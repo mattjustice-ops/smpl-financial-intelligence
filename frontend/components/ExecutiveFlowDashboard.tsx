@@ -48,6 +48,26 @@ type ValidationCheck = {
   source_tables_used: string[];
 };
 
+function asValidationChecks(
+  checks: Array<{
+    scenario: string;
+    period: string;
+    validation_name: string;
+    status: "pass" | "warning" | "fail";
+    variance?: string | number | null;
+    source_tables_used?: string[];
+  }>,
+): ValidationCheck[] {
+  return checks.map((c) => ({
+    scenario: c.scenario,
+    period: c.period,
+    validation_name: c.validation_name,
+    status: c.status,
+    variance: c.variance,
+    source_tables_used: c.source_tables_used ?? [],
+  }));
+}
+
 type WaterfallSummaryRow = {
   scenario: string;
   period: string;
@@ -608,14 +628,16 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
           remaining_pipeline: fallbackOpportunity(),
         },
         validation: [
-          ...(marketing.validation ?? []),
-          ...(marketingChannels.validation ?? []),
-          ...(pipeline.validation ?? []),
-          ...(arr.validation ?? []),
-          ...(deferredRevenue.validation ?? []),
-          ...(cashFlow.validation ?? []),
-          ...(statementResult?.ok ? (statementResult.value as FinancialStatementsSummary).validation : []),
-          ...(workforceValidation?.checks ?? []),
+          ...asValidationChecks(marketing.validation ?? []),
+          ...asValidationChecks(marketingChannels.validation ?? []),
+          ...asValidationChecks(pipeline.validation ?? []),
+          ...asValidationChecks(arr.validation ?? []),
+          ...asValidationChecks(deferredRevenue.validation ?? []),
+          ...asValidationChecks(cashFlow.validation ?? []),
+          ...asValidationChecks(
+            statementResult?.ok ? (statementResult.value as FinancialStatementsSummary).validation : [],
+          ),
+          ...asValidationChecks(workforceValidation?.checks ?? []),
         ],
         workforce_validation: workforceValidation,
         commentary_prompts: commentaryPrompts,
