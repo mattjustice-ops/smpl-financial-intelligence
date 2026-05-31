@@ -108,6 +108,12 @@ type MonthlySeries = {
   ebitda_margin_budget?: string | number;
 };
 
+type MarginTrendField = "gm_pct_actual" | "gm_pct_budget" | "ebitda_margin_actual" | "ebitda_margin_budget";
+
+function marginTrendValue(s: MonthlySeries, field: MarginTrendField) {
+  return num(s[field]);
+}
+
 type WaterfallStep = {
   label: string;
   value: string | number;
@@ -494,8 +500,8 @@ function MarginTrendChart({
   yMax = 0.85,
 }: {
   series: MonthlySeries[];
-  fieldActual: keyof MonthlySeries;
-  fieldBudget: keyof MonthlySeries;
+  fieldActual: MarginTrendField;
+  fieldBudget: MarginTrendField;
   title: string;
   yMin?: number;
   yMax?: number;
@@ -510,10 +516,10 @@ function MarginTrendChart({
   const y = (v: number) => pad + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
   const x = (i: number) => pad + (i / Math.max(closed.length - 1, 1)) * plotW;
   const actualPath = closed
-    .map((s, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(num(s[fieldActual]))}`)
+    .map((s, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(marginTrendValue(s, fieldActual))}`)
     .join(" ");
   const budgetPath = closed
-    .map((s, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(num(s[fieldBudget]))}`)
+    .map((s, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(marginTrendValue(s, fieldBudget))}`)
     .join(" ");
   return (
     <div>

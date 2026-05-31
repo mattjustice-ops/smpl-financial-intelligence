@@ -703,7 +703,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
   );
   const warnings = data?.validation.filter((row) => row.status !== "pass") ?? [];
   const closePeriod = useMemo(() => {
-    const periods = [...new Set(marketingRows.map((r) => r.period))].sort();
+    const periods = Array.from(new Set(marketingRows.map((r) => r.period))).sort();
     return periods.at(-1) ?? endPeriod;
   }, [marketingRows, endPeriod]);
 

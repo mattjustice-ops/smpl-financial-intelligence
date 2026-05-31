@@ -52,7 +52,7 @@ export function mergeCombinedWorkforcePlans(
     if (metric) operatingMetrics.push(metric);
   }
 
-  const departments = [...new Set([...actual.departments, ...forecast.departments])].sort();
+  const departments = Array.from(new Set([...actual.departments, ...forecast.departments])).sort();
 
   return {
     organization_id: forecast.organization_id,
@@ -66,7 +66,7 @@ export function mergeCombinedWorkforcePlans(
       ...actual.validations.map((check) => ({ ...check, scenario: check.scenario ?? "Actual" })),
       ...forecast.validations.map((check) => ({ ...check, scenario: check.scenario ?? "Forecast" })),
     ],
-    data_sources: [...new Set([...actual.data_sources, ...forecast.data_sources])],
+    data_sources: Array.from(new Set([...actual.data_sources, ...forecast.data_sources])),
   };
 }
 
@@ -137,10 +137,12 @@ export function rollupWorkforceDepartments(
     byDept.set(dept, cur);
   }
 
-  return [...byDept.values()].sort((a, b) => a.department.localeCompare(b.department));
+  return Array.from(byDept.values()).sort((a, b) => a.department.localeCompare(b.department));
 }
 
-export function rollupWorkforcePeriods(plan: WorkforcePlanResponse | null): PeriodRollup[] {
+export type PeriodRollupEntry = readonly [period: string, totals: PeriodRollup];
+
+export function rollupWorkforcePeriods(plan: WorkforcePlanResponse | null): PeriodRollupEntry[] {
   const metricsByPeriod = new Map(
     (plan?.operating_metrics ?? []).map((row) => [normalizePeriodKey(row.period), row] as const)
   );
@@ -199,7 +201,7 @@ export function rollupWorkforcePeriods(plan: WorkforcePlanResponse | null): Peri
     }
   }
 
-  return [...map.entries()]
+  return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([period, totals]) => [period, totals] as const);
 }
