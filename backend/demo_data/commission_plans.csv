@@ -1,0 +1,2 @@
+plan_id,role,eligible_opportunity_type,base_commission_rate,accelerator_multiplier,accelerator_threshold,accelerated_rate,clawback_window
+PLAN-AE,Account Executive,new_business,0.10,1.50,500000.00,0.12,90 days

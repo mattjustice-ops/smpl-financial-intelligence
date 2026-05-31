@@ -1,0 +1,6 @@
+version,req_id,role,department,sub_department,hiring_manager,target_hire_date,planned_start_date,priority,approved_status,requisition_type,level,region,salary_annual_override,quota_capacity_arr_override
+Forecast,REQ-101,Account Executive,Sales,Enterprise,VP Sales,2026-06-15,2026-07-01,P1,Approved,new,L3,US,,
+Forecast,REQ-102,Account Executive,Sales,Mid-Market,VP Sales,2026-07-01,2026-08-01,P1,Approved,new,L3,US,,
+Forecast,REQ-103,Demand Gen Manager,Marketing,Demand Gen,CMO,2026-06-01,2026-06-01,P2,Approved,new,L4,US,,
+Forecast,REQ-104,Software Engineer,R&D,Platform,VP Eng,2026-08-01,2026-09-01,P1,Approved,new,L4,US,,
+Forecast,REQ-105,CSM,Customer Success,Enterprise,VP CS,2026-07-15,2026-08-01,P2,Approved,replacement,L3,US,,

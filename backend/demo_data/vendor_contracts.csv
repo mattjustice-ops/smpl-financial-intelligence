@@ -1,0 +1,2 @@
+vendor_id,vendor_name,service_category,contract_start,contract_end,annual_contract_value,billing_cadence,payment_terms,expense_category
+VEND-001,CloudCo,Infrastructure,2026-01-01,2026-12-31,120000.00,annual,Net 30,Software

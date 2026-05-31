@@ -1,0 +1,2 @@
+period,account_number,account_name,statement,category,amount,currency,subsidiary,source_system
+2026-01-01,4000,Subscription Revenue,income,revenue,10000.00,USD,,demo

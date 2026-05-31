@@ -1,0 +1,2 @@
+opportunity_id,customer_id,opportunity_name,opportunity_type,stage,amount_arr,expected_close_date,probability,segment,owner,rep_id,forecast_period,source_crm
+OPP-001,CUST-001,Platform renewal,new_business,Proposal,50000.00,2026-06-01,0.6,Enterprise,Jane Doe,REP-001,Q1-2026,Salesforce

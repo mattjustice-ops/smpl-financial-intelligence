@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sfi
+      POSTGRES_PASSWORD: sfi_dev_password
+      POSTGRES_DB: sfi
+    ports:
+      - "5432:5432"
+    volumes:
+      - sfi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sfi -d sfi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sfi_pgdata:

@@ -1,0 +1,40 @@
+"""Design tokens — fixed executive canvas (16:9). Do not tune per slide at runtime."""
+
+from __future__ import annotations
+
+# Canvas (inches)
+SLIDE_WIDTH_IN = 13.333
+SLIDE_HEIGHT_IN = 7.5
+MARGIN_LEFT_IN = 0.75
+MARGIN_RIGHT_IN = 0.75
+CONTENT_WIDTH_IN = 11.83
+
+# Typography (pt)
+TITLE_PT = 26
+SUBTITLE_PT = 12
+SECTION_LABEL_PT = 11
+BODY_PT = 11
+TABLE_PT = 10
+FOOTNOTE_PT = 9
+CHART_TITLE_PT = 10
+CHART_AXIS_PT = 8
+KPI_VALUE_PT = 22
+KPI_LABEL_PT = 10
+
+# Palette (RGB tuples)
+NAVY_RGB = (31, 73, 125)
+SUBTLE_RGB = (90, 90, 90)
+SECTION_GREEN_RGB = (46, 125, 50)
+COMMENTARY_ORANGE_RGB = (210, 105, 30)
+ZEBRA_LIGHT_RGB = (245, 247, 250)
+ZEBRA_DARK_RGB = (235, 239, 245)
+
+# Density caps (executive band)
+MAX_KPI_CARDS = 4
+MAX_FOOTER_BULLETS = 3
+MAX_CALLOUTS = 2
+MAX_TABLE_ROWS_EXEC = 5
+MAX_CHART_CATEGORIES = 7
+MAX_CHART_SERIES = 2
+
+PRESENTATION_ENGINE_ID = "smpl-board-v2"

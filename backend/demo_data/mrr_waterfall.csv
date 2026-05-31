@@ -1,0 +1,2 @@
+period,customer_id,beginning_mrr,new_mrr,expansion_mrr,contraction_mrr,churn_mrr,reactivation_mrr,ending_mrr,movement_type
+2026-01-01,CUST-001,9000.00,500.00,200.00,0.00,0.00,0.00,9700.00,net

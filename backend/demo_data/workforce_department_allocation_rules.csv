@@ -1,0 +1,13 @@
+version,rule_id,department,pnl_line,allocation_pct,effective_start,effective_end,notes
+Forecast,ALLOC-SALES-01,Sales,sales_and_marketing,1.0,,,Sales payroll to S&M
+Forecast,ALLOC-MKT-01,Marketing,sales_and_marketing,1.0,,,
+Forecast,ALLOC-RD-01,R&D,research_and_development,1.0,,,
+Forecast,ALLOC-PROD-01,Product,research_and_development,0.7,,,Product split R&D / G&A
+Forecast,ALLOC-PROD-02,Product,general_and_administrative,0.3,,,
+Forecast,ALLOC-CS-01,Customer Success,cost_of_revenue,0.6,,,CS split COGS / S&M
+Forecast,ALLOC-CS-02,Customer Success,sales_and_marketing,0.4,,,
+Forecast,ALLOC-SUP-01,Support,cost_of_revenue,1.0,,,
+Forecast,ALLOC-GA-01,G&A,general_and_administrative,1.0,,,
+Forecast,ALLOC-FIN-01,Finance,general_and_administrative,1.0,,,
+Forecast,ALLOC-HR-01,HR / People,general_and_administrative,1.0,,,
+Forecast,ALLOC-OPS-01,Operations,general_and_administrative,1.0,,,

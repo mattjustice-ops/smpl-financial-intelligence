@@ -1,0 +1,66 @@
+{
+  "period_label": "May 2026",
+  "organization_name": "Demo Org",
+  "currency": "USD",
+  "mrr_waterfall": {
+    "period": "2026-05-01",
+    "beginning_mrr": 100000,
+    "new_mrr": 15000,
+    "expansion_mrr": 5000,
+    "contraction_mrr": 2000,
+    "churn_mrr": 8000,
+    "reactivation_mrr": 0,
+    "ending_mrr": 110000,
+    "nrr": 1.05,
+    "grr": 0.90,
+    "gross_mrr_churn_rate": 0.08
+  },
+  "bookings_forecast": {
+    "period_start": "2026-05-01",
+    "period_end": "2026-05-31",
+    "total_forecast": 180000,
+    "base": 180000,
+    "conservative": 150000,
+    "upside": 220000,
+    "confidence_score": 0.72,
+    "confidence_band": "medium",
+    "coverage_ratio": 3.0,
+    "target_bookings": 60000
+  },
+  "revenue_forecast": {
+    "period_start": "2026-05-01",
+    "period_end": "2026-05-31",
+    "forecasted_revenue": 110000,
+    "prior_period_revenue": 100000,
+    "growth_rate": 0.10
+  },
+  "kpi_trends": [
+    { "period_label": "Mar 2026", "arr": 1100000, "nrr": 1.03 },
+    { "period_label": "Apr 2026", "arr": 1200000, "nrr": 1.04 },
+    { "period_label": "May 2026", "arr": 1320000, "nrr": 1.05 }
+  ],
+  "actuals_vs_forecast": [
+    {
+      "metric": "revenue",
+      "actual": 110000,
+      "forecast": 105000,
+      "variance_absolute": 5000,
+      "variance_percent": 0.048,
+      "direction": "favorable"
+    }
+  ],
+  "customer_movement": {
+    "new_customers": 20,
+    "churned_customers": 10,
+    "expanded_customers": 4,
+    "contracted_customers": 1,
+    "reactivated_customers": 0
+  },
+  "sales_efficiency": {
+    "new_bookings_arr": 180000,
+    "sales_marketing_expense": 60000,
+    "sales_efficiency": 3.0,
+    "magic_number": 0.73,
+    "cac_payback_months": 5.0
+  }
+}

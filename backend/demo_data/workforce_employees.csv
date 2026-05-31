@@ -1,0 +1,12 @@
+version,employee_id,department,sub_department,role,level,region,hire_date,termination_date,employment_status,salary_annual,bonus_annual,commission_annual,equity_sbc_annual,benefits_load_pct,quota_capacity_arr,productivity_ramp_pct,months_to_full_productivity
+Forecast,E001,Sales,Enterprise,Account Executive,L4,US,2024-03-01,,Active,145000,29000,120000,18000,0.25,1200000,,
+Forecast,E002,Sales,Mid-Market,Account Executive,L3,US,2025-01-15,,Active,125000,18750,90000,15000,0.25,900000,,
+Forecast,E003,Marketing,Demand Gen,Marketing Manager,L4,US,2023-06-01,,Active,135000,20250,0,12000,0.22,0,,
+Forecast,E004,R&D,Platform,Software Engineer,L5,US,2022-01-10,,Active,185000,27750,0,35000,0.28,0,,
+Forecast,E005,Product,Core,Product Manager,L4,US,2023-09-01,,Active,160000,24000,0,20000,0.25,0,,
+Forecast,E006,Customer Success,Enterprise,CSM,L3,US,2024-07-01,,Active,110000,11000,0,8000,0.24,0,,
+Forecast,E007,Support,Tier 2,Support Engineer,L2,US,2025-04-01,,Active,85000,4250,0,5000,0.22,0,,
+Forecast,E008,G&A,Executive,Chief of Staff,L5,US,2021-05-01,,Active,175000,35000,0,25000,0.25,0,,
+Forecast,E009,Finance,FP&A,Finance Manager,L4,US,2022-11-01,,Active,140000,21000,0,10000,0.24,0,,
+Forecast,E010,HR / People,People Ops,People Partner,L3,US,2024-01-15,,Active,115000,11500,0,6000,0.23,0,,
+Forecast,E011,Operations,Business Ops,Operations Manager,L4,US,2023-03-01,,Active,130000,19500,0,9000,0.24,0,,

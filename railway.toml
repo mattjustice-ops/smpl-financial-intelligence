@@ -1,0 +1,9 @@
+# Railway — deploy backend from repo root (set Root Directory = backend in UI if needed)
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

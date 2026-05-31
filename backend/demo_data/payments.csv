@@ -1,0 +1,2 @@
+payment_id,invoice_id,customer_id,payment_date,payment_amount,payment_method,currency
+PAY-001,INV-001,CUST-001,2026-01-20,10000.00,ach,USD

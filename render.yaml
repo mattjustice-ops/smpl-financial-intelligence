@@ -1,0 +1,36 @@
+# Render Blueprint — optional full-stack deploy
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: sfi-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sfi-postgres
+          property: connectionString
+      - key: API_CORS_ORIGINS
+        sync: false
+    autoDeploy: true
+
+  - type: web
+    name: sfi-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: SFI_BACKEND_URL
+        sync: false
+    autoDeploy: true
+
+databases:
+  - name: sfi-postgres
+    plan: starter
+    databaseName: sfi
+    user: sfi

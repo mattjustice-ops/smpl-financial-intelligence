@@ -1,0 +1,13 @@
+version,department,role,level,region,base_salary_annual,bonus_target_pct,commission_annual,equity_sbc_annual,benefits_load_pct,default_quota_capacity_arr
+Forecast,Sales,Account Executive,L3,US,125000,0.15,90000,15000,0.25,900000
+Forecast,Sales,Account Executive,L4,US,145000,0.20,120000,18000,0.25,1200000
+Forecast,Marketing,Demand Gen Manager,L4,US,135000,0.15,0,12000,0.22,0
+Forecast,R&D,Software Engineer,L4,US,165000,0.10,0,30000,0.28,0
+Forecast,R&D,Software Engineer,L5,US,185000,0.15,0,35000,0.28,0
+Forecast,Customer Success,CSM,L3,US,110000,0.10,0,8000,0.24,0
+Forecast,Product,Product Manager,L4,US,160000,0.15,0,20000,0.25,0
+Forecast,Support,Support Engineer,L2,US,85000,0.05,0,5000,0.22,0
+Forecast,G&A,Chief of Staff,L5,US,175000,0.20,0,25000,0.25,0
+Forecast,Finance,Finance Manager,L4,US,140000,0.15,0,10000,0.24,0
+Forecast,HR / People,People Partner,L3,US,115000,0.10,0,6000,0.23,0
+Forecast,Operations,Operations Manager,L4,US,130000,0.15,0,9000,0.24,0

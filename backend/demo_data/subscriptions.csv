@@ -1,0 +1,11 @@
+subscription_id,customer_id,product,billing_cadence,start_date,end_date,current_mrr,current_arr,status,currency
+SUB-001,CUST-001,Platform Suite,monthly,2026-01-01,,1000.00,12000.00,active,USD
+SUB-100,CUST-100,Platform Suite,monthly,2026-01-01,,1000.00,12000.00,active,USD
+SUB-101,CUST-101,Platform Suite,monthly,2026-05-10,,1500.00,18000.00,active,USD
+SUB-102A,CUST-102,Platform Suite,monthly,2026-01-01,,800.00,9600.00,active,USD
+SUB-102B,CUST-102,Premium Add-On,monthly,2026-05-01,,400.00,4800.00,active,USD
+SUB-103A,CUST-103,Platform Suite,monthly,2026-01-01,,1200.00,14400.00,active,USD
+SUB-103B,CUST-103,Premium Add-On,monthly,2026-01-01,2026-04-30,300.00,3600.00,cancelled,USD
+SUB-104,CUST-104,Platform Suite,monthly,2026-01-01,2026-04-30,2000.00,24000.00,cancelled,USD
+SUB-105A,CUST-105,Platform Suite,monthly,2026-01-01,2026-03-31,700.00,8400.00,cancelled,USD
+SUB-105B,CUST-105,Platform Suite,monthly,2026-05-01,,700.00,8400.00,active,USD

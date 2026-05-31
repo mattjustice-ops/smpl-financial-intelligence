@@ -1,0 +1,8 @@
+customer_id,customer_name,segment,industry,status,start_date,billing_cadence,payment_terms,source_crm,netsuite_customer_id,stripe_customer_id
+CUST-001,Acme Demo Co,Enterprise,Software,active,2026-01-01,monthly,Net 30,Salesforce,,cus_demo_001
+CUST-100,Stable Customer Inc,Enterprise,Software,active,2026-01-01,monthly,Net 30,Salesforce,,cus_demo_100
+CUST-101,Brand New Customer Co,Mid-Market,Retail,active,2026-05-10,monthly,Net 30,Salesforce,,cus_demo_101
+CUST-102,Expanding Customer LLC,Enterprise,Finance,active,2026-01-01,monthly,Net 30,Salesforce,,cus_demo_102
+CUST-103,Downgrading Customer,Mid-Market,Healthcare,active,2026-01-01,monthly,Net 30,Salesforce,,cus_demo_103
+CUST-104,Churned Customer Co,SMB,Software,churned,2026-01-01,monthly,Net 30,Salesforce,,cus_demo_104
+CUST-105,Win-Back Customer,Mid-Market,Manufacturing,active,2026-01-01,monthly,Net 30,Salesforce,,cus_demo_105
