@@ -12,6 +12,7 @@ import {
   DatabaseZap,
   Layers3,
   LineChart,
+  Mail,
   PieChart,
   ShieldCheck,
   Sparkles,
@@ -19,6 +20,12 @@ import {
 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+
+const SALES_EMAIL = "mattjustice@smpl-ai.com";
+const SALES_INQUIRY_MAILTO = `mailto:${SALES_EMAIL}?subject=${encodeURIComponent("SMPL.ai inquiry")}`;
+const DEFAULT_SCHEDULING_URL = "https://calendar.app.google/R8yf5HpyPwAitKq16";
+const SCHEDULING_URL =
+  process.env.NEXT_PUBLIC_SCHEDULING_URL?.trim() || DEFAULT_SCHEDULING_URL;
 
 const modules = [
   {
@@ -290,19 +297,31 @@ export function SmplAiLandingPage() {
               Walk through the May 2026 board package — executive summary, ARR bridge, revenue, GTM, cash, headcount,
               and three-statement views built from the same underlying data model.
             </p>
-            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col items-center justify-center gap-4">
               <Link
                 href="/board"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-teal-400 px-7 text-base font-medium text-slate-950 hover:bg-teal-300"
               >
                 Open board demo <ArrowRight size={18} />
               </Link>
-              <a
-                href="mailto:hello@smpl.ai"
-                className="inline-flex h-12 items-center justify-center rounded-full border border-white/20 bg-white/5 px-7 text-base font-medium text-white hover:bg-white/10"
-              >
-                Contact sales
-              </a>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <a
+                  href={SALES_INQUIRY_MAILTO}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-7 text-base font-medium text-white hover:bg-white/10"
+                >
+                  <Mail size={18} />
+                  Email inquiry
+                </a>
+                <a
+                  href={SCHEDULING_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-7 text-base font-medium text-white hover:bg-white/10"
+                >
+                  <CalendarClock size={18} />
+                  Book a call
+                </a>
+              </div>
             </div>
           </div>
         </section>
