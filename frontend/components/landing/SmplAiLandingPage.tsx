@@ -83,20 +83,12 @@ export function SmplAiLandingPage() {
               Demo
             </a>
           </nav>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/app"
-              className="hidden text-sm text-slate-400 hover:text-white md:inline"
-            >
-              Platform beta
-            </Link>
-            <Link
-              href="/board"
-              className="inline-flex h-10 items-center justify-center rounded-full bg-white px-5 text-sm font-medium text-slate-950 hover:bg-slate-200"
-            >
-              Open demo
-            </Link>
-          </div>
+          <Link
+            href="/board"
+            className="inline-flex h-10 items-center justify-center rounded-full bg-white px-5 text-sm font-medium text-slate-950 hover:bg-slate-200"
+          >
+            Open demo
+          </Link>
         </div>
       </header>
 
@@ -115,18 +107,12 @@ export function SmplAiLandingPage() {
                 SMPL connects pipeline, ARR, revenue, cash, headcount, and financial statements into one trusted
                 platform that explains what happened, why it happened, and what leadership should do next.
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-8">
                 <Link
                   href="/board"
                   className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-teal-400 px-7 text-base font-medium text-slate-950 hover:bg-teal-300"
                 >
                   View interactive demo <ArrowRight size={18} />
-                </Link>
-                <Link
-                  href="/app"
-                  className="inline-flex h-12 items-center justify-center rounded-full border border-white/20 bg-white/5 px-7 text-base font-medium text-white hover:bg-white/10"
-                >
-                  Explore live platform beta
                 </Link>
               </div>
             </motion.div>
