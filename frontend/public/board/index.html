@@ -166,7 +166,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· We make finance simple</span></div>
   <div class="topbar-right">
     <span class="period-badge">May 2026 · YTD Close</span>
-    <button class="ai-global-btn" onclick="globalMDA()">✦ Full MD&A ↗</button>
+    <button class="ai-global-btn" onclick="globalMDA()" title="Download May 2026 board review deck (PowerPoint)">✦ Full MD&A ↗</button>
   </div>
 </div>
 
@@ -186,11 +186,11 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 <div id="slideArea"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Board Intelligence · Jan–May 2026 Actuals · AI commentary via Claude · Confidential</div>
+  <div class="footer-note">SMPL · Board Intelligence · Jan–May 2026 Actuals · May close exports · Confidential</div>
   <div class="export-btns">
-    <button class="exp-btn" onclick="globalMDA()">✦ MD&A Narrative ↗</button>
-    <button class="exp-btn" onclick="varComm()">✦ Variance Commentary ↗</button>
-    <button class="exp-btn" onclick="decBrief()">✦ Decision Brief ↗</button>
+    <button class="exp-btn" onclick="mdaNarrative()" title="Open MD&A narrative workbook (Excel)">✦ MD&A Narrative ↗</button>
+    <button class="exp-btn" onclick="varComm()" title="Open variance commentary workbook (Excel)">✦ Variance Commentary ↗</button>
+    <button class="exp-btn" onclick="decBrief()" title="Open decision brief workbook (Excel)">✦ Decision Brief ↗</button>
   </div>
 </div>
 
@@ -1043,9 +1043,31 @@ async function aiComm(slideKey, targetId) {
   } catch(e){ txt.textContent='Unable to connect to AI commentary — static commentary displayed above. Connect to Anthropic API to enable regeneration.'; }
 }
 
-function globalMDA() { alert('Open in claude.ai to use AI-powered MD&A generation. This file uses the Anthropic API for commentary.'); }
-function varComm() { alert('Variance commentary generation requires claude.ai connection.'); }
-function decBrief() { alert('Decision brief generation requires claude.ai connection.'); }
+const BOARD_EXPORTS = {
+  boardReview: '/board/exports/SMPL_Board_Review_May2026.pptx',
+  mdaPackage: '/board/exports/SMPL_MDA_Package_May2026.xlsx',
+};
+
+function openBoardExport(url, label) {
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) window.location.assign(url);
+}
+
+function globalMDA() {
+  openBoardExport(BOARD_EXPORTS.boardReview, 'Full MD&A — Board Review deck');
+}
+
+function mdaNarrative() {
+  openBoardExport(BOARD_EXPORTS.mdaPackage, 'MD&A Narrative workbook');
+}
+
+function varComm() {
+  openBoardExport(BOARD_EXPORTS.mdaPackage, 'Variance Commentary workbook');
+}
+
+function decBrief() {
+  openBoardExport(BOARD_EXPORTS.mdaPackage, 'Decision Brief workbook');
+}
 
 
 // ─── THREE STATEMENT DATA (from CSVs) ─────────────────────────────────────
