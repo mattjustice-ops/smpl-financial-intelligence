@@ -188,9 +188,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 <div class="footer">
   <div class="footer-note">SMPL · Board Intelligence · Jan–May 2026 Actuals · May close exports · Confidential</div>
   <div class="export-btns">
-    <button class="exp-btn" onclick="mdaNarrative()" title="Open MD&A narrative workbook (Excel)">✦ MD&A Narrative ↗</button>
     <button class="exp-btn" onclick="varComm()" title="Open variance commentary workbook (Excel)">✦ Variance Commentary ↗</button>
-    <button class="exp-btn" onclick="decBrief()" title="Open decision brief workbook (Excel)">✦ Decision Brief ↗</button>
   </div>
 </div>
 
@@ -1057,16 +1055,8 @@ function globalMDA() {
   openBoardExport(BOARD_EXPORTS.boardReview, 'Full MD&A — Board Review deck');
 }
 
-function mdaNarrative() {
-  openBoardExport(BOARD_EXPORTS.mdaPackage, 'MD&A Narrative workbook');
-}
-
 function varComm() {
   openBoardExport(BOARD_EXPORTS.mdaPackage, 'Variance Commentary workbook');
-}
-
-function decBrief() {
-  openBoardExport(BOARD_EXPORTS.mdaPackage, 'Decision Brief workbook');
 }
 
 
