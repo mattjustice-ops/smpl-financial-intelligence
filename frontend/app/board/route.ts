@@ -3,7 +3,7 @@ import { join } from "path";
 import { NextResponse } from "next/server";
 
 const DEFAULT_DOWNLOADS_SRC =
-  "C:\\Users\\mattj\\Downloads\\SMPL_Board_Platform_May2026 (1).html";
+  "C:\\Users\\mattj\\Downloads\\SMPL_Board_Platform_May2026 (5).html";
 
 function resolveBoardHtmlPath(): string | null {
   const publicPath = join(process.cwd(), "public", "board", "index.html");

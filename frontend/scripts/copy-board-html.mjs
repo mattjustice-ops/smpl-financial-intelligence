@@ -5,15 +5,10 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src =
   process.env.SMPL_BOARD_HTML_SRC?.trim() ??
-  "C:\\Users\\mattj\\Downloads\\SMPL_Board_Platform_May2026 (1).html";
+  "C:\\Users\\mattj\\Downloads\\SMPL_Board_Platform_May2026 (5).html";
 const dst = join(root, "public", "board", "index.html");
 
 mkdirSync(dirname(dst), { recursive: true });
-
-if (existsSync(dst)) {
-  console.log(`Board HTML already at ${dst} (${statSync(dst).size} bytes)`);
-  process.exit(0);
-}
 
 if (!existsSync(src)) {
   if (existsSync(dst)) {
