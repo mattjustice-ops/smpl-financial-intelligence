@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SCHEDULING_URL } from "@/components/landing/constants";
 import {
   ARR_RANGES,
   BUDGET_RANGES,
