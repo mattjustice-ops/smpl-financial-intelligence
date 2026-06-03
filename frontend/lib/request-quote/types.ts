@@ -64,6 +64,8 @@ export type HubSpotSyncResult = {
       industry?: string | null;
       domain?: string | null;
     };
+    resolvedFrom?: string;
+    contactCompanyIds?: string[];
   };
 };
 

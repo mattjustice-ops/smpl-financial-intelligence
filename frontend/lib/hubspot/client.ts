@@ -141,10 +141,12 @@ export class HubSpotClient {
   }
 
   async findCompanyByDomainVariants(domain: string): Promise<string | null> {
+    const normalized = normalizeDomain(domain);
+    if (!normalized) return null;
+
     const variants = new Set([
-      domain,
-      domain.replace(/^www\./, ""),
-      `www.${domain.replace(/^www\./, "")}`,
+      normalized,
+      `www.${normalized}`,
     ]);
 
     for (const variant of variants) {
@@ -153,6 +155,59 @@ export class HubSpotClient {
     }
 
     return null;
+  }
+
+  async resolveQuoteCompanyId(
+    contactId: string,
+    identity: Record<string, string>,
+    contactEmail?: string
+  ): Promise<{ companyId: string | null; source: string }> {
+    const domain = normalizeDomain(identity.domain);
+    const name = identity.name?.trim();
+    const emailDomain = contactEmail ? normalizeDomain(contactEmail.split("@")[1]) : null;
+
+    let associatedIds = await this.listAssociationIds("contacts", contactId, "companies");
+    if (associatedIds.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      associatedIds = await this.listAssociationIds("contacts", contactId, "companies");
+    }
+
+    for (const id of associatedIds) {
+      const company = await this.getCompany(id, ["name", "domain"]);
+      const companyDomain = normalizeDomain(company.properties.domain);
+      if (domain && domainsMatch(companyDomain, domain)) {
+        return { companyId: id, source: "contact-association:domain-match" };
+      }
+    }
+
+    if (associatedIds.length === 1) {
+      const company = await this.getCompany(associatedIds[0], ["name", "domain"]);
+      if (!company.properties.name?.trim()) {
+        return { companyId: associatedIds[0], source: "contact-association:empty-shell" };
+      }
+    }
+
+    if (domain && emailDomain && domainsMatch(domain, emailDomain)) {
+      for (const id of associatedIds) {
+        const company = await this.getCompany(id, ["name", "domain"]);
+        const companyDomain = normalizeDomain(company.properties.domain);
+        if (!companyDomain || domainsMatch(companyDomain, emailDomain)) {
+          return { companyId: id, source: "contact-association:email-domain" };
+        }
+      }
+    }
+
+    const byDomain = domain ? await this.findCompanyByDomainVariants(domain) : null;
+    if (byDomain) {
+      return { companyId: byDomain, source: "domain-search" };
+    }
+
+    const byName = name ? await this.findCompanyByName(name) : null;
+    if (byName) {
+      return { companyId: byName, source: "name-search" };
+    }
+
+    return { companyId: null, source: "create" };
   }
 
   async getPropertyDefinition(objectType: "companies" | "contacts" | "deals", propertyName: string) {
@@ -189,14 +244,17 @@ export class HubSpotClient {
 
   async syncCompanyRecord(
     identity: Record<string, string>,
-    formIndustry: string
+    formIndustry: string,
+    options?: { contactId?: string; contactEmail?: string }
   ): Promise<{
     companyId: string;
     applied: string[];
     skipped: Array<{ property: string; reason: string }>;
     verified: { name?: string | null; industry?: string | null; domain?: string | null };
+    resolvedFrom: string;
+    contactCompanyIds: string[];
   }> {
-    const domain = identity.domain?.replace(/^www\./, "");
+    const domain = normalizeDomain(identity.domain) ?? undefined;
     const name = identity.name?.trim();
     const applied: string[] = [];
     const skipped: Array<{ property: string; reason: string }> = [];
@@ -205,9 +263,25 @@ export class HubSpotClient {
       throw new Error("Company name is required for HubSpot company sync.");
     }
 
-    let companyId =
-      (domain ? await this.findCompanyByDomainVariants(domain) : null) ||
-      (name ? await this.findCompanyByName(name) : null);
+    let resolvedFrom = "create";
+    let contactCompanyIds: string[] = [];
+    let companyId: string | null = null;
+
+    if (options?.contactId) {
+      contactCompanyIds = await this.listAssociationIds("contacts", options.contactId, "companies");
+      const resolved = await this.resolveQuoteCompanyId(
+        options.contactId,
+        identity,
+        options.contactEmail
+      );
+      companyId = resolved.companyId;
+      resolvedFrom = resolved.source;
+    } else {
+      companyId =
+        (domain ? await this.findCompanyByDomainVariants(domain) : null) ||
+        (name ? await this.findCompanyByName(name) : null);
+      resolvedFrom = companyId ? "search" : "create";
+    }
 
     if (!companyId) {
       companyId = await this.createCompany(
@@ -218,6 +292,7 @@ export class HubSpotClient {
         })
       );
       applied.push("create");
+      resolvedFrom = "create";
     }
 
     const basePayload = cleanProperties({
@@ -289,7 +364,7 @@ export class HubSpotClient {
       });
     }
 
-    return { companyId, applied, skipped, verified };
+    return { companyId, applied, skipped, verified, resolvedFrom, contactCompanyIds };
   }
 
   async createCompany(properties: Record<string, string>): Promise<string> {
@@ -602,6 +677,26 @@ export function cleanProperties(properties: Record<string, string | undefined>):
   return Object.fromEntries(
     Object.entries(properties).filter(([, value]) => value !== undefined && value !== "")
   ) as Record<string, string>;
+}
+
+export function normalizeDomain(domain: string | null | undefined): string | null {
+  if (!domain) return null;
+
+  const trimmed = domain.trim().toLowerCase();
+  if (!trimmed) return null;
+
+  const withoutProtocol = trimmed.replace(/^https?:\/\//, "");
+  const host = withoutProtocol.split("/")[0]?.replace(/^www\./, "");
+  return host || null;
+}
+
+export function domainsMatch(
+  left: string | null | undefined,
+  right: string | null | undefined
+): boolean {
+  const normalizedLeft = normalizeDomain(left);
+  const normalizedRight = normalizeDomain(right);
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
 }
 
 function formatHubSpotHttpError(status: number, body: unknown, fallback: string): string {

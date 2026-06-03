@@ -48,9 +48,29 @@ export async function syncRequestQuoteToHubSpot(
     const contactId = await client.upsertContact(contactProperties(payload));
     const companySync = await client.syncCompanyRecord(
       companyIdentityProperties(payload),
-      payload.industry
+      payload.industry,
+      { contactId, contactEmail: payload.email }
     );
     const companyId = companySync.companyId;
+
+    if (
+      companySync.contactCompanyIds.length > 1 &&
+      companySync.resolvedFrom.startsWith("contact-association")
+    ) {
+      warnings.push(
+        `Contact had ${companySync.contactCompanyIds.length} associated companies; enriched company ${companyId} (${companySync.resolvedFrom}).`
+      );
+    }
+
+    if (
+      companySync.contactCompanyIds.length > 0 &&
+      !companySync.contactCompanyIds.map(String).includes(String(companyId)) &&
+      companySync.resolvedFrom === "domain-search"
+    ) {
+      warnings.push(
+        `Contact was linked to company ${companySync.contactCompanyIds.join(", ")} but form data was saved to company ${companyId} by domain search. Associations will target ${companyId}.`
+      );
+    }
 
     if (companySync.skipped.length > 0) {
       for (const item of companySync.skipped) {
@@ -126,6 +146,8 @@ export async function syncRequestQuoteToHubSpot(
         applied: companySync.applied,
         skipped: companySync.skipped,
         verified: companySync.verified,
+        resolvedFrom: companySync.resolvedFrom,
+        contactCompanyIds: companySync.contactCompanyIds,
       },
     };
   } catch (error) {
