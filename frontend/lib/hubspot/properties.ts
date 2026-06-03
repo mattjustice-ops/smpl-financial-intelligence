@@ -13,29 +13,13 @@ export function pickProperties(
   return Object.fromEntries(keys.filter((key) => all[key]).map((key) => [key, all[key]!]));
 }
 
-export function mapIndustryToHubSpot(industry: string): string | undefined {
-  const map: Record<string, string> = {
-    "B2B SaaS": "COMPUTER_SOFTWARE",
-    FinTech: "FINANCIAL_SERVICES",
-    HealthTech: "HOSPITAL_HEALTH_CARE",
-    EdTech: "EDUCATION_MANAGEMENT",
-    Cybersecurity: "INFORMATION_TECHNOLOGY_AND_SERVICES",
-    "Infrastructure / DevTools": "INFORMATION_TECHNOLOGY_AND_SERVICES",
-    Marketplace: "INTERNET",
-    Other: "COMPUTER_SOFTWARE",
-  };
-  return map[industry];
-}
-
 export function companyIdentityProperties(payload: RequestQuotePayload): Record<string, string> {
   const domain = payload.domain.replace(/^www\./, "");
-  const mappedIndustry = mapIndustryToHubSpot(payload.industry);
 
   return cleanProperties({
-    name: payload.companyName,
+    name: payload.companyName.trim(),
     domain,
     website: domain ? `https://${domain}` : undefined,
-    industry: mappedIndustry,
   });
 }
 

@@ -19,14 +19,6 @@ function contactProperties(payload: RequestQuotePayload): Record<string, string>
   });
 }
 
-function companyCoreProperties(payload: RequestQuotePayload): Record<string, string> {
-  return {
-    ...companyIdentityProperties(payload),
-    description: formatCompanyDescription(payload),
-    about_us: formatCompanyDescription(payload),
-  };
-}
-
 function dealCoreProperties(
   payload: RequestQuotePayload,
   pipelineId: string,
@@ -54,12 +46,21 @@ export async function syncRequestQuoteToHubSpot(
 
   try {
     const contactId = await client.upsertContact(contactProperties(payload));
-    const companyProps = companyCoreProperties(payload);
-    const companyId = await client.upsertCompany(companyProps);
+    const companySync = await client.syncCompanyRecord(
+      companyIdentityProperties(payload),
+      payload.industry
+    );
+    const companyId = companySync.companyId;
+
+    if (companySync.skipped.length > 0) {
+      for (const item of companySync.skipped) {
+        warnings.push(`${item.property}: ${item.reason}`);
+      }
+    }
 
     const companyTextUpdate = await client.updateCompanyResilient(companyId, {
-      description: companyProps.description,
-      about_us: companyProps.about_us,
+      description: formatCompanyDescription(payload),
+      about_us: formatCompanyDescription(payload),
     });
     if (companyTextUpdate.skipped.length > 0) {
       warnings.push(
@@ -98,12 +99,22 @@ export async function syncRequestQuoteToHubSpot(
       );
     }
 
+    const companyOk = Boolean(companySync.verified.name);
+
     return {
-      ok: true,
+      ok: companyOk,
       contactId,
       companyId,
       dealId,
+      error: companyOk
+        ? undefined
+        : "HubSpot company record was found/created but company name did not save. See companyDebug for details.",
       warnings: warnings.length ? warnings : undefined,
+      companyDebug: {
+        applied: companySync.applied,
+        skipped: companySync.skipped,
+        verified: companySync.verified,
+      },
     };
   } catch (error) {
     const message = formatHubSpotError(error);

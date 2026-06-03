@@ -50,6 +50,16 @@ export type HubSpotSyncResult = {
   companyId?: string;
   dealId?: string;
   error?: string;
+  warnings?: string[];
+  companyDebug?: {
+    applied: string[];
+    skipped: Array<{ property: string; reason: string }>;
+    verified?: {
+      name?: string | null;
+      industry?: string | null;
+      domain?: string | null;
+    };
+  };
 };
 
 export type RequestQuoteResponse = {

@@ -155,28 +155,141 @@ export class HubSpotClient {
     return null;
   }
 
-  async batchUpsertCompanyByDomain(domain: string, properties: Record<string, string>): Promise<string> {
-    const result = await this.request<{
-      results: Array<{ id: string }>;
-    }>(`/crm/v3/objects/companies/batch/upsert?idProperty=domain`, {
+  async getPropertyDefinition(objectType: "companies" | "contacts" | "deals", propertyName: string) {
+    return this.request<{
+      name: string;
+      label: string;
+      options?: Array<{ label: string; value: string; hidden?: boolean }>;
+    }>(`/crm/v3/properties/${objectType}/${propertyName}`);
+  }
+
+  async getCompany(companyId: string, properties: string[]) {
+    const query = properties.map((property) => encodeURIComponent(property)).join(",");
+    return this.request<{
+      id: string;
+      properties: Record<string, string | null | undefined>;
+    }>(`/crm/v3/objects/companies/${companyId}?properties=${query}`);
+  }
+
+  async batchUpdateCompany(companyId: string, properties: Record<string, string>): Promise<void> {
+    await this.request("/crm/v3/objects/companies/batch/update", {
       method: "POST",
       body: JSON.stringify({
-        inputs: [
-          {
-            id: domain,
-            properties: {
-              ...properties,
-              domain,
-              website: properties.website || `https://${domain}`,
-            },
-          },
-        ],
+        inputs: [{ id: companyId, properties }],
       }),
     });
+  }
 
-    const id = result.results?.[0]?.id;
-    if (!id) throw new Error("HubSpot company upsert returned no id.");
-    return id;
+  async resolveIndustryValue(formIndustry: string): Promise<string | undefined> {
+    const definition = await this.getPropertyDefinition("companies", "industry");
+    const { resolveIndustryOption } = await import("./industry");
+    const option = resolveIndustryOption(formIndustry, definition.options ?? []);
+    return option?.value;
+  }
+
+  async syncCompanyRecord(
+    identity: Record<string, string>,
+    formIndustry: string
+  ): Promise<{
+    companyId: string;
+    applied: string[];
+    skipped: Array<{ property: string; reason: string }>;
+    verified: { name?: string | null; industry?: string | null; domain?: string | null };
+  }> {
+    const domain = identity.domain?.replace(/^www\./, "");
+    const name = identity.name?.trim();
+    const applied: string[] = [];
+    const skipped: Array<{ property: string; reason: string }> = [];
+
+    if (!name) {
+      throw new Error("Company name is required for HubSpot company sync.");
+    }
+
+    let companyId =
+      (domain ? await this.findCompanyByDomainVariants(domain) : null) ||
+      (name ? await this.findCompanyByName(name) : null);
+
+    if (!companyId) {
+      companyId = await this.createCompany(
+        cleanProperties({
+          name,
+          domain,
+          website: identity.website || (domain ? `https://${domain}` : undefined),
+        })
+      );
+      applied.push("create");
+    }
+
+    const basePayload = cleanProperties({
+      name,
+      domain,
+      website: identity.website || (domain ? `https://${domain}` : undefined),
+    });
+
+    try {
+      await this.batchUpdateCompany(companyId, basePayload);
+      applied.push(...Object.keys(basePayload).map((key) => `batch:${key}`));
+    } catch (error) {
+      for (const [property, value] of Object.entries(basePayload)) {
+        try {
+          await this.updateCompany(companyId, { [property]: value });
+          applied.push(property);
+        } catch (patchError) {
+          skipped.push({
+            property,
+            reason: patchError instanceof Error ? patchError.message : "Unknown update error",
+          });
+        }
+      }
+    }
+
+    const industryValue = await this.resolveIndustryValue(formIndustry);
+    if (industryValue) {
+      try {
+        await this.batchUpdateCompany(companyId, { industry: industryValue });
+        applied.push("batch:industry");
+      } catch (error) {
+        try {
+          await this.updateCompany(companyId, { industry: industryValue });
+          applied.push("industry");
+        } catch (patchError) {
+          skipped.push({
+            property: "industry",
+            reason: patchError instanceof Error ? patchError.message : "Unknown industry update error",
+          });
+        }
+      }
+    } else if (formIndustry) {
+      skipped.push({
+        property: "industry",
+        reason: `Could not map form industry "${formIndustry}" to a HubSpot industry option.`,
+      });
+    }
+
+    const verifiedCompany = await this.getCompany(companyId, ["name", "domain", "industry"]);
+    const verified = {
+      name: verifiedCompany.properties.name ?? null,
+      industry: verifiedCompany.properties.industry ?? null,
+      domain: verifiedCompany.properties.domain ?? null,
+    };
+
+    if (!verified.name) {
+      skipped.push({
+        property: "name",
+        reason: "Company name is still blank in HubSpot after update attempts.",
+      });
+    }
+
+    if (formIndustry && !verified.industry) {
+      skipped.push({
+        property: "industry",
+        reason: industryValue
+          ? `Industry value "${industryValue}" was not saved in HubSpot.`
+          : `Could not map form industry "${formIndustry}" to a HubSpot industry option.`,
+      });
+    }
+
+    return { companyId, applied, skipped, verified };
   }
 
   async createCompany(properties: Record<string, string>): Promise<string> {
@@ -249,92 +362,6 @@ export class HubSpotClient {
     }
 
     return { applied, skipped };
-  }
-
-  async applyCompanyIdentity(
-    companyId: string,
-    identity: Record<string, string>
-  ): Promise<{ applied: string[]; skipped: Array<{ property: string; reason: string }> }> {
-    const applied: string[] = [];
-    const skipped: Array<{ property: string; reason: string }> = [];
-
-    const name = identity.name;
-    if (name) {
-      try {
-        await this.updateCompany(companyId, { name });
-        applied.push("name");
-      } catch (error) {
-        skipped.push({
-          property: "name",
-          reason: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    }
-
-    const rest = { ...identity };
-    delete rest.name;
-    const resilient = await this.updateCompanyResilient(companyId, rest);
-    applied.push(...resilient.applied);
-    skipped.push(...resilient.skipped);
-
-    return { applied, skipped };
-  }
-
-  async upsertCompany(properties: Record<string, string>): Promise<string> {
-    const domain = properties.domain?.replace(/^www\./, "");
-    const name = properties.name;
-
-    if (domain) {
-      try {
-        const companyId = await this.batchUpsertCompanyByDomain(domain, {
-          ...properties,
-          name: name || domain,
-          domain,
-          website: properties.website || `https://${domain}`,
-        });
-        await this.applyCompanyIdentity(companyId, {
-          name: name || domain,
-          domain,
-          website: properties.website || `https://${domain}`,
-          ...(properties.industry ? { industry: properties.industry } : {}),
-        });
-        return companyId;
-      } catch {
-        // Fall back to search/update/create when domain is not a unique upsert key in this portal.
-      }
-    }
-
-    const existingId =
-      (domain ? await this.findCompanyByDomainVariants(domain) : null) ||
-      (name ? await this.findCompanyByName(name) : null);
-
-    if (existingId) {
-      await this.applyCompanyIdentity(existingId, cleanProperties({
-        name,
-        domain,
-        website: domain ? properties.website || `https://${domain}` : properties.website,
-        industry: properties.industry,
-      }));
-      return existingId;
-    }
-
-    const createProps = cleanProperties({
-      name: name || domain,
-      domain,
-      website: domain ? `https://${domain}` : properties.website,
-    });
-    if (!createProps.name && !createProps.domain) {
-      throw new Error("Company name or domain is required.");
-    }
-
-    const companyId = await this.createCompany(createProps);
-    await this.applyCompanyIdentity(companyId, cleanProperties({
-      name,
-      domain,
-      website: domain ? properties.website || `https://${domain}` : properties.website,
-      industry: properties.industry,
-    }));
-    return companyId;
   }
 
   async resolvePipeline(): Promise<{ pipelineId: string; dealstage: string; pipelineLabel: string }> {
