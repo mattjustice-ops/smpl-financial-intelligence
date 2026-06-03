@@ -1,4 +1,12 @@
 import { cleanProperties, getHubSpotToken, HubSpotClient } from "./client";
+import {
+  companyExtendedProperties,
+  companyIdentityProperties,
+  dealExtendedProperties,
+  formatCompanyDescription,
+  formatDealDescription,
+  formatHubSpotError,
+} from "./properties";
 import type { HubSpotSyncResult, RequestQuotePayload } from "../request-quote/types";
 
 function contactProperties(payload: RequestQuotePayload): Record<string, string> {
@@ -11,25 +19,15 @@ function contactProperties(payload: RequestQuotePayload): Record<string, string>
   });
 }
 
-function companyProperties(payload: RequestQuotePayload): Record<string, string> {
-  return cleanProperties({
-    name: payload.companyName,
-    domain: payload.domain,
-    industry: payload.industry,
-    smpl_arr_range: payload.arrRange,
-    smpl_employee_count: payload.employeeCount,
-    smpl_finance_team_size: payload.financeTeamSize,
-    smpl_company_stage: payload.companyStage,
-    smpl_current_erp: payload.currentErp,
-    smpl_current_crm: payload.currentCrm,
-    smpl_current_billing_system: payload.currentBilling,
-    smpl_current_hris: payload.currentHris,
-    smpl_current_planning_tool: payload.currentPlanning,
-    smpl_data_reliability: payload.dataReliability,
-  });
+function companyCoreProperties(payload: RequestQuotePayload): Record<string, string> {
+  return {
+    ...companyIdentityProperties(payload),
+    description: formatCompanyDescription(payload),
+    about_us: formatCompanyDescription(payload),
+  };
 }
 
-function dealProperties(
+function dealCoreProperties(
   payload: RequestQuotePayload,
   pipelineId: string,
   dealstage: string
@@ -39,16 +37,7 @@ function dealProperties(
     pipeline: pipelineId,
     dealstage,
     amount: String(payload.estimatedDealAmount),
-    smpl_requested_modules: payload.requestedModules.join("; "),
-    smpl_business_needs: payload.businessNeeds,
-    smpl_biggest_challenge: payload.biggestChallenge,
-    smpl_current_solution: payload.currentSolution || undefined,
-    smpl_expected_users: payload.expectedUsers,
-    smpl_implementation_timeline: payload.implementationTimeline,
-    smpl_deployment_preference: payload.deploymentPreference,
-    smpl_budget_range: payload.budgetRange,
-    smpl_lead_score: String(payload.leadScore),
-    smpl_recommended_package: payload.recommendedPackage,
+    description: formatDealDescription(payload),
   });
 }
 
@@ -61,20 +50,63 @@ export async function syncRequestQuoteToHubSpot(
   }
 
   const client = new HubSpotClient(token);
+  const warnings: string[] = [];
 
   try {
     const contactId = await client.upsertContact(contactProperties(payload));
-    const companyId = await client.upsertCompany(companyProperties(payload));
+    const companyProps = companyCoreProperties(payload);
+    const companyId = await client.upsertCompany(companyProps);
+
+    const companyTextUpdate = await client.updateCompanyResilient(companyId, {
+      description: companyProps.description,
+      about_us: companyProps.about_us,
+    });
+    if (companyTextUpdate.skipped.length > 0) {
+      warnings.push(
+        `Some company narrative fields were skipped (${companyTextUpdate.skipped.length}). Check Description/About on the company record.`
+      );
+    }
+
     const { pipelineId, dealstage } = await client.resolvePipeline();
-    const dealId = await client.createDeal(dealProperties(payload, pipelineId, dealstage));
+    const dealId = await client.createDeal(dealCoreProperties(payload, pipelineId, dealstage));
 
-    await client.associateDefault("contacts", contactId, "companies", companyId);
-    await client.associateDefault("deals", dealId, "contacts", contactId);
-    await client.associateDefault("deals", dealId, "companies", companyId);
+    const companyExtended = await client.patchExtendedProperties(
+      "companies",
+      companyId,
+      companyExtendedProperties(payload)
+    );
+    if (companyExtended.skipped.length > 0) {
+      warnings.push(
+        `Company custom fields skipped (${companyExtended.skipped.length}). Details are in the company description.`
+      );
+    }
 
-    return { ok: true, contactId, companyId, dealId };
+    const dealExtended = await client.patchExtendedProperties("deals", dealId, dealExtendedProperties(payload));
+    if (dealExtended.skipped.length > 0) {
+      warnings.push(
+        `Deal custom fields skipped (${dealExtended.skipped.length}). Details are in the deal description.`
+      );
+    }
+
+    try {
+      await client.associateContactToCompany(contactId, companyId);
+      await client.associateDeal(dealId, "contacts", contactId);
+      await client.associateDeal(dealId, "companies", companyId);
+    } catch (associationError) {
+      warnings.push(
+        `Records were created but associations failed: ${formatHubSpotError(associationError)}`
+      );
+    }
+
+    return {
+      ok: true,
+      contactId,
+      companyId,
+      dealId,
+      warnings: warnings.length ? warnings : undefined,
+    };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown HubSpot error";
+    const message = formatHubSpotError(error);
     console.error("[request-quote] HubSpot sync failed:", message);
     return { ok: false, error: message };
   }
