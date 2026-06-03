@@ -27,7 +27,10 @@ class Settings(BaseSettings):
         "postgresql+psycopg://sfi:sfi_dev_password@localhost:5432/sfi"
     )
     api_cors_origins: str = ",".join(
-        f"http://localhost:{p}" for p in range(3000, 3011)
+        origin
+        for host in ("localhost", "127.0.0.1")
+        for p in range(3000, 3011)
+        for origin in (f"http://{host}:{p}",)
     )
 
     # OpenAI / AI commentary (env file + OS env use OPENAI_API_KEY)

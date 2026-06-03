@@ -8,9 +8,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sqlalchemy.orm import Session
+
 from app.db.session import SessionLocal
 from app.services.demo_csv.loader import load_demo_csv
-
 
 DEFAULT_FOLDER = Path.home() / "OneDrive" / "Documents" / "simple CSVS"
 VALID_PREFIXES = {"Actual", "Actuals", "Budget", "Forecast"}
@@ -25,6 +26,29 @@ def matching_files(folder: Path, prefix: str | None) -> list[Path]:
     for item in prefixes:
         files.extend(folder.glob(f"{item}_*.csv"))
     return sorted(set(files))
+
+
+def load_versioned_files(
+    db: Session,
+    organization_id: uuid.UUID,
+    files: list[Path],
+    *,
+    label: str = "versioned CSV",
+) -> tuple[int, int]:
+    loaded = 0
+    for path in files:
+        result = load_demo_csv(db, organization_id, path.read_bytes(), filename=path.name)
+        if result.header_error or result.integrity_error:
+            print(f"FAILED {path.name}: {result.header_error or result.integrity_error}")
+            continue
+        loaded += 1
+        print(f"LOADED {path.name}: {result.csv_kind} rows={result.rows_upserted}")
+        if result.validation_errors:
+            print(f"  validation_errors={len(result.validation_errors)}")
+        if result.warnings:
+            print(f"  warnings={len(result.warnings)}")
+    print(f"\nLoaded {loaded} of {len(files)} {label} files.")
+    return loaded, len(files)
 
 
 def main() -> None:
@@ -47,19 +71,8 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        loaded = 0
-        for path in files:
-            result = load_demo_csv(db, organization_id, path.read_bytes(), filename=path.name)
-            if result.header_error or result.integrity_error:
-                print(f"FAILED {path.name}: {result.header_error or result.integrity_error}")
-                continue
-            loaded += 1
-            print(f"LOADED {path.name}: {result.csv_kind} rows={result.rows_upserted}")
-            if result.validation_errors:
-                print(f"  validation_errors={len(result.validation_errors)}")
-            if result.warnings:
-                print(f"  warnings={len(result.warnings)}")
-        print(f"\nLoaded {loaded} of {len(files)} versioned CSV files.")
+        label = f"{prefix} CSV" if prefix else "versioned CSV"
+        load_versioned_files(db, organization_id, files, label=label)
     finally:
         db.close()
 

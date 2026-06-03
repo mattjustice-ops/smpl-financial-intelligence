@@ -19,6 +19,8 @@ from app.services.financial_statements.financial_statement_mapper import (
     table_name_for,
 )
 
+from app.services.reporting.period_utils import period_to_date, scenario_periods, to_period
+
 MONEY = Decimal("0.01")
 TOLERANCE = Decimal("1.00")
 
@@ -132,18 +134,28 @@ def fetch_rows(session: Session, table_name: str, organization_id: uuid.UUID, st
     return sorted(out, key=lambda r: r["period"])
 
 
-def scenarios_for(scenario: str, start_period: date, end_period: date) -> list[tuple[str, date, date]]:
+def scenarios_for(
+    scenario: str,
+    start_period: date,
+    end_period: date,
+    *,
+    as_of_period: date | None = None,
+) -> list[tuple[str, date, date]]:
     if scenario.lower() != "combined":
         normalized = "Forecast" if scenario.lower() == "forecast" else "Budget" if scenario.lower() == "budget" else "Actual"
         return [(normalized, month_start(start_period), month_start(end_period))]
-    periods = period_range(start_period, end_period)
-    actual_periods = [p for p in periods if p <= date(2026, 5, 1)]
-    forecast_periods = [p for p in periods if p >= date(2026, 6, 1)]
+    as_of = to_period(as_of_period) if as_of_period else None
+    slices = scenario_periods(
+        "Combined",
+        month_start(start_period),
+        month_start(end_period),
+        as_of_period=as_of,
+    )
     out: list[tuple[str, date, date]] = []
-    if actual_periods:
-        out.append(("Actual", actual_periods[0], actual_periods[-1]))
-    if forecast_periods:
-        out.append(("Forecast", forecast_periods[0], forecast_periods[-1]))
+    for scenario_name in ("Actual", "Forecast"):
+        periods = [period_to_date(period) for source, period in slices if source == scenario_name]
+        if periods:
+            out.append((scenario_name, periods[0], periods[-1]))
     return out
 
 
@@ -196,10 +208,23 @@ def ensure_balance_formulas(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def ensure_cash_flow_formulas(rows: list[dict[str, Any]], bs_cash: dict[tuple[str, date], Decimal], scenario: str) -> list[dict[str, Any]]:
+def ensure_cash_flow_formulas(
+    rows: list[dict[str, Any]],
+    bs_cash: dict[tuple[str, date], Decimal],
+    scenario: str,
+    *,
+    as_of_period: date | None = None,
+) -> list[dict[str, Any]]:
     out_rows: list[dict[str, Any]] = []
     prior_ending: Decimal | None = None
-    actual_may_cash = bs_cash.get(("Actual", date(2026, 5, 1)))
+    as_of_key = month_start(as_of_period) if as_of_period else None
+    first_forecast_period: date | None = None
+    if as_of_key is not None:
+        if as_of_key.month == 12:
+            first_forecast_period = date(as_of_key.year + 1, 1, 1)
+        else:
+            first_forecast_period = date(as_of_key.year, as_of_key.month + 1, 1)
+    actual_cutover_cash = bs_cash.get(("Actual", as_of_key)) if as_of_key else None
     for row in sorted(rows, key=lambda r: r["period"]):
         out = dict(row)
         period = out["period"]
@@ -207,8 +232,13 @@ def ensure_cash_flow_formulas(rows: list[dict[str, Any]], bs_cash: dict[tuple[st
         net_change = row_value(out, "net_change_in_cash")
         ending = row_value(out, "ending_cash")
         if beginning == 0:
-            if scenario == "Forecast" and period == date(2026, 6, 1) and actual_may_cash is not None:
-                beginning = actual_may_cash
+            if (
+                scenario == "Forecast"
+                and first_forecast_period is not None
+                and period == first_forecast_period
+                and actual_cutover_cash is not None
+            ):
+                beginning = actual_cutover_cash
             elif prior_ending is not None:
                 beginning = prior_ending
             elif ending != 0 or net_change != 0:
@@ -273,10 +303,11 @@ def statement(
     start_period: date,
     end_period: date,
     statement_type: str,
+    as_of_period: date | None = None,
 ) -> NormalizedStatementResponse:
     rows: list[NormalizedStatementLine] = []
     periods: set[date] = set()
-    for scenario_name, s, e in scenarios_for(scenario, start_period, end_period):
+    for scenario_name, s, e in scenarios_for(scenario, start_period, end_period, as_of_period=as_of_period):
         if statement_type == "income_statement":
             table = table_name_for(scenario_name, "income_statement")
             source = [ensure_income_formulas(r) for r in fetch_rows(session, table, organization_id, s, e)]
@@ -288,7 +319,12 @@ def statement(
         else:
             table = table_name_for(scenario_name, "cash_flow_statement")
             bs_cash = balance_sheet_cash(session, organization_id, start_period, end_period)
-            source = ensure_cash_flow_formulas(fetch_rows(session, table, organization_id, s, e), bs_cash, scenario_name)
+            source = ensure_cash_flow_formulas(
+                fetch_rows(session, table, organization_id, s, e),
+                bs_cash,
+                scenario_name,
+                as_of_period=as_of_period,
+            )
             mappings = CASH_FLOW_LINES
         periods.update(r["period"] for r in source)
         rows.extend(normalize_rows(organization_id, scenario_name, table, source, mappings))
@@ -312,14 +348,55 @@ def balance_sheet_cash(session: Session, organization_id: uuid.UUID, start_perio
     return out
 
 
-def summary(session: Session, organization_id: uuid.UUID, *, scenario: str, start_period: date, end_period: date) -> SummaryResponse:
-    income = statement(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, statement_type="income_statement")
-    balance = statement(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, statement_type="balance_sheet")
-    cash = statement(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, statement_type="cash_flow")
+def summary(
+    session: Session,
+    organization_id: uuid.UUID,
+    *,
+    scenario: str,
+    start_period: date,
+    end_period: date,
+    as_of_period: date | None = None,
+) -> SummaryResponse:
+    income = statement(
+        session,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        statement_type="income_statement",
+        as_of_period=as_of_period,
+    )
+    balance = statement(
+        session,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        statement_type="balance_sheet",
+        as_of_period=as_of_period,
+    )
+    cash = statement(
+        session,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        statement_type="cash_flow",
+        as_of_period=as_of_period,
+    )
     from app.services.financial_statements.financial_statement_validation_service import validate_financial_statements
 
     validations = validate_financial_statements(income, balance, cash)
-    validations.extend(source_reconciliation_validations(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period))
+    validations.extend(
+        source_reconciliation_validations(
+            session,
+            organization_id,
+            scenario=scenario,
+            start_period=start_period,
+            end_period=end_period,
+            as_of_period=as_of_period,
+        )
+    )
     return SummaryResponse(
         organization_id=str(organization_id),
         scenario=scenario,
@@ -353,9 +430,10 @@ def source_reconciliation_validations(
     scenario: str,
     start_period: date,
     end_period: date,
+    as_of_period: date | None = None,
 ) -> list[ValidationResult]:
     results: list[ValidationResult] = []
-    for scenario_name, s, e in scenarios_for(scenario, start_period, end_period):
+    for scenario_name, s, e in scenarios_for(scenario, start_period, end_period, as_of_period=as_of_period):
         ar_table = table_name_for(scenario_name, "accounts_receivable_rollforward")
         for row in fetch_rows(session, ar_table, organization_id, s, e):
             expected = (

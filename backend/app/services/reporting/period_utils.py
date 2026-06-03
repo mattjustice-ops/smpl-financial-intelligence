@@ -47,13 +47,25 @@ def prior_period(period: str) -> str:
     return f"{current.year:04d}-{current.month - 1:02d}"
 
 
-def combined_scenario_for_period(period: str) -> str:
-    return "Actual" if to_period(period) <= "2026-05" else "Forecast"
+def combined_scenario_for_period(period: str, *, as_of_period: str | None = None) -> str:
+    from app.services.reporting.as_of_period import active_as_of_period
+
+    as_of = to_period(as_of_period) if as_of_period else active_as_of_period(fallback=period)
+    return "Actual" if to_period(period) <= as_of else "Forecast"
 
 
-def scenario_periods(scenario: str, start_period: str | date, end_period: str | date) -> list[tuple[str, str]]:
+def scenario_periods(
+    scenario: str,
+    start_period: str | date,
+    end_period: str | date,
+    *,
+    as_of_period: str | None = None,
+) -> list[tuple[str, str]]:
+    from app.services.reporting.as_of_period import active_as_of_period
+
     periods = period_range(start_period, end_period)
     if scenario.lower() == "combined":
-        return [(combined_scenario_for_period(period), period) for period in periods]
+        as_of = to_period(as_of_period) if as_of_period else active_as_of_period(fallback=periods[-1])
+        return [(combined_scenario_for_period(period, as_of_period=as_of), period) for period in periods]
     normalized = "Actual" if scenario.lower() == "actual" else "Budget" if scenario.lower() == "budget" else "Forecast"
     return [(normalized, period) for period in periods]

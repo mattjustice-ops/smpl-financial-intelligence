@@ -25,6 +25,7 @@ import { ExecutiveAiCommentary } from "./cfo/ExecutiveAiCommentary";
 import { ExecutiveKpiStrip } from "./cfo/ExecutiveKpiStrip";
 import { OperatingSectionHeader } from "./cfo/OperatingSectionHeader";
 import { deriveExecutiveKpis } from "../lib/deriveExecutiveKpis";
+import { normalizePeriodKey, scenarioForPeriod } from "../lib/periodScenario";
 import { ManagementPnLDashboard } from "./management/ManagementPnLDashboard";
 import { WorkforcePlanningDashboard } from "./workforce/WorkforcePlanningDashboard";
 import {
@@ -164,6 +165,7 @@ type ActualBudgetForecastResponse = {
 };
 
 type ExecutiveFlowResponse = {
+  as_of_period?: string;
   marketing_summary: { rows?: MarketingRow[] };
   marketing_channel_performance?: { rows?: MarketingRow[] };
   marketing_channel_actual?: { rows?: MarketingRow[] };
@@ -255,9 +257,20 @@ function monthRange(startPeriod: string, endPeriod: string) {
   return periods;
 }
 
-function scenarioForPeriod(period: string, selectedScenario: string) {
-  if (selectedScenario === "Combined") return period <= "2026-05" ? "Actual" : "Forecast";
-  return selectedScenario;
+function filterMarketingRowsForDisplay(
+  rows: MarketingRow[],
+  selectedScenario: string,
+  periods: string[],
+  asOfPeriod: string
+) {
+  const periodSet = new Set(periods);
+  return rows.filter((row) => {
+    if (!periodSet.has(row.period)) return false;
+    if (selectedScenario === "Combined") {
+      return row.scenario === scenarioForPeriod(row.period, selectedScenario, asOfPeriod);
+    }
+    return row.scenario === selectedScenario;
+  });
 }
 
 /** Map View control to API period range (marketing routes use start/end only). */
@@ -279,22 +292,6 @@ function resolveQueryPeriodRange(periodView: string, startPeriod: string, endPer
     };
   }
   return { start: startPeriod, end: endPeriod };
-}
-
-/** Keep only in-range rows and the scenario slice Combined uses per month. */
-function filterMarketingRowsForDisplay(
-  rows: MarketingRow[],
-  selectedScenario: string,
-  periods: string[]
-) {
-  const periodSet = new Set(periods);
-  return rows.filter((row) => {
-    if (!periodSet.has(row.period)) return false;
-    if (selectedScenario === "Combined") {
-      return row.scenario === scenarioForPeriod(row.period, selectedScenario);
-    }
-    return row.scenario === selectedScenario;
-  });
 }
 
 const ATTRIBUTION_ROW_LIMIT = 250;
@@ -382,6 +379,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
   const [scenario, setScenario] = useState("Combined");
   const [startPeriod, setStartPeriod] = useState("2026-01");
   const [endPeriod, setEndPeriod] = useState("2026-12");
+  const [asOfPeriod, setAsOfPeriod] = useState("");
   const [periodView, setPeriodView] = useState("monthly");
   const [marketingChannel, setMarketingChannel] = useState("");
   const [data, setData] = useState<ExecutiveFlowResponse | null>(null);
@@ -427,6 +425,10 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
         end_period: queryEnd,
         _: String(Date.now()),
       });
+      const closeMonth = normalizePeriodKey(asOfPeriod || endPeriod);
+      if (scenario === "Combined" || asOfPeriod.trim()) {
+        params.set("as_of_period", closeMonth);
+      }
       if (marketingChannel) params.set("marketing_channel", marketingChannel);
       if (periodView === "fiscal_year") params.set("fiscal_year", startPeriod.slice(0, 4));
       if (periodView.startsWith("Q")) {
@@ -472,6 +474,9 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
         end_period: statementDates.end_period,
         _: String(Date.now()),
       });
+      if (scenario === "Combined" || asOfPeriod.trim()) {
+        statementParams.set("as_of_period", `${closeMonth}-01`);
+      }
       const workforceDates = statementPeriodParams(queryStart, queryEnd);
       const workforceValidationFetches =
         scenario === "Combined"
@@ -605,12 +610,16 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
       ) {
         const executive = await fetchSection<ExecutiveFlowResponse>("/api/v1/dashboard/executive-flow");
         setData(executive);
+        if (executive.as_of_period) {
+          setAsOfPeriod(executive.as_of_period);
+        }
         setError(null);
         setLastRefresh(new Date().toLocaleString());
         return;
       }
 
       setData({
+        as_of_period: closeMonth,
         marketing_summary: { rows: marketing.rows },
         marketing_channel_performance: { rows: marketingChannels.rows },
         marketing_channel_actual: { rows: marketingChannelsActual.rows },
@@ -658,7 +667,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
     if (!enabled) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, periodView, startPeriod, endPeriod, scenario, orgId, marketingChannel]);
+  }, [enabled, periodView, startPeriod, endPeriod, scenario, orgId, marketingChannel, asOfPeriod]);
 
   const queryPeriodRange = useMemo(
     () => resolveQueryPeriodRange(periodView, startPeriod, endPeriod),
@@ -668,44 +677,45 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
     () => monthRange(queryPeriodRange.start, queryPeriodRange.end),
     [queryPeriodRange]
   );
+  const effectiveAsOf = normalizePeriodKey(asOfPeriod || data?.as_of_period || endPeriod);
 
   const dashboardPeriods = queryPeriods;
   const marketingRows = useMemo(
-    () => filterMarketingRowsForDisplay(data?.marketing_summary.rows ?? [], scenario, queryPeriods),
-    [data?.marketing_summary.rows, scenario, queryPeriods]
+    () => filterMarketingRowsForDisplay(data?.marketing_summary.rows ?? [], scenario, queryPeriods, effectiveAsOf),
+    [data?.marketing_summary.rows, scenario, queryPeriods, effectiveAsOf]
   );
   const marketingChannelRows = useMemo(
     () =>
       filterMarketingRowsForDisplay(
         data?.marketing_channel_performance?.rows ?? [],
         scenario,
-        queryPeriods
+        queryPeriods,
+        effectiveAsOf
       ),
-    [data?.marketing_channel_performance?.rows, scenario, queryPeriods]
+    [data?.marketing_channel_performance?.rows, scenario, queryPeriods, effectiveAsOf]
   );
   const marketingChannelActualRows = useMemo(
     () =>
       filterMarketingRowsForDisplay(
         data?.marketing_channel_actual?.rows ?? [],
         "Actual",
-        queryPeriods
+        queryPeriods,
+        effectiveAsOf
       ),
-    [data?.marketing_channel_actual?.rows, queryPeriods]
+    [data?.marketing_channel_actual?.rows, queryPeriods, effectiveAsOf]
   );
   const marketingChannelBudgetRows = useMemo(
     () =>
       filterMarketingRowsForDisplay(
         data?.marketing_channel_budget?.rows ?? [],
         "Budget",
-        queryPeriods
+        queryPeriods,
+        effectiveAsOf
       ),
-    [data?.marketing_channel_budget?.rows, queryPeriods]
+    [data?.marketing_channel_budget?.rows, queryPeriods, effectiveAsOf]
   );
   const warnings = data?.validation.filter((row) => row.status !== "pass") ?? [];
-  const closePeriod = useMemo(() => {
-    const periods = Array.from(new Set(marketingRows.map((r) => r.period))).sort();
-    return periods.at(-1) ?? endPeriod;
-  }, [marketingRows, endPeriod]);
+  const closePeriod = effectiveAsOf;
 
   const validationStatus = useMemo((): "ok" | "warn" | "fail" | "unknown" => {
     if (!data) return "unknown";
@@ -720,7 +730,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
       (r) =>
         r.period === closePeriod &&
         /total.*revenue|^revenue$/i.test(r.line_item.trim()) &&
-        r.scenario === scenarioForPeriod(closePeriod, scenario)
+        r.scenario === scenarioForPeriod(closePeriod, scenario, effectiveAsOf)
     );
     return deriveExecutiveKpis({
       closePeriod,
@@ -773,6 +783,15 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
           <option value="fiscal_year">Fiscal Year</option>
           <option value="ytd">YTD</option>
         </select>
+      </label>
+      <label>
+        Close month (Combined)
+        <input
+          type="month"
+          value={asOfPeriod || effectiveAsOf}
+          onChange={(e) => setAsOfPeriod(e.target.value)}
+          title="Last closed Actual month — open months use Forecast"
+        />
       </label>
       <label>
         Start
@@ -893,6 +912,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
             title="Pipeline waterfall"
             response={data.waterfalls.pipeline}
             selectedScenario={scenario}
+            asOfPeriod={closePeriod}
             organizationId={orgId}
             marketingChannel={marketingChannel}
             periodsOverride={dashboardPeriods}
@@ -901,6 +921,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
             title="Opportunities by stage"
             response={data.opportunities.stage_summary}
             selectedScenario={scenario}
+            asOfPeriod={closePeriod}
             periodsOverride={dashboardPeriods}
           />
         </>
@@ -913,6 +934,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
             title="MRR / ARR waterfall"
             response={data.waterfalls.arr}
             selectedScenario={scenario}
+            asOfPeriod={closePeriod}
             periodsOverride={dashboardPeriods}
           />
         </>
@@ -937,6 +959,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
             ]}
             periodsOverride={dashboardPeriods}
             selectedScenario={scenario}
+            asOfPeriod={closePeriod}
             expandable={false}
           />
           <p style={{ color: "var(--muted)", fontSize: 12, margin: "8px 0 0" }}>
@@ -948,6 +971,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
             filterTypes={["new_billings"]}
             periodsOverride={dashboardPeriods}
             selectedScenario={scenario}
+            asOfPeriod={closePeriod}
           />
         </>
       )}
@@ -991,6 +1015,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
             title="Cash forecast"
             response={data.waterfalls.cash_flow}
             selectedScenario={scenario}
+            asOfPeriod={closePeriod}
             organizationId={orgId}
             periodsOverride={dashboardPeriods}
           />
@@ -1465,6 +1490,7 @@ export function PipelineWaterfallTable({
   title,
   response,
   selectedScenario,
+  asOfPeriod,
   organizationId,
   marketingChannel,
   periodsOverride,
@@ -1472,6 +1498,7 @@ export function PipelineWaterfallTable({
   title: string;
   response?: WaterfallResponse;
   selectedScenario: string;
+  asOfPeriod: string;
   organizationId: string;
   marketingChannel: string;
   periodsOverride?: string[];
@@ -1533,6 +1560,7 @@ export function PipelineWaterfallTable({
           _: String(Date.now()),
         });
         if (marketingChannel) params.set("marketing_channel", marketingChannel);
+        if (selectedScenario === "Combined") params.set("as_of_period", asOfPeriod);
         const payload = await fetchJson<PipelineDrilldownResponse>(
           `${apiBase}/api/v1/waterfalls/pipeline/drilldown?${params}`
         );
@@ -1549,7 +1577,7 @@ export function PipelineWaterfallTable({
     return () => {
       cancelled = true;
     };
-  }, [selected, organizationId, selectedScenario, marketingChannel]);
+  }, [selected, organizationId, selectedScenario, marketingChannel, asOfPeriod]);
 
   const onCellClick = (row: WaterfallSummaryRow, period: string) => {
     if (!PIPELINE_DRILLDOWN_TYPES.has(row.waterfall_type)) return;
@@ -1583,8 +1611,8 @@ export function PipelineWaterfallTable({
                 <th key={period} style={periodHeaderStyle(th)}>
                   {formatDashboardPeriodHeader(period)}
                   <div style={{ marginTop: 4 }}>
-                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario))}>
-                      {scenarioForPeriod(period, selectedScenario)}
+                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario, asOfPeriod))}>
+                      {scenarioForPeriod(period, selectedScenario, asOfPeriod)}
                     </span>
                   </div>
                 </th>
@@ -1650,7 +1678,7 @@ export function PipelineWaterfallTable({
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
             <div>
               <strong>
-                {selected.line_item} · {selected.period} ({scenarioForPeriod(selected.period, selectedScenario)})
+                {selected.line_item} · {selected.period} ({scenarioForPeriod(selected.period, selectedScenario, asOfPeriod)})
               </strong>
               <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>
                 Waterfall cell {money(selected.amount)}
@@ -1741,12 +1769,14 @@ export function CashFlowWaterfallTable({
   title,
   response,
   selectedScenario,
+  asOfPeriod,
   organizationId,
   periodsOverride,
 }: {
   title: string;
   response?: WaterfallResponse;
   selectedScenario: string;
+  asOfPeriod: string;
   organizationId: string;
   periodsOverride?: string[];
 }) {
@@ -1806,6 +1836,7 @@ export function CashFlowWaterfallTable({
           expected_amount: String(selected.amount),
           _: String(Date.now()),
         });
+        if (selectedScenario === "Combined") params.set("as_of_period", asOfPeriod);
         const payload = await fetchJson<CashFlowDrilldownResponse>(
           `${apiBase}/api/v1/waterfalls/cash-flow/drilldown?${params}`
         );
@@ -1822,7 +1853,7 @@ export function CashFlowWaterfallTable({
     return () => {
       cancelled = true;
     };
-  }, [selected, organizationId, selectedScenario]);
+  }, [selected, organizationId, selectedScenario, asOfPeriod]);
 
   const onCellClick = (row: WaterfallSummaryRow, period: string) => {
     if (!CASH_DRILLDOWN_TYPES.has(row.waterfall_type)) return;
@@ -1856,8 +1887,8 @@ export function CashFlowWaterfallTable({
                 <th key={period} style={periodHeaderStyle(th)}>
                   {formatDashboardPeriodHeader(period)}
                   <div style={{ marginTop: 4 }}>
-                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario))}>
-                      {scenarioForPeriod(period, selectedScenario)}
+                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario, asOfPeriod))}>
+                      {scenarioForPeriod(period, selectedScenario, asOfPeriod)}
                     </span>
                   </div>
                 </th>
@@ -1926,7 +1957,7 @@ export function CashFlowWaterfallTable({
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
             <div>
               <strong>
-                {selected.line_item} · {selected.period} ({scenarioForPeriod(selected.period, selectedScenario)})
+                {selected.line_item} · {selected.period} ({scenarioForPeriod(selected.period, selectedScenario, asOfPeriod)})
               </strong>
               <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>
                 Waterfall cell {money(selected.amount)}
@@ -2013,6 +2044,7 @@ export function ExpandableWaterfallTable({
   filterTypes,
   periodsOverride,
   selectedScenario,
+  asOfPeriod,
   expandable = true,
 }: {
   title: string;
@@ -2020,6 +2052,7 @@ export function ExpandableWaterfallTable({
   filterTypes?: string[];
   periodsOverride?: string[];
   selectedScenario: string;
+  asOfPeriod: string;
   expandable?: boolean;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -2058,8 +2091,8 @@ export function ExpandableWaterfallTable({
                 <th key={period} style={periodHeaderStyle(th)}>
                   {formatDashboardPeriodHeader(period)}
                   <div style={{ marginTop: 4 }}>
-                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario))}>
-                      {scenarioForPeriod(period, selectedScenario)}
+                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario, asOfPeriod))}>
+                      {scenarioForPeriod(period, selectedScenario, asOfPeriod)}
                     </span>
                   </div>
                 </th>
@@ -2341,11 +2374,13 @@ function OpportunitySummary({
   title,
   response,
   selectedScenario,
+  asOfPeriod,
   periodsOverride,
 }: {
   title: string;
   response?: OpportunityResponse;
   selectedScenario: string;
+  asOfPeriod: string;
   periodsOverride?: string[];
 }) {
   const rows = response?.rows ?? [];
@@ -2372,8 +2407,8 @@ function OpportunitySummary({
                 <th key={period} style={periodHeaderStyle(th)}>
                   {formatDashboardPeriodHeader(period)}
                   <div style={{ marginTop: 4 }}>
-                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario))}>
-                      {scenarioForPeriod(period, selectedScenario)}
+                    <span style={scenarioPill(scenarioForPeriod(period, selectedScenario, asOfPeriod))}>
+                      {scenarioForPeriod(period, selectedScenario, asOfPeriod)}
                     </span>
                   </div>
                 </th>

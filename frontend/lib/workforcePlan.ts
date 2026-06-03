@@ -39,14 +39,15 @@ export function mergeCombinedWorkforcePlans(
   actual: WorkforcePlanResponse,
   forecast: WorkforcePlanResponse,
   queryStart: string,
-  queryEnd: string
+  queryEnd: string,
+  asOfPeriod: string
 ): WorkforcePlanResponse {
   const periods = monthRange(queryStart, queryEnd);
   const periodSummary: WorkforcePeriodRow[] = [];
   const operatingMetrics: WorkforceOperatingMetric[] = [];
 
   for (const period of periods) {
-    const slice = scenarioForPeriod(period, "Combined") === "Actual" ? actual : forecast;
+    const slice = scenarioForPeriod(period, "Combined", asOfPeriod) === "Actual" ? actual : forecast;
     periodSummary.push(...slice.period_summary.filter((row) => normalizePeriodKey(row.period) === period));
     const metric = slice.operating_metrics.find((row) => normalizePeriodKey(row.period) === period);
     if (metric) operatingMetrics.push(metric);

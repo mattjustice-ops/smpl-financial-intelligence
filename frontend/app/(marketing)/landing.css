@@ -6,3 +6,83 @@
 .marketing-root {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
+/* ── Operating model: CSS-only radio tabs (no React hydration required) ── */
+.op-model-root .op-model-panel {
+  display: none;
+}
+
+.op-model-root #smpl-op-0:checked ~ .op-model-panel[data-op-panel="0"],
+.op-model-root #smpl-op-1:checked ~ .op-model-panel[data-op-panel="1"],
+.op-model-root #smpl-op-2:checked ~ .op-model-panel[data-op-panel="2"],
+.op-model-root #smpl-op-3:checked ~ .op-model-panel[data-op-panel="3"],
+.op-model-root #smpl-op-4:checked ~ .op-model-panel[data-op-panel="4"],
+.op-model-root #smpl-op-5:checked ~ .op-model-panel[data-op-panel="5"],
+.op-model-root #smpl-op-6:checked ~ .op-model-panel[data-op-panel="6"] {
+  display: block;
+}
+
+.op-model-root #smpl-op-0:checked ~ .op-model-labels label[for="smpl-op-0"],
+.op-model-root #smpl-op-1:checked ~ .op-model-labels label[for="smpl-op-1"],
+.op-model-root #smpl-op-2:checked ~ .op-model-labels label[for="smpl-op-2"],
+.op-model-root #smpl-op-3:checked ~ .op-model-labels label[for="smpl-op-3"],
+.op-model-root #smpl-op-4:checked ~ .op-model-labels label[for="smpl-op-4"],
+.op-model-root #smpl-op-5:checked ~ .op-model-labels label[for="smpl-op-5"],
+.op-model-root #smpl-op-6:checked ~ .op-model-labels label[for="smpl-op-6"] {
+  border-color: rgb(20 184 166);
+  background: linear-gradient(to bottom, rgb(240 253 250), rgb(236 254 255));
+  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.12);
+}
+
+.op-model-root #smpl-op-0:checked ~ .op-model-labels label[for="smpl-op-0"] .op-model-tab-num,
+.op-model-root #smpl-op-1:checked ~ .op-model-labels label[for="smpl-op-1"] .op-model-tab-num,
+.op-model-root #smpl-op-2:checked ~ .op-model-labels label[for="smpl-op-2"] .op-model-tab-num,
+.op-model-root #smpl-op-3:checked ~ .op-model-labels label[for="smpl-op-3"] .op-model-tab-num,
+.op-model-root #smpl-op-4:checked ~ .op-model-labels label[for="smpl-op-4"] .op-model-tab-num,
+.op-model-root #smpl-op-5:checked ~ .op-model-labels label[for="smpl-op-5"] .op-model-tab-num,
+.op-model-root #smpl-op-6:checked ~ .op-model-labels label[for="smpl-op-6"] .op-model-tab-num {
+  background: rgb(20 184 166);
+  color: white;
+}
+
+.op-model-root #smpl-op-0:checked ~ .op-model-pills label[for="smpl-op-0"],
+.op-model-root #smpl-op-1:checked ~ .op-model-pills label[for="smpl-op-1"],
+.op-model-root #smpl-op-2:checked ~ .op-model-pills label[for="smpl-op-2"],
+.op-model-root #smpl-op-3:checked ~ .op-model-pills label[for="smpl-op-3"],
+.op-model-root #smpl-op-4:checked ~ .op-model-pills label[for="smpl-op-4"],
+.op-model-root #smpl-op-5:checked ~ .op-model-pills label[for="smpl-op-5"],
+.op-model-root #smpl-op-6:checked ~ .op-model-pills label[for="smpl-op-6"] {
+  background: rgb(13 148 136);
+  color: white;
+  --tw-ring-color: rgb(13 148 136);
+}
+
+/* ── Executive questions: CSS-only radio Q&A ── */
+.understand-root .understand-panel {
+  display: none;
+}
+
+.understand-root #sq-0:checked ~ .grid .understand-panel[data-sq-panel="0"],
+.understand-root #sq-1:checked ~ .grid .understand-panel[data-sq-panel="1"],
+.understand-root #sq-2:checked ~ .grid .understand-panel[data-sq-panel="2"],
+.understand-root #sq-3:checked ~ .grid .understand-panel[data-sq-panel="3"],
+.understand-root #sq-4:checked ~ .grid .understand-panel[data-sq-panel="4"],
+.understand-root #sq-5:checked ~ .grid .understand-panel[data-sq-panel="5"],
+.understand-root #sq-6:checked ~ .grid .understand-panel[data-sq-panel="6"],
+.understand-root #sq-7:checked ~ .grid .understand-panel[data-sq-panel="7"] {
+  display: block;
+}
+
+.understand-root #sq-0:checked ~ .grid .understand-labels label[for="sq-0"],
+.understand-root #sq-1:checked ~ .grid .understand-labels label[for="sq-1"],
+.understand-root #sq-2:checked ~ .grid .understand-labels label[for="sq-2"],
+.understand-root #sq-3:checked ~ .grid .understand-labels label[for="sq-3"],
+.understand-root #sq-4:checked ~ .grid .understand-labels label[for="sq-4"],
+.understand-root #sq-5:checked ~ .grid .understand-labels label[for="sq-5"],
+.understand-root #sq-6:checked ~ .grid .understand-labels label[for="sq-6"],
+.understand-root #sq-7:checked ~ .grid .understand-labels label[for="sq-7"] {
+  border-color: rgba(45, 212, 191, 0.6);
+  background: rgba(45, 212, 191, 0.15);
+  color: white;
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.4);
+}

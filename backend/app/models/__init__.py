@@ -32,6 +32,7 @@ from app.models.demo_finance import (
     WarehouseCsvRow,
 )
 from app.models.organization import Organization
+from app.models.quote_submission import QuoteSubmission
 from app.models.workforce import (
     WorkforceCompensationBand,
     WorkforceDepartmentAllocationRule,
@@ -67,6 +68,7 @@ __all__ = [
     "MrrWaterfall",
     "Opportunity",
     "Organization",
+    "QuoteSubmission",
     "Payment",
     "SalesQuota",
     "Subscription",

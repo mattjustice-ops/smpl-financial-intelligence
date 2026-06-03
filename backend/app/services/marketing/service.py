@@ -116,8 +116,9 @@ def _load_marketing_rows(
     start_period: str,
     end_period: str,
     marketing_channel: str | None = None,
+    as_of_period: str | None = None,
 ) -> list[MarketingMetricRow]:
-    wanted = set(scenario_periods(scenario, start_period, end_period))
+    wanted = set(scenario_periods(scenario, start_period, end_period, as_of_period=as_of_period))
     rows: list[MarketingMetricRow] = []
     for source_scenario in sorted({item[0] for item in wanted}):
         table_name = SCENARIO_TABLE[source_scenario]
@@ -218,6 +219,7 @@ def _validate(
     scenario: str,
     start_period: str,
     end_period: str,
+    as_of_period: str | None = None,
 ) -> list[ValidationCheck]:
     checks: list[ValidationCheck] = []
     actual_closed_won = _actual_closed_won_by_channel(db, organization_id, start_period, end_period)
@@ -262,7 +264,7 @@ def _validate(
                 )
             )
     if scenario.lower() == "combined":
-        for source_scenario, period in scenario_periods("Combined", start_period, end_period):
+        for source_scenario, period in scenario_periods("Combined", start_period, end_period, as_of_period=as_of_period):
             matching = [r for r in rows if r.period == period]
             if matching and any(r.scenario != source_scenario for r in matching):
                 checks.append(
@@ -276,14 +278,88 @@ def _validate(
     return checks
 
 
-def performance_summary(db: Session, organization_id: uuid.UUID, *, scenario: str, start_period: str, end_period: str, marketing_channel: str | None = None) -> MarketingResponse:
-    rows = _aggregate(_load_marketing_rows(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, marketing_channel=marketing_channel), by_channel=False)
-    return MarketingResponse(organization_id=str(organization_id), scenario=scenario, start_period=start_period, end_period=end_period, rows=rows, charts=_chart(rows, ["marketing_spend", "pipeline_arr_created", "closed_won_arr"]), validation=_validate(db, organization_id, rows, scenario=scenario, start_period=start_period, end_period=end_period), metadata={"grain": "period"})
+def performance_summary(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    scenario: str,
+    start_period: str,
+    end_period: str,
+    marketing_channel: str | None = None,
+    as_of_period: str | None = None,
+) -> MarketingResponse:
+    rows = _aggregate(
+        _load_marketing_rows(
+            db,
+            organization_id,
+            scenario=scenario,
+            start_period=start_period,
+            end_period=end_period,
+            marketing_channel=marketing_channel,
+            as_of_period=as_of_period,
+        ),
+        by_channel=False,
+    )
+    return MarketingResponse(
+        organization_id=str(organization_id),
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        rows=rows,
+        charts=_chart(rows, ["marketing_spend", "pipeline_arr_created", "closed_won_arr"]),
+        validation=_validate(
+            db,
+            organization_id,
+            rows,
+            scenario=scenario,
+            start_period=start_period,
+            end_period=end_period,
+            as_of_period=as_of_period,
+        ),
+        metadata={"grain": "period", "as_of_period": as_of_period},
+    )
 
 
-def channel_performance(db: Session, organization_id: uuid.UUID, *, scenario: str, start_period: str, end_period: str, marketing_channel: str | None = None) -> MarketingResponse:
-    rows = _aggregate(_load_marketing_rows(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, marketing_channel=marketing_channel), by_channel=True)
-    return MarketingResponse(organization_id=str(organization_id), scenario=scenario, start_period=start_period, end_period=end_period, rows=rows, charts=_chart(rows, ["pipeline_arr_created", "marketing_spend", "closed_won_arr"], series_by_channel=True), validation=_validate(db, organization_id, rows, scenario=scenario, start_period=start_period, end_period=end_period), metadata={"grain": "period_channel"})
+def channel_performance(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    scenario: str,
+    start_period: str,
+    end_period: str,
+    marketing_channel: str | None = None,
+    as_of_period: str | None = None,
+) -> MarketingResponse:
+    rows = _aggregate(
+        _load_marketing_rows(
+            db,
+            organization_id,
+            scenario=scenario,
+            start_period=start_period,
+            end_period=end_period,
+            marketing_channel=marketing_channel,
+            as_of_period=as_of_period,
+        ),
+        by_channel=True,
+    )
+    return MarketingResponse(
+        organization_id=str(organization_id),
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        rows=rows,
+        charts=_chart(rows, ["pipeline_arr_created", "marketing_spend", "closed_won_arr"], series_by_channel=True),
+        validation=_validate(
+            db,
+            organization_id,
+            rows,
+            scenario=scenario,
+            start_period=start_period,
+            end_period=end_period,
+            as_of_period=as_of_period,
+        ),
+        metadata={"grain": "period_channel", "as_of_period": as_of_period},
+    )
 
 
 def pipeline_waterfall(db: Session, organization_id: uuid.UUID, *, scenario: str, start_period: str, end_period: str, marketing_channel: str | None = None) -> MarketingResponse:
@@ -300,9 +376,49 @@ def spend_efficiency(db: Session, organization_id: uuid.UUID, *, scenario: str, 
     return MarketingResponse(organization_id=str(organization_id), scenario=scenario, start_period=start_period, end_period=end_period, rows=rows, charts=_chart(rows, ["cost_per_mql", "cost_per_sql", "pipeline_per_dollar_spend", "marketing_cac_proxy"], series_by_channel=True), validation=_validate(db, organization_id, rows, scenario=scenario, start_period=start_period, end_period=end_period), metadata={"section": "efficiency"})
 
 
-def actual_budget_forecast(db: Session, organization_id: uuid.UUID, *, start_period: str, end_period: str, marketing_channel: str | None = None) -> ActualBudgetForecastResponse:
-    actual = performance_summary(db, organization_id, scenario="Actual", start_period=start_period, end_period=end_period, marketing_channel=marketing_channel).rows
-    budget = performance_summary(db, organization_id, scenario="Budget", start_period=start_period, end_period=end_period, marketing_channel=marketing_channel).rows
-    forecast = performance_summary(db, organization_id, scenario="Forecast", start_period=start_period, end_period=end_period, marketing_channel=marketing_channel).rows
-    combined_response = performance_summary(db, organization_id, scenario="Combined", start_period=start_period, end_period=end_period, marketing_channel=marketing_channel)
+def actual_budget_forecast(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    start_period: str,
+    end_period: str,
+    marketing_channel: str | None = None,
+    as_of_period: str | None = None,
+) -> ActualBudgetForecastResponse:
+    actual = performance_summary(
+        db,
+        organization_id,
+        scenario="Actual",
+        start_period=start_period,
+        end_period=end_period,
+        marketing_channel=marketing_channel,
+        as_of_period=as_of_period,
+    ).rows
+    budget = performance_summary(
+        db,
+        organization_id,
+        scenario="Budget",
+        start_period=start_period,
+        end_period=end_period,
+        marketing_channel=marketing_channel,
+        as_of_period=as_of_period,
+    ).rows
+    forecast = performance_summary(
+        db,
+        organization_id,
+        scenario="Forecast",
+        start_period=start_period,
+        end_period=end_period,
+        marketing_channel=marketing_channel,
+        as_of_period=as_of_period,
+    ).rows
+    combined_response = performance_summary(
+        db,
+        organization_id,
+        scenario="Combined",
+        start_period=start_period,
+        end_period=end_period,
+        marketing_channel=marketing_channel,
+        as_of_period=as_of_period,
+    )
     return ActualBudgetForecastResponse(organization_id=str(organization_id), start_period=start_period, end_period=end_period, actual=actual, budget=budget, forecast=forecast, combined=combined_response.rows, validation=combined_response.validation)

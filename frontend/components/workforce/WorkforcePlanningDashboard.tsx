@@ -77,7 +77,8 @@ async function fetchWorkforcePlan(
   orgId: string,
   queryStart: string,
   queryEnd: string,
-  scenario: string
+  scenario: string,
+  asOfPeriod: string
 ): Promise<WorkforcePlanResponse> {
   if (scenario !== "Combined") {
     const params = buildWorkforceParams(orgId, queryStart, queryEnd, workforceApiScenario(scenario));
@@ -98,7 +99,7 @@ async function fetchWorkforcePlan(
       );
     })
   );
-  return mergeCombinedWorkforcePlans(actual, forecast, queryStart, queryEnd);
+  return mergeCombinedWorkforcePlans(actual, forecast, queryStart, queryEnd, asOfPeriod);
 }
 
 async function fetchWorkforceValidation(
@@ -164,7 +165,7 @@ export function WorkforcePlanningDashboard({
     setError(null);
     try {
       const [planResult, validationResult] = await Promise.all([
-        fetchWorkforcePlan(orgId, queryStart, queryEnd, scenario),
+        fetchWorkforcePlan(orgId, queryStart, queryEnd, scenario, asOfPeriod),
         fetchWorkforceValidation(orgId, queryStart, queryEnd, scenario),
       ]);
       setPlan(planResult);
@@ -176,7 +177,7 @@ export function WorkforcePlanningDashboard({
     } finally {
       setBusy(false);
     }
-  }, [orgId, enabled, queryStart, queryEnd, scenario]);
+  }, [orgId, enabled, queryStart, queryEnd, scenario, asOfPeriod]);
 
   useEffect(() => {
     load();
@@ -206,7 +207,7 @@ export function WorkforcePlanningDashboard({
   const rangeStartKey = normalizePeriodKey(queryStart);
   const rangeEndKey = normalizePeriodKey(queryEnd);
   const asOfTotals = periodTotals.find(([period]) => period === asOfKey)?.[1];
-  const asOfScenario = scenarioForPeriod(asOfKey, scenario);
+  const asOfScenario = scenarioForPeriod(asOfKey, scenario, asOfKey);
 
   const departmentAnnualRows = useMemo(
     () => rollupWorkforceDepartments(plan, queryStart, queryEnd),
@@ -305,7 +306,7 @@ export function WorkforcePlanningDashboard({
                   {periodTotals.map(([period, totals]) => (
                     <tr key={period} style={period === asOfKey ? { background: "var(--surface-muted, #f8fafc)" } : undefined}>
                       <td>{period}</td>
-                      <td>{scenarioForPeriod(period, scenario)}</td>
+                      <td>{scenarioForPeriod(period, scenario, asOfKey)}</td>
                       <td className="mpl-num">{totals.filled.toFixed(1)}</td>
                       <td className="mpl-num">{totals.planned.toFixed(1)}</td>
                       <td className="mpl-num">{totals.total.toFixed(1)}</td>

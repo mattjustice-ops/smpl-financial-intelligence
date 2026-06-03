@@ -21,6 +21,7 @@ def executive_flow(db: Session, organization_id: uuid.UUID, **params) -> Executi
         start_period=params["start_period"],
         end_period=params["end_period"],
         marketing_channel=params.get("marketing_channel"),
+        as_of_period=params.get("as_of_period"),
     )
     waterfalls = {
         "pipeline": waterfall_response(db, organization_id, waterfall_name="pipeline", **params),
@@ -41,6 +42,7 @@ def executive_flow(db: Session, organization_id: uuid.UUID, **params) -> Executi
         scenario=params["scenario"],
         start_period=params["start_period"],
         end_period=params["end_period"],
+        as_of_period=params["as_of_period"],
         marketing_summary=marketing.model_dump(mode="json"),
         waterfalls=waterfalls,
         opportunities=opportunities,

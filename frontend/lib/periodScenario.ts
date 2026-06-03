@@ -21,9 +21,11 @@ export function normalizePeriodKey(period: string) {
   return period.slice(0, 7);
 }
 
-/** Match ExecutiveFlow Combined slice: Actual through close month, Forecast after. */
-export function scenarioForPeriod(period: string, selectedScenario: string) {
-  if (selectedScenario === "Combined") return period <= "2026-05" ? "Actual" : "Forecast";
+/** Match Combined slice: Actual through close month, Forecast after. */
+export function scenarioForPeriod(period: string, selectedScenario: string, asOfPeriod: string) {
+  if (selectedScenario === "Combined") {
+    return period <= asOfPeriod.slice(0, 7) ? "Actual" : "Forecast";
+  }
   return selectedScenario;
 }
 

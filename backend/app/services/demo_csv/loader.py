@@ -537,6 +537,20 @@ PHYSICAL_REQUIRED_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
+PHYSICAL_INSERT_SKIP_COLUMNS = frozenset(
+    {"organization_id", "source_row_number", "source_filename", "created_at", "updated_at"}
+)
+
+
+def _physical_extra_insert_columns(columns: list[str], required_columns: set[str]) -> list[str]:
+    """Include NOT NULL DB columns (e.g. version) that are absent from the CSV headers."""
+    extra: list[str] = []
+    for col in sorted(required_columns):
+        if col in columns or col in extra or col in PHYSICAL_INSERT_SKIP_COLUMNS:
+            continue
+        extra.append(col)
+    return extra
+
 
 def _first_raw_value(raw: dict[str, str], *keys: str) -> Any:
     for key in keys:
@@ -578,8 +592,7 @@ def _apply_physical_required_aliases(
             or version_hint
             or "Forecast"
         )
-    period_value = row_payload.get("period") or row_payload.get("forecast_period")
-    if "version" in required_columns and not row_payload.get("version") and period_value not in (None, ""):
+    if "version" in required_columns and not row_payload.get("version"):
         row_payload["version"] = _first_raw_value(raw, "version") or version_hint or "Forecast"
 
 
@@ -606,9 +619,7 @@ def _load_physical_version_csv(
     column_types = _physical_column_types(session, table_name)
     required_columns = _physical_required_columns(session, table_name)
     version_hint = _version_from_filename(filename)
-    extra_columns: list[str] = []
-    if "scenario_name" in required_columns and "scenario_name" not in columns:
-        extra_columns.append("scenario_name")
+    extra_columns = _physical_extra_insert_columns(columns, required_columns)
     for target_col in PHYSICAL_REQUIRED_ALIASES.get(table_name, {}):
         if target_col in required_columns and target_col not in columns and target_col not in extra_columns:
             extra_columns.append(target_col)
@@ -702,14 +713,25 @@ def load_demo_csv_core(
     filename_kind = _kind_from_filename(filename)
     physical_table = _physical_version_table_name(filename)
     if physical_table is not None:
-        loaded_rows = _load_physical_version_csv(
-            session,
-            organization_id,
-            table_name=physical_table,
-            filename=filename,
-            headers=headers,
-            rows=raw_rows,
-        )
+        try:
+            loaded_rows = _load_physical_version_csv(
+                session,
+                organization_id,
+                table_name=physical_table,
+                filename=filename,
+                headers=headers,
+                rows=raw_rows,
+            )
+        except (IntegrityError, DBAPIError, SQLAlchemyError) as e:
+            session.rollback()
+            orig = getattr(e, "orig", None)
+            return LoadResult(
+                physical_table,
+                0,
+                [],
+                integrity_error=str(orig) if orig is not None else str(e),
+                did_upsert=False,
+            )
         # Versioned Actual_/Budget_/Forecast_ files land only in physical warehouse tables.
         return LoadResult(physical_table, loaded_rows, did_upsert=True)
 

@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
-const apiBase =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+import { getNextApiBase } from "@/lib/apiBase";
 
 type Org = { id: string; name: string };
 
@@ -27,6 +26,7 @@ type SeedResponse = {
 };
 
 export function CsvUploadPanel() {
+  const apiBase = getNextApiBase();
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgId, setOrgId] = useState("");
   const [newOrgName, setNewOrgName] = useState("");
@@ -55,7 +55,7 @@ export function CsvUploadPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [apiBase]);
 
   const onCreateOrg = async () => {
     setPanelError(null);

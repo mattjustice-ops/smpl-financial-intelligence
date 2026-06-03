@@ -98,6 +98,7 @@ def fetch_scenario_rows(
     segment: str | None = None,
     owner: str | None = None,
     waterfall_type: str | None = None,
+    as_of_period: str | None = None,
 ) -> list[tuple[str, str, str, dict[str, Any]]]:
     del waterfall_type
     combined_filters = {
@@ -109,7 +110,7 @@ def fetch_scenario_rows(
     if filters:
         combined_filters.update(filters)
     combined_filters = {k: v for k, v in combined_filters.items() if v}
-    wanted = set(scenario_periods(scenario, start_period, end_period))
+    wanted = set(scenario_periods(scenario, start_period, end_period, as_of_period=as_of_period))
     out: list[tuple[str, str, str, dict[str, Any]]] = []
     for source_scenario in sorted({item[0] for item in wanted}):
         table_name = preferred_table(db, source_scenario, suffix, fallback=fallback)

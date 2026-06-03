@@ -68,8 +68,9 @@ Write-Host "=== Step 6: Load new CSV files from folder ===" -ForegroundColor Cya
 & $Python scripts\load_versioned_csvs.py $OrgId $CsvFolder
 
 Write-Host ""
-Write-Host "=== Step 7: Ensure Forecast GL detail is in gl_actuals ===" -ForegroundColor Cyan
-& $Python scripts\load_forecast_gl_detail.py $OrgId "$CsvFolder\Forecast_gl_detail.csv"
+Write-Host "=== Step 7: Forecast GL migration + full Forecast_* reload (optional) ===" -ForegroundColor Cyan
+Write-Host "Step 6 already loads Forecast_*.csv. Re-run only if you need legacy GL migration or a Forecast-only refresh." -ForegroundColor DarkGray
+& $Python scripts\load_forecast_csvs.py $OrgId $CsvFolder
 
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Green

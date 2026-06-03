@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,8 @@ from app.services.financial_statements.financial_statement_service import (
     summary,
 )
 from app.services.organizations import get_organization_or_404
+from app.services.reporting.as_of_period import bind_as_of_period, resolve_as_of_period
+from app.services.reporting.period_utils import period_to_date
 
 financial_statements_router = APIRouter(
     prefix="/financial-statements", tags=["financial-statements"]
@@ -27,17 +30,43 @@ def _validate(start_period: date, end_period: date) -> None:
         raise HTTPException(status_code=400, detail="end_period must be >= start_period")
 
 
+def _as_of_date(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    as_of_period: date | None,
+    end_period: date,
+) -> date:
+    resolved = resolve_as_of_period(
+        db,
+        organization_id,
+        as_of_period=as_of_period,
+        end_period=end_period,
+    )
+    bind_as_of_period(resolved)
+    return period_to_date(resolved)
+
+
 @financial_statements_router.get("/run", response_model=SummaryResponse)
 def run_financial_statements_endpoint(
     organization_id: uuid.UUID = Query(..., description="Tenant organization UUID"),
     scenario: str = Query("Combined"),
     start_period: date = Query(..., description="Inclusive start date"),
     end_period: date = Query(..., description="Inclusive end date"),
+    as_of_period: date | None = Query(None, description="Close month for Combined (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
 ) -> SummaryResponse:
     get_organization_or_404(db, organization_id)
     _validate(start_period, end_period)
-    return summary(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
+    as_of = _as_of_date(db, organization_id, as_of_period=as_of_period, end_period=end_period)
+    return summary(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        as_of_period=as_of,
+    )
 
 
 @financial_statements_router.get("/income-statement", response_model=NormalizedStatementResponse)
@@ -46,11 +75,21 @@ def income_statement_endpoint(
     scenario: str = Query("Combined"),
     start_period: date = Query(...),
     end_period: date = Query(...),
+    as_of_period: date | None = Query(None),
     db: Session = Depends(get_db),
 ) -> NormalizedStatementResponse:
     get_organization_or_404(db, organization_id)
     _validate(start_period, end_period)
-    return statement(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, statement_type="income_statement")
+    as_of = _as_of_date(db, organization_id, as_of_period=as_of_period, end_period=end_period)
+    return statement(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        statement_type="income_statement",
+        as_of_period=as_of,
+    )
 
 
 @financial_statements_router.get("/balance-sheet", response_model=NormalizedStatementResponse)
@@ -59,11 +98,21 @@ def balance_sheet_endpoint(
     scenario: str = Query("Combined"),
     start_period: date = Query(...),
     end_period: date = Query(...),
+    as_of_period: date | None = Query(None),
     db: Session = Depends(get_db),
 ) -> NormalizedStatementResponse:
     get_organization_or_404(db, organization_id)
     _validate(start_period, end_period)
-    return statement(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, statement_type="balance_sheet")
+    as_of = _as_of_date(db, organization_id, as_of_period=as_of_period, end_period=end_period)
+    return statement(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        statement_type="balance_sheet",
+        as_of_period=as_of,
+    )
 
 
 @financial_statements_router.get("/cash-flow", response_model=NormalizedStatementResponse)
@@ -72,11 +121,21 @@ def cash_flow_endpoint(
     scenario: str = Query("Combined"),
     start_period: date = Query(...),
     end_period: date = Query(...),
+    as_of_period: date | None = Query(None),
     db: Session = Depends(get_db),
 ) -> NormalizedStatementResponse:
     get_organization_or_404(db, organization_id)
     _validate(start_period, end_period)
-    return statement(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, statement_type="cash_flow")
+    as_of = _as_of_date(db, organization_id, as_of_period=as_of_period, end_period=end_period)
+    return statement(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        statement_type="cash_flow",
+        as_of_period=as_of,
+    )
 
 
 @financial_statements_router.get("/summary", response_model=SummaryResponse)
@@ -85,11 +144,20 @@ def summary_endpoint(
     scenario: str = Query("Combined"),
     start_period: date = Query(...),
     end_period: date = Query(...),
+    as_of_period: date | None = Query(None),
     db: Session = Depends(get_db),
 ) -> SummaryResponse:
     get_organization_or_404(db, organization_id)
     _validate(start_period, end_period)
-    return summary(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
+    as_of = _as_of_date(db, organization_id, as_of_period=as_of_period, end_period=end_period)
+    return summary(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        as_of_period=as_of,
+    )
 
 
 @financial_statements_router.get("/validation", response_model=list[ValidationResult])
@@ -98,8 +166,17 @@ def validation_endpoint(
     scenario: str = Query("Combined"),
     start_period: date = Query(...),
     end_period: date = Query(...),
+    as_of_period: date | None = Query(None),
     db: Session = Depends(get_db),
 ) -> list[ValidationResult]:
     get_organization_or_404(db, organization_id)
     _validate(start_period, end_period)
-    return summary(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period).validation
+    as_of = _as_of_date(db, organization_id, as_of_period=as_of_period, end_period=end_period)
+    return summary(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        as_of_period=as_of,
+    ).validation

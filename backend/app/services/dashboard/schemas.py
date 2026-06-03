@@ -140,6 +140,7 @@ class ExecutiveFlowResponse(BaseModel):
     scenario: str
     start_period: str
     end_period: str
+    as_of_period: str
     marketing_summary: dict[str, Any] = Field(default_factory=dict)
     waterfalls: dict[str, WaterfallResponse] = Field(default_factory=dict)
     opportunities: dict[str, OpportunityResponse] = Field(default_factory=dict)

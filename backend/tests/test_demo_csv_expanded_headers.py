@@ -8,6 +8,7 @@ from app.services.demo_csv.loader import (
     _canonicalize_row,
     _is_skippable_physical_row,
     _kind_from_filename,
+    _physical_extra_insert_columns,
     _physical_version_table_name,
 )
 
@@ -184,6 +185,26 @@ def test_forecast_opportunities_alias_period_to_forecast_period() -> None:
         version_hint="Forecast",
     )
     assert row_payload["forecast_period"] == "2026-06-01"
+
+
+def test_physical_extra_insert_columns_include_required_version() -> None:
+    columns = ["period", "cash", "accounts_receivable"]
+    required = {"organization_id", "version", "period", "source_row_number"}
+    assert _physical_extra_insert_columns(columns, required) == ["version"]
+
+
+def test_physical_required_version_from_filename_hint() -> None:
+    row_payload: dict[str, object] = {"period": "2026-01-01"}
+    raw = {"period": "2026-01"}
+    _apply_physical_required_aliases(
+        "forecast_balance_sheet",
+        row_payload,
+        raw,
+        column_types={"period": "date", "version": "character varying"},
+        required_columns={"period", "version"},
+        version_hint="Forecast",
+    )
+    assert row_payload["version"] == "Forecast"
 
 
 def test_versioned_opportunity_filenames_use_physical_tables() -> None:
