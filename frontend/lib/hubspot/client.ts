@@ -425,6 +425,140 @@ export class HubSpotClient {
     });
   }
 
+  async createAssociationV3(
+    fromType: "contacts" | "companies" | "deals",
+    fromId: string,
+    toType: "contacts" | "companies" | "deals",
+    toId: string,
+    associationTypeId: number
+  ): Promise<void> {
+    await this.request(
+      `/crm/v3/objects/${fromType}/${fromId}/associations/${toType}/${toId}/${associationTypeId}`,
+      { method: "PUT" }
+    );
+  }
+
+  async listAssociationIds(
+    fromType: "contacts" | "companies" | "deals",
+    fromId: string,
+    toType: "contacts" | "companies" | "deals"
+  ): Promise<string[]> {
+    try {
+      const result = await this.request<{
+        results: Array<{ id: string }>;
+      }>(`/crm/v3/objects/${fromType}/${fromId}/associations/${toType}`, { method: "GET" });
+      return result.results?.map((item) => String(item.id)) ?? [];
+    } catch {
+      try {
+        const result = await this.request<{
+          results: Array<{ toObjectId?: string; id?: string }>;
+        }>(`/crm/v4/objects/${fromType}/${fromId}/associations/${toType}`, { method: "GET" });
+        return (
+          result.results?.map((item) => String(item.toObjectId ?? item.id ?? "")).filter(Boolean) ?? []
+        );
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  async linkQuoteRecords(
+    contactId: string,
+    companyId: string,
+    dealId: string
+  ): Promise<{
+    applied: string[];
+    verifiedContactCompanies: string[];
+    verifiedCompanyContacts: string[];
+  }> {
+    const applied: string[] = [];
+    const errors: string[] = [];
+
+    const associationAttempts: Array<{
+      label: string;
+      run: () => Promise<void>;
+    }> = [
+      {
+        label: "contact->company:279",
+        run: () => this.createAssociationV3("contacts", contactId, "companies", companyId, 279),
+      },
+      {
+        label: "contact->company:1",
+        run: () => this.createAssociationV3("contacts", contactId, "companies", companyId, 1),
+      },
+      {
+        label: "company->contact:280",
+        run: () => this.createAssociationV3("companies", companyId, "contacts", contactId, 280),
+      },
+      {
+        label: "deal->contact:3",
+        run: () => this.createAssociationV3("deals", dealId, "contacts", contactId, 3),
+      },
+      {
+        label: "deal->company:5",
+        run: () => this.createAssociationV3("deals", dealId, "companies", companyId, 5),
+      },
+    ];
+
+    for (const attempt of associationAttempts) {
+      try {
+        await attempt.run();
+        applied.push(attempt.label);
+      } catch (error) {
+        errors.push(
+          `${attempt.label}: ${error instanceof Error ? error.message : "Unknown association error"}`
+        );
+      }
+    }
+
+    if (!applied.some((item) => item.startsWith("contact->company"))) {
+      try {
+        await this.request("/crm/v4/associations/contacts/companies/batch/create", {
+          method: "POST",
+          body: JSON.stringify({
+            inputs: [
+              {
+                from: { id: contactId },
+                to: { id: companyId },
+                types: [
+                  { associationCategory: "HUBSPOT_DEFINED", associationTypeId: 279 },
+                  { associationCategory: "HUBSPOT_DEFINED", associationTypeId: 1 },
+                ],
+              },
+            ],
+          }),
+        });
+        applied.push("batch:contact->company");
+      } catch (error) {
+        errors.push(
+          `batch:contact->company: ${error instanceof Error ? error.message : "Unknown batch association error"}`
+        );
+      }
+    }
+
+    if (!applied.some((item) => item.startsWith("contact->company"))) {
+      try {
+        await this.associateDefault("contacts", contactId, "companies", companyId);
+        applied.push("default:contact->company");
+      } catch (error) {
+        errors.push(
+          `default:contact->company: ${error instanceof Error ? error.message : "Unknown default association error"}`
+        );
+      }
+    }
+
+    const verifiedContactCompanies = await this.listAssociationIds("contacts", contactId, "companies");
+    const verifiedCompanyContacts = await this.listAssociationIds("companies", companyId, "contacts");
+
+    if (!verifiedContactCompanies.map(String).includes(String(companyId))) {
+      throw new Error(
+        `Contact ${contactId} is not linked to company ${companyId}. Association errors: ${errors.join(" | ") || "none logged"}`
+      );
+    }
+
+    return { applied, verifiedContactCompanies, verifiedCompanyContacts };
+  }
+
   async associateDefault(
     fromType: "contacts" | "companies" | "deals",
     fromId: string,
@@ -434,47 +568,6 @@ export class HubSpotClient {
     await this.request(`/crm/v4/objects/${fromType}/${fromId}/associations/default/${toType}/${toId}`, {
       method: "PUT",
     });
-  }
-
-  async associateContactToCompany(contactId: string, companyId: string): Promise<void> {
-    try {
-      await this.request("/crm/v4/associations/contacts/companies/batch/create", {
-        method: "POST",
-        body: JSON.stringify({
-          inputs: [
-            {
-              from: { id: contactId },
-              to: { id: companyId },
-              types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 1 }],
-            },
-          ],
-        }),
-      });
-      return;
-    } catch {
-      await this.associateDefault("contacts", contactId, "companies", companyId);
-    }
-  }
-
-  async associateDeal(dealId: string, toType: "contacts" | "companies", toId: string): Promise<void> {
-    const associationTypeId = toType === "contacts" ? 3 : 5;
-    try {
-      await this.request(`/crm/v4/associations/deals/${toType}/batch/create`, {
-        method: "POST",
-        body: JSON.stringify({
-          inputs: [
-            {
-              from: { id: dealId },
-              to: { id: toId },
-              types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId }],
-            },
-          ],
-        }),
-      });
-      return;
-    } catch {
-      await this.associateDefault("deals", dealId, toType, toId);
-    }
   }
 
   async patchExtendedProperties(

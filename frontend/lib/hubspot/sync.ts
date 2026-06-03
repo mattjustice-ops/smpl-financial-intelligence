@@ -89,27 +89,39 @@ export async function syncRequestQuoteToHubSpot(
       );
     }
 
+    let associationDebug:
+      | {
+          applied: string[];
+          verifiedContactCompanies: string[];
+          verifiedCompanyContacts: string[];
+        }
+      | undefined;
+
     try {
-      await client.associateContactToCompany(contactId, companyId);
-      await client.associateDeal(dealId, "contacts", contactId);
-      await client.associateDeal(dealId, "companies", companyId);
+      associationDebug = await client.linkQuoteRecords(contactId, companyId, dealId);
     } catch (associationError) {
-      warnings.push(
-        `Records were created but associations failed: ${formatHubSpotError(associationError)}`
-      );
+      warnings.push(`Association failed: ${formatHubSpotError(associationError)}`);
+      associationDebug = {
+        applied: [],
+        verifiedContactCompanies: [],
+        verifiedCompanyContacts: [],
+      };
     }
 
     const companyOk = Boolean(companySync.verified.name);
 
     return {
-      ok: companyOk,
+      ok: companyOk && Boolean(associationDebug?.verifiedContactCompanies.map(String).includes(String(companyId))),
       contactId,
       companyId,
       dealId,
       error: companyOk
-        ? undefined
+        ? associationDebug?.verifiedContactCompanies.map(String).includes(String(companyId))
+          ? undefined
+          : "HubSpot records were created but the contact and company were not linked."
         : "HubSpot company record was found/created but company name did not save. See companyDebug for details.",
       warnings: warnings.length ? warnings : undefined,
+      associationDebug,
       companyDebug: {
         applied: companySync.applied,
         skipped: companySync.skipped,

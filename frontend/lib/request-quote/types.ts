@@ -51,6 +51,11 @@ export type HubSpotSyncResult = {
   dealId?: string;
   error?: string;
   warnings?: string[];
+  associationDebug?: {
+    applied: string[];
+    verifiedContactCompanies: string[];
+    verifiedCompanyContacts: string[];
+  };
   companyDebug?: {
     applied: string[];
     skipped: Array<{ property: string; reason: string }>;
