@@ -157,22 +157,72 @@ export class HubSpotClient {
     return null;
   }
 
+  async waitForContactCompanyIds(
+    contactId: string,
+    maxAttempts = 6,
+    delayMs = 500
+  ): Promise<string[]> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const ids = await this.listAssociationIds("contacts", contactId, "companies");
+      if (ids.length > 0) {
+        return ids;
+      }
+      if (attempt < maxAttempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return [];
+  }
+
+  async upsertCompanyByDomain(
+    domain: string,
+    properties: Record<string, string>
+  ): Promise<{ companyId: string; created: boolean }> {
+    const normalized = normalizeDomain(domain);
+    if (!normalized) {
+      throw new Error("Domain is required for HubSpot company upsert.");
+    }
+
+    const result = await this.request<{
+      results: Array<{ id: string; new?: boolean }>;
+    }>("/crm/v3/objects/companies/batch/upsert", {
+      method: "POST",
+      body: JSON.stringify({
+        inputs: [
+          {
+            idProperty: "domain",
+            id: normalized,
+            properties: {
+              ...properties,
+              domain: normalized,
+            },
+          },
+        ],
+      }),
+    });
+
+    const row = result.results?.[0];
+    if (!row?.id) {
+      throw new Error("HubSpot company upsert by domain returned no id.");
+    }
+
+    return { companyId: row.id, created: Boolean(row.new) };
+  }
+
   async resolveQuoteCompanyId(
     contactId: string,
     identity: Record<string, string>,
-    contactEmail?: string
+    contactEmail?: string,
+    associatedIds?: string[]
   ): Promise<{ companyId: string | null; source: string }> {
     const domain = normalizeDomain(identity.domain);
     const name = identity.name?.trim();
     const emailDomain = contactEmail ? normalizeDomain(contactEmail.split("@")[1]) : null;
 
-    let associatedIds = await this.listAssociationIds("contacts", contactId, "companies");
-    if (associatedIds.length === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      associatedIds = await this.listAssociationIds("contacts", contactId, "companies");
-    }
+    const linkedCompanyIds =
+      associatedIds ?? (await this.waitForContactCompanyIds(contactId));
 
-    for (const id of associatedIds) {
+    for (const id of linkedCompanyIds) {
       const company = await this.getCompany(id, ["name", "domain"]);
       const companyDomain = normalizeDomain(company.properties.domain);
       if (domain && domainsMatch(companyDomain, domain)) {
@@ -180,15 +230,15 @@ export class HubSpotClient {
       }
     }
 
-    if (associatedIds.length === 1) {
-      const company = await this.getCompany(associatedIds[0], ["name", "domain"]);
+    if (linkedCompanyIds.length === 1) {
+      const company = await this.getCompany(linkedCompanyIds[0], ["name", "domain"]);
       if (!company.properties.name?.trim()) {
-        return { companyId: associatedIds[0], source: "contact-association:empty-shell" };
+        return { companyId: linkedCompanyIds[0], source: "contact-association:empty-shell" };
       }
     }
 
     if (domain && emailDomain && domainsMatch(domain, emailDomain)) {
-      for (const id of associatedIds) {
+      for (const id of linkedCompanyIds) {
         const company = await this.getCompany(id, ["name", "domain"]);
         const companyDomain = normalizeDomain(company.properties.domain);
         if (!companyDomain || domainsMatch(companyDomain, emailDomain)) {
@@ -267,12 +317,21 @@ export class HubSpotClient {
     let contactCompanyIds: string[] = [];
     let companyId: string | null = null;
 
+    const industryValue = await this.resolveIndustryValue(formIndustry);
+    const basePayload = cleanProperties({
+      name,
+      domain,
+      website: identity.website || (domain ? `https://${domain}` : undefined),
+      ...(industryValue ? { industry: industryValue } : {}),
+    });
+
     if (options?.contactId) {
-      contactCompanyIds = await this.listAssociationIds("contacts", options.contactId, "companies");
+      contactCompanyIds = await this.waitForContactCompanyIds(options.contactId);
       const resolved = await this.resolveQuoteCompanyId(
         options.contactId,
         identity,
-        options.contactEmail
+        options.contactEmail,
+        contactCompanyIds
       );
       companyId = resolved.companyId;
       resolvedFrom = resolved.source;
@@ -283,58 +342,67 @@ export class HubSpotClient {
       resolvedFrom = companyId ? "search" : "create";
     }
 
+    if (domain) {
+      try {
+        const upserted = await this.upsertCompanyByDomain(domain, basePayload);
+        if (companyId && companyId !== upserted.companyId) {
+          skipped.push({
+            property: "reconcile",
+            reason: `Merged contact-linked company ${companyId} into domain upsert ${upserted.companyId}.`,
+          });
+        }
+        companyId = upserted.companyId;
+        resolvedFrom = upserted.created ? "domain-upsert:create" : "domain-upsert:update";
+        applied.push(resolvedFrom, ...Object.keys(basePayload).map((key) => `upsert:${key}`));
+      } catch (upsertError) {
+        skipped.push({
+          property: "domain-upsert",
+          reason: upsertError instanceof Error ? upsertError.message : "Domain upsert failed",
+        });
+      }
+    }
+
     if (!companyId) {
-      companyId = await this.createCompany(
-        cleanProperties({
-          name,
-          domain,
-          website: identity.website || (domain ? `https://${domain}` : undefined),
-        })
-      );
+      companyId = await this.createCompany(basePayload);
       applied.push("create");
       resolvedFrom = "create";
-    }
-
-    const basePayload = cleanProperties({
-      name,
-      domain,
-      website: identity.website || (domain ? `https://${domain}` : undefined),
-    });
-
-    try {
-      await this.batchUpdateCompany(companyId, basePayload);
-      applied.push(...Object.keys(basePayload).map((key) => `batch:${key}`));
-    } catch (error) {
-      for (const [property, value] of Object.entries(basePayload)) {
-        try {
-          await this.updateCompany(companyId, { [property]: value });
-          applied.push(property);
-        } catch (patchError) {
-          skipped.push({
-            property,
-            reason: patchError instanceof Error ? patchError.message : "Unknown update error",
-          });
-        }
-      }
-    }
-
-    const industryValue = await this.resolveIndustryValue(formIndustry);
-    if (industryValue) {
+    } else if (!domain) {
       try {
-        await this.batchUpdateCompany(companyId, { industry: industryValue });
-        applied.push("batch:industry");
+        await this.batchUpdateCompany(companyId, basePayload);
+        applied.push(...Object.keys(basePayload).map((key) => `batch:${key}`));
       } catch (error) {
-        try {
-          await this.updateCompany(companyId, { industry: industryValue });
-          applied.push("industry");
-        } catch (patchError) {
-          skipped.push({
-            property: "industry",
-            reason: patchError instanceof Error ? patchError.message : "Unknown industry update error",
-          });
+        for (const [property, value] of Object.entries(basePayload)) {
+          try {
+            await this.updateCompany(companyId, { [property]: value });
+            applied.push(property);
+          } catch (patchError) {
+            skipped.push({
+              property,
+              reason: patchError instanceof Error ? patchError.message : "Unknown update error",
+            });
+          }
         }
       }
-    } else if (formIndustry) {
+    } else if (!applied.some((item) => item.startsWith("upsert:"))) {
+      try {
+        await this.batchUpdateCompany(companyId, basePayload);
+        applied.push(...Object.keys(basePayload).map((key) => `batch:${key}`));
+      } catch (error) {
+        for (const [property, value] of Object.entries(basePayload)) {
+          try {
+            await this.updateCompany(companyId, { [property]: value });
+            applied.push(property);
+          } catch (patchError) {
+            skipped.push({
+              property,
+              reason: patchError instanceof Error ? patchError.message : "Unknown update error",
+            });
+          }
+        }
+      }
+    }
+
+    if (formIndustry && !industryValue) {
       skipped.push({
         property: "industry",
         reason: `Could not map form industry "${formIndustry}" to a HubSpot industry option.`,

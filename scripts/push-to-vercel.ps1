@@ -1,41 +1,93 @@
-# Commit landing + request-quote changes and push to GitHub (triggers Vercel).
-# Run from repo root:  .\scripts\push-to-vercel.ps1
+# Commit local changes and push to GitHub (triggers Vercel redeploy).
+#
+# Run from repo root in PowerShell:
+#   cd C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence
+#   .\scripts\push-to-vercel.ps1
+#
+# Optional custom commit subject:
+#   .\scripts\push-to-vercel.ps1 -Message "Fix HubSpot duplicate companies on quote form"
+
+param(
+  [string]$Message = "Fix HubSpot duplicate company records on request-quote"
+)
 
 $ErrorActionPreference = "Stop"
-Set-Location (Split-Path $PSScriptRoot -Parent)
+$repoRoot = Split-Path $PSScriptRoot -Parent
+Set-Location $repoRoot
+
+Write-Host ""
+Write-Host "=== SMPL deploy to Vercel ===" -ForegroundColor Cyan
+Write-Host "Repo:   $repoRoot"
+Write-Host ""
 
 if (-not (git rev-parse --is-inside-work-tree 2>$null)) {
   Write-Error "Not a git repository. Clone https://github.com/mattjustice-ops/smpl-financial-intelligence first."
 }
 
-Write-Host "Branch:" (git branch --show-current)
-Write-Host "Remote:" (git remote get-url origin)
+$branch = git branch --show-current
+$remote = git remote get-url origin 2>$null
+Write-Host "Branch: $branch"
+Write-Host "Remote: $remote"
+Write-Host ""
 
 git status
+Write-Host ""
 
 $envFiles = @(".env.local", "frontend/.env.local", "backend/.env", "backend/secrets.env")
 git add -A
+
 foreach ($f in $envFiles) {
-  if (Test-Path $f) {
-    git restore --staged $f 2>$null
+  if (-not (Test-Path $f)) {
+    continue
+  }
+
+  $isStaged = git diff --cached --name-only -- $f
+  if (-not $isStaged) {
+    continue
+  }
+
+  git reset HEAD -- $f *> $null
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Skipped staging secret file: $f" -ForegroundColor DarkYellow
   }
 }
 
-$staged = git diff --cached --name-only
-if (-not $staged) {
-  Write-Host "Nothing to commit — working tree clean. Pushing current branch..."
+$staged = @(git diff --cached --name-only)
+if ($staged.Count -eq 0) {
+  Write-Host "Nothing new to commit. Pushing current branch anyway..." -ForegroundColor Yellow
 } else {
-  Write-Host "Staging:"
+  Write-Host "Files to commit:" -ForegroundColor Green
   $staged | ForEach-Object { Write-Host "  $_" }
-  git commit -m "Polish landing page and request-quote flow" -m "Update landing copy and header CTAs, add request-quote workflow with HubSpot sync, and fix hero interactions."
+
+  $body = @(
+    "Use HubSpot domain upsert and contact-linked company reconciliation so quote submissions create one company record with contact, name, and industry."
+    "Check hubspot.companyDebug.resolvedFrom in the /api/request-quote response after deploy."
+  ) -join "`n`n"
+
+  git commit -m $Message -m $body
+  Write-Host ""
+  Write-Host "Committed." -ForegroundColor Green
 }
 
+Write-Host ""
+Write-Host "Pushing to origin/$branch ..." -ForegroundColor Cyan
 git push origin HEAD
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "git push failed. Check your GitHub auth (gh auth login or SSH key)."
+}
+
 Write-Host ""
-Write-Host "Done. Vercel will redeploy from GitHub if the project is connected."
-Write-Host "Production: https://smpl-financial-intelligence.vercel.app/"
+Write-Host "Done." -ForegroundColor Green
+Write-Host "Vercel should redeploy in ~1-2 minutes if the GitHub project is connected."
 Write-Host ""
-Write-Host "Set these in Vercel (frontend project) for request-quote + HubSpot:"
+Write-Host "Production:  https://smpl-financial-intelligence.vercel.app/"
+Write-Host "Quote form:  https://smpl-financial-intelligence.vercel.app/request-quote"
+Write-Host ""
+Write-Host "After deploy, submit a test quote and inspect the Network tab response:"
+Write-Host "  hubspot.companyDebug.resolvedFrom  -> should be domain-upsert:update or domain-upsert:create"
+Write-Host "  hubspot.companyId                  -> single company id used for contact + deal links"
+Write-Host ""
+Write-Host "Vercel env vars required (Project Settings -> Environment Variables):"
 Write-Host "  HUBSPOT_PRIVATE_APP_TOKEN"
 Write-Host "  HUBSPOT_PIPELINE_NAME=SMPL Inbound Sales"
-Write-Host "  NEXT_PUBLIC_SCHEDULING_URL (optional, already has default)"
+Write-Host ""
