@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft, CalendarClock, CheckCircle2, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -125,7 +125,7 @@ const COPY: Record<
   demo: {
     formTitle: "Book your SMPL demo",
     formSubtitle:
-      "Share the same details we use for quote requests — then choose a time on our calendar.",
+      "Share the same details we use for quote requests. After you continue, we save your info and take you to our calendar.",
     submitLabel: "Continue to scheduling",
     successTitle: "You're almost booked",
     successBody: (first, _pkg) =>
@@ -156,6 +156,8 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<RequestQuoteResponse | null>(null);
+  const [hubspotWarning, setHubspotWarning] = useState<string | null>(null);
+  const [submittedContact, setSubmittedContact] = useState({ firstname: "", email: "" });
 
   function updateField<K extends keyof RequestQuoteFormData>(key: K, value: RequestQuoteFormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -163,7 +165,10 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
 
   async function saveDemoLead(
     payload: RequestQuoteFormData
-  ): Promise<{ ok: true; data: RequestQuoteResponse } | { ok: false; error: string }> {
+  ): Promise<
+    | { ok: true; data: RequestQuoteResponse; hubspotWarning: string | null }
+    | { ok: false; error: string }
+  > {
     const res = await fetch("/api/request-quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -178,14 +183,12 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
       };
     }
 
-    if (!data.hubspot?.contactId) {
-      return {
-        ok: false,
-        error: data.hubspot?.error ?? "HubSpot sync did not complete. Check server configuration.",
-      };
-    }
+    const hubspotWarning =
+      data.hubspot?.contactId
+        ? null
+        : data.hubspot?.error ?? "CRM sync did not fully complete, but your request was received.";
 
-    return { ok: true, data: { ...data, ok: true } };
+    return { ok: true, data: { ...data, ok: true }, hubspotWarning };
   }
 
   async function handleDemoContinue(event: React.MouseEvent<HTMLButtonElement>) {
@@ -208,8 +211,14 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
         return;
       }
 
+      setHubspotWarning(outcome.hubspotWarning);
+      setSubmittedContact({ firstname: form.firstname, email: form.email });
       setResult(outcome.data);
       onDemoSubmitted?.();
+
+      window.setTimeout(() => {
+        window.location.replace(schedulingUrl);
+      }, 1500);
     } catch {
       setErrors(["Network error while saving your details. Please try again."]);
     } finally {
@@ -249,16 +258,6 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
     }
   }
 
-  useEffect(() => {
-    if (intent !== "demo" || !result?.ok) return;
-
-    const redirectTimer = window.setTimeout(() => {
-      window.location.replace(schedulingUrl);
-    }, 2000);
-
-    return () => window.clearTimeout(redirectTimer);
-  }, [intent, result, schedulingUrl]);
-
   if (result?.ok) {
     const openCalendarInSameTab = intent === "demo";
 
@@ -270,12 +269,19 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
           </div>
           <h2 className="text-3xl font-semibold text-white">{copy.successTitle}</h2>
           <p className="mt-4 text-lg text-slate-400">
-            {copy.successBody(form.firstname, result.recommendedPackage)}
+            {copy.successBody(
+              intent === "demo" ? submittedContact.firstname || form.firstname : form.firstname,
+              result.recommendedPackage
+            )}
           </p>
           {intent === "demo" ? (
             <>
+              {hubspotWarning ? (
+                <p className="mt-3 text-sm text-amber-200/90">{hubspotWarning}</p>
+              ) : null}
               <p className="mt-3 text-sm text-slate-500">
-                Use the same work email ({form.email}) when the calendar asks for your details.
+                Use the same work email (
+                {submittedContact.email || form.email}) when the calendar asks for your details.
               </p>
               <p className="mt-4 inline-flex items-center gap-2 text-sm text-teal-200/90">
                 <Loader2 size={16} className="animate-spin" />
