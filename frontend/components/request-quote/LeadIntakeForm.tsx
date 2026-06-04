@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, CalendarClock, CheckCircle2, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -129,20 +129,22 @@ const COPY: Record<
     submitLabel: "Continue to scheduling",
     successTitle: "You're almost booked",
     successBody: (first, _pkg) =>
-      `Thanks, ${first}. Your details are saved. Pick a time below to complete your demo booking.`,
-    primarySuccessCta: { label: "Choose a time on the calendar", show: true },
+      `Thanks, ${first}. Your details are saved. We’re taking you to our calendar to pick a time.`,
+    primarySuccessCta: { label: "Go to calendar now", show: true },
   },
 };
 
 type Props = {
   intent: SubmissionIntent;
   preferredTier?: string;
+  /** Called when a demo submission succeeds (form is replaced; parent can hide page chrome). */
+  onDemoSubmitted?: () => void;
 };
 
 const demoContinueClassName =
   "inline-flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-teal-400 px-7 text-base font-semibold text-slate-950 transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/50";
 
-export function LeadIntakeForm({ intent, preferredTier }: Props) {
+export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props) {
   const schedulingUrl = resolveSchedulingUrl();
   const selectedTier = tierFromParam(preferredTier);
   const copy = COPY[intent];
@@ -159,7 +161,9 @@ export function LeadIntakeForm({ intent, preferredTier }: Props) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function saveDemoLead(payload: RequestQuoteFormData): Promise<string | null> {
+  async function saveDemoLead(
+    payload: RequestQuoteFormData
+  ): Promise<{ ok: true; data: RequestQuoteResponse } | { ok: false; error: string }> {
     const res = await fetch("/api/request-quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -168,14 +172,20 @@ export function LeadIntakeForm({ intent, preferredTier }: Props) {
     const data = (await res.json()) as RequestQuoteResponse & { errors?: string[]; error?: string };
 
     if (!res.ok) {
-      return data.errors?.join(" ") ?? data.error ?? "Could not save your details. Please try again.";
+      return {
+        ok: false,
+        error: data.errors?.join(" ") ?? data.error ?? "Could not save your details. Please try again.",
+      };
     }
 
     if (!data.hubspot?.contactId) {
-      return data.hubspot?.error ?? "HubSpot sync did not complete. Check server configuration.";
+      return {
+        ok: false,
+        error: data.hubspot?.error ?? "HubSpot sync did not complete. Check server configuration.",
+      };
     }
 
-    return null;
+    return { ok: true, data: { ...data, ok: true } };
   }
 
   async function handleDemoContinue(event: React.MouseEvent<HTMLButtonElement>) {
@@ -192,13 +202,14 @@ export function LeadIntakeForm({ intent, preferredTier }: Props) {
     setSubmitting(true);
 
     try {
-      const saveError = await saveDemoLead(payload);
-      if (saveError) {
-        setErrors([saveError]);
+      const outcome = await saveDemoLead(payload);
+      if (!outcome.ok) {
+        setErrors([outcome.error]);
         return;
       }
 
-      window.open(schedulingUrl, "_blank", "noopener,noreferrer");
+      setResult(outcome.data);
+      onDemoSubmitted?.();
     } catch {
       setErrors(["Network error while saving your details. Please try again."]);
     } finally {
@@ -238,7 +249,19 @@ export function LeadIntakeForm({ intent, preferredTier }: Props) {
     }
   }
 
+  useEffect(() => {
+    if (intent !== "demo" || !result?.ok) return;
+
+    const redirectTimer = window.setTimeout(() => {
+      window.location.replace(schedulingUrl);
+    }, 2000);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [intent, result, schedulingUrl]);
+
   if (result?.ok) {
+    const openCalendarInSameTab = intent === "demo";
+
     return (
       <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-8 shadow-2xl md:p-12">
         <div className="mx-auto max-w-2xl text-center">
@@ -250,16 +273,23 @@ export function LeadIntakeForm({ intent, preferredTier }: Props) {
             {copy.successBody(form.firstname, result.recommendedPackage)}
           </p>
           {intent === "demo" ? (
-            <p className="mt-3 text-sm text-slate-500">
-              Use the same work email ({form.email}) when the calendar asks for your details.
-            </p>
+            <>
+              <p className="mt-3 text-sm text-slate-500">
+                Use the same work email ({form.email}) when the calendar asks for your details.
+              </p>
+              <p className="mt-4 inline-flex items-center gap-2 text-sm text-teal-200/90">
+                <Loader2 size={16} className="animate-spin" />
+                Redirecting to the calendar…
+              </p>
+            </>
           ) : null}
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             {copy.primarySuccessCta.show ? (
               <a
                 href={schedulingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                {...(openCalendarInSameTab
+                  ? {}
+                  : { target: "_blank", rel: "noopener noreferrer" })}
                 className="inline-flex h-12 items-center gap-2 rounded-full bg-gradient-to-r from-teal-400 to-cyan-400 px-7 text-base font-semibold text-slate-950 shadow-lg shadow-teal-500/25 transition hover:brightness-110"
               >
                 <CalendarClock size={18} />
