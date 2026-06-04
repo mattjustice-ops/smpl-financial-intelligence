@@ -64,9 +64,13 @@ export function backendBaseUrl(): string | null {
   );
 }
 
+type BillingBackendInit = Omit<RequestInit, "body"> & {
+  body?: Record<string, unknown>;
+};
+
 export async function callBillingBackend(
   path: string,
-  init: RequestInit & { body?: object }
+  init: BillingBackendInit = {}
 ): Promise<Response> {
   const base = backendBaseUrl();
   if (!base) {
