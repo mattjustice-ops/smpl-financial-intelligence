@@ -21,10 +21,33 @@ class Organization(Base):
         default=uuid.uuid4,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pending", default="pending")
+    plan: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    billing_customer: Mapped["BillingCustomer | None"] = relationship(
+        "BillingCustomer",
+        back_populates="organization",
+        uselist=False,
+    )
+    billing_subscriptions: Mapped[list["BillingSubscription"]] = relationship(
+        "BillingSubscription",
+        back_populates="organization",
+        cascade="all, delete-orphan",
     )
 
     demo_customers: Mapped[list["Customer"]] = relationship(

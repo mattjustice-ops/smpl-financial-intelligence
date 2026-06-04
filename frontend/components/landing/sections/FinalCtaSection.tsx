@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarClock, Mail } from "lucide-react";
 
-import { SALES_INQUIRY_MAILTO, SCHEDULING_URL } from "../constants";
+import { BOOK_DEMO_URL, SALES_INQUIRY_MAILTO } from "../constants";
 import { SectionReveal, GlowOrb } from "../motion";
 
 export function FinalCtaSection() {
@@ -18,15 +18,13 @@ export function FinalCtaSection() {
             connects your stack into one intelligent operating model.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a
-              href={SCHEDULING_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href={BOOK_DEMO_URL}
               className="inline-flex h-12 items-center gap-2 rounded-full bg-gradient-to-r from-teal-400 to-cyan-400 px-8 text-base font-semibold text-slate-950 shadow-lg shadow-teal-500/20 hover:brightness-110"
             >
               <CalendarClock size={18} />
               Book a demo
-            </a>
+            </Link>
             <Link
               href="/request-quote"
               className="inline-flex h-12 items-center justify-center rounded-full border border-cyan-400/70 px-8 text-base font-medium text-teal-300 transition hover:border-cyan-300 hover:bg-teal-400/10"

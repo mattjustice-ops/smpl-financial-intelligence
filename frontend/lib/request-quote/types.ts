@@ -1,30 +1,19 @@
+export type SubmissionIntent = "quote" | "demo";
+
 export type RequestQuoteFormData = {
   firstname: string;
   lastname: string;
+  companyName: string;
   email: string;
   jobtitle: string;
   phone: string;
-  companyName: string;
-  domain: string;
-  industry: string;
-  arrRange: string;
-  employeeCount: string;
-  financeTeamSize: string;
-  companyStage: string;
-  currentErp: string;
-  currentCrm: string;
-  currentBilling: string;
-  currentHris: string;
-  currentPlanning: string;
+  country: string;
+  state: string;
   dataReliability: string;
-  requestedModules: string[];
-  businessNeeds: string;
-  biggestChallenge: string;
-  currentSolution: string;
-  expectedUsers: string;
-  implementationTimeline: string;
-  deploymentPreference: string;
-  budgetRange: string;
+  primaryNeeds: string;
+  /** From /request-quote?plan= or /book-demo?plan= when linked from pricing */
+  preferredPlan?: string;
+  submissionIntent?: SubmissionIntent;
 };
 
 export type LeadScoringResult = {
@@ -35,7 +24,28 @@ export type LeadScoringResult = {
   rationale: string[];
 };
 
+/** Full payload stored and sent to HubSpot (includes legacy fields for CRM descriptions). */
 export type RequestQuotePayload = RequestQuoteFormData & {
+  submissionIntent: SubmissionIntent;
+  domain: string;
+  businessNeeds: string;
+  biggestChallenge: string;
+  industry: string;
+  arrRange: string;
+  employeeCount: string;
+  financeTeamSize: string;
+  companyStage: string;
+  currentErp: string;
+  currentCrm: string;
+  currentBilling: string;
+  currentHris: string;
+  currentPlanning: string;
+  requestedModules: string[];
+  currentSolution: string;
+  expectedUsers: string;
+  implementationTimeline: string;
+  deploymentPreference: string;
+  budgetRange: string;
   leadScore: number;
   leadTier: LeadScoringResult["tier"];
   recommendedPackage: string;
@@ -84,28 +94,13 @@ export type RequestQuoteResponse = {
 export const EMPTY_FORM: RequestQuoteFormData = {
   firstname: "",
   lastname: "",
+  companyName: "",
   email: "",
   jobtitle: "",
   phone: "",
-  companyName: "",
-  domain: "",
-  industry: "",
-  arrRange: "",
-  employeeCount: "",
-  financeTeamSize: "",
-  companyStage: "",
-  currentErp: "",
-  currentCrm: "",
-  currentBilling: "",
-  currentHris: "",
-  currentPlanning: "",
+  country: "",
+  state: "",
   dataReliability: "",
-  requestedModules: [],
-  businessNeeds: "",
-  biggestChallenge: "",
-  currentSolution: "",
-  expectedUsers: "",
-  implementationTimeline: "",
-  deploymentPreference: "",
-  budgetRange: "",
+  primaryNeeds: "",
+  preferredPlan: "",
 };

@@ -20,6 +20,7 @@ from app.api.demo_csv_routes import demo_csv_router, org_router
 from app.api.kpis_routes import kpis_router
 from app.api.marketing_routes import marketing_router
 from app.api.mrr_routes import mrr_router
+from app.api.billing_routes import billing_router
 from app.api.quote_routes import quote_router
 from app.api.export_routes import export_router
 from app.api.waterfall_routes import waterfall_router
@@ -101,6 +102,7 @@ app.include_router(financial_statements_router, prefix="/api/v1")
 app.include_router(forecast_router, prefix="/api/v1")
 app.include_router(marketing_router, prefix="/api/v1")
 app.include_router(quote_router, prefix="/api/v1")
+app.include_router(billing_router, prefix="/api/v1")
 app.include_router(workforce_router, prefix="/api/v1")
 
 

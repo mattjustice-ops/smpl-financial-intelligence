@@ -29,38 +29,41 @@ function cleanProperties(properties: Record<string, string | undefined>): Record
   ) as Record<string, string>;
 }
 
+function submissionLabel(payload: RequestQuotePayload): "Demo" | "Quote" {
+  return payload.submissionIntent === "demo" ? "Demo" : "Quote";
+}
+
 export function formatCompanyDescription(payload: RequestQuotePayload): string {
   return [
-    "SMPL Request Quote — Company profile",
-    `Industry: ${payload.industry}`,
-    `ARR range: ${payload.arrRange}`,
-    `Employees: ${payload.employeeCount}`,
-    `Finance team: ${payload.financeTeamSize}`,
-    `Stage: ${payload.companyStage}`,
-    `ERP: ${payload.currentErp}`,
-    `CRM: ${payload.currentCrm}`,
-    `Billing: ${payload.currentBilling}`,
-    `HRIS: ${payload.currentHris}`,
-    `Planning: ${payload.currentPlanning}`,
+    `SMPL ${submissionLabel(payload)} Request`,
+    `Company: ${payload.companyName}`,
+    `Contact: ${payload.firstname} ${payload.lastname} (${payload.email})`,
+    `Job title: ${payload.jobtitle}`,
+    payload.phone ? `Phone: ${payload.phone}` : "",
+    `Location: ${payload.state}, ${payload.country}`,
     `Data reliability: ${payload.dataReliability}`,
-  ].join("\n");
+    `Primary needs / issues: ${payload.primaryNeeds}`,
+    `Recommended package: ${payload.recommendedPackage}`,
+    payload.preferredPlan ? `Interested plan: ${payload.preferredPlan}` : "",
+    `Submitted: ${payload.submittedAt}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function formatDealDescription(payload: RequestQuotePayload): string {
   return [
-    "SMPL Request Quote — Deal summary",
+    `SMPL ${submissionLabel(payload)} — Deal summary`,
     `Recommended package: ${payload.recommendedPackage}`,
     `Lead score: ${payload.leadScore}`,
-    `Modules: ${payload.requestedModules.join(", ")}`,
-    `Business needs: ${payload.businessNeeds}`,
-    `Biggest challenge: ${payload.biggestChallenge}`,
-    `Current solution: ${payload.currentSolution || "Not provided"}`,
-    `Expected users: ${payload.expectedUsers}`,
-    `Timeline: ${payload.implementationTimeline}`,
-    `Deployment: ${payload.deploymentPreference}`,
-    `Budget: ${payload.budgetRange}`,
+    `Primary needs / issues: ${payload.primaryNeeds}`,
+    `Data reliability: ${payload.dataReliability}`,
+    `Location: ${payload.state}, ${payload.country}`,
+    payload.preferredPlan ? `Pricing tier selected: ${payload.preferredPlan}` : "",
     `Submitted: ${payload.submittedAt}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function companyExtendedProperties(payload: RequestQuotePayload): Record<string, string> {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { LandingHeader } from "@/components/landing/LandingHeader";
 import "./landing.css";
 
 export const metadata: Metadata = {
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="marketing-root min-h-screen bg-slate-950 text-white antialiased">
+      <LandingHeader />
       {children}
     </div>
   );

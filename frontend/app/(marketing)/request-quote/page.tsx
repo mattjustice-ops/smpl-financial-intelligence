@@ -8,7 +8,11 @@ export const metadata: Metadata = {
     "A few quick questions about your stack and goals. SMPL will suggest the right package and coordinate a follow-up on your schedule.",
 };
 
-export default function RequestQuotePage() {
+export default function RequestQuotePage({
+  searchParams,
+}: {
+  searchParams?: { plan?: string };
+}) {
   return (
     <div className="px-6 py-16 md:py-24">
       <div className="mx-auto max-w-4xl">
@@ -18,11 +22,11 @@ export default function RequestQuotePage() {
             Get a tailored SMPL package recommendation.
           </h1>
           <p className="mt-4 text-lg text-slate-400">
-            A few quick questions about your stack and goals. We&apos;ll suggest the right SMPL package
-            and coordinate a follow-up on your schedule.
+            Share a few details about your team and priorities. We&apos;ll follow up to schedule a demo and
+            discuss the right SMPL plan.
           </p>
         </div>
-        <RequestQuoteForm />
+        <RequestQuoteForm preferredTier={searchParams?.plan} />
       </div>
     </div>
   );

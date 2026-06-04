@@ -1,160 +1,94 @@
 import type { LeadScoringResult, RequestQuoteFormData } from "./types";
 
-const ARR_SCORES: Record<string, number> = {
-  "Under $5M": 8,
-  "$5M–$20M": 14,
-  "$20M–$50M": 20,
-  "$50M–$100M": 24,
-  "$100M+": 25,
-};
-
-const EMPLOYEE_SCORES: Record<string, number> = {
-  "1–50": 3,
-  "51–200": 6,
-  "201–500": 8,
-  "501–1,000": 9,
-  "1,000+": 10,
-};
-
-const FINANCE_TEAM_SCORES: Record<string, number> = {
-  "1–2": 4,
-  "3–5": 6,
-  "6–10": 8,
-  "11–20": 9,
-  "20+": 10,
-};
-
-const BUDGET_SCORES: Record<string, number> = {
-  "Under $50K / year": 6,
-  "$50K–$100K / year": 10,
-  "$100K–$250K / year": 15,
-  "$250K–$500K / year": 18,
-  "$500K+ / year": 20,
-  "Not determined yet": 4,
-};
-
-const TIMELINE_SCORES: Record<string, number> = {
-  "Immediate (0–30 days)": 10,
-  "Near-term (1–3 months)": 8,
-  "This quarter": 6,
-  "Next quarter": 4,
-  "Exploring / no timeline yet": 2,
-};
-
-const STAGE_SCORES: Record<string, number> = {
-  "Seed / Series A": 4,
-  "Series B": 6,
-  "Series C+": 8,
-  "Growth / PE-backed": 9,
-  Public: 10,
-};
-
 const DATA_RELIABILITY_SCORES: Record<string, number> = {
-  "Highly reliable — single source of truth": 2,
-  "Mostly reliable — minor reconciliation gaps": 3,
-  "Mixed — multiple versions of truth": 4,
-  "Unreliable — heavy manual work each close": 5,
+  "Highly reliable — single source of truth": 8,
+  "Mostly reliable — minor reconciliation gaps": 12,
+  "Mixed — multiple versions of truth": 18,
+  "Unreliable — heavy manual work each close": 22,
 };
 
-const DEAL_AMOUNTS: Record<string, number> = {
-  "Under $5M": 35000,
-  "$5M–$20M": 75000,
-  "$20M–$50M": 120000,
-  "$50M–$100M": 180000,
-  "$100M+": 250000,
+const PLAN_SCORES: Record<string, number> = {
+  starter: 8,
+  professional: 14,
+  enterprise: 20,
+};
+
+const PACKAGE_BY_PLAN: Record<string, string> = {
+  starter: "SMPL Starter",
+  professional: "SMPL Professional",
+  enterprise: "SMPL Enterprise",
+};
+
+const DEAL_BY_PLAN: Record<string, number> = {
+  starter: 30000,
+  professional: 60000,
+  enterprise: 120000,
 };
 
 function scoreTier(score: number): LeadScoringResult["tier"] {
-  if (score >= 80) return "priority";
-  if (score >= 60) return "hot";
-  if (score >= 40) return "warm";
+  if (score >= 75) return "priority";
+  if (score >= 55) return "hot";
+  if (score >= 35) return "warm";
   return "cold";
 }
 
 function recommendPackage(form: RequestQuoteFormData, score: number): string {
-  const moduleCount = form.requestedModules.length;
-  const arr = form.arrRange;
-  const budget = form.budgetRange;
-
-  if (
-    score >= 80 ||
-    arr === "$100M+" ||
-    (arr === "$50M–$100M" && moduleCount >= 5) ||
-    budget === "$500K+ / year"
-  ) {
-    return "SMPL Platform";
+  const plan = form.preferredPlan;
+  if (plan && PACKAGE_BY_PLAN[plan]) {
+    return PACKAGE_BY_PLAN[plan];
   }
 
-  if (
-    score >= 60 ||
-    arr === "$50M–$100M" ||
-    arr === "$20M–$50M" ||
-    moduleCount >= 5 ||
-    budget === "$250K–$500K / year"
-  ) {
-    return "SMPL Enterprise";
-  }
-
-  if (
-    score >= 40 ||
-    arr === "$5M–$20M" ||
-    moduleCount >= 3 ||
-    budget === "$100K–$250K / year"
-  ) {
-    return "SMPL Growth";
-  }
-
+  if (score >= 75) return "SMPL Enterprise";
+  if (score >= 55) return "SMPL Professional";
   return "SMPL Starter";
 }
 
 export function scoreLead(form: RequestQuoteFormData): LeadScoringResult {
   const rationale: string[] = [];
-  let score = 0;
-
-  const arrPoints = ARR_SCORES[form.arrRange] ?? 0;
-  score += arrPoints;
-  if (arrPoints) rationale.push(`ARR range contributed ${arrPoints} points.`);
-
-  const employeePoints = EMPLOYEE_SCORES[form.employeeCount] ?? 0;
-  score += employeePoints;
-  if (employeePoints) rationale.push(`Company size contributed ${employeePoints} points.`);
-
-  const financePoints = FINANCE_TEAM_SCORES[form.financeTeamSize] ?? 0;
-  score += financePoints;
-  if (financePoints) rationale.push(`Finance team size contributed ${financePoints} points.`);
-
-  const budgetPoints = BUDGET_SCORES[form.budgetRange] ?? 0;
-  score += budgetPoints;
-  if (budgetPoints) rationale.push(`Budget range contributed ${budgetPoints} points.`);
-
-  const timelinePoints = TIMELINE_SCORES[form.implementationTimeline] ?? 0;
-  score += timelinePoints;
-  if (timelinePoints) rationale.push(`Timeline urgency contributed ${timelinePoints} points.`);
-
-  const stagePoints = STAGE_SCORES[form.companyStage] ?? 0;
-  score += stagePoints;
-  if (stagePoints) rationale.push(`Company stage contributed ${stagePoints} points.`);
+  let score = 28;
 
   const reliabilityPoints = DATA_RELIABILITY_SCORES[form.dataReliability] ?? 0;
   score += reliabilityPoints;
   if (reliabilityPoints) {
-    rationale.push(`Data pain / reliability contributed ${reliabilityPoints} points.`);
+    rationale.push(`Data reliability contributed ${reliabilityPoints} points.`);
   }
 
-  const modulePoints = Math.min(form.requestedModules.length * 2, 10);
-  score += modulePoints;
-  if (modulePoints) {
-    rationale.push(`${form.requestedModules.length} requested modules contributed ${modulePoints} points.`);
+  const needsLength = form.primaryNeeds.trim().length;
+  if (needsLength >= 120) {
+    score += 12;
+    rationale.push("Detailed needs description (+12).");
+  } else if (needsLength >= 50) {
+    score += 6;
+    rationale.push("Needs description provided (+6).");
   }
 
-  if (form.currentSolution.trim()) {
+  const planPoints = form.preferredPlan ? (PLAN_SCORES[form.preferredPlan] ?? 0) : 0;
+  if (planPoints) {
+    score += planPoints;
+    rationale.push(`Pricing tier interest (${form.preferredPlan}) contributed ${planPoints} points.`);
+  }
+
+  const freeDomains = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"];
+  const domain = form.email.split("@")[1]?.toLowerCase() ?? "";
+  if (domain && !freeDomains.includes(domain)) {
+    score += 6;
+    rationale.push("Business email domain (+6).");
+  }
+
+  if (form.phone.trim()) {
     score += 2;
-    rationale.push("Existing solution noted (+2).");
+    rationale.push("Phone provided (+2).");
   }
 
   score = Math.min(score, 100);
   const recommendedPackage = recommendPackage(form, score);
-  const estimatedDealAmount = DEAL_AMOUNTS[form.arrRange] ?? 50000;
+  const estimatedDealAmount = form.preferredPlan
+    ? (DEAL_BY_PLAN[form.preferredPlan] ?? 50000)
+    : score >= 75
+      ? 120000
+      : score >= 55
+        ? 60000
+        : 30000;
 
   return {
     score,

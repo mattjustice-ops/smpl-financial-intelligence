@@ -16,6 +16,8 @@ function contactProperties(payload: RequestQuotePayload): Record<string, string>
     email: payload.email,
     jobtitle: payload.jobtitle,
     phone: payload.phone || undefined,
+    state: payload.state || undefined,
+    country: payload.country || undefined,
   });
 }
 
@@ -25,7 +27,7 @@ function dealCoreProperties(
   dealstage: string
 ): Record<string, string> {
   return cleanProperties({
-    dealname: `${payload.companyName} — SMPL Quote Request`,
+    dealname: `${payload.companyName} — SMPL ${payload.submissionIntent === "demo" ? "Demo" : "Quote"} Request`,
     pipeline: pipelineId,
     dealstage,
     amount: String(payload.estimatedDealAmount),
@@ -33,6 +35,7 @@ function dealCoreProperties(
   });
 }
 
+/** Shared HubSpot sync for /request-quote and /book-demo (contact, company, deal, associations). */
 export async function syncRequestQuoteToHubSpot(
   payload: RequestQuotePayload
 ): Promise<HubSpotSyncResult> {

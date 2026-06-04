@@ -1,6 +1,6 @@
-# HubSpot setup for /request-quote
+# HubSpot setup for /request-quote and /book-demo
 
-When a quote form is submitted, the server creates or updates:
+When a **request quote** or **book demo** form is submitted, the server runs the same HubSpot sync and creates or updates:
 
 1. **Contact** — standard HubSpot fields
 2. **Company** — name, domain, plus a full summary in **Description**
@@ -15,7 +15,9 @@ In **Vercel → Project → Settings → Environment Variables**:
 | Variable | Value |
 |----------|--------|
 | `HUBSPOT_PRIVATE_APP_TOKEN` | Your `pat-...` token |
-| `HUBSPOT_PIPELINE_NAME` | `SMPL Inbound Sales` |
+| `HUBSPOT_PIPELINE_NAME` | `SMPL Inbound Sales` (or `Sales Pipeline` if that is what exists in your portal) |
+
+If `SMPL Inbound Sales` does not exist, the app falls back to **Sales Pipeline** automatically after deploy.
 
 Redeploy after saving.
 

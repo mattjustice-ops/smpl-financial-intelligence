@@ -1,5 +1,4 @@
 import { LandingFooter } from "./LandingFooter";
-import { LandingHeader } from "./LandingHeader";
 import { AiCopilotSection } from "./sections/AiCopilotSection";
 import { BeforeAfterSection } from "./sections/BeforeAfterSection";
 import { DataSourceOrbit } from "./sections/DataSourceOrbit";
@@ -15,7 +14,6 @@ import { TrustSection } from "./sections/TrustSection";
 export function SmplAiLandingPage() {
   return (
     <div className="min-h-screen">
-      <LandingHeader />
       <main>
         <HeroSection />
         <DataSourceOrbit />

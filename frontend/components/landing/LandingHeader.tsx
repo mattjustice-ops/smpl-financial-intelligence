@@ -3,56 +3,95 @@
 import Link from "next/link";
 import { CalendarClock, Sparkles } from "lucide-react";
 
-import { SCHEDULING_URL } from "./constants";
+import { BOOK_DEMO_URL } from "./constants";
 
-const NAV = [
+const SECTION_NAV = [
   { href: "#sources", label: "Data layer" },
   { href: "#model", label: "Operating model" },
   { href: "#understand", label: "Insights" },
   { href: "#modules", label: "Platform" },
   { href: "#copilot", label: "AI Copilot" },
-];
+] as const;
+
+const navLinkClass =
+  "text-sm text-slate-400 transition hover:text-white whitespace-nowrap";
 
 export function LandingHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2.5">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 sm:py-4">
+        <Link href="/" className="flex shrink-0 items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-teal-500/25">
             <Sparkles size={18} />
           </div>
-          <span className="text-xl font-semibold tracking-tight text-white">SMPL.ai</span>
+          <span className="text-lg font-semibold tracking-tight text-white sm:text-xl">SMPL.ai</span>
         </Link>
-        <nav className="hidden items-center gap-7 text-sm text-slate-400 md:flex">
-          {NAV.map((item) => (
-            <a key={item.href} href={item.href} className="transition hover:text-white">
+
+        <nav
+          className="hidden min-w-0 flex-1 items-center justify-center gap-4 overflow-x-auto px-2 text-center lg:flex lg:gap-6"
+          aria-label="Page sections"
+        >
+          {SECTION_NAV.map((item) => (
+            <a key={item.href} href={item.href} className={navLinkClass}>
               {item.label}
             </a>
           ))}
-        </nav>
-        <div className="flex items-center gap-3">
-          <a
-            href={SCHEDULING_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-r from-teal-400 to-cyan-400 px-5 text-sm font-semibold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:brightness-110"
-          >
-            <CalendarClock size={16} />
-            Book a demo
-          </a>
-          <Link
-            href="/request-quote"
-            className="hidden h-10 items-center justify-center rounded-full border border-cyan-400/70 px-5 text-sm font-medium text-teal-300 transition hover:border-cyan-300 hover:bg-teal-400/10 sm:inline-flex"
-          >
-            Request a quote
+          <Link href="/pricing" className={navLinkClass}>
+            Pricing
           </Link>
+        </nav>
+
+        <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+          <div className="hidden items-center gap-2 sm:flex">
+            <Link
+              href={BOOK_DEMO_URL}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-gradient-to-r from-teal-400 to-cyan-400 px-4 text-xs font-semibold text-slate-950 shadow-lg shadow-teal-500/20 transition hover:brightness-110 sm:h-10 sm:gap-2 sm:px-5 sm:text-sm"
+            >
+              <CalendarClock size={16} className="hidden sm:block" />
+              Book a demo
+            </Link>
+            <Link
+              href="/request-quote"
+              className="inline-flex h-9 items-center justify-center rounded-full border border-cyan-400/70 px-4 text-xs font-medium text-teal-300 transition hover:border-cyan-300 hover:bg-teal-400/10 sm:h-10 sm:px-5 sm:text-sm"
+            >
+              Request a quote
+            </Link>
+          </div>
           <Link
             href="/board"
-            className="hidden h-10 items-center justify-center rounded-full border border-white/15 px-5 text-sm font-medium text-white transition hover:bg-white/5 md:inline-flex"
+            className="inline-flex h-9 items-center justify-center rounded-full border border-white/15 px-3 text-xs font-medium text-white transition hover:bg-white/5 sm:h-10 sm:px-5 sm:text-sm"
           >
-            View sample dashboard
+            <span className="hidden md:inline">View sample dashboard</span>
+            <span className="md:hidden">Sample dashboard</span>
           </Link>
         </div>
+      </div>
+
+      <div className="flex items-center justify-center gap-4 overflow-x-auto border-t border-white/5 px-4 py-2 text-center lg:hidden">
+        {SECTION_NAV.map((item) => (
+          <a key={item.href} href={item.href} className={`${navLinkClass} text-xs`}>
+            {item.label}
+          </a>
+        ))}
+        <Link href="/pricing" className={`${navLinkClass} text-xs`}>
+          Pricing
+        </Link>
+      </div>
+
+      <div className="flex items-center justify-center gap-2 border-t border-white/5 px-4 py-2 sm:hidden">
+        <Link
+          href={BOOK_DEMO_URL}
+          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-teal-400 to-cyan-400 px-3 text-xs font-semibold text-slate-950"
+        >
+          <CalendarClock size={14} />
+          Book a demo
+        </Link>
+        <Link
+          href="/request-quote"
+          className="inline-flex h-9 flex-1 items-center justify-center rounded-full border border-cyan-400/70 px-3 text-xs font-medium text-teal-300"
+        >
+          Request quote
+        </Link>
       </div>
     </header>
   );

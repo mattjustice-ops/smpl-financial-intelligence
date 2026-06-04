@@ -1,8 +1,20 @@
 export const SALES_EMAIL = "mattjustice@smpl-ai.com";
 export const SALES_INQUIRY_MAILTO = `mailto:${SALES_EMAIL}?subject=${encodeURIComponent("SMPL.ai demo request")}`;
 export const DEFAULT_SCHEDULING_URL = "https://calendar.app.google/R8yf5HpyPwAitKq16";
-export const SCHEDULING_URL =
-  process.env.NEXT_PUBLIC_SCHEDULING_URL?.trim() || DEFAULT_SCHEDULING_URL;
+
+/** Always an absolute https URL — ignores relative env values like `/book-demo`. */
+export function resolveSchedulingUrl(): string {
+  const candidate = process.env.NEXT_PUBLIC_SCHEDULING_URL?.trim();
+  if (candidate && /^https?:\/\//i.test(candidate)) {
+    return candidate;
+  }
+  return DEFAULT_SCHEDULING_URL;
+}
+
+export const SCHEDULING_URL = resolveSchedulingUrl();
+
+/** Collect the same fields as request-quote, then send users to the calendar. */
+export const BOOK_DEMO_URL = "/book-demo";
 
 export const HERO_COMMENTARY =
   "Enterprise expansion ARR outperformed plan while paid acquisition efficiency remains the largest GTM optimization opportunity.";

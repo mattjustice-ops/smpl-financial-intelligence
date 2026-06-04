@@ -31,6 +31,13 @@ from app.models.demo_finance import (
     VendorContract,
     WarehouseCsvRow,
 )
+from app.models.billing import (
+    BillingCheckoutSession,
+    BillingCustomer,
+    BillingEvent,
+    BillingSubscription,
+    PendingUserInvite,
+)
 from app.models.organization import Organization
 from app.models.quote_submission import QuoteSubmission
 from app.models.workforce import (
@@ -43,6 +50,11 @@ from app.models.workforce import (
 )
 
 __all__ = [
+    "BillingCheckoutSession",
+    "BillingCustomer",
+    "BillingEvent",
+    "BillingSubscription",
+    "PendingUserInvite",
     "Customer",
     "DemoCommissionPlan",
     "ForecastAssumption",

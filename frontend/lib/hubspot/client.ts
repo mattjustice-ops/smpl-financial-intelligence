@@ -527,9 +527,14 @@ export class HubSpotClient {
       }>;
     }>("/crm/v3/pipelines/deals");
 
+    const byExactName = (name: string) =>
+      pipelines.results.find((p) => p.label.toLowerCase() === name.toLowerCase());
+
     const pipeline =
-      pipelines.results.find((p) => p.label.toLowerCase() === pipelineName.toLowerCase()) ??
-      pipelines.results.find((p) => p.label.toLowerCase().includes("smpl"));
+      byExactName(pipelineName) ??
+      pipelines.results.find((p) => p.label.toLowerCase().includes("smpl")) ??
+      byExactName("Sales Pipeline") ??
+      pipelines.results[0];
 
     if (!pipeline) {
       const available = pipelines.results.map((p) => p.label).join(", ");
