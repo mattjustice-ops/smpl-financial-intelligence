@@ -6,11 +6,11 @@ import { CalendarClock, LogIn, Sparkles } from "lucide-react";
 import { BOOK_DEMO_URL } from "./constants";
 
 const SECTION_NAV = [
-  { href: "#sources", label: "Data layer" },
-  { href: "#model", label: "Operating model" },
-  { href: "#understand", label: "Insights" },
-  { href: "#modules", label: "Platform" },
-  { href: "#copilot", label: "AI Copilot" },
+  { hash: "sources", label: "Data layer" },
+  { hash: "model", label: "Operating model" },
+  { hash: "understand", label: "Insights" },
+  { hash: "modules", label: "Platform" },
+  { hash: "copilot", label: "AI Copilot" },
 ] as const;
 
 const navLinkClass =
@@ -33,9 +33,13 @@ export function LandingHeader() {
             aria-label="Page sections"
           >
             {SECTION_NAV.map((item) => (
-              <a key={item.href} href={item.href} className={navLinkClass}>
+              <Link
+                key={item.hash}
+                href={{ pathname: "/", hash: item.hash }}
+                className={navLinkClass}
+              >
                 {item.label}
-              </a>
+              </Link>
             ))}
             <Link href="/pricing" className={navLinkClass}>
               Pricing
@@ -78,9 +82,13 @@ export function LandingHeader() {
 
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-white/5 px-4 py-2 text-center lg:hidden">
         {SECTION_NAV.map((item) => (
-          <a key={item.href} href={item.href} className={`${navLinkClass} text-xs`}>
+          <Link
+            key={item.hash}
+            href={{ pathname: "/", hash: item.hash }}
+            className={`${navLinkClass} text-xs`}
+          >
             {item.label}
-          </a>
+          </Link>
         ))}
         <Link href="/pricing" className={`${navLinkClass} text-xs`}>
           Pricing
