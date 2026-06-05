@@ -49,6 +49,11 @@ class Organization(Base):
         back_populates="organization",
         cascade="all, delete-orphan",
     )
+    members: Mapped[list["OrganizationMember"]] = relationship(
+        "OrganizationMember",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
 
     demo_customers: Mapped[list["Customer"]] = relationship(
         "Customer",

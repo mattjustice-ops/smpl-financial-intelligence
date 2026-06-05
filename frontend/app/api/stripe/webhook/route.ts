@@ -5,6 +5,15 @@ import { backendBaseUrl, callBillingBackend, getStripe, getStripeWebhookSecret }
 
 export const runtime = "nodejs";
 
+/** Browsers use GET — this is not an error; Stripe sends POST with a signed payload. */
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    message:
+      "Stripe webhook endpoint is active. Do not open this URL in the browser for testing. Add it in Stripe Dashboard → Developers → Webhooks (POST only).",
+  });
+}
+
 const HANDLED_EVENTS = new Set([
   "checkout.session.completed",
   "customer.subscription.created",

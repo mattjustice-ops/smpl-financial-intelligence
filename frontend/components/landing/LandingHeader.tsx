@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, Sparkles } from "lucide-react";
+import { CalendarClock, LogIn, Sparkles } from "lucide-react";
 
 import { BOOK_DEMO_URL } from "./constants";
 
@@ -19,27 +19,29 @@ const navLinkClass =
 export function LandingHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 sm:py-4">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-teal-500/25">
-            <Sparkles size={18} />
-          </div>
-          <span className="text-lg font-semibold tracking-tight text-white sm:text-xl">SMPL.ai</span>
-        </Link>
-
-        <nav
-          className="hidden min-w-0 flex-1 items-center justify-center gap-4 overflow-x-auto px-2 text-center lg:flex lg:gap-6"
-          aria-label="Page sections"
-        >
-          {SECTION_NAV.map((item) => (
-            <a key={item.href} href={item.href} className={navLinkClass}>
-              {item.label}
-            </a>
-          ))}
-          <Link href="/pricing" className={navLinkClass}>
-            Pricing
+      <div className="mx-auto flex w-full max-w-[96rem] items-center justify-between gap-4 px-5 py-3 sm:px-8 sm:py-4 lg:px-10">
+        <div className="flex min-w-0 items-center gap-5 lg:gap-6">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-teal-500/25">
+              <Sparkles size={18} />
+            </div>
+            <span className="text-lg font-semibold tracking-tight text-white sm:text-xl">SMPL.ai</span>
           </Link>
-        </nav>
+
+          <nav
+            className="hidden shrink-0 items-center gap-x-4 lg:flex xl:gap-x-6"
+            aria-label="Page sections"
+          >
+            {SECTION_NAV.map((item) => (
+              <a key={item.href} href={item.href} className={navLinkClass}>
+                {item.label}
+              </a>
+            ))}
+            <Link href="/pricing" className={navLinkClass}>
+              Pricing
+            </Link>
+          </nav>
+        </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
           <div className="hidden items-center gap-2 sm:flex">
@@ -61,13 +63,20 @@ export function LandingHeader() {
             href="/board"
             className="inline-flex h-9 items-center justify-center rounded-full border border-white/15 px-3 text-xs font-medium text-white transition hover:bg-white/5 sm:h-10 sm:px-5 sm:text-sm"
           >
-            <span className="hidden md:inline">View sample dashboard</span>
-            <span className="md:hidden">Sample dashboard</span>
+            <span className="hidden 2xl:inline">View sample dashboard</span>
+            <span className="2xl:hidden">Sample dashboard</span>
+          </Link>
+          <Link
+            href="/login"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/15 px-3 text-xs font-medium text-slate-200 transition hover:bg-white/5 sm:h-10 sm:px-4 sm:text-sm"
+          >
+            <LogIn size={15} className="hidden sm:block" />
+            Log in
           </Link>
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-4 overflow-x-auto border-t border-white/5 px-4 py-2 text-center lg:hidden">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-white/5 px-4 py-2 text-center lg:hidden">
         {SECTION_NAV.map((item) => (
           <a key={item.href} href={item.href} className={`${navLinkClass} text-xs`}>
             {item.label}

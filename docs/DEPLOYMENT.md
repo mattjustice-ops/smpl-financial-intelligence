@@ -12,6 +12,18 @@ The **board demo** works on Vercel alone — no API or database needed. Share th
 
 The **live platform** (`/app`) needs the FastAPI backend + Postgres with your org data loaded.
 
+### Phase 1.5 — Auth milestone on Vercel (current step)
+
+Deploy the frontend to validate Auth.js + magic links on production infra **before** inviting customers.
+
+1. Set Vercel env vars — run `.\scripts\print-vercel-auth-env.ps1`
+2. Migrate prod auth DB — `alembic upgrade head` on `AUTH_DATABASE_URL`
+3. Deploy — `.\scripts\deploy-frontend-vercel.ps1 -CommitPush`
+
+Full checklist: **`docs/VERCEL_AUTH_DEPLOY.md`**
+
+`/app` still uses the demo org until PR2 wires `session.user.activeOrganizationId`.
+
 ---
 
 ## Phase 1 — Board demo on Vercel (fastest path)

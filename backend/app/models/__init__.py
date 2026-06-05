@@ -38,6 +38,7 @@ from app.models.billing import (
     BillingSubscription,
     PendingUserInvite,
 )
+from app.models.user import OrganizationMember, User
 from app.models.organization import Organization
 from app.models.quote_submission import QuoteSubmission
 from app.models.workforce import (
@@ -80,7 +81,9 @@ __all__ = [
     "MrrWaterfall",
     "Opportunity",
     "Organization",
+    "OrganizationMember",
     "QuoteSubmission",
+    "User",
     "Payment",
     "SalesQuota",
     "Subscription",

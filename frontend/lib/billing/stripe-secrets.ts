@@ -1,3 +1,5 @@
+import "server-only";
+
 import fs from "node:fs";
 
 const DEFAULT_STRIPE_TOKEN_FILE = "C:\\Users\\mattj\\OneDrive\\Documents\\Stripe Token.txt";

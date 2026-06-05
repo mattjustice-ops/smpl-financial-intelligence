@@ -16,6 +16,9 @@ export const SCHEDULING_URL = resolveSchedulingUrl();
 /** Collect the same fields as request-quote, then send users to the calendar. */
 export const BOOK_DEMO_URL = "/book-demo";
 
+/** Customer workspace sign-in (optional — home page stays public). */
+export const LOGIN_URL = "/login";
+
 export const HERO_COMMENTARY =
   "Enterprise expansion ARR outperformed plan while paid acquisition efficiency remains the largest GTM optimization opportunity.";
 

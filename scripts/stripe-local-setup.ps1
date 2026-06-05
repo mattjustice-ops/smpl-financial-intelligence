@@ -24,9 +24,12 @@ APP_BASE_URL=http://localhost:3002
 # Paste price_... IDs from Stripe Dashboard -> Products (see docs/STRIPE_BILLING.md)
 STRIPE_STARTER_MONTHLY_PRICE_ID=price_REPLACE_ME
 STRIPE_STARTER_ANNUAL_PRICE_ID=price_REPLACE_ME
+STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID=price_REPLACE_ME
+STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID=price_REPLACE_ME
+STRIPE_STARTER_IMPLEMENTATION_PRICE_ID=price_REPLACE_ME
+STRIPE_PROFESSIONAL_IMPLEMENTATION_PRICE_ID=price_REPLACE_ME
 STRIPE_GROWTH_MONTHLY_PRICE_ID=price_REPLACE_ME
 STRIPE_GROWTH_ANNUAL_PRICE_ID=price_REPLACE_ME
-STRIPE_STARTER_IMPLEMENTATION_PRICE_ID=price_REPLACE_ME
 STRIPE_GROWTH_IMPLEMENTATION_PRICE_ID=price_REPLACE_ME
 "@
 
@@ -47,7 +50,7 @@ if ($content -match "STRIPE_STARTER_MONTHLY_PRICE_ID") {
 Write-Host ""
 Write-Host "Get price IDs:" -ForegroundColor Cyan
 Write-Host "  1. https://dashboard.stripe.com/test/products"
-Write-Host "  2. Create Starter + Growth (monthly + annual recurring prices)"
+Write-Host "  2. Run .\scripts\create-stripe-test-products.ps1 OR create Starter + Professional in Dashboard"
 Write-Host "  3. Optional: one-time Implementation prices (`$5k / `$7.5k)"
 Write-Host "  4. Click each price -> copy ID (starts with price_)"
 Write-Host ""

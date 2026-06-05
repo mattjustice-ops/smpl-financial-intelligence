@@ -1,10 +1,11 @@
-# Creates SMPL Starter/Growth test products + prices in Stripe and writes price IDs into frontend/.env.local
+# Creates SMPL Starter + Professional products/prices in Stripe and writes price IDs to frontend/.env.local
 #
 # Run from repo root:
 #   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 #   .\scripts\create-stripe-test-products.ps1
 #
-# Requires: C:\Users\mattj\OneDrive\Documents\Stripe Token.txt with Secret Key (sk_test_...)
+# Requires: Stripe Token.txt with Secret Key (sk_test_... or sk_live_...)
+# Default path: C:\Users\mattj\OneDrive\Documents\Stripe Token.txt
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -51,7 +52,7 @@ function Set-EnvLocalPriceId {
     [string]$PriceId
   )
   if (-not (Test-Path $envLocal)) {
-    throw "Missing $envLocal - run stripe-local-setup.ps1 first or copy .env.example"
+    throw "Missing $envLocal - run .\scripts\stripe-local-setup.ps1 first"
   }
 
   $prefix = $Name + "="
@@ -66,30 +67,45 @@ function Set-EnvLocalPriceId {
   }
 
   if (-not $found) {
-    throw "$Name not found in .env.local"
+    $lines += $prefix + $PriceId
   }
 
   Set-Content -Path $envLocal -Value $lines
   Write-Host "  $Name = $PriceId" -ForegroundColor Green
 }
 
+$secretKey = Get-StripeSecretKey
+$mode = if ($secretKey -match "^sk_test_") { "test" } else { "live" }
+
 Write-Host ""
-Write-Host "=== Create Stripe test products (SMPL) ===" -ForegroundColor Cyan
-Write-Host "Paste target file: $envLocal" -ForegroundColor DarkGray
+Write-Host "=== Create Stripe products (SMPL) ===" -ForegroundColor Cyan
+Write-Host "Stripe mode: $mode (open dashboard in this mode)" -ForegroundColor Yellow
+Write-Host "Env file:    $envLocal" -ForegroundColor DarkGray
+
+$account = Invoke-RestMethod -Uri "https://api.stripe.com/v1/account" -Headers @{
+  Authorization = "Bearer $secretKey"
+}
+Write-Host ""
+Write-Host "This key belongs to Stripe account:" -ForegroundColor Green
+Write-Host "  $($account.business_profile.name)"
+Write-Host "  $($account.email)"
+Write-Host "  $($account.id)"
+Write-Host "Log into THIS account in the browser, then open the product catalog URL printed at the end."
 Write-Host ""
 
 $starterProduct = Invoke-StripeApi -Path "products" -Body @{
   name        = "SMPL Starter"
-  description = "3 users, basic dashboards, standard reporting, CSV uploads, basic AI commentary"
+  description = "Silver Support - 2 users, 1 integration, dedicated environment, dashboards, board reporting, AI commentary"
 }
 Write-Host "Created product: $($starterProduct.name) ($($starterProduct.id))"
 
-$growthProduct = Invoke-StripeApi -Path "products" -Body @{
-  name        = "SMPL Growth"
-  description = "8 users, board reporting, forecasting, workforce planning, AI commentary, scenario analysis"
+$professionalProduct = Invoke-StripeApi -Path "products" -Body @{
+  name        = "SMPL Professional"
+  description = "Gold Support - 5 users, 3 integrations, forecasting, workforce planning, scenario analysis, AI commentary"
 }
-Write-Host "Created product: $($growthProduct.name) ($($growthProduct.id))"
+Write-Host "Created product: $($professionalProduct.name) ($($professionalProduct.id))"
 
+# Placeholder recurring amounts for post-contract checkout (public /pricing is sales-led).
 $starterMonthly = Invoke-StripeApi -Path "prices" -Body @{
   product                     = $starterProduct.id
   unit_amount                 = "250000"
@@ -106,51 +122,59 @@ $starterAnnual = Invoke-StripeApi -Path "prices" -Body @{
   "recurring[interval_count]" = "1"
   nickname                    = "Starter Annual"
 }
-$growthMonthly = Invoke-StripeApi -Path "prices" -Body @{
-  product                     = $growthProduct.id
+$professionalMonthly = Invoke-StripeApi -Path "prices" -Body @{
+  product                     = $professionalProduct.id
   unit_amount                 = "500000"
   currency                    = "usd"
   "recurring[interval]"       = "month"
   "recurring[interval_count]" = "1"
-  nickname                    = "Growth Monthly"
+  nickname                    = "Professional Monthly"
 }
-$growthAnnual = Invoke-StripeApi -Path "prices" -Body @{
-  product                     = $growthProduct.id
-  unit_amount                 = "6000000"
-  currency                    = "usd"
-  "recurring[interval]"       = "year"
-  "recurring[interval_count]" = "1"
-  nickname                    = "Growth Annual"
-}
-$starterImpl = Invoke-StripeApi -Path "prices" -Body @{
-  product     = $starterProduct.id
-  unit_amount = "500000"
-  currency    = "usd"
-  nickname    = "Starter Implementation"
-}
-$growthImpl = Invoke-StripeApi -Path "prices" -Body @{
-  product     = $growthProduct.id
-  unit_amount = "750000"
-  currency    = "usd"
-  nickname    = "Growth Implementation"
-}
-
-Write-Host ""
-Write-Host "Updating frontend/.env.local ..." -ForegroundColor Cyan
-Set-EnvLocalPriceId -Name "STRIPE_STARTER_MONTHLY_PRICE_ID" -PriceId $starterMonthly.id
-Set-EnvLocalPriceId -Name "STRIPE_STARTER_ANNUAL_PRICE_ID" -PriceId $starterAnnual.id
-Set-EnvLocalPriceId -Name "STRIPE_GROWTH_MONTHLY_PRICE_ID" -PriceId $growthMonthly.id
-Set-EnvLocalPriceId -Name "STRIPE_GROWTH_ANNUAL_PRICE_ID" -PriceId $growthAnnual.id
-Set-EnvLocalPriceId -Name "STRIPE_STARTER_IMPLEMENTATION_PRICE_ID" -PriceId $starterImpl.id
-Set-EnvLocalPriceId -Name "STRIPE_GROWTH_IMPLEMENTATION_PRICE_ID" -PriceId $growthImpl.id
-
-Write-Host ""
-Write-Host "Done." -ForegroundColor Green
-Write-Host "View in Stripe: https://dashboard.stripe.com/test/products" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Next:" -ForegroundColor Yellow
-Write-Host "  1. Restart frontend if it is running (npm run dev)"
-Write-Host "  2. stripe listen --forward-to localhost:3002/api/stripe/webhook"
-Write-Host "  3. Add whsec_... line to Stripe Token.txt"
-Write-Host "  4. Open http://localhost:3002/pricing"
-Write-Host ""
+$professionalAnnual = Invoke-StripeApi -Path "prices" -Body @{
+  product                     = $professionalProduct.id
+  unit_amount                 = "6000000"
+  currency                    = "usd"
+  "recurring[interval]"       = "year"
+  "recurring[interval_count]" = "1"
+  nickname                    = "Professional Annual"
+}
+
+$starterImpl = Invoke-StripeApi -Path "prices" -Body @{
+  product     = $starterProduct.id
+  unit_amount = "500000"
+  currency    = "usd"
+  nickname    = "Starter Implementation"
+}
+$professionalImpl = Invoke-StripeApi -Path "prices" -Body @{
+  product     = $professionalProduct.id
+  unit_amount = "750000"
+  currency    = "usd"
+  nickname    = "Professional Implementation"
+}
+
+Write-Host ""
+Write-Host "Updating frontend/.env.local ..." -ForegroundColor Cyan
+Set-EnvLocalPriceId -Name "STRIPE_STARTER_MONTHLY_PRICE_ID" -PriceId $starterMonthly.id
+Set-EnvLocalPriceId -Name "STRIPE_STARTER_ANNUAL_PRICE_ID" -PriceId $starterAnnual.id
+Set-EnvLocalPriceId -Name "STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID" -PriceId $professionalMonthly.id
+Set-EnvLocalPriceId -Name "STRIPE_PROFESSIONAL_ANNUAL_PRICE_ID" -PriceId $professionalAnnual.id
+Set-EnvLocalPriceId -Name "STRIPE_STARTER_IMPLEMENTATION_PRICE_ID" -PriceId $starterImpl.id
+Set-EnvLocalPriceId -Name "STRIPE_PROFESSIONAL_IMPLEMENTATION_PRICE_ID" -PriceId $professionalImpl.id
+# Legacy aliases (app still accepts GROWTH_* as fallback)
+Set-EnvLocalPriceId -Name "STRIPE_GROWTH_MONTHLY_PRICE_ID" -PriceId $professionalMonthly.id
+Set-EnvLocalPriceId -Name "STRIPE_GROWTH_ANNUAL_PRICE_ID" -PriceId $professionalAnnual.id
+Set-EnvLocalPriceId -Name "STRIPE_GROWTH_IMPLEMENTATION_PRICE_ID" -PriceId $professionalImpl.id
+
+Write-Host ""
+Write-Host "Done. Enterprise is sales-led only (no Stripe product)." -ForegroundColor Green
+if ($mode -eq "test") {
+  Write-Host "Dashboard: https://dashboard.stripe.com/test/products" -ForegroundColor Cyan
+} else {
+  Write-Host "Dashboard: https://dashboard.stripe.com/products" -ForegroundColor Cyan
+}
+Write-Host ""
+Write-Host "Next:" -ForegroundColor Yellow
+Write-Host "  1. Confirm Test/Live toggle in Stripe matches key in Token.txt"
+Write-Host "  2. Copy the six price_ IDs to Vercel env vars for production"
+Write-Host "  3. Restart frontend: cd frontend; npm run dev"
+Write-Host ""

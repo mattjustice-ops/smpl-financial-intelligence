@@ -84,10 +84,41 @@ Creates:
 
 ## Stripe Dashboard setup
 
-1. Create products **Starter** and **Growth** with recurring prices (monthly + annual).
-2. Create one-time prices for implementation fees (optional line items).
-3. Enable **Customer Portal** in Stripe Billing settings (cancel, payment methods, invoices).
-4. Copy price IDs into env vars above.
+Products are **not** created when you deploy to Vercel. You must either run the PowerShell script or click **+ Create product** in Stripe.
+
+### Create products (PowerShell)
+
+```powershell
+cd C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\create-stripe-test-products.ps1
+```
+
+The script prints the **Stripe account email and ID** for the key in `Stripe Token.txt`. You must be logged into **that same account** in the browser to see products.
+
+### Verify (if Dashboard looks empty)
+
+```powershell
+.\scripts\verify-stripe-catalog.ps1
+```
+
+If the script lists products but Dashboard shows 0, you are logged into a **different Stripe account** in the browser (use the account switcher, top-left).
+
+### Test vs Live (sandbox)
+
+| Key in Token.txt | Dashboard toggle | Product catalog URL |
+|------------------|------------------|---------------------|
+| `sk_test_...` | **Test mode** ON | https://dashboard.stripe.com/test/products |
+| `sk_live_...` | **Test mode** OFF | https://dashboard.stripe.com/products |
+
+Test and Live are separate catalogs. Creating in test does not appear in live.
+
+### Manual setup
+
+1. Create products **SMPL Starter** and **SMPL Professional** with recurring prices (monthly + annual).
+2. Optional one-time implementation prices.
+3. Enable **Customer Portal** in Stripe Billing settings.
+4. Copy `price_...` IDs into `frontend/.env.local` and Vercel env vars.
 
 ## Local testing with Stripe CLI
 
@@ -187,13 +218,46 @@ Idempotency: `billing_events.stripe_event_id` unique constraint.
 
 If `HUBSPOT_PRIVATE_APP_TOKEN` is set and checkout metadata includes `hubspot_deal_id`, webhook handler updates the deal with checkout note and contract value.
 
-## Vercel production
+## Vercel production (plain language)
 
-Set all Stripe env vars on the **frontend** Vercel project. Set `APP_BASE_URL` to `https://smpl-financial-intelligence.vercel.app`. Register webhook endpoint:
+You only need this when accepting **real** payments in **Live** mode. For now, **sandbox + local `.env.local` is enough** for development.
+
+### What “copy price_... into Vercel” means
+
+A **price ID** is a Stripe label like `price_1ABC123...`. Your app does not read the Product catalog UI — it reads these IDs from **environment variables** on Vercel.
+
+1. In Stripe (Live mode or your sandbox), open a product → click a price → copy **Price ID**.
+2. In [Vercel](https://vercel.com) → your project → **Settings** → **Environment Variables**.
+3. Add or edit each name to match the value, for example:
+   - `STRIPE_STARTER_MONTHLY_PRICE_ID` = `price_...`
+   - `STRIPE_PROFESSIONAL_MONTHLY_PRICE_ID` = `price_...`
+   - (same for annual + implementation IDs)
+4. Add `STRIPE_SECRET_KEY` = your `sk_live_...` (live) or keep `sk_test_...` only on preview if you prefer.
+5. **Redeploy** the site after saving variables (Deployments → … → Redeploy).
+
+`frontend/.env.local` on your PC is **not** uploaded to Vercel automatically.
+
+### Webhook URL (not a web page)
 
 `https://smpl-financial-intelligence.vercel.app/api/stripe/webhook`
 
-Ensure Railway/backend URL is in `SFI_BACKEND_URL` so webhooks persist to Postgres.
+- Opening it in Chrome is only a quick **health check** (should return JSON saying the endpoint is active).
+- **Stripe** sends **POST** requests to this URL when someone pays or a subscription changes. You configure it in Stripe, not by visiting the link.
+
+**Stripe Dashboard → Developers → Webhooks → Add endpoint**
+
+- Endpoint URL: `https://smpl-financial-intelligence.vercel.app/api/stripe/webhook`
+- Events: `checkout.session.completed`, `customer.subscription.*`, `invoice.payment_*`, `customer.updated`
+- After creating the endpoint, copy the **Signing secret** (`whsec_...`) into Vercel as `STRIPE_WEBHOOK_SECRET`.
+
+Also set `SFI_BACKEND_URL` on Vercel to your production API URL so webhooks can save to Postgres.
+
+### Sandbox vs Live on Vercel
+
+| Goal | Keys on Vercel |
+|------|----------------|
+| Dev / no real charges | Optional: only needed for testing checkout on production URL |
+| Real customer billing | `sk_live_...`, live `price_...` IDs, live `whsec_...` from a **Live mode** webhook endpoint |
 
 ## Security checklist
 
