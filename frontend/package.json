@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev -p 3002",
     "dev:kill": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-port.ps1 -Port 3002",
-    "dev:fresh": "npm run dev:kill && npm run dev",
+    "dev:fresh": "powershell -ExecutionPolicy Bypass -File ./scripts/restart-dev.ps1 -Port 3002",
     "dev:restart": "powershell -ExecutionPolicy Bypass -File ./scripts/restart-dev.ps1 -Port 3002",
     "copy:board": "node scripts/copy-board-html.mjs",
     "copy:board-exports": "node scripts/copy-board-exports.mjs",
     "copy:board-all": "node scripts/copy-board-html.mjs && node scripts/copy-board-exports.mjs",
+    "update:board-june": "node scripts/update-june-board.mjs",
     "prebuild": "node scripts/copy-board-html.mjs && node scripts/copy-board-exports.mjs",
     "dev:3000": "next dev -p 3000",
     "build": "next build",

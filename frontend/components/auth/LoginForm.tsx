@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { requestMagicLink } from "@/app/login/actions";
+import { getLoginErrorMessage } from "@/lib/auth/login-error-message";
 
 type LoginFormProps = {
   emailConfigured: boolean;
@@ -44,10 +45,7 @@ export function LoginForm({ emailConfigured }: LoginFormProps) {
       {error || errorCode ? (
         <div className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2.5 text-xs text-red-200">
           {error ??
-            (errorCode === "AccessDenied"
-              ? accessReason ??
-                "That email does not have workspace access yet. Make sure the backend is running on port 8001, your invite is seeded, and you request a fresh sign-in link."
-              : "Sign-in failed. Please try again or contact support.")}
+            getLoginErrorMessage(errorCode, accessReason)}
         </div>
       ) : null}
 
