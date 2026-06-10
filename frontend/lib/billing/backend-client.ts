@@ -2,12 +2,32 @@ type BillingBackendInit = Omit<RequestInit, "body"> & {
   body?: Record<string, unknown>;
 };
 
+function isLocalhostUrl(url: string): boolean {
+  return /127\.0\.0\.1|localhost/i.test(url);
+}
+
+/** Resolve hosted API URL for server-side fetches (auth session-sync, billing, etc.). */
 export function backendBaseUrl(): string | null {
-  return (
-    process.env.SFI_BACKEND_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
-    null
-  );
+  const candidates = [
+    process.env.SFI_BACKEND_URL?.trim(),
+    process.env.NEXT_PUBLIC_API_URL?.trim(),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const url of candidates) {
+    if (process.env.VERCEL && isLocalhostUrl(url)) {
+      continue;
+    }
+    return url.replace(/\/$/, "");
+  }
+
+  // Fallback: call /api/v1/* on the public app origin (Next.js rewrite -> Railway).
+  const appBase =
+    process.env.APP_BASE_URL?.trim() || process.env.AUTH_URL?.trim();
+  if (appBase && process.env.VERCEL) {
+    return appBase.replace(/\/$/, "");
+  }
+
+  return null;
 }
 
 export async function callBillingBackend(
@@ -16,6 +36,11 @@ export async function callBillingBackend(
 ): Promise<Response> {
   const base = backendBaseUrl();
   if (!base) {
+    if (process.env.VERCEL) {
+      throw new Error(
+        "SFI_BACKEND_URL is not configured on Vercel Production. Set it to your Railway API URL and redeploy.",
+      );
+    }
     throw new Error("SFI_BACKEND_URL is not configured.");
   }
 
