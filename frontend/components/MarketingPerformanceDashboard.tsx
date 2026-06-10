@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { useActiveOrganization } from "../hooks/useActiveOrganization";
+
 const apiBase =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
 
-const defaultOrgId = "8571e520-0687-4516-bdee-379f37c58c1f";
 
 type Org = { id: string; name: string };
 
@@ -112,8 +113,9 @@ function sum(rows: MarketingRow[], key: keyof MarketingRow) {
 }
 
 export function MarketingPerformanceDashboard() {
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [orgId, setOrgId] = useState(defaultOrgId);
+  const { organizationId, organizations, isLoading: sessionLoading } = useActiveOrganization();
+  const orgs = organizations;
+  const [orgId, setOrgId] = useState("");
   const [scenario, setScenario] = useState("Combined");
   const [startPeriod, setStartPeriod] = useState("2026-01");
   const [endPeriod, setEndPeriod] = useState("2026-12");
@@ -125,23 +127,13 @@ export function MarketingPerformanceDashboard() {
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/api/v1/organizations/?_=${Date.now()}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as Org[];
-        if (!cancelled) setOrgs(data);
-      } catch {
-        // Manual org ID fallback remains available.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (organizationId) {
+      setOrgId(organizationId);
+    }
+  }, [organizationId]);
 
   const load = async () => {
+    if (!orgId || sessionLoading) return;
     setBusy(true);
     setError(null);
     try {

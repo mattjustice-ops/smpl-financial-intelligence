@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
-import { proxyToBackend } from "../../../../../lib/backendProxy";
+import { proxyToBackendAuthed } from "../../../../../lib/backendProxy";
 
 export async function POST(request: NextRequest) {
-  return proxyToBackend(request, "/api/v1/workforce/recompute");
+  return proxyToBackendAuthed(request, "/api/v1/workforce/recompute");
 }

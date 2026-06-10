@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { useActiveOrganization } from "../hooks/useActiveOrganization";
 import { fetchJson } from "../lib/fetchJson";
 import { getApiBase, getWorkforceApiBase } from "../lib/apiBase";
 import {
@@ -32,8 +33,6 @@ import {
   WorkforceValidationStrip,
   type WorkforceValidationResponse,
 } from "./workforce/WorkforceValidationStrip";
-
-const defaultOrgId = "8571e520-0687-4516-bdee-379f37c58c1f";
 
 type Org = { id: string; name: string };
 
@@ -371,8 +370,9 @@ type SelectedCashCell = {
 };
 
 export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }) {
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [orgId, setOrgId] = useState(defaultOrgId);
+  const { organizationId, organizations, isLoading: sessionLoading } = useActiveOrganization();
+  const orgs = organizations;
+  const [orgId, setOrgId] = useState("");
   const [scenario, setScenario] = useState("Combined");
   const [startPeriod, setStartPeriod] = useState("2026-01");
   const [endPeriod, setEndPeriod] = useState("2026-12");
@@ -388,24 +388,13 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
   const [activeSection, setActiveSection] = useState<OperatingSectionId>("executive");
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`${getApiBase()}/api/v1/organizations/?_=${Date.now()}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const rows = (await res.json()) as Org[];
-        if (!cancelled) setOrgs(rows);
-      } catch {
-        // Manual org fallback.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (organizationId) {
+      setOrgId(organizationId);
+    }
+  }, [organizationId]);
 
   const load = async () => {
-    if (!enabled || !orgId) return;
+    if (!enabled || !orgId || sessionLoading) return;
     setBusy(true);
     setError(null);
     setStatementsError(null);
@@ -664,7 +653,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
     if (!enabled) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, periodView, startPeriod, endPeriod, scenario, orgId, marketingChannel, asOfPeriod]);
+  }, [enabled, periodView, startPeriod, endPeriod, scenario, orgId, marketingChannel, asOfPeriod, sessionLoading]);
 
   const queryPeriodRange = useMemo(
     () => resolveQueryPeriodRange(periodView, startPeriod, endPeriod),

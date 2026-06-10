@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { useActiveOrganization } from "../hooks/useActiveOrganization";
+
 const apiBase =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
 
@@ -52,7 +54,6 @@ const scheduleLabels: Record<string, string> = {
   assumptions: "Driver Assumptions",
 };
 
-const defaultOrgId = "8571e520-0687-4516-bdee-379f37c58c1f";
 
 function money(value: string | number | null | undefined) {
   const n = Number(value ?? 0);
@@ -173,8 +174,9 @@ function formatScheduleCell(metric: string, value: string | number | null | unde
 }
 
 export function ForecastDashboard() {
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [orgId, setOrgId] = useState(defaultOrgId);
+  const { organizationId, organizations, isLoading: sessionLoading } = useActiveOrganization();
+  const orgs = organizations;
+  const [orgId, setOrgId] = useState("");
   const [scenario, setScenario] = useState("Forecast");
   const [startPeriod, setStartPeriod] = useState("2026-01-01");
   const [endPeriod, setEndPeriod] = useState("2026-12-31");
@@ -185,27 +187,13 @@ export function ForecastDashboard() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/api/v1/organizations/?_=${Date.now()}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as Org[];
-        if (cancelled) return;
-        setOrgs(data);
-        if (data.length && !orgId) setOrgId(data[0].id);
-      } catch {
-        // Dashboard still supports manually entered org IDs.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
+    if (organizationId) {
+      setOrgId(organizationId);
+    }
+  }, [organizationId]);
 
   const load = async () => {
+    if (!orgId || sessionLoading) return;
     setBusy(true);
     setError(null);
     try {

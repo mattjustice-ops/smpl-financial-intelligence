@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CsvUploadPanel } from "../../components/CsvUploadPanel";
+import { AppSessionBanner } from "../../components/app/AppSessionBanner";
 import { getApiBaseDisplay } from "../../lib/apiBase";
 
 const ExecutiveFlowDashboard = dynamic(
@@ -102,6 +103,7 @@ export default function ProductAppPage() {
             ← SMPL.ai home
           </Link>
         </div>
+        <AppSessionBanner />
         <details className="os-workspace-panel" open>
           <summary>Workspace · data upload &amp; API health</summary>
           <div style={{ marginTop: 12, display: "grid", gap: 12 }}>

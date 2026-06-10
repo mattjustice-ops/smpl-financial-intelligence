@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { getNextApiBase } from "@/lib/apiBase";
+import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 
 type Org = { id: string; name: string };
 
@@ -27,7 +28,7 @@ type SeedResponse = {
 
 export function CsvUploadPanel() {
   const apiBase = getNextApiBase();
-  const [orgs, setOrgs] = useState<Org[]>([]);
+  const { organizationId, organizations, isLoading: sessionLoading } = useActiveOrganization();
   const [orgId, setOrgId] = useState("");
   const [newOrgName, setNewOrgName] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -37,25 +38,12 @@ export function CsvUploadPanel() {
   const [seedResult, setSeedResult] = useState<SeedResponse | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/api/v1/organizations/`);
-        if (!res.ok) throw new Error(`Organizations ${res.status}`);
-        const data = (await res.json()) as Org[];
-        if (cancelled) return;
-        setOrgs(data);
-        if (data.length) {
-          setOrgId((prev) => prev || data[0].id);
-        }
-      } catch (e) {
-        if (!cancelled) setPanelError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBase]);
+    if (organizationId) {
+      setOrgId(organizationId);
+    }
+  }, [organizationId]);
+
+  const orgs = organizations;
 
   const onCreateOrg = async () => {
     setPanelError(null);
@@ -70,9 +58,6 @@ export function CsvUploadPanel() {
       if (!res.ok) throw new Error(await res.text());
       const created = (await res.json()) as Org;
       setNewOrgName("");
-      const listRes = await fetch(`${apiBase}/api/v1/organizations/`);
-      const data = (await listRes.json()) as Org[];
-      setOrgs(data);
       setOrgId(created.id);
     } catch (e) {
       setPanelError(e instanceof Error ? e.message : String(e));

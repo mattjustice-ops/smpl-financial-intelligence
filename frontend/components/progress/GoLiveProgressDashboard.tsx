@@ -49,6 +49,11 @@ export function GoLiveProgressDashboard() {
           </code>{" "}
           and set items to <code className="rounded bg-white/5 px-1.5 py-0.5">done: true</code>
         </p>
+        {"currentFocus" in goLiveProgressMeta && goLiveProgressMeta.currentFocus ? (
+          <p className="mt-3 rounded-lg border border-teal-400/20 bg-teal-400/5 px-3 py-2 text-sm text-teal-200">
+            Current focus: {goLiveProgressMeta.currentFocus}
+          </p>
+        ) : null}
       </div>
 
       <section className="mb-10 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-6 md:p-8">

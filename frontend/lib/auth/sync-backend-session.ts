@@ -60,11 +60,26 @@ export async function syncBackendSession(input: {
       },
     };
   } catch (error) {
-    if (error instanceof Error && /fetch failed|ECONNREFUSED|ENOTFOUND/i.test(error.message)) {
-      const api = backendBaseUrl() ?? "http://127.0.0.1:8001";
+    const api = backendBaseUrl();
+    const isLocalhost =
+      !api || /127\.0\.0\.1|localhost/i.test(api);
+    const onVercel = Boolean(process.env.VERCEL);
+
+    if (
+      error instanceof Error &&
+      (/fetch failed|ECONNREFUSED|ENOTFOUND/i.test(error.message) || isLocalhost)
+    ) {
+      if (onVercel && isLocalhost) {
+        return {
+          ok: false,
+          message:
+            "Production API is not configured yet. Host FastAPI on Railway (Phase B), set SFI_BACKEND_URL on Vercel to that URL, redeploy, then request a fresh sign-in link.",
+        };
+      }
+      const target = api ?? "http://127.0.0.1:8001";
       return {
         ok: false,
-        message: `Cannot reach the SMPL API at ${api}. Start the backend on port 8001, then request a fresh sign-in link.`,
+        message: `Cannot reach the SMPL API at ${target}. Start the backend on port 8001, then request a fresh sign-in link.`,
       };
     }
     return {
