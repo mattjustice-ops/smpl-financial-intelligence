@@ -17,7 +17,7 @@ export const goLiveProgressMeta = {
   title: "SMPL go-live progress",
   subtitle: "Track milestone completion as we close remaining deliverables.",
   currentFocus:
-    "Deploy PR2 session-org wiring, then confirm prod /app smoke test (ca-8)",
+    "Full go-live prep: verified Resend domain, customer provisioning, first paying customer",
 } as const;
 
 export const goLiveMilestones: GoLiveMilestone[] = [
@@ -60,7 +60,7 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "ca-5", label: "Warehouse schema + pilot customer data loaded in cloud DB", done: true },
       { id: "ca-6", label: "PR2: /app uses session.user.activeOrganizationId (not demo org)", done: true },
       { id: "ca-7", label: "PR2: Authenticated API proxy + org membership checks", done: true },
-      { id: "ca-8", label: "Prod smoke test: customer login → their data in /app", done: false },
+      { id: "ca-8", label: "Prod smoke test: customer login → their data in /app", done: true },
     ],
   },
   {
