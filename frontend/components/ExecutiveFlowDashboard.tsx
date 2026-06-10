@@ -33,9 +33,6 @@ import {
   type WorkforceValidationResponse,
 } from "./workforce/WorkforceValidationStrip";
 
-const apiBase = getApiBase();
-const workforceApiBase = getWorkforceApiBase();
-
 const defaultOrgId = "8571e520-0687-4516-bdee-379f37c58c1f";
 
 type Org = { id: string; name: string };
@@ -394,7 +391,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/api/v1/organizations/?_=${Date.now()}`, { cache: "no-store" });
+        const res = await fetch(`${getApiBase()}/api/v1/organizations/?_=${Date.now()}`, { cache: "no-store" });
         if (!res.ok) return;
         const rows = (await res.json()) as Org[];
         if (!cancelled) setOrgs(rows);
@@ -437,14 +434,14 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
       }
       const query = params.toString();
       const fetchSection = <T,>(path: string) =>
-        fetchJson<T>(`${apiBase}${path}?${query}`);
+        fetchJson<T>(`${getApiBase()}${path}?${query}`);
 
       // Load smaller dashboard sections independently instead of one very large
       // payload; this keeps expandable attribution responsive in the browser.
       const fetchWithScenario = <T,>(path: string, scenarioOverride: string) => {
         const p = new URLSearchParams(params);
         p.set("scenario", scenarioOverride);
-        return fetchJson<T>(`${apiBase}${path}?${p.toString()}`);
+        return fetchJson<T>(`${getApiBase()}${path}?${p.toString()}`);
       };
 
       const requests = {
@@ -489,12 +486,12 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
                 _: String(Date.now()),
               });
               return fetchJson<WorkforceValidationResponse>(
-                `${workforceApiBase}/api/v1/workforce/validation?${params}`
+                `${getWorkforceApiBase()}/api/v1/workforce/validation?${params}`
               );
             })
           : [
               fetchJson<WorkforceValidationResponse>(
-                `${workforceApiBase}/api/v1/workforce/validation?${new URLSearchParams({
+                `${getWorkforceApiBase()}/api/v1/workforce/validation?${new URLSearchParams({
                   organization_id: orgId,
                   scenario: scenario === "Budget" ? "Budget" : scenario === "Actual" ? "Actual" : "Forecast",
                   start_period: workforceDates.start_period,
@@ -513,7 +510,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
               const raw = error instanceof Error ? error.message : String(error);
               const hint =
                 raw.toLowerCase().includes("failed to fetch")
-                  ? `${raw} (check backend at ${apiBase}, CORS for ${typeof window !== "undefined" ? window.location.origin : "your dev port"}, and uvicorn logs for this section's API path)`
+                  ? `${raw} (check backend at ${getApiBase()}, CORS for ${typeof window !== "undefined" ? window.location.origin : "your dev port"}, and uvicorn logs for this section's API path)`
                   : raw;
               return [key, { ok: false, error: hint }] as const;
             }
@@ -521,7 +518,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
           (async () => {
             try {
               const value = await fetchJson<FinancialStatementsSummary>(
-                `${apiBase}/api/v1/financial-statements/summary?${statementParams}`
+                `${getApiBase()}/api/v1/financial-statements/summary?${statementParams}`
               );
               return ["financial_statements", { ok: true, value }] as const;
             } catch (error) {
@@ -656,7 +653,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message.toLowerCase().includes("failed to fetch")
-        ? `One Executive Flow section could not fetch from ${apiBase}. Financial Statements may still work; check the backend terminal for the specific dashboard endpoint error.`
+        ? `One Executive Flow section could not fetch from ${getApiBase()}. Financial Statements may still work; check the backend terminal for the specific dashboard endpoint error.`
         : message);
     } finally {
       setBusy(false);
@@ -1562,7 +1559,7 @@ export function PipelineWaterfallTable({
         if (marketingChannel) params.set("marketing_channel", marketingChannel);
         if (selectedScenario === "Combined") params.set("as_of_period", asOfPeriod);
         const payload = await fetchJson<PipelineDrilldownResponse>(
-          `${apiBase}/api/v1/waterfalls/pipeline/drilldown?${params}`
+          `${getApiBase()}/api/v1/waterfalls/pipeline/drilldown?${params}`
         );
         if (!cancelled) setDrilldown(payload);
       } catch (e) {
@@ -1838,7 +1835,7 @@ export function CashFlowWaterfallTable({
         });
         if (selectedScenario === "Combined") params.set("as_of_period", asOfPeriod);
         const payload = await fetchJson<CashFlowDrilldownResponse>(
-          `${apiBase}/api/v1/waterfalls/cash-flow/drilldown?${params}`
+          `${getApiBase()}/api/v1/waterfalls/cash-flow/drilldown?${params}`
         );
         if (!cancelled) setDrilldown(payload);
       } catch (e) {

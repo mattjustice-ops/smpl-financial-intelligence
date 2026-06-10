@@ -1,14 +1,27 @@
+function isLocalhostUrl(url: string): boolean {
+  return /127\.0\.0\.1|localhost/i.test(url);
+}
+
 /**
  * API base for browser `fetch`.
  * Management P&L uses Next.js route handlers under `/api/v1/management-pl/*` (server proxy).
  * Other calls may use direct backend URL from NEXT_PUBLIC_API_URL.
  */
 export function getApiBase(): string {
+  // Deployed browser: same-origin `/api/v1/*` (Next rewrite -> Railway). Avoids CORS.
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host && !isLocalhostUrl(host)) {
+      return "";
+    }
+  }
+
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (raw) {
+  if (raw && !isLocalhostUrl(raw)) {
     return raw.replace(/\/$/, "");
   }
-  return "http://127.0.0.1:8000";
+
+  return raw?.replace(/\/$/, "") || "http://127.0.0.1:8000";
 }
 
 /** Same-origin base for routes implemented as Next.js API handlers. */
@@ -28,9 +41,10 @@ export function getWorkforceApiBase(): string {
 export function getApiBaseDisplay(): string {
   const backend = getApiBase();
   if (typeof window !== "undefined") {
-    return `${backend} · Management P&L via Next proxy /api/v1/management-pl`;
+    const label = backend || `${window.location.origin} (Next proxy /api/v1)`;
+    return `${label} · Management P&L via Next proxy /api/v1/management-pl`;
   }
-  return backend;
+  return backend || "same-origin /api/v1 proxy";
 }
 
 /** FastAPI `date` query param (YYYY-MM-DD). Accepts YYYY-MM or YYYY-MM-DD. */
