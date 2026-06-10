@@ -13,10 +13,12 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-06-06",
+  lastUpdated: "2026-05-19",
   title: "SMPL go-live progress",
   subtitle: "Track milestone completion as we close remaining deliverables.",
-};
+  currentFocus:
+    "Refresh prod /app dashboards, then PR2 (session org + API auth) or ca-8 smoke test",
+} as const;
 
 export const goLiveMilestones: GoLiveMilestone[] = [
   {
@@ -40,10 +42,10 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "am-1", label: "Auth.js + Postgres adapter + /login UI implemented", done: true },
       { id: "am-2", label: "Session sync API + invites + seat limits (local)", done: true },
       { id: "am-3", label: "Middleware protects /app and /account", done: true },
-      { id: "am-4", label: "Neon/Supabase AUTH_DATABASE_URL on Vercel", done: false },
-      { id: "am-5", label: "Alembic migrations run on production auth DB", done: false },
-      { id: "am-6", label: "Vercel AUTH_SECRET, AUTH_URL, AUTH_RESEND_KEY, EMAIL_FROM set", done: false },
-      { id: "am-7", label: "Prod smoke test: magic link email → /app redirect", done: false },
+      { id: "am-4", label: "Neon/Supabase AUTH_DATABASE_URL on Vercel", done: true },
+      { id: "am-5", label: "Alembic migrations run on production auth DB", done: true },
+      { id: "am-6", label: "Vercel AUTH_SECRET, AUTH_URL, AUTH_RESEND_KEY, EMAIL_FROM set", done: true },
+      { id: "am-7", label: "Prod smoke test: magic link email → /app redirect", done: true },
     ],
   },
   {
@@ -53,9 +55,9 @@ export const goLiveMilestones: GoLiveMilestone[] = [
     items: [
       { id: "ca-1", label: "/app dashboards built (Executive, P&L, workforce, GTM, etc.)", done: true },
       { id: "ca-2", label: "FastAPI reporting modules + CSV ingest (local)", done: true },
-      { id: "ca-3", label: "Hosted FastAPI on Railway/Render with DATABASE_URL", done: false },
-      { id: "ca-4", label: "SFI_BACKEND_URL + NEXT_PUBLIC_API_URL → hosted API on Vercel", done: false },
-      { id: "ca-5", label: "Warehouse schema + pilot customer data loaded in cloud DB", done: false },
+      { id: "ca-3", label: "Hosted FastAPI on Railway/Render with DATABASE_URL", done: true },
+      { id: "ca-4", label: "SFI_BACKEND_URL + NEXT_PUBLIC_API_URL → hosted API on Vercel", done: true },
+      { id: "ca-5", label: "Warehouse schema + pilot customer data loaded in cloud DB", done: true },
       { id: "ca-6", label: "PR2: /app uses session.user.activeOrganizationId (not demo org)", done: false },
       { id: "ca-7", label: "PR2: Authenticated API proxy + org membership checks", done: false },
       { id: "ca-8", label: "Prod smoke test: customer login → their data in /app", done: false },

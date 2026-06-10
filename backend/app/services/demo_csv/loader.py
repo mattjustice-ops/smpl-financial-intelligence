@@ -356,10 +356,14 @@ def _row_to_payload(kind: str, row_model: BaseModel, *, version_hint: Optional[s
         data["version"] = data.get("version") or version_hint or "Actual"
         if data.get("headcount") is None and data.get("headcount_ending") is not None:
             data["headcount"] = data["headcount_ending"]
+        data.pop("headcount_ending", None)
+        data.pop("headcount_beginning", None)
     if kind == "forecast_headcount_plan":
         data["version"] = data.get("version") or version_hint or "Forecast"
         if data.get("headcount") is None and data.get("headcount_ending") is not None:
             data["headcount"] = data["headcount_ending"]
+        data.pop("headcount_ending", None)
+        data.pop("headcount_beginning", None)
     if kind == "sales_quotas":
         data["segment"] = data.get("segment") or ""
     if kind.startswith("forecast_") and kind not in ("forecast_assumptions", "forecast_gl_detail"):
