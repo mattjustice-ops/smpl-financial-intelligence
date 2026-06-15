@@ -13,11 +13,11 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-05-19",
+  lastUpdated: "2026-05-21",
   title: "SMPL go-live progress",
   subtitle: "Track milestone completion as we close remaining deliverables.",
   currentFocus:
-    "Full go-live prep: verified Resend domain, customer provisioning, first paying customer",
+    "gl-7: first paying customer on prod (or gl-3 plan entitlements)",
 } as const;
 
 export const goLiveMilestones: GoLiveMilestone[] = [
@@ -68,8 +68,8 @@ export const goLiveMilestones: GoLiveMilestone[] = [
     name: "Full go-live",
     summary: "Multi-tenant cloud platform ready for paying customers at scale.",
     items: [
-      { id: "gl-1", label: "Customer provisioning playbook (Stripe or manual invite)", done: false },
-      { id: "gl-2", label: "Resend verified sending domain (not onboarding@resend.dev)", done: false },
+      { id: "gl-1", label: "Customer provisioning playbook (Stripe or manual invite)", done: true },
+      { id: "gl-2", label: "Resend verified sending domain (not onboarding@resend.dev)", done: true },
       { id: "gl-3", label: "Plan module entitlements in UI + API", done: false },
       { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
       { id: "gl-5", label: "Staging environment + smoke tests before prod pushes", done: false },

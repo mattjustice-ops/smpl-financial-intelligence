@@ -5,6 +5,8 @@ __pycache__/
 venv/
 .env
 .env.local
+.env.vercel-production.local
+.env.neon-production.local
 backend/secrets.env
 *.egg-info/
 .pytest_cache/
@@ -20,3 +22,5 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+
+.vercel

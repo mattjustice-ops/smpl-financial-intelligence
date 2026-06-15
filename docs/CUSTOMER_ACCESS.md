@@ -94,11 +94,21 @@ Requires `X-Billing-Internal-Key` header when `BILLING_INTERNAL_API_KEY` is set 
 | `SFI_BACKEND_URL` | Production API URL |
 | `BILLING_INTERNAL_API_KEY` | Shared secret with backend |
 | `AUTH_RESEND_KEY` or `RESEND_TOKEN_FILE` | Resend API key for magic links |
-| `EMAIL_FROM` | Sender address (verified domain in production) |
-| `AUTH_DATABASE_URL` | Postgres for verification tokens |
+| `EMAIL_FROM` | `SMPL.ai <noreply@smpl-ai.com>` (verified domain) |
+| `AUTH_DATABASE_URL` | Postgres for verification tokens + org/invites |
 
-## PR2 (next)
+### Manual customer provisioning (gl-1)
 
-- Wire `/app` to `session.user.activeOrganizationId`
-- Authenticated API proxy with membership checks on all org routes
-- Plan module entitlements in UI + API
+See **`docs/GO_LIVE_GL1_CUSTOMER_PROVISIONING.md`**.
+
+```powershell
+# Invite to existing demo org (warehouse data already loaded)
+.\scripts\provision-prod-customer.ps1 -Email colleague@company.com -UseDemoOrg
+
+# New customer org
+.\scripts\provision-prod-customer.ps1 -Email admin@acme.com -OrganizationName "Acme Corp"
+```
+
+Customer signs in at https://smpl-financial-intelligence.vercel.app/login .
+
+Stripe auto-provision is planned for gl-4; until then use the script above.

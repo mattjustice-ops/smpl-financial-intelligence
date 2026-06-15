@@ -29,10 +29,10 @@ if (-not $key) {
   exit 1
 }
 
-if (Test-Path $envLocal) {
+if (-not $PSBoundParameters.ContainsKey("From") -and (Test-Path $envLocal)) {
   $fromLine = Get-Content $envLocal | Where-Object { $_ -match "^EMAIL_FROM=" } | Select-Object -First 1
   if ($fromLine -match "^EMAIL_FROM=(.+)$") {
-    $From = $Matches[1]
+    $From = $Matches[1].Trim().Trim('"')
   }
 }
 
