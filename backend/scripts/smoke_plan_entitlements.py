@@ -63,6 +63,19 @@ def set_plan(conn, org_id: str, plan: str) -> None:
     )
 
 
+def api_get_health(api_base: str) -> tuple[int, dict]:
+    url = f"{api_base.rstrip('/')}/health"
+    req = Request(url, method="GET")
+    try:
+        with urlopen(req, timeout=30) as resp:
+            import json as json_mod
+
+            body = json_mod.loads(resp.read(4096).decode("utf-8"))
+            return resp.status, body
+    except HTTPError as exc:
+        return exc.code, {}
+
+
 def api_get_workforce_plan(api_base: str, org_id: str) -> tuple[int, str]:
     qs = urlencode(
         {
@@ -116,6 +129,25 @@ def main() -> None:
 
     failures: list[str] = []
 
+    if not args.skip_api:
+        health_status, health = api_get_health(args.api_base)
+        entitlements_build = health.get("entitlements_build") if health else None
+        print(f"API /health: HTTP {health_status} build={health.get('build') if health else 'n/a'}")
+        if entitlements_build:
+            print(f"  entitlements_build={entitlements_build}")
+        else:
+            print(
+                "HINT: Railway is still on pre-gl-3 code (no entitlements_build in /health).",
+                file=sys.stderr,
+            )
+            print(
+                "      Push latest backend to GitHub and redeploy sfi-api on Railway, then re-run.",
+                file=sys.stderr,
+            )
+            failures.append(
+                "Railway API missing gl-3 (check /health for entitlements_build). Deploy backend first."
+            )
+
     with engine.begin() as conn:
         exists, original_plan = fetch_org_plan(conn, org_id)
         if not exists:
@@ -168,21 +200,20 @@ def main() -> None:
             print("OK: DB gate blocks workforce on starter")
 
         if not args.skip_api:
-            status, body = api_get_workforce_plan(args.api_base, org_id)
-            print(f"API workforce/plan on starter: HTTP {status}")
-            if status != 403:
-                failures.append(
-                    f"expected HTTP 403 for workforce on starter, got {status}. "
-                    "If DB checks passed, deploy gl-3 to Railway (backend) and re-run."
-                )
-                print(
-                    "HINT: Railway API likely missing gl-3 module gates — push backend and redeploy.",
-                    file=sys.stderr,
-                )
-            elif "module_not_entitled" not in body:
-                failures.append("403 body missing module_not_entitled")
+            if failures:
+                print("Skipping workforce API checks until Railway has gl-3 deployed.")
             else:
-                print("OK: API returns 403 module_not_entitled for starter")
+                status, body = api_get_workforce_plan(args.api_base, org_id)
+                print(f"API workforce/plan on starter: HTTP {status}")
+                if status != 403:
+                    failures.append(
+                        f"expected HTTP 403 for workforce on starter, got {status}. "
+                        "Redeploy Railway sfi-api from latest main."
+                    )
+                elif "module_not_entitled" not in body:
+                    failures.append("403 body missing module_not_entitled")
+                else:
+                    print("OK: API returns 403 module_not_entitled for starter")
 
         # --- Professional ---
         set_plan(conn, org_id, "professional")
@@ -199,7 +230,7 @@ def main() -> None:
         except Exception as exc:
             failures.append(f"DB gate should allow workforce on professional: {exc}")
 
-        if not args.skip_api:
+        if not args.skip_api and not failures:
             status, body = api_get_workforce_plan(args.api_base, org_id)
             print(f"API workforce/plan on professional: HTTP {status}")
             if status == 403:

@@ -42,15 +42,29 @@ Aggregate `/dashboard/executive-flow` still returns all waterfalls (UI hides Cas
 
 ## Smoke test
 
+```powershell
+# Automated (Neon DB + Railway API)
+.\scripts\smoke-test-plan-entitlements.ps1
+
+# DB-only while waiting on Railway deploy
+.\scripts\smoke-test-plan-entitlements.ps1 -SkipApi
+```
+
+**Before API checks pass**, Railway must serve gl-3. Confirm deploy:
+
+```powershell
+.\scripts\verify-railway-gl3-deploy.ps1
+```
+
+Expect `/health` to include `"plan_entitlements": true` and `"entitlements_build": "gl-3-v1"`.  
+If you still see `"build": "management-pl-v11-spec-table-periods"`, push latest backend and redeploy **sfi-api** on Railway (Settings → Redeploy, or push to the connected branch).
+
+Manual UI checks:
+
 1. Set org plan to `starter` on Neon: `UPDATE organizations SET plan = 'starter' WHERE id = '...'`
 2. Re-login on prod → fewer nav tabs + upgrade banner
 3. Direct API call to `/workforce/...` → 403 `module_not_entitled`
 4. Set plan to `professional`, re-login → all tabs visible
-
-```powershell
-# Optional: provision starter pilot
-.\scripts\provision-prod-customer.ps1 -Email pilot@company.com -OrganizationName "Starter Pilot" -Plan starter
-```
 
 ---
 

@@ -34,9 +34,10 @@ from app.services.organizations import get_organization_or_404
 settings = get_settings()
 
 # Bump when Management P&L / workforce routes change — visible in /health
-SFI_BUILD_ID = "management-pl-v11-spec-table-periods"
+SFI_BUILD_ID = "management-pl-v12-plan-entitlements"
 WORKFORCE_BUILD_ID = "workforce-legacy-headcount-v6"
 DEMO_CSV_BUILD_ID = "gl-warehouse-v3"
+PLAN_ENTITLEMENTS_BUILD = "gl-3-v1"
 _MAIN_FILE = Path(__file__).resolve()
 
 app = FastAPI(
@@ -408,6 +409,8 @@ def health(response: Response) -> dict[str, str | bool]:
         "build": SFI_BUILD_ID,
         "workforce_build": WORKFORCE_BUILD_ID,
         "demo_csv_build": DEMO_CSV_BUILD_ID,
+        "plan_entitlements": True,
+        "entitlements_build": PLAN_ENTITLEMENTS_BUILD,
         "management_pl": _management_pl_mounted(),
         "workforce": _workforce_mounted(),
     }
