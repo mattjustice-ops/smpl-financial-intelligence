@@ -8,6 +8,7 @@ export type BackendOrganization = {
   plan: string;
   seatLimit: number;
   organizationStatus: string;
+  enabledModules?: string[];
 };
 
 export type SendVerificationRequestParams = Parameters<EmailConfig["sendVerificationRequest"]>[0];

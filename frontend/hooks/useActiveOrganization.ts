@@ -8,6 +8,7 @@ export type SessionOrganization = {
   name: string;
   role: string;
   plan: string;
+  enabledModules: string[];
 };
 
 export function useActiveOrganization() {
@@ -19,6 +20,7 @@ export function useActiveOrganization() {
       name: org.organizationName,
       role: org.role,
       plan: org.plan,
+      enabledModules: org.enabledModules ?? [],
     }));
   }, [session?.user?.organizations]);
 

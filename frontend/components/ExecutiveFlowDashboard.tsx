@@ -4,6 +4,10 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import type { CSSProperties } from "react";
 
 import { useActiveOrganization } from "../hooks/useActiveOrganization";
+import { useEntitlements } from "../hooks/useEntitlements";
+import {
+  type OperatingModuleId,
+} from "../lib/entitlements/plan-modules";
 import { fetchJson } from "../lib/fetchJson";
 import { getApiBase, getWorkforceApiBase } from "../lib/apiBase";
 import {
@@ -22,6 +26,7 @@ import {
 } from "./FinancialStatementTable";
 import { ReportingExportToolbar } from "./ReportingExportToolbar";
 import { CfoOperatingShell } from "./cfo/CfoOperatingShell";
+import { PlanUpgradeBanner } from "./cfo/PlanUpgradeBanner";
 import { ExecutiveAiCommentary } from "./cfo/ExecutiveAiCommentary";
 import { ExecutiveKpiStrip } from "./cfo/ExecutiveKpiStrip";
 import { OperatingSectionHeader } from "./cfo/OperatingSectionHeader";
@@ -202,19 +207,7 @@ function marketingChannelColor(channel: string, fallbackIndex: number) {
   return MARKETING_CHANNEL_COLORS[channel] ?? palette[fallbackIndex % palette.length]!;
 }
 
-const OPERATING_SECTIONS = [
-  { id: "executive", label: "Executive Summary" },
-  { id: "arr", label: "ARR Waterfall" },
-  { id: "revenue", label: "Revenue" },
-  { id: "management-pl", label: "Management P&L" },
-  { id: "workforce", label: "Workforce" },
-  { id: "gtm", label: "GTM / Marketing" },
-  { id: "pipeline", label: "Pipeline" },
-  { id: "cash", label: "Cash Forecast" },
-  { id: "decisions", label: "Risks & Validation" },
-] as const;
-
-type OperatingSectionId = (typeof OPERATING_SECTIONS)[number]["id"];
+type OperatingSectionId = OperatingModuleId;
 
 function n(value: string | number | null | undefined) {
   return Number(value ?? 0);
@@ -371,6 +364,7 @@ type SelectedCashCell = {
 
 export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }) {
   const { organizationId, organizations, isLoading: sessionLoading } = useActiveOrganization();
+  const { entitledSections, hasModule, plan, planLabel } = useEntitlements();
   const orgs = organizations;
   const [orgId, setOrgId] = useState("");
   const [scenario, setScenario] = useState("Combined");
@@ -392,6 +386,13 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
       setOrgId(organizationId);
     }
   }, [organizationId]);
+
+  useEffect(() => {
+    if (entitledSections.length === 0) return;
+    if (!entitledSections.some((section) => section.id === activeSection)) {
+      setActiveSection(entitledSections[0]!.id);
+    }
+  }, [entitledSections, activeSection]);
 
   const load = async () => {
     if (!enabled || !orgId || sessionLoading) return;
@@ -801,7 +802,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
   return (
     <CfoOperatingShell
       periodLabel={periodLabel}
-      sections={[...OPERATING_SECTIONS]}
+      sections={entitledSections}
       activeSection={activeSection}
       onSectionChange={(id) => setActiveSection(id as OperatingSectionId)}
       validationStatus={validationStatus}
@@ -814,7 +815,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
       busy={busy}
       controls={controls}
       footer={
-        orgId ? (
+        orgId && hasModule("board_export") ? (
           <ReportingExportToolbar
             variant="footer"
             organizationId={orgId}
@@ -828,6 +829,7 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
         ) : undefined
       }
     >
+      <PlanUpgradeBanner planLabel={planLabel} visible={plan === "starter"} />
       {lastRefresh && (
         <p className="os-slide-sub" style={{ marginBottom: 12 }}>
           Last refreshed: {lastRefresh}
@@ -848,16 +850,18 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
             subtitle={`${startPeriod} – ${endPeriod} · ${scenario} · Guide focus before drilldown`}
           />
           <ExecutiveKpiStrip kpis={executiveKpis} />
-          <ExecutiveAiCommentary
-            organizationId={orgId}
-            scenario={scenario}
-            startPeriod={startPeriod}
-            endPeriod={endPeriod}
-            asOfPeriod={closePeriod}
-            marketingChannel={marketingChannel}
-            disabled={!enabled}
-          />
-          {orgId && (
+          {hasModule("ai_commentary") ? (
+            <ExecutiveAiCommentary
+              organizationId={orgId}
+              scenario={scenario}
+              startPeriod={startPeriod}
+              endPeriod={endPeriod}
+              asOfPeriod={closePeriod}
+              marketingChannel={marketingChannel}
+              disabled={!enabled}
+            />
+          ) : null}
+          {orgId && hasModule("board_export") ? (
             <ReportingExportToolbar
               variant="featured"
               organizationId={orgId}
@@ -868,11 +872,11 @@ export function ExecutiveFlowDashboard({ enabled = true }: { enabled?: boolean }
               marketingChannel={marketingChannel}
               disabled={!enabled}
             />
-          )}
+          ) : null}
         </>
       )}
 
-      {data && activeSection === "gtm" && (
+      {data && activeSection === "gtm" && hasModule("gtm") && (
         <>
           <OperatingSectionHeader
             title="GTM & Marketing Channel Efficiency"

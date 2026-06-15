@@ -37,7 +37,7 @@ def management_pl_dashboard(
     department: str = Query("Total Company"),
     db: Session = Depends(get_db),
 ) -> ManagementPlDashboardResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="management-pl")
     if end_period < start_period:
         raise HTTPException(status_code=400, detail="end_period must be >= start_period")
     if period_mode not in ("month", "qtd", "ytd", "fy"):

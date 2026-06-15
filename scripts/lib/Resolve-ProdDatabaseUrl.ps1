@@ -1,10 +1,17 @@
 # Resolve Neon/Railway production DATABASE_URL for ops scripts.
 # Skips localhost. Optional Vercel env pull when logged in via CLI.
 
+function Test-IsPlaceholderDatabaseUrl {
+    param([string]$Url)
+    if (-not $Url) { return $true }
+    return ($Url -match "(?i)ep-xxxx|USER:PASSWORD|YOUR_PASSWORD|YOUR-PASSWORD|REPLACE_ME|@USER@|password@ep-|://user:")
+}
+
 function Test-IsLocalDatabaseUrl {
     param([string]$Url)
     if (-not $Url) { return $true }
-    return ($Url -match "localhost|127\.0\.0\.1|:5432/sfi\b|YOUR_PASSWORD|YOUR-RAILWAY")
+    if (Test-IsPlaceholderDatabaseUrl $Url) { return $true }
+    return ($Url -match "localhost|127\.0\.0\.1|:5432/sfi\b|YOUR-RAILWAY")
 }
 
 function Get-DatabaseUrlFromEnvFile {
@@ -96,14 +103,14 @@ function Resolve-ProdDatabaseUrl {
         (Join-Path $frontendDir ".env.production.local")
     )
 
-    foreach ($file in $candidates) {
-        $found = Get-DatabaseUrlFromEnvFile -FilePath $file
-        if ($found) { return $found }
-    }
-
     if ($TryVercelPull) {
         $fromVercel = Get-DatabaseUrlFromVercelPull -FrontendDir $frontendDir
         if ($fromVercel) { return $fromVercel }
+    }
+
+    foreach ($file in $candidates) {
+        $found = Get-DatabaseUrlFromEnvFile -FilePath $file
+        if ($found) { return $found }
     }
 
     return $null
@@ -111,17 +118,19 @@ function Resolve-ProdDatabaseUrl {
 
 function Write-ProdDatabaseUrlHelp {
     Write-Host ""
-    Write-Host "Could not find a production Neon connection string." -ForegroundColor Red
+    Write-Host "Could not find a real production Neon connection string." -ForegroundColor Red
     Write-Host ""
-    Write-Host "Option A - pass it once:" -ForegroundColor Yellow
-    Write-Host '  .\scripts\provision-prod-customer.ps1 -DatabaseUrl "postgresql://...@ep-....neon.tech/neondb?sslmode=require" -Email ...' -ForegroundColor White
+    Write-Host "Your frontend/.env.neon-production.local may still be the example (ep-xxxx)." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Option B - save locally (gitignored) for future scripts:" -ForegroundColor Yellow
-    Write-Host '  .\scripts\save-prod-database-url.ps1 -DatabaseUrl "postgresql://..."' -ForegroundColor White
+    Write-Host "Option A - save the real URL once (recommended):" -ForegroundColor Yellow
+    Write-Host "  1. Neon dashboard -> Connection details -> copy connection string" -ForegroundColor White
+    Write-Host "     OR Vercel -> smpl-financial-intelligence -> Settings -> AUTH_DATABASE_URL" -ForegroundColor White
+    Write-Host '  2. .\scripts\save-prod-database-url.ps1 -DatabaseUrl "postgresql://...@ep-REAL.neon.tech/neondb?sslmode=require"' -ForegroundColor White
     Write-Host ""
-    Write-Host "Option C - pull from Vercel (requires: npx vercel login):" -ForegroundColor Yellow
-    Write-Host "  .\scripts\provision-prod-customer.ps1 -Email ... -TryVercelPull" -ForegroundColor White
+    Write-Host "Option B - pass inline for this run only:" -ForegroundColor Yellow
+    Write-Host '  .\scripts\smoke-test-plan-entitlements.ps1 -DatabaseUrl "postgresql://..."' -ForegroundColor White
     Write-Host ""
-    Write-Host "Get the URL from Neon dashboard -> Connection details, or Vercel -> AUTH_DATABASE_URL." -ForegroundColor DarkGray
+    Write-Host "Option C - Vercel CLI pull (requires: npx vercel login):" -ForegroundColor Yellow
+    Write-Host "  .\scripts\smoke-test-plan-entitlements.ps1 -TryVercelPull" -ForegroundColor White
     Write-Host ""
 }

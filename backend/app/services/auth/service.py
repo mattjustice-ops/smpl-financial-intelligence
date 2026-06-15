@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from app.models.billing import PendingUserInvite
 from app.models.organization import Organization
 from app.models.user import OrganizationMember, User
-from app.services.entitlements import normalize_plan, seat_limit_for_org, seats_available
+from app.services.entitlements import (
+    modules_for_org,
+    normalize_plan,
+    seat_limit_for_org,
+    seats_available,
+)
 
 
 class AuthSyncError(Exception):
@@ -36,6 +41,7 @@ def _membership_payload(member: OrganizationMember, org: Organization) -> dict[s
         "plan": plan,
         "seatLimit": seat_limit_for_org(org),
         "organizationStatus": org.status,
+        "enabledModules": modules_for_org(org),
     }
 
 

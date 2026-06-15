@@ -15,9 +15,9 @@ export type GoLiveMilestone = {
 export const goLiveProgressMeta = {
   lastUpdated: "2026-05-21",
   title: "SMPL go-live progress",
-  subtitle: "Track milestone completion as we close remaining deliverables.",
-  currentFocus:
-    "gl-7: first paying customer on prod (or gl-3 plan entitlements)",
+  subtitle:
+    "Track milestone completion as we close remaining deliverables. Recommended order after gl-1/gl-2: gl-3 → gl-5 → gl-6 → gl-4 (when billing) → gl-7 last.",
+  currentFocus: "gl-3: smoke test plan entitlements (starter vs professional on /app)",
 } as const;
 
 export const goLiveMilestones: GoLiveMilestone[] = [
@@ -71,10 +71,10 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "gl-1", label: "Customer provisioning playbook (Stripe or manual invite)", done: true },
       { id: "gl-2", label: "Resend verified sending domain (not onboarding@resend.dev)", done: true },
       { id: "gl-3", label: "Plan module entitlements in UI + API", done: false },
-      { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
       { id: "gl-5", label: "Staging environment + smoke tests before prod pushes", done: false },
       { id: "gl-6", label: "Monitoring, backups, and incident runbook", done: false },
-      { id: "gl-7", label: "First paying customer live on production stack", done: false },
+      { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
+      { id: "gl-7", label: "Last: first paying customer live on production stack", done: false },
     ],
   },
 ];

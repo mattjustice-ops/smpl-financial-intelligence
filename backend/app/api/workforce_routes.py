@@ -32,7 +32,7 @@ def workforce_plan(
     persist: bool = Query(True, description="Write derived rows to workforce_period_summary"),
     db: Session = Depends(get_db),
 ) -> WorkforcePlanResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     _validate_periods(start_period, end_period)
     try:
         plan = service.build_workforce_plan(
@@ -67,7 +67,7 @@ def workforce_recompute(
     ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     _validate_periods(start_period, end_period)
     try:
         plan = service.build_workforce_plan(
@@ -110,7 +110,7 @@ def workforce_feed_payroll(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     _validate_periods(start_period, end_period)
     return feeds.payroll_by_department(
         db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period
@@ -125,7 +125,7 @@ def workforce_feed_cash_payroll(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     _validate_periods(start_period, end_period)
     return feeds.cash_payroll_outflow(
         db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period
@@ -140,7 +140,7 @@ def workforce_feed_gtm_capacity(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     _validate_periods(start_period, end_period)
     return feeds.gtm_quota_capacity_feed(
         db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period
@@ -162,7 +162,7 @@ def workforce_validation(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> WorkforceValidationResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     _validate_periods(start_period, end_period)
     return workforce_validation_service.run_workforce_validations(
         db,

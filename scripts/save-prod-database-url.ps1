@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 $url = $DatabaseUrl.Trim().Trim('"').Trim("'")
 if (Test-IsLocalDatabaseUrl $url) {
-    Write-Host "ERROR: Use the Neon production URL (not localhost)." -ForegroundColor Red
+    Write-Host "ERROR: Use the real Neon production URL (not localhost or ep-xxxx placeholder)." -ForegroundColor Red
     exit 1
 }
 

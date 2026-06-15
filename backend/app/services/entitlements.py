@@ -1,4 +1,4 @@
-"""Plan seat limits and entitlements (used at login and API authorization)."""
+"""Plan seat limits and module entitlements (login + API authorization)."""
 
 from __future__ import annotations
 
@@ -8,12 +8,35 @@ from sqlalchemy.orm import Session
 from app.models.organization import Organization
 from app.models.user import OrganizationMember
 
-# Keep aligned with frontend/lib/billing/plans.ts PRICING_TIERS.*.usersIncluded
+# Keep aligned with frontend/lib/entitlements/plan-modules.ts
 PLAN_SEAT_LIMITS: dict[str, int] = {
     "starter": 2,
     "professional": 5,
     "enterprise": 10,
     "growth": 5,  # legacy alias → professional
+}
+
+STARTER_MODULES: frozenset[str] = frozenset(
+    {
+        "executive",
+        "arr",
+        "revenue",
+        "gtm",
+        "pipeline",
+        "decisions",
+        "board_export",
+        "ai_commentary",
+    }
+)
+
+PROFESSIONAL_MODULES: frozenset[str] = STARTER_MODULES | frozenset(
+    {"management-pl", "workforce", "cash"}
+)
+
+PLAN_MODULES: dict[str, frozenset[str]] = {
+    "starter": STARTER_MODULES,
+    "professional": PROFESSIONAL_MODULES,
+    "enterprise": PROFESSIONAL_MODULES,
 }
 
 
@@ -24,6 +47,19 @@ def normalize_plan(plan: str | None) -> str:
     if key == "growth":
         return "professional"
     return key
+
+
+def modules_for_plan(plan: str | None) -> frozenset[str]:
+    key = normalize_plan(plan)
+    return PLAN_MODULES.get(key, STARTER_MODULES)
+
+
+def modules_for_org(org: Organization) -> list[str]:
+    return sorted(modules_for_plan(org.plan))
+
+
+def org_has_module(org: Organization, module_id: str) -> bool:
+    return module_id in modules_for_plan(org.plan)
 
 
 def seat_limit_for_org(org: Organization) -> int:

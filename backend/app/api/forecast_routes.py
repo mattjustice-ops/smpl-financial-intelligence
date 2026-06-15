@@ -29,7 +29,7 @@ def forecast_cash_flow(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> ForecastScheduleResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="cash")
     _validate_periods(start_period, end_period)
     return service.cash_flow_schedule(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
 
@@ -42,7 +42,7 @@ def forecast_deferred_revenue_waterfall(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> ForecastScheduleResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="revenue")
     _validate_periods(start_period, end_period)
     return service.deferred_revenue_schedule(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
 
@@ -55,7 +55,7 @@ def forecast_working_capital(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> ForecastScheduleResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="cash")
     _validate_periods(start_period, end_period)
     return service.working_capital_schedule(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
 
@@ -68,7 +68,7 @@ def forecast_operating_cash_bridge(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> ForecastScheduleResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="cash")
     _validate_periods(start_period, end_period)
     return service.operating_cash_bridge_schedule(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
 
@@ -81,7 +81,7 @@ def forecast_balance_sheet(
     end_period: date = Query(...),
     db: Session = Depends(get_db),
 ) -> ForecastScheduleResponse:
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="cash")
     _validate_periods(start_period, end_period)
     return service.balance_sheet_schedule(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
 

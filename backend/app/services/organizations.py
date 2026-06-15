@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.organization import Organization
 from app.schemas.organization import OrganizationCreate, OrganizationOut
+from app.services.entitlements import normalize_plan, org_has_module
 
 
 def list_organizations(db: Session) -> list[OrganizationOut]:
@@ -25,8 +26,22 @@ def create_organization(db: Session, body: OrganizationCreate) -> OrganizationOu
     return OrganizationOut(id=org.id, name=org.name)
 
 
-def get_organization_or_404(db: Session, organization_id: uuid.UUID) -> Organization:
+def get_organization_or_404(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    module: str | None = None,
+) -> Organization:
     org = db.get(Organization, organization_id)
     if org is None:
         raise HTTPException(status_code=404, detail="Organization not found")
+    if module and not org_has_module(org, module):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "module_not_entitled",
+                "module": module,
+                "plan": normalize_plan(org.plan),
+            },
+        )
     return org

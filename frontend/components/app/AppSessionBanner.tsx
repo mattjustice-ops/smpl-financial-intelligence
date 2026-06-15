@@ -3,11 +3,13 @@
 import { signOut } from "next-auth/react";
 
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
+import { planLabel as formatPlanLabel } from "@/lib/entitlements/plan-modules";
 
 export function AppSessionBanner() {
   const { email, organizationId, organizations, isLoading } = useActiveOrganization();
-  const orgName =
-    organizations.find((org) => org.id === organizationId)?.name ?? organizationId;
+  const activeOrg = organizations.find((org) => org.id === organizationId);
+  const orgName = activeOrg?.name ?? organizationId;
+  const planName = activeOrg ? formatPlanLabel(activeOrg.plan) : null;
 
   if (isLoading) {
     return (
@@ -35,6 +37,12 @@ export function AppSessionBanner() {
           <>
             {" "}
             · Workspace: <strong style={{ color: "var(--text)" }}>{orgName}</strong>
+          </>
+        ) : null}
+        {planName ? (
+          <>
+            {" "}
+            · Plan: <strong style={{ color: "var(--text)" }}>{planName}</strong>
           </>
         ) : null}
       </span>
