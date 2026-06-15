@@ -106,6 +106,12 @@ class FakeSession:
         return None
 
 
+def set_plan_committed(engine, org_id: str, plan: str) -> None:
+    """Persist plan so hosted API (separate DB connection) sees the update."""
+    with engine.begin() as conn:
+        set_plan(conn, org_id, plan)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Smoke test plan module entitlements")
     parser.add_argument("--organization-id", default=DEFAULT_ORG_ID)
@@ -176,75 +182,75 @@ def main() -> None:
                     file=sys.stderr,
                 )
             sys.exit(1)
-        print(f"Original plan: {original_plan}")
+    print(f"Original plan: {original_plan}")
 
-        # --- Starter ---
-        set_plan(conn, org_id, "starter")
-        starter_modules = modules_for_plan("starter")
-        print(f"Starter modules ({len(starter_modules)}): {', '.join(starter_modules)}")
-        if "workforce" in starter_modules:
-            failures.append("starter modules should not include workforce")
-        if "management-pl" not in starter_modules:
-            pass
-        if "executive" not in starter_modules:
-            failures.append("starter modules should include executive")
+    # --- Starter ---
+    set_plan_committed(engine, org_id, "starter")
+    starter_modules = modules_for_plan("starter")
+    print(f"Starter modules ({len(starter_modules)}): {', '.join(starter_modules)}")
+    if "workforce" in starter_modules:
+        failures.append("starter modules should not include workforce")
+    if "management-pl" not in starter_modules:
+        pass
+    if "executive" not in starter_modules:
+        failures.append("starter modules should include executive")
 
-        from app.models.organization import Organization
+    from app.models.organization import Organization
 
-        starter_org = Organization(id=uuid.UUID(org_id), name="Smoke Test", plan="starter")
-        fake_db = FakeSession(starter_org)
-        try:
-            get_organization_or_404(fake_db, uuid.UUID(org_id), module="workforce")
-            failures.append("DB gate: starter org should block workforce module")
-        except Exception:
-            print("OK: DB gate blocks workforce on starter")
+    starter_org = Organization(id=uuid.UUID(org_id), name="Smoke Test", plan="starter")
+    fake_db = FakeSession(starter_org)
+    try:
+        get_organization_or_404(fake_db, uuid.UUID(org_id), module="workforce")
+        failures.append("DB gate: starter org should block workforce module")
+    except Exception:
+        print("OK: DB gate blocks workforce on starter")
 
-        if not args.skip_api:
-            if failures:
-                print("Skipping workforce API checks until Railway has gl-3 deployed.")
-            else:
-                status, body = api_get_workforce_plan(args.api_base, org_id)
-                print(f"API workforce/plan on starter: HTTP {status}")
-                if status != 403:
-                    failures.append(
-                        f"expected HTTP 403 for workforce on starter, got {status}. "
-                        "Redeploy Railway sfi-api from latest main."
-                    )
-                elif "module_not_entitled" not in body:
-                    failures.append("403 body missing module_not_entitled")
-                else:
-                    print("OK: API returns 403 module_not_entitled for starter")
-
-        # --- Professional ---
-        set_plan(conn, org_id, "professional")
-        pro_modules = modules_for_plan("professional")
-        print(f"Professional modules ({len(pro_modules)}): includes workforce={('workforce' in pro_modules)}")
-        if "workforce" not in pro_modules:
-            failures.append("professional modules should include workforce")
-
-        pro_org = Organization(id=uuid.UUID(org_id), name="Smoke Test", plan="professional")
-        fake_db_pro = FakeSession(pro_org)
-        try:
-            get_organization_or_404(fake_db_pro, uuid.UUID(org_id), module="workforce")
-            print("OK: DB gate allows workforce on professional")
-        except Exception as exc:
-            failures.append(f"DB gate should allow workforce on professional: {exc}")
-
-        if not args.skip_api and not failures:
-            status, body = api_get_workforce_plan(args.api_base, org_id)
-            print(f"API workforce/plan on professional: HTTP {status}")
-            if status == 403:
-                failures.append(f"professional should not get 403 on workforce: {body[:200]}")
-            else:
-                print("OK: API does not return 403 for professional (may be 200/422/500 if data missing)")
-
-        # Restore plan
-        if args.keep_plan == "restore":
-            set_plan(conn, org_id, original_plan)
-            print(f"Restored plan: {original_plan}")
+    if not args.skip_api:
+        if failures:
+            print("Skipping workforce API checks until Railway has gl-3 deployed.")
         else:
-            set_plan(conn, org_id, args.keep_plan)
-            print(f"Left plan as: {args.keep_plan} (re-login on prod to refresh session)")
+            status, body = api_get_workforce_plan(args.api_base, org_id)
+            print(f"API workforce/plan on starter: HTTP {status}")
+            if status != 403:
+                failures.append(
+                    f"expected HTTP 403 for workforce on starter, got {status}. "
+                    "Redeploy Railway sfi-api from latest main."
+                )
+            elif "module_not_entitled" not in body:
+                failures.append("403 body missing module_not_entitled")
+            else:
+                print("OK: API returns 403 module_not_entitled for starter")
+
+    # --- Professional ---
+    set_plan_committed(engine, org_id, "professional")
+    pro_modules = modules_for_plan("professional")
+    print(f"Professional modules ({len(pro_modules)}): includes workforce={('workforce' in pro_modules)}")
+    if "workforce" not in pro_modules:
+        failures.append("professional modules should include workforce")
+
+    pro_org = Organization(id=uuid.UUID(org_id), name="Smoke Test", plan="professional")
+    fake_db_pro = FakeSession(pro_org)
+    try:
+        get_organization_or_404(fake_db_pro, uuid.UUID(org_id), module="workforce")
+        print("OK: DB gate allows workforce on professional")
+    except Exception as exc:
+        failures.append(f"DB gate should allow workforce on professional: {exc}")
+
+    if not args.skip_api and not failures:
+        status, body = api_get_workforce_plan(args.api_base, org_id)
+        print(f"API workforce/plan on professional: HTTP {status}")
+        if status == 403:
+            failures.append(f"professional should not get 403 on workforce: {body[:200]}")
+        else:
+            print("OK: API does not return 403 for professional (may be 200/422/500 if data missing)")
+
+    # Restore plan
+    if args.keep_plan == "restore":
+        set_plan_committed(engine, org_id, original_plan)
+        print(f"Restored plan: {original_plan}")
+    else:
+        set_plan_committed(engine, org_id, args.keep_plan)
+        print(f"Left plan as: {args.keep_plan} (re-login on prod to refresh session)")
 
     print("")
     if failures:
