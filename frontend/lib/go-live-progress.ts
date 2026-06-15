@@ -13,11 +13,18 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-05-21",
+  lastUpdated: "2026-05-19",
   title: "SMPL go-live progress",
   subtitle:
     "Track milestone completion as we close remaining deliverables. Recommended order after gl-1/gl-2: gl-3 → gl-5 → gl-6 → gl-4 (when billing) → gl-7 last.",
-  currentFocus: "gl-3: smoke test plan entitlements (starter vs professional on /app)",
+  currentFocus:
+    "gl-5: staging environment + smoke tests before prod pushes (Vercel preview + Railway staging)",
+  /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
+  demoWorkspace: {
+    organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
+    organizationName: "SMPL Demo Co",
+    plan: "enterprise" as const,
+  },
 } as const;
 
 export const goLiveMilestones: GoLiveMilestone[] = [
@@ -70,7 +77,7 @@ export const goLiveMilestones: GoLiveMilestone[] = [
     items: [
       { id: "gl-1", label: "Customer provisioning playbook (Stripe or manual invite)", done: true },
       { id: "gl-2", label: "Resend verified sending domain (not onboarding@resend.dev)", done: true },
-      { id: "gl-3", label: "Plan module entitlements in UI + API", done: false },
+      { id: "gl-3", label: "Plan module entitlements in UI + API", done: true },
       { id: "gl-5", label: "Staging environment + smoke tests before prod pushes", done: false },
       { id: "gl-6", label: "Monitoring, backups, and incident runbook", done: false },
       { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
