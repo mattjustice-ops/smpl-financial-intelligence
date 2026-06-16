@@ -16,9 +16,9 @@ export const goLiveProgressMeta = {
   lastUpdated: "2026-05-19",
   title: "SMPL go-live progress",
   subtitle:
-    "Track milestone completion as we close remaining deliverables. Recommended order: gl-3 ✓ → POC onboarding (poc-1…poc-4) → gl-5 → gl-6 → gl-4 (when billing) → gl-7 last.",
+    "Track milestone completion as we close remaining deliverables. Recommended order: gl-3 ✓ → poc-0 (direct access) + poc-4 → self-serve poc-1…poc-3 in parallel → gl-5 → gl-6 → gl-4 → gl-7.",
   currentFocus:
-    "poc-1: secure customer CSV upload endpoint (authenticated, org-scoped) — start POC onboarding milestone",
+    "poc-0: direct data access playbook — white-glove POC path for enterprise customers (parallel with poc-4)",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -74,8 +74,19 @@ export const goLiveMilestones: GoLiveMilestone[] = [
     id: "poc-onboarding",
     name: "POC customer onboarding",
     summary:
-      "Self-serve CSV ingest, AI column mapping, and confirmation UI — required before paying customers can load their own data.",
+      "Two ways to load customer data: white-glove direct access (enterprise POC) and self-serve CSV + AI mapping (scale).",
     items: [
+      {
+        id: "poc-0",
+        label:
+          "Direct data access playbook (Snowflake share, S3/R2, ERP export → ops warehouse load)",
+        done: false,
+      },
+      {
+        id: "poc-4",
+        label: "Backend org membership enforcement on ingest + reporting routes (defense in depth)",
+        done: false,
+      },
       {
         id: "poc-1",
         label:
@@ -91,11 +102,6 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       {
         id: "poc-3",
         label: "/app/onboarding UI — upload, mapping review, validation, then dashboard",
-        done: false,
-      },
-      {
-        id: "poc-4",
-        label: "Backend org membership enforcement on ingest + reporting routes (defense in depth)",
         done: false,
       },
       {
@@ -116,7 +122,7 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "gl-5", label: "Staging environment + smoke tests before prod pushes", done: false },
       { id: "gl-6", label: "Monitoring, backups, and incident runbook", done: false },
       { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
-      { id: "gl-7", label: "Last: first paying customer live on production stack", done: false },
+      { id: "gl-7", label: "Last: first paying customer on prod (direct access or self-serve POC)", done: false },
     ],
   },
 ];

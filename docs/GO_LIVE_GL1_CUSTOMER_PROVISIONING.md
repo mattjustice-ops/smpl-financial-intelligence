@@ -12,6 +12,7 @@
 |------|-------------|
 | **A. Add user to existing org** | Pilot on SMPL Demo Co, extra seat on same data |
 | **B. New customer org** | Separate tenant, own company name and (eventually) own CSVs |
+| **C. Direct data access (enterprise POC)** | Customer grants read access; SMPL ops loads warehouse — see `GO_LIVE_POC_DIRECT_DATA_ACCESS.md` |
 
 Stripe checkout auto-provisioning is **gl-4** — until then, use **manual ops** below.
 
@@ -104,4 +105,9 @@ Login returns `seats_full` if the org is at capacity. Upgrade plan on the `organ
 
 ## Next (gl-7)
 
-First **paying** external customer on the same stack — often the same flow as Path B plus contract/Stripe (gl-4).
+First **paying** external customer on the same stack:
+
+- **Enterprise / white-glove:** Path B provision + **Path C** direct data load (`GO_LIVE_POC_DIRECT_DATA_ACCESS.md`) — does not require self-serve upload.
+- **Self-serve at scale:** Path B + `/app/onboarding` when poc-1 … poc-3 ship.
+
+Contract/Stripe: gl-4 when charging.
