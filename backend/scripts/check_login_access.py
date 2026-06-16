@@ -34,7 +34,10 @@ def main() -> None:
     email = args.email.strip().lower()
     org_id = args.organization_id.strip()
 
-    engine = create_engine(load_database_url())
+    db_url = load_database_url()
+    db_host = db_url.split("@")[-1].split("/")[0] if "@" in db_url else db_url
+    print(f"Database host: {db_host}")
+    engine = create_engine(db_url)
     with engine.connect() as conn:
         org = conn.execute(
             text("SELECT id, name, status FROM organizations WHERE id = :id"),

@@ -96,12 +96,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return true;
     },
-    async jwt({ token, user }) {
-      if (user?.email) {
+    async jwt({ token, user, trigger }) {
+      const shouldSync = trigger === "signIn" || Boolean(user?.email);
+      const email =
+        user?.email ??
+        (typeof token.email === "string" ? token.email : undefined);
+
+      if (shouldSync && email) {
         const sync = await syncBackendSession({
-          email: user.email,
-          name: user.name,
-          authSubject: user.id,
+          email,
+          name: user?.name ?? (typeof token.name === "string" ? token.name : null),
+          authSubject:
+            user?.id ?? (typeof token.sub === "string" ? token.sub : null),
         });
         if (sync.ok) {
           token.userId = sync.data.userId;
