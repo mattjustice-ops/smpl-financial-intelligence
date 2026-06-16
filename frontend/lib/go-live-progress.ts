@@ -13,12 +13,12 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-05-20",
+  lastUpdated: "2026-06-16",
   title: "SMPL go-live progress",
   subtitle:
-    "Track milestone completion as we close remaining deliverables. Recommended order: poc-0 ✓ → gl-5 → poc-4 / self-serve poc-1…poc-3 → gl-6 → gl-4 → gl-7.",
+    "Track milestone completion as we close remaining deliverables. Recommended order: poc-0 ✓ → gl-5b → poc-4 / self-serve poc-1…poc-3 → gl-6 → gl-4 → gl-7.",
   currentFocus:
-    "gl-5: staging environment + smoke tests before prod pushes (Vercel preview + Railway staging)",
+    "gl-5b: Vercel Preview env → staging API + staging AUTH_DATABASE_URL — see docs/GO_LIVE_GL5_STAGING.md",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -119,7 +119,21 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "gl-1", label: "Customer provisioning playbook (Stripe or manual invite)", done: true },
       { id: "gl-2", label: "Resend verified sending domain (not onboarding@resend.dev)", done: true },
       { id: "gl-3", label: "Plan module entitlements in UI + API", done: true },
-      { id: "gl-5", label: "Staging environment + smoke tests before prod pushes", done: false },
+      {
+        id: "gl-5a",
+        label: "Neon staging branch + Railway staging API (/health + /health/db)",
+        done: true,
+      },
+      {
+        id: "gl-5b",
+        label: "Vercel Preview env → staging API + staging AUTH_DATABASE_URL",
+        done: false,
+      },
+      {
+        id: "gl-5c",
+        label: "smoke-test-staging.ps1 passes before prod merges",
+        done: true,
+      },
       { id: "gl-6", label: "Monitoring, backups, and incident runbook", done: false },
       { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
       { id: "gl-7", label: "Last: first paying customer on prod (direct access or self-serve POC)", done: false },
