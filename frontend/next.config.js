@@ -5,16 +5,21 @@ const backendUrl = (
   "http://127.0.0.1:8001"
 ).replace(/\/$/, "");
 
-if (process.env.VERCEL && /127\.0\.0\.1|localhost/i.test(backendUrl)) {
-  throw new Error(
-    "SFI_BACKEND_URL or NEXT_PUBLIC_API_URL must be set for Vercel builds (Preview and Production). " +
-      "Without it, /api/v1 rewrites point at localhost and dashboards fail with DNS_HOSTNAME_RESOLVED_PRIVATE.",
-  );
-}
+const isLocalBackend = /127\.0\.0\.1|localhost/i.test(backendUrl);
 
+// /api/v1/*, /health, and /health/db are proxied by App Router route handlers at
+// *runtime* using SFI_BACKEND_URL. Skip build-time rewrites on Vercel when the
+// API URL is not configured yet (otherwise rewrites point at localhost).
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
+    if (process.env.VERCEL && isLocalBackend) {
+      console.warn(
+        "[next.config] SFI_BACKEND_URL not set at build time — skipping rewrites; " +
+          "App Router proxies use runtime env. Set Preview env vars in Vercel dashboard.",
+      );
+      return [];
+    }
     return [
       {
         source: "/api/v1/:path*",

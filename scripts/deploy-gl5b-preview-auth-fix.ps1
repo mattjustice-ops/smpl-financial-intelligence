@@ -120,7 +120,8 @@ Write-Host ""
 Write-Host "OK: pushed $hash to origin/$branch" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Yellow
-Write-Host "  1. Vercel -> Deployments -> wait for gl-5b-preview-test build (or Redeploy)" -ForegroundColor White
-Write-Host "  2. .\scripts\set-staging-demo-workspace.ps1" -ForegroundColor White
-Write-Host "  3. Preview: sign out -> NEW magic link -> banner should say SMPL Demo Co" -ForegroundColor White
+    Write-Host "  1. Vercel -> Deployments -> wait for gl-5b-preview-test build (or Redeploy)" -ForegroundColor White
+    Write-Host "  2. .\scripts\check-vercel-preview-env.ps1  (Preview must have SFI_BACKEND_URL)" -ForegroundColor White
+    Write-Host "  3. .\scripts\set-staging-demo-workspace.ps1" -ForegroundColor White
+    Write-Host "  4. Preview: sign out -> NEW magic link -> banner should say SMPL Demo Co" -ForegroundColor White
 Write-Host ""
