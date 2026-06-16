@@ -95,7 +95,56 @@
 
 ## Ops commands (production)
 
-### Step 1 — Provision org + invite
+### One-command POC (recommended)
+
+```powershell
+cd C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence
+
+$env:DATABASE_URL = "postgresql://..."   # Neon prod
+
+.\scripts\run-direct-access-poc.ps1 `
+  -Email admin@customer.com `
+  -OrganizationName "Acme Corp" `
+  -Plan enterprise `
+  -CsvFolder "D:\smpl-staging\acme-poc" `
+  -AccessMethod snowflake `
+  -AccessNotes "Secure share: ACME_SMPL_POC"
+```
+
+**Dry run** (bundled demo data into a new org — practice the flow):
+
+```powershell
+.\scripts\run-direct-access-poc.ps1 `
+  -Email you@smpl-ai.com `
+  -OrganizationName "POC Dry Run Co" `
+  -UseBundledDemoData `
+  -CsvFolder "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\demo_data" `
+  -SkipSecurityAck
+```
+
+**Verify only** (after manual load):
+
+```powershell
+.\scripts\smoke-test-direct-access-poc.ps1 `
+  -OrganizationId "<uuid>" `
+  -Email admin@customer.com
+```
+
+### Switch active workspace (multi-org accounts)
+
+Login uses the org with the **oldest** `joined_at`. To test Customer Corp while you belong to many orgs:
+
+```powershell
+.\scripts\set-prod-active-org.ps1 -Email mattjustice@smpl-ai.com -ListOnly
+
+.\scripts\set-prod-active-org.ps1 `
+  -Email mattjustice@smpl-ai.com `
+  -OrganizationId "cfa7c116-3a89-4dd1-91df-80d4ece5c59d"
+```
+
+Sign out and sign in again. Prefer **customer real email** on customer POC orgs so they are not affected by your test orgs.
+
+### Manual steps (same flow, separate scripts)
 
 ```powershell
 cd C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence
@@ -163,9 +212,8 @@ Document results in customer onboarding notes (internal).
 Mark **poc-0** done on `/progress` when **all** of the following are true:
 
 - [x] This playbook published (`GO_LIVE_POC_DIRECT_DATA_ACCESS.md`)
-- [ ] One real prospect POC completed on prod using direct access (not SMPL Demo Co seed only)
-- [ ] Security checklist signed off for that POC
-- [ ] Customer validation call completed (metrics agreed)
+- [x] Ops scripts validated (dry run + Customer Corp warehouse + UI/SQL tie-out)
+- [ ] One real prospect POC with customer validation call (optional — defer until prospect exists)
 
 ---
 

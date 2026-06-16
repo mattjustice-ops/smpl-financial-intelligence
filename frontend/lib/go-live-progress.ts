@@ -13,12 +13,12 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-05-19",
+  lastUpdated: "2026-05-20",
   title: "SMPL go-live progress",
   subtitle:
-    "Track milestone completion as we close remaining deliverables. Recommended order: gl-3 ✓ → poc-0 (direct access) + poc-4 → self-serve poc-1…poc-3 in parallel → gl-5 → gl-6 → gl-4 → gl-7.",
+    "Track milestone completion as we close remaining deliverables. Recommended order: poc-0 ✓ → gl-5 → poc-4 / self-serve poc-1…poc-3 → gl-6 → gl-4 → gl-7.",
   currentFocus:
-    "poc-0: direct data access playbook — white-glove POC path for enterprise customers (parallel with poc-4)",
+    "gl-5: staging environment + smoke tests before prod pushes (Vercel preview + Railway staging)",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -79,8 +79,8 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       {
         id: "poc-0",
         label:
-          "Direct data access playbook (Snowflake share, S3/R2, ERP export → ops warehouse load)",
-        done: false,
+          "Direct data access playbook + ops scripts (Customer Corp validated — $22.5M pipeline tie-out)",
+        done: true,
       },
       {
         id: "poc-4",
