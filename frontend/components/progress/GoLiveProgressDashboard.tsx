@@ -65,7 +65,7 @@ export function GoLiveProgressDashboard() {
             </p>
           </div>
           <p className="max-w-sm text-sm text-slate-400">
-            Weighted across all checklist items in the four milestones below.
+            Weighted across all checklist items in the milestones below.
           </p>
         </div>
         <div className="mt-5">
@@ -73,7 +73,7 @@ export function GoLiveProgressDashboard() {
         </div>
       </section>
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {milestoneRows.map(({ milestone, stats }) => (
           <div
             key={milestone.id}

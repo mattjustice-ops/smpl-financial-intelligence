@@ -5,7 +5,7 @@ export type GoLiveChecklistItem = {
 };
 
 export type GoLiveMilestone = {
-  id: "demo-ready" | "auth-milestone" | "customer-app" | "full-go-live";
+  id: "demo-ready" | "auth-milestone" | "customer-app" | "poc-onboarding" | "full-go-live";
   name: string;
   summary: string;
   items: GoLiveChecklistItem[];
@@ -16,9 +16,9 @@ export const goLiveProgressMeta = {
   lastUpdated: "2026-05-19",
   title: "SMPL go-live progress",
   subtitle:
-    "Track milestone completion as we close remaining deliverables. Recommended order after gl-1/gl-2: gl-3 → gl-5 → gl-6 → gl-4 (when billing) → gl-7 last.",
+    "Track milestone completion as we close remaining deliverables. Recommended order: gl-3 ✓ → POC onboarding (poc-1…poc-4) → gl-5 → gl-6 → gl-4 (when billing) → gl-7 last.",
   currentFocus:
-    "gl-5: staging environment + smoke tests before prod pushes (Vercel preview + Railway staging)",
+    "poc-1: secure customer CSV upload endpoint (authenticated, org-scoped) — start POC onboarding milestone",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -68,6 +68,41 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "ca-6", label: "PR2: /app uses session.user.activeOrganizationId (not demo org)", done: true },
       { id: "ca-7", label: "PR2: Authenticated API proxy + org membership checks", done: true },
       { id: "ca-8", label: "Prod smoke test: customer login → their data in /app", done: true },
+    ],
+  },
+  {
+    id: "poc-onboarding",
+    name: "POC customer onboarding",
+    summary:
+      "Self-serve CSV ingest, AI column mapping, and confirmation UI — required before paying customers can load their own data.",
+    items: [
+      {
+        id: "poc-1",
+        label:
+          "Secure CSV upload API (POST /api/v1/ingest/upload — auth, org-scoped, size/type limits)",
+        done: false,
+      },
+      {
+        id: "poc-2",
+        label:
+          "AI schema mapper API (maps customer CSV columns → SMPL schema with confidence scores)",
+        done: false,
+      },
+      {
+        id: "poc-3",
+        label: "/app/onboarding UI — upload, mapping review, validation, then dashboard",
+        done: false,
+      },
+      {
+        id: "poc-4",
+        label: "Backend org membership enforcement on ingest + reporting routes (defense in depth)",
+        done: false,
+      },
+      {
+        id: "poc-5",
+        label: "Workspace switcher in /app (users with multiple org memberships)",
+        done: false,
+      },
     ],
   },
   {
