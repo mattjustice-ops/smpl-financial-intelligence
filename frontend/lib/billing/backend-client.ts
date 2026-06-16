@@ -20,13 +20,8 @@ export function backendBaseUrl(): string | null {
     return url.replace(/\/$/, "");
   }
 
-  // Fallback: call /api/v1/* on the public app origin (Next.js rewrite -> Railway).
-  const appBase =
-    process.env.APP_BASE_URL?.trim() || process.env.AUTH_URL?.trim();
-  if (appBase && process.env.VERCEL) {
-    return appBase.replace(/\/$/, "");
-  }
-
+  // Do not fall back to APP_BASE_URL / AUTH_URL on Vercel — those are the Next.js site,
+  // not Railway. Using them causes DNS_HOSTNAME_RESOLVED_PRIVATE and wrong session-sync DB.
   return null;
 }
 
@@ -38,7 +33,7 @@ export async function callBillingBackend(
   if (!base) {
     if (process.env.VERCEL) {
       throw new Error(
-        "SFI_BACKEND_URL is not configured on Vercel Production. Set it to your Railway API URL and redeploy.",
+        "SFI_BACKEND_URL is not configured on Vercel. Set SFI_BACKEND_URL (and NEXT_PUBLIC_API_URL) for this environment, then redeploy.",
       );
     }
     throw new Error("SFI_BACKEND_URL is not configured.");

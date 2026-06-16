@@ -5,6 +5,13 @@ const backendUrl = (
   "http://127.0.0.1:8001"
 ).replace(/\/$/, "");
 
+if (process.env.VERCEL && /127\.0\.0\.1|localhost/i.test(backendUrl)) {
+  throw new Error(
+    "SFI_BACKEND_URL or NEXT_PUBLIC_API_URL must be set for Vercel builds (Preview and Production). " +
+      "Without it, /api/v1 rewrites point at localhost and dashboards fail with DNS_HOSTNAME_RESOLVED_PRIVATE.",
+  );
+}
+
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
