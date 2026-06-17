@@ -97,13 +97,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
     async jwt({ token, user, trigger }) {
-      const shouldSync =
-        trigger === "signIn" ||
-        trigger === "signUp" ||
-        Boolean(user?.email);
       const email =
         user?.email ??
         (typeof token.email === "string" ? token.email : undefined);
+
+      // Re-sync workspace on sign-in and on Preview session reads (keeps JWT fresh if sync succeeds).
+      const shouldSync =
+        trigger === "signIn" ||
+        trigger === "signUp" ||
+        Boolean(user?.email) ||
+        (process.env.VERCEL_ENV === "preview" && Boolean(email));
 
       if (shouldSync && email) {
         const sync = await syncBackendSession({
@@ -116,21 +119,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.userId = sync.data.userId;
           token.activeOrganizationId = sync.data.activeOrganizationId;
           token.organizations = sync.data.organizations;
+        } else if (process.env.VERCEL_ENV === "preview") {
+          console.error("[auth] jwt preview sync failed:", sync.message);
         }
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user?.email) {
+      const email =
+        session.user?.email ??
+        (typeof token.email === "string" ? token.email : undefined);
+
+      if (email) {
         const sync = await syncBackendSession({
-          email: session.user.email,
-          name: session.user.name ?? null,
-          authSubject: typeof token.sub === "string" ? token.sub : null,
+          email,
+          name: session.user?.name ?? null,
+          authSubject:
+            session.user?.id ??
+            (typeof token.sub === "string" ? token.sub : null),
         });
         if (sync.ok) {
-          session.user.id = sync.data.userId;
-          session.user.activeOrganizationId = sync.data.activeOrganizationId;
-          session.user.organizations = sync.data.organizations;
+          session.user!.id = sync.data.userId;
+          session.user!.activeOrganizationId = sync.data.activeOrganizationId;
+          session.user!.organizations = sync.data.organizations;
+          return session;
+        }
+        console.error("[auth] session callback sync failed:", sync.message);
+        if (process.env.VERCEL_ENV === "preview") {
+          // Do not keep a stale production workspace on staging Preview.
+          session.user!.activeOrganizationId = "";
+          session.user!.organizations = [];
           return session;
         }
       }
@@ -143,6 +161,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session.user.activeOrganizationId = token.activeOrganizationId;
         }
         session.user.organizations = (token.organizations as BackendOrganization[] | undefined) ?? [];
+        console.warn(
+          "[auth] session using stale JWT workspace:",
+          session.user.activeOrganizationId,
+        );
       }
       return session;
     },

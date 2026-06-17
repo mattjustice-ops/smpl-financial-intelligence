@@ -1,4 +1,4 @@
-# Step C: commit + push auth fix to gl-5b-preview-test (triggers Vercel Preview rebuild).
+# Step C: commit + push auth fix to gl-5b-sandbox (triggers Vercel Preview rebuild).
 #
 # Usage:
 #   .\scripts\deploy-gl5b-preview-auth-fix.ps1
@@ -36,7 +36,7 @@ if (-not (Test-Path (Join-Path $repoRoot ".git"))) {
     exit 1
 }
 
-$branch = "gl-5b-preview-test"
+$branch = "gl-5b-sandbox"
 $commitMessage = @"
 fix: refresh active org on magic-link sign-in for Preview staging
 
@@ -120,7 +120,7 @@ Write-Host ""
 Write-Host "OK: pushed $hash to origin/$branch" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Yellow
-    Write-Host "  1. Vercel -> Deployments -> wait for gl-5b-preview-test build (or Redeploy)" -ForegroundColor White
+    Write-Host "  1. Vercel -> Deployments -> wait for gl-5b-sandbox build (or Redeploy)" -ForegroundColor White
     Write-Host "  2. .\scripts\check-vercel-preview-env.ps1  (Preview must have SFI_BACKEND_URL)" -ForegroundColor White
     Write-Host "  3. .\scripts\set-staging-demo-workspace.ps1" -ForegroundColor White
     Write-Host "  4. Preview: sign out -> NEW magic link -> banner should say SMPL Demo Co" -ForegroundColor White

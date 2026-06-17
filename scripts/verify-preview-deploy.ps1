@@ -2,10 +2,10 @@
 #
 # Usage:
 #   .\scripts\verify-preview-deploy.ps1
-#   .\scripts\verify-preview-deploy.ps1 -PreviewUrl "https://smpl-financial-intelligence-git-gl-5b-preview-test-smplai.vercel.app"
+#   .\scripts\verify-preview-deploy.ps1 -PreviewUrl "https://smpl-financial-intelligence-git-gl-5b-sandbox-smplai.vercel.app"
 
 param(
-    [string]$PreviewUrl = "https://smpl-financial-intelligence-git-gl-5b-preview-test-smplai.vercel.app",
+    [string]$PreviewUrl = "https://smpl-financial-intelligence-git-gl-5b-sandbox-smplai.vercel.app",
     [string]$StagingApi = ""
 )
 

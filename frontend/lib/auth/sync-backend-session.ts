@@ -40,6 +40,14 @@ export async function syncBackendSession(input: {
 
     if (!res.ok) {
       const detail = payload.detail;
+      if (res.status === 401) {
+        return {
+          ok: false,
+          code: "invalid_internal_key",
+          message:
+            "Session sync rejected (401). BILLING_INTERNAL_API_KEY on Vercel Preview must match Railway sfi-api-staging, or be unset on both.",
+        };
+      }
       if (detail && typeof detail === "object" && "message" in detail) {
         return { ok: false, code: detail.code, message: String(detail.message) };
       }

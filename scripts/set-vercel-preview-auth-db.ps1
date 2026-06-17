@@ -80,7 +80,7 @@ try {
     Write-Host "Also required on Preview (copy from Production if missing):" -ForegroundColor Yellow
     Write-Host "  AUTH_SECRET, AUTH_RESEND_KEY, EMAIL_FROM" -ForegroundColor White
     Write-Host ""
-    Write-Host "Then: Vercel -> Deployments -> Redeploy gl-5b-preview-test" -ForegroundColor Yellow
+    Write-Host "Then: Vercel -> Deployments -> Redeploy gl-5b-sandbox" -ForegroundColor Yellow
     Write-Host ""
 }
 finally {

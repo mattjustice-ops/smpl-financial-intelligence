@@ -1,6 +1,8 @@
-# gl-5 — Staging environment + smoke tests before prod
+# gl-5 — Sandbox environment + smoke tests before prod
 
-**Goal:** Every change that touches auth, billing, entitlements, or ingest is validated on **staging** (Neon branch + Railway staging API + Vercel Preview) before merging to production.
+> **Naming:** We call this environment **sandbox** (Vercel Preview + sandbox API + Neon sandbox branch). Docs and scripts may still say `staging` in filenames or Railway service names — same thing. See [ENVIRONMENTS.md](./ENVIRONMENTS.md).
+
+**Goal:** Every change that touches auth, billing, entitlements, or ingest is validated on **sandbox** before merging to production.
 
 **Production (reference):**
 
@@ -22,10 +24,10 @@ flowchart LR
     NP[Neon prod branch]
     VP --> RP --> NP
   end
-  subgraph staging [Staging gl-5]
+  subgraph sandbox [Sandbox gl-5]
     VPr[Vercel Preview]
     RS[Railway sfi-api-staging]
-    NS[Neon staging branch]
+    NS[Neon sandbox branch]
     VPr --> RS --> NS
   end
   Dev[PR / feature branch] --> VPr
@@ -38,7 +40,7 @@ flowchart LR
 
 ## Checklist (gl-5a → gl-5c)
 
-### gl-5a — Neon staging branch + Railway staging API
+### gl-5a — Neon sandbox branch + Railway sandbox API
 
 1. **Neon — create staging branch**
    - Neon console → your project → **Branches** → **Create branch** (e.g. `staging` from `main`).

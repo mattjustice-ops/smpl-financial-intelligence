@@ -13,12 +13,12 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-06-16",
+  lastUpdated: "2026-05-19",
   title: "SMPL go-live progress",
   subtitle:
-    "Track milestone completion as we close remaining deliverables. Recommended order: poc-0 ✓ → gl-5b → poc-4 / self-serve poc-1…poc-3 → gl-6 → gl-4 → gl-7.",
+    "Track milestone completion as we close remaining deliverables. Recommended order: poc-0 ✓ → gl-5b ✓ → poc-4 / self-serve poc-1…poc-3 → gl-6 → gl-4 → gl-7.",
   currentFocus:
-    "gl-5b: Vercel Preview env → staging API + staging AUTH_DATABASE_URL — see docs/GO_LIVE_GL5_STAGING.md",
+    "POC onboarding (poc-1…) or gl-6 monitoring — sandbox Preview validated; see docs/ENVIRONMENTS.md",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -121,17 +121,17 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "gl-3", label: "Plan module entitlements in UI + API", done: true },
       {
         id: "gl-5a",
-        label: "Neon staging branch + Railway staging API (/health + /health/db)",
+        label: "Neon sandbox branch + Railway sandbox API (/health + /health/db)",
         done: true,
       },
       {
         id: "gl-5b",
-        label: "Vercel Preview env → staging API + staging AUTH_DATABASE_URL",
-        done: false,
+        label: "Vercel Preview env → sandbox API + sandbox AUTH_DATABASE_URL (validated)",
+        done: true,
       },
       {
         id: "gl-5c",
-        label: "smoke-test-staging.ps1 passes before prod merges",
+        label: "smoke-test-staging.ps1 passes before prod merges (sandbox smoke tests)",
         done: true,
       },
       { id: "gl-6", label: "Monitoring, backups, and incident runbook", done: false },
