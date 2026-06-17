@@ -30,4 +30,5 @@ Thumbs.db
 # Local merge / push logs
 merge-gl5b-to-main.log
 git-push-log.txt
+commit-local-wip.log
 .wip-restore-backup/
