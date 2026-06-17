@@ -61,6 +61,10 @@ Write-Host "=== Staging default workspace -> SMPL Demo Co ===" -ForegroundColor 
 Write-Host "DB host: $safeHost" -ForegroundColor DarkGray
 Write-Host "Email:   $email" -ForegroundColor DarkGray
 Write-Host ""
+Write-Host "IMPORTANT: Preview login calls session-sync on Railway sfi-api-staging." -ForegroundColor Yellow
+Write-Host "Railway DATABASE_URL host must match this Neon host (not production)." -ForegroundColor Yellow
+Write-Host "If banner stays Customer Corp, fix Railway then re-run this script." -ForegroundColor Yellow
+Write-Host ""
 
 $py = @"
 import os
@@ -163,6 +167,21 @@ with engine.begin() as conn:
         {"uid": user_id, "oid": demo_org_id},
     )
 
+    # gl-5b: only one active workspace on staging so session-sync cannot pick Customer Corp.
+    deactivated = conn.execute(
+        text('''
+            UPDATE organization_members
+            SET status = 'inactive'
+            WHERE user_id = CAST(:uid AS uuid)
+              AND organization_id != CAST(:oid AS uuid)
+              AND status = 'active'
+            RETURNING organization_id::text
+        '''),
+        {"uid": user_id, "oid": demo_org_id},
+    ).all()
+    for (other_id,) in deactivated:
+        print(f"Deactivated other workspace membership: {other_id}")
+
     rows = list_memberships(conn)
 
 print("")
@@ -179,6 +198,9 @@ if rows and rows[0][0] != demo_org_id:
 print("")
 print("OK: Next fresh magic-link login should use SMPL Demo Co.")
 print("Sign out on Preview, request a NEW link, click it (do not reuse an old tab).")
+print("")
+print("Verify Railway sees the same data:")
+print("  .\\scripts\\verify-staging-session-sync.ps1")
 "@
 
 Push-Location $backendDir

@@ -97,7 +97,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
     async jwt({ token, user, trigger }) {
-      const shouldSync = trigger === "signIn" || Boolean(user?.email);
+      const shouldSync =
+        trigger === "signIn" ||
+        trigger === "signUp" ||
+        Boolean(user?.email);
       const email =
         user?.email ??
         (typeof token.email === "string" ? token.email : undefined);
@@ -118,6 +121,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
+      if (session.user?.email) {
+        const sync = await syncBackendSession({
+          email: session.user.email,
+          name: session.user.name ?? null,
+          authSubject: typeof token.sub === "string" ? token.sub : null,
+        });
+        if (sync.ok) {
+          session.user.id = sync.data.userId;
+          session.user.activeOrganizationId = sync.data.activeOrganizationId;
+          session.user.organizations = sync.data.organizations;
+          return session;
+        }
+      }
+
       if (session.user) {
         if (typeof token.userId === "string") {
           session.user.id = token.userId;
