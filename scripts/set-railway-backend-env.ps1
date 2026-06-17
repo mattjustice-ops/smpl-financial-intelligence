@@ -32,11 +32,15 @@ function Convert-ToRailwayDatabaseUrl {
     param([string]$Url)
     $normalized = $Url.Trim().Trim('"').Trim("'")
     if ($normalized -match "^postgresql://") {
-        return $normalized -replace "^postgresql://", "postgresql+psycopg://"
+        $normalized = $normalized -replace "^postgresql://", "postgresql+psycopg://"
     }
     if ($normalized -match "^postgres://") {
-        return $normalized -replace "^postgres://", "postgresql+psycopg://"
+        $normalized = $normalized -replace "^postgres://", "postgresql+psycopg://"
     }
+    # Neon copy/paste often includes channel_binding=require; psycopg on Railway fails with it.
+    $normalized = $normalized -replace "[?&]channel_binding=require", ""
+    $normalized = $normalized -replace "\?&", "?"
+    $normalized = $normalized.TrimEnd("?").TrimEnd("&")
     return $normalized
 }
 

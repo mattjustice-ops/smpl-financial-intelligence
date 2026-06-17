@@ -5,8 +5,10 @@ __pycache__/
 venv/
 .env
 .env.local
+.env.staging.local
 .env.vercel-production.local
 .env.neon-production.local
+scripts/config/staging.local.env
 backend/secrets.env
 *.egg-info/
 .pytest_cache/
@@ -24,3 +26,8 @@ Thumbs.db
 .vscode/
 
 .vercel
+
+# Local merge / push logs
+merge-gl5b-to-main.log
+git-push-log.txt
+.wip-restore-backup/

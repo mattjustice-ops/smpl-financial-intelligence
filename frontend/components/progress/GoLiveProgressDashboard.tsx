@@ -12,10 +12,10 @@ function progressBarColor(percent: number): string {
   return "bg-slate-500";
 }
 
-/** e.g. "gl-5: staging..." → "gl-5" */
+/** e.g. "gl-5a: staging..." → "gl-5a" */
 function currentFocusItemId(focus: string | undefined): string | null {
   if (!focus) return null;
-  const match = focus.match(/^([a-z]{2,3}-\d+)\b/i);
+  const match = focus.match(/^([a-z]{2,3}-\d+[a-z]?)\b/i);
   return match ? match[1]!.toLowerCase() : null;
 }
 

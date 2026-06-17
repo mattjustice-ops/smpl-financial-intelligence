@@ -35,7 +35,7 @@ poc-4 (membership) ──► poc-1 ──► poc-2 ──► poc-3 (self-serve) 
 poc-5 (workspace switcher) — after first multi-org pain
 ```
 
-Run **gl-5 staging** in parallel so ingest work is tested before prod.
+Run **gl-5 staging** (`docs/GO_LIVE_GL5_STAGING.md`) in parallel so ingest work is tested before prod.
 
 ---
 
@@ -155,8 +155,8 @@ See full field lists in team audit doc or extend `backend/app/schemas/demo_csv/`
 **Path A (ops):**
 
 ```powershell
-.\scripts\provision-prod-customer.ps1 -Email ... -OrganizationName "..." -Plan enterprise
-.\scripts\setup-prod-warehouse.ps1 -DatabaseUrl "..." -OrganizationId "<uuid>"
+.\scripts\run-direct-access-poc.ps1 -Email ... -OrganizationName "..." -CsvFolder "..."
+.\scripts\smoke-test-direct-access-poc.ps1 -OrganizationId "<uuid>" -Email ...
 ```
 
 **Path B (when built):**

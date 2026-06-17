@@ -115,6 +115,7 @@ def main() -> None:
         if member and member.status == "active":
             print(f"OK: {email} already has active access to {org_name} ({org_id})")
             print("Prod login: https://smpl-financial-intelligence.vercel.app/login")
+            print(f"ORGANIZATION_ID={org_id}")
             return
 
         conn.execute(
@@ -153,6 +154,7 @@ def main() -> None:
     print("  3. Confirm /app shows the correct workspace")
     print("")
     print(f"Organization ID (for warehouse CSV load): {org_id}")
+    print(f"ORGANIZATION_ID={org_id}")
 
 
 if __name__ == "__main__":
