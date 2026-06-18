@@ -79,7 +79,10 @@ export function CsvUploadPanel() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("organization_id", orgId);
-      const res = await fetch(`${apiBase}/api/v1/demo-csv/upload`, { method: "POST", body: fd });
+      const res = await fetch(
+        `${apiBase}/api/v1/demo-csv/upload?organization_id=${encodeURIComponent(orgId)}`,
+        { method: "POST", body: fd },
+      );
       const text = await res.text();
       if (!res.ok) {
         try {

@@ -11,6 +11,7 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.api.deps.auth import require_internal_auth_key
 from app.services.demo_csv.loader import (
     SEED_FILES_IN_ORDER,
     WORKFORCE_SEED_FILES,
@@ -64,12 +65,19 @@ def demo_csv_ping() -> dict[str, str | bool]:
 
 
 @org_router.get("/", response_model=list[OrganizationOut])
-def list_orgs(db: Session = Depends(get_db)) -> list[OrganizationOut]:
+def list_orgs(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_internal_auth_key),
+) -> list[OrganizationOut]:
     return list_organizations(db)
 
 
 @org_router.post("/", status_code=201, response_model=OrganizationOut)
-def create_org(body: OrganizationCreate, db: Session = Depends(get_db)) -> OrganizationOut:
+def create_org(
+    body: OrganizationCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_internal_auth_key),
+) -> OrganizationOut:
     return create_organization(db, body)
 
 

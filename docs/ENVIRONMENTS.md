@@ -62,6 +62,7 @@ Confirm **DATABASE_URL** on `sfi-api-staging` uses sandbox Neon (`ep-fragrant-gr
 ## Related docs
 
 - [GO_LIVE_GL5_STAGING.md](./GO_LIVE_GL5_STAGING.md) — gl-5 setup checklist (sandbox)
+- [GO_LIVE_GL6_MONITORING.md](./GO_LIVE_GL6_MONITORING.md) — monitoring, backups, incident runbook
 - [GO_LIVE_POC_DIRECT_DATA_ACCESS.md](./GO_LIVE_POC_DIRECT_DATA_ACCESS.md) — per-customer POC (path A)
 
 ---

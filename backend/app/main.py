@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.api.board_package_routes import board_package_router
 from app.api.dashboard_routes import dashboard_router
+from app.api.deps.request_context import reset_request_user_id, set_request_user_id
 from app.api.financial_statements_routes import financial_statements_router
 from app.api.forecast_routes import forecast_router
 from app.api.bookings_routes import bookings_router
@@ -45,6 +46,23 @@ app = FastAPI(
     version="0.1.0",
     description="Local development API for the financial intelligence MVP.",
 )
+
+
+@app.middleware("http")
+async def attach_request_user_context(request: Request, call_next):
+    """Read X-SFI-User-Id from Next.js proxy for org membership checks (poc-4)."""
+    header = request.headers.get("X-SFI-User-Id")
+    token = None
+    if header:
+        try:
+            token = set_request_user_id(uuid.UUID(header.strip()))
+        except ValueError:
+            pass
+    try:
+        return await call_next(request)
+    finally:
+        if token is not None:
+            reset_request_user_id(token)
 
 
 # Registered BEFORE export_router so this wins over any stale /export/ping on the router.

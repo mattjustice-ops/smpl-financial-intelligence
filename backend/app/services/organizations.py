@@ -1,4 +1,4 @@
-"""Organization list / bootstrap for local MVP (no auth)."""
+"""Organization helpers — existence, plan entitlements, and membership (poc-4)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.models.organization import Organization
 from app.schemas.organization import OrganizationCreate, OrganizationOut
+from app.services.auth.service import AuthService
 from app.services.entitlements import normalize_plan, org_has_module
+from app.api.deps.request_context import get_request_user_id
 
 
 def list_organizations(db: Session) -> list[OrganizationOut]:
@@ -44,4 +46,12 @@ def get_organization_or_404(
                 "plan": normalize_plan(org.plan),
             },
         )
+    user_id = get_request_user_id()
+    if user_id is not None:
+        auth = AuthService(db)
+        if auth.get_member(user_id=user_id, organization_id=organization_id) is None:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have access to this organization.",
+            )
     return org

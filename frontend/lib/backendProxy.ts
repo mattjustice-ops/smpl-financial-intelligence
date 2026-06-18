@@ -11,6 +11,7 @@ export function backendUrl(): string {
 export async function proxyToBackend(
   request: NextRequest,
   apiPath: string,
+  options?: { userId?: string | null },
 ): Promise<NextResponse> {
   const search = request.nextUrl.search;
   const url = `${backendUrl()}${apiPath}${search}`;
@@ -20,6 +21,10 @@ export async function proxyToBackend(
     const internalKey = process.env.BILLING_INTERNAL_API_KEY?.trim();
     if (internalKey) {
       headers["X-Billing-Internal-Key"] = internalKey;
+    }
+    const userId = options?.userId?.trim();
+    if (userId) {
+      headers["X-SFI-User-Id"] = userId;
     }
 
     const init: RequestInit = { cache: "no-store", method, headers };
@@ -61,5 +66,5 @@ export async function proxyToBackendAuthed(
   if ("error" in access) {
     return access.error;
   }
-  return proxyToBackend(request, apiPath);
+  return proxyToBackend(request, apiPath, { userId: access.session.user?.id ?? null });
 }
