@@ -14,7 +14,9 @@ from app.api.board_package_routes import board_package_router
 from app.api.dashboard_routes import dashboard_router
 from app.api.deps.request_context import reset_request_user_id, set_request_user_id
 from app.api.financial_statements_routes import financial_statements_router
-from app.api.forecast_routes import forecast_router
+from app.api.board_platform_routes import board_platform_router
+from app.api.forecast_engine_routes import forecast_engine_router
+from app.api.forecast_version_routes import forecast_versions_router
 from app.api.bookings_routes import bookings_router
 from app.api.commentary_routes import commentary_router
 from app.api.demo_csv_routes import demo_csv_router, org_router
@@ -72,7 +74,7 @@ def export_ping_main(response: Response) -> dict[str, str | bool]:
 
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
-    response.headers["X-SFI-Api-Build"] = "openai-ping-v3"
+    response.headers["X-SFI-Api-Build"] = "llm-ping-v4"
     return openai_ping_payload()
 
 
@@ -121,6 +123,9 @@ app.include_router(commentary_router, prefix="/api/v1")
 app.include_router(board_package_router, prefix="/api/v1")
 app.include_router(financial_statements_router, prefix="/api/v1")
 app.include_router(forecast_router, prefix="/api/v1")
+app.include_router(forecast_versions_router, prefix="/api/v1")
+app.include_router(forecast_engine_router, prefix="/api/v1")
+app.include_router(board_platform_router, prefix="/api/v1")
 app.include_router(marketing_router, prefix="/api/v1")
 app.include_router(quote_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
@@ -184,7 +189,7 @@ def workforce_plan_debug(
     from app.services.workforce.legacy_headcount import load_legacy_headcount_rows
     from app.services.workforce.schemas import WorkforcePlanResponse
 
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     if end_period < start_period:
         raise HTTPException(status_code=400, detail="end_period must be >= start_period")
 
@@ -259,7 +264,7 @@ def workforce_validation_inline(
 ):
     from app.services.workforce import validation_service as workforce_validation_service
 
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="workforce")
     if end_period < start_period:
         raise HTTPException(status_code=400, detail="end_period must be >= start_period")
     return workforce_validation_service.run_workforce_validations(
@@ -294,7 +299,7 @@ def management_pl_dashboard_inline(
 ):
     from app.services.management_pl.service import build_management_pl_dashboard
 
-    get_organization_or_404(db, organization_id)
+    get_organization_or_404(db, organization_id, module="management-pl")
     if end_period < start_period:
         raise HTTPException(status_code=400, detail="end_period must be >= start_period")
     if period_mode not in ("month", "qtd", "ytd", "fy"):

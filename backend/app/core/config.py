@@ -39,9 +39,14 @@ class Settings(BaseSettings):
     openai_temperature: float = 0.2
     openai_timeout_seconds: float = 60.0
 
-    @field_validator("openai_api_key", mode="before")
+    anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
+    anthropic_model: str = "claude-sonnet-4-20250514"
+    anthropic_temperature: float = 0.2
+    anthropic_timeout_seconds: float = 60.0
+
+    @field_validator("openai_api_key", "anthropic_api_key", mode="before")
     @classmethod
-    def _empty_openai_key_is_none(cls, value: object) -> object:
+    def _empty_key_is_none(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str) and not value.strip():
@@ -53,21 +58,29 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]
 
 
-def _read_openai_key_from_secrets_file() -> str | None:
-    """Fallback when pydantic-settings does not bind OPENAI_API_KEY from secrets.env."""
+def _read_secret_value_from_secrets_file(env_name: str) -> str | None:
+    """Fallback when pydantic-settings does not bind a key from secrets.env."""
     path = _BACKEND_ROOT / "secrets.env"
     if not path.is_file():
         return None
+    prefix = f"{env_name.upper()}="
     text = path.read_text(encoding="utf-8-sig")
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        upper = stripped.upper()
-        if upper.startswith("OPENAI_API_KEY="):
+        if stripped.upper().startswith(prefix):
             value = stripped.split("=", 1)[1].strip().strip('"').strip("'")
             return value or None
     return None
+
+
+def _read_openai_key_from_secrets_file() -> str | None:
+    return _read_secret_value_from_secrets_file("OPENAI_API_KEY")
+
+
+def _read_anthropic_key_from_secrets_file() -> str | None:
+    return _read_secret_value_from_secrets_file("ANTHROPIC_API_KEY")
 
 
 def _resolve_openai_api_key(settings: Settings) -> str | None:
@@ -79,12 +92,27 @@ def _resolve_openai_api_key(settings: Settings) -> str | None:
     return _read_openai_key_from_secrets_file()
 
 
+def _resolve_anthropic_api_key(settings: Settings) -> str | None:
+    if settings.anthropic_api_key:
+        return settings.anthropic_api_key
+    env_val = os.environ.get("ANTHROPIC_API_KEY")
+    if env_val and str(env_val).strip():
+        return str(env_val).strip()
+    return _read_anthropic_key_from_secrets_file()
+
+
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    key = _resolve_openai_api_key(settings)
-    if key and key != settings.openai_api_key:
-        return settings.model_copy(update={"openai_api_key": key})
+    updates: dict[str, str] = {}
+    openai_key = _resolve_openai_api_key(settings)
+    if openai_key and openai_key != settings.openai_api_key:
+        updates["openai_api_key"] = openai_key
+    anthropic_key = _resolve_anthropic_api_key(settings)
+    if anthropic_key and anthropic_key != settings.anthropic_api_key:
+        updates["anthropic_api_key"] = anthropic_key
+    if updates:
+        return settings.model_copy(update=updates)
     return settings
 
 

@@ -61,11 +61,15 @@ def _export_params(
 
 
 def _check_validation(bundle: ReportingBundle, block_on_failure: bool) -> None:
-    if block_on_failure and bundle.validation.failed_count > 0:
+    if not block_on_failure:
+        return
+    from app.services.reporting.validation_gate import validation_blocked
+
+    if validation_blocked(bundle.validation, strict=True):
         raise HTTPException(
             status_code=409,
             detail={
-                "message": "Export blocked: validation checks failed. Review Validation Checks or pass block_on_failure=false.",
+                "message": "Export blocked: validation checks failed or have warnings.",
                 "validation": bundle.validation.model_dump(mode="json"),
             },
         )
@@ -127,13 +131,13 @@ def export_executive_commentary(
     region: str | None = Query(None),
     segment: str | None = Query(None),
     owner: str | None = Query(None),
-    use_ai: bool = Query(True, description="Enrich commentary via OpenAI when API key is set"),
+    use_ai: bool = Query(True, description="Enrich commentary via Claude/OpenAI when API key is set"),
     db: Session = Depends(get_db),
 ) -> dict:
     """Executive + MD&A narrative for dashboard preview (same engine as board/Excel exports)."""
     get_organization_or_404(db, organization_id)
     settings = get_settings()
-    ai_configured = bool(settings.openai_api_key)
+    ai_configured = bool(settings.anthropic_api_key or settings.openai_api_key)
     params = _export_params(
         scenario,
         start_period,
@@ -160,6 +164,12 @@ def export_executive_commentary(
         "as_of_period": bundle.as_of_period,
         "ai_configured": ai_configured,
         "used_ai": bool(use_ai and ai_configured),
+        "llm_provider": "anthropic" if settings.anthropic_api_key else ("openai" if settings.openai_api_key else ""),
+        "llm_model": (
+            settings.anthropic_model
+            if settings.anthropic_api_key
+            else (settings.openai_model if settings.openai_api_key else "")
+        ),
         "openai_model": settings.openai_model,
         "executive_summary": _commentary_to_dict(exec_sc),
         "mda_summary": _commentary_to_dict(mda_sc),
