@@ -24,6 +24,7 @@ def opportunity_attribution(
     region: str | None = None,
     segment: str | None = None,
     owner: str | None = None,
+    as_of_period: str | None = None,
     closed_only: bool = False,
     remaining_only: bool = False,
 ) -> list[WaterfallAttributionRow]:
@@ -38,6 +39,7 @@ def opportunity_attribution(
         fallback="opportunities",
         start_period=start_period,
         end_period=end_period,
+        as_of_period=as_of_period,
         filters=filters,
     ):
         stage = str_any(raw, "stage") or ""
