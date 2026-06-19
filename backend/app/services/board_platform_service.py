@@ -17,8 +17,15 @@ from app.services.reporting.export.board_commentary_service import build_all_sli
 from app.services.reporting.export.data_collector import collect_reporting_bundle
 from app.services.reporting.export.schemas import ExportValidationSummary
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
+from app.services.reporting.period_utils import to_period
 from app.services.reporting.three_statement_payload import build_ts_data
 from app.services.reporting.validation_gate import raise_if_validation_blocked
+
+IS_LINE_METRICS: dict[str, str] = {
+    "Revenue": "revenue",
+    "EBITDA": "ebitda",
+    "Net Income": "net_income",
+}
 
 
 class BoardPlatformMeta(BaseModel):
@@ -56,21 +63,28 @@ def _build_time_series(bundle) -> dict[str, Any]:
     fs = bundle.comparison_financial_statements or bundle.financial_statements
     if fs is None:
         return {}
-    periods = sorted({str(row.period)[:7] for row in fs.income_statement.rows if row.period})
     actual: dict[str, dict[str, float | None]] = {}
     forecast: dict[str, dict[str, float | None]] = {}
     budget: dict[str, dict[str, float | None]] = {}
+    periods: set[str] = set()
 
     for row in fs.income_statement.rows:
-        period = str(row.period)[:7]
-        bucket = actual if row.scenario == "Actual" else forecast if row.scenario == "Forecast" else budget
+        period = to_period(row.period)
+        periods.add(period)
+        metric = IS_LINE_METRICS.get(row.line_item)
+        if not metric:
+            continue
+        if row.scenario == "Actual":
+            bucket = actual
+        elif row.scenario == "Forecast":
+            bucket = forecast
+        else:
+            bucket = budget
         target = bucket.setdefault(period, {})
-        target["revenue"] = float(row.revenue) if row.revenue is not None else None
-        target["ebitda"] = float(row.ebitda) if row.ebitda is not None else None
-        target["net_income"] = float(row.net_income) if row.net_income is not None else None
+        target[metric] = float(row.amount) if row.amount is not None else None
 
     return {
-        "periods": periods,
+        "periods": sorted(periods),
         "Actual": actual,
         "Forecast": forecast,
         "Budget": budget,

@@ -46,12 +46,20 @@ def board_platform_payload(
     include_commentary: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> BoardPlatformPayload:
-    return build_board_platform_payload(
-        db,
-        organization_id,
-        include_commentary=include_commentary,
-        block_on_validation=True,
-    )
+    try:
+        return build_board_platform_payload(
+            db,
+            organization_id,
+            include_commentary=include_commentary,
+            block_on_validation=True,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Board platform payload failed: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 @board_platform_router.post("/commentary/regenerate", response_model=BoardCommentaryResponse)
