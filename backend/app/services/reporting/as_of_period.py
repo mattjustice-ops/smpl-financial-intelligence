@@ -72,30 +72,29 @@ def infer_as_of_period(session: Session, organization_id: uuid.UUID) -> str | No
         present_cols = [col for col in value_cols if _column_exists(session, table, col)]
         if not present_cols:
             continue
-        metric_expr = ", ".join(f'"{col}"' for col in present_cols)
+        metric_exprs = ", ".join(f'"{col}"' for col in present_cols)
         if len(present_cols) == 1:
-            metric_select = f"{metric_expr} as metric"
+            metric_filter = f'"{present_cols[0]}" is not null'
         else:
-            metric_select = f"coalesce({metric_expr}) as metric"
-        rows = session.execute(
-            text(
-                f"""
-                select "{period_col}" as period, {metric_select}
-                from "{table}"
-                where organization_id = :organization_id
-                """
-            ),
-            {"organization_id": org_key},
-        ).mappings()
-        for row in rows:
-            metric = row.get("metric")
-            if metric in (None, ""):
-                continue
-            period_raw = row.get("period")
-            if period_raw in (None, ""):
-                continue
+            metric_filter = f"coalesce({metric_exprs}) is not null"
+        row = (
+            session.execute(
+                text(
+                    f"""
+                    select max("{period_col}") as period
+                    from "{table}"
+                    where organization_id = :organization_id
+                      and {metric_filter}
+                    """
+                ),
+                {"organization_id": org_key},
+            )
+            .mappings()
+            .first()
+        )
+        if row and row.get("period") not in (None, ""):
             try:
-                candidates.append(to_period(period_raw))
+                candidates.append(to_period(row["period"]))
             except (TypeError, ValueError):
                 continue
     if not candidates:

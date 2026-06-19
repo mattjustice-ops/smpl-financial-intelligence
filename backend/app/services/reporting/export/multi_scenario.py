@@ -38,10 +38,12 @@ def collect_comparison_waterfalls(
     *,
     start_period: str,
     end_period: str,
+    scenarios: tuple[str, ...] | None = None,
     **filters,
 ) -> dict[str, list[WaterfallSummaryRow]]:
     """Merge waterfall rows from Actual, Budget, and Forecast API calls."""
     merged: dict[str, list[WaterfallSummaryRow]] = {}
+    scenario_list = scenarios or EXPORT_SCENARIOS
     base = {
         "start_period": start_period,
         "end_period": end_period,
@@ -49,7 +51,7 @@ def collect_comparison_waterfalls(
     }
     for waterfall_name in WATERFALL_NAMES:
         rows: list[WaterfallSummaryRow] = []
-        for scenario in EXPORT_SCENARIOS:
+        for scenario in scenario_list:
             try:
                 response = waterfall_response(
                     db,

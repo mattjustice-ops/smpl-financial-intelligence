@@ -150,6 +150,7 @@ def collect_reporting_bundle(
         "start_period": start,
         "end_period": end,
         **dashboard_filters,
+        "as_of_period": as_of,
     }
     executive = executive_flow(db, organization_id, **params)
 
@@ -316,6 +317,62 @@ def collect_reporting_bundle(
         data_gaps=data_gaps,
         commentary=commentary,
         commentary_fields=commentary_fields,
+    )
+    bundle.validation = run_export_validation_bundle(bundle)
+    return bundle
+
+
+def collect_board_platform_bundle(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    scenario: str,
+    start_period: str,
+    end_period: str,
+    as_of_period: str | None = None,
+    **dashboard_filters,
+) -> ReportingBundle:
+    """Lightweight bundle for Board Platform — skips GL, headcount, drilldown, and AI export work."""
+    org = get_organization_or_404(db, organization_id)
+    start = to_period(start_period)
+    end = to_period(end_period)
+    as_of = to_period(as_of_period or end_period)
+
+    params = {
+        "scenario": scenario,
+        "start_period": start,
+        "end_period": end,
+        **dashboard_filters,
+        "as_of_period": as_of,
+    }
+    executive = executive_flow(db, organization_id, **params)
+    comparison_waterfalls = collect_comparison_waterfalls(
+        db,
+        organization_id,
+        start_period=start,
+        end_period=end,
+        scenarios=("Actual",),
+        **dashboard_filters,
+    )
+    comparison_financial = collect_comparison_financial_statements(
+        db,
+        organization_id,
+        start_period=start,
+        end_period=end,
+    )
+
+    bundle = ReportingBundle(
+        organization_id=str(organization_id),
+        organization_name=getattr(org, "name", None),
+        scenario=scenario,
+        start_period=start,
+        end_period=end,
+        as_of_period=as_of,
+        period_label=_period_label(as_of),
+        executive_flow=executive,
+        financial_statements=comparison_financial,
+        comparison_waterfalls=comparison_waterfalls,
+        comparison_financial_statements=comparison_financial,
     )
     bundle.validation = run_export_validation_bundle(bundle)
     return bundle

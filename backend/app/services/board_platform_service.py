@@ -14,7 +14,7 @@ from app.services.forecast_version_service import get_active_forecast_version
 from app.services.organizations import get_organization_or_404
 from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 from app.services.reporting.export.board_commentary_service import build_all_slide_commentary
-from app.services.reporting.export.data_collector import collect_reporting_bundle
+from app.services.reporting.export.data_collector import collect_board_platform_bundle
 from app.services.reporting.export.schemas import ExportValidationSummary
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import to_period
@@ -96,7 +96,7 @@ def build_board_platform_payload(
     organization_id: uuid.UUID,
     *,
     include_commentary: bool = False,
-    block_on_validation: bool = True,
+    block_on_validation: bool = False,
 ) -> BoardPlatformPayload:
     org = get_organization_or_404(db, organization_id, module="board_export")
     ensure_org_reporting_defaults(db, org)
@@ -105,14 +105,13 @@ def build_board_platform_payload(
 
     token = bind_as_of_period(as_of)
     try:
-        bundle = collect_reporting_bundle(
+        bundle = collect_board_platform_bundle(
             db,
             organization_id,
             scenario="Combined",
             start_period=start_period,
             end_period=end_period,
             as_of_period=as_of,
-            include_ai_commentary=False,
         )
     finally:
         reset_as_of_period(token)

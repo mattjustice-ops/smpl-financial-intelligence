@@ -81,6 +81,8 @@ export function BoardPlatformApp() {
     try {
       const data = await fetchJson<BoardPayload>(
         `/api/v1/board-platform/payload?organization_id=${organizationId}`,
+        undefined,
+        120000,
       );
       setPayload(data);
     } catch (e) {
