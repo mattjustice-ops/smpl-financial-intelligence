@@ -14,6 +14,7 @@ from app.api.board_package_routes import board_package_router
 from app.api.dashboard_routes import dashboard_router
 from app.api.deps.request_context import reset_request_user_id, set_request_user_id
 from app.api.financial_statements_routes import financial_statements_router
+from app.api.forecast_routes import forecast_router
 from app.api.board_platform_routes import board_platform_router
 from app.api.forecast_engine_routes import forecast_engine_router
 from app.api.forecast_version_routes import forecast_versions_router

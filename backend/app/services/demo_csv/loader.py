@@ -916,6 +916,76 @@ def load_demo_csv(
     return res
 
 
+PROMOTABLE_FORECAST_TABLES: tuple[str, ...] = (
+    "forecast_mrr_waterfall",
+    "forecast_income_statement",
+    "forecast_cash_flow_statement",
+    "forecast_balance_sheet",
+    "forecast_bookings_summary",
+    "forecast_deferred_revenue_waterfall",
+    "forecast_gl_detail",
+    "forecast_marketing_pipeline",
+    "forecast_opportunities",
+    "forecast_headcount_plan",
+)
+
+
+def load_physical_table_rows(
+    session: Session,
+    organization_id: uuid.UUID,
+    *,
+    table_name: str,
+    rows: list[dict[str, str]],
+    filename: str | None = None,
+) -> int:
+    """Replace org-scoped rows in a versioned physical warehouse table."""
+    if not rows:
+        return 0
+    headers = list(rows[0].keys())
+    synthetic_name = filename or f"Forecast_{table_name.removeprefix('forecast_')}.csv"
+    return _load_physical_version_csv(
+        session,
+        organization_id,
+        table_name=table_name,
+        filename=synthetic_name,
+        headers=headers,
+        rows=rows,
+    )
+
+
+def promote_forecast_tables(
+    session: Session,
+    organization_id: uuid.UUID,
+    *,
+    tables: dict[str, list[dict[str, str]]],
+    forecast_version_id: uuid.UUID,
+    as_of_period: str,
+) -> dict[str, int]:
+    """Write promoted forecast rows into physical warehouse tables."""
+    org_key = str(organization_id)
+    version_key = str(forecast_version_id)
+    loaded: dict[str, int] = {}
+    for table_name, raw_rows in tables.items():
+        if table_name not in PROMOTABLE_FORECAST_TABLES:
+            continue
+        rows: list[dict[str, str]] = []
+        for idx, raw in enumerate(raw_rows, start=1):
+            row = {str(k): "" if v is None else str(v) for k, v in raw.items()}
+            row.setdefault("organization_id", org_key)
+            row.setdefault("forecast_version_id", version_key)
+            row.setdefault("as_of_period", as_of_period)
+            row.setdefault("version", row.get("version") or "Forecast")
+            rows.append(row)
+        if rows:
+            loaded[table_name] = load_physical_table_rows(
+                session,
+                organization_id,
+                table_name=table_name,
+                rows=rows,
+            )
+    return loaded
+
+
 # Files relative to backend/demo_data/ — order matches README (FK-safe).
 SEED_FILES_IN_ORDER: list[tuple[str, str]] = [
     ("customers.csv", "customers"),

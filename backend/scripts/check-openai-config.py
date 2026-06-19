@@ -1,4 +1,4 @@
-"""Print whether OpenAI settings load (no secret values). Run from backend/: python scripts/check-openai-config.py"""
+"""Print whether LLM settings load (no full secret values). Run from backend/: python scripts/check-openai-config.py"""
 from __future__ import annotations
 
 import os
@@ -17,6 +17,10 @@ secrets = _BACKEND_ROOT / "secrets.env"
 print("backend_root:", _BACKEND_ROOT)
 print("secrets_env_exists:", secrets.is_file())
 print("env_OPENAI_API_KEY_set:", bool(os.environ.get("OPENAI_API_KEY")))
-print("settings_openai_configured:", bool(s.openai_api_key))
+print("env_ANTHROPIC_API_KEY_set:", bool(os.environ.get("ANTHROPIC_API_KEY")))
+print("settings_anthropic_configured:", bool(s.anthropic_api_key))
+print("settings_llm_configured:", bool(s.anthropic_api_key or s.openai_api_key))
+if s.anthropic_api_key:
+    print("anthropic_key_prefix:", s.anthropic_api_key[:12])
 if s.openai_api_key:
-    print("key_prefix:", s.openai_api_key[:12])
+    print("openai_key_prefix:", s.openai_api_key[:12])

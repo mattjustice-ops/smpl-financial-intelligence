@@ -5,10 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.config import Settings, get_settings
+from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.commentary.openai_client import (
     CommentaryLLMClient,
     LLMError,
-    OpenAICommentaryClient,
 )
 from app.services.commentary.schemas import CommentaryInputs, CommentaryOutput
 from app.services.commentary.service import generate_commentary
@@ -29,20 +29,13 @@ def set_llm_client_override(client: CommentaryLLMClient | None) -> None:
 def get_llm_client(settings: Settings = Depends(get_settings)) -> CommentaryLLMClient:
     if _llm_client_override is not None:
         return _llm_client_override
-    if not settings.openai_api_key:
+    try:
+        return build_commentary_llm_client()
+    except LLMError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "OPENAI_API_KEY is not set on the server. "
-                "Add it to your .env file or environment to enable the commentary endpoint."
-            ),
-        )
-    return OpenAICommentaryClient(
-        api_key=settings.openai_api_key,
-        model=settings.openai_model,
-        temperature=settings.openai_temperature,
-        timeout_seconds=settings.openai_timeout_seconds,
-    )
+            detail=str(exc),
+        ) from exc
 
 
 @commentary_router.post("/generate", response_model=CommentaryOutput)

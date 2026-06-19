@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.services.commentary.openai_client import build_openai_commentary_client
+from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.commentary.service import generate_commentary
 from app.services.dashboard.executive_service import executive_flow
 from app.services.dashboard.pipeline_opportunity_drilldown_service import pipeline_drilldown
@@ -271,7 +271,7 @@ def collect_reporting_bundle(
     )
     mda_commentary = generate_mda_commentary(partial_bundle, use_ai=include_ai_commentary)
 
-    if include_ai_commentary and get_settings().openai_api_key:
+    if include_ai_commentary:
         try:
             from app.services.reporting.export.board_inputs_mapper import build_commentary_inputs
 
@@ -281,7 +281,7 @@ def collect_reporting_bundle(
                 bundle_data=executive,
                 financial=financial,
             )
-            client = build_openai_commentary_client()
+            client = build_commentary_llm_client()
             commentary = generate_commentary(inputs, client)
             commentary_fields[0] = CommentaryField(
                 section="Executive Summary",

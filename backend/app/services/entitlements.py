@@ -33,10 +33,12 @@ PROFESSIONAL_MODULES: frozenset[str] = STARTER_MODULES | frozenset(
     {"management-pl", "workforce", "cash"}
 )
 
+ENTERPRISE_MODULES: frozenset[str] = PROFESSIONAL_MODULES | frozenset({"forecast_engine"})
+
 PLAN_MODULES: dict[str, frozenset[str]] = {
     "starter": STARTER_MODULES,
     "professional": PROFESSIONAL_MODULES,
-    "enterprise": PROFESSIONAL_MODULES,
+    "enterprise": ENTERPRISE_MODULES,
 }
 
 

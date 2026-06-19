@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from app.core.config import get_settings
 from app.services.board_package.package import fmt_money
-from app.services.commentary.openai_client import build_openai_commentary_client
+from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.reporting.export.board_metrics_snapshot import BoardMetricsSnapshot, build_metrics_snapshot
 from app.services.reporting.export.company_context import strategic_context_for_prompt
 from app.services.reporting.export.saas_semantic_reporting import (
@@ -256,11 +256,12 @@ def build_slide_commentary(bundle: ReportingBundle, slide_key: str) -> SlideComm
 
 
 def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCommentary]) -> dict[str, SlideCommentary]:
-    if not get_settings().openai_api_key:
+    settings = get_settings()
+    if not (settings.anthropic_api_key or settings.openai_api_key):
         return slides
     try:
         m = build_metrics_snapshot(bundle)
-        client = build_openai_commentary_client()
+        client = build_commentary_llm_client()
         metrics_blob = (
             f"ARR {fmt_money(m.ending_arr, m.currency)}, net new {fmt_money(m.net_new_arr, m.currency)}, "
             f"pipeline created {fmt_money(m.pipeline_created, m.currency)}, churn {fmt_money(m.churn, m.currency)}, "

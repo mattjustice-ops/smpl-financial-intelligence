@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.core.config import get_settings
-from app.services.commentary.openai_client import build_openai_commentary_client
+from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.dashboard.schemas import WaterfallAttributionRow
 from app.services.financial_statements.financial_statement_service import SummaryResponse
 from app.services.marketing.schemas import ActualBudgetForecastResponse
@@ -199,7 +199,8 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
         ),
     ]
 
-    if use_ai and get_settings().openai_api_key:
+    settings = get_settings()
+    if use_ai and (settings.anthropic_api_key or settings.openai_api_key):
         try:
             from app.services.commentary.prompts import SYSTEM_PROMPT, build_user_prompt
             from app.services.reporting.export.company_context import strategic_context_for_prompt
@@ -210,7 +211,7 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
                 bundle_data=bundle.executive_flow,
                 financial=bundle.comparison_financial_statements or bundle.financial_statements,
             )
-            client = build_openai_commentary_client()
+            client = build_commentary_llm_client()
             user_prompt = build_user_prompt(inputs) + "\n\n" + strategic_context_for_prompt()
             ai_raw = client.generate(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
             from app.services.commentary.schemas import CommentaryOutput

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +27,13 @@ class Organization(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    close_month: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    fiscal_year_end_month: Mapped[int] = mapped_column(Integer, nullable=False, default=12, server_default="12")
+    active_forecast_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("forecast_versions.id", ondelete="SET NULL", use_alter=True, name="fk_organizations_active_forecast_version"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -53,6 +60,17 @@ class Organization(Base):
         "OrganizationMember",
         back_populates="organization",
         cascade="all, delete-orphan",
+    )
+    forecast_versions: Mapped[list["ForecastVersion"]] = relationship(
+        "ForecastVersion",
+        back_populates="organization",
+        foreign_keys="ForecastVersion.organization_id",
+        cascade="all, delete-orphan",
+    )
+    active_forecast_version: Mapped["ForecastVersion | None"] = relationship(
+        "ForecastVersion",
+        foreign_keys=[active_forecast_version_id],
+        post_update=True,
     )
 
     demo_customers: Mapped[list["Customer"]] = relationship(
