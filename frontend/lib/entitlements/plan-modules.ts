@@ -15,7 +15,7 @@ export type OperatingModuleId =
   | "cash"
   | "decisions";
 
-export type FeatureModuleId = OperatingModuleId | "board_export" | "ai_commentary";
+export type FeatureModuleId = OperatingModuleId | "board_export" | "ai_commentary" | "forecast_engine";
 
 export const OPERATING_SECTIONS = [
   { id: "executive" as const, label: "Executive Summary" },
@@ -47,10 +47,15 @@ const PROFESSIONAL_MODULES: readonly FeatureModuleId[] = [
   "cash",
 ];
 
+const ENTERPRISE_MODULES: readonly FeatureModuleId[] = [
+  ...PROFESSIONAL_MODULES,
+  "forecast_engine",
+];
+
 const PLAN_MODULE_MAP: Record<PricingTierId, readonly FeatureModuleId[]> = {
   starter: STARTER_MODULES,
   professional: PROFESSIONAL_MODULES,
-  enterprise: PROFESSIONAL_MODULES,
+  enterprise: ENTERPRISE_MODULES,
 };
 
 export function normalizePlan(plan: string | null | undefined): PricingTierId {

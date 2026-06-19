@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
-import { planLabel as formatPlanLabel } from "@/lib/entitlements/plan-modules";
+import { hasModule, planLabel as formatPlanLabel } from "@/lib/entitlements/plan-modules";
 
 export function AppSessionBanner() {
   const { email, organizationId, organizations, isLoading } = useActiveOrganization();
   const activeOrg = organizations.find((org) => org.id === organizationId);
   const orgName = activeOrg?.name ?? organizationId;
   const planName = activeOrg ? formatPlanLabel(activeOrg.plan) : null;
+  const showBoard = activeOrg && hasModule(activeOrg.enabledModules, activeOrg.plan, "board_export");
+  const showForecast = activeOrg && hasModule(activeOrg.enabledModules, activeOrg.plan, "forecast_engine");
 
   if (isLoading) {
     return (
@@ -46,7 +49,18 @@ export function AppSessionBanner() {
           </>
         ) : null}
       </span>
-      <button
+      <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        {showBoard ? (
+          <Link href="/app/board" style={{ color: "var(--muted)", fontSize: 13 }}>
+            Board Platform
+          </Link>
+        ) : null}
+        {showForecast ? (
+          <Link href="/forecast-engine" style={{ color: "var(--muted)", fontSize: 13 }}>
+            Forecast Engine
+          </Link>
+        ) : null}
+        <button
         type="button"
         onClick={() => signOut({ callbackUrl: "/login" })}
         style={{
@@ -60,6 +74,7 @@ export function AppSessionBanner() {
       >
         Sign out
       </button>
+      </span>
     </div>
   );
 }

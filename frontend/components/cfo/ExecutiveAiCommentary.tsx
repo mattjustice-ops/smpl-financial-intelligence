@@ -55,7 +55,7 @@ export function ExecutiveAiCommentary({
   const apiBase = getApiBase();
   const [useAi, setUseAi] = useState(false);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
-  const [openaiModel, setOpenaiModel] = useState<string | null>(null);
+  const [llmModel, setLlmModel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<CommentaryResponse | null>(null);
@@ -68,10 +68,15 @@ export function ExecutiveAiCommentary({
           cache: "no-store",
         });
         if (!res.ok) return;
-        const ping = (await res.json()) as { openai_configured?: boolean; openai_model?: string };
+        const ping = (await res.json()) as {
+          ai_configured?: boolean;
+          openai_configured?: boolean;
+          llm_model?: string;
+          llm_provider?: string;
+        };
         if (!cancelled) {
-          setAiConfigured(!!ping.openai_configured);
-          setOpenaiModel(ping.openai_model ?? null);
+          setAiConfigured(!!(ping.ai_configured ?? ping.openai_configured));
+          setLlmModel(ping.llm_model ?? ping.llm_provider ?? null);
         }
       } catch {
         if (!cancelled) setAiConfigured(false);
@@ -135,16 +140,16 @@ export function ExecutiveAiCommentary({
           <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
             {aiConfigured === false && (
               <>
-                Set <code>OPENAI_API_KEY</code> in <code>backend/secrets.env</code> (or run{" "}
-                <code>backend/scripts/import-openai-key.ps1</code> with your Notepad file path), then restart the API.
+                Set <code>ANTHROPIC_API_KEY</code> in <code>backend/secrets.env</code> (or run{" "}
+                <code>backend/scripts/import-anthropic-keys.ps1</code>), then restart the API.
               </>
             )}
             {aiConfigured === true && (
               <>
-                Connected via API · {openaiModel ?? "OpenAI"} · same engine as board deck &amp; MD&A exports
+                Connected via API · {llmModel ?? "Claude"} · same engine as board deck &amp; MD&A exports
               </>
             )}
-            {aiConfigured === null && "Checking OpenAI configuration…"}
+            {aiConfigured === null && "Checking AI configuration…"}
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -155,7 +160,7 @@ export function ExecutiveAiCommentary({
               onChange={(e) => setUseAi(e.target.checked)}
               disabled={busy}
             />
-            Use ChatGPT
+            Use Claude AI
           </label>
           <button type="button" className="os-btn-ghost" onClick={load} disabled={busy || disabled || !organizationId}>
             {busy ? "Generating…" : "Regenerate"}
@@ -179,7 +184,7 @@ export function ExecutiveAiCommentary({
         !busy &&
         !error && (
           <p style={{ margin: "12px 0 0", fontSize: 12, color: "var(--muted)" }}>
-            Click Regenerate to draft executive commentary from current filters. Optionally enable Use ChatGPT before
+            Click Regenerate to draft executive commentary from current filters. Optionally enable Use Claude AI before
             regenerating.
           </p>
         )

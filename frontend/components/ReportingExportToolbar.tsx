@@ -71,7 +71,7 @@ export function ReportingExportToolbar({
   const [boardEngine, setBoardEngine] = useState<string | null>(null);
   const [lastExportEngine, setLastExportEngine] = useState<string | null>(null);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
-  const [openaiModel, setOpenaiModel] = useState<string | null>(null);
+  const [llmModel, setLlmModel] = useState<string | null>(null);
 
   useEffect(() => {
     setCloseMonth(asOfPeriodProp ?? endPeriod);
@@ -89,13 +89,15 @@ export function ReportingExportToolbar({
         if (!res.ok) return;
         const data = (await res.json()) as {
           board_engine?: string;
+          ai_configured?: boolean;
           openai_configured?: boolean;
-          openai_model?: string;
+          llm_model?: string;
+          llm_provider?: string;
         };
         if (!cancelled) {
           if (data.board_engine) setBoardEngine(data.board_engine);
-          setAiConfigured(!!data.openai_configured);
-          setOpenaiModel(data.openai_model ?? null);
+          setAiConfigured(!!(data.ai_configured ?? data.openai_configured));
+          setLlmModel(data.llm_model ?? data.llm_provider ?? null);
         }
       } catch {
         if (!cancelled) setAiConfigured(null);
@@ -288,7 +290,7 @@ export function ReportingExportToolbar({
             </div>
             <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
               Download board presentation, MD&amp;A workbook, and month-end close packages for the selected filters.
-              {aiConfigured === false && " Add OPENAI_API_KEY to backend/secrets.env to include AI commentary in exports."}
+              {aiConfigured === false && " Add ANTHROPIC_API_KEY to backend/secrets.env to include AI commentary in exports."}
             </p>
           </div>
           <button type="button" className="os-btn-ghost" disabled={disabled || !!busy || !organizationId} onClick={runValidation}>
@@ -332,11 +334,11 @@ export function ReportingExportToolbar({
               onChange={(e) => setIncludeAi(e.target.checked)}
               disabled={!!busy}
             />
-            Include ChatGPT commentary in exports
+            Include Claude AI commentary in exports
           </label>
           {includeAi && aiConfigured === false && (
             <span style={{ fontSize: 11, color: "var(--watch)", alignSelf: "center", maxWidth: 420, lineHeight: 1.4 }}>
-              No API key on server. Add OPENAI_API_KEY to backend/secrets.env (see backend/scripts/import-openai-key.ps1), then restart
+              No API key on server. Add ANTHROPIC_API_KEY to backend/secrets.env (see backend/scripts/import-anthropic-keys.ps1), then restart
               .\start-api.ps1
             </span>
           )}
@@ -400,11 +402,11 @@ export function ReportingExportToolbar({
       </label>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--muted)" }}>
         <input type="checkbox" checked={includeAi} onChange={(e) => setIncludeAi(e.target.checked)} disabled={!!busy} />
-        Include AI draft commentary (requires OPENAI_API_KEY on backend)
+        Include AI draft commentary (requires ANTHROPIC_API_KEY on backend)
       </label>
       {includeAi && aiConfigured === false && (
         <p style={{ margin: 0, fontSize: 11, color: "var(--watch)" }}>
-          OPENAI_API_KEY not detected on server — exports will use rules-based commentary.
+          ANTHROPIC_API_KEY not detected on server — exports will use rules-based commentary.
         </p>
       )}
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--muted)" }}>

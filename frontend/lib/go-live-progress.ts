@@ -13,12 +13,12 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-05-19",
+  lastUpdated: "2026-06-17",
   title: "SMPL go-live progress",
   subtitle:
     "Track milestone completion as we close remaining deliverables. Recommended order: poc-0 ✓ → gl-5 ✓ → gl-6 ✓ → poc-1…poc-3 → gl-4 → gl-7.",
   currentFocus:
-    "Monday outreach ready — optional poc-1 self-serve CSV; see docs/GO_LIVE_GL6_MONITORING.md",
+    "Monday outreach — prod SMPL Demo Co validated; gl-7 when first prospect converts",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -68,6 +68,11 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "ca-6", label: "PR2: /app uses session.user.activeOrganizationId (not demo org)", done: true },
       { id: "ca-7", label: "PR2: Authenticated API proxy + org membership checks", done: true },
       { id: "ca-8", label: "Prod smoke test: customer login → their data in /app", done: true },
+      {
+        id: "ca-9",
+        label: "Prod default demo workspace (SMPL Demo Co) for outreach login",
+        done: true,
+      },
     ],
   },
   {
@@ -134,7 +139,7 @@ export const goLiveMilestones: GoLiveMilestone[] = [
         label: "smoke-test-staging.ps1 passes before prod merges (sandbox smoke tests)",
         done: true,
       },
-      { id: "gl-6", label: "Monitoring, backups, and incident runbook (minimal)", done: true },
+      { id: "gl-6", label: "Monitoring, backups, and incident runbook (minimal; prod smoke passed)", done: true },
       { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
       { id: "gl-7", label: "Last: first paying customer on prod (direct access or self-serve POC)", done: false },
     ],

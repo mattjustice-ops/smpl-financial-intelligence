@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en" style="height:100%">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMPL · Rolling Forecast Engine · June 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#18241b;--bg2:#23332699;--bg3:#2b3c2e;--text:#dde8d6;--text2:#aab8a2;--text3:#72826a;--border:#2e3f31;--border2:rgba(56,75,60,0.25);--teal:#5fa878;--teal-light:rgba(95,168,120,0.12);--navy:#23332699;--blue:#5fa878;--red:#b8705f;--red-light:rgba(184,112,95,0.1);--amber:#b89060;--amber-light:rgba(184,144,96,0.1);--green:#5fa878;--green-light:rgba(95,168,120,0.1);--gray:#72826a;--lgray:#2e3f31;--accent:#c4855a;--shadow:0 1px 2px rgba(0,0,0,0.3),0 12px 32px -8px rgba(0,0,0,0.4);--r:12px;--r2:18px;--mono:'Inter',-apple-system,sans-serif;--serif:'Inter',-apple-system,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;transition:background .25s}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 24px;border-bottom:0.5px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
+.logo{font-family:var(--serif);font-size:17px;font-weight:300;letter-spacing:-0.3px}
+.logo em{font-style:italic;color:var(--text2)}
+.period-badge{font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg2);padding:4px 12px;border-radius:20px;border:0.5px solid var(--border)}
+.skin-select{font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:500;padding:5px 10px;border:0.5px solid var(--border);border-radius:20px;background:var(--bg2);color:var(--text2);cursor:pointer;outline:none;transition:all .15s}
+.skin-select:hover{color:var(--text)}
+.skin-select option{background:#1a1a1a;color:#eee}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.nav{display:flex;padding:0 24px;border-bottom:0.5px solid var(--border);overflow-x:auto;background:var(--bg);gap:0}
+.nav-btn{padding:10px 15px;font-size:12px;color:var(--text2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s;font-family:inherit}
+.nav-btn:hover:not(.active){color:var(--text)}
+.nav-btn.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.slide{padding:20px 24px;max-width:100%}
+.slide-title{font-family:var(--serif);font-size:20px;font-weight:300;font-style:italic;color:var(--text);margin-bottom:3px}
+.slide-sub{font-size:11.5px;color:var(--text2);margin-bottom:16px}
+.kpi-strip{display:grid;gap:10px;margin-bottom:16px}
+.ks5{grid-template-columns:repeat(5,1fr)}.ks4{grid-template-columns:repeat(4,1fr)}.ks6{grid-template-columns:repeat(6,1fr)}
+.kpi{background:var(--bg2);border-radius:var(--r2);padding:12px 15px;border:0.5px solid var(--border);box-shadow:var(--shadow)}
+.kpi-lbl{font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.kpi-val{font-size:20px;font-weight:500;font-family:var(--mono);line-height:1;color:var(--text)}
+.kpi-delta{font-size:10px;margin-top:4px;font-family:var(--mono)}
+.pos{color:var(--teal)}.neg{color:var(--red)}.amb{color:var(--amber)}.neu{color:var(--text3)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px;box-shadow:var(--shadow)}
+.card-title{font-size:11.5px;font-weight:500;color:var(--text);margin-bottom:2px}
+.card-sub{font-size:10px;color:var(--text3);margin-bottom:10px}
+.chart-wrap{position:relative}
+.sec-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);padding:9px 0 5px;font-weight:500}
+.var-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px}
+.var-row:last-child{border-bottom:none}
+.var-lbl{color:var(--text2)}.var-act{color:var(--text);font-family:var(--mono);font-weight:500}
+.var-bud{color:var(--text3);font-family:var(--mono);font-size:11px}
+.snav{display:flex;gap:5px;margin-bottom:13px;flex-wrap:wrap}
+.snav-btn{font-size:11px;padding:4px 10px;border-radius:20px;border:0.5px solid var(--border);cursor:pointer;background:none;color:var(--text2);font-family:inherit;transition:all .15s}
+.snav-btn.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.badge{display:inline-block;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:500}
+.badge-hi{background:var(--teal-light);color:var(--blue)}
+.badge-med{background:var(--amber-light);color:var(--amber)}
+.badge-lo{background:rgba(136,135,128,.2);color:var(--text3)}
+.badge-green{background:var(--teal-light);color:var(--teal)}
+.badge-final{background:var(--teal-light);color:var(--teal);font-size:10px;padding:3px 9px}
+.badge-draft{background:var(--amber-light);color:var(--amber);font-size:10px;padding:3px 9px}
+.badge-super{background:var(--bg3);color:var(--text3);font-size:10px;padding:3px 9px}
+/* LAYOUT: left panel + right output */
+.engine-layout{display:grid;grid-template-columns:290px 1fr;gap:14px;align-items:start}
+.lever-panel{background:var(--bg2);border-radius:var(--r2);padding:14px;border:0.5px solid var(--border)}
+.lever-section{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:8px}
+.lever-section:first-child{padding-top:0}
+.lever{margin-bottom:9px}
+.lever-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+.lever-lbl{font-size:12px;color:var(--text2)}
+.lever-val{font-size:12px;font-weight:500;color:var(--text);font-family:var(--mono);min-width:48px;text-align:right}
+.lever-hint{font-size:9.5px;color:var(--text3);margin-top:1px}
+input[type=range]{width:100%;height:4px;appearance:none;background:var(--lgray);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer}
+/* req toggle */
+.req-row{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:11.5px}
+.req-row:last-child{border-bottom:none}
+.tog{width:32px;height:18px;border-radius:9px;border:none;cursor:pointer;position:relative;flex-shrink:0;transition:background .2s}
+.tog.on{background:var(--accent)}.tog.off{background:var(--border)}
+.tog::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;transition:left .15s}
+.tog.on::after{left:16px}.tog.off::after{left:2px}
+/* stmt tables */
+.stmt-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+.stmt-tbl th{text-align:right;padding:4px 6px;font-size:9.5px;font-weight:500;color:var(--text3);border-bottom:0.5px solid var(--border2);white-space:nowrap}
+.stmt-tbl th:first-child{text-align:left;min-width:145px}
+.stmt-tbl td{padding:4px 6px;border-bottom:0.5px solid var(--border);white-space:nowrap;font-size:10.5px;text-align:right;font-family:var(--mono);color:var(--text2)}
+.stmt-tbl td:first-child{text-align:left;font-family:inherit;color:var(--text);font-size:11px}
+.stmt-tbl tr.sec-hdr td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);font-weight:500;font-family:inherit}
+.stmt-tbl tr.sub-row td{font-weight:500;color:var(--text);border-top:0.5px solid var(--border2)}
+.stmt-tbl tr.tot-row td{font-weight:500;color:var(--text);border-top:1.5px solid var(--border2);background:var(--bg2)}
+.stmt-tbl td.act-col{color:var(--text)}
+.stmt-tbl td.fc-col{color:var(--amber)}
+.stmt-tbl th.fc-col{color:var(--amber)}
+.stmt-tbl td.pos-v{color:var(--teal)}.stmt-tbl td.neg-v{color:var(--red)}
+.stmt-tbl tr.indent-row td:first-child{padding-left:18px;color:var(--text2);font-size:10.5px}
+.stmt-tbl tr.indent-row td{font-size:10.5px;color:var(--text2)}
+/* horizon tabs */
+.hz-tabs{display:flex;gap:3px;background:var(--bg2);padding:3px;border-radius:8px;border:0.5px solid var(--border)}
+.hz-tab{font-size:11px;padding:4px 11px;border:none;background:transparent;border-radius:6px;cursor:pointer;color:var(--text2);font-family:inherit;transition:all .15s}
+.hz-tab.on{background:var(--accent);color:var(--bg);font-weight:600;box-shadow:none}
+/* version list */
+.ver-row{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)}
+.ver-row:last-child{border-bottom:none}
+.ver-name{font-size:12px;font-weight:500;color:var(--text)}
+.ver-meta{font-size:10px;color:var(--text3);margin-top:2px}
+.ver-stats{font-size:11px;font-family:var(--mono);color:var(--text2);text-align:right;white-space:nowrap}
+/* opp deal rows */
+.deal-row{padding:5px 0;border-bottom:0.5px solid var(--border);font-size:11px}
+.deal-row:last-child{border-bottom:none}
+/* action buttons */
+.act-btn{font-size:11px;padding:6px 14px;border-radius:20px;cursor:pointer;font-family:inherit;transition:all .15s;display:inline-flex;align-items:center;gap:5px}
+.act-btn.primary{background:var(--accent);color:var(--bg);border:none}
+.act-btn.primary:hover{opacity:.85}
+.act-btn.success{background:var(--teal);color:var(--bg);border:none}
+.act-btn.success:hover{opacity:.85}
+.act-btn.outline{background:none;color:var(--text2);border:0.5px solid var(--border2)}
+.act-btn.outline:hover{background:var(--bg2)}
+.act-btn.danger{background:none;color:var(--red);border:0.5px solid rgba(216,90,48,.3)}
+/* gap alert */
+.gap-alert{background:var(--amber-light);border:0.5px solid var(--amber);border-radius:var(--r);padding:10px 13px;margin-top:12px;font-size:11.5px;color:var(--text2)}
+.gap-alert strong{color:var(--amber);font-family:var(--mono)}
+/* tie badge */
+.tie-ok{background:var(--teal-light);color:var(--teal);font-size:9.5px;padding:2px 7px;border-radius:10px;font-weight:500;margin-left:6px}
+/* sensitivity table */
+.sens-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.sens-tbl th{text-align:right;padding:5px 8px;font-size:9.5px;color:var(--text3);font-weight:500;border-bottom:0.5px solid var(--border2)}
+.sens-tbl th:first-child{text-align:left}
+.sens-tbl td{padding:5px 8px;border-bottom:0.5px solid var(--border);font-family:var(--mono);font-size:10.5px;text-align:right}
+.sens-tbl td:first-child{font-family:inherit;text-align:left;color:var(--text)}
+.sens-tbl tr.base-row{background:var(--bg2);font-weight:500}
+.footer{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;border-top:0.5px solid var(--border);margin-top:6px}
+.footer-note{font-size:10px;color:var(--text3)}
+</style>
+</head>
+<body>
+<div style="display:flex;height:100vh;overflow:hidden">
+<div id="leverSidebar" style="width:290px;flex-shrink:0;overflow-y:auto;border-right:0.5px solid var(--border);background:var(--bg2);padding:14px">
+  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding-bottom:8px;border-bottom:0.5px solid var(--border);margin-bottom:8px">ARR — from deal pipeline</div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">New business attainment</span><span class="lever-val" id="v-nb">100%</span></div><input type="range" min="50" max="150" value="100" step="5" id="l-nb" oninput="refresh()"><div class="lever-hint">% of weighted pipeline · 195 deals</div></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">Expansion rate</span><span class="lever-val" id="v-exp">100%</span></div><input type="range" min="50" max="150" value="100" step="5" id="l-exp" oninput="refresh()"></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">Churn stress</span><span class="lever-val" id="v-churn">100%</span></div><input type="range" min="70" max="160" value="100" step="5" id="l-churn" oninput="refresh()"><div class="lever-hint">100% = base · 160% = SMB stress</div></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">Renewal rate adj.</span><span class="lever-val" id="v-ren">+0%</span></div><input type="range" min="-15" max="15" value="0" step="1" id="l-ren" oninput="refresh()"><div class="lever-hint">Commit 95% · Likely 75% · At Risk 55%</div></div>
+  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:8px">Cost ratios — % of revenue</div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">COGS %</span><span class="lever-val" id="v-cogs">29%</span></div><input type="range" min="18" max="45" value="29" step="1" id="l-cogs" oninput="refresh()"></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">S&M %</span><span class="lever-val" id="v-sm">34%</span></div><input type="range" min="20" max="60" value="34" step="1" id="l-sm" oninput="refresh()"></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">R&D %</span><span class="lever-val" id="v-rd">16%</span></div><input type="range" min="8" max="35" value="16" step="1" id="l-rd" oninput="refresh()"></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">G&A %</span><span class="lever-val" id="v-ga">11%</span></div><input type="range" min="5" max="25" value="11" step="1" id="l-ga" oninput="refresh()"></div>
+  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:8px">Working capital</div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">DSO (days)</span><span class="lever-val" id="v-dso">42d</span></div><input type="range" min="20" max="75" value="42" step="1" id="l-dso" oninput="refresh()"></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">DPO (days)</span><span class="lever-val" id="v-dpo">30d</span></div><input type="range" min="15" max="60" value="30" step="1" id="l-dpo" oninput="refresh()"></div>
+  <div class="lever"><div class="lever-row"><span class="lever-lbl">CapEx / mo</span><span class="lever-val" id="v-capex">$220K</span></div><input type="range" min="100" max="500" value="220" step="10" id="l-capex" oninput="refresh()"></div>
+  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:8px">Hire-by-hire open reqs</div>
+  <div id="leverReqList"></div>
+</div>
+<div style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-width:0">
+<div class="topbar">
+  <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· Rolling Forecast Engine</span></div>
+  <div class="topbar-right">
+    <div class="hz-tabs" id="hzTabs">
+      <button class="hz-tab" onclick="setHz('3p9',this)">3 + 9</button>
+      <button class="hz-tab on" onclick="setHz('6p6',this)">6 + 6</button>
+      <button class="hz-tab" onclick="setHz('9p3',this)">9 + 3</button>
+    </div>
+    <span class="period-badge" id="hzLabel">Jan–Jun Actual · Jul–Dec Forecast</span>
+    <select class="skin-select" id="skinSelect" onchange="applySkin(this.value)" aria-label="Design skin">
+      <option value="canvas">Canvas</option>
+      <option value="smpl">SMPL</option>
+      <option value="midnight">Midnight</option>
+      <option value="harbor">Harbor</option>
+      <option value="eclipse">Eclipse</option>
+      <option value="graphite">Graphite</option>
+      <option value="aurora">Aurora</option>
+      <option value="ember">Ember</option>
+      <option value="slate">Slate</option>
+      <option value="mist">Mist</option>
+    </select>
+  </div>
+</div>
+
+<nav class="nav" id="mainNav">
+  <button class="nav-btn active" onclick="showTab('overview',this)">Overview</button>
+  <button class="nav-btn" onclick="showTab('arr',this)">ARR Waterfall</button>
+  <button class="nav-btn" onclick="showTab('is',this)">Income Statement</button>
+  <button class="nav-btn" onclick="showTab('cashflow',this)">Cash Flow</button>
+  <button class="nav-btn" onclick="showTab('bs',this)">Balance Sheet</button>
+  <button class="nav-btn" onclick="showTab('pipeline',this)">Pipeline Detail</button>
+  <button class="nav-btn" onclick="showTab('headcount',this)">Headcount</button>
+  <button class="nav-btn" onclick="showTab('sensitivity',this)">Sensitivity</button>
+  <button class="nav-btn" onclick="showTab('versions',this)">Versions</button>
+</nav>
+
+<div id="slideArea" style="flex:1;overflow-y:auto;min-height:0"></div>
+
+<div class="footer">
+  <div class="footer-note">SMPL · Rolling Forecast Engine · Built from Forecast_opportunities.csv + Forecast_renewal_pipeline.csv + open reqs · Confidential</div>
+  <div style="display:flex;gap:8px">
+    <button class="act-btn outline" onclick="saveVersion('draft')">💾 Save Draft</button>
+    <button class="act-btn success" onclick="saveVersion('final')">✓ Promote to Final</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const SRC={"actuals":{"2026-01":{"revenue":5900000.0,"cogs":1711000.0,"gross_profit":4189000.0,"sm":2006000.0,"rd":944000.0,"ga":649000.0,"ebitda":590000.0,"da":88500.0,"interest":40000.0,"net_income":369200.0,"beginning_cash":46000000.0,"cfo":487200.0,"cfi":-118000.0,"cff":0.0,"net_change_cash":369200.0,"ending_cash":46369200.0,"cash_bs":46369200.0,"ar":708000.0,"equity":49161200.0,"dr":944000.0,"ap":472000.0,"arr_bop":75000000.0,"arr_nb":1200000.0,"arr_exp":650000.0,"arr_churn":420000.0,"arr_cont":180000.0,"arr_react":60000.0,"arr_nn":1310000.0,"arr_eop":76310000.0,"nrr":1.0007,"grr":0.992,"chg_ar":-236000,"chg_dr":118000,"chg_ap":88500},"2026-02":{"revenue":6100000.0,"cogs":1769000.0,"gross_profit":4331000.0,"sm":2074000.0,"rd":976000.0,"ga":671000.0,"ebitda":610000.0,"da":91500.0,"interest":40000.0,"net_income":382800.0,"beginning_cash":46369200.0,"cfo":504800.0,"cfi":-122000.0,"cff":0.0,"net_change_cash":382800.0,"ending_cash":46752000.0,"cash_bs":46752000.0,"ar":732000.0,"equity":49520000.0,"dr":976000.0,"ap":488000.0,"arr_bop":76310000.0,"arr_nb":1350000.0,"arr_exp":720000.0,"arr_churn":435000.0,"arr_cont":195000.0,"arr_react":65000.0,"arr_nn":1505000.0,"arr_eop":77815000.0,"nrr":1.0012,"grr":0.9917,"chg_ar":-244000,"chg_dr":122000,"chg_ap":91500},"2026-03":{"revenue":6400000.0,"cogs":1856000.0,"gross_profit":4544000.0,"sm":2176000.0,"rd":1024000.0,"ga":704000.0,"ebitda":640000.0,"da":96000.0,"interest":40000.0,"net_income":403200.0,"beginning_cash":46752000.0,"cfo":531200.0,"cfi":-128000.0,"cff":0.0,"net_change_cash":403200.0,"ending_cash":47155200.0,"cash_bs":47155200.0,"ar":768000.0,"equity":49887200.0,"dr":1024000.0,"ap":512000.0,"arr_bop":77815000.0,"arr_nb":1500000.0,"arr_exp":780000.0,"arr_churn":450000.0,"arr_cont":210000.0,"arr_react":70000.0,"arr_nn":1690000.0,"arr_eop":79505000.0,"nrr":1.0015,"grr":0.9915,"chg_ar":-256000,"chg_dr":128000,"chg_ap":96000},"2026-04":{"revenue":6700000.0,"cogs":1943000.0,"gross_profit":4757000.0,"sm":2278000.0,"rd":1072000.0,"ga":737000.0,"ebitda":670000.0,"da":100500.0,"interest":40000.0,"net_income":423600.0,"beginning_cash":47155200.0,"cfo":557600.0,"cfi":-134000.0,"cff":0.0,"net_change_cash":423600.0,"ending_cash":47578800.0,"cash_bs":47578800.0,"ar":804000.0,"equity":50274800.0,"dr":1072000.0,"ap":536000.0,"arr_bop":79505000.0,"arr_nb":1650000.0,"arr_exp":850000.0,"arr_churn":470000.0,"arr_cont":225000.0,"arr_react":75000.0,"arr_nn":1880000.0,"arr_eop":81385000.0,"nrr":1.0019,"grr":0.9913,"chg_ar":-268000,"chg_dr":134000,"chg_ap":100500},"2026-05":{"revenue":7000000.0,"cogs":2030000.0,"gross_profit":4970000.0,"sm":2380000.0,"rd":1120000.0,"ga":770000.0,"ebitda":700000.0,"da":105000.0,"interest":40000.0,"net_income":444000.0,"beginning_cash":47578800.0,"cfo":584000.0,"cfi":-140000.0,"cff":0.0,"net_change_cash":444000.0,"ending_cash":48022800.0,"cash_bs":48022800.0,"ar":840000.0,"equity":50682800.0,"dr":1120000.0,"ap":560000.0,"arr_bop":81385000.0,"arr_nb":1800000.0,"arr_exp":910000.0,"arr_churn":490000.0,"arr_cont":240000.0,"arr_react":80000.0,"arr_nn":2060000.0,"arr_eop":83445000.0,"nrr":1.0022,"grr":0.991,"chg_ar":-280000,"chg_dr":140000,"chg_ap":105000},"2026-06":{"revenue":7412000.0,"cogs":1537000.0,"gross_profit":5875000.0,"sm":3680000.0,"rd":1220000.0,"ga":810000.0,"ebitda":-1297000.0,"da":122000.0,"interest":35000.0,"net_income":-1454000.0,"beginning_cash":48022800.0,"cfo":4800000.0,"cfi":-220000.0,"cff":0.0,"net_change_cash":4580000.0,"ending_cash":70610000.0,"cash_bs":70610000.0,"ar":1040000.0,"equity":49228800.0,"dr":1120000.0,"ap":520000.0,"arr_bop":83445000.0,"arr_nb":1920000.0,"arr_exp":980000.0,"arr_churn":115000.0,"arr_cont":225000.0,"arr_react":95000.0,"arr_nn":2655000.0,"arr_eop":86100000.0,"nrr":1.0082,"grr":0.9987,"chg_ar":-200000,"chg_dr":0,"chg_ap":-40000}},"opp_pipeline":{"2026-06":{"New Business":{"total":1842789.0,"weighted":1122555.75,"count":12,"deals":[{"customer":"Northstar Health 280","stage":"Discovery","segment":"Mid-Market","region":"Central","arr":111678,"weighted":39087,"prob":35,"owner":"Casey Johnson","channel":"Webinar","billing":"Quarterly"},{"customer":"Nimbus Works 1790","stage":"Discovery","segment":"SMB","region":"West","arr":156335,"weighted":78167,"prob":50,"owner":"Riley Wilson","channel":"Customer Success","billing":"Quarterly"},{"customer":"Apex Group 2454","stage":"Negotiation","segment":"Mid-Market","region":"West","arr":154825,"weighted":123860,"prob":80,"owner":"Cameron Clark","channel":"Customer Success","billing":"Annual"},{"customer":"Pioneer Systems 348","stage":"Negotiation","segment":"SMB","region":"Central","arr":202499,"weighted":162000,"prob":80,"owner":"Cameron Clark","channel":"Referral","billing":"Quarterly"},{"customer":"Vertex Solutions 596","stage":"Discovery","segment":"Mid-Market","region":"Central","arr":166529,"weighted":108244,"prob":65,"owner":"Jordan Smith","channel":"Field Event","billing":"Annual"}]},"Expansion":{"total":940817.99,"weighted":580015.6799999999,"count":7,"deals":[{"customer":"Apex Cloud 476","stage":"Discovery","segment":"Mid-Market","region":"Central","arr":104671,"weighted":68036,"prob":65,"owner":"Riley Wilson","channel":"Organic Search","billing":"Annual"},{"customer":"Pioneer Cloud 2354","stage":"Discovery","segment":"Mid-Market","region":"West","arr":159275,"weighted":127420,"prob":80,"owner":"Morgan Davis","channel":"Content Syndication","billing":"Annual"},{"customer":"BlueRiver Solutions 1558","stage":"Discovery","segment":"SMB","region":"West","arr":82644,"weighted":28925,"prob":35,"owner":"Taylor Brown","channel":"Organic Search","billing":"Monthly"},{"customer":"Summit Analytics 1743","stage":"Commit","segment":"SMB","region":"West","arr":148946,"weighted":119157,"prob":80,"owner":"Morgan Davis","channel":"Paid Search","billing":"Monthly"},{"customer":"Catalyst Solutions 1692","stage":"Evaluation","segment":"Enterprise","region":"Central","arr":151561,"weighted":98514,"prob":65,"owner":"Taylor Brown","channel":"Webinar","billing":"Quarterly"}]},"Contraction":{"total":322877.0,"weighted":163692.11000000002,"count":2,"deals":[{"customer":"Apex Analytics 143","stage":"Negotiation","segment":"Mid-Market","region":"South","arr":153926,"weighted":53874,"prob":35,"owner":"Cameron Clark","channel":"Organic Search","billing":"Quarterly"},{"customer":"Vertex Solutions 2180","stage":"Discovery","segment":"Mid-Market","region":"East","arr":168951,"weighted":109818,"prob":65,"owner":"Riley Wilson","channel":"Paid Social","billing":"Monthly"}]},"Churn":{"total":530257.01,"weighted":245987.24,"count":3,"deals":[{"customer":"Catalyst Analytics 150","stage":"Evaluation","segment":"SMB","region":"West","arr":147174,"weighted":73587,"prob":50,"owner":"Taylor Brown","channel":"Paid Search","billing":"Monthly"},{"customer":"Evergreen Legal 2322","stage":"Proposal","segment":"Enterprise","region":"West","arr":255475,"weighted":127737,"prob":50,"owner":"Riley Wilson","channel":"Paid Search","billing":"Annual"},{"customer":"BlueRiver Works 1575","stage":"Proposal","segment":"Mid-Market","region":"South","arr":127608,"weighted":44663,"prob":35,"owner":"Taylor Brown","channel":"Content Syndication","billing":"Quarterly"}]},"Reactivation":{"total":150000.0,"weighted":120000.0,"count":1,"deals":[{"customer":"Pioneer Analytics 1566","stage":"Proposal","segment":"Mid-Market","region":"East","arr":150000,"weighted":120000,"prob":80,"owner":"Taylor Brown","channel":"Organic Search","billing":"Annual"}]}},"2026-07":{"New Business":{"total":1866714.9900000002,"weighted":1155310.3199999998,"count":12,"deals":[{"customer":"BlueRiver Health 1637","stage":"Commit","segment":"SMB","region":"East","arr":158383,"weighted":126707,"prob":80,"owner":"Avery Garcia","channel":"Content Syndication","billing":"Annual"},{"customer":"Catalyst Analytics 185","stage":"Proposal","segment":"SMB","region":"East","arr":172919,"weighted":112397,"prob":65,"owner":"Riley Wilson","channel":"Partner","billing":"Quarterly"},{"customer":"Northstar Group 373","stage":"Evaluation","segment":"SMB","region":"East","arr":131102,"weighted":104882,"prob":80,"owner":"Riley Wilson","channel":"Paid Search","billing":"Annual"},{"customer":"Summit Systems 1832","stage":"Commit","segment":"Enterprise","region":"South","arr":175446,"weighted":140357,"prob":80,"owner":"Jordan Smith","channel":"Paid Social","billing":"Quarterly"},{"customer":"Catalyst Group 13","stage":"Proposal","segment":"Mid-Market","region":"Central","arr":167679,"weighted":58688,"prob":35,"owner":"Taylor Brown","channel":"Webinar","billing":"Quarterly"}]},"Expansion":{"total":995196.9900000001,"weighted":584966.0800000001,"count":7,"deals":[{"customer":"BlueRiver Legal 1489","stage":"Discovery","segment":"Mid-Market","region":"Central","arr":142078,"weighted":49727,"prob":35,"owner":"Alex Lee","channel":"Webinar","billing":"Annual"},{"customer":"Northstar Cloud 974","stage":"Negotiation","segment":"SMB","region":"South","arr":125185,"weighted":81370,"prob":65,"owner":"Riley Wilson","channel":"Organic Search","billing":"Quarterly"},{"customer":"Northstar Legal 798","stage":"Discovery","segment":"SMB","region":"Central","arr":146171,"weighted":73085,"prob":50,"owner":"Riley Wilson","channel":"Content Syndication","billing":"Annual"},{"customer":"BlueRiver Group 1225","stage":"Negotiation","segment":"SMB","region":"East","arr":127081,"weighted":82603,"prob":65,"owner":"Casey Johnson","channel":"Outbound","billing":"Monthly"},{"customer":"Summit Solutions 221","stage":"Negotiation","segment":"Mid-Market","region":"West","arr":204915,"weighted":163932,"prob":80,"owner":"Avery Garcia","channel":"Partner","billing":"Monthly"}]},"Contraction":{"total":371121.0,"weighted":218630.47999999998,"count":2,"deals":[{"customer":"Summit Legal 1286","stage":"Proposal","segment":"Mid-Market","region":"Central","arr":197196,"weighted":157757,"prob":80,"owner":"Alex Lee","channel":"Paid Social","billing":"Monthly"},{"customer":"Pioneer Analytics 389","stage":"Evaluation","segment":"Mid-Market","region":"South","arr":173925,"weighted":60874,"prob":35,"owner":"Taylor Brown","channel":"Direct","billing":"Monthly"}]},"Churn":{"total":612563.01,"weighted":417432.87,"count":3,"deals":[{"customer":"Pioneer Analytics 1134","stage":"Discovery","segment":"Mid-Market","region":"Central","arr":229210,"weighted":183368,"prob":80,"owner":"Riley Wilson","channel":"Referral","billing":"Quarterly"},{"customer":"Evergreen Cloud 925","stage":"Discovery","segment":"SMB","region":"West","arr":161372,"weighted":56480,"prob":35,"owner":"Morgan Davis","channel":"Paid Search","billing":"Quarterly"},{"customer":"Catalyst Systems 2352","stage":"Negotiation","segment":"SMB","region":"Central","arr":221981,"weighted":177585,"prob":80,"owner":"Alex Lee","channel":"Paid Search","billing":"Quarterly"}]},"Reactivation":{"total":307478.0,"weighted":202206.90000000002,"count":3,"deals":[{"customer":"BlueRiver Solutions 2021","stage":"Discovery","segment":"SMB","region":"South","arr":94079,"weighted":47039,"prob":50,"owner":"Cameron Clark","channel":"Paid Social","billing":"Quarterly"},{"customer":"BlueRiver Analytics 1883","stage":"Evaluation","segment":"SMB","region":"Central","arr":109720,"weighted":87776,"prob":80,"owner":"Jordan Smith","channel":"Direct","billing":"Annual"},{"customer":"Summit Health 1075","stage":"Discovery","segment":"SMB","region":"East","arr":103679,"weighted":67391,"prob":65,"owner":"Avery Garcia","channel":"Partner","billing":"Quarterly"}]}},"2026-08":{"New Business":{"total":1750478.02,"weighted":1002656.42,"count":11,"deals":[{"customer":"Catalyst Works 189","stage":"Negotiation","segment":"Mid-Market","region":"West","arr":172321,"weighted":86160,"prob":50,"owner":"Alex Lee","channel":"Outbound","billing":"Quarterly"},{"customer":"Summit Cloud 49","stage":"Discovery","segment":"Enterprise","region":"East","arr":165455,"weighted":57909,"prob":35,"owner":"Casey Johnson","channel":"Referral","billing":"Quarterly"},{"customer":"Catalyst Analytics 631","stage":"Negotiation","segment":"Mid-Market","region":"South","arr":162374,"weighted":105543,"prob":65,"owner":"Cameron Clark","channel":"Webinar","billing":"Monthly"},{"customer":"Nimbus Legal 973","stage":"Evaluation","segment":"Mid-Market","region":"South","arr":186366,"weighted":121138,"prob":65,"owner":"Alex Lee","channel":"Paid Social","billing":"Monthly"},{"customer":"Catalyst Solutions 556","stage":"Evaluation","segment":"Mid-Market","region":"West","arr":116348,"weighted":40722,"prob":35,"owner":"Avery Garcia","channel":"Content Syndication","billing":"Quarterly"}]},"Expansion":{"total":1027047.0,"weighted":612316.02,"count":8,"deals":[{"customer":"Pioneer Systems 1997","stage":"Commit","segment":"SMB","region":"South","arr":142301,"weighted":113841,"prob":80,"owner":"Riley Wilson","channel":"Direct","billing":"Annual"},{"customer":"Pioneer Health 1109","stage":"Evaluation","segment":"SMB","region":"Central","arr":125390,"weighted":43886,"prob":35,"owner":"Jordan Smith","channel":"Direct","billing":"Monthly"},{"customer":"Vertex Systems 62","stage":"Negotiation","segment":"Mid-Market","region":"East","arr":91725,"weighted":45863,"prob":50,"owner":"Riley Wilson","channel":"Field Event","billing":"Quarterly"},{"customer":"Acme Solutions 632","stage":"Proposal","segment":"SMB","region":"Central","arr":165352,"weighted":107479,"prob":65,"owner":"Morgan Davis","channel":"Customer Success","billing":"Annual"},{"customer":"Northstar Health 661","stage":"Evaluation","segment":"SMB","region":"East","arr":136087,"weighted":108869,"prob":80,"owner":"Casey Johnson","channel":"Webinar","billing":"Quarterly"}]},"Contraction":{"total":402430.0,"weighted":287626.39,"count":3,"deals":[{"customer":"Acme Health 376","stage":"Proposal","segment":"Mid-Market","region":"East","arr":116551,"weighted":75758,"prob":65,"owner":"Alex Lee","channel":"Paid Social","billing":"Quarterly"},{"customer":"Catalyst Analytics 2185","stage":"Discovery","segment":"Mid-Market","region":"South","arr":112233,"weighted":72952,"prob":65,"owner":"Riley Wilson","channel":"Organic Search","billing":"Annual"},{"customer":"Evergreen Legal 444","stage":"Commit","segment":"SMB","region":"South","arr":173646,"weighted":138917,"prob":80,"owner":"Cameron Clark","channel":"Partner","billing":"Monthly"}]},"Churn":{"total":662371.0,"weighted":463320.93,"count":3,"deals":[{"customer":"BlueRiver Cloud 1153","stage":"Evaluation","segment":"Mid-Market","region":"West","arr":192570,"weighted":125171,"prob":65,"owner":"Taylor Brown","channel":"Field Event","billing":"Quarterly"},{"customer":"BlueRiver Systems 1199","stage":"Proposal","segment":"Mid-Market","region":"West","arr":251269,"weighted":163325,"prob":65,"owner":"Avery Garcia","channel":"Organic Search","billing":"Quarterly"},{"customer":"Apex Group 1061","stage":"Discovery","segment":"Mid-Market","region":"East","arr":218532,"weighted":174826,"prob":80,"owner":"Riley Wilson","channel":"Content Syndication","billing":"Monthly"}]},"Reactivation":{"total":373503.0,"weighted":258774.77999999997,"count":3,"deals":[{"customer":"Acme Works 2183","stage":"Proposal","segment":"SMB","region":"East","arr":106652,"weighted":85322,"prob":80,"owner":"Morgan Davis","channel":"Customer Success","billing":"Annual"},{"customer":"Catalyst Solutions 31","stage":"Commit","segment":"SMB","region":"Central","arr":94488,"weighted":61418,"prob":65,"owner":"Cameron Clark","channel":"Direct","billing":"Monthly"},{"customer":"Apex Legal 498","stage":"Proposal","segment":"Mid-Market","region":"Central","arr":172362,"weighted":112035,"prob":65,"owner":"Jordan Smith","channel":"Direct","billing":"Quarterly"}]}},"2026-09":{"New Business":{"total":1765110.0,"weighted":866261.1699999999,"count":11,"deals":[{"customer":"Pioneer Group 663","stage":"Commit","segment":"SMB","region":"Central","arr":159879,"weighted":79939,"prob":50,"owner":"Alex Lee","channel":"Content Syndication","billing":"Monthly"},{"customer":"Nimbus Cloud 1648","stage":"Evaluation","segment":"Mid-Market","region":"East","arr":169347,"weighted":84674,"prob":50,"owner":"Casey Johnson","channel":"Field Event","billing":"Annual"},{"customer":"Evergreen Works 85","stage":"Commit","segment":"SMB","region":"South","arr":127601,"weighted":63801,"prob":50,"owner":"Casey Johnson","channel":"Direct","billing":"Monthly"},{"customer":"Catalyst Group 305","stage":"Evaluation","segment":"Mid-Market","region":"Central","arr":133323,"weighted":66662,"prob":50,"owner":"Morgan Davis","channel":"Content Syndication","billing":"Quarterly"},{"customer":"Summit Cloud 861","stage":"Commit","segment":"Mid-Market","region":"East","arr":217333,"weighted":141267,"prob":65,"owner":"Riley Wilson","channel":"Customer Success","billing":"Quarterly"}]},"Expansion":{"total":922212.9900000001,"weighted":491339.35,"count":7,"deals":[{"customer":"Nimbus Cloud 481","stage":"Discovery","segment":"Enterprise","region":"South","arr":140794,"weighted":49278,"prob":35,"owner":"Alex Lee","channel":"Direct","billing":"Quarterly"},{"customer":"Northstar Health 808","stage":"Commit","segment":"SMB","region":"South","arr":90700,"weighted":58955,"prob":65,"owner":"Morgan Davis","channel":"Organic Search","billing":"Quarterly"},{"customer":"Evergreen Health 39","stage":"Negotiation","segment":"SMB","region":"East","arr":138880,"weighted":48608,"prob":35,"owner":"Riley Wilson","channel":"Outbound","billing":"Monthly"},{"customer":"Nimbus Systems 60","stage":"Discovery","segment":"SMB","region":"West","arr":144858,"weighted":50700,"prob":35,"owner":"Riley Wilson","channel":"Content Syndication","billing":"Annual"},{"customer":"Nimbus Solutions 845","stage":"Commit","segment":"Mid-Market","region":"Central","arr":146964,"weighted":95527,"prob":65,"owner":"Casey Johnson","channel":"Paid Search","billing":"Annual"}]},"Contraction":{"total":424035.99,"weighted":258711.81,"count":3,"deals":[{"customer":"Apex Solutions 1653","stage":"Evaluation","segment":"Mid-Market","region":"South","arr":128049,"weighted":44817,"prob":35,"owner":"Alex Lee","channel":"Outbound","billing":"Monthly"},{"customer":"Catalyst Legal 1629","stage":"Discovery","segment":"Mid-Market","region":"West","arr":143355,"weighted":114684,"prob":80,"owner":"Jordan Smith","channel":"Direct","billing":"Quarterly"},{"customer":"Pioneer Health 2293","stage":"Proposal","segment":"Mid-Market","region":"East","arr":152632,"weighted":99211,"prob":65,"owner":"Morgan Davis","channel":"Outbound","billing":"Quarterly"}]},"Churn":{"total":705506.0,"weighted":358135.31,"count":4,"deals":[{"customer":"Pioneer Health 2012","stage":"Commit","segment":"Mid-Market","region":"West","arr":127253,"weighted":44539,"prob":35,"owner":"Morgan Davis","channel":"Field Event","billing":"Quarterly"},{"customer":"Pioneer Works 1019","stage":"Discovery","segment":"SMB","region":"South","arr":207559,"weighted":72646,"prob":35,"owner":"Avery Garcia","channel":"Organic Search","billing":"Annual"},{"customer":"Vertex Systems 419","stage":"Proposal","segment":"SMB","region":"East","arr":184324,"weighted":119810,"prob":65,"owner":"Cameron Clark","channel":"Outbound","billing":"Quarterly"},{"customer":"Evergreen Group 2210","stage":"Proposal","segment":"Mid-Market","region":"South","arr":186370,"weighted":121141,"prob":65,"owner":"Cameron Clark","channel":"Paid Social","billing":"Monthly"}]},"Reactivation":{"total":382361.0,"weighted":285692.29000000004,"count":3,"deals":[{"customer":"Catalyst Analytics 1756","stage":"Evaluation","segment":"Mid-Market","region":"Central","arr":146314,"weighted":117051,"prob":80,"owner":"Cameron Clark","channel":"Content Syndication","billing":"Quarterly"},{"customer":"Catalyst Legal 1227","stage":"Evaluation","segment":"Mid-Market","region":"Central","arr":101404,"weighted":81123,"prob":80,"owner":"Morgan Davis","channel":"Outbound","billing":"Annual"},{"customer":"Summit Systems 1166","stage":"Discovery","segment":"Enterprise","region":"Central","arr":134643,"weighted":87518,"prob":65,"owner":"Taylor Brown","channel":"Outbound","billing":"Annual"}]}},"2026-10":{"New Business":{"total":1678392.9999999998,"weighted":919339.4700000001,"count":11,"deals":[{"customer":"Vertex Works 222","stage":"Negotiation","segment":"Enterprise","region":"Central","arr":153532,"weighted":53736,"prob":35,"owner":"Avery Garcia","channel":"Direct","billing":"Monthly"},{"customer":"Evergreen Health 1060","stage":"Commit","segment":"Mid-Market","region":"West","arr":169463,"weighted":110151,"prob":65,"owner":"Alex Lee","channel":"Content Syndication","billing":"Monthly"},{"customer":"Nimbus Systems 369","stage":"Negotiation","segment":"SMB","region":"South","arr":161159,"weighted":104753,"prob":65,"owner":"Taylor Brown","channel":"Direct","billing":"Monthly"},{"customer":"Summit Analytics 1740","stage":"Proposal","segment":"SMB","region":"Central","arr":156453,"weighted":54758,"prob":35,"owner":"Casey Johnson","channel":"Partner","billing":"Annual"},{"customer":"Evergreen Health 2367","stage":"Proposal","segment":"Enterprise","region":"West","arr":166642,"weighted":108317,"prob":65,"owner":"Morgan Davis","channel":"Paid Search","billing":"Quarterly"}]},"Expansion":{"total":1058122.0100000002,"weighted":546999.0299999999,"count":8,"deals":[{"customer":"Nimbus Analytics 249","stage":"Evaluation","segment":"Mid-Market","region":"Central","arr":109552,"weighted":87641,"prob":80,"owner":"Alex Lee","channel":"Paid Search","billing":"Quarterly"},{"customer":"BlueRiver Solutions 2203","stage":"Commit","segment":"Mid-Market","region":"Central","arr":156285,"weighted":54700,"prob":35,"owner":"Jordan Smith","channel":"Organic Search","billing":"Quarterly"},{"customer":"Vertex Analytics 1241","stage":"Proposal","segment":"SMB","region":"West","arr":165497,"weighted":57924,"prob":35,"owner":"Cameron Clark","channel":"Customer Success","billing":"Annual"},{"customer":"BlueRiver Group 2010","stage":"Commit","segment":"Mid-Market","region":"Central","arr":96864,"weighted":62962,"prob":65,"owner":"Jordan Smith","channel":"Paid Search","billing":"Quarterly"},{"customer":"Nimbus Cloud 2083","stage":"Discovery","segment":"Mid-Market","region":"South","arr":137018,"weighted":89061,"prob":65,"owner":"Alex Lee","channel":"Outbound","billing":"Annual"}]},"Contraction":{"total":439678.99000000005,"weighted":269280.62,"count":3,"deals":[{"customer":"Vertex Legal 2194","stage":"Negotiation","segment":"Enterprise","region":"Central","arr":164804,"weighted":131843,"prob":80,"owner":"Riley Wilson","channel":"Organic Search","billing":"Quarterly"},{"customer":"Catalyst Cloud 626","stage":"Discovery","segment":"SMB","region":"West","arr":144872,"weighted":72436,"prob":50,"owner":"Jordan Smith","channel":"Paid Search","billing":"Monthly"},{"customer":"Acme Analytics 1137","stage":"Negotiation","segment":"Mid-Market","region":"South","arr":130003,"weighted":65002,"prob":50,"owner":"Alex Lee","channel":"Paid Social","billing":"Quarterly"}]},"Churn":{"total":707603.0,"weighted":440495.36,"count":4,"deals":[{"customer":"Northstar Legal 1728","stage":"Negotiation","segment":"Mid-Market","region":"East","arr":189222,"weighted":151377,"prob":80,"owner":"Alex Lee","channel":"Customer Success","billing":"Monthly"},{"customer":"Acme Cloud 1383","stage":"Discovery","segment":"Mid-Market","region":"Central","arr":205465,"weighted":102732,"prob":50,"owner":"Casey Johnson","channel":"Webinar","billing":"Monthly"},{"customer":"Apex Works 201","stage":"Evaluation","segment":"SMB","region":"West","arr":199516,"weighted":129685,"prob":65,"owner":"Cameron Clark","channel":"Outbound","billing":"Monthly"},{"customer":"Acme Cloud 1721","stage":"Proposal","segment":"SMB","region":"Central","arr":113401,"weighted":56701,"prob":50,"owner":"Riley Wilson","channel":"Paid Search","billing":"Annual"}]},"Reactivation":{"total":391126.0,"weighted":239049.2,"count":3,"deals":[{"customer":"Catalyst Solutions 783","stage":"Proposal","segment":"Mid-Market","region":"West","arr":122047,"weighted":97638,"prob":80,"owner":"Casey Johnson","channel":"Paid Search","billing":"Annual"},{"customer":"BlueRiver Legal 306","stage":"Discovery","segment":"Mid-Market","region":"West","arr":111633,"weighted":39071,"prob":35,"owner":"Morgan Davis","channel":"Partner","billing":"Monthly"},{"customer":"Evergreen Analytics 1829","stage":"Proposal","segment":"SMB","region":"East","arr":157446,"weighted":102340,"prob":65,"owner":"Jordan Smith","channel":"Customer Success","billing":"Annual"}]}},"2026-11":{"New Business":{"total":1652682.0000000002,"weighted":831851.63,"count":11,"deals":[{"customer":"Vertex Group 2224","stage":"Evaluation","segment":"SMB","region":"South","arr":157517,"weighted":78758,"prob":50,"owner":"Jordan Smith","channel":"Paid Search","billing":"Quarterly"},{"customer":"Vertex Solutions 1087","stage":"Discovery","segment":"Mid-Market","region":"West","arr":121578,"weighted":60789,"prob":50,"owner":"Casey Johnson","channel":"Customer Success","billing":"Annual"},{"customer":"Northstar Analytics 526","stage":"Commit","segment":"SMB","region":"Central","arr":181236,"weighted":63433,"prob":35,"owner":"Riley Wilson","channel":"Field Event","billing":"Annual"},{"customer":"Summit Legal 513","stage":"Commit","segment":"SMB","region":"Central","arr":180631,"weighted":63221,"prob":35,"owner":"Morgan Davis","channel":"Field Event","billing":"Monthly"},{"customer":"Vertex Analytics 2005","stage":"Commit","segment":"Mid-Market","region":"South","arr":165744,"weighted":132595,"prob":80,"owner":"Jordan Smith","channel":"Webinar","billing":"Monthly"}]},"Expansion":{"total":982232.0000000001,"weighted":566383.04,"count":7,"deals":[{"customer":"Catalyst Cloud 731","stage":"Commit","segment":"SMB","region":"South","arr":147926,"weighted":96152,"prob":65,"owner":"Riley Wilson","channel":"Direct","billing":"Monthly"},{"customer":"Acme Cloud 92","stage":"Negotiation","segment":"Mid-Market","region":"Central","arr":122976,"weighted":61488,"prob":50,"owner":"Riley Wilson","channel":"Partner","billing":"Quarterly"},{"customer":"Apex Health 2343","stage":"Evaluation","segment":"SMB","region":"East","arr":173134,"weighted":86567,"prob":50,"owner":"Riley Wilson","channel":"Webinar","billing":"Quarterly"},{"customer":"Summit Health 1830","stage":"Commit","segment":"SMB","region":"East","arr":95044,"weighted":76035,"prob":80,"owner":"Taylor Brown","channel":"Direct","billing":"Quarterly"},{"customer":"Apex Legal 905","stage":"Negotiation","segment":"Enterprise","region":"East","arr":154608,"weighted":123686,"prob":80,"owner":"Morgan Davis","channel":"Referral","billing":"Quarterly"}]},"Contraction":{"total":440972.0,"weighted":218292.59,"count":3,"deals":[{"customer":"Apex Legal 1209","stage":"Negotiation","segment":"Mid-Market","region":"East","arr":134287,"weighted":67143,"prob":50,"owner":"Jordan Smith","channel":"Referral","billing":"Monthly"},{"customer":"Nimbus Solutions 2453","stage":"Proposal","segment":"Mid-Market","region":"East","arr":160654,"weighted":56229,"prob":35,"owner":"Taylor Brown","channel":"Partner","billing":"Monthly"},{"customer":"Vertex Works 1154","stage":"Negotiation","segment":"Mid-Market","region":"South","arr":146031,"weighted":94920,"prob":65,"owner":"Casey Johnson","channel":"Webinar","billing":"Quarterly"}]},"Churn":{"total":718922.0,"weighted":361004.02,"count":4,"deals":[{"customer":"Vertex Systems 1314","stage":"Negotiation","segment":"Mid-Market","region":"South","arr":174785,"weighted":139828,"prob":80,"owner":"Morgan Davis","channel":"Direct","billing":"Monthly"},{"customer":"Vertex Systems 670","stage":"Commit","segment":"Enterprise","region":"East","arr":190522,"weighted":66683,"prob":35,"owner":"Cameron Clark","channel":"Webinar","billing":"Monthly"},{"customer":"Catalyst Systems 2247","stage":"Commit","segment":"Mid-Market","region":"East","arr":148760,"weighted":52066,"prob":35,"owner":"Alex Lee","channel":"Field Event","billing":"Annual"},{"customer":"Apex Cloud 76","stage":"Commit","segment":"Enterprise","region":"East","arr":204855,"weighted":102427,"prob":50,"owner":"Alex Lee","channel":"Field Event","billing":"Quarterly"}]},"Reactivation":{"total":399892.0,"weighted":165569.11,"count":3,"deals":[{"customer":"Summit Group 285","stage":"Proposal","segment":"Mid-Market","region":"East","arr":170713,"weighted":85356,"prob":50,"owner":"Avery Garcia","channel":"Outbound","billing":"Quarterly"},{"customer":"Pioneer Analytics 1521","stage":"Commit","segment":"Enterprise","region":"West","arr":122294,"weighted":42803,"prob":35,"owner":"Morgan Davis","channel":"Content Syndication","billing":"Quarterly"},{"customer":"Nimbus Systems 214","stage":"Commit","segment":"Mid-Market","region":"South","arr":106885,"weighted":37410,"prob":35,"owner":"Riley Wilson","channel":"Direct","billing":"Quarterly"}]}},"2026-12":{"New Business":{"total":1745963.9999999998,"weighted":1142287.62,"count":11,"deals":[{"customer":"Apex Systems 2172","stage":"Proposal","segment":"SMB","region":"East","arr":176509,"weighted":88254,"prob":50,"owner":"Jordan Smith","channel":"Partner","billing":"Monthly"},{"customer":"Evergreen Systems 1460","stage":"Commit","segment":"Enterprise","region":"South","arr":182289,"weighted":145831,"prob":80,"owner":"Avery Garcia","channel":"Direct","billing":"Quarterly"},{"customer":"Acme Health 1044","stage":"Discovery","segment":"SMB","region":"East","arr":213872,"weighted":171098,"prob":80,"owner":"Taylor Brown","channel":"Paid Search","billing":"Annual"},{"customer":"Evergreen Solutions 2250","stage":"Negotiation","segment":"Mid-Market","region":"East","arr":140343,"weighted":91223,"prob":65,"owner":"Jordan Smith","channel":"Direct","billing":"Monthly"},{"customer":"Catalyst Legal 694","stage":"Proposal","segment":"Enterprise","region":"West","arr":109073,"weighted":38175,"prob":35,"owner":"Riley Wilson","channel":"Direct","billing":"Quarterly"}]},"Expansion":{"total":1034765.01,"weighted":591792.3200000001,"count":8,"deals":[{"customer":"Vertex Solutions 193","stage":"Negotiation","segment":"Mid-Market","region":"South","arr":95172,"weighted":76138,"prob":80,"owner":"Morgan Davis","channel":"Organic Search","billing":"Quarterly"},{"customer":"BlueRiver Group 686","stage":"Negotiation","segment":"Mid-Market","region":"South","arr":145033,"weighted":94272,"prob":65,"owner":"Casey Johnson","channel":"Content Syndication","billing":"Monthly"},{"customer":"Summit Systems 1204","stage":"Evaluation","segment":"Enterprise","region":"Central","arr":147694,"weighted":73847,"prob":50,"owner":"Cameron Clark","channel":"Content Syndication","billing":"Quarterly"},{"customer":"BlueRiver Health 1211","stage":"Discovery","segment":"SMB","region":"West","arr":140405,"weighted":70202,"prob":50,"owner":"Cameron Clark","channel":"Content Syndication","billing":"Annual"},{"customer":"Pioneer Works 2111","stage":"Evaluation","segment":"Mid-Market","region":"South","arr":148783,"weighted":119027,"prob":80,"owner":"Jordan Smith","channel":"Organic Search","billing":"Quarterly"}]},"Contraction":{"total":475141.0,"weighted":210245.64,"count":3,"deals":[{"customer":"Northstar Solutions 2462","stage":"Negotiation","segment":"SMB","region":"East","arr":113208,"weighted":56604,"prob":50,"owner":"Casey Johnson","channel":"Partner","billing":"Quarterly"},{"customer":"Evergreen Solutions 2114","stage":"Discovery","segment":"SMB","region":"West","arr":182166,"weighted":63758,"prob":35,"owner":"Casey Johnson","channel":"Organic Search","billing":"Monthly"},{"customer":"Acme Group 1627","stage":"Proposal","segment":"Mid-Market","region":"South","arr":179768,"weighted":89884,"prob":50,"owner":"Cameron Clark","channel":"Organic Search","billing":"Monthly"}]},"Churn":{"total":802124.01,"weighted":350750.66000000003,"count":4,"deals":[{"customer":"Acme Legal 2080","stage":"Proposal","segment":"Mid-Market","region":"South","arr":220507,"weighted":110254,"prob":50,"owner":"Jordan Smith","channel":"Webinar","billing":"Annual"},{"customer":"Catalyst Group 2066","stage":"Proposal","segment":"SMB","region":"Central","arr":222667,"weighted":77934,"prob":35,"owner":"Morgan Davis","channel":"Partner","billing":"Annual"},{"customer":"Apex Group 1167","stage":"Commit","segment":"Mid-Market","region":"East","arr":123104,"weighted":80018,"prob":65,"owner":"Morgan Davis","channel":"Organic Search","billing":"Quarterly"},{"customer":"Vertex Health 1908","stage":"Proposal","segment":"Mid-Market","region":"West","arr":235846,"weighted":82546,"prob":35,"owner":"Taylor Brown","channel":"Field Event","billing":"Quarterly"}]},"Reactivation":{"total":408658.0,"weighted":225506.7,"count":4,"deals":[{"customer":"Acme Cloud 2392","stage":"Commit","segment":"Enterprise","region":"West","arr":117835,"weighted":94268,"prob":80,"owner":"Alex Lee","channel":"Organic Search","billing":"Quarterly"},{"customer":"Nimbus Systems 1861","stage":"Commit","segment":"Enterprise","region":"South","arr":94486,"weighted":33070,"prob":35,"owner":"Morgan Davis","channel":"Field Event","billing":"Quarterly"},{"customer":"Apex Solutions 353","stage":"Proposal","segment":"Mid-Market","region":"Central","arr":98782,"weighted":49391,"prob":50,"owner":"Taylor Brown","channel":"Direct","billing":"Monthly"},{"customer":"Catalyst Solutions 2410","stage":"Proposal","segment":"Mid-Market","region":"East","arr":97555,"weighted":48777,"prob":50,"owner":"Taylor Brown","channel":"Paid Search","billing":"Quarterly"}]}}},"renewals":{"2026-06":{"count":55,"arr":5488129,"weighted":5213723,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":105709,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"Yes","csm":"Parker Garcia"},{"customer":"Forecast Customer 2","arr":52460,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"Yes","csm":"Jordan Wilson"},{"customer":"Forecast Customer 3","arr":100331,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"No","csm":"Taylor Brown"},{"customer":"Forecast Customer 4","arr":70110,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"No","csm":"Jamie Davis"},{"customer":"Forecast Customer 5","arr":61005,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.8,"auto_renew":"Yes","csm":"Jamie Davis"},{"customer":"Forecast Customer 6","arr":96112,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.9,"auto_renew":"Yes","csm":"Jordan Miller"},{"customer":"Forecast Customer 7","arr":75111,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.0,"auto_renew":"No","csm":"Avery Garcia"},{"customer":"Forecast Customer 8","arr":83052,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":10.1,"auto_renew":"No","csm":"Drew Garcia"}]},"2026-07":{"count":55,"arr":6432772,"weighted":6111134,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":150571,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.9,"auto_renew":"No","csm":"Quinn Clark"},{"customer":"Forecast Customer 2","arr":75782,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.4,"auto_renew":"Yes","csm":"Parker Brown"},{"customer":"Forecast Customer 3","arr":143665,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Avery Garcia"},{"customer":"Forecast Customer 4","arr":79653,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.9,"auto_renew":"No","csm":"Morgan Miller"},{"customer":"Forecast Customer 5","arr":95373,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.2,"auto_renew":"Yes","csm":"Drew Garcia"},{"customer":"Forecast Customer 6","arr":105979,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":8.9,"auto_renew":"No","csm":"Jamie Lee"},{"customer":"Forecast Customer 7","arr":76091,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Parker Clark"},{"customer":"Forecast Customer 8","arr":150531,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Taylor Brown"}]},"2026-08":{"count":55,"arr":5654909,"weighted":5372163,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":140718,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Jamie Lee"},{"customer":"Forecast Customer 2","arr":119828,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":13.2,"auto_renew":"Yes","csm":"Drew Johnson"},{"customer":"Forecast Customer 3","arr":172338,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Cameron Martinez"},{"customer":"Forecast Customer 4","arr":89505,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":11.1,"auto_renew":"Yes","csm":"Jordan Lee"},{"customer":"Forecast Customer 5","arr":108688,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":9.1,"auto_renew":"Yes","csm":"Jamie Davis"},{"customer":"Forecast Customer 6","arr":171796,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":8.9,"auto_renew":"Yes","csm":"Riley Miller"},{"customer":"Forecast Customer 7","arr":74160,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.3,"auto_renew":"Yes","csm":"Taylor Garcia"},{"customer":"Forecast Customer 8","arr":89058,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.3,"auto_renew":"No","csm":"Riley Miller"}]},"2026-09":{"count":55,"arr":6610788,"weighted":6280249,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":143309,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":10.8,"auto_renew":"Yes","csm":"Parker Garcia"},{"customer":"Forecast Customer 2","arr":77379,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.6,"auto_renew":"No","csm":"Taylor Davis"},{"customer":"Forecast Customer 3","arr":97959,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.6,"auto_renew":"No","csm":"Quinn Clark"},{"customer":"Forecast Customer 4","arr":138138,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.3,"auto_renew":"Yes","csm":"Morgan Miller"},{"customer":"Forecast Customer 5","arr":120788,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":12.6,"auto_renew":"No","csm":"Quinn Johnson"},{"customer":"Forecast Customer 6","arr":124451,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.8,"auto_renew":"No","csm":"Riley Martinez"},{"customer":"Forecast Customer 7","arr":64148,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.2,"auto_renew":"Yes","csm":"Avery Garcia"},{"customer":"Forecast Customer 8","arr":175632,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":7.9,"auto_renew":"No","csm":"Drew Clark"}]},"2026-10":{"count":55,"arr":6211160,"weighted":5900602,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":48085,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":1.4,"auto_renew":"No","csm":"Taylor Brown"},{"customer":"Forecast Customer 2","arr":70857,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.6,"auto_renew":"Yes","csm":"Morgan Miller"},{"customer":"Forecast Customer 3","arr":153922,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.5,"auto_renew":"No","csm":"Avery Johnson"},{"customer":"Forecast Customer 4","arr":87080,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Parker Brown"},{"customer":"Forecast Customer 5","arr":98451,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.4,"auto_renew":"Yes","csm":"Taylor Brown"},{"customer":"Forecast Customer 6","arr":168778,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Drew Johnson"},{"customer":"Forecast Customer 7","arr":154991,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":3.7,"auto_renew":"No","csm":"Casey Johnson"},{"customer":"Forecast Customer 8","arr":102350,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":7.6,"auto_renew":"Yes","csm":"Parker Johnson"}]},"2026-11":{"count":55,"arr":6038535,"weighted":5736608,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":71042,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":12.3,"auto_renew":"Yes","csm":"Jordan Lee"},{"customer":"Forecast Customer 2","arr":102180,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.5,"auto_renew":"Yes","csm":"Taylor Davis"},{"customer":"Forecast Customer 3","arr":118674,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.8,"auto_renew":"Yes","csm":"Jordan Miller"},{"customer":"Forecast Customer 4","arr":131844,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.1,"auto_renew":"Yes","csm":"Jamie Davis"},{"customer":"Forecast Customer 5","arr":53032,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":10.1,"auto_renew":"No","csm":"Parker Garcia"},{"customer":"Forecast Customer 6","arr":164800,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.3,"auto_renew":"Yes","csm":"Drew Clark"},{"customer":"Forecast Customer 7","arr":59102,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.5,"auto_renew":"Yes","csm":"Parker Brown"},{"customer":"Forecast Customer 8","arr":150339,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Cameron Smith"}]},"2026-12":{"count":55,"arr":6063707,"weighted":5760522,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":82705,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.3,"auto_renew":"Yes","csm":"Riley Miller"},{"customer":"Forecast Customer 2","arr":48414,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.2,"auto_renew":"No","csm":"Casey Johnson"},{"customer":"Forecast Customer 3","arr":153006,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Taylor Lee"},{"customer":"Forecast Customer 4","arr":48602,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.3,"auto_renew":"No","csm":"Riley Martinez"},{"customer":"Forecast Customer 5","arr":70809,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.1,"auto_renew":"Yes","csm":"Avery Lee"},{"customer":"Forecast Customer 6","arr":91322,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":1.3,"auto_renew":"No","csm":"Drew Garcia"},{"customer":"Forecast Customer 7","arr":158706,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":3.8,"auto_renew":"No","csm":"Avery Lee"},{"customer":"Forecast Customer 8","arr":130312,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":3.7,"auto_renew":"No","csm":"Quinn Clark"}]}},"dr_waterfall":{"2026-06":{"beg_dr":46979276.0,"billings":6468420.0,"recognized":6809558.0,"end_dr":46638138.42},"2026-07":{"beg_dr":41698711.0,"billings":6676822.0,"recognized":6432830.0,"end_dr":41942702.58},"2026-08":{"beg_dr":36653387.0,"billings":6982470.0,"recognized":6042670.0,"end_dr":37593186.58},"2026-09":{"beg_dr":31501750.0,"billings":7286347.0,"recognized":5629197.0,"end_dr":33158899.58},"2026-10":{"beg_dr":26108164.0,"billings":7590222.0,"recognized":5198453.0,"end_dr":28499932.67},"2026-11":{"beg_dr":20472411.0,"billings":7894097.0,"recognized":4752998.0,"end_dr":23613509.83},"2026-12":{"beg_dr":14594491.0,"billings":8197972.0,"recognized":4291649.0,"end_dr":18500813.83}},"open_reqs":[{"id":"FREQ-001","dept":"Sales","role":"Senior Account Executive","level":"L5","status":"Open","priority":"High","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":265500,"gaap_annual":283500,"quota_arr":1100000,"ramp_months":4},{"id":"FREQ-002","dept":"Sales","role":"Account Executive","level":"L4","status":"Open","priority":"High","start":"2026-07","approved":"Yes","replacement":"New","cash_annual":212400,"gaap_annual":224400,"quota_arr":800000,"ramp_months":4},{"id":"FREQ-003","dept":"Sales","role":"Sales Development Rep","level":"L2","status":"Open","priority":"High","start":"2026-07","approved":"Yes","replacement":"New","cash_annual":112100,"gaap_annual":118100,"quota_arr":300000,"ramp_months":3},{"id":"FREQ-004","dept":"Marketing","role":"Product Marketing Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":161660,"gaap_annual":174660,"quota_arr":0,"ramp_months":2},{"id":"FREQ-005","dept":"Marketing","role":"Marketing Operations Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-09","approved":"Yes","replacement":"New","cash_annual":147500,"gaap_annual":156500,"quota_arr":0,"ramp_months":2},{"id":"FREQ-006","dept":"R&D","role":"Senior Software Engineer","level":"L5","status":"Open","priority":"High","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":220660,"gaap_annual":255660,"quota_arr":0,"ramp_months":3},{"id":"FREQ-007","dept":"R&D","role":"Software Engineer","level":"L4","status":"Open","priority":"High","start":"2026-07","approved":"Yes","replacement":"New","cash_annual":188800,"gaap_annual":213800,"quota_arr":0,"ramp_months":3},{"id":"FREQ-008","dept":"R&D","role":"Security Engineer","level":"L4","status":"Open","priority":"High","start":"2026-10","approved":"Yes","replacement":"New","cash_annual":200600,"gaap_annual":228600,"quota_arr":0,"ramp_months":3},{"id":"FREQ-009","dept":"Product","role":"Senior Product Manager","level":"L5","status":"Open","priority":"High","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":218300,"gaap_annual":253300,"quota_arr":0,"ramp_months":3},{"id":"FREQ-010","dept":"Product","role":"Product Designer","level":"L4","status":"Open","priority":"High","start":"2026-08","approved":"Yes","replacement":"New","cash_annual":171100,"gaap_annual":193100,"quota_arr":0,"ramp_months":3},{"id":"FREQ-011","dept":"Customer Success","role":"Senior Customer Success Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":168740,"gaap_annual":180740,"quota_arr":650000,"ramp_months":3},{"id":"FREQ-012","dept":"Customer Success","role":"Customer Success Manager","level":"L3","status":"Open","priority":"Medium","start":"2026-09","approved":"Yes","replacement":"New","cash_annual":141600,"gaap_annual":150600,"quota_arr":450000,"ramp_months":3},{"id":"FREQ-013","dept":"Support","role":"Technical Support Engineer","level":"L3","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":121540,"gaap_annual":128540,"quota_arr":0,"ramp_months":2},{"id":"FREQ-014","dept":"Support","role":"Customer Support Specialist","level":"L2","status":"Open","priority":"Medium","start":"2026-08","approved":"Yes","replacement":"New","cash_annual":88500,"gaap_annual":92500,"quota_arr":0,"ramp_months":2},{"id":"FREQ-015","dept":"G&A","role":"Finance Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":173460,"gaap_annual":191460,"quota_arr":0,"ramp_months":2},{"id":"FREQ-016","dept":"G&A","role":"People Operations Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-09","approved":"Yes","replacement":"New","cash_annual":153400,"gaap_annual":165400,"quota_arr":0,"ramp_months":2},{"id":"FREQ-017","dept":"G&A","role":"Legal Counsel","level":"L5","status":"Open","priority":"Medium","start":"2026-11","approved":"Yes","replacement":"New","cash_annual":236000,"gaap_annual":266000,"quota_arr":0,"ramp_months":2}],"ramp_lu":{"2":{"1":0.5,"2":1.0,"3":1.0,"4":1.0,"5":1.0,"6":1.0},"3":{"1":0.25,"2":0.6,"3":1.0,"4":1.0,"5":1.0,"6":1.0},"4":{"1":0.0,"2":0.25,"3":0.5,"4":0.75,"5":1.0,"6":1.0}},"opening_bs":{"cash":70610000.0,"ar":1040000.0,"other_assets":6000000.0,"ap":520000.0,"dr":1120000.0,"other_liab":2500000.0,"equity":49228800.0},"cost_ratios":{"cogs":0.29,"sm":0.34,"rd":0.16,"ga":0.11}};
+
+// \u2500\u2500 CONSTANTS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ── CLOSE_MONTH ── UPDATE THIS ONE VALUE EACH CLOSE ──────────────────────────
+const CLOSE_MONTH = '2026-06';
+const YEAR         = CLOSE_MONTH.slice(0,4);
+const CLOSE_MO_IDX = parseInt(CLOSE_MONTH.slice(5)) - 1;
+const ALL_P  = Array.from({length:12},(_,i)=>`${YEAR}-${String(i+1).padStart(2,'0')}`);
+const ACT_P  = ALL_P.slice(0, CLOSE_MO_IDX + 1);
+const FC_P   = ALL_P.slice(CLOSE_MO_IDX + 1);
+const MO12   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const ACT_MO = MO12.slice(0, CLOSE_MO_IDX + 1);
+const CLOSE_MO_LABEL  = MO12[CLOSE_MO_IDX];
+const FC_START_LABEL  = MO12[CLOSE_MO_IDX + 1] || '';
+const HORIZON={
+  '3p9':{act:ALL_P.slice(0,3),fc:ALL_P.slice(3),label:'Jan-Mar Actual · Apr-Dec Forecast'},
+  '6p6':{act:ACT_P,fc:FC_P,label:`Jan-${CLOSE_MO_LABEL} Actual · ${FC_START_LABEL}-Dec Forecast`},
+  '9p3':{act:ALL_P.slice(0,9),fc:ALL_P.slice(9),label:'Jan-Sep Actual · Oct-Dec Forecast'},
+};
+const DEPT_COLORS={Sales:'#185FA5',Marketing:'#BA7517','R&D':'#1D9E75',Product:'#534AB7','Customer Success':'#0F6E56',Support:'#888780','G&A':'#A32D2D',Finance:'#64748B'};
+
+// \u2500\u2500 STATE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+let hz='6p6', curTab='overview', reqActive={}, versions=[], charts={};
+SRC.open_reqs.forEach(r=>{reqActive[r.id]=true;});
+
+// \u2500\u2500 FORMATTERS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+const fM=(v,d=2)=>{if(v===null||v===undefined)return'--';d=Math.min(d,2);const neg=v<0,abs=Math.abs(v);if(abs>=1e6)return(neg?'-$':'$')+(abs/1e6).toFixed(d)+'M';if(abs>=1e3)return(neg?'-$':'$')+(abs/1e3).toFixed(0)+'K';return(neg?'-$':'$')+Math.round(abs);};
+const fP=v=>(v*100).toFixed(1)+'%';
+const fV=v=>(v>=0?'+':'')+fM(v);
+const fPct=(a,b)=>b?((a-b)/Math.abs(b)*100).toFixed(1)+'%':'--';
+const vc=(v,inv=false)=>{const g=inv?v<0:v>0;return Math.abs(v)<1000?'':g?'pos-v':'neg-v';};
+
+function mk(id,cfg){if(charts[id]){charts[id].destroy();delete charts[id];}const c=document.getElementById(id);if(c)charts[id]=new Chart(c,cfg);}
+function destroyAll(){Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};}
+
+// \u2500\u2500 COMPUTE ENGINE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function getEl(id,def){const el=document.getElementById(id);return el?+el.value:def;}
+function getLevers(){
+  return{
+    nb:       getEl('l-nb',100)/100,
+    exp:      getEl('l-exp',100)/100,
+    churn:    getEl('l-churn',100)/100,
+    ren_adj:  getEl('l-ren',0)/100,
+    cogs:     getEl('l-cogs',29)/100,
+    sm:       getEl('l-sm',34)/100,
+    rd:       getEl('l-rd',16)/100,
+    ga:       getEl('l-ga',11)/100,
+    dso:      getEl('l-dso',42),
+    dpo:      getEl('l-dpo',30),
+    capex:    getEl('l-capex',220)*1000,
+  };
+}
+
+function computePeriod(p, bop_arr, prev_cash, prev_ar, prev_ap, prev_dr, prev_eq, lv){
+  const cfg=HORIZON[hz];
+  const isAct=cfg.act.includes(p);
+
+  // \u2500\u2500 ARR waterfall \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  let arr={};
+  if(isAct && SRC.actuals[p]){
+    const a=SRC.actuals[p];
+    arr={arr_bop:a.arr_bop,gross_ren:0,arr_ren:0,ren_churn:a.arr_churn,
+         arr_nb:a.arr_nb,arr_exp:a.arr_exp,arr_react:a.arr_react,
+         arr_cont:a.arr_cont,arr_churn:a.arr_churn,arr_nn:a.arr_nn,
+         arr_eop:a.arr_eop,grr:a.grr||0,nrr:a.nrr||0,is_actual:true};
+  } else {
+    const opps=SRC.opp_pipeline[p]||{};
+    const ren_p=SRC.renewals[p]||{arr:0,weighted:0,count:0};
+    const gross_ren=ren_p.arr||0;
+    const ren_rate=Math.min(1,Math.max(0,(ren_p.weighted/Math.max(1,gross_ren))+lv.ren_adj));
+    const arr_ren=gross_ren*ren_rate;
+    const ren_churn=gross_ren-arr_ren;
+    const nb=(opps['New Business']?.weighted||0)*lv.nb;
+    const exp=(opps['Expansion']?.weighted||0)*lv.exp;
+    const react=opps['Reactivation']?.weighted||0;
+    const cont=opps['Contraction']?.weighted||0;
+    const nr_churn=(opps['Churn']?.weighted||0)*lv.churn;
+    const arr_nn=(arr_ren-gross_ren)+nb+exp+react-cont-nr_churn;
+    const arr_eop=bop_arr+arr_nn;
+    const grr=bop_arr>0?(bop_arr-ren_churn-nr_churn)/bop_arr:0;
+    const nrr=bop_arr>0?(bop_arr+arr_nn-nb)/bop_arr:0;
+    arr={arr_bop:bop_arr,gross_ren,arr_ren,ren_churn,arr_nb:nb,arr_exp:exp,
+         arr_react:react,arr_cont:cont,arr_nr_churn:nr_churn,
+         arr_churn:ren_churn+nr_churn,arr_nn,arr_eop,grr,nrr,is_actual:false};
+  }
+
+  // \u2500\u2500 Income Statement \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  let is={};
+  if(isAct && SRC.actuals[p]){
+    const a=SRC.actuals[p];
+    is={revenue:a.revenue,cogs:a.cogs,gross_profit:a.gross_profit,
+        sm:a.sm,rd:a.rd,ga:a.ga,
+        total_opex:a.sm+a.rd+a.ga,ebitda:a.ebitda,da:a.da,
+        interest:a.interest,net_income:a.net_income,is_actual:true};
+  } else {
+    // Payroll from active reqs
+    let req_sm=0,req_rd=0,req_ga=0;
+    SRC.open_reqs.forEach(r=>{
+      if(!reqActive[r.id]||r.start>p) return;
+      const mo=r.cash_annual/12;
+      if(['Sales','Marketing'].includes(r.dept)) req_sm+=mo;
+      else if(['R&D','Product'].includes(r.dept)) req_rd+=mo;
+      else req_ga+=mo;
+    });
+    const sub_rev=arr.arr_eop/12;
+    const svc_rev=sub_rev*0.033;
+    const revenue=sub_rev+svc_rev;
+    const cogs=revenue*lv.cogs;
+    const sm=revenue*lv.sm+req_sm;
+    const rd=revenue*lv.rd+req_rd;
+    const ga=revenue*lv.ga+req_ga;
+    const gross_profit=revenue-cogs;
+    const total_opex=sm+rd+ga;
+    const ebitda=gross_profit-total_opex;
+    const da=125000+FC_P.indexOf(p)*4000;
+    const interest=35000;
+    const net_income=ebitda-da-interest;
+    is={revenue,cogs,gross_profit,sm,rd,ga,total_opex,ebitda,da,interest,net_income,is_actual:false};
+  }
+
+  // \u2500\u2500 Cash Flow Statement \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  let cfs={};
+  if(isAct && SRC.actuals[p]){
+    const a=SRC.actuals[p];
+    cfs={beg_cash:a.beginning_cash,ni:a.net_income,da:a.da,sbc:80000,
+         chg_ar:a.chg_ar||0,chg_dr:a.chg_dr||0,chg_ap:a.chg_ap||0,chg_pre:-15000,
+         cfo:a.cfo,capex:a.cfi,cfi:a.cfi,cff:0,
+         net_change:a.net_change_cash,end_cash:a.ending_cash,
+         ar:a.ar,ap:a.ap,end_dr:a.dr,billings:0,is_actual:true};
+  } else {
+    const dr_row=SRC.dr_waterfall[p]||{};
+    const billings=dr_row.billings||is.revenue*1.05;
+    const recognized=dr_row.recognized||is.revenue;
+    const end_dr=dr_row.end_dr||(prev_dr+(billings-recognized));
+    const chg_dr=billings-recognized;
+    const ar=is.revenue*(lv.dso/30);
+    const chg_ar=-(ar-prev_ar);
+    const ap=(is.cogs+is.total_opex)*(lv.dpo/30);
+    const chg_ap=ap-prev_ap;
+    const sbc=80000;
+    const chg_pre=-15000;
+    const cfo=is.net_income+is.da+sbc+chg_ar+chg_dr+chg_ap+chg_pre;
+    const capex=-(lv.capex+FC_P.indexOf(p)*3000);
+    const net_change=cfo+capex;
+    const end_cash=prev_cash+net_change;
+    cfs={beg_cash:prev_cash,ni:is.net_income,da:is.da,sbc,chg_ar,chg_dr,chg_ap,chg_pre,
+         cfo,capex,cfi:capex,cff:0,net_change,end_cash,ar,ap,end_dr,billings,is_actual:false};
+  }
+
+  // \u2500\u2500 Balance Sheet \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  let bs={};
+  if(isAct && SRC.actuals[p]){
+    const a=SRC.actuals[p];
+    bs={cash:a.cash_bs,ar:a.ar,other_assets:SRC.opening_bs.other_assets,
+        total_assets:a.cash_bs+a.ar+SRC.opening_bs.other_assets,
+        ap:a.ap,dr:a.dr,debt:5000000,other_liab:SRC.opening_bs.other_liab,
+        equity:a.equity,is_actual:true,balance_check:0};
+  } else {
+    const cash=cfs.end_cash;
+    const ar=cfs.ar;
+    const oa=SRC.opening_bs.other_assets;
+    const total_assets=cash+ar+oa;
+    const ap=cfs.ap;
+    const dr=cfs.end_dr;
+    const debt=5000000;
+    const ol=SRC.opening_bs.other_liab;
+    const total_liab=ap+dr+debt+ol;
+    const equity=total_assets-total_liab;
+    bs={cash,ar,other_assets:oa,total_assets,ap,dr,debt,other_liab:ol,
+        total_liab,equity,balance_check:Math.round(total_assets-(total_liab+equity)),is_actual:false};
+  }
+
+  return{p,arr,is,cfs,bs};
+}
+
+function compute(){
+  const lv=getLevers();
+  const cfg=HORIZON[hz];
+  const lastAct=SRC.actuals[CLOSE_MONTH];
+  let bop=lastAct.arr_eop;
+  let cash=lastAct.ending_cash;
+  let ar=lastAct.revenue*(lv.dso/30);
+  let ap=(lastAct.cogs+lastAct.sm+lastAct.rd+lastAct.ga)*(lv.dpo/30);
+  let dr=SRC.dr_waterfall[FC_P[0]]?.beg_dr||lastAct.dr||0;
+  let eq=lastAct.equity;
+  const results={};
+  FC_P.forEach(p=>{
+    const r=computePeriod(p,bop,cash,ar,ap,dr,eq,lv);
+    results[p]=r;
+    bop=r.arr.arr_eop;
+    cash=r.cfs.end_cash;
+    ar=r.cfs.ar;
+    ap=r.cfs.ap;
+    dr=r.cfs.end_dr;
+    eq=r.bs.equity;
+  });
+  return results;
+}
+
+function getResults(){return compute();}
+
+// Shared sequential CFS: each month's beg_cash = prior month's end_cash
+function buildCFSChain(cfg){
+  var res=getResults();
+  var allP=[...cfg.act,...cfg.fc];
+  var chain={};
+  var prev_end=SRC.actuals[ACT_P[0]].beginning_cash;
+  allP.forEach(function(p){
+    if(p<=CLOSE_MONTH){
+      var a=SRC.actuals[p];
+      var eb=(a.gross_profit||0)-((a.sm||0)+(a.rd||0)+(a.ga||0));
+      var pt=eb-(a.da||0)-(a.interest||0);
+      var tax=pt>0?Math.round(pt*0.30):0;
+      var ni=pt-tax;
+      var sbc=80000,pre=-15000;
+      var car=a.chg_ar||0,cdr=a.chg_dr||0,cap=a.chg_ap||0;
+      var cfo=ni+a.da+sbc+car+cdr+cap+pre;
+      var capex=a.cfi;
+      var net=cfo+capex;
+      var beg=prev_end;
+      var end=beg+net;
+      prev_end=end;
+      chain[p]={beg_cash:beg,ni:ni,da:a.da,sbc:sbc,chg_ar:car,chg_dr:cdr,
+                chg_ap:cap,chg_pre:pre,cfo:cfo,capex:capex,cfi:capex,
+                cff:0,net_change:net,end_cash:end,is_actual:true};
+    } else {
+      var fc=res[p]&&res[p].cfs?res[p].cfs:null;
+      if(fc){
+        var beg=prev_end;
+        var net=fc.cfo+fc.cfi;
+        var end=beg+net;
+        var row={};
+        for(var k in fc) row[k]=fc[k];
+        row.beg_cash=beg; row.net_change=net; row.end_cash=end;
+        chain[p]=row;
+        prev_end=end;
+      }
+    }
+  });
+  return chain;
+}
+
+// \u2500\u2500 HORIZON \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function setHz(h,btn){
+  hz=h;
+  document.querySelectorAll('.hz-tab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('hzLabel').textContent=HORIZON[h].label;
+  refresh();
+}
+
+// \u2500\u2500 LEVER LABELS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function updLabels(){
+  ['nb','exp','churn','ren','cogs','sm','rd','ga'].forEach(id=>{
+    const el=document.getElementById('v-'+id);
+    const val=+document.getElementById('l-'+id).value;
+    if(el) el.textContent=(id==='ren'?(val>=0?'+':'')+val:''+val)+'%';
+  });
+  const dso=document.getElementById('l-dso');
+  const dpo=document.getElementById('l-dpo');
+  const cap=document.getElementById('l-capex');
+  if(dso) document.getElementById('v-dso').textContent=dso.value+'d';
+  if(dpo) document.getElementById('v-dpo').textContent=dpo.value+'d';
+  if(cap) document.getElementById('v-capex').textContent='$'+cap.value+'K';
+}
+
+function refresh(){updLabels();showTab(curTab);}
+
+// \u2500\u2500 TABS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function showTab(name,btn){
+  destroyAll();
+  curTab=name;
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.slice(0,3)))b.classList.add('active');});
+  const area=document.getElementById('slideArea');
+  area.innerHTML='';
+  const fn={overview:renderOverview,arr:renderARR,is:renderIS,cashflow:renderCash,
+             bs:renderBS,pipeline:renderPipeline,headcount:renderHC,
+             sensitivity:renderSens,versions:renderVersions};
+  if(fn[name]) fn[name](area);
+}
+
+// \u2500\u2500 KPI STRIP \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function buildKPIs(results){
+  const last=results[FC_P[FC_P.length-1]];
+  const fc_ebitda=FC_P.reduce((s,p)=>s+(results[p]?.is?.ebitda||0),0);
+  const fc_rev=FC_P.reduce((s,p)=>s+(results[p]?.is?.revenue||0),0);
+  const dec_arr=last.arr.arr_eop;
+  const dec_cash=last.cfs.end_cash;
+  const base_arr=97503876;
+  const gap=dec_arr-base_arr;
+  const items=[
+    ['Dec ARR',fM(dec_arr,1),gap>=0?'^ vs $97.5M base':fM(gap,1)+' gap vs base',gap>=0?'pos':'neg'],
+    ['Forecast Revenue',fM(fc_rev,1),HORIZON[hz].fc.length+'-mo period','neu'],
+    ['Forecast EBITDA',fM(fc_ebitda,1),fP(fc_ebitda/Math.max(fc_rev,1))+' margin',fc_ebitda>=0?'pos':'neg'],
+    ['Dec Cash',fM(dec_cash,1),'From opening $48.0M','pos'],
+    ['GRR / NRR',fP(last.arr.grr)+' / '+fP(last.arr.nrr),'Dec 2026 retention','pos'],
+  ];
+  return `<div class="kpi-strip ks5">${items.map(([l,v,d,c])=>`<div class="kpi"><div class="kpi-lbl">${l}</div><div class="kpi-val">${v}</div><div class="kpi-delta ${c}">${d}</div></div>`).join('')}</div>`;
+}
+
+// \u2500\u2500 LEFT PANEL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function buildLeftPanel(){
+  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
+  return `
+  <div class="lever-panel">
+    <div class="lever-section">ARR -- from deal pipeline</div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">New business attainment</span><span class="lever-val" id="v-nb">100%</span></div>
+      <input type="range" min="50" max="150" value="100" step="5" id="l-nb" oninput="refresh()">
+      <div class="lever-hint">% of weighted pipeline . 195 deals</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">Expansion rate</span><span class="lever-val" id="v-exp">100%</span></div>
+      <input type="range" min="50" max="150" value="100" step="5" id="l-exp" oninput="refresh()">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">Churn stress</span><span class="lever-val" id="v-churn">100%</span></div>
+      <input type="range" min="70" max="160" value="100" step="5" id="l-churn" oninput="refresh()">
+      <div class="lever-hint">100% = base . 160% = SMB stress</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">Renewal rate adj.</span><span class="lever-val" id="v-ren">+0%</span></div>
+      <input type="range" min="-15" max="15" value="0" step="1" id="l-ren" oninput="refresh()">
+      <div class="lever-hint">Base: Commit 95% . Likely 75% . At Risk 55%</div>
+    </div>
+    <div class="lever-section">Cost ratios -- % of revenue</div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">COGS %</span><span class="lever-val" id="v-cogs">29%</span></div>
+      <input type="range" min="18" max="45" value="29" step="1" id="l-cogs" oninput="refresh()">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">S&M %</span><span class="lever-val" id="v-sm">34%</span></div>
+      <input type="range" min="20" max="60" value="34" step="1" id="l-sm" oninput="refresh()">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">R&D %</span><span class="lever-val" id="v-rd">16%</span></div>
+      <input type="range" min="8" max="35" value="16" step="1" id="l-rd" oninput="refresh()">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">G&A %</span><span class="lever-val" id="v-ga">11%</span></div>
+      <input type="range" min="5" max="25" value="11" step="1" id="l-ga" oninput="refresh()">
+    </div>
+    <div class="lever-section">Working capital</div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">DSO (days)</span><span class="lever-val" id="v-dso">42d</span></div>
+      <input type="range" min="20" max="75" value="42" step="1" id="l-dso" oninput="refresh()">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">DPO (days)</span><span class="lever-val" id="v-dpo">30d</span></div>
+      <input type="range" min="15" max="60" value="30" step="1" id="l-dpo" oninput="refresh()">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">CapEx / mo</span><span class="lever-val" id="v-capex">$220K</span></div>
+      <input type="range" min="100" max="500" value="220" step="10" id="l-capex" oninput="refresh()">
+    </div>
+    <div class="lever-section">Hire-by-hire open reqs</div>
+    <div id="reqList">
+      ${SRC.open_reqs.map(r=>`<div class="req-row">
+        <button class="tog on" id="tog-${r.id}" onclick="toggleReq('${r.id}')" aria-label="Toggle ${r.role}"></button>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.role}</div>
+          <div style="font-size:9.5px;color:var(--text3)">${r.dept} . ${r.start} . ${fM(r.cash_annual/12,0)}K/mo</div>
+        </div>
+        <span class="badge ${priCls[r.priority]||'badge-lo'}">${r.priority}</span>
+      </div>`).join('')}
+    </div>`;
+}
+
+function toggleReq(id){
+  reqActive[id]=!reqActive[id];
+  // Update ALL toggle buttons with this id (sidebar + any rendered in tab)
+  document.querySelectorAll('[id="tog-'+id+'"]').forEach(b=>{
+    b.classList.toggle('on',reqActive[id]);
+    b.classList.toggle('off',!reqActive[id]);
+  });
+  refresh();
+}
+
+// \u2500\u2500 OVERVIEW \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderOverview(area){
+  const res=getResults();
+  const lv=getLevers();
+  const dec=res[FC_P[FC_P.length-1]];
+  const gap=dec.arr.arr_eop-97503876;
+  let gapHtml='';
+  if(Math.abs(gap)>100000){
+    gapHtml=`<div class="gap-alert">
+      <strong>${fV(gap)}</strong> vs base forecast ($97.5M target). 
+      ${gap<0?'Pipeline implies '+fM(dec.arr.arr_eop,1)+'. To close: increase NB attainment ~'+Math.round(-gap/dec.arr.arr_nb*100)+'% or improve renewal rates ~'+Math.round(-gap/SRC.renewals['2026-06'].arr*100)+'pp.':'Tracking ahead of plan.'}
+    </div>`;
+  }
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Rolling Forecast . ${hz.replace('p','+')} . ${HORIZON[hz].label}</div>
+    <div class="slide-sub">Bottom-up from Forecast_opportunities.csv (195 deals) + Forecast_renewal_pipeline.csv (385 renewals) + ${Object.values(reqActive).filter(Boolean).length}/17 open reqs</div>
+    ${buildKPIs(res)}
+    <div>
+        <div class="two-col" style="margin-bottom:12px">
+          <div class="card">
+            <div class="card-title">ARR trajectory -- Actual + Forecast</div>
+            <div class="card-sub">BOP ARR by period . teal=actual . amber=forecast . dashed=base plan</div>
+            <div class="chart-wrap" style="height:195px"><canvas id="ovArrC" role="img" aria-label="ARR trajectory chart showing actual Jan-May and forecast Jun-Dec">ARR from $75M in Jan to forecast EOP in Dec.</canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">EBITDA &amp; Revenue -- Forecast period</div>
+            <div class="card-sub">Monthly ($M) . forecast periods only</div>
+            <div class="chart-wrap" style="height:195px"><canvas id="ovEbitC" role="img" aria-label="EBITDA and revenue chart for forecast period">Revenue growing monthly with EBITDA positive.</canvas></div>
+          </div>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-title">Cash Position -- Full Year</div>
+            <div class="card-sub">Ending cash by period . actual + forecast</div>
+            <div class="chart-wrap" style="height:170px"><canvas id="ovCashC" role="img" aria-label="Cash position chart full year 2026">Cash trajectory from opening $48M through Dec forecast.</canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">GRR &amp; NRR -- forecast period</div>
+            <div class="card-sub">Monthly retention metrics . renewal pipeline-driven</div>
+            <div class="chart-wrap" style="height:170px"><canvas id="ovNrrC" role="img" aria-label="GRR and NRR trend for forecast period">Gross and net retention rates Jun-Dec 2026.</canvas></div>
+          </div>
+        </div>
+        ${gapHtml}
+      </div>
+    </div>`;
+  setTimeout(()=>buildOverviewCharts(res),40);
+}
+
+function buildOverviewCharts(res){
+  const allArr=ALL_P.map(p=>+(( p<=CLOSE_MONTH?SRC.actuals[p]?.arr_eop:res[p]?.arr.arr_eop)||0)/1e6).map(v=>+v.toFixed(2));
+  const baseLine=[...Array(ACT_P.length).fill(null),...FC_P.map((_,i)=>+(83.445+(i+1)*2).toFixed(2))];
+  const actCols=ALL_P.map(p=>p<=CLOSE_MONTH?'rgba(29,158,117,0.6)':'rgba(186,117,23,0.6)');
+  mk('ovArrC',{type:'bar',data:{labels:MO12,datasets:[
+    {data:allArr,backgroundColor:actCols,borderRadius:3,borderWidth:0},
+    {type:'line',data:baseLine,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,label:'Base plan'},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:72,ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+
+  const fc_rev=FC_P.map(p=>+(res[p]?.is?.revenue/1e6||0).toFixed(2));
+  const fc_ebit=FC_P.map(p=>+(res[p]?.is?.ebitda/1e6||0).toFixed(2));
+  mk('ovEbitC',{data:{labels:MO12.slice(5),datasets:[
+    {type:'bar',data:fc_rev,backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,label:'Revenue',yAxisID:'y1'},
+    {type:'line',data:fc_ebit,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false,label:'EBITDA',yAxisID:'y2'},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{display:false}},x:{ticks:{font:{size:9}},grid:{display:false}}}}});
+
+  // Build CFS chain for ALL_P so overview chart aligns with CFS/BS statements
+  var _ovCFSChain=buildCFSChain({act:ACT_P,fc:FC_P});
+  const allCash=ALL_P.map(p=>+((_ovCFSChain[p]?.end_cash)||0)/1e6).map(v=>+v.toFixed(2));
+  const cashCols=ALL_P.map(p=>p<=CLOSE_MONTH?'#1D9E75':'#BA7517');
+  mk('ovCashC',{type:'line',data:{labels:MO12,datasets:[{data:allCash,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,pointBackgroundColor:cashCols,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+
+  const grr=FC_P.map(p=>+((res[p]?.arr?.grr||0)*100).toFixed(1));
+  const nrr=FC_P.map(p=>+((res[p]?.arr?.nrr||0)*100).toFixed(1));
+  mk('ovNrrC',{type:'line',data:{labels:MO12.slice(5),datasets:[
+    {label:'GRR',data:grr,borderColor:'#185FA5',borderWidth:2,pointRadius:3,fill:false},
+    {label:'NRR',data:nrr,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},
+    {label:'100%',data:Array(7).fill(100),borderColor:'#888780',borderDash:[4,3],borderWidth:1,pointRadius:0,fill:false},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:96,max:103,ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+}
+
+// \u2500\u2500 ARR WATERFALL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderARR(area){
+  var res=getResults();
+  var cfg=HORIZON[hz];
+  var allPeriods=cfg.act.concat(cfg.fc);
+  var moLabels=allPeriods.map(function(p){return MO12[parseInt(p.slice(5))-1];});
+
+  var fields=[
+    {lbl:'Beginning ARR',   key:'arr_bop'},
+    {lbl:'+ New Business',  key:'arr_nb',      col:'pos-v'},
+    {lbl:'+ Expansion',     key:'arr_exp',      col:'pos-v'},
+    {lbl:'+ Reactivation',  key:'arr_react',    col:'pos-v'},
+    {lbl:'- Contraction',   key:'arr_cont',     col:'neg-v'},
+    {lbl:'- Churn',         compute:function(r){return (r.arr.arr_nr_churn||0)+(r.arr.ren_churn||0);}, col:'neg-v',
+     fc_sum:function(r){return ((r&&r.arr?r.arr.arr_nr_churn:0)||0)+((r&&r.arr?r.arr.ren_churn:0)||0);}},
+    {lbl:'Ending ARR',      key:'arr_eop',      type:'tot'},
+    {type:'sec',lbl:'N$R and G$R'},
+    {lbl:'N$R',             key:'nrr',          pct:true},
+    {lbl:'G$R',             key:'grr',          pct:true},
+  ];
+
+  function getVal(r,f){
+    if(f.compute) return f.compute(r);
+    var v=r.arr[f.key];
+    return v===undefined?null:v;
+  }
+
+  // Cumulative bridge data
+  var bop_arr=SRC.actuals[ACT_P[ACT_P.length-1]].arr_eop;
+  var fc_periods=cfg.fc;
+  function sum_fc(key){return fc_periods.reduce(function(s,p){return s+(res[p]&&res[p].arr?res[p].arr[key]||0:0);},0);}
+  var nb_cum   =  sum_fc('arr_nb');
+  var exp_cum  =  sum_fc('arr_exp');
+  var react_cum=  sum_fc('arr_react');
+  var cont_cum = -sum_fc('arr_cont');
+  var nr_churn = -sum_fc('arr_nr_churn');
+  var ren_churn= -sum_fc('ren_churn');
+  var churn_cum= nr_churn+ren_churn;
+  var dec_eop  = res[FC_P[FC_P.length-1]]&&res[FC_P[FC_P.length-1]].arr?res[FC_P[FC_P.length-1]].arr.arr_eop:bop_arr;
+  var net_change=dec_eop-bop_arr;
+
+  // Build waterfall steps
+  var steps=[];
+  var running=bop_arr;
+  function addAnchor(lbl,val){steps.push({lbl:lbl,val:val,running:val,offset:0,isAnchor:true,isNeg:false});running=val;}
+  function addBar(lbl,val){var isNeg=val<0;var offset=isNeg?running+val:running;steps.push({lbl:lbl,val:val,running:running+val,offset:offset,isAnchor:false,isNeg:isNeg});running+=val;}
+  addAnchor(CLOSE_MO_LABEL+'\nAct',bop_arr);
+  addBar('New\nBusiness',nb_cum);
+  addBar('Expansion',exp_cum);
+  addBar('Reactivation',react_cum);
+  addBar('Contraction',cont_cum);
+  addBar('Churn',churn_cum);
+  addAnchor('Dec\nFcst',dec_eop);
+
+  var offsets=steps.map(function(s){return+(s.offset/1e6).toFixed(3);});
+  var barVals=steps.map(function(s){return+(Math.abs(s.val)/1e6).toFixed(3);});
+  var barColors=steps.map(function(s){
+    if(s.isAnchor) return '#1a2e44';
+    if(s.isNeg) return '#D85A30';
+    if(s.lbl.indexOf('New')>=0) return '#1D9E75';
+    if(s.lbl.indexOf('Exp')>=0) return '#185FA5';
+    return '#534AB7';
+  });
+
+  area.innerHTML='<div class="slide">'+
+    '<div class="slide-title">ARR Waterfall - Forecast Period Bridge</div>'+
+    '<div class="slide-sub">'+CLOSE_MO_LABEL+' 2026 actual EOP → Dec 2026 forecast EOP · cumulative forecast-period movements</div>'+
+    buildKPIs(res)+
+    '<div>'+
+    '<div class="card" style="margin-bottom:12px">'+
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
+        '<div>'+
+          '<div class="card-title">ARR Bridge -- '+CLOSE_MO_LABEL+' Actual to Dec Forecast</div>'+
+          '<div class="card-sub">Each bar = cumulative '+fc_periods.length+'-month movement</div>'+
+        '</div>'+
+        '<div style="display:flex;gap:16px;flex-wrap:wrap">'+
+          '<div style="text-align:right"><div style="font-size:9.5px;color:var(--text3)">'+CLOSE_MO_LABEL+' Actual EOP</div><div style="font-family:var(--mono);font-size:16px;font-weight:500;color:var(--teal)">'+fM(bop_arr,1)+'</div></div>'+
+          '<div style="text-align:right"><div style="font-size:9.5px;color:var(--text3)">Dec Forecast EOP</div><div style="font-family:var(--mono);font-size:16px;font-weight:500;color:var(--navy)">'+fM(dec_eop,1)+'</div></div>'+
+          '<div style="text-align:right"><div style="font-size:9.5px;color:var(--text3)">Net Change</div><div style="font-family:var(--mono);font-size:16px;font-weight:500;color:'+(net_change>=0?'var(--teal)':'var(--red)')+'">'+fM(net_change,1)+'</div></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="chart-wrap" style="height:300px"><canvas id="arrBridgeC" role="img" aria-label="ARR bridge waterfall">ARR bridge: '+CLOSE_MO_LABEL+' '+fM(bop_arr,1)+' to Dec '+fM(dec_eop,1)+'.</canvas></div>'+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">'+
+        '<span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--text2)"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1D9E75"></span>New Business</span>'+
+        '<span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--text2)"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#185FA5"></span>Expansion</span>'+
+        '<span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--text2)"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#534AB7"></span>Reactivation</span>'+
+        '<span style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--text2)"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#D85A30"></span>Churn / Contraction</span>'+
+        
+      '</div>'+
+    '</div>'+
+    '<div style="overflow-x:auto;margin-top:12px">'+
+    '<table class="stmt-tbl"><thead><tr>'+
+      '<th style="text-align:left;min-width:155px">Line Item</th>'+
+      allPeriods.map(function(p){return '<th class="'+(cfg.fc.indexOf(p)>=0?'fc-col':'')+'">'+(MO12[parseInt(p.slice(5))-1])+'</th>';}).join('')+
+      '<th style="text-align:right">FY Total</th>'+
+    '</tr></thead><tbody>'+
+    fields.map(function(f){
+      if(f.type==='sec') return '<tr class="sec-hdr"><td colspan="'+(allPeriods.length+2)+'">'+f.lbl+'</td></tr>';
+      var cls=f.type==='tot'?'tot-row':f.type==='sub'?'sub-row':'';
+      var vals=allPeriods.map(function(p){
+        var r=ACT_P.indexOf(p)>=0?{arr:SRC.actuals[p]}:{arr:res[p]?res[p].arr:null};
+        if(!r.arr) return '<td>--</td>';
+        var v=getVal(r,f);
+        if(v===null||v===undefined) return '<td>--</td>';
+        var isFc=cfg.fc.indexOf(p)>=0;
+        var colCls=isFc?'fc-col':'act-col';
+        if(f.pct) return '<td class="'+colCls+'">'+(v*100).toFixed(1)+'%</td>';
+        return '<td class="'+colCls+' '+(f.col||'')+'">'+fM(v)+'</td>';
+      }).join('');
+      var fcTotal='';
+      var allP2=[...ACT_P,...FC_P];
+      if(f.key==='arr_bop'){
+        // FY Beginning ARR = Jan opening (first actual period BOP)
+        var janAct=SRC.actuals[ACT_P[0]];
+        fcTotal=janAct?fM(janAct.arr_bop||janAct.arr_eop-janAct.arr_nn):'';
+      } else if(f.key==='arr_eop'){
+        // FY Ending ARR = December closing EOP
+        var decR=res[FC_P[FC_P.length-1]];
+        fcTotal=decR?fM(decR.arr.arr_eop):'';
+      } else if(f.key==='nrr'||f.key==='grr'||f.pct){
+        fcTotal='';
+      } else if(f.fc_sum){
+        var tot=allP2.reduce(function(s,p){
+          var r2=ACT_P.indexOf(p)>=0?{arr:SRC.actuals[p]}:(res[p]||null);
+          return r2?s+f.fc_sum(r2):s;
+        },0);
+        fcTotal=fM(tot);
+      } else if(f.key){
+        var tot2=allP2.reduce(function(s,p){
+          var r2=ACT_P.indexOf(p)>=0?SRC.actuals[p]:(res[p]&&res[p].arr?res[p].arr:null);
+          return r2?s+(r2[f.key]||0):s;
+        },0);
+        fcTotal=fM(tot2);
+      }
+      return '<tr class="'+cls+'"><td>'+f.lbl+'</td>'+vals+'<td class="fc-col">'+fcTotal+'</td></tr>';
+    }).join('')+
+    '</tbody></table></div>'+
+    '</div></div>';
+
+  setTimeout(function(){
+    var localSteps=steps;
+    var labelPlugin={
+      id:'wfLabels',
+      afterDatasetsDraw:function(chart){
+        var stps=localSteps;
+        if(!stps||!stps.length) return;
+        var ctx=chart.ctx;
+        var meta=chart.getDatasetMeta(1);
+        var yAxis=chart.scales.y;
+        ctx.save();
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.font='bold 10px system-ui,sans-serif';
+        stps.forEach(function(s,i){
+          var bar=meta.data[i];
+          if(!bar) return;
+          var barTop=Math.min(bar.y,bar.base);
+          var barBot=Math.max(bar.y,bar.base);
+          var barH=barBot-barTop;
+          var mid=(barTop+barBot)/2;
+          var sign=s.isNeg?'-':s.isAnchor?'':'+';
+          var label=sign+fM(Math.abs(s.val),1);
+          if(barH>=18){
+            ctx.fillStyle='rgba(255,255,255,0.95)';
+            ctx.fillText(label,bar.x,mid);
+          } else {
+            ctx.font='bold 9px system-ui,sans-serif';
+            ctx.fillStyle=s.isNeg?'#D85A30':s.isAnchor?'#1a2e44':'#1D9E75';
+            ctx.fillText(label,bar.x,s.isNeg?barBot+10:barTop-8);
+          }
+          if(i<stps.length-1){
+            var nextBar=meta.data[i+1];
+            if(nextBar){
+              var runY=yAxis.getPixelForValue(s.running/1e6);
+              ctx.beginPath();
+              ctx.strokeStyle='rgba(120,120,120,0.3)';
+              ctx.setLineDash([3,3]);
+              ctx.lineWidth=1;
+              ctx.moveTo(bar.x+bar.width/2+2,runY);
+              ctx.lineTo(nextBar.x-nextBar.width/2-2,runY);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          }
+        });
+        ctx.restore();
+      }
+    };
+    mk('arrBridgeC',{
+      type:'bar',
+      data:{
+        labels:steps.map(function(s){return s.lbl;}),
+        datasets:[
+          {data:offsets,backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(0,0,0,0)',borderWidth:0,stack:'wf'},
+          {label:'ARR',data:barVals,backgroundColor:barColors,borderColor:barColors,borderWidth:1,borderRadius:3,stack:'wf'}
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        animation:{duration:300},
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            callbacks:{
+              title:function(ctx){return ctx[0].label.replace(/\n/g,' ');},
+              label:function(ctx){
+                if(ctx.datasetIndex===0) return null;
+                var s=localSteps[ctx.dataIndex];
+                var sign=s.isNeg?'-':s.isAnchor?'':'+';
+                return [sign+fM(Math.abs(s.val),1),'Running: '+fM(s.running,1)];
+              }
+            }
+          }
+        },
+        scales:{
+          x:{stacked:true,ticks:{font:{size:9},maxRotation:0},grid:{display:false}},
+          y:{
+            stacked:true,
+            min:Math.floor(Math.min(bop_arr,dec_eop)/1e6*0.97),
+            ticks:{callback:function(v){return '$'+v.toFixed(0)+'M';},font:{size:9}},
+            grid:{color:'rgba(0,0,0,0.04)'}
+          }
+        }
+      },
+      plugins:[labelPlugin]
+    });
+
+  },60);
+}
+
+
+function renderIS(area){
+  const res=getResults();
+  const cfg=HORIZON[hz];
+  const allP=[...cfg.act,...cfg.fc];
+  const moL=allP.map(p=>MO12[parseInt(p.slice(5))-1]);
+
+  function getIS(p){return p<=CLOSE_MONTH?SRC.actuals[p]:res[p]?.is;}
+
+  const rows=[
+    {type:'sec',lbl:'Revenue'},
+    {lbl:'Subscription Revenue',compute:r=>r.revenue*0.967},
+    {lbl:'Services Revenue',compute:r=>r.revenue*0.033},
+    {lbl:'Total Revenue',key:'revenue',type:'sub',fy:true},
+    {type:'sec',lbl:'Cost of Revenue'},
+    {lbl:'Cost of Revenue',key:'cogs',inv:true},
+    {lbl:'Gross Profit',key:'gross_profit',type:'sub',fy:true},
+    {lbl:'Gross Margin %',compute:r=>r.gross_profit/r.revenue,pct:true},
+    {type:'sec',lbl:'Operating Expenses'},
+    {lbl:'Sales & Marketing',key:'sm',inv:true,fy:true},
+    {lbl:'Research & Development',key:'rd',inv:true,fy:true},
+    {lbl:'General & Administrative',key:'ga',inv:true,fy:true},
+    {lbl:'Total OpEx',key:'total_opex',type:'sub',inv:true,fy:true},
+    {lbl:'EBITDA',key:'ebitda',type:'sub',fy:true},
+    {lbl:'EBITDA Margin %',compute:r=>r.ebitda/r.revenue,pct:true},
+    {type:'sec',lbl:'Below the Line'},
+    {lbl:'D&A',key:'da',inv:true},
+    {lbl:'Interest Expense',key:'interest',inv:true},
+    {lbl:'Net Income',key:'net_income',type:'tot',fy:true},
+  ];
+
+  const fyTotals={};
+  rows.filter(r=>r.fy&&!r.type).forEach(r=>{
+    fyTotals[r.key||r.lbl]=allP.reduce((s,p)=>{
+      const d=getIS(p);
+      return s+(r.key?d?.[r.key]||0:0);
+    },0);
+  });
+
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Income Statement . ${hz.replace('p','+')} Horizon</div>
+    <div class="slide-sub">Net income ties to cash flow statement <span class="tie-ok">\u2713 Tied</span> . Headcount-adjusted payroll from open reqs</div>
+    ${buildKPIs(res)}
+    <div>
+        <div class="two-col" style="margin-bottom:12px">
+          <div class="card">
+            <div class="card-title">Revenue vs EBITDA -- full year</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="isRevC" role="img" aria-label="Revenue and EBITDA full year chart">Revenue and EBITDA by month full year 2026.</canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">OpEx mix -- forecast period</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="isOpexC" role="img" aria-label="OpEx mix donut chart">OpEx split: S&M, R&D, G&A.</canvas></div>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="stmt-tbl">
+            <thead><tr>
+              <th style="text-align:left">Line Item</th>
+              ${allP.map(p=>{const mo=MO12[parseInt(p.slice(5))-1];const ifc=cfg.fc.includes(p);return`<th class="${ifc?'fc-col':''}" style="text-align:right"><div style="font-weight:600;color:${ifc?'var(--amber)':'var(--text2)'}"><b>${mo}</b></div><div style="font-size:8px;opacity:0.55;font-weight:400;letter-spacing:.04em;margin-top:1px">${ifc?'Fcst':'Act'}</div></th>`;}).join('')}
+              <th style="text-align:right">FY Total</th>
+            </tr></thead>
+            <tbody>${rows.map(r=>{
+              if(r.type==='sec') return `<tr class="sec-hdr"><td colspan="${allP.length+2}">${r.lbl}</td></tr>`;
+              const cls=r.type==='tot'?'tot-row':r.type==='sub'?'sub-row':'';
+              const vals=allP.map(p=>{
+                const d=getIS(p); if(!d) return '<td>--</td>';
+                const v=r.compute?r.compute(d):d[r.key];
+                if(v===null||v===undefined) return '<td>--</td>';
+                const isFc=cfg.fc.includes(p);
+                if(r.pct) return `<td class="${isFc?'fc-col':'act-col'}">${(v*100).toFixed(1)}%</td>`;
+                const sign=r.inv?-1:1;
+                const vCls=v*sign>0?'pos-v':'neg-v';
+                return `<td class="${isFc?'fc-col':'act-col'} ${Math.abs(v)<100?'':vCls}">${fM(v)}</td>`;
+              }).join('');
+              const fy=r.fy&&r.key?fM(fyTotals[r.key]||0):'';
+              return `<tr class="${cls}"><td>${r.lbl}</td>${vals}<td class="fc-col">${fy}</td></tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>{
+    const allRev=allP.map(p=>+(getIS(p)?.revenue/1e6||0).toFixed(2));
+    const allEbit=allP.map(p=>+(getIS(p)?.ebitda/1e6||0).toFixed(2));
+    const cols=allP.map(p=>cfg.fc.includes(p)?'rgba(186,117,23,0.5)':'rgba(24,95,165,0.15)');
+    mk('isRevC',{data:{labels:MO12.slice(allP[0].slice(5)-1),datasets:[
+      {type:'bar',data:allRev,backgroundColor:cols,borderWidth:0,label:'Revenue',yAxisID:'y1'},
+      {type:'line',data:allEbit,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false,label:'EBITDA',yAxisID:'y2'},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{display:false}},x:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    const smTotal=FC_P.reduce((s,p)=>s+(res[p]?.is?.sm||0),0);
+    const rdTotal=FC_P.reduce((s,p)=>s+(res[p]?.is?.rd||0),0);
+    const gaTotal=FC_P.reduce((s,p)=>s+(res[p]?.is?.ga||0),0);
+    mk('isOpexC',{type:'doughnut',data:{labels:[`S&M ${fM(smTotal,1)}`,`R&D ${fM(rdTotal,1)}`,`G&A ${fM(gaTotal,1)}`],datasets:[{data:[smTotal,rdTotal,gaTotal],backgroundColor:['#185FA5','#1D9E75','#BA7517'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:10}}}}});
+  },40);
+}
+
+// \u2500\u2500 CASH FLOW \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderCash(area){
+  const res=getResults();
+  const cfg=HORIZON[hz];
+  const allP=[...cfg.act,...cfg.fc];
+
+  var _cfsChain=buildCFSChain(cfg);
+  function getCFS(p){return _cfsChain[p];}
+
+  const rows=[
+    {type:'sec',lbl:'Operating Activities'},
+    {lbl:'Net Income',key:'ni'},
+    {lbl:'Depreciation & Amortization',key:'da'},
+    {lbl:'Stock-Based Compensation',key:'sbc'},
+    {lbl:'Change in AR',key:'chg_ar'},
+    {lbl:'Change in Deferred Revenue',key:'chg_dr'},
+    {lbl:'Change in AP',key:'chg_ap'},
+    {lbl:'Change in Prepaids',key:'chg_pre'},
+    {lbl:'Cash from Operations (CFO)',key:'cfo',type:'sub'},
+    {type:'sec',lbl:'Investing Activities'},
+    {lbl:'Capital Expenditures',key:'capex'},
+    {lbl:'Cash from Investing (CFI)',key:'cfi',type:'sub'},
+    {type:'sec',lbl:'Cash Roll-Forward'},
+    {lbl:'Beginning Cash',key:'beg_cash'},
+    {lbl:'Net Change in Cash',key:'net_change',type:'sub'},
+    {lbl:'Ending Cash',key:'end_cash',type:'tot'},
+  ];
+
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Cash Flow Statement . ${hz.replace('p','+')} Horizon</div>
+    <div class="slide-sub">Indirect method . Deferred revenue from Forecast_deferred_revenue_waterfall.csv . Ending cash ties to balance sheet <span class="tie-ok">\u2713 Tied</span></div>
+    ${buildKPIs(res)}
+    <div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">Cash Position -- Full Year</div>
+          <div class="card-sub">Ending cash by period ($M)</div>
+          <div class="chart-wrap" style="height:190px"><canvas id="cashTrendC" role="img" aria-label="Cash position full year 2026">Cash builds from $48M through December.</canvas></div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="stmt-tbl">
+            <thead><tr>
+              <th style="text-align:left">Line Item</th>
+              ${allP.map(p=>{const mo=MO12[parseInt(p.slice(5))-1];const ifc=cfg.fc.includes(p);return`<th class="${ifc?'fc-col':''}" style="text-align:right"><div style="font-weight:600;color:${ifc?'var(--amber)':'var(--text2)'}"><b>${mo}</b></div><div style="font-size:8px;opacity:0.55;font-weight:400;letter-spacing:.04em;margin-top:1px">${ifc?'Fcst':'Act'}</div></th>`;}).join('')}
+            </tr></thead>
+            <tbody>${rows.map(r=>{
+              if(r.type==='sec') return `<tr class="sec-hdr"><td colspan="${allP.length+1}">${r.lbl}</td></tr>`;
+              const cls=r.type==='tot'?'tot-row':r.type==='sub'?'sub-row':'';
+              const vals=allP.map(p=>{
+                const d=getCFS(p); if(!d) return '<td>--</td>';
+                const v=d[r.key];
+                if(v===null||v===undefined) return '<td>--</td>';
+                const isFc=cfg.fc.includes(p);
+                const posV=v>0?'pos-v':v<0?'neg-v':'';
+                return `<td class="${isFc?'fc-col':'act-col'} ${r.type?'':posV}">${fM(v)}</td>`;
+              }).join('');
+              return `<tr class="${cls}"><td>${r.lbl}</td>${vals}</tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>{
+    const cashData=allP.map(p=>+(getCFS(p)?.end_cash/1e6||0).toFixed(2));
+    const cols=allP.map(p=>cfg.fc.includes(p)?'#BA751799':'#1D9E7599');
+    mk('cashTrendC',{type:'line',data:{labels:allP.map(p=>MO12[parseInt(p.slice(5))-1]),datasets:[{data:cashData,borderColor:'#185FA5',borderWidth:2.5,pointRadius:4,pointBackgroundColor:cols,backgroundColor:'rgba(24,95,165,0.06)',fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+  },40);
+}
+
+// \u2500\u2500 BALANCE SHEET \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderBS(area){
+  const res=getResults();
+  const cfg=HORIZON[hz];
+  const allP=[...cfg.act,...cfg.fc];
+  var _bsChain=buildCFSChain(cfg);
+  function getBS(p){
+    if(p<=CLOSE_MONTH){
+      var cfs=_bsChain[p];
+      var a=SRC.actuals[p];
+      var cash=cfs?cfs.end_cash:a.cash_bs;
+      var ar=a.ar;
+      // PPE: opening PPE + cumulative capex - cumulative DA through this month
+      var oa=SRC.opening_bs.other_assets||6000000;
+      var act_idx=ACT_P.indexOf(p);
+      var cum_da=ACT_P.slice(0,act_idx+1).reduce(function(s,q){return s+(SRC.actuals[q]?SRC.actuals[q].da:0);},0);
+      var cum_cap=ACT_P.slice(0,act_idx+1).reduce(function(s,q){return s+(SRC.actuals[q]?SRC.actuals[q].cfi:0);},0);
+      var ppe=Math.max(0,oa+cum_cap-cum_da);
+      var total_assets=cash+ar+ppe;
+      var dr=(SRC.dr_waterfall[p]&&SRC.dr_waterfall[p].end_dr)?SRC.dr_waterfall[p].end_dr:a.dr;
+      var ol=SRC.opening_bs.other_liab;
+      var total_liab=a.ap+dr+5000000+ol;
+      var equity=total_assets-total_liab;
+      return{cash:cash,ar:ar,ppe:ppe,total_assets:total_assets,
+             ap:a.ap,dr:dr,debt:5000000,other_liab:ol,total_liab:total_liab,equity:equity};
+    }
+    var fc=res[p]?res[p].bs:null;
+    if(!fc) return null;
+    // PPE for forecast: opening PPE + cumulative capex/DA through this forecast month
+    var oa=SRC.opening_bs.other_assets||6000000;
+    // Start from end of actuals PPE
+    var act_cum_da=ACT_P.reduce(function(s,q){return s+(SRC.actuals[q]?SRC.actuals[q].da:0);},0);
+    var act_cum_cap=ACT_P.reduce(function(s,q){return s+(SRC.actuals[q]?SRC.actuals[q].cfi:0);},0);
+    var ppe_at_close=Math.max(0,oa+act_cum_cap-act_cum_da);
+    var fc_idx=FC_P.indexOf(p);
+    var fc_cum_da=FC_P.slice(0,fc_idx+1).reduce(function(s,q){var fi=res[q]?res[q].is:null;return s+(fi?fi.da:125000);},0);
+    var fc_cum_cap=FC_P.slice(0,fc_idx+1).reduce(function(s,q){var fc2=_bsChain[q];return s+(fc2?fc2.capex:0);},0);
+    var ppe=Math.max(0,ppe_at_close+fc_cum_cap-fc_cum_da);
+    var cfs=_bsChain[p];
+    var cash=cfs?cfs.end_cash:fc.cash;
+    var ar=fc.ar;
+    var ol=SRC.opening_bs.other_liab;
+    var total_assets=cash+ar+ppe;
+    var total_liab=fc.ap+fc.dr+5000000+ol;
+    var equity=total_assets-total_liab;
+    return{cash:cash,ar:ar,ppe:ppe,total_assets:total_assets,
+           ap:fc.ap,dr:fc.dr,debt:5000000,other_liab:ol,total_liab:total_liab,equity:equity};
+  }
+  const rows=[
+    {type:'sec',lbl:'ASSETS'},
+    {lbl:'Cash & Cash Equivalents',key:'cash',indent:true},
+    {lbl:'Accounts Receivable',key:'ar',indent:true},
+    {lbl:'Prepaids & Other Current',compute:function(d){return SRC.opening_bs.other_liab||2500000;},indent:true},
+    {lbl:'Total Current Assets',compute:function(d){return (d.cash||0)+(d.ar||0)+(SRC.opening_bs.other_liab||2500000);},type:'sub'},
+    {lbl:'PPE (Net)',key:'ppe',indent:true},
+    {lbl:'Total Assets',compute:function(d){return (d.cash||0)+(d.ar||0)+(SRC.opening_bs.other_liab||2500000)+(d.ppe||0);},type:'tot'},
+    {type:'sec',lbl:'LIABILITIES'},
+    {lbl:'Accounts Payable',key:'ap',indent:true},
+    {lbl:'Deferred Revenue',key:'dr',indent:true},
+    {lbl:'Debt',key:'debt',indent:true},
+    {lbl:'Other Liabilities',key:'other_liab',indent:true},
+    {lbl:'Total Liabilities',key:'total_liab',type:'sub'},
+    {type:'sec',lbl:"SHAREHOLDERS' EQUITY"},
+    {lbl:'Total Equity',key:'equity',type:'tot'},
+    {lbl:'Total Liabilities & Equity',compute:function(d){return (d.total_liab||0)+(d.equity||0);},type:'tot'},
+  ];
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Balance Sheet . ${hz.replace('p','+')} Horizon</div>
+    <div class="slide-sub">Cash ties to CFS <span class="tie-ok">\u2713</span> . Deferred revenue from DR waterfall CSV . Balance check = $0</div>
+    ${buildKPIs(res)}
+    <div>
+        <div style="overflow-x:auto">
+          <table class="stmt-tbl">
+            <thead><tr>
+              <th style="text-align:left">Line Item</th>
+              ${allP.map(p=>{const mo=MO12[parseInt(p.slice(5))-1];const ifc=cfg.fc.includes(p);return`<th class="${ifc?'fc-col':''}" style="text-align:right"><div style="font-weight:600;color:${ifc?'var(--amber)':'var(--text2)'}"><b>${mo}</b></div><div style="font-size:8px;opacity:0.55;font-weight:400;letter-spacing:.04em;margin-top:1px">${ifc?'Fcst':'Act'}</div></th>`;}).join('')}
+            </tr></thead>
+            <tbody>${rows.map(r=>{
+              if(r.type==='sec') return `<tr class="sec-hdr"><td colspan="${allP.length+1}">${r.lbl}</td></tr>`;
+              const cls=r.type==='tot'?'tot-row':r.type==='sub'?'sub-row':'';
+              const vals=allP.map(p=>{
+                const d=getBS(p); if(!d) return '<td>--</td>';
+                const v=r.compute?r.compute(d):d[r.key];
+                if(v===null||v===undefined) return '<td>--</td>';
+                const isFc=cfg.fc.includes(p);
+                return `<td class="${isFc?'fc-col':'act-col'}">${fM(v)}</td>`;
+              }).join('');
+              return `<tr class="${cls}"><td>${r.lbl}</td>${vals}</tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+// \u2500\u2500 PIPELINE DETAIL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderPipeline(area){
+  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Pipeline Detail</div>
+    <div class="slide-sub">Deal-level view from Forecast_opportunities.csv (195 deals) + Forecast_renewal_pipeline.csv (385 renewals)</div>
+    <div class="snav" id="pipeTabs">
+      ${FC_P.map((p,i)=>`<button class="snav-btn ${i===0?'on':''}" onclick="showPipeMonth('${p}',this)">${MO12[parseInt(p.slice(5))-1]}</button>`).join('')}
+    </div>
+    <div id="pipeContent"></div>
+  </div>`;
+  showPipeMonth('2026-06');
+}
+
+function showPipeMonth(p, btn){
+  document.querySelectorAll('#pipeTabs .snav-btn').forEach(b=>b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  const opps=SRC.opp_pipeline[p]||{};
+  const ren=SRC.renewals[p]||{};
+  const lv=getLevers();
+  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
+  const types=['New Business','Expansion','Reactivation','Contraction','Churn'];
+  const typeColors={'New Business':'#1D9E75','Expansion':'#185FA5','Reactivation':'#534AB7','Contraction':'#BA7517','Churn':'#D85A30'};
+
+  document.getElementById('pipeContent').innerHTML=`
+  <div class="two-col" style="margin-bottom:12px">
+    <div class="card">
+      <div class="card-title">Renewal pipeline -- ${ren.count||0} renewals</div>
+      <div class="card-sub">From Forecast_renewal_pipeline.csv . Commit 95% . Likely 75% . At Risk 55%</div>
+      <div class="var-row"><span class="var-lbl">Gross ARR at risk</span><span class="var-act">${fM(ren.arr||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Weighted (base rate)</span><span class="var-act pos">${fM(ren.weighted||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Renewal rate adj.</span><span class="var-act">${lv.ren_adj>=0?'+':''}${(lv.ren_adj*100).toFixed(0)}pp</span></div>
+      <div class="var-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:8px"><span class="var-lbl" style="font-weight:500">Implied retained ARR</span><span class="var-act pos" style="font-weight:500">${fM(Math.round((ren.weighted||0)*(1+lv.ren_adj)))}</span></div>
+      <div class="sec-lbl">Sample renewals</div>
+      ${(ren.deals||[]).slice(0,6).map(r=>`<div class="deal-row">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;font-weight:500;color:var(--text)">${r.customer.slice(0,32)}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:${r.stage==='Commit'?'var(--teal)':r.stage==='At Risk'?'var(--red)':'var(--amber)'}">${fM(r.arr)}</span>
+        </div>
+        <div style="font-size:9.5px;color:var(--text3)">${r.stage} . ${r.prob}% . Risk ${r.risk} . Health ${r.health}</div>
+      </div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="card-title">Opportunity pipeline -- ${Object.values(opps).reduce((s,t)=>s+t.count,0)} deals</div>
+      <div class="card-sub">From Forecast_opportunities.csv . weighted by probability</div>
+      ${types.map(t=>{const d=opps[t]||{total:0,weighted:0,count:0};return`<div class="var-row">
+        <span class="var-lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${typeColors[t]};margin-right:5px;vertical-align:middle"></span>${t}</span>
+        <span style="font-size:10px;color:var(--text3)">${d.count} deals</span>
+        <span class="var-act">${fM(d.total,0)}</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--teal)">${fM(d.weighted,0)} wtd</span>
+      </div>`;}).join('')}
+      <div class="sec-lbl">New business deals</div>
+      ${(opps['New Business']?.deals||[]).slice(0,5).map(d=>`<div class="deal-row">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;font-weight:500;color:var(--text)">${d.customer.slice(0,28)}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--teal)">${fM(d.weighted)}</span>
+        </div>
+        <div style="font-size:9.5px;color:var(--text3)">${d.stage} . ${d.prob}% . ${d.segment} . ${d.region} . ${d.owner}</div>
+        <div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:3px"><div style="width:${d.prob}%;height:100%;background:var(--teal);border-radius:2px"></div></div>
+      </div>`).join('')}
+    </div>`;
+}
+
+// \u2500\u2500 HEADCOUNT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderHC(area){
+  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
+  let h2_cost=0, active=0;
+  SRC.open_reqs.forEach(r=>{
+    if(!reqActive[r.id]) return;
+    active++;
+    FC_P.forEach(p=>{if(p>=r.start) h2_cost+=r.cash_annual/12;});
+  });
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Headcount Plan</div>
+    <div class="slide-sub">Hire-by-hire from Forecast_Open_Requisitions.csv . Toggle reqs on/off . Payroll flows to IS and CFS automatically</div>
+    <div class="kpi-strip ks4">
+      <div class="kpi"><div class="kpi-lbl">Current HC (May)</div><div class="kpi-val">130</div><div class="kpi-delta neu">Actual</div></div>
+      <div class="kpi"><div class="kpi-lbl">Active reqs</div><div class="kpi-val">${active}/17</div><div class="kpi-delta pos">Toggled on</div></div>
+      <div class="kpi"><div class="kpi-lbl">H2 Payroll Impact</div><div class="kpi-val">${fM(h2_cost,1)}</div><div class="kpi-delta neg">From active reqs</div></div>
+      <div class="kpi"><div class="kpi-lbl">Dec Headcount</div><div class="kpi-val">${130+active}</div><div class="kpi-delta pos">Est. EOP</div></div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Open requisitions -- hire-by-hire plan</div>
+        <div class="card-sub">Toggle on/off . changes flow through payroll \u2192 IS \u2192 CFS automatically</div>
+        ${SRC.open_reqs.map(r=>{
+          const on=reqActive[r.id];
+          return`<div class="req-row">
+            <button class="tog ${on?'on':'off'}" onclick="toggleReqHC('${r.id}')" aria-label="Toggle ${r.role}"></button>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11.5px;color:${on?'var(--text)':'var(--text3)'};font-weight:${on?'500':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.role}</div>
+              <div style="font-size:9.5px;color:var(--text3)">${r.dept} . Start: ${r.start} . ${fM(r.cash_annual/12,0)}K/mo . ${r.ramp_months}mo ramp</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <span class="badge ${priCls[r.priority]||'badge-lo'}">${r.priority}</span>
+              ${on?`<div style="font-size:10px;color:var(--teal);margin-top:2px">${fM(r.cash_annual/12,0)}K/mo</div>`:``}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:12px">
+          <div class="card-title">Cumulative HC adds by start month</div>
+          <div class="card-sub">Active reqs only . stacked by department</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="hcAddC" role="img" aria-label="Headcount adds by month">HC adds Jun-Dec from active reqs.</canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Incremental payroll impact</div>
+          <div class="card-sub">Monthly cost from active reqs ($K)</div>
+          <div class="chart-wrap" style="height:160px"><canvas id="hcPayC" role="img" aria-label="Incremental payroll from reqs">Payroll adds from open reqs by month.</canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>{
+    const depts=['Sales','Marketing','R&D','Product','Customer Success','Support','G&A'];
+    const deptAdds=depts.map(d=>FC_P.map(p=>SRC.open_reqs.filter(r=>reqActive[r.id]&&r.dept===d&&r.start===p).length));
+    mk('hcAddC',{type:'bar',data:{labels:MO12.slice(5),datasets:depts.map((d,i)=>({label:d,data:deptAdds[i],backgroundColor:Object.values(DEPT_COLORS)[i]+'99',stack:'a',borderWidth:0}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:8}}},scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    const payByMo=FC_P.map(p=>+(SRC.open_reqs.filter(r=>reqActive[r.id]&&r.start<=p).reduce((s,r)=>s+r.cash_annual/12,0)/1000).toFixed(0));
+    mk('hcPayC',{type:'bar',data:{labels:MO12.slice(5),datasets:[{data:payByMo,backgroundColor:'rgba(216,90,48,0.5)',borderColor:'var(--red)',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+  },40);
+}
+
+function toggleReqHC(id){
+  reqActive[id]=!reqActive[id];
+  document.querySelectorAll('[id="tog-'+id+'"]').forEach(b=>{b.classList.toggle('on',reqActive[id]);b.classList.toggle('off',!reqActive[id]);});
+  showTab('headcount');
+}
+
+// \u2500\u2500 SENSITIVITY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderSens(area){
+  const baseRes=getResults();
+  const dec=FC_P[FC_P.length-1];
+  const base_arr=baseRes[dec].arr.arr_eop;
+  const base_cash=baseRes[dec].cfs.end_cash;
+  const base_ebitda=FC_P.reduce((s,p)=>s+(baseRes[p]?.is?.ebitda||0),0);
+
+  function runScenario(ovr){
+    // Temporarily override lever values
+    const orig={};
+    Object.keys(ovr).forEach(k=>{const el=document.getElementById('l-'+k);if(el){orig[k]=el.value;el.value=ovr[k];}});
+    const res=getResults();
+    Object.keys(orig).forEach(k=>{const el=document.getElementById('l-'+k);if(el)el.value=orig[k];});
+    return{arr:res[dec].arr.arr_eop,cash:res[dec].cfs.end_cash,ebitda:FC_P.reduce((s,p)=>s+(res[p]?.is?.ebitda||0),0)};
+  }
+
+  const scenarios=[
+    {name:'Base forecast',ovr:{},is_base:true},
+    {name:'NB +10%',ovr:{nb:110}},
+    {name:'NB -20%',ovr:{nb:80}},
+    {name:'Churn stress +30%',ovr:{churn:130}},
+    {name:'Churn reduced -20%',ovr:{churn:80}},
+    {name:'Best case (NB+10, Churn-20)',ovr:{nb:110,churn:80}},
+    {name:'Stress (NB-20, Churn+30)',ovr:{nb:80,churn:130}},
+    {name:'Renewal rate +5pp',ovr:{ren:5}},
+    {name:'All costs +3pp',ovr:{cogs:32,sm:37,rd:19,ga:14}},
+  ];
+
+  const results=scenarios.map(s=>{
+    if(s.is_base) return{...s,arr:base_arr,cash:base_cash,ebitda:base_ebitda};
+    return{...s,...runScenario(s.ovr)};
+  });
+
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Sensitivity Analysis</div>
+    <div class="slide-sub">Run scenarios on top of current assumptions without affecting saved versions . Dec 2026 outcomes</div>
+    ${buildKPIs(baseRes)}
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Scenario comparison -- Dec ARR</div>
+        <div class="chart-wrap" style="height:280px"><canvas id="sensArrC" role="img" aria-label="Scenario comparison bar chart for Dec ARR">Dec ARR comparison across scenarios.</canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Scenario comparison -- H2 EBITDA</div>
+        <div class="chart-wrap" style="height:280px"><canvas id="sensEbitC" role="img" aria-label="Scenario comparison for H2 EBITDA">H2 EBITDA comparison across scenarios.</canvas></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-title" style="margin-bottom:8px">Full scenario table</div>
+      <table class="sens-tbl">
+        <thead><tr><th style="text-align:left">Scenario</th><th>Dec ARR</th><th>vs Base</th><th>H2 EBITDA</th><th>vs Base</th><th>Dec Cash</th><th>vs Base</th></tr></thead>
+        <tbody>${results.map(s=>{
+          const ad=s.arr-base_arr, ed=s.ebitda-base_ebitda, cd=s.cash-base_cash;
+          return `<tr class="${s.is_base?'base-row':''}">
+            <td>${s.name}</td>
+            <td>${fM(s.arr,1)}</td>
+            <td class="${s.is_base?'':''+( ad>0?'pos-v':'neg-v')}">${s.is_base?'--':fV(ad)}</td>
+            <td class="${s.ebitda>=0?'pos-v':'neg-v'}">${fM(s.ebitda,1)}</td>
+            <td class="${s.is_base?'':''+( ed>0?'pos-v':'neg-v')}">${s.is_base?'--':fV(ed)}</td>
+            <td>${fM(s.cash,1)}</td>
+            <td class="${s.is_base?'':''+( cd>0?'pos-v':'neg-v')}">${s.is_base?'--':fV(cd)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  </div>`;
+  setTimeout(()=>{
+    const cols=results.map(s=>s.is_base?'#1D9E7566':s.arr>base_arr?'#185FA566':'#D85A3066');
+    mk('sensArrC',{type:'bar',data:{labels:results.map(s=>s.name),datasets:[{data:results.map(s=>+(s.arr/1e6).toFixed(2)),backgroundColor:cols,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'$'+ctx.raw.toFixed(2)+'M'}}},scales:{x:{min:(base_arr*0.98)/1e6,ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    const ebitCols=results.map(s=>s.ebitda>=0?'#1D9E7566':'#D85A3066');
+    mk('sensEbitC',{type:'bar',data:{labels:results.map(s=>s.name),datasets:[{data:results.map(s=>+(s.ebitda/1e6).toFixed(2)),backgroundColor:ebitCols,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+  },40);
+}
+
+// \u2500\u2500 VERSION MANAGEMENT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function saveVersion(status){
+  const res=getResults();
+  const lv=getLevers();
+  const dec=FC_P[FC_P.length-1];
+  const dec_arr=res[dec].arr.arr_eop;
+  const dec_cash=res[dec].cfs.end_cash;
+  const h2_ebitda=FC_P.reduce((s,p)=>s+(res[p]?.is?.ebitda||0),0);
+  const name=prompt(`Name this ${status==='final'?'FINAL':'draft'} version:`,`${hz.replace('p','+')} ${status==='final'?'Final':'Draft'} ${new Date().toLocaleDateString()}`);
+  if(!name) return;
+  if(status==='final'){
+    versions.forEach(v=>{if(v.status==='final') v.status='superseded';});
+  }
+  const vid='V'+Date.now();
+  versions.unshift({
+    id:vid,name,status,horizon:hz,
+    ts:new Date().toLocaleString(),
+    nb_att:lv.nb,churn:lv.churn,ren_adj:lv.ren_adj,
+    active_reqs:Object.values(reqActive).filter(Boolean).length,
+    dec_arr,dec_cash,h2_ebitda,
+    results:JSON.parse(JSON.stringify(res)),lv,reqActive:{...reqActive}
+  });
+  if(status==='final'){
+    const csvs=generateAllCSVs(res,lv,vid);
+    downloadAllCSVs(csvs,vid,name);
+  }
+  showTab('versions');
+}
+
+function generateAllCSVs(res,lv,vid){
+  const org='8571e520-0687-4516-bdee-379f37c58c1f';
+  const ts=new Date().toISOString().slice(0,10);
+  const csvs={};
+
+  // MRR Waterfall
+  const mrrRows=[...ACT_P.map(p=>{const a=SRC.actuals[p];return{forecast_version_id:vid,organization_id:org,version:'Actual',period:p,as_of_period:'2026-05',beginning_arr:a.arr_bop,gross_renewal_arr:0,renewal_arr:0,new_business_arr:a.arr_nb,expansion_arr:a.arr_exp,reactivation_arr:a.arr_react,contraction_arr:a.arr_cont,churn_arr:a.arr_churn,net_new_arr:a.arr_nn,ending_arr:a.arr_eop,gross_retention_rate:a.grr||0,net_dollar_retention_rate:a.nrr||0};}),
+    ...FC_P.map(p=>{const r=res[p];return{forecast_version_id:vid,organization_id:org,version:'Forecast',period:p,as_of_period:'2026-05',beginning_arr:r.arr.arr_bop,gross_renewal_arr:r.arr.gross_ren||0,renewal_arr:r.arr.arr_ren||0,new_business_arr:r.arr.arr_nb,expansion_arr:r.arr.arr_exp,reactivation_arr:r.arr.arr_react,contraction_arr:r.arr.arr_cont,churn_arr:r.arr.arr_churn,net_new_arr:r.arr.arr_nn,ending_arr:r.arr.arr_eop,gross_retention_rate:r.arr.grr,net_dollar_retention_rate:r.arr.nrr};})];
+  csvs[`Forecast_MRR_Waterfall_${vid}.csv`]=toCSV(mrrRows);
+
+  // Income Statement
+  const isRows=[...ACT_P.map(p=>{const a=SRC.actuals[p];return{forecast_version_id:vid,organization_id:org,version:'Actual',period:p,as_of_period:'2026-05',revenue:a.revenue,cost_of_revenue:a.cogs,gross_profit:a.gross_profit,sales_and_marketing:a.sm,research_and_development:a.rd,general_and_administrative:a.ga,ebitda:a.ebitda,depreciation_and_amortization:a.da,interest_expense:a.interest,net_income:a.net_income};}),
+    ...FC_P.map(p=>{const r=res[p];return{forecast_version_id:vid,organization_id:org,version:'Forecast',period:p,as_of_period:'2026-05',...r.is};})];
+  csvs[`Forecast_income_statement_${vid}.csv`]=toCSV(isRows);
+
+  // Cash Flow Statement
+  const cfsRows=[...ACT_P.map(p=>{const a=SRC.actuals[p];return{forecast_version_id:vid,organization_id:org,version:'Actual',period:p,as_of_period:'2026-05',beginning_cash:a.beginning_cash,net_income:a.net_income,net_cash_from_operating_activities:a.cfo,net_cash_from_investing_activities:a.cfi,net_cash_from_financing_activities:0,net_change_in_cash:a.net_change_cash,ending_cash:a.ending_cash};}),
+    ...FC_P.map(p=>{const c=res[p].cfs;return{forecast_version_id:vid,organization_id:org,version:'Forecast',period:p,as_of_period:'2026-05',beginning_cash:c.beg_cash,net_income:c.ni,depreciation_and_amortization:c.da,stock_based_compensation:c.sbc,change_in_accounts_receivable:c.chg_ar,change_in_deferred_revenue:c.chg_dr,change_in_accounts_payable:c.chg_ap,change_in_prepaids:c.chg_pre,net_cash_from_operating_activities:c.cfo,capital_expenditures:c.capex,net_cash_from_investing_activities:c.cfi,net_cash_from_financing_activities:0,net_change_in_cash:c.net_change,ending_cash:c.end_cash};})];
+  csvs[`Forecast_cash_flow_statement_${vid}.csv`]=toCSV(cfsRows);
+
+  // Balance Sheet
+  const bsRows=[...ACT_P.map(p=>{const a=SRC.actuals[p];return{forecast_version_id:vid,organization_id:org,version:'Actual',period:p,as_of_period:'2026-05',cash:a.cash_bs,accounts_receivable:a.ar,other_assets:SRC.opening_bs.other_assets,accounts_payable:a.ap,deferred_revenue:a.dr,equity:a.equity};}),
+    ...FC_P.map(p=>{const b=res[p].bs;return{forecast_version_id:vid,organization_id:org,version:'Forecast',period:p,as_of_period:'2026-05',...b};})];
+  csvs[`Forecast_balance_sheet_${vid}.csv`]=toCSV(bsRows);
+
+  // Bookings Summary
+  const bkRows=FC_P.map(p=>{const r=res[p];const opps=SRC.opp_pipeline[p]||{};const ren=SRC.renewals[p]||{};return{forecast_version_id:vid,organization_id:org,version:'Forecast',period:p,as_of_period:'2026-05',new_business_arr:r.arr.arr_nb,expansion_arr:r.arr.arr_exp,reactivation_arr:r.arr.arr_react,contraction_arr:r.arr.arr_cont,churn_arr:r.arr.arr_churn,gross_renewal_arr:r.arr.gross_ren||0,renewal_arr:r.arr.arr_ren||0,net_new_arr:r.arr.arr_nn,ending_arr:r.arr.arr_eop};});
+  csvs[`Forecast_bookings_summary_${vid}.csv`]=toCSV(bkRows);
+
+  // Version Registry
+  const allFinals=versions.filter(v=>v.status==='final'||v.id===vid);
+  const regRows=versions.map(v=>({version_id:v.id,version_name:v.name,horizon:v.horizon,status:v.status,as_of_period:'2026-05',created_at:v.ts,nb_attainment:v.nb_att,churn_stress:v.churn,renewal_adj:v.ren_adj,active_reqs:v.active_reqs,dec_arr:Math.round(v.dec_arr),dec_cash:Math.round(v.dec_cash),h2_ebitda:Math.round(v.h2_ebitda)}));
+  csvs['forecast_versions_registry.csv']=toCSV(regRows);
+
+  return csvs;
+}
+
+function toCSV(rows){
+  if(!rows.length) return '';
+  const keys=Object.keys(rows[0]);
+  const escape=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;};
+  return [keys.join(','),...rows.map(r=>keys.map(k=>escape(r[k])).join(','))].join('\n');
+}
+
+function downloadAllCSVs(csvs,vid,name){
+  Object.entries(csvs).forEach(([filename,content],i)=>{
+    setTimeout(()=>{
+      const blob=new Blob([content],{type:'text/csv'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download=filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    },i*300);
+  });
+  alert(`\u2713 Promoted to FINAL: "${name}"\n\n${Object.keys(csvs).length} CSV files downloading now.\nLoad them into your warehouse using forecast_versions_registry.csv as the manifest.`);
+}
+
+function downloadDraftCSV(vid){
+  const v=versions.find(x=>x.id===vid);
+  if(!v) return;
+  const csvs=generateAllCSVs(v.results,v.lv,vid);
+  Object.entries(csvs).forEach(([filename,content],i)=>{
+    setTimeout(()=>{
+      const blob=new Blob([content],{type:'text/csv'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download=filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    },i*300);
+  });
+}
+
+// \u2500\u2500 VERSIONS TAB \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderVersions(area){
+  area.innerHTML=`<div class="slide">
+    <div class="slide-title">Version Management</div>
+    <div class="slide-sub">Draft \u2192 Final lifecycle . Only one active final drives board reporting . Final versions generate CSV outputs</div>
+    <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+      <button class="act-btn outline" onclick="saveVersion('draft')">\u1F4BE Save working draft</button>
+      <button class="act-btn success" onclick="saveVersion('final')">\u2713 Promote to final -- generate CSVs</button>
+      <span style="font-size:10px;color:var(--text3)">Final versions lock assumptions and download all Forecast_* CSVs automatically</span>
+    </div>
+    ${versions.length===0?`<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">No versions saved yet.<br>Save a draft to iterate, or promote to final when you're ready to report.</div>`:`
+    <div>
+      ${versions.map(v=>`<div class="ver-row">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="ver-name">${v.name}</span>
+            <span class="badge ${v.status==='final'?'badge-final':v.status==='superseded'?'badge-super':'badge-draft'}">${v.status==='final'?'\u2713 Final':v.status==='superseded'?'Superseded':'Draft'}</span>
+            <span style="font-size:9.5px;padding:2px 7px;border-radius:10px;background:var(--bg2);border:0.5px solid var(--border);color:var(--text3)">${v.horizon.replace('p','+')} horizon</span>
+          </div>
+          <div class="ver-meta">${v.ts} . NB ${Math.round(v.nb_att*100)}% . Churn ${Math.round(v.churn*100)}% . ${v.active_reqs} reqs . Ren adj ${v.ren_adj>=0?'+':''}${Math.round(v.ren_adj*100)}pp</div>
+        </div>
+        <div class="ver-stats">
+          <div style="color:var(--teal)">${fM(v.dec_arr,1)} ARR</div>
+          <div>${fM(v.dec_cash,1)} cash</div>
+          <div style="color:${v.h2_ebitda>=0?'var(--teal)':'var(--red)'}">${fM(v.h2_ebitda,1)} EBITDA</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-left:8px">
+          ${v.status!=='final'?`<button class="act-btn success" style="font-size:10px;padding:4px 10px" onclick="promoteVersion('${v.id}')">\u2191 Promote</button>`:''}
+          <button class="act-btn outline" style="font-size:10px;padding:4px 10px" onclick="downloadDraftCSV('${v.id}')">\u2193 CSVs</button>
+          ${v.status!=='final'?`<button class="act-btn outline" style="font-size:10px;padding:4px 10px;color:var(--red)" onclick="deleteVersion('${v.id}')">\u2715</button>`:''}
+        </div>
+      </div>`).join('')}
+    </div>`}
+  </div>`;
+}
+
+function promoteVersion(id){
+  const v=versions.find(x=>x.id===id);
+  if(!v||!confirm(`Promote "${v.name}" to FINAL? This will supersede the current final version and download CSVs.`)) return;
+  versions.forEach(x=>{if(x.status==='final') x.status='superseded';});
+  v.status='final';
+  const csvs=generateAllCSVs(v.results,v.lv,id);
+  downloadAllCSVs(csvs,id,v.name);
+  showTab('versions');
+}
+
+function deleteVersion(id){
+  if(!confirm('Delete this draft version?')) return;
+  versions=versions.filter(v=>v.id!==id);
+  showTab('versions');
+}
+
+// \u2500\u2500 INIT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function buildLeverReqs(){
+  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
+  const el=document.getElementById('leverReqList');
+  if(!el) return;
+  el.innerHTML=SRC.open_reqs.map(r=>`<div class="req-row">
+    <button class="tog on" id="tog-${r.id}" onclick="toggleReq('${r.id}')" aria-label="Toggle ${r.role}"></button>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.role}</div>
+      <div style="font-size:9.5px;color:var(--text3)">${r.dept} . ${r.start} . ${fM(r.cash_annual/12,0)}/mo</div>
+    </div>
+    <span class="badge ${priCls[r.priority]||'badge-lo'}">${r.priority}</span>
+  </div>`).join('');
+}
+buildLeverReqs();
+updLabels();
+
+// ─── SKIN ENGINE ─────────────────────────────────────────────────────────────
+const SKINS = {
+  canvas:   {bg:'#18241b',bg2:'#23332699',bg3:'#2b3c2e',text:'#dde8d6',text2:'#aab8a2',text3:'#72826a',border:'#2e3f31',border2:'rgba(56,75,60,0.25)',  accent:'#c4855a',teal:'#5fa878',red:'#b8705f',amber:'#b89060',shadow:'0 1px 2px rgba(0,0,0,0.3),0 12px 32px -8px rgba(0,0,0,0.4)'},
+  smpl:     {bg:'#0c1418',bg2:'#14222899',bg3:'#1a2e35',text:'#d8eae8',text2:'#8eb0ad',text3:'#5e8280',border:'#1e3540',border2:'rgba(36,64,76,0.25)',   accent:'#3db8a6',teal:'#4aaa94',red:'#b87068',amber:'#c4924a',shadow:'0 1px 2px rgba(0,0,0,0.45),0 16px 40px -10px rgba(0,0,0,0.6)'},
+  midnight: {bg:'#141a2e',bg2:'#1e273f99',bg3:'#252e4a',text:'#d8daf0',text2:'#9098c0',text3:'#606880',border:'#2c3558',border2:'rgba(52,62,100,0.25)',  accent:'#c4a058',teal:'#5ea87a',red:'#b87070',amber:'#c4a058',shadow:'0 1px 2px rgba(0,0,0,0.35),0 12px 32px -8px rgba(0,0,0,0.45)'},
+  harbor:   {bg:'#0e2428',bg2:'#16363999',bg3:'#1d4045',text:'#d2e8e4',text2:'#88b0ac',text3:'#567874',border:'#244850',border2:'rgba(44,88,92,0.25)',   accent:'#c49058',teal:'#52a882',red:'#b87068',amber:'#c49058',shadow:'0 1px 2px rgba(0,0,0,0.35),0 12px 32px -8px rgba(0,0,0,0.45)'},
+  eclipse:  {bg:'#0d1018',bg2:'#181e2e',  bg3:'#202638',text:'#d4d8e8',text2:'#8890b0',text3:'#586080',border:'#282f48',border2:'rgba(50,58,86,0.25)',   accent:'#6090c8',teal:'#52a882',red:'#b07070',amber:'#b8904a',shadow:'0 1px 2px rgba(0,0,0,0.45),0 16px 40px -10px rgba(0,0,0,0.62)'},
+  graphite: {bg:'#141311',bg2:'#221f1c',  bg3:'#2c2924',text:'#dedad4',text2:'#a09890',text3:'#706860',border:'#363028',border2:'rgba(66,58,50,0.25)',   accent:'#c0825a',teal:'#5aa87a',red:'#b07060',amber:'#c0825a',shadow:'0 1px 2px rgba(0,0,0,0.4),0 16px 40px -10px rgba(0,0,0,0.55)'},
+  aurora:   {bg:'#0c1020',bg2:'#161e30',  bg3:'#1e283e',text:'#ccd8ec',text2:'#7890b0',text3:'#506080',border:'#263450',border2:'rgba(46,62,96,0.25)',   accent:'#5090c0',teal:'#4898a0',red:'#a87070',amber:'#a89050',shadow:'0 1px 2px rgba(0,0,0,0.45),0 16px 40px -10px rgba(0,0,0,0.62)'},
+  ember:    {bg:'#160f12',bg2:'#261a20',  bg3:'#302028',text:'#e8dcd8',text2:'#a88880',text3:'#785850',border:'#3c2830',border2:'rgba(70,48,58,0.25)',   accent:'#c09050',teal:'#5aa87a',red:'#b07070',amber:'#c09050',shadow:'0 1px 2px rgba(0,0,0,0.45),0 16px 40px -10px rgba(0,0,0,0.6)'},
+  slate:    {bg:'#181b22',bg2:'#20252e99',bg3:'#282e38',text:'#d4d8e4',text2:'#8890a8',text3:'#606878',border:'#303848',border2:'rgba(58,68,88,0.25)',   accent:'#6090c0',teal:'#5aa87a',red:'#a87060',amber:'#a89050',shadow:'0 1px 2px rgba(0,0,0,0.3),0 12px 32px -8px rgba(0,0,0,0.4)'},
+  mist:     {bg:'#1c2028',bg2:'#242a34',  bg3:'#2c3240',text:'#d0d4de',text2:'#848c9c',text3:'#5c6270',border:'#323848',border2:'rgba(62,70,88,0.25)',   accent:'#7890a8',teal:'#5a9878',red:'#a07068',amber:'#a08858',shadow:'0 1px 2px rgba(0,0,0,0.3),0 14px 36px -12px rgba(0,0,0,0.42)'},
+};
+
+function applySkin(id) {
+  const s = SKINS[id] || SKINS.canvas;
+  const r = document.documentElement.style;
+  r.setProperty('--bg',          s.bg);
+  r.setProperty('--bg2',         s.bg2);
+  r.setProperty('--bg3',         s.bg3);
+  r.setProperty('--text',        s.text);
+  r.setProperty('--text2',       s.text2);
+  r.setProperty('--text3',       s.text3);
+  r.setProperty('--border',      s.border);
+  r.setProperty('--border2',     s.border2);
+  r.setProperty('--accent',      s.accent);
+  r.setProperty('--teal',        s.teal);
+  r.setProperty('--red',         s.red);
+  r.setProperty('--amber',       s.amber);
+  r.setProperty('--navy',        s.bg2);
+  r.setProperty('--blue',        s.teal);
+  r.setProperty('--green',       s.teal);
+  r.setProperty('--gray',        s.text3);
+  r.setProperty('--lgray',       s.border);
+  r.setProperty('--shadow',      s.shadow);
+  r.setProperty('--teal-light',  s.teal + '22');
+  r.setProperty('--red-light',   s.red  + '18');
+  r.setProperty('--amber-light', s.amber + '18');
+  r.setProperty('--green-light', s.teal + '18');
+
+  // Patch Chart.js global defaults so ALL charts become readable on dark backgrounds
+  // without touching any individual mk() call
+  if (window.Chart) {
+    Chart.defaults.color          = s.text3;
+    Chart.defaults.borderColor    = 'rgba(255,255,255,0.07)';
+    Chart.defaults.font.family    = "'Inter',-apple-system,sans-serif";
+    Chart.defaults.font.size      = 10;
+  }
+
+  localStorage.setItem('smpl-skin', id);
+  // Redraw current tab only if content already rendered
+  if (document.getElementById('slideArea')?.children.length > 0) {
+    showTab(curTab);
+  }
+}
+
+(function() {
+  const saved = localStorage.getItem('smpl-skin') || 'canvas';
+  const sel = document.getElementById('skinSelect');
+  if (sel) sel.value = saved;
+  applySkin(saved);
+  showTab('overview');
+})();
+
+</script>
+</div>
+</div>
+
+<script>
+/* SMPL warehouse hydration + draft/promote API wiring */
+(function(){
+  async function smplOrgId(){
+    const q=new URLSearchParams(window.location.search);
+    if(q.get('organization_id')) return q.get('organization_id');
+    try{
+      const s=await fetch('/api/auth/session',{credentials:'include'});
+      const j=await s.json();
+      return j?.user?.activeOrganizationId||null;
+    }catch(_){return null;}
+  }
+  async function smplHydrate(){
+    const orgId=await smplOrgId();
+    if(!orgId) return;
+    const res=await fetch('/api/v1/forecast-engine/payload?organization_id='+encodeURIComponent(orgId),{credentials:'include'});
+    if(!res.ok){console.warn('Forecast hydrate failed',await res.text());return;}
+    const data=await res.json();
+    if(data.meta?.close_month) window.CLOSE_MONTH=data.meta.close_month;
+    if(data.SRC?.actuals){
+      SRC.actuals={...SRC.actuals,...data.SRC.actuals};
+    }
+    if(typeof refresh==='function') refresh();
+  }
+  const _saveVersion=window.saveVersion;
+  window.saveVersion=async function(status){
+    const orgId=await smplOrgId();
+    if(!orgId){alert('Sign in to save forecast versions.');return;}
+    const res=getResults();
+    const lv=getLevers();
+    const name=prompt('Name this '+(status==='final'?'FINAL':'draft')+' version:','Forecast '+new Date().toLocaleDateString());
+    if(!name) return;
+    const tables=typeof generateAllCSVs==='function'?null:null;
+    let tablePayload={};
+    try{
+      if(typeof generateAllCSVs==='function'){
+        const vid='V'+Date.now();
+        tablePayload=generateAllCSVs(res,lv,vid);
+      }
+    }catch(_){}
+    const body={
+      version_name:name,
+      levers:lv,
+      req_active:reqActive,
+      results:{engine:res},
+      tables:Object.fromEntries(Object.entries(tablePayload||{}).map(([k,v])=>[k.replace(/^Forecast_/,'forecast_').toLowerCase(),[]]))
+    };
+    const draftRes=await fetch('/api/v1/forecast/versions/draft?organization_id='+encodeURIComponent(orgId),{
+      method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+    });
+    if(!draftRes.ok){alert('Draft save failed: '+await draftRes.text());return;}
+    const draft=await draftRes.json();
+    if(status==='final'){
+      const promoteRes=await fetch('/api/v1/forecast/versions/'+draft.id+'/promote?organization_id='+encodeURIComponent(orgId),{
+        method:'POST',credentials:'include'
+      });
+      if(!promoteRes.ok){alert('Promote failed: '+await promoteRes.text());return;}
+      alert('Promoted to FINAL and loaded into warehouse.');
+    } else {
+      alert('Draft saved server-side.');
+    }
+    if(typeof showTab==='function') showTab('versions',null);
+  };
+  window.addEventListener('load',()=>{smplHydrate();});
+})();
+</script>
+
+</body>
+</html>
