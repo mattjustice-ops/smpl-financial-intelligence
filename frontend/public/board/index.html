@@ -453,95 +453,248 @@ function show(name, btn) {
   setTimeout(()=>buildCharts(name),50);
 }
 
-// ─── EXEC (8039 executive_scorecard layout) ───────────────────────────────
-function formatPeriodLabel(period) {
-  if (!period || period.length < 7) return period || '';
-  const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const m = parseInt(period.slice(5, 7), 10) - 1;
-  return (names[m] || period.slice(5, 7)) + ' ' + period.slice(0, 4);
-}
-
-function demoExecutiveScorecard() {
-  return {
-    layout: 'executive_scorecard',
-    subtitle: `Jan – ${CLOSE_MO} 2026 Actuals · CM / QTD / YTD / FY Outlook`,
-    kpis: [
-      { label: 'Ending ARR', value: '$86.1M', subtext: '+$0.58M vs budget', tone: 'favorable' },
-      { label: 'Revenue (CM)', value: '$7.41M', subtext: 'YTD $41.7M', tone: 'neutral' },
-      { label: 'EBITDA (CM)', value: '$-1.30M', subtext: 'YTD $-8.1M', tone: 'unfavorable' },
-      { label: 'Cash', value: '$70.6M', subtext: 'FY outlook $31.5M', tone: 'favorable' },
-    ],
-    period_table: {
-      headers: ['Metric', 'CM', 'QTD', 'YTD', 'FY Outlook', 'YTD vs Budget'],
-      rows: [
-        ['Ending ARR', '$86.1M', '$252.4M', '$252.4M', '$97.6M', '+2%'],
-        ['Revenue', '$7.41M', '$21.3M', '$41.7M', '$50.8M', '+0%'],
-        ['EBITDA', '$-1.30M', '$-4.1M', '$-8.1M', '$-1.0M', '-680%'],
-        ['Ending Cash', '$70.6M', '$188.4M', '$188.4M', '$70.6M', '+498%'],
-        ['Pipeline Created (YTD flow)', '$2.06M', '$11.2M', '$11.2M', '$8.4M', '—'],
-      ],
-    },
-    takeaways: [
-      'What changed: June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by $0.47M.',
-      'Why: New business and expansion outpaced churn; annual billing collections drove cash above plan.',
-      'So what: Gross margin expanded to 79.2% while EBITDA timing reflects Q2 variable compensation.',
-      'Action: Normalize compensation cadence in Q3 and maintain expansion playbook in enterprise segment.',
-    ],
-    chart: {
-      title: 'Ending ARR — YTD Actual + FY Outlook',
-      labels: MO12,
-      series: { Actual: ARR_ACT.concat(Array(6).fill(null)), Outlook: Array(6).fill(null).concat(ARR_BUD.slice(0, 6)) },
-    },
-  };
-}
-
-function executiveScorecardData() {
-  const live = window.SMPL_BOARD_PAYLOAD && window.SMPL_BOARD_PAYLOAD.executive_scorecard;
-  if (live && live.layout === 'executive_scorecard') return live;
-  return demoExecutiveScorecard();
-}
-
+// ─── EXEC ──────────────────────────────────────────────────────────────────
 function renderExec(area) {
-  const sc = executiveScorecardData();
-  const kpis = (sc.kpis || []).slice(0, 4);
-  const tbl = sc.period_table || { headers: [], rows: [] };
-  const bullets = sc.takeaways || [];
-  const chartTitle = (sc.chart && sc.chart.title) || 'Ending ARR — YTD Actual + FY Outlook';
+  // Driver tree data
+  const drivers = [
+    { label:'New Business', val:1.92,  bud:1.73,  dir:'pos', pct:72 },
+    { label:'Expansion',    val:0.98,  bud:0.85,  dir:'pos', pct:37 },
+    { label:'Reactivation', val:0.095, bud:0.07,  dir:'pos', pct:10 },
+    { label:'Contraction',  val:-0.225,bud:-0.28, dir:'pos', pct:18 },
+    { label:'Churn',        val:-0.115,bud:-0.50, dir:'pos', pct:9  },
+  ];
 
-  area.innerHTML = `<div class="slide">
-  <div class="slide-title">Executive Summary</div>
-  <div class="slide-sub">${sc.subtitle || ''}</div>
-  <div class="kpi-strip kpi-strip-${Math.max(kpis.length, 4)}">
-    ${kpis.map(k => `<div class="kpi"><div class="kpi-lbl">${k.label}</div><div class="kpi-val">${k.value}</div>${k.subtext ? `<div class="kpi-delta ${k.tone === 'favorable' ? 'pos' : k.tone === 'unfavorable' ? 'neg' : 'neu'}">${k.subtext}</div>` : ''}</div>`).join('')}
+  area.innerHTML = `<div class="slide" style="padding:20px 24px 32px">
+
+  <!-- ── MASTHEAD ── -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:0.5px solid var(--border)">
+    <div>
+      <div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px">Jan – Jun 2026</div>
+      <div style="font-size:26px;font-weight:700;letter-spacing:-0.6px;color:var(--text);line-height:1.1">Executive Operating Summary</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:5px">Prepared for Board of Directors · June 2026 Close</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <span style="font-size:11px;font-weight:600;padding:5px 13px;border-radius:20px;background:rgba(95,168,120,0.15);color:var(--teal);border:0.5px solid var(--teal);letter-spacing:.02em">▲ Ahead of Plan</span>
+    </div>
   </div>
-  <div class="two-col" style="margin-top:14px;align-items:stretch">
-    <div class="card" style="margin:0">
-      <div class="card-title">Period scorecard</div>
-      <div class="card-sub">CM · QTD · YTD · FY Outlook · YTD vs Budget</div>
-      <div style="overflow-x:auto">
-        <table class="exec-period-tbl">
-          <thead><tr>${(tbl.headers || []).map((h, i) => `<th${i === 0 ? ' style="text-align:left"' : ''}>${h}</th>`).join('')}</tr></thead>
-          <tbody>${(tbl.rows || []).map(row => `<tr>${row.map((cell, i) => `<td${i === 0 ? ' style="text-align:left;font-family:inherit"' : ''}>${cell}</td>`).join('')}</tr>`).join('')}</tbody>
-        </table>
+
+  <!-- ── VERDICT ── -->
+  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:24px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
+    <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">H1 closed with ARR $0.58M ahead of plan and the strongest net new ARR month of the year — margin expansion and a cash position 2.2× budget create H2 headroom, while EBITDA timing variance warrants monitoring.</div>
+  </div>
+
+  <!-- ── 01: WHERE WE STAND ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">01</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Where We Stand</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">June 2026 actuals vs budget</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px">
+    ${[
+      {lbl:'Ending ARR',     val:'$86.1M',   delta:'+$0.58M vs bud', dir:'pos', because:'Best net new ARR month of H1 — new logos + expansion both beat plan', link:'View waterfall →'},
+      {lbl:'Net New ARR',    val:'$2.655M',  delta:'+$0.47M vs bud', dir:'pos', because:'New business $1.92M (+$0.19M) and expansion $0.98M (+$0.13M) drove outperformance', link:'View driver tree →'},
+      {lbl:'EBITDA',         val:'-$1.30M',  delta:'-$1.08M vs bud', dir:'neg', because:'Q2 variable comp accrual timing — underlying operating leverage is intact; normalizes Q3', link:'View P&L →'},
+      {lbl:'Cash Balance',   val:'$70.61M',  delta:'+$39.1M vs bud', dir:'pos', because:'Annual billing collection cycle front-loaded; $39M above budget reflects billing structure', link:'View cash →'},
+    ].map(h=>`
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.lbl}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.dir==='pos'?'▲':'▼'}</span>
+        <span style="font-size:10px;font-family:var(--mono);font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.delta}</span>
+      </div>
+      <div style="font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--text);line-height:1">${h.val}</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.5;border-top:0.5px solid var(--border);padding-top:7px;margin-top:2px">${h.because}</div>
+      <div style="font-size:10px;color:var(--accent);cursor:pointer;font-weight:500">${h.link}</div>
+    </div>`).join('')}
+  </div>
+
+  <!-- ── 02: WHY IT HAPPENED ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">02</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Why It Happened</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">Net New ARR driver decomposition · June 2026</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px 20px;box-shadow:var(--shadow);margin-bottom:28px">
+    <div style="display:flex;align-items:center;gap:24px">
+      <!-- Root -->
+      <div style="flex-shrink:0;text-align:center;padding-right:20px;border-right:0.5px solid var(--border)">
+        <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px">Net New ARR</div>
+        <div style="font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--teal)">$2.655M</div>
+        <div style="font-size:10px;color:var(--teal);font-weight:600;margin-top:2px">+$0.47M vs budget</div>
+      </div>
+      <!-- Drivers -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        ${drivers.map(d=>{
+          const isNeg = d.val < 0;
+          const dispVal = isNeg ? '-$'+Math.abs(d.val).toFixed(2)+'M' : '+$'+d.val.toFixed(2)+'M';
+          const budDiff = d.val - d.bud;
+          const budLabel = budDiff >= 0 ? '+$'+Math.abs(budDiff).toFixed(3)+'M vs bud' : '-$'+Math.abs(budDiff).toFixed(3)+'M vs bud';
+          const barColor = d.dir==='pos' ? 'var(--teal)' : 'var(--red)';
+          return `<div style="display:grid;grid-template-columns:110px 1fr 90px 100px;gap:10px;align-items:center">
+            <span style="font-size:11px;color:var(--text2)">${d.label}</span>
+            <div style="background:var(--bg3);border-radius:3px;height:7px;overflow:hidden">
+              <div style="width:${d.pct}%;height:100%;background:${barColor};border-radius:3px;opacity:${isNeg?0.5:0.75}"></div>
+            </div>
+            <span style="font-size:11px;font-family:var(--mono);font-weight:600;text-align:right;color:${isNeg?'var(--red)':'var(--teal)'}">${dispVal}</span>
+            <span style="font-size:10px;font-family:var(--mono);text-align:right;color:${budDiff>=0?'var(--teal)':'var(--red)'}">${budLabel}</span>
+          </div>`;
+        }).join('')}
       </div>
     </div>
-    <div class="exec-takeaways">
-      <div class="exec-takeaways-hdr">Key takeaways</div>
-      <ul>${bullets.map(b => `<li>${b}</li>`).join('') || '<li>Live warehouse connected — regenerate commentary for narrative refresh.</li>'}</ul>
+  </div>
+
+  <!-- ── 03: WHAT IT MEANS ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">03</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">What It Means &amp; What To Do</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">Drivers · Risks · Actions</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:28px">
+    <!-- Key Drivers -->
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--teal);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--teal);margin-bottom:10px">Key Drivers</div>
+      ${[
+        'NRR reached 100.8% — churn dramatically favorable vs -$0.50M budget',
+        'Gross margin expanded 220bps to 79.2% from engineering infra optimization',
+        'Net new ARR $2.655M — best month of H1, 6th consecutive beat',
+        'Pipeline coverage 3.3× vs H2 ARR target — H2 forecast tracking $1.4M ahead',
+      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
+        <span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-top:4px"></span>
+        <span>${t}</span>
+      </div>`).join('')}
+    </div>
+    <!-- Key Risks -->
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--red);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px">Key Risks</div>
+      ${[
+        'EBITDA -$1.08M vs budget — variable comp timing; confirm Q3 normalization',
+        'SMB concentration 78% of gross churn — GRR risk if SMB softens in H2',
+        'Paid Search at $429K spend and sub-2× efficiency — ROI below threshold',
+        'Pipeline coverage softened from 4.5× (May) to 3.3× — needs Q3 acceleration',
+      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
+        <span style="flex-shrink:0;width:6px;height:6px;background:var(--red);margin-top:4px"></span>
+        <span>${t}</span>
+      </div>`).join('')}
+    </div>
+    <!-- Actions -->
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--accent);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:10px">Recommended Actions</div>
+      ${[
+        {n:1,t:'Confirm Q3 EBITDA normalization plan',owner:'CFO',impact:'High'},
+        {n:2,t:'Reallocate Paid Search budget to Partner & Organic',owner:'CMO',impact:'High'},
+        {n:3,t:'Accelerate Q3 pipeline creation — cover 3.3× gap',owner:'CRO',impact:'High'},
+        {n:4,t:'SMB churn cohort analysis — identify at-risk accounts',owner:'CS',impact:'Med'},
+      ].map(a=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px">
+        <span style="flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);font-family:var(--mono);min-width:14px">${a.n}.</span>
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:3px">${a.t}</div>
+          <div style="display:flex;gap:5px">
+            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(255,255,255,0.06);color:var(--text3);border:0.5px solid var(--border)">${a.owner}</span>
+            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:${a.impact==='High'?'rgba(184,112,95,0.15)':'rgba(255,255,255,0.06)'};color:${a.impact==='High'?'var(--red)':'var(--text3)'};border:0.5px solid ${a.impact==='High'?'var(--red)':'var(--border)'}">↑ ${a.impact}</span>
+          </div>
+        </div>
+      </div>`).join('')}
     </div>
   </div>
-  <div class="card" style="margin-top:14px;margin-bottom:0">
-    <div class="card-title">${chartTitle}</div>
-    <div class="card-sub">Actual through close month · Outlook for remaining fiscal periods</div>
-    <div class="chart-wrap" style="height:220px"><canvas id="execChart" role="img" aria-label="${chartTitle}"></canvas></div>
+
+  <!-- ── 04: ARR & REVENUE TREND ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">04</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">ARR &amp; Revenue Trend</span>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center">
+      <span style="font-size:10px;color:var(--text3)">● ARR actual (left)</span>
+      <span style="font-size:10px;color:var(--text3)">╌ ARR budget (left)</span>
+      <span style="font-size:10px;color:var(--text3)">▬ Revenue (right)</span>
+    </div>
   </div>
-  <div class="commentary" id="execComm" style="margin-top:14px">
-    <div class="commentary-lbl">Executive Takeaway</div>
-    <div class="commentary-text">${bullets[0] ? bullets[0].replace(/^What changed:\s*/i, '') : 'June close marks the strongest ARR month of H1 — net new ARR beat budget, with gross margin expansion and strong cash collections.'}</div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:28px">
+    <div class="chart-wrap" style="height:200px"><canvas id="execChart" role="img" aria-label="ARR and revenue dual-axis trend chart Jan to June 2026"></canvas></div>
   </div>
-  <button class="ai-btn" onclick="aiComm('exec','execComm')">✦ Regenerate AI commentary ↗</button>
+
+  <!-- ── 05: VARIANCE DETAIL ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">05</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Variance Detail</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">June 2026 actuals vs budget</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div class="two-col" style="margin-bottom:28px">
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Budget Variance Summary</div>
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border);padding-bottom:5px;margin-bottom:4px">
+        ${['Metric','Actual','Budget','Var'].map(h=>`<span style="font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:${h==='Metric'?'left':'right'};${h!=='Metric'?'min-width:70px':''}">${h}</span>`).join('')}
+      </div>
+      ${[
+        ['ARR',         '$86.1M',   '$85.52M', 0.58,   false],
+        ['Revenue',     '$7.41M',   '$7.35M',  0.06,   false],
+        ['Gross Profit','$5.87M',   '$5.66M',  0.21,   false],
+        ['Gross Margin','79.2%',    '77.0%',   0,      false],
+        ['EBITDA',      '-$1.30M',  '-$0.22M', -1.08,  false],
+        ['Cash',        '$70.61M',  '$31.46M', 39.1,   false],
+        ['NRR',         '100.8%',   '100.0%',  0.008,  false],
+      ].map(([l,a,b,d,inv],i)=>{
+        const emph = l==='ARR'||l==='EBITDA';
+        return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${emph?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
+          <span style="font-size:11.5px;color:var(--text2);font-weight:${emph?'600':'400'}">${l}</span>
+          <span style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:${emph?'600':'500'};text-align:right;min-width:70px">${a}</span>
+          <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:70px">${b}</span>
+          <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d>0?'var(--teal)':d<0?'var(--red)':'var(--text3)'}">${d>0?'+':''}${l==='NRR'?'+20bps':l==='Gross Margin'?'flat':fM(d)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Net New ARR — Monthly</div>
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border);padding-bottom:5px;margin-bottom:4px">
+        ${['Period','Actual','Budget','Var'].map(h=>`<span style="font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:${h==='Period'?'left':'right'};${h!=='Period'?'min-width:70px':''}">${h}</span>`).join('')}
+      </div>
+      ${MO.map((m,i)=>{
+        const d=NN_ACT[i]-NN_BUD[i];
+        const isJun = i===5;
+        return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${isJun?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
+          <span style="font-size:11.5px;color:var(--text2);font-weight:${isJun?'600':'400'}">${m} 2026${isJun?' ✦':''}</span>
+          <span style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:${isJun?'600':'500'};text-align:right;min-width:70px">${fM(NN_ACT[i])}</span>
+          <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:70px">${fM(NN_BUD[i])}</span>
+          <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d>=0?'var(--teal)':'var(--red)'}">${fV(d)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+
+  <!-- ── 06: AI TAKEAWAY ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">06</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Executive Takeaway</span>
+    </div>
+    <button class="ai-btn" onclick="aiComm('exec','execComm')" style="margin-top:0">✦ Regenerate ↗</button>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r2) var(--r2) 0;padding:16px 20px;box-shadow:var(--shadow)" id="execComm">
+    <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">AI-Generated · Claude</div>
+    <div class="commentary-text">June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by $0.47M, driven by $1.92M new business and $0.98M expansion across 14 new logos and 10 expansion accounts. Revenue of $7.41M exceeded plan by $60K with gross margin expanding 220bps to 79.2% from engineering infrastructure efficiency gains. Cash reached $70.61M against a $31.46M budget — the $39.1M favorable variance reflects annual billing collections and should not be interpreted as operational outperformance. EBITDA of -$1.30M trailed budget by $1.08M due to Q2 variable compensation timing; normalization is expected in Q3 and the underlying operating leverage remains intact.</div>
+  </div>
+
 </div>`;
-  window._execChartSpec = sc.chart || null;
 }
 
 // ─── ARR ──────────────────────────────────────────────────────────────────
@@ -1069,23 +1222,38 @@ function renderRisks(area) {
 // ─── CHART BUILDER ─────────────────────────────────────────────────────────
 function buildCharts(slide) {
   if(slide==='exec') {
-    const spec = window._execChartSpec || demoExecutiveScorecard().chart;
-    const rawLabels = (spec && spec.labels) || MO12;
-    const labels = rawLabels.map(l => (typeof l === 'string' && l.length === 7 ? formatPeriodLabel(l) : l));
-    const toMillions = arr => (arr || []).map(v => v == null ? null : (Math.abs(v) > 1000 ? v / 1e6 : v));
-    const actual = toMillions((spec && spec.series && (spec.series.Actual || spec.series.actual)) || ARR_ACT);
-    const outlook = toMillions((spec && spec.series && (spec.series.Outlook || spec.series.Forecast || spec.series.outlook)) || []);
-    const datasets = [];
-    if (actual.some(v => v != null)) {
-      datasets.push({type:'line', label:'Actual', data:actual, borderColor:'#185FA5', borderWidth:2, pointRadius:3, fill:false, spanGaps:true});
-    }
-    if (outlook.some(v => v != null)) {
-      datasets.push({type:'line', label:'Outlook', data:outlook, borderColor:'#BA7517', borderDash:[5,4], borderWidth:2, pointRadius:2, fill:false, spanGaps:true});
-    }
-    if (!datasets.length) {
-      datasets.push({type:'line', label:'ARR Act', data:ARR_ACT, borderColor:'#185FA5', borderWidth:2, pointRadius:3, fill:false});
-    }
-    charts.exec=new Chart(document.getElementById('execChart'),{data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{boxWidth:10,font:{size:10}}}},scales:{y:{ticks:{callback:v=>'$'+Number(v).toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    const cs = getComputedStyle(document.documentElement);
+    const C = k => cs.getPropertyValue(k).trim();
+    const cPos = C('--teal');
+    const cAmber = C('--amber');
+    const cText3 = C('--text3');
+    const cAccent = C('--accent');
+    const tickFont = { size: 9, family: "'Inter',-apple-system,sans-serif" };
+    const gridColor = 'rgba(255,255,255,0.06)';
+    const fade = (hex, a) => {
+      hex = hex.replace('#','');
+      if(hex.length===3) hex=hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+      const r=parseInt(hex.slice(0,2),16)||122;
+      const g=parseInt(hex.slice(2,4),16)||159;
+      const b=parseInt(hex.slice(4,6),16)||194;
+      return `rgba(${r},${g},${b},${a})`;
+    };
+    charts.exec=new Chart(document.getElementById('execChart'),{
+      data:{labels:MO,datasets:[
+        {type:'bar', label:'Net New ARR', data:NN_ACT, backgroundColor:fade(cPos,0.25), borderColor:cPos, borderWidth:1.5, yAxisID:'y2', order:2, borderRadius:3},
+        {type:'line',label:'ARR Act',    data:ARR_ACT, borderColor:cAccent, borderWidth:2.5, pointRadius:4, pointBackgroundColor:cAccent, yAxisID:'y1', fill:false, order:1, tension:0.3},
+        {type:'line',label:'ARR Bud',   data:ARR_BUD, borderColor:cText3, borderDash:[4,3], borderWidth:1.5, pointRadius:2, yAxisID:'y1', fill:false, order:1, tension:0.3},
+        {type:'line',label:'Revenue',   data:REV_ACT, borderColor:cAmber, borderWidth:2, pointRadius:3, yAxisID:'y2', fill:false, order:1, tension:0.3},
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:false}},
+        scales:{
+          y1:{type:'linear',position:'left',  ticks:{callback:v=>'$'+v+'M', font:tickFont, color:cText3}, grid:{color:gridColor}},
+          y2:{type:'linear',position:'right', ticks:{callback:v=>'$'+v.toFixed(1)+'M', font:tickFont, color:cText3}, grid:{display:false}},
+          x: { ticks:{ font:tickFont, color:cText3 }, grid:{ display:false } },
+        }
+      }
+    });
   } else if(slide==='arr') {
     // True waterfall: BOP=81.39, +NB 1.80, +Exp 0.91, +React 0.08, -Con 0.24, -Churn 0.49, EOP=83.45
     // Each floating bar = [base_offset, value] using min/max trick
