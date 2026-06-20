@@ -43,6 +43,7 @@ class BoardPlatformMeta(BaseModel):
 class BoardPlatformPayload(BaseModel):
     meta: BoardPlatformMeta
     executive: dict[str, Any]
+    executive_scorecard: dict[str, Any] = Field(default_factory=dict)
     validation: ExportValidationSummary
     time_series: dict[str, Any] = Field(default_factory=dict)
     three_statement: dict[str, Any] = Field(default_factory=dict)
@@ -88,6 +89,50 @@ def _build_time_series(bundle) -> dict[str, Any]:
         "Actual": actual,
         "Forecast": forecast,
         "Budget": budget,
+    }
+
+
+def _build_executive_scorecard(bundle) -> dict[str, Any]:
+    """IMG 8039 / executive_scorecard layout for the web board tab."""
+    from app.services.reporting.export.board_commentary_service import SlideCommentary
+    from app.services.reporting.export.board_slides import _executive_takeaway_bullets
+    from app.services.reporting.export.board_visuals import (
+        executive_period_table,
+        executive_summary_kpis,
+        executive_trajectory_chart,
+    )
+
+    table = executive_period_table(bundle)
+    kpis = executive_summary_kpis(bundle)
+    chart = executive_trajectory_chart(bundle)
+    bullets = _executive_takeaway_bullets(SlideCommentary(), bundle)
+
+    chart_payload: dict[str, Any] | None = None
+    if chart and chart.categories:
+        chart_payload = {
+            "title": chart.title,
+            "labels": chart.categories,
+            "series": chart.series,
+        }
+
+    return {
+        "layout": "executive_scorecard",
+        "subtitle": f"Close {bundle.as_of_period} · Actual + Forecast · CM / QTD / YTD / FY Outlook",
+        "kpis": [
+            {
+                "label": kpi.label,
+                "value": kpi.value,
+                "subtext": kpi.subtext,
+                "tone": kpi.tone,
+            }
+            for kpi in kpis
+        ],
+        "period_table": {
+            "headers": table.headers,
+            "rows": table.rows,
+        },
+        "takeaways": bullets,
+        "chart": chart_payload,
     }
 
 
@@ -155,6 +200,7 @@ def build_board_platform_payload(
     return BoardPlatformPayload(
         meta=meta,
         executive=_decimal_to_json(bundle.executive_flow.model_dump(mode="json")),
+        executive_scorecard=_decimal_to_json(_build_executive_scorecard(bundle)),
         validation=bundle.validation,
         time_series=_build_time_series(bundle),
         three_statement=three_statement,
