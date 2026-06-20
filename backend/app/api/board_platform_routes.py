@@ -44,6 +44,8 @@ class CopilotResponse(BaseModel):
 def board_platform_payload(
     organization_id: uuid.UUID,
     include_commentary: bool = Query(False),
+    include_validation: bool = Query(False),
+    include_three_statement: bool = Query(False),
     block_on_validation: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> BoardPlatformPayload:
@@ -52,6 +54,8 @@ def board_platform_payload(
             db,
             organization_id,
             include_commentary=include_commentary,
+            include_validation=include_validation,
+            include_three_statement=include_three_statement,
             block_on_validation=block_on_validation,
         )
     except HTTPException:

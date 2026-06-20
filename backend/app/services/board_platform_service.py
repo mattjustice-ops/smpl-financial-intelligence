@@ -96,6 +96,8 @@ def build_board_platform_payload(
     organization_id: uuid.UUID,
     *,
     include_commentary: bool = False,
+    include_validation: bool = False,
+    include_three_statement: bool = False,
     block_on_validation: bool = False,
 ) -> BoardPlatformPayload:
     org = get_organization_or_404(db, organization_id, module="board_export")
@@ -112,16 +114,19 @@ def build_board_platform_payload(
             start_period=start_period,
             end_period=end_period,
             as_of_period=as_of,
+            include_validation=include_validation,
         )
     finally:
         reset_as_of_period(token)
 
-    if block_on_validation:
+    if block_on_validation and include_validation:
         raise_if_validation_blocked(bundle.validation, action="Board Platform load")
 
-    three_statement = build_ts_data(
-        db, organization_id, as_of=as_of, start_period=start_period, end_period=end_period
-    )
+    three_statement: dict[str, Any] = {}
+    if include_three_statement:
+        three_statement = build_ts_data(
+            db, organization_id, as_of=as_of, start_period=start_period, end_period=end_period
+        )
 
     commentary: dict[str, dict[str, str]] = {}
     if include_commentary:

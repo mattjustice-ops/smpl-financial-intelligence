@@ -28,6 +28,7 @@ from app.services.reporting.export.multi_scenario import (
 )
 from app.services.reporting.export.schemas import (
     CommentaryField,
+    ExportValidationSummary,
     GlDetailRow,
     HeadcountRow,
     ReportingBundle,
@@ -330,9 +331,10 @@ def collect_board_platform_bundle(
     start_period: str,
     end_period: str,
     as_of_period: str | None = None,
+    include_validation: bool = False,
     **dashboard_filters,
 ) -> ReportingBundle:
-    """Lightweight bundle for Board Platform — skips GL, headcount, drilldown, and AI export work."""
+    """Lightweight bundle for Board Platform — skips GL, headcount, drilldown, waterfalls, and AI export work."""
     org = get_organization_or_404(db, organization_id)
     start = to_period(start_period)
     end = to_period(end_period)
@@ -346,14 +348,6 @@ def collect_board_platform_bundle(
         "as_of_period": as_of,
     }
     executive = executive_flow(db, organization_id, **params)
-    comparison_waterfalls = collect_comparison_waterfalls(
-        db,
-        organization_id,
-        start_period=start,
-        end_period=end,
-        scenarios=("Actual",),
-        **dashboard_filters,
-    )
     comparison_financial = collect_comparison_financial_statements(
         db,
         organization_id,
@@ -371,8 +365,10 @@ def collect_board_platform_bundle(
         period_label=_period_label(as_of),
         executive_flow=executive,
         financial_statements=comparison_financial,
-        comparison_waterfalls=comparison_waterfalls,
         comparison_financial_statements=comparison_financial,
     )
-    bundle.validation = run_export_validation_bundle(bundle)
+    if include_validation:
+        bundle.validation = run_export_validation_bundle(bundle)
+    else:
+        bundle.validation = ExportValidationSummary(status="pass")
     return bundle

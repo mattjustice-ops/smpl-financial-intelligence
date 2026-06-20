@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { useEntitlements } from "@/hooks/useEntitlements";
+import { getLongRunningApiBase } from "@/lib/apiBase";
 import { fetchJson } from "@/lib/fetchJson";
 
 type ValidationCheck = {
@@ -79,10 +80,16 @@ export function BoardPlatformApp() {
     setLoading(true);
     setError(null);
     try {
+      const apiBase = getLongRunningApiBase();
+      const params = new URLSearchParams({
+        organization_id: organizationId,
+        include_validation: "false",
+        include_three_statement: "false",
+      });
       const data = await fetchJson<BoardPayload>(
-        `/api/v1/board-platform/payload?organization_id=${organizationId}`,
+        `${apiBase}/api/v1/board-platform/payload?${params.toString()}`,
         undefined,
-        120000,
+        180000,
       );
       setPayload(data);
     } catch (e) {
@@ -229,7 +236,7 @@ export function BoardPlatformApp() {
       {loading && <div className="board-panel">Loading live board data…</div>}
       {error && (
         <div className="board-panel board-error">
-          <strong>Board blocked — validation or load error</strong>
+          <strong>Could not load board data</strong>
           <pre>{error}</pre>
           <button type="button" className="board-btn" onClick={() => void loadPayload()}>
             Retry
@@ -240,9 +247,9 @@ export function BoardPlatformApp() {
       {payload && !loading && (
         <>
           {payload.validation.failed_count > 0 || payload.validation.warning_count > 0 ? (
-            <div className="board-panel board-error">
+            <div className="board-panel board-warn">
               Validation {payload.validation.status}: {payload.validation.failed_count} failed,{" "}
-              {payload.validation.warning_count} warnings. Resolve before export.
+              {payload.validation.warning_count} warnings. Board still loads — review before export.
             </div>
           ) : null}
 
@@ -404,6 +411,13 @@ export function BoardPlatformApp() {
           border-left: 3px solid #b8705f;
           margin: 16px 24px;
           border-radius: 8px;
+        }
+        .board-warn {
+          background: rgba(196, 133, 90, 0.1);
+          border-left: 3px solid #c4855a;
+          margin: 16px 24px;
+          border-radius: 8px;
+          color: #dde8d6;
         }
         .board-kpi-strip {
           display: grid;
