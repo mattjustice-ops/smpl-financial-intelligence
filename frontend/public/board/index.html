@@ -269,7 +269,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 <div id="slideArea"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Board Intelligence · Jan–${CLOSE_MO} 2026 Actuals · AI commentary via Claude · Confidential</div>
+  <div class="footer-note" id="footerNote"></div>
   </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -2734,9 +2734,22 @@ function applySkin(id) {
 }
 
 (function initBoardShell() {
+  function updateFooterNote(closeMonth) {
+    const el = document.getElementById('footerNote');
+    if (!el) return;
+    let mo = CLOSE_MO;
+    if (closeMonth && closeMonth.length >= 7) {
+      const idx = parseInt(closeMonth.slice(5, 7), 10) - 1;
+      if (idx >= 0 && idx < MO12.length) mo = MO12[idx];
+    }
+    el.textContent = 'SMPL \u00b7 Board Intelligence \u00b7 Jan\u2013' + mo + ' 2026 Actuals \u00b7 AI commentary via Claude \u00b7 Confidential';
+  }
+  window.updateFooterNote = updateFooterNote;
+
   const saved = localStorage.getItem('smpl-skin') || 'canvas';
   applySkin(saved);
   document.getElementById('periodBadge').textContent = CLOSE_LABEL + ' \u00b7 YTD Close';
+  updateFooterNote(CLOSE_MONTH);
   show('exec');
 })();
 
@@ -2982,7 +2995,8 @@ function formatCopilotReply(text) {
       const close = data.meta?.close_month;
       if (close) {
         const badge = document.getElementById('periodBadge');
-        if (badge) badge.textContent = monthLabel(close) + ' · Live close';
+        if (badge) badge.textContent = monthLabel(close) + ' \u00b7 Live close';
+        if (typeof updateFooterNote === 'function') updateFooterNote(close);
         if (typeof CP_DATA !== 'undefined') {
           CP_DATA.as_of = monthLabel(close);
         }
