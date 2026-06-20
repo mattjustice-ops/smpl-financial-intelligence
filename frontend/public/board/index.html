@@ -127,6 +127,9 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 /* FOOTER */
 .footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; border-top: 0.5px solid var(--border); margin-top: 6px; }
 .footer-note { font-size: 10px; color: var(--text3); }
+.skin-select{font-family:-apple-system,'Segoe UI',sans-serif;font-size:11px;font-weight:500;padding:5px 10px;border:0.5px solid var(--border);border-radius:20px;background:var(--bg2);color:var(--text2);cursor:pointer;outline:none;transition:all .15s}
+.skin-select:hover{color:var(--text)}
+.skin-select option{background:#1a1a1a;color:#eee}
 .export-btns { display: flex; gap: 8px; }
 .exp-btn { font-size: 11px; padding: 5px 10px; border: 0.5px solid var(--border); border-radius: var(--r); background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 4px; font-family: inherit; transition: all .15s; }
 .exp-btn:hover { background: var(--bg2); }
@@ -220,7 +223,20 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 <div class="topbar">
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· We make finance simple</span></div>
   <div class="topbar-right">
+    <span class="period-badge" id="warehouseStatus">Demo data</span>
     <span class="period-badge" id="periodBadge"></span>
+    <select class="skin-select" id="skinSelect" onchange="applySkin(this.value)" aria-label="Design skin">
+      <option value="canvas">Canvas</option>
+      <option value="smpl">SMPL</option>
+      <option value="midnight">Midnight</option>
+      <option value="harbor">Harbor</option>
+      <option value="eclipse">Eclipse</option>
+      <option value="graphite">Graphite</option>
+      <option value="aurora">Aurora</option>
+      <option value="ember">Ember</option>
+      <option value="slate">Slate</option>
+      <option value="mist">Mist</option>
+    </select>
     <button class="ai-global-btn" onclick="openMdaDeck()">✦ MD&A Deck ↗</button>
     <button class="ai-global-btn" onclick="openVarianceCommentary()">✦ Variance Commentary ↗</button>
 </div>
@@ -417,6 +433,7 @@ function destroyCharts() { Object.values(charts).forEach(c=>{try{c.destroy();}ca
 
 function show(name, btn) {
   destroyCharts();
+  SMPL_BOARD_TAB = name;
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.substr(0,3)))b.classList.add('active');});
@@ -2332,8 +2349,64 @@ function _sComm(el) {
 // end Sales Intelligence block
 
 // Init
-document.getElementById('periodBadge').textContent = CLOSE_LABEL + ' \u00b7 YTD Close';
-show('exec');
+let SMPL_BOARD_TAB = 'exec';
+
+const SKINS = {
+  canvas:   {bg:'#18241b',bg2:'#233326',bg3:'#2b3c2e',text:'#dde8d6',text2:'#aab8a2',text3:'#72826a',border:'#2e3f31',border2:'rgba(56,75,60,0.25)',teal:'#5fa878',red:'#b8705f',amber:'#b89060',navy:'#233326',blue:'#5fa878'},
+  smpl:     {bg:'#0c1418',bg2:'#142228',bg3:'#1a2e35',text:'#d8eae8',text2:'#8eb0ad',text3:'#5e8280',border:'#1e3540',border2:'rgba(36,64,76,0.25)',teal:'#4aaa94',red:'#b87068',amber:'#c4924a',navy:'#142228',blue:'#4aaa94'},
+  midnight: {bg:'#141a2e',bg2:'#1e273f',bg3:'#252e4a',text:'#d8daf0',text2:'#9098c0',text3:'#606880',border:'#2c3558',border2:'rgba(52,62,100,0.25)',teal:'#5ea87a',red:'#b87070',amber:'#c4a058',navy:'#1e273f',blue:'#5ea87a'},
+  harbor:   {bg:'#0e2428',bg2:'#163639',bg3:'#1d4045',text:'#d2e8e4',text2:'#88b0ac',text3:'#567874',border:'#244850',border2:'rgba(44,88,92,0.25)',teal:'#52a882',red:'#b87068',amber:'#c49058',navy:'#163639',blue:'#52a882'},
+  eclipse:  {bg:'#0d1018',bg2:'#181e2e',bg3:'#202638',text:'#d4d8e8',text2:'#8890b0',text3:'#586080',border:'#282f48',border2:'rgba(50,58,86,0.25)',teal:'#52a882',red:'#b07070',amber:'#b8904a',navy:'#181e2e',blue:'#6090c8'},
+  graphite: {bg:'#141311',bg2:'#221f1c',bg3:'#2c2924',text:'#dedad4',text2:'#a09890',text3:'#706860',border:'#363028',border2:'rgba(66,58,50,0.25)',teal:'#5aa87a',red:'#b07060',amber:'#c0825a',navy:'#221f1c',blue:'#5aa87a'},
+  aurora:   {bg:'#0c1020',bg2:'#161e30',bg3:'#1e283e',text:'#ccd8ec',text2:'#7890b0',text3:'#506080',border:'#263450',border2:'rgba(46,62,96,0.25)',teal:'#4898a0',red:'#a87070',amber:'#a89050',navy:'#161e30',blue:'#5090c0'},
+  ember:    {bg:'#160f12',bg2:'#261a20',bg3:'#302028',text:'#e8dcd8',text2:'#a88880',text3:'#785850',border:'#3c2830',border2:'rgba(70,48,58,0.25)',teal:'#5aa87a',red:'#b07070',amber:'#c09050',navy:'#261a20',blue:'#5aa87a'},
+  slate:    {bg:'#181b22',bg2:'#20252e',bg3:'#282e38',text:'#d4d8e4',text2:'#8890a8',text3:'#606878',border:'#303848',border2:'rgba(58,68,88,0.25)',teal:'#5aa87a',red:'#a87060',amber:'#a89050',navy:'#20252e',blue:'#6090c0'},
+  mist:     {bg:'#1c2028',bg2:'#242a34',bg3:'#2c3240',text:'#d0d4de',text2:'#848c9c',text3:'#5c6270',border:'#323848',border2:'rgba(62,70,88,0.25)',teal:'#5a9878',red:'#a07068',amber:'#a08858',navy:'#242a34',blue:'#7890a8'},
+};
+
+function applySkin(id) {
+  const s = SKINS[id] || SKINS.canvas;
+  const r = document.documentElement.style;
+  r.setProperty('--bg', s.bg);
+  r.setProperty('--bg2', s.bg2);
+  r.setProperty('--bg3', s.bg3);
+  r.setProperty('--text', s.text);
+  r.setProperty('--text2', s.text2);
+  r.setProperty('--text3', s.text3);
+  r.setProperty('--border', s.border);
+  r.setProperty('--border2', s.border2);
+  r.setProperty('--teal', s.teal);
+  r.setProperty('--red', s.red);
+  r.setProperty('--amber', s.amber);
+  r.setProperty('--navy', s.navy);
+  r.setProperty('--blue', s.blue);
+  r.setProperty('--green', s.teal);
+  r.setProperty('--gray', s.text3);
+  r.setProperty('--lgray', s.border);
+  r.setProperty('--teal-light', s.teal + '22');
+  r.setProperty('--red-light', s.red + '18');
+  r.setProperty('--amber-light', s.amber + '18');
+  r.setProperty('--green-light', s.teal + '18');
+  if (window.Chart) {
+    Chart.defaults.color = s.text3;
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+    Chart.defaults.font.family = "-apple-system, 'Segoe UI', sans-serif";
+    Chart.defaults.font.size = 10;
+  }
+  localStorage.setItem('smpl-skin', id);
+  const sel = document.getElementById('skinSelect');
+  if (sel && sel.value !== id) sel.value = id;
+  if (document.getElementById('slideArea')?.children.length > 0) {
+    show(SMPL_BOARD_TAB);
+  }
+}
+
+(function initBoardShell() {
+  const saved = localStorage.getItem('smpl-skin') || 'canvas';
+  applySkin(saved);
+  document.getElementById('periodBadge').textContent = CLOSE_LABEL + ' \u00b7 YTD Close';
+  show('exec');
+})();
 
 // ── SMPL COPILOT ────────────────────────────────────────────────────────────
 // Data context injected from June actuals CSVs
@@ -2516,6 +2589,89 @@ function formatCopilotReply(text) {
   return out;
 }
 
+</script>
+<script>
+/* Live warehouse hydration — same-origin proxy as Forecast Engine (avoids CORS / 502). */
+(function () {
+  function setWarehouseStatus(text, tone) {
+    const el = document.getElementById('warehouseStatus');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color =
+      tone === 'ok' ? 'var(--teal)' : tone === 'warn' ? 'var(--amber)' : 'var(--text2)';
+  }
+
+  async function smplOrgId() {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('organization_id')) return q.get('organization_id');
+    try {
+      const s = await fetch('/api/auth/session', { credentials: 'include' });
+      const j = await s.json();
+      return j?.user?.activeOrganizationId || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function monthLabel(period) {
+    if (!period || period.length < 7) return period || '';
+    const y = period.slice(0, 4);
+    const m = parseInt(period.slice(5, 7), 10) - 1;
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return (names[m] || period.slice(5, 7)) + ' ' + y;
+  }
+
+  async function smplBoardHydrate() {
+    const orgId = await smplOrgId();
+    if (!orgId) {
+      setWarehouseStatus('Demo data (sign in for live)', 'warn');
+      return;
+    }
+
+    setWarehouseStatus('Syncing live warehouse…', 'warn');
+    try {
+      const params = new URLSearchParams({
+        organization_id: orgId,
+        include_validation: 'false',
+        include_three_statement: 'false',
+      });
+      const res = await fetch('/api/v1/board-platform/payload?' + params.toString(), {
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        console.warn('Board hydrate failed', await res.text());
+        setWarehouseStatus('Demo data (API ' + res.status + ')', 'warn');
+        return;
+      }
+
+      const data = await res.json();
+      window.SMPL_BOARD_PAYLOAD = data;
+
+      const close = data.meta?.close_month;
+      if (close) {
+        const badge = document.getElementById('periodBadge');
+        if (badge) badge.textContent = monthLabel(close) + ' · Live close';
+        if (typeof CP_DATA !== 'undefined') {
+          CP_DATA.as_of = monthLabel(close);
+        }
+      }
+
+      const orgName = data.meta?.organization_name;
+      setWarehouseStatus(orgName ? 'Live · ' + orgName : 'Live warehouse', 'ok');
+
+      if (typeof show === 'function' && SMPL_BOARD_TAB) {
+        show(SMPL_BOARD_TAB);
+      }
+    } catch (err) {
+      console.warn('Board hydrate error', err);
+      setWarehouseStatus('Demo data (offline)', 'warn');
+    }
+  }
+
+  window.addEventListener('load', function () {
+    smplBoardHydrate();
+  });
+})();
 </script>
 </body>
 </html>

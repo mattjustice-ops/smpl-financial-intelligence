@@ -34,7 +34,7 @@ export function getNextApiBase(): string {
 
 /**
  * Long-running board/export calls: hit Railway directly from the browser when deployed.
- * Avoids Vercel's ~60s App Router proxy limit (board payload can take 90–120s).
+ * Avoids Vercel's ~60s App Router proxy limit (board payload can take 90-120s).
  */
 export function getLongRunningApiBase(): string {
   const direct = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "");

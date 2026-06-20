@@ -112,6 +112,8 @@ $paths = @(
     "backend/app/services/reporting/as_of_period.py",
     "backend/tests/test_board_platform_service.py",
     "backend/tests/test_opportunity_attribution_params.py",
+    "frontend/app/app/board/page.tsx",
+    "frontend/public/board/index.html",
     "frontend/components/board/BoardPlatformApp.tsx",
     "frontend/lib/apiBase.ts",
     "frontend/app/api/v1/board-platform/payload/route.ts",
