@@ -272,6 +272,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
   <div class="footer-note" id="footerNote"></div>
   </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -2418,7 +2419,7 @@ function _sOverview(el) {
   <div class="two-col">
     <div class="card">
       <div class="card-title">Quota attainment — monthly trend</div>
-      <div class="card-sub">Attained $M (bars) vs quota and budget (lines)</div>
+      <div class="card-sub">Attained vs quota (grouped bars) · budget reference (line)</div>
       <div class="chart-wrap" style="height:190px"><canvas id="sAttC" role="img" aria-label="Monthly quota attainment Jan to Jun 2026. Improving from 85.0% in January to 98.1% in June.">Attainment: Jan 85%, Feb 90.6%, Mar 95.7%, Apr 96.7%, May 99.9%, Jun 98.1%.</canvas></div>
     </div>
     <div class="card">
@@ -2446,9 +2447,9 @@ function _sOverview(el) {
     const quotas  =actSalesPeriods.map(p=>+((SD.monthly[p].quota)/1e6).toFixed(2));
     const budQ    =actSalesPeriods.map(p=>+((SD.monthly[p].bud_quota)/1e6).toFixed(2));
     _smk('sAttC',{type:'bar',data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
-      {label:'Attained',data:attained,backgroundColor:fade(cPos,0.5),borderColor:cPos,borderWidth:1,borderRadius:3,order:2},
+      {label:'Attained',data:attained,backgroundColor:fade(cPos,0.5),borderColor:cPos,borderWidth:1,borderRadius:3},
       _quotaBar(quotas),
-      {type:'line',label:'Budget',data:budQ,borderColor:cText2,borderDash:[5,4],borderWidth:2,pointRadius:2,fill:false,order:1},
+      {type:'line',label:'Budget',data:budQ,borderColor:cText2,borderDash:[5,4],borderWidth:2,pointRadius:2,fill:false},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:baseScaleX,y:{min:1.0,...baseScaleY(v=>'$'+v.toFixed(1)+'M')}},datasets:{bar:{categoryPercentage:0.72,barPercentage:0.9}}}});
 
     const roles=['Sr Account Executive','Account Executive','Sales Dev Rep'];
@@ -2508,45 +2509,185 @@ function _sPipeline(el) {
   },50);
 }
 
+const SALES_TERRITORY_EU_NAMES = new Set([
+  'Austria','Belgium','Bulgaria','Croatia','Cyprus','Czechia','Czech Rep.',
+  'Denmark','Estonia','Finland','France','Germany','Greece','Hungary',
+  'Ireland','Italy','Latvia','Lithuania','Luxembourg','Malta','Netherlands',
+  'Poland','Portugal','Romania','Slovakia','Slovenia','Spain','Sweden',
+  'United Kingdom','Norway','Switzerland'
+]);
+const SALES_TERRITORY_COORDS = {
+  West:    { lon: -119, lat: 37 },
+  Central: { lon: -97,  lat: 39 },
+  East:    { lon: -78,  lat: 39 },
+  EMEA:    { lon: 12,   lat: 50 },
+};
+// Verified basemap projection — do not change scale/translate without regenerating us_emea_basemap.svg.
+const SALES_TERRITORY_PROJECTION = {
+  scale: 410,
+  translate: [855.4244561908681, 540.1364842702924],
+};
+let _salesTerritoryBasemapCache = null;
+
+function _salesTerritoryInScope(countryName) {
+  return countryName === 'United States of America' || SALES_TERRITORY_EU_NAMES.has(countryName);
+}
+
+function _salesTerritoryMapColors() {
+  const cs = getComputedStyle(document.documentElement);
+  const C = k => cs.getPropertyValue(k).trim();
+  return { cBg: C('--bg'), cBg2: C('--bg2'), cBg3: C('--bg3'), cBorder: C('--border'), cText: C('--text'), cText3: C('--text3') };
+}
+
+function _salesTerritoryMapError(container, message) {
+  container.innerHTML = '<div style="padding:24px;color:var(--text3);font-size:12px">' + message + '</div>';
+}
+
+function _salesTerritoryProject(lon, lat) {
+  return d3.geoNaturalEarth1()
+    .scale(SALES_TERRITORY_PROJECTION.scale)
+    .translate(SALES_TERRITORY_PROJECTION.translate)([lon, lat]);
+}
+
+function _salesTerritoryApplyBasemapColors(svgRoot) {
+  const { cBg2, cBg3, cBorder, cText3 } = _salesTerritoryMapColors();
+  svgRoot.querySelectorAll('#world-countries path[data-country]').forEach(path => {
+    const inScope = _salesTerritoryInScope(path.getAttribute('data-country'));
+    path.setAttribute('fill', inScope ? cBg3 : cBg2);
+    path.setAttribute('stroke', inScope ? cText3 : cBorder);
+    path.setAttribute('stroke-width', inScope ? '0.9' : '0.5');
+  });
+}
+
+function _salesTerritoryRenderPins(svgRoot, territories) {
+  const { cBg, cText } = _salesTerritoryMapColors();
+  const svgNs = 'http://www.w3.org/2000/svg';
+  svgRoot.querySelector('#territory-pins')?.remove();
+  const pinsG = document.createElementNS(svgNs, 'g');
+  pinsG.setAttribute('id', 'territory-pins');
+
+  territories.forEach(t => {
+    const [x, y] = _salesTerritoryProject(t.lon, t.lat);
+    const r = 14 + t.reps * 2.6;
+    const g = document.createElementNS(svgNs, 'g');
+    g.setAttribute('class', 'pin');
+    g.setAttribute('transform', `translate(${x},${y})`);
+
+    const circle = document.createElementNS(svgNs, 'circle');
+    circle.setAttribute('r', String(r));
+    circle.setAttribute('fill', t.color);
+    circle.setAttribute('fill-opacity', '0.92');
+    circle.setAttribute('stroke', cText);
+    circle.setAttribute('stroke-width', '2.5');
+    g.appendChild(circle);
+
+    const repText = document.createElementNS(svgNs, 'text');
+    repText.setAttribute('text-anchor', 'middle');
+    repText.setAttribute('dy', '0.35em');
+    repText.setAttribute('font-size', String(16 + Math.min(t.reps, 8)));
+    repText.setAttribute('font-weight', '600');
+    repText.setAttribute('fill', cBg);
+    repText.textContent = String(t.reps);
+    g.appendChild(repText);
+
+    const nameText = document.createElementNS(svgNs, 'text');
+    nameText.setAttribute('text-anchor', 'middle');
+    nameText.setAttribute('y', String(r + 20));
+    nameText.setAttribute('font-size', '14');
+    nameText.setAttribute('font-weight', '600');
+    nameText.setAttribute('fill', cText);
+    nameText.textContent = t.name;
+    g.appendChild(nameText);
+
+    const attText = document.createElementNS(svgNs, 'text');
+    attText.setAttribute('text-anchor', 'middle');
+    attText.setAttribute('y', String(r + 38));
+    attText.setAttribute('font-size', '13');
+    attText.setAttribute('font-family', 'var(--mono), monospace');
+    attText.setAttribute('fill', t.color);
+    attText.textContent = t.att.toFixed(1) + '%';
+    g.appendChild(attText);
+
+    pinsG.appendChild(g);
+  });
+
+  svgRoot.appendChild(pinsG);
+}
+
+function _salesTerritoryLoadBasemap() {
+  if (_salesTerritoryBasemapCache) return Promise.resolve(_salesTerritoryBasemapCache);
+  return fetch('us_emea_basemap.svg')
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status} for us_emea_basemap.svg`);
+      return r.text();
+    })
+    .then(svgText => {
+      if (!svgText.includes('world-countries')) throw new Error('Invalid basemap SVG');
+      _salesTerritoryBasemapCache = svgText;
+      return svgText;
+    });
+}
+
+function _salesTerritoryPinColor(attPct) {
+  const { cPos, cAmber, cNeg } = chartSkinTokens();
+  if (attPct >= 100) return cPos;
+  if (attPct >= 90) return cAmber;
+  return cNeg;
+}
+
+function _salesTerritoryData() {
+  return ['West','Central','East','EMEA'].map(name => {
+    const d = SD.regions[name];
+    const att = (d.jun_attained / d.jun_quota) * 100;
+    const coords = SALES_TERRITORY_COORDS[name];
+    return { name, lon: coords.lon, lat: coords.lat, reps: d.reps, att, color: _salesTerritoryPinColor(att) };
+  });
+}
+
+function _salesTerritoryAriaLabel(territories) {
+  return 'Map showing sales territories across the United States and Europe, with pins sized by rep headcount and colored by June attainment percentage: ' +
+    territories.map(t => `${t.name} ${t.reps} reps at ${t.att.toFixed(1)}%`).join(', ');
+}
+
+function renderSalesTerritoryMap() {
+  const container = document.getElementById('sTerritoryMap');
+  if (!container) return;
+  if (typeof d3 === 'undefined') {
+    _salesTerritoryMapError(container, 'Map unavailable — D3 library failed to load.');
+    console.error('[Territory map] d3 not loaded');
+    return;
+  }
+
+  const territories = _salesTerritoryData();
+  container.setAttribute('aria-label', _salesTerritoryAriaLabel(territories));
+  container.innerHTML = '<div style="padding:24px;color:var(--text3);font-size:12px">Loading map…</div>';
+
+  _salesTerritoryLoadBasemap()
+    .then(svgText => {
+      container.innerHTML = svgText;
+      const svgRoot = container.querySelector('svg');
+      if (!svgRoot) throw new Error('Basemap SVG missing root element');
+      _salesTerritoryApplyBasemapColors(svgRoot);
+      _salesTerritoryRenderPins(svgRoot, territories);
+    })
+    .catch(err => {
+      console.error('[Territory map] Basemap load failed', err);
+      _salesTerritoryMapError(container, 'Map unavailable — ensure us_emea_basemap.svg is in frontend/public/board/ (run python scripts/copy-basemap.py).');
+    });
+}
+
 function _sMap(el) {
-  const pinColor=att=>att>=1?'#1D9E75':att>=.9?'#BA7517':'#D85A30';
   el.innerHTML = `
   <div class="two-col">
     <div class="card" style="padding:16px">
       <div class="card-title">Sales territory — headcount &amp; attainment by region</div>
-      <div class="card-sub">Pin size = rep count · color = Jun attainment · hover for detail</div>
-      <div style="position:relative;background:var(--bg2);border-radius:8px;overflow:hidden;height:300px">
-        <svg viewBox="0 0 900 540" style="width:100%;height:100%;display:block" role="img" aria-label="US territory map with sales region pins">
-          <path d="M150,70 L820,70 L820,400 L700,400 L680,440 L640,455 L590,435 L560,400 L530,420 L490,415 L450,435 L410,425 L370,435 L330,418 L290,435 L250,420 L200,415 L165,400 Z" fill="var(--bg3)" stroke="var(--border)" stroke-width="1.5"/>
-          <line x1="480" y1="70" x2="480" y2="380" stroke="var(--border)" stroke-width="0.8" stroke-dasharray="4,4"/>
-          <line x1="330" y1="70" x2="330" y2="380" stroke="var(--border)" stroke-width="0.8" stroke-dasharray="4,4"/>
-          <line x1="620" y1="70" x2="620" y2="380" stroke="var(--border)" stroke-width="0.8" stroke-dasharray="4,4"/>
-          <text x="235" y="230" font-size="13" fill="var(--text3)" text-anchor="middle" font-family="system-ui,sans-serif">West</text>
-          <text x="405" y="230" font-size="13" fill="var(--text3)" text-anchor="middle" font-family="system-ui,sans-serif">Central</text>
-          <text x="545" y="230" font-size="13" fill="var(--text3)" text-anchor="middle" font-family="system-ui,sans-serif">Central</text>
-          <text x="715" y="230" font-size="13" fill="var(--text3)" text-anchor="middle" font-family="system-ui,sans-serif">East</text>
-        </svg>
-        <!-- Pins as HTML over SVG -->
-        <div style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none">
-          ${['West','Central','East','EMEA'].map((reg,ri)=>{
-            const d=SD.regions[reg];
-            const att=d.jun_attained/d.jun_quota;
-            const col=pinColor(att);
-            const pos={West:'left:27%;top:42%',Central:'left:47%;top:38%',East:'left:77%;top:35%',EMEA:'left:87%;top:12%'}[reg];
-            const sz=Math.max(36,Math.min(d.reps*4+28,56));
-            return `<div style="position:absolute;${pos};transform:translate(-50%,-50%);text-align:center;pointer-events:all">
-              <div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${col};border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#fff;margin:0 auto;cursor:default">${d.reps}</div>
-              <div style="font-size:9.5px;font-weight:500;margin-top:3px;color:var(--text);white-space:nowrap">${reg}</div>
-              <div style="font-size:9px;color:${col};font-family:var(--mono)">${_sp(att)}</div>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
-      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
-        <span style="font-size:10px;color:var(--text3)">● Green = ≥100%</span>
-        <span style="font-size:10px;color:var(--text3)">● Amber = 90–99%</span>
-        <span style="font-size:10px;color:var(--text3)">● Red = &lt;90%</span>
-        <span style="font-size:10px;color:var(--text3)">Pin size = rep count · EMEA shown top-right</span>
+      <div class="card-sub">Pin size = rep count · color = Jun attainment · US + EU/EMEA territories</div>
+      <div id="sTerritoryMap" role="img" style="width:100%;position:relative;overflow:hidden;min-height:300px;background:var(--bg2);border-radius:8px"></div>
+      <div style="display:flex;gap:20px;margin-top:14px;font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:12px;flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--teal);display:inline-block"></span>Green = ≥100%</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--amber);display:inline-block"></span>Amber = 90–99%</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block"></span>Red = &lt;90%</span>
+        <span style="color:var(--text3)">Pin size = rep count</span>
       </div>
     </div>
     <div>
@@ -2577,6 +2718,7 @@ function _sMap(el) {
     </div>
   </div>`;
   setTimeout(()=>{
+    renderSalesTerritoryMap();
     const { fade, baseScaleX, baseScaleY } = chartSkinTokens();
     const regs=['East','EMEA','West','Central'];
     _smk('sRegBudC',{type:'bar',data:{labels:regs,datasets:[
@@ -2730,6 +2872,9 @@ function applySkin(id) {
   if (sel && sel.value !== id) sel.value = id;
   if (document.getElementById('slideArea')?.children.length > 0) {
     show(SMPL_BOARD_TAB);
+  }
+  if (typeof renderSalesTerritoryMap === 'function' && document.getElementById('sTerritoryMap')) {
+    renderSalesTerritoryMap();
   }
 }
 
