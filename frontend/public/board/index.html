@@ -431,16 +431,63 @@ const fM = (v,d=2) => {
   d = Math.min(d, 2); // never more than 2 decimal places
   const neg = v < 0, abs = Math.abs(v);
   if(abs >= 1e6) return (neg?'-$':'$') + (abs/1e6).toFixed(Math.min(d,2)) + 'M';
-  if(abs >= 1e3) return (neg?'-$':'$') + (abs/1e3).toFixed(0) + 'K';
+  if(abs >= 1e3) return (neg?'-$':'$') + (abs/1e3).toFixed(0) + 'k';
   return (neg?'-$':'$') + abs.toFixed(0);
 };
 const fV = v => (v>=0?'+':'')+fM(v);
+/** KPI strip: value already in $M → one decimal */
+function fKpiM(v) {
+  if (v == null || v === undefined || v === '') return '—';
+  var neg = v < 0, abs = Math.abs(Number(v));
+  return (neg ? '-$' : '$') + abs.toFixed(1) + 'M';
+}
+/** KPI strip: raw dollars → one decimal $M */
+function fKpiMRaw(v) {
+  if (v == null || v === undefined) return '—';
+  return fKpiM(Number(v) / 1e6);
+}
+/** KPI strip: variance in $M (values already in millions) */
+function fKpiVarM(v) {
+  if (v == null || v === undefined) return '—';
+  var n = Number(v), abs = Math.abs(n);
+  return (n >= 0 ? '+' : '-') + '$' + abs.toFixed(1) + 'M';
+}
+/** KPI strip: thousands — integer, lowercase k (v in $000s unless rawDollars) */
+function fKpiK(v, rawDollars) {
+  if (v == null || v === undefined) return '—';
+  var neg = v < 0, abs = Math.abs(Number(v));
+  var k = rawDollars ? Math.round(abs / 1000) : Math.round(abs);
+  return (neg ? '-$' : '$') + k.toLocaleString('en-US') + 'k';
+}
+/** KPI strip: variance in $000s */
+function fKpiVarK(v) {
+  if (v == null || v === undefined) return '—';
+  var n = Number(v), abs = Math.round(Math.abs(n));
+  return (n >= 0 ? '+' : '-') + '$' + abs.toLocaleString('en-US') + 'k';
+}
+/** KPI strip: one decimal percent (isRatio=true when v is 0–2 scale) */
+function fKpiPct(v, isRatio) {
+  if (v == null || v === undefined) return '—';
+  var pct = isRatio !== false && Math.abs(v) <= 2 ? Number(v) * 100 : Number(v);
+  return pct.toFixed(1) + '%';
+}
 const fP = (v,b) => b ? ((v-b)/Math.abs(b)*100).toFixed(1)+'%' : '—';
 const vCls = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'vpos':'vneg';
 const vSign = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'pos':'neg';
 
 function boardActiveCloseMonth() {
   return (typeof window !== 'undefined' && window.CLOSE_MONTH) ? window.CLOSE_MONTH : CLOSE_MONTH;
+}
+function boardActualPeriods() {
+  var actual = TS_DATA && TS_DATA.Actual;
+  if (actual && actual.periods) return actual.periods.slice(0, ACT_MONTHS_COUNT);
+  var cm = boardActiveCloseMonth();
+  var year = cm.slice(0, 4);
+  var out = [];
+  for (var m = 1; m <= parseInt(cm.slice(5), 10); m++) {
+    out.push(year + '-' + String(m).padStart(2, '0'));
+  }
+  return out;
 }
 function boardPeriodLabel(period) {
   return MO12[parseInt(period.slice(5), 10) - 1] + ' ' + period.slice(0, 4);
@@ -533,6 +580,106 @@ function boardWorkforceMetrics() {
     payroll: payroll,
   };
 }
+function boardCashBridgeRow(period) {
+  if (window.SMPLOutlook && SMPLOutlook.getCashBridgeRow) {
+    return SMPLOutlook.getCashBridgeRow(period, 'Actual', boardActiveCloseMonth());
+  }
+  var bridge = window.SMPL_CASH_BRIDGE || (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE);
+  return bridge && bridge.Actual ? bridge.Actual[period] : null;
+}
+function boardBridgeM(value) {
+  if (value == null || value === '') return null;
+  return Math.abs(value) >= 1e6 ? value / 1e6 : value;
+}
+function boardCashMetrics() {
+  var cm = boardActiveCloseMonth();
+  var i = ACT_MONTHS_COUNT - 1;
+  var m = boardJunMetrics();
+  var bridge = boardCashBridgeRow(cm) || {};
+  var collections = boardBridgeM(bridge.collections);
+  if (collections == null) collections = COLL[i];
+  var prevColl = null;
+  if (i > 0) {
+    var periods = boardActualPeriods();
+    var prevBridge = boardCashBridgeRow(periods[i - 1]) || {};
+    prevColl = boardBridgeM(prevBridge.collections);
+    if (prevColl == null) prevColl = COLL[i - 1];
+  }
+  var netChange = boardBridgeM(bridge.net_change);
+  if (netChange == null && bridge.beginning_cash != null && bridge.ending_cash != null) {
+    netChange = (bridge.ending_cash - bridge.beginning_cash) / 1e6;
+  }
+  if (netChange == null && i > 0) netChange = CASH_ACT[i] - CASH_ACT[i - 1];
+  return {
+    cm: cm,
+    closeLbl: boardPeriodLabel(cm),
+    endingCash: m.cashAct,
+    cashVar: m.cashAct - m.cashBud,
+    collections: collections,
+    prevColl: prevColl,
+    vsFloor: m.cashAct - 10,
+    bridge: {
+      collections: collections,
+      payroll: boardBridgeM(bridge.payroll),
+      vendor: boardBridgeM(bridge.vendor),
+      commission: boardBridgeM(bridge.commission),
+      capex: boardBridgeM(bridge.capex),
+      tax: boardBridgeM(bridge.tax),
+      other: boardBridgeM(bridge.other_operating),
+      netChange: netChange,
+    },
+    liveBridge: bridge.collections != null || Boolean(window.SMPL_LIVE_OUTLOOK),
+  };
+}
+function boardExecDrivers() {
+  var i = ACT_MONTHS_COUNT - 1;
+  var wf = WF_TABLE || {};
+  var toM = function (v) { return v != null ? v / 1e6 : 0; };
+  var specs = [
+    { key: 'New Business', label: 'New Business', negate: false },
+    { key: 'Expansion', label: 'Expansion', negate: false },
+    { key: 'Reactivation', label: 'Reactivation', negate: false },
+    { key: 'Contraction', label: 'Contraction', negate: true },
+    { key: 'Churn', label: 'Churn', negate: true },
+  ];
+  var drivers = [];
+  var maxAbs = 0;
+  specs.forEach(function (spec) {
+    var raw = wf[spec.key] ? wf[spec.key][i] : null;
+    var val = toM(raw);
+    if (spec.negate) val = -Math.abs(val);
+    maxAbs = Math.max(maxAbs, Math.abs(val));
+    drivers.push({ label: spec.label, val: val, bud: 0, dir: spec.negate ? 'pos' : 'pos' });
+  });
+  drivers.forEach(function (d) {
+    d.pct = maxAbs ? Math.min(100, Math.round(Math.abs(d.val) / maxAbs * 100)) : 0;
+  });
+  return {
+    drivers: drivers,
+    nnAct: NN_ACT[i] || 0,
+    nnBud: NN_BUD[i] || 0,
+    nnVar: (NN_ACT[i] || 0) - (NN_BUD[i] || 0),
+  };
+}
+function boardExecVerdict(m, drivers) {
+  var arrVar = m.arrAct - m.arrBud;
+  var cashVar = m.cashAct - m.cashBud;
+  var ebitdaVar = m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
+  if (arrVar >= 0 && cashVar >= 0 && ebitdaVar >= 0) {
+    return { label: '▲ Ahead of Plan', cls: 'pos', tone: 'ahead of plan' };
+  }
+  if (arrVar < 0 && cashVar < 0) {
+    return { label: '▼ Behind Plan', cls: 'neg', tone: 'behind plan' };
+  }
+  return { label: '◆ Mixed vs Plan', cls: 'neu', tone: 'mixed versus plan' };
+}
+function fmtBridgeLine(value, invert) {
+  if (value == null) return '—';
+  var abs = Math.abs(value);
+  var txt = abs >= 1 ? fM(abs, 2) : fM(abs * 1e6, 0);
+  if (invert) return '-$' + txt.replace(/^\$/, '');
+  return '+$' + txt.replace(/^\$/, '');
+}
 function syncBoardFromOutlook(data) {
   if (data && data.meta && data.meta.close_month) {
     window.CLOSE_MONTH = data.meta.close_month;
@@ -594,6 +741,14 @@ function syncBoardFromOutlook(data) {
       wf.WF_ROSTER.forEach(function (r) { WF_ROSTER.push(r); });
     }
   }
+  if (data && data.CASH_BRIDGE && data.CASH_BRIDGE.Actual) {
+    boardActualPeriods().forEach(function (p, idx) {
+      var row = data.CASH_BRIDGE.Actual[p];
+      if (row && row.collections != null) {
+        COLL[idx] = Math.round(row.collections / 1e5) / 10;
+      }
+    });
+  }
   var badge = document.getElementById('periodBadge');
   if (badge) badge.textContent = boardPeriodLabel(boardActiveCloseMonth()) + ' · YTD Close';
   var foot = document.querySelector('.footer-note');
@@ -605,7 +760,12 @@ function syncBoardFromOutlook(data) {
   }
 }
 
-function destroyCharts() { Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}}); charts={}; }
+function destroyCharts() {
+  Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});
+  charts={};
+  Object.values(_sCharts).forEach(function (c) { try { c.destroy(); } catch (e) {} });
+  _sCharts = {};
+}
 
 function show(name, btn) {
   destroyCharts();
@@ -622,84 +782,240 @@ function show(name, btn) {
 // ─── EXEC ──────────────────────────────────────────────────────────────────
 function renderExec(area) {
   const m = boardJunMetrics();
+  const drivers = boardExecDrivers();
+  const verdict = boardExecVerdict(m, drivers);
   const closeLbl = boardPeriodLabel(m.cm);
+  const closeMo = boardActiveCloseMonth().slice(5, 7);
+  const closeIdx = ACT_MONTHS_COUNT - 1;
   const arrVar = m.arrAct - m.arrBud;
   const revVar = m.revAct - m.revBud;
   const gpVar = m.gpBud != null ? m.gpAct - m.gpBud : 0;
-  const gmBudPct = m.gmBud != null ? (m.gmBud * 100).toFixed(1) + '%' : '—';
   const gmActPct = m.gmAct != null ? (m.gmAct * 100).toFixed(1) + '%' : '—';
-  const ebitdaBud = m.ebitdaBud != null ? fM(m.ebitdaBud) : '—';
+  const gmBudPct = m.gmBud != null ? (m.gmBud * 100).toFixed(1) + '%' : '—';
   const ebitdaVar = m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
   const cashVar = m.cashAct - m.cashBud;
-  const nrrPct = (m.nrr * 100).toFixed(1) + '%';
-  area.innerHTML = `<div class="slide">
-  <div class="slide-title">Executive Operating Summary</div>
-  <div class="slide-sub">Jan – ${closeLbl} Actuals · Full-Year Budget comparison · Prepared for Board of Directors</div>
-  <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">ARR</div><div class="kpi-val">$${m.arrAct.toFixed(1)}M</div><div class="kpi-delta ${arrVar>=0?'pos':'neg'}">${fV(arrVar)} vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Monthly Revenue</div><div class="kpi-val">${fM(m.revAct)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${fV(revVar)} vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val">${gmActPct}</div><div class="kpi-delta neu">${gmBudPct} budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Cash Balance</div><div class="kpi-val">${fM(m.cashAct)}</div><div class="kpi-delta ${cashVar>=0?'pos':'neg'}">${fV(cashVar)} vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val">${nrrPct}</div><div class="kpi-delta pos">live warehouse</div></div>
-  </div>
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-title">ARR &amp; Revenue trend — Actual vs Budget · Jan – ${CLOSE_MO}</div>
-    <div class="card-sub">ARR (left axis, $M) · Net New ARR bars + Revenue line overlay (right axis, $M)</div>
-    <div class="chart-wrap" style="height:230px"><canvas id="execChart" role="img" aria-label="Full-width ARR trend actual vs budget and revenue trend"></canvas></div>
-  </div>
-  <div class="two-col">
+  const nrrPct = fKpiPct(m.nrr, true);
+  const nnVar = drivers.nnVar;
+  const heroCards = [
+    { lbl: 'Ending ARR', val: fKpiM(m.arrAct), delta: fKpiVarM(arrVar) + ' vs bud', dir: arrVar >= 0 ? 'pos' : 'neg', because: 'Net new ARR ' + fKpiM(drivers.nnAct) + ' in ' + CLOSE_MO + ' · ' + fKpiVarM(nnVar) + ' vs budget', link: "show('arr',null)" },
+    { lbl: 'Net New ARR', val: fKpiM(drivers.nnAct), delta: fKpiVarM(nnVar) + ' vs bud', dir: nnVar >= 0 ? 'pos' : 'neg', because: 'Driver tree from live MRR waterfall components', link: "show('arr',null)" },
+    { lbl: 'EBITDA', val: fKpiM(m.ebitdaAct), delta: fKpiVarM(ebitdaVar) + ' vs bud', dir: ebitdaVar >= 0 ? 'pos' : 'neg', because: 'Operating result for ' + closeLbl + ' from warehouse income statement', link: "show('pl',null)" },
+    { lbl: 'Cash Balance', val: fKpiM(m.cashAct), delta: fKpiVarM(cashVar) + ' vs bud', dir: cashVar >= 0 ? 'pos' : 'neg', because: 'Ending cash ties to balance sheet and cash flow statement', link: "show('cash',null)" },
+  ];
+  area.innerHTML = `<div class="slide" style="padding:20px 24px 32px">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:0.5px solid var(--border)">
     <div>
-      <div class="sec-lbl">Budget Variance Summary — ${closeLbl}</div>
-      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border2);padding-bottom:4px;margin-bottom:4px">
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500">Metric</span>
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Actual</span>
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Budget</span>
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Variance</span>
+      <div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px">Jan – ${closeLbl}</div>
+      <div style="font-size:26px;font-weight:700;letter-spacing:-0.6px;color:var(--text);line-height:1.1">Executive Operating Summary</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:5px">Prepared for Board of Directors · ${closeLbl} Close · Live warehouse</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <span style="font-size:11px;font-weight:600;padding:5px 13px;border-radius:20px;background:rgba(95,168,120,0.15);color:var(--${verdict.cls==='pos'?'teal':verdict.cls==='neg'?'red':'text2'});border:0.5px solid var(--${verdict.cls==='pos'?'teal':verdict.cls==='neg'?'red':'border'});letter-spacing:.02em">${verdict.label}</span>
+    </div>
+  </div>
+
+  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:24px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
+    <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">H1 closed with ARR ${fV(arrVar)} versus budget, revenue ${fV(revVar)}, and cash ${fV(cashVar)} — ${verdict.tone} with net new ARR of ${fM(drivers.nnAct)} in ${CLOSE_MO}.</div>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">01</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Where We Stand</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">${closeLbl} actuals vs budget</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px">
+    ${heroCards.map(h=>`
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.lbl}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;font-weight:600;color:${h.dir==='pos'?'var(--teal)':'var(--red)'}">${h.dir==='pos'?'▲':'▼'}</span>
+        <span style="font-size:10px;font-family:var(--mono);font-weight:600;color:${h.dir==='pos'?'var(--teal)':'var(--red)'}">${h.delta}</span>
       </div>
-      ${[['ARR',fM(m.arrAct),fM(m.arrBud),arrVar,false],['Revenue',fM(m.revAct),fM(m.revBud),revVar,false],['Gross Profit',fM(m.gpAct),m.gpBud!=null?fM(m.gpBud):'—',gpVar,false],['Gross Margin',gmActPct,gmBudPct,0,false],['EBITDA',fM(m.ebitdaAct),ebitdaBud,ebitdaVar,false],['Cash',fM(m.cashAct),fM(m.cashBud),cashVar,false],['NRR',nrrPct,'100.0%',0,false]].map(([l,a,b,d,inv])=>`
-      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center">
-        <span style="font-size:12px;color:var(--text2)">${l}</span>
-        <span style="font-size:12px;color:var(--text);font-family:var(--mono);font-weight:500;text-align:right;min-width:72px">${a}</span>
-        <span style="font-size:11px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:72px">${b}</span>
-        <span style="font-size:11px;font-family:var(--mono);font-weight:500;text-align:right;min-width:72px" class="${d>0?'pos':d<0?'neg':'neu'}">${d>0?'+':''}${l==='NRR'?'+20bps':l==='Gross Margin'?'flat':fM(d)}</span>
+      <div style="font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--text);line-height:1">${h.val}</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.5;border-top:0.5px solid var(--border);padding-top:7px;margin-top:2px">${h.because}</div>
+      <div style="font-size:10px;color:var(--accent);cursor:pointer;font-weight:500" onclick="${h.link}">View detail →</div>
+    </div>`).join('')}
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">02</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Why It Happened</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">Net New ARR driver decomposition · ${CLOSE_MO}</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px 20px;box-shadow:var(--shadow);margin-bottom:28px">
+    <div style="display:flex;align-items:center;gap:24px">
+      <div style="flex-shrink:0;text-align:center;padding-right:20px;border-right:0.5px solid var(--border)">
+        <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px">Net New ARR</div>
+        <div style="font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--teal)">${fM(drivers.nnAct)}</div>
+        <div style="font-size:10px;color:${nnVar>=0?'var(--teal)':'var(--red)'};font-weight:600;margin-top:2px">${fV(nnVar)} vs budget</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        ${drivers.drivers.map(d=>{
+          const isNeg = d.val < 0;
+          const dispVal = isNeg ? '-$'+Math.abs(d.val).toFixed(2)+'M' : '+$'+d.val.toFixed(2)+'M';
+          const barColor = isNeg ? 'var(--red)' : 'var(--teal)';
+          return `<div style="display:grid;grid-template-columns:110px 1fr 90px;gap:10px;align-items:center">
+            <span style="font-size:11px;color:var(--text2)">${d.label}</span>
+            <div style="background:var(--bg3);border-radius:3px;height:7px;overflow:hidden">
+              <div style="width:${d.pct}%;height:100%;background:${barColor};border-radius:3px;opacity:${isNeg?0.55:0.75}"></div>
+            </div>
+            <span style="font-size:11px;font-family:var(--mono);font-weight:600;text-align:right;color:${isNeg?'var(--red)':'var(--teal)'}">${dispVal}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">03</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">What It Means &amp; What To Do</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">Drivers · Risks · Actions</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:28px">
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--teal);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--teal);margin-bottom:10px">Key Drivers</div>
+      ${[
+        'N$R at ' + nrrPct + ' from live ARR waterfall',
+        'Gross margin ' + gmActPct + ' vs ' + gmBudPct + ' budget',
+        'Net new ARR ' + fM(drivers.nnAct) + ' in ' + CLOSE_MO,
+        'Revenue ' + fM(m.revAct) + ' (' + fV(revVar) + ' vs bud)',
+      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5"><span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-top:4px"></span><span>${t}</span></div>`).join('')}
+    </div>
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--red);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px">Key Risks</div>
+      ${[
+        ebitdaVar < 0 ? 'EBITDA ' + fV(ebitdaVar) + ' vs budget — confirm timing and Q3 normalization' : 'EBITDA tracking at or above budget',
+        'Pipeline coverage and paid-channel efficiency require H2 monitoring',
+        'SMB churn concentration can pressure GRR if renewals soften',
+        cashVar > 20 ? 'Cash variance may reflect billing timing rather than operating outperformance' : 'Cash position supports H2 operating plan',
+      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5"><span style="flex-shrink:0;width:6px;height:6px;background:var(--red);margin-top:4px"></span><span>${t}</span></div>`).join('')}
+    </div>
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--accent);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:10px">Recommended Actions</div>
+      ${[
+        {n:1,t:'Confirm Q3 EBITDA normalization plan',owner:'CFO',impact:'High'},
+        {n:2,t:'Reallocate low-efficiency paid spend to partner and organic',owner:'CMO',impact:'High'},
+        {n:3,t:'Accelerate Q3 pipeline creation against H2 quota',owner:'CRO',impact:'High'},
+        {n:4,t:'Review renewal cohort concentration before Q3 cycle',owner:'CS',impact:'Med'},
+      ].map(a=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px">
+        <span style="flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);font-family:var(--mono);min-width:14px">${a.n}.</span>
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:3px">${a.t}</div>
+          <div style="display:flex;gap:5px">
+            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(255,255,255,0.06);color:var(--text3);border:0.5px solid var(--border)">${a.owner}</span>
+            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:${a.impact==='High'?'rgba(184,112,95,0.15)':'rgba(255,255,255,0.06)'};color:${a.impact==='High'?'var(--red)':'var(--text3)'};border:0.5px solid ${a.impact==='High'?'var(--red)':'var(--border)'}">↑ ${a.impact}</span>
+          </div>
+        </div>
       </div>`).join('')}
     </div>
-    <div>
-      <div class="sec-lbl">Net New ARR — Monthly Trend</div>
-      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border2);padding-bottom:4px;margin-bottom:4px">
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500">Period</span>
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Actual</span>
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Budget</span>
-        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Variance</span>
-      </div>
-      ${MO.map((m,i)=>{const d=NN_ACT[i]-NN_BUD[i];return`
-      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center">
-        <span style="font-size:12px;color:var(--text2)">${m} 2026</span>
-        <span style="font-size:12px;color:var(--text);font-family:var(--mono);font-weight:500;text-align:right;min-width:72px">${fM(NN_ACT[i])}</span>
-        <span style="font-size:11px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:72px">${fM(NN_BUD[i])}</span>
-        <span style="font-size:11px;font-family:var(--mono);font-weight:500;text-align:right;min-width:72px" class="${d>=0?'pos':'neg'}">${fV(d)}</span>
-      </div>`;}).join('')}
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">04</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">ARR &amp; Revenue Trend</span>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center">
+      <span style="font-size:10px;color:var(--text3)">● ARR actual (left)</span>
+      <span style="font-size:10px;color:var(--text3)">╌ ARR budget (left)</span>
+      <span style="font-size:10px;color:var(--text3)">▬ Revenue (right)</span>
     </div>
   </div>
-  <div class="commentary" id="execComm" style="margin-top:14px">
-    <div class="commentary-lbl">Executive Takeaway</div>
-    <div class="commentary-text">June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by $0.47M, driven by $1.92M new business (bud $1.73M) and $0.98M expansion (bud $0.85M). Revenue of $7.41M exceeded plan by $60K with gross margin expanding 220bps to 79.2% from engineering infrastructure gains. Cash reached $70.61M against a $31.46M budget — the $39.1M favorable variance reflects annual billing collections. EBITDA of -$1.30M trailed budget by $1.08M due to Q2 variable compensation timing; normalization expected in Q3.</div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:28px">
+    <div class="chart-wrap" style="height:200px"><canvas id="execChart" role="img" aria-label="ARR and revenue dual-axis trend chart"></canvas></div>
   </div>
-  <button class="ai-btn" onclick="aiComm('exec','execComm')">✦ Regenerate AI commentary ↗</button>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">05</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Variance Detail</span>
+    </div>
+    <span style="font-size:10px;color:var(--text3)">${closeLbl} actuals vs budget</span>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+
+  <div class="two-col" style="margin-bottom:28px">
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Budget Variance Summary</div>
+      ${[
+        ['ARR', fM(m.arrAct), fM(m.arrBud), arrVar, true],
+        ['Revenue', fM(m.revAct), fM(m.revBud), revVar, false],
+        ['Gross Profit', fM(m.gpAct), m.gpBud != null ? fM(m.gpBud) : '—', gpVar, false],
+        ['Gross Margin', gmActPct, gmBudPct, 0, false],
+        ['EBITDA', fM(m.ebitdaAct), m.ebitdaBud != null ? fM(m.ebitdaBud) : '—', ebitdaVar, true],
+        ['Cash', fM(m.cashAct), fM(m.cashBud), cashVar, false],
+        ['N$R', nrrPct, '100.0%', 0, false],
+      ].map(([l,a,b,d,emph])=>`
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${emph?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
+        <span style="font-size:11.5px;color:var(--text2);font-weight:${emph?'600':'400'}">${l}</span>
+        <span style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:${emph?'600':'500'};text-align:right;min-width:70px">${a}</span>
+        <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:70px">${b}</span>
+        <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d>0?'var(--teal)':d<0?'var(--red)':'var(--text3)'}">${d>0?'+':''}${l==='N$R'?'bps':l==='Gross Margin'?'flat':fKpiM(d)}</span>
+      </div>`).join('')}
+    </div>
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
+      <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Net New ARR — Monthly</div>
+      ${MO.map((mo,i)=>{
+        const d = NN_ACT[i] - NN_BUD[i];
+        const isClose = i === closeIdx;
+        return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${isClose?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
+          <span style="font-size:11.5px;color:var(--text2);font-weight:${isClose?'600':'400'}">${mo} 2026${isClose?' ✦':''}</span>
+          <span style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:${isClose?'600':'500'};text-align:right;min-width:70px">${fM(NN_ACT[i])}</span>
+          <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:70px">${fM(NN_BUD[i])}</span>
+          <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d>=0?'var(--teal)':'var(--red)'}">${fV(d)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">06</span>
+      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Executive Takeaway</span>
+    </div>
+    <button class="ai-btn" onclick="aiComm('exec','execComm')" style="margin-top:0">✦ Regenerate ↗</button>
+  </div>
+  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r2) var(--r2) 0;padding:16px 20px;box-shadow:var(--shadow)" id="execComm">
+    <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">AI-Generated · Claude</div>
+    <div class="commentary-text">${CLOSE_MO} close: ARR ${fM(m.arrAct)} (${fV(arrVar)} vs bud), revenue ${fM(m.revAct)} (${fV(revVar)} vs bud), EBITDA ${fM(m.ebitdaAct)} (${fV(ebitdaVar)} vs bud), cash ${fM(m.cashAct)} (${fV(cashVar)} vs bud), NRR ${nrrPct}.</div>
+  </div>
 </div>`;
 }
 
 // ─── ARR ──────────────────────────────────────────────────────────────────
 function renderARR(area) {
+  const m = boardJunMetrics();
+  const drivers = boardExecDrivers();
+  const i = ACT_MONTHS_COUNT - 1;
+  const wf = WF_TABLE || {};
+  const wfM = function (key) { return wf[key] && wf[key][i] != null ? wf[key][i] / 1e6 : 0; };
+  const nb = wfM('New Business');
+  const exp = wfM('Expansion');
+  const arrVar = m.arrAct - m.arrBud;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">ARR / MRR Waterfall</div>
   <div class="slide-sub">Actual vs Budget · Net New ARR components · Ending ARR trend</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Ending ARR</div><div class="kpi-val">$86.1M</div><div class="kpi-delta pos">+$0.58M vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Net New ARR</div><div class="kpi-val">$2.655M</div><div class="kpi-delta pos">+$0.58M vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">New Business</div><div class="kpi-val">$1.80M</div><div class="kpi-delta pos">+$0.07M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">Expansion ARR</div><div class="kpi-val">$0.91M</div><div class="kpi-delta pos">+$0.06M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val">100.8%</div><div class="kpi-delta pos">↑ from 100.07%</div></div>
+    <div class="kpi"><div class="kpi-lbl">Ending ARR</div><div class="kpi-val">${fKpiM(m.arrAct)}</div><div class="kpi-delta ${arrVar>=0?'pos':'neg'}">${fKpiVarM(arrVar)} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Net New ARR</div><div class="kpi-val">${fKpiM(drivers.nnAct)}</div><div class="kpi-delta ${drivers.nnVar>=0?'pos':'neg'}">${fKpiVarM(drivers.nnVar)} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">New Business</div><div class="kpi-val">${fKpiM(nb)}</div><div class="kpi-delta pos">${CLOSE_MO} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">Expansion ARR</div><div class="kpi-val">${fKpiM(exp)}</div><div class="kpi-delta pos">${CLOSE_MO} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">N$R</div><div class="kpi-val">${fKpiPct(m.nrr, true)}</div><div class="kpi-delta pos">live close</div></div>
   </div>
   <div class="two-col">
     <div class="card">
@@ -742,15 +1058,20 @@ function renderARR(area) {
 
 // ─── REVENUE ──────────────────────────────────────────────────────────────
 function renderRevenue(area) {
+  const m = boardJunMetrics();
+  const revVar = m.revAct - m.revBud;
+  const arrVar = m.arrAct - m.arrBud;
+  const ytdRev = REV_ACT.slice(0, ACT_MONTHS_COUNT).reduce(function (a, b) { return a + b; }, 0);
+  const ytdBud = REV_BUD.slice(0, ACT_MONTHS_COUNT).reduce(function (a, b) { return a + b; }, 0);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Revenue &amp; ARR</div>
   <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs Budget · Jan – June 2026</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Jun Revenue</div><div class="kpi-val">$7.412M</div><div class="kpi-delta pos">+$0.08M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val">$34.3M</div><div class="kpi-delta pos">+$0.3M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val">79.2%</div><div class="kpi-delta neu">on budget all periods</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR (Ending)</div><div class="kpi-val">$86.1M</div><div class="kpi-delta pos">+$0.58M vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val">100.8%</div><div class="kpi-delta pos">↑ improving</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Revenue</div><div class="kpi-val">${fKpiM(m.revAct)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${fKpiVarM(revVar)} vs bud</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val">${fKpiM(ytdRev)}</div><div class="kpi-delta ${ytdRev>=ytdBud?'pos':'neg'}">${fKpiVarM(ytdRev - ytdBud)} vs bud</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val">${fKpiPct(m.gmAct, true)}</div><div class="kpi-delta neu">GAAP margin</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR (Ending)</div><div class="kpi-val">${fKpiM(m.arrAct)}</div><div class="kpi-delta ${arrVar>=0?'pos':'neg'}">${fKpiVarM(arrVar)} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">N$R</div><div class="kpi-val">${fKpiPct(m.nrr, true)}</div><div class="kpi-delta pos">${CLOSE_MO} close</div></div>
   </div>
   <div class="two-col">
     <div class="card">
@@ -797,23 +1118,23 @@ function renderGTM(area) {
   const maxEff = keys.length ? Math.min(GTM[keys[0]].eff, 50) : 50;
   const gm = boardGtmMetrics();
   const closeLbl = boardPeriodLabel(boardActiveCloseMonth());
-  const mqlLbl = gm.totalMqls >= 1000 ? (gm.totalMqls / 1000).toFixed(1) + 'K' : String(gm.totalMqls);
+  const mqlLbl = gm.totalMqls >= 1000 ? Math.round(gm.totalMqls / 1000).toLocaleString('en-US') + 'k' : String(gm.totalMqls);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">GTM &amp; Marketing Channel Efficiency</div>
   <div class="slide-sub">Pipeline per $1 Spend · Win Rate · MQL Volume · YTD Jan–${closeLbl}</div>
   <div class="kpi-strip kpi-strip-5">
     <div class="kpi"><div class="kpi-lbl">Total MQLs</div><div class="kpi-val">${mqlLbl}</div><div class="kpi-delta neu">YTD actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">Pipeline Created</div><div class="kpi-val">$${gm.totalPipe.toFixed(1)}M</div><div class="kpi-delta neu">YTD created</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total Spend</div><div class="kpi-val">$${gm.totalSpend.toFixed(1)}M</div><div class="kpi-delta neu">YTD spend</div></div>
-    <div class="kpi"><div class="kpi-lbl">Overall Eff.</div><div class="kpi-val">${gm.overallEff.toFixed(1)}x</div><div class="kpi-delta pos">Pipeline per $1</div></div>
-    <div class="kpi"><div class="kpi-lbl">Best WR</div><div class="kpi-val">${gm.bestWr.name}</div><div class="kpi-delta pos">${gm.bestWr.wr.toFixed(1)}% win rate</div></div>
+    <div class="kpi"><div class="kpi-lbl">Pipeline Created</div><div class="kpi-val">${fKpiM(gm.totalPipe)}</div><div class="kpi-delta neu">YTD created</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Spend</div><div class="kpi-val">${fKpiM(gm.totalSpend)}</div><div class="kpi-delta neu">YTD spend</div></div>
+    <div class="kpi"><div class="kpi-lbl">Overall Eff.</div><div class="kpi-val">${gm.overallEff.toFixed(1)}×</div><div class="kpi-delta pos">Pipeline per $1</div></div>
+    <div class="kpi"><div class="kpi-lbl">Best WR</div><div class="kpi-val">${gm.bestWr.name}</div><div class="kpi-delta pos">${fKpiPct(gm.bestWr.wr, false)} win rate</div></div>
   </div>
   <div class="two-col">
     <div class="card">
       <div class="card-title">Pipeline efficiency — all channels</div>
       <div class="card-sub">Pipeline per $1 spend · sorted high to low</div>
       <div class="sec-lbl" style="display:grid;grid-template-columns:120px 1fr 65px 70px;gap:8px;font-size:9px;color:var(--text3)"><span>Channel</span><span>Efficiency bar</span><span style="text-align:right">Spend</span><span style="text-align:right">Pipeline</span></div>
-      ${keys.map(k=>{const ch=GTM[k];const pct=Math.min(ch.eff,50)/50*100;const hi=ch.eff>5;return`<div class="ch-row"><span style="color:var(--text${hi?'':'-secondary'})">${k}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${hi?'#1D9E75':'#B4B2A9'}"></div></div><span style="text-align:right;color:var(--text3);font-family:var(--mono)">$${ch.spend.toFixed(2)}M</span><span style="text-align:right;color:var(--text2);font-family:var(--mono)">$${ch.pipe.toFixed(2)}M</span></div>`;}).join('')}
+      ${keys.map(k=>{const ch=GTM[k];const pct=Math.min(ch.eff,50)/50*100;const hi=ch.eff>5;return`<div class="ch-row"><span style="color:var(--text${hi?'':'-secondary'})">${k}</span><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${hi?'var(--teal)':'var(--text3)'}"></div></div><span style="text-align:right;color:var(--text3);font-family:var(--mono)">$${ch.spend.toFixed(2)}M</span><span style="text-align:right;color:var(--text2);font-family:var(--mono)">$${ch.pipe.toFixed(2)}M</span></div>`;}).join('')}
     </div>
     <div>
       <div class="card" style="margin-bottom:12px">
@@ -838,47 +1159,53 @@ function renderGTM(area) {
 
 // ─── CASH ─────────────────────────────────────────────────────────────────
 function renderCash(area) {
+  const cm = boardCashMetrics();
+  const b = cm.bridge;
+  const bridgeTitle = cm.closeLbl + ' cash bridge';
+  const bridgeSub = cm.liveBridge ? 'From live cash flow bridge · ties to CFS' : 'Cash movements during the month';
+  const collDelta = cm.prevColl != null ? (cm.collections >= cm.prevColl ? 'above ' + CLOSE_MO + ' prior (' + fM(cm.prevColl, 1) + ')' : 'below prior month') : 'YTD actual';
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Cash Forecast &amp; Liquidity</div>
-  <div class="slide-sub">Collections → Operating Outflows → Ending Cash · Actual vs Budget · Jan – June 2026</div>
+  <div class="slide-sub">Collections → Operating Outflows → Ending Cash · Actual vs Budget · Jan – ${cm.closeLbl}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Ending Cash</div><div class="kpi-val">$70.61M</div><div class="kpi-delta pos">+$39.1M vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">June Collections</div><div class="kpi-val">$11.18M</div><div class="kpi-delta pos">above May ($9.65M)</div></div>
-    <div class="kpi"><div class="kpi-lbl">Cash vs Floor</div><div class="kpi-val">$56.0M</div><div class="kpi-delta pos">Floor: $10M</div></div>
-    <div class="kpi"><div class="kpi-lbl">Runway</div><div class="kpi-val">&gt;24 mo</div><div class="kpi-delta pos">well-capitalized</div></div>
-    <div class="kpi"><div class="kpi-lbl">Financing</div><div class="kpi-val">$0.0M</div><div class="kpi-delta pos">none required</div></div>
+    <div class="kpi"><div class="kpi-lbl">Ending Cash</div><div class="kpi-val">${fKpiM(cm.endingCash)}</div><div class="kpi-delta ${cm.cashVar>=0?'pos':'neg'}">${fKpiVarM(cm.cashVar)} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Collections</div><div class="kpi-val">${fKpiM(cm.collections)}</div><div class="kpi-delta pos">${collDelta}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Cash vs Floor</div><div class="kpi-val">${fKpiM(cm.vsFloor)}</div><div class="kpi-delta pos">Floor: ${fKpiM(10)}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Net Cash Move</div><div class="kpi-val">${b.netChange != null ? fKpiM(b.netChange) : '—'}</div><div class="kpi-delta neu">${cm.closeLbl}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Bridge Source</div><div class="kpi-val">${cm.liveBridge ? 'Live' : 'Demo'}</div><div class="kpi-delta ${cm.liveBridge?'pos':'neu'}">${cm.liveBridge ? 'CFS tied' : 'warehouse pending'}</div></div>
   </div>
   <div class="two-col">
     <div class="card">
       <div class="card-title">Cash balance — actual vs budget</div>
       <div class="card-sub">Ending cash ($M) · Teal = actual, gray = budget</div>
-      <div class="chart-wrap" style="height:180px"><canvas id="cashTrend" role="img" aria-label="Cash balance trend Jan to June 2026 actual vs budget">Cash grew from $48.7M to $66.0M vs budget $28.6M.</canvas></div>
+      <div class="chart-wrap" style="height:180px"><canvas id="cashTrend" role="img" aria-label="Cash balance trend actual vs budget"></canvas></div>
       <div style="margin-top:12px">
         <div class="sec-lbl">Monthly Actual vs Budget</div>
-        ${MO.map((m,i)=>{const d=CASH_ACT[i]-CASH_BUD[i];return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM(CASH_ACT[i],1)}</span><span class="var-bud">${fM(CASH_BUD[i],1)} bud</span><span class="var-diff pos">${fV(d)}</span></div>`}).join('')}
+        ${MO.map((m,i)=>{const d=CASH_ACT[i]-CASH_BUD[i];return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM(CASH_ACT[i],1)}</span><span class="var-bud">${fM(CASH_BUD[i],1)} bud</span><span class="var-diff ${d>=0?'pos':'neg'}">${fV(d)}</span></div>`}).join('')}
       </div>
     </div>
     <div>
       <div class="card" style="margin-bottom:12px">
         <div class="card-title">Monthly collections</div>
-        <div class="card-sub">March $13.6M = annual enterprise billing cycle</div>
-        <div class="chart-wrap" style="height:140px"><canvas id="cashColl" role="img" aria-label="Monthly collections bar chart showing March spike from annual enterprise renewals">Collections: Jan $9.3M, Feb $8.7M, Mar $13.6M spike, Apr $10.8M, May $9.7M, Jun $11.18M.</canvas></div>
+        <div class="card-sub">From cash flow bridge where available</div>
+        <div class="chart-wrap" style="height:140px"><canvas id="cashColl" role="img" aria-label="Monthly collections bar chart"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title">June 2026 cash bridge</div>
-        <div class="card-sub">Cash movements during the month</div>
-        <div class="cash-row in"><span style="color:var(--teal)">+ Collections</span><span style="font-family:var(--mono)">+$9.65M</span></div>
-        <div class="cash-row out"><span style="color:var(--red)">– Payroll</span><span style="font-family:var(--mono)">-$3.61M</span></div>
-        <div class="cash-row out"><span style="color:var(--red)">– Vendor / AP</span><span style="font-family:var(--mono)">-$1.38M</span></div>
-        <div class="cash-row out"><span style="color:var(--red)">– Commissions</span><span style="font-family:var(--mono)">-$0.29M</span></div>
-        <div class="cash-row out"><span style="color:var(--red)">– CapEx</span><span style="font-family:var(--mono)">-$0.18M</span></div>
-        <div class="cash-row tot" style="margin-top:5px"><span>Net Cash Movement</span><span style="font-family:var(--mono);color:var(--teal)">+$3.47M</span></div>
+        <div class="card-title">${bridgeTitle}</div>
+        <div class="card-sub">${bridgeSub}</div>
+        <div class="cash-row in"><span style="color:var(--teal)">+ Collections</span><span style="font-family:var(--mono)">${fmtBridgeLine(b.collections, false)}</span></div>
+        <div class="cash-row out"><span style="color:var(--red)">– Payroll</span><span style="font-family:var(--mono)">${fmtBridgeLine(b.payroll, true)}</span></div>
+        <div class="cash-row out"><span style="color:var(--red)">– Vendor / AP</span><span style="font-family:var(--mono)">${fmtBridgeLine(b.vendor, true)}</span></div>
+        <div class="cash-row out"><span style="color:var(--red)">– Commissions</span><span style="font-family:var(--mono)">${fmtBridgeLine(b.commission, true)}</span></div>
+        ${b.tax != null ? `<div class="cash-row out"><span style="color:var(--red)">– Tax</span><span style="font-family:var(--mono)">${fmtBridgeLine(b.tax, true)}</span></div>` : ''}
+        <div class="cash-row out"><span style="color:var(--red)">– CapEx</span><span style="font-family:var(--mono)">${fmtBridgeLine(b.capex, true)}</span></div>
+        <div class="cash-row tot" style="margin-top:5px"><span>Net Cash Movement</span><span style="font-family:var(--mono);color:${(b.netChange||0)>=0?'var(--teal)':'var(--red)'}">${b.netChange != null ? ((b.netChange>=0?'+':'-') + fM(Math.abs(b.netChange), 2).replace(/^\$/, '$')) : '—'}</span></div>
       </div>
     </div>
   </div>
   <div class="commentary" id="cashComm">
     <div class="commentary-lbl">Cash &amp; Liquidity Narrative</div>
-    <div class="commentary-text">June ending cash of $70.61M is $39.15M above the $31.46M budget — the favorable variance is structural, driven by annual enterprise billing collections (March spike $13.6M) and June collections of $11.18M above the $9.65M May run rate. CFO was $4.80M in June vs $3.65M in May, reflecting the stronger billing close. Zero financing activity YTD; with 24+ months runway and a $10M cash floor, the balance sheet provides full operating flexibility for the H2 hiring plan and any opportunistic investments.</div>
+    <div class="commentary-text">${cm.closeLbl} ending cash of ${fM(cm.endingCash, 2)} is ${fV(cm.cashVar)} versus budget. Collections of ${fM(cm.collections, 2)}${cm.prevColl != null ? ' compare to ' + fM(cm.prevColl, 2) + ' in the prior month' : ''}. Net cash movement of ${b.netChange != null ? fM(b.netChange, 2) : '—'} is sourced from the ${cm.liveBridge ? 'live warehouse cash flow bridge' : 'demo bridge until hydrate completes'} and should reconcile to the cash flow statement.</div>
   </div>
   <button class="ai-btn" onclick="aiComm('cash','cashComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
@@ -886,14 +1213,23 @@ function renderCash(area) {
 
 // ─── MANAGEMENT P&L ───────────────────────────────────────────────────────
 function renderPL(area) {
+  const m = boardJunMetrics();
+  const cm = boardActiveCloseMonth();
+  const isA = (TS_DATA && TS_DATA.Actual && TS_DATA.Actual.is && TS_DATA.Actual.is[cm]) || {};
+  const isB = (TS_DATA && TS_DATA.Budget && TS_DATA.Budget.is && TS_DATA.Budget.is[cm]) || {};
+  const revVar = m.revAct - m.revBud;
+  const opexAct = isA.total_opex != null ? isA.total_opex / 1e6 : 5.744;
+  const opexBud = isB.total_opex != null ? isB.total_opex / 1e6 : 5.557;
+  const opexVar = opexAct - opexBud;
+  const ebitdaVar = m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Management P&amp;L</div>
   <div class="slide-sub">GL-level drilldown · Actual vs Budget vs Forecast · Click ▶ rows to expand account detail</div>
   <div class="kpi-strip kpi-strip-4">
-    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val">$7.412M</div><div class="kpi-delta pos">+$0.01M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">$5.53M</div><div class="kpi-delta pos">Margin 77.0%</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val">$5.74M</div><div class="kpi-delta neg">+$0.19M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val">-$0.22M</div><div class="kpi-delta pos">+$0.01M vs bud</div></div>
+    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val">${fKpiM(m.revAct)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${fKpiVarM(revVar)} vs bud</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fKpiM(m.gpAct)}</div><div class="kpi-delta neu">${fKpiPct(m.gmAct, true)} margin</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val">${fKpiM(opexAct)}</div><div class="kpi-delta ${opexVar<=0?'pos':'neg'}">${fKpiVarM(opexVar)} vs bud</div></div>
+    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val">${fKpiM(m.ebitdaAct)}</div><div class="kpi-delta ${ebitdaVar>=0?'pos':'neg'}">${fKpiVarM(ebitdaVar)} vs bud</div></div>
   </div>
   <div class="subnav">
     <button class="snav-btn on" onclick="showPLView('summary',this)">P&L Summary</button>
@@ -1001,16 +1337,17 @@ function togglePLRow(ri, gl, inv) {
 }
 
 function buildPLMiniCharts() {
-  charts.plRev = new Chart(document.getElementById('plRevC'),{data:{labels:MO,datasets:[
-    {type:'bar',data:GP_ACT,backgroundColor:'rgba(29,158,117,0.15)',borderColor:'#1D9E75',borderWidth:1,label:'GP'},
-    {type:'line',data:REV_ACT,borderColor:'#1a2e44',borderWidth:2,pointRadius:3,fill:false,label:'Rev'},
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}}); 
+  const { cPos, cAmber, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+  mkChart('plRevC', {data:{labels:MO,datasets:[
+    {type:'bar',data:GP_ACT,backgroundColor:fade(cPos,0.15),borderColor:cPos,borderWidth:1,label:'GP',borderRadius:3},
+    {type:'line',data:REV_ACT,borderColor:cBlue,borderWidth:2,pointRadius:3,fill:false,label:'Rev',tension:0.3},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}});
   const sm=[3.43,3.49,3.56,3.64,3.73],rd=[1.12,1.14,1.16,1.19,1.22],ga=[0.72,0.74,0.75,0.77,0.79];
-  charts.plOpex = new Chart(document.getElementById('plOpexC'),{type:'bar',data:{labels:MO,datasets:[
-    {label:'Sales&Mktg',data:sm,backgroundColor:'#1a2e44',stack:'a'},
-    {label:'R&D&Prod',data:rd,backgroundColor:'#1D9E75',stack:'a'},
-    {label:'G&A&Fin',data:ga,backgroundColor:'#BA7517',stack:'a'},
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+  mkChart('plOpexC', {type:'bar',data:{labels:MO,datasets:[
+    {label:'Sales&Mktg',data:sm,backgroundColor:fade(cBlue,0.85),stack:'a',borderRadius:2},
+    {label:'R&D&Prod',data:rd,backgroundColor:fade(cPos,0.85),stack:'a',borderRadius:2},
+    {label:'G&A&Fin',data:ga,backgroundColor:fade(cAmber,0.85),stack:'a',borderRadius:2},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{stacked:true,...baseScaleX},y:{stacked:true,...baseScaleY(v=>'$'+v+'M')}}}});
 }
 
 function buildPLBridge(area) {
@@ -1032,23 +1369,25 @@ function buildPLBridge(area) {
     </div>
   </div>`;
   setTimeout(()=>{
-    charts.bridge = new Chart(document.getElementById('bridgeC'),{type:'bar',data:{labels:['Revenue','– COGS','Gross Profit','– S&M','– Engineering','– G&A/Fin','EBITDA'],datasets:[{data:[7.41,-1.54,5.87,-3.68,-1.22,-0.81,-1.30],backgroundColor:['#1D9E75','#D85A30','#1a2e44','#D85A30','#D85A30','#D85A30','#BA7517'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+Math.abs(ctx.raw).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>(v<0?'-$':'$')+Math.abs(v).toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.gm = new Chart(document.getElementById('gmC'),{type:'line',data:{labels:MO,datasets:[{label:'Actual',data:[77,77,77,77,77],borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:[77,77,77,77,77],borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:74,max:80,ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.em = new Chart(document.getElementById('emC'),{type:'line',
+    const { cPos, cNeg, cAmber, cBlue, cAccent, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+    mkChart('bridgeC', {type:'bar',data:{labels:['Revenue','– COGS','Gross Profit','– S&M','– Engineering','– G&A/Fin','EBITDA'],datasets:[{data:[7.41,-1.54,5.87,-3.68,-1.22,-0.81,-1.30],backgroundColor:[cPos,cNeg,cBlue,cNeg,cNeg,cNeg,cAmber],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+Math.abs(ctx.raw).toFixed(2)+'M'}}},scales:{x:baseScaleX,y:baseScaleY(v=>(v<0?'-$':'$')+Math.abs(v).toFixed(1)+'M')}}});
+    mkChart('gmC', {type:'line',data:{labels:MO,datasets:[
+      {label:'Actual',data:[77,77,77,77,77],borderColor:cPos,borderWidth:2,pointRadius:3,fill:false,tension:0.3},
+      {label:'Budget',data:[77,77,77,77,77],borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,tension:0.3}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:{min:74,max:80,...baseScaleY(v=>v+'%')}}}});
+    mkChart('emC', {type:'line',
     data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
       {label:'Actual',
        data:EBITDA_ACT.slice(0,ACT_MONTHS_COUNT).map(function(e,i){return parseFloat((e/REV_ACT[i]*100).toFixed(1));}),
-       borderColor:'#BA7517',borderWidth:2,pointRadius:3,fill:false},
+       borderColor:cAmber,borderWidth:2,pointRadius:3,fill:false,tension:0.3},
       {label:'Budget',
        data:[-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0].slice(0,ACT_MONTHS_COUNT),
-       borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}
+       borderColor:cText3,borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false,tension:0.3}
     ]},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{
-        x:{ticks:{font:{size:9}},grid:{display:false}},
-        y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}
-      }}});
+      plugins:{legend:chartLegendBottom()},
+      scales:{x:baseScaleX,y:baseScaleY(function(v){return v.toFixed(1)+'%';})}
+      }});
   },30);
 }
 
@@ -1082,9 +1421,13 @@ function buildPLDept(area) {
     </tbody></table>
   </div>`;
   setTimeout(()=>{
+    const { cPos, cNeg, cAmber, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
     const vars=DEPTS.map(d=>d.a-d.b);
-    charts.deptVar=new Chart(document.getElementById('deptVarC'),{type:'bar',data:{labels:DEPTS.map(d=>d.n),datasets:[{data:vars,backgroundColor:vars.map(v=>v>0.005?'rgba(216,90,48,0.4)':v<-0.005?'rgba(29,158,117,0.4)':'rgba(136,135,128,0.3)'),borderColor:vars.map(v=>v>0.005?'#D85A30':v<-0.005?'#1D9E75':'#888780'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
-    charts.deptMix=new Chart(document.getElementById('deptMixC'),{type:'doughnut',data:{labels:['Sales & Mktg 65%','R&D + Product 21%','G&A + Finance 14%'],datasets:[{data:[65,21,14],backgroundColor:['#1a2e44','#1D9E75','#BA7517'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:true,position:'bottom',labels:{font:{size:10},padding:10}}}}});
+    mkChart('deptVarC', {type:'bar',data:{labels:DEPTS.map(d=>d.n),datasets:[{data:vars,
+      backgroundColor:vars.map(v=>v>0.005?fade(cNeg,0.5):v<-0.005?fade(cPos,0.5):fade(cText3,0.35)),
+      borderColor:vars.map(v=>v>0.005?cNeg:v<-0.005?cPos:cText3),borderWidth:1.5,borderRadius:3}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleY(v=>(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M'),y:baseScaleX}}});
+    mkChart('deptMixC', {type:'doughnut',data:{labels:['Sales & Mktg 65%','R&D + Product 21%','G&A + Finance 14%'],datasets:[{data:[65,21,14],backgroundColor:[cBlue,cPos,cAmber],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:chartLegendBottom()}}});
   },30);
 }
 
@@ -1142,14 +1485,19 @@ function renderGLTable(dept) {
 function renderHC(area) {
   const depts = Object.keys(HC_DATA);
   const totJan=HC_TOTAL_JAN, totMay=HC_TOTAL_MAY, totBud=HC_TOTAL_BUD;
+  const closeIdx = ACT_MONTHS_COUNT - 1;
+  const arrPerEmp = totMay ? Math.round(ARR_ACT[closeIdx] * 1e6 / totMay / 1000) : null;
+  const janArrPerEmp = totJan ? Math.round(ARR_ACT[0] * 1e6 / totJan / 1000) : null;
+  const arrPerDelta = arrPerEmp != null && janArrPerEmp != null ? arrPerEmp - janArrPerEmp : null;
+  const payrollMay = WF_PAYROLL[closeIdx] || 6.09;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Headcount &amp; Productivity</div>
   <div class="slide-sub">Department staffing · ARR per employee · Payroll cost · Jan–June 2026 Actuals vs Budget</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Total HC (May)</div><div class="kpi-val">${totMay}</div><div class="kpi-delta ${totMay<=totBud?'pos':'neg'}">vs budget: ${totBud}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">${totMay}</div><div class="kpi-delta ${totMay<=totBud?'pos':'neg'}">vs budget: ${totBud}</div></div>
     <div class="kpi"><div class="kpi-lbl">HC vs Jan</div><div class="kpi-val">+${totMay-totJan}</div><div class="kpi-delta pos">net adds YTD</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">$233K</div><div class="kpi-delta pos">+$19K vs Jan</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total Payroll (May)</div><div class="kpi-val">$6.09M</div><div class="kpi-delta neu">on budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">${arrPerEmp != null ? fKpiK(arrPerEmp) : '—'}</div><div class="kpi-delta ${arrPerDelta!=null&&arrPerDelta>=0?'pos':'neg'}">${arrPerDelta != null ? fKpiVarK(arrPerDelta) + ' vs Jan' : '—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Payroll (${CLOSE_MO})</div><div class="kpi-val">${fKpiM(payrollMay)}</div><div class="kpi-delta neu">monthly cash</div></div>
     <div class="kpi"><div class="kpi-lbl">Attrition YTD</div><div class="kpi-val">3</div><div class="kpi-delta neu">within plan</div></div>
   </div>
   <div class="hc-grid">
@@ -1214,15 +1562,94 @@ function renderRisks(area) {
 </div>`;
 }
 
+function chartSkinTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  const C = k => cs.getPropertyValue(k).trim();
+  const cPos = C('--teal');
+  const cNeg = C('--red');
+  const cAmber = C('--amber');
+  const cAccent = C('--accent');
+  const cText2 = C('--text2');
+  const cText3 = C('--text3');
+  const cBlue = '#7a9fc2';
+  const fade = (hex, a) => {
+    hex = (hex || '').replace('#', '');
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    const r = parseInt(hex.slice(0, 2), 16) || 122;
+    const g = parseInt(hex.slice(2, 4), 16) || 159;
+    const b = parseInt(hex.slice(4, 6), 16) || 194;
+    return `rgba(${r},${g},${b},${a})`;
+  };
+  const gridColor = 'rgba(255,255,255,0.14)';
+  const tickFont = { size: 10, family: "'Inter',-apple-system,sans-serif", weight: '500' };
+  const tickColor = cText2;
+  const baseScaleX = { ticks: { font: tickFont, color: tickColor }, grid: { display: false } };
+  const baseScaleY = (cb) => ({ ticks: { callback: cb, font: tickFont, color: tickColor }, grid: { color: gridColor, drawTicks: false } });
+  const bubblePalette = ['#7a9fc2', '#74b88a', '#c2a07a', '#a07ab8', '#7ab8b0', '#b87a7a', '#b8a87a', '#7a8ab8', '#8ab87a', '#b87aa0', '#7ab8c2'];
+  return { cPos, cNeg, cAmber, cAccent, cText2, cText3, cBlue, fade, gridColor, tickFont, tickColor, baseScaleX, baseScaleY, bubblePalette };
+}
+
+function patchChartCfg(cfg) {
+  const { tickFont, tickColor, gridColor, cText2 } = chartSkinTokens();
+  const sliceBorder = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim() || '#fff';
+  const opts = cfg.options || (cfg.options = {});
+  if (opts.scales) {
+    Object.values(opts.scales).forEach(scale => {
+      if (!scale) return;
+      if (scale.grid && scale.grid.display !== false) {
+        scale.grid.color = gridColor;
+        scale.grid.drawTicks = false;
+      }
+      if (scale.ticks) {
+        scale.ticks.font = { ...tickFont, ...(scale.ticks.font || {}) };
+        if (!scale.ticks.color) scale.ticks.color = tickColor;
+      }
+    });
+  }
+  if (opts.plugins?.legend?.labels) {
+    if (!opts.plugins.legend.labels.color) opts.plugins.legend.labels.color = cText2;
+    if (!opts.plugins.legend.labels.font) opts.plugins.legend.labels.font = tickFont;
+  }
+  if (cfg.type === 'doughnut' && cfg.data?.datasets) {
+    cfg.data.datasets.forEach(function (ds) {
+      if (!ds.borderColor || ds.borderColor === '#fff') ds.borderColor = sliceBorder;
+    });
+  }
+  return cfg;
+}
+
+function chartLegendBottom() {
+  const { tickFont, cText2 } = chartSkinTokens();
+  return { position: 'bottom', labels: { font: tickFont, boxWidth: 10, color: cText2, padding: 10 } };
+}
+
+function mkChart(id, cfg) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  const c = document.getElementById(id);
+  if (c) charts[id] = new Chart(c, patchChartCfg(cfg));
+}
+
 // ─── CHART BUILDER ─────────────────────────────────────────────────────────
 function buildCharts(slide) {
+  const { cPos, cNeg, cAmber, cAccent, cText2, cText3, cBlue, fade, gridColor, tickFont, tickColor, baseScaleX, baseScaleY, bubblePalette } = chartSkinTokens();
+
   if(slide==='exec') {
-    charts.exec=new Chart(document.getElementById('execChart'),{data:{labels:MO,datasets:[
-      {type:'bar',label:'Net New ARR',data:NN_ACT,backgroundColor:'rgba(29,158,117,0.15)',borderColor:'#1D9E75',borderWidth:1,yAxisID:'y2',order:2},
-      {type:'line',label:'ARR Act',data:ARR_ACT,borderColor:'#185FA5',borderWidth:2,pointRadius:4,pointBackgroundColor:'#185FA5',yAxisID:'y1',fill:false,order:1},
-      {type:'line',label:'ARR Bud',data:ARR_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,yAxisID:'y1',fill:false,order:1},
-      {type:'line',label:'Revenue',data:REV_ACT,borderColor:'#BA7517',borderWidth:2,pointRadius:3,yAxisID:'y2',fill:false,order:1},
-    ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{display:false}}}}});
+    mkChart('execChart', {
+      data:{labels:MO,datasets:[
+        {type:'bar', label:'Net New ARR', data:NN_ACT, backgroundColor:fade(cPos,0.25), borderColor:cPos, borderWidth:1.5, yAxisID:'y2', order:2, borderRadius:3},
+        {type:'line',label:'ARR Act', data:ARR_ACT, borderColor:cAccent, borderWidth:2.5, pointRadius:4, pointBackgroundColor:cAccent, yAxisID:'y1', fill:false, order:1, tension:0.3},
+        {type:'line',label:'ARR Bud', data:ARR_BUD, borderColor:cText3, borderDash:[4,3], borderWidth:1.5, pointRadius:2, yAxisID:'y1', fill:false, order:1, tension:0.3},
+        {type:'line',label:'Revenue', data:REV_ACT, borderColor:cAmber, borderWidth:2, pointRadius:3, yAxisID:'y2', fill:false, order:1, tension:0.3},
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:false}},
+        scales:{
+          y1:{type:'linear',position:'left', ticks:{callback:v=>'$'+v+'M', font:tickFont, color:tickColor}, grid:{color:gridColor}},
+          y2:{type:'linear',position:'right', ticks:{callback:v=>'$'+v.toFixed(1)+'M', font:tickFont, color:tickColor}, grid:{display:false}},
+          x: baseScaleX,
+        }
+      }
+    });
   } else if(slide==='arr') {
     // True waterfall: BOP=81.39, +NB 1.80, +Exp 0.91, +React 0.08, -Con 0.24, -Churn 0.49, EOP=83.45
     // Each floating bar = [base_offset, value] using min/max trick
@@ -1240,10 +1667,10 @@ function buildCharts(slide) {
     const wfOffsets  = [0,        BOP,     afterNB,  afterExp,  afterCon,   afterChurn, 0       ];
     // visible bar heights: BOP=full, additive=component, subtractive=component, EOP=full
     const wfHeights  = [BOP,      nb,      exp,      react,     con,        churn,      afterChurn];
-    const wfColors   = ['#185FA5','#1D9E75','#1D9E75','#1D9E75','#D85A30','#D85A30','#185FA5'];
-    const wfBorders  = ['#185FA5','#0F6E56','#0F6E56','#0F6E56','#A32D2D','#A32D2D','#185FA5'];
+    const wfColors   = [cAccent, cPos, cPos, cPos, cNeg, cNeg, cAccent];
+    const wfBorders  = [cAccent, cPos, cPos, cPos, cNeg, cNeg, cAccent];
     const wfLabelsTop= [BOP,      nb,       exp,      react,    -con,      -churn,    afterChurn];
-    charts.wf=new Chart(document.getElementById('arrWF'),{
+    mkChart('arrWF', {
       type:'bar',
       data:{labels:wfLabels,datasets:[
         {label:'offset',data:wfOffsets,backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(0,0,0,0)',borderWidth:0,skipNull:true},
@@ -1257,8 +1684,8 @@ function buildCharts(slide) {
           datalabels:{display:false}
         },
         scales:{
-          x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},
-          y:{stacked:true,min:76,max:86,ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}
+          x:{stacked:true,...baseScaleX},
+          y:{stacked:true,min:76,max:86,...baseScaleY(v=>'$'+v.toFixed(0)+'M')}
         }
       },
       plugins:[{afterDatasetsDraw(chart){
@@ -1274,13 +1701,16 @@ function buildCharts(slide) {
           const displayLabel=isBase?('$'+Math.abs(v).toFixed(2)+'M'):label;
           const yPos = v>=0 ? bar.y-6 : bar.y+bar.height+13;
           const finalY = isBase ? bar.y-6 : yPos;
-          ctx2.fillStyle = v<0 ? '#A32D2D' : (isBase?'#185FA5':'#0F6E56');
+          ctx2.fillStyle = v<0 ? cNeg : (isBase ? cAccent : cPos);
           ctx2.fillText(displayLabel, bar.x, finalY);
         });
         ctx2.restore();
       }}]
     });
-    charts.nn=new Chart(document.getElementById('arrNN'),{type:'bar',data:{labels:MO,datasets:[{label:'Actual',data:NN_ACT,backgroundColor:'rgba(29,158,117,0.7)',borderColor:'#1D9E75',borderWidth:1,borderRadius:3},{label:'Budget',data:NN_BUD,backgroundColor:'rgba(136,135,128,0.3)',borderColor:'#888780',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    mkChart('arrNN', {type:'bar',data:{labels:MO,datasets:[
+      {label:'Actual',data:NN_ACT,backgroundColor:fade(cPos,0.7),borderColor:cPos,borderWidth:1,borderRadius:3},
+      {label:'Budget',data:NN_BUD,backgroundColor:fade(cText3,0.3),borderColor:cText3,borderWidth:1,borderRadius:3}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}});
     // Build MRR/ARR waterfall table (matches Image 2) — WF_TABLE is module-level for live hydration
     const WF_ROWS = ['Beginning','New Business','Expansion','Contraction','Churn','Reactivation','Ending'];
     const WF_POSITIVE = ['Beginning','New Business','Expansion','Reactivation','Ending'];
@@ -1323,37 +1753,99 @@ function buildCharts(slide) {
       });
     }, 80);
   } else if(slide==='revenue') {
-    charts.rev=new Chart(document.getElementById('revChart'),{data:{labels:MO,datasets:[{type:'bar',data:GP_ACT,backgroundColor:'rgba(29,158,117,0.15)',borderColor:'#1D9E75',borderWidth:1,label:'GP'},{type:'line',data:REV_ACT,borderColor:'#1a2e44',borderWidth:2,pointRadius:3,fill:false,label:'Act'},{type:'line',data:REV_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,label:'Bud'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.revArr=new Chart(document.getElementById('revARR'),{type:'line',data:{labels:MO,datasets:[{label:'Actual',data:ARR_ACT,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false},{label:'Budget',data:ARR_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    mkChart('revChart', {data:{labels:MO,datasets:[
+      {type:'bar',data:GP_ACT,backgroundColor:fade(cPos,0.15),borderColor:cPos,borderWidth:1,label:'GP',borderRadius:3},
+      {type:'line',data:REV_ACT,borderColor:cBlue,borderWidth:2,pointRadius:3,fill:false,label:'Act',tension:0.3},
+      {type:'line',data:REV_BUD,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,label:'Bud',tension:0.3}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}});
+    mkChart('revARR', {type:'line',data:{labels:MO,datasets:[
+      {label:'Actual',data:ARR_ACT,borderColor:cPos,borderWidth:2.5,pointRadius:4,fill:false,tension:0.3},
+      {label:'Budget',data:ARR_BUD,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false,tension:0.3}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}});
   } else if(slide==='gtm') {
     const sortedKeys=Object.keys(GTM).sort((a,b)=>GTM[b].wr-GTM[a].wr);
-    charts.gtmWR=new Chart(document.getElementById('gtmWR'),{type:'bar',data:{labels:sortedKeys,datasets:[{data:sortedKeys.map(k=>GTM[k].wr),backgroundColor:sortedKeys.map(k=>GTM[k].wr>30?'rgba(29,158,117,0.6)':GTM[k].wr>10?'rgba(186,117,23,0.5)':'rgba(216,90,48,0.5)'),borderColor:sortedKeys.map(k=>GTM[k].wr>30?'#1D9E75':GTM[k].wr>10?'#BA7517':'#D85A30'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    mkChart('gtmWR', {type:'bar',data:{labels:sortedKeys,datasets:[{data:sortedKeys.map(k=>GTM[k].wr),
+      backgroundColor:sortedKeys.map(k=>GTM[k].wr>30?fade(cPos,0.6):GTM[k].wr>10?fade(cAmber,0.5):fade(cNeg,0.5)),
+      borderColor:sortedKeys.map(k=>GTM[k].wr>30?cPos:GTM[k].wr>10?cAmber:cNeg),borderWidth:1.5,borderRadius:3}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleY(v=>v+'%'),y:baseScaleX}}});
     const bkeys=Object.keys(GTM);
-    charts.gtmB=new Chart(document.getElementById('gtmBubble'),{type:'bubble',data:{datasets:bkeys.map(k=>{const ch=GTM[k];return{label:k,data:[{x:ch.spend,y:ch.pipe,r:Math.max(5,Math.min(ch.eff/8+4,20))}],backgroundColor:ch.color+'88',borderColor:ch.color,borderWidth:1.5};})},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Spend ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:2.5},y:{title:{display:true,text:'Pipeline ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:3.5}}}});
+    mkChart('gtmBubble', {type:'bubble',data:{datasets:bkeys.map((k,idx)=>{const ch=GTM[k];const col=bubblePalette[idx%bubblePalette.length];return{label:k,data:[{x:ch.spend,y:ch.pipe,r:Math.max(5,Math.min(ch.eff/8+4,20))}],backgroundColor:col+'88',borderColor:col,borderWidth:1.5};})},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+        x:{title:{display:true,text:'Spend ($M)',font:tickFont,color:tickColor},ticks:{callback:v=>'$'+v+'M',font:tickFont,color:tickColor},min:0,max:2.5,grid:{color:gridColor}},
+        y:{title:{display:true,text:'Pipeline ($M)',font:tickFont,color:tickColor},ticks:{callback:v=>'$'+v+'M',font:tickFont,color:tickColor},min:0,max:3.5,grid:{color:gridColor}}
+      }}});
   } else if(slide==='cash') {
-    charts.cashT=new Chart(document.getElementById('cashTrend'),{data:{labels:MO,datasets:[{type:'line',data:CASH_ACT,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',borderWidth:2.5,pointRadius:4,fill:true},{type:'line',data:CASH_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.coll=new Chart(document.getElementById('cashColl'),{type:'bar',data:{labels:MO,datasets:[{data:COLL,backgroundColor:COLL.map(v=>v>12?'rgba(29,158,117,0.8)':'rgba(29,158,117,0.4)'),borderColor:'#1D9E75',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    mkChart('cashTrend', {data:{labels:MO,datasets:[
+      {type:'line',data:CASH_ACT,borderColor:cPos,backgroundColor:fade(cPos,0.08),borderWidth:2.5,pointRadius:4,fill:true,tension:0.3},
+      {type:'line',data:CASH_BUD,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false,tension:0.3}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}});
+    mkChart('cashColl', {type:'bar',data:{labels:MO,datasets:[{data:COLL,
+      backgroundColor:COLL.map(v=>v>12?fade(cPos,0.8):fade(cPos,0.4)),borderColor:cPos,borderWidth:1,borderRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}});
   } else if(slide==='headcount') {
     const depts=Object.keys(HC_DATA);
     const actHC=depts.map(d=>HC_DATA[d].may);
     const budHC=depts.map(d=>HC_DATA[d].bud);
-    charts.hcBar=new Chart(document.getElementById('hcBar'),{type:'bar',data:{labels:depts,datasets:[{label:'Actual',data:actHC,backgroundColor:'rgba(24,95,165,0.6)',borderColor:'#185FA5',borderWidth:1,borderRadius:3},{label:'Budget',data:budHC,backgroundColor:'rgba(136,135,128,0.3)',borderColor:'#888780',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:8},maxRotation:30},grid:{display:false}},y:{ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.hcT=new Chart(document.getElementById('hcTrend'),{data:{labels:MO,datasets:[{type:'line',label:'ARR/Emp ($K)',data:ARR_PER_EMP,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false,yAxisID:'y1'},{type:'bar',label:'Total HC',data:HC_BY_MO,backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y1:{type:'linear',position:'left',title:{display:true,text:'ARR/Emp ($K)',font:{size:9}},ticks:{callback:v=>'$'+v+'K',font:{size:9}}},y2:{type:'linear',position:'right',title:{display:true,text:'HC',font:{size:9}},ticks:{font:{size:9}},grid:{display:false}}}}});
-  } else if(slide==='revenue') {
-    charts.rev=new Chart(document.getElementById('revChart'),{data:{labels:MO,datasets:[{type:'bar',data:GP_ACT,backgroundColor:'rgba(29,158,117,0.15)',borderColor:'#1D9E75',borderWidth:1,label:'GP'},{type:'line',data:REV_ACT,borderColor:'#1a2e44',borderWidth:2,pointRadius:3,fill:false,label:'Act'},{type:'line',data:REV_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,label:'Bud'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.revArr=new Chart(document.getElementById('revARR'),{type:'line',data:{labels:MO,datasets:[{label:'Actual',data:ARR_ACT,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false},{label:'Budget',data:ARR_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-  } else if(slide==='gtm') {
-    const sortedKeys=Object.keys(GTM).sort((a,b)=>GTM[b].wr-GTM[a].wr);
-    charts.gtmWR=new Chart(document.getElementById('gtmWR'),{type:'bar',data:{labels:sortedKeys,datasets:[{data:sortedKeys.map(k=>GTM[k].wr),backgroundColor:sortedKeys.map(k=>GTM[k].wr>30?'rgba(29,158,117,0.6)':GTM[k].wr>10?'rgba(186,117,23,0.5)':'rgba(216,90,48,0.5)'),borderColor:sortedKeys.map(k=>GTM[k].wr>30?'#1D9E75':GTM[k].wr>10?'#BA7517':'#D85A30'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
-    const bkeys=Object.keys(GTM);
-    charts.gtmB=new Chart(document.getElementById('gtmBubble'),{type:'bubble',data:{datasets:bkeys.map(k=>{const ch=GTM[k];return{label:k,data:[{x:ch.spend,y:ch.pipe,r:Math.max(5,Math.min(ch.eff/8+4,20))}],backgroundColor:ch.color+'88',borderColor:ch.color,borderWidth:1.5};})},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Spend ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:2.5},y:{title:{display:true,text:'Pipeline ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:3.5}}}});
-  } else if(slide==='cash') {
-    charts.cashT=new Chart(document.getElementById('cashTrend'),{data:{labels:MO,datasets:[{type:'line',data:CASH_ACT,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',borderWidth:2.5,pointRadius:4,fill:true},{type:'line',data:CASH_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.coll=new Chart(document.getElementById('cashColl'),{type:'bar',data:{labels:MO,datasets:[{data:COLL,backgroundColor:COLL.map(v=>v>12?'rgba(29,158,117,0.8)':'rgba(29,158,117,0.4)'),borderColor:'#1D9E75',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    mkChart('hcBar', {type:'bar',data:{labels:depts,datasets:[
+      {label:'Actual',data:actHC,backgroundColor:fade(cAccent,0.6),borderColor:cAccent,borderWidth:1,borderRadius:3},
+      {label:'Budget',data:budHC,backgroundColor:fade(cText3,0.3),borderColor:cText3,borderWidth:1,borderRadius:3}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{...baseScaleX,ticks:{...baseScaleX.ticks,maxRotation:30}},y:baseScaleY()}}});
+    mkChart('hcTrend', {data:{labels:MO,datasets:[
+      {type:'line',label:'ARR/Emp ($K)',data:ARR_PER_EMP,borderColor:cPos,borderWidth:2,pointRadius:3,fill:false,yAxisID:'y1',tension:0.3},
+      {type:'bar',label:'Total HC',data:HC_BY_MO,backgroundColor:fade(cAccent,0.15),borderColor:cAccent,borderWidth:1,yAxisID:'y2',borderRadius:3}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+      y1:{type:'linear',position:'left',title:{display:true,text:'ARR/Emp ($K)',font:tickFont,color:tickColor},ticks:{callback:v=>'$'+v+'K',font:tickFont,color:tickColor},grid:{color:gridColor}},
+      y2:{type:'linear',position:'right',title:{display:true,text:'HC',font:tickFont,color:tickColor},ticks:{font:tickFont,color:tickColor},grid:{display:false}},
+      x: baseScaleX,
+    }}});
   }
 }
 
-// ─── AI COMMENTARY ─────────────────────────────────────────────────────────
+// ─── AI COMMENTARY (Claude via backend — server-side ANTHROPIC_API_KEY) ───
+const BOARD_SLIDE_API_KEYS = {
+  exec: "executive_summary",
+  arr: "arr_waterfall",
+  revenue: "gaap_revenue",
+  gtm: "gtm_performance",
+  cash: "cash_forecast",
+  headcount: "headcount",
+  risks: "risks_opportunities",
+};
+
+async function boardResolveOrgId() {
+  if (window.SMPL_ORG_ID) return window.SMPL_ORG_ID;
+  if (window.SMPLOutlook && window.SMPLOutlook.resolveOrgId) {
+    return await window.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 4000 });
+  }
+  return null;
+}
+
+function formatApiCommentary(c) {
+  if (!c || typeof c !== "object") return "";
+  return [
+    c.what_happened,
+    c.why_it_happened,
+    c.impact,
+    c.favorable,
+    c.unfavorable,
+    c.leadership_watch,
+    c.recommended_actions,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+async function boardApiErrorMessage(res) {
+  try {
+    const j = await res.json();
+    if (typeof j.detail === "string") return j.detail;
+    if (Array.isArray(j.detail)) return j.detail.map((d) => d.msg || d).join("; ");
+    return j.message || `Request failed (${res.status})`;
+  } catch (_) {
+    return `Request failed (${res.status})`;
+  }
+}
+
 const AI_CTX = {
   exec:`June 2026 close: ARR $86.10M (bud $85.52M, +$0.58M). Revenue $7.41M (bud $7.35M, +$0.06M). Gross Margin 79.2% (bud 77.0%, +220bps from infra efficiency). EBITDA -$1.30M (bud -$0.22M, -$1.08M unfavorable). Cash $70.61M (bud $31.46M, +$39.1M from annual billing timing). NRR 100.8%. Q2 net new ARR $2.655M, best month of H1. YTD revenue $41.71M vs $41.61M budget.`,
   arr:`June waterfall: Begin $83.44M, New Biz +$1.92M (bud $1.73M, +$0.19M), Expansion +$0.98M (bud $0.85M, +$0.13M), Reactivation +$0.095M, Contraction -$0.225M, Churn -$0.115M (bud -$0.50M, favorable), End $86.10M (+$0.58M vs budget). NRR 100.8%, GRR 98.7%. H2 ARR forecast $97.5M vs $96.1M budget. June net new $2.655M best month YTD.`,
@@ -1365,17 +1857,45 @@ const AI_CTX = {
 };
 
 async function aiComm(slideKey, targetId) {
-  if(aiCache[slideKey]){document.getElementById(targetId).querySelector('.commentary-text').textContent=aiCache[slideKey];return;}
-  const el=document.getElementById(targetId); if(!el) return;
-  const txt=el.querySelector('.commentary-text');
-  txt.innerHTML='<span class="spin"></span> Generating AI commentary...';
-  const prompt=`You are a CFO presenting to the board of a B2B SaaS company. Write 3-4 sentences of executive commentary for the ${slideKey} section. Rules: be specific (use exact numbers), explain the operational driver (WHY not just WHAT), include one forward-looking statement or risk, sound like a seasoned CFO not a report generator. Do NOT start with "The data shows." Do NOT use bullet points. Data context: ${AI_CTX[slideKey]}`;
+  if (aiCache[slideKey]) {
+    document.getElementById(targetId).querySelector(".commentary-text").textContent = aiCache[slideKey];
+    return;
+  }
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  const txt = el.querySelector(".commentary-text");
+  txt.innerHTML = '<span class="spin"></span> Generating AI commentary...';
+
+  const orgId = await boardResolveOrgId();
+  if (!orgId) {
+    txt.textContent =
+      "Open Board Platform from the signed-in operating OS (/app/board) to regenerate live Claude commentary.";
+    return;
+  }
+
+  const apiSlideKey = BOARD_SLIDE_API_KEYS[slideKey] || slideKey;
   try {
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
-    const data=await res.json();
-    const text=data.content?.map(b=>b.text||'').join('')||'Commentary unavailable.';
-    txt.textContent=text; aiCache[slideKey]=text;
-  } catch(e){ txt.textContent='Unable to connect to AI commentary — static commentary displayed above. Connect to Anthropic API to enable regeneration.'; }
+    const res = await fetch(
+      `/api/v1/board-platform/commentary/regenerate?organization_id=${encodeURIComponent(orgId)}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slide_key: apiSlideKey }),
+      },
+    );
+    if (!res.ok) {
+      txt.textContent = await boardApiErrorMessage(res);
+      return;
+    }
+    const data = await res.json();
+    const text = formatApiCommentary(data.commentary) || "Commentary unavailable.";
+    txt.textContent = text;
+    aiCache[slideKey] = text;
+  } catch (_) {
+    txt.textContent =
+      "Unable to reach commentary service. Confirm you are signed in and ANTHROPIC_API_KEY is set on the API server.";
+  }
 }
 
 const BOARD_EXPORTS = {
@@ -1455,14 +1975,14 @@ function tsGet(sc, src, period, stmt, key) {
 
 const tsFmt = (v, d=1) => {
   if(v===null||v===undefined) return '—';
-  const d2=Math.min(d,2), abs=Math.abs(v), neg=v<0;
+  const abs=Math.abs(v), neg=v<0;
   let s;
-  if(abs>=1e6) s='$'+(abs/1e6).toFixed(d2)+'M';
-  else if(abs>=1e3) s='$'+(abs/1e3).toFixed(0)+'K';
+  if(abs>=1e6) s='$'+(abs/1e6).toFixed(1)+'M';
+  else if(abs>=1e3) s='$'+Math.round(abs/1e3).toLocaleString('en-US')+'k';
   else s='$'+abs.toFixed(0);
   return neg?'('+s+')':s;
 };
-const tsFmtPct = v => v===null?'—':(v*100).toFixed(1)+'%';
+const tsFmtPct = v => v===null?'—':fKpiPct(v, true);
 const tsCls = (v, inv=false) => {
   if(v===null||Math.abs(v)<1) return '';
   const good = inv ? v<0 : v>0;
@@ -1732,8 +2252,8 @@ function renderWorkforce(area) {
     <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">${wm.closeHc}</div><div class="kpi-delta neu">${CLOSE_LABEL} actual</div></div>
     <div class="kpi"><div class="kpi-lbl">HC — Dec Forecast</div><div class="kpi-val">${wm.decHc}</div><div class="kpi-delta ${hcDelta>=0?'pos':'neg'}">${hcDelta>=0?'+':''}${hcDelta} from ${CLOSE_MO}</div></div>
     <div class="kpi"><div class="kpi-lbl">Open Reqs</div><div class="kpi-val">${wm.openReqs}</div><div class="kpi-delta neu">${FC_MO_LABELS[0]}\u2013Nov starts</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">${wm.arrPerEmp != null ? '$'+wm.arrPerEmp+'K' : '—'}</div><div class="kpi-delta pos">${CLOSE_LABEL} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">Monthly Payroll</div><div class="kpi-val">$${wm.payroll.toFixed(2)}M</div><div class="kpi-delta neu">${CLOSE_MO} &middot; live</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">${wm.arrPerEmp != null ? fKpiK(wm.arrPerEmp) : '—'}</div><div class="kpi-delta pos">${CLOSE_LABEL} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">Monthly Payroll</div><div class="kpi-val">${fKpiM(wm.payroll)}</div><div class="kpi-delta neu">${CLOSE_MO} &middot; live</div></div>
   </div>
   <div class="wf-tab-bar">
     <button class="wf-tab on"  onclick="wfTab('overview',this)">Overview</button>
@@ -1807,32 +2327,33 @@ function wfOverview(el) {
     </div>
   </div>`;
   setTimeout(()=>{
-    charts.wfHCStack = new Chart(document.getElementById('wfHCStack'),{type:'bar',data:{labels:ALL12,
-      datasets:WF_DEPTS.map(d=>({label:d,data:WF_HC_ALL[d],backgroundColor:WF_COLORS[d]+'cc',stack:'a',borderWidth:0}))},
+    const { cPos, cNeg, cAmber, cAccent, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+    mkChart('wfHCStack', {type:'bar',data:{labels:ALL12,
+      datasets:WF_DEPTS.map(d=>({label:d,data:WF_HC_ALL[d],backgroundColor:fade(WF_COLORS[d],0.8),stack:'a',borderWidth:0}))},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    
+        scales:{x:{stacked:true,...baseScaleX},y:{stacked:true,...baseScaleY()}}}});
+
     const REV_ALL = [6.59,6.71,6.85,7.01,7.18,7.36,7.54,7.73,7.93,8.13,8.33,8.54];
     const ARR_ALL = [76.3,77.8,79.5,81.4,83.5,85.5,87.7,89.8,91.7,93.7,95.6,97.5];
-    charts.wfRevEmp = new Chart(document.getElementById('wfRevEmp'),{type:'line',data:{labels:ALL12,datasets:[
-      {label:'Rev/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(REV_ALL[i]*1e6/hc/1000)),borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},
-      {label:'ARR/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(ARR_ALL[i]*1e6/hc/1000)),borderColor:'#185FA5',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    mkChart('wfRevEmp', {type:'line',data:{labels:ALL12,datasets:[
+      {label:'Rev/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(REV_ALL[i]*1e6/hc/1000)),borderColor:cPos,borderWidth:2,pointRadius:3,fill:false,tension:0.3},
+      {label:'ARR/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(ARR_ALL[i]*1e6/hc/1000)),borderColor:cAccent,borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false,tension:0.3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},
+      scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v+'K')}}});
 
-    charts.wfPayTrend = new Chart(document.getElementById('wfPayTrend'),{type:'line',data:{labels:ALL12,
-      datasets:[{label:'Payroll',data:WF_PAYROLL,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,
-        backgroundColor:'rgba(24,95,165,0.06)',fill:true}]},
+    mkChart('wfPayTrend', {type:'line',data:{labels:ALL12,
+      datasets:[{label:'Payroll',data:WF_PAYROLL,borderColor:cAccent,borderWidth:2.5,pointRadius:3,
+        backgroundColor:fade(cAccent,0.08),fill:true,tension:0.3}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(2)+'M')}}});
 
-    const revIdx = [6.59,6.71,6.85,7.01,7.18,7.36,7.54,7.73,7.93,8.13,8.33,8.54].map(v=>Math.round(v/6.59*100));
+    const revIdx = REV_ALL.map(v=>Math.round(v/6.59*100));
     const hcIdx  = WF_TOTAL_HC.map(v=>Math.round(v/121*100));
-    charts.wfOpLev = new Chart(document.getElementById('wfOpLev'),{type:'line',data:{labels:ALL12,datasets:[
-      {label:'Revenue index',data:revIdx,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'HC index',data:hcIdx,borderColor:'#D85A30',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:98,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    mkChart('wfOpLev', {type:'line',data:{labels:ALL12,datasets:[
+      {label:'Revenue index',data:revIdx,borderColor:cPos,borderWidth:2.5,pointRadius:3,fill:false,tension:0.3},
+      {label:'HC index',data:hcIdx,borderColor:cNeg,borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false,tension:0.3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},
+      scales:{x:baseScaleX,y:{min:98,...baseScaleY()}}}});
   }, 50);
 }
 
@@ -1859,20 +2380,19 @@ const BRIDGE = BRIDGE_DATA.map(b => ({
   ...b,
   actual: b.mo ? b.mo <= CLOSE_MONTH : false
 }));
-  const offsets=[],bars=[],colors=[],borders=[];
+  const offsets=[],bars=[];
   BRIDGE.forEach((b,i)=>{
-    if(b.isBase){offsets.push(0);bars.push(b.hc);colors.push('#185FA5');borders.push('#185FA5');}
-    else{const prior=BRIDGE[i-1].hc;offsets.push(prior);bars.push(b.adds);
-      colors.push(b.actual?'#1D9E75':'#BA7517');borders.push(b.actual?'#0F6E56':'#854F0B');}
+    if(b.isBase){offsets.push(0);bars.push(b.hc);}
+    else{const prior=BRIDGE[i-1].hc;offsets.push(prior);bars.push(b.adds);}
   });
   el.innerHTML = `
   <div class="card" style="margin-bottom:12px">
     <div class="card-title">Headcount bridge — Jan 2026 BOP → Dec 2026 EOP</div>
     <div class="card-sub">All monthly new hire increments &middot; green = actual adds (Jan–${CLOSE_MO}) &middot; amber = forecast adds &middot; blue = totals</div>
     <div class="legend">
-      <span class="li"><span class="ls" style="background:#185FA5"></span>BOP / EOP total</span>
-      <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual new hires (Jan–Jun)</span>
-      <span class="li"><span class="ls" style="background:#BA7517"></span>Forecast new hires (Jun–Dec)</span>
+      <span class="li"><span class="ls" style="background:var(--accent)"></span>BOP / EOP total</span>
+      <span class="li"><span class="ls" style="background:var(--teal)"></span>Actual new hires (Jan–Jun)</span>
+      <span class="li"><span class="ls" style="background:var(--amber)"></span>Forecast new hires (Jun–Dec)</span>
     </div>
     <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount bridge waterfall. Jan BOP 121. Feb +3=124, Mar +2=126, Apr +2=128, May +2=130, Jun +7=137, Jul +3=140, Aug +2=142, Sep +3=145, Oct +1=146, Nov +1=147, Dec +0=147. Dec EOP 147.">HC bridge: 121 BOP grows to 147 EOP with monthly adds shown.</canvas></div>
   </div>
@@ -1891,7 +2411,13 @@ const BRIDGE = BRIDGE_DATA.map(b => ({
     </div>
   </div>`;
   setTimeout(()=>{
-    charts.wfBridge = new Chart(document.getElementById('wfBridgeChart'),{
+    const { cPos, cAmber, cAccent, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+    const colors=[],borders=[];
+    BRIDGE.forEach(function(b){
+      if(b.isBase){colors.push(cAccent);borders.push(cAccent);}
+      else{colors.push(b.actual?cPos:cAmber);borders.push(b.actual?cPos:cAmber);}
+    });
+    mkChart('wfBridgeChart', {
       type:'bar',data:{labels:BRIDGE.map(b=>b.label),datasets:[
         {data:offsets,backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(0,0,0,0)',borderWidth:0,stack:'b'},
         {data:bars,backgroundColor:colors,borderColor:borders,borderWidth:1,
@@ -1899,17 +2425,16 @@ const BRIDGE = BRIDGE_DATA.map(b => ({
       ]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
         tooltip:{filter:item=>item.datasetIndex===1,callbacks:{label:ctx=>{const b=BRIDGE[ctx.dataIndex];return b.isBase?`Total: ${b.hc}`:`+${b.adds} → ${b.hc}`;}}},
-      },scales:{x:{stacked:true,ticks:{font:{size:9},maxRotation:30},grid:{display:false}},
-        y:{stacked:true,min:110,max:155,ticks:{font:{size:9},stepSize:5},grid:{color:'rgba(0,0,0,0.04)'}}}},
+      },scales:{x:{stacked:true,...baseScaleX,ticks:{...baseScaleX.ticks,maxRotation:30}},y:{stacked:true,min:110,max:155,...baseScaleY(),ticks:{stepSize:5}}}},
       plugins:[{id:'wfVals',afterDatasetsDraw(chart){
         const ctx2=chart.ctx,meta=chart.getDatasetMeta(1);
         ctx2.save();ctx2.textAlign='center';
         meta.data.forEach((bar,i)=>{
           const b=BRIDGE[i];if(!bars[i]) return;
           ctx2.font='bold 10px system-ui,sans-serif';
-          ctx2.fillStyle=b.isBase?'#185FA5':b.actual?'#0F6E56':'#854F0B';
+          ctx2.fillStyle=b.isBase?cAccent:b.actual?cPos:cAmber;
           ctx2.fillText(b.isBase?String(b.hc):`+${b.adds}`,bar.x,bar.y-4);
-          if(!b.isBase&&b.adds>0){ctx2.font='9px system-ui,sans-serif';ctx2.fillStyle='rgba(100,116,139,0.8)';ctx2.fillText(String(b.hc),bar.x,bar.y-15);}
+          if(!b.isBase&&b.adds>0){ctx2.font='9px system-ui,sans-serif';ctx2.fillStyle='rgba(148,163,184,0.85)';ctx2.fillText(String(b.hc),bar.x,bar.y-15);}
         });ctx2.restore();
       }}]
     });
@@ -1919,11 +2444,11 @@ const BRIDGE = BRIDGE_DATA.map(b => ({
         const prev=i===0?WF_HC_ALL[d][4]:WF_HC_ALL[d][4+i];
         const curr=WF_HC_ALL[d][5+i];
         return Math.max(0,curr-prev);
-      }),backgroundColor:WF_COLORS[d]+'bb',stack:'a',borderWidth:0,
+      }),backgroundColor:fade(WF_COLORS[d],0.75),stack:'a',borderWidth:0,
     }));
-    charts.wfDeptAdds = new Chart(document.getElementById('wfDeptAdds'),{type:'bar',data:{labels:FC_MO_LABELS,datasets:deptAddData},
+    mkChart('wfDeptAdds', {type:'bar',data:{labels:FC_MO_LABELS,datasets:deptAddData},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+        scales:{x:{stacked:true,...baseScaleX},y:{stacked:true,...baseScaleY(),ticks:{stepSize:1}}}}});
   }, 50);
 }
 
@@ -1955,22 +2480,23 @@ function wfCapacity(el) {
     </table>
   </div>`;
   setTimeout(()=>{
-    charts.wfQuota = new Chart(document.getElementById('wfQuota'),{type:'line',data:{labels:ALL12,datasets:[
-      {label:'Total quota ($M/mo)',data:WF_QUOTA_TOT,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'Ramped capacity ($M/mo)',data:WF_QUOTA_RMP,borderColor:'#1D9E75',borderWidth:2.5,borderDash:[4,3],pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:1.1,ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    const { cPos, cAmber, cAccent, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+    mkChart('wfQuota', {type:'line',data:{labels:ALL12,datasets:[
+      {label:'Total quota ($M/mo)',data:WF_QUOTA_TOT,borderColor:cAccent,borderWidth:2.5,pointRadius:3,fill:false,tension:0.3},
+      {label:'Ramped capacity ($M/mo)',data:WF_QUOTA_RMP,borderColor:cPos,borderWidth:2.5,borderDash:[4,3],pointRadius:3,fill:false,tension:0.3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},
+      scales:{x:baseScaleX,y:{min:1.1,...baseScaleY(v=>'$'+v.toFixed(2)+'M')}}}});
 
     const rampCurves=[
-      {label:'2-mo (SDR)',color:'#1D9E75',data:[50,100,100,100,100,100]},
-      {label:'3-mo (CSM)',color:'#185FA5',data:[33,67,100,100,100,100]},
-      {label:'4-mo (AE)',color:'#BA7517',data:[0,25,50,75,100,100]},
-      {label:'6-mo (SE)',color:'#888780',data:[0,15,30,50,75,100]},
+      {label:'2-mo (SDR)',color:cPos,data:[50,100,100,100,100,100]},
+      {label:'3-mo (CSM)',color:cAccent,data:[33,67,100,100,100,100]},
+      {label:'4-mo (AE)',color:cAmber,data:[0,25,50,75,100,100]},
+      {label:'6-mo (SE)',color:cText3,data:[0,15,30,50,75,100]},
     ];
-    charts.wfRamps = new Chart(document.getElementById('wfRamps'),{type:'line',data:{labels:['Mo 1','Mo 2','Mo 3','Mo 4','Mo 5','Mo 6'],
-      datasets:rampCurves.map(r=>({label:r.label,data:r.data,borderColor:r.color,borderWidth:2,pointRadius:4,fill:false}))},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-        scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:0,max:110,ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    mkChart('wfRamps', {type:'line',data:{labels:['Mo 1','Mo 2','Mo 3','Mo 4','Mo 5','Mo 6'],
+      datasets:rampCurves.map(r=>({label:r.label,data:r.data,borderColor:r.color,borderWidth:2,pointRadius:4,fill:false,tension:0.3}))},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},
+        scales:{x:baseScaleX,y:{min:0,max:110,...baseScaleY(v=>v+'%')}}}});
   }, 50);
 }
 
@@ -2008,15 +2534,16 @@ function wfPayroll(el) {
     </table>
   </div>`;
   setTimeout(()=>{
-    charts.wfPayStack = new Chart(document.getElementById('wfPayStack'),{type:'bar',data:{labels:ALL12,
+    const { cPos, cAmber, cAccent, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+    mkChart('wfPayStack', {type:'bar',data:{labels:ALL12,
       datasets:WF_DEPTS.map(d=>({label:d,data:WF_PAYROLL.map(p=>+(p*(deptShares[d]||0.1)).toFixed(2)),
-        backgroundColor:WF_COLORS[d]+'cc',stack:'a',borderWidth:0}))},
+        backgroundColor:fade(WF_COLORS[d],0.8),stack:'a',borderWidth:0}))},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.wfCompMix = new Chart(document.getElementById('wfCompMix'),{type:'doughnut',data:{
+        scales:{x:{stacked:true,...baseScaleX},y:{stacked:true,...baseScaleY(v=>'$'+v.toFixed(2)+'M')}}}});
+    mkChart('wfCompMix', {type:'doughnut',data:{
       labels:['Base salary 55%','Variable comp 18%','Benefits 15%','SBC 12%'],
-      datasets:[{data:[55,18,15,12],backgroundColor:['#185FA5','#1D9E75','#BA7517','#888780'],borderWidth:2,borderColor:'#fff'}]},
-      options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:10}}}}});
+      datasets:[{data:[55,18,15,12],backgroundColor:[cAccent,cPos,cAmber,cText3],borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:chartLegendBottom()}}});
   }, 50);
 }
 
@@ -2049,23 +2576,24 @@ function wfReqs(el) {
     </div>`).join('')}
   </div>`;
   setTimeout(()=>{
+    const { cPos, cAmber, cAccent, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
     const deptCounts={};const deptH={},deptM={},deptL={};
     WF_REQS.forEach(r=>{deptCounts[r.dept]=(deptCounts[r.dept]||0)+1;
       if(r.pri==='High') deptH[r.dept]=(deptH[r.dept]||0)+1;
       else if(r.pri==='Medium') deptM[r.dept]=(deptM[r.dept]||0)+1;
       else deptL[r.dept]=(deptL[r.dept]||0)+1;});
     const depts=Object.keys(deptCounts);
-    charts.wfReqDept = new Chart(document.getElementById('wfReqDept'),{type:'bar',data:{labels:depts,datasets:[
-      {label:'High',data:depts.map(d=>deptH[d]||0),backgroundColor:'#185FA5bb',stack:'a'},
-      {label:'Medium',data:depts.map(d=>deptM[d]||0),backgroundColor:'#BA7517bb',stack:'a'},
-      {label:'Low',data:depts.map(d=>deptL[d]||0),backgroundColor:'#888780bb',stack:'a'},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{stacked:true,ticks:{font:{size:9},maxRotation:30},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.wfHireTimeline = new Chart(document.getElementById('wfHireTimeline'),{type:'bar',
+    mkChart('wfReqDept', {type:'bar',data:{labels:depts,datasets:[
+      {label:'High',data:depts.map(d=>deptH[d]||0),backgroundColor:fade(cAccent,0.8),stack:'a'},
+      {label:'Medium',data:depts.map(d=>deptM[d]||0),backgroundColor:fade(cAmber,0.8),stack:'a'},
+      {label:'Low',data:depts.map(d=>deptL[d]||0),backgroundColor:fade(cText3,0.65),stack:'a'},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},
+      scales:{x:{stacked:true,...baseScaleX,ticks:{...baseScaleX.ticks,maxRotation:30}},y:{stacked:true,...baseScaleY(),ticks:{stepSize:1}}}}});
+    mkChart('wfHireTimeline', {type:'bar',
       data:{labels:['Jun','Jul','Aug','Sep','Oct','Nov'],datasets:[{
-        data:moKeys.map(m=>byMo[m]||0),backgroundColor:moKeys.map((_,i)=>i===0?'#185FA5bb':'#1D9E7588'),borderRadius:3}]},
+        data:moKeys.map(m=>byMo[m]||0),backgroundColor:moKeys.map(function(_,i){return i===0?fade(cAccent,0.8):fade(cPos,0.65);}),borderRadius:3}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+        scales:{x:baseScaleX,y:{...baseScaleY(),ticks:{stepSize:1}}}}});
   }, 50);
 }
 
@@ -2135,18 +2663,19 @@ function wfScenarios(el) {
     <div class="commentary-text">Base plan adds 10 employees Jul–Dec (June hires completed), reaching 147 total headcount. A 2-month blanket delay saves $0.14M in H2 payroll by deferring the July/August wave to September/October with no material impact on December quota capacity. A G&A-only freeze through year-end saves $0.09M and is invisible to revenue-generating capacity. The Enterprise AE acceleration scenario adds 2 senior AEs ahead of plan, increasing December ramped quota capacity by $0.13M/month at an incremental payroll cost of approximately $0.04M/month.</div>
   </div>`;
   setTimeout(()=>{
-    charts.wfScPay = new Chart(document.getElementById('wfScPay'),{type:'line',data:{labels:FC_MO_LABELS,datasets:[
-      {label:'Base',data:WF_SC_PAY.base,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:2,fill:false},
-      {label:'2-mo delay',data:WF_SC_PAY.delay2,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'G&A freeze',data:WF_SC_PAY.freeze,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.wfScHC = new Chart(document.getElementById('wfScHC'),{type:'line',data:{labels:FC_MO_LABELS,datasets:[
-      {label:'Base',data:WF_SC_HC.base,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:2,fill:false},
-      {label:'2-mo delay',data:WF_SC_HC.delay2,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'G&A freeze',data:WF_SC_HC.freeze,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:128,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    const { cPos, cAccent, cText3, baseScaleX, baseScaleY } = chartSkinTokens();
+    mkChart('wfScPay', {type:'line',data:{labels:FC_MO_LABELS,datasets:[
+      {label:'Base',data:WF_SC_PAY.base,borderColor:cText3,borderWidth:1.5,borderDash:[4,3],pointRadius:2,fill:false,tension:0.3},
+      {label:'2-mo delay',data:WF_SC_PAY.delay2,borderColor:cAccent,borderWidth:2.5,pointRadius:3,fill:false,tension:0.3},
+      {label:'G&A freeze',data:WF_SC_PAY.freeze,borderColor:cPos,borderWidth:2.5,pointRadius:3,fill:false,tension:0.3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},
+      scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(2)+'M')}}});
+    mkChart('wfScHC', {type:'line',data:{labels:FC_MO_LABELS,datasets:[
+      {label:'Base',data:WF_SC_HC.base,borderColor:cText3,borderWidth:1.5,borderDash:[4,3],pointRadius:2,fill:false,tension:0.3},
+      {label:'2-mo delay',data:WF_SC_HC.delay2,borderColor:cAccent,borderWidth:2.5,pointRadius:3,fill:false,tension:0.3},
+      {label:'G&A freeze',data:WF_SC_HC.freeze,borderColor:cPos,borderWidth:2.5,pointRadius:3,fill:false,tension:0.3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},
+      scales:{x:baseScaleX,y:{min:128,...baseScaleY()}}}});
   }, 50);
 }
 // end workforce block
@@ -2225,23 +2754,25 @@ const PERIOD5=['2026-01','2026-02','2026-03','2026-04','2026-05'];
 const PERIOD6=['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06'];
 let _sCharts={}, _sTab='overview';
 
-function _smk(id,cfg){if(_sCharts[id])_sCharts[id].destroy();const c=document.getElementById(id);if(c)_sCharts[id]=new Chart(c,cfg);}
+function _smk(id,cfg){if(_sCharts[id]){_sCharts[id].destroy();delete _sCharts[id];}const c=document.getElementById(id);if(c)_sCharts[id]=new Chart(c,patchChartCfg(cfg));}
 const _sf=(v,d=2)=>{if(!v)return'—';d=Math.min(d,2);const neg=v<0,abs=Math.abs(v);if(abs>=1e6)return(neg?'-$':'$')+(abs/1e6).toFixed(d)+'M';if(abs>=1e3)return(neg?'-$':'$')+(abs/1e3).toFixed(0)+'K';return(neg?'-$':'$')+Math.round(abs);};
 const _sp=v=>(v*100).toFixed(1)+'%';
 const _pill=pct=>{const p=pct*100;if(p>=100)return`<span class="badge badge-green">✓ ${_sp(pct)}</span>`;if(p>=90)return`<span class="badge badge-amber">${_sp(pct)}</span>`;return`<span class="badge badge-red">${_sp(pct)}</span>`;};
 
 function renderSales(area) {
+  Object.values(_sCharts).forEach(function (c) { try { c.destroy(); } catch (e) {} });
+  _sCharts = {};
   const sm = boardSalesMetrics();
   const closeLbl = boardPeriodLabel(sm.cm);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Sales Intelligence</div>
   <div class="slide-sub">${sm.repCount} quota-carrying reps · Live warehouse · Jan–${closeLbl}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">${_sf(sm.ytdQuota,1)}</div><div class="kpi-delta neu">YTD through ${closeLbl}</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">${_sf(sm.ytdAtt,1)}</div><div class="kpi-delta ${sm.ytdPct>=0.94?'pos':'amb'}">${_sp(sm.ytdPct)} of quota</div></div>
-    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Attainment</div><div class="kpi-val">${_sp(sm.junPct)}</div><div class="kpi-delta ${sm.junPct>=0.95?'pos':'amb'}">${closeLbl} close</div></div>
-    <div class="kpi"><div class="kpi-lbl">Open Pipeline</div><div class="kpi-val">${_sf(sm.openPipeline,1)}</div><div class="kpi-delta pos">${sm.coverage.toFixed(1)}× coverage</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Commission</div><div class="kpi-val">${_sf(sm.ytdComm,0)}</div><div class="kpi-delta neu">${sm.repCount} carriers</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">${fKpiMRaw(sm.ytdQuota)}</div><div class="kpi-delta neu">YTD through ${closeLbl}</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">${fKpiMRaw(sm.ytdAtt)}</div><div class="kpi-delta ${sm.ytdPct>=0.94?'pos':'amb'}">${fKpiPct(sm.ytdPct, true)} of quota</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Attainment</div><div class="kpi-val">${fKpiPct(sm.junPct, true)}</div><div class="kpi-delta ${sm.junPct>=0.95?'pos':'amb'}">${closeLbl} close</div></div>
+    <div class="kpi"><div class="kpi-lbl">Open Pipeline</div><div class="kpi-val">${fKpiMRaw(sm.openPipeline)}</div><div class="kpi-delta pos">${sm.coverage.toFixed(1)}× coverage</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Commission</div><div class="kpi-val">${fKpiK(sm.ytdComm, true)}</div><div class="kpi-delta neu">${sm.repCount} carriers</div></div>
   </div>
   <div class="subnav" style="margin-bottom:14px">
     <button class="snav-btn on" onclick="showSTab('overview',this)">Overview</button>
@@ -2302,39 +2833,40 @@ function _sOverview(el) {
     </div>
   </div>`;
   setTimeout(()=>{
+    const { cPos, cNeg, cAmber, cAccent, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
     const actSalesPeriods=Object.keys(SD.monthly).filter(p=>p<=CLOSE_MONTH).sort();
     const attained=actSalesPeriods.map(p=>+((SD.monthly[p].attained)/1e6).toFixed(2));
     const quotas  =actSalesPeriods.map(p=>+((SD.monthly[p].quota)/1e6).toFixed(2));
     const budQ    =actSalesPeriods.map(p=>+((SD.monthly[p].bud_quota)/1e6).toFixed(2));
     _smk('sAttC',{type:'bar',data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
-      {label:'Attained',data:attained,backgroundColor:'rgba(29,158,117,0.5)',borderColor:'#1D9E75',borderWidth:1,borderRadius:3,order:2},
-      {type:'line',label:'Quota',data:quotas,borderColor:'#185FA5',borderWidth:2,pointRadius:3,fill:false,order:1},
-      {type:'line',label:'Budget',data:budQ,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,order:1},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:1.0,ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+      {label:'Attained',data:attained,backgroundColor:fade(cPos,0.75),borderColor:cPos,borderWidth:1.5,borderRadius:3,order:2},
+      {type:'line',label:'Quota',data:quotas,borderColor:cAccent,borderWidth:2,pointRadius:3,fill:false,order:1,tension:0.3},
+      {type:'line',label:'Budget',data:budQ,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,order:1,tension:0.3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},scales:{x:baseScaleX,y:{min:1.0,...baseScaleY(v=>'$'+v.toFixed(1)+'M')}}}});
 
     const roles=['Sr Account Executive','Account Executive','Sales Dev Rep'];
     const rLabels=['Sr AE','AE','SDR'];
+    const roleColors=[cAccent,cPos,'#a07ab8'];
     _smk('sRoleC',{type:'bar',data:{labels:rLabels,datasets:[
-      {label:'Attained',data:roles.map(r=>+((SD.roles[r]?.ytd_attained||0)/1e6).toFixed(2)),backgroundColor:['#185FA599','#1D9E7599','#534AB799'],borderColor:['#185FA5','#1D9E75','#534AB7'],borderWidth:1,borderRadius:3},
-      {label:'Quota',  data:roles.map(r=>+((SD.roles[r]?.ytd_quota||0)/1e6).toFixed(2)),backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(136,135,128,0.5)',borderWidth:1.5,borderRadius:3},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+      {label:'Attained',data:roles.map(r=>+((SD.roles[r]?.ytd_attained||0)/1e6).toFixed(2)),backgroundColor:roleColors.map(function(c){return fade(c,0.75);}),borderColor:roleColors,borderWidth:1.5,borderRadius:3},
+      {label:'Quota',  data:roles.map(r=>+((SD.roles[r]?.ytd_quota||0)/1e6).toFixed(2)),backgroundColor:fade(cText3,0.35),borderColor:cText3,borderWidth:1.5,borderRadius:3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}});
 
     const regs=['East','EMEA','West','Central'];
     _smk('sRegC',{type:'bar',data:{labels:regs,datasets:[
-      {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(2)),backgroundColor:regs.map(r=>RCOLS[r]+'88'),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1,borderRadius:3},
-      {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(2)),backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(136,135,128,0.5)',borderWidth:1.5,borderRadius:3},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+      {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(2)),backgroundColor:regs.map(r=>fade(RCOLS[r],0.75)),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1.5,borderRadius:3},
+      {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(2)),backgroundColor:fade(cText3,0.35),borderColor:cText3,borderWidth:1.5,borderRadius:3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}});
 
     const bkts={'<80%':0,'80-90%':0,'90-100%':0,'100-110%':0,'>110%':0};
     SD.reps.forEach(r=>{const p=r.pct*100;if(p<80)bkts['<80%']++;else if(p<90)bkts['80-90%']++;else if(p<100)bkts['90-100%']++;else if(p<110)bkts['100-110%']++;else bkts['>110%']++;});
-    _smk('sDistC',{type:'bar',data:{labels:Object.keys(bkts),datasets:[{data:Object.values(bkts),backgroundColor:['#D85A3099','#BA751799','#185FA599','#1D9E7599','#0F6E5699'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{stepSize:1,font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'},min:0}}}});
+    _smk('sDistC',{type:'bar',data:{labels:Object.keys(bkts),datasets:[{data:Object.values(bkts),backgroundColor:[fade(cNeg,0.75),fade(cAmber,0.75),fade(cAccent,0.75),fade(cPos,0.75),fade(cPos,0.55)],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:{min:0,...baseScaleY(),ticks:{stepSize:1}}}}});
   },50);
 }
 
 function _sPipeline(el) {
   const pipe12=[3.60,4.05,4.50,4.95,5.40,5.90,
     ...Object.values(SD.budget_fc).map(d=>+((d.quota*1.15)/1e6).toFixed(2))];
-  const pipe12Cols=MO12.map((_,i)=>i<=CLOSE_MO_IDX?'#1D9E7599':'#BA751766');
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
@@ -2354,17 +2886,22 @@ function _sPipeline(el) {
     <div class="chart-wrap" style="height:180px"><canvas id="sPipe12" role="img" aria-label="Monthly pipeline creation chart. Actual grows from $3.6M to $5.9M Jun. Budget forecast continues to ~$9M by December.">Pipeline creation: Jan $3.6M growing to Jun $5.9M, forecast to ~$9M by Dec.</canvas></div>
   </div>`;
   setTimeout(()=>{
-    _smk('sPipeWF',{type:'bar',data:{labels:['Jan\nBOP','+Pipeline\n(6-mo)','−Closed\nWon','−Closed\nLost','Jun\nEOP'],datasets:[{data:[6.5,28.4,-10.4,-2.74,27.12],backgroundColor:['#185FA5','#1D9E75','#D85A30','#D85A30','#185FA5'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+(Math.abs(ctx.raw)).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+Math.abs(v).toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    const { cPos, cNeg, cAmber, cAccent, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+    _smk('sPipeWF',{type:'bar',data:{labels:['Jan\nBOP','+Pipeline\n(6-mo)','−Closed\nWon','−Closed\nLost','Jun\nEOP'],datasets:[{data:[6.5,28.4,-10.4,-2.74,27.12],backgroundColor:[cAccent,cPos,cNeg,cNeg,cAccent],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+(Math.abs(ctx.raw)).toFixed(2)+'M'}}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+Math.abs(v).toFixed(0)+'M')}}});
 
     const actPeriods=Object.keys(SD.pipeline).filter(p=>p<=CLOSE_MONTH).sort();
     const endPipe=actPeriods.map(p=>+((SD.pipeline[p].ending)/1e6).toFixed(2));
     _smk('sCovC',{data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
-      {type:'bar',label:'Pipeline ($M)',data:endPipe,backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y1'},
-      {type:'line',label:'Coverage (×)',data:actPeriods.map(p=>SD.pipeline[p].coverage||0).filter(Boolean),borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false,yAxisID:'y2'},
-      {type:'line',label:'3× target',data:actPeriods.map(()=>3),borderColor:'#D85A30',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false,yAxisID:'y2'},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',min:0,max:6,ticks:{callback:v=>v+'×',font:{size:9}},grid:{display:false}},x:{ticks:{font:{size:9}},grid:{display:false}}}}});
+      {type:'bar',label:'Pipeline ($M)',data:endPipe,backgroundColor:fade(cAccent,0.2),borderColor:cAccent,borderWidth:1,yAxisID:'y1',borderRadius:3},
+      {type:'line',label:'Coverage (×)',data:actPeriods.map(p=>SD.pipeline[p].coverage||0).filter(Boolean),borderColor:cPos,borderWidth:2.5,pointRadius:4,fill:false,yAxisID:'y2',tension:0.3},
+      {type:'line',label:'3× target',data:actPeriods.map(()=>3),borderColor:cNeg,borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false,yAxisID:'y2',tension:0.3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},scales:{
+      y1:{type:'linear',position:'left',...baseScaleY(v=>'$'+v+'M')},
+      y2:{type:'linear',position:'right',min:0,max:6,ticks:{callback:v=>v+'×',font:chartSkinTokens().tickFont,color:chartSkinTokens().tickColor},grid:{display:false}},
+      x:baseScaleX}}});
 
-    _smk('sPipe12',{type:'bar',data:{labels:MO12,datasets:[{data:pipe12,backgroundColor:pipe12Cols,borderColor:pipe12Cols.map(c=>c.slice(0,7)),borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    const pipe12Cols=MO12.map(function(_,i){return i<=CLOSE_MO_IDX?fade(cPos,0.75):fade(cAmber,0.55);});
+    _smk('sPipe12',{type:'bar',data:{labels:MO12,datasets:[{data:pipe12,backgroundColor:pipe12Cols,borderColor:pipe12Cols.map(function(c,i){return i<=CLOSE_MO_IDX?cPos:cAmber;}),borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}});
   },50);
 }
 
@@ -2437,11 +2974,12 @@ function _sMap(el) {
     </div>
   </div>`;
   setTimeout(()=>{
+    const { cPos, cNeg, cAmber, cAccent, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
     const regs=['East','EMEA','West','Central'];
     _smk('sRegBudC',{type:'bar',data:{labels:regs,datasets:[
-      {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(2)),backgroundColor:regs.map(r=>RCOLS[r]+'88'),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1,borderRadius:3},
-      {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(2)),backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(136,135,128,0.5)',borderWidth:1.5,borderRadius:3},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+      {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(2)),backgroundColor:regs.map(r=>fade(RCOLS[r],0.75)),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1.5,borderRadius:3},
+      {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(2)),backgroundColor:fade(cText3,0.35),borderColor:cText3,borderWidth:1.5,borderRadius:3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:chartLegendBottom()},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}});
   },50);
 }
 
@@ -2480,12 +3018,13 @@ function _sReps(el) {
     </tbody></table>
   </div>`;
   setTimeout(()=>{
+    const { cPos, cNeg, cAmber, cAccent, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
     const pcts=sorted.map(r=>+(r.pct*100).toFixed(1));
-    const cols=pcts.map(p=>p>=100?'#1D9E7599':p>=90?'#BA751799':'#D85A3099');
-    _smk('sRepBarC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:pcts,backgroundColor:cols,borderColor:cols.map(c=>c.slice(0,7)),borderWidth:1,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:70,max:130,ticks:{callback:v=>v+'%',font:{size:8}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    const cols=pcts.map(p=>p>=100?fade(cPos,0.75):p>=90?fade(cAmber,0.75):fade(cNeg,0.75));
+    _smk('sRepBarC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:pcts,backgroundColor:cols,borderColor:cols.map(function(c,i){return pcts[i]>=100?cPos:pcts[i]>=90?cAmber:cNeg;}),borderWidth:1,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:70,max:130,...baseScaleY(v=>v+'%')},y:baseScaleX}}});
     const bkts={'<80%':0,'80-90%':0,'90-100%':0,'100-110%':0,'>110%':0};
     SD.reps.forEach(r=>{const p=r.pct*100;if(p<80)bkts['<80%']++;else if(p<90)bkts['80-90%']++;else if(p<100)bkts['90-100%']++;else if(p<110)bkts['100-110%']++;else bkts['>110%']++;});
-    _smk('sBktC',{type:'bar',data:{labels:Object.keys(bkts),datasets:[{data:Object.values(bkts),backgroundColor:['#D85A3099','#BA751799','#185FA599','#1D9E7599','#0F6E5699'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{stepSize:1,font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'},min:0}}}});
+    _smk('sBktC',{type:'bar',data:{labels:Object.keys(bkts),datasets:[{data:Object.values(bkts),backgroundColor:[fade(cNeg,0.75),fade(cAmber,0.75),fade(cAccent,0.75),fade(cPos,0.75),fade(cPos,0.55)],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:{min:0,...baseScaleY(),ticks:{stepSize:1}}}}});
   },50);
 }
 
@@ -2527,9 +3066,11 @@ function _sComm(el) {
     </tbody></table>
   </div>`;
   setTimeout(()=>{
-    const commCols=sorted.map(r=>({'Sr Account Executive':'#185FA599','Account Executive':'#1D9E7599','Sales Dev Rep':'#534AB799'}[r.role]||'#88878099'));
-    _smk('sCommC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:sorted.map(r=>r.comm),backgroundColor:commCols,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'$'+ctx.raw.toLocaleString()}}},scales:{x:{ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
-    _smk('sCommRoleC',{type:'doughnut',data:{labels:['Sr AE','AE','SDR'],datasets:[{data:Object.values(roleComms),backgroundColor:['#185FA5','#1D9E75','#534AB7'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:10}}}}});
+    const { cPos, cAccent, cBlue, cText3, fade, baseScaleX, baseScaleY } = chartSkinTokens();
+    const roleColors={'Sr Account Executive':cAccent,'Account Executive':cPos,'Sales Dev Rep':'#a07ab8'};
+    const commCols=sorted.map(r=>fade(roleColors[r.role]||cText3,0.75));
+    _smk('sCommC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:sorted.map(r=>r.comm),backgroundColor:commCols,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'$'+ctx.raw.toLocaleString()}}},scales:{x:baseScaleY(v=>'$'+(v/1000).toFixed(0)+'K'),y:baseScaleX}}});
+    _smk('sCommRoleC',{type:'doughnut',data:{labels:['Sr AE','AE','SDR'],datasets:[{data:Object.values(roleComms),backgroundColor:[cAccent,cPos,'#a07ab8'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:chartLegendBottom()}}});
   },50);
 }
 // end Sales Intelligence block
@@ -2661,22 +3202,48 @@ async function cpSend() {
   msgs.scrollTop = msgs.scrollHeight;
 
   // Add to history
-  cpHistory.push({role:'user', content: q});
+  cpHistory.push({ role: "user", content: q });
+
+  const orgId = await boardResolveOrgId();
+  if (!orgId) {
+    const thinkEl = document.getElementById(thinkId);
+    if (thinkEl) {
+      thinkEl.outerHTML = `<div class="cp-msg assistant">
+      <div class="cp-avatar">S</div>
+      <div class="cp-bubble" style="color:var(--red)">Open Board Platform from the signed-in operating OS (/app/board) to use live SMPL Copilot.</div>
+    </div>`;
+    }
+    cpSending = false;
+    if (sendBtn) sendBtn.disabled = false;
+    return;
+  }
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: CP_SYSTEM,
-        messages: cpHistory
-      })
-    });
+    const res = await fetch(
+      `/api/v1/board-platform/copilot?organization_id=${encodeURIComponent(orgId)}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q }),
+      },
+    );
+    if (!res.ok) {
+      const errText = await boardApiErrorMessage(res);
+      const thinkEl = document.getElementById(thinkId);
+      if (thinkEl) {
+        thinkEl.outerHTML = `<div class="cp-msg assistant">
+      <div class="cp-avatar">S</div>
+      <div class="cp-bubble" style="color:var(--red)">${errText.replace(/</g, "&lt;")}</div>
+    </div>`;
+      }
+      cpSending = false;
+      if (sendBtn) sendBtn.disabled = false;
+      return;
+    }
     const data = await res.json();
-    const reply = data.content?.[0]?.text || 'Unable to generate response.';
-    cpHistory.push({role:'assistant', content: reply});
+    const reply = data.answer || "Unable to generate response.";
+    cpHistory.push({ role: "assistant", content: reply });
 
     // Format the three-part response
     const formatted = formatCopilotReply(reply);
@@ -2688,12 +3255,14 @@ async function cpSend() {
       <div class="cp-bubble">${formatted}</div>
     </div>`;
 
-  } catch(err) {
+  } catch (_) {
     const thinkEl = document.getElementById(thinkId);
-    if(thinkEl) thinkEl.outerHTML = `<div class="cp-msg assistant">
+    if (thinkEl) {
+      thinkEl.outerHTML = `<div class="cp-msg assistant">
       <div class="cp-avatar">S</div>
-      <div class="cp-bubble" style="color:var(--red)">Connection error. Configure API key to enable Copilot responses. Data context is loaded and ready.</div>
+      <div class="cp-bubble" style="color:var(--red)">Connection error. Confirm sign-in and ANTHROPIC_API_KEY on the API server.</div>
     </div>`;
+    }
   }
 
   cpSending = false;

@@ -22,6 +22,24 @@ from app.services.reporting.validation_gate import raise_if_validation_blocked
 
 board_platform_router = APIRouter(prefix="/board-platform", tags=["board-platform"])
 
+# Web board tab ids → narrative slide keys (board/index.html + BoardPlatformApp).
+BOARD_SLIDE_KEY_ALIASES: dict[str, str] = {
+    "exec": "executive_summary",
+    "executive": "executive_summary",
+    "arr": "arr_waterfall",
+    "revenue": "gaap_revenue",
+    "gtm": "gtm_performance",
+    "cash": "cash_forecast",
+    "headcount": "headcount",
+    "risks": "risks_opportunities",
+    "risk": "risks_opportunities",
+}
+
+
+def normalize_board_slide_key(slide_key: str) -> str:
+    key = slide_key.strip()
+    return BOARD_SLIDE_KEY_ALIASES.get(key, key)
+
 
 class BoardCommentaryRequest(BaseModel):
     slide_key: str = Field(min_length=1, max_length=64)
@@ -92,13 +110,14 @@ def regenerate_slide_commentary(
 
     raise_if_validation_blocked(bundle.validation, action="AI commentary")
 
+    slide_key = normalize_board_slide_key(body.slide_key)
     slides = build_all_slide_commentary(bundle, use_ai=True)
-    slide = slides.get(body.slide_key)
+    slide = slides.get(slide_key)
     if slide is None:
         raise HTTPException(status_code=404, detail=f"Unknown slide key: {body.slide_key}")
 
     return BoardCommentaryResponse(
-        slide_key=body.slide_key,
+        slide_key=slide_key,
         commentary={
             "what_happened": slide.what_happened,
             "why_it_happened": slide.why_it_happened,
@@ -143,13 +162,18 @@ def board_copilot(
         client = build_commentary_llm_client()
         raw = client.generate(
             system_prompt=(
-                "You are SMPL Copilot — a SaaS CFO analyst. Answer using ONLY the metrics provided. "
-                "Be concise, evidence-based, and tie numbers to business drivers."
+                "You are SMPL Copilot — the AI financial intelligence layer for a B2B SaaS company. "
+                "Answer using ONLY the live metrics provided. Never invent numbers. "
+                "Structure every answer in exactly three labeled sections:\n"
+                "1. PRIMARY DRIVER + VARIANCE CONTEXT — the key metric/movement with exact variance vs budget or prior period.\n"
+                "2. FINANCIAL AND OPERATIONAL ROOT CAUSE — connect operational drivers (ARR, pipeline, headcount, GTM) to the outcome.\n"
+                "3. RECOMMENDED ACTION + BOARD SUMMARY — one specific action plus a one-sentence board-ready summary.\n"
+                "Keep each section to 2-3 sentences. Use dollar signs and percentages consistently."
             ),
             user_prompt=(
                 f"Organization: {org.name}. Close month: {as_of}. FY window: {start_period}–{end_period}.\n"
                 f"Live metrics:\n{metrics_blob}\n\nQuestion: {body.question}\n\n"
-                'Respond JSON: {"answer": "..."}'
+                'Respond JSON: {"answer": "..."} where answer contains the three numbered sections as plain text.'
             ),
         )
         answer = str(raw.get("answer") or raw.get("response") or "").strip()
