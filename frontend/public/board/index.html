@@ -5,26 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SMPL · We make finance simple · June 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #ffffff; --bg2: #f8fafc; --bg3: #f1f5f9;
-  --text: #0f172a; --text2: #475569; --text3: #94a3b8;
-  --border: rgba(15,23,42,0.1); --border2: rgba(15,23,42,0.18);
-  --teal: #1D9E75; --teal-light: rgba(29,158,117,0.1);
-  --navy: #1a2e44; --blue: #185FA5;
-  --red: #D85A30; --red-light: rgba(216,90,48,0.08);
-  --amber: #BA7517; --amber-light: rgba(186,117,23,0.1);
-  --green: #1D9E75; --green-light: rgba(29,158,117,0.08);
-  --gray: #888780; --lgray: #e2e8f0;
-  --r: 6px; --r2: 10px;
-  --mono: 'DM Mono', monospace;
-  --serif: 'Fraunces', serif;
-  --teal: #1D9E75;
-  --red: #D85A30;
+  --bg: #18241b; --bg2: #23332699; --bg3: #2b3c2e;
+  --text: #dde8d6; --text2: #aab8a2; --text3: #72826a;
+  --border: #2e3f31; --border2: rgba(56,75,60,0.25);
+  --teal: #5fa878; --teal-light: rgba(95,168,120,0.12);
+  --navy: #23332699; --blue: #5fa878;
+  --red: #b8705f; --red-light: rgba(184,112,95,0.1);
+  --amber: #b89060; --amber-light: rgba(184,144,96,0.1);
+  --green: #5fa878; --green-light: rgba(95,168,120,0.1);
+  --gray: #72826a; --lgray: #2e3f31;
+  --accent: #c4855a;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3),0 12px 32px -8px rgba(0,0,0,0.4);
+  --r: 12px; --r2: 18px;
+  --mono: 'Inter', -apple-system, sans-serif;
+  --serif: 'Inter', -apple-system, sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+body { font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.skin-select{font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:500;padding:5px 10px;border:0.5px solid var(--border);border-radius:20px;background:var(--bg2);color:var(--text2);cursor:pointer;outline:none;transition:all .15s}
+.skin-select:hover{color:var(--text)}
+.skin-select option{background:#1a1a1a;color:#eee}
 /* TOPBAR */
 .topbar { display: flex; align-items: center; justify-content: space-between; padding: 13px 24px; border-bottom: 0.5px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 100; }
 .logo { font-family: var(--serif); font-size: 17px; font-weight: 300; letter-spacing: -0.3px; }
@@ -37,7 +40,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 .nav { display: flex; padding: 0 24px; border-bottom: 0.5px solid var(--border); overflow-x: auto; background: var(--bg); }
 .nav-btn { padding: 11px 16px; font-size: 12px; color: var(--text2); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .15s; font-family: inherit; }
 .nav-btn:hover:not(.active) { color: var(--text); }
-.nav-btn.active { color: var(--text); border-bottom-color: var(--navy); font-weight: 500; }
+.nav-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 /* SLIDE */
 .slide { padding: 22px 24px; max-width: 100%; }
 .slide-title { font-family: var(--serif); font-size: 20px; font-weight: 300; font-style: italic; color: var(--text); margin-bottom: 3px; }
@@ -47,7 +50,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 .kpi-strip-5 { grid-template-columns: repeat(5,1fr); }
 .kpi-strip-4 { grid-template-columns: repeat(4,1fr); }
 .kpi-strip-6 { grid-template-columns: repeat(6,1fr); }
-.kpi { background: var(--bg2); border-radius: var(--r); padding: 11px 13px; }
+.kpi { background: var(--bg2); border-radius: var(--r2); padding: 12px 15px; border: 0.5px solid var(--border); box-shadow: var(--shadow); }
 .kpi-lbl { font-size: 9.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
 .kpi-val { font-size: 20px; font-weight: 500; font-family: var(--mono); line-height: 1; color: var(--text); }
 .kpi-delta { font-size: 10px; margin-top: 4px; font-family: var(--mono); }
@@ -57,7 +60,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .chart-wrap { position: relative; }
 /* CARDS */
-.card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--r2); padding: 14px 16px; }
+.card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--r2); padding: 14px; box-shadow: var(--shadow); }
 .card-title { font-size: 11.5px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
 .card-sub { font-size: 10px; color: var(--text3); margin-bottom: 11px; }
 /* COMMENTARY */
@@ -195,17 +198,18 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 .ts-sc-btn.on{background:var(--bg);color:var(--text);font-weight:500;box-shadow:0 0 0 0.5px var(--border2)}
 .ts-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
 .ts-tbl th{padding:5px 8px;font-size:9.5px;font-weight:500;color:var(--text3);white-space:nowrap;border-bottom:1px solid var(--border2);text-align:right}
-.ts-tbl th:first-child{text-align:left;min-width:185px}
-.ts-tbl th:not(:first-child){min-width:80px}
+.ts-tbl col.ts-label-col{width:240px}
+.ts-tbl th:first-child{text-align:left;width:240px;min-width:240px;max-width:240px;white-space:nowrap}
+.ts-tbl th:not(:first-child){min-width:82px}
 .ts-tbl td{padding:4px 8px;border-bottom:0.5px solid var(--border);white-space:nowrap;text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--text2)}
 .ts-tbl td:first-child{text-align:left;font-family:inherit;color:var(--text);font-size:11px}
 .ts-tbl tr.ts-sec td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);font-weight:500;padding:6px 8px;font-family:inherit;border-top:0.5px solid var(--border2)}
 .ts-tbl tr.ts-sub td{font-weight:600;color:var(--text);border-top:0.5px solid var(--border2)}
 .ts-tbl tr.ts-tot td{font-weight:600;color:var(--text);border-top:1.5px solid var(--border2);background:var(--bg2)}
 .ts-tbl tr.ts-indent td:first-child{padding-left:20px;color:var(--text2);font-size:10.5px}
-.ts-tbl .fc-col{color:var(--amber) !important;background:rgba(186,117,23,0.03)}
+.ts-tbl .fc-col{color:var(--amber) !important;background:var(--amber-light)}
 .ts-tbl .act-col{color:var(--text2)}
-.ts-tbl .bud-col{color:var(--blue) !important;background:rgba(24,95,165,0.03)}
+.ts-tbl .bud-col{color:var(--teal) !important;background:var(--teal-light)}
 .ts-pos{color:var(--teal) !important}
 .ts-neg{color:var(--red) !important}
 .ts-stmt-hdr{display:flex;align-items:center;gap:8px;margin:18px 0 8px;padding-bottom:6px;border-bottom:1.5px solid var(--border2)}
@@ -220,7 +224,20 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 <div class="topbar">
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· We make finance simple</span></div>
   <div class="topbar-right">
+    <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
     <span class="period-badge" id="periodBadge"></span>
+    <select class="skin-select" id="skinSelect" onchange="SMPLSkin.apply(this.value, smplBoardRefreshView)" aria-label="Design skin">
+      <option value="canvas">Canvas</option>
+      <option value="smpl">SMPL</option>
+      <option value="midnight">Midnight</option>
+      <option value="harbor">Harbor</option>
+      <option value="eclipse">Eclipse</option>
+      <option value="graphite">Graphite</option>
+      <option value="aurora">Aurora</option>
+      <option value="ember">Ember</option>
+      <option value="slate">Slate</option>
+      <option value="mist">Mist</option>
+    </select>
     <button class="ai-global-btn" onclick="openMdaDeck()">✦ MD&A Deck ↗</button>
     <button class="ai-global-btn" onclick="openVarianceCommentary()">✦ Variance Commentary ↗</button>
 </div>
@@ -243,7 +260,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg)
 <div id="slideArea"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Board Intelligence · Jan–${CLOSE_MO} 2026 Actuals · AI commentary via Claude · Confidential</div>
+  <div class="footer-note">SMPL · Board Intelligence · Loading…</div>
   </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -266,6 +283,15 @@ const EBITDA_ACT = [-1.77, -1.69, -1.59, -1.51, -1.51, -1.3];
 const CASH_ACT = [48.71, 51.01, 58.09, 62.57, 66.04, 70.61];
 const CASH_BUD = [12.75, 14.95, 22.87, 26.35, 28.64, 31.46];
 const COLL     = [9.27,8.67,13.59,10.82,9.65,11.18];
+const WF_TABLE = {
+  Beginning:   [75000000,76310000,77815000,79505000,81385000,83445000, 86100000,88076000,90010000,91936000,93800000,95700000],
+  'New Business':[1200000,1350000,1500000,1650000,1800000,  1920000,  1866715,1750478,1765110,1678393,1720000,1690000],
+  Expansion:   [650000,720000,780000,850000,910000,          980000,   995197,1027047,922213,1058122,980000,1010000],
+  Contraction: [-180000,-195000,-210000,-225000,-240000,    -225000,  -371121,-402430,-424036,-439679,-445000,-452000],
+  Churn:       [-420000,-435000,-450000,-470000,-490000,    -115000,  -612563,-662371,-705506,-707603,-720000,-734000],
+  Reactivation:[60000,65000,70000,75000,80000,               95000,   307478,373503,382361,391126,393000,400000],
+  Ending:      [76310000,77815000,79505000,81385000,83445000,86100000, 88076000,90010000,91936000,93800000,95705000,97560000],
+};
 // ══════════════════════════════════════════════════════════════════════════════
 // SMPL BOARD PLATFORM — MONTHLY CLOSE ROLLOVER INSTRUCTIONS
 // ══════════════════════════════════════════════════════════════════════════════
@@ -413,6 +439,172 @@ const fP = (v,b) => b ? ((v-b)/Math.abs(b)*100).toFixed(1)+'%' : '—';
 const vCls = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'vpos':'vneg';
 const vSign = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'pos':'neg';
 
+function boardActiveCloseMonth() {
+  return (typeof window !== 'undefined' && window.CLOSE_MONTH) ? window.CLOSE_MONTH : CLOSE_MONTH;
+}
+function boardPeriodLabel(period) {
+  return MO12[parseInt(period.slice(5), 10) - 1] + ' ' + period.slice(0, 4);
+}
+function boardJunMetrics() {
+  var cm = boardActiveCloseMonth();
+  var i = ACT_MONTHS_COUNT - 1;
+  var isA = (TS_DATA && TS_DATA.Actual && TS_DATA.Actual.is && TS_DATA.Actual.is[cm]) || {};
+  var isB = (TS_DATA && TS_DATA.Budget && TS_DATA.Budget.is && TS_DATA.Budget.is[cm]) || {};
+  var bsA = (TS_DATA && TS_DATA.Actual && TS_DATA.Actual.bs && TS_DATA.Actual.bs[cm]) || {};
+  var bsB = (TS_DATA && TS_DATA.Budget && TS_DATA.Budget.bs && TS_DATA.Budget.bs[cm]) || {};
+  var src = (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.SRC && window.SMPL_OUTLOOK_PAYLOAD.SRC.actuals && window.SMPL_OUTLOOK_PAYLOAD.SRC.actuals[cm]) || {};
+  return {
+    cm: cm,
+    arrAct: ARR_ACT[i],
+    arrBud: ARR_BUD[i],
+    revAct: isA.revenue != null ? isA.revenue / 1e6 : REV_ACT[i],
+    revBud: isB.revenue != null ? isB.revenue / 1e6 : REV_BUD[i],
+    gpAct: isA.gross_profit != null ? isA.gross_profit / 1e6 : GP_ACT[i],
+    gpBud: isB.gross_profit != null ? isB.gross_profit / 1e6 : null,
+    gmAct: isA.gm_pct != null ? isA.gm_pct : (REV_ACT[i] ? GP_ACT[i] / REV_ACT[i] : null),
+    gmBud: isB.gm_pct != null ? isB.gm_pct : null,
+    ebitdaAct: isA.ebitda != null ? isA.ebitda / 1e6 : EBITDA_ACT[i],
+    ebitdaBud: isB.ebitda != null ? isB.ebitda / 1e6 : null,
+    cashAct: bsA.cash != null ? bsA.cash / 1e6 : CASH_ACT[i],
+    cashBud: bsB.cash != null ? bsB.cash / 1e6 : CASH_BUD[i],
+    nrr: src.nrr != null ? src.nrr : (isA.nrr != null ? isA.nrr : 1),
+  };
+}
+function boardGtmMetrics() {
+  var keys = Object.keys(GTM);
+  var totalMqls = 0, totalPipe = 0, totalSpend = 0, bestWr = { name: '—', wr: 0 };
+  keys.forEach(function (k) {
+    var ch = GTM[k];
+    totalMqls += ch.mqls || 0;
+    totalPipe += ch.pipe || 0;
+    totalSpend += ch.spend || 0;
+    if ((ch.wr || 0) > bestWr.wr) bestWr = { name: k, wr: ch.wr };
+  });
+  return {
+    totalMqls: totalMqls,
+    totalPipe: totalPipe,
+    totalSpend: totalSpend,
+    overallEff: totalSpend ? totalPipe / totalSpend : 0,
+    bestWr: bestWr,
+  };
+}
+function boardSalesMetrics() {
+  var cm = boardActiveCloseMonth();
+  var periods = Object.keys(SD.monthly || {}).filter(function (p) { return p <= cm; }).sort();
+  var ytdQuota = 0, ytdAtt = 0, ytdComm = 0, repCount = (SD.reps || []).length;
+  periods.forEach(function (p) {
+    var row = SD.monthly[p];
+    ytdQuota += row.quota || 0;
+    ytdAtt += row.attained || 0;
+  });
+  (SD.reps || []).forEach(function (r) { ytdComm += r.comm || 0; });
+  var jun = SD.monthly[cm] || {};
+  var junPct = jun.pct != null ? jun.pct : (jun.quota ? jun.attained / jun.quota : 0);
+  var pipe = (SD.pipeline && SD.pipeline[cm]) || {};
+  return {
+    cm: cm,
+    ytdQuota: ytdQuota,
+    ytdAtt: ytdAtt,
+    ytdPct: ytdQuota ? ytdAtt / ytdQuota : 0,
+    junPct: junPct,
+    openPipeline: pipe.ending || 0,
+    coverage: pipe.coverage || 0,
+    ytdComm: ytdComm,
+    repCount: repCount,
+  };
+}
+function boardWorkforceMetrics() {
+  var cm = boardActiveCloseMonth();
+  var i = parseInt(cm.slice(5, 7), 10) - 1;
+  var summary = (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.WORKFORCE && window.SMPL_OUTLOOK_PAYLOAD.WORKFORCE.summary) || {};
+  var closeHc = summary.close_hc != null ? summary.close_hc : (WF_TOTAL_HC[i] || HC_TOTAL_JUN);
+  var decHc = summary.dec_hc != null ? summary.dec_hc : (WF_TOTAL_HC[11] || closeHc);
+  var payroll = summary.close_payroll_m != null ? summary.close_payroll_m : (WF_PAYROLL[i] || 0);
+  var arrPerEmp = summary.arr_per_employee_k;
+  if (arrPerEmp == null && closeHc) {
+    var arrIdx = ACT_MONTHS_COUNT - 1;
+    arrPerEmp = Math.round((ARR_ACT[arrIdx] * 1e6) / closeHc / 1000);
+  }
+  return {
+    closeHc: closeHc,
+    decHc: decHc,
+    openReqs: WF_REQS.length,
+    arrPerEmp: arrPerEmp,
+    payroll: payroll,
+  };
+}
+function syncBoardFromOutlook(data) {
+  if (data && data.meta && data.meta.close_month) {
+    window.CLOSE_MONTH = data.meta.close_month;
+  }
+  var actual = TS_DATA && TS_DATA.Actual;
+  var budget = TS_DATA && TS_DATA.Budget;
+  if (actual && actual.periods) {
+    actual.periods.forEach(function (p, idx) {
+      if (idx >= ACT_MONTHS_COUNT) return;
+      var is = (actual.is && actual.is[p]) || {};
+      var bs = (actual.bs && actual.bs[p]) || {};
+      if (is.revenue != null) REV_ACT[idx] = Math.round(is.revenue / 1e5) / 10;
+      if (is.gross_profit != null) GP_ACT[idx] = Math.round(is.gross_profit / 1e5) / 10;
+      if (is.ebitda != null) EBITDA_ACT[idx] = Math.round(is.ebitda / 1e5) / 10;
+      if (bs.cash != null) CASH_ACT[idx] = Math.round(bs.cash / 1e5) / 10;
+    });
+  }
+  if (budget && budget.periods) {
+    budget.periods.forEach(function (p, idx) {
+      if (idx >= ACT_MONTHS_COUNT) return;
+      var is = (budget.is && budget.is[p]) || {};
+      var bs = (budget.bs && budget.bs[p]) || {};
+      if (is.revenue != null) REV_BUD[idx] = Math.round(is.revenue / 1e5) / 10;
+      if (bs.cash != null) CASH_BUD[idx] = Math.round(bs.cash / 1e5) / 10;
+    });
+  }
+  if (WF_TABLE && WF_TABLE.Beginning && WF_TABLE.Ending) {
+    for (var j = 0; j < ACT_MONTHS_COUNT; j++) {
+      NN_ACT[j] = +((WF_TABLE.Ending[j] - WF_TABLE.Beginning[j]) / 1e6).toFixed(3);
+    }
+  }
+  if (data && data.GTM && Object.keys(data.GTM).length) {
+    Object.keys(GTM).forEach(function (k) { delete GTM[k]; });
+    Object.assign(GTM, data.GTM);
+  }
+  if (data && data.SD && Object.keys(data.SD).length) {
+    ['monthly', 'budget_fc', 'regions', 'roles', 'pipeline'].forEach(function (k) {
+      if (data.SD[k]) SD[k] = data.SD[k];
+    });
+    if (data.SD.reps) SD.reps = data.SD.reps;
+  }
+  if (data && data.WORKFORCE) {
+    var wf = data.WORKFORCE;
+    if (wf.WF_HC_ALL) {
+      Object.keys(wf.WF_HC_ALL).forEach(function (dept) {
+        WF_HC_ALL[dept] = wf.WF_HC_ALL[dept].slice();
+      });
+    }
+    if (wf.WF_TOTAL_HC) WF_TOTAL_HC.splice(0, WF_TOTAL_HC.length, wf.WF_TOTAL_HC);
+    if (wf.WF_PAYROLL) WF_PAYROLL.splice(0, WF_PAYROLL.length, wf.WF_PAYROLL);
+    if (wf.WF_QUOTA_TOT) WF_QUOTA_TOT.splice(0, WF_QUOTA_TOT.length, wf.WF_QUOTA_TOT);
+    if (wf.WF_QUOTA_RMP) WF_QUOTA_RMP.splice(0, WF_QUOTA_RMP.length, wf.WF_QUOTA_RMP);
+    if (wf.WF_REQS) {
+      WF_REQS.splice(0, WF_REQS.length);
+      wf.WF_REQS.forEach(function (r) { WF_REQS.push(r); });
+    }
+    if (wf.WF_ROSTER) {
+      WF_ROSTER.splice(0, WF_ROSTER.length);
+      wf.WF_ROSTER.forEach(function (r) { WF_ROSTER.push(r); });
+    }
+  }
+  var badge = document.getElementById('periodBadge');
+  if (badge) badge.textContent = boardPeriodLabel(boardActiveCloseMonth()) + ' · YTD Close';
+  var foot = document.querySelector('.footer-note');
+  if (foot) {
+    foot.textContent =
+      'SMPL · Board Intelligence · Jan–' +
+      boardPeriodLabel(boardActiveCloseMonth()) +
+      ' Actuals · Live warehouse · Confidential';
+  }
+}
+
 function destroyCharts() { Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}}); charts={}; }
 
 function show(name, btn) {
@@ -429,31 +621,42 @@ function show(name, btn) {
 
 // ─── EXEC ──────────────────────────────────────────────────────────────────
 function renderExec(area) {
+  const m = boardJunMetrics();
+  const closeLbl = boardPeriodLabel(m.cm);
+  const arrVar = m.arrAct - m.arrBud;
+  const revVar = m.revAct - m.revBud;
+  const gpVar = m.gpBud != null ? m.gpAct - m.gpBud : 0;
+  const gmBudPct = m.gmBud != null ? (m.gmBud * 100).toFixed(1) + '%' : '—';
+  const gmActPct = m.gmAct != null ? (m.gmAct * 100).toFixed(1) + '%' : '—';
+  const ebitdaBud = m.ebitdaBud != null ? fM(m.ebitdaBud) : '—';
+  const ebitdaVar = m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
+  const cashVar = m.cashAct - m.cashBud;
+  const nrrPct = (m.nrr * 100).toFixed(1) + '%';
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Executive Operating Summary</div>
-  <div class="slide-sub">Jan – June 2026 Actuals · Full-Year Budget comparison · Prepared for Board of Directors</div>
+  <div class="slide-sub">Jan – ${closeLbl} Actuals · Full-Year Budget comparison · Prepared for Board of Directors</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">ARR</div><div class="kpi-val">$86.1M</div><div class="kpi-delta pos">+$0.58M vs budgetget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Monthly Revenue</div><div class="kpi-val">$7.412M</div><div class="kpi-delta pos">+$0.06M vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val">79.2%</div><div class="kpi-delta neu">on budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Cash Balance</div><div class="kpi-val">$70.61M</div><div class="kpi-delta pos">+$39.1M vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val">100.8%</div><div class="kpi-delta pos">↑ improving</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR</div><div class="kpi-val">$${m.arrAct.toFixed(1)}M</div><div class="kpi-delta ${arrVar>=0?'pos':'neg'}">${fV(arrVar)} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Monthly Revenue</div><div class="kpi-val">${fM(m.revAct)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${fV(revVar)} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val">${gmActPct}</div><div class="kpi-delta neu">${gmBudPct} budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Cash Balance</div><div class="kpi-val">${fM(m.cashAct)}</div><div class="kpi-delta ${cashVar>=0?'pos':'neg'}">${fV(cashVar)} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val">${nrrPct}</div><div class="kpi-delta pos">live warehouse</div></div>
   </div>
   <div class="card" style="margin-bottom:14px">
-    <div class="card-title">ARR &amp; Revenue trend — Actual vs Budget · Jan – June 2026</div>
+    <div class="card-title">ARR &amp; Revenue trend — Actual vs Budget · Jan – ${CLOSE_MO}</div>
     <div class="card-sub">ARR (left axis, $M) · Net New ARR bars + Revenue line overlay (right axis, $M)</div>
-    <div class="chart-wrap" style="height:230px"><canvas id="execChart" role="img" aria-label="Full-width ARR trend actual vs budget and revenue trend Jan to June 2026">ARR grew $76.3M to $83.5M; revenue $6.59M to $7.18M.</canvas></div>
+    <div class="chart-wrap" style="height:230px"><canvas id="execChart" role="img" aria-label="Full-width ARR trend actual vs budget and revenue trend"></canvas></div>
   </div>
   <div class="two-col">
     <div>
-      <div class="sec-lbl">Budget Variance Summary — June 2026</div>
+      <div class="sec-lbl">Budget Variance Summary — ${closeLbl}</div>
       <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border2);padding-bottom:4px;margin-bottom:4px">
         <span style="font-size:9.5px;color:var(--text3);font-weight:500">Metric</span>
         <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Actual</span>
         <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Budget</span>
         <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Variance</span>
       </div>
-      ${[['ARR','$86.1M','$85.52M',0.58,false],['Revenue','$7.412M','$7.35M',0.06,false],['Gross Profit','$5.87M','$5.66M',0.209,false],['Gross Margin','79.2%','77.0%',0,false],['EBITDA','$-1.297M','-$0.22M',-1.076,false],['Cash','$70.61M','$31.5M',39.1,false],['NRR','100.8%','100.0%',0.008,false]].map(([l,a,b,d,inv])=>`
+      ${[['ARR',fM(m.arrAct),fM(m.arrBud),arrVar,false],['Revenue',fM(m.revAct),fM(m.revBud),revVar,false],['Gross Profit',fM(m.gpAct),m.gpBud!=null?fM(m.gpBud):'—',gpVar,false],['Gross Margin',gmActPct,gmBudPct,0,false],['EBITDA',fM(m.ebitdaAct),ebitdaBud,ebitdaVar,false],['Cash',fM(m.cashAct),fM(m.cashBud),cashVar,false],['NRR',nrrPct,'100.0%',0,false]].map(([l,a,b,d,inv])=>`
       <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center">
         <span style="font-size:12px;color:var(--text2)">${l}</span>
         <span style="font-size:12px;color:var(--text);font-family:var(--mono);font-weight:500;text-align:right;min-width:72px">${a}</span>
@@ -591,16 +794,19 @@ function renderRevenue(area) {
 // ─── GTM ──────────────────────────────────────────────────────────────────
 function renderGTM(area) {
   const keys = Object.keys(GTM).sort((a,b)=>GTM[b].eff-GTM[a].eff);
-  const maxEff = Math.min(GTM[keys[0]].eff, 50);
+  const maxEff = keys.length ? Math.min(GTM[keys[0]].eff, 50) : 50;
+  const gm = boardGtmMetrics();
+  const closeLbl = boardPeriodLabel(boardActiveCloseMonth());
+  const mqlLbl = gm.totalMqls >= 1000 ? (gm.totalMqls / 1000).toFixed(1) + 'K' : String(gm.totalMqls);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">GTM &amp; Marketing Channel Efficiency</div>
-  <div class="slide-sub">Pipeline per $1 Spend · Win Rate · MQL Volume · YTD Jan–June 2026</div>
+  <div class="slide-sub">Pipeline per $1 Spend · Win Rate · MQL Volume · YTD Jan–${closeLbl}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Total MQLs</div><div class="kpi-val">20.5K</div><div class="kpi-delta pos">+8% vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Pipeline Created</div><div class="kpi-val">$22.5M</div><div class="kpi-delta pos">+$0.9M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total Spend</div><div class="kpi-val">$7.6M</div><div class="kpi-delta neg">+$0.5M vs bud</div></div>
-    <div class="kpi"><div class="kpi-lbl">Overall Eff.</div><div class="kpi-val">3.0x</div><div class="kpi-delta pos">Pipeline per $1</div></div>
-    <div class="kpi"><div class="kpi-lbl">Best WR</div><div class="kpi-val">Referral</div><div class="kpi-delta pos">65.7% win rate</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total MQLs</div><div class="kpi-val">${mqlLbl}</div><div class="kpi-delta neu">YTD actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">Pipeline Created</div><div class="kpi-val">$${gm.totalPipe.toFixed(1)}M</div><div class="kpi-delta neu">YTD created</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total Spend</div><div class="kpi-val">$${gm.totalSpend.toFixed(1)}M</div><div class="kpi-delta neu">YTD spend</div></div>
+    <div class="kpi"><div class="kpi-lbl">Overall Eff.</div><div class="kpi-val">${gm.overallEff.toFixed(1)}x</div><div class="kpi-delta pos">Pipeline per $1</div></div>
+    <div class="kpi"><div class="kpi-lbl">Best WR</div><div class="kpi-val">${gm.bestWr.name}</div><div class="kpi-delta pos">${gm.bestWr.wr.toFixed(1)}% win rate</div></div>
   </div>
   <div class="two-col">
     <div class="card">
@@ -1075,17 +1281,7 @@ function buildCharts(slide) {
       }}]
     });
     charts.nn=new Chart(document.getElementById('arrNN'),{type:'bar',data:{labels:MO,datasets:[{label:'Actual',data:NN_ACT,backgroundColor:'rgba(29,158,117,0.7)',borderColor:'#1D9E75',borderWidth:1,borderRadius:3},{label:'Budget',data:NN_BUD,backgroundColor:'rgba(136,135,128,0.3)',borderColor:'#888780',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    // Build MRR/ARR waterfall table (matches Image 2)
-    // All values in dollars (not millions)
-    const WF_TABLE = {
-      Beginning:   [75000000,76310000,77815000,79505000,81385000,83445000, 86100000,88076000,90010000,91936000,93800000,95700000],
-      'New Business':[1200000,1350000,1500000,1650000,1800000,  1920000,  1866715,1750478,1765110,1678393,1720000,1690000],
-      Expansion:   [650000,720000,780000,850000,910000,          980000,   995197,1027047,922213,1058122,980000,1010000],
-      Contraction: [-180000,-195000,-210000,-225000,-240000,    -225000,  -371121,-402430,-424036,-439679,-445000,-452000],
-      Churn:       [-420000,-435000,-450000,-470000,-490000,    -115000,  -612563,-662371,-705506,-707603,-720000,-734000],
-      Reactivation:[60000,65000,70000,75000,80000,               95000,   307478,373503,382361,391126,393000,400000],
-      Ending:      [76310000,77815000,79505000,81385000,83445000,86100000, 88076000,90010000,91936000,93800000,95705000,97560000],
-    };
+    // Build MRR/ARR waterfall table (matches Image 2) — WF_TABLE is module-level for live hydration
     const WF_ROWS = ['Beginning','New Business','Expansion','Contraction','Churn','Reactivation','Ending'];
     const WF_POSITIVE = ['Beginning','New Business','Expansion','Reactivation','Ending'];
     const fDollar = v => {
@@ -1234,6 +1430,9 @@ function tsSetScenario(sc, btn) {
 }
 
 const TS_DATA={"Actual":{"periods":["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06"],"is":{"2026-01":{"revenue":6569019.17,"sub_rev":6352241.54,"svc_rev":216777.63,"cogs":1412339.12,"gross_profit":5156680.05,"gm_pct":0.785,"sm":2988903.72,"rd":2594762.57,"ga":1346648.93,"total_opex":6930315.22,"ebitda":-1773635.18,"da":85000.0,"interest":35000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":-1893635.18},"2026-02":{"revenue":6698574.58,"sub_rev":6477521.62,"svc_rev":221052.96,"cogs":1440193.54,"gross_profit":5258381.05,"gm_pct":0.785,"sm":3000961.41,"rd":2625841.24,"ga":1326317.77,"total_opex":6953120.42,"ebitda":-1694739.37,"da":85000.0,"interest":35000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":-1814739.37},"2026-03":{"revenue":6844055.42,"sub_rev":6618201.59,"svc_rev":225853.83,"cogs":1450939.75,"gross_profit":5393115.67,"gm_pct":0.788,"sm":3011384.38,"rd":2662337.56,"ga":1314058.64,"total_opex":6987780.58,"ebitda":-1594664.91,"da":85000.0,"interest":35000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":-1714664.91},"2026-04":{"revenue":7005892.08,"sub_rev":6774697.64,"svc_rev":231194.44,"cogs":1478243.23,"gross_profit":5527648.85,"gm_pct":0.789,"sm":3040557.16,"rd":2704274.34,"ga":1296090.04,"total_opex":7040921.54,"ebitda":-1513272.69,"da":85000.0,"interest":35000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":-1633272.69},"2026-05":{"revenue":7183223.75,"sub_rev":6946177.37,"svc_rev":237046.38,"cogs":1508476.99,"gross_profit":5674746.76,"gm_pct":0.79,"sm":3103152.66,"rd":2772724.37,"ga":1307346.72,"total_opex":7183223.75,"ebitda":-1508476.99,"da":85000.0,"interest":35000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":-1628476.99},"2026-06":{"revenue":7411775.0,"sub_rev":7167186.42,"svc_rev":244588.58,"cogs":1541649.2,"gross_profit":5870125.8,"gm_pct":0.792,"sm":3150004.38,"rd":2757180.3,"ga":1260001.75,"total_opex":7167186.43,"ebitda":-1297060.62,"da":92000.0,"interest":35000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":-1424060.62}},"cfs":{"2026-01":{"beginning_cash":46103205.0,"net_income":-1893635.18,"da":85000.0,"sbc":82500.0,"chg_ar":1153658.92,"chg_dr":6757057.92,"chg_ap":-2278709.14,"chg_prepaids":-15000.0,"cfo":2785872.52,"capex":-180000.0,"cfi":-180000.0,"debt":0.0,"cff":0.0,"net_change":2605872.52,"ending_cash":48709077.52},"2026-02":{"beginning_cash":48709077.52,"net_income":-1814739.37,"da":85000.0,"sbc":82500.0,"chg_ar":1249178.77,"chg_dr":2663786.38,"chg_ap":-171295.35,"chg_prepaids":-15000.0,"cfo":2482430.43,"capex":-180000.0,"cfi":-180000.0,"debt":0.0,"cff":0.0,"net_change":2302430.43,"ending_cash":51011507.95},"2026-03":{"beginning_cash":51011507.95,"net_income":-1714664.91,"da":85000.0,"sbc":82500.0,"chg_ar":-7696175.32,"chg_dr":16032316.85,"chg_ap":78472.09,"chg_prepaids":-15000.0,"cfo":7263448.71,"capex":-180000.0,"cfi":-180000.0,"debt":0.0,"cff":0.0,"net_change":7083448.71,"ending_cash":58094956.66},"2026-04":{"beginning_cash":58094956.66,"net_income":-1633272.69,"da":85000.0,"sbc":82500.0,"chg_ar":8963155.37,"chg_dr":-3132662.77,"chg_ap":-112661.92,"chg_prepaids":-15000.0,"cfo":4656057.99,"capex":-180000.0,"cfi":-180000.0,"debt":0.0,"cff":0.0,"net_change":4476057.99,"ending_cash":62571014.65},"2026-05":{"beginning_cash":62571014.65,"net_income":-1628476.99,"da":85000.0,"sbc":82500.0,"chg_ar":214195.9,"chg_dr":4453199.42,"chg_ap":27689.09,"chg_prepaids":-15000.0,"cfo":3646107.42,"capex":-180000.0,"cfi":-180000.0,"debt":0.0,"cff":0.0,"net_change":3466107.42,"ending_cash":66037122.07},"2026-06":{"beginning_cash":66037122.07,"net_income":-1424060.62,"da":92000.0,"sbc":88000.0,"chg_ar":-170000.0,"chg_dr":6172060.62,"chg_ap":60000.0,"chg_prepaids":-15000.0,"cfo":4795000.0,"capex":-220000.0,"cfi":-220000.0,"debt":0.0,"cff":0.0,"net_change":4575000.0,"ending_cash":70612122.07}},"bs":{"2026-01":{"cash":48709077.52,"ar":11259437.99,"prepaids":12772000.0,"ppe":2500000.0,"total_assets":72740515.51,"ap":5675314.61,"deferred_rev":25047136.61,"debt":5000000.0,"total_liabilities":33222451.22,"equity":39518064.29,"total_le":72740515.51},"2026-02":{"cash":51011507.95,"ar":10010259.22,"prepaids":12311542.53,"ppe":2500000.0,"total_assets":73333309.7,"ap":5504019.26,"deferred_rev":27625965.52,"debt":5000000.0,"total_liabilities":35629984.78,"equity":37703324.92,"total_le":73333309.7},"2026-03":{"cash":58094956.66,"ar":17706434.54,"prepaids":8544088.12,"ppe":2500000.0,"total_assets":84345479.32,"ap":5582491.35,"deferred_rev":40274327.96,"debt":5000000.0,"total_liabilities":48356819.31,"equity":35988660.01,"total_le":84345479.32},"2026-04":{"cash":62571014.65,"ar":8743279.17,"prepaids":14434115.14,"ppe":2500000.0,"total_assets":85748408.96,"ap":5469829.43,"deferred_rev":43423192.21,"debt":5000000.0,"total_liabilities":51393021.64,"equity":34355387.32,"total_le":85748408.96},"2026-05":{"cash":66037122.07,"ar":8529083.27,"prepaids":13137499.12,"ppe":2500000.0,"total_assets":87703704.46,"ap":5497518.52,"deferred_rev":46979275.61,"debt":5000000.0,"total_liabilities":54976794.13,"equity":32726910.33,"total_le":87703704.46},"2026-06":{"cash":70612122.07,"ar":8699083.27,"prepaids":10966663.5,"ppe":2500000.0,"total_assets":90277868.84,"ap":5557518.52,"deferred_rev":50917500.61,"debt":5000000.0,"total_liabilities":58975019.13,"equity":31302849.71,"total_le":90277868.84}}},"Forecast":{"periods":["2026-07","2026-08","2026-09","2026-10","2026-11","2026-12"],"is":{"2026-07":{"revenue":7690800.0,"sub_rev":7437003.6,"svc_rev":253796.4,"cogs":2307240.0,"gross_profit":5383560.0,"gm_pct":0.7,"sm":2693318.16,"rd":1267443.84,"ga":871367.64,"total_opex":4832129.64,"ebitda":551430.36,"da":115362.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":316854.69},"2026-08":{"revenue":7884600.0,"sub_rev":7624408.2,"svc_rev":260191.8,"cogs":2365380.0,"gross_profit":5519220.0,"gm_pct":0.7,"sm":2761186.92,"rd":1299382.08,"ga":893325.18,"total_opex":4953894.18,"ebitda":565325.82,"da":118269.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":325645.46},"2026-09":{"revenue":8058000.0,"sub_rev":7792086.0,"svc_rev":265914.0,"cogs":2417400.0,"gross_profit":5640600.0,"gm_pct":0.7,"sm":2821911.6,"rd":1327958.4,"ga":912971.4,"total_opex":5062841.4,"ebitda":577758.6,"da":120870.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":333510.88},"2026-10":{"revenue":8241600.0,"sub_rev":7969627.2,"svc_rev":271972.8,"cogs":2472480.0,"gross_profit":5769120.0,"gm_pct":0.7,"sm":2886208.32,"rd":1358215.68,"ga":933773.28,"total_opex":5178197.28,"ebitda":590922.72,"da":123624.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":341838.98},"2026-11":{"revenue":8404800.0,"sub_rev":8127441.6,"svc_rev":277358.4,"cogs":2521440.0,"gross_profit":5883360.0,"gm_pct":0.7,"sm":2943360.96,"rd":1385111.04,"ga":952263.84,"total_opex":5280735.84,"ebitda":602624.16,"da":126072.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":349241.73},"2026-12":{"revenue":8578200.0,"sub_rev":8295119.4,"svc_rev":283080.6,"cogs":2573460.0,"gross_profit":6004740.0,"gm_pct":0.7,"sm":3004085.64,"rd":1413687.36,"ga":971910.06,"total_opex":5389683.06,"ebitda":615056.94,"da":128673.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":357107.15}},"cfs":{"2026-07":{"beginning_cash":70612122.07,"net_income":316854.69,"da":115362.0,"sbc":76908.0,"chg_ar":-307632.0,"chg_dr":153816.0,"chg_ap":115362.0,"chg_prepaids":-15000.0,"cfo":470670.69,"capex":-153816.0,"cfi":-153816.0,"debt":0.0,"cff":0.0,"net_change":316854.69,"ending_cash":70928976.76},"2026-08":{"beginning_cash":70928976.76,"net_income":325645.46,"da":118269.0,"sbc":78846.0,"chg_ar":-315384.0,"chg_dr":157692.0,"chg_ap":118269.0,"chg_prepaids":-15000.0,"cfo":483337.46,"capex":-157692.0,"cfi":-157692.0,"debt":0.0,"cff":0.0,"net_change":325645.46,"ending_cash":71254622.22},"2026-09":{"beginning_cash":71254622.22,"net_income":333510.88,"da":120870.0,"sbc":80580.0,"chg_ar":-322320.0,"chg_dr":161160.0,"chg_ap":120870.0,"chg_prepaids":-15000.0,"cfo":494670.88,"capex":-161160.0,"cfi":-161160.0,"debt":0.0,"cff":0.0,"net_change":333510.88,"ending_cash":71588133.1},"2026-10":{"beginning_cash":71588133.1,"net_income":341838.98,"da":123624.0,"sbc":82416.0,"chg_ar":-329664.0,"chg_dr":164832.0,"chg_ap":123624.0,"chg_prepaids":-15000.0,"cfo":506670.98,"capex":-164832.0,"cfi":-164832.0,"debt":0.0,"cff":0.0,"net_change":341838.98,"ending_cash":71929972.08},"2026-11":{"beginning_cash":71929972.08,"net_income":349241.73,"da":126072.0,"sbc":84048.0,"chg_ar":-336192.0,"chg_dr":168096.0,"chg_ap":126072.0,"chg_prepaids":-15000.0,"cfo":517337.73,"capex":-168096.0,"cfi":-168096.0,"debt":0.0,"cff":0.0,"net_change":349241.73,"ending_cash":72279213.81},"2026-12":{"beginning_cash":72279213.81,"net_income":357107.15,"da":128673.0,"sbc":85782.0,"chg_ar":-343128.0,"chg_dr":171564.0,"chg_ap":128673.0,"chg_prepaids":-15000.0,"cfo":528671.15,"capex":-171564.0,"cfi":-171564.0,"debt":0.0,"cff":0.0,"net_change":357107.15,"ending_cash":72636320.96}},"bs":{"2026-07":{"cash":70928976.76,"ar":922896.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":77851872.76,"ap":615264.0,"deferred_rev":1230528.0,"debt":5000000.0,"total_liabilities":4345792.0,"equity":73506080.76,"total_le":55134927.73},"2026-08":{"cash":71254622.22,"ar":946152.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":78200774.22,"ap":630768.0,"deferred_rev":1261536.0,"debt":5000000.0,"total_liabilities":4392304.0,"equity":73808470.22,"total_le":55483829.18},"2026-09":{"cash":71588133.1,"ar":966960.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":78555093.1,"ap":644640.0,"deferred_rev":1289280.0,"debt":5000000.0,"total_liabilities":4433920.0,"equity":74121173.1,"total_le":55838148.06},"2026-10":{"cash":71929972.08,"ar":988992.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":78918964.08,"ap":659328.0,"deferred_rev":1318656.0,"debt":5000000.0,"total_liabilities":4477984.0,"equity":74440980.08,"total_le":56202019.04},"2026-11":{"cash":72279213.81,"ar":1008576.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":79287789.81,"ap":672384.0,"deferred_rev":1344768.0,"debt":5000000.0,"total_liabilities":4517152.0,"equity":74770637.81,"total_le":56570844.77},"2026-12":{"cash":72636320.96,"ar":1029384.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":79665704.96,"ap":686256.0,"deferred_rev":1372512.0,"debt":5000000.0,"total_liabilities":4558768.0,"equity":75106936.96,"total_le":56948759.92}}},"Budget":{"periods":["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11","2026-12"],"is":{"2026-01":{"revenue":6195000.0,"sub_rev":5990565.0,"svc_rev":204435.0,"cogs":1796550.0,"gross_profit":4398450.0,"gm_pct":0.71,"sm":2127363.0,"rd":1001112.0,"ga":688264.5,"total_opex":3816739.5,"ebitda":581710.5,"da":92925.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":359028.4},"2026-02":{"revenue":6405000.0,"sub_rev":6193635.0,"svc_rev":211365.0,"cogs":1857450.0,"gross_profit":4547550.0,"gm_pct":0.71,"sm":2199477.0,"rd":1035048.0,"ga":711595.5,"total_opex":3946120.5,"ebitda":601429.5,"da":96075.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":372283.6},"2026-03":{"revenue":6720000.0,"sub_rev":6498240.0,"svc_rev":221760.0,"cogs":1948800.0,"gross_profit":4771200.0,"gm_pct":0.71,"sm":2307648.0,"rd":1085952.0,"ga":746592.0,"total_opex":4140192.0,"ebitda":631008.0,"da":100800.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":392166.4},"2026-04":{"revenue":7035000.0,"sub_rev":6802845.0,"svc_rev":232155.0,"cogs":2040150.0,"gross_profit":4994850.0,"gm_pct":0.71,"sm":2415819.0,"rd":1136856.0,"ga":781588.5,"total_opex":4334263.5,"ebitda":660586.5,"da":105525.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":412049.2},"2026-05":{"revenue":7350000.0,"sub_rev":7107450.0,"svc_rev":242550.0,"cogs":2131500.0,"gross_profit":5218500.0,"gm_pct":0.71,"sm":2523990.0,"rd":1187760.0,"ga":816585.0,"total_opex":4528335.0,"ebitda":690165.0,"da":110250.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":431932.0},"2026-06":{"revenue":7717500.0,"sub_rev":7462822.5,"svc_rev":254677.5,"cogs":2315250.0,"gross_profit":5402250.0,"gm_pct":0.7,"sm":2650189.5,"rd":1247148.0,"ga":857414.25,"total_opex":4754751.75,"ebitda":647498.25,"da":115762.5,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":393388.6},"2026-07":{"revenue":7917000.0,"sub_rev":7655739.0,"svc_rev":261261.0,"cogs":2375100.0,"gross_profit":5541900.0,"gm_pct":0.7,"sm":2718697.8,"rd":1279387.2,"ga":879578.7,"total_opex":4877663.7,"ebitda":664236.3,"da":118755.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":404385.04},"2026-08":{"revenue":8116500.0,"sub_rev":7848655.5,"svc_rev":267844.5,"cogs":2434950.0,"gross_profit":5681550.0,"gm_pct":0.7,"sm":2787206.1,"rd":1311626.4,"ga":901743.15,"total_opex":5000575.65,"ebitda":680974.35,"da":121747.5,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":415381.48},"2026-09":{"revenue":8295000.0,"sub_rev":8021265.0,"svc_rev":273735.0,"cogs":2488500.0,"gross_profit":5806500.0,"gm_pct":0.7,"sm":2848503.0,"rd":1340472.0,"ga":921574.5,"total_opex":5110549.5,"ebitda":695950.5,"da":124425.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":425220.4},"2026-10":{"revenue":8484000.0,"sub_rev":8204028.0,"svc_rev":279972.0,"cogs":2545200.0,"gross_profit":5938800.0,"gm_pct":0.7,"sm":2913405.6,"rd":1371014.4,"ga":942572.4,"total_opex":5226992.4,"ebitda":711807.6,"da":127260.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":435638.08},"2026-11":{"revenue":8652000.0,"sub_rev":8366484.0,"svc_rev":285516.0,"cogs":2595600.0,"gross_profit":6056400.0,"gm_pct":0.7,"sm":2971096.8,"rd":1398163.2,"ga":961237.2,"total_opex":5330497.2,"ebitda":725902.8,"da":129780.0,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":444898.24},"2026-12":{"revenue":8830500.0,"sub_rev":8539093.5,"svc_rev":291406.5,"cogs":2649150.0,"gross_profit":6181350.0,"gm_pct":0.7,"sm":3032393.7,"rd":1427008.8,"ga":981068.55,"total_opex":5440471.05,"ebitda":740878.95,"da":132457.5,"interest":40000.0,"op_income":0.0,"pretax":0.0,"tax":0.0,"net_income":454737.16}},"cfs":{"2026-01":{"beginning_cash":46000000.0,"net_income":359028.4,"da":92925.0,"sbc":61950.0,"chg_ar":-247800.0,"chg_dr":123900.0,"chg_ap":92925.0,"chg_prepaids":-15000.0,"cfo":482928.4,"capex":-123900.0,"cfi":-123900.0,"debt":0.0,"cff":0.0,"net_change":359028.4,"ending_cash":46359028.4},"2026-02":{"beginning_cash":46359028.4,"net_income":372283.6,"da":96075.0,"sbc":64050.0,"chg_ar":-256200.0,"chg_dr":128100.0,"chg_ap":96075.0,"chg_prepaids":-15000.0,"cfo":500383.6,"capex":-128100.0,"cfi":-128100.0,"debt":0.0,"cff":0.0,"net_change":372283.6,"ending_cash":46731312.0},"2026-03":{"beginning_cash":46731312.0,"net_income":392166.4,"da":100800.0,"sbc":67200.0,"chg_ar":-268800.0,"chg_dr":134400.0,"chg_ap":100800.0,"chg_prepaids":-15000.0,"cfo":526566.4,"capex":-134400.0,"cfi":-134400.0,"debt":0.0,"cff":0.0,"net_change":392166.4,"ending_cash":47123478.4},"2026-04":{"beginning_cash":47123478.4,"net_income":412049.2,"da":105525.0,"sbc":70350.0,"chg_ar":-281400.0,"chg_dr":140700.0,"chg_ap":105525.0,"chg_prepaids":-15000.0,"cfo":552749.2,"capex":-140700.0,"cfi":-140700.0,"debt":0.0,"cff":0.0,"net_change":412049.2,"ending_cash":47535527.6},"2026-05":{"beginning_cash":47535527.6,"net_income":431932.0,"da":110250.0,"sbc":73500.0,"chg_ar":-294000.0,"chg_dr":147000.0,"chg_ap":110250.0,"chg_prepaids":-15000.0,"cfo":578932.0,"capex":-147000.0,"cfi":-147000.0,"debt":0.0,"cff":0.0,"net_change":431932.0,"ending_cash":47967459.6},"2026-06":{"beginning_cash":47967459.6,"net_income":393388.6,"da":115762.5,"sbc":77175.0,"chg_ar":-308700.0,"chg_dr":154350.0,"chg_ap":115762.5,"chg_prepaids":-15000.0,"cfo":547738.6,"capex":-154350.0,"cfi":-154350.0,"debt":0.0,"cff":0.0,"net_change":393388.6,"ending_cash":48360848.2},"2026-07":{"beginning_cash":48360848.2,"net_income":404385.04,"da":118755.0,"sbc":79170.0,"chg_ar":-316680.0,"chg_dr":158340.0,"chg_ap":118755.0,"chg_prepaids":-15000.0,"cfo":562725.04,"capex":-158340.0,"cfi":-158340.0,"debt":0.0,"cff":0.0,"net_change":404385.04,"ending_cash":48765233.24},"2026-08":{"beginning_cash":48765233.24,"net_income":415381.48,"da":121747.5,"sbc":81165.0,"chg_ar":-324660.0,"chg_dr":162330.0,"chg_ap":121747.5,"chg_prepaids":-15000.0,"cfo":577711.48,"capex":-162330.0,"cfi":-162330.0,"debt":0.0,"cff":0.0,"net_change":415381.48,"ending_cash":49180614.72},"2026-09":{"beginning_cash":49180614.72,"net_income":425220.4,"da":124425.0,"sbc":82950.0,"chg_ar":-331800.0,"chg_dr":165900.0,"chg_ap":124425.0,"chg_prepaids":-15000.0,"cfo":591120.4,"capex":-165900.0,"cfi":-165900.0,"debt":0.0,"cff":0.0,"net_change":425220.4,"ending_cash":49605835.12},"2026-10":{"beginning_cash":49605835.12,"net_income":435638.08,"da":127260.0,"sbc":84840.0,"chg_ar":-339360.0,"chg_dr":169680.0,"chg_ap":127260.0,"chg_prepaids":-15000.0,"cfo":605318.08,"capex":-169680.0,"cfi":-169680.0,"debt":0.0,"cff":0.0,"net_change":435638.08,"ending_cash":50041473.2},"2026-11":{"beginning_cash":50041473.2,"net_income":444898.24,"da":129780.0,"sbc":86520.0,"chg_ar":-346080.0,"chg_dr":173040.0,"chg_ap":129780.0,"chg_prepaids":-15000.0,"cfo":617938.24,"capex":-173040.0,"cfi":-173040.0,"debt":0.0,"cff":0.0,"net_change":444898.24,"ending_cash":50486371.44},"2026-12":{"beginning_cash":50486371.44,"net_income":454737.16,"da":132457.5,"sbc":88305.0,"chg_ar":-353220.0,"chg_dr":176610.0,"chg_ap":132457.5,"chg_prepaids":-15000.0,"cfo":631347.16,"capex":-176610.0,"cfi":-176610.0,"debt":0.0,"cff":0.0,"net_change":454737.16,"ending_cash":50941108.6}},"bs":{"2026-01":{"cash":46359028.4,"ar":743400.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":53102428.4,"ap":495600.0,"deferred_rev":991200.0,"debt":5000000.0,"total_liabilities":3986800.0,"equity":49115628.4,"total_le":53102428.4},"2026-02":{"cash":46731312.0,"ar":768600.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":53499912.0,"ap":512400.0,"deferred_rev":1024800.0,"debt":5000000.0,"total_liabilities":4037200.0,"equity":49462712.0,"total_le":53499912.0},"2026-03":{"cash":47123478.4,"ar":806400.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":53929878.4,"ap":537600.0,"deferred_rev":1075200.0,"debt":5000000.0,"total_liabilities":4112800.0,"equity":49817078.4,"total_le":53929878.4},"2026-04":{"cash":47535527.6,"ar":844200.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":54379727.6,"ap":562800.0,"deferred_rev":1125600.0,"debt":5000000.0,"total_liabilities":4188400.0,"equity":50191327.6,"total_le":54379727.6},"2026-05":{"cash":47967459.6,"ar":882000.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":54849459.6,"ap":588000.0,"deferred_rev":1176000.0,"debt":5000000.0,"total_liabilities":4264000.0,"equity":50585459.6,"total_le":54849459.6},"2026-06":{"cash":48360848.2,"ar":926100.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":55286948.2,"ap":617400.0,"deferred_rev":1234800.0,"debt":5000000.0,"total_liabilities":4352200.0,"equity":50934748.2,"total_le":55286948.2},"2026-07":{"cash":48765233.24,"ar":950040.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":55715273.24,"ap":633360.0,"deferred_rev":1266720.0,"debt":5000000.0,"total_liabilities":4400080.0,"equity":51315193.24,"total_le":55715273.24},"2026-08":{"cash":49180614.72,"ar":973980.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":56154594.72,"ap":649320.0,"deferred_rev":1298640.0,"debt":5000000.0,"total_liabilities":4447960.0,"equity":51706634.72,"total_le":56154594.72},"2026-09":{"cash":49605835.12,"ar":995400.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":56601235.12,"ap":663600.0,"deferred_rev":1327200.0,"debt":5000000.0,"total_liabilities":4490800.0,"equity":52110435.12,"total_le":56601235.12},"2026-10":{"cash":50041473.2,"ar":1018080.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":57059553.2,"ap":678720.0,"deferred_rev":1357440.0,"debt":5000000.0,"total_liabilities":4536160.0,"equity":52523393.2,"total_le":57059553.2},"2026-11":{"cash":50486371.44,"ar":1038240.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":57524611.44,"ap":692160.0,"deferred_rev":1384320.0,"debt":5000000.0,"total_liabilities":4576480.0,"equity":52948131.44,"total_le":57524611.44},"2026-12":{"cash":50941108.6,"ar":1059660.0,"prepaids":6000000.0,"ppe":2500000.0,"total_assets":58000768.6,"ap":706440.0,"deferred_rev":1412880.0,"debt":5000000.0,"total_liabilities":4619320.0,"equity":53381448.6,"total_le":58000768.6}}}};
+
+window.SMPL_DEMO_TS_DATA = TS_DATA;
+window.SMPL_DEMO_WF_TABLE = WF_TABLE;
 
 function tsGetPeriods(sc) {
   if(sc === 'Combined') {
@@ -1524,15 +1723,17 @@ const WF_ROSTER = [
 let _wfTab = 'overview';
 
 function renderWorkforce(area) {
+  const wm = boardWorkforceMetrics();
+  const hcDelta = wm.decHc - wm.closeHc;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Workforce Intelligence</div>
-  <div class="slide-sub">Employee-level planning · 132 active employees · ${WF_REQS.length} open reqs · From Actual_Employees.csv + Forecast data</div>
+  <div class="slide-sub">Employee-level planning · ${wm.closeHc} active employees · ${wm.openReqs} open reqs · Live warehouse</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">132</div><div class="kpi-delta pos">On budget (130)</div></div>
-    <div class="kpi"><div class="kpi-lbl">HC — Dec Forecast</div><div class="kpi-val">147</div><div class="kpi-delta pos">+15 from Jun</div></div>
-    <div class="kpi"><div class="kpi-lbl">Open Reqs</div><div class="kpi-val">${WF_REQS.length}</div><div class="kpi-delta neu">${FC_MO_LABELS[0]}\u2013Nov starts</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">$652K</div><div class="kpi-delta pos">${CLOSE_LABEL} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">Monthly Payroll</div><div class="kpi-val">$1.94M</div><div class="kpi-delta neu">${CLOSE_MO} &middot; on budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">${wm.closeHc}</div><div class="kpi-delta neu">${CLOSE_LABEL} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">HC — Dec Forecast</div><div class="kpi-val">${wm.decHc}</div><div class="kpi-delta ${hcDelta>=0?'pos':'neg'}">${hcDelta>=0?'+':''}${hcDelta} from ${CLOSE_MO}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Open Reqs</div><div class="kpi-val">${wm.openReqs}</div><div class="kpi-delta neu">${FC_MO_LABELS[0]}\u2013Nov starts</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">${wm.arrPerEmp != null ? '$'+wm.arrPerEmp+'K' : '—'}</div><div class="kpi-delta pos">${CLOSE_LABEL} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">Monthly Payroll</div><div class="kpi-val">$${wm.payroll.toFixed(2)}M</div><div class="kpi-delta neu">${CLOSE_MO} &middot; live</div></div>
   </div>
   <div class="wf-tab-bar">
     <button class="wf-tab on"  onclick="wfTab('overview',this)">Overview</button>
@@ -2030,15 +2231,17 @@ const _sp=v=>(v*100).toFixed(1)+'%';
 const _pill=pct=>{const p=pct*100;if(p>=100)return`<span class="badge badge-green">✓ ${_sp(pct)}</span>`;if(p>=90)return`<span class="badge badge-amber">${_sp(pct)}</span>`;return`<span class="badge badge-red">${_sp(pct)}</span>`;};
 
 function renderSales(area) {
+  const sm = boardSalesMetrics();
+  const closeLbl = boardPeriodLabel(sm.cm);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Sales Intelligence</div>
-  <div class="slide-sub">25 quota-carrying reps · 4 regions · Jan–June 2026 actuals from Actual_Sales_Quotas.csv + Budget_Sales_Quotas.csv</div>
+  <div class="slide-sub">${sm.repCount} quota-carrying reps · Live warehouse · Jan–${closeLbl}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">$8.96M</div><div class="kpi-delta neu">Jan–Jun 2026</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">$8.45M</div><div class="kpi-delta pos">94.4% of quota</div></div>
-    <div class="kpi"><div class="kpi-lbl">Jun Attainment</div><div class="kpi-val">98.1%</div><div class="kpi-delta pos">Best H1 close</div></div>
-    <div class="kpi"><div class="kpi-lbl">Open Pipeline</div><div class="kpi-val">$27.1M</div><div class="kpi-delta pos">3.3× coverage</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Commission</div><div class="kpi-val">$804K</div><div class="kpi-delta neu">29 carriers</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">${_sf(sm.ytdQuota,1)}</div><div class="kpi-delta neu">YTD through ${closeLbl}</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">${_sf(sm.ytdAtt,1)}</div><div class="kpi-delta ${sm.ytdPct>=0.94?'pos':'amb'}">${_sp(sm.ytdPct)} of quota</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Attainment</div><div class="kpi-val">${_sp(sm.junPct)}</div><div class="kpi-delta ${sm.junPct>=0.95?'pos':'amb'}">${closeLbl} close</div></div>
+    <div class="kpi"><div class="kpi-lbl">Open Pipeline</div><div class="kpi-val">${_sf(sm.openPipeline,1)}</div><div class="kpi-delta pos">${sm.coverage.toFixed(1)}× coverage</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Commission</div><div class="kpi-val">${_sf(sm.ytdComm,0)}</div><div class="kpi-delta neu">${sm.repCount} carriers</div></div>
   </div>
   <div class="subnav" style="margin-bottom:14px">
     <button class="snav-btn on" onclick="showSTab('overview',this)">Overview</button>
@@ -2516,6 +2719,68 @@ function formatCopilotReply(text) {
   return out;
 }
 
+</script>
+
+<script src="/shared/smpl-skin.js?v=1"></script>
+<script src="/shared/smpl-outlook.js?v=12"></script>
+<script>
+/* Live warehouse hydration — same /api/v1/reporting/outlook payload as Forecast Engine */
+(function () {
+  var SMPL_BOARD_TAB = "exec";
+
+  function smplBoardRefreshView() {
+    show(SMPL_BOARD_TAB, null);
+  }
+  window.smplBoardRefreshView = smplBoardRefreshView;
+
+  var origShow = window.show;
+  window.show = function (name, btn) {
+    SMPL_BOARD_TAB = name;
+    return origShow(name, btn);
+  };
+
+  function setWarehouseStatus(text, tone) {
+    var el = document.getElementById("warehouseStatus");
+    if (!el) return;
+    el.textContent = text;
+    el.style.color =
+      tone === "ok" ? "var(--teal)" : tone === "warn" ? "var(--amber)" : "var(--text2)";
+  }
+
+  async function smplBoardHydrate() {
+    if (!window.SMPLOutlook) {
+      setWarehouseStatus("Demo data", "warn");
+      return;
+    }
+    window.SMPL_DEMO_TS_DATA = TS_DATA;
+    window.SMPL_DEMO_WF_TABLE = WF_TABLE;
+    window.SMPLOutlook.registerDemoData(TS_DATA, WF_TABLE);
+    await window.SMPLOutlook.hydrate({
+      endpoint: "reporting/outlook",
+      hooks: {
+        TS_DATA: TS_DATA,
+        WF_TABLE: WF_TABLE,
+        ARR_ACT: ARR_ACT,
+        actMonthsCount: ACT_MONTHS_COUNT,
+      },
+      onStatus: setWarehouseStatus,
+      onApplied: function (data) {
+        syncBoardFromOutlook(data);
+        show(SMPL_BOARD_TAB, null);
+      },
+    });
+  }
+
+  window.SMPL_ON_ORG_READY = function () {
+    void smplBoardHydrate();
+  };
+  window.addEventListener("load", function () {
+    if (window.SMPLSkin) {
+      SMPLSkin.init("skinSelect", smplBoardRefreshView);
+    }
+    void smplBoardHydrate();
+  });
+})();
 </script>
 </body>
 </html>
