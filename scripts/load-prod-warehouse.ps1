@@ -46,15 +46,15 @@ if (-not $resolved) {
 Write-Host "Using DB from: $($resolved.Source)" -ForegroundColor DarkGray
 Write-Host ""
 
-$setupArgs = @(
-    "-DatabaseUrl", $resolved.Url,
-    "-CsvFolder", $CsvFolder,
-    "-OrganizationId", $OrganizationId,
-    "-CloseMonth", $CloseMonth
-)
-if ($ListOnly) { $setupArgs += "-ListOnly" }
+$setupParams = @{
+    DatabaseUrl    = $resolved.Url
+    CsvFolder      = $CsvFolder
+    OrganizationId = $OrganizationId
+}
+if ($CloseMonth) { $setupParams.CloseMonth = $CloseMonth }
+if ($ListOnly) { $setupParams.ListOnly = $true }
 
-& (Join-Path $repoRoot "scripts\setup-prod-warehouse.ps1") @setupArgs
+& (Join-Path $repoRoot "scripts\setup-prod-warehouse.ps1") @setupParams
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if (-not $ListOnly) {
