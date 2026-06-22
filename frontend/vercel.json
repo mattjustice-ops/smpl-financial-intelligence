@@ -4,6 +4,9 @@
   "functions": {
     "app/api/v1/board-platform/payload/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/v1/reporting/outlook/route.ts": {
+      "maxDuration": 300
     }
   }
 }

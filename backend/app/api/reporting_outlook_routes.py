@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
-from app.services.reporting.three_statement_payload import build_shared_reporting_payload
+from app.services.reporting.three_statement_payload import (
+    build_outlook_api_payload,
+    build_shared_reporting_payload,
+)
 
 reporting_outlook_router = APIRouter(prefix="/reporting", tags=["reporting-outlook"])
 
@@ -23,11 +26,15 @@ def reporting_outlook_payload(
 ) -> dict[str, Any]:
     """Single warehouse outlook payload — both board and forecast surfaces hydrate from this."""
     get_organization_or_404(db, organization_id)
-    payload = build_shared_reporting_payload(
-        db,
-        organization_id,
-        block_on_validation=block_on_validation,
-    )
+    if block_on_validation:
+        payload = build_shared_reporting_payload(
+            db,
+            organization_id,
+            block_on_validation=True,
+            include_reporting_bundle=True,
+        )
+    else:
+        payload = build_outlook_api_payload(db, organization_id)
     return {
         "meta": payload["meta"],
         "TS_DATA": payload["TS_DATA"],

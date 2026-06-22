@@ -742,13 +742,16 @@ def build_forecast_engine_src(
     return {"actuals": actuals}
 
 
-def build_shared_reporting_payload(
+OUTLOOK_API_BUILD = "light-v1"
+
+
+def build_outlook_api_payload(
     db: Session,
     organization_id: uuid.UUID,
-    *,
-    block_on_validation: bool = True,
 ) -> dict[str, Any]:
+    """Fast outlook payload for board + forecast — no export/reporting bundle."""
     from app.models.organization import Organization
+    from app.services.forecast_version_service import get_active_forecast_version
 
     org = db.get(Organization, organization_id)
     if org is None:
@@ -756,21 +759,64 @@ def build_shared_reporting_payload(
     ensure_org_reporting_defaults(db, org)
     as_of, start_period, end_period = resolve_org_reporting_window(db, org)
 
-    token = bind_as_of_period(as_of)
-    try:
-        bundle = collect_reporting_bundle(
-            db,
-            organization_id,
-            scenario="Combined",
-            start_period=start_period,
-            end_period=end_period,
-            as_of_period=as_of,
-        )
-    finally:
-        reset_as_of_period(token)
+    active = get_active_forecast_version(db, org)
+    outlook = build_unified_outlook_payload(
+        db,
+        organization_id,
+        as_of=as_of,
+        start_period=start_period,
+        end_period=end_period,
+    )
 
-    if block_on_validation:
-        raise_if_validation_blocked(bundle.validation, action="Reporting payload")
+    return {
+        "meta": {
+            "organization_id": str(organization_id),
+            "organization_name": org.name,
+            "close_month": as_of,
+            "start_period": start_period,
+            "end_period": end_period,
+            "fiscal_year_end_month": int(org.fiscal_year_end_month or 12),
+            "active_forecast_version_id": str(active.id) if active else None,
+            "active_forecast_version_name": active.version_name if active else None,
+            "outlook_build": OUTLOOK_API_BUILD,
+        },
+        **outlook,
+    }
+
+
+def build_shared_reporting_payload(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    block_on_validation: bool = True,
+    include_reporting_bundle: bool = True,
+) -> dict[str, Any]:
+    from app.models.organization import Organization
+    from app.services.reporting.export.schemas import ExportValidationSummary
+
+    org = db.get(Organization, organization_id)
+    if org is None:
+        raise ValueError("Organization not found")
+    ensure_org_reporting_defaults(db, org)
+    as_of, start_period, end_period = resolve_org_reporting_window(db, org)
+
+    bundle = None
+    if include_reporting_bundle or block_on_validation:
+        token = bind_as_of_period(as_of)
+        try:
+            bundle = collect_reporting_bundle(
+                db,
+                organization_id,
+                scenario="Combined",
+                start_period=start_period,
+                end_period=end_period,
+                as_of_period=as_of,
+            )
+        finally:
+            reset_as_of_period(token)
+
+        if block_on_validation:
+            raise_if_validation_blocked(bundle.validation, action="Reporting payload")
 
     from app.services.forecast_version_service import get_active_forecast_version
 
@@ -795,5 +841,9 @@ def build_shared_reporting_payload(
             "active_forecast_version_name": active.version_name if active else None,
         },
         **outlook,
-        "validation": bundle.validation.model_dump(mode="json"),
+        "validation": (
+            bundle.validation.model_dump(mode="json")
+            if bundle is not None
+            else ExportValidationSummary(status="pass").model_dump(mode="json")
+        ),
     }
