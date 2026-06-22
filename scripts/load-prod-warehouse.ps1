@@ -1,4 +1,4 @@
-# Step 3 — Load validated CSV pack into Neon production warehouse.
+# Step 3 - Load validated CSV pack into Neon production warehouse.
 #
 # Usage:
 #   .\scripts\load-prod-warehouse.ps1
@@ -28,7 +28,7 @@ if (-not $SkipValidation -and -not $ListOnly) {
     try {
         node scripts/validate-csv-pack.mjs 2>&1 | Write-Host
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "WARN: validation reported issues — review validate-csv-pack-result.json" -ForegroundColor Yellow
+            Write-Host "WARN: validation reported issues - review validate-csv-pack-result.json" -ForegroundColor Yellow
         }
     }
     finally {
@@ -60,6 +60,6 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (-not $ListOnly) {
     Write-Host ""
     Write-Host "Warehouse load complete." -ForegroundColor Green
-    Write-Host "Next: restart Railway API (if needed) and hard-refresh Board + Forecast Engine." -ForegroundColor Yellow
+    Write-Host 'Next: restart Railway API if needed, then hard-refresh Board and Forecast Engine.' -ForegroundColor Yellow
     Write-Host ""
 }

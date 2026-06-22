@@ -6,9 +6,6 @@ export function LandingFooter() {
       <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 text-sm text-slate-500 md:flex-row md:items-center">
         <p>© 2026 SMPL.ai · The AI operating system for SaaS finance teams.</p>
         <div className="flex flex-wrap gap-6">
-          <Link href="/founder" className="transition hover:text-white">
-            Founder
-          </Link>
           <Link href="/board" className="transition hover:text-white">
             Board demo
           </Link>

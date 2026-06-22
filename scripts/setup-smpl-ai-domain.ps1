@@ -89,6 +89,5 @@ Write-Host "  Vercel -> Deployments -> Redeploy latest" -ForegroundColor White
 Write-Host ""
 Write-Host "Smoke test:" -ForegroundColor Yellow
 Write-Host "  $ProdUrl" -ForegroundColor White
-Write-Host "  $ProdUrl/founder" -ForegroundColor White
 Write-Host "  $ProdUrl/login" -ForegroundColor White
 Write-Host ""
