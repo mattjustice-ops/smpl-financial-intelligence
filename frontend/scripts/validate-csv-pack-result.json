@@ -1,0 +1,55 @@
+{
+  "issues": [
+    {
+      "label": "mrr summary final_ending_arr vs Forecast Dec",
+      "detail": "summary=undefined file=90291801.85"
+    },
+    {
+      "label": "actual_forecast_continuity flag"
+    },
+    {
+      "label": "full_alignment Dec ARR claim",
+      "detail": ""
+    }
+  ],
+  "ok": [
+    {
+      "label": "Starting Jan ARR (mrr summary)",
+      "detail": "file=75000000"
+    },
+    {
+      "label": "Jun→Jul continuity (Actual EOP = Forecast BOP)",
+      "detail": "jun_eop=85308020.62 jul_bop=85308020.62"
+    },
+    {
+      "label": "mrr summary budget_dec vs Budget Dec",
+      "detail": "summary=96098088 file= 96,098,088 "
+    },
+    {
+      "label": "mrr summary forecast_vs_budget_gap",
+      "detail": "summary=-5806286 computed=-5806286.150000006"
+    },
+    {
+      "label": "Forecast_dataset_summary.csv Actual months includes 2026-06",
+      "detail": "summary=\"2026-01 to 2026-06\" but Actual_MRR_Waterfall ends 2026-06"
+    },
+    {
+      "label": "Actual_dataset_summary.csv Actual months includes 2026-06",
+      "detail": "summary=\"2026-01 to 2026-06\" but Actual_MRR_Waterfall ends 2026-06"
+    },
+    {
+      "label": "Budget_dataset_summary.csv Actual months includes 2026-06",
+      "detail": "summary=\"2026-01 to 2026-06\" but Actual_MRR_Waterfall ends 2026-06"
+    },
+    {
+      "label": "IS validation Actual Jun revenue",
+      "detail": "summary=7350000.0 file=7350000.0"
+    },
+    {
+      "label": "IS validation Forecast Dec revenue",
+      "detail": "summary=8410000.0 file=8410000.0"
+    }
+  ],
+  "junActualArr": 85308020.62,
+  "decForecastArr": 90291801.85
+}

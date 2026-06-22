@@ -41,6 +41,9 @@ export function LandingHeader() {
                 {item.label}
               </Link>
             ))}
+            <Link href="/founder" className={navLinkClass}>
+              Founder
+            </Link>
             <Link href="/pricing" className={navLinkClass}>
               Pricing
             </Link>
@@ -90,6 +93,9 @@ export function LandingHeader() {
             {item.label}
           </Link>
         ))}
+        <Link href="/founder" className={`${navLinkClass} text-xs`}>
+          Founder
+        </Link>
         <Link href="/pricing" className={`${navLinkClass} text-xs`}>
           Pricing
         </Link>

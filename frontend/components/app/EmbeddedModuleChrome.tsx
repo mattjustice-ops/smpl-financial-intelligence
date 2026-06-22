@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useEffect, useRef } from "react";
 
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { useEntitlements } from "@/hooks/useEntitlements";
@@ -15,10 +16,48 @@ type EmbeddedModuleChromeProps = {
 export function EmbeddedModuleChrome({ moduleTitle, children, links }: EmbeddedModuleChromeProps) {
   const { organizationId, organizations, isLoading: orgLoading } = useActiveOrganization();
   const { planLabel, isLoading: entLoading } = useEntitlements();
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const activeOrg = organizations.find((org) => org.id === organizationId);
   const orgName = activeOrg?.name ?? "—";
   const loading = orgLoading || entLoading;
+
+  useEffect(() => {
+    if (!organizationId) return;
+
+    function postOrgToIframe(frame: HTMLIFrameElement) {
+      frame.contentWindow?.postMessage(
+        { type: "smpl:org", organizationId },
+        window.location.origin,
+      );
+    }
+
+    const body = bodyRef.current;
+    if (!body) return;
+    const iframe = body.querySelector("iframe");
+    if (!iframe) return;
+
+    function onIframeLoad() {
+      postOrgToIframe(iframe as HTMLIFrameElement);
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "smpl:iframe-ready") return;
+      postOrgToIframe(iframe as HTMLIFrameElement);
+    }
+
+    iframe.addEventListener("load", onIframeLoad);
+    window.addEventListener("message", onMessage);
+    if (iframe.contentDocument?.readyState === "complete") {
+      postOrgToIframe(iframe as HTMLIFrameElement);
+    }
+
+    return () => {
+      iframe.removeEventListener("load", onIframeLoad);
+      window.removeEventListener("message", onMessage);
+    };
+  }, [organizationId]);
 
   return (
     <div className="embedded-module">
@@ -36,7 +75,9 @@ export function EmbeddedModuleChrome({ moduleTitle, children, links }: EmbeddedM
         </span>
         {links ? <div className="embedded-module__links">{links}</div> : null}
       </header>
-      <div className="embedded-module__body">{children}</div>
+      <div className="embedded-module__body" ref={bodyRef}>
+        {children}
+      </div>
     </div>
   );
 }

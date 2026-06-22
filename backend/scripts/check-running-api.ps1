@@ -9,6 +9,7 @@ Write-Host "=== Port $Port listeners ===" -ForegroundColor Cyan
 $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
 if (-not $conns) {
     Write-Host "No listener on port $Port" -ForegroundColor Yellow
+    Write-Host "(Health checks skipped - nothing is running yet; expected before restart.)" -ForegroundColor DarkGray
 } else {
     $procIds = $conns | Select-Object -ExpandProperty OwningProcess -Unique
     foreach ($procId in $procIds) {
@@ -18,6 +19,11 @@ if (-not $conns) {
     }
 }
 
+if (-not $conns) {
+    Write-Host ""
+    Write-Host "=== Pre-start checks ===" -ForegroundColor Cyan
+    Write-Host "No API on port $Port yet - skipping /health and /whoami." -ForegroundColor DarkGray
+} else {
 Write-Host ""
 Write-Host "=== GET $BaseUrl/health ===" -ForegroundColor Cyan
 try {
@@ -41,6 +47,7 @@ try {
     } catch {
         Write-Host "export/whoami also failed." -ForegroundColor Red
     }
+}
 }
 
 Write-Host ""

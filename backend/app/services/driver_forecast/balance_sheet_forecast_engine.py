@@ -62,6 +62,7 @@ def build_balance_sheet_forecast(
         ap = decimal_value(row, "accounts_payable")
         prepaids = decimal_value_any(
             row,
+            "prepaids_and_other_current",
             "prepaids_and_other_current_assets",
             "prepaid_and_other_current_assets",
             "prepaids",
@@ -70,11 +71,11 @@ def build_balance_sheet_forecast(
         )
         fixed_assets = decimal_value_any(
             row,
+            "ppe_net",
             "property_and_equipment_net",
             "property_plant_and_equipment_net",
             "property_plant_equipment_net",
             "property_plant_net",
-            "ppe_net",
             "fixed_assets",
         )
         debt = decimal_value_any(row, "debt", "total_debt", "debt_balance", "notes_payable")

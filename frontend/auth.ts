@@ -126,33 +126,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      const email =
-        session.user?.email ??
-        (typeof token.email === "string" ? token.email : undefined);
-
-      if (email) {
-        const sync = await syncBackendSession({
-          email,
-          name: session.user?.name ?? null,
-          authSubject:
-            session.user?.id ??
-            (typeof token.sub === "string" ? token.sub : null),
-        });
-        if (sync.ok) {
-          session.user!.id = sync.data.userId;
-          session.user!.activeOrganizationId = sync.data.activeOrganizationId;
-          session.user!.organizations = sync.data.organizations;
-          return session;
-        }
-        console.error("[auth] session callback sync failed:", sync.message);
-        if (process.env.VERCEL_ENV === "preview") {
-          // Do not keep a stale production workspace on staging Preview.
-          session.user!.activeOrganizationId = "";
-          session.user!.organizations = [];
-          return session;
-        }
-      }
-
       if (session.user) {
         if (typeof token.userId === "string") {
           session.user.id = token.userId;
@@ -160,11 +133,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (typeof token.activeOrganizationId === "string") {
           session.user.activeOrganizationId = token.activeOrganizationId;
         }
-        session.user.organizations = (token.organizations as BackendOrganization[] | undefined) ?? [];
-        console.warn(
-          "[auth] session using stale JWT workspace:",
-          session.user.activeOrganizationId,
-        );
+        session.user.organizations =
+          (token.organizations as BackendOrganization[] | undefined) ?? [];
       }
       return session;
     },

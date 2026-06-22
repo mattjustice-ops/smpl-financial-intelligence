@@ -26,7 +26,7 @@ $python = Join-Path $backendDir ".venv312\Scripts\python.exe"
 if (-not (Test-Path $python)) { $python = "python" }
 
 if (-not $DatabaseUrl) {
-    $resolved = Resolve-ProdDatabaseUrl -RepoRoot $repoRoot -TryVercelPull:$TryVercelPull
+    $resolved = Resolve-ProdDatabaseUrl -RepoRoot $repoRoot -TryVercelPull:$TryVercelPull -PreferSavedProdFile
     if ($resolved) { $DatabaseUrl = $resolved.Url }
 }
 if (-not $DatabaseUrl) {

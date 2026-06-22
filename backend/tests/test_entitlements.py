@@ -42,6 +42,12 @@ def test_professional_includes_forecast_modules():
     assert "management-pl" in pro
     assert "workforce" in pro
     assert "cash" in pro
+    assert "forecast_engine" not in pro
+
+
+def test_enterprise_includes_forecast_engine():
+    ent = modules_for_plan("enterprise")
+    assert "forecast_engine" in ent
 
 
 def test_modules_for_org_uses_plan():

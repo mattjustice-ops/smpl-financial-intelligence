@@ -185,6 +185,7 @@ def ensure_balance_formulas(row: dict[str, Any]) -> dict[str, Any]:
     out = dict(row)
     out["prepaids_and_other_current_assets"] = row_value_any(
         out,
+        "prepaids_and_other_current",
         "prepaids_and_other_current_assets",
         "prepaid_and_other_current_assets",
         "prepaids",
@@ -193,11 +194,11 @@ def ensure_balance_formulas(row: dict[str, Any]) -> dict[str, Any]:
     )
     out["property_and_equipment_net"] = row_value_any(
         out,
+        "ppe_net",
         "property_and_equipment_net",
         "property_plant_and_equipment_net",
         "property_plant_equipment_net",
         "property_plant_net",
-        "ppe_net",
         "fixed_assets",
     )
     out["debt"] = row_value_any(out, "debt", "total_debt", "debt_balance", "notes_payable")

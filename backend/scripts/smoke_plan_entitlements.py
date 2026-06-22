@@ -186,6 +186,11 @@ def main() -> None:
 
     # --- Starter ---
     set_plan_committed(engine, org_id, "starter")
+    with engine.begin() as conn:
+        _, plan_after = fetch_org_plan(conn, org_id)
+    print(f"Verified DB plan after starter update: {plan_after}")
+    if plan_after != "starter":
+        failures.append(f"DB plan not starter after update (got {plan_after})")
     starter_modules = modules_for_plan("starter")
     print(f"Starter modules ({len(starter_modules)}): {', '.join(starter_modules)}")
     if "workforce" in starter_modules:
@@ -214,7 +219,8 @@ def main() -> None:
             if status != 403:
                 failures.append(
                     f"expected HTTP 403 for workforce on starter, got {status}. "
-                    "Redeploy Railway sfi-api from latest main."
+                    "Ensure smoke DATABASE_URL is Railway PROD warehouse Neon (not sandbox shell env). "
+                    "Run: .\\scripts\\save-prod-database-url.ps1 or clear $env:DATABASE_URL and re-run."
                 )
             elif "module_not_entitled" not in body:
                 failures.append("403 body missing module_not_entitled")

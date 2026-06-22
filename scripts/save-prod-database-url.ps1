@@ -32,3 +32,6 @@ Write-Host ""
 Write-Host "Saved to frontend/.env.neon-production.local" -ForegroundColor Green
 Write-Host "Provision scripts will use this automatically." -ForegroundColor DarkGray
 Write-Host ""
+Write-Host "Run migrations against prod Neon:" -ForegroundColor Cyan
+Write-Host "  .\scripts\run-alembic-migration.ps1 -Environment prod" -ForegroundColor White
+Write-Host ""

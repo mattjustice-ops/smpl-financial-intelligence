@@ -72,11 +72,33 @@ function Resolve-ProdDatabaseUrl {
     param(
         [string]$DatabaseUrl = "",
         [string]$RepoRoot = "",
-        [switch]$TryVercelPull
+        [switch]$TryVercelPull,
+        [switch]$PreferSavedProdFile
     )
 
     if ($DatabaseUrl -and -not (Test-IsLocalDatabaseUrl $DatabaseUrl)) {
         return @{ Url = $DatabaseUrl.Trim().Trim('"').Trim("'"); Source = "-DatabaseUrl parameter"; Name = "DATABASE_URL" }
+    }
+
+    if (-not $RepoRoot) {
+        $RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+        if (-not (Test-Path (Join-Path $RepoRoot "backend"))) {
+            $RepoRoot = Split-Path $PSScriptRoot -Parent
+        }
+    }
+
+    $frontendDir = Join-Path $RepoRoot "frontend"
+    $fileCandidates = @(
+        (Join-Path $frontendDir ".env.neon-production.local"),
+        (Join-Path $frontendDir ".env.vercel-production.local"),
+        (Join-Path $frontendDir ".env.production.local")
+    )
+
+    if ($PreferSavedProdFile) {
+        foreach ($file in $fileCandidates) {
+            $found = Get-DatabaseUrlFromEnvFile -FilePath $file
+            if ($found) { return $found }
+        }
     }
 
     if ($env:DATABASE_URL -and -not (Test-IsLocalDatabaseUrl $env:DATABASE_URL)) {
@@ -89,26 +111,12 @@ function Resolve-ProdDatabaseUrl {
         return @{ Url = $env:AUTH_DATABASE_URL.Trim(); Source = "AUTH_DATABASE_URL env var"; Name = "AUTH_DATABASE_URL" }
     }
 
-    if (-not $RepoRoot) {
-        $RepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-        if (-not (Test-Path (Join-Path $RepoRoot "backend"))) {
-            $RepoRoot = Split-Path $PSScriptRoot -Parent
-        }
-    }
-
-    $frontendDir = Join-Path $RepoRoot "frontend"
-    $candidates = @(
-        (Join-Path $frontendDir ".env.neon-production.local"),
-        (Join-Path $frontendDir ".env.vercel-production.local"),
-        (Join-Path $frontendDir ".env.production.local")
-    )
-
     if ($TryVercelPull) {
         $fromVercel = Get-DatabaseUrlFromVercelPull -FrontendDir $frontendDir
         if ($fromVercel) { return $fromVercel }
     }
 
-    foreach ($file in $candidates) {
+    foreach ($file in $fileCandidates) {
         $found = Get-DatabaseUrlFromEnvFile -FilePath $file
         if ($found) { return $found }
     }
@@ -126,6 +134,7 @@ function Write-ProdDatabaseUrlHelp {
     Write-Host "  1. Neon dashboard -> Connection details -> copy connection string" -ForegroundColor White
     Write-Host "     OR Vercel -> smpl-financial-intelligence -> Settings -> AUTH_DATABASE_URL" -ForegroundColor White
     Write-Host '  2. .\scripts\save-prod-database-url.ps1 -DatabaseUrl "postgresql://...@ep-REAL.neon.tech/neondb?sslmode=require"' -ForegroundColor White
+    Write-Host '  3. .\scripts\run-alembic-migration.ps1 -Environment prod' -ForegroundColor White
     Write-Host ""
     Write-Host "Option B - pass inline for this run only:" -ForegroundColor Yellow
     Write-Host '  .\scripts\smoke-test-plan-entitlements.ps1 -DatabaseUrl "postgresql://..."' -ForegroundColor White

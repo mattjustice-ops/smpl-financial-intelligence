@@ -18,7 +18,7 @@ from app.services.reporting.export.data_collector import collect_board_platform_
 from app.services.reporting.export.schemas import ExportValidationSummary
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import to_period
-from app.services.reporting.three_statement_payload import build_ts_data
+from app.services.reporting.three_statement_payload import build_ts_data, build_unified_outlook_payload
 from app.services.reporting.validation_gate import raise_if_validation_blocked
 
 IS_LINE_METRICS: dict[str, str] = {
@@ -47,6 +47,10 @@ class BoardPlatformPayload(BaseModel):
     validation: ExportValidationSummary
     time_series: dict[str, Any] = Field(default_factory=dict)
     three_statement: dict[str, Any] = Field(default_factory=dict)
+    TS_DATA: dict[str, Any] = Field(default_factory=dict)
+    SRC: dict[str, Any] = Field(default_factory=dict)
+    ARR_WATERFALL: dict[str, Any] = Field(default_factory=dict)
+    baseline_engine: dict[str, Any] = Field(default_factory=dict)
     commentary: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
@@ -173,6 +177,16 @@ def build_board_platform_payload(
             db, organization_id, as_of=as_of, start_period=start_period, end_period=end_period
         )
 
+    outlook = build_unified_outlook_payload(
+        db,
+        organization_id,
+        as_of=as_of,
+        start_period=start_period,
+        end_period=end_period,
+    )
+    if include_three_statement and not three_statement:
+        three_statement = outlook.get("TS_DATA") or {}
+
     commentary: dict[str, dict[str, str]] = {}
     if include_commentary:
         slides = build_all_slide_commentary(bundle, use_ai=False)
@@ -204,5 +218,9 @@ def build_board_platform_payload(
         validation=bundle.validation,
         time_series=_build_time_series(bundle),
         three_statement=three_statement,
+        TS_DATA=outlook.get("TS_DATA") or {},
+        SRC=outlook.get("SRC") or {},
+        ARR_WATERFALL=outlook.get("ARR_WATERFALL") or {},
+        baseline_engine=outlook.get("baseline_engine") or {},
         commentary=commentary,
     )

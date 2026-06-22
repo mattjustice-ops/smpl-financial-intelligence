@@ -28,7 +28,7 @@ if ($LocalApi) {
     $ApiBase = "http://127.0.0.1:8001"
 }
 
-$resolved = Resolve-ProdDatabaseUrl -DatabaseUrl $DatabaseUrl -RepoRoot $repoRoot -TryVercelPull:$TryVercelPull
+$resolved = Resolve-ProdDatabaseUrl -DatabaseUrl $DatabaseUrl -RepoRoot $repoRoot -TryVercelPull:$TryVercelPull -PreferSavedProdFile:(-not $DatabaseUrl)
 if (-not $resolved) {
     Write-ProdDatabaseUrlHelp
     exit 1
@@ -39,9 +39,20 @@ if ($dbUrl -match "^postgresql://") {
     $dbUrl = $dbUrl -replace "^postgresql://", "postgresql+psycopg://"
 }
 
+$dbHost = "unknown"
+if ($dbUrl -match '@([^/]+)/') {
+    $dbHost = $Matches[1]
+}
+
 Write-Host ""
 Write-Host "Using DB from: $($resolved.Source)" -ForegroundColor DarkGray
+Write-Host "DB host:       $dbHost" -ForegroundColor DarkGray
 Write-Host "API base:      $ApiBase" -ForegroundColor DarkGray
+if ($resolved.Source -eq "DATABASE_URL env var") {
+    Write-Host ""
+    Write-Host "NOTE: Shell DATABASE_URL is used. If this is sandbox Neon, entitlements API checks will fail." -ForegroundColor Yellow
+    Write-Host "      Prefer: save-prod-database-url.ps1 or pass -DatabaseUrl / -TryVercelPull" -ForegroundColor Yellow
+}
 Write-Host ""
 
 $argsList = @(

@@ -14,12 +14,13 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
 
 WAREHOUSE_TABLES = (
-    "opportunities",
-    "mrr_waterfall",
+    "actual_opportunities",
+    "actual_mrr_waterfall",
+    "forecast_mrr_waterfall",
     "gl_actuals",
     "forecast_opportunities",
-    "workforce_employees",
-    "customers",
+    "actual_employees",
+    "actual_customers",
 )
 
 MIN_ROWS_DEFAULT = 1
@@ -130,6 +131,7 @@ def main() -> None:
                     or 0
                 )
             except Exception as exc:
+                conn.rollback()
                 print(f"  {table}: (skip) {exc}")
                 continue
             print(f"  {table}: {count}")

@@ -53,13 +53,18 @@ Before loading a real customer POC: note current Neon **branch / timestamp** or 
 From repo root:
 
 ```powershell
-# Prod API + entitlements
+# Prod API + entitlements (uses frontend/.env.neon-production.local when saved)
 .\scripts\smoke-test-plan-entitlements.ps1
 
-# Optional: sandbox stack
-.\scripts\smoke-test-staging.ps1
-
 # Full prod readiness (health + entitlements)
+.\scripts\smoke-test-prod-readiness.ps1
+```
+
+If entitlements smoke fails with `expected HTTP 403 for workforce on starter, got 200`, your shell `DATABASE_URL` may point at **sandbox** Neon while Railway uses **prod**. Fix:
+
+```powershell
+Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+.\scripts\save-prod-database-url.ps1   # paste Railway prod warehouse URL once
 .\scripts\smoke-test-prod-readiness.ps1
 ```
 
