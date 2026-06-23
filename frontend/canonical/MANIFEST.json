@@ -1,0 +1,20 @@
+{
+  "label": "June 2026 corrected platform baseline",
+  "updated": "2026-06-23",
+  "boardMarker": "SMPL_LIVE_BOARD v1",
+  "forecastMarker": "forecast-engine stability v20260519d",
+  "files": [
+    "board/index.html",
+    "board/pin_coordinates.json",
+    "board/projection_params.json",
+    "board/us_emea_basemap.svg",
+    "forecast-engine/index.html",
+    "shared/board-data.js",
+    "shared/board-hydrate.js",
+    "shared/smpl-skin.js",
+    "shared/smpl-outlook.js",
+    "shared/smpl-demo-seed.js"
+  ],
+  "resetCommand": "npm run reset:platform",
+  "snapshotCommand": "npm run snapshot:platform"
+}

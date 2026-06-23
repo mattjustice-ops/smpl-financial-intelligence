@@ -50,7 +50,7 @@ for (const asset of assets) {
       continue;
     }
     console.warn(`Board export source not found for ${asset.dst}`);
-    console.warn(`Set env override or run: npm run update:board-june`);
+    console.warn(`Set ${asset.env} or run: npm run copy:board-exports`);
     continue;
   }
   copyFileSync(srcPath, destPath);

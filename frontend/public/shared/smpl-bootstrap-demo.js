@@ -1,14 +1,78 @@
 /**
- * Load Board-compatible demo TS_DATA + WF_TABLE for Forecast Engine (and any surface
- * that does not embed them inline). Parses public/board/index.html — same source Board uses.
+ * Load Board-compatible demo TS_DATA + WF_TABLE for Forecast Engine.
+ * Parses public/board/index.html (supports var/const/let declarations).
  */
 (function (g) {
   "use strict";
 
-  if (g.SMPL_DEMO_TS_DATA && g.SMPL_DEMO_WF_TABLE) return;
+  if (g.SMPL_DEMO_TS_DATA && g.SMPL_DEMO_WF_TABLE) {
+    if (g.console && g.console.info) {
+      g.console.info("[smpl-bootstrap-demo] demo seed ready (static seed file)");
+    }
+    return;
+  }
 
   function parseJsObject(source) {
     return new Function("return (" + source + ");")();
+  }
+
+  function extractJsObject(html, varName) {
+    var prefixes = ["var " + varName, "const " + varName, "let " + varName];
+    var start = -1;
+    for (var i = 0; i < prefixes.length; i++) {
+      start = html.indexOf(prefixes[i]);
+      if (start >= 0) break;
+    }
+    if (start < 0) return null;
+    var eq = html.indexOf("=", start);
+    if (eq < 0) return null;
+    var brace = html.indexOf("{", eq);
+    if (brace < 0) return null;
+    var depth = 0;
+    var inStr = false;
+    var strCh = "";
+    for (var j = brace; j < html.length; j++) {
+      var c = html[j];
+      var prev = html[j - 1];
+      if (inStr) {
+        if (c === strCh && prev !== "\\") inStr = false;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        inStr = true;
+        strCh = c;
+        continue;
+      }
+      if (c === "{") depth++;
+      else if (c === "}") {
+        depth--;
+        if (depth === 0) return html.slice(brace, j + 1);
+      }
+    }
+    return null;
+  }
+
+  function registerDemo(tsData, wfTable) {
+    if (!tsData || !wfTable) return false;
+    g.SMPL_DEMO_TS_DATA = tsData;
+    g.SMPL_DEMO_WF_TABLE = wfTable;
+    if (g.SMPLOutlook && g.SMPLOutlook.registerDemoData) {
+      g.SMPLOutlook.registerDemoData(tsData, wfTable);
+    }
+    if (g.console && g.console.info) {
+      g.console.info("[smpl-bootstrap-demo] demo seed ready (TS_DATA + WF_TABLE)");
+    }
+    return true;
+  }
+
+  function loadFromBoardHtml(html) {
+    var tsSource =
+      extractJsObject(html, "TS_DATA") || extractJsObject(html, "SMPL_DEMO_TS_DATA");
+    var wfSource = extractJsObject(html, "SMPL_DEMO_WF_TABLE");
+    if (!tsSource || !wfSource) {
+      throw new Error("could not extract TS_DATA or SMPL_DEMO_WF_TABLE from board index");
+    }
+    return registerDemo(parseJsObject(tsSource), parseJsObject(wfSource));
   }
 
   try {
@@ -18,24 +82,7 @@
     if (xhr.status < 200 || xhr.status >= 300) {
       throw new Error("board index HTTP " + xhr.status);
     }
-    var html = xhr.responseText;
-    var wfMatch =
-      html.match(/const WF_TABLE = (\{[\s\S]*?\n\});[\r\n]+window\.SMPL_DEMO_WF_TABLE/) ||
-      html.match(/const WF_TABLE = (\{[\s\S]*?\n\});/);
-    var tsMatch =
-      html.match(/const TS_DATA=(\{[\s\S]*?\});[\r\n]+window\.SMPL_DEMO_TS_DATA/) ||
-      html.match(/const TS_DATA=(\{[\s\S]*?\});[\r\n]+function tsGetPeriods/);
-    if (!wfMatch || !tsMatch) {
-      throw new Error("could not parse WF_TABLE / TS_DATA from board index");
-    }
-    g.SMPL_DEMO_WF_TABLE = parseJsObject(wfMatch[1]);
-    g.SMPL_DEMO_TS_DATA = parseJsObject(tsMatch[1]);
-    if (g.SMPLOutlook && g.SMPLOutlook.registerDemoData) {
-      g.SMPLOutlook.registerDemoData(g.SMPL_DEMO_TS_DATA, g.SMPL_DEMO_WF_TABLE);
-    }
-    if (g.console && g.console.info) {
-      g.console.info("[smpl-bootstrap-demo] loaded demo constants from /board/index.html");
-    }
+    loadFromBoardHtml(xhr.responseText);
   } catch (err) {
     console.warn("[smpl-bootstrap-demo] failed to load board demo constants", err);
   }
