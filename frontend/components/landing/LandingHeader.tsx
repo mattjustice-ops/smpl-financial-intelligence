@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { CalendarClock, LogIn, Sparkles } from "lucide-react";
 
-import { BOOK_DEMO_URL } from "./constants";
+import { BOOK_DEMO_URL, SAMPLE_DASHBOARD_URL } from "./constants";
 
 const SECTION_NAV = [
   { hash: "sources", label: "Data layer" },
@@ -64,7 +64,7 @@ export function LandingHeader() {
             </Link>
           </div>
           <Link
-            href="/board"
+            href={SAMPLE_DASHBOARD_URL}
             className="inline-flex h-9 items-center justify-center rounded-full border border-white/15 px-3 text-xs font-medium text-white transition hover:bg-white/5 sm:h-10 sm:px-5 sm:text-sm"
           >
             <span className="hidden 2xl:inline">View sample dashboard</span>

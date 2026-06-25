@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarClock, Mail } from "lucide-react";
 
-import { BOOK_DEMO_URL, SALES_INQUIRY_MAILTO } from "../constants";
+import { BOOK_DEMO_URL, SALES_INQUIRY_MAILTO, SAMPLE_DASHBOARD_URL } from "../constants";
 import { SectionReveal, GlowOrb } from "../motion";
 
 export function FinalCtaSection() {
@@ -32,7 +32,7 @@ export function FinalCtaSection() {
               Request a quote
             </Link>
             <Link
-              href="/board"
+              href={SAMPLE_DASHBOARD_URL}
               className="inline-flex h-12 items-center gap-2 rounded-full border border-white/20 bg-white/5 px-8 text-base font-medium text-white hover:bg-white/10"
             >
               View sample dashboard

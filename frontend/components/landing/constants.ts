@@ -16,6 +16,9 @@ export const SCHEDULING_URL = resolveSchedulingUrl();
 /** Collect the same fields as request-quote, then send users to the calendar. */
 export const BOOK_DEMO_URL = "/book-demo";
 
+/** Public marketing sample — static HTML board template (not the live /board demo). */
+export const SAMPLE_DASHBOARD_URL = "/board-sample";
+
 /** Customer workspace sign-in (optional — home page stays public). */
 export const LOGIN_URL = "/login";
 

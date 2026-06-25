@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 
-import { BOOK_DEMO_URL, HERO_COMMENTARY } from "../constants";
+import { BOOK_DEMO_URL, HERO_COMMENTARY, SAMPLE_DASHBOARD_URL } from "../constants";
 import { GlowOrb } from "../motion";
 
 const KPIS = [
@@ -65,7 +65,7 @@ export function HeroSection() {
               Book a demo <ArrowRight size={18} />
             </Link>
             <Link
-              href="/board"
+              href={SAMPLE_DASHBOARD_URL}
               className="inline-flex h-12 items-center gap-2 rounded-full border border-white/15 bg-white/5 px-7 text-base font-medium backdrop-blur-sm transition hover:bg-white/10"
               style={{ color: "#fff" }}
             >
