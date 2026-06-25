@@ -836,6 +836,45 @@
     );
   }
 
+  /** Cross-origin file downloads bypass CORS (unlike fetch). Railway serves Content-Disposition: attachment. */
+  function triggerDirectExportDownload(exportUrl, label) {
+    alert(
+      label +
+        " export started.\n\nGeneration can take 3–8 minutes. Your browser will download when ready — keep this tab open.",
+    );
+    var frame = document.getElementById("smpl-export-download-frame");
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.id = "smpl-export-download-frame";
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.display = "none";
+      document.body.appendChild(frame);
+    }
+    frame.src = exportUrl;
+  }
+
+  async function fetchBoardExportBlob(exportBase, exportUrl, exportSpec, exportTimeoutMs) {
+    var res = await boardFetchWithTimeout(
+      exportUrl,
+      boardLiveFetchInit(exportBase, { method: "GET", cache: "no-store" }),
+      exportTimeoutMs,
+    );
+    if (!res.ok) {
+      return { ok: false, message: await boardApiErrorMessage(res) };
+    }
+    var blob = await res.blob();
+    if (!blob || blob.size < 100) {
+      return { ok: false, message: exportSpec.label + " export returned an empty file. Check backend logs and retry." };
+    }
+    var objectUrl = URL.createObjectURL(blob);
+    var anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = exportSpec.filename;
+    anchor.click();
+    URL.revokeObjectURL(objectUrl);
+    return { ok: true };
+  }
+
   async function openLiveBoardExport(format) {
     var orgId = await boardResolveOrgId();
     var closeMonth = boardActiveCloseMonth();
@@ -879,12 +918,14 @@
       var directBase = await boardExportApiBase();
       var host = global.location && global.location.hostname;
       var isLocal = host === "localhost" || host === "127.0.0.1";
-      var bases = [];
-      if (directBase) bases.push(directBase);
-      // Long PPTX exports exceed Vercel's proxy limit — only fall back on localhost dev.
-      if (isLocal && bases.indexOf("") < 0) bases.push("");
+      var exportUrl = boardLiveUrl(directBase, exportSpec.path) + "?" + params.toString();
 
-      if (!bases.length) {
+      if (directBase && !isLocal) {
+        triggerDirectExportDownload(exportUrl, exportSpec.label);
+        return "started";
+      }
+
+      if (!directBase && !isLocal) {
         alert(
           exportSpec.label +
             " export failed: Railway API URL is not configured.\n\n" +
@@ -893,52 +934,16 @@
         return "error";
       }
 
-      var lastErrText = "";
-      for (var attempt = 0; attempt < bases.length; attempt++) {
-        var exportBase = bases[attempt];
-        var viaLabel = exportBase ? "Railway direct" : "Vercel proxy";
-        var exportUrl = boardLiveUrl(exportBase, exportSpec.path) + "?" + params.toString();
-        try {
-          var res = await boardFetchWithTimeout(
-            exportUrl,
-            boardLiveFetchInit(exportBase, { method: "GET", cache: "no-store" }),
-            exportTimeoutMs,
-          );
-          if (res.ok) {
-            var blob = await res.blob();
-            if (!blob || blob.size < 100) {
-              alert(exportSpec.label + " export returned an empty file. Check backend logs and retry.");
-              return "error";
-            }
-            var objectUrl = URL.createObjectURL(blob);
-            var anchor = document.createElement("a");
-            anchor.href = objectUrl;
-            anchor.download = exportSpec.filename;
-            anchor.click();
-            URL.revokeObjectURL(objectUrl);
-            return "ok";
-          }
-          lastErrText = await boardApiErrorMessage(res);
-          if (isExportUpstreamError(lastErrText) && attempt < bases.length - 1) {
-            continue;
-          }
-          alert(exportSpec.label + " export failed (" + viaLabel + "):\n" + lastErrText);
-          return "error";
-        } catch (err) {
-          lastErrText = boardFetchErrorMessage(err, exportTimeoutMs);
-          if (exportBase && /Failed to fetch|NetworkError/i.test(lastErrText)) {
-            lastErrText +=
-              " Railway may be blocking browser CORS from this domain — confirm API_CORS_ORIGINS on Railway includes " +
-              (global.location && global.location.origin ? global.location.origin : "your app URL") +
-              ".";
-          }
-          if (attempt < bases.length - 1) continue;
-          alert(exportSpec.label + " export failed (" + viaLabel + "):\n" + lastErrText);
-          return "error";
-        }
+      var exportBase = directBase || "";
+      try {
+        var result = await fetchBoardExportBlob(exportBase, exportUrl, exportSpec, exportTimeoutMs);
+        if (result.ok) return "ok";
+        alert(exportSpec.label + " export failed:\n" + (result.message || "Unknown error"));
+        return "error";
+      } catch (err) {
+        alert(exportSpec.label + " export failed:\n" + boardFetchErrorMessage(err, exportTimeoutMs));
+        return "error";
       }
-      alert(exportSpec.label + " export failed:\n" + (lastErrText || "Unknown error"));
-      return "error";
     } catch (err) {
       alert(
         exportSpec.label +
