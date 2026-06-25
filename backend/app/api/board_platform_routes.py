@@ -20,9 +20,8 @@ from app.services.reporting.export.board_commentary_service import (
     enrich_slide_with_ai,
     parse_focus_period_from_question,
 )
-from app.services.reporting.export.data_collector import collect_board_platform_bundle, collect_reporting_bundle
+from app.services.reporting.export.data_collector import collect_board_platform_bundle, collect_copilot_bundle
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
-from app.services.reporting.export.export_sheet_registry import requirements_prompt_block
 from app.services.reporting.three_statement_payload import build_cash_bridge_data, build_ts_data
 from app.services.reporting.validation_gate import raise_if_validation_blocked
 
@@ -152,15 +151,23 @@ def board_copilot(
     org = get_organization_or_404(db, organization_id, module="board_export")
     as_of, start_period, end_period = resolve_org_reporting_window(db, org)
 
+    focus_period = parse_focus_period_from_question(
+        body.question,
+        default=as_of,
+        start_period=start_period,
+        end_period=end_period,
+    )
+
     token = bind_as_of_period(as_of)
     try:
-        bundle = collect_reporting_bundle(
+        bundle = collect_copilot_bundle(
             db,
             organization_id,
             scenario="Combined",
             start_period=start_period,
             end_period=end_period,
             as_of_period=as_of,
+            focus_period=focus_period,
         )
     except Exception as exc:
         raise HTTPException(
@@ -169,8 +176,6 @@ def board_copilot(
         ) from exc
     finally:
         reset_as_of_period(token)
-
-    # Board interactive AI is best-effort: pipeline tie failures must not block Copilot.
 
     cash_bridge_table = build_cash_bridge_data(
         db,
@@ -185,23 +190,18 @@ def board_copilot(
         start_period=start_period,
         end_period=end_period,
     )
-    focus_period = parse_focus_period_from_question(
-        body.question,
-        default=as_of,
-        start_period=start_period,
-        end_period=end_period,
-    )
     metrics_blob = copilot_context_blob(
         bundle,
         cash_bridge_table=cash_bridge_table,
         ts_data=ts_data,
         focus_period=focus_period,
+        max_chars=18000,
     )
     try:
         exec_json = bundle.executive_flow.model_dump(mode="json")
         kpis = exec_json.get("kpis")
         if kpis:
-            metrics_blob += "\n\nExecutive KPIs JSON:\n" + str(kpis)[:8000]
+            metrics_blob += "\n\nExecutive KPIs JSON:\n" + str(kpis)[:3000]
     except Exception:
         pass
 
@@ -209,24 +209,14 @@ def board_copilot(
         client = build_commentary_llm_client()
         raw = client.generate(
             system_prompt=(
-                requirements_prompt_block("copilot_answer")
-                + "\n\nYou are SMPL Copilot — the AI financial intelligence layer for a B2B SaaS board platform. "
+                "You are SMPL Copilot for a B2B SaaS board platform. "
                 "Answer using ONLY the live warehouse metrics provided. Never invent numbers. "
-                "You receive executive KPIs plus warehouse tables: monthly trends, ARR/pipeline/deferred/cash waterfalls, "
-                "cash operational bridge, income statement / balance sheet / cash flow, three-statement detail, "
-                "headcount, GTM funnel, GL spend, and pipeline opportunity drilldown. "
-                "Monthly income statement opex lines include G&A actual vs budget for every actual month Jan through close. "
-                "When the question names a specific month, answer using that month's opex/GL sections — do not refuse "
-                "if G&A actual vs budget appears in Monthly income statement opex. Use GL detail lines for drivers when present. "
-                "Search all sections for relevant figures before answering any question — ARR, revenue, margin, "
-                "pipeline, cash, headcount, GTM, variances, or reconciliations. "
-                "Do not claim data is missing if it appears anywhere in the metrics. "
-                "If a figure is truly absent, say so and cite the closest related data you do have. "
+                "When the question names a month, use that month's sections. "
                 "Structure every answer in exactly three labeled sections:\n"
-                "1. PRIMARY DRIVER + VARIANCE CONTEXT — the key metric/movement with exact variance vs budget or prior period.\n"
-                "2. FINANCIAL AND OPERATIONAL ROOT CAUSE — connect operational drivers (ARR, pipeline, headcount, GTM) to the outcome.\n"
-                "3. RECOMMENDED ACTION + BOARD SUMMARY — one specific action plus a one-sentence board-ready summary.\n"
-                "Keep each section to 2-3 sentences. Use dollar signs and percentages consistently."
+                "1. PRIMARY DRIVER + VARIANCE CONTEXT\n"
+                "2. FINANCIAL AND OPERATIONAL ROOT CAUSE\n"
+                "3. RECOMMENDED ACTION + BOARD SUMMARY\n"
+                "Keep each section to 2-3 sentences. Use $ and % consistently."
             ),
             user_prompt=(
                 f"Organization: {org.name}. Org close month: {as_of}. FY window: {start_period}–{end_period}.\n"
@@ -234,6 +224,7 @@ def board_copilot(
                 f"Live metrics:\n{metrics_blob}\n\nQuestion: {body.question}\n\n"
                 'Respond JSON: {"answer": "..."} where answer contains the three numbered sections as plain text.'
             ),
+            max_tokens=1200,
         )
         answer = str(raw.get("answer") or raw.get("response") or "").strip()
         if not answer and isinstance(raw, dict):

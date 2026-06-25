@@ -22,7 +22,7 @@ class AnthropicCommentaryClient:
         self,
         api_key: str,
         *,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-4-6",
         temperature: float = 0.2,
         timeout_seconds: float = 60.0,
         max_tokens: int = 4096,
@@ -40,11 +40,17 @@ class AnthropicCommentaryClient:
         self._temperature = temperature
         self._max_tokens = max_tokens
 
-    def generate(self, *, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+    def generate(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int | None = None,
+    ) -> dict[str, Any]:
         try:
             resp = self._client.messages.create(
                 model=self._model,
-                max_tokens=self._max_tokens,
+                max_tokens=max_tokens if max_tokens is not None else self._max_tokens,
                 temperature=self._temperature,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],

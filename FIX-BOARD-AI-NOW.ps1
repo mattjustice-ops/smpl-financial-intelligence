@@ -3,8 +3,11 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 git add `
+  backend/app/core/config.py `
+  backend/app/core/openai_status.py `
+  backend/app/services/commentary/anthropic_client.py `
+  backend/app/services/reporting/export/data_collector.py `
   backend/app/api/board_platform_routes.py `
-  backend/app/services/reporting/export/board_commentary_service.py `
   frontend/app/api/smpl/board-config/route.ts `
   frontend/components/app/EmbeddedModuleChrome.tsx `
   frontend/public/shared/board-hydrate.js `
@@ -12,12 +15,11 @@ git add `
   frontend/public/board/index.html `
   frontend/scripts/verify-board-platform.mjs `
   frontend/vercel.json `
-  scripts/deploy-board-ai-fix.ps1 `
   FIX-BOARD-AI-NOW.ps1
 
 $staged = git diff --cached --name-only
 if ($staged) {
-  git commit -m "fix: board Claude uses same-origin proxy (fix Failed to fetch CORS)"
+  git commit -m "fix: MD&A exports via Railway direct; faster copilot; CORS for smpl-ai.com"
 }
 git push origin main
 git log -1 --oneline

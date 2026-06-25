@@ -380,3 +380,65 @@ def collect_board_platform_bundle(
     else:
         bundle.validation = ExportValidationSummary(status="pass")
     return bundle
+
+
+def collect_copilot_bundle(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    scenario: str,
+    start_period: str,
+    end_period: str,
+    as_of_period: str | None = None,
+    focus_period: str | None = None,
+    **dashboard_filters,
+) -> ReportingBundle:
+    """Fast bundle for interactive Copilot — skips export validation, MD&A build, and heavy drilldowns."""
+    start = to_period(start_period)
+    end = to_period(end_period)
+    as_of = to_period(as_of_period or end_period)
+    focus = to_period(focus_period or as_of)
+
+    bundle = collect_board_platform_bundle(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start,
+        end_period=end,
+        as_of_period=as_of,
+        include_validation=False,
+        **dashboard_filters,
+    )
+
+    bundle.marketing_comparison = collect_marketing_comparison(
+        db,
+        organization_id,
+        start_period=start,
+        end_period=end,
+        marketing_channel=dashboard_filters.get("marketing_channel"),
+    )
+
+    bundle.headcount = _load_headcount(db, organization_id, as_of, as_of)
+    bundle.gl_detail = _load_gl_detail(db, organization_id, focus, focus)
+
+    drill_filters = {
+        k: v
+        for k, v in dashboard_filters.items()
+        if k in {"region", "segment", "owner", "marketing_channel"} and v
+    }
+    drilldown_payload: dict = {}
+    try:
+        drill = pipeline_drilldown(
+            db,
+            organization_id,
+            scenario=scenario,
+            period=as_of,
+            waterfall_type="closed_won",
+            **drill_filters,
+        )
+        drilldown_payload["closed_won"] = drill.model_dump(mode="json")
+    except Exception:
+        drilldown_payload["closed_won"] = {"opportunities": [], "waterfall_type": "closed_won"}
+    bundle.pipeline_drilldown = drilldown_payload
+
+    return bundle

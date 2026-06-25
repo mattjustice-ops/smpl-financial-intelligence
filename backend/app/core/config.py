@@ -37,10 +37,12 @@ class Settings(BaseSettings):
         "postgresql+psycopg://sfi:sfi_dev_password@localhost:5432/sfi"
     )
     api_cors_origins: str = ",".join(
-        origin
-        for host in ("localhost", "127.0.0.1")
-        for p in range(3000, 3011)
-        for origin in (f"http://{host}:{p}",)
+        [
+            *(f"http://{host}:{p}" for host in ("localhost", "127.0.0.1") for p in range(3000, 3011)),
+            "https://smpl-financial-intelligence.vercel.app",
+            "https://smpl-ai.com",
+            "https://www.smpl-ai.com",
+        ]
     )
 
     # OpenAI / AI commentary (env file + OS env use OPENAI_API_KEY)
@@ -80,7 +82,17 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]
+        origins = [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]
+        seen = set(origins)
+        for origin in (
+            "https://smpl-financial-intelligence.vercel.app",
+            "https://smpl-ai.com",
+            "https://www.smpl-ai.com",
+        ):
+            if origin not in seen:
+                origins.append(origin)
+                seen.add(origin)
+        return origins
 
 
 def _read_secret_value_from_secrets_file(env_name: str) -> str | None:

@@ -143,7 +143,7 @@ const checks = [
   ["HTML exec summary nav links wired", boardHtml.includes("function boardExecNav") && boardHtml.includes("onclick=\"boardExecNav("), true],
   ["board-hydrate installs live AI on parse", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("installLiveAi();\n  installCommentaryCacheRestore"), true],
   ["board HTML no direct Anthropic API", !boardHtml.includes("api.anthropic.com"), true],
-  ["board HTML loads board-hydrate v24", boardHtml.includes("board-hydrate.js?v=24"), true],
+  ["board HTML loads board-hydrate v25", boardHtml.includes("board-hydrate.js?v=25"), true],
   ["board-hydrate uses same-origin live API", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("boardLiveApiBase"), true],
   ["export_sheet_registry has requirements_prompt_block", fs.readFileSync(path.join(__dirname, "../../backend/app/services/reporting/export/export_sheet_registry.py"), "utf8").includes("def requirements_prompt_block"), true],
   ["territory basemap asset exists", fs.existsSync(path.join(__dirname, "../public/board/us_emea_basemap.svg")), true],
