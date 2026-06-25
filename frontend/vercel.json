@@ -2,7 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "functions": {
+    "app/api/v1/[...path]/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/v1/board-platform/payload/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/v1/board-platform/commentary/regenerate/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/v1/board-platform/copilot/route.ts": {
       "maxDuration": 300
     },
     "app/api/v1/reporting/outlook/route.ts": {

@@ -236,15 +236,28 @@
   }
 
   function boardFetchWithTimeout(url, init, timeoutMs) {
-    timeoutMs = timeoutMs == null ? 120000 : timeoutMs;
+    timeoutMs = timeoutMs == null ? 280000 : timeoutMs;
     var controller = new AbortController();
     var timer = setTimeout(function () {
-      controller.abort();
+      controller.abort("board-request-timeout");
     }, timeoutMs);
     var opts = Object.assign({}, init || {}, { signal: controller.signal });
     return fetch(url, opts).finally(function () {
       clearTimeout(timer);
     });
+  }
+
+  function boardFetchErrorMessage(err, timeoutMs) {
+    if (!err) return "Request failed.";
+    if (err === "board-request-timeout" || err.name === "AbortError") {
+      var secs = Math.round((timeoutMs || 280000) / 1000);
+      return (
+        "Request timed out after " +
+        secs +
+        "s. Claude exports can take several minutes — confirm Railway API is healthy and ANTHROPIC_API_KEY is set, then retry."
+      );
+    }
+    return err.message ? err.message : String(err);
   }
 
   async function boardApiErrorMessage(res) {
@@ -459,7 +472,7 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ slide_key: apiSlideKey }),
             },
-            120000,
+            280000,
           );
           if (res.ok) {
             var data = await res.json();
@@ -482,8 +495,7 @@
           lastApiStatus = res.status;
         } catch (err) {
           if (orgId) {
-            txt.textContent =
-              "Commentary request failed: " + (err && err.message ? err.message : String(err));
+            txt.textContent = "Commentary request failed: " + boardFetchErrorMessage(err, 280000);
             return;
           }
         }
@@ -560,7 +572,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question: q }),
           },
-          120000,
+          280000,
         );
         if (!res.ok) {
           var errText = await boardApiErrorMessage(res);
@@ -587,11 +599,13 @@
               "</div></div>";
           }
         }
-      } catch (_) {
+      } catch (err) {
         var failEl = document.getElementById(thinkId);
         if (failEl) {
           failEl.outerHTML =
-            '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble" style="color:var(--red)">Connection error. Confirm sign-in and API health.</div></div>';
+            '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble" style="color:var(--red)">' +
+            boardFetchErrorMessage(err, 280000).replace(/</g, "&lt;") +
+            "</div></div>";
         }
       }
 
@@ -820,7 +834,7 @@
       alert(
         exportSpec.label +
           " export failed: " +
-          (err && err.message ? err.message : String(err)),
+          boardFetchErrorMessage(err, 300000),
       );
       return "error";
     }

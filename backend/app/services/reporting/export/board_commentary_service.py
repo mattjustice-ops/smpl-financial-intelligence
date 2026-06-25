@@ -14,7 +14,7 @@ from app.services.commentary.llm_factory import build_commentary_llm_client, LLM
 from app.services.reporting.export.board_chart_service import _wf
 from app.services.reporting.export.board_metrics_snapshot import BoardMetricsSnapshot, build_metrics_snapshot
 from app.services.reporting.export.company_context import strategic_context_for_prompt
-from app.services.reporting.export.output_requirements import (
+from app.services.reporting.export.export_sheet_registry import (
     monthly_close_requirements_prompt,
     requirements_prompt_block,
 )

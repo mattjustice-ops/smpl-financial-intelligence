@@ -22,7 +22,7 @@ from app.services.reporting.export.board_commentary_service import (
 )
 from app.services.reporting.export.data_collector import collect_reporting_bundle
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
-from app.services.reporting.export.output_requirements import requirements_prompt_block
+from app.services.reporting.export.export_sheet_registry import requirements_prompt_block
 from app.services.reporting.three_statement_payload import build_cash_bridge_data, build_ts_data
 from app.services.reporting.validation_gate import raise_if_validation_blocked
 

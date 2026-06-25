@@ -204,6 +204,7 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
         try:
             from app.services.commentary.prompts import SYSTEM_PROMPT, build_user_prompt
             from app.services.reporting.export.company_context import strategic_context_for_prompt
+            from app.services.reporting.export.export_sheet_registry import monthly_close_requirements_prompt
 
             inputs = build_commentary_inputs(
                 organization_name=bundle.organization_name,
@@ -212,7 +213,13 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
                 financial=bundle.comparison_financial_statements or bundle.financial_statements,
             )
             client = build_commentary_llm_client()
-            user_prompt = build_user_prompt(inputs) + "\n\n" + strategic_context_for_prompt()
+            user_prompt = (
+                build_user_prompt(inputs)
+                + "\n\n"
+                + strategic_context_for_prompt()
+                + "\n\n"
+                + monthly_close_requirements_prompt()
+            )
             ai_raw = client.generate(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
             from app.services.commentary.schemas import CommentaryOutput
 
