@@ -1648,6 +1648,14 @@ const BOARD_EXPORTS = {
   mdaPackage: '/board/exports/SMPL_MDA_Package_June2026.xlsx',
 };
 
+async function aiComm(slideKey, targetId) {
+  var el = document.getElementById(targetId);
+  if (el) {
+    var txt = el.querySelector('.commentary-text');
+    if (txt) txt.innerHTML = '<span class="spin"></span> Loading commentary service…';
+  }
+}
+
 function openBoardExport(url, label) {
   const opened = window.open(url, '_blank', 'noopener,noreferrer');
   if (!opened) window.location.assign(url);
@@ -3088,8 +3096,8 @@ Rules:
 - Keep each section to 2-3 sentences maximum
 - Use dollar signs and percentages consistently`;
 
-let cpHistory = [];
-let cpSending = false;
+window.cpHistory = window.cpHistory || [];
+window.cpSending = false;
 
 function renderCopilot(area) {
   area.innerHTML = `<div class="slide">
@@ -3117,7 +3125,7 @@ function renderCopilot(area) {
       </div>
     </div>
   </div>`;
-  if(cpHistory.length === 0) cpHistory = [];
+  if(window.cpHistory.length === 0) window.cpHistory = [];
 }
 
 function cpAsk(q) {
@@ -3126,73 +3134,11 @@ function cpAsk(q) {
 }
 
 async function cpSend() {
-  if(cpSending) return;
-  const input = document.getElementById('cpInput');
-  const sendBtn = document.getElementById('cpSendBtn');
-  const msgs = document.getElementById('cpMessages');
-  if(!input || !msgs) return;
-  const q = input.value.trim();
-  if(!q) return;
-
-  cpSending = true;
-  input.value = '';
-  if(sendBtn) sendBtn.disabled = true;
-
-  // Add user message
-  msgs.innerHTML += `<div class="cp-msg user">
-    <div class="cp-avatar">M</div>
-    <div class="cp-bubble">${q.replace(/</g,'&lt;')}</div>
-  </div>`;
-
-  // Add thinking indicator
-  const thinkId = 'cpThink_' + Date.now();
-  msgs.innerHTML += `<div class="cp-msg assistant" id="${thinkId}">
-    <div class="cp-avatar">S</div>
-    <div class="cp-bubble"><div class="cp-thinking">
-      <div class="cp-dot"></div><div class="cp-dot"></div><div class="cp-dot"></div>
-    </div></div>
-  </div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-
-  // Add to history
-  cpHistory.push({role:'user', content: q});
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        system: CP_SYSTEM,
-        messages: cpHistory
-      })
-    });
-    const data = await res.json();
-    const reply = data.content?.[0]?.text || 'Unable to generate response.';
-    cpHistory.push({role:'assistant', content: reply});
-
-    // Format the three-part response
-    const formatted = formatCopilotReply(reply);
-
-    // Replace thinking with response
-    const thinkEl = document.getElementById(thinkId);
-    if(thinkEl) thinkEl.outerHTML = `<div class="cp-msg assistant">
-      <div class="cp-avatar">S</div>
-      <div class="cp-bubble">${formatted}</div>
-    </div>`;
-
-  } catch(err) {
-    const thinkEl = document.getElementById(thinkId);
-    if(thinkEl) thinkEl.outerHTML = `<div class="cp-msg assistant">
-      <div class="cp-avatar">S</div>
-      <div class="cp-bubble" style="color:var(--red)">Connection error. Configure API key to enable Copilot responses. Data context is loaded and ready.</div>
-    </div>`;
+  var msgs = document.getElementById('cpMessages');
+  if (msgs) {
+    msgs.innerHTML += '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble" style="color:var(--text2)">SMPL Copilot is loading — try again in a moment.</div></div>';
+    msgs.scrollTop = msgs.scrollHeight;
   }
-
-  cpSending = false;
-  if(sendBtn) sendBtn.disabled = false;
-  msgs.scrollTop = msgs.scrollHeight;
 }
 window.cpSend = cpSend;
 
@@ -3424,7 +3370,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=19"></script>
+<script src="/shared/board-hydrate.js?v=20"></script>
 
 </body>
 </html>

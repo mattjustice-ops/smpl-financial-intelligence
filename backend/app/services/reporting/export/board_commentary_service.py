@@ -2,19 +2,36 @@
 
 from __future__ import annotations
 
+import calendar
+import re
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from app.core.config import get_settings
 from app.services.board_package.package import fmt_money
-from app.services.commentary.llm_factory import build_commentary_llm_client
+from app.services.commentary.llm_factory import build_commentary_llm_client, LLMError
+from app.services.reporting.export.board_chart_service import _wf
 from app.services.reporting.export.board_metrics_snapshot import BoardMetricsSnapshot, build_metrics_snapshot
 from app.services.reporting.export.company_context import strategic_context_for_prompt
+from app.services.reporting.export.output_requirements import (
+    monthly_close_requirements_prompt,
+    requirements_prompt_block,
+)
 from app.services.reporting.export.saas_semantic_reporting import (
     OpportunityMovementType,
     build_movement_attribution,
 )
 from app.services.reporting.export.schemas import ReportingBundle
+from app.services.reporting.period_utils import period_range, to_period
+
+_MONTH_NAME_TO_NUM: dict[str, int] = {
+    name.lower(): i for i, name in enumerate(calendar.month_name[1:], start=1)
+}
+_MONTH_ABBR_TO_NUM: dict[str, int] = {
+    abbr.lower(): i for i, abbr in enumerate(calendar.month_abbr[1:], start=1)
+}
+_GA_DEPT_HINTS = ("g&a", "g & a", "general", "admin", "finance", "legal", "hr", "people")
 
 
 @dataclass
@@ -255,42 +272,626 @@ def build_slide_commentary(bundle: ReportingBundle, slide_key: str) -> SlideComm
     return SlideCommentary(what_happened=f"Review {slide_key} detail in the MD&A workbook export.")
 
 
+def metrics_prompt_blob(bundle: ReportingBundle) -> str:
+    """Rich metric context for board Claude prompts."""
+    m = build_metrics_snapshot(bundle)
+    cur = m.currency
+    gm_act = None
+    gm_bud = None
+    if m.revenue_actual and m.revenue_actual > 0:
+        fs = bundle.comparison_financial_statements or bundle.financial_statements
+        if fs:
+            for row in fs.income_statement.rows:
+                p = str(row.period)[:7]
+                if p != m.as_of:
+                    continue
+                if "gross margin" in row.line_item.lower() or row.line_item.lower() == "gm":
+                    if row.scenario == "Actual":
+                        gm_act = row.amount
+                    elif row.scenario == "Budget":
+                        gm_bud = row.amount
+    lines = [
+        f"Close month: {m.as_of} ({bundle.period_label})",
+        (
+            f"Ending ARR {fmt_money(m.ending_arr, cur)}; net new {fmt_money(m.net_new_arr, cur)} "
+            f"(budget {fmt_money(m.new_arr_budget, cur)}); expansion {fmt_money(m.expansion, cur)}; "
+            f"churn {fmt_money(m.churn, cur)}"
+        ),
+        (
+            f"Revenue {fmt_money(m.revenue_actual, cur)} actual vs {fmt_money(m.revenue_budget, cur)} budget; "
+            f"EBITDA {fmt_money(m.ebitda_actual, cur)} actual vs {fmt_money(m.ebitda_budget, cur)} budget"
+        ),
+        f"Cash {fmt_money(m.cash_actual, cur)}; pipeline created {fmt_money(m.pipeline_created, cur)}; deferred {fmt_money(m.slipped, cur)}",
+        f"Headcount {m.headcount}; marketing spend {fmt_money(m.marketing_spend, cur)}",
+    ]
+    if m.grr is not None:
+        lines.append(f"GRR {float(m.grr):.3f}")
+    if m.nrr is not None:
+        lines.append(f"NRR {float(m.nrr):.3f}")
+    if gm_act is not None and gm_bud is not None:
+        lines.append(f"Gross margin actual {gm_act} vs budget {gm_bud}")
+    return "\n".join(lines)
+
+
+_CASH_BRIDGE_ITEMS: tuple[tuple[str, str], ...] = (
+    ("beginning_cash", "Beginning cash"),
+    ("cash_collections", "Collections"),
+    ("collections", "Collections"),
+    ("payroll_cash_out", "Payroll"),
+    ("vendor_cash_out", "Vendor payments"),
+    ("commission_cash_out", "Commissions"),
+    ("tax_cash_out", "Tax"),
+    ("interest_cash_out", "Interest"),
+    ("other_operating_cash_out", "Other operating"),
+    ("capex", "Capex"),
+    ("financing", "Financing"),
+    ("ending_cash", "Ending cash"),
+)
+
+_ARR_BRIDGE_ITEMS: tuple[tuple[str, str], ...] = (
+    ("beginning", "Beginning ARR"),
+    ("new_business", "New business ARR"),
+    ("expansion", "Expansion ARR"),
+    ("churn", "Churn ARR"),
+    ("contraction", "Contraction ARR"),
+    ("reactivation", "Reactivation ARR"),
+    ("ending", "Ending ARR"),
+    ("ending_arr", "Ending ARR"),
+)
+
+_PIPELINE_ITEMS: tuple[tuple[str, str], ...] = (
+    ("beginning_pipeline", "Beginning pipeline ARR"),
+    ("pipeline_created", "Pipeline created ARR"),
+    ("closed_won", "Closed won ARR"),
+    ("closed_lost", "Closed lost ARR"),
+    ("slipped_pipeline", "Slipped pipeline ARR"),
+    ("ending_pipeline", "Ending pipeline ARR"),
+)
+
+_DEFERRED_ITEMS: tuple[tuple[str, str], ...] = (
+    ("beginning_deferred_revenue", "Beginning deferred revenue"),
+    ("new_billings", "Billings"),
+    ("billings", "Billings"),
+    ("revenue_recognized", "Revenue recognized"),
+    ("deferred_revenue_recognized", "Deferred revenue recognized"),
+    ("total_gaap_revenue", "Total GAAP revenue"),
+    ("ending_deferred_revenue", "Ending deferred revenue"),
+)
+
+_CASH_BRIDGE_TABLE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("beginning_cash", "Beginning cash"),
+    ("collections", "Collections"),
+    ("payroll", "Payroll"),
+    ("vendor", "Vendor payments"),
+    ("commission", "Commissions"),
+    ("tax", "Tax"),
+    ("interest", "Interest"),
+    ("other_operating", "Other operating"),
+    ("capex", "Capex"),
+    ("ending_cash", "Ending cash"),
+)
+
+
+def _scenario_amount_parts(
+    bundle: ReportingBundle,
+    waterfall_key: str,
+    waterfall_type: str,
+    *,
+    scenarios: tuple[str, ...] = ("Actual", "Budget", "Forecast"),
+) -> list[str]:
+    cur = bundle.currency
+    parts: list[str] = []
+    for scenario in scenarios:
+        amt = _wf(bundle, waterfall_key, waterfall_type, bundle.as_of_period, scenario)
+        if amt != 0 or waterfall_type in {"beginning_cash", "ending_cash", "beginning", "ending", "ending_arr"}:
+            parts.append(f"{scenario} {fmt_money(amt, cur)}")
+    return parts
+
+
+def _waterfall_section_lines(
+    bundle: ReportingBundle,
+    title: str,
+    waterfall_key: str,
+    items: tuple[tuple[str, str], ...],
+) -> list[str]:
+    lines: list[str] = []
+    seen_labels: set[str] = set()
+    for wtype, label in items:
+        if label in seen_labels:
+            continue
+        parts = _scenario_amount_parts(bundle, waterfall_key, wtype)
+        if not parts:
+            continue
+        seen_labels.add(label)
+        lines.append(f"  {label}: {'; '.join(parts)}")
+    return [title, *lines] if lines else []
+
+
+def cash_reconciliation_prompt_blob(
+    bundle: ReportingBundle,
+    *,
+    cash_bridge_table: dict[str, dict[str, dict[str, float | None]]] | None = None,
+) -> str:
+    """Operational cash bridge for close month — same source as Cash Forecast tab."""
+    as_of = bundle.as_of_period
+    cur = bundle.currency
+    section_lines = _waterfall_section_lines(
+        bundle,
+        f"Cash reconciliation ({as_of}) — operational cash bridge:",
+        "cash_flow",
+        _CASH_BRIDGE_ITEMS,
+    )
+    if len(section_lines) <= 1 and cash_bridge_table:
+        for scenario in ("Actual", "Budget", "Forecast"):
+            period_row = (cash_bridge_table.get(scenario) or {}).get(as_of)
+            if not period_row:
+                continue
+            scenario_lines: list[str] = []
+            seen: set[str] = set()
+            for field, label in _CASH_BRIDGE_TABLE_FIELDS:
+                if label in seen:
+                    continue
+                raw = period_row.get(field)
+                if raw is None and field not in {"beginning_cash", "ending_cash"}:
+                    continue
+                seen.add(label)
+                scenario_lines.append(f"  {label} ({scenario}): {fmt_money(Decimal(str(raw or 0)), cur)}")
+            if scenario_lines:
+                if not section_lines:
+                    section_lines = [f"Cash reconciliation ({as_of}) — operational cash bridge:"]
+                section_lines.extend(scenario_lines)
+
+    if len(section_lines) <= 1:
+        return ""
+
+    beg = _wf(bundle, "cash_flow", "beginning_cash", as_of, "Actual")
+    end = _wf(bundle, "cash_flow", "ending_cash", as_of, "Actual")
+    if beg == 0 and cash_bridge_table:
+        actual_row = (cash_bridge_table.get("Actual") or {}).get(as_of) or {}
+        beg = Decimal(str(actual_row.get("beginning_cash") or 0))
+        end = Decimal(str(actual_row.get("ending_cash") or end))
+    if beg and end:
+        section_lines.append(
+            f"  Reconciliation check: beginning {fmt_money(beg, cur)} → ending {fmt_money(end, cur)} "
+            "(collections and disbursements above should bridge opening to closing)."
+        )
+    return "\n".join(section_lines)
+
+
+def _decimal_amount(value: Any) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
+def _financial_statements_prompt(bundle: ReportingBundle, *, focus_period: str | None = None) -> str:
+    fs = bundle.comparison_financial_statements or bundle.financial_statements
+    if fs is None:
+        return ""
+    detail_period = to_period(focus_period or bundle.as_of_period)
+    cur = bundle.currency
+    lines = [f"Financial statements ({detail_period}):"]
+    for stmt_label, stmt in (
+        ("Income statement", fs.income_statement),
+        ("Balance sheet", fs.balance_sheet),
+        ("Cash flow statement", fs.cash_flow),
+    ):
+        stmt_lines: list[str] = []
+        for row in stmt.rows:
+            if str(row.period)[:7] != detail_period:
+                continue
+            if row.amount == 0:
+                continue
+            stmt_lines.append(f"  {row.line_item} ({row.scenario}): {fmt_money(row.amount, cur)}")
+        if stmt_lines:
+            lines.append(f"  {stmt_label}:")
+            lines.extend(stmt_lines[:24])
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _three_statement_prompt(
+    ts_data: dict[str, Any] | None,
+    as_of: str,
+    cur: str,
+    *,
+    focus_period: str | None = None,
+) -> str:
+    if not ts_data:
+        return ""
+    detail_period = to_period(focus_period or as_of)
+    lines = [f"Three-statement warehouse (detail month {detail_period}):"]
+    for scenario in ("Actual", "Budget", "Forecast"):
+        block = ts_data.get(scenario)
+        if not isinstance(block, dict):
+            continue
+        is_row = (block.get("is") or {}).get(detail_period) or {}
+        bs_row = (block.get("bs") or {}).get(detail_period) or {}
+        cfs_row = (block.get("cfs") or {}).get(detail_period) or {}
+        if not any((is_row, bs_row, cfs_row)):
+            continue
+        lines.append(f"  [{scenario}]")
+        for label, row in (("IS", is_row), ("BS", bs_row), ("CFS", cfs_row)):
+            if not row:
+                continue
+            parts = [
+                f"{key} {fmt_money(_decimal_amount(val), cur)}"
+                for key, val in sorted(row.items())
+                if key != "is_actual" and val not in (None, 0, 0.0)
+            ]
+            if parts:
+                lines.append(f"    {label}: " + "; ".join(parts[:18]))
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _monthly_trends_prompt(bundle: ReportingBundle) -> str:
+    cur = bundle.currency
+    lines = [f"Monthly Actual trends ({bundle.start_period} → {bundle.as_of_period}):"]
+    for period in period_range(bundle.start_period, bundle.as_of_period):
+        ending_arr = _wf(bundle, "arr", "ending", period, "Actual") or _wf(
+            bundle, "arr", "ending_arr", period, "Actual"
+        )
+        ending_cash = _wf(bundle, "cash_flow", "ending_cash", period, "Actual")
+        ending_pipe = _wf(bundle, "pipeline", "ending_pipeline", period, "Actual")
+        net_new = _wf(bundle, "arr", "new_business", period, "Actual") or _wf(
+            bundle, "arr", "new_arr", period, "Actual"
+        )
+        if not any((ending_arr, ending_cash, ending_pipe, net_new)):
+            continue
+        lines.append(
+            f"  {period}: ARR {fmt_money(ending_arr, cur)}; net new {fmt_money(net_new, cur)}; "
+            f"cash {fmt_money(ending_cash, cur)}; pipeline {fmt_money(ending_pipe, cur)}"
+        )
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _headcount_prompt(bundle: ReportingBundle) -> str:
+    as_of = bundle.as_of_period
+    rows = [r for r in bundle.headcount if r.period == as_of]
+    if not rows:
+        return ""
+    lines = [f"Headcount ({as_of}):"]
+    for row in sorted(rows, key=lambda r: (r.scenario, r.department or ""))[:24]:
+        lines.append(
+            f"  {row.department or 'All'} ({row.scenario}): HC {int(row.headcount or 0)}; "
+            f"open roles {int(row.open_roles or 0)}"
+        )
+    return "\n".join(lines)
+
+
+def _marketing_prompt(bundle: ReportingBundle) -> str:
+    mkt = bundle.marketing_comparison
+    if not mkt:
+        return ""
+    as_of = bundle.as_of_period
+    cur = bundle.currency
+    lines = [f"GTM / marketing funnel ({as_of}):"]
+    for row in mkt.actual:
+        if row.period != as_of:
+            continue
+        lines.append(
+            f"  Actual — MQL {int(row.mqls)}; SQL {int(row.sqls)}; SAL {int(row.sals)}; "
+            f"opps created {int(row.opportunities_created)}; pipeline ARR created {fmt_money(row.pipeline_arr_created, cur)}; "
+            f"closed won ARR {fmt_money(row.closed_won_arr, cur)}; spend {fmt_money(row.marketing_spend, cur)}"
+        )
+    for row in mkt.budget:
+        if row.period != as_of:
+            continue
+        lines.append(
+            f"  Budget — MQL {int(row.mqls)}; pipeline ARR created {fmt_money(row.pipeline_arr_created, cur)}; "
+            f"spend {fmt_money(row.marketing_spend, cur)}"
+        )
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def parse_focus_period_from_question(
+    question: str,
+    *,
+    default: str,
+    start_period: str,
+    end_period: str,
+) -> str:
+    """Infer YYYY-MM from the user question when they ask about a prior close month."""
+    default_p = to_period(default)
+    start_p = to_period(start_period)
+    end_p = to_period(end_period)
+    text = question.strip()
+
+    iso = re.search(r"\b(20\d{2})-(0[1-9]|1[0-2])\b", text)
+    if iso:
+        candidate = iso.group(0)
+        if start_p <= candidate <= end_p:
+            return candidate
+
+    for pattern in (
+        r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})\b",
+        r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(20\d{2})\b",
+    ):
+        for match in re.finditer(pattern, text, flags=re.I):
+            month_token = match.group(1).lower().rstrip(".")
+            year = match.group(2)
+            month_num = _MONTH_NAME_TO_NUM.get(month_token) or _MONTH_ABBR_TO_NUM.get(month_token[:3])
+            if not month_num:
+                continue
+            candidate = f"{year}-{month_num:02d}"
+            if start_p <= candidate <= end_p:
+                return candidate
+
+    return default_p
+
+
+def _is_ga_related(row) -> bool:
+    blob = " ".join(
+        str(getattr(row, field, "") or "")
+        for field in ("department", "account", "account_group", "expense_type")
+    ).lower()
+    return any(hint in blob for hint in _GA_DEPT_HINTS)
+
+
+def _monthly_is_opex_prompt(
+    ts_data: dict[str, Any] | None,
+    *,
+    start_period: str,
+    end_period: str,
+    currency: str,
+) -> str:
+    if not ts_data:
+        return ""
+    lines = [f"Monthly income statement — opex & G&A ({start_period} → {end_period}):"]
+    for period in period_range(start_period, end_period):
+        act = ((ts_data.get("Actual") or {}).get("is") or {}).get(period) or {}
+        bud = ((ts_data.get("Budget") or {}).get("is") or {}).get(period) or {}
+        ga_a = _decimal_amount(act.get("ga"))
+        ga_b = _decimal_amount(bud.get("ga"))
+        rev_a = _decimal_amount(act.get("revenue"))
+        rev_b = _decimal_amount(bud.get("revenue"))
+        if not any((ga_a, ga_b, rev_a, rev_b)):
+            continue
+        ga_var = ga_a - ga_b if ga_a and ga_b else None
+        var_txt = f"; G&A variance {fmt_money(ga_var, currency)}" if ga_var is not None else ""
+        lines.append(
+            f"  {period}: revenue actual {fmt_money(rev_a, currency)} vs budget {fmt_money(rev_b, currency)}; "
+            f"G&A actual {fmt_money(ga_a, currency)} vs budget {fmt_money(ga_b, currency)}{var_txt}; "
+            f"SM actual {fmt_money(_decimal_amount(act.get('sm')), currency)} vs budget "
+            f"{fmt_money(_decimal_amount(bud.get('sm')), currency)}; "
+            f"R&D actual {fmt_money(_decimal_amount(act.get('rd')), currency)} vs budget "
+            f"{fmt_money(_decimal_amount(bud.get('rd')), currency)}"
+        )
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def _gl_spend_prompt(bundle: ReportingBundle, *, focus_period: str | None = None) -> str:
+    cur = bundle.currency
+    if not bundle.gl_detail:
+        return ""
+
+    focus = to_period(focus_period or bundle.as_of_period)
+    lines: list[str] = []
+
+    ga_by_period: dict[str, Decimal] = {}
+    for row in bundle.gl_detail:
+        if row.scenario != "Actual" or not row.amount or not _is_ga_related(row):
+            continue
+        ga_by_period[row.period] = ga_by_period.get(row.period, Decimal("0")) + row.amount
+
+    if ga_by_period:
+        lines.append(f"G&A-related GL actuals by month ({bundle.start_period} → {bundle.as_of_period}):")
+        for period in period_range(bundle.start_period, bundle.as_of_period):
+            total = ga_by_period.get(period)
+            if total:
+                lines.append(f"  {period}: {fmt_money(total, cur)}")
+
+    actual_rows = [
+        r
+        for r in bundle.gl_detail
+        if r.period == focus and r.scenario == "Actual" and r.amount != 0
+    ]
+    if actual_rows:
+        actual_rows.sort(key=lambda r: abs(r.amount), reverse=True)
+        lines.append(f"GL actuals detail ({focus}, top lines — use for driver analysis):")
+        for row in actual_rows[:25]:
+            label = row.account or row.account_group or row.expense_type or row.department or "Line"
+            dept = f" / {row.department}" if row.department else ""
+            lines.append(f"  {label}{dept}: {fmt_money(row.amount, cur)}")
+    elif focus != bundle.as_of_period:
+        lines.append(
+            f"GL actuals detail ({focus}): no GL rows in warehouse for this month "
+            "(use Monthly income statement opex lines above for G&A actual vs budget)."
+        )
+
+    return "\n".join(lines)
+
+
+def _pipeline_drilldown_prompt(bundle: ReportingBundle) -> str:
+    if not bundle.pipeline_drilldown:
+        return ""
+    as_of = bundle.as_of_period
+    cur = bundle.currency
+    lines = [f"Pipeline opportunity drilldown ({as_of}):"]
+    for movement, payload in bundle.pipeline_drilldown.items():
+        opps = payload.get("opportunities") or []
+        if not opps:
+            continue
+        lines.append(f"  {movement.replace('_', ' ')}: {len(opps)} opportunities")
+        ranked = sorted(
+            opps,
+            key=lambda o: abs(_decimal_amount(o.get("arr_impact") or o.get("amount") or 0)),
+            reverse=True,
+        )
+        for opp in ranked[:5]:
+            name = opp.get("account_name") or opp.get("name") or opp.get("opportunity_name") or "Opportunity"
+            amt = _decimal_amount(opp.get("arr_impact") or opp.get("amount") or opp.get("pipeline_arr"))
+            if amt:
+                lines.append(f"    - {name}: {fmt_money(amt, cur)}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+def copilot_context_blob(
+    bundle: ReportingBundle,
+    *,
+    cash_bridge_table: dict[str, dict[str, dict[str, float | None]]] | None = None,
+    ts_data: dict[str, Any] | None = None,
+    focus_period: str | None = None,
+    max_chars: int = 32000,
+) -> str:
+    """Full warehouse context for SMPL Copilot Q&A across all board domains."""
+    focus = to_period(focus_period or bundle.as_of_period)
+    sections: list[str] = [
+        metrics_prompt_blob(bundle),
+        _monthly_trends_prompt(bundle),
+        _monthly_is_opex_prompt(
+            ts_data,
+            start_period=bundle.start_period,
+            end_period=bundle.as_of_period,
+            currency=bundle.currency,
+        ),
+        cash_reconciliation_prompt_blob(bundle, cash_bridge_table=cash_bridge_table),
+        "\n".join(
+            _waterfall_section_lines(
+                bundle,
+                f"ARR waterfall ({bundle.as_of_period}):",
+                "arr",
+                _ARR_BRIDGE_ITEMS,
+            )
+        ),
+        "\n".join(
+            _waterfall_section_lines(
+                bundle,
+                f"Pipeline waterfall ({bundle.as_of_period}):",
+                "pipeline",
+                _PIPELINE_ITEMS,
+            )
+        ),
+        "\n".join(
+            _waterfall_section_lines(
+                bundle,
+                f"Deferred revenue / GAAP bridge ({bundle.as_of_period}):",
+                "deferred_revenue",
+                _DEFERRED_ITEMS,
+            )
+        ),
+        _financial_statements_prompt(bundle, focus_period=focus),
+        _three_statement_prompt(
+            ts_data,
+            bundle.as_of_period,
+            bundle.currency,
+            focus_period=focus,
+        ),
+        _headcount_prompt(bundle),
+        _marketing_prompt(bundle),
+        _gl_spend_prompt(bundle, focus_period=focus),
+        _pipeline_drilldown_prompt(bundle),
+    ]
+    if focus != bundle.as_of_period:
+        sections.insert(
+            1,
+            f"Copilot focus month: {focus} (org close month is {bundle.as_of_period}). "
+            "Answer using metrics for the focus month below.",
+        )
+    blob = "\n\n".join(section for section in sections if section and section.strip())
+    if len(blob) <= max_chars:
+        return blob
+    return blob[:max_chars] + "\n\n[Context truncated — prioritize figures above for the question.]"
+
+
+CFO_BOARD_NARRATIVE_SYSTEM = (
+    "You are a seasoned SaaS CFO writing the Executive Takeaway for a board operating review. "
+    "Evidence-only — use exact figures from the metrics provided. "
+    "Write one flowing paragraph (4 sentences): specific dollars and bps; operational drivers (new business, "
+    "expansion, margin, cash timing); one forward-looking risk or normalization; board-ready tone. "
+    "No bullet points. Do not start with 'The data shows.' No generic consulting filler."
+)
+
+
+def enrich_slide_with_ai(
+    bundle: ReportingBundle,
+    slide_key: str,
+    base: SlideCommentary,
+) -> SlideCommentary:
+    """LLM rewrite for a single slide (used by on-demand regenerate)."""
+    settings = get_settings()
+    if not (settings.anthropic_api_key or settings.openai_api_key):
+        return base
+    try:
+        client = build_commentary_llm_client()
+        metrics_blob = metrics_prompt_blob(bundle)
+        slide_label = slide_key.replace("_", " ")
+        prompt = (
+            f"{strategic_context_for_prompt()}\n\n"
+            f"{requirements_prompt_block('board_slide_commentary')}\n\n"
+            f"Board slide: {slide_label}.\n"
+            f"Metrics:\n{metrics_blob}\n\n"
+            "Respond with JSON only: {\"narrative\": \"...\"} — one paragraph, 4 sentences, Commentary B quality.\n"
+            "Example tone: 'June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by "
+            "$0.47M, driven by $1.92M new business and $0.98M expansion...' Use live metrics above, not the example numbers."
+        )
+        raw = client.generate(
+            system_prompt=CFO_BOARD_NARRATIVE_SYSTEM,
+            user_prompt=prompt,
+        )
+        if not isinstance(raw, dict):
+            raise LLMError(f"Claude returned non-JSON response for slide {slide_key}.")
+        narrative = str(raw.get("narrative") or raw.get("what_happened") or "").strip()
+        if not narrative:
+            raise LLMError(f"Claude returned empty narrative for slide {slide_key}.")
+        return SlideCommentary(what_happened=narrative)
+    except LLMError:
+        raise
+    except Exception as exc:
+        raise LLMError(
+            f"Claude commentary failed for {slide_key}: {type(exc).__name__}: {exc}"
+        ) from exc
+
+
 def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCommentary]) -> dict[str, SlideCommentary]:
+    """LLM-enrich every narrative slide (full 17-slide board deck)."""
+    from app.services.reporting.export.board_semantic_mappings import NARRATIVE_SLIDE_ORDER
+
     settings = get_settings()
     if not (settings.anthropic_api_key or settings.openai_api_key):
         return slides
     try:
-        m = build_metrics_snapshot(bundle)
         client = build_commentary_llm_client()
-        metrics_blob = (
-            f"ARR {fmt_money(m.ending_arr, m.currency)}, net new {fmt_money(m.net_new_arr, m.currency)}, "
-            f"pipeline created {fmt_money(m.pipeline_created, m.currency)}, churn {fmt_money(m.churn, m.currency)}, "
-            f"cash {fmt_money(m.cash_actual, m.currency)}."
-        )
+        slide_keys = [k for k in NARRATIVE_SLIDE_ORDER if k in slides]
+        metrics_blob = copilot_context_blob(bundle)[:24000]
+        key_list = ", ".join(slide_keys)
         prompt = (
             f"{strategic_context_for_prompt()}\n\n"
-            f"Period: {bundle.period_label}. Metrics: {metrics_blob}\n"
-            "Write JSON keys executive_summary, gtm_performance, pipeline_health, arr_waterfall, cash_forecast — "
-            "each with what_happened, why_it_happened, favorable, unfavorable, recommended_actions. "
-            "2-3 sentences each. Connect cause→effect→leadership implication. No generic filler."
+            f"{monthly_close_requirements_prompt()}\n\n"
+            f"{requirements_prompt_block('mda_deck_pptx')}\n\n"
+            f"Period: {bundle.period_label} ({bundle.as_of_period}). "
+            f"Organization: {bundle.organization_name or 'SMPL'}.\n\n"
+            f"Live metrics:\n{metrics_blob}\n\n"
+            f"Write JSON with one object per slide key ({key_list}). "
+            "Each slide object must include what_happened, why_it_happened, favorable, "
+            "unfavorable, recommended_actions — 2-3 evidence-based sentences each. "
+            "Connect cause→effect→leadership implication. No generic filler."
         )
         raw = client.generate(
-            system_prompt="You are a SaaS CFO writing a board operating review. Evidence-only.",
+            system_prompt=(
+                "You are a SaaS CFO writing a board operating review deck. "
+                "Evidence-only — cite exact figures from the metrics provided."
+            ),
             user_prompt=prompt,
         )
-        for key in raw:
-            if key not in slides or not isinstance(raw[key], dict):
+        if not isinstance(raw, dict):
+            return slides
+        for key in slide_keys:
+            block = raw.get(key)
+            if not isinstance(block, dict):
                 continue
-            block = raw[key]
             sc = slides[key]
             slides[key] = SlideCommentary(
-                what_happened=str(block.get("what_happened", sc.what_happened)),
-                why_it_happened=str(block.get("why_it_happened", sc.why_it_happened)),
-                favorable=str(block.get("favorable", sc.favorable)),
-                unfavorable=str(block.get("unfavorable", sc.unfavorable)),
-                recommended_actions=str(block.get("recommended_actions", sc.recommended_actions)),
-                leadership_watch=sc.leadership_watch,
-                impact=sc.impact,
+                what_happened=str(block.get("what_happened") or sc.what_happened or "").strip(),
+                why_it_happened=str(block.get("why_it_happened") or sc.why_it_happened or "").strip(),
+                favorable=str(block.get("favorable") or sc.favorable or "").strip(),
+                unfavorable=str(block.get("unfavorable") or sc.unfavorable or "").strip(),
+                recommended_actions=str(
+                    block.get("recommended_actions") or sc.recommended_actions or ""
+                ).strip(),
+                leadership_watch=str(block.get("leadership_watch") or sc.leadership_watch or "").strip(),
+                impact=str(block.get("impact") or sc.impact or "").strip(),
             )
     except Exception:
         pass
