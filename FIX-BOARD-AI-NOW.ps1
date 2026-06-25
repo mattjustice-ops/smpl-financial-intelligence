@@ -17,7 +17,7 @@ git add `
 
 $staged = git diff --cached --name-only
 if ($staged) {
-  git commit -m "fix: route board Claude AI directly to Railway (bypass Vercel upstream errors)"
+  git commit -m "fix: board Claude uses same-origin proxy (fix Failed to fetch CORS)"
 }
 git push origin main
 git log -1 --oneline

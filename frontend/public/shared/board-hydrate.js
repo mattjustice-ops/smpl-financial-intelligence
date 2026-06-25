@@ -235,35 +235,16 @@
     return sessionOrgs ? pickAccessibleOrgId(null, sessionOrgs) : null;
   }
 
-  var _boardAiApiBasePromise = null;
-
-  async function boardAiApiBase() {
+  /** Same-origin Next proxy on prod (session + X-SFI-User-Id). Direct Railway only on localhost. */
+  async function boardLiveApiBase() {
     var host = global.location && global.location.hostname;
     if (host === "localhost" || host === "127.0.0.1") {
       return "http://127.0.0.1:8001";
     }
-    if (global.SMPL_LONG_RUNNING_API_BASE) {
-      return global.SMPL_LONG_RUNNING_API_BASE;
-    }
-    if (!_boardAiApiBasePromise) {
-      _boardAiApiBasePromise = fetch("/api/smpl/board-config", { cache: "no-store", credentials: "include" })
-        .then(function (res) {
-          if (!res.ok) return "";
-          return res.json();
-        })
-        .then(function (j) {
-          var base = j && j.longRunningApiBase ? String(j.longRunningApiBase).replace(/\/$/, "") : "";
-          if (base) global.SMPL_LONG_RUNNING_API_BASE = base;
-          return base;
-        })
-        .catch(function () {
-          return "";
-        });
-    }
-    return _boardAiApiBasePromise;
+    return "";
   }
 
-  function boardAiFetchInit(apiBase, init) {
+  function boardLiveFetchInit(apiBase, init) {
     var opts = Object.assign({}, init || {});
     if (apiBase) {
       opts.credentials = "omit";
@@ -274,7 +255,7 @@
     return opts;
   }
 
-  function boardAiUrl(apiBase, path) {
+  function boardLiveUrl(apiBase, path) {
     return (apiBase || "") + path;
   }
 
@@ -298,6 +279,12 @@
         "Request timed out after " +
         secs +
         "s. Claude exports can take several minutes — confirm Railway API is healthy and ANTHROPIC_API_KEY is set, then retry."
+      );
+    }
+    if (err.message === "Failed to fetch" || (err.message && err.message.indexOf("NetworkError") >= 0)) {
+      return (
+        "Network error reaching the API. Stay on /app/board (signed in), hard refresh, and retry. " +
+        "If exports time out, confirm SFI_BACKEND_URL on Vercel points to Railway."
       );
     }
     return err.message ? err.message : String(err);
@@ -513,13 +500,13 @@
 
       if (orgId) {
         try {
-          var apiBase = await boardAiApiBase();
+          var apiBase = await boardLiveApiBase();
           var res = await boardFetchWithTimeout(
-            boardAiUrl(
+            boardLiveUrl(
               apiBase,
               "/api/v1/board-platform/commentary/regenerate?organization_id=" + encodeURIComponent(orgId),
             ),
-            boardAiFetchInit(apiBase, {
+            boardLiveFetchInit(apiBase, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ slide_key: apiSlideKey }),
@@ -616,13 +603,13 @@
       }
 
       try {
-        var cpApiBase = await boardAiApiBase();
+        var cpApiBase = await boardLiveApiBase();
         var res = await boardFetchWithTimeout(
-          boardAiUrl(
+          boardLiveUrl(
             cpApiBase,
             "/api/v1/board-platform/copilot?organization_id=" + encodeURIComponent(orgId),
           ),
-          boardAiFetchInit(cpApiBase, {
+          boardLiveFetchInit(cpApiBase, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question: q }),
@@ -816,7 +803,7 @@
   }
 
   function boardExportApiBase() {
-    return boardAiApiBase();
+    return boardLiveApiBase();
   }
 
   async function openLiveBoardExport(format) {
@@ -858,10 +845,10 @@
 
     try {
       var exportBase = await boardExportApiBase();
-      var exportUrl = boardAiUrl(exportBase, exportSpec.path) + "?" + params.toString();
+      var exportUrl = boardLiveUrl(exportBase, exportSpec.path) + "?" + params.toString();
       var res = await boardFetchWithTimeout(
         exportUrl,
-        boardAiFetchInit(exportBase, { method: "GET", cache: "no-store" }),
+        boardLiveFetchInit(exportBase, { method: "GET", cache: "no-store" }),
         295000,
       );
       if (!res.ok) {
