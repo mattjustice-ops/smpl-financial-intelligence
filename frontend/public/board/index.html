@@ -1,4 +1,4 @@
-<!-- SMPL_LIVE_BOARD v1 -->
+<!-- SMPL_LIVE_BOARD v2 demo-ready May 2026 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -525,6 +525,14 @@ const vSign = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'pos':'neg';
 
 function destroyCharts() { Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}}); charts={}; }
 
+/** Executive summary KPI cards → primary nav tabs */
+function boardExecNav(tab) {
+  const btn = Array.from(document.querySelectorAll('.nav-btn')).find(function (b) {
+    return (b.getAttribute('onclick') || '').indexOf("show('" + tab + "'") >= 0;
+  });
+  show(tab, btn || null);
+}
+
 function show(name, btn) {
   if (typeof boardRefreshAllSeries === 'function') boardRefreshAllSeries();
   if (typeof boardValidate === 'function') {
@@ -587,10 +595,10 @@ function renderExec(area) {
 
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px">
     ${[
-      {lbl:'Ending ARR',     val:fM1(k.arrEop),   delta:arrVarLbl, dir:k.arrVar>=0?'pos':'neg', because:'Best net new ARR month of H1 — new logos + expansion both beat plan', link:'View waterfall →'},
-      {lbl:'Net New ARR',    val:nnRoot,          delta:nnVarLbl, dir:k.nnVar>=0?'pos':'neg', because:'New business '+fM1(drivers[0]?.val)+' and expansion '+fM1(drivers[1]?.val)+' drove outperformance', link:'View driver tree →'},
-      {lbl:'EBITDA',         val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:(k.ebitdaAct-k.ebitdaBud)<0?'neg':'pos', because:'Q2 variable comp accrual timing — underlying operating leverage is intact; normalizes Q3', link:'View P&L →'},
-      {lbl:'Cash Balance',   val:fM1(k.cashAct),  delta:cashVarLbl, dir:(k.cashAct-k.cashBud)>=0?'pos':'neg', because:'Annual billing collection cycle front-loaded; favorable variance reflects billing structure', link:'View cash →'},
+      {lbl:'Ending ARR',     val:fM1(k.arrEop),   delta:arrVarLbl, dir:k.arrVar>=0?'pos':'neg', because:'Best net new ARR month of H1 — new logos + expansion both beat plan', link:'View waterfall →', tab:'arr'},
+      {lbl:'Net New ARR',    val:nnRoot,          delta:nnVarLbl, dir:k.nnVar>=0?'pos':'neg', because:'New business '+fM1(drivers[0]?.val)+' and expansion '+fM1(drivers[1]?.val)+' drove outperformance', link:'View driver tree →', tab:'arr'},
+      {lbl:'EBITDA',         val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:(k.ebitdaAct-k.ebitdaBud)<0?'neg':'pos', because:'Q2 variable comp accrual timing — underlying operating leverage is intact; normalizes Q3', link:'View P&L →', tab:'pl'},
+      {lbl:'Cash Balance',   val:fM1(k.cashAct),  delta:cashVarLbl, dir:(k.cashAct-k.cashBud)>=0?'pos':'neg', because:'Annual billing collection cycle front-loaded; favorable variance reflects billing structure', link:'View cash →', tab:'cash'},
     ].map(h=>`
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px">
       <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.lbl}</div>
@@ -600,7 +608,7 @@ function renderExec(area) {
       </div>
       <div style="font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--text);line-height:1">${h.val}</div>
       <div style="font-size:10px;color:var(--text3);line-height:1.5;border-top:0.5px solid var(--border);padding-top:7px;margin-top:2px">${h.because}</div>
-      <div style="font-size:10px;color:var(--accent);cursor:pointer;font-weight:500">${h.link}</div>
+      <div style="font-size:10px;color:var(--accent);cursor:pointer;font-weight:500" onclick="boardExecNav('${h.tab}')" role="link" tabindex="0">${h.link}</div>
     </div>`).join('')}
   </div>
 
@@ -1633,20 +1641,7 @@ const AI_CTX = {
   risks:`Key risks: EBITDA -$1.08M vs budget (Q2 variable comp timing — monitor Q3 normalization); Paid Search $429K at sub-2x efficiency; SMB concentration 78% of gross churn creates GRR risk; pipeline coverage 3.3x adequate but below May 4.5x peak — needs Q3 pipeline acceleration. Opportunities: gross margin expansion 220bps above budget; NRR improvement to 100.8%; Partner + Organic channels at 2.3-2.6x efficiency warrant budget reallocation from Paid Search.`,
 };
 
-async function aiComm(slideKey, targetId) {
-  if(aiCache[slideKey]){document.getElementById(targetId).querySelector('.commentary-text').textContent=aiCache[slideKey];return;}
-  const el=document.getElementById(targetId); if(!el) return;
-  const txt=el.querySelector('.commentary-text');
-  txt.innerHTML='<span class="spin"></span> Generating AI commentary...';
-  const prompt=`You are a CFO presenting to the board of a B2B SaaS company. Write 3-4 sentences of executive commentary for the ${slideKey} section. Rules: be specific (use exact numbers), explain the operational driver (WHY not just WHAT), include one forward-looking statement or risk, sound like a seasoned CFO not a report generator. Do NOT start with "The data shows." Do NOT use bullet points. Data context: ${AI_CTX[slideKey]}`;
-  try {
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
-    const data=await res.json();
-    const text=data.content?.map(b=>b.text||'').join('')||'Commentary unavailable.';
-    txt.textContent=text; aiCache[slideKey]=text;
-  } catch(e){ txt.textContent='Unable to connect to AI commentary — static commentary displayed above. Connect to Anthropic API to enable regeneration.'; }
-}
-window.aiComm = aiComm;
+window.AI_CTX = AI_CTX;
 
 const BOARD_EXPORTS = {
   boardReview: '/board/exports/SMPL_Board_Review_Q2_2026.pptx',
@@ -1658,12 +1653,28 @@ function openBoardExport(url, label) {
   if (!opened) window.location.assign(url);
 }
 
-function openMdaDeck() {
-  openBoardExport(BOARD_EXPORTS.boardReview, 'MD&A Deck');
+async function openMdaDeck() {
+  if (window.SMPLBoardLive && typeof window.SMPLBoardLive.openBoardExport === "function") {
+    var live = await window.SMPLBoardLive.openBoardExport("pptx");
+    if (live === "ok") return;
+    if (live === "no-org") {
+      openBoardExport(BOARD_EXPORTS.boardReview, "MD&A Deck");
+    }
+    return;
+  }
+  openBoardExport(BOARD_EXPORTS.boardReview, "MD&A Deck");
 }
 
-function openVarianceCommentary() {
-  openBoardExport(BOARD_EXPORTS.mdaPackage, 'Variance Commentary');
+async function openVarianceCommentary() {
+  if (window.SMPLBoardLive && typeof window.SMPLBoardLive.openBoardExport === "function") {
+    var live = await window.SMPLBoardLive.openBoardExport("xlsx");
+    if (live === "ok") return;
+    if (live === "no-org") {
+      openBoardExport(BOARD_EXPORTS.mdaPackage, "Variance Commentary");
+    }
+    return;
+  }
+  openBoardExport(BOARD_EXPORTS.mdaPackage, "Variance Commentary");
 }
 
 function renderThreeStmt(area) {
@@ -3151,7 +3162,7 @@ async function cpSend() {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1000,
         system: CP_SYSTEM,
         messages: cpHistory
@@ -3413,7 +3424,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=9"></script>
+<script src="/shared/board-hydrate.js?v=19"></script>
 
 </body>
 </html>
