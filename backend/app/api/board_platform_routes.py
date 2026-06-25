@@ -20,7 +20,7 @@ from app.services.reporting.export.board_commentary_service import (
     enrich_slide_with_ai,
     parse_focus_period_from_question,
 )
-from app.services.reporting.export.data_collector import collect_reporting_bundle
+from app.services.reporting.export.data_collector import collect_board_platform_bundle, collect_reporting_bundle
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
 from app.services.reporting.export.export_sheet_registry import requirements_prompt_block
 from app.services.reporting.three_statement_payload import build_cash_bridge_data, build_ts_data
@@ -102,13 +102,14 @@ def regenerate_slide_commentary(
 
     token = bind_as_of_period(as_of)
     try:
-        bundle = collect_reporting_bundle(
+        bundle = collect_board_platform_bundle(
             db,
             organization_id,
             scenario="Combined",
             start_period=start_period,
             end_period=end_period,
             as_of_period=as_of,
+            include_validation=False,
         )
     finally:
         reset_as_of_period(token)
@@ -121,10 +122,7 @@ def regenerate_slide_commentary(
     if slide_key not in allowed:
         raise HTTPException(status_code=404, detail=f"Unknown slide key: {body.slide_key}")
     base = build_slide_commentary(bundle, slide_key)
-    try:
-        slide = enrich_slide_with_ai(bundle, slide_key, base)
-    except LLMError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    slide = enrich_slide_with_ai(bundle, slide_key, base)
     if slide.what_happened and not slide.recommended_actions and not slide.leadership_watch:
         narrative = slide.what_happened
     else:

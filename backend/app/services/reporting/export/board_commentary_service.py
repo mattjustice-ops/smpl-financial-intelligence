@@ -10,7 +10,7 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.services.board_package.package import fmt_money
-from app.services.commentary.llm_factory import build_commentary_llm_client, LLMError
+from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.reporting.export.board_chart_service import _wf
 from app.services.reporting.export.board_metrics_snapshot import BoardMetricsSnapshot, build_metrics_snapshot
 from app.services.reporting.export.company_context import strategic_context_for_prompt
@@ -831,17 +831,13 @@ def enrich_slide_with_ai(
             user_prompt=prompt,
         )
         if not isinstance(raw, dict):
-            raise LLMError(f"Claude returned non-JSON response for slide {slide_key}.")
+            return base
         narrative = str(raw.get("narrative") or raw.get("what_happened") or "").strip()
         if not narrative:
-            raise LLMError(f"Claude returned empty narrative for slide {slide_key}.")
+            return base
         return SlideCommentary(what_happened=narrative)
-    except LLMError:
-        raise
-    except Exception as exc:
-        raise LLMError(
-            f"Claude commentary failed for {slide_key}: {type(exc).__name__}: {exc}"
-        ) from exc
+    except Exception:
+        return base
 
 
 def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCommentary]) -> dict[str, SlideCommentary]:

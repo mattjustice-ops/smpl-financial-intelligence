@@ -236,7 +236,7 @@
   }
 
   function boardFetchWithTimeout(url, init, timeoutMs) {
-    timeoutMs = timeoutMs == null ? 280000 : timeoutMs;
+    timeoutMs = timeoutMs == null ? 295000 : timeoutMs;
     var controller = new AbortController();
     var timer = setTimeout(function () {
       controller.abort("board-request-timeout");
@@ -250,7 +250,7 @@
   function boardFetchErrorMessage(err, timeoutMs) {
     if (!err) return "Request failed.";
     if (err === "board-request-timeout" || err.name === "AbortError") {
-      var secs = Math.round((timeoutMs || 280000) / 1000);
+      var secs = Math.round((timeoutMs || 295000) / 1000);
       return (
         "Request timed out after " +
         secs +
@@ -472,7 +472,7 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ slide_key: apiSlideKey }),
             },
-            280000,
+            295000,
           );
           if (res.ok) {
             var data = await res.json();
@@ -495,7 +495,7 @@
           lastApiStatus = res.status;
         } catch (err) {
           if (orgId) {
-            txt.textContent = "Commentary request failed: " + boardFetchErrorMessage(err, 280000);
+            txt.textContent = "Commentary request failed: " + boardFetchErrorMessage(err, 295000);
             return;
           }
         }
@@ -572,7 +572,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question: q }),
           },
-          280000,
+          295000,
         );
         if (!res.ok) {
           var errText = await boardApiErrorMessage(res);
@@ -604,7 +604,7 @@
         if (failEl) {
           failEl.outerHTML =
             '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble" style="color:var(--red)">' +
-            boardFetchErrorMessage(err, 280000).replace(/</g, "&lt;") +
+            boardFetchErrorMessage(err, 295000).replace(/</g, "&lt;") +
             "</div></div>";
         }
       }
@@ -811,7 +811,7 @@
       var res = await boardFetchWithTimeout(
         exportUrl,
         { method: "GET", credentials: exportBase ? "omit" : "include", cache: "no-store" },
-        300000,
+        295000,
       );
       if (!res.ok) {
         var errText = await boardApiErrorMessage(res);
@@ -834,7 +834,7 @@
       alert(
         exportSpec.label +
           " export failed: " +
-          boardFetchErrorMessage(err, 300000),
+          boardFetchErrorMessage(err, 295000),
       );
       return "error";
     }
