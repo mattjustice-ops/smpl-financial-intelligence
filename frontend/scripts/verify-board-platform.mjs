@@ -140,6 +140,7 @@ const checks = [
   ["HTML MO12 on window", boardHtml.includes("window.MO12 = MO12"), true],
   ["HTML territory basemap loader", boardHtml.includes("us_emea_basemap.svg"), true],
   ["HTML territory verified pin XY", boardHtml.includes("SALES_TERRITORY_PIN_XY"), true],
+  ["HTML exec summary nav links wired", boardHtml.includes("function boardExecNav") && boardHtml.includes("onclick=\"boardExecNav("), true],
   ["territory basemap asset exists", fs.existsSync(path.join(__dirname, "../public/board/us_emea_basemap.svg")), true],
   ["canonical reset script", fs.existsSync(path.join(__dirname, "reset-platform.mjs")), true],
   ["package reset:platform script", fs.readFileSync(path.join(__dirname, "../package.json"), "utf8").includes('"reset:platform"'), true],

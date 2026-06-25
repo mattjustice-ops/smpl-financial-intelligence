@@ -26,6 +26,9 @@ const PLATFORM_FILES = [
   { rel: "shared/smpl-skin.js" },
   { rel: "shared/smpl-outlook.js" },
   { rel: "shared/smpl-demo-seed.js" },
+  { rel: "shared/smpl-pipeline.js" },
+  { rel: "shared/smpl-bootstrap-demo.js" },
+  { rel: "shared/smpl-bootstrap-pipeline.js" },
 ];
 
 function log(msg) {
@@ -73,7 +76,7 @@ function writeManifest() {
   const boardHtml = readFileSync(canonicalPath("board/index.html"), "utf8");
   const forecastHtml = readFileSync(canonicalPath("forecast-engine/index.html"), "utf8");
   const manifest = {
-    label: "June 2026 corrected platform baseline",
+    label: "May 2026 demo-ready platform baseline (Board + Forecast Engine)",
     updated: new Date().toISOString().slice(0, 10),
     boardMarker: (boardHtml.match(/<!--\s*(SMPL_LIVE_BOARD[^>]*)\s*-->/) || [])[1] || "SMPL_LIVE_BOARD v1",
     forecastMarker: (forecastHtml.match(/<!--\s*(forecast-engine stability[^\n>]*)\s*-->/) || [])[1] || "forecast-engine stability",

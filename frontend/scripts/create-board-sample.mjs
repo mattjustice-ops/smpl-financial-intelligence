@@ -9,9 +9,13 @@ const publicDir = join(root, "public", "board-sample");
 const publicPath = join(publicDir, "index.html");
 const canonicalDir = join(root, "canonical", "board-sample");
 const canonicalPath = join(canonicalDir, "index.html");
+const canonicalRawPath = join(canonicalDir, "SMPL_Board_Platform_June2026.html");
 
 const sources = [
   process.env.SMPL_BOARD_SAMPLE_SRC?.trim(),
+  "C:\\Users\\mattj\\Downloads\\SMPL_Board_Platform_June2026 (6).html",
+  join(process.env.USERPROFILE || "", "Downloads", "SMPL_Board_Platform_June2026 (6).html"),
+  canonicalRawPath,
   canonicalPath,
   publicPath,
   "C:\\Users\\mattj\\Downloads\\SMPL_Board_Platform_June2026 (10).html",
@@ -38,6 +42,7 @@ if (src) {
   const raw = readFileSync(src, "utf-8");
   const html = patchBoardSampleHtml(raw);
 
+  writeFileSync(canonicalRawPath, raw, "utf-8");
   writeFileSync(publicPath, html, "utf-8");
   writeFileSync(canonicalPath, html, "utf-8");
 

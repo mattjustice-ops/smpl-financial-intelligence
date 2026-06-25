@@ -5,87 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SMPL · Board sample · June 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* ── Skin tokens — overwritten by applySkin() at runtime ── */
-  --bg:      #18241b;
-  --bg2:     #233326cc;
-  --bg3:     #2b3c2e;
-  --panel:   #233326cc;
-  --text:    #dde8d6;
-  --text2:   #aab8a2;
-  --text3:   #72826a;
-  --border:  #2e3f31;
-  --border2: rgba(56,75,60,0.25);
-  --accent:  #c4855a;
-  --teal:    #5fa878;
-  --red:     #b8705f;
-  --amber:   #b89060;
-  --navy:    #23332699;
-  --blue:    #5fa878;
-  --teal-light: rgba(95,168,120,0.12);
-  --red-light:  rgba(184,112,95,0.1);
-  --amber-light:rgba(184,144,96,0.1);
-  --green:   #5fa878;
-  --green-light: rgba(95,168,120,0.1);
-  --gray:    #72826a;
-  --lgray:   #2e3f31;
-  --shadow:  0 1px 2px rgba(0,0,0,0.25), 0 12px 32px -8px rgba(0,0,0,0.35);
-  --r:  12px;
-  --r2: 18px;
-  --font: 'Inter', -apple-system, 'Segoe UI', sans-serif;
-  --mono: 'Inter', -apple-system, sans-serif;
-  --serif: 'Inter', -apple-system, sans-serif;
+  --bg: #ffffff; --bg2: #f8fafc; --bg3: #f1f5f9;
+  --text: #0f172a; --text2: #475569; --text3: #94a3b8;
+  --border: rgba(15,23,42,0.1); --border2: rgba(15,23,42,0.18);
+  --teal: #1D9E75; --teal-light: rgba(29,158,117,0.1);
+  --navy: #1a2e44; --blue: #185FA5;
+  --red: #D85A30; --red-light: rgba(216,90,48,0.08);
+  --amber: #BA7517; --amber-light: rgba(186,117,23,0.1);
+  --green: #1D9E75; --green-light: rgba(29,158,117,0.08);
+  --gray: #888780; --lgray: #e2e8f0;
+  --r: 6px; --r2: 10px;
+  --mono: 'DM Mono', monospace;
+  --serif: 'Fraunces', serif;
+  --teal: #1D9E75;
+  --red: #D85A30;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; transition: background 0.25s, color 0.25s; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 /* TOPBAR */
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 13px 24px; border-bottom: 0.5px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px); transition: background 0.25s, border-color 0.25s; }
-.logo { font-family: var(--font); font-size: 16px; font-weight: 600; letter-spacing: -0.4px; color: var(--text); }
-.logo span { font-weight: 300; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 13px 24px; border-bottom: 0.5px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 100; }
+.logo { font-family: var(--serif); font-size: 17px; font-weight: 300; letter-spacing: -0.3px; }
+.logo em { font-style: italic; color: var(--text2); }
 .period-badge { font-family: var(--mono); font-size: 11px; color: var(--text2); background: var(--bg2); padding: 4px 12px; border-radius: 20px; border: 0.5px solid var(--border); }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
-.ai-global-btn { font-size: 11px; padding: 5px 12px; border: 0.5px solid var(--border); border-radius: 20px; background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 5px; transition: all .15s; font-family: var(--font); }
+.ai-global-btn { font-size: 11px; padding: 5px 12px; border: 0.5px solid var(--border2); border-radius: 20px; background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 5px; transition: all .15s; }
 .ai-global-btn:hover { background: var(--bg2); color: var(--text); }
-/* SKIN SWITCHER */
-.skin-select { font-family: var(--font); font-size: 11px; font-weight: 500; padding: 5px 10px; border: 0.5px solid var(--border); border-radius: 20px; background: var(--bg2); color: var(--text2); cursor: pointer; outline: none; transition: all .15s; }
-.skin-select:hover { color: var(--text); }
-.skin-select option { background: #1a1a1a; color: #eee; }
 /* NAV */
-.nav { display: flex; padding: 0 24px; border-bottom: 0.5px solid var(--border); overflow-x: auto; background: var(--bg); transition: background 0.25s, border-color 0.25s; }
-.nav-btn { padding: 11px 16px; font-size: 12px; color: var(--text3); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .15s; font-family: var(--font); letter-spacing: 0.01em; }
-.nav-btn:hover:not(.active) { color: var(--text2); }
-.nav-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.nav { display: flex; padding: 0 24px; border-bottom: 0.5px solid var(--border); overflow-x: auto; background: var(--bg); }
+.nav-btn { padding: 11px 16px; font-size: 12px; color: var(--text2); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .15s; font-family: inherit; }
+.nav-btn:hover:not(.active) { color: var(--text); }
+.nav-btn.active { color: var(--text); border-bottom-color: var(--navy); font-weight: 500; }
 /* SLIDE */
 .slide { padding: 22px 24px; max-width: 100%; }
-.slide-title { font-family: var(--font); font-size: 20px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); margin-bottom: 3px; }
-.slide-sub { font-size: 11.5px; color: var(--text3); margin-bottom: 18px; font-weight: 400; }
+.slide-title { font-family: var(--serif); font-size: 20px; font-weight: 300; font-style: italic; color: var(--text); margin-bottom: 3px; }
+.slide-sub { font-size: 11.5px; color: var(--text2); margin-bottom: 18px; }
 /* KPI STRIP */
 .kpi-strip { display: grid; gap: 10px; margin-bottom: 18px; }
 .kpi-strip-5 { grid-template-columns: repeat(5,1fr); }
 .kpi-strip-4 { grid-template-columns: repeat(4,1fr); }
 .kpi-strip-6 { grid-template-columns: repeat(6,1fr); }
-.kpi { background: var(--bg2); border-radius: var(--r2); padding: 14px 16px; border: 0.5px solid var(--border); box-shadow: var(--shadow); transition: background 0.25s, border-color 0.25s; }
-.kpi-lbl { font-size: 9.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; font-weight: 500; }
-.kpi-val { font-size: 22px; font-weight: 600; font-family: var(--font); line-height: 1; color: var(--text); letter-spacing: -0.5px; }
-.kpi-delta { font-size: 10px; margin-top: 5px; font-family: var(--font); }
+.kpi { background: var(--bg2); border-radius: var(--r); padding: 11px 13px; }
+.kpi-lbl { font-size: 9.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.kpi-val { font-size: 20px; font-weight: 500; font-family: var(--mono); line-height: 1; color: var(--text); }
+.kpi-delta { font-size: 10px; margin-top: 4px; font-family: var(--mono); }
 .pos { color: var(--teal); } .neg { color: var(--red); } .neu { color: var(--text3); }
 /* GRID LAYOUTS */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .chart-wrap { position: relative; }
 /* CARDS */
-.card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--r2); padding: 16px 18px; box-shadow: var(--shadow); transition: background 0.25s, border-color 0.25s; }
-.card-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; letter-spacing: -0.1px; }
-.card-sub { font-size: 10px; color: var(--text3); margin-bottom: 12px; }
+.card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--r2); padding: 14px 16px; }
+.card-title { font-size: 11.5px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
+.card-sub { font-size: 10px; color: var(--text3); margin-bottom: 11px; }
 /* COMMENTARY */
-.commentary { background: var(--bg2); border-radius: var(--r); padding: 14px 16px; margin-top: 14px; border-left: 2.5px solid var(--accent); box-shadow: var(--shadow); transition: all 0.25s; }
+.commentary { background: var(--bg2); border-radius: var(--r); padding: 13px 15px; margin-top: 14px; border-left: 2.5px solid var(--teal); }
 .commentary.risk { border-left-color: var(--red); }
-.commentary-lbl { font-size: 9.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; font-weight: 500; }
-.commentary-text { font-size: 12px; color: var(--text2); line-height: 1.7; }
-.ai-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 6px 13px; border: 0.5px solid var(--border); background: var(--bg2); color: var(--text2); border-radius: 20px; cursor: pointer; margin-top: 9px; transition: all .15s; font-family: var(--font); }
-.ai-btn:hover { background: var(--bg3); color: var(--text); }
+.commentary-lbl { font-size: 9.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+.commentary-text { font-size: 12px; color: var(--text2); line-height: 1.65; }
+.ai-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 5px 11px; border: 0.5px solid var(--border2); background: var(--bg); color: var(--text2); border-radius: 20px; cursor: pointer; margin-top: 9px; transition: all .15s; font-family: inherit; }
+.ai-btn:hover { background: var(--bg2); color: var(--text); }
 .spin { display: inline-block; width: 10px; height: 10px; border: 1.5px solid var(--border2); border-top-color: var(--text); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* VARIANCE ROWS */
@@ -140,14 +121,14 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .pl-expand { display: inline-block; width: 14px; font-size: 9px; opacity: .45; }
 /* DEPT TABS */
 .dtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-.dtab { font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 0.5px solid var(--border); cursor: pointer; background: none; color: var(--text2); font-family: var(--font); transition: all .15s; }
+.dtab { font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 0.5px solid var(--border); cursor: pointer; background: none; color: var(--text2); font-family: inherit; transition: all .15s; }
 .dtab:hover { background: var(--bg2); }
-.dtab.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.dtab.on { background: var(--text); color: var(--bg); border-color: var(--text); }
 /* FOOTER */
-.footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; border-top: 0.5px solid var(--border); margin-top: 6px; background: var(--bg); transition: background 0.25s, border-color 0.25s; }
+.footer { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; border-top: 0.5px solid var(--border); margin-top: 6px; }
 .footer-note { font-size: 10px; color: var(--text3); }
 .export-btns { display: flex; gap: 8px; }
-.exp-btn { font-size: 11px; padding: 5px 10px; border: 0.5px solid var(--border); border-radius: var(--r); background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 4px; font-family: var(--font); transition: all .15s; }
+.exp-btn { font-size: 11px; padding: 5px 10px; border: 0.5px solid var(--border); border-radius: var(--r); background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 4px; font-family: inherit; transition: all .15s; }
 .exp-btn:hover { background: var(--bg2); }
 /* LEGEND */
 .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -158,12 +139,12 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .vneu { color: var(--text3); }
 /* PL SUB NAV */
 .subnav { display: flex; gap: 6px; margin-bottom: 14px; }
-.snav-btn { font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 0.5px solid var(--border); cursor: pointer; background: none; color: var(--text2); font-family: var(--font); transition: all .15s; }
-.snav-btn.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.snav-btn { font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 0.5px solid var(--border); cursor: pointer; background: none; color: var(--text2); font-family: inherit; transition: all .15s; }
+.snav-btn.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 
 .wf-tab-bar{display:flex;gap:4px;margin-bottom:14px}
-.wf-tab{font-size:11px;padding:4px 11px;border-radius:20px;border:0.5px solid var(--border);cursor:pointer;background:none;color:var(--text2);font-family:var(--font);transition:all .15s}
-.wf-tab.on{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.wf-tab{font-size:11px;padding:4px 11px;border-radius:20px;border:0.5px solid var(--border);cursor:pointer;background:none;color:var(--text2);font-family:inherit;transition:all .15s}
+.wf-tab.on{background:var(--navy);color:#fff;border-color:var(--navy)}
 .roster-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
 .roster-tbl th{padding:4px 8px;font-size:9px;font-weight:500;color:var(--text3);border-bottom:0.5px solid var(--border2);text-align:right;white-space:nowrap}
 .roster-tbl th:first-child{text-align:left}
@@ -179,32 +160,32 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .sc-stat-lbl{color:var(--text2)}.sc-stat-val{font-family:var(--mono);font-size:10.5px}
 
 /* ── COPILOT ─────────────────────────────────────────────────────────────── */
-.copilot-btn { color: var(--accent) !important; font-weight: 500; }
-.copilot-btn.active { border-bottom-color: var(--accent) !important; }
+.copilot-btn { color: var(--teal) !important; font-weight: 500; }
+.copilot-btn.active { border-bottom-color: var(--teal) !important; }
 .cp-container { display: flex; flex-direction: column; height: calc(100vh - 160px); }
 .cp-messages { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 12px; }
 .cp-msg { display: flex; gap: 10px; align-items: flex-start; }
 .cp-msg.user { flex-direction: row-reverse; }
 .cp-bubble { max-width: 75%; padding: 11px 14px; border-radius: 12px; font-size: 12.5px; line-height: 1.55; }
-.cp-msg.user .cp-bubble { background: var(--accent); color: var(--bg); border-radius: 12px 12px 2px 12px; }
+.cp-msg.user .cp-bubble { background: var(--navy); color: #fff; border-radius: 12px 12px 2px 12px; }
 .cp-msg.assistant .cp-bubble { background: var(--bg2); color: var(--text); border: 0.5px solid var(--border); border-radius: 12px 12px 12px 2px; }
 .cp-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; margin-top: 2px; }
-.cp-msg.user .cp-avatar { background: var(--accent); color: var(--bg); }
-.cp-msg.assistant .cp-avatar { background: var(--teal); color: var(--bg); font-size: 10px; }
+.cp-msg.user .cp-avatar { background: var(--navy); color: #fff; }
+.cp-msg.assistant .cp-avatar { background: var(--teal); color: #fff; font-size: 10px; }
 .cp-input-row { display: flex; gap: 8px; padding: 12px 0 0; border-top: 0.5px solid var(--border); }
-.cp-input { flex: 1; padding: 10px 14px; border: 0.5px solid var(--border); border-radius: 8px; font-size: 12.5px; font-family: var(--font); resize: none; background: var(--bg2); color: var(--text); outline: none; line-height: 1.4; transition: border-color .15s; }
-.cp-input:focus { border-color: var(--accent); }
-.cp-send { padding: 10px 18px; background: var(--accent); color: var(--bg); border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; font-family: var(--font); transition: opacity .15s; white-space: nowrap; }
-.cp-send:hover { opacity: 0.85; }
-.cp-send:disabled { opacity: 0.4; cursor: not-allowed; }
+.cp-input { flex: 1; padding: 10px 14px; border: 0.5px solid var(--border2); border-radius: 8px; font-size: 12.5px; font-family: inherit; resize: none; background: var(--bg); color: var(--text); outline: none; line-height: 1.4; }
+.cp-input:focus { border-color: var(--teal); }
+.cp-send { padding: 10px 18px; background: var(--teal); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 500; font-family: inherit; transition: background .15s; white-space: nowrap; }
+.cp-send:hover { background: #179062; }
+.cp-send:disabled { background: var(--lgray); cursor: not-allowed; }
 .cp-chip-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 4px; }
-.cp-chip { font-size: 11px; padding: 5px 11px; border: 0.5px solid var(--border); border-radius: 20px; cursor: pointer; background: var(--bg2); color: var(--text2); font-family: var(--font); transition: all .15s; }
-.cp-chip:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.cp-chip { font-size: 11px; padding: 5px 11px; border: 0.5px solid var(--border2); border-radius: 20px; cursor: pointer; background: var(--bg2); color: var(--text2); font-family: inherit; transition: all .15s; }
+.cp-chip:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
 .cp-source { font-size: 9.5px; color: var(--text3); margin-top: 6px; padding-top: 5px; border-top: 0.5px solid var(--border); }
-.cp-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin-bottom: 4px; margin-top: 10px; }
+.cp-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--teal); margin-bottom: 4px; margin-top: 10px; }
 .cp-section:first-child { margin-top: 0; }
 .cp-thinking { display: flex; gap: 4px; align-items: center; padding: 4px 0; }
-.cp-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: cpBounce 1.2s infinite; }
+.cp-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); animation: cpBounce 1.2s infinite; }
 .cp-dot:nth-child(2) { animation-delay: .2s; }
 .cp-dot:nth-child(3) { animation-delay: .4s; }
 @keyframes cpBounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
@@ -239,21 +220,9 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <div class="topbar">
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· We make finance simple</span></div>
   <div class="topbar-right">
-    <span class="period-badge" id="periodBadge"></span>
+            <span class="period-badge" id="periodBadge"></span>
     <button class="ai-global-btn" onclick="globalMDA()">✦ MD&A Deck ↗</button>
     <button class="ai-global-btn" onclick="varComm()">✦ Variance Commentary ↗</button>
-    <select class="skin-select" id="skinSelect" onchange="applySkin(this.value)" aria-label="Design skin">
-      <option value="canvas">Canvas</option>
-      <option value="smpl">SMPL</option>
-      <option value="midnight">Midnight</option>
-      <option value="harbor">Harbor</option>
-      <option value="eclipse">Eclipse</option>
-      <option value="graphite">Graphite</option>
-      <option value="aurora">Aurora</option>
-      <option value="ember">Ember</option>
-      <option value="slate">Slate</option>
-      <option value="mist">Mist</option>
-    </select>
   </div>
 </div>
 
@@ -274,7 +243,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <div id="slideArea"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Board sample · Jan–<span id="footerCloseMo"></span> 2026 · Illustrative static data · MD&A &amp; variance exports only</div>
+  <div class="footer-note">SMPL · Board sample · Jan–<span id="footerCloseMo"></span> 2026 · Illustrative static data</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -444,14 +413,6 @@ const fP = (v,b) => b ? ((v-b)/Math.abs(b)*100).toFixed(1)+'%' : '—';
 const vCls = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'vpos':'vneg';
 const vSign = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'pos':'neg';
 
-/** Executive summary KPI cards → primary nav tabs */
-function boardExecNav(tab) {
-  const btn = Array.from(document.querySelectorAll('.nav-btn')).find(function (b) {
-    return (b.getAttribute('onclick') || '').indexOf("show('" + tab + "'") >= 0;
-  });
-  show(tab, btn || null);
-}
-
 function destroyCharts() { Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}}); charts={}; }
 
 function show(name, btn) {
@@ -468,245 +429,60 @@ function show(name, btn) {
 
 // ─── EXEC ──────────────────────────────────────────────────────────────────
 function renderExec(area) {
-  // Driver tree data
-  const drivers = [
-    { label:'New Business', val:1.92,  bud:1.73,  dir:'pos', pct:72 },
-    { label:'Expansion',    val:0.98,  bud:0.85,  dir:'pos', pct:37 },
-    { label:'Reactivation', val:0.095, bud:0.07,  dir:'pos', pct:10 },
-    { label:'Contraction',  val:-0.225,bud:-0.28, dir:'pos', pct:18 },
-    { label:'Churn',        val:-0.115,bud:-0.50, dir:'pos', pct:9  },
-  ];
-
-  area.innerHTML = `<div class="slide" style="padding:20px 24px 32px">
-
-  <!-- ── MASTHEAD ── -->
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:0.5px solid var(--border)">
+  area.innerHTML = `<div class="slide">
+  <div class="slide-title">Executive Operating Summary</div>
+  <div class="slide-sub">Jan – June 2026 Actuals · Full-Year Budget comparison · Prepared for Board of Directors</div>
+  <div class="kpi-strip kpi-strip-5">
+    <div class="kpi"><div class="kpi-lbl">ARR</div><div class="kpi-val">$86.1M</div><div class="kpi-delta pos">+$0.58M vs budgetget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Monthly Revenue</div><div class="kpi-val">$7.412M</div><div class="kpi-delta pos">+$0.06M vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val">79.2%</div><div class="kpi-delta neu">on budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Cash Balance</div><div class="kpi-val">$70.61M</div><div class="kpi-delta pos">+$39.1M vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val">100.8%</div><div class="kpi-delta pos">↑ improving</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">ARR &amp; Revenue trend — Actual vs Budget · Jan – June 2026</div>
+    <div class="card-sub">ARR (left axis, $M) · Net New ARR bars + Revenue line overlay (right axis, $M)</div>
+    <div class="chart-wrap" style="height:230px"><canvas id="execChart" role="img" aria-label="Full-width ARR trend actual vs budget and revenue trend Jan to June 2026">ARR grew $76.3M to $83.5M; revenue $6.59M to $7.18M.</canvas></div>
+  </div>
+  <div class="two-col">
     <div>
-      <div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px">Jan – Jun 2026</div>
-      <div style="font-size:26px;font-weight:700;letter-spacing:-0.6px;color:var(--text);line-height:1.1">Executive Operating Summary</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:5px">Prepared for Board of Directors · June 2026 Close</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-      <span style="font-size:11px;font-weight:600;padding:5px 13px;border-radius:20px;background:rgba(95,168,120,0.15);color:var(--teal);border:0.5px solid var(--teal);letter-spacing:.02em">▲ Ahead of Plan</span>
-    </div>
-  </div>
-
-  <!-- ── VERDICT ── -->
-  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:24px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
-    <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">H1 closed with ARR $0.58M ahead of plan and the strongest net new ARR month of the year — margin expansion and a cash position 2.2× budget create H2 headroom, while EBITDA timing variance warrants monitoring.</div>
-  </div>
-
-  <!-- ── 01: WHERE WE STAND ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">01</span>
-      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Where We Stand</span>
-    </div>
-    <span style="font-size:10px;color:var(--text3)">June 2026 actuals vs budget</span>
-  </div>
-  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
-
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px">
-    ${[
-      {lbl:'Ending ARR',     val:'$86.1M',   delta:'+$0.58M vs bud', dir:'pos', because:'Best net new ARR month of H1 — new logos + expansion both beat plan', link:'View waterfall →', tab:'arr'},
-      {lbl:'Net New ARR',    val:'$2.655M',  delta:'+$0.47M vs bud', dir:'pos', because:'New business $1.92M (+$0.19M) and expansion $0.98M (+$0.13M) drove outperformance', link:'View driver tree →', tab:'arr'},
-      {lbl:'EBITDA',         val:'-$1.30M',  delta:'-$1.08M vs bud', dir:'neg', because:'Q2 variable comp accrual timing — underlying operating leverage is intact; normalizes Q3', link:'View P&L →', tab:'pl'},
-      {lbl:'Cash Balance',   val:'$70.61M',  delta:'+$39.1M vs bud', dir:'pos', because:'Annual billing collection cycle front-loaded; $39M above budget reflects billing structure', link:'View cash →', tab:'cash'},
-    ].map(h=>`
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px">
-      <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.lbl}</div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:10px;font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.dir==='pos'?'▲':'▼'}</span>
-        <span style="font-size:10px;font-family:var(--mono);font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.delta}</span>
+      <div class="sec-lbl">Budget Variance Summary — June 2026</div>
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border2);padding-bottom:4px;margin-bottom:4px">
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500">Metric</span>
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Actual</span>
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Budget</span>
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Variance</span>
       </div>
-      <div style="font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--text);line-height:1">${h.val}</div>
-      <div style="font-size:10px;color:var(--text3);line-height:1.5;border-top:0.5px solid var(--border);padding-top:7px;margin-top:2px">${h.because}</div>
-      <div style="font-size:10px;color:var(--accent);cursor:pointer;font-weight:500" onclick="boardExecNav('${h.tab}')" role="link" tabindex="0">${h.link}</div>
-    </div>`).join('')}
-  </div>
-
-  <!-- ── 02: WHY IT HAPPENED ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">02</span>
-      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Why It Happened</span>
-    </div>
-    <span style="font-size:10px;color:var(--text3)">Net New ARR driver decomposition · June 2026</span>
-  </div>
-  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
-
-  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px 20px;box-shadow:var(--shadow);margin-bottom:28px">
-    <div style="display:flex;align-items:center;gap:24px">
-      <!-- Root -->
-      <div style="flex-shrink:0;text-align:center;padding-right:20px;border-right:0.5px solid var(--border)">
-        <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px">Net New ARR</div>
-        <div style="font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--teal)">$2.655M</div>
-        <div style="font-size:10px;color:var(--teal);font-weight:600;margin-top:2px">+$0.47M vs budget</div>
-      </div>
-      <!-- Drivers -->
-      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
-        ${drivers.map(d=>{
-          const isNeg = d.val < 0;
-          const dispVal = isNeg ? '-$'+Math.abs(d.val).toFixed(2)+'M' : '+$'+d.val.toFixed(2)+'M';
-          const budDiff = d.val - d.bud;
-          const budLabel = budDiff >= 0 ? '+$'+Math.abs(budDiff).toFixed(3)+'M vs bud' : '-$'+Math.abs(budDiff).toFixed(3)+'M vs bud';
-          const barColor = d.dir==='pos' ? 'var(--teal)' : 'var(--red)';
-          return `<div style="display:grid;grid-template-columns:110px 1fr 90px 100px;gap:10px;align-items:center">
-            <span style="font-size:11px;color:var(--text2)">${d.label}</span>
-            <div style="background:var(--bg3);border-radius:3px;height:7px;overflow:hidden">
-              <div style="width:${d.pct}%;height:100%;background:${barColor};border-radius:3px;opacity:${isNeg?0.5:0.75}"></div>
-            </div>
-            <span style="font-size:11px;font-family:var(--mono);font-weight:600;text-align:right;color:${isNeg?'var(--red)':'var(--teal)'}">${dispVal}</span>
-            <span style="font-size:10px;font-family:var(--mono);text-align:right;color:${budDiff>=0?'var(--teal)':'var(--red)'}">${budLabel}</span>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-  </div>
-
-  <!-- ── 03: WHAT IT MEANS ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">03</span>
-      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">What It Means &amp; What To Do</span>
-    </div>
-    <span style="font-size:10px;color:var(--text3)">Drivers · Risks · Actions</span>
-  </div>
-  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:28px">
-    <!-- Key Drivers -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--teal);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
-      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--teal);margin-bottom:10px">Key Drivers</div>
-      ${[
-        'NRR reached 100.8% — churn dramatically favorable vs -$0.50M budget',
-        'Gross margin expanded 220bps to 79.2% from engineering infra optimization',
-        'Net new ARR $2.655M — best month of H1, 6th consecutive beat',
-        'Pipeline coverage 3.3× vs H2 ARR target — H2 forecast tracking $1.4M ahead',
-      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
-        <span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-top:4px"></span>
-        <span>${t}</span>
+      ${[['ARR','$86.1M','$85.52M',0.58,false],['Revenue','$7.412M','$7.35M',0.06,false],['Gross Profit','$5.87M','$5.66M',0.209,false],['Gross Margin','79.2%','77.0%',0,false],['EBITDA','$-1.297M','-$0.22M',-1.076,false],['Cash','$70.61M','$31.5M',39.1,false],['NRR','100.8%','100.0%',0.008,false]].map(([l,a,b,d,inv])=>`
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center">
+        <span style="font-size:12px;color:var(--text2)">${l}</span>
+        <span style="font-size:12px;color:var(--text);font-family:var(--mono);font-weight:500;text-align:right;min-width:72px">${a}</span>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:72px">${b}</span>
+        <span style="font-size:11px;font-family:var(--mono);font-weight:500;text-align:right;min-width:72px" class="${d>0?'pos':d<0?'neg':'neu'}">${d>0?'+':''}${l==='NRR'?'+20bps':l==='Gross Margin'?'flat':fM(d)}</span>
       </div>`).join('')}
     </div>
-    <!-- Key Risks -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--red);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
-      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px">Key Risks</div>
-      ${[
-        'EBITDA -$1.08M vs budget — variable comp timing; confirm Q3 normalization',
-        'SMB concentration 78% of gross churn — GRR risk if SMB softens in H2',
-        'Paid Search at $429K spend and sub-2× efficiency — ROI below threshold',
-        'Pipeline coverage softened from 4.5× (May) to 3.3× — needs Q3 acceleration',
-      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
-        <span style="flex-shrink:0;width:6px;height:6px;background:var(--red);margin-top:4px"></span>
-        <span>${t}</span>
-      </div>`).join('')}
-    </div>
-    <!-- Actions -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--accent);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
-      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:10px">Recommended Actions</div>
-      ${[
-        {n:1,t:'Confirm Q3 EBITDA normalization plan',owner:'CFO',impact:'High'},
-        {n:2,t:'Reallocate Paid Search budget to Partner & Organic',owner:'CMO',impact:'High'},
-        {n:3,t:'Accelerate Q3 pipeline creation — cover 3.3× gap',owner:'CRO',impact:'High'},
-        {n:4,t:'SMB churn cohort analysis — identify at-risk accounts',owner:'CS',impact:'Med'},
-      ].map(a=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px">
-        <span style="flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);font-family:var(--mono);min-width:14px">${a.n}.</span>
-        <div style="flex:1">
-          <div style="font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:3px">${a.t}</div>
-          <div style="display:flex;gap:5px">
-            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(255,255,255,0.06);color:var(--text3);border:0.5px solid var(--border)">${a.owner}</span>
-            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:${a.impact==='High'?'rgba(184,112,95,0.15)':'rgba(255,255,255,0.06)'};color:${a.impact==='High'?'var(--red)':'var(--text3)'};border:0.5px solid ${a.impact==='High'?'var(--red)':'var(--border)'}">↑ ${a.impact}</span>
-          </div>
-        </div>
-      </div>`).join('')}
-    </div>
-  </div>
-
-  <!-- ── 04: ARR & REVENUE TREND ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">04</span>
-      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">ARR &amp; Revenue Trend</span>
-    </div>
-    <div style="display:flex;gap:14px;align-items:center">
-      <span style="font-size:10px;color:var(--text3)">● ARR actual (left)</span>
-      <span style="font-size:10px;color:var(--text3)">╌ ARR budget (left)</span>
-      <span style="font-size:10px;color:var(--text3)">▬ Revenue (right)</span>
-    </div>
-  </div>
-  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
-
-  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:28px">
-    <div class="chart-wrap" style="height:200px"><canvas id="execChart" role="img" aria-label="ARR and revenue dual-axis trend chart Jan to June 2026"></canvas></div>
-  </div>
-
-  <!-- ── 05: VARIANCE DETAIL ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">05</span>
-      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Variance Detail</span>
-    </div>
-    <span style="font-size:10px;color:var(--text3)">June 2026 actuals vs budget</span>
-  </div>
-  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
-
-  <div class="two-col" style="margin-bottom:28px">
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
-      <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Budget Variance Summary</div>
-      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border);padding-bottom:5px;margin-bottom:4px">
-        ${['Metric','Actual','Budget','Var'].map(h=>`<span style="font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:${h==='Metric'?'left':'right'};${h!=='Metric'?'min-width:70px':''}">${h}</span>`).join('')}
+    <div>
+      <div class="sec-lbl">Net New ARR — Monthly Trend</div>
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border2);padding-bottom:4px;margin-bottom:4px">
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500">Period</span>
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Actual</span>
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Budget</span>
+        <span style="font-size:9.5px;color:var(--text3);font-weight:500;text-align:right;min-width:72px">Variance</span>
       </div>
-      ${[
-        ['ARR',         '$86.1M',   '$85.52M', 0.58,   false],
-        ['Revenue',     '$7.41M',   '$7.35M',  0.06,   false],
-        ['Gross Profit','$5.87M',   '$5.66M',  0.21,   false],
-        ['Gross Margin','79.2%',    '77.0%',   0,      false],
-        ['EBITDA',      '-$1.30M',  '-$0.22M', -1.08,  false],
-        ['Cash',        '$70.61M',  '$31.46M', 39.1,   false],
-        ['NRR',         '100.8%',   '100.0%',  0.008,  false],
-      ].map(([l,a,b,d,inv],i)=>{
-        const emph = l==='ARR'||l==='EBITDA';
-        return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${emph?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
-          <span style="font-size:11.5px;color:var(--text2);font-weight:${emph?'600':'400'}">${l}</span>
-          <span style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:${emph?'600':'500'};text-align:right;min-width:70px">${a}</span>
-          <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:70px">${b}</span>
-          <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d>0?'var(--teal)':d<0?'var(--red)':'var(--text3)'}">${d>0?'+':''}${l==='NRR'?'+20bps':l==='Gross Margin'?'flat':fM(d)}</span>
-        </div>`;
-      }).join('')}
-    </div>
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
-      <div style="font-size:10px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Net New ARR — Monthly</div>
-      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;border-bottom:0.5px solid var(--border);padding-bottom:5px;margin-bottom:4px">
-        ${['Period','Actual','Budget','Var'].map(h=>`<span style="font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:${h==='Period'?'left':'right'};${h!=='Period'?'min-width:70px':''}">${h}</span>`).join('')}
-      </div>
-      ${MO.map((m,i)=>{
-        const d=NN_ACT[i]-NN_BUD[i];
-        const isJun = i===5;
-        return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${isJun?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
-          <span style="font-size:11.5px;color:var(--text2);font-weight:${isJun?'600':'400'}">${m} 2026${isJun?' ✦':''}</span>
-          <span style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:${isJun?'600':'500'};text-align:right;min-width:70px">${fM(NN_ACT[i])}</span>
-          <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:70px">${fM(NN_BUD[i])}</span>
-          <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d>=0?'var(--teal)':'var(--red)'}">${fV(d)}</span>
-        </div>`;
-      }).join('')}
+      ${MO.map((m,i)=>{const d=NN_ACT[i]-NN_BUD[i];return`
+      <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center">
+        <span style="font-size:12px;color:var(--text2)">${m} 2026</span>
+        <span style="font-size:12px;color:var(--text);font-family:var(--mono);font-weight:500;text-align:right;min-width:72px">${fM(NN_ACT[i])}</span>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:72px">${fM(NN_BUD[i])}</span>
+        <span style="font-size:11px;font-family:var(--mono);font-weight:500;text-align:right;min-width:72px" class="${d>=0?'pos':'neg'}">${fV(d)}</span>
+      </div>`;}).join('')}
     </div>
   </div>
-
-  <!-- ── 06: AI TAKEAWAY ── -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="display:flex;align-items:baseline;gap:10px">
-      <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">06</span>
-      <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Executive Takeaway</span>
-    </div>
-    <button class="ai-btn" onclick="aiComm('exec','execComm')" style="margin-top:0">✦ Regenerate ↗</button>
+  <div class="commentary" id="execComm" style="margin-top:14px">
+    <div class="commentary-lbl">Executive Takeaway</div>
+    <div class="commentary-text">June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by $0.47M, driven by $1.92M new business (bud $1.73M) and $0.98M expansion (bud $0.85M). Revenue of $7.41M exceeded plan by $60K with gross margin expanding 220bps to 79.2% from engineering infrastructure gains. Cash reached $70.61M against a $31.46M budget — the $39.1M favorable variance reflects annual billing collections. EBITDA of -$1.30M trailed budget by $1.08M due to Q2 variable compensation timing; normalization expected in Q3.</div>
   </div>
-  <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
-
-  <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r2) var(--r2) 0;padding:16px 20px;box-shadow:var(--shadow)" id="execComm">
-    <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">AI-Generated · Claude</div>
-    <div class="commentary-text">June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by $0.47M, driven by $1.92M new business and $0.98M expansion across 14 new logos and 10 expansion accounts. Revenue of $7.41M exceeded plan by $60K with gross margin expanding 220bps to 79.2% from engineering infrastructure efficiency gains. Cash reached $70.61M against a $31.46M budget — the $39.1M favorable variance reflects annual billing collections and should not be interpreted as operational outperformance. EBITDA of -$1.30M trailed budget by $1.08M due to Q2 variable compensation timing; normalization is expected in Q3 and the underlying operating leverage remains intact.</div>
-  </div>
-
+  <button class="ai-btn" onclick="aiComm('exec','execComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
 }
 
@@ -1234,215 +1010,152 @@ function renderRisks(area) {
 
 // ─── CHART BUILDER ─────────────────────────────────────────────────────────
 function buildCharts(slide) {
-  // ── Read live skin tokens from CSS at chart-build time ──────────────────
-  const cs = getComputedStyle(document.documentElement);
-  const C = k => cs.getPropertyValue(k).trim();
-  const cPos    = C('--teal');
-  const cNeg    = C('--red');
-  const cAmber  = C('--amber');
-  const cText3  = C('--text3');
-  const cText2  = C('--text2');
-  const cBorder = C('--border');
-  const cAccent = C('--accent');
-  const cBlue   = '#7a9fc2';
-
-  const fade = (hex, a) => {
-    hex = hex.replace('#','');
-    if(hex.length===3) hex=hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
-    const r=parseInt(hex.slice(0,2),16)||122;
-    const g=parseInt(hex.slice(2,4),16)||159;
-    const b=parseInt(hex.slice(4,6),16)||194;
-    return `rgba(${r},${g},${b},${a})`;
-  };
-
-  const gridColor  = 'rgba(255,255,255,0.06)';
-  const tickFont   = { size: 9, family: "'Inter',-apple-system,sans-serif" };
-  const tickColor  = cText3;
-  const baseScaleX = { ticks:{ font:tickFont, color:tickColor }, grid:{ display:false } };
-  const baseScaleY = (cb) => ({ ticks:{ callback:cb, font:tickFont, color:tickColor }, grid:{ color:gridColor } });
-
   if(slide==='exec') {
-    charts.exec=new Chart(document.getElementById('execChart'),{
-      data:{labels:MO,datasets:[
-        {type:'bar', label:'Net New ARR', data:NN_ACT, backgroundColor:fade(cPos,0.25), borderColor:cPos, borderWidth:1.5, yAxisID:'y2', order:2, borderRadius:3},
-        {type:'line',label:'ARR Act',    data:ARR_ACT, borderColor:cAccent, borderWidth:2.5, pointRadius:4, pointBackgroundColor:cAccent, yAxisID:'y1', fill:false, order:1, tension:0.3},
-        {type:'line',label:'ARR Bud',   data:ARR_BUD, borderColor:cText3, borderDash:[4,3], borderWidth:1.5, pointRadius:2, yAxisID:'y1', fill:false, order:1, tension:0.3},
-        {type:'line',label:'Revenue',   data:REV_ACT, borderColor:cAmber, borderWidth:2, pointRadius:3, yAxisID:'y2', fill:false, order:1, tension:0.3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-        plugins:{legend:{display:false}},
-        scales:{
-          y1:{type:'linear',position:'left',  ticks:{callback:v=>'$'+v+'M', font:tickFont, color:tickColor}, grid:{color:gridColor}},
-          y2:{type:'linear',position:'right', ticks:{callback:v=>'$'+v.toFixed(1)+'M', font:tickFont, color:tickColor}, grid:{display:false}},
-          x: baseScaleX,
-        }
-      }
-    });
+    charts.exec=new Chart(document.getElementById('execChart'),{data:{labels:MO,datasets:[
+      {type:'bar',label:'Net New ARR',data:NN_ACT,backgroundColor:'rgba(29,158,117,0.15)',borderColor:'#1D9E75',borderWidth:1,yAxisID:'y2',order:2},
+      {type:'line',label:'ARR Act',data:ARR_ACT,borderColor:'#185FA5',borderWidth:2,pointRadius:4,pointBackgroundColor:'#185FA5',yAxisID:'y1',fill:false,order:1},
+      {type:'line',label:'ARR Bud',data:ARR_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,yAxisID:'y1',fill:false,order:1},
+      {type:'line',label:'Revenue',data:REV_ACT,borderColor:'#BA7517',borderWidth:2,pointRadius:3,yAxisID:'y2',fill:false,order:1},
+    ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{display:false}}}}});
   } else if(slide==='arr') {
-    const wfLabels=['Begin ARR','New Business','Expansion','Reactivation','Contraction','Churn','End ARR'];
-    const BOP=81.39,nb=1.80,exp=0.91,react=0.08,con=0.24,churn=0.49;
-    const afterNB=BOP+nb,afterExp=afterNB+exp,afterReact=afterExp+react;
-    const afterCon=afterReact-con,afterChurn=afterCon-churn;
-    const wfOffsets=[0,BOP,afterNB,afterExp,afterCon,afterChurn,0];
-    const wfHeights=[BOP,nb,exp,react,con,churn,afterChurn];
-    const wfColors=[cBlue,cPos,cPos,cPos,cNeg,cNeg,cBlue];
-    const wfLabelsTop=[BOP,nb,exp,react,-con,-churn,afterChurn];
+    // True waterfall: BOP=81.39, +NB 1.80, +Exp 0.91, +React 0.08, -Con 0.24, -Churn 0.49, EOP=83.45
+    // Each floating bar = [base_offset, value] using min/max trick
+    // For additive bars: base = running total before, bar = component value
+    // For subtractive bars: base = running total after (bottom of red bar), bar = abs value
+    const wfLabels = ['Begin ARR','New Business','Expansion','Reactivation','Contraction','Churn','End ARR'];
+    const BOP = 81.39;
+    const nb=1.80, exp=0.91, react=0.08, con=0.24, churn=0.49;
+    const afterNB = BOP+nb;           // 83.19
+    const afterExp = afterNB+exp;     // 84.10
+    const afterReact = afterExp+react;// 84.18
+    const afterCon = afterReact-con;  // 83.94 (top of contraction = afterReact, bottom = afterCon)
+    const afterChurn = afterCon-churn;// 83.45 = EOP
+    // offsets (transparent bottom stack): BOP=0, additive=running_total_before, subtractive=bottom, EOP=0
+    const wfOffsets  = [0,        BOP,     afterNB,  afterExp,  afterCon,   afterChurn, 0       ];
+    // visible bar heights: BOP=full, additive=component, subtractive=component, EOP=full
+    const wfHeights  = [BOP,      nb,      exp,      react,     con,        churn,      afterChurn];
+    const wfColors   = ['#185FA5','#1D9E75','#1D9E75','#1D9E75','#D85A30','#D85A30','#185FA5'];
+    const wfBorders  = ['#185FA5','#0F6E56','#0F6E56','#0F6E56','#A32D2D','#A32D2D','#185FA5'];
+    const wfLabelsTop= [BOP,      nb,       exp,      react,    -con,      -churn,    afterChurn];
     charts.wf=new Chart(document.getElementById('arrWF'),{
       type:'bar',
       data:{labels:wfLabels,datasets:[
-        {label:'offset',data:wfOffsets,backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(0,0,0,0)',borderWidth:0},
-        {label:'value', data:wfHeights,backgroundColor:wfColors.map(c=>fade(c,0.7)),borderColor:wfColors,borderWidth:1.5,borderRadius:3},
+        {label:'offset',data:wfOffsets,backgroundColor:'rgba(0,0,0,0)',borderColor:'rgba(0,0,0,0)',borderWidth:0,skipNull:true},
+        {label:'value', data:wfHeights,backgroundColor:wfColors,borderColor:wfBorders,borderWidth:1.5,borderRadius:3},
       ]},
       options:{
         responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>{if(ctx.datasetIndex===0)return null;const v=wfLabelsTop[ctx.dataIndex];return(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M';} }}},
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:ctx=>{if(ctx.datasetIndex===0)return null;const v=wfLabelsTop[ctx.dataIndex];return(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M';}}},
+          datalabels:{display:false}
+        },
         scales:{
-          x:{stacked:true,...baseScaleX},
-          y:{stacked:true,min:76,max:86,...baseScaleY(v=>'$'+v.toFixed(0)+'M')}
+          x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},
+          y:{stacked:true,min:76,max:86,ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}
         }
       },
       plugins:[{afterDatasetsDraw(chart){
-        const ctx2=chart.ctx,ds1=chart.getDatasetMeta(1);
+        const ctx2=chart.ctx;
+        const ds1=chart.getDatasetMeta(1);
         ctx2.save();
-        ctx2.font='bold 9px Inter,-apple-system,sans-serif';
+        ctx2.font='bold 10px -apple-system,sans-serif';
         ctx2.textAlign='center';
         ds1.data.forEach((bar,i)=>{
           const v=wfLabelsTop[i];
-          const isBase=i===0||i===wfLabels.length-1;
-          const displayLabel=isBase?'$'+Math.abs(v).toFixed(2)+'M':(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M';
-          const yPos=v>=0?bar.y-6:bar.y+bar.height+13;
-          const finalY=isBase?bar.y-6:yPos;
-          ctx2.fillStyle=v<0?cNeg:(isBase?cBlue:cPos);
-          ctx2.fillText(displayLabel,bar.x,finalY);
+          const label=(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M';
+          const isBase=(i===0||i===wfLabels.length-1);
+          const displayLabel=isBase?('$'+Math.abs(v).toFixed(2)+'M'):label;
+          const yPos = v>=0 ? bar.y-6 : bar.y+bar.height+13;
+          const finalY = isBase ? bar.y-6 : yPos;
+          ctx2.fillStyle = v<0 ? '#A32D2D' : (isBase?'#185FA5':'#0F6E56');
+          ctx2.fillText(displayLabel, bar.x, finalY);
         });
         ctx2.restore();
       }}]
     });
-    charts.nn=new Chart(document.getElementById('arrNN'),{
-      type:'bar',data:{labels:MO,datasets:[
-        {label:'Actual',data:NN_ACT,backgroundColor:fade(cPos,0.55),borderColor:cPos,borderWidth:1.5,borderRadius:3},
-        {label:'Budget',data:NN_BUD,backgroundColor:fade(cText3,0.2),borderColor:cText3,borderWidth:1,borderRadius:3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}
-    });
-    const WF_TABLE={
-      Beginning:   [75000000,76310000,77815000,79505000,81385000,83445000,86100000,88076000,90010000,91936000,93800000,95700000],
-      'New Business':[1200000,1350000,1500000,1650000,1800000,1920000,1866715,1750478,1765110,1678393,1720000,1690000],
-      Expansion:   [650000,720000,780000,850000,910000,980000,995197,1027047,922213,1058122,980000,1010000],
-      Contraction: [-180000,-195000,-210000,-225000,-240000,-225000,-371121,-402430,-424036,-439679,-445000,-452000],
-      Churn:       [-420000,-435000,-450000,-470000,-490000,-115000,-612563,-662371,-705506,-707603,-720000,-734000],
-      Reactivation:[60000,65000,70000,75000,80000,95000,307478,373503,382361,391126,393000,400000],
-      Ending:      [76310000,77815000,79505000,81385000,83445000,86100000,88076000,90010000,91936000,93800000,95705000,97560000],
+    charts.nn=new Chart(document.getElementById('arrNN'),{type:'bar',data:{labels:MO,datasets:[{label:'Actual',data:NN_ACT,backgroundColor:'rgba(29,158,117,0.7)',borderColor:'#1D9E75',borderWidth:1,borderRadius:3},{label:'Budget',data:NN_BUD,backgroundColor:'rgba(136,135,128,0.3)',borderColor:'#888780',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    // Build MRR/ARR waterfall table (matches Image 2)
+    // All values in dollars (not millions)
+    const WF_TABLE = {
+      Beginning:   [75000000,76310000,77815000,79505000,81385000,83445000, 86100000,88076000,90010000,91936000,93800000,95700000],
+      'New Business':[1200000,1350000,1500000,1650000,1800000,  1920000,  1866715,1750478,1765110,1678393,1720000,1690000],
+      Expansion:   [650000,720000,780000,850000,910000,          980000,   995197,1027047,922213,1058122,980000,1010000],
+      Contraction: [-180000,-195000,-210000,-225000,-240000,    -225000,  -371121,-402430,-424036,-439679,-445000,-452000],
+      Churn:       [-420000,-435000,-450000,-470000,-490000,    -115000,  -612563,-662371,-705506,-707603,-720000,-734000],
+      Reactivation:[60000,65000,70000,75000,80000,               95000,   307478,373503,382361,391126,393000,400000],
+      Ending:      [76310000,77815000,79505000,81385000,83445000,86100000, 88076000,90010000,91936000,93800000,95705000,97560000],
     };
-    const WF_ROWS=['Beginning','New Business','Expansion','Contraction','Churn','Reactivation','Ending'];
-    const fDollarFull=v=>{const neg=v<0;const abs=Math.abs(v);return(neg?'-$':'$')+abs.toLocaleString('en-US');};
+    const WF_ROWS = ['Beginning','New Business','Expansion','Contraction','Churn','Reactivation','Ending'];
+    const WF_POSITIVE = ['Beginning','New Business','Expansion','Reactivation','Ending'];
+    const fDollar = v => {
+      const abs = Math.abs(v);
+      const s = abs >= 1000000 ? '$'+( abs/1000000).toFixed(3).replace(/\.?0+$/,'')+'M' : '$'+(abs/1000).toFixed(0)+'K';
+      return v < 0 ? '-'+s : s;
+    };
+    const fDollarFull = v => {
+      const neg = v < 0;
+      const abs = Math.abs(v);
+      const formatted = abs.toLocaleString('en-US');
+      return (neg ? '-$' : '$') + formatted;
+    };
     setTimeout(()=>{
-      const tb=document.getElementById('arrWFTbody');
-      if(!tb)return;
-      tb.innerHTML='';
-      WF_ROWS.forEach((rowName,ri)=>{
-        const vals=WF_TABLE[rowName];
-        const isTotal=rowName==='Beginning'||rowName==='Ending';
-        const tr=document.createElement('tr');
-        if(ri%2===0)tr.style.background='var(--bg2)';
-        if(isTotal){tr.style.fontWeight='500';tr.style.borderTop='1px solid var(--border2)';}
-        const labelCell=`<td style="padding:7px 10px;font-size:11.5px;color:var(--text);font-weight:${isTotal?'500':'400'};position:sticky;left:0;background:inherit;border-right:0.5px solid var(--border)">▸ ${rowName}</td>`;
-        const dataCells=vals.map((v,ci)=>{
-          const color=isTotal?'var(--text)':v<0?'var(--red)':'var(--teal)';
-          const bgTint=ci>=6?'background:rgba(255,255,255,0.02)':'';
+      const tb = document.getElementById('arrWFTbody');
+      if(!tb) return;
+      tb.innerHTML = '';
+      const openWF = new Set();
+      WF_ROWS.forEach((rowName, ri) => {
+        const vals = WF_TABLE[rowName];
+        const isTotal = rowName === 'Beginning' || rowName === 'Ending';
+        const isPos = WF_POSITIVE.includes(rowName);
+        const hasDrill = false; // can expand in future
+        const tr = document.createElement('tr');
+        tr.style.cssText = isTotal
+          ? 'background:var(--bg2);font-weight:500;border-top:1px solid var(--border2);border-bottom:1px solid var(--border2)'
+          : (ri%2===0?'background:var(--bg2)':'');
+        const labelCell = `<td style="padding:7px 10px;font-size:11.5px;color:var(--text${isTotal?'':'-secondary'});font-weight:${isTotal?'500':'400'};position:sticky;left:0;background:inherit;border-right:0.5px solid var(--border)">▸ ${rowName}</td>`;
+        const dataCells = vals.map((v, ci) => {
+          const isAct = ci < 6;
+          const isNeg = v < 0;
+          const isZero = v === 0;
+          const color = isTotal ? 'var(--text)' : isZero ? 'var(--text3)' : isNeg ? 'var(--red)' : 'var(--teal)';
+          const bgTint = isAct ? '' : 'background:rgba(186,117,23,0.03)';
           return `<td style="padding:7px 10px;text-align:right;font-family:var(--mono);font-size:11px;color:${color};${bgTint}">${fDollarFull(v)}</td>`;
         }).join('');
-        tr.innerHTML=labelCell+dataCells;
+        tr.innerHTML = labelCell + dataCells;
         tb.appendChild(tr);
       });
-    },80);
+    }, 80);
   } else if(slide==='revenue') {
-    charts.rev=new Chart(document.getElementById('revChart'),{
-      data:{labels:MO,datasets:[
-        {type:'bar', data:GP_ACT, backgroundColor:fade(cPos,0.2), borderColor:cPos, borderWidth:1, label:'GP', borderRadius:3},
-        {type:'line',data:REV_ACT, borderColor:cAccent, borderWidth:2.5, pointRadius:3, pointBackgroundColor:cAccent, fill:false, label:'Act', tension:0.3},
-        {type:'line',data:REV_BUD, borderColor:cText3, borderDash:[4,3], borderWidth:1.5, pointRadius:0, fill:false, label:'Bud', tension:0.3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}
-    });
-    charts.revArr=new Chart(document.getElementById('revARR'),{
-      type:'line',data:{labels:MO,datasets:[
-        {label:'Actual',data:ARR_ACT,borderColor:cPos,borderWidth:2.5,pointRadius:4,pointBackgroundColor:cPos,fill:false,tension:0.3},
-        {label:'Budget',data:ARR_BUD,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false,tension:0.3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}
-    });
+    charts.rev=new Chart(document.getElementById('revChart'),{data:{labels:MO,datasets:[{type:'bar',data:GP_ACT,backgroundColor:'rgba(29,158,117,0.15)',borderColor:'#1D9E75',borderWidth:1,label:'GP'},{type:'line',data:REV_ACT,borderColor:'#1a2e44',borderWidth:2,pointRadius:3,fill:false,label:'Act'},{type:'line',data:REV_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,label:'Bud'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.revArr=new Chart(document.getElementById('revARR'),{type:'line',data:{labels:MO,datasets:[{label:'Actual',data:ARR_ACT,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false},{label:'Budget',data:ARR_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   } else if(slide==='gtm') {
     const sortedKeys=Object.keys(GTM).sort((a,b)=>GTM[b].wr-GTM[a].wr);
-    charts.gtmWR=new Chart(document.getElementById('gtmWR'),{
-      type:'bar',data:{labels:sortedKeys,datasets:[{
-        data:sortedKeys.map(k=>GTM[k].wr),
-        backgroundColor:sortedKeys.map(k=>GTM[k].wr>30?fade(cPos,0.55):GTM[k].wr>10?fade(cAmber,0.45):fade(cNeg,0.4)),
-        borderColor:sortedKeys.map(k=>GTM[k].wr>30?cPos:GTM[k].wr>10?cAmber:cNeg),
-        borderWidth:1.5,borderRadius:3
-      }]},
-      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{ticks:{callback:v=>v+'%',font:tickFont,color:tickColor},grid:{color:gridColor}},y:{ticks:{font:tickFont,color:tickColor},grid:{display:false}}}}
-    });
+    charts.gtmWR=new Chart(document.getElementById('gtmWR'),{type:'bar',data:{labels:sortedKeys,datasets:[{data:sortedKeys.map(k=>GTM[k].wr),backgroundColor:sortedKeys.map(k=>GTM[k].wr>30?'rgba(29,158,117,0.6)':GTM[k].wr>10?'rgba(186,117,23,0.5)':'rgba(216,90,48,0.5)'),borderColor:sortedKeys.map(k=>GTM[k].wr>30?'#1D9E75':GTM[k].wr>10?'#BA7517':'#D85A30'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
     const bkeys=Object.keys(GTM);
-    const bubblePalette=['#7a9fc2','#74b88a','#c2a07a','#a07ab8','#7ab8b0','#b87a7a','#b8a87a','#7a8ab8','#8ab87a','#b87aa0','#7ab8c2'];
-    charts.gtmB=new Chart(document.getElementById('gtmBubble'),{
-      type:'bubble',
-      data:{datasets:bkeys.map((k,i)=>{const ch=GTM[k];const col=bubblePalette[i%bubblePalette.length];return{label:k,data:[{x:ch.spend,y:ch.pipe,r:Math.max(5,Math.min(ch.eff/8+4,20))}],backgroundColor:fade(col,0.45),borderColor:col,borderWidth:1.5};})},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{
-          x:{title:{display:true,text:'Spend ($M)',font:tickFont,color:tickColor},ticks:{callback:v=>'$'+v+'M',font:tickFont,color:tickColor},min:0,max:2.5,grid:{color:gridColor}},
-          y:{title:{display:true,text:'Pipeline ($M)',font:tickFont,color:tickColor},ticks:{callback:v=>'$'+v+'M',font:tickFont,color:tickColor},min:0,max:3.5,grid:{color:gridColor}}
-        }
-      }
-    });
+    charts.gtmB=new Chart(document.getElementById('gtmBubble'),{type:'bubble',data:{datasets:bkeys.map(k=>{const ch=GTM[k];return{label:k,data:[{x:ch.spend,y:ch.pipe,r:Math.max(5,Math.min(ch.eff/8+4,20))}],backgroundColor:ch.color+'88',borderColor:ch.color,borderWidth:1.5};})},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Spend ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:2.5},y:{title:{display:true,text:'Pipeline ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:3.5}}}});
   } else if(slide==='cash') {
-    charts.cashT=new Chart(document.getElementById('cashTrend'),{
-      data:{labels:MO,datasets:[
-        {type:'line',data:CASH_ACT,borderColor:cPos,backgroundColor:fade(cPos,0.1),borderWidth:2.5,pointRadius:4,pointBackgroundColor:cPos,fill:true,tension:0.3},
-        {type:'line',data:CASH_BUD,borderColor:cText3,borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false,tension:0.3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}
-    });
-    charts.coll=new Chart(document.getElementById('cashColl'),{
-      type:'bar',data:{labels:MO,datasets:[{
-        data:COLL,
-        backgroundColor:COLL.map(v=>v>12?fade(cPos,0.7):fade(cPos,0.35)),
-        borderColor:cPos,borderWidth:1.5,borderRadius:3
-      }]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(0)+'M')}}
-    });
+    charts.cashT=new Chart(document.getElementById('cashTrend'),{data:{labels:MO,datasets:[{type:'line',data:CASH_ACT,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',borderWidth:2.5,pointRadius:4,fill:true},{type:'line',data:CASH_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.coll=new Chart(document.getElementById('cashColl'),{type:'bar',data:{labels:MO,datasets:[{data:COLL,backgroundColor:COLL.map(v=>v>12?'rgba(29,158,117,0.8)':'rgba(29,158,117,0.4)'),borderColor:'#1D9E75',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   } else if(slide==='headcount') {
     const depts=Object.keys(HC_DATA);
-    charts.hcBar=new Chart(document.getElementById('hcBar'),{
-      type:'bar',data:{labels:depts,datasets:[
-        {label:'Actual',data:depts.map(d=>HC_DATA[d].may),backgroundColor:fade(cBlue,0.6),borderColor:cBlue,borderWidth:1.5,borderRadius:3},
-        {label:'Budget',data:depts.map(d=>HC_DATA[d].bud),backgroundColor:fade(cText3,0.2),borderColor:cText3,borderWidth:1,borderRadius:3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{ticks:{font:{size:8},maxRotation:30,color:tickColor},grid:{display:false}},y:baseScaleY(v=>v)}}
-    });
-    charts.hcT=new Chart(document.getElementById('hcTrend'),{
-      data:{labels:MO,datasets:[
-        {type:'line',label:'ARR/Emp ($K)',data:ARR_PER_EMP,borderColor:cPos,borderWidth:2,pointRadius:3,pointBackgroundColor:cPos,fill:false,yAxisID:'y1',tension:0.3},
-        {type:'bar', label:'Total HC',    data:HC_BY_MO,  backgroundColor:fade(cBlue,0.2),borderColor:cBlue,borderWidth:1.5,yAxisID:'y2',borderRadius:3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{
-          y1:{type:'linear',position:'left', title:{display:true,text:'ARR/Emp ($K)',font:tickFont,color:tickColor},ticks:{callback:v=>'$'+v+'K',font:tickFont,color:tickColor},grid:{color:gridColor}},
-          y2:{type:'linear',position:'right',title:{display:true,text:'HC',font:tickFont,color:tickColor},ticks:{font:tickFont,color:tickColor},grid:{display:false}},
-          x:baseScaleX,
-        }
-      }
-    });
+    const actHC=depts.map(d=>HC_DATA[d].may);
+    const budHC=depts.map(d=>HC_DATA[d].bud);
+    charts.hcBar=new Chart(document.getElementById('hcBar'),{type:'bar',data:{labels:depts,datasets:[{label:'Actual',data:actHC,backgroundColor:'rgba(24,95,165,0.6)',borderColor:'#185FA5',borderWidth:1,borderRadius:3},{label:'Budget',data:budHC,backgroundColor:'rgba(136,135,128,0.3)',borderColor:'#888780',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:8},maxRotation:30},grid:{display:false}},y:{ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.hcT=new Chart(document.getElementById('hcTrend'),{data:{labels:MO,datasets:[{type:'line',label:'ARR/Emp ($K)',data:ARR_PER_EMP,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false,yAxisID:'y1'},{type:'bar',label:'Total HC',data:HC_BY_MO,backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y1:{type:'linear',position:'left',title:{display:true,text:'ARR/Emp ($K)',font:{size:9}},ticks:{callback:v=>'$'+v+'K',font:{size:9}}},y2:{type:'linear',position:'right',title:{display:true,text:'HC',font:{size:9}},ticks:{font:{size:9}},grid:{display:false}}}}});
+  } else if(slide==='revenue') {
+    charts.rev=new Chart(document.getElementById('revChart'),{data:{labels:MO,datasets:[{type:'bar',data:GP_ACT,backgroundColor:'rgba(29,158,117,0.15)',borderColor:'#1D9E75',borderWidth:1,label:'GP'},{type:'line',data:REV_ACT,borderColor:'#1a2e44',borderWidth:2,pointRadius:3,fill:false,label:'Act'},{type:'line',data:REV_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,label:'Bud'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.revArr=new Chart(document.getElementById('revARR'),{type:'line',data:{labels:MO,datasets:[{label:'Actual',data:ARR_ACT,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false},{label:'Budget',data:ARR_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+  } else if(slide==='gtm') {
+    const sortedKeys=Object.keys(GTM).sort((a,b)=>GTM[b].wr-GTM[a].wr);
+    charts.gtmWR=new Chart(document.getElementById('gtmWR'),{type:'bar',data:{labels:sortedKeys,datasets:[{data:sortedKeys.map(k=>GTM[k].wr),backgroundColor:sortedKeys.map(k=>GTM[k].wr>30?'rgba(29,158,117,0.6)':GTM[k].wr>10?'rgba(186,117,23,0.5)':'rgba(216,90,48,0.5)'),borderColor:sortedKeys.map(k=>GTM[k].wr>30?'#1D9E75':GTM[k].wr>10?'#BA7517':'#D85A30'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    const bkeys=Object.keys(GTM);
+    charts.gtmB=new Chart(document.getElementById('gtmBubble'),{type:'bubble',data:{datasets:bkeys.map(k=>{const ch=GTM[k];return{label:k,data:[{x:ch.spend,y:ch.pipe,r:Math.max(5,Math.min(ch.eff/8+4,20))}],backgroundColor:ch.color+'88',borderColor:ch.color,borderWidth:1.5};})},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Spend ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:2.5},y:{title:{display:true,text:'Pipeline ($M)',font:{size:9}},ticks:{callback:v=>'$'+v+'M',font:{size:9}},min:0,max:3.5}}}});
+  } else if(slide==='cash') {
+    charts.cashT=new Chart(document.getElementById('cashTrend'),{data:{labels:MO,datasets:[{type:'line',data:CASH_ACT,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',borderWidth:2.5,pointRadius:4,fill:true},{type:'line',data:CASH_BUD,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:2,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.coll=new Chart(document.getElementById('cashColl'),{type:'bar',data:{labels:MO,datasets:[{data:COLL,backgroundColor:COLL.map(v=>v>12?'rgba(29,158,117,0.8)':'rgba(29,158,117,0.4)'),borderColor:'#1D9E75',borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   }
 }
-
 
 // ─── AI COMMENTARY ─────────────────────────────────────────────────────────
 const AI_CTX = {
@@ -2615,7 +2328,8 @@ function _sComm(el) {
 
 // Init
 document.getElementById('periodBadge').textContent = CLOSE_LABEL + ' \u00b7 YTD Close';
-document.getElementById('footerCloseMo').textContent = CLOSE_MO;
+const _footerMo = document.getElementById('footerCloseMo');
+if (_footerMo) _footerMo.textContent = CLOSE_MO;
 show('exec');
 
 // ── SMPL COPILOT ────────────────────────────────────────────────────────────
@@ -2765,216 +2479,6 @@ function formatCopilotReply(text) {
   }
   return out;
 }
-
-// ─── SKIN ENGINE ────────────────────────────────────────────────────────────
-// All 10 skins from the v0 design system. Each skin defines the full set of
-// CSS custom properties that every component already references.
-const SKINS = {
-  canvas: {
-    name: 'Canvas',
-    bg:      '#18241b',
-    bg2:     '#23332699',
-    bg3:     '#2b3c2e',
-    text:    '#dde8d6',
-    text2:   '#aab8a2',
-    text3:   '#72826a',
-    border:  '#2e3f31',
-    border2: 'rgba(56,75,60,0.25)',
-    accent:  '#c4855a',   // muted terracotta
-    teal:    '#5fa878',   // desaturated sage-green
-    red:     '#b8705f',   // muted clay red
-    amber:   '#b89060',   // muted sand
-    shadow:  '0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -8px rgba(0,0,0,0.4)',
-  },
-  smpl: {
-    name: 'SMPL',
-    bg:      '#0c1418',
-    bg2:     '#14222899',
-    bg3:     '#1a2e35',
-    text:    '#d8eae8',
-    text2:   '#8eb0ad',
-    text3:   '#5e8280',
-    border:  '#1e3540',
-    border2: 'rgba(36,64,76,0.25)',
-    accent:  '#3db8a6',   // muted teal
-    teal:    '#4aaa94',
-    red:     '#b87068',
-    amber:   '#c4924a',
-    shadow:  '0 1px 2px rgba(0,0,0,0.45), 0 16px 40px -10px rgba(0,0,0,0.6)',
-  },
-  midnight: {
-    name: 'Midnight',
-    bg:      '#141a2e',
-    bg2:     '#1e273f99',
-    bg3:     '#252e4a',
-    text:    '#d8daf0',
-    text2:   '#9098c0',
-    text3:   '#606880',
-    border:  '#2c3558',
-    border2: 'rgba(52,62,100,0.25)',
-    accent:  '#c4a058',   // muted gold
-    teal:    '#5ea87a',
-    red:     '#b87070',
-    amber:   '#c4a058',
-    shadow:  '0 1px 2px rgba(0,0,0,0.35), 0 12px 32px -8px rgba(0,0,0,0.45)',
-  },
-  harbor: {
-    name: 'Harbor',
-    bg:      '#0e2428',
-    bg2:     '#16363999',
-    bg3:     '#1d4045',
-    text:    '#d2e8e4',
-    text2:   '#88b0ac',
-    text3:   '#567874',
-    border:  '#244850',
-    border2: 'rgba(44,88,92,0.25)',
-    accent:  '#c49058',   // muted amber
-    teal:    '#52a882',
-    red:     '#b87068',
-    amber:   '#c49058',
-    shadow:  '0 1px 2px rgba(0,0,0,0.35), 0 12px 32px -8px rgba(0,0,0,0.45)',
-  },
-  eclipse: {
-    name: 'Eclipse',
-    bg:      '#0d1018',
-    bg2:     '#181e2e',
-    bg3:     '#202638',
-    text:    '#d4d8e8',
-    text2:   '#8890b0',
-    text3:   '#586080',
-    border:  '#282f48',
-    border2: 'rgba(50,58,86,0.25)',
-    accent:  '#6090c8',   // muted slate-blue
-    teal:    '#52a882',
-    red:     '#b07070',
-    amber:   '#b8904a',
-    shadow:  '0 1px 2px rgba(0,0,0,0.45), 0 16px 40px -10px rgba(0,0,0,0.62)',
-  },
-  graphite: {
-    name: 'Graphite',
-    bg:      '#141311',
-    bg2:     '#221f1c',
-    bg3:     '#2c2924',
-    text:    '#dedad4',
-    text2:   '#a09890',
-    text3:   '#706860',
-    border:  '#363028',
-    border2: 'rgba(66,58,50,0.25)',
-    accent:  '#c0825a',   // muted copper
-    teal:    '#5aa87a',
-    red:     '#b07060',
-    amber:   '#c0825a',
-    shadow:  '0 1px 2px rgba(0,0,0,0.4), 0 16px 40px -10px rgba(0,0,0,0.55)',
-  },
-  aurora: {
-    name: 'Aurora',
-    bg:      '#0c1020',
-    bg2:     '#161e30',
-    bg3:     '#1e283e',
-    text:    '#ccd8ec',
-    text2:   '#7890b0',
-    text3:   '#506080',
-    border:  '#263450',
-    border2: 'rgba(46,62,96,0.25)',
-    accent:  '#5090c0',   // muted sky
-    teal:    '#4898a0',
-    red:     '#a87070',
-    amber:   '#a89050',
-    shadow:  '0 1px 2px rgba(0,0,0,0.45), 0 16px 40px -10px rgba(0,0,0,0.62)',
-  },
-  ember: {
-    name: 'Ember',
-    bg:      '#160f12',
-    bg2:     '#261a20',
-    bg3:     '#302028',
-    text:    '#e8dcd8',
-    text2:   '#a88880',
-    text3:   '#785850',
-    border:  '#3c2830',
-    border2: 'rgba(70,48,58,0.25)',
-    accent:  '#c09050',   // muted amber
-    teal:    '#5aa87a',
-    red:     '#b07070',
-    amber:   '#c09050',
-    shadow:  '0 1px 2px rgba(0,0,0,0.45), 0 16px 40px -10px rgba(0,0,0,0.6)',
-  },
-  slate: {
-    name: 'Slate',
-    bg:      '#181b22',
-    bg2:     '#20252e99',
-    bg3:     '#282e38',
-    text:    '#d4d8e4',
-    text2:   '#8890a8',
-    text3:   '#606878',
-    border:  '#303848',
-    border2: 'rgba(58,68,88,0.25)',
-    accent:  '#6090c0',   // muted steel-blue
-    teal:    '#5aa87a',
-    red:     '#a87060',
-    amber:   '#a89050',
-    shadow:  '0 1px 2px rgba(0,0,0,0.3), 0 12px 32px -8px rgba(0,0,0,0.4)',
-  },
-  mist: {
-    name: 'Mist',
-    bg:      '#1c2028',
-    bg2:     '#242a34',
-    bg3:     '#2c3240',
-    text:    '#d0d4de',
-    text2:   '#848c9c',
-    text3:   '#5c6270',
-    border:  '#323848',
-    border2: 'rgba(62,70,88,0.25)',
-    accent:  '#7890a8',   // muted dove-blue
-    teal:    '#5a9878',
-    red:     '#a07068',
-    amber:   '#a08858',
-    shadow:  '0 1px 2px rgba(0,0,0,0.3), 0 14px 36px -12px rgba(0,0,0,0.42)',
-  },
-};
-
-function applySkin(id) {
-  const s = SKINS[id] || SKINS.canvas;
-  const r = document.documentElement.style;
-  r.setProperty('--bg',           s.bg);
-  r.setProperty('--bg2',          s.bg2);
-  r.setProperty('--bg3',          s.bg3);
-  r.setProperty('--panel',        s.bg2);
-  r.setProperty('--text',         s.text);
-  r.setProperty('--text2',        s.text2);
-  r.setProperty('--text3',        s.text3);
-  r.setProperty('--border',       s.border);
-  r.setProperty('--border2',      s.border2);
-  r.setProperty('--accent',       s.accent);
-  r.setProperty('--teal',         s.teal);
-  r.setProperty('--red',          s.red);
-  r.setProperty('--amber',        s.amber);
-  r.setProperty('--navy',         s.bg2);
-  r.setProperty('--blue',         s.teal);
-  r.setProperty('--green',        s.teal);
-  r.setProperty('--gray',         s.text3);
-  r.setProperty('--lgray',        s.border);
-  r.setProperty('--shadow',       s.shadow);
-  r.setProperty('--teal-light',   s.teal + '22');
-  r.setProperty('--red-light',    s.red  + '18');
-  r.setProperty('--amber-light',  s.amber + '18');
-  r.setProperty('--green-light',  s.teal + '18');
-  // Persist selection
-  localStorage.setItem('smpl-skin', id);
-  // Rebuild charts so they pick up new colors
-  const activeTab = document.querySelector('.nav-btn.active');
-  if(activeTab) {
-    const tabName = activeTab.getAttribute('onclick')?.match(/show\('(\w+)'/)?.[1];
-    if(tabName) { destroyCharts(); setTimeout(()=>buildCharts(tabName), 30); }
-  }
-}
-
-// Init skin on load — restore persisted or default to canvas
-(function() {
-  const saved = localStorage.getItem('smpl-skin') || 'canvas';
-  const sel = document.getElementById('skinSelect');
-  if(sel) sel.value = saved;
-  applySkin(saved);
-})();
 
 </script>
 </body>

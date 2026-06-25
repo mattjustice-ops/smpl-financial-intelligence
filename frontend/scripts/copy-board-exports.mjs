@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const exportDir = join(root, "public", "board", "exports");
+const sampleExportDir = join(root, "public", "board-sample", "exports");
+const backendTemplateDir = join(root, "..", "backend", "templates", "board");
 
 const assets = [
   {
@@ -11,6 +13,7 @@ const assets = [
       process.env.SMPL_BOARD_PPTX_SRC?.trim() ??
       "C:\\Users\\mattj\\OneDrive\\SMPL_Board_Review_Q2_2026.pptx",
     dst: "SMPL_Board_Review_Q2_2026.pptx",
+    templateDst: "SMPL_Board_Review_Template.pptx",
     fallbacks: ["C:\\Users\\mattj\\Downloads\\SMPL_Board_Review_Q2_2026.pptx"],
   },
   {
@@ -28,6 +31,8 @@ const legacyFiles = [
 ];
 
 mkdirSync(exportDir, { recursive: true });
+mkdirSync(sampleExportDir, { recursive: true });
+mkdirSync(backendTemplateDir, { recursive: true });
 
 function resolveSource(asset) {
   if (asset.src && existsSync(asset.src)) {
@@ -55,6 +60,14 @@ for (const asset of assets) {
   }
   copyFileSync(srcPath, destPath);
   console.log(`Copied ${statSync(destPath).size} bytes to ${destPath}`);
+  const sampleDest = join(sampleExportDir, asset.dst);
+  copyFileSync(srcPath, sampleDest);
+  console.log(`Copied sample export to ${sampleDest}`);
+  if (asset.templateDst) {
+    const templatePath = join(backendTemplateDir, asset.templateDst);
+    copyFileSync(srcPath, templatePath);
+    console.log(`Copied template to ${templatePath} (used by live MD&A deck export)`);
+  }
 }
 
 for (const legacy of legacyFiles) {
