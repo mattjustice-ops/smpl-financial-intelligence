@@ -235,6 +235,49 @@
     return sessionOrgs ? pickAccessibleOrgId(null, sessionOrgs) : null;
   }
 
+  var _boardAiApiBasePromise = null;
+
+  async function boardAiApiBase() {
+    var host = global.location && global.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://127.0.0.1:8001";
+    }
+    if (global.SMPL_LONG_RUNNING_API_BASE) {
+      return global.SMPL_LONG_RUNNING_API_BASE;
+    }
+    if (!_boardAiApiBasePromise) {
+      _boardAiApiBasePromise = fetch("/api/smpl/board-config", { cache: "no-store", credentials: "include" })
+        .then(function (res) {
+          if (!res.ok) return "";
+          return res.json();
+        })
+        .then(function (j) {
+          var base = j && j.longRunningApiBase ? String(j.longRunningApiBase).replace(/\/$/, "") : "";
+          if (base) global.SMPL_LONG_RUNNING_API_BASE = base;
+          return base;
+        })
+        .catch(function () {
+          return "";
+        });
+    }
+    return _boardAiApiBasePromise;
+  }
+
+  function boardAiFetchInit(apiBase, init) {
+    var opts = Object.assign({}, init || {});
+    if (apiBase) {
+      opts.credentials = "omit";
+      opts.mode = "cors";
+    } else {
+      opts.credentials = "include";
+    }
+    return opts;
+  }
+
+  function boardAiUrl(apiBase, path) {
+    return (apiBase || "") + path;
+  }
+
   function boardFetchWithTimeout(url, init, timeoutMs) {
     timeoutMs = timeoutMs == null ? 295000 : timeoutMs;
     var controller = new AbortController();
@@ -286,6 +329,12 @@
         }
         return text.slice(0, 500);
       } catch (_) {
+        if (/upstream error|ROUTER_EXTERNAL_TARGET|An error occurred with this application/i.test(text)) {
+          return (
+            "Vercel could not reach the API (upstream error). The board will retry via Railway direct — hard refresh /app/board. " +
+            "If this persists, confirm SFI_BACKEND_URL on Vercel and Railway health."
+          );
+        }
         return text.slice(0, 500);
       }
     } catch (_) {
@@ -464,14 +513,17 @@
 
       if (orgId) {
         try {
+          var apiBase = await boardAiApiBase();
           var res = await boardFetchWithTimeout(
-            "/api/v1/board-platform/commentary/regenerate?organization_id=" + encodeURIComponent(orgId),
-            {
+            boardAiUrl(
+              apiBase,
+              "/api/v1/board-platform/commentary/regenerate?organization_id=" + encodeURIComponent(orgId),
+            ),
+            boardAiFetchInit(apiBase, {
               method: "POST",
-              credentials: "include",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ slide_key: apiSlideKey }),
-            },
+            }),
             295000,
           );
           if (res.ok) {
@@ -564,14 +616,17 @@
       }
 
       try {
+        var cpApiBase = await boardAiApiBase();
         var res = await boardFetchWithTimeout(
-          "/api/v1/board-platform/copilot?organization_id=" + encodeURIComponent(orgId),
-          {
+          boardAiUrl(
+            cpApiBase,
+            "/api/v1/board-platform/copilot?organization_id=" + encodeURIComponent(orgId),
+          ),
+          boardAiFetchInit(cpApiBase, {
             method: "POST",
-            credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question: q }),
-          },
+          }),
           295000,
         );
         if (!res.ok) {
@@ -761,11 +816,7 @@
   }
 
   function boardExportApiBase() {
-    var host = global.location && global.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") {
-      return "http://127.0.0.1:8001";
-    }
-    return "";
+    return boardAiApiBase();
   }
 
   async function openLiveBoardExport(format) {
@@ -806,11 +857,11 @@
     });
 
     try {
-      var exportBase = boardExportApiBase();
-      var exportUrl = exportBase + exportSpec.path + "?" + params.toString();
+      var exportBase = await boardExportApiBase();
+      var exportUrl = boardAiUrl(exportBase, exportSpec.path) + "?" + params.toString();
       var res = await boardFetchWithTimeout(
         exportUrl,
-        { method: "GET", credentials: exportBase ? "omit" : "include", cache: "no-store" },
+        boardAiFetchInit(exportBase, { method: "GET", cache: "no-store" }),
         295000,
       );
       if (!res.ok) {

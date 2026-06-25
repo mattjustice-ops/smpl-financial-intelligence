@@ -22,14 +22,22 @@ export function EmbeddedModuleChrome({ moduleTitle, children, links }: EmbeddedM
   const orgName = activeOrg?.name ?? "—";
   const loading = orgLoading || entLoading;
 
+  const longRunningApiBase = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
+
   useEffect(() => {
     if (!organizationId) return;
 
-    function postOrgToIframe(frame: HTMLIFrameElement) {
+    function postToIframe(frame: HTMLIFrameElement) {
       frame.contentWindow?.postMessage(
         { type: "smpl:org", organizationId },
         window.location.origin,
       );
+      if (longRunningApiBase) {
+        frame.contentWindow?.postMessage(
+          { type: "smpl:api-base", apiBase: longRunningApiBase },
+          window.location.origin,
+        );
+      }
     }
 
     const body = bodyRef.current;
@@ -38,26 +46,26 @@ export function EmbeddedModuleChrome({ moduleTitle, children, links }: EmbeddedM
     if (!iframe) return;
 
     function onIframeLoad() {
-      postOrgToIframe(iframe as HTMLIFrameElement);
+      postToIframe(iframe as HTMLIFrameElement);
     }
 
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== "smpl:iframe-ready") return;
-      postOrgToIframe(iframe as HTMLIFrameElement);
+      postToIframe(iframe as HTMLIFrameElement);
     }
 
     iframe.addEventListener("load", onIframeLoad);
     window.addEventListener("message", onMessage);
     if (iframe.contentDocument?.readyState === "complete") {
-      postOrgToIframe(iframe as HTMLIFrameElement);
+      postToIframe(iframe as HTMLIFrameElement);
     }
 
     return () => {
       iframe.removeEventListener("load", onIframeLoad);
       window.removeEventListener("message", onMessage);
     };
-  }, [organizationId]);
+  }, [organizationId, longRunningApiBase]);
 
   return (
     <div className="embedded-module">

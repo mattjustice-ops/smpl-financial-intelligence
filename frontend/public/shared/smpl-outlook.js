@@ -24,22 +24,42 @@
   async function resolveOrgId(options) {
     options = options || {};
     var fromQuery = resolveOrgIdFromQuery();
-    if (fromQuery) return fromQuery;
-    if (global.SMPL_ORG_ID) return global.SMPL_ORG_ID;
+    var sessionOrgs = null;
+    try {
+      var res = await fetch("/api/auth/session", { credentials: "include" });
+      if (res.ok) {
+        var j = await res.json();
+        if (j && j.user) {
+          sessionOrgs = {
+            activeId: j.user.activeOrganizationId || null,
+            orgIds: (j.user.organizations || [])
+              .map(function (o) {
+                return o.organizationId;
+              })
+              .filter(Boolean),
+          };
+        }
+      }
+    } catch (_) {}
+
+    function pick(preferred) {
+      if (!sessionOrgs || !sessionOrgs.orgIds.length) return preferred || null;
+      if (preferred && sessionOrgs.orgIds.indexOf(preferred) >= 0) return preferred;
+      if (sessionOrgs.activeId && sessionOrgs.orgIds.indexOf(sessionOrgs.activeId) >= 0) {
+        return sessionOrgs.activeId;
+      }
+      return sessionOrgs.orgIds[0];
+    }
+
+    if (fromQuery) return pick(fromQuery);
+    if (global.SMPL_ORG_ID) return pick(global.SMPL_ORG_ID);
 
     if (options.waitForParent !== false) {
       var waited = await waitForParentOrg(options.parentWaitMs || 4000);
-      if (waited) return waited;
+      if (waited) return pick(waited);
     }
 
-    try {
-      var res = await fetch("/api/auth/session", { credentials: "include" });
-      if (!res.ok) return null;
-      var j = await res.json();
-      return j && j.user && j.user.activeOrganizationId ? j.user.activeOrganizationId : null;
-    } catch (_) {
-      return null;
-    }
+    return pick(null);
   }
 
   function waitForParentOrg(timeoutMs) {
@@ -81,10 +101,15 @@
   global.addEventListener("message", function (event) {
     if (event.origin !== global.location.origin) return;
     var data = event.data;
-    if (!data || data.type !== "smpl:org" || !data.organizationId) return;
-    global.SMPL_ORG_ID = data.organizationId;
-    if (typeof global.SMPL_ON_ORG_READY === "function") {
-      global.SMPL_ON_ORG_READY(data.organizationId);
+    if (!data || !data.type) return;
+    if (data.type === "smpl:org" && data.organizationId) {
+      global.SMPL_ORG_ID = data.organizationId;
+      if (typeof global.SMPL_ON_ORG_READY === "function") {
+        global.SMPL_ON_ORG_READY(data.organizationId);
+      }
+    }
+    if (data.type === "smpl:api-base" && data.apiBase) {
+      global.SMPL_LONG_RUNNING_API_BASE = String(data.apiBase).replace(/\/$/, "");
     }
   });
 
