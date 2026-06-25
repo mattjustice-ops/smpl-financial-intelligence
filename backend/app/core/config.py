@@ -8,6 +8,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Always resolve env files from backend/ (not the process cwd).
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# Railway / legacy envs may still reference retired Anthropic model ids.
+_ANTHROPIC_MODEL_ALIASES: dict[str, str] = {
+    "claude-sonnet-4-20250514": "claude-sonnet-4-6",
+}
+
+
+def normalize_anthropic_model(model: str | None) -> str:
+    raw = (model or "").strip() or "claude-sonnet-4-6"
+    return _ANTHROPIC_MODEL_ALIASES.get(raw, raw)
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and optional .env file."""
@@ -40,9 +50,17 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 60.0
 
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
-    anthropic_model: str = "claude-sonnet-4-20250514"
+    anthropic_model: str = "claude-sonnet-4-6"
     anthropic_temperature: float = 0.2
-    anthropic_timeout_seconds: float = 60.0
+    anthropic_timeout_seconds: float = 120.0
+
+    # Board MD&A deck — path to reference PPTX (ClarityFP / SMPL Board Review template).
+    board_pptx_template: str | None = Field(default=None, validation_alias="BOARD_PPTX_TEMPLATE")
+    board_pptx_export_mode: str = Field(
+        default="template_first",
+        validation_alias="BOARD_PPTX_EXPORT_MODE",
+        description="template_first | template_only | programmatic",
+    )
 
     @field_validator("openai_api_key", "anthropic_api_key", mode="before")
     @classmethod
@@ -52,6 +70,13 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("anthropic_model", mode="before")
+    @classmethod
+    def _normalize_anthropic_model(cls, value: object) -> str:
+        if value is None:
+            return normalize_anthropic_model(None)
+        return normalize_anthropic_model(str(value))
 
     @property
     def cors_origins_list(self) -> list[str]:

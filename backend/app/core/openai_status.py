@@ -8,6 +8,7 @@ from app.core.config import (
     _read_openai_key_from_secrets_file,
     clear_settings_cache,
     get_settings,
+    normalize_anthropic_model,
 )
 
 
@@ -38,7 +39,7 @@ def active_llm_provider() -> str | None:
 def active_llm_model() -> str:
     settings = get_settings()
     if is_anthropic_configured():
-        return settings.anthropic_model or "claude-sonnet-4-20250514"
+        return normalize_anthropic_model(settings.anthropic_model)
     if is_openai_configured():
         return settings.openai_model or "gpt-4o-mini"
     return ""
@@ -56,7 +57,7 @@ def openai_ping_payload() -> dict[str, str | bool]:
     ai_ok = anthropic_ok or openai_ok
     provider = "anthropic" if anthropic_ok else ("openai" if openai_ok else "")
     llm_model = (
-        (settings.anthropic_model or "claude-sonnet-4-20250514")
+        normalize_anthropic_model(settings.anthropic_model)
         if anthropic_ok
         else ((settings.openai_model or "gpt-4o-mini") if openai_ok else "")
     )
@@ -72,7 +73,7 @@ def openai_ping_payload() -> dict[str, str | bool]:
         "llm_provider": provider,
         "llm_model": llm_model,
         "anthropic_configured": anthropic_ok,
-        "anthropic_model": settings.anthropic_model or "claude-sonnet-4-20250514",
+        "anthropic_model": normalize_anthropic_model(settings.anthropic_model),
         "openai_configured": openai_ok,
         "openai_model": settings.openai_model or "gpt-4o-mini",
         "secrets_env_exists": (_BACKEND_ROOT / "secrets.env").is_file(),
