@@ -195,7 +195,7 @@ def board_copilot(
         cash_bridge_table=cash_bridge_table,
         ts_data=ts_data,
         focus_period=focus_period,
-        max_chars=18000,
+        max_chars=24000,
     )
     try:
         exec_json = bundle.executive_flow.model_dump(mode="json")
@@ -211,7 +211,8 @@ def board_copilot(
             system_prompt=(
                 "You are SMPL Copilot for a B2B SaaS board platform. "
                 "Answer using ONLY the live warehouse metrics provided. Never invent numbers. "
-                "When the question names a month, use that month's sections. "
+                "When the question names a month, use that month's sections — especially "
+                "'Monthly operational cash bridges' and 'Monthly Actual trends'. "
                 "Structure every answer in exactly three labeled sections:\n"
                 "1. PRIMARY DRIVER + VARIANCE CONTEXT\n"
                 "2. FINANCIAL AND OPERATIONAL ROOT CAUSE\n"

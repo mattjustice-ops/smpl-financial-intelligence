@@ -377,12 +377,14 @@ def _scenario_amount_parts(
     waterfall_key: str,
     waterfall_type: str,
     *,
+    period: str | None = None,
     scenarios: tuple[str, ...] = ("Actual", "Budget", "Forecast"),
 ) -> list[str]:
     cur = bundle.currency
+    detail = to_period(period or bundle.as_of_period)
     parts: list[str] = []
     for scenario in scenarios:
-        amt = _wf(bundle, waterfall_key, waterfall_type, bundle.as_of_period, scenario)
+        amt = _wf(bundle, waterfall_key, waterfall_type, detail, scenario)
         if amt != 0 or waterfall_type in {"beginning_cash", "ending_cash", "beginning", "ending", "ending_arr"}:
             parts.append(f"{scenario} {fmt_money(amt, cur)}")
     return parts
@@ -393,13 +395,15 @@ def _waterfall_section_lines(
     title: str,
     waterfall_key: str,
     items: tuple[tuple[str, str], ...],
+    *,
+    period: str | None = None,
 ) -> list[str]:
     lines: list[str] = []
     seen_labels: set[str] = set()
     for wtype, label in items:
         if label in seen_labels:
             continue
-        parts = _scenario_amount_parts(bundle, waterfall_key, wtype)
+        parts = _scenario_amount_parts(bundle, waterfall_key, wtype, period=period)
         if not parts:
             continue
         seen_labels.add(label)
@@ -407,23 +411,54 @@ def _waterfall_section_lines(
     return [title, *lines] if lines else []
 
 
+def _monthly_cash_bridge_table_prompt(
+    cash_bridge_table: dict[str, dict[str, dict[str, float | None]]] | None,
+    *,
+    start_period: str,
+    end_period: str,
+    currency: str,
+) -> str:
+    """All months in the FY window — lets Copilot answer February, March, etc."""
+    if not cash_bridge_table:
+        return ""
+    lines = [f"Monthly operational cash bridges ({start_period} → {end_period}):"]
+    wrote = False
+    for period in period_range(start_period, end_period):
+        for scenario in ("Actual", "Budget", "Forecast"):
+            period_row = (cash_bridge_table.get(scenario) or {}).get(period)
+            if not period_row:
+                continue
+            parts: list[str] = []
+            for field, label in _CASH_BRIDGE_TABLE_FIELDS:
+                raw = period_row.get(field)
+                if raw is None and field not in {"beginning_cash", "ending_cash"}:
+                    continue
+                parts.append(f"{label} {fmt_money(Decimal(str(raw or 0)), currency)}")
+            if parts:
+                lines.append(f"  {period} [{scenario}]: " + "; ".join(parts))
+                wrote = True
+    return "\n".join(lines) if wrote else ""
+
+
 def cash_reconciliation_prompt_blob(
     bundle: ReportingBundle,
     *,
     cash_bridge_table: dict[str, dict[str, dict[str, float | None]]] | None = None,
+    focus_period: str | None = None,
 ) -> str:
-    """Operational cash bridge for close month — same source as Cash Forecast tab."""
-    as_of = bundle.as_of_period
+    """Operational cash bridge for focus month (or org close month)."""
+    detail = to_period(focus_period or bundle.as_of_period)
     cur = bundle.currency
     section_lines = _waterfall_section_lines(
         bundle,
-        f"Cash reconciliation ({as_of}) — operational cash bridge:",
+        f"Cash reconciliation ({detail}) — operational cash bridge:",
         "cash_flow",
         _CASH_BRIDGE_ITEMS,
+        period=detail,
     )
     if len(section_lines) <= 1 and cash_bridge_table:
         for scenario in ("Actual", "Budget", "Forecast"):
-            period_row = (cash_bridge_table.get(scenario) or {}).get(as_of)
+            period_row = (cash_bridge_table.get(scenario) or {}).get(detail)
             if not period_row:
                 continue
             scenario_lines: list[str] = []
@@ -438,16 +473,16 @@ def cash_reconciliation_prompt_blob(
                 scenario_lines.append(f"  {label} ({scenario}): {fmt_money(Decimal(str(raw or 0)), cur)}")
             if scenario_lines:
                 if not section_lines:
-                    section_lines = [f"Cash reconciliation ({as_of}) — operational cash bridge:"]
+                    section_lines = [f"Cash reconciliation ({detail}) — operational cash bridge:"]
                 section_lines.extend(scenario_lines)
 
     if len(section_lines) <= 1:
         return ""
 
-    beg = _wf(bundle, "cash_flow", "beginning_cash", as_of, "Actual")
-    end = _wf(bundle, "cash_flow", "ending_cash", as_of, "Actual")
+    beg = _wf(bundle, "cash_flow", "beginning_cash", detail, "Actual")
+    end = _wf(bundle, "cash_flow", "ending_cash", detail, "Actual")
     if beg == 0 and cash_bridge_table:
-        actual_row = (cash_bridge_table.get("Actual") or {}).get(as_of) or {}
+        actual_row = (cash_bridge_table.get("Actual") or {}).get(detail) or {}
         beg = Decimal(str(actual_row.get("beginning_cash") or 0))
         end = Decimal(str(actual_row.get("ending_cash") or end))
     if beg and end:
@@ -546,12 +581,12 @@ def _monthly_trends_prompt(bundle: ReportingBundle) -> str:
     return "\n".join(lines) if len(lines) > 1 else ""
 
 
-def _headcount_prompt(bundle: ReportingBundle) -> str:
-    as_of = bundle.as_of_period
-    rows = [r for r in bundle.headcount if r.period == as_of]
+def _headcount_prompt(bundle: ReportingBundle, *, focus_period: str | None = None) -> str:
+    detail = to_period(focus_period or bundle.as_of_period)
+    rows = [r for r in bundle.headcount if r.period == detail]
     if not rows:
         return ""
-    lines = [f"Headcount ({as_of}):"]
+    lines = [f"Headcount ({detail}):"]
     for row in sorted(rows, key=lambda r: (r.scenario, r.department or ""))[:24]:
         lines.append(
             f"  {row.department or 'All'} ({row.scenario}): HC {int(row.headcount or 0)}; "
@@ -560,15 +595,15 @@ def _headcount_prompt(bundle: ReportingBundle) -> str:
     return "\n".join(lines)
 
 
-def _marketing_prompt(bundle: ReportingBundle) -> str:
+def _marketing_prompt(bundle: ReportingBundle, *, focus_period: str | None = None) -> str:
     mkt = bundle.marketing_comparison
     if not mkt:
         return ""
-    as_of = bundle.as_of_period
+    detail = to_period(focus_period or bundle.as_of_period)
     cur = bundle.currency
-    lines = [f"GTM / marketing funnel ({as_of}):"]
+    lines = [f"GTM / marketing funnel ({detail}):"]
     for row in mkt.actual:
-        if row.period != as_of:
+        if row.period != detail:
             continue
         lines.append(
             f"  Actual — MQL {int(row.mqls)}; SQL {int(row.sqls)}; SAL {int(row.sals)}; "
@@ -576,7 +611,7 @@ def _marketing_prompt(bundle: ReportingBundle) -> str:
             f"closed won ARR {fmt_money(row.closed_won_arr, cur)}; spend {fmt_money(row.marketing_spend, cur)}"
         )
     for row in mkt.budget:
-        if row.period != as_of:
+        if row.period != detail:
             continue
         lines.append(
             f"  Budget — MQL {int(row.mqls)}; pipeline ARR created {fmt_money(row.pipeline_arr_created, cur)}; "
@@ -746,29 +781,42 @@ def copilot_context_blob(
             end_period=bundle.as_of_period,
             currency=bundle.currency,
         ),
-        cash_reconciliation_prompt_blob(bundle, cash_bridge_table=cash_bridge_table),
+        _monthly_cash_bridge_table_prompt(
+            cash_bridge_table,
+            start_period=bundle.start_period,
+            end_period=bundle.as_of_period,
+            currency=bundle.currency,
+        ),
+        cash_reconciliation_prompt_blob(
+            bundle,
+            cash_bridge_table=cash_bridge_table,
+            focus_period=focus,
+        ),
         "\n".join(
             _waterfall_section_lines(
                 bundle,
-                f"ARR waterfall ({bundle.as_of_period}):",
+                f"ARR waterfall ({focus}):",
                 "arr",
                 _ARR_BRIDGE_ITEMS,
+                period=focus,
             )
         ),
         "\n".join(
             _waterfall_section_lines(
                 bundle,
-                f"Pipeline waterfall ({bundle.as_of_period}):",
+                f"Pipeline waterfall ({focus}):",
                 "pipeline",
                 _PIPELINE_ITEMS,
+                period=focus,
             )
         ),
         "\n".join(
             _waterfall_section_lines(
                 bundle,
-                f"Deferred revenue / GAAP bridge ({bundle.as_of_period}):",
+                f"Deferred revenue / GAAP bridge ({focus}):",
                 "deferred_revenue",
                 _DEFERRED_ITEMS,
+                period=focus,
             )
         ),
         _financial_statements_prompt(bundle, focus_period=focus),
@@ -778,8 +826,8 @@ def copilot_context_blob(
             bundle.currency,
             focus_period=focus,
         ),
-        _headcount_prompt(bundle),
-        _marketing_prompt(bundle),
+        _headcount_prompt(bundle, focus_period=focus),
+        _marketing_prompt(bundle, focus_period=focus),
         _gl_spend_prompt(bundle, focus_period=focus),
         _pipeline_drilldown_prompt(bundle),
     ]
@@ -829,7 +877,7 @@ def enrich_slide_with_ai(
         raw = client.generate(
             system_prompt=CFO_BOARD_NARRATIVE_SYSTEM,
             user_prompt=prompt,
-            max_tokens=1000,
+            max_tokens=4096,
         )
         if not isinstance(raw, dict):
             return base

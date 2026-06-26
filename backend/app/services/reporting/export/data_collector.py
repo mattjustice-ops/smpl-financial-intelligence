@@ -418,7 +418,7 @@ def collect_copilot_bundle(
         marketing_channel=dashboard_filters.get("marketing_channel"),
     )
 
-    bundle.headcount = _load_headcount(db, organization_id, as_of, as_of)
+    bundle.headcount = _load_headcount(db, organization_id, focus, focus)
     bundle.gl_detail = _load_gl_detail(db, organization_id, focus, focus)
 
     drill_filters = {
