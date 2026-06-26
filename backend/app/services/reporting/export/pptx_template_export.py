@@ -525,7 +525,6 @@ def _generate_claude_template_commentary(
             logger.warning("Template export metrics context failed: %s", exc)
 
         client = build_commentary_llm_client()
-        slide_count = max(len(outline), 1)
         raw = client.generate(
             system_prompt=(
                 requirements_prompt_block("mda_deck_pptx")
@@ -541,7 +540,7 @@ def _generate_claude_template_commentary(
                 'Respond JSON only: {"slides": [{"index": 1, "commentary": "..."}, ...]} '
                 "One entry per template slide index. Each commentary 2-4 sentences, board-ready."
             ),
-            max_tokens=min(4096, slide_count * 220),
+            max_tokens=4096,
         )
         if not isinstance(raw, dict):
             return {}
