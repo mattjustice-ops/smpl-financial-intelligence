@@ -64,6 +64,32 @@ def build_board_package_from_bundle(
     )
 
 
+def build_mda_deck_pptx_bytes(
+    bundle: ReportingBundle,
+    *,
+    include_commentary: bool = True,
+    include_validation_appendix: bool = True,
+    use_ai_commentary: bool = False,
+    scenario_mode: str | None = None,
+    package_mode: PackageMode = "full_board",
+) -> tuple[bytes, str]:
+    """MD&A deck — always programmatic layout (no template shape patching)."""
+    _ = scenario_mode
+    package = build_board_package_from_bundle(
+        bundle,
+        include_commentary=include_commentary,
+        include_validation_appendix=include_validation_appendix,
+        use_ai_commentary=use_ai_commentary,
+        scenario_mode=scenario_mode,
+        package_mode=package_mode,
+    )
+    skip_filter = package_mode == "full_board"
+    return (
+        render_pptx_bytes(package, skip_viability_filter=skip_filter),
+        "programmatic",
+    )
+
+
 def build_board_pptx_bytes(
     bundle: ReportingBundle,
     *,

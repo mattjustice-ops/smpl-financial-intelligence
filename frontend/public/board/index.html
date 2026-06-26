@@ -1664,7 +1664,7 @@ function openBoardExport(url, label) {
 async function openMdaDeck() {
   if (window.SMPLBoardLive && typeof window.SMPLBoardLive.openBoardExport === "function") {
     var live = await window.SMPLBoardLive.openBoardExport("pptx");
-    if (live === "ok") return;
+    if (live === "ok" || live === "started") return;
     if (live === "no-org") {
       openBoardExport(BOARD_EXPORTS.boardReview, "MD&A Deck");
     }
@@ -1676,7 +1676,7 @@ async function openMdaDeck() {
 async function openVarianceCommentary() {
   if (window.SMPLBoardLive && typeof window.SMPLBoardLive.openBoardExport === "function") {
     var live = await window.SMPLBoardLive.openBoardExport("xlsx");
-    if (live === "ok") return;
+    if (live === "ok" || live === "started") return;
     if (live === "no-org") {
       openBoardExport(BOARD_EXPORTS.mdaPackage, "Variance Commentary");
     }
@@ -3370,7 +3370,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=27"></script>
+<script src="/shared/board-hydrate.js?v=28"></script>
 
 </body>
 </html>

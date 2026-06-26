@@ -102,8 +102,31 @@ def build_pptx_board_presentation(
     use_ai_commentary: bool = False,
     scenario_mode: str | None = None,
     package_mode: str = "full_board",
-) -> bytes:
-    return build_pptx_bytes(
+) -> tuple[bytes, str]:
+    from app.services.reporting.export.board_export_service import build_board_pptx_bytes
+
+    return build_board_pptx_bytes(
+        bundle,
+        include_commentary=include_commentary,
+        include_validation_appendix=include_validation_appendix,
+        use_ai_commentary=use_ai_commentary,
+        scenario_mode=scenario_mode,
+        package_mode=package_mode,  # type: ignore[arg-type]
+    )
+
+
+def build_pptx_mda_deck(
+    bundle: ReportingBundle,
+    *,
+    include_commentary: bool = True,
+    include_validation_appendix: bool = True,
+    use_ai_commentary: bool = False,
+    scenario_mode: str | None = None,
+    package_mode: str = "full_board",
+) -> tuple[bytes, str]:
+    from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
+
+    return build_mda_deck_pptx_bytes(
         bundle,
         include_commentary=include_commentary,
         include_validation_appendix=include_validation_appendix,

@@ -888,8 +888,8 @@
     var exportSpec =
       format === "pptx"
         ? {
-            path: "/api/v1/export/board-presentation.pptx",
-            filename: "board_mda_deck_" + closeMonth + ".pptx",
+            path: "/api/v1/export/mda-deck.pptx",
+            filename: "mda_deck_" + closeMonth + ".pptx",
             label: "MD&A Deck",
           }
         : {

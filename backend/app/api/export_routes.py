@@ -22,6 +22,7 @@ from app.services.reporting.export.service import (
     build_excel_management_review,
     build_excel_variance_commentary,
     build_pptx_board_presentation,
+    build_pptx_mda_deck,
     collect_bundle,
     run_export_validation,
 )
@@ -424,20 +425,32 @@ def _board_pptx_response(
     use_ai_commentary: bool,
     scenario_mode: str | None,
     package_mode: str,
+    deck_kind: str = "board",
 ) -> Response:
     try:
-        content, pptx_source = build_pptx_board_presentation(
-            bundle,
-            include_commentary=include_commentary,
-            include_validation_appendix=include_validation_appendix,
-            use_ai_commentary=use_ai_commentary,
-            scenario_mode=scenario_mode,
-            package_mode=package_mode,
-        )
+        if deck_kind == "mda":
+            content, pptx_source = build_pptx_mda_deck(
+                bundle,
+                include_commentary=include_commentary,
+                include_validation_appendix=include_validation_appendix,
+                use_ai_commentary=use_ai_commentary,
+                scenario_mode=scenario_mode,
+                package_mode=package_mode,
+            )
+            filename = f"mda_deck_{bundle.as_of_period}.pptx"
+        else:
+            content, pptx_source = build_pptx_board_presentation(
+                bundle,
+                include_commentary=include_commentary,
+                include_validation_appendix=include_validation_appendix,
+                use_ai_commentary=use_ai_commentary,
+                scenario_mode=scenario_mode,
+                package_mode=package_mode,
+            )
+            filename = f"board_package_{bundle.as_of_period}.pptx"
         if not content:
             raise ValueError("Board PPTX render returned empty content.")
         validation_status = bundle.validation.status if bundle.validation else "unknown"
-        filename = f"board_package_{bundle.as_of_period}.pptx"
         from app.services.reporting.export.pptx_template_export import resolve_board_pptx_template
 
         template_path = resolve_board_pptx_template()
@@ -447,8 +460,9 @@ def _board_pptx_response(
             "X-Board-Package-Engine": "smpl-board-v2",
             "X-Board-PPTX-Source": pptx_source,
             "X-Board-AI-Commentary": "true" if use_ai_commentary else "false",
+            "X-Board-Deck-Kind": deck_kind,
         }
-        if template_path:
+        if template_path and deck_kind != "mda":
             headers["X-Board-PPTX-Template"] = str(template_path)
         return Response(
             content=content,
@@ -462,6 +476,46 @@ def _board_pptx_response(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to render board presentation: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
+@export_router.get("/mda-deck-smoke")
+def export_mda_deck_smoke(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query("2026-06"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """JSON smoke test for MD&A deck (programmatic PPTX, no template)."""
+    get_organization_or_404(db, organization_id)
+    year = as_of_period[:4]
+    try:
+        bundle = collect_bundle(
+            db,
+            organization_id,
+            scenario="Combined",
+            start_period=f"{year}-01",
+            end_period=f"{year}-12",
+            as_of_period=as_of_period,
+            include_ai_commentary=False,
+        )
+        content, source = build_pptx_mda_deck(
+            bundle,
+            use_ai_commentary=False,
+            package_mode="full_board",
+        )
+        return {
+            "status": "ok",
+            "bytes": len(content),
+            "source": source,
+            "deck_kind": "mda",
+            "validation": bundle.validation.status,
+            "period": bundle.as_of_period,
+        }
+    except Exception as exc:
+        logger.exception("MD&A deck smoke failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"MD&A deck smoke failed: {type(exc).__name__}: {exc}",
         ) from exc
 
 
@@ -582,4 +636,81 @@ def export_board_presentation(
         use_ai_commentary=include_ai_commentary,
         scenario_mode=scenario_mode,
         package_mode=package_mode,
+    )
+
+
+@export_router.get("/mda-deck.pptx")
+def export_mda_deck(
+    organization_id: uuid.UUID = Query(...),
+    reporting_period: str | None = Query(None, description="Alias for as_of_period (close month YYYY-MM)"),
+    scenario: str = Query("Combined"),
+    scenario_mode: str | None = Query(
+        None,
+        description="Actual | Budget | Forecast | Actual+Forecast | Actual vs Budget | Actual vs Forecast",
+    ),
+    start_period: str = Query(...),
+    end_period: str = Query(...),
+    period: str | None = Query(None),
+    quarter: str | None = Query(None),
+    fiscal_year: str | None = Query(None),
+    as_of_period: str | None = Query(None),
+    block_on_failure: bool = Query(False),
+    include_ai_commentary: bool = Query(
+        True,
+        description="Generate Claude slide commentary when API key is set",
+    ),
+    include_commentary: bool = Query(True),
+    include_appendix: bool = Query(True),
+    include_validation: bool = Query(True, description="Include validation appendix slide"),
+    package_mode: str = Query(
+        "full_board",
+        description="full_board | executive_summary | gtm_deep_dive | finance_deep_dive | variance_commentary",
+    ),
+    waterfall_type: str | None = Query(None),
+    marketing_channel: str | None = Query(None),
+    region: str | None = Query(None),
+    segment: str | None = Query(None),
+    owner: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> Response:
+    """MD&A operating review deck — programmatic PPTX (no template patching)."""
+    get_organization_or_404(db, organization_id)
+    as_of = reporting_period or as_of_period
+    params = _export_params(
+        scenario,
+        start_period,
+        end_period,
+        period,
+        quarter,
+        fiscal_year,
+        as_of,
+        waterfall_type,
+        marketing_channel,
+        region,
+        segment,
+        owner,
+    )
+    try:
+        bundle = collect_bundle(
+            db,
+            organization_id,
+            include_ai_commentary=False,
+            **params,
+        )
+    except Exception as exc:
+        logger.exception("MD&A deck bundle collection failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Export bundle failed: {type(exc).__name__}: {exc}",
+        ) from exc
+    if include_validation:
+        _check_validation(bundle, block_on_failure)
+    return _board_pptx_response(
+        bundle,
+        include_commentary=include_commentary,
+        include_validation_appendix=include_appendix,
+        use_ai_commentary=include_ai_commentary,
+        scenario_mode=scenario_mode,
+        package_mode=package_mode,
+        deck_kind="mda",
     )

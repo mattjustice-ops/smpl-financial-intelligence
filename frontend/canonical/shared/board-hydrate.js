@@ -174,6 +174,8 @@
     if (global.SMPLBoardLive && global.SMPLBoardLive.updateCopilotContext) {
       global.SMPLBoardLive.updateCopilotContext(data);
     }
+
+    refreshExecCommentaryFromLiveMetrics();
   }
 
   function smplBoardRefreshView() {
@@ -192,36 +194,136 @@
   }
   global.smplBoardRefreshView = smplBoardRefreshView;
 
-  async function boardResolveOrgId() {
-    if (global.SMPL_ORG_ID) return global.SMPL_ORG_ID;
-    if (global.SMPLOutlook && global.SMPLOutlook.resolveOrgId) {
-      return await global.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 4000 });
+  async function boardSessionOrgs() {
+    try {
+      var res = await fetch("/api/auth/session", { credentials: "include" });
+      if (!res.ok) return null;
+      var j = await res.json();
+      if (!j || !j.user) return null;
+      var orgIds = (j.user.organizations || [])
+        .map(function (o) {
+          return o.organizationId;
+        })
+        .filter(Boolean);
+      return {
+        activeId: j.user.activeOrganizationId || null,
+        orgIds: orgIds,
+      };
+    } catch (_) {
+      return null;
     }
-    return null;
+  }
+
+  function pickAccessibleOrgId(preferred, sessionOrgs) {
+    if (!sessionOrgs || !sessionOrgs.orgIds.length) return preferred || null;
+    if (preferred && sessionOrgs.orgIds.indexOf(preferred) >= 0) return preferred;
+    if (sessionOrgs.activeId && sessionOrgs.orgIds.indexOf(sessionOrgs.activeId) >= 0) {
+      return sessionOrgs.activeId;
+    }
+    return sessionOrgs.orgIds[0];
+  }
+
+  async function boardResolveOrgId() {
+    var sessionOrgs = await boardSessionOrgs();
+    if (global.SMPL_ORG_ID) {
+      return pickAccessibleOrgId(global.SMPL_ORG_ID, sessionOrgs);
+    }
+    if (global.SMPLOutlook && global.SMPLOutlook.resolveOrgId) {
+      var resolved = await global.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 4000 });
+      return pickAccessibleOrgId(resolved, sessionOrgs);
+    }
+    return sessionOrgs ? pickAccessibleOrgId(null, sessionOrgs) : null;
+  }
+
+  /** Same-origin Next proxy on prod (session + X-SFI-User-Id). Direct Railway only on localhost. */
+  async function boardLiveApiBase() {
+    var host = global.location && global.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://127.0.0.1:8001";
+    }
+    return "";
+  }
+
+  function boardLiveFetchInit(apiBase, init) {
+    var opts = Object.assign({}, init || {});
+    if (apiBase) {
+      opts.credentials = "omit";
+      opts.mode = "cors";
+    } else {
+      opts.credentials = "include";
+    }
+    return opts;
+  }
+
+  function boardLiveUrl(apiBase, path) {
+    return (apiBase || "") + path;
+  }
+
+  function boardFetchWithTimeout(url, init, timeoutMs) {
+    timeoutMs = timeoutMs == null ? 295000 : timeoutMs;
+    var controller = new AbortController();
+    var timer = setTimeout(function () {
+      controller.abort("board-request-timeout");
+    }, timeoutMs);
+    var opts = Object.assign({}, init || {}, { signal: controller.signal });
+    return fetch(url, opts).finally(function () {
+      clearTimeout(timer);
+    });
+  }
+
+  function boardFetchErrorMessage(err, timeoutMs) {
+    if (!err) return "Request failed.";
+    if (err === "board-request-timeout" || err.name === "AbortError") {
+      var secs = Math.round((timeoutMs || 295000) / 1000);
+      return (
+        "Request timed out after " +
+        secs +
+        "s. Claude exports can take several minutes — confirm Railway API is healthy and ANTHROPIC_API_KEY is set, then retry."
+      );
+    }
+    if (err.message === "Failed to fetch" || (err.message && err.message.indexOf("NetworkError") >= 0)) {
+      return (
+        "Network error reaching the API. Stay on /app/board (signed in), hard refresh, and retry. " +
+        "If exports time out, confirm SFI_BACKEND_URL on Vercel points to Railway."
+      );
+    }
+    return err.message ? err.message : String(err);
   }
 
   async function boardApiErrorMessage(res) {
     try {
-      var j = await res.json();
-      var detail = j.detail;
-      if (typeof detail === "string") return detail;
-      if (detail && typeof detail === "object") {
-        var msg = detail.message || detail.code || "Request failed (" + res.status + ")";
-        var checks = detail.validation && detail.validation.checks;
-        if (checks && checks.length) {
-          var issues = checks
-            .filter(function (c) {
-              return c.status === "fail" || c.status === "warning";
-            })
-            .slice(0, 4)
-            .map(function (c) {
-              return c.validation_name + " (" + c.period + "): " + c.status;
-            });
-          if (issues.length) msg += " — " + issues.join("; ");
+      var text = await res.text();
+      if (!text) return "Request failed (" + res.status + ")";
+      try {
+        var j = JSON.parse(text);
+        var detail = j.detail;
+        if (typeof detail === "string") return detail;
+        if (detail && typeof detail === "object") {
+          var msg = detail.message || detail.code || "Request failed (" + res.status + ")";
+          var checks = detail.validation && detail.validation.checks;
+          if (checks && checks.length) {
+            var issues = checks
+              .filter(function (c) {
+                return c.status === "fail" || c.status === "warning";
+              })
+              .slice(0, 4)
+              .map(function (c) {
+                return c.validation_name + " (" + c.period + "): " + c.status;
+              });
+            if (issues.length) msg += " — " + issues.join("; ");
+          }
+          return msg;
         }
-        return msg;
+        return text.slice(0, 500);
+      } catch (_) {
+        if (/upstream error|ROUTER_EXTERNAL_TARGET|An error occurred with this application/i.test(text)) {
+          return (
+            "Export timed out on the web proxy (upstream error). Retrying via Railway direct… " +
+            "If both attempts fail, confirm SFI_BACKEND_URL on Vercel and Railway /export/ping health."
+          );
+        }
+        return text.slice(0, 500);
       }
-      return "Request failed (" + res.status + ")";
     } catch (_) {
       return "Request failed (" + res.status + ")";
     }
@@ -229,63 +331,234 @@
 
   function formatApiCommentary(c) {
     if (!c || typeof c !== "object") return "";
-    return [
-      c.what_happened,
-      c.why_it_happened,
-      c.impact,
-      c.favorable,
-      c.unfavorable,
-      c.leadership_watch,
-      c.recommended_actions,
-    ]
-      .filter(Boolean)
-      .join(" ");
+    if (c.narrative) return c.narrative;
+    // Single-paragraph Claude output (no rule-based boilerplate fields)
+    if (c.what_happened && !c.impact && !c.recommended_actions && !c.leadership_watch) {
+      return c.what_happened;
+    }
+    if (c.what_happened && c.why_it_happened) {
+      return (c.what_happened + " " + c.why_it_happened).trim();
+    }
+    return c.what_happened || "";
+  }
+
+  var BOARD_COMMENTARY_SLIDE_FOR_TAB = {
+    exec: "exec",
+    arr: "arr",
+    revenue: "revenue",
+    gtm: "gtm",
+    cash: "cash",
+    workforce: "headcount",
+    risks: "risks",
+  };
+
+  var BOARD_COMMENTARY_TARGET = {
+    exec: "execComm",
+    arr: "arrComm",
+    revenue: "revComm",
+    gtm: "gtmComm",
+    cash: "cashComm",
+    headcount: "hcComm",
+    risks: "riskComm",
+  };
+
+  function restoreSlideCommentary(tabName) {
+    var slideKey = BOARD_COMMENTARY_SLIDE_FOR_TAB[tabName];
+    if (!slideKey || !global.aiCache || !global.aiCache[slideKey]) return;
+    var targetId = BOARD_COMMENTARY_TARGET[slideKey];
+    if (!targetId) return;
+    var el = document.getElementById(targetId);
+    if (!el) return;
+    var txt = el.querySelector(".commentary-text");
+    if (txt) txt.textContent = global.aiCache[slideKey];
+  }
+
+  function installCommentaryCacheRestore() {
+    if (global._smplCommentaryRestoreInstalled || !global.show) return;
+    global._smplCommentaryRestoreInstalled = true;
+    var origShow = global.show;
+    global.show = function (name, btn) {
+      origShow(name, btn);
+      setTimeout(function () {
+        restoreSlideCommentary(name);
+      }, 0);
+    };
+  }
+
+  function formatDemoFacts(facts) {
+    if (!facts) return "";
+    var parts = facts.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (parts.length <= 4) return facts;
+    return parts.slice(0, 2).join(" ") + " " + parts.slice(2, 4).join(" ") + " " + parts.slice(4).join(" ");
+  }
+
+  function readStaticCommentary(slideKey, targetId) {
+    global._smplStaticComm = global._smplStaticComm || {};
+    if (!global._smplStaticComm[slideKey]) {
+      var el = document.getElementById(targetId);
+      var node = el && el.querySelector(".commentary-text");
+      var text = node && node.textContent ? node.textContent.trim() : "";
+      if (!text && global.AI_CTX && global.AI_CTX[slideKey]) {
+        text = formatDemoFacts(global.AI_CTX[slideKey]);
+      }
+      global._smplStaticComm[slideKey] = text || "Commentary unavailable.";
+    }
+    return global._smplStaticComm[slideKey];
+  }
+
+  function hasLiveBoardMetrics() {
+    var m = boardJunMetrics();
+    return m.arrAct != null || m.revAct != null || m.cashAct != null;
+  }
+
+  function buildLiveExecCommentary() {
+    var m = boardJunMetrics();
+    var drivers = boardExecDrivers();
+    var closeLbl = global.CLOSE_LABEL || "Close";
+    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : 0;
+    var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : 0;
+    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
+    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : 0;
+    var nrrPct = m.nrr != null ? (m.nrr * 100).toFixed(1) + "%" : "—";
+    return (
+      closeLbl +
+      " close: ARR " +
+      fKpiM(m.arrAct) +
+      " (" +
+      fKpiVarM(arrVar) +
+      " vs bud), net new " +
+      fKpiM(drivers.nnAct) +
+      ", revenue " +
+      fKpiM(m.revAct) +
+      " (" +
+      fKpiVarM(revVar) +
+      " vs bud), EBITDA " +
+      fKpiM(m.ebitdaAct) +
+      " (" +
+      fKpiVarM(ebitdaVar) +
+      " vs bud), cash " +
+      fKpiM(m.cashAct) +
+      " (" +
+      fKpiVarM(cashVar) +
+      " vs bud), N$R " +
+      nrrPct +
+      "."
+    );
+  }
+
+  function buildDemoCommentary(slideKey, targetId) {
+    if (slideKey === "exec" && hasLiveBoardMetrics()) {
+      return buildLiveExecCommentary();
+    }
+    return readStaticCommentary(slideKey, targetId);
+  }
+
+  function refreshExecCommentaryFromLiveMetrics() {
+    if (global.aiCache && global.aiCache.exec) return;
+    var execComm = document.getElementById("execComm");
+    if (!execComm || !hasLiveBoardMetrics()) return;
+    var txt = execComm.querySelector(".commentary-text");
+    if (txt) txt.textContent = buildLiveExecCommentary();
+  }
+
+  function shouldFallbackToDemo(status) {
+    // Auth / org mismatch → embedded demo. API/LLM outages surface explicit errors instead.
+    return status === 401 || status === 403 || status === 409;
+  }
+
+  function cacheAllStaticCommentary() {
+    var map = {
+      exec: "execComm",
+      arr: "arrComm",
+      revenue: "revComm",
+      gtm: "gtmComm",
+      cash: "cashComm",
+      headcount: "hcComm",
+      risks: "riskComm",
+    };
+    Object.keys(map).forEach(function (key) {
+      readStaticCommentary(key, map[key]);
+    });
   }
 
   function installLiveAi() {
     if (global._smplBoardAiInstalled) return;
     global._smplBoardAiInstalled = true;
+    cacheAllStaticCommentary();
 
     global.aiComm = async function aiComm(slideKey, targetId) {
-      if (global.aiCache && global.aiCache[slideKey]) {
-        document.getElementById(targetId).querySelector(".commentary-text").textContent =
-          global.aiCache[slideKey];
-        return;
-      }
+      global.aiCache = global.aiCache || {};
+      delete global.aiCache[slideKey];
+
       var el = document.getElementById(targetId);
       if (!el) return;
       var txt = el.querySelector(".commentary-text");
       txt.innerHTML = '<span class="spin"></span> Generating AI commentary...';
       var orgId = await boardResolveOrgId();
-      if (!orgId) {
-        txt.textContent =
-          "Open Board Platform from the signed-in operating OS (/app/board) to regenerate live Claude commentary.";
-        return;
-      }
       var apiSlideKey = BOARD_SLIDE_API_KEYS[slideKey] || slideKey;
-      try {
-        var res = await fetch(
-          "/api/v1/board-platform/commentary/regenerate?organization_id=" + encodeURIComponent(orgId),
-          {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slide_key: apiSlideKey }),
-          },
-        );
-        if (!res.ok) {
-          txt.textContent = await boardApiErrorMessage(res);
-          return;
+      var lastApiStatus = null;
+
+      if (orgId) {
+        try {
+          var apiBase = await boardLiveApiBase();
+          var res = await boardFetchWithTimeout(
+            boardLiveUrl(
+              apiBase,
+              "/api/v1/board-platform/commentary/regenerate?organization_id=" + encodeURIComponent(orgId),
+            ),
+            boardLiveFetchInit(apiBase, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ slide_key: apiSlideKey }),
+            }),
+            295000,
+          );
+          if (res.ok) {
+            var data = await res.json();
+            var text = formatApiCommentary(data.commentary) || "Commentary unavailable.";
+            if (
+              text.indexOf("See section commentary") >= 0 ||
+              text.indexOf("Confirm waterfall tie-outs") >= 0
+            ) {
+              text = readStaticCommentary(slideKey, targetId);
+            }
+            txt.textContent = text;
+            global.aiCache = global.aiCache || {};
+            global.aiCache[slideKey] = text;
+            return;
+          }
+          if (!shouldFallbackToDemo(res.status)) {
+            txt.textContent = await boardApiErrorMessage(res);
+            return;
+          }
+          lastApiStatus = res.status;
+        } catch (err) {
+          if (orgId) {
+            txt.textContent = "Commentary request failed: " + boardFetchErrorMessage(err, 295000);
+            return;
+          }
         }
-        var data = await res.json();
-        var text = formatApiCommentary(data.commentary) || "Commentary unavailable.";
-        txt.textContent = text;
-        global.aiCache = global.aiCache || {};
-        global.aiCache[slideKey] = text;
-      } catch (_) {
-        txt.textContent =
-          "Unable to reach commentary service. Confirm sign-in and ANTHROPIC_API_KEY on the API server.";
       }
+
+      await new Promise(function (r) {
+        setTimeout(r, 350);
+      });
+      var demoText = buildDemoCommentary(slideKey, targetId);
+      if (lastApiStatus === 409) {
+        demoText +=
+          " Warehouse validation notes (e.g. pipeline_waterfall_ties) do not block board review — export package still requires tie-outs.";
+      } else if (!orgId) {
+        demoText +=
+          " (Embedded narrative — sign in at /app/board for live Claude commentary from your warehouse.)";
+      } else if (hasLiveBoardMetrics()) {
+        demoText += " (Live warehouse metrics — Claude unavailable or API blocked; numbers above match hydrated board data.)";
+      } else {
+        demoText +=
+          " (Live API unavailable — showing embedded June 2026 narrative. Confirm sign-in and ANTHROPIC_API_KEY on the API server.)";
+      }
+      txt.textContent = demoText;
+      global.aiCache = global.aiCache || {};
+      global.aiCache[slideKey] = demoText;
     };
 
     var origCpSend = global.cpSend;
@@ -330,14 +603,18 @@
       }
 
       try {
-        var res = await fetch(
-          "/api/v1/board-platform/copilot?organization_id=" + encodeURIComponent(orgId),
-          {
+        var cpApiBase = await boardLiveApiBase();
+        var res = await boardFetchWithTimeout(
+          boardLiveUrl(
+            cpApiBase,
+            "/api/v1/board-platform/copilot?organization_id=" + encodeURIComponent(orgId),
+          ),
+          boardLiveFetchInit(cpApiBase, {
             method: "POST",
-            credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question: q }),
-          },
+          }),
+          295000,
         );
         if (!res.ok) {
           var errText = await boardApiErrorMessage(res);
@@ -364,11 +641,13 @@
               "</div></div>";
           }
         }
-      } catch (_) {
+      } catch (err) {
         var failEl = document.getElementById(thinkId);
         if (failEl) {
           failEl.outerHTML =
-            '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble" style="color:var(--red)">Connection error. Confirm sign-in and API health.</div></div>';
+            '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble" style="color:var(--red)">' +
+            boardFetchErrorMessage(err, 295000).replace(/</g, "&lt;") +
+            "</div></div>";
         }
       }
 
@@ -467,28 +746,12 @@
       var execComm = document.getElementById("execComm");
       if (execComm) {
         var txt = execComm.querySelector(".commentary-text");
-        if (txt && !global.aiCache?.exec) {
-          txt.textContent =
-            closeLbl +
-            " close: ARR " +
-            fKpiM(m.arrAct) +
-            " (" +
-            fKpiVarM(arrVar) +
-            " vs bud), revenue " +
-            fKpiM(m.revAct) +
-            " (" +
-            fKpiVarM(revVar) +
-            " vs bud), EBITDA " +
-            fKpiM(m.ebitdaAct) +
-            " (" +
-            fKpiVarM(ebitdaVar) +
-            " vs bud), cash " +
-            fKpiM(m.cashAct) +
-            " (" +
-            fKpiVarM(cashVar) +
-            " vs bud), N$R " +
-            nrrPct +
-            ".";
+        if (txt) {
+          if (global.aiCache && global.aiCache.exec) {
+            txt.textContent = global.aiCache.exec;
+          } else if (!global.aiCache?.exec) {
+            txt.textContent = buildLiveExecCommentary();
+          }
         }
       }
     };
@@ -539,20 +802,176 @@
     });
   }
 
+  function boardExportApiBase() {
+    var host = global.location && global.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return Promise.resolve("http://127.0.0.1:8001");
+    }
+    if (global.SMPL_LONG_RUNNING_API_BASE) {
+      return Promise.resolve(global.SMPL_LONG_RUNNING_API_BASE);
+    }
+    if (!global._boardExportApiBasePromise) {
+      global._boardExportApiBasePromise = fetch("/api/smpl/board-config", {
+        cache: "no-store",
+        credentials: "include",
+      })
+        .then(function (res) {
+          return res.ok ? res.json() : null;
+        })
+        .then(function (j) {
+          var base = j && j.longRunningApiBase ? String(j.longRunningApiBase).replace(/\/$/, "") : "";
+          if (base) global.SMPL_LONG_RUNNING_API_BASE = base;
+          return base;
+        })
+        .catch(function () {
+          return "";
+        });
+    }
+    return global._boardExportApiBasePromise;
+  }
+
+  function isExportUpstreamError(text) {
+    return /upstream error|ROUTER_EXTERNAL_TARGET|An error occurred with this application|502|504|503/i.test(
+      text || "",
+    );
+  }
+
+  /** Cross-origin file downloads bypass CORS (unlike fetch). Railway serves Content-Disposition: attachment. */
+  function triggerDirectExportDownload(exportUrl, label) {
+    alert(
+      label +
+        " export started.\n\nGeneration can take 3–8 minutes. Your browser will download when ready — keep this tab open.",
+    );
+    var frame = document.getElementById("smpl-export-download-frame");
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.id = "smpl-export-download-frame";
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.display = "none";
+      document.body.appendChild(frame);
+    }
+    frame.src = exportUrl;
+  }
+
+  async function fetchBoardExportBlob(exportBase, exportUrl, exportSpec, exportTimeoutMs) {
+    var res = await boardFetchWithTimeout(
+      exportUrl,
+      boardLiveFetchInit(exportBase, { method: "GET", cache: "no-store" }),
+      exportTimeoutMs,
+    );
+    if (!res.ok) {
+      return { ok: false, message: await boardApiErrorMessage(res) };
+    }
+    var blob = await res.blob();
+    if (!blob || blob.size < 100) {
+      return { ok: false, message: exportSpec.label + " export returned an empty file. Check backend logs and retry." };
+    }
+    var objectUrl = URL.createObjectURL(blob);
+    var anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = exportSpec.filename;
+    anchor.click();
+    URL.revokeObjectURL(objectUrl);
+    return { ok: true };
+  }
+
+  async function openLiveBoardExport(format) {
+    var orgId = await boardResolveOrgId();
+    var closeMonth = boardActiveCloseMonth();
+    var year = closeMonth.slice(0, 4);
+    if (!orgId) {
+      return "no-org";
+    }
+
+    // Board header buttons — must match backend export registry (output_requirements.py).
+    // Variance Commentary button → full MD&A Excel package (month-end-close), NOT 2-tab variance-only.
+    var exportSpec =
+      format === "pptx"
+        ? {
+            path: "/api/v1/export/mda-deck.pptx",
+            filename: "mda_deck_" + closeMonth + ".pptx",
+            label: "MD&A Deck",
+          }
+        : {
+            path: "/api/v1/export/month-end-close.xlsx",
+            filename: "mda_package_" + closeMonth + ".xlsx",
+            label: "Variance Commentary",
+          };
+
+    var params = new URLSearchParams({
+      organization_id: orgId,
+      scenario: "Combined",
+      start_period: year + "-01",
+      end_period: year + "-12",
+      as_of_period: closeMonth,
+      include_ai_commentary: "true",
+      include_commentary: "true",
+      include_appendix: "true",
+      include_validation: "true",
+      block_on_failure: "false",
+      package_mode: "full_board",
+    });
+
+    var exportTimeoutMs = 600000;
+
+    try {
+      var directBase = await boardExportApiBase();
+      var host = global.location && global.location.hostname;
+      var isLocal = host === "localhost" || host === "127.0.0.1";
+      var exportUrl = boardLiveUrl(directBase, exportSpec.path) + "?" + params.toString();
+
+      if (directBase && !isLocal) {
+        triggerDirectExportDownload(exportUrl, exportSpec.label);
+        return "started";
+      }
+
+      if (!directBase && !isLocal) {
+        alert(
+          exportSpec.label +
+            " export failed: Railway API URL is not configured.\n\n" +
+            "Set SFI_BACKEND_URL and NEXT_PUBLIC_API_URL on Vercel to https://sfi-api-production.up.railway.app, redeploy, then hard refresh /app/board.",
+        );
+        return "error";
+      }
+
+      var exportBase = directBase || "";
+      try {
+        var result = await fetchBoardExportBlob(exportBase, exportUrl, exportSpec, exportTimeoutMs);
+        if (result.ok) return "ok";
+        alert(exportSpec.label + " export failed:\n" + (result.message || "Unknown error"));
+        return "error";
+      } catch (err) {
+        alert(exportSpec.label + " export failed:\n" + boardFetchErrorMessage(err, exportTimeoutMs));
+        return "error";
+      }
+    } catch (err) {
+      alert(
+        exportSpec.label +
+          " export failed: " +
+          boardFetchErrorMessage(err, exportTimeoutMs),
+      );
+      return "error";
+    }
+  }
+
   global.SMPLBoardLive = {
     hydrate: smplBoardHydrate,
     syncBoardFromOutlook: syncBoardFromOutlook,
     updateCopilotContext: updateCopilotWelcome,
     boardJunMetrics: boardJunMetrics,
+    refreshExecCommentaryFromLiveMetrics: refreshExecCommentaryFromLiveMetrics,
+    openBoardExport: openLiveBoardExport,
   };
 
   global.SMPL_ON_ORG_READY = function () {
     void smplBoardHydrate();
   };
 
-  global.addEventListener("load", function () {
-    installLiveAi();
+  // Install live handlers as soon as this script parses (before window "load").
+  installLiveAi();
+  installCommentaryCacheRestore();
 
+  global.addEventListener("load", function () {
     if (global.SMPLSkin) {
       global.SMPLSkin.init("skinSelect", smplBoardRefreshView);
     } else if (typeof global.applySkin === "function") {
