@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from app.services.reporting.export.pptx_template_export import (
     TemplateCommentaryUpdate,
-    _apply_key_takeaways_commentary,
+    _apply_key_takeaway_bullets,
+    _find_key_takeaways_slots,
     _find_commentary_column_shapes,
     _find_key_takeaways_bullet_shapes,
     _find_risk_description_shapes,
     _is_boilerplate_shape,
     _is_exec_nav_text,
     _month_label,
+    _normalize_bullet_line,
     _period_replacements,
     _prior_month,
     _quarter_label,
@@ -188,31 +190,56 @@ def test_is_boilerplate_shape_detects_footer():
     assert not _is_boilerplate_shape("• Revenue $7.41M vs budget")
 
 
-def test_apply_key_takeaways_replaces_all_bullets_without_layering():
+def test_apply_key_takeaway_bullets_fills_template_slots_in_order():
     from pptx import Presentation
     from pptx.util import Inches
 
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(2), Inches(0.4)).text = "Key Takeaways"
-    old1 = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(8), Inches(0.5))
-    old1.text = "• Old May bullet one about revenue"
-    old2 = slide.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(8), Inches(0.5))
-    old2.text = "• Old May bullet two about ARR"
+    boxes = []
+    for row in range(3):
+        box = slide.shapes.add_textbox(Inches(0.5), Inches(1.0 + row * 0.5), Inches(8), Inches(0.45))
+        box.text = f"• Old template bullet {row + 1} about May revenue"
+        boxes.append(box)
     footer = slide.shapes.add_textbox(Inches(0.5), Inches(6.5), Inches(8), Inches(0.4))
     footer.text = "SMPL · Board Operating Review · Q2 2026 · CONFIDENTIAL"
 
-    bullets = _find_key_takeaways_bullet_shapes(slide)
-    assert len(bullets) == 2
+    slots = _find_key_takeaways_slots(slide)
+    assert len(slots) == 3
 
-    new_text = "• June revenue $7.35M vs budget\n• Ending ARR $85.31M vs budget +$420K"
-    assert _apply_key_takeaways_commentary(slide, new_text)
+    bullets = ["• First provided bullet", "• Second provided bullet", "• Third provided bullet"]
+    assert _apply_key_takeaway_bullets(slide, bullets)
 
-    assert "May" not in old1.text
-    assert "May" not in old2.text
-    assert "June revenue" in old1.text
-    assert "Ending ARR" in old2.text
+    assert "May" not in boxes[0].text
+    assert "First provided" in boxes[0].text
+    assert "Second provided" in boxes[1].text
+    assert "Third provided" in boxes[2].text
     assert footer.text == "SMPL · Board Operating Review · Q2 2026 · CONFIDENTIAL"
+
+
+def test_apply_key_takeaway_bullets_clears_extra_template_slots():
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(2), Inches(0.4)).text = "Key Takeaways"
+    boxes = []
+    for row in range(3):
+        box = slide.shapes.add_textbox(Inches(0.5), Inches(1.0 + row * 0.5), Inches(8), Inches(0.45))
+        box.text = f"• Old bullet {row + 1}"
+        boxes.append(box)
+
+    assert _apply_key_takeaway_bullets(slide, ["• Only one new bullet"])
+    assert "Only one new" in boxes[0].text
+    assert boxes[1].text.strip() == ""
+    assert boxes[2].text.strip() == ""
+
+
+def test_normalize_bullet_line_strips_duplicate_prefix():
+    assert _normalize_bullet_line("• Revenue $7.35M") == "• Revenue $7.35M"
+    assert _normalize_bullet_line("Revenue $7.35M") == "• Revenue $7.35M"
 
 
 def test_apply_template_commentary_skips_footer_only_slides():
@@ -228,7 +255,13 @@ def test_apply_template_commentary_skips_footer_only_slides():
 
     applied = apply_template_commentary(
         prs,
-        {1: TemplateCommentaryUpdate(slide_key="executive_summary", text="• Fresh June bullet")},
+        {
+            1: TemplateCommentaryUpdate(
+                slide_key="executive_summary",
+                text="• Fresh June bullet",
+                bullets=("• Fresh June bullet",),
+            )
+        },
     )
     assert applied == 0
     assert "Fresh June" not in footer.text

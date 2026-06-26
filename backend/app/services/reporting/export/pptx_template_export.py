@@ -52,6 +52,7 @@ class TemplateSlideOutline:
 class TemplateCommentaryUpdate:
     slide_key: str
     text: str
+    bullets: tuple[str, ...] = ()
 
 
 # How commentary text is placed into each mapped slide's template zones.
@@ -366,6 +367,38 @@ def _set_shape_text(shape, text: str) -> None:
         extra.text = ""
 
 
+def _normalize_bullet_line(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    body = stripped.lstrip("•\u2022-\u2013 \t")
+    return f"• {body}" if body else ""
+
+
+def _set_paragraph_text_preserve_format(paragraph, text: str) -> None:
+    """Replace text in-place so the template run/paragraph formatting is kept."""
+    if paragraph.runs:
+        paragraph.runs[0].text = text
+        for run in paragraph.runs[1:]:
+            run.text = ""
+    else:
+        paragraph.text = text
+
+
+def _set_shape_single_line(shape, text: str, *, as_bullet: bool = False) -> None:
+    """Write one line into a fixed template text box (single paragraph)."""
+    if not hasattr(shape, "text_frame") or shape.text_frame is None:
+        return
+    tf = shape.text_frame
+    line = _normalize_bullet_line(text) if as_bullet else text.strip()
+    if tf.paragraphs:
+        _set_paragraph_text_preserve_format(tf.paragraphs[0], line)
+        for extra in tf.paragraphs[1:]:
+            extra.text = ""
+    elif line:
+        shape.text = line
+
+
 def _commentary_text_from_slide(slide_comm) -> str:
     from app.services.reporting.export.board_api_prompts import format_key_takeaway_bullets
 
@@ -489,8 +522,13 @@ def _build_template_commentary_updates(
         base = build_slide_commentary(bundle, slide_key)
         comm = enrich_slide_with_ai(bundle, slide_key, base) if use_ai_commentary else base
         text = _commentary_text_from_slide(comm)
-        if text:
-            updates[slide_idx] = TemplateCommentaryUpdate(slide_key=slide_key, text=text)
+        bullets = tuple(comm.bullets) if comm.bullets else ()
+        if text or bullets:
+            updates[slide_idx] = TemplateCommentaryUpdate(
+                slide_key=slide_key,
+                text=text,
+                bullets=bullets,
+            )
 
     logger.info(
         "Board PPTX template commentary: %d slides (%s, ai=%s)",
@@ -547,8 +585,13 @@ def _fallback_commentary_by_slide(
         if not comm:
             continue
         text = _commentary_text_from_slide(comm)
-        if text:
-            updates[item.index] = TemplateCommentaryUpdate(slide_key=key, text=text)
+        bullets = tuple(comm.bullets) if comm.bullets else ()
+        if text or bullets:
+            updates[item.index] = TemplateCommentaryUpdate(
+                slide_key=key,
+                text=text,
+                bullets=bullets,
+            )
     return updates
 
 
@@ -625,7 +668,9 @@ def _is_takeaway_bullet_text(text: str) -> bool:
     stripped = text.strip()
     if not stripped:
         return False
-    return stripped[0] in "•\u2022-\u2013"
+    if stripped[0] in "•\u2022":
+        return True
+    return stripped.startswith("- ")
 
 
 def _looks_like_metric_cell(text: str) -> bool:
@@ -670,12 +715,64 @@ def _split_key_takeaway_lines(text: str) -> list[str]:
     return lines
 
 
-def _apply_lines_to_shapes(shapes: list[Any], lines: list[str]) -> bool:
+def _apply_lines_to_shapes(
+    shapes: list[Any],
+    lines: list[str],
+    *,
+    as_bullet: bool = False,
+) -> bool:
     if not shapes:
         return False
     for idx, shape in enumerate(shapes):
-        _safe_set_shape_text(shape, lines[idx] if idx < len(lines) else "")
+        line = lines[idx] if idx < len(lines) else ""
+        _set_shape_single_line(shape, line, as_bullet=as_bullet)
     return True
+
+
+def _find_key_takeaways_label(slide) -> Any | None:
+    for shape in _iter_shapes(slide.shapes):
+        if _shape_text(shape).strip().lower() == "key takeaways":
+            return shape
+    return None
+
+
+def _find_key_takeaways_slots(slide) -> list[Any]:
+    """Fixed template text boxes under Key Takeaways — one slot per bullet, top-to-bottom."""
+    label = _find_key_takeaways_label(slide)
+    if label is None:
+        return _find_key_takeaways_bullet_shapes(slide)
+
+    col_left = label.left
+    min_top = label.top + int(label.height * 0.5)
+    max_top = min_top + 2300000  # stay within the Key Takeaways stack, not KPI mini-widgets
+    tol = 350000
+    min_width = 2000000  # wide bullet boxes only (exclude NRR/ARR chart labels)
+
+    candidates: list[tuple[int, int, Any]] = []
+    for shape in _iter_shapes(slide.shapes):
+        if shape is label:
+            continue
+        if not hasattr(shape, "text_frame") or shape.text_frame is None:
+            continue
+        if shape.top < min_top or shape.top > max_top:
+            continue
+        if abs(shape.left - col_left) > tol:
+            continue
+        if shape.width < min_width:
+            continue
+        if _is_protected_nav_shape(shape):
+            continue
+        text = _shape_text(shape)
+        if not text or _is_boilerplate_shape(text):
+            continue
+        if not _is_takeaway_bullet_text(text) and len(text) < 60:
+            continue
+        candidates.append((shape.top, shape.left, shape))
+
+    if candidates:
+        candidates.sort(key=lambda x: (x[0], x[1]))
+        return [shape for _, _, shape in candidates]
+    return _find_key_takeaways_bullet_shapes(slide)
 
 
 def _find_key_takeaways_bullet_shapes(slide) -> list[Any]:
@@ -768,27 +865,42 @@ def _find_narrative_block_shapes(slide, *, min_chars: int = 90) -> list[Any]:
     return [s for _, _, s in blocks]
 
 
-def _apply_key_takeaways_commentary(slide, commentary: str) -> bool:
-    """Replace all Key Takeaways bullet shapes; clear siblings so old text never layers."""
-    bullet_shapes = _find_key_takeaways_bullet_shapes(slide)
-    if not bullet_shapes:
-        return False
-    lines = _commentary_lines(commentary)
-    if not lines:
-        for shape in bullet_shapes:
-            _safe_set_shape_text(shape, "")
-        return True
-    return _apply_lines_to_shapes(bullet_shapes, lines)
+def _key_takeaway_bullet_lines(update: TemplateCommentaryUpdate) -> list[str]:
+    """Use API-provided bullets only — one string per template slot, no sentence splitting."""
+    if update.bullets:
+        return [_normalize_bullet_line(b) for b in update.bullets if b.strip()]
+    return [_normalize_bullet_line(line) for line in _split_key_takeaway_lines(update.text)]
 
 
-def _apply_commentary_for_slide(slide, slide_key: str, commentary: str) -> bool:
-    zone = _SLIDE_COMMENTARY_ZONE.get(slide_key, "takeaway_bullets")
-    lines = _commentary_lines(commentary.strip())
-    if not lines:
+def _apply_key_takeaway_bullets(slide, bullets: list[str]) -> bool:
+    """Fill each pre-existing template bullet box; clear unused slots."""
+    slots = _find_key_takeaways_slots(slide)
+    if not slots:
         return False
+    for idx, shape in enumerate(slots):
+        line = bullets[idx] if idx < len(bullets) else ""
+        _set_shape_single_line(shape, line, as_bullet=bool(line))
+    return True
+
+
+def _apply_commentary_for_slide(slide, update: TemplateCommentaryUpdate) -> bool:
+    zone = _SLIDE_COMMENTARY_ZONE.get(update.slide_key, "takeaway_bullets")
 
     if zone == "takeaway_bullets":
-        return _apply_key_takeaways_commentary(slide, commentary)
+        lines = _key_takeaway_bullet_lines(update)
+        if not lines:
+            slots = _find_key_takeaways_slots(slide)
+            for shape in slots:
+                _set_shape_single_line(shape, "")
+            return bool(slots)
+        return _apply_key_takeaway_bullets(slide, lines)
+
+    lines = _commentary_lines(update.text.strip())
+    if not lines and update.bullets:
+        lines = [b.strip() for b in update.bullets if b.strip()]
+    if not lines:
+        return False
+
     if zone == "commentary_column":
         shapes = _find_commentary_column_shapes(slide)
         return _apply_lines_to_shapes(shapes, lines)
@@ -807,7 +919,7 @@ def apply_template_commentary(prs, updates: dict[int, TemplateCommentaryUpdate])
         if idx < 1 or idx > len(prs.slides):
             continue
         slide = prs.slides[idx - 1]
-        if _apply_commentary_for_slide(slide, update.slide_key, update.text):
+        if _apply_commentary_for_slide(slide, update):
             applied += 1
         else:
             logger.warning(
