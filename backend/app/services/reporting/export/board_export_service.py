@@ -83,11 +83,7 @@ def build_mda_deck_pptx_bytes(
         scenario_mode=scenario_mode,
         package_mode=package_mode,
     )
-    skip_filter = package_mode == "full_board"
-    return (
-        render_pptx_bytes(package, skip_viability_filter=skip_filter),
-        "programmatic",
-    )
+    return render_pptx_bytes(package), "programmatic"
 
 
 def build_board_pptx_bytes(
@@ -144,8 +140,4 @@ def build_board_pptx_bytes(
         scenario_mode=scenario_mode,
         package_mode=package_mode,
     )
-    skip_filter = package_mode == "full_board"
-    return (
-        render_pptx_bytes(package, skip_viability_filter=skip_filter),
-        "programmatic",
-    )
+    return render_pptx_bytes(package), "programmatic"
