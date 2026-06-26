@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from app.services.reporting.export.pptx_template_export import (
+    TemplateCommentaryUpdate,
     _apply_key_takeaways_commentary,
+    _find_commentary_column_shapes,
     _find_key_takeaways_bullet_shapes,
+    _find_risk_description_shapes,
     _is_boilerplate_shape,
     _is_exec_nav_text,
     _month_label,
@@ -223,7 +226,26 @@ def test_apply_template_commentary_skips_footer_only_slides():
     table_cell = slide.shapes.add_textbox(Inches(0.5), Inches(2.0), Inches(4), Inches(0.4))
     table_cell.text = "1.3x, 5.8% WR — reallocate to Partner"
 
-    applied = apply_template_commentary(prs, {1: "• Fresh June bullet"})
+    applied = apply_template_commentary(
+        prs,
+        {1: TemplateCommentaryUpdate(slide_key="executive_summary", text="• Fresh June bullet")},
+    )
     assert applied == 0
     assert "Fresh June" not in footer.text
     assert "Fresh June" not in table_cell.text
+
+
+def test_map_template_slides_includes_gtm_and_outlook_on_gold_deck():
+    template = resolve_board_pptx_template()
+    if template is None:
+        return
+    from pptx import Presentation
+
+    mapping = map_template_slides_to_slide_keys(Presentation(str(template)))
+    assert mapping.get("executive_summary") == 2
+    assert mapping.get("gtm_performance") == 7
+    assert mapping.get("gtm_funnel") == 8
+    assert mapping.get("risks_opportunities") == 9
+    assert mapping.get("financial_outlook") == 10
+    assert mapping.get("board_actions") == 11
+    assert "headcount" not in mapping

@@ -48,6 +48,28 @@ class TemplateSlideOutline:
     preview: str
 
 
+@dataclass(frozen=True)
+class TemplateCommentaryUpdate:
+    slide_key: str
+    text: str
+
+
+# How commentary text is placed into each mapped slide's template zones.
+_SLIDE_COMMENTARY_ZONE: dict[str, str] = {
+    "executive_summary": "takeaway_bullets",
+    "arr_waterfall": "takeaway_bullets",
+    "gaap_revenue": "takeaway_bullets",
+    "cash_forecast": "takeaway_bullets",
+    "cash_flow_statement": "takeaway_bullets",
+    "gtm_performance": "commentary_column",
+    "gtm_funnel": "narrative_blocks",
+    "headcount": "takeaway_bullets",
+    "risks_opportunities": "risk_descriptions",
+    "financial_outlook": "narrative_blocks",
+    "board_actions": "narrative_blocks",
+}
+
+
 def resolve_board_pptx_template() -> Path | None:
     settings = get_settings()
     explicit = getattr(settings, "board_pptx_template", None)
@@ -384,16 +406,29 @@ _TEMPLATE_SLIDE_KEYWORDS: dict[str, tuple[str, ...]] = {
         "liquidity",
         "cash bridge",
     ),
+    "cash_flow_statement": (
+        "cash flow statement",
+        "operating activities",
+        "investing activities",
+        "financing activities",
+    ),
     "gtm_performance": (
         "gtm & marketing",
         "gtm and marketing",
         "marketing efficiency",
         "channel efficiency",
         "gtm performance",
+        "pipeline & channel",
+    ),
+    "gtm_funnel": (
+        "funnel analysis",
+        "new logo funnel",
+        "expansion funnel",
+        "pipeline to bookings",
     ),
     "headcount": (
-        "workforce",
-        "headcount",
+        "workforce & headcount",
+        "workforce and headcount",
         "hiring plan",
         "quota capacity",
     ),
@@ -401,7 +436,19 @@ _TEMPLATE_SLIDE_KEYWORDS: dict[str, tuple[str, ...]] = {
         "risks & opportunities",
         "risks and opportunities",
         "risk / opportunity",
-        "key risks",
+        "strategic assessment",
+        "decision matrix",
+    ),
+    "financial_outlook": (
+        "financial outlook",
+        "h2 2026 strategy",
+        "full-year forecast",
+        "board discussion",
+    ),
+    "board_actions": (
+        "board actions",
+        "approvals & next steps",
+        "decisions required",
     ),
 }
 
@@ -424,7 +471,7 @@ def _build_template_commentary_updates(
     prs,
     *,
     use_ai_commentary: bool,
-) -> dict[int, str]:
+) -> dict[int, TemplateCommentaryUpdate]:
     """Build commentary text per template slide index (API-spec path when AI enabled)."""
     from app.services.reporting.export.board_commentary_service import (
         build_slide_commentary,
@@ -437,13 +484,13 @@ def _build_template_commentary_updates(
         outline = extract_template_outline(prs)
         return _fallback_commentary_by_slide(bundle, outline, use_ai=use_ai_commentary)
 
-    updates: dict[int, str] = {}
+    updates: dict[int, TemplateCommentaryUpdate] = {}
     for slide_key, slide_idx in key_to_idx.items():
         base = build_slide_commentary(bundle, slide_key)
         comm = enrich_slide_with_ai(bundle, slide_key, base) if use_ai_commentary else base
         text = _commentary_text_from_slide(comm)
         if text:
-            updates[slide_idx] = text
+            updates[slide_idx] = TemplateCommentaryUpdate(slide_key=slide_key, text=text)
 
     logger.info(
         "Board PPTX template commentary: %d slides (%s, ai=%s)",
@@ -487,13 +534,13 @@ def _fallback_commentary_by_slide(
     outline: list[TemplateSlideOutline],
     *,
     use_ai: bool,
-) -> dict[int, str]:
+) -> dict[int, TemplateCommentaryUpdate]:
     """Legacy outline-index fallback when keyword mapping finds no slides."""
     from app.services.reporting.export.board_commentary_service import build_all_slide_commentary
 
     commentary = build_all_slide_commentary(bundle, use_ai=use_ai)
     slide_keys = list(commentary.keys())
-    updates: dict[int, str] = {}
+    updates: dict[int, TemplateCommentaryUpdate] = {}
     for i, item in enumerate(outline):
         key = slide_keys[i % len(slide_keys)] if slide_keys else "executive_summary"
         comm = commentary.get(key)
@@ -501,7 +548,7 @@ def _fallback_commentary_by_slide(
             continue
         text = _commentary_text_from_slide(comm)
         if text:
-            updates[item.index] = text
+            updates[item.index] = TemplateCommentaryUpdate(slide_key=key, text=text)
     return updates
 
 
@@ -576,7 +623,59 @@ def _is_boilerplate_shape(text: str) -> bool:
 
 def _is_takeaway_bullet_text(text: str) -> bool:
     stripped = text.strip()
-    return stripped.startswith("•") or stripped.startswith("-")
+    if not stripped:
+        return False
+    return stripped[0] in "•\u2022-\u2013"
+
+
+def _looks_like_metric_cell(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if re.fullmatch(r"[\$\(\)\d\.,\+%x\-bps]+", stripped.replace(" ", "")):
+        return True
+    if len(stripped) <= 8 and re.search(r"\d", stripped):
+        return True
+    return False
+
+
+def _commentary_lines(text: str) -> list[str]:
+    """Split AI output into lines for one shape each (bullets or sentences)."""
+    lines = _split_key_takeaway_lines(text)
+    if len(lines) > 1:
+        return lines
+    if not lines:
+        return []
+    single = lines[0]
+    if "|" in single:
+        parts = [p.strip() for p in single.split("|") if p.strip()]
+        if len(parts) > 1:
+            return parts
+    if len(single) > 120 and ". " in single:
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", single) if s.strip()]
+        if len(sentences) > 1:
+            return sentences
+    return lines
+
+
+def _split_key_takeaway_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.lower() == "key takeaways":
+            continue
+        lines.append(stripped)
+    return lines
+
+
+def _apply_lines_to_shapes(shapes: list[Any], lines: list[str]) -> bool:
+    if not shapes:
+        return False
+    for idx, shape in enumerate(shapes):
+        _safe_set_shape_text(shape, lines[idx] if idx < len(lines) else "")
+    return True
 
 
 def _find_key_takeaways_bullet_shapes(slide) -> list[Any]:
@@ -594,16 +693,79 @@ def _find_key_takeaways_bullet_shapes(slide) -> list[Any]:
     return [shape for _, _, shape in candidates]
 
 
-def _split_key_takeaway_lines(text: str) -> list[str]:
-    lines: list[str] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped:
+def _find_commentary_column_shapes(slide) -> list[Any]:
+    """GTM channel table — right-hand Commentary column cells."""
+    header_left: int | None = None
+    header_top = 0
+    for shape in _iter_shapes(slide.shapes):
+        if _shape_text(shape).strip().lower() == "commentary":
+            header_left = shape.left
+            header_top = shape.top
+            break
+    if header_left is None:
+        return []
+    tol = 250000
+    rows: list[tuple[int, Any]] = []
+    for shape in _iter_shapes(slide.shapes):
+        if abs(shape.left - header_left) > tol:
             continue
-        if stripped.lower() == "key takeaways":
+        if shape.top <= header_top:
             continue
-        lines.append(stripped)
-    return lines
+        text = _shape_text(shape)
+        if not text or _is_boilerplate_shape(text):
+            continue
+        if _looks_like_metric_cell(text):
+            continue
+        rows.append((shape.top, shape))
+    rows.sort(key=lambda x: x[0])
+    return [s for _, s in rows]
+
+
+def _find_risk_description_shapes(slide) -> list[Any]:
+    """Risks & Opportunities matrix — long description fields (not row titles)."""
+    rows: list[tuple[int, int, Any]] = []
+    for shape in _iter_shapes(slide.shapes):
+        if _is_protected_nav_shape(shape):
+            continue
+        text = _shape_text(shape)
+        if len(text) < 80:
+            continue
+        if _is_boilerplate_shape(text) or _is_takeaway_bullet_text(text):
+            continue
+        low = text.lower()
+        if low.startswith("risk ·") or low.startswith("opp ·"):
+            continue
+        if shape.left < 400000:
+            continue
+        rows.append((shape.top, shape.left, shape))
+    rows.sort(key=lambda x: (x[0], x[1]))
+    return [s for _, _, s in rows]
+
+
+def _find_narrative_block_shapes(slide, *, min_chars: int = 90) -> list[Any]:
+    """Funnel callouts, outlook paragraphs, board action descriptions."""
+    blocks: list[tuple[int, int, Any]] = []
+    for shape in _iter_shapes(slide.shapes):
+        if _is_protected_nav_shape(shape):
+            continue
+        text = _shape_text(shape)
+        if len(text) < min_chars:
+            continue
+        if _is_boilerplate_shape(text) or _is_takeaway_bullet_text(text):
+            continue
+        stripped = text.strip()
+        low = stripped.lower()
+        if stripped.isupper() and len(stripped) < 50:
+            continue
+        if low.startswith("for approval") or low.startswith("for discussion"):
+            continue
+        if low.startswith("owner:") or low.startswith("due:"):
+            continue
+        if _looks_like_metric_cell(stripped):
+            continue
+        blocks.append((shape.top, shape.left, shape))
+    blocks.sort(key=lambda x: (x[0], x[1]))
+    return [s for _, _, s in blocks]
 
 
 def _apply_key_takeaways_commentary(slide, commentary: str) -> bool:
@@ -611,64 +773,48 @@ def _apply_key_takeaways_commentary(slide, commentary: str) -> bool:
     bullet_shapes = _find_key_takeaways_bullet_shapes(slide)
     if not bullet_shapes:
         return False
-
-    lines = _split_key_takeaway_lines(commentary)
+    lines = _commentary_lines(commentary)
     if not lines:
         for shape in bullet_shapes:
             _safe_set_shape_text(shape, "")
         return True
-
-    # Single long narrative block: use first shape only and wipe the rest.
-    if len(lines) == 1 and len(lines[0]) > 150:
-        _safe_set_shape_text(bullet_shapes[0], lines[0])
-        for shape in bullet_shapes[1:]:
-            _safe_set_shape_text(shape, "")
-        return True
-
-    for idx, shape in enumerate(bullet_shapes):
-        _safe_set_shape_text(shape, lines[idx] if idx < len(lines) else "")
-    return True
+    return _apply_lines_to_shapes(bullet_shapes, lines)
 
 
-def _pick_commentary_shape(slide) -> Any | None:
-    """Legacy fallback when a slide has no Key Takeaways bullet row."""
-    candidates: list[tuple[int, Any]] = []
-    for shape in _iter_shapes(slide.shapes):
-        if _is_protected_nav_shape(shape):
-            continue
-        text = _shape_text(shape)
-        if _is_exec_nav_text(text) or _is_boilerplate_shape(text):
-            continue
-        if len(text) < 40:
-            continue
-        score = len(text)
-        if any(k in text.lower() for k in ("what changed", "why", "impact", "commentary", "driver")):
-            score += 500
-        candidates.append((score, shape))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    return candidates[0][1]
+def _apply_commentary_for_slide(slide, slide_key: str, commentary: str) -> bool:
+    zone = _SLIDE_COMMENTARY_ZONE.get(slide_key, "takeaway_bullets")
+    lines = _commentary_lines(commentary.strip())
+    if not lines:
+        return False
+
+    if zone == "takeaway_bullets":
+        return _apply_key_takeaways_commentary(slide, commentary)
+    if zone == "commentary_column":
+        shapes = _find_commentary_column_shapes(slide)
+        return _apply_lines_to_shapes(shapes, lines)
+    if zone == "risk_descriptions":
+        shapes = _find_risk_description_shapes(slide)
+        return _apply_lines_to_shapes(shapes, lines)
+    if zone == "narrative_blocks":
+        shapes = _find_narrative_block_shapes(slide)
+        return _apply_lines_to_shapes(shapes, lines)
+    return False
 
 
-def apply_template_commentary(prs, updates: dict[int, str]) -> int:
+def apply_template_commentary(prs, updates: dict[int, TemplateCommentaryUpdate]) -> int:
     applied = 0
-    for idx, commentary in updates.items():
+    for idx, update in updates.items():
         if idx < 1 or idx > len(prs.slides):
             continue
         slide = prs.slides[idx - 1]
-        body = commentary.strip()
-        if not body:
-            continue
-        if _apply_key_takeaways_commentary(slide, body):
+        if _apply_commentary_for_slide(slide, update.slide_key, update.text):
             applied += 1
-            continue
-        shape = _pick_commentary_shape(slide)
-        if shape is None:
-            logger.warning("Board PPTX: slide %d has no Key Takeaways region — skipping commentary", idx)
-            continue
-        if _safe_set_shape_text(shape, body):
-            applied += 1
+        else:
+            logger.warning(
+                "Board PPTX: no commentary zone matched slide %d (%s)",
+                idx,
+                update.slide_key,
+            )
     return applied
 
 
