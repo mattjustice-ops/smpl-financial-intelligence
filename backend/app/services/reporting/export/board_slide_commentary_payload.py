@@ -23,9 +23,12 @@ BOARD_DECK_SLIDE_KEYS = frozenset(
         "arr_waterfall",
         "gaap_revenue",
         "cash_forecast",
+        "cash_flow_statement",
         "gtm_performance",
-        "headcount",
+        "gtm_funnel",
         "risks_opportunities",
+        "financial_outlook",
+        "board_actions",
     }
 )
 
@@ -34,43 +37,71 @@ _SLIDE_SPECS: dict[str, dict[str, Any]] = {
         "slide_number": 2,
         "slide_title": "Executive Summary",
         "max_bullets": 5,
-        "max_words_per_bullet": 25,
+        "max_words_per_bullet": 18,
+        "max_chars_per_bullet": 100,
     },
     "arr_waterfall": {
         "slide_number": 3,
         "slide_title": "ARR Analysis",
-        "max_bullets": 4,
-        "max_words_per_bullet": 25,
+        "max_bullets": 2,
+        "max_words_per_bullet": 16,
+        "max_chars_per_bullet": 90,
     },
     "gaap_revenue": {
         "slide_number": 4,
         "slide_title": "P&L Review",
         "max_bullets": 5,
-        "max_words_per_bullet": 25,
+        "max_words_per_bullet": 15,
+        "max_chars_per_bullet": 85,
     },
     "cash_forecast": {
         "slide_number": 5,
         "slide_title": "Cash & Liquidity",
         "max_bullets": 4,
-        "max_words_per_bullet": 25,
+        "max_words_per_bullet": 16,
+        "max_chars_per_bullet": 90,
+    },
+    "cash_flow_statement": {
+        "slide_number": 6,
+        "slide_title": "Cash Flow Statement",
+        "max_bullets": 4,
+        "max_words_per_bullet": 16,
+        "max_chars_per_bullet": 90,
     },
     "gtm_performance": {
-        "slide_number": 6,
-        "slide_title": "GTM & Marketing",
-        "max_bullets": 4,
-        "max_words_per_bullet": 25,
-    },
-    "headcount": {
         "slide_number": 7,
-        "slide_title": "Workforce & Headcount",
+        "slide_title": "GTM & Marketing",
+        "max_bullets": 11,
+        "max_words_per_bullet": 6,
+        "max_chars_per_bullet": 38,
+    },
+    "gtm_funnel": {
+        "slide_number": 8,
+        "slide_title": "Funnel Analysis",
         "max_bullets": 4,
-        "max_words_per_bullet": 25,
+        "max_words_per_bullet": 18,
+        "max_chars_per_bullet": 115,
     },
     "risks_opportunities": {
-        "slide_number": 8,
+        "slide_number": 9,
         "slide_title": "Risks & Opportunities",
         "max_bullets": 4,
-        "max_words_per_bullet": 25,
+        "max_words_per_bullet": 20,
+        "max_chars_per_bullet": 135,
+    },
+    "financial_outlook": {
+        "slide_number": 10,
+        "slide_title": "Financial Outlook",
+        "max_bullets": 4,
+        "max_words_per_bullet": 22,
+        "max_chars_per_bullet": 160,
+    },
+    "board_actions": {
+        "slide_number": 11,
+        "slide_title": "Board Actions",
+        "max_bullets": 4,
+        "max_words_per_bullet": 24,
+        "max_chars_per_bullet": 165,
     },
 }
 
@@ -364,9 +395,12 @@ _METRIC_BUILDERS = {
     "arr_waterfall": _metrics_arr,
     "gaap_revenue": _metrics_pl,
     "cash_forecast": _metrics_cash,
+    "cash_flow_statement": _metrics_cash,
     "gtm_performance": _metrics_gtm,
-    "headcount": _metrics_headcount,
+    "gtm_funnel": _metrics_gtm,
     "risks_opportunities": _metrics_risks,
+    "financial_outlook": _metrics_executive,
+    "board_actions": _metrics_risks,
 }
 
 
@@ -394,6 +428,10 @@ def build_single_slide_payload(bundle: ReportingBundle, slide_key: str) -> dict[
     }
 
 
-def slide_prompt_limits(slide_key: str) -> tuple[int, int]:
+def slide_prompt_limits(slide_key: str) -> tuple[int, int, int]:
     spec = _SLIDE_SPECS[slide_key]
-    return int(spec["max_bullets"]), int(spec["max_words_per_bullet"])
+    return (
+        int(spec["max_bullets"]),
+        int(spec["max_words_per_bullet"]),
+        int(spec.get("max_chars_per_bullet", 120)),
+    )

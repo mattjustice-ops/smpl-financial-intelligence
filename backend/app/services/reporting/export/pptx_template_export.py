@@ -70,6 +70,25 @@ _SLIDE_COMMENTARY_ZONE: dict[str, str] = {
     "board_actions": "narrative_blocks",
 }
 
+# Template box capacity (chars) — derived from gold deck geometry; export layer enforces hard caps.
+_SLIDE_SLOT_CHAR_LIMIT: dict[str, int] = {
+    "executive_summary": 100,
+    "arr_waterfall": 90,
+    "gaap_revenue": 85,
+    "cash_forecast": 90,
+    "cash_flow_statement": 90,
+    "gtm_performance": 38,
+    "gtm_funnel": 115,
+    "risks_opportunities": 135,
+    "financial_outlook": 160,
+    "board_actions": 165,
+}
+
+_KEY_TAKEAWAY_SLOT_GAP_EMU = 28000
+_TEXT_FRAME_MARGIN_EMU = 45000
+_GTM_CHANNEL_COL_LEFT = 411480
+_GTM_ROW_TOP_TOLERANCE = 200000
+
 
 def resolve_board_pptx_template() -> Path | None:
     settings = get_settings()
@@ -375,6 +394,105 @@ def _normalize_bullet_line(text: str) -> str:
     return f"• {body}" if body else ""
 
 
+def _chars_per_line_for_shape(shape) -> int:
+    """Rough character capacity per line from box width (10pt body text)."""
+    width = max(int(getattr(shape, "width", 0) or 0), 800000)
+    return max(18, int(width / 52000))
+
+
+def _max_lines_for_shape(shape) -> int:
+    height = max(int(getattr(shape, "height", 0) or 0), 200000)
+    line_px = 127000  # ~10pt line height in EMU
+    return max(1, min(3, height // line_px))
+
+
+def _truncate_to_char_limit(text: str, max_chars: int) -> str:
+    stripped = text.strip()
+    if not stripped or max_chars <= 0:
+        return ""
+    if len(stripped) <= max_chars:
+        return stripped
+    if max_chars <= 1:
+        return stripped[:max_chars]
+    trimmed = stripped[: max_chars - 1].rstrip()
+    if " " in trimmed:
+        trimmed = trimmed.rsplit(" ", 1)[0]
+    return trimmed.rstrip(".,;:") + "…"
+
+
+def _truncate_text_for_shape(text: str, shape, *, max_chars: int | None = None) -> str:
+    if not text.strip():
+        return ""
+    per_line = _chars_per_line_for_shape(shape)
+    max_lines = _max_lines_for_shape(shape)
+    box_cap = per_line * max_lines
+    cap = max_chars if max_chars is not None else box_cap
+    cap = min(cap, box_cap) if max_chars is None else min(cap, box_cap, max_chars)
+    return _truncate_to_char_limit(text, cap)
+
+
+def _configure_text_frame_fit(text_frame) -> None:
+    """Single spacing, word wrap, and inset margins so text stays inside template boxes."""
+    try:
+        text_frame.word_wrap = True
+    except Exception:
+        pass
+    for margin_attr, value in (
+        ("margin_left", _TEXT_FRAME_MARGIN_EMU),
+        ("margin_right", _TEXT_FRAME_MARGIN_EMU),
+        ("margin_top", _TEXT_FRAME_MARGIN_EMU // 2),
+        ("margin_bottom", _TEXT_FRAME_MARGIN_EMU // 2),
+    ):
+        try:
+            setattr(text_frame, margin_attr, value)
+        except Exception:
+            pass
+    for paragraph in text_frame.paragraphs:
+        try:
+            paragraph.line_spacing = 1.0
+        except Exception:
+            pass
+        try:
+            p_pr = paragraph._p.get_or_add_pPr()
+            spacing = p_pr.find("{http://schemas.openxmlformats.org/drawingml/2006/main}lnSpc")
+            if spacing is None:
+                from pptx.oxml.ns import qn
+
+                spacing = p_pr.makeelement(qn("a:lnSpc"))
+                p_pr.append(spacing)
+            spacing.clear()
+            from pptx.oxml.ns import qn
+
+            sp_pct = spacing.makeelement(qn("a:spcPct"))
+            sp_pct.set("val", "100000")
+            spacing.append(sp_pct)
+        except Exception:
+            pass
+
+
+def _estimated_shape_text_height(shape, text: str) -> int:
+    if not text.strip():
+        return int(getattr(shape, "height", 0) or 200000)
+    per_line = _chars_per_line_for_shape(shape)
+    lines = max(1, (len(text) + per_line - 1) // per_line)
+    line_h = 127000
+    padding = _TEXT_FRAME_MARGIN_EMU
+    return lines * line_h + padding
+
+
+def _reflow_key_takeaway_slots(label, slots: list[Any]) -> None:
+    """Stack Key Takeaways boxes by rendered text height so bullets do not overlap."""
+    if not label or not slots:
+        return
+    start_top = label.top + label.height + 80000
+    current_top = start_top
+    for shape in slots:
+        text = _shape_text(shape)
+        block_h = max(int(shape.height), _estimated_shape_text_height(shape, text))
+        shape.top = current_top
+        current_top += block_h + _KEY_TAKEAWAY_SLOT_GAP_EMU
+
+
 def _set_paragraph_text_preserve_format(paragraph, text: str) -> None:
     """Replace text in-place so the template run/paragraph formatting is kept."""
     if paragraph.runs:
@@ -391,12 +509,26 @@ def _set_shape_single_line(shape, text: str, *, as_bullet: bool = False) -> None
         return
     tf = shape.text_frame
     line = _normalize_bullet_line(text) if as_bullet else text.strip()
+    _configure_text_frame_fit(tf)
     if tf.paragraphs:
         _set_paragraph_text_preserve_format(tf.paragraphs[0], line)
         for extra in tf.paragraphs[1:]:
             extra.text = ""
     elif line:
         shape.text = line
+
+
+def _set_fitted_single_line(
+    shape,
+    text: str,
+    *,
+    as_bullet: bool = False,
+    max_chars: int | None = None,
+) -> None:
+    line = text.strip()
+    if line:
+        line = _truncate_text_for_shape(line, shape, max_chars=max_chars)
+    _set_shape_single_line(shape, line, as_bullet=as_bullet)
 
 
 def _commentary_text_from_slide(slide_comm) -> str:
@@ -720,12 +852,13 @@ def _apply_lines_to_shapes(
     lines: list[str],
     *,
     as_bullet: bool = False,
+    max_chars: int | None = None,
 ) -> bool:
     if not shapes:
         return False
     for idx, shape in enumerate(shapes):
         line = lines[idx] if idx < len(lines) else ""
-        _set_shape_single_line(shape, line, as_bullet=as_bullet)
+        _set_fitted_single_line(shape, line, as_bullet=as_bullet, max_chars=max_chars)
     return True
 
 
@@ -742,11 +875,14 @@ def _find_key_takeaways_slots(slide) -> list[Any]:
     if label is None:
         return _find_key_takeaways_bullet_shapes(slide)
 
-    col_left = label.left
-    min_top = label.top + int(label.height * 0.5)
-    max_top = min_top + 2300000  # stay within the Key Takeaways stack, not KPI mini-widgets
+    bullets = _find_key_takeaways_bullet_shapes(slide)
+    col_left = bullets[0].left if bullets else label.left
+    slot_width = bullets[0].width if bullets else 2800000
+    min_top = label.top + int(label.height * 0.85)
+    max_top = min_top + 2800000
     tol = 350000
-    min_width = 2000000  # wide bullet boxes only (exclude NRR/ARR chart labels)
+    width_tol = 500000
+    min_width = 2000000
 
     candidates: list[tuple[int, int, Any]] = []
     for shape in _iter_shapes(slide.shapes):
@@ -760,12 +896,14 @@ def _find_key_takeaways_slots(slide) -> list[Any]:
             continue
         if shape.width < min_width:
             continue
+        if bullets and abs(shape.width - slot_width) > width_tol:
+            continue
         if _is_protected_nav_shape(shape):
             continue
         text = _shape_text(shape)
-        if not text or _is_boilerplate_shape(text):
+        if text and _is_boilerplate_shape(text):
             continue
-        if not _is_takeaway_bullet_text(text) and len(text) < 60:
+        if text and not _is_takeaway_bullet_text(text) and len(text) < 60:
             continue
         candidates.append((shape.top, shape.left, shape))
 
@@ -790,8 +928,35 @@ def _find_key_takeaways_bullet_shapes(slide) -> list[Any]:
     return [shape for _, _, shape in candidates]
 
 
+def _find_gtm_channel_rows(slide) -> list[tuple[int, Any]]:
+    """Left-column channel name rows on the GTM performance slide."""
+    rows: list[tuple[int, Any]] = []
+    skip = {
+        "channel",
+        "commentary",
+        "act spend",
+        "actual spend",
+        "budget spend",
+        "cac",
+        "pipeline",
+        "marketing channel performance",
+    }
+    for shape in _iter_shapes(slide.shapes):
+        if abs(shape.left - _GTM_CHANNEL_COL_LEFT) > 250000:
+            continue
+        text = _shape_text(shape)
+        if not text or len(text) > 28:
+            continue
+        low = text.strip().lower()
+        if low in skip or _looks_like_metric_cell(text):
+            continue
+        rows.append((shape.top, shape))
+    rows.sort(key=lambda x: x[0])
+    return rows
+
+
 def _find_commentary_column_shapes(slide) -> list[Any]:
-    """GTM channel table — right-hand Commentary column cells."""
+    """GTM channel table — right-hand Commentary column cells, row-aligned to channels."""
     header_left: int | None = None
     header_top = 0
     for shape in _iter_shapes(slide.shapes):
@@ -802,20 +967,42 @@ def _find_commentary_column_shapes(slide) -> list[Any]:
     if header_left is None:
         return []
     tol = 250000
-    rows: list[tuple[int, Any]] = []
+    cells: list[tuple[int, Any]] = []
     for shape in _iter_shapes(slide.shapes):
         if abs(shape.left - header_left) > tol:
             continue
         if shape.top <= header_top:
             continue
+        if not hasattr(shape, "text_frame") or shape.text_frame is None:
+            continue
         text = _shape_text(shape)
-        if not text or _is_boilerplate_shape(text):
+        if text and (_is_boilerplate_shape(text) or _looks_like_metric_cell(text)):
             continue
-        if _looks_like_metric_cell(text):
-            continue
-        rows.append((shape.top, shape))
-    rows.sort(key=lambda x: x[0])
-    return [s for _, s in rows]
+        cells.append((shape.top, shape))
+    cells.sort(key=lambda x: x[0])
+
+    channels = _find_gtm_channel_rows(slide)
+    if not channels:
+        return [s for _, s in cells]
+
+    aligned: list[Any] = []
+    used: set[int] = set()
+    for ch_top, _ in channels:
+        best_idx: int | None = None
+        best_delta = _GTM_ROW_TOP_TOLERANCE + 1
+        for idx, (cell_top, cell_shape) in enumerate(cells):
+            if idx in used:
+                continue
+            delta = abs(cell_top - ch_top)
+            if delta < best_delta:
+                best_delta = delta
+                best_idx = idx
+        if best_idx is not None and best_delta <= _GTM_ROW_TOP_TOLERANCE:
+            used.add(best_idx)
+            aligned.append(cells[best_idx][1])
+    if aligned:
+        return aligned
+    return [s for _, s in cells]
 
 
 def _find_risk_description_shapes(slide) -> list[Any]:
@@ -839,16 +1026,18 @@ def _find_risk_description_shapes(slide) -> list[Any]:
     return [s for _, _, s in rows]
 
 
-def _find_narrative_block_shapes(slide, *, min_chars: int = 90) -> list[Any]:
+def _find_narrative_block_shapes(slide, *, min_chars: int = 90, slide_key: str = "") -> list[Any]:
     """Funnel callouts, outlook paragraphs, board action descriptions."""
     blocks: list[tuple[int, int, Any]] = []
     for shape in _iter_shapes(slide.shapes):
         if _is_protected_nav_shape(shape):
             continue
-        text = _shape_text(shape)
-        if len(text) < min_chars:
+        if not hasattr(shape, "text_frame") or shape.text_frame is None:
             continue
-        if _is_boilerplate_shape(text) or _is_takeaway_bullet_text(text):
+        text = _shape_text(shape)
+        if text and len(text) < min_chars:
+            continue
+        if text and (_is_boilerplate_shape(text) or _is_takeaway_bullet_text(text)):
             continue
         stripped = text.strip()
         low = stripped.lower()
@@ -856,44 +1045,93 @@ def _find_narrative_block_shapes(slide, *, min_chars: int = 90) -> list[Any]:
             continue
         if low.startswith("for approval") or low.startswith("for discussion"):
             continue
+        if re.match(r"^\d{2}\s+for\s+(approval|discussion)", low):
+            continue
         if low.startswith("owner:") or low.startswith("due:"):
             continue
-        if _looks_like_metric_cell(stripped):
+        if text and _looks_like_metric_cell(stripped):
+            continue
+        if slide_key == "board_actions" and shape.height < 240000:
             continue
         blocks.append((shape.top, shape.left, shape))
     blocks.sort(key=lambda x: (x[0], x[1]))
     return [s for _, _, s in blocks]
 
 
-def _key_takeaway_bullet_lines(update: TemplateCommentaryUpdate) -> list[str]:
-    """Use API-provided bullets only — one string per template slot, no sentence splitting."""
+def _split_narrative_into_bullets(text: str, max_count: int, char_limit: int) -> list[str]:
+    """When the API returns prose instead of bullets, split into slot-sized chunks."""
+    lines = [_normalize_bullet_line(line) for line in _split_key_takeaway_lines(text) if line.strip()]
+    if len(lines) >= 2:
+        return [_truncate_to_char_limit(line, char_limit) for line in lines[:max_count]]
+    single = " ".join(line.lstrip("•").strip() for line in lines)
+    if not single:
+        return []
+    if len(single) <= char_limit:
+        return [_normalize_bullet_line(single)]
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", single) if s.strip()]
+    if len(sentences) >= 2:
+        return [
+            _truncate_to_char_limit(_normalize_bullet_line(s), char_limit)
+            for s in sentences[:max_count]
+        ]
+    chunks: list[str] = []
+    words = single.split()
+    current: list[str] = []
+    for word in words:
+        candidate = " ".join(current + [word])
+        if len(candidate) > char_limit - 1 and current:
+            chunks.append(_normalize_bullet_line(" ".join(current)))
+            current = [word]
+        else:
+            current.append(word)
+    if current:
+        chunks.append(_normalize_bullet_line(" ".join(current)))
+    return [_truncate_to_char_limit(c, char_limit) for c in chunks[:max_count]]
+
+
+def _key_takeaway_bullet_lines(update: TemplateCommentaryUpdate, slide_key: str = "") -> list[str]:
+    """One string per template slot; split long prose when bullets are missing."""
+    char_limit = _SLIDE_SLOT_CHAR_LIMIT.get(slide_key, 100)
     if update.bullets:
-        return [_normalize_bullet_line(b) for b in update.bullets if b.strip()]
-    return [_normalize_bullet_line(line) for line in _split_key_takeaway_lines(update.text)]
+        return [
+            _truncate_to_char_limit(_normalize_bullet_line(b), char_limit)
+            for b in update.bullets
+            if b.strip()
+        ]
+    raw_lines = [_normalize_bullet_line(line) for line in _split_key_takeaway_lines(update.text)]
+    if len(raw_lines) == 1 and len(raw_lines[0]) > char_limit + 20:
+        slots_hint = 4
+        return _split_narrative_into_bullets(update.text, slots_hint, char_limit)
+    return [_truncate_to_char_limit(line, char_limit) for line in raw_lines if line]
 
 
-def _apply_key_takeaway_bullets(slide, bullets: list[str]) -> bool:
-    """Fill each pre-existing template bullet box; clear unused slots."""
+def _apply_key_takeaway_bullets(slide, bullets: list[str], *, slide_key: str = "") -> bool:
+    """Fill each pre-existing template bullet box; clear unused slots; reflow by text height."""
     slots = _find_key_takeaways_slots(slide)
     if not slots:
         return False
+    char_limit = _SLIDE_SLOT_CHAR_LIMIT.get(slide_key, 100)
+    label = _find_key_takeaways_label(slide)
     for idx, shape in enumerate(slots):
         line = bullets[idx] if idx < len(bullets) else ""
-        _set_shape_single_line(shape, line, as_bullet=bool(line))
+        _set_fitted_single_line(shape, line, as_bullet=bool(line), max_chars=char_limit)
+    if label:
+        _reflow_key_takeaway_slots(label, slots)
     return True
 
 
 def _apply_commentary_for_slide(slide, update: TemplateCommentaryUpdate) -> bool:
     zone = _SLIDE_COMMENTARY_ZONE.get(update.slide_key, "takeaway_bullets")
+    char_limit = _SLIDE_SLOT_CHAR_LIMIT.get(update.slide_key)
 
     if zone == "takeaway_bullets":
-        lines = _key_takeaway_bullet_lines(update)
+        lines = _key_takeaway_bullet_lines(update, update.slide_key)
         if not lines:
             slots = _find_key_takeaways_slots(slide)
             for shape in slots:
-                _set_shape_single_line(shape, "")
+                _set_fitted_single_line(shape, "")
             return bool(slots)
-        return _apply_key_takeaway_bullets(slide, lines)
+        return _apply_key_takeaway_bullets(slide, lines, slide_key=update.slide_key)
 
     lines = _commentary_lines(update.text.strip())
     if not lines and update.bullets:
@@ -903,13 +1141,13 @@ def _apply_commentary_for_slide(slide, update: TemplateCommentaryUpdate) -> bool
 
     if zone == "commentary_column":
         shapes = _find_commentary_column_shapes(slide)
-        return _apply_lines_to_shapes(shapes, lines)
+        return _apply_lines_to_shapes(shapes, lines, max_chars=char_limit)
     if zone == "risk_descriptions":
         shapes = _find_risk_description_shapes(slide)
-        return _apply_lines_to_shapes(shapes, lines)
+        return _apply_lines_to_shapes(shapes, lines, max_chars=char_limit)
     if zone == "narrative_blocks":
-        shapes = _find_narrative_block_shapes(slide)
-        return _apply_lines_to_shapes(shapes, lines)
+        shapes = _find_narrative_block_shapes(slide, slide_key=update.slide_key)
+        return _apply_lines_to_shapes(shapes, lines, max_chars=char_limit)
     return False
 
 

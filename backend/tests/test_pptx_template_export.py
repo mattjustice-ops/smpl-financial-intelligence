@@ -17,6 +17,8 @@ from app.services.reporting.export.pptx_template_export import (
     _prior_month,
     _quarter_label,
     _set_shape_text,
+    _split_narrative_into_bullets,
+    _truncate_to_char_limit,
     _ytd_range_label,
     apply_template_commentary,
     map_template_slides_to_slide_keys,
@@ -240,6 +242,44 @@ def test_apply_key_takeaway_bullets_clears_extra_template_slots():
 def test_normalize_bullet_line_strips_duplicate_prefix():
     assert _normalize_bullet_line("• Revenue $7.35M") == "• Revenue $7.35M"
     assert _normalize_bullet_line("Revenue $7.35M") == "• Revenue $7.35M"
+
+
+def test_truncate_to_char_limit_preserves_word_boundary():
+    long_text = "• Ending ARR $86.10M vs budget $84.50M; net new ARR $1.60M driven by expansion and new logos in June."
+    trimmed = _truncate_to_char_limit(long_text, 90)
+    assert len(trimmed) <= 90
+    assert trimmed.endswith("…")
+
+
+def test_split_narrative_into_bullets_chunks_long_prose():
+    prose = (
+        "Operating cash flow was negative in June due to payroll timing and annual prepayments. "
+        "Collections remained on plan. Financing inflows offset the bridge. "
+        "H2 outlook assumes normalized working capital."
+    )
+    chunks = _split_narrative_into_bullets(prose, max_count=4, char_limit=90)
+    assert len(chunks) >= 2
+    assert all(len(c) <= 90 for c in chunks)
+
+
+def test_apply_key_takeaway_bullets_finds_empty_slots_after_clear():
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(2), Inches(0.4)).text = "Key Takeaways"
+    boxes = []
+    for row in range(4):
+        box = slide.shapes.add_textbox(Inches(0.5), Inches(1.0 + row * 0.5), Inches(8), Inches(0.45))
+        box.text = f"• Old bullet {row + 1}"
+        boxes.append(box)
+
+    assert _apply_key_takeaway_bullets(slide, ["• Only one new bullet"], slide_key="cash_flow_statement")
+    assert "Only one new" in boxes[0].text
+    assert boxes[1].text.strip() == ""
+    slots = _find_key_takeaways_slots(slide)
+    assert len(slots) == 4
 
 
 def test_apply_template_commentary_skips_footer_only_slides():

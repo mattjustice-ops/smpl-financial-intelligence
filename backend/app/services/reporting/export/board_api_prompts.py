@@ -114,8 +114,9 @@ def validate_and_trim_bullets(
     *,
     max_bullets: int,
     max_words_per_bullet: int,
+    max_chars_per_bullet: int | None = None,
 ) -> list[str]:
-    """Enforce bullet count and per-bullet word limits."""
+    """Enforce bullet count, word, and character limits."""
     trimmed: list[str] = []
     for bullet in bullets[:max_bullets]:
         text = bullet.strip()
@@ -126,6 +127,15 @@ def validate_and_trim_bullets(
         words = text.lstrip("•").strip().split()
         if len(words) > max_words_per_bullet:
             text = "• " + " ".join(words[:max_words_per_bullet])
+        if max_chars_per_bullet is not None and len(text) > max_chars_per_bullet:
+            body = text.lstrip("•").strip()
+            if max_chars_per_bullet <= 2:
+                text = "• " + body[: max_chars_per_bullet - 2]
+            else:
+                clipped = body[: max_chars_per_bullet - 3].rstrip()
+                if " " in clipped:
+                    clipped = clipped.rsplit(" ", 1)[0]
+                text = "• " + clipped.rstrip(".,;:") + "…"
         trimmed.append(text)
     return trimmed
 

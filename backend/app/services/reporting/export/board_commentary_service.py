@@ -882,7 +882,7 @@ def enrich_slide_with_ai(
     try:
         client = build_commentary_llm_client()
         payload = build_single_slide_payload(bundle, slide_key)
-        max_bullets, max_words = slide_prompt_limits(slide_key)
+        max_bullets, max_words, max_chars = slide_prompt_limits(slide_key)
         raw = client.generate(
             system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
             user_prompt=board_deck_single_slide_user_message(payload),
@@ -893,6 +893,7 @@ def enrich_slide_with_ai(
             bullets,
             max_bullets=max_bullets,
             max_words_per_bullet=max_words,
+            max_chars_per_bullet=max_chars,
         )
         narrative = format_key_takeaway_bullets(bullets)
         if not narrative:
