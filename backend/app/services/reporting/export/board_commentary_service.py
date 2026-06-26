@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import calendar
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
@@ -43,6 +43,7 @@ class SlideCommentary:
     unfavorable: str = ""
     recommended_actions: str = ""
     leadership_watch: str = ""
+    bullets: list[str] = field(default_factory=list)
 
     def bullets_favorable_unfavorable_watch(self) -> list[str]:
         out: list[str] = []
@@ -857,10 +858,56 @@ def enrich_slide_with_ai(
     slide_key: str,
     base: SlideCommentary,
 ) -> SlideCommentary:
-    """LLM rewrite for a single slide (used by on-demand regenerate)."""
+    """LLM Key Takeaways for a single board slide (on-demand regenerate)."""
+    from app.services.reporting.export.board_api_prompts import (
+        BOARD_DECK_SLIDE_SYSTEM_PROMPT,
+        board_deck_single_slide_user_message,
+        format_key_takeaway_bullets,
+        parse_board_deck_bullets_response,
+        validate_and_trim_bullets,
+    )
+    from app.services.reporting.export.board_slide_commentary_payload import (
+        BOARD_DECK_SLIDE_KEYS,
+        build_single_slide_payload,
+        slide_prompt_limits,
+    )
+
     settings = get_settings()
     if not (settings.anthropic_api_key or settings.openai_api_key):
         return base
+
+    if slide_key not in BOARD_DECK_SLIDE_KEYS:
+        return _enrich_slide_with_ai_legacy(bundle, slide_key, base)
+
+    try:
+        client = build_commentary_llm_client()
+        payload = build_single_slide_payload(bundle, slide_key)
+        max_bullets, max_words = slide_prompt_limits(slide_key)
+        raw = client.generate(
+            system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
+            user_prompt=board_deck_single_slide_user_message(payload),
+            max_tokens=2048,
+        )
+        bullets = parse_board_deck_bullets_response(raw, slide_key)
+        bullets = validate_and_trim_bullets(
+            bullets,
+            max_bullets=max_bullets,
+            max_words_per_bullet=max_words,
+        )
+        narrative = format_key_takeaway_bullets(bullets)
+        if not narrative:
+            return base
+        return SlideCommentary(what_happened=narrative, bullets=bullets)
+    except Exception:
+        return base
+
+
+def _enrich_slide_with_ai_legacy(
+    bundle: ReportingBundle,
+    slide_key: str,
+    base: SlideCommentary,
+) -> SlideCommentary:
+    """Fallback narrative paragraph for non-board-deck slide keys."""
     try:
         client = build_commentary_llm_client()
         metrics_blob = metrics_prompt_blob(bundle)
@@ -870,9 +917,8 @@ def enrich_slide_with_ai(
             f"{requirements_prompt_block('board_slide_commentary')}\n\n"
             f"Board slide: {slide_label}.\n"
             f"Metrics:\n{metrics_blob}\n\n"
-            "Respond with JSON only: {\"narrative\": \"...\"} — one paragraph, 4 sentences, Commentary B quality.\n"
-            "Example tone: 'June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by "
-            "$0.47M, driven by $1.92M new business and $0.98M expansion...' Use live metrics above, not the example numbers."
+            'Respond with JSON only: {"narrative": "..."} — one paragraph, 4 sentences, board-ready.\n'
+            "Use live metrics above; do not copy example numbers."
         )
         raw = client.generate(
             system_prompt=CFO_BOARD_NARRATIVE_SYSTEM,
