@@ -381,7 +381,6 @@ _TEMPLATE_SLIDE_KEYWORDS: dict[str, tuple[str, ...]] = {
         "cash & liquidity",
         "cash and liquidity",
         "cash forecast",
-        "cash flow",
         "liquidity",
         "cash bridge",
     ),
@@ -559,13 +558,86 @@ def _generate_claude_template_commentary(
         return {}
 
 
+def _is_boilerplate_shape(text: str) -> bool:
+    """Footer, page number, and other shapes that must never receive commentary."""
+    lowered = text.strip().lower()
+    if not lowered:
+        return True
+    if re.search(r"\d+/\d+\s*$", lowered):
+        return True
+    if "confidential" in lowered and "board operating review" in lowered:
+        return True
+    if "not for distribution" in lowered:
+        return True
+    if lowered.startswith("smpl · board operating review"):
+        return True
+    return False
+
+
+def _is_takeaway_bullet_text(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith("•") or stripped.startswith("-")
+
+
+def _find_key_takeaways_bullet_shapes(slide) -> list[Any]:
+    """Return ordered text shapes that hold Key Takeaways bullets (one bullet per shape)."""
+    candidates: list[tuple[int, int, Any]] = []
+    for shape in _iter_shapes(slide.shapes):
+        if _is_protected_nav_shape(shape):
+            continue
+        text = _shape_text(shape)
+        if not text or _is_boilerplate_shape(text):
+            continue
+        if _is_takeaway_bullet_text(text):
+            candidates.append((shape.top, shape.left, shape))
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return [shape for _, _, shape in candidates]
+
+
+def _split_key_takeaway_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.lower() == "key takeaways":
+            continue
+        lines.append(stripped)
+    return lines
+
+
+def _apply_key_takeaways_commentary(slide, commentary: str) -> bool:
+    """Replace all Key Takeaways bullet shapes; clear siblings so old text never layers."""
+    bullet_shapes = _find_key_takeaways_bullet_shapes(slide)
+    if not bullet_shapes:
+        return False
+
+    lines = _split_key_takeaway_lines(commentary)
+    if not lines:
+        for shape in bullet_shapes:
+            _safe_set_shape_text(shape, "")
+        return True
+
+    # Single long narrative block: use first shape only and wipe the rest.
+    if len(lines) == 1 and len(lines[0]) > 150:
+        _safe_set_shape_text(bullet_shapes[0], lines[0])
+        for shape in bullet_shapes[1:]:
+            _safe_set_shape_text(shape, "")
+        return True
+
+    for idx, shape in enumerate(bullet_shapes):
+        _safe_set_shape_text(shape, lines[idx] if idx < len(lines) else "")
+    return True
+
+
 def _pick_commentary_shape(slide) -> Any | None:
+    """Legacy fallback when a slide has no Key Takeaways bullet row."""
     candidates: list[tuple[int, Any]] = []
     for shape in _iter_shapes(slide.shapes):
         if _is_protected_nav_shape(shape):
             continue
         text = _shape_text(shape)
-        if _is_exec_nav_text(text):
+        if _is_exec_nav_text(text) or _is_boilerplate_shape(text):
             continue
         if len(text) < 40:
             continue
@@ -585,17 +657,17 @@ def apply_template_commentary(prs, updates: dict[int, str]) -> int:
         if idx < 1 or idx > len(prs.slides):
             continue
         slide = prs.slides[idx - 1]
+        body = commentary.strip()
+        if not body:
+            continue
+        if _apply_key_takeaways_commentary(slide, body):
+            applied += 1
+            continue
         shape = _pick_commentary_shape(slide)
         if shape is None:
+            logger.warning("Board PPTX: slide %d has no Key Takeaways region — skipping commentary", idx)
             continue
-        existing = _shape_text(shape)
-        lines = existing.splitlines()
-        header = lines[0].strip() if lines and len(lines[0]) < 80 else ""
-        body = commentary.strip()
-        if header and header.lower() not in body.lower():
-            if _safe_set_shape_text(shape, f"{header}\n{body}"):
-                applied += 1
-        elif _safe_set_shape_text(shape, body):
+        if _safe_set_shape_text(shape, body):
             applied += 1
     return applied
 

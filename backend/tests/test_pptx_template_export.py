@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from app.services.reporting.export.pptx_template_export import (
+    _apply_key_takeaways_commentary,
+    _find_key_takeaways_bullet_shapes,
+    _is_boilerplate_shape,
     _is_exec_nav_text,
     _month_label,
     _period_replacements,
@@ -10,6 +13,7 @@ from app.services.reporting.export.pptx_template_export import (
     _quarter_label,
     _set_shape_text,
     _ytd_range_label,
+    apply_template_commentary,
     map_template_slides_to_slide_keys,
     repair_executive_nav_links,
     resolve_board_pptx_template,
@@ -173,3 +177,53 @@ def test_set_shape_text_preserves_multiline_bullets():
     assert box.text_frame.paragraphs[0].text == "Key Takeaways"
     assert "Revenue" in box.text_frame.paragraphs[1].text
     assert "ARR" in box.text_frame.paragraphs[2].text
+
+
+def test_is_boilerplate_shape_detects_footer():
+    assert _is_boilerplate_shape("SMPL · Board Operating Review · Q2 2026 · CONFIDENTIAL")
+    assert _is_boilerplate_shape("2/11")
+    assert not _is_boilerplate_shape("• Revenue $7.41M vs budget")
+
+
+def test_apply_key_takeaways_replaces_all_bullets_without_layering():
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(2), Inches(0.4)).text = "Key Takeaways"
+    old1 = slide.shapes.add_textbox(Inches(0.5), Inches(1.0), Inches(8), Inches(0.5))
+    old1.text = "• Old May bullet one about revenue"
+    old2 = slide.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(8), Inches(0.5))
+    old2.text = "• Old May bullet two about ARR"
+    footer = slide.shapes.add_textbox(Inches(0.5), Inches(6.5), Inches(8), Inches(0.4))
+    footer.text = "SMPL · Board Operating Review · Q2 2026 · CONFIDENTIAL"
+
+    bullets = _find_key_takeaways_bullet_shapes(slide)
+    assert len(bullets) == 2
+
+    new_text = "• June revenue $7.35M vs budget\n• Ending ARR $85.31M vs budget +$420K"
+    assert _apply_key_takeaways_commentary(slide, new_text)
+
+    assert "May" not in old1.text
+    assert "May" not in old2.text
+    assert "June revenue" in old1.text
+    assert "Ending ARR" in old2.text
+    assert footer.text == "SMPL · Board Operating Review · Q2 2026 · CONFIDENTIAL"
+
+
+def test_apply_template_commentary_skips_footer_only_slides():
+    from pptx import Presentation
+    from pptx.util import Inches
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    footer = slide.shapes.add_textbox(Inches(0.5), Inches(6.5), Inches(8), Inches(0.4))
+    footer.text = "SMPL · Board Operating Review · Q2 2026 · CONFIDENTIAL"
+    table_cell = slide.shapes.add_textbox(Inches(0.5), Inches(2.0), Inches(4), Inches(0.4))
+    table_cell.text = "1.3x, 5.8% WR — reallocate to Partner"
+
+    applied = apply_template_commentary(prs, {1: "• Fresh June bullet"})
+    assert applied == 0
+    assert "Fresh June" not in footer.text
+    assert "Fresh June" not in table_cell.text
