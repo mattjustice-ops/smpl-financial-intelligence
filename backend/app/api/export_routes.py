@@ -446,6 +446,7 @@ def _board_pptx_response(
             "X-Export-Validation": validation_status,
             "X-Board-Package-Engine": "smpl-board-v2",
             "X-Board-PPTX-Source": pptx_source,
+            "X-Board-AI-Commentary": "true" if use_ai_commentary else "false",
         }
         if template_path:
             headers["X-Board-PPTX-Template"] = str(template_path)
@@ -525,8 +526,8 @@ def export_board_presentation(
     as_of_period: str | None = Query(None),
     block_on_failure: bool = Query(False),
     include_ai_commentary: bool = Query(
-        False,
-        description="Draft Claude narrative for board slides (template uses rule-based commentary when false)",
+        True,
+        description="Generate Claude Key Takeaways per slide (API spec prompts) when API key is set",
     ),
     include_commentary: bool = Query(True),
     include_appendix: bool = Query(True),

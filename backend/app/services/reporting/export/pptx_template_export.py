@@ -328,12 +328,131 @@ def _set_shape_text(shape, text: str) -> None:
     if not hasattr(shape, "text_frame") or shape.text_frame is None:
         return
     tf = shape.text_frame
-    if tf.paragraphs:
-        tf.paragraphs[0].text = text
-        for extra in tf.paragraphs[1:]:
-            extra.text = ""
-    else:
-        shape.text = text
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        if tf.paragraphs:
+            tf.paragraphs[0].text = ""
+        else:
+            shape.text = ""
+        return
+    for idx, line in enumerate(lines):
+        if idx < len(tf.paragraphs):
+            tf.paragraphs[idx].text = line
+        else:
+            tf.add_paragraph().text = line
+    for extra in tf.paragraphs[len(lines) :]:
+        extra.text = ""
+
+
+def _commentary_text_from_slide(slide_comm) -> str:
+    from app.services.reporting.export.board_api_prompts import format_key_takeaway_bullets
+
+    if slide_comm.bullets:
+        formatted = format_key_takeaway_bullets(slide_comm.bullets)
+        if formatted.strip():
+            return formatted.strip()
+    return (slide_comm.what_happened or slide_comm.narrative_block() or "").strip()
+
+
+# Semantic map: board deck slide_key -> keywords found in template slide text.
+_TEMPLATE_SLIDE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "executive_summary": (
+        "executive summary",
+        "executive operating",
+        "operating summary",
+        "where we stand",
+    ),
+    "arr_waterfall": (
+        "arr analysis",
+        "arr / mrr",
+        "mrr waterfall",
+        "arr waterfall",
+        "arr roll",
+        "net new arr",
+    ),
+    "gaap_revenue": (
+        "p&l review",
+        "income statement",
+        "department spend",
+        "gaap revenue",
+        "management p&l",
+    ),
+    "cash_forecast": (
+        "cash & liquidity",
+        "cash and liquidity",
+        "cash forecast",
+        "cash flow",
+        "liquidity",
+        "cash bridge",
+    ),
+    "gtm_performance": (
+        "gtm & marketing",
+        "gtm and marketing",
+        "marketing efficiency",
+        "channel efficiency",
+        "gtm performance",
+    ),
+    "headcount": (
+        "workforce",
+        "headcount",
+        "hiring plan",
+        "quota capacity",
+    ),
+    "risks_opportunities": (
+        "risks & opportunities",
+        "risks and opportunities",
+        "risk / opportunity",
+        "key risks",
+    ),
+}
+
+
+def map_template_slides_to_slide_keys(prs) -> dict[str, int]:
+    """Map board slide_key -> 1-based PPTX slide index using title/body keywords."""
+    mapping: dict[str, int] = {}
+    used_zero_based: set[int] = set()
+    for slide_key, keywords in _TEMPLATE_SLIDE_KEYWORDS.items():
+        idx0 = _find_slide_by_keywords(prs, keywords, exclude_indices=used_zero_based)
+        if idx0 is None:
+            continue
+        mapping[slide_key] = idx0 + 1
+        used_zero_based.add(idx0)
+    return mapping
+
+
+def _build_template_commentary_updates(
+    bundle: ReportingBundle,
+    prs,
+    *,
+    use_ai_commentary: bool,
+) -> dict[int, str]:
+    """Build commentary text per template slide index (API-spec path when AI enabled)."""
+    from app.services.reporting.export.board_commentary_service import (
+        build_slide_commentary,
+        enrich_slide_with_ai,
+    )
+
+    key_to_idx = map_template_slides_to_slide_keys(prs)
+    if not key_to_idx:
+        logger.warning("Board PPTX: no keyword slide mapping — using outline fallback")
+        outline = extract_template_outline(prs)
+        return _fallback_commentary_by_slide(bundle, outline, use_ai=use_ai_commentary)
+
+    updates: dict[int, str] = {}
+    for slide_key, slide_idx in key_to_idx.items():
+        base = build_slide_commentary(bundle, slide_key)
+        comm = enrich_slide_with_ai(bundle, slide_key, base) if use_ai_commentary else base
+        text = _commentary_text_from_slide(comm)
+        if text:
+            updates[slide_idx] = text
+
+    logger.info(
+        "Board PPTX template commentary: %d slides (%s, ai=%s)",
+        len(updates),
+        ", ".join(sorted(key_to_idx.keys())),
+        use_ai_commentary,
+    )
+    return updates
 
 
 def _safe_set_shape_text(shape, text: str) -> bool:
@@ -370,6 +489,9 @@ def _fallback_commentary_by_slide(
     *,
     use_ai: bool,
 ) -> dict[int, str]:
+    """Legacy outline-index fallback when keyword mapping finds no slides."""
+    from app.services.reporting.export.board_commentary_service import build_all_slide_commentary
+
     commentary = build_all_slide_commentary(bundle, use_ai=use_ai)
     slide_keys = list(commentary.keys())
     updates: dict[int, str] = {}
@@ -378,9 +500,9 @@ def _fallback_commentary_by_slide(
         comm = commentary.get(key)
         if not comm:
             continue
-        text = comm.narrative_block() or comm.what_happened
+        text = _commentary_text_from_slide(comm)
         if text:
-            updates[item.index] = text.strip()
+            updates[item.index] = text
     return updates
 
 
@@ -494,15 +616,12 @@ def build_pptx_from_template(
     try:
         prs = Presentation(str(template_path))
         roll_template_period_labels(prs, bundle)
-        outline = extract_template_outline(prs)
 
-        updates = (
-            _generate_claude_template_commentary(bundle, outline)
-            if use_ai_commentary
-            else {}
+        updates = _build_template_commentary_updates(
+            bundle,
+            prs,
+            use_ai_commentary=use_ai_commentary,
         )
-        if not updates:
-            updates = _fallback_commentary_by_slide(bundle, outline, use_ai=use_ai_commentary)
 
         apply_template_commentary(prs, updates)
         repair_executive_nav_links(prs)
