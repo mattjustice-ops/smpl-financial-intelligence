@@ -483,9 +483,15 @@ def _board_pptx_response(
 def export_mda_deck_smoke(
     organization_id: uuid.UUID = Query(...),
     as_of_period: str = Query("2026-06"),
+    render: bool = Query(
+        False,
+        description="When true, render full PPTX bytes (slow; may timeout on Railway). Default is quick assembly-only smoke.",
+    ),
     db: Session = Depends(get_db),
 ) -> dict:
     """JSON smoke test for MD&A deck (programmatic PPTX, no template)."""
+    from app.services.reporting.export.board_export_service import build_mda_deck_smoke_result
+
     get_organization_or_404(db, organization_id)
     year = as_of_period[:4]
     try:
@@ -498,19 +504,7 @@ def export_mda_deck_smoke(
             as_of_period=as_of_period,
             include_ai_commentary=False,
         )
-        content, source = build_pptx_mda_deck(
-            bundle,
-            use_ai_commentary=False,
-            package_mode="full_board",
-        )
-        return {
-            "status": "ok",
-            "bytes": len(content),
-            "source": source,
-            "deck_kind": "mda",
-            "validation": bundle.validation.status,
-            "period": bundle.as_of_period,
-        }
+        return build_mda_deck_smoke_result(bundle, full_render=render)
     except Exception as exc:
         logger.exception("MD&A deck smoke failed")
         raise HTTPException(

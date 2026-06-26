@@ -86,6 +86,37 @@ def build_mda_deck_pptx_bytes(
     return render_pptx_bytes(package), "programmatic"
 
 
+def build_mda_deck_smoke_result(
+    bundle: ReportingBundle,
+    *,
+    full_render: bool = False,
+    package_mode: PackageMode = "executive_summary",
+) -> dict[str, object]:
+    """Quick smoke: assemble slides only. Full smoke: also render PPTX bytes."""
+    mode = "executive_summary" if not full_render else package_mode
+    package = build_board_package_from_bundle(
+        bundle,
+        include_commentary=True,
+        include_validation_appendix=full_render,
+        use_ai_commentary=False,
+        package_mode=mode,
+    )
+    result: dict[str, object] = {
+        "status": "ok",
+        "source": "programmatic",
+        "deck_kind": "mda",
+        "mode": "full" if full_render else "quick",
+        "slide_count": len(package.slides),
+        "package_mode": mode,
+        "validation": bundle.validation.status,
+        "period": bundle.as_of_period,
+    }
+    if full_render:
+        content = render_pptx_bytes(package)
+        result["bytes"] = len(content)
+    return result
+
+
 def build_board_pptx_bytes(
     bundle: ReportingBundle,
     *,
