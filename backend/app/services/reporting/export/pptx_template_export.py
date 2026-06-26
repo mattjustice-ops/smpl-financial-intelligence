@@ -30,12 +30,12 @@ logger = logging.getLogger(__name__)
 _REPO_ROOT = _BACKEND_ROOT.parent
 
 # Search order for the gold-standard deck (user-provided template).
+_CANONICAL_TEMPLATE_NAME = "SMPL_Board_Review_Template.pptx"
+_CANONICAL_TEMPLATE = _BACKEND_ROOT / "templates" / "board" / _CANONICAL_TEMPLATE_NAME
 _TEMPLATE_SEARCH_GLOBS: tuple[tuple[Path, str], ...] = (
-    (_BACKEND_ROOT / "templates" / "board", "*.pptx"),
-    (_REPO_ROOT / "docs" / "reference-decks", "ClarityFP_Board_Review*.pptx"),
+    (_BACKEND_ROOT / "templates" / "board", "SMPL_Board_Review*.pptx"),
     (_REPO_ROOT / "docs" / "reference-decks", "SMPL_Board_Review*.pptx"),
     (_REPO_ROOT / "frontend" / "public" / "board" / "exports", "SMPL_Board_Review*.pptx"),
-    (_REPO_ROOT / "frontend" / "public" / "board" / "exports", "*.pptx"),
 )
 
 _ONEDRIVE_TEMPLATE = Path.home() / "OneDrive" / "SMPL_Board_Review_Q2_2026.pptx"
@@ -54,9 +54,15 @@ def resolve_board_pptx_template() -> Path | None:
     if explicit:
         path = Path(explicit)
         if path.is_file():
+            logger.info("Board PPTX template (BOARD_PPTX_TEMPLATE): %s", path)
             return path
 
+    if _CANONICAL_TEMPLATE.is_file():
+        logger.info("Board PPTX template (canonical): %s", _CANONICAL_TEMPLATE)
+        return _CANONICAL_TEMPLATE
+
     if _ONEDRIVE_TEMPLATE.is_file():
+        logger.info("Board PPTX template (OneDrive dev): %s", _ONEDRIVE_TEMPLATE)
         return _ONEDRIVE_TEMPLATE
 
     best: Path | None = None
@@ -74,6 +80,8 @@ def resolve_board_pptx_template() -> Path | None:
             if slide_count >= 10 and slide_count >= best_slides:
                 best = candidate
                 best_slides = slide_count
+    if best is not None:
+        logger.info("Board PPTX template (glob): %s (%s slides)", best, best_slides)
     return best
 
 
@@ -395,6 +403,7 @@ def _generate_claude_template_commentary(
             logger.warning("Template export metrics context failed: %s", exc)
 
         client = build_commentary_llm_client()
+        slide_count = max(len(outline), 1)
         raw = client.generate(
             system_prompt=(
                 requirements_prompt_block("mda_deck_pptx")
@@ -410,6 +419,7 @@ def _generate_claude_template_commentary(
                 'Respond JSON only: {"slides": [{"index": 1, "commentary": "..."}, ...]} '
                 "One entry per template slide index. Each commentary 2-4 sentences, board-ready."
             ),
+            max_tokens=min(4096, slide_count * 220),
         )
         if not isinstance(raw, dict):
             return {}

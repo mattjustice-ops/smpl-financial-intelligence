@@ -61,11 +61,17 @@ def openai_ping_payload() -> dict[str, str | bool]:
         if anthropic_ok
         else ((settings.openai_model or "gpt-4o-mini") if openai_ok else "")
     )
+    from app.services.reporting.export.pptx_template_export import resolve_board_pptx_template
+
+    template_path = resolve_board_pptx_template()
     return {
         "status": "ok",
         "service": "export",
         "api_build": "llm-ping-v4",
         "board_engine": PRESENTATION_ENGINE_VERSION,
+        "board_pptx_export_mode": getattr(settings, "board_pptx_export_mode", "template_first"),
+        "board_pptx_template": str(template_path) if template_path else "",
+        "board_pptx_template_ready": bool(template_path),
         "pipeline": "reporting.export.board_slides",
         "executive_slide_layout": "executive_scorecard",
         "marketing_channels_layout": "marketing_source",

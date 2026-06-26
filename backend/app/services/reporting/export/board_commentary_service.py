@@ -829,6 +829,7 @@ def enrich_slide_with_ai(
         raw = client.generate(
             system_prompt=CFO_BOARD_NARRATIVE_SYSTEM,
             user_prompt=prompt,
+            max_tokens=1000,
         )
         if not isinstance(raw, dict):
             return base

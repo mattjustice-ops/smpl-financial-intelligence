@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -27,6 +28,7 @@ from app.services.reporting.export.service import (
 from app.services.reporting.period_utils import to_period
 
 export_router = APIRouter(prefix="/export", tags=["export"])
+logger = logging.getLogger(__name__)
 
 
 def _export_params(
@@ -424,7 +426,7 @@ def _board_pptx_response(
     package_mode: str,
 ) -> Response:
     try:
-        content = build_pptx_board_presentation(
+        content, pptx_source = build_pptx_board_presentation(
             bundle,
             include_commentary=include_commentary,
             include_validation_appendix=include_validation_appendix,
@@ -432,18 +434,77 @@ def _board_pptx_response(
             scenario_mode=scenario_mode,
             package_mode=package_mode,
         )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to render board presentation: {exc}") from exc
-    filename = f"board_package_{bundle.as_of_period}.pptx"
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        headers={
+        if not content:
+            raise ValueError("Board PPTX render returned empty content.")
+        validation_status = bundle.validation.status if bundle.validation else "unknown"
+        filename = f"board_package_{bundle.as_of_period}.pptx"
+        from app.services.reporting.export.pptx_template_export import resolve_board_pptx_template
+
+        template_path = resolve_board_pptx_template()
+        headers = {
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Export-Validation": bundle.validation.status,
+            "X-Export-Validation": validation_status,
             "X-Board-Package-Engine": "smpl-board-v2",
-        },
-    )
+            "X-Board-PPTX-Source": pptx_source,
+        }
+        if template_path:
+            headers["X-Board-PPTX-Template"] = str(template_path)
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers=headers,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Board PPTX render failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to render board presentation: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
+@export_router.get("/board-presentation-smoke")
+def export_board_presentation_smoke(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query("2026-06"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """JSON smoke test for board PPTX pipeline (no file download)."""
+    get_organization_or_404(db, organization_id)
+    year = as_of_period[:4]
+    try:
+        bundle = collect_bundle(
+            db,
+            organization_id,
+            scenario="Combined",
+            start_period=f"{year}-01",
+            end_period=f"{year}-12",
+            as_of_period=as_of_period,
+            include_ai_commentary=False,
+        )
+        content, source = build_pptx_board_presentation(
+            bundle,
+            use_ai_commentary=False,
+            package_mode="full_board",
+        )
+        from app.services.reporting.export.pptx_template_export import resolve_board_pptx_template
+
+        template_path = resolve_board_pptx_template()
+        return {
+            "status": "ok",
+            "bytes": len(content),
+            "source": source,
+            "template_path": str(template_path) if template_path else None,
+            "validation": bundle.validation.status,
+            "period": bundle.as_of_period,
+        }
+    except Exception as exc:
+        logger.exception("Board PPTX smoke failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Board export smoke failed: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 @export_router.get("/board-package")
@@ -463,7 +524,10 @@ def export_board_presentation(
     fiscal_year: str | None = Query(None),
     as_of_period: str | None = Query(None),
     block_on_failure: bool = Query(False),
-    include_ai_commentary: bool = Query(False),
+    include_ai_commentary: bool = Query(
+        False,
+        description="Draft Claude narrative for board slides (template uses rule-based commentary when false)",
+    ),
     include_commentary: bool = Query(True),
     include_appendix: bool = Query(True),
     include_validation: bool = Query(True, description="Include validation appendix slide"),
@@ -495,14 +559,19 @@ def export_board_presentation(
         owner,
     )
     try:
+        # Metrics bundle only — Claude narrative runs at PPTX render time (faster, fewer 500s).
         bundle = collect_bundle(
             db,
             organization_id,
-            include_ai_commentary=include_ai_commentary,
+            include_ai_commentary=False,
             **params,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Export bundle failed: {exc}") from exc
+        logger.exception("Board PPTX bundle collection failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Export bundle failed: {type(exc).__name__}: {exc}",
+        ) from exc
     if include_validation:
         _check_validation(bundle, block_on_failure)
     return _board_pptx_response(

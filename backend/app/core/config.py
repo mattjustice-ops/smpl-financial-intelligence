@@ -56,8 +56,11 @@ class Settings(BaseSettings):
     anthropic_temperature: float = 0.2
     anthropic_timeout_seconds: float = 120.0
 
-    # Board MD&A deck — path to reference PPTX (ClarityFP / SMPL Board Review template).
-    board_pptx_template: str | None = Field(default=None, validation_alias="BOARD_PPTX_TEMPLATE")
+    # Board MD&A deck — reference PPTX (SMPL Board Review Q2 2026 template).
+    board_pptx_template: str | None = Field(
+        default="/app/templates/board/SMPL_Board_Review_Template.pptx",
+        validation_alias="BOARD_PPTX_TEMPLATE",
+    )
     board_pptx_export_mode: str = Field(
         default="template_first",
         validation_alias="BOARD_PPTX_EXPORT_MODE",
