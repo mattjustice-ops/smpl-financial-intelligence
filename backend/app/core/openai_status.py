@@ -67,7 +67,8 @@ def openai_ping_payload() -> dict[str, str | bool]:
     return {
         "status": "ok",
         "service": "export",
-        "api_build": "llm-ping-v4",
+        "api_build": "mda-smoke-v5",
+        "mda_smoke_levels": "ping,bundle,assemble,render",
         "board_engine": PRESENTATION_ENGINE_VERSION,
         "board_pptx_export_mode": getattr(settings, "board_pptx_export_mode", "template_first"),
         "board_pptx_template": str(template_path) if template_path else "",
@@ -86,5 +87,5 @@ def openai_ping_payload() -> dict[str, str | bool]:
         "env_file_exists": (_BACKEND_ROOT / ".env").is_file(),
         "backend_root": str(_BACKEND_ROOT),
         "python_executable": sys.executable,
-        "settings_loader": "v4-llm-ping",
+        "settings_loader": "v5-mda-smoke",
     }

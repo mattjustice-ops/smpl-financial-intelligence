@@ -483,16 +483,37 @@ def _board_pptx_response(
 def export_mda_deck_smoke(
     organization_id: uuid.UUID = Query(...),
     as_of_period: str = Query("2026-06"),
-    render: bool = Query(
-        False,
-        description="When true, render full PPTX bytes (slow; may timeout on Railway). Default is quick assembly-only smoke.",
+    level: str = Query(
+        "ping",
+        description="ping (~2s) | bundle (~2min) | assemble | render (full PPTX, slow)",
     ),
     db: Session = Depends(get_db),
 ) -> dict:
-    """JSON smoke test for MD&A deck (programmatic PPTX, no template)."""
+    """JSON smoke test for MD&A deck. Default level=ping avoids Railway HTTP timeouts."""
     from app.services.reporting.export.board_export_service import build_mda_deck_smoke_result
 
-    get_organization_or_404(db, organization_id)
+    org = get_organization_or_404(db, organization_id)
+    normalized = (level or "ping").strip().lower()
+    if normalized not in {"ping", "bundle", "assemble", "render"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid level {level!r}. Use ping, bundle, assemble, or render.",
+        )
+
+    if normalized == "ping":
+        return {
+            "status": "ok",
+            "level": "ping",
+            "mode": "ping",
+            "source": "programmatic",
+            "deck_kind": "mda",
+            "organization_id": str(organization_id),
+            "organization_name": org.name,
+            "period": as_of_period,
+            "api_build": "mda-smoke-v5",
+            "note": "Org reachable. Use level=assemble locally or -LocalSmoke for full pipeline.",
+        }
+
     year = as_of_period[:4]
     try:
         bundle = collect_bundle(
@@ -504,7 +525,24 @@ def export_mda_deck_smoke(
             as_of_period=as_of_period,
             include_ai_commentary=False,
         )
-        return build_mda_deck_smoke_result(bundle, full_render=render)
+        if normalized == "bundle":
+            return {
+                "status": "ok",
+                "level": "bundle",
+                "mode": "bundle",
+                "source": "programmatic",
+                "deck_kind": "mda",
+                "validation": bundle.validation.status,
+                "period": bundle.as_of_period,
+                "organization_name": bundle.organization_name,
+            }
+        result = build_mda_deck_smoke_result(
+            bundle,
+            full_render=(normalized == "render"),
+            package_mode="executive_summary" if normalized == "assemble" else "full_board",
+        )
+        result["level"] = normalized
+        return result
     except Exception as exc:
         logger.exception("MD&A deck smoke failed")
         raise HTTPException(

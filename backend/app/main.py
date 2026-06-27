@@ -76,7 +76,7 @@ def export_ping_main(response: Response) -> dict[str, str | bool]:
 
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
-    response.headers["X-SFI-Api-Build"] = "llm-ping-v4"
+    response.headers["X-SFI-Api-Build"] = "mda-smoke-v5"
     return openai_ping_payload()
 
 
