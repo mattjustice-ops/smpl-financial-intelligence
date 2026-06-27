@@ -17,6 +17,8 @@ from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_ROOT))
+sys.path.insert(0, str(BACKEND_ROOT / "scripts"))
+from local_db_url import prepare_local_database_env
 
 ORG_ID = uuid.UUID("8571e520-0687-4516-bdee-379f37c58c1f")
 
@@ -33,6 +35,8 @@ def main() -> None:
             "DATABASE_URL is not set.\n"
             "Copy the Railway Neon URL into this shell (read-only — no migrations run)."
         )
+
+    prepare_local_database_env()
 
     from app.db.session import SessionLocal
     from app.services.reporting.export.board_export_service import (

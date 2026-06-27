@@ -44,8 +44,23 @@ function Show-HttpError {
     }
 }
 
+function Normalize-DatabaseUrl {
+    param([string]$Url)
+    $u = $Url.Trim()
+    if ($u.StartsWith("postgresql://")) {
+        return "postgresql+psycopg://" + $u.Substring("postgresql://".Length)
+    }
+    if ($u.StartsWith("postgres://")) {
+        return "postgresql+psycopg://" + $u.Substring("postgres://".Length)
+    }
+    return $u
+}
+
 function Import-DatabaseUrlFromEnvFiles {
-    if ($env:DATABASE_URL) { return }
+    if ($env:DATABASE_URL) {
+        $env:DATABASE_URL = Normalize-DatabaseUrl $env:DATABASE_URL
+        return
+    }
     foreach ($file in @(
             (Join-Path $backendRoot ".env"),
             (Join-Path $backendRoot "secrets.env"),
@@ -54,7 +69,7 @@ function Import-DatabaseUrlFromEnvFiles {
         if (-not (Test-Path $file)) { continue }
         Get-Content $file | ForEach-Object {
             if ($_ -match '^\s*DATABASE_URL\s*=\s*(.+)\s*$') {
-                $env:DATABASE_URL = $matches[1].Trim().Trim('"').Trim("'")
+                $env:DATABASE_URL = Normalize-DatabaseUrl $matches[1].Trim().Trim('"').Trim("'")
             }
         }
         if ($env:DATABASE_URL) {
@@ -81,6 +96,7 @@ function Invoke-LocalPython {
         Write-Host '   Then: $env:DATABASE_URL = "postgresql://..."' -ForegroundColor Yellow
         exit 1
     }
+    Write-Host "   DB driver: psycopg v3 (postgresql+psycopg://)" -ForegroundColor DarkGray
     if ($NoAI) { $env:MDA_USE_AI = "false" } else { $env:MDA_USE_AI = "true" }
     $env:MDA_CLOSE_PERIOD = $ClosePeriod
     Push-Location $backendRoot
