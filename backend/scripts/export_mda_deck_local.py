@@ -24,13 +24,8 @@ USE_AI = os.environ.get("MDA_USE_AI", "true").lower() in ("1", "true", "yes")
 
 
 def main() -> None:
-    if not os.environ.get("DATABASE_URL", "").strip():
-        raise SystemExit(
-            "DATABASE_URL is not set.\n"
-            "Set it to your Neon production URL, then re-run this script."
-        )
-
-    prepare_local_database_env()
+    host_hint = prepare_local_database_env()
+    print(f"Neon host: {host_hint}")
 
     from app.db.session import SessionLocal
     from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes

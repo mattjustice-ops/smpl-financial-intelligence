@@ -30,13 +30,8 @@ def main() -> None:
     parser.add_argument("--no-ai", action="store_true")
     args = parser.parse_args()
 
-    if not os.environ.get("DATABASE_URL", "").strip():
-        raise SystemExit(
-            "DATABASE_URL is not set.\n"
-            "Copy the Railway Neon URL into this shell (read-only — no migrations run)."
-        )
-
-    prepare_local_database_env()
+    host_hint = prepare_local_database_env()
+    print(f"Neon host: {host_hint}")
 
     from app.db.session import SessionLocal
     from app.services.reporting.export.board_export_service import (

@@ -92,11 +92,21 @@ function Invoke-LocalPython {
     Import-DatabaseUrlFromEnvFiles
     if (-not $env:DATABASE_URL) {
         Write-Host "   DATABASE_URL not set." -ForegroundColor Red
-        Write-Host "   Copy it from Railway -> service -> Variables -> DATABASE_URL" -ForegroundColor Yellow
-        Write-Host '   Then: $env:DATABASE_URL = "postgresql://..."' -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "   1. Open https://railway.app -> sfi-api-production service" -ForegroundColor Yellow
+        Write-Host "   2. Variables tab -> copy DATABASE_URL (full postgresql://... string)" -ForegroundColor Yellow
+        Write-Host '   3. $env:DATABASE_URL = "postgresql://neondb_owner:PASSWORD@ep-....neon.tech/neondb?sslmode=require"' -ForegroundColor Yellow
+        Write-Host "   4. Re-run this script" -ForegroundColor Yellow
         exit 1
     }
-    Write-Host "   DB driver: psycopg v3 (postgresql+psycopg://)" -ForegroundColor DarkGray
+    if ($env:DATABASE_URL -match "paste-your-railway|your-railway-url|example\.com") {
+        Write-Host "   DATABASE_URL is still a placeholder from the docs — paste the real Railway value." -ForegroundColor Red
+        exit 1
+    }
+    $hostHint = ""
+    if ($env:DATABASE_URL -match "@([^/?]+)") { $hostHint = $matches[1] }
+    Write-Host ("   DB host: {0}" -f $(if ($hostHint) { $hostHint } else { "(unknown)" })) -ForegroundColor DarkGray
+    Write-Host "   DB driver: psycopg v3" -ForegroundColor DarkGray
     if ($NoAI) { $env:MDA_USE_AI = "false" } else { $env:MDA_USE_AI = "true" }
     $env:MDA_CLOSE_PERIOD = $ClosePeriod
     Push-Location $backendRoot
