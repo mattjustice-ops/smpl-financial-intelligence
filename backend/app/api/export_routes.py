@@ -63,6 +63,40 @@ def _export_params(
     return params
 
 
+def _load_board_export_enrichment(
+    db: Session,
+    organization_id: uuid.UUID,
+    bundle: ReportingBundle,
+) -> tuple[dict | None, dict | None]:
+    """Three-statement + cash bridge tables used by Prompt 2 MD&A package and Prompt 5 deck."""
+    ts_data: dict | None = None
+    cash_bridge_data: dict | None = None
+    try:
+        from app.services.reporting.three_statement_payload import build_cash_bridge_data, build_ts_data
+
+        ts_data = build_ts_data(
+            db,
+            organization_id,
+            as_of=bundle.as_of_period,
+            start_period=bundle.start_period,
+            end_period=bundle.end_period,
+        )
+        cash_bridge_data = build_cash_bridge_data(
+            db,
+            organization_id,
+            start_period=bundle.start_period,
+            end_period=bundle.end_period,
+        )
+    except Exception:
+        logger.warning(
+            "Board export enrichment unavailable for org=%s period=%s — using bundle fallbacks",
+            organization_id,
+            bundle.as_of_period,
+            exc_info=True,
+        )
+    return ts_data, cash_bridge_data
+
+
 def _check_validation(bundle: ReportingBundle, block_on_failure: bool) -> None:
     if not block_on_failure:
         return
@@ -314,6 +348,94 @@ def export_month_end_close(
     )
 
 
+@export_router.get("/mda-package.xlsx")
+def export_mda_package(
+    organization_id: uuid.UUID = Query(...),
+    reporting_period: str | None = Query(None, description="Alias for as_of_period (close month YYYY-MM)"),
+    scenario: str = Query("Combined"),
+    start_period: str = Query(...),
+    end_period: str = Query(...),
+    period: str | None = Query(None),
+    quarter: str | None = Query(None),
+    fiscal_year: str | None = Query(None),
+    as_of_period: str | None = Query(None),
+    block_on_failure: bool = Query(False),
+    include_ai_commentary: bool = Query(
+        True,
+        description="Generate Claude Prompt 2 variance commentary when API key is set",
+    ),
+    waterfall_type: str | None = Query(None),
+    marketing_channel: str | None = Query(None),
+    region: str | None = Query(None),
+    segment: str | None = Query(None),
+    owner: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> Response:
+    """SMPL MD&A Excel package — Prompt 2 template refresh + Claude commentary."""
+    from app.services.reporting.export.board_export_service import build_mda_package_xlsx_bytes
+
+    get_organization_or_404(db, organization_id)
+    as_of = reporting_period or as_of_period
+    params = _export_params(
+        scenario,
+        start_period,
+        end_period,
+        period,
+        quarter,
+        fiscal_year,
+        as_of,
+        waterfall_type,
+        marketing_channel,
+        region,
+        segment,
+        owner,
+    )
+    try:
+        bundle = collect_bundle(
+            db,
+            organization_id,
+            include_ai_commentary=False,
+            **params,
+        )
+    except Exception as exc:
+        logger.exception("MD&A package bundle collection failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Export bundle failed: {type(exc).__name__}: {exc}",
+        ) from exc
+    _check_validation(bundle, block_on_failure)
+    ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+    try:
+        content, package_source = build_mda_package_xlsx_bytes(
+            bundle,
+            include_commentary=include_ai_commentary,
+            use_ai_commentary=include_ai_commentary,
+            ts_data=ts_data,
+            cash_bridge_data=cash_bridge_data,
+        )
+    except Exception as exc:
+        logger.exception("MD&A package export failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"MD&A package export failed: {type(exc).__name__}: {exc}",
+        ) from exc
+    if not content:
+        raise HTTPException(status_code=500, detail="MD&A package export returned empty content.")
+    period_label = bundle.as_of_period.replace("-", "_")
+    filename = f"SMPL_MDA_Package_{period_label}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Export-Validation": bundle.validation.status if bundle.validation else "unknown",
+            "X-MDA-Package-Source": package_source,
+            "X-MDA-Package-Engine": "claude_prompt2",
+            "X-MDA-AI-Commentary": "true" if include_ai_commentary else "false",
+        },
+    )
+
+
 @export_router.get("/management-review.xlsx")
 def export_management_review(
     organization_id: uuid.UUID = Query(...),
@@ -427,6 +549,7 @@ def _board_pptx_response(
     package_mode: str,
     deck_kind: str = "board",
     ts_data: dict | None = None,
+    cash_bridge_data: dict | None = None,
 ) -> Response:
     try:
         if deck_kind == "mda":
@@ -438,6 +561,7 @@ def _board_pptx_response(
                 scenario_mode=scenario_mode,
                 package_mode=package_mode,
                 ts_data=ts_data,
+                cash_bridge_data=cash_bridge_data,
             )
             filename = f"mda_deck_{bundle.as_of_period}.pptx"
         else:
@@ -739,19 +863,7 @@ def export_mda_deck(
         ) from exc
     if include_validation:
         _check_validation(bundle, block_on_failure)
-    ts_data = None
-    try:
-        from app.services.reporting.three_statement_payload import build_ts_data
-
-        ts_data = build_ts_data(
-            db,
-            organization_id,
-            as_of=bundle.as_of_period,
-            start_period=bundle.start_period,
-            end_period=bundle.end_period,
-        )
-    except Exception:
-        logger.warning("MD&A deck: build_ts_data unavailable — using financial_statements fallback")
+    ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
     return _board_pptx_response(
         bundle,
         include_commentary=include_commentary,
@@ -761,4 +873,5 @@ def export_mda_deck(
         package_mode=package_mode,
         deck_kind="mda",
         ts_data=ts_data,
+        cash_bridge_data=cash_bridge_data,
     )

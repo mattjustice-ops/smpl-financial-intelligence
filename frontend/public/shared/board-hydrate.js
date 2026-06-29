@@ -883,8 +883,8 @@
       return "no-org";
     }
 
-    // Board header buttons — must match backend export registry (output_requirements.py).
-    // Variance Commentary button → full MD&A Excel package (month-end-close), NOT 2-tab variance-only.
+    // Board header buttons — must match backend export registry (export_sheet_registry.py).
+    // Variance Commentary button → SMPL MD&A Excel package (Prompt 2), NOT month-end-close.xlsx.
     var exportSpec =
       format === "pptx"
         ? {
@@ -893,8 +893,8 @@
             label: "MD&A Deck",
           }
         : {
-            path: "/api/v1/export/month-end-close.xlsx",
-            filename: "mda_package_" + closeMonth + ".xlsx",
+            path: "/api/v1/export/mda-package.xlsx",
+            filename: "SMPL_MDA_Package_" + closeMonth.replace("-", "_") + ".xlsx",
             label: "Variance Commentary",
           };
 

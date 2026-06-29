@@ -124,6 +124,7 @@ def build_pptx_mda_deck(
     scenario_mode: str | None = None,
     package_mode: str = "full_board",
     ts_data: dict | None = None,
+    cash_bridge_data: dict | None = None,
 ) -> tuple[bytes, str]:
     from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
 
@@ -135,4 +136,5 @@ def build_pptx_mda_deck(
         scenario_mode=scenario_mode,
         package_mode=package_mode,  # type: ignore[arg-type]
         ts_data=ts_data,
+        cash_bridge_data=cash_bridge_data,
     )
