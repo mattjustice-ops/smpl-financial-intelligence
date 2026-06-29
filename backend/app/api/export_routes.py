@@ -436,6 +436,263 @@ def export_mda_package(
     )
 
 
+def _run_mda_package_job(
+    job_id: str,
+    *,
+    organization_id: uuid.UUID,
+    bundle_params: dict,
+    include_ai_commentary: bool,
+    block_on_failure: bool,
+) -> None:
+    from app.db.session import SessionLocal
+    from app.services.reporting.export.board_export_service import build_mda_package_xlsx_bytes
+    from app.services.reporting.export.export_jobs import complete_export_job, update_export_job_message
+
+    db = SessionLocal()
+    try:
+        get_organization_or_404(db, organization_id)
+
+        update_export_job_message(job_id, "Collecting warehouse bundle…")
+        bundle = collect_bundle(
+            db,
+            organization_id,
+            include_ai_commentary=False,
+            **bundle_params,
+        )
+        if block_on_failure:
+            _check_validation(bundle, True)
+        update_export_job_message(job_id, "Loading three-statement and cash bridge…")
+        ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+        update_export_job_message(job_id, "Generating SMPL MD&A package (Prompt 2)…")
+        content, package_source = build_mda_package_xlsx_bytes(
+            bundle,
+            include_commentary=include_ai_commentary,
+            use_ai_commentary=include_ai_commentary,
+            ts_data=ts_data,
+            cash_bridge_data=cash_bridge_data,
+        )
+        period_label = bundle.as_of_period.replace("-", "_")
+        complete_export_job(
+            job_id,
+            content,
+            message="MD&A package ready",
+            headers_extra={
+                "X-Export-Validation": bundle.validation.status if bundle.validation else "unknown",
+                "X-MDA-Package-Source": package_source,
+                "X-MDA-Package-Engine": "claude_prompt2",
+                "X-MDA-AI-Commentary": "true" if include_ai_commentary else "false",
+            },
+        )
+    finally:
+        db.close()
+
+
+def _run_mda_deck_job(
+    job_id: str,
+    *,
+    organization_id: uuid.UUID,
+    bundle_params: dict,
+    include_ai_commentary: bool,
+    include_commentary: bool,
+    include_appendix: bool,
+    include_validation: bool,
+    block_on_failure: bool,
+    scenario_mode: str | None,
+    package_mode: str,
+) -> None:
+    from app.db.session import SessionLocal
+    from app.services.reporting.export.export_jobs import complete_export_job, update_export_job_message
+
+    db = SessionLocal()
+    try:
+        get_organization_or_404(db, organization_id)
+
+        update_export_job_message(job_id, "Collecting warehouse bundle…")
+        bundle = collect_bundle(
+            db,
+            organization_id,
+            include_ai_commentary=False,
+            **bundle_params,
+        )
+        if include_validation and block_on_failure:
+            _check_validation(bundle, True)
+        update_export_job_message(job_id, "Loading three-statement and cash bridge…")
+        ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+        update_export_job_message(job_id, "Generating MD&A deck (Prompt 5)…")
+        content, pptx_source = build_pptx_mda_deck(
+            bundle,
+            include_commentary=include_commentary,
+            include_validation_appendix=include_appendix,
+            use_ai_commentary=include_ai_commentary,
+            scenario_mode=scenario_mode,
+            package_mode=package_mode,
+            ts_data=ts_data,
+            cash_bridge_data=cash_bridge_data,
+        )
+        complete_export_job(
+            job_id,
+            content,
+            message="MD&A deck ready",
+            headers_extra={
+                "X-Export-Validation": bundle.validation.status if bundle.validation else "unknown",
+                "X-Board-Package-Engine": "smpl-board-v2",
+                "X-Board-PPTX-Source": pptx_source,
+                "X-Board-AI-Commentary": "true" if include_ai_commentary else "false",
+                "X-Board-Deck-Kind": "mda",
+            },
+        )
+    finally:
+        db.close()
+
+
+@export_router.post("/jobs/mda-package")
+def start_mda_package_job(
+    organization_id: uuid.UUID = Query(...),
+    reporting_period: str | None = Query(None),
+    scenario: str = Query("Combined"),
+    start_period: str = Query(...),
+    end_period: str = Query(...),
+    period: str | None = Query(None),
+    quarter: str | None = Query(None),
+    fiscal_year: str | None = Query(None),
+    as_of_period: str | None = Query(None),
+    block_on_failure: bool = Query(False),
+    include_ai_commentary: bool = Query(True),
+    waterfall_type: str | None = Query(None),
+    marketing_channel: str | None = Query(None),
+    region: str | None = Query(None),
+    segment: str | None = Query(None),
+    owner: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Start background MD&A package job (avoids Railway 5-minute idle timeout)."""
+    from app.services.reporting.export.export_jobs import job_status_payload, submit_export_job
+
+    get_organization_or_404(db, organization_id)
+    as_of = reporting_period or as_of_period
+    bundle_params = _export_params(
+        scenario,
+        start_period,
+        end_period,
+        period,
+        quarter,
+        fiscal_year,
+        as_of,
+        waterfall_type,
+        marketing_channel,
+        region,
+        segment,
+        owner,
+    )
+    period_label = (as_of or bundle_params["as_of_period"]).replace("-", "_")
+    job = submit_export_job(
+        "mda_package",
+        lambda job_id: _run_mda_package_job(
+            job_id,
+            organization_id=organization_id,
+            bundle_params=bundle_params,
+            include_ai_commentary=include_ai_commentary,
+            block_on_failure=block_on_failure,
+        ),
+        filename=f"SMPL_MDA_Package_{period_label}.xlsx",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    return job_status_payload(job)
+
+
+@export_router.post("/jobs/mda-deck")
+def start_mda_deck_job(
+    organization_id: uuid.UUID = Query(...),
+    reporting_period: str | None = Query(None),
+    scenario: str = Query("Combined"),
+    scenario_mode: str | None = Query(None),
+    start_period: str = Query(...),
+    end_period: str = Query(...),
+    period: str | None = Query(None),
+    quarter: str | None = Query(None),
+    fiscal_year: str | None = Query(None),
+    as_of_period: str | None = Query(None),
+    block_on_failure: bool = Query(False),
+    include_ai_commentary: bool = Query(True),
+    include_commentary: bool = Query(True),
+    include_appendix: bool = Query(True),
+    include_validation: bool = Query(True),
+    package_mode: str = Query("full_board"),
+    waterfall_type: str | None = Query(None),
+    marketing_channel: str | None = Query(None),
+    region: str | None = Query(None),
+    segment: str | None = Query(None),
+    owner: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Start background MD&A deck job (avoids Railway 5-minute idle timeout)."""
+    from app.services.reporting.export.export_jobs import job_status_payload, submit_export_job
+
+    get_organization_or_404(db, organization_id)
+    as_of = reporting_period or as_of_period
+    bundle_params = _export_params(
+        scenario,
+        start_period,
+        end_period,
+        period,
+        quarter,
+        fiscal_year,
+        as_of,
+        waterfall_type,
+        marketing_channel,
+        region,
+        segment,
+        owner,
+    )
+    deck_period = as_of or bundle_params["as_of_period"]
+    job = submit_export_job(
+        "mda_deck",
+        lambda job_id: _run_mda_deck_job(
+            job_id,
+            organization_id=organization_id,
+            bundle_params=bundle_params,
+            include_ai_commentary=include_ai_commentary,
+            include_commentary=include_commentary,
+            include_appendix=include_appendix,
+            include_validation=include_validation,
+            block_on_failure=block_on_failure,
+            scenario_mode=scenario_mode,
+            package_mode=package_mode,
+        ),
+        filename=f"mda_deck_{deck_period}.pptx",
+        content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+    return job_status_payload(job)
+
+
+@export_router.get("/jobs/{job_id}")
+def export_job_status(job_id: uuid.UUID) -> dict:
+    from app.services.reporting.export.export_jobs import get_export_job, job_status_payload
+
+    job = get_export_job(str(job_id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    return job_status_payload(job)
+
+
+@export_router.get("/jobs/{job_id}/download")
+def export_job_download(job_id: uuid.UUID) -> Response:
+    from app.services.reporting.export.export_jobs import get_export_job
+
+    job = get_export_job(str(job_id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    if job.status == "failed":
+        raise HTTPException(status_code=500, detail=job.error or "Export job failed")
+    if job.status != "complete" or not job.content:
+        raise HTTPException(status_code=409, detail=f"Export not ready (status={job.status})")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{job.filename}"',
+        **job.headers_extra,
+    }
+    return Response(content=job.content, media_type=job.content_type, headers=headers)
+
+
 @export_router.get("/management-review.xlsx")
 def export_management_review(
     organization_id: uuid.UUID = Query(...),

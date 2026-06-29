@@ -837,11 +837,13 @@
   }
 
   /** Cross-origin file downloads bypass CORS (unlike fetch). Railway serves Content-Disposition: attachment. */
-  function triggerDirectExportDownload(exportUrl, label) {
-    alert(
-      label +
-        " export started.\n\nGeneration can take 3–8 minutes. Your browser will download when ready — keep this tab open.",
-    );
+  function triggerDirectExportDownload(exportUrl, label, silent) {
+    if (!silent) {
+      alert(
+        label +
+          " export started.\n\nGeneration can take 3–8 minutes. Your browser will download when ready — keep this tab open.",
+      );
+    }
     var frame = document.getElementById("smpl-export-download-frame");
     if (!frame) {
       frame = document.createElement("iframe");
@@ -851,6 +853,75 @@
       document.body.appendChild(frame);
     }
     frame.src = exportUrl;
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  async function pollAndDownloadExport(directBase, exportSpec, format, params) {
+    alert(
+      exportSpec.label +
+        " export started.\n\nGeneration can take 3–10 minutes. Your browser will download automatically when ready — keep this tab open.",
+    );
+    var jobPath =
+      format === "pptx" ? "/api/v1/export/jobs/mda-deck" : "/api/v1/export/jobs/mda-package";
+    var startUrl = boardLiveUrl(directBase, jobPath) + "?" + params.toString();
+    try {
+      var startRes = await boardFetchWithTimeout(
+        startUrl,
+        boardLiveFetchInit(directBase, { method: "POST", cache: "no-store" }),
+        120000,
+      );
+      if (!startRes.ok) {
+        alert(exportSpec.label + " export failed:\n" + (await boardApiErrorMessage(startRes)));
+        return "error";
+      }
+      var startJson = await startRes.json();
+      var jobId = startJson && startJson.job_id;
+      if (!jobId) {
+        alert(exportSpec.label + " export failed: no job id returned from API.");
+        return "error";
+      }
+      var deadline = Date.now() + 600000;
+      while (Date.now() < deadline) {
+        await sleep(5000);
+        var statusUrl = boardLiveUrl(directBase, "/api/v1/export/jobs/" + jobId);
+        var statusRes = await boardFetchWithTimeout(
+          statusUrl,
+          boardLiveFetchInit(directBase, { method: "GET", cache: "no-store" }),
+          60000,
+        );
+        if (!statusRes.ok) continue;
+        var statusJson = await statusRes.json();
+        if (statusJson.status === "failed") {
+          alert(
+            exportSpec.label +
+              " export failed:\n" +
+              (statusJson.error || statusJson.message || "Unknown error"),
+          );
+          return "error";
+        }
+        if (statusJson.status === "complete") {
+          triggerDirectExportDownload(
+            boardLiveUrl(directBase, "/api/v1/export/jobs/" + jobId + "/download"),
+            exportSpec.label,
+            true,
+          );
+          return "started";
+        }
+      }
+      alert(
+        exportSpec.label +
+          " export timed out after 10 minutes. Check Railway logs and retry.",
+      );
+      return "error";
+    } catch (err) {
+      alert(exportSpec.label + " export failed:\n" + boardFetchErrorMessage(err, 600000));
+      return "error";
+    }
   }
 
   async function fetchBoardExportBlob(exportBase, exportUrl, exportSpec, exportTimeoutMs) {
@@ -921,8 +992,7 @@
       var exportUrl = boardLiveUrl(directBase, exportSpec.path) + "?" + params.toString();
 
       if (directBase && !isLocal) {
-        triggerDirectExportDownload(exportUrl, exportSpec.label);
-        return "started";
+        return await pollAndDownloadExport(directBase, exportSpec, format, params);
       }
 
       if (!directBase && !isLocal) {
