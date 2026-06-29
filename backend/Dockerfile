@@ -22,7 +22,12 @@ COPY alembic.ini .
 COPY scripts ./scripts
 COPY templates ./templates
 
-RUN cd scripts/deck-gen && npm install --omit=dev
+# Prompt 5 deck export runs Claude-generated PptxGenJS via Node (pptxgenjs in deck-gen).
+RUN if [ -f scripts/deck-gen/package.json ]; then \
+      cd scripts/deck-gen && npm install --omit=dev; \
+    else \
+      echo "WARN: scripts/deck-gen missing — Prompt 5 deck export unavailable"; \
+    fi
 
 EXPOSE 8000
 

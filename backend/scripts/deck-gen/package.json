@@ -1,0 +1,8 @@
+{
+  "name": "smpl-deck-gen",
+  "private": true,
+  "description": "PptxGenJS runtime for Claude-generated board decks (Prompt 5)",
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}
