@@ -24,6 +24,7 @@ from app.services.reporting.export.multi_scenario import (
     assess_data_gaps,
     collect_comparison_financial_statements,
     collect_comparison_waterfalls,
+    collect_marketing_channel_comparison,
     collect_marketing_comparison,
 )
 from app.services.reporting.export.schemas import (
@@ -175,6 +176,13 @@ def collect_reporting_bundle(
         end_period=end,
         marketing_channel=dashboard_filters.get("marketing_channel"),
     )
+    marketing_channel_comparison = collect_marketing_channel_comparison(
+        db,
+        organization_id,
+        start_period=start,
+        end_period=end,
+        marketing_channel=dashboard_filters.get("marketing_channel"),
+    )
 
     fs_start, fs_end = _statement_date_range(start, end)
     financial: SummaryResponse | None = comparison_financial
@@ -264,6 +272,7 @@ def collect_reporting_bundle(
         comparison_waterfalls=comparison_waterfalls,
         comparison_financial_statements=comparison_financial,
         marketing_comparison=marketing_comparison,
+        marketing_channel_comparison=marketing_channel_comparison,
         gl_detail=gl_detail,
         headcount=headcount,
         pipeline_drilldown=drilldown_payload,
@@ -310,6 +319,7 @@ def collect_reporting_bundle(
         comparison_waterfalls=comparison_waterfalls,
         comparison_financial_statements=comparison_financial,
         marketing_comparison=marketing_comparison,
+        marketing_channel_comparison=marketing_channel_comparison,
         gl_detail=gl_detail,
         headcount=headcount,
         pipeline_drilldown=drilldown_payload,

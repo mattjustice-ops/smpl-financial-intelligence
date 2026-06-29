@@ -64,6 +64,32 @@ def build_board_package_from_bundle(
     )
 
 
+def build_mda_package_xlsx_bytes(
+    bundle: ReportingBundle,
+    *,
+    include_commentary: bool = True,
+    use_ai_commentary: bool = True,
+    ts_data: dict | None = None,
+    cash_bridge_data: dict | None = None,
+) -> tuple[bytes, str]:
+    """MD&A Excel package — Claude Prompt 2 commentary + SMPL template."""
+    import os
+
+    from app.services.reporting.export.prompt2_mda_package import build_claude_mda_package_xlsx_bytes
+
+    skip = (
+        not include_commentary
+        or not use_ai_commentary
+        or os.environ.get("MDA_DATA_ONLY", "").strip().lower() in ("1", "true", "yes")
+    )
+    return build_claude_mda_package_xlsx_bytes(
+        bundle,
+        ts_data=ts_data,
+        cash_bridge_data=cash_bridge_data,
+        skip_claude=skip,
+    )
+
+
 def build_mda_deck_pptx_bytes(
     bundle: ReportingBundle,
     *,
@@ -72,18 +98,16 @@ def build_mda_deck_pptx_bytes(
     use_ai_commentary: bool = False,
     scenario_mode: str | None = None,
     package_mode: PackageMode = "full_board",
+    ts_data: dict | None = None,
+    cash_bridge_data: dict | None = None,
 ) -> tuple[bytes, str]:
-    """MD&A deck — always programmatic layout (no template shape patching)."""
-    _ = scenario_mode
-    package = build_board_package_from_bundle(
-        bundle,
-        include_commentary=include_commentary,
-        include_validation_appendix=include_validation_appendix,
-        use_ai_commentary=use_ai_commentary,
-        scenario_mode=scenario_mode,
-        package_mode=package_mode,
+    """MD&A deck — Claude Prompt 5 full fresh build (PptxGenJS via Node)."""
+    _ = (include_commentary, include_validation_appendix, use_ai_commentary, scenario_mode, package_mode)
+    from app.services.reporting.export.prompt5_deck import build_claude_deck_pptx_bytes
+
+    return build_claude_deck_pptx_bytes(
+        bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data
     )
-    return render_pptx_bytes(package), "programmatic"
 
 
 def build_mda_deck_smoke_result(
@@ -103,7 +127,7 @@ def build_mda_deck_smoke_result(
     )
     result: dict[str, object] = {
         "status": "ok",
-        "source": "programmatic",
+        "source": "claude_prompt5",
         "deck_kind": "mda",
         "mode": "full" if full_render else "quick",
         "slide_count": len(package.slides),

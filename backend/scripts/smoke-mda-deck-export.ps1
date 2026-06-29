@@ -1,15 +1,11 @@
-# MDA deck export smoke + local iteration (read-only Neon — no DB schema changes)
+# MDA deck export smoke + local iteration (read-only Neon, no DB schema changes)
 #
-# === Railway smoke (no DATABASE_URL needed) ===
-# Instant check (~5s after deploy):
-#   powershell -ExecutionPolicy Bypass -File "...\smoke-mda-deck-export.ps1"
-#
-# === Local full pipeline (same Neon as prod, read-only) ===
-# One-time in PowerShell — paste Railway DATABASE_URL (Variables tab):
-#   $env:DATABASE_URL = "postgresql://..."
-# Then:
-#   powershell -ExecutionPolicy Bypass -File "...\smoke-mda-deck-export.ps1" -LocalSmoke
+# Local export (uses backend\.env DATABASE_URL if set):
+#   Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
 #   powershell -ExecutionPolicy Bypass -File "...\smoke-mda-deck-export.ps1" -LocalExport
+#
+# Railway smoke only (no DATABASE_URL):
+#   powershell -ExecutionPolicy Bypass -File "...\smoke-mda-deck-export.ps1"
 
 param(
     [string]$OrgId = "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -24,6 +20,7 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendRoot = Split-Path -Parent $scriptDir
 $timeoutSec = 120
+$amp = [char]38
 
 function Write-Step {
     param([string]$Number, [string]$Message)
@@ -44,9 +41,26 @@ function Show-HttpError {
     }
 }
 
+function Test-PlaceholderDatabaseUrl {
+    param([string]$Url)
+    $lower = $Url.ToLower()
+    $bad = @(
+        "paste-your-railway",
+        "your-railway-url",
+        "your_password",
+        "ep-xxxxx",
+        "example.com",
+        "neondb_owner:password@"
+    )
+    foreach ($token in $bad) {
+        if ($lower.Contains($token)) { return $true }
+    }
+    return $false
+}
+
 function Normalize-DatabaseUrl {
     param([string]$Url)
-    $u = $Url.Trim()
+    $u = $Url.Trim().Trim('"').Trim("'")
     if ($u.StartsWith("postgresql://")) {
         return "postgresql+psycopg://" + $u.Substring("postgresql://".Length)
     }
@@ -56,10 +70,26 @@ function Normalize-DatabaseUrl {
     return $u
 }
 
+function Get-DatabaseHostHint {
+    param([string]$Url)
+    $at = $Url.IndexOf("@")
+    if ($at -lt 0) { return "(unknown host)" }
+    $rest = $Url.Substring($at + 1)
+    $slash = $rest.IndexOf("/")
+    if ($slash -lt 0) { return $rest }
+    return $rest.Substring(0, $slash)
+}
+
 function Import-DatabaseUrlFromEnvFiles {
+    $placeholderInSession = $false
     if ($env:DATABASE_URL) {
-        $env:DATABASE_URL = Normalize-DatabaseUrl $env:DATABASE_URL
-        return
+        if (Test-PlaceholderDatabaseUrl $env:DATABASE_URL) {
+            $placeholderInSession = $true
+            Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+        } else {
+            $env:DATABASE_URL = Normalize-DatabaseUrl $env:DATABASE_URL
+            return
+        }
     }
     foreach ($file in @(
             (Join-Path $backendRoot ".env"),
@@ -69,11 +99,17 @@ function Import-DatabaseUrlFromEnvFiles {
         if (-not (Test-Path $file)) { continue }
         Get-Content $file | ForEach-Object {
             if ($_ -match '^\s*DATABASE_URL\s*=\s*(.+)\s*$') {
-                $env:DATABASE_URL = Normalize-DatabaseUrl $matches[1].Trim().Trim('"').Trim("'")
+                $candidate = Normalize-DatabaseUrl $matches[1]
+                if (-not (Test-PlaceholderDatabaseUrl $candidate)) {
+                    $env:DATABASE_URL = $candidate
+                }
             }
         }
         if ($env:DATABASE_URL) {
             Write-Host ("  Loaded DATABASE_URL from {0}" -f $file) -ForegroundColor DarkGray
+            if ($placeholderInSession) {
+                Write-Host "  (Ignored placeholder DATABASE_URL from your PowerShell session)" -ForegroundColor DarkGray
+            }
             return
         }
     }
@@ -91,23 +127,25 @@ function Invoke-LocalPython {
     }
     Import-DatabaseUrlFromEnvFiles
     if (-not $env:DATABASE_URL) {
-        Write-Host "   DATABASE_URL not set." -ForegroundColor Red
+        Write-Host "   DATABASE_URL not found." -ForegroundColor Red
         Write-Host ""
-        Write-Host "   1. Open https://railway.app -> sfi-api-production service" -ForegroundColor Yellow
-        Write-Host "   2. Variables tab -> copy DATABASE_URL (full postgresql://... string)" -ForegroundColor Yellow
-        Write-Host '   3. $env:DATABASE_URL = "postgresql://neondb_owner:PASSWORD@ep-....neon.tech/neondb?sslmode=require"' -ForegroundColor Yellow
-        Write-Host "   4. Re-run this script" -ForegroundColor Yellow
+        Write-Host "   Option A (easiest): put DATABASE_URL in backend\.env" -ForegroundColor Yellow
+        Write-Host "   Copy the full value from Railway -> sfi-api-production -> Variables -> DATABASE_URL" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "   Option B: paste the full copied Railway string (do not type YOUR_PASSWORD):" -ForegroundColor Yellow
+        Write-Host '   $env:DATABASE_URL = "<paste entire Railway DATABASE_URL here>"' -ForegroundColor Yellow
         exit 1
     }
-    if ($env:DATABASE_URL -match "paste-your-railway|your-railway-url|example\.com") {
-        Write-Host "   DATABASE_URL is still a placeholder from the docs — paste the real Railway value." -ForegroundColor Red
+    if (Test-PlaceholderDatabaseUrl $env:DATABASE_URL) {
+        Write-Host "   DATABASE_URL is still an example/placeholder, not your real Railway value." -ForegroundColor Red
         exit 1
     }
-    $hostHint = ""
-    if ($env:DATABASE_URL -match "@([^/?]+)") { $hostHint = $matches[1] }
-    Write-Host ("   DB host: {0}" -f $(if ($hostHint) { $hostHint } else { "(unknown)" })) -ForegroundColor DarkGray
+    $hostHint = Get-DatabaseHostHint $env:DATABASE_URL
+    Write-Host ("   DB host: {0}" -f $hostHint) -ForegroundColor DarkGray
     Write-Host "   DB driver: psycopg v3" -ForegroundColor DarkGray
-    if ($NoAI) { $env:MDA_USE_AI = "false" } else { $env:MDA_USE_AI = "true" }
+    if ($NoAI) {
+        Write-Host "   Note: -NoAI is ignored. MDA deck uses Claude Prompt 5 full build." -ForegroundColor DarkGray
+    }
     $env:MDA_CLOSE_PERIOD = $ClosePeriod
     Push-Location $backendRoot
     try {
@@ -140,21 +178,21 @@ Write-Host ("  API:    {0}" -f $ApiBase)
 
 Write-Step -Number "1" -Message "Export ping"
 try {
-    $ping = Invoke-RestMethod -Uri ("{0}/api/v1/export/ping" -f $ApiBase) -TimeoutSec 30
+    $pingUri = "{0}/api/v1/export/ping" -f $ApiBase
+    $ping = Invoke-RestMethod -Uri $pingUri -TimeoutSec 30
     Write-Host ("   status: {0}" -f $ping.status) -ForegroundColor Green
     Write-Host ("   api_build: {0}" -f $ping.api_build)
     Write-Host ("   ai_configured: {0}" -f $ping.ai_configured)
     if ($ping.api_build -ne "mda-smoke-v5") {
-        Write-Host "   WARNING: Railway may not have latest deploy yet (expected api_build=mda-smoke-v5)" -ForegroundColor Yellow
-        Write-Host "   Wait 2-3 min after push, then re-run." -ForegroundColor Yellow
+        Write-Host "   WARNING: expected api_build=mda-smoke-v5 (wait for Railway deploy)" -ForegroundColor Yellow
     }
 } catch {
     Show-HttpError $_
     exit 1
 }
 
-Write-Step -Number "2" -Message "MDA deck ping smoke (org check only, ~5s)"
-$smokeUri = "{0}/api/v1/export/mda-deck-smoke?organization_id={1}&as_of_period={2}&level=ping" -f $ApiBase, $OrgId, $ClosePeriod
+Write-Step -Number "2" -Message "MDA deck ping smoke (org check only, about 5s)"
+$smokeUri = "{0}/api/v1/export/mda-deck-smoke?organization_id={1}{2}as_of_period={3}{2}level=ping" -f $ApiBase, $OrgId, $amp, $ClosePeriod
 try {
     $smoke = Invoke-RestMethod -Uri $smokeUri -TimeoutSec $timeoutSec
     Write-Host ("   status: {0}" -f $smoke.status) -ForegroundColor Green
@@ -169,7 +207,7 @@ try {
 Write-Host ""
 Write-Host "Railway smoke passed." -ForegroundColor Green
 Write-Host ""
-Write-Host "Full deck build (read-only Neon, no DB changes):" -ForegroundColor Cyan
-Write-Host '  $env:DATABASE_URL = "postgresql://..."   # from Railway Variables' -ForegroundColor Yellow
-Write-Host ('  powershell -ExecutionPolicy Bypass -File "{0}" -LocalSmoke' -f $MyInvocation.MyCommand.Path) -ForegroundColor Yellow
-Write-Host ('  powershell -ExecutionPolicy Bypass -File "{0}" -LocalExport' -f $MyInvocation.MyCommand.Path) -ForegroundColor Yellow
+Write-Host "Local deck build (uses backend\.env DATABASE_URL):" -ForegroundColor Cyan
+Write-Host "  Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue" -ForegroundColor Yellow
+$localCmd = "powershell -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -LocalExport"
+Write-Host "  $localCmd" -ForegroundColor Yellow

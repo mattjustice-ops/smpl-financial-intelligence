@@ -28,8 +28,11 @@ def validate_database_url(url: str) -> None:
     placeholders = (
         "paste-your-railway-url-here",
         "your-railway-url",
+        "your_password",
+        "ep-xxxxx",
         "postgresql://...",
         "postgresql://user:pass@host",
+        "neondb_owner:password@",
         "changeme",
         "example.com",
     )

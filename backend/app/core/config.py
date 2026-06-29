@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_temperature: float = 0.2
-    anthropic_timeout_seconds: float = 120.0
+    anthropic_timeout_seconds: float = 300.0
 
     # Board MD&A deck — reference PPTX (SMPL Board Review Q2 2026 template).
     board_pptx_template: str | None = Field(

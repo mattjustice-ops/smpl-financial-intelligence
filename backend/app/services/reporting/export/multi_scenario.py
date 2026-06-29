@@ -15,7 +15,7 @@ from app.services.financial_statements.financial_statement_service import (
     summary,
 )
 from app.services.marketing.schemas import ActualBudgetForecastResponse, MarketingMetricRow
-from app.services.marketing.service import actual_budget_forecast
+from app.services.marketing.service import actual_budget_forecast, channel_performance
 from app.services.reporting.export.schemas import DataGapNote
 from app.services.reporting.period_utils import to_period
 
@@ -152,6 +152,54 @@ def collect_marketing_comparison(
             start_period=start_period,
             end_period=end_period,
             marketing_channel=marketing_channel,
+        )
+    except Exception:
+        return None
+
+
+def collect_marketing_channel_comparison(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    start_period: str,
+    end_period: str,
+    marketing_channel: str | None = None,
+) -> ActualBudgetForecastResponse | None:
+    """Per-channel marketing rows for deck GTM slide (top-N channel efficiency)."""
+    try:
+        actual = channel_performance(
+            db,
+            organization_id,
+            scenario="Actual",
+            start_period=start_period,
+            end_period=end_period,
+            marketing_channel=marketing_channel,
+        ).rows
+        budget = channel_performance(
+            db,
+            organization_id,
+            scenario="Budget",
+            start_period=start_period,
+            end_period=end_period,
+            marketing_channel=marketing_channel,
+        ).rows
+        forecast = channel_performance(
+            db,
+            organization_id,
+            scenario="Forecast",
+            start_period=start_period,
+            end_period=end_period,
+            marketing_channel=marketing_channel,
+        ).rows
+        return ActualBudgetForecastResponse(
+            organization_id=str(organization_id),
+            start_period=start_period,
+            end_period=end_period,
+            actual=actual,
+            budget=budget,
+            forecast=forecast,
+            combined=actual,
+            validation=[],
         )
     except Exception:
         return None

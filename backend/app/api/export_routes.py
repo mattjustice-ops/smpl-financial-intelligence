@@ -426,6 +426,7 @@ def _board_pptx_response(
     scenario_mode: str | None,
     package_mode: str,
     deck_kind: str = "board",
+    ts_data: dict | None = None,
 ) -> Response:
     try:
         if deck_kind == "mda":
@@ -436,6 +437,7 @@ def _board_pptx_response(
                 use_ai_commentary=use_ai_commentary,
                 scenario_mode=scenario_mode,
                 package_mode=package_mode,
+                ts_data=ts_data,
             )
             filename = f"mda_deck_{bundle.as_of_period}.pptx"
         else:
@@ -705,7 +707,7 @@ def export_mda_deck(
     owner: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> Response:
-    """MD&A operating review deck — programmatic PPTX (no template patching)."""
+    """MD&A operating review deck — Claude Prompt 5 full fresh build from data source."""
     get_organization_or_404(db, organization_id)
     as_of = reporting_period or as_of_period
     params = _export_params(
@@ -737,6 +739,19 @@ def export_mda_deck(
         ) from exc
     if include_validation:
         _check_validation(bundle, block_on_failure)
+    ts_data = None
+    try:
+        from app.services.reporting.three_statement_payload import build_ts_data
+
+        ts_data = build_ts_data(
+            db,
+            organization_id,
+            as_of=bundle.as_of_period,
+            start_period=bundle.start_period,
+            end_period=bundle.end_period,
+        )
+    except Exception:
+        logger.warning("MD&A deck: build_ts_data unavailable — using financial_statements fallback")
     return _board_pptx_response(
         bundle,
         include_commentary=include_commentary,
@@ -745,4 +760,5 @@ def export_mda_deck(
         scenario_mode=scenario_mode,
         package_mode=package_mode,
         deck_kind="mda",
+        ts_data=ts_data,
     )

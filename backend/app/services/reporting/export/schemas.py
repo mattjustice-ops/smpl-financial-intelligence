@@ -97,6 +97,7 @@ class ReportingBundle(BaseModel):
     comparison_waterfalls: dict[str, list[WaterfallSummaryRow]] = Field(default_factory=dict)
     comparison_financial_statements: SummaryResponse | None = None
     marketing_comparison: ActualBudgetForecastResponse | None = None
+    marketing_channel_comparison: ActualBudgetForecastResponse | None = None
     gl_detail: list[GlDetailRow] = Field(default_factory=list)
     headcount: list[HeadcountRow] = Field(default_factory=list)
     pipeline_drilldown: dict[str, Any] = Field(default_factory=dict)

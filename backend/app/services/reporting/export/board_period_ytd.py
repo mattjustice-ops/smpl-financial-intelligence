@@ -42,16 +42,17 @@ def _fs_by_period(
     line_match: str,
     scenario: str,
 ) -> dict[str, Decimal]:
-    out: dict[str, Decimal] = {}
     fs = bundle.comparison_financial_statements or bundle.financial_statements
     if not fs:
-        return out
-    needle = line_match.lower()
+        return {}
+    n = line_match.lower()
+    out: dict[str, Decimal] = {}
     for row in fs.income_statement.rows:
+        p = to_period(str(row.period)[:7])
         if row.scenario != scenario:
             continue
-        if needle in row.line_item.lower() and "deferred" not in row.line_item.lower():
-            out[to_period(str(row.period)[:7])] = row.amount
+        if n in row.line_item.lower() and "deferred" not in row.line_item.lower():
+            out[p] = row.amount
     return out
 
 
@@ -76,6 +77,36 @@ def _outlook_series(
         else:
             outlook[p] = forecast.get(p, ZERO) if forecast.get(p, ZERO) != ZERO else ZERO
     return outlook
+
+
+def rollup_point_in_time_metric(
+    bundle: ReportingBundle,
+    key: str,
+    wtype: str,
+) -> PeriodRollup:
+    """Stock/balance metrics — CM, QTD, and YTD are the same point-in-time value at as_of."""
+    as_of = to_period(bundle.as_of_period)
+    year = as_of[:4]
+    fiscal_end = to_period(bundle.end_period) if bundle.end_period else f"{year}-12"
+    actual = _wf_by_period(bundle, key, wtype, "Actual")
+    forecast = _wf_by_period(bundle, key, wtype, "Forecast")
+    budget = _wf_by_period(bundle, key, wtype, "Budget")
+    outlook = _outlook_series(bundle, actual, forecast)
+
+    cm = actual.get(as_of, ZERO) or outlook.get(as_of, ZERO)
+    bud_cm = budget.get(as_of, ZERO)
+    bud_eoy = budget.get(fiscal_end, ZERO)
+    fy = outlook.get(fiscal_end, ZERO) or cm
+
+    return PeriodRollup(
+        current_month=cm,
+        qtd=cm,
+        ytd=cm,
+        fy_outlook=fy,
+        budget_cm=bud_cm,
+        budget_ytd=bud_cm,
+        budget_fy=bud_eoy or bud_cm,
+    )
 
 
 def rollup_waterfall_metric(
@@ -115,9 +146,9 @@ def rollup_waterfall_metric(
 
 
 def rollup_ending_arr(bundle: ReportingBundle) -> PeriodRollup:
-    for wtype in ("ending_arr", "ending"):
-        if _wf_by_period(bundle, "arr", wtype, "Actual"):
-            return rollup_waterfall_metric(bundle, "arr", wtype, flow=False)
+    for wtype in ("ending", "ending_arr"):
+        if _wf_by_period(bundle, "arr", wtype, "Actual") or _wf_by_period(bundle, "arr", wtype, "Budget"):
+            return rollup_point_in_time_metric(bundle, "arr", wtype)
     return PeriodRollup(ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO)
 
 
@@ -127,13 +158,14 @@ def rollup_revenue(bundle: ReportingBundle) -> PeriodRollup:
     forecast = _fs_by_period(bundle, "revenue", "Forecast")
     budget = _fs_by_period(bundle, "revenue", "Budget")
     outlook = _outlook_series(bundle, actual, forecast)
+    ytd_p = ytd_periods(as_of)
     return PeriodRollup(
         current_month=actual.get(as_of, ZERO),
-        qtd=_sum_periods(outlook, qtd_periods(as_of)),
-        ytd=_sum_periods(outlook, ytd_periods(as_of)),
+        qtd=_sum_periods(actual, qtd_periods(as_of)),
+        ytd=_sum_periods(actual, ytd_p),
         fy_outlook=_sum_periods(outlook, export_fiscal_periods(bundle.start_period, bundle.end_period)),
         budget_cm=budget.get(as_of, ZERO),
-        budget_ytd=_sum_periods(budget, ytd_periods(as_of)),
+        budget_ytd=_sum_periods(budget, ytd_p),
         budget_fy=_sum_periods(budget, export_fiscal_periods(bundle.start_period, bundle.end_period)),
     )
 
@@ -144,19 +176,21 @@ def rollup_ebitda(bundle: ReportingBundle) -> PeriodRollup:
     forecast = _fs_by_period(bundle, "ebitda", "Forecast")
     budget = _fs_by_period(bundle, "ebitda", "Budget")
     outlook = _outlook_series(bundle, actual, forecast)
+    ytd_p = ytd_periods(as_of)
     return PeriodRollup(
         current_month=actual.get(as_of, ZERO),
-        qtd=_sum_periods(outlook, qtd_periods(as_of)),
-        ytd=_sum_periods(outlook, ytd_periods(as_of)),
+        qtd=_sum_periods(actual, qtd_periods(as_of)),
+        ytd=_sum_periods(actual, ytd_p),
         fy_outlook=_sum_periods(outlook, export_fiscal_periods(bundle.start_period, bundle.end_period)),
         budget_cm=budget.get(as_of, ZERO),
-        budget_ytd=_sum_periods(budget, ytd_periods(as_of)),
+        budget_ytd=_sum_periods(budget, ytd_p),
         budget_fy=_sum_periods(budget, export_fiscal_periods(bundle.start_period, bundle.end_period)),
     )
 
 
 def rollup_cash(bundle: ReportingBundle) -> PeriodRollup:
-    return rollup_waterfall_metric(bundle, "cash_flow", "ending_cash", flow=False)
+    """Ending cash from cash-flow waterfall (legacy deck rollups)."""
+    return rollup_point_in_time_metric(bundle, "cash_flow", "ending_cash")
 
 
 def rollup_pipeline_created(bundle: ReportingBundle) -> PeriodRollup:

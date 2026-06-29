@@ -8,6 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -18,6 +21,8 @@ COPY alembic ./alembic
 COPY alembic.ini .
 COPY scripts ./scripts
 COPY templates ./templates
+
+RUN cd scripts/deck-gen && npm install --omit=dev
 
 EXPOSE 8000
 

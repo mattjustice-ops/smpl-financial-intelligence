@@ -172,21 +172,26 @@ def _is_line_amount(
 
 
 def _gross_margin_pct(bundle: ReportingBundle, period: str, scenario: str) -> Decimal | None:
+    """Gross margin % = Gross Profit / Revenue."""
     fs = bundle.comparison_financial_statements or bundle.financial_statements
     if not fs:
         return None
-    gm = rev = Decimal("0")
+    gp = rev = Decimal("0")
     for row in fs.income_statement.rows:
         if str(row.period)[:7] != period or row.scenario != scenario:
             continue
         li = row.line_item.lower()
-        if "gross margin" in li or li == "gm":
-            gm = row.amount
-        if "revenue" in li and "deferred" not in li:
+        if "gross profit" in li:
+            gp = row.amount
+        elif ("gross margin" in li or li == "gm") and gp == 0:
+            if row.amount <= Decimal("1.5"):
+                return row.amount * 100
+            return row.amount
+        if "revenue" in li and "deferred" not in li and "cost" not in li:
             rev = row.amount
-    if rev:
-        return (gm / rev) * 100 if gm and gm <= rev else gm
-    return gm if gm else None
+    if rev and gp:
+        return (gp / rev) * 100
+    return None
 
 
 def _headcount_totals(bundle: ReportingBundle, period: str, scenario: str) -> tuple[int, int]:

@@ -67,7 +67,8 @@ def openai_ping_payload() -> dict[str, str | bool]:
     return {
         "status": "ok",
         "service": "export",
-        "api_build": "mda-smoke-v5",
+        "api_build": "mda-claude-prompt5-v1",
+        "mda_deck_mode": "claude_prompt5",
         "mda_smoke_levels": "ping,bundle,assemble,render",
         "board_engine": PRESENTATION_ENGINE_VERSION,
         "board_pptx_export_mode": getattr(settings, "board_pptx_export_mode", "template_first"),

@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from app.services.reporting.export.board_chart_service import _wf
+from app.services.reporting.export.is_line_resolver import ending_cash_at, fs_sum_periods
 from app.services.reporting.export.schemas import ReportingBundle
+from app.services.reporting.period_utils import to_period
 
 
 @dataclass
@@ -62,8 +64,11 @@ def build_metrics_snapshot(bundle: ReportingBundle) -> BoardMetricsSnapshot:
     snap.slipped = abs(_wf(bundle, "pipeline", "slipped_pipeline", as_of))
     snap.active_pipeline_proxy = snap.pipeline_created + snap.slipped
 
-    snap.cash_actual = _wf(bundle, "cash_flow", "ending_cash", as_of, "Actual")
-    snap.cash_forecast = _wf(bundle, "cash_flow", "ending_cash", as_of, "Forecast")
+    snap.cash_actual = ending_cash_at(bundle, as_of, "Actual")
+    snap.cash_forecast = ending_cash_at(bundle, as_of, "Forecast")
+
+    snap.revenue_actual = fs_sum_periods(bundle, [as_of], "Actual", "revenue")
+    snap.revenue_budget = fs_sum_periods(bundle, [as_of], "Budget", "revenue")
 
     fs = bundle.comparison_financial_statements or bundle.financial_statements
     if fs:
@@ -71,12 +76,7 @@ def build_metrics_snapshot(bundle: ReportingBundle) -> BoardMetricsSnapshot:
             p = str(row.period)[:7]
             if p != as_of:
                 continue
-            if "revenue" in row.line_item.lower() and "deferred" not in row.line_item.lower():
-                if row.scenario == "Actual":
-                    snap.revenue_actual = row.amount
-                elif row.scenario == "Budget":
-                    snap.revenue_budget = row.amount
-            if "ebitda" in row.line_item.lower():
+            if "ebitda" in row.line_item.lower() and "margin" not in row.line_item.lower():
                 if row.scenario == "Actual":
                     snap.ebitda_actual = row.amount
                 elif row.scenario == "Budget":
@@ -97,6 +97,8 @@ def build_metrics_snapshot(bundle: ReportingBundle) -> BoardMetricsSnapshot:
         snap.movement_counts[movement] = len(opps)
 
     snap.headcount = sum(
-        int(r.headcount or 0) for r in bundle.headcount if r.period == as_of and r.scenario == "Actual"
+        int(Decimal(str(r.headcount or 0)))
+        for r in bundle.headcount
+        if to_period(str(r.period)) == to_period(as_of) and r.scenario == "Actual"
     )
     return snap

@@ -123,6 +123,7 @@ def build_pptx_mda_deck(
     use_ai_commentary: bool = False,
     scenario_mode: str | None = None,
     package_mode: str = "full_board",
+    ts_data: dict | None = None,
 ) -> tuple[bytes, str]:
     from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
 
@@ -133,4 +134,5 @@ def build_pptx_mda_deck(
         use_ai_commentary=use_ai_commentary,
         scenario_mode=scenario_mode,
         package_mode=package_mode,  # type: ignore[arg-type]
+        ts_data=ts_data,
     )

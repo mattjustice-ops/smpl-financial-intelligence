@@ -47,6 +47,20 @@ class AnthropicCommentaryClient:
         user_prompt: str,
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
+        text = self.generate_text(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=max_tokens,
+        )
+        return _parse_json_response(text)
+
+    def generate_text(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int | None = None,
+    ) -> str:
         try:
             resp = self._client.messages.create(
                 model=self._model,
@@ -65,7 +79,7 @@ class AnthropicCommentaryClient:
         content = "\n".join(text_parts).strip()
         if not content:
             raise LLMError("Anthropic returned an empty response.")
-        return _parse_json_response(content)
+        return content
 
 
 def _parse_json_response(content: str) -> dict[str, Any]:
