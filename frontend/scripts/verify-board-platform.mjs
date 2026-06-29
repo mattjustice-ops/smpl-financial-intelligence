@@ -141,9 +141,16 @@ const checks = [
   ["HTML territory basemap loader", boardHtml.includes("us_emea_basemap.svg"), true],
   ["HTML territory verified pin XY", boardHtml.includes("SALES_TERRITORY_PIN_XY"), true],
   ["HTML exec summary nav links wired", boardHtml.includes("function boardExecNav") && boardHtml.includes("onclick=\"boardExecNav("), true],
-  ["board-hydrate installs live AI on parse", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("installLiveAi();\n  installCommentaryCacheRestore"), true],
+  [
+    "board-hydrate installs live AI on parse",
+    (() => {
+      const hydrate = fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8");
+      return hydrate.includes("installLiveAi();") && hydrate.includes("installCommentaryCacheRestore();");
+    })(),
+    true,
+  ],
   ["board HTML no direct Anthropic API", !boardHtml.includes("api.anthropic.com"), true],
-  ["board HTML loads board-hydrate v27", boardHtml.includes("board-hydrate.js?v=27"), true],
+  ["board HTML loads board-hydrate v28", boardHtml.includes("board-hydrate.js?v=28"), true],
   ["board-hydrate exports via Railway navigation", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("triggerDirectExportDownload"), true],
   ["board-hydrate uses same-origin live API", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("boardLiveApiBase"), true],
   ["export_sheet_registry has requirements_prompt_block", fs.readFileSync(path.join(__dirname, "../../backend/app/services/reporting/export/export_sheet_registry.py"), "utf8").includes("def requirements_prompt_block"), true],
