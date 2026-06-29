@@ -13,12 +13,12 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-05-19",
+  lastUpdated: "2026-06-29",
   title: "SMPL go-live progress",
   subtitle:
-    "Track milestone completion as we close remaining deliverables. Recommended order: dr-7 ✓ → dr-10 ✓ → dr-8…dr-9 → dr-11 → dr-12 → poc-1…poc-3 → gl-4 → gl-7.",
+    "Track milestone completion as we close remaining deliverables. Recommended order: gl-4 ✓ → gl-7 first paying customer.",
   currentFocus:
-    "dr-9: deploy + verify Track A Phase 1 board export; dr-12 export dry-run before demos",
+    "gl-7: first paying customer on prod (white-glove provision + schema updates for data scope)",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -47,12 +47,12 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       {
         id: "dr-8",
         label: "Live board on prod: Copilot + regenerate commentary (not static fallback)",
-        done: false,
+        done: true,
       },
       {
         id: "dr-9",
         label: "Board PPTX export: API-spec Claude commentary per slide (Track A Phase 1)",
-        done: false,
+        done: true,
       },
       {
         id: "dr-10",
@@ -62,12 +62,12 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       {
         id: "dr-11",
         label: "MD&A Excel three-column variance commentary (Track A Phase 2 / Prompt 2)",
-        done: false,
+        done: true,
       },
       {
         id: "dr-12",
         label: "Export dry-run signed off before demos (PPTX + XLSX, live commentary)",
-        done: false,
+        done: true,
       },
     ],
   },
@@ -170,7 +170,7 @@ export const goLiveMilestones: GoLiveMilestone[] = [
         done: true,
       },
       { id: "gl-6", label: "Monitoring, backups, and incident runbook (minimal; prod smoke passed)", done: true },
-      { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: false },
+      { id: "gl-4", label: "Stripe live keys + webhooks (when charging)", done: true },
       { id: "gl-7", label: "Last: first paying customer on prod (direct access or self-serve POC)", done: false },
     ],
   },
@@ -196,3 +196,5 @@ export function milestoneStats(milestone: GoLiveMilestone) {
   const done = milestone.items.filter((item) => item.done).length;
   return { done, total: milestone.items.length, percent: milestonePercent(milestone) };
 }
+
+
