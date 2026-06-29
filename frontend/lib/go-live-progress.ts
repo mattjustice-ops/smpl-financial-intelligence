@@ -13,12 +13,12 @@ export type GoLiveMilestone = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const goLiveProgressMeta = {
-  lastUpdated: "2026-06-17",
+  lastUpdated: "2026-05-19",
   title: "SMPL go-live progress",
   subtitle:
-    "Track milestone completion as we close remaining deliverables. Recommended order: poc-0 ✓ → gl-5 ✓ → gl-6 ✓ → poc-1…poc-3 → gl-4 → gl-7.",
+    "Track milestone completion as we close remaining deliverables. Recommended order: dr-7 ✓ → dr-10 ✓ → dr-8…dr-9 → dr-11 → dr-12 → poc-1…poc-3 → gl-4 → gl-7.",
   currentFocus:
-    "Monday outreach — prod SMPL Demo Co validated; gl-7 when first prospect converts",
+    "dr-9: deploy + verify Track A Phase 1 board export; dr-12 export dry-run before demos",
   /** Prod demo workspace — keep on enterprise so prospects see all operating tabs. */
   demoWorkspace: {
     organizationId: "8571e520-0687-4516-bdee-379f37c58c1f",
@@ -39,6 +39,36 @@ export const goLiveMilestones: GoLiveMilestone[] = [
       { id: "dr-4", label: "Local dev stack documented (Docker, backend, frontend scripts)", done: true },
       { id: "dr-5", label: "Board PPT + Excel committed under public/board/exports", done: true },
       { id: "dr-6", label: "Vercel build succeeds without local-only env dependencies", done: true },
+      {
+        id: "dr-7",
+        label: "Google Organization JSON-LD + logo on prod (www.smpl-ai.com)",
+        done: true,
+      },
+      {
+        id: "dr-8",
+        label: "Live board on prod: Copilot + regenerate commentary (not static fallback)",
+        done: false,
+      },
+      {
+        id: "dr-9",
+        label: "Board PPTX export: API-spec Claude commentary per slide (Track A Phase 1)",
+        done: false,
+      },
+      {
+        id: "dr-10",
+        label: "PPTX gold template on Railway (export/ping → board_pptx_template_ready)",
+        done: true,
+      },
+      {
+        id: "dr-11",
+        label: "MD&A Excel three-column variance commentary (Track A Phase 2 / Prompt 2)",
+        done: false,
+      },
+      {
+        id: "dr-12",
+        label: "Export dry-run signed off before demos (PPTX + XLSX, live commentary)",
+        done: false,
+      },
     ],
   },
   {
