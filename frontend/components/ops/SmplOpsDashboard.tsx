@@ -51,9 +51,35 @@ type CustomerUsageResponse = {
   limits_enabled?: boolean;
 };
 
+type WarehouseOrgHealth = {
+  ok: boolean;
+  status: "ready" | "incomplete" | "empty" | "error";
+  organization_id: string;
+  organization_name: string | null;
+  plan: string | null;
+  close_month: string | null;
+  issues: string[];
+  actual_mrr_row_count: number;
+  actual_mrr_periods: string[];
+  board_hydrate_ready: boolean;
+  close_month_ending_arr?: number | null;
+};
+
+type WarehouseHealthSummary = {
+  ok: boolean;
+  organizations_total: number;
+  organizations_ready: number;
+  organizations_incomplete: number;
+  organizations_empty: number;
+  organizations_error: number;
+  organizations: WarehouseOrgHealth[];
+  failing: WarehouseOrgHealth[];
+};
+
 type PlatformHealthResponse = {
   generated_at: string;
   database: { ok: boolean; latency_ms: number | null };
+  warehouse?: WarehouseHealthSummary;
   storage: {
     database_gb?: number;
     tenant_table_gb?: number;
@@ -63,6 +89,7 @@ type PlatformHealthResponse = {
   };
   alerts: {
     status: string;
+    stored_status?: string;
     last_check_at: string | null;
     checks: Array<{ name: string; ok: boolean; detail?: string; latency_ms?: number }>;
   };
@@ -92,6 +119,32 @@ type PlatformHealthResponse = {
     metadata: Record<string, unknown> | null;
   }>;
 };
+
+function warehouseStatusLabel(status: WarehouseOrgHealth["status"]): string {
+  switch (status) {
+    case "ready":
+      return "Ready";
+    case "incomplete":
+      return "Incomplete";
+    case "empty":
+      return "No data";
+    case "error":
+      return "Error";
+    default:
+      return status;
+  }
+}
+
+function warehouseStatusPill(status: WarehouseOrgHealth["status"]): string {
+  switch (status) {
+    case "ready":
+      return "border-teal-400/40 bg-teal-400/10 text-teal-200";
+    case "empty":
+      return "border-amber-400/40 bg-amber-400/10 text-amber-200";
+    default:
+      return "border-rose-400/40 bg-rose-400/10 text-rose-200";
+  }
+}
 
 function formatUsd(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -138,13 +191,6 @@ function jobStatusClass(status: string): string {
   return "text-slate-400";
 }
 
-function limitUsageClass(percent: number | null | undefined): string {
-  if (percent == null) return "text-slate-300";
-  if (percent >= 100) return "text-rose-300";
-  if (percent >= 80) return "text-amber-300";
-  return "text-slate-300";
-}
-
 function resolveUsageLimit(
   usage: CustomerUsageResponse,
   row: CustomerRow,
@@ -155,28 +201,6 @@ function resolveUsageLimit(
   const fromApi = usage.plan_limits?.[key];
   if (fromApi != null) return fromApi;
   return DEFAULT_USAGE_LIMITS[key] ?? 0;
-}
-
-function resolvePercentUsed(
-  row: CustomerRow,
-  used: number,
-  limit: number,
-  key: UsageLimitKey,
-): number | null {
-  const fromApi = row.percent_used?.[key];
-  if (fromApi != null) return fromApi;
-  if (limit <= 0) return null;
-  return Math.min(100, Math.round((used / limit) * 1000) / 10);
-}
-
-function formatLimitCell(
-  used: number,
-  limit: number,
-  percent: number | null | undefined,
-  formatValue: (value: number) => string,
-): string {
-  const pctLabel = percent != null ? ` (${percent}%)` : "";
-  return `${formatValue(used)} / ${formatValue(limit)}${pctLabel}`;
 }
 
 export function SmplOpsDashboard() {
@@ -228,8 +252,6 @@ export function SmplOpsDashboard() {
     () => usage?.plan_limits ?? DEFAULT_USAGE_LIMITS,
     [usage?.plan_limits],
   );
-
-  const showUsageCaps = true;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -414,9 +436,6 @@ export function SmplOpsDashboard() {
               Monthly caps (all plans): {formatUsd(planLimits.ai_cost_usd_monthly ?? 10)} AI ·{" "}
               {formatInt(planLimits.llm_calls_monthly ?? 10)} LLM calls ·{" "}
               {formatInt(planLimits.exports_monthly ?? 10)} exports
-              {usage.limits_enabled
-                ? " — % vs cap uses calendar-month enforcement"
-                : " — switch to calendar month for % vs cap"}
             </p>
           </div>
 
@@ -466,104 +485,60 @@ export function SmplOpsDashboard() {
                   <th className="px-4 py-3">Organization</th>
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3 text-right">AI $</th>
-                  {showUsageCaps ? (
-                    <th className="px-4 py-3 text-right">AI vs cap</th>
-                  ) : null}
+                  <th className="px-4 py-3 text-right">Cap</th>
                   <th className="px-4 py-3 text-right">Est. storage</th>
                   <th className="px-4 py-3 text-right">Warehouse rows</th>
                   <th className="px-4 py-3 text-right">LLM calls</th>
-                  {showUsageCaps ? (
-                    <th className="px-4 py-3 text-right">LLM vs cap</th>
-                  ) : null}
+                  <th className="px-4 py-3 text-right">Cap</th>
                   <th className="px-4 py-3 text-right">Exports</th>
-                  {showUsageCaps ? (
-                    <th className="px-4 py-3 text-right">Export vs cap</th>
-                  ) : null}
+                  <th className="px-4 py-3 text-right">Cap</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-slate-200">
                 {usage.customers.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={showUsageCaps ? 10 : 7}
-                      className="px-4 py-8 text-center text-slate-500"
-                    >
+                    <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
                       No usage recorded for this period yet.
                     </td>
                   </tr>
                 ) : (
                   usage.customers.map((row) => {
-                    const aiLimit = resolveUsageLimit(usage, row, "ai_cost_usd_monthly");
-                    const llmLimit = resolveUsageLimit(usage, row, "llm_calls_monthly");
-                    const exportLimit = resolveUsageLimit(usage, row, "exports_monthly");
-                    const aiPct = resolvePercentUsed(
-                      row,
-                      row.ai_cost_usd,
-                      aiLimit,
-                      "ai_cost_usd_monthly",
-                    );
-                    const llmPct = resolvePercentUsed(
-                      row,
-                      row.llm_calls,
-                      llmLimit,
-                      "llm_calls_monthly",
-                    );
-                    const exportPct = resolvePercentUsed(
-                      row,
-                      row.exports_complete,
-                      exportLimit,
-                      "exports_monthly",
-                    );
+                    const aiCap = resolveUsageLimit(usage, row, "ai_cost_usd_monthly");
+                    const llmCap = resolveUsageLimit(usage, row, "llm_calls_monthly");
+                    const exportCap = resolveUsageLimit(usage, row, "exports_monthly");
 
                     return (
-                    <tr key={row.organization_id ?? row.organization_name}>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-white">{row.organization_name}</div>
-                        <div className="text-xs text-slate-500">{row.organization_id}</div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{row.plan ?? "—"}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatUsd(row.ai_cost_usd)}
-                      </td>
-                      {showUsageCaps ? (
-                        <td
-                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(aiPct)}`}
-                        >
-                          {formatLimitCell(row.ai_cost_usd, aiLimit, aiPct, formatUsd)}
+                      <tr key={row.organization_id ?? row.organization_name}>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-white">{row.organization_name}</div>
+                          <div className="text-xs text-slate-500">{row.organization_id}</div>
                         </td>
-                      ) : null}
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-300">
-                        {formatMb(row.estimated_storage_mb)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-400">
-                        {formatInt(row.warehouse_rows)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatInt(row.llm_calls)}
-                      </td>
-                      {showUsageCaps ? (
-                        <td
-                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(llmPct)}`}
-                        >
-                          {formatLimitCell(row.llm_calls, llmLimit, llmPct, formatInt)}
+                        <td className="px-4 py-3 text-slate-400">{row.plan ?? "—"}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {formatUsd(row.ai_cost_usd)}
                         </td>
-                      ) : null}
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatInt(row.exports_complete)}
-                      </td>
-                      {showUsageCaps ? (
-                        <td
-                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(exportPct)}`}
-                        >
-                          {formatLimitCell(
-                            row.exports_complete,
-                            exportLimit,
-                            exportPct,
-                            formatInt,
-                          )}
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-400">
+                          {formatUsd(aiCap)}
                         </td>
-                      ) : null}
-                    </tr>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-300">
+                          {formatMb(row.estimated_storage_mb)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-400">
+                          {formatInt(row.warehouse_rows)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {formatInt(row.llm_calls)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-400">
+                          {formatInt(llmCap)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {formatInt(row.exports_complete)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-400">
+                          {formatInt(exportCap)}
+                        </td>
+                      </tr>
                     );
                   })
                 )}
@@ -575,7 +550,49 @@ export function SmplOpsDashboard() {
 
       {tab === "health" && health ? (
         <section className="space-y-6">
+          {health.warehouse && health.warehouse.failing.length > 0 ? (
+            <div className="rounded-xl border border-rose-400/40 bg-rose-400/10 px-4 py-4 text-sm text-rose-100">
+              <p className="font-medium text-rose-200">
+                {health.warehouse.failing.length} customer warehouse
+                {health.warehouse.failing.length === 1 ? "" : "s"} cannot hydrate /app/board
+              </p>
+              <ul className="mt-3 space-y-3">
+                {health.warehouse.failing.map((org) => (
+                  <li key={org.organization_id}>
+                    <p className="font-medium text-rose-100">
+                      {org.organization_name ?? org.organization_id}
+                      {org.close_month ? ` · close ${org.close_month}` : ""}
+                    </p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-rose-100/90">
+                      {org.issues.map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+              <p className="text-xs uppercase tracking-widest text-slate-500">Customer warehouses</p>
+              <p className="mt-2 flex items-center gap-2">
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs font-medium ${statusPill(health.warehouse?.ok ?? false)}`}
+                >
+                  {health.warehouse
+                    ? `${health.warehouse.organizations_ready}/${health.warehouse.organizations_total} ready`
+                    : "—"}
+                </span>
+              </p>
+              {health.warehouse ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  {health.warehouse.organizations_incomplete} incomplete ·{" "}
+                  {health.warehouse.organizations_empty} no data yet
+                </p>
+              ) : null}
+            </div>
             <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
               <p className="text-xs uppercase tracking-widest text-slate-500">Database</p>
               <p className="mt-2 flex items-center gap-2">
@@ -607,6 +624,12 @@ export function SmplOpsDashboard() {
               <p className={`mt-2 text-2xl font-semibold capitalize ${alertStatusClass(health.alerts.status)}`}>
                 {health.alerts.status}
               </p>
+              {health.alerts.stored_status &&
+              health.alerts.stored_status !== health.alerts.status ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Scheduled check: {health.alerts.stored_status} · live warehouse included
+                </p>
+              ) : null}
             </div>
             {[
               ["LLM calls (24h)", formatInt(health.last_24h.llm_calls)],
@@ -621,6 +644,60 @@ export function SmplOpsDashboard() {
               </div>
             ))}
           </div>
+
+          {health.warehouse && health.warehouse.organizations.length > 0 ? (
+            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+              <h2 className="mb-3 text-sm font-semibold text-white">Customer warehouse health</h2>
+              <p className="mb-4 text-xs text-slate-500">
+                Each active customer org is checked against the same rules as /app/board live hydration.
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-white/10">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-white/10 bg-white/5 text-xs uppercase tracking-widest text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3">Organization</th>
+                      <th className="px-4 py-3">Plan</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Close month</th>
+                      <th className="px-4 py-3 text-right">MRR periods</th>
+                      <th className="px-4 py-3">Periods loaded</th>
+                      <th className="px-4 py-3">Issues</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-slate-200">
+                    {health.warehouse.organizations.map((org) => (
+                      <tr key={org.organization_id}>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-white">{org.organization_name ?? "—"}</div>
+                          <div className="text-xs text-slate-500">{org.organization_id}</div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-400">{org.plan ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-xs font-medium ${warehouseStatusPill(org.status)}`}
+                          >
+                            {warehouseStatusLabel(org.status)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-400">{org.close_month ?? "—"}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {formatInt(org.actual_mrr_row_count)}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {org.actual_mrr_periods.length
+                            ? org.actual_mrr_periods.join(", ")
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {org.issues.length ? org.issues.join(" · ") : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">

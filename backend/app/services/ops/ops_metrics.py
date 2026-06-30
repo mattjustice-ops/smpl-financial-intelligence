@@ -18,6 +18,7 @@ from app.services.ops.storage_snapshot import (
     storage_snapshot_history,
 )
 from app.services.ops.usage_limits import DEFAULT_USAGE_LIMITS, limits_for_plan
+from app.services.ops.warehouse_health import assess_all_customer_warehouses
 from app.services.reporting.export.export_jobs import list_export_jobs_snapshot
 
 
@@ -275,12 +276,24 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
         alert_status = latest_health_check.metadata_json.get("status", "unknown")
         alert_checks = latest_health_check.metadata_json.get("checks", [])
 
+    warehouse = assess_all_customer_warehouses(db)
+    warehouse_ok = bool(warehouse.get("ok"))
+
+    effective_status = "ok"
+    if not db_ok or not warehouse_ok:
+        effective_status = "degraded"
+    elif alert_status == "degraded":
+        effective_status = "degraded"
+    elif alert_status == "unknown" and not alert_checks:
+        effective_status = "unknown"
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "database": {
             "ok": db_ok,
             "latency_ms": db_latency_ms,
         },
+        "warehouse": warehouse,
         "storage": {
             "database_gb": storage.get("database_gb"),
             "tenant_table_gb": storage.get("tenant_table_gb"),
@@ -289,7 +302,8 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
             "history": storage_history,
         },
         "alerts": {
-            "status": alert_status,
+            "status": effective_status,
+            "stored_status": alert_status,
             "last_check_at": latest_health_check.created_at.isoformat()
             if latest_health_check
             else None,

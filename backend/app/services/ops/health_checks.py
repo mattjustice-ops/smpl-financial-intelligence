@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.usage_event import UsageEvent
 from app.services.ops.storage_snapshot import maybe_collect_storage_snapshot
 from app.services.ops.usage_tracking import record_usage_event
+from app.services.ops.warehouse_health import warehouse_health_check_row
 from app.services.reporting.export.export_jobs import list_export_jobs_snapshot
 
 
@@ -59,6 +60,14 @@ def run_platform_health_checks(db: Session, *, collect_storage: bool = True) -> 
             checks.append(_check("api_health", False, detail=str(exc)))
     else:
         checks.append(_check("api_health", True, detail="skipped (SFI_PUBLIC_API_URL unset)"))
+
+    warehouse_summary: dict[str, Any] | None = None
+    try:
+        wh = warehouse_health_check_row(db)
+        checks.append(_check(wh["name"], wh["ok"], detail=wh["detail"]))
+        warehouse_summary = wh.get("warehouse")
+    except Exception as exc:
+        checks.append(_check("customer_warehouse_board", False, detail=str(exc)))
 
     since_24h = datetime.now(timezone.utc) - timedelta(hours=24)
     failed_exports = db.scalar(
@@ -109,6 +118,7 @@ def run_platform_health_checks(db: Session, *, collect_storage: bool = True) -> 
         "checks": checks,
         "active_export_jobs": len(active_jobs),
         "storage": storage_payload,
+        "warehouse": warehouse_summary,
     }
     record_usage_event(
         event_type="health_check",
