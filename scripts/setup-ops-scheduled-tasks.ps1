@@ -47,11 +47,6 @@ if ($Unregister) {
 if (-not (Test-Path $storageScript)) { throw "Missing $storageScript" }
 if (-not (Test-Path $smokeScript)) { throw "Missing $smokeScript" }
 
-$actionTemplate = {
-    param($Args)
-    New-ScheduledTaskAction -Execute "powershell.exe" -Argument $Args -WorkingDirectory $repoRoot
-}
-
 $trigger = New-ScheduledTaskTrigger -Daily -At $Time
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
@@ -62,7 +57,10 @@ Write-Host "Daily: $Time" -ForegroundColor DarkGray
 Write-Host ""
 
 foreach ($task in $tasks) {
-    $action = & $actionTemplate $task.Arguments
+    $action = New-ScheduledTaskAction `
+        -Execute "powershell.exe" `
+        -Argument $task.Arguments `
+        -WorkingDirectory $repoRoot
     if ($WhatIf) {
         Write-Host "Would register: $($task.Name)" -ForegroundColor Yellow
         continue
