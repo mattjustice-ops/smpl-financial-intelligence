@@ -4,8 +4,9 @@
 #   .\scripts\smoke-test-prod-readiness.ps1
 
 param(
-    [string]$FrontendUrl = "https://smpl-financial-intelligence.vercel.app",
-    [string]$ApiBase = "https://sfi-api-production.up.railway.app"
+    [string]$FrontendUrl = "https://www.smpl-ai.com",
+    [string]$ApiBase = "https://sfi-api-production.up.railway.app",
+    [switch]$SkipOpsSmoke
 )
 
 $ErrorActionPreference = "Continue"
@@ -50,6 +51,13 @@ Write-Host ""
 Write-Host "Plan entitlements (hosted API + Neon)..." -ForegroundColor Yellow
 & (Join-Path $repoRoot "scripts\smoke-test-plan-entitlements.ps1") -ApiBase $ApiBase
 if ($LASTEXITCODE -ne 0) { $failed++ }
+
+if (-not $SkipOpsSmoke) {
+    Write-Host ""
+    Write-Host "SMPL Ops alerts smoke (Phase 2)..." -ForegroundColor Yellow
+    & (Join-Path $repoRoot "scripts\smoke-test-ops-alerts.ps1") -FrontendUrl $FrontendUrl -ApiBase $ApiBase
+    if ($LASTEXITCODE -ne 0) { $failed++ }
+}
 
 Write-Host ""
 if ($failed -eq 0) {

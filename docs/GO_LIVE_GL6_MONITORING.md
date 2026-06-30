@@ -56,8 +56,17 @@ From repo root:
 # Prod API + entitlements (uses frontend/.env.neon-production.local when saved)
 .\scripts\smoke-test-plan-entitlements.ps1
 
-# Full prod readiness (health + entitlements)
+# Full prod readiness (health + entitlements + SMPL Ops smoke)
 .\scripts\smoke-test-prod-readiness.ps1
+
+# SMPL Ops only (Railway + Vercel health)
+.\scripts\smoke-test-ops-alerts.ps1
+
+# Daily storage snapshot (local Neon — no API key)
+.\scripts\collect-ops-storage-snapshot.ps1 -Local
+
+# Register Windows Task Scheduler jobs (6 AM daily)
+.\scripts\setup-ops-scheduled-tasks.ps1
 ```
 
 If entitlements smoke fails with `expected HTTP 403 for workforce on starter, got 200`, your shell `DATABASE_URL` may point at **sandbox** Neon while Railway uses **prod**. Fix:
@@ -73,6 +82,35 @@ Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
 1. Incognito → prod `/login` → new magic link → `/app` shows **SMPL Demo Co**
 2. `/health` on prod frontend → JSON `status: ok`
 3. `/board` loads June 2026 demo
+
+---
+
+## SMPL Ops (Phase 1.5 + 2)
+
+| Surface | URL |
+|---------|-----|
+| Dashboard | https://www.smpl-ai.com/app/ops |
+| API | `/api/v1/ops/customer-usage`, `/api/v1/ops/platform-health` |
+
+**Phase 1.5:** calendar month usage, Neon storage snapshots, per-org warehouse footprint.
+
+**Phase 2:** scheduled smoke + health_check events.
+
+```powershell
+.\scripts\smoke-test-ops-alerts.ps1 -RecordBackendCheck
+.\scripts\collect-ops-storage-snapshot.ps1 -Local
+.\scripts\setup-ops-scheduled-tasks.ps1   # optional Windows daily tasks
+```
+
+**Native alerts (configure once in consoles):**
+
+| Provider | Alert on |
+|----------|----------|
+| Railway | `sfi-api-production` — 5xx rate, crash loops, deploy failures |
+| Vercel | `smpl-financial-intelligence` — 5xx, function errors, latency |
+| Neon | Storage GB + compute hours thresholds on prod branch |
+
+Optional Railway env for self-ping in health checks: `SFI_PUBLIC_API_URL=https://sfi-api-production.up.railway.app`
 
 ---
 
@@ -131,5 +169,7 @@ Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
 - [x] Backup approach documented (Neon PITR + git redeploy)
 - [x] Incident runbook (502, auth, workspace, POC)
 - [x] Pre-outreach smoke script (`smoke-test-prod-readiness.ps1`)
+- [x] SMPL Ops dashboard (`/app/ops`) + usage_events instrumentation
+- [x] SMPL Ops alerts smoke (`smoke-test-ops-alerts.ps1`) + daily storage snapshot script
 
-Optional later: Datadog/Sentry, PagerDuty, automated uptime checks.
+Optional later: Datadog/Sentry, PagerDuty, PagerDuty on `health_check` degraded status.
