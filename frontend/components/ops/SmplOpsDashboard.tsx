@@ -37,7 +37,18 @@ type CustomerUsageResponse = {
     exports_complete: number;
     warehouse_rows: number;
     estimated_storage_mb: number;
+    limits?: {
+      ai_cost_usd_monthly: number | null;
+      exports_monthly: number | null;
+      llm_calls_monthly: number | null;
+    };
+    percent_used?: {
+      ai_cost_usd_monthly: number | null;
+      exports_monthly: number | null;
+      llm_calls_monthly: number | null;
+    };
   }>;
+  limits_enabled?: boolean;
 };
 
 type PlatformHealthResponse = {
@@ -125,6 +136,24 @@ function jobStatusClass(status: string): string {
   if (status === "failed") return "text-rose-300";
   if (status === "running") return "text-amber-300";
   return "text-slate-400";
+}
+
+function limitUsageClass(percent: number | null | undefined): string {
+  if (percent == null) return "text-slate-300";
+  if (percent >= 100) return "text-rose-300";
+  if (percent >= 80) return "text-amber-300";
+  return "text-slate-300";
+}
+
+function formatLimitCell(
+  used: number,
+  limit: number | null | undefined,
+  percent: number | null | undefined,
+  formatValue: (value: number) => string,
+): string {
+  if (limit == null) return `${formatValue(used)} · ∞`;
+  const pctLabel = percent != null ? ` (${percent}%)` : "";
+  return `${formatValue(used)} / ${formatValue(limit)}${pctLabel}`;
 }
 
 export function SmplOpsDashboard() {
@@ -351,6 +380,11 @@ export function SmplOpsDashboard() {
               </label>
             )}
             <p className="text-xs text-slate-500">Showing {periodLabel}</p>
+            {usage.limits_enabled ? (
+              <p className="text-xs text-slate-500">
+                Plan caps shown vs calendar-month usage (enforced on AI exports &amp; copilot).
+              </p>
+            ) : null}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -383,16 +417,28 @@ export function SmplOpsDashboard() {
                   <th className="px-4 py-3">Organization</th>
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3 text-right">AI $</th>
+                  {usage.limits_enabled ? (
+                    <th className="px-4 py-3 text-right">AI cap</th>
+                  ) : null}
                   <th className="px-4 py-3 text-right">Est. storage</th>
                   <th className="px-4 py-3 text-right">Warehouse rows</th>
                   <th className="px-4 py-3 text-right">LLM calls</th>
+                  {usage.limits_enabled ? (
+                    <th className="px-4 py-3 text-right">LLM cap</th>
+                  ) : null}
                   <th className="px-4 py-3 text-right">Exports</th>
+                  {usage.limits_enabled ? (
+                    <th className="px-4 py-3 text-right">Export cap</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-slate-200">
                 {usage.customers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                    <td
+                      colSpan={usage.limits_enabled ? 10 : 7}
+                      className="px-4 py-8 text-center text-slate-500"
+                    >
                       No usage recorded for this period yet.
                     </td>
                   </tr>
@@ -407,6 +453,20 @@ export function SmplOpsDashboard() {
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatUsd(row.ai_cost_usd)}
                       </td>
+                      {usage.limits_enabled ? (
+                        <td
+                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(
+                            row.percent_used?.ai_cost_usd_monthly,
+                          )}`}
+                        >
+                          {formatLimitCell(
+                            row.ai_cost_usd,
+                            row.limits?.ai_cost_usd_monthly,
+                            row.percent_used?.ai_cost_usd_monthly,
+                            formatUsd,
+                          )}
+                        </td>
+                      ) : null}
                       <td className="px-4 py-3 text-right tabular-nums text-slate-300">
                         {formatMb(row.estimated_storage_mb)}
                       </td>
@@ -416,9 +476,37 @@ export function SmplOpsDashboard() {
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatInt(row.llm_calls)}
                       </td>
+                      {usage.limits_enabled ? (
+                        <td
+                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(
+                            row.percent_used?.llm_calls_monthly,
+                          )}`}
+                        >
+                          {formatLimitCell(
+                            row.llm_calls,
+                            row.limits?.llm_calls_monthly,
+                            row.percent_used?.llm_calls_monthly,
+                            formatInt,
+                          )}
+                        </td>
+                      ) : null}
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatInt(row.exports_complete)}
                       </td>
+                      {usage.limits_enabled ? (
+                        <td
+                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(
+                            row.percent_used?.exports_monthly,
+                          )}`}
+                        >
+                          {formatLimitCell(
+                            row.exports_complete,
+                            row.limits?.exports_monthly,
+                            row.percent_used?.exports_monthly,
+                            formatInt,
+                          )}
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}

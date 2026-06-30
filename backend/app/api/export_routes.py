@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.dashboard_routes import dashboard_params
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
+from app.services.ops.usage_limits import assert_within_usage_limits
 from app.core.config import get_settings
 from app.services.reporting.export.board_commentary_service import (
     SlideCommentary,
@@ -61,6 +62,24 @@ def _export_params(
     )
     params["as_of_period"] = to_period(as_of_period or params["end_period"])
     return params
+
+
+def _org_for_board_export(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    include_ai_commentary: bool,
+) -> "Organization":
+    from app.models.organization import Organization
+
+    org = get_organization_or_404(db, organization_id, module="board_export")
+    assert_within_usage_limits(
+        db,
+        org,
+        require_export=True,
+        require_ai=include_ai_commentary,
+    )
+    return org
 
 
 def _load_board_export_enrichment(
@@ -374,7 +393,7 @@ def export_mda_package(
     """SMPL MD&A Excel package — Prompt 2 template refresh + Claude commentary."""
     from app.services.reporting.export.board_export_service import build_mda_package_xlsx_bytes
 
-    get_organization_or_404(db, organization_id)
+    _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
     params = _export_params(
         scenario,
@@ -574,7 +593,7 @@ def start_mda_package_job(
     """Start background MD&A package job (avoids Railway 5-minute idle timeout)."""
     from app.services.reporting.export.export_jobs import job_status_payload, submit_export_job
 
-    get_organization_or_404(db, organization_id)
+    _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
     bundle_params = _export_params(
         scenario,
@@ -635,7 +654,7 @@ def start_mda_deck_job(
     """Start background MD&A deck job (avoids Railway 5-minute idle timeout)."""
     from app.services.reporting.export.export_jobs import job_status_payload, submit_export_job
 
-    get_organization_or_404(db, organization_id)
+    _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
     bundle_params = _export_params(
         scenario,
@@ -1020,7 +1039,7 @@ def export_board_presentation(
     owner: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> Response:
-    get_organization_or_404(db, organization_id)
+    _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
     params = _export_params(
         scenario,
@@ -1097,7 +1116,7 @@ def export_mda_deck(
     db: Session = Depends(get_db),
 ) -> Response:
     """MD&A operating review deck — Claude Prompt 5 full fresh build from data source."""
-    get_organization_or_404(db, organization_id)
+    _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
     params = _export_params(
         scenario,

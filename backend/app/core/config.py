@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         validation_alias="BOARD_PPTX_EXPORT_MODE",
         description="template_first | template_only | programmatic",
     )
+    smpl_usage_limits_enabled: bool = Field(
+        default=True,
+        validation_alias="SMPL_USAGE_LIMITS_ENABLED",
+    )
 
     @field_validator("openai_api_key", "anthropic_api_key", mode="before")
     @classmethod

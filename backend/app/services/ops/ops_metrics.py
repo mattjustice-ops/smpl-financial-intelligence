@@ -17,7 +17,14 @@ from app.services.ops.storage_snapshot import (
     maybe_collect_storage_snapshot,
     storage_snapshot_history,
 )
+from app.services.ops.usage_limits import limits_for_plan
 from app.services.reporting.export.export_jobs import list_export_jobs_snapshot
+
+
+def _usage_percent(used: float | int, cap: int | float | None) -> float | None:
+    if cap is None or cap == 0:
+        return None
+    return round(min(100.0, (float(used) / float(cap)) * 100.0), 1)
 
 
 def _usage_window(
@@ -53,6 +60,7 @@ def _merge_customer_rows(
     llm_rows: list[Any],
     export_rows: list[Any],
     org_footprint: dict[str, dict[str, Any]],
+    include_plan_limits: bool = False,
 ) -> list[dict[str, Any]]:
     org_ids: set[uuid.UUID | None] = set()
     org_ids.update(row.organization_id for row in llm_rows)
@@ -77,21 +85,31 @@ def _merge_customer_rows(
         ai_cost = float(llm.ai_cost_usd) if llm and llm.ai_cost_usd is not None else 0.0
         warehouse_rows = int(footprint["warehouse_rows"]) if footprint else 0
         storage_mb = float(footprint["estimated_storage_mb"]) if footprint else 0.0
-        customers.append(
-            {
-                "organization_id": str(org_id) if org_id else None,
-                "organization_name": org.name if org else "Unknown",
-                "plan": org.plan if org else None,
-                "status": org.status if org else None,
-                "ai_cost_usd": round(ai_cost, 4),
-                "input_tokens": int(llm.input_tokens) if llm else 0,
-                "output_tokens": int(llm.output_tokens) if llm else 0,
-                "llm_calls": int(llm.llm_calls) if llm else 0,
-                "exports_complete": int(exports.exports) if exports else 0,
-                "warehouse_rows": warehouse_rows,
-                "estimated_storage_mb": storage_mb,
+        row: dict[str, Any] = {
+            "organization_id": str(org_id) if org_id else None,
+            "organization_name": org.name if org else "Unknown",
+            "plan": org.plan if org else None,
+            "status": org.status if org else None,
+            "ai_cost_usd": round(ai_cost, 4),
+            "input_tokens": int(llm.input_tokens) if llm else 0,
+            "output_tokens": int(llm.output_tokens) if llm else 0,
+            "llm_calls": int(llm.llm_calls) if llm else 0,
+            "exports_complete": int(exports.exports) if exports else 0,
+            "warehouse_rows": warehouse_rows,
+            "estimated_storage_mb": storage_mb,
+        }
+        if include_plan_limits and org:
+            limits = limits_for_plan(org.plan)
+            row["limits"] = limits
+            row["percent_used"] = {
+                "ai_cost_usd_monthly": _usage_percent(ai_cost, limits.get("ai_cost_usd_monthly")),
+                "exports_monthly": _usage_percent(
+                    row["exports_complete"],
+                    limits.get("exports_monthly"),
+                ),
+                "llm_calls_monthly": _usage_percent(row["llm_calls"], limits.get("llm_calls_monthly")),
             }
-        )
+        customers.append(row)
 
     customers.sort(
         key=lambda row: (row["ai_cost_usd"], row["estimated_storage_mb"]),
@@ -144,6 +162,7 @@ def customer_usage_summary(
         llm_rows=llm_rows,
         export_rows=export_rows,
         org_footprint=org_footprint,
+        include_plan_limits=period.get("kind") == "calendar_month",
     )
 
     totals = db.execute(
@@ -173,6 +192,7 @@ def customer_usage_summary(
         "period": period,
         "available_months": recent_calendar_months(count=12),
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "limits_enabled": period.get("kind") == "calendar_month",
         "totals": {
             "ai_cost_usd": round(float(totals[0] or 0), 4),
             "input_tokens": int(totals[1] or 0),

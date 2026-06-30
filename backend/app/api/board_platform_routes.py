@@ -13,6 +13,8 @@ from app.db.session import get_db
 from app.services.board_platform_service import BoardPlatformPayload, build_board_platform_payload
 from app.services.commentary.llm_factory import build_commentary_llm_client, LLMError
 from app.services.organizations import get_organization_or_404
+from app.services.ops.usage_context import reset_usage_context, set_usage_context
+from app.services.ops.usage_limits import assert_within_usage_limits
 from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 from app.services.reporting.export.board_commentary_service import (
     build_slide_commentary,
@@ -97,6 +99,8 @@ def regenerate_slide_commentary(
     db: Session = Depends(get_db),
 ) -> BoardCommentaryResponse:
     org = get_organization_or_404(db, organization_id, module="board_export")
+    assert_within_usage_limits(db, org, require_ai=True)
+    usage_tokens = set_usage_context(organization_id=organization_id, feature="board_commentary_regenerate")
     as_of, start_period, end_period = resolve_org_reporting_window(db, org)
 
     token = bind_as_of_period(as_of)
@@ -112,6 +116,7 @@ def regenerate_slide_commentary(
         )
     finally:
         reset_as_of_period(token)
+        reset_usage_context(usage_tokens)
 
     # Board regenerate is best-effort; do not block on pipeline_waterfall_ties fails.
     # Export routes still honor block_on_failure for PPTX/XLSX.
@@ -149,6 +154,8 @@ def board_copilot(
     db: Session = Depends(get_db),
 ) -> CopilotResponse:
     org = get_organization_or_404(db, organization_id, module="board_export")
+    assert_within_usage_limits(db, org, require_ai=True)
+    usage_tokens = set_usage_context(organization_id=organization_id, feature="board_copilot")
     as_of, start_period, end_period = resolve_org_reporting_window(db, org)
 
     focus_period = parse_focus_period_from_question(
@@ -233,11 +240,14 @@ def board_copilot(
         if not answer:
             raise LLMError("Copilot returned an empty response.")
     except LLMError as exc:
+        reset_usage_context(usage_tokens)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
+        reset_usage_context(usage_tokens)
         raise HTTPException(
             status_code=503,
             detail=f"SMPL Copilot failed: {type(exc).__name__}: {exc}",
         ) from exc
 
+    reset_usage_context(usage_tokens)
     return CopilotResponse(answer=answer)
