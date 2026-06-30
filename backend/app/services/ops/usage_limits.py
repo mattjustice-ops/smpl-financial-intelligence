@@ -18,23 +18,11 @@ from app.services.entitlements import normalize_plan
 from app.services.ops.ops_period import format_calendar_month, parse_calendar_month
 
 # Keep aligned with frontend/lib/entitlements/usage-limits.ts
-# None = unlimited for that metric on the plan.
-PLAN_USAGE_LIMITS: dict[str, dict[str, int | float | None]] = {
-    "starter": {
-        "ai_cost_usd_monthly": 25.0,
-        "exports_monthly": 10,
-        "llm_calls_monthly": 100,
-    },
-    "professional": {
-        "ai_cost_usd_monthly": 100.0,
-        "exports_monthly": 50,
-        "llm_calls_monthly": 500,
-    },
-    "enterprise": {
-        "ai_cost_usd_monthly": None,
-        "exports_monthly": None,
-        "llm_calls_monthly": None,
-    },
+# Flat monthly caps for all plans (no tiered ranges).
+DEFAULT_USAGE_LIMITS: dict[str, int | float] = {
+    "ai_cost_usd_monthly": 10.0,
+    "exports_monthly": 10,
+    "llm_calls_monthly": 10,
 }
 
 
@@ -47,8 +35,8 @@ class MonthlyUsageTotals:
 
 
 def limits_for_plan(plan: str | None) -> dict[str, int | float | None]:
-    key = normalize_plan(plan)
-    return dict(PLAN_USAGE_LIMITS.get(key, PLAN_USAGE_LIMITS["starter"]))
+    _ = normalize_plan(plan)
+    return dict(DEFAULT_USAGE_LIMITS)
 
 
 def _current_month_bounds() -> tuple[datetime, datetime, str]:

@@ -916,6 +916,47 @@ def load_demo_csv(
     return res
 
 
+def load_entity_records(
+    session: Session,
+    organization_id: uuid.UUID,
+    kind: str,
+    records: list[dict[str, Any]],
+) -> LoadResult:
+    """Import JSON/API records using the same validation + upsert path as CSV upload."""
+    if kind not in KIND_MODEL:
+        return LoadResult(
+            None,
+            0,
+            [],
+            header_error={
+                "message": "unsupported_entity_type",
+                "entity_type": kind,
+                "supported": sorted(KIND_MODEL.keys()),
+            },
+        )
+    if not records:
+        return LoadResult(kind, 0, [], did_upsert=False)
+
+    headers: list[str] = []
+    for record in records:
+        for key in record.keys():
+            if key not in headers:
+                headers.append(str(key))
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=headers, extrasaction="ignore")
+    writer.writeheader()
+    for record in records:
+        writer.writerow({key: record.get(key, "") for key in headers})
+
+    return load_demo_csv_core(
+        session,
+        organization_id,
+        buf.getvalue().encode("utf-8"),
+        filename=f"{kind}.csv",
+    )
+
+
 PROMOTABLE_FORECAST_TABLES: tuple[str, ...] = (
     "forecast_mrr_waterfall",
     "forecast_income_statement",

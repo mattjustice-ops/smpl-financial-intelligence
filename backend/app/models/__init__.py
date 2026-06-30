@@ -41,6 +41,7 @@ from app.models.billing import (
 from app.models.user import OrganizationMember, User
 from app.models.forecast_version import ForecastVersion
 from app.models.organization import Organization
+from app.models.pipeline import IngestBatch, PipelineEvent
 from app.models.quote_submission import QuoteSubmission
 from app.models.usage_event import UsageEvent
 from app.models.workforce import (
@@ -80,11 +81,13 @@ __all__ = [
     "ForecastWorkingCapitalMetrics",
     "GlActual",
     "HeadcountPlan",
+    "IngestBatch",
     "Invoice",
     "MrrWaterfall",
     "Opportunity",
     "Organization",
     "OrganizationMember",
+    "PipelineEvent",
     "QuoteSubmission",
     "UsageEvent",
     "User",

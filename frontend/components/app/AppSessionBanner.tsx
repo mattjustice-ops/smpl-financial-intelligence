@@ -52,6 +52,9 @@ export function AppSessionBanner() {
         ) : null}
       </span>
       <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <Link href="/app/workspace" style={{ color: "var(--muted)", fontSize: 13 }}>
+          Workspace
+        </Link>
         {showBoard ? (
           <Link href="/app/board" style={{ color: "var(--muted)", fontSize: 13 }}>
             Board Platform

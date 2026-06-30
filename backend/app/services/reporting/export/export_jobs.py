@@ -38,6 +38,38 @@ class ExportJob:
     updated_at: float = field(default_factory=time.time)
 
 
+def _record_export_pipeline_safe(
+    *,
+    organization_id: uuid.UUID | None,
+    event_type: str,
+    export_kind: str,
+    job_id: str | None = None,
+    error: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    if organization_id is None:
+        return
+    try:
+        from app.db.session import SessionLocal
+        from app.services.workspace.ingest_service import record_export_pipeline_event
+
+        db = SessionLocal()
+        try:
+            record_export_pipeline_event(
+                db,
+                organization_id=organization_id,
+                event_type=event_type,
+                export_kind=export_kind,
+                job_id=job_id,
+                error=error,
+                metadata=metadata,
+            )
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Failed to record export pipeline event %s", event_type)
+
+
 def _purge_stale_jobs() -> None:
     cutoff = time.time() - _JOB_TTL_SECONDS
     stale = [job_id for job_id, job in _jobs.items() if job.updated_at < cutoff]
@@ -77,6 +109,12 @@ def submit_export_job(
         _jobs[job_id] = job
 
     record_export_event("queued", kind=kind, organization_id=organization_id, job_id=job_id)
+    _record_export_pipeline_safe(
+        organization_id=organization_id,
+        event_type="export_queued",
+        export_kind=kind,
+        job_id=job_id,
+    )
 
     def _wrapped() -> None:
         started_at = time.time()
@@ -94,6 +132,13 @@ def submit_export_job(
                     job_id=job_id,
                     duration_ms=duration_ms,
                 )
+                _record_export_pipeline_safe(
+                    organization_id=organization_id,
+                    event_type="export_complete",
+                    export_kind=kind,
+                    job_id=job_id,
+                    metadata={"duration_ms": duration_ms},
+                )
         except Exception as exc:
             logger.exception("Export job %s failed", job_id)
             _update(job_id, status="failed", error=f"{type(exc).__name__}: {exc}", message="Export failed")
@@ -105,6 +150,14 @@ def submit_export_job(
                 job_id=job_id,
                 duration_ms=duration_ms,
                 error=f"{type(exc).__name__}: {exc}",
+            )
+            _record_export_pipeline_safe(
+                organization_id=organization_id,
+                event_type="export_failed",
+                export_kind=kind,
+                job_id=job_id,
+                error=f"{type(exc).__name__}: {exc}",
+                metadata={"duration_ms": duration_ms},
             )
 
     _executor.submit(_wrapped)

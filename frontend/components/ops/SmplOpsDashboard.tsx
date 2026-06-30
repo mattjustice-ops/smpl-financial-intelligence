@@ -2,8 +2,29 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DEFAULT_USAGE_LIMITS,
+  type PlanUsageLimits,
+  type UsageLimitKey,
+} from "@/lib/entitlements/usage-limits";
 
 type TabId = "usage" | "health";
+
+type CustomerRow = {
+  organization_id: string | null;
+  organization_name: string;
+  plan: string | null;
+  status: string | null;
+  ai_cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  llm_calls: number;
+  exports_complete: number;
+  warehouse_rows: number;
+  estimated_storage_mb: number;
+  limits?: Partial<PlanUsageLimits>;
+  percent_used?: Partial<Record<UsageLimitKey, number | null>>;
+};
 
 type CustomerUsageResponse = {
   period: {
@@ -15,6 +36,7 @@ type CustomerUsageResponse = {
   };
   available_months: string[];
   generated_at: string;
+  plan_limits?: PlanUsageLimits;
   totals: {
     ai_cost_usd: number;
     input_tokens: number;
@@ -25,29 +47,7 @@ type CustomerUsageResponse = {
     estimated_storage_mb: number;
     database_gb?: number;
   };
-  customers: Array<{
-    organization_id: string | null;
-    organization_name: string;
-    plan: string | null;
-    status: string | null;
-    ai_cost_usd: number;
-    input_tokens: number;
-    output_tokens: number;
-    llm_calls: number;
-    exports_complete: number;
-    warehouse_rows: number;
-    estimated_storage_mb: number;
-    limits?: {
-      ai_cost_usd_monthly: number | null;
-      exports_monthly: number | null;
-      llm_calls_monthly: number | null;
-    };
-    percent_used?: {
-      ai_cost_usd_monthly: number | null;
-      exports_monthly: number | null;
-      llm_calls_monthly: number | null;
-    };
-  }>;
+  customers: CustomerRow[];
   limits_enabled?: boolean;
 };
 
@@ -145,13 +145,36 @@ function limitUsageClass(percent: number | null | undefined): string {
   return "text-slate-300";
 }
 
+function resolveUsageLimit(
+  usage: CustomerUsageResponse,
+  row: CustomerRow,
+  key: UsageLimitKey,
+): number {
+  const fromRow = row.limits?.[key];
+  if (fromRow != null) return fromRow;
+  const fromApi = usage.plan_limits?.[key];
+  if (fromApi != null) return fromApi;
+  return DEFAULT_USAGE_LIMITS[key] ?? 0;
+}
+
+function resolvePercentUsed(
+  row: CustomerRow,
+  used: number,
+  limit: number,
+  key: UsageLimitKey,
+): number | null {
+  const fromApi = row.percent_used?.[key];
+  if (fromApi != null) return fromApi;
+  if (limit <= 0) return null;
+  return Math.min(100, Math.round((used / limit) * 1000) / 10);
+}
+
 function formatLimitCell(
   used: number,
-  limit: number | null | undefined,
+  limit: number,
   percent: number | null | undefined,
   formatValue: (value: number) => string,
 ): string {
-  if (limit == null) return `${formatValue(used)} · ∞`;
   const pctLabel = percent != null ? ` (${percent}%)` : "";
   return `${formatValue(used)} / ${formatValue(limit)}${pctLabel}`;
 }
@@ -200,6 +223,13 @@ export function SmplOpsDashboard() {
     }
     return `Last ${usage.period.days ?? rollingDays} days`;
   }, [usage, rollingDays]);
+
+  const planLimits = useMemo(
+    () => usage?.plan_limits ?? DEFAULT_USAGE_LIMITS,
+    [usage?.plan_limits],
+  );
+
+  const showUsageCaps = true;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -380,18 +410,37 @@ export function SmplOpsDashboard() {
               </label>
             )}
             <p className="text-xs text-slate-500">Showing {periodLabel}</p>
-            {usage.limits_enabled ? (
-              <p className="text-xs text-slate-500">
-                Plan caps shown vs calendar-month usage (enforced on AI exports &amp; copilot).
-              </p>
-            ) : null}
+            <p className="text-xs text-slate-500">
+              Monthly caps (all plans): {formatUsd(planLimits.ai_cost_usd_monthly ?? 10)} AI ·{" "}
+              {formatInt(planLimits.llm_calls_monthly ?? 10)} LLM calls ·{" "}
+              {formatInt(planLimits.exports_monthly ?? 10)} exports
+              {usage.limits_enabled
+                ? " — % vs cap uses calendar-month enforcement"
+                : " — switch to calendar month for % vs cap"}
+            </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             {[
               ["AI spend", formatUsd(usage.totals.ai_cost_usd)],
+              ["AI cap", formatUsd(planLimits.ai_cost_usd_monthly ?? 10)],
               ["LLM calls", formatInt(usage.totals.llm_calls)],
+              ["LLM cap", formatInt(planLimits.llm_calls_monthly ?? 10)],
               ["Exports", formatInt(usage.totals.exports_complete)],
+              ["Export cap", formatInt(planLimits.exports_monthly ?? 10)],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="rounded-xl border border-white/10 bg-slate-900/60 p-4"
+              >
+                <p className="text-xs uppercase tracking-widest text-slate-500">{label}</p>
+                <p className="mt-2 text-2xl font-semibold tabular-nums text-white">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[
               ["Est. warehouse", formatMb(usage.totals.estimated_storage_mb)],
               [
                 "Neon total",
@@ -417,18 +466,18 @@ export function SmplOpsDashboard() {
                   <th className="px-4 py-3">Organization</th>
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3 text-right">AI $</th>
-                  {usage.limits_enabled ? (
-                    <th className="px-4 py-3 text-right">AI cap</th>
+                  {showUsageCaps ? (
+                    <th className="px-4 py-3 text-right">AI vs cap</th>
                   ) : null}
                   <th className="px-4 py-3 text-right">Est. storage</th>
                   <th className="px-4 py-3 text-right">Warehouse rows</th>
                   <th className="px-4 py-3 text-right">LLM calls</th>
-                  {usage.limits_enabled ? (
-                    <th className="px-4 py-3 text-right">LLM cap</th>
+                  {showUsageCaps ? (
+                    <th className="px-4 py-3 text-right">LLM vs cap</th>
                   ) : null}
                   <th className="px-4 py-3 text-right">Exports</th>
-                  {usage.limits_enabled ? (
-                    <th className="px-4 py-3 text-right">Export cap</th>
+                  {showUsageCaps ? (
+                    <th className="px-4 py-3 text-right">Export vs cap</th>
                   ) : null}
                 </tr>
               </thead>
@@ -436,14 +485,37 @@ export function SmplOpsDashboard() {
                 {usage.customers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={usage.limits_enabled ? 10 : 7}
+                      colSpan={showUsageCaps ? 10 : 7}
                       className="px-4 py-8 text-center text-slate-500"
                     >
                       No usage recorded for this period yet.
                     </td>
                   </tr>
                 ) : (
-                  usage.customers.map((row) => (
+                  usage.customers.map((row) => {
+                    const aiLimit = resolveUsageLimit(usage, row, "ai_cost_usd_monthly");
+                    const llmLimit = resolveUsageLimit(usage, row, "llm_calls_monthly");
+                    const exportLimit = resolveUsageLimit(usage, row, "exports_monthly");
+                    const aiPct = resolvePercentUsed(
+                      row,
+                      row.ai_cost_usd,
+                      aiLimit,
+                      "ai_cost_usd_monthly",
+                    );
+                    const llmPct = resolvePercentUsed(
+                      row,
+                      row.llm_calls,
+                      llmLimit,
+                      "llm_calls_monthly",
+                    );
+                    const exportPct = resolvePercentUsed(
+                      row,
+                      row.exports_complete,
+                      exportLimit,
+                      "exports_monthly",
+                    );
+
+                    return (
                     <tr key={row.organization_id ?? row.organization_name}>
                       <td className="px-4 py-3">
                         <div className="font-medium text-white">{row.organization_name}</div>
@@ -453,18 +525,11 @@ export function SmplOpsDashboard() {
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatUsd(row.ai_cost_usd)}
                       </td>
-                      {usage.limits_enabled ? (
+                      {showUsageCaps ? (
                         <td
-                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(
-                            row.percent_used?.ai_cost_usd_monthly,
-                          )}`}
+                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(aiPct)}`}
                         >
-                          {formatLimitCell(
-                            row.ai_cost_usd,
-                            row.limits?.ai_cost_usd_monthly,
-                            row.percent_used?.ai_cost_usd_monthly,
-                            formatUsd,
-                          )}
+                          {formatLimitCell(row.ai_cost_usd, aiLimit, aiPct, formatUsd)}
                         </td>
                       ) : null}
                       <td className="px-4 py-3 text-right tabular-nums text-slate-300">
@@ -476,39 +541,31 @@ export function SmplOpsDashboard() {
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatInt(row.llm_calls)}
                       </td>
-                      {usage.limits_enabled ? (
+                      {showUsageCaps ? (
                         <td
-                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(
-                            row.percent_used?.llm_calls_monthly,
-                          )}`}
+                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(llmPct)}`}
                         >
-                          {formatLimitCell(
-                            row.llm_calls,
-                            row.limits?.llm_calls_monthly,
-                            row.percent_used?.llm_calls_monthly,
-                            formatInt,
-                          )}
+                          {formatLimitCell(row.llm_calls, llmLimit, llmPct, formatInt)}
                         </td>
                       ) : null}
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatInt(row.exports_complete)}
                       </td>
-                      {usage.limits_enabled ? (
+                      {showUsageCaps ? (
                         <td
-                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(
-                            row.percent_used?.exports_monthly,
-                          )}`}
+                          className={`px-4 py-3 text-right tabular-nums text-xs ${limitUsageClass(exportPct)}`}
                         >
                           {formatLimitCell(
                             row.exports_complete,
-                            row.limits?.exports_monthly,
-                            row.percent_used?.exports_monthly,
+                            exportLimit,
+                            exportPct,
                             formatInt,
                           )}
                         </td>
                       ) : null}
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -17,7 +17,7 @@ from app.services.ops.storage_snapshot import (
     maybe_collect_storage_snapshot,
     storage_snapshot_history,
 )
-from app.services.ops.usage_limits import limits_for_plan
+from app.services.ops.usage_limits import DEFAULT_USAGE_LIMITS, limits_for_plan
 from app.services.reporting.export.export_jobs import list_export_jobs_snapshot
 
 
@@ -98,8 +98,8 @@ def _merge_customer_rows(
             "warehouse_rows": warehouse_rows,
             "estimated_storage_mb": storage_mb,
         }
-        if include_plan_limits and org:
-            limits = limits_for_plan(org.plan)
+        if include_plan_limits:
+            limits = limits_for_plan(org.plan if org else None)
             row["limits"] = limits
             row["percent_used"] = {
                 "ai_cost_usd_monthly": _usage_percent(ai_cost, limits.get("ai_cost_usd_monthly")),
@@ -192,6 +192,7 @@ def customer_usage_summary(
         "period": period,
         "available_months": recent_calendar_months(count=12),
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "plan_limits": dict(DEFAULT_USAGE_LIMITS),
         "limits_enabled": period.get("kind") == "calendar_month",
         "totals": {
             "ai_cost_usd": round(float(totals[0] or 0), 4),
