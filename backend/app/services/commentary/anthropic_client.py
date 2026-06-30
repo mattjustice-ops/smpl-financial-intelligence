@@ -61,6 +61,12 @@ class AnthropicCommentaryClient:
         user_prompt: str,
         max_tokens: int | None = None,
     ) -> str:
+        from app.services.ops.usage_tracking import (
+            LlmCallTimer,
+            record_llm_usage_from_anthropic_response,
+        )
+
+        timer = LlmCallTimer()
         try:
             resp = self._client.messages.create(
                 model=self._model,
@@ -71,6 +77,12 @@ class AnthropicCommentaryClient:
             )
         except Exception as exc:  # pragma: no cover
             raise LLMError(f"Anthropic request failed: {exc}") from exc
+
+        record_llm_usage_from_anthropic_response(
+            resp,
+            model=self._model,
+            duration_ms=timer.duration_ms,
+        )
 
         text_parts: list[str] = []
         for block in resp.content:

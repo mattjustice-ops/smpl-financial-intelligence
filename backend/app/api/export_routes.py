@@ -445,9 +445,11 @@ def _run_mda_package_job(
     block_on_failure: bool,
 ) -> None:
     from app.db.session import SessionLocal
+    from app.services.ops.usage_context import reset_usage_context, set_usage_context
     from app.services.reporting.export.board_export_service import build_mda_package_xlsx_bytes
     from app.services.reporting.export.export_jobs import complete_export_job, update_export_job_message
 
+    tokens = set_usage_context(organization_id=organization_id, feature="mda_package")
     db = SessionLocal()
     try:
         get_organization_or_404(db, organization_id)
@@ -485,6 +487,7 @@ def _run_mda_package_job(
         )
     finally:
         db.close()
+        reset_usage_context(tokens)
 
 
 def _run_mda_deck_job(
@@ -501,8 +504,10 @@ def _run_mda_deck_job(
     package_mode: str,
 ) -> None:
     from app.db.session import SessionLocal
+    from app.services.ops.usage_context import reset_usage_context, set_usage_context
     from app.services.reporting.export.export_jobs import complete_export_job, update_export_job_message
 
+    tokens = set_usage_context(organization_id=organization_id, feature="mda_deck")
     db = SessionLocal()
     try:
         get_organization_or_404(db, organization_id)
@@ -543,6 +548,7 @@ def _run_mda_deck_job(
         )
     finally:
         db.close()
+        reset_usage_context(tokens)
 
 
 @export_router.post("/jobs/mda-package")
@@ -596,6 +602,7 @@ def start_mda_package_job(
         ),
         filename=f"SMPL_MDA_Package_{period_label}.xlsx",
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        organization_id=organization_id,
     )
     return job_status_payload(job)
 
@@ -661,6 +668,7 @@ def start_mda_deck_job(
         ),
         filename=f"mda_deck_{deck_period}.pptx",
         content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        organization_id=organization_id,
     )
     return job_status_payload(job)
 

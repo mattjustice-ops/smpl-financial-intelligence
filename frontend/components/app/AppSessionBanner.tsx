@@ -5,6 +5,7 @@ import { signOut } from "next-auth/react";
 
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { hasModule, planLabel as formatPlanLabel } from "@/lib/entitlements/plan-modules";
+import { isSmplOpsAdminEmail } from "@/lib/ops/smpl-ops-admin";
 
 export function AppSessionBanner() {
   const { email, organizationId, organizations, isLoading } = useActiveOrganization();
@@ -13,6 +14,7 @@ export function AppSessionBanner() {
   const planName = activeOrg ? formatPlanLabel(activeOrg.plan) : null;
   const showBoard = activeOrg && hasModule(activeOrg.enabledModules, activeOrg.plan, "board_export");
   const showForecast = activeOrg && hasModule(activeOrg.enabledModules, activeOrg.plan, "forecast_engine");
+  const showOps = isSmplOpsAdminEmail(email);
 
   if (isLoading) {
     return (
@@ -58,6 +60,11 @@ export function AppSessionBanner() {
         {showForecast ? (
           <Link href="/forecast-engine" style={{ color: "var(--muted)", fontSize: 13 }}>
             Forecast Engine
+          </Link>
+        ) : null}
+        {showOps ? (
+          <Link href="/app/ops" style={{ color: "var(--muted)", fontSize: 13 }}>
+            SMPL Ops
           </Link>
         ) : null}
         <button

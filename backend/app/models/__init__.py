@@ -42,6 +42,7 @@ from app.models.user import OrganizationMember, User
 from app.models.forecast_version import ForecastVersion
 from app.models.organization import Organization
 from app.models.quote_submission import QuoteSubmission
+from app.models.usage_event import UsageEvent
 from app.models.workforce import (
     WorkforceCompensationBand,
     WorkforceDepartmentAllocationRule,
@@ -85,6 +86,7 @@ __all__ = [
     "Organization",
     "OrganizationMember",
     "QuoteSubmission",
+    "UsageEvent",
     "User",
     "Payment",
     "SalesQuota",

@@ -30,6 +30,7 @@ from app.api.auth_routes import auth_router
 from app.api.billing_routes import billing_router
 from app.api.quote_routes import quote_router
 from app.api.export_routes import export_router
+from app.api.ops_routes import ops_router
 from app.api.waterfall_routes import waterfall_router
 from app.api.workforce_routes import workforce_router
 from app.core.config import get_settings
@@ -133,6 +134,7 @@ app.include_router(marketing_router, prefix="/api/v1")
 app.include_router(quote_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
+app.include_router(ops_router, prefix="/api/v1")
 app.include_router(workforce_router, prefix="/api/v1")
 
 
