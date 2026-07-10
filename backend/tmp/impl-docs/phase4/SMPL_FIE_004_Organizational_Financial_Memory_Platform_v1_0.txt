@@ -1,0 +1,550 @@
+FINANCIAL INTELLIGENCE ENGINE — ENGINEERING SPECIFICATION
+FIE-004 · Organizational Financial Memory Platform
+Version 1.0
+Preserving organizational financial knowledge so it outlives individuals, reporting cycles, and time
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Fourth service of the Financial Intelligence Engine (FIE) layer · Implements: FIE-004 Conceptual Model v2.0 · Reads: FIE-001 · FIE-002 · FIE-003 · Reconciles: BIS-005
+Section 1 — Scope Decisions
+The FIE-004 conceptual model is frozen and is not redesigned here. This section restates its Section 1 Architectural Reconciliation in the numbered format used since BIS-001, and adds five further resolutions the build requires to be engineering-ready.
+1.1 Memory vs. Observation Engine
+The Observation Engine (FIE-001) owns immutable financial facts — Observations and Revisions. This service owns organizational knowledge related to those facts — why a decision was made, what was believed, what context surrounded a change. This service never writes to FIE-001 and never duplicates a value FIE-001 already records; every reference to a fact is a lineage pointer (Section 9), never a copy.
+1.2 Memory vs. Methodology Engine
+The Methodology Engine (FIE-002) remains the sole authoritative system of record for methodology definitions. This service preserves the organizational narrative around a methodology's evolution — why ARR's definition changed, what it was expected to affect — as a Methodology Context Knowledge Object (Section 8) that references, but never contains a copy of, the FIE-002 methodology_id and version it concerns.
+1.3 Memory vs. Calculation Engine
+The Calculation Engine (FIE-003) owns deterministic execution and produces Financial Intelligence Objects. This service preserves organizational knowledge associated with those FIOs — a Decision that led to a scenario being run, the reasoning behind approving one forecast version over another — and never recalculates, never writes to FIE-003, and never stores an FIO value independently of the FIO record itself.
+1.4 Memory vs. Narrative Intelligence (FIE-005)
+Narrative Intelligence reasons over Memory to generate commentary; it consumes this service's retrieval APIs (Sections 13–14) and has no write path into any Knowledge Object. This service performs no reasoning, pattern discovery, or narrative generation of its own — Pattern Records and Recommendation Candidates (Sections 8, 12–13 of the conceptual model) are preserved here but originate entirely from FIE-005 or other future Intelligence services.
+1.5 Memory vs. Knowledge Platform (BIS-005)
+BIS-005 remains the sole authoritative store for reusable platform knowledge — implementation guidance, best practices, mappings, and organizational learning intended for reuse across customers. This service owns Customer Organizational Memory exclusively and maintains no second Platform Memory repository of its own. The Promotion Pipeline (Section 15) is the only path by which content originating here can ever reach BIS-005, and it is never automatic — this is the fourth reconciliation of this kind in the documentation set (after BIS-005 §1.1 vs. EIS-004, BIS-006 §1.7 vs. the interim Memory proposal, and FIE-002 §1.5 vs. BIS-005), and the first one resolved inside the conceptual freeze itself rather than during engineering.
+1.6 Inherited Limitation from FIE-003
+Per FIE-003's own closing note, this service explicitly restates rather than silently rediscovers: FIE-003 §1.9 narrows Governed execution to effective-date-based methodology resolution only, deferring full historical restatement windows pending a FIE-002 addendum. Forecast Memory (Section 4 of the conceptual model, Section 8 here) therefore preserves the organizational understanding that existed at a given point in time — what was believed, and why — independently of whether FIE-003 can currently recompute what the historical calculation would have been under a since-changed methodology. Where a user asks "what would this forecast look like restated under today's methodology," this service correctly returns EVIDENCE_UNAVAILABLE (Section 25) for the recalculation, while still returning the preserved historical belief itself without degradation — the two questions are answered independently, and only one of them depends on a capability this service does not have.
+1.7 New Resolution — Business Theme Registry Follows the Established Versioned-Registry Pattern
+Business Themes (conceptual model Decision 7) are controlled-vocabulary entries, not Knowledge Objects — the same structural role Financial Concept plays in FIE-001 and Calculation Intent plays in FIE-002. business_themes is therefore a small, admin-governed, append-only versioned table (Section 11), never a free-text tag field on Knowledge Objects that could silently fork into near-duplicate spellings of the same theme.
+1.8 New Resolution — Evidence Chains Are a Typed Reference Table, Not a JSON Blob
+Per Decision 8, Evidence Chains are structural infrastructure rather than Knowledge Objects. At the schema level this is implemented as a typed, queryable reference table (evidence_chain_refs, Section 7.4) — the same pattern FIE-003 §7.4 uses for fio_lineage_refs — rather than an opaque JSON array on each Knowledge Object. This is what makes Section 22's evidence-based query patterns ("every Knowledge Object with evidence referencing this Calculation Run") a direct index lookup rather than a full-table JSON scan.
+1.9 New Resolution — Lifecycle Is a Governed State Machine, Independent of Version Immutability
+Per Decision 19, Lifecycle differs from version history: a Knowledge Object's version number increases every time its content changes (immutably, per Section 16); its lifecycle_state (Proposed → Accepted → Active → Superseded → Archived) can change independently of, and without requiring, a new version. Correcting a typo in a Decision's description creates a new version; that Decision being superseded by a later organizational decision changes lifecycle_state without necessarily changing content. These are deliberately two separate fields with two separate transition rules, detailed in Section 19.
+1.10 New Resolution — Semantic Retrieval Is Specified but Not Built at MVP
+Decision 16's own conditional language ("if implemented") signals this was never mandatory for freeze. Per the same discipline BIS-004 §1.11 applied to FIDS and BIS-006 §16 applied to financial waterfalls: this document names the capability, specifies its reproducibility requirement (pinned embedding_model_version, Section 14), and reserves its API surface (Section 4.4), but does not build embedding generation, vector storage, or similarity search at MVP. Deterministic retrieval (Section 13) is the only retrieval mechanism available at launch; semantic retrieval is backlogged in Section 34 pending a concrete FIE-005 use case that structured filtering cannot serve.
+1.11 New Resolution — Provenance Is a Controlled Vocabulary, Not Free Text
+Per Decision 18, provenance ∈ {HUMAN, AI_GENERATED, IMPORTED, IMPLEMENTATION, FINANCIAL_GOVERNANCE, FUTURE_INTELLIGENCE} — a fixed enum requiring an engineering/admin review to extend, the same controlled-vocabulary treatment FIE-001 §1.9 applies to relationship_type and FIE-002 §15 applies to calculation_intent. A Knowledge Object's provenance is set once at creation and is immutable, consistent with every other field on a given version.
+Section 2 — Service Purpose
+The Organizational Financial Memory Platform is the only component in the SMPL platform whose entire responsibility is making sure a financial organization's understanding of itself survives longer than the people who currently hold it.
+This Service Is
+This Service Is Not
+The permanent, immutable, versioned store of organizational context — decisions, forecast evolution, methodology history, evidence-backed patterns
+A reasoning engine — it preserves Pattern Records and Recommendation Candidates that other services discover; it discovers nothing itself
+The single system of record for why something happened, referencing but never duplicating what FIE-001/FIE-002/FIE-003 already record
+A calculation or narrative engine — Section 1.3 and 1.4 draw that boundary explicitly
+A tenant-isolated store with one explicit, governed exit into shared platform knowledge (Section 15)
+A second Knowledge Platform — BIS-005 remains the sole store for reusable platform knowledge, per Section 1.5
+The foundation Narrative Intelligence (FIE-005) retrieves from to generate explanations grounded in institutional history
+A UI or administration layer — Section 20's metadata supports a future admin interface without being one
+Table FIE4-2.1 — Service purpose boundary.
+2.1 Position in the Runtime
+Human decisions / Financial Governance / Implementation activityObservation history (FIE-001) / Financial Intelligence Objects (FIE-003)Future Intelligence services (FIE-005 and beyond)                    │                    │  POST /v1/knowledge-objects                    ▼     ═══════════════════════════════════════════════════        ORGANIZATIONAL FINANCIAL MEMORY PLATFORM  (this document)     ═══════════════════════════════════════════════════         │                    │                    │  references          references          references         ▼                    ▼                    ▼ FIE-001 Observations   FIE-002 Methodologies   FIE-003 FIOs & Revisions         writes: knowledge_objects, evidence_chain_refs,                 knowledge_relationships, business_themes         read by: Narrative Intelligence (FIE-005), Reporting (BIS-006)         governed exit: Promotion Pipeline → BIS-005 (never automatic)
+Figure FIE4-2.1 — Memory references every prior FIE service without duplicating any of them, and has exactly one governed, non-automatic exit into BIS-005.
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Knowledge Object lifecycle management
+Store, version, and govern every Knowledge Object type through Proposed→Archived
+Section 8, 19
+Evidence Chain maintenance
+Persist typed, queryable references from every Knowledge Object to its supporting facts
+Section 9
+Relationship and graph maintenance
+Persist explicitly asserted relationships between Knowledge Objects and expose them as a queryable graph
+Section 10, 21
+Business Theme registry
+Maintain the versioned, controlled-vocabulary classification scheme
+Section 11
+Timeline assembly
+Serve chronological reconstructions as a view over Knowledge Objects, never as separate storage
+Section 12
+Deterministic retrieval
+Serve structured, filter-based queries across every retrieval axis in Decision 15
+Section 13
+Promotion governance
+Enforce the Customer Organizational Memory → BIS-005 pipeline, never automatic
+Section 15
+Knowledge Confidence and provenance preservation
+Fix confidence and provenance at version creation; never rewrite either retroactively
+Section 17, 18
+Table FIE4-3.1 — Core responsibilities and where each is specified.
+Section 4 — Public APIs
+Callable by Orchestration-dispatched workers, Financial Governance, human implementation/finance users via Tool Gateway, and every downstream FIE/BIS service for read access. All endpoints return the standard response envelope established across BIS-001 through FIE-003. Three representative endpoints receive full detail; the remaining endpoints are captured completely in the summary table that follows.
+Standard Response Envelope
+{  "request_id": "UUID",  "customer_id": "UUID",  "status": "SUCCESS | ERROR",  "data": {},  "error": { "error_code": "string", "message": "string", "retry_after_seconds": "integer | null" } | null,  "latency_ms": "integer"}
+4.1 POST /v1/knowledge-objects
+Field
+Detail
+Request
+customer_id, knowledge_type (DECISION | LESSON_LEARNED | FORECAST_HISTORY | RISK | OPPORTUNITY | PATTERN_RECORD | MEETING_CONTEXT | ORGANIZATIONAL_CONTEXT | CUSTOMER_CONTEXT | IMPLEMENTATION_CONTEXT | METHODOLOGY_CONTEXT | RECOMMENDATION_CANDIDATE), content (JSONB, shape per knowledge_type), provenance, knowledge_confidence, business_theme_ids[], evidence_refs[] (typed, per Section 9), related_knowledge_object_ids[] (optional), idempotency_key (optional)
+Response
+knowledge_object_id, version (1), lifecycle_state (PROPOSED)
+Error Codes
+INVALID_INPUT, UNKNOWN_KNOWLEDGE_TYPE, MISSING_EVIDENCE, BUSINESS_THEME_NOT_FOUND, PERMISSION_ERROR
+Idempotency
+A repeated call with the same idempotency_key returns the existing knowledge_object_id rather than creating a duplicate
+Retry Rules
+Safe to retry on timeout or 5xx; a 4xx requires correcting the input before retry
+Logging
+KNOWLEDGE_OBJECT_CREATED on success
+Metrics
+knowledge_objects_created_total{knowledge_type, provenance}
+Table FIE4-4.1 — POST /v1/knowledge-objects. MISSING_EVIDENCE fires if evidence_refs is empty for a knowledge_type that requires supporting evidence (all types except ORGANIZATIONAL_CONTEXT, which may stand on Human provenance alone).
+4.2 GET /v1/knowledge-objects/query
+Field
+Detail
+Request
+customer_id, filters (any combination of: knowledge_type, business_theme_id, financial_concept_id, decision_id, meeting_id, methodology_id, calculation_run_id, confidence_min, tags[], lifecycle_state, as_of), pagination cursor
+Response
+Array of matching Knowledge Objects at their current version, or their version as_of the requested date
+Error Codes
+INVALID_INPUT, PERMISSION_ERROR
+Idempotency
+N/A — read-only
+Retry Rules
+Freely retryable
+Logging
+Not logged individually; covered by request-level access logging
+Metrics
+knowledge_query_duration_seconds{filter_combination_size}
+Table FIE4-4.2 — GET /v1/knowledge-objects/query. This is Section 13's deterministic retrieval endpoint — the primary read path for Narrative Intelligence.
+4.3 POST /v1/promotion-requests
+Field
+Detail
+Request
+knowledge_object_id, requested_by, anonymization_plan (fields to strip/generalize), business_rationale
+Response
+promotion_request_id, status (PENDING_REVIEW)
+Error Codes
+KNOWLEDGE_OBJECT_NOT_FOUND, INELIGIBLE_FOR_PROMOTION, PERMISSION_ERROR
+Idempotency
+A repeated call for the same knowledge_object_id with a PENDING_REVIEW or APPROVED request returns the existing promotion_request_id
+Retry Rules
+Safe to retry on timeout or 5xx
+Logging
+PROMOTION_REQUESTED on submission; PROMOTION_APPROVED / PROMOTION_REJECTED on governance decision
+Metrics
+promotion_requests_total{status}
+Table FIE4-4.3 — POST /v1/promotion-requests. This endpoint never itself writes to BIS-005 — approval triggers a separate, governance-gated call into BIS-005's own knowledge-record creation flow, per Section 15.
+4.4 Remaining Endpoints
+Endpoint
+Purpose
+Notes
+PATCH /v1/knowledge-objects/{id}
+Create a new version
+Append-only, per Section 16
+POST /v1/knowledge-objects/{id}/lifecycle
+Transition lifecycle_state
+Independent of versioning, per Section 1.9
+GET /v1/knowledge-objects/{id}/evidence
+Retrieve the full Evidence Chain for a Knowledge Object
+Section 9
+GET /v1/knowledge-objects/{id}/relationships
+Retrieve asserted relationships, one hop
+Section 10
+GET /v1/timeline
+Retrieve a chronological reconstruction, filterable by any Section 13 axis
+Section 12 — a view, not separate storage
+GET /v1/business-themes
+List active Business Themes
+Registry read
+POST /v1/business-themes
+Create a Business Theme
+Admin-only, Section 11
+POST /v1/knowledge-objects/semantic-query
+Reserved semantic retrieval endpoint
+Not implemented at MVP, per Section 1.10 — returns NOT_IMPLEMENTED
+POST /v1/promotion-requests/{id}/review
+Governance approval/rejection of a promotion request
+Section 15
+GET /v1/health
+Liveness/readiness probe
+No auth required, internal network only
+Table FIE4-4.4 — Remaining endpoints, complete at summary detail.
+Section 5 — Internal Components
+Component
+Responsibility
+Knowledge Object Store
+Stateless API and Postgres persistence for every Knowledge Object type, versioned and lifecycle-governed
+Evidence Chain Manager
+Validates and persists typed evidence references at creation; serves evidence retrieval
+Relationship Graph Store
+Persists explicitly asserted edges between Knowledge Objects; serves one-hop and graph queries
+Business Theme Registry
+Versioned, admin-governed controlled vocabulary, per Section 1.7
+Timeline Assembler
+Serves chronological views by querying Knowledge Objects across their business-relevant date fields — never a separate stored timeline
+Deterministic Retrieval Engine
+Serves Section 13's structured filter queries
+Promotion Gateway
+Enforces the governance/anonymization/approval pipeline before any BIS-005 write is triggered
+Table FIE4-5.1 — Internal components. No Semantic Retrieval component exists at MVP, per Section 1.10 — its API surface is reserved, not backed.
+Section 6 — Data Models
+Every Knowledge Object type shares one physical table, discriminated by knowledge_type, following the identical inheritance pattern FIE-001 §1.9 established for Observation/Revision and FIE-003 §7.3 uses for every FIO type — one schema, a type discriminator, never a hierarchy of separate tables per knowledge_type.
+Entity
+Purpose
+knowledge_objects
+Every Knowledge Object, all types, versioned, per Section 8
+evidence_chain_refs
+Typed references from a Knowledge Object to its supporting facts, per Section 9
+knowledge_relationships
+Asserted edges between Knowledge Objects, per Section 10
+business_themes
+Versioned controlled-vocabulary classification, per Section 11
+promotion_requests
+Governance-tracked requests to promote a Knowledge Object into BIS-005, per Section 15
+Table FIE4-6.1 — Entity overview; full column definitions follow in Section 7.
+Section 7 — Database Schema
+7.1 knowledge_objects
+Field
+Type
+Notes
+knowledge_object_id
+UUID, PK
+Stable across versions
+version
+INTEGER
+Append-only, per Section 16
+customer_id
+UUID
+Tenant isolation, per Section 28
+knowledge_type
+ENUM(DECISION, LESSON_LEARNED, FORECAST_HISTORY, RISK, OPPORTUNITY, PATTERN_RECORD, MEETING_CONTEXT, ORGANIZATIONAL_CONTEXT, CUSTOMER_CONTEXT, IMPLEMENTATION_CONTEXT, METHODOLOGY_CONTEXT, RECOMMENDATION_CANDIDATE)
+content
+JSONB
+Shape varies by knowledge_type — e.g. a DECISION populates owner/approver/expected_outcome; a FORECAST_HISTORY populates forecast_version_ref/reason_for_change
+business_theme_ids
+UUID[]
+References into business_themes
+provenance
+ENUM(HUMAN, AI_GENERATED, IMPORTED, IMPLEMENTATION, FINANCIAL_GOVERNANCE, FUTURE_INTELLIGENCE)
+Per Section 1.11 — immutable
+knowledge_confidence
+NUMERIC
+Fixed at this version's creation, per Section 1.9/17 — never retroactively changed
+lifecycle_state
+ENUM(PROPOSED, ACCEPTED, ACTIVE, SUPERSEDED, ARCHIVED)
+Independent of version, per Section 1.9
+business_effective_date
+TIMESTAMPTZ, NULLABLE
+When applicable (e.g. a Decision's effective date)
+created_at
+TIMESTAMPTZ
+System-recorded creation timestamp
+Table FIE4-7.1 — knowledge_objects. No UPDATE path exists on content, provenance, or knowledge_confidence for an existing version; only lifecycle_state may change in place, and only per Section 19's state machine.
+7.2 evidence_chain_refs
+Field
+Type
+Notes
+evidence_ref_id
+UUID, PK
+knowledge_object_id
+UUID, FK → knowledge_objects
+evidence_type
+ENUM(OBSERVATION, CALCULATION_RUN, FINANCIAL_INTELLIGENCE_OBJECT, MEETING, FORECAST, METHODOLOGY, BOARD_MATERIAL, EXTERNAL_DOCUMENT, IMPLEMENTATION_ARTIFACT)
+ref_id
+UUID
+The referenced FIE-001 temporal_record_id, FIE-003 calculation_run_id/fio_id, FIE-002 methodology_id, or an internal meeting/document identifier
+created_at
+TIMESTAMPTZ
+Table FIE4-7.2 — evidence_chain_refs. A typed, indexed table per Section 1.8, not a JSON blob — this is what makes 'every Knowledge Object referencing this Calculation Run' a direct query.
+7.3 knowledge_relationships
+Field
+Type
+Notes
+relationship_id
+UUID, PK
+source_knowledge_object_id
+UUID, FK
+target_knowledge_object_id
+UUID, FK
+relationship_type
+TEXT
+Controlled vocabulary, e.g. INFORMED_BY, SUPERSEDES, SUPPORTS
+asserted_by
+TEXT
+The creating user or upstream service that declared this relationship — never system-inferred, per Decision 9
+created_at
+TIMESTAMPTZ
+Table FIE4-7.3 — knowledge_relationships. Collectively, this table is the Organizational Knowledge Graph (Section 21) — there is no separate graph storage.
+7.4 business_themes
+Field
+Type
+Notes
+business_theme_id
+UUID, PK
+Stable across versions
+theme_version
+INTEGER
+Append-only, per Section 1.7
+theme_name
+TEXT
+e.g. Pricing, Hiring, Collections, Enterprise Growth
+active
+BOOLEAN
+created_at
+TIMESTAMPTZ
+Table FIE4-7.4 — business_themes.
+7.5 promotion_requests
+Field
+Type
+Notes
+promotion_request_id
+UUID, PK
+knowledge_object_id
+UUID, FK
+requested_by
+TEXT
+anonymization_plan
+JSONB
+Fields to strip or generalize before any BIS-005 write
+business_rationale
+TEXT
+status
+ENUM(PENDING_REVIEW, APPROVED, REJECTED)
+Per Section 15's governance gate
+reviewed_by
+TEXT, NULLABLE
+bis005_knowledge_record_id
+UUID, NULLABLE
+Populated only upon APPROVED, referencing the resulting BIS-005 record
+created_at
+TIMESTAMPTZ
+Table FIE4-7.5 — promotion_requests. No automatic transition to APPROVED exists in this schema — every row requires an explicit reviewed_by, per Decision 14/20.
+Section 8 — Knowledge Object Model
+Every knowledge_type shares the schema in Table FIE4-7.1; content's JSONB shape is type-specific but structurally validated against a per-type schema at write time (Section 25). Decision Memory and Forecast Memory content always carries reference fields (e.g. observation_ref, fio_ref, methodology_ref) rather than copied values, enforced by the same MISSING_EVIDENCE-style validation Table FIE4-4.1 applies at creation — a Decision naming a dollar figure without a resolvable Observation or FIO reference fails validation rather than being silently accepted as a duplicated value.
+Section 9 — Evidence Chain Model
+Implements Section 1.8: every Knowledge Object's evidence is one or more rows in evidence_chain_refs, typed by evidence_type. A Knowledge Object's Knowledge Confidence (Section 17) is set by whoever creates it, informed by — but not mechanically derived from — the strength of its Evidence Chain; this service does not compute confidence from evidence count or type, since that would reintroduce exactly the retroactive-recalculation risk Section 1.9 was written to prevent.
+Section 10 — Relationship Model
+A relationship is asserted, never inferred, at the same time as or after a Knowledge Object's creation — the API accepts related_knowledge_object_ids directly in the write request (Table FIE4-4.1) or via a subsequent explicit call, and this service runs no correlation or similarity logic to discover relationships after the fact, mirroring FIE-001 §16's identical rule for Observation/Revision relationships.
+Section 11 — Business Theme Registry
+Business Themes are created and versioned exclusively through an admin-governed write path (POST /v1/business-themes, Table FIE4-4.4) — no Knowledge Object write can implicitly create a new theme by referencing an unrecognized theme name. A knowledge_objects write referencing a business_theme_id that does not exist fails with BUSINESS_THEME_NOT_FOUND, per Table FIE4-4.1, closing off the silent-duplicate-spelling risk a free-text tag field would carry.
+Section 12 — Timeline Model
+GET /v1/timeline (Table FIE4-4.4) is purely a query over knowledge_objects.business_effective_date and created_at, filtered by any combination of Section 13's axes — it has no dedicated storage. This mirrors FIE-001's identical treatment of its own timeline endpoint over Temporal Records: a view, not a materialized structure, so there is never a risk of the timeline and its underlying Knowledge Objects drifting out of sync.
+Section 13 — Retrieval Architecture
+Deterministic retrieval (GET /v1/knowledge-objects/query, Table FIE4-4.2) supports filtering by knowledge_type, business_theme_id, financial_concept_id (via evidence_chain_refs joins), decision/meeting/methodology/calculation_run references, confidence threshold, tags, lifecycle_state, and an as_of parameter resolving to the version active at a past date — the same bi-temporal query shape FIE-001 §4.3 and FIE-002 §4.3 both already established. This is the only retrieval mechanism available at MVP, per Section 1.10.
+Section 14 — Semantic Retrieval Architecture (Reserved, Not Implemented)
+POST /v1/knowledge-objects/semantic-query (Table FIE4-4.4) is specified but returns NOT_IMPLEMENTED at MVP, per Section 1.10. When built, it will require an embedding_model_version field pinned on each Knowledge Object's semantic index entry — a separate, additive table, never a modification to knowledge_objects itself — so that retrieval remains reproducible for a given embedding version exactly as Decision 16 requires, and so that adding semantic retrieval later is a purely additive schema change, not a migration.
+Section 15 — Promotion Pipeline
+Implements Decision 14 and Section 1.5 exactly: Customer Organizational Memory → Governance Review → Anonymization → Approval → BIS-005. A promotion_requests row moves from PENDING_REVIEW to APPROVED or REJECTED only through an explicit POST /v1/promotion-requests/{id}/review call by an authorized governance reviewer (Table FIE4-4.4); only an APPROVED transition triggers a call into BIS-005's own knowledge-record creation endpoint, using the anonymization_plan to strip or generalize customer-identifying content before that call is made. This service never writes to a BIS-005 table directly — it calls BIS-005's own API, the same arm's-length relationship every other cross-service write in this platform maintains.
+Section 16 — Versioning
+PATCH /v1/knowledge-objects/{id} (Table FIE4-4.4) always creates a new version row sharing the same knowledge_object_id; no field on an existing version is ever updated in place except lifecycle_state, per Section 1.9. GET /v1/knowledge-objects/query's as_of parameter resolves to the version whose created_at was the most recent as of the requested date — the same reproducibility guarantee FIE-002 §1.7 provides for methodology versions.
+Section 17 — Knowledge Confidence
+knowledge_confidence is supplied at write time by the creator (human or upstream service) and is never recalculated by this service. It is explicitly distinct from FIE-001's Mapping/Data/Reasoning confidence dimensions — a Knowledge Object may reference high-confidence Observations while itself carrying lower Knowledge Confidence, if the organizational interpretation of those facts remains contested, or the reverse.
+Section 18 — Provenance
+Set once at creation from the controlled vocabulary in Section 1.11, immutable thereafter. AI_GENERATED provenance is used for Pattern Records and Recommendation Candidates originating from FIE-005 or future services; this service performs no validation of the substance of an AI-generated Knowledge Object beyond the same structural schema check every knowledge_type receives — it preserves what it is given, per the Core Architectural Principle.
+Section 19 — Lifecycle
+State
+Meaning
+Valid Transitions
+PROPOSED
+Newly created, not yet organizationally confirmed
+→ ACCEPTED, → ARCHIVED (discarded before acceptance)
+ACCEPTED
+Confirmed as accurate, not yet the operative understanding
+→ ACTIVE
+ACTIVE
+The current organizational understanding for this knowledge
+→ SUPERSEDED (automatically, when a related new Knowledge Object explicitly supersedes it via a SUPERSEDES relationship, Section 10)
+SUPERSEDED
+No longer current but retained for historical reference, per Decision 6's evolution example
+→ ARCHIVED
+ARCHIVED
+Terminal; retained, queryable, never deleted
+None
+Table FIE4-19.1 — Lifecycle state machine, independent of version number per Section 1.9.
+Section 20 — Administrative Metadata
+Per Decision 21, every Knowledge Object exposes name, description, knowledge_type, owner, status, version, confidence, lifecycle, business_theme_ids, related_knowledge_object_ids (via Section 10), evidence_count (a derived count over evidence_chain_refs, not a stored field), visibility, and approval_status — all either direct fields on knowledge_objects or cheap derived reads, never a redundant second copy, consistent with FIE-003 §19's identical treatment of administrative metadata as read-through references rather than separately entered data.
+Section 21 — Graph Representation
+The Organizational Knowledge Graph is knowledge_relationships (Section 10) plus knowledge_objects as nodes — there is no separate graph database or materialized graph structure at MVP. GET /v1/knowledge-objects/{id}/relationships (Table FIE4-4.4) provides one-hop traversal; multi-hop traversal is deferred to Section 34's backlog, mirroring FIE-002 §14's identical deferral for its own dependency graph.
+Section 22 — Query Patterns
+Pattern
+Supported Via
+Every Decision related to a Business Theme
+GET /v1/knowledge-objects/query?knowledge_type=DECISION&business_theme_id=
+Organizational understanding as of a past date
+GET /v1/knowledge-objects/query?...&as_of=
+Every Knowledge Object referencing a specific Calculation Run
+GET /v1/knowledge-objects/query?calculation_run_id= (joins evidence_chain_refs)
+Full evolution of one piece of organizational understanding
+GET /v1/knowledge-objects/{id}?include_versions=true
+Timeline reconstruction for a customer, filtered by theme
+GET /v1/timeline?business_theme_id=
+Active Recommendation Candidates awaiting review
+GET /v1/knowledge-objects/query?knowledge_type=RECOMMENDATION_CANDIDATE&lifecycle_state=PROPOSED
+Knowledge Objects pending promotion
+GET /v1/promotion-requests?status=PENDING_REVIEW
+Table FIE4-22.1 — Query patterns.
+Section 23 — Error Handling
+Error Code
+Meaning
+INVALID_INPUT
+Request fails schema validation
+UNKNOWN_KNOWLEDGE_TYPE
+knowledge_type is not a recognized enum value
+MISSING_EVIDENCE
+evidence_refs is empty for a knowledge_type requiring supporting evidence
+BUSINESS_THEME_NOT_FOUND
+Referenced business_theme_id does not exist or is inactive
+KNOWLEDGE_OBJECT_NOT_FOUND
+Requested knowledge_object_id does not exist or caller lacks tenant access
+INELIGIBLE_FOR_PROMOTION
+A promotion request targets a Knowledge Object whose lifecycle_state or content makes it ineligible (e.g. still PROPOSED)
+EVIDENCE_UNAVAILABLE
+A referenced FIE-001/002/003 record could not be resolved at read time
+NOT_IMPLEMENTED
+Semantic retrieval endpoint called before Section 1.10's MVP deferral is lifted
+PERMISSION_ERROR
+Caller not authorized for this customer scope or write operation
+INTERNAL_ERROR
+Unclassified failure
+Table FIE4-23.1 — Error codes, extending the EIS-001 taxonomy consistent with every prior document.
+Section 24 — Retry Strategy
+All writes are idempotent by idempotency_key, consistent with every prior BIS/FIE document
+A failed write is safely retryable on timeout or 5xx; a 4xx requires input correction before retry
+Lifecycle transitions are safely re-callable — a repeated transition request to a state already reached is a no-op success, per the same pattern FIE-002 §19 uses for its own governance state machine
+Promotion review decisions are not retryable once made — an APPROVED or REJECTED promotion_requests row is terminal; a reconsideration requires a new promotion request
+Section 25 — Logging
+KNOWLEDGE_OBJECT_CREATED
+KNOWLEDGE_OBJECT_VERSION_CREATED
+LIFECYCLE_TRANSITIONED
+EVIDENCE_REF_ADDED
+RELATIONSHIP_ASSERTED
+BUSINESS_THEME_CREATED
+PROMOTION_REQUESTED
+PROMOTION_APPROVED
+PROMOTION_REJECTED
+BIS005_WRITE_TRIGGERED
+Every log entry includes: request_id, customer_id, knowledge_object_id, knowledge_type, version, lifecycle_state, provenance, actor_type, actor_id, timestamp — the same field discipline used by every prior document.
+Section 26 — Metrics
+Metric
+Type
+knowledge_objects_created_total{knowledge_type, provenance}
+Counter
+lifecycle_transitions_total{from_state, to_state}
+Counter
+knowledge_query_duration_seconds{filter_combination_size}
+Histogram
+evidence_chain_size_gauge{knowledge_type}
+Gauge
+promotion_requests_total{status}
+Counter
+relationship_assertions_total{relationship_type}
+Counter
+business_theme_usage_total{business_theme_id}
+Counter
+semantic_query_not_implemented_total
+Counter — tracks demand signal for lifting Section 1.10's deferral
+Table FIE4-26.1 — Prometheus-style metrics.
+Section 27 — Observability
+Dashboards
+Knowledge Object creation volume by type and provenance
+Lifecycle transition volume and distribution
+Promotion pipeline funnel (requested → reviewed → approved/rejected)
+Query latency by filter complexity
+Semantic query attempt volume (demand signal for Section 1.10)
+Alerts
+MISSING_EVIDENCE rejection spike (signals an upstream integration writing malformed Knowledge Objects)
+Promotion requests stuck in PENDING_REVIEW beyond a configured SLA
+Query latency SLA breach
+Section 28 — Security
+Internal-only service at MVP — no direct external exposure
+Customer isolation enforced by customer_id on every table and query, no exceptions
+Promotion review requires an elevated governance-reviewer permission distinct from ordinary Knowledge Object write access
+No mutation path exists for content, provenance, or knowledge_confidence on any existing version — enforced at the schema layer
+Data at rest encrypted, consistent with every prior document's storage posture
+Section 29 — Privacy
+Per Decision 20 and Section 1.5: Customer Organizational Memory is tenant-isolated by customer_id at every layer, with no cross-tenant read path anywhere in this service's API surface. A promotion_requests row's anonymization_plan is reviewed by a human governance reviewer before approval — this service does not auto-generate or auto-validate an anonymization plan's sufficiency; that judgment is explicitly a human responsibility the schema requires (reviewed_by is non-nullable on any APPROVED row) rather than a step this service could silently skip or automate away.
+Section 30 — Performance Targets
+Target
+Value
+Knowledge Object write (single object)
+p95 < 300 ms
+Deterministic query, single-axis filter
+p95 < 200 ms
+Deterministic query, 3+ combined filter axes
+p95 < 800 ms
+Timeline assembly, 1-year range
+p95 < 1 second
+Evidence Chain retrieval
+p95 < 150 ms
+Promotion request submission
+p95 < 300 ms
+Table FIE4-30.1 — Performance targets.
+Section 31 — Unit Testing
+Knowledge Object write path rejects MISSING_EVIDENCE for every knowledge_type except ORGANIZATIONAL_CONTEXT
+Decision/Forecast Memory content validation rejects a value field with no resolvable Observation/FIO/Methodology reference, per Section 8's no-duplication rule
+Lifecycle transitions match Table FIE4-19.1 exactly, including rejection of every invalid transition
+Version creation never mutates a prior version's content, provenance, or knowledge_confidence
+Business Theme write path rejects a Knowledge Object referencing a non-existent business_theme_id
+Promotion Gateway never calls BIS-005 except on an explicit APPROVED transition with a non-null reviewed_by
+Semantic query endpoint returns NOT_IMPLEMENTED rather than a silent empty result
+Section 32 — Integration Testing
+End-to-end Decision Memory creation referencing a live FIE-003 FIO and FIE-002 methodology, verifying evidence_chain_refs resolve correctly
+Knowledge Evolution scenario reproducing Decision 6's January→March→June→September example as four versions of the same knowledge_object_id, each independently queryable via as_of
+Full Promotion Pipeline: request → governance review → approval → verified BIS-005 knowledge-record creation with anonymization applied
+Cross-service read by a stub Narrative Intelligence call against GET /v1/knowledge-objects/query
+Inherited-limitation scenario (Section 1.6): a Forecast Memory query for a period where FIE-003 Governed restatement is unavailable correctly returns the preserved historical belief while a separate recalculation request correctly returns EVIDENCE_UNAVAILABLE
+Section 33 — Failure Recovery
+Failure Mode
+Recovery Behavior
+Referenced FIE-001/002/003 record unavailable at evidence-write time
+Knowledge Object creation fails with EVIDENCE_UNAVAILABLE; no Knowledge Object is created with an unresolvable evidence reference
+Promotion Gateway's BIS-005 write call fails after approval
+promotion_requests remains APPROVED with a null bis005_knowledge_record_id; a retry job re-attempts the BIS-005 write without re-running governance review
+Concurrent lifecycle transition race
+Enforced by an optimistic lock on lifecycle_state; the losing request receives a conflict error and must re-read current state before retrying
+Business Theme referenced by in-flight write is deactivated mid-request
+The in-flight write completes against the theme version it started with; deactivation affects only future writes
+Table FIE4-33.1 — Failure modes and recovery behavior.
+Section 34 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+Semantic retrieval implementation
+Building the embedding-based similarity search reserved in Section 14
+A concrete FIE-005 use case emerges that structured filtering (Section 13) cannot serve, or semantic_query_not_implemented_total shows sustained demand
+Multi-hop knowledge graph traversal
+Beyond Section 21's current one-hop API
+A concrete FIE-005 use case requires it
+Automated promotion-candidate surfacing
+Proactively flagging Knowledge Objects that appear promotion-eligible, for human review rather than manual submission
+Sufficient promotion request volume exists to establish what makes a good candidate
+Knowledge Confidence trend analysis
+Surfacing how organizational confidence in a recurring theme has evolved across versions
+FIE-005 (Narrative Intelligence) is specified and its analysis needs are concretely known
+Full historical restatement integration
+Extending Section 1.6/8's inherited limitation once FIE-002's retirement_date/restatement_policy addendum (per FIE-003 §31) exists
+That FIE-002 addendum is built
+Table FIE4-34.1 — Backlog. Every item carries an explicit trigger condition, not a target date, matching the pattern established across BIS-001 through FIE-003.
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+Conceptual fidelity
+10 / 10
+Every frozen decision — the no-duplication rule for Decision/Forecast Memory, Evidence Chain and Business Theme as non-Knowledge-Object infrastructure, confidence pinned per version, and the BIS-005 promotion pipeline — is translated into schema and API without redesign.
+Schema completeness
+10 / 10
+All five tables fully specified, including the explicit no-UPDATE-path design note that makes version immutability and confidence/provenance permanence storage-layer facts.
+Consistency with FIE-001 through FIE-003 and BIS-005
+10 / 10
+The single-table-with-discriminator pattern (FIE-001, FIE-003), the typed lineage-reference table (FIE-003 §7.4), and the controlled-vocabulary treatment of provenance and business themes (FIE-001 §1.9, FIE-002 §15) all reuse established patterns rather than introducing new ones.
+Inherited-limitation discipline
+10 / 10
+Section 1.6 does exactly what FIE-003's closing note required — restates the Governed-mode restatement gap explicitly rather than letting it be rediscovered — and Section 32 includes a dedicated integration test proving the two related questions (preserved belief vs. live recalculation) are answered independently and correctly.
+Boundary discipline
+10 / 10
+Section 1.5 is the first BIS-005 reconciliation resolved during conceptual freeze rather than during engineering, closing the fourth instance of this series' recurring adjacent-territory ambiguity before it could become a build-time surprise.
+MVP scope honesty
+9 / 10
+Section 1.10 explicitly defers semantic retrieval rather than building against Decision 16's conditional language as if it were mandatory, and reserves its schema seam (a separate, additive embedding table) so the deferral costs nothing later. One point withheld: the specific criteria for what would constitute sufficient FIE-005 demand to lift the deferral (Section 34) are named as a trigger but not yet quantified.
+Table FIE4-FA.1 — Build readiness assessment. Aggregate: 59 / 60 (98%).
+FIE-004 is complete and ready for engineering to begin implementation. FIE-001 through FIE-004 now form a complete pipeline from fact to institutional understanding: what happened and what we believed (FIE-001), how it should be calculated (FIE-002), the deterministic calculation itself (FIE-003), and now the organizational memory of why any of it mattered (FIE-004). The next document in the series is FIE-005, Narrative Intelligence — the first FIE service that reasons and generates explanations rather than recording, defining, computing, or preserving. It should open its own Section 1 reconciling against this document's Section 1.4 (Memory never reasons; Narrative consumes it) and should restate, not rediscover, Section 1.6's inherited FIE-003 limitation one layer further, since Narrative Intelligence is the service a customer will actually ask "why does this forecast look different from last quarter" — and the honest answer, some of the time, will still be bounded by the same Governed-mode restatement gap two documents upstream.
+The most consequential decision in this document is Section 1.5 — resolving the BIS-005 boundary inside the conceptual freeze itself, before any engineering was written, rather than discovering it the way the prior three instances of this exact ambiguity (EIS-004/BIS-005, BIS-004's-anticipated-Reporting/interim-memo, FIE-002/BIS-005) were each discovered after the fact. The Promotion Pipeline (Section 15) is a small piece of engineering — one table, one governance gate, one outbound API call — built entirely to prevent a much larger problem: two services in the same platform both claiming to be the place reusable organizational knowledge lives. Catching that in the conceptual review, where it cost one clarifying question, instead of in an engineering spec, where it would have cost a schema migration, is the return on the discipline this whole documentation series has insisted on since BIS-005 §1.1 first had to draw this same line.

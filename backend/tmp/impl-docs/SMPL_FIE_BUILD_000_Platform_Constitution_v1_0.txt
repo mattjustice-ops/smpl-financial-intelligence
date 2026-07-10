@@ -1,0 +1,232 @@
+FIE-BUILD-000
+PLATFORM CONSTITUTION & NAVIGATION GUIDE
+Version 1.0
+What SMPL is, why every layer exists, how the full documentation set fits together, and where to go next
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — READ THIS FIRST
+Evidence Before Trust · Canonical Before Intelligence · Determinism Before Automation · Explainability By Design · Governance Before Flexibility · Version Everything · Humans Remain Accountable · Customer Outcomes Above Engineering Activity
+What This Document Is, and Isn't
+This is not an architecture document — it introduces no new service and redefines nothing. It is not an engineering specification — FIE-BUILD-002 already owns engineering standards, and this document does not compete with it. BIS-000 through FIE-BUILD-008 collectively answer, in enormous and necessary detail, how every piece of this platform works. This document answers a different question: given all of that, where does a reader actually start, and how do the pieces relate to each other as one coherent system?
+Read this first. Everything else is where you go next, and this document tells you exactly which "next" is right for you.
+What SMPL Is, and Why It Exists
+Every SaaS company should be able to operate like it has a world-class CFO team. Finance teams run on spreadsheets, manual data pulls, and reactive reporting — closing the books, building a forecast, or preparing a board deck means stitching together numbers from the CRM, the billing system, the ERP, and the data warehouse by hand. When a number changes, nobody can quickly answer why. When someone leaves the team, their knowledge of "how we've always calculated this" leaves with them.
+SMPL exists to fix that — not by replacing the ERP, CRM, billing system, or data warehouse, but by sitting on top of all of them as an intelligence and orchestration layer that turns fragmented data into trusted, explainable financial insight. It is not a reporting tool or a dashboard generator. It is a decision-making engine.
+Every architectural decision documented across this entire platform traces back to one goal: a platform a finance professional can actually stake their reputation on.
+The Eight Founding Principles
+Every section, every service, and every BUILD document that follows answers to these eight principles. Where a specific document enforces a principle mechanically — not just philosophically — that enforcement point is cited.
+Evidence Before Trust
+No claim is accepted, published, or acted on without a traceable source. This is FIE-005's entire reason for existing, and BIS-006's narrative discipline before it.
+Enforced in: FIE-005 §1.6, §14–15; BIS-006 §17
+Canonical Before Intelligence
+Every ingestion path — live connector, CSV upload, or hybrid — converges on the same Canonical Business Objects before anything downstream ever sees the data. Nothing reasons about data that hasn't first become canonical.
+Enforced in: BIS-003 §1.1; ABS-012 §2
+Determinism Before Automation
+The one service that actually computes a financial number — FIE-003 — has no LLM anywhere in its execution path. Automation and AI assist, interpret, and explain; they never compute.
+Enforced in: FIE-003 §1.11; FIE-BUILD-002's Deterministic Core / AI Never Changes Numbers principles
+Explainability By Design
+Every published value can answer where it came from, without a special debug mode, from the moment its table is created — not bolted on after the fact.
+Enforced in: FIE-BUILD-002 §17; FIE-003 §1.7's Financial Evidence Package
+Governance Before Flexibility
+A capability that could be misused — restating history, promoting knowledge to shared use, granting elevated access — is gated by explicit, recorded approval before it is convenient. Convenience is never the deciding factor.
+Enforced in: FIE-002 Addendum A; FIE-004 §15; FIE-BUILD-007 §4, §9
+Version Everything
+Registries, schemas, methodologies, contracts, and releases are append-only. A change is a new version, never an edit in place — this is what makes reproducibility and audit possible at all.
+Enforced in: FIE-BUILD-002's Versioning Philosophy; restated in every owning specification's own schema
+Humans Remain Accountable
+Automation executes; a named human or named discipline owns the outcome. Every governance table in this platform names an owner, not just a process.
+Enforced in: FIE-BUILD-005 §2; FIE-BUILD-007 §1
+Customer Outcomes Above Engineering Activity
+A technically complete milestone that leaves a customer unable to trust the output has not succeeded. Implementation success is measured by what the customer can do with the platform, not by what shipped.
+Enforced in: FIE-BUILD-001's Customer Readiness; FIE-BUILD-008's Customer Success Principle
+The Complete Architecture Map
+Four layers, in dependency order. Nothing in a later layer redefines anything in an earlier one — every document in this platform either extends or cites the layer below it, never the reverse.
+Layer 1 — Architecture Standards (frozen)
+Document
+Purpose
+GPES-001
+The SaaS Golden Path — the reference trace every milestone and every acceptance test is measured against
+ABS-009 (CEP)
+Customer Environment Profile — what only a customer can tell the platform; "if AI can discover it, don't ask"
+ABS-010 (SOF)
+SMPL Orchestration Framework — the runtime conductor sequencing discovery through implementation
+ABS-011
+AI Agent Playbook Library — executable instructions for every coordination and implementation agent
+ABS-012
+Multi-Path Implementation Architecture — CSV, live connector, or hybrid, all converging on Canonical
+SKA §8 / CKR / IMS (per domain)
+Connector Knowledge Registries and Implementation Mapping libraries for ERP, CRM, Billing, and HRIS
+EIS-001–004
+Tool Registry, Agent Runtime, Prompt Registry, and Implementation Memory — the engineering substrate under the agent layer
+Layer 2 — Implementation Foundation (frozen)
+Document
+Purpose
+BIS-001
+Connector Proxy Service — the single interface to every external system
+BIS-002
+Orchestration Service — job dispatch and workflow state, owns all scheduling
+BIS-003
+Canonical Platform — the single consistent language every other service reads
+BIS-004
+Validation Platform — is the data trustworthy, and why or why not
+BIS-005
+Knowledge Platform — reusable, cross-customer implementation knowledge
+BIS-006
+Reporting Platform — customer- and internal-facing output rendering
+Layer 3 — Financial Intelligence Engine (frozen)
+Document
+Purpose
+FIE-000
+Architecture Overview — the orientation guide to FIE-001 through 005
+FIE-001
+Observation Engine — the permanent, bi-temporal record of facts and beliefs
+FIE-002 (+ Addendum A)
+Methodology Engine — how this customer defines and calculates their own numbers, plus restatement governance
+FIE-003
+Calculation Engine — deterministic execution, producing Financial Intelligence Objects
+FIE-004
+Organizational Memory Platform — institutional knowledge that survives turnover
+FIE-005
+Financial Reasoning Platform — evidence-based explanation, fail-closed by design
+Layer 4 — BUILD Series (engineering execution, frozen)
+Document
+Purpose
+FIE-BUILD-001
+Implementation Plan — what to build first, and in what order
+FIE-BUILD-002
+Engineering Playbook — how every engineer builds every service, consistently
+FIE-BUILD-003
+Platform Integration & Delivery Guide — how eleven services assemble into one platform
+FIE-BUILD-004
+Release Engineering & Delivery Pipeline — how changes safely reach production
+FIE-BUILD-005
+Production Operations — how the live platform is monitored and kept trustworthy
+FIE-BUILD-006
+Performance & Scalability — how the platform grows without weakening any guarantee
+FIE-BUILD-007
+Security, Compliance & Governance — how the platform is protected without weakening explainability
+FIE-BUILD-008
+Customer Implementation & Success — how a customer actually gets there and stays
+FIE-BUILD-000
+Platform Constitution & Navigation Guide — this document
+How the Layers Relate
+Layer 1 — Architecture Standards   (GPES, ABS, SKA/CKR/IMS, EIS)     ↓  governs how customer data enters the platformLayer 2 — Implementation Foundation  (BIS-001–006)     ↓  produces trusted Canonical dataLayer 3 — Financial Intelligence Engine  (FIE-000–005)     ↓  turns trusted data into calculated, explained financial intelligenceLayer 4 — BUILD Series  (FIE-BUILD-001–008, 000)     →  turns all three layers above into an actually-built, actually-operated,        actually-adopted production platform
+A request from a real customer moves through all four layers on every single interaction: a connector or CSV upload (Layer 1) populates Canonical (Layer 2), which FIE-001 through FIE-005 turn into a verified Narrative (Layer 3), delivered through a platform that was built, released, operated, scaled, secured, and onboarded according to the discipline in Layer 4. No layer skips another. This is the single most important structural fact about the entire platform — see FIE-000 §5–6 and FIE-BUILD-003 §1–2 for the full runtime diagram.
+Document Authority and Precedence
+Architecture (Layers 1–3) is authoritative over engineering execution (Layer 4). A BUILD document that appears to conflict with architecture is wrong, and the architecture wins — this rule is stated explicitly at the top of every BUILD document in this series
+Within a layer, a more specific document wins over a more general one for its own specific topic — e.g. FIE-002 Addendum A governs restatement specifics; FIE-002 itself remains authoritative for everything else
+A frozen document is never silently reopened. A gap discovered in a frozen document becomes a named backlog item (Known Open Items, below) or a new addendum — never an unannounced edit
+Where two documents name the same concept differently or use the same abbreviation for different things, that collision is resolved explicitly, in both documents, the moment it's found — never left ambiguous for a future reader to guess at. See the SDR collision (FIE-BUILD-006 vs. FIE-BUILD-007) for a worked example of how this is handled
+Ownership-matrix tables (FIE-BUILD-001's Engineering Ownership Matrix, FIE-BUILD-003's Platform Ownership Matrix, FIE-BUILD-004's Release Governance, FIE-BUILD-005's Operational Governance, FIE-BUILD-007's Security Governance) are reconciled toward whichever was established first whenever they overlap
+Navigation by Role
+Role
+Start Here
+Then Read
+Reference When
+New backend/platform engineer
+FIE-BUILD-002 (how we build)
+The owning spec for your service (BIS-00X or FIE-00X)
+FIE-BUILD-002 §14 anti-patterns, before every PR
+New AI/reasoning engineer
+FIE-005, then FIE-BUILD-002 §11/§28
+FIE-004 (what Reasoning reads), FIE-BUILD-007 §11b (LLM vendor security)
+FIE-005 §1.10 fail-closed Verification, every time a shortcut is tempting
+Solutions/implementation architect
+FIE-000, then ABS-012
+FIE-BUILD-001 (build order), FIE-BUILD-003 (integration)
+ABS-012 §9 guardrail, before recommending any connector
+Implementation consultant
+FIE-BUILD-008, then ABS-012 §3–4
+FIE-BUILD-001 §4 golden path
+FIE-BUILD-008 Section 9 Customer Validation checklist, every implementation
+Customer Success
+FIE-BUILD-008
+FIE-BUILD-005 §6 Operational Confidence, FIE-BUILD-007's Trust Integrity Principle
+FIE-BUILD-008's Customer Success Dashboard, continuously
+Security/compliance engineer
+FIE-BUILD-007
+FIE-BUILD-002 §10, FIE-BUILD-004 §11, FIE-BUILD-005 §19, FIE-BUILD-006 §9
+FIE-BUILD-007 §6 Financial Integrity Protection, before any security change touching financial data
+Executive / board / investor audience
+The Executive Summary or Board Overview document (non-technical)
+This document's "What SMPL Is" section, if more depth is wanted
+N/A — these audiences should rarely need the technical corpus directly
+AI coding agent implementing a feature
+This document's Document Authority section, then the owning spec's own Section 1 Scope Decisions
+FIE-BUILD-002 §1–19 in full before writing any code
+The Navigation by Question table, below, for any ambiguous routing decision
+Navigation by Question
+Question
+Go To
+How does a number get calculated, end to end?
+FIE-000 §5–6 for the overview; FIE-001→002→003 for the mechanism
+Why can't I edit this record?
+FIE-BUILD-002 §1 (Immutability) and §8 (append-only database standard)
+A customer has no API access — what do we do?
+ABS-012 §1.1, §9 — Path A, and the guardrail against prescribing a connector
+How do I add a new service?
+FIE-BUILD-002 §2–4 (structure and build sequence), following the Section 1 Scope Decisions pattern every prior document uses
+How do I know if a change is safe to ship?
+FIE-BUILD-004 §5 Release Gates and §12 Rollback Strategy
+How is a live incident handled?
+FIE-BUILD-005 §8–10
+How do we know the platform is actually healthy?
+FIE-BUILD-005 §6 Operational Confidence — infrastructure health alone is not enough
+Can a security control ever hide data from an authorized user?
+No — FIE-BUILD-007's Explainability Protection. Read it before building any access control
+How does a customer actually get onboarded?
+FIE-BUILD-008 §2, §7–9
+What's the one test that matters most before any release?
+FIE-BUILD-001 §4's Golden Path — the single most valuable recurring test in the platform
+Two documents seem to disagree — which one is right?
+Document Authority and Precedence, above
+I found a real gap this documentation set doesn't cover
+Add it to Known Open Items (below) with an owner and a trigger condition — never silently work around it
+The Discipline That Holds This Together
+Thirty-plus documents stayed internally consistent across an enormous amount of iteration for one reason: a small set of habits, applied every time, without exception. Any future contributor — human or AI — extending this documentation set should follow the same habits.
+Reference, never duplicate — a fact or value owned by one document is cited by section number in another, never restated in a way that could drift out of sync
+Restate inherited limitations, don't rediscover them — when Document B inherits a gap from Document A, Document B says so explicitly in its own Section 1, so Document C doesn't have to discover the same gap a third time
+Name collisions the moment they're found — two documents using the same term or abbreviation for different things is fixed in both places immediately, never left for a future reader to puzzle out
+State what's true, flag what isn't built yet — a document describing target-state capability says so; a document describing what's actually running says so; the two are never blurred into one present-tense voice
+Every backlog item gets an owner and a trigger condition — never a vague "someday," always a specific condition that means it's time to act
+A frozen document is extended, not reopened — new capability becomes an addendum (FIE-002 Addendum A) or a new document, never a silent edit to something already frozen
+Every new document's Section 1 reconciles against what came before it — the same discipline applied nine times running across FIE-001 through FIE-BUILD-008
+Known Open Items
+The consolidated, platform-wide backlog — everything named as not-yet-built across every document in this series, in one place, so nothing has to be rediscovered.
+Item
+Blocks
+Trigger to Resolve
+ABS-013 — Canonical Identity & Entity Resolution
+Path C at scale; entity matching across ingestion paths
+First domain graduation from CSV to API, or first real Path C entity overlap in production
+ABS-015 — Customer Migration / Prototype Retirement Standard
+FIE-BUILD-001 Milestone 7 (Production Readiness)
+Must be authored before Milestone 7 work begins in earnest
+MCR — Module Capability Registry
+Module-level activation / entitlements
+Milestone 7 or later, when module activation is actually in scope
+Dedicated Explainability Platform
+Nothing currently — FIE-005's interim Adapter is sufficient at MVP
+A second consumer beyond FIE-005 and BIS-006 needs the same lineage/tie-out views
+GPES-002 reference (FIE-BUILD-008)
+Nothing currently — likely a citation error
+Confirm whether this is a typo for GPES-001 or an undocumented real document; correct FIE-BUILD-008 accordingly
+Tool Gateway extraction
+Nothing currently — inlined per FIE-BUILD-002 §2.1's brownfield bootstrap
+Once services are actually split across independent deployments, per EIS-002
+FIE-002 Financial Governance (retirement dates, restatement)
+CLOSED
+Resolved by FIE-002 Addendum A — no longer open
+Table K.1 — Known open items. Every row traces to the specific document that first named it. Closing an item here means updating this table, not deleting the row — the history of what used to be open is itself worth keeping, per Version Everything.
+How to Extend This Documentation Set
+A new document — architecture, BIS, FIE, or BUILD — follows the same pattern every prior one has:
+Open with a Section 1 (or equivalent) that restates the boundaries of every document it touches, rather than assuming them
+State explicitly what it does NOT own, not only what it does
+Cite, don't duplicate, any content already specified elsewhere
+If it inherits a limitation from an earlier document, restate that limitation explicitly rather than silently working around it
+If it introduces a term, abbreviation, or pattern that might collide with an existing one, check first — and if a collision is found anyway, resolve it in both documents
+Close with a build-readiness or final-review assessment naming any remaining gaps honestly, including ones that reflect on the document itself
+Add any newly-discovered gap to this document's Known Open Items table, with an owner and a trigger condition
+This is not bureaucracy for its own sake — it is the specific, demonstrated reason a documentation set this large has stayed coherent rather than accumulating silent contradictions. Every future contributor inherits the benefit of that discipline only by continuing to practice it.
+Closing
+The platform remembers. The platform calculates the same way every time. The platform explains itself, or it says nothing. That is the whole system, and every document in this set exists to make one part of it real.
+This document has no authority to change anything it describes. Its only job is to make sure the next person — or the next agent — reading this documentation set for the first time knows where they are, why it's built this way, and exactly where to go next.

@@ -1,0 +1,1430 @@
+ 
+GOLDEN PATH EXECUTION SPECIFICATION
+GPES-001 · SaaS Customer Implementation
+NetSuite + HubSpot + Stripe + Rippling
+ 
+The operational blueprint engineering uses to build and validate the first SMPL customer implementation
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING DOCUMENT
+Executes: SOF (ABS-010) · AI Role Playbooks (ABS-011) · EIS-001 through EIS-004
+Section 0 — Document Purpose and SOF Stage Mapping
+GPES-001 is the first execution specification produced from the frozen SMPL architecture. It does not introduce new architecture, new agents, or new tools. It documents, at execution granularity, exactly what happens when the platform runs a real customer through onboarding — every tool call, every state transition, every checkpoint, every point where a human is asked something and why.
+This document exists because architecture specifications answer "what is possible" and execution specifications answer "what actually happens, in what order, and how long does it take." Engineering teams building the MVP runtime (EIS-002) should be able to read this document and know exactly what integration test to write for each stage.
+GPES-001 is the reference implementation for SMPL's Golden Path execution model — the benchmark execution pattern, the baseline for runtime performance, and the baseline for implementation metrics. It is also the first candidate entry for the Implementation Pattern Library defined in EIS-004 Section 1.2. Every future GPES document, whether documenting a different connector combination or a more complex customer profile, should be structured and measured against this document's format: the same nine-stage structure, the same execution state machine, the same deviation-pattern catalog, and the same metrics scorecard.
+ 
+0.1 GPES Stage to SOF Stage Mapping
+This document breaks the SOF's seven orchestration stages into nine execution-level stages for the purpose of showing connector-level detail. No SOF stage is added, removed, or redefined — GPES stages 2 through 6 are a granular expansion of SOF Stage 3 (Connector Implementation) and the front half of SOF Stage 4 (Canonical Integration).
+GPES Stage
+SOF Stage
+Relationship
+1 — Customer Discovery
+SOF Stage 1 — Customer Discovery
+Direct 1:1 mapping
+2 — Connector Authentication
+SOF Stage 2 — Connector Discovery (auth sub-phase)
+Granular view of the authentication portion of SOF Stage 2
+3 — Connector Discovery
+SOF Stage 2 — Connector Discovery (environment/module sub-phase)
+Granular view of the environment and module inventory portion of SOF Stage 2
+4 — IMS Execution
+SOF Stage 3 — Connector Implementation (Sections 1–4 of each IMS)
+Granular view of discovery gates and transformation execution within Stage 3
+5 — Canonical Population
+SOF Stage 3 (Sections 6–8 of each IMS) + SOF Stage 4 (Canonical Integration)
+Granular view of per-connector canonical writes plus the cross-system merge
+6 — Validation
+SOF Stage 3 (IMS Section 5) + SOF Stage 5 (partial — EVAL-002)
+Granular view of validation execution, both per-connector and aggregate
+7 — Capability Assessment
+SOF Stage 5 — Capability Assessment
+Direct 1:1 mapping
+8 — Customer Review
+SOF Stage 6 — Customer Review
+Direct 1:1 mapping
+9 — Activation
+SOF Stage 7 — Implementation Completion
+Direct 1:1 mapping
+Table GPES-0.1 — GPES-to-SOF stage mapping. GPES stages 2–6 zoom into SOF Stage 3; all other GPES stages map 1:1 to their SOF counterpart.
+ 
+0.2 Design Principles Applied in This Execution
+Minimal customer effort: this reference implementation requires 4 discrete customer confirmations totaling approximately 12 minutes of customer time, plus one 45-minute Stage 6 review meeting.
+AI discovery over questionnaires: of the 40+ CEP fields populated during this implementation, 33 are AUTO_DISCOVERED and 7 require HUMAN_CONFIRMED input — an 82% auto-discovery rate for this connector combination.
+Parallel connector execution: all four connectors authenticate, discover, and implement simultaneously — see Section 5 (Parallel Execution Map) for the full concurrency model.
+Non-blocking waits: every PAUSE_FOR_CEP condition in this implementation is resolved without halting any other connector's progress — demonstrated stage-by-stage below.
+ 
+Section 1 — Reference Customer Profile
+The reference customer for GPES-001 is a realistic mid-market B2B SaaS company — the most common profile in SMPL's target segment and the profile against which the NetSuite + HubSpot + Stripe + Rippling connector combination is most frequently deployed.
+ 
+Attribute
+Value
+Company (illustrative)
+Meridian Analytics, Inc.
+Industry
+B2B SaaS — data analytics platform for mid-market retail and e-commerce
+Business model
+Annual and monthly subscription; per-seat + usage-tier pricing; no metered/consumption billing
+ARR
+$18.2M
+Employees
+142 (138 full-time, 4 contractors)
+Countries
+United States only (single-entity, single-country operations)
+Legal entities
+1 — Meridian Analytics, Inc. (Delaware C-Corp)
+Currency
+USD only — no multi-currency complexity
+Fiscal calendar
+Calendar year (January–December)
+Funding stage
+Series C — 4 years since NetSuite implementation, 2 years since HubSpot, 3 years since Stripe Billing, 18 months since Rippling
+ERP
+NetSuite (standard edition, no OneWorld, no ARM module — Series C scale, not yet multi-entity or advanced revenue recognition)
+CRM
+HubSpot (Sales Hub Professional, Marketing Hub Professional — single default pipeline)
+Billing
+Stripe Billing (livemode active; standard subscription + one-time invoice mix; no usage-based pricing)
+HRIS
+Rippling (Payroll module active; standard flat Department model; no formal Position Management)
+Table GPES-1.1 — Reference customer profile.
+ 
+1.1 Why This Profile and Connector Combination
+This combination is deliberately chosen as SMPL's cleanest reference path — not because it hides complexity, but because it isolates the platform's core execution model from the connector-specific complexity documented extensively in the IMS libraries (SAP's ACDOCA filter, Oracle Fusion's ledger designation, Workday's Supervisory Org disambiguation, Zuora's Rate Plan enumeration). Every one of those complexities is real and is documented in its respective IMS — this document demonstrates the platform's behavior when none of them are present, which is the majority case for SMPL's primary target segment: Series B–D SaaS companies on modern, API-first systems.
+The four connectors in this combination are Production Ready or fast-resolving across the CKR and IMS libraries: NetSuite (Production Ready ERP, standard configuration with no OneWorld or ARM), HubSpot (fast Stage Normalization Gate resolution due to single default pipeline), Stripe (Production Ready Billing, the IMS-001 reference-quality connector), and Rippling (fastest HRIS in the library, no Position Planning ambiguity, native Payroll narrowing the compensation gap).
+ 
+Section 2 — End-to-End Timeline
+Two timelines are presented because they answer different questions. The AI-Only Critical Path shows how long the platform's compute actually takes with no human latency — this is the number that matters for infrastructure planning and cost estimation. The Realistic Wall-Clock Timeline shows how long the implementation takes including customer response time and the mandatory Stage 6 human review meeting — this is the number that matters for the customer's onboarding experience.
+ 
+2.1 AI-Only Critical Path (compute time, zero human latency)
+Stage
+Duration
+Cumulative
+1 — Customer Discovery (AI portion only — auto-population)
+< 1 min
+< 1 min
+2 — Connector Authentication (4 connectors, parallel)
+45 sec
+~1.5 min
+3 — Connector Discovery (4 connectors, parallel)
+2 min
+~3.5 min
+4 — IMS Execution (4 connectors, parallel, compute portion)
+8 min
+~12 min
+5 — Canonical Population (extraction + transform + integrate)
+14 min
+~26 min
+6 — Validation
+3 min
+~29 min
+7 — Capability Assessment
+90 sec
+~30.5 min
+8 — Customer Review (report generation only, not the meeting)
+2 min
+~32.5 min
+9 — Activation
+1 min
+~33.5 min
+Table GPES-2.1 — AI-only critical path. Total compute time: under 34 minutes for a complete four-connector implementation with zero human latency.
+ 
+2.2 Realistic Wall-Clock Timeline (includes customer response time)
+Stage
+Elapsed Time
+Notes
+Day 1, 9:00 AM — Kickoff call, Stage 1 Customer Discovery
+15 min
+Live call with Implementation Consultant; CEP core fields confirmed
+Day 1, 9:15 AM — Stages 2–3 (Authentication + Discovery), all 4 connectors
+~3 min compute
+Customer has already provided credentials before the call
+Day 1, 9:20 AM — Stage 4 IMS Execution begins; first PAUSE_FOR_CEP items generated
+Immediate
+HubSpot stage confirmation + Stripe gate questions + Rippling gate questions surfaced
+Day 1, 9:20 AM – 11:00 AM — Customer answers CEP questions via portal
+~90 min (customer-paced, not blocking)
+4 questions total; other 3 connectors continue extracting uninterrupted
+Day 1, 11:00 AM — All gates resolved; Stages 4–7 complete
+~25 min compute
+Canonical Population, Validation, Capability Assessment complete
+Day 1, 11:30 AM — Capability Summary and Readiness Score ready
+—
+Implementation Consultant reviews internally before customer meeting
+Day 2, 10:00 AM — Stage 8 Customer Review meeting
+45 min
+Live meeting; customer confirms Module Activation Plan
+Day 2, 10:45 AM — Stage 9 Activation
+1 min compute
+Modules go live immediately following customer confirmation
+Table GPES-2.2 — Realistic wall-clock timeline. Total elapsed time: same-day technical completion, next-morning activation — approximately 26 hours from kickoff to Financial Intelligence Ready, of which under 35 minutes is actual compute.
+ 
+The gap between the two timelines — roughly 25.5 hours — is entirely customer-paced human response time and calendar availability for the Stage 6 meeting, not platform latency. This is the number to communicate to prospects: technical implementation completes same-day; the only reason full activation isn't same-day is that Stage 6 requires a live conversation, which is a deliberate design choice (SOF Section 2, Stage 6), not a technical constraint.
+ 
+Section 3 — Execution State Machine
+This is the primary runtime reference for engineering: the ten-state lifecycle every implementation session moves through, in order, with the exact entry criteria, exit criteria, responsible worker, and checkpoint for each state. This state machine is a reference view of the same SOF-governed execution documented stage-by-stage later in this document — it does not introduce new orchestration logic.
+ 
+  DISCOVERY
+     ↓
+  AUTHENTICATED
+     ↓
+  DISCOVERED
+     ↓
+  IMS_RUNNING
+     ↓
+  CANONICAL_POPULATION
+     ↓
+  VALIDATED
+     ↓
+  CAPABILITY_ASSESSED
+     ↓
+  CUSTOMER_REVIEW
+     ↓
+  ACTIVATED
+     ↓
+  CONTINUOUS_MONITORING
+ 
+State
+Entry Criteria
+Exit Criteria
+Responsible Worker
+Checkpoint Created
+DISCOVERY
+Session created; CEP record initialized (empty)
+CEP.connector_inventory has >= 1 entry; fiscal_calendar and functional_currency confirmed
+Orchestrator Worker (COORD-002 embedded)
+Session state snapshot; checkpoint_version = 1
+AUTHENTICATED
+DISCOVERY exit criteria met; credentials available for >= 1 connector
+All connectors in scope reach AUTHENTICATED, AUTH_FAILED, or NOT_CONFIRMED
+Discovery Agent (COORD-003) — parallel per connector
+auth_status per connector; checkpoint_version = 2
+DISCOVERED
+>= 1 connector AUTHENTICATED
+All authenticated connectors reach dispatch_ready = true (environment + module inventory complete)
+Discovery Agent (COORD-003) — parallel per connector
+Module inventory per connector; checkpoint_version = 3
+IMS_RUNNING
+dispatch_list populated from DISCOVERED state
+All dispatched connectors reach a terminal gate status (PASSED, PASSED_WITH_DEFERRAL, or TERMINAL_BLOCKED) — this is the Stage 3 fan-in gate
+Domain Agents (ERP/CRM/BIL/HRS-DOMAIN) — parallel per connector
+IMS pre-fetch manifest + gate resolution status per connector
+CANONICAL_POPULATION
+IMS_RUNNING fan-in gate satisfied
+All canonical objects written for all non-blocked connectors; Canonical Integration Agent completes identity resolution and system-of-authority assignment
+Domain Agents (extraction/write) then Canonical Integration Agent (COORD-004, merge)
+Canonical population progress per connector (every 10,000 records); canonical merge checkpoint
+VALIDATED
+Unified SCBM instance exists
+Validation suite complete for all populated canonical objects; aggregate health score computed; zero unresolved BLOCK conditions
+Validation Agent (EVAL-002)
+validation_report_id written to session_state
+CAPABILITY_ASSESSED
+VALIDATED exit criteria met
+Every MCR module has an explicit READY/PARTIAL/UNAVAILABLE status with numeric confidence; Readiness Score computed
+CAL Agent (EVAL-001) + Confidence Scoring Agent (EVAL-003) — parallel
+assessment_id and readiness_score written to session_state
+CUSTOMER_REVIEW
+CAPABILITY_ASSESSED exit criteria met; review materials generated
+Customer confirms Module Activation Plan; all pending items resolved or explicitly DEFERRED_BY_CUSTOMER
+Reporting Agent (COORD-005) generates materials; human Implementation Consultant leads the session
+Stage 6 completion signal written to session_state; module_activation_plan persisted
+ACTIVATED
+CUSTOMER_REVIEW exit criteria met
+At least 1 confirmed READY module is live; Implementation Summary delivered
+Orchestrator Worker (activation trigger) + Reporting Agent (final deliverables)
+Final checkpoint — session marked COMPLETE
+CONTINUOUS_MONITORING
+ACTIVATED exit criteria met
+N/A — ongoing state; session transitions from onboarding orchestration to scheduled refresh orchestration per EIS-002 Section 8.1
+All workers, in scheduled (not session-driven) execution mode
+Incremental sync checkpoints on a recurring schedule
+Table GPES-3.1 — Execution state machine. Every implementation session, regardless of connector combination, moves through these ten states in this order. This table is the primary lifecycle reference for engineering — consult it before consulting the stage-by-stage detail later in this document.
+ 
+Stage 1 — Customer Discovery
+Field
+Specification
+Purpose
+Establish the minimum viable CEP before any technical work begins. Confirm connector inventory, fiscal calendar, and functional currency.
+Responsible Worker
+Orchestrator Worker (COORD-002 behavior embedded per EIS-002 Section 1.2)
+Role Playbook
+APB-001 Section 4 (Stage 1) + APB-002 (CEP Agent discovery conversation)
+Tools Used
+create_implementation_session, update_cep, read_cep, write_implementation_log
+Inputs
+Sales handoff notes (company name, expected connector list); Implementation Consultant's kickoff call notes
+Actions
+(1) create_implementation_session called; session_id and empty cep_id returned. (2) Live kickoff call: Implementation Consultant confirms ERP=NetSuite, CRM=HubSpot, Billing=Stripe, HRIS=Rippling. (3) Fiscal year start confirmed as January. (4) Functional currency confirmed as USD. (5) update_cep called 4 times with source=HUMAN_CONFIRMED. (6) fiscal_calendar.year_end auto-computed and written with source=AUTO_DISCOVERED.
+Outputs
+CEP.connector_inventory = [NetSuite, HubSpot, Stripe, Rippling]; CEP.fiscal_calendar.year_start = January; CEP.fiscal_calendar.year_end = December (auto-computed); CEP.functional_currency = USD
+Expected State
+session_state.current_sof_stage = 1; status = RUNNING
+Checkpoint Created
+Session state snapshot written to Postgres; checkpoint_version = 1
+Possible Errors
+INVALID_INPUT if customer_id not found (sales handoff incomplete) — not encountered in this reference path
+Retry Strategy
+N/A — this stage is a live human conversation, not a retriable automated step
+Customer Interaction
+15-minute live kickoff call with Implementation Consultant. This is the only mandatory live conversation before Stage 8.
+Success Criteria
+CEP.connector_inventory has >= 1 entry; fiscal_calendar and functional_currency confirmed
+Estimated Duration
+15 minutes (human-paced; call length, not compute)
+Estimated AI Cost (Planning Estimate)
+$0.00 — no LLM calls in this stage; CEP writes are direct tool calls with no model inference required for confirmed human answers
+Engineering Notes
+This is the one SOF stage with zero LLM cost by design — it is pure structured data capture from a human conversation. Any "AI cost" attributed to Stage 1 in vendor conversations should be $0, which is a useful, honest data point for sales conversations about implementation cost.
+Table GPES-S1.1 — Stage 1 complete specification.
+ 
+Stage 2 — Connector Authentication
+All four connectors authenticate in parallel. This stage demonstrates the EIS-002 Section 6 parallel execution model at its simplest: no shared-Dataverse coordination needed (that only applies to Dynamics 365 Finance + Sales), no time-intensive-connector-first sequencing needed (none of these four are in the Oracle Fusion / SAP / Zuora / Workday time-intensive category).
+ 
+Connector
+Auth Method
+Result
+Time
+NetSuite
+OAuth 2.0 Token-Based Authentication (TBA); credential_reference_id resolved by Connector Proxy Service
+AUTHENTICATED — Account ID confirmed, no _SB suffix, environment_type = PRODUCTION (HIGH confidence)
+8 sec
+HubSpot
+Private App access token
+AUTHENTICATED — Portal ID confirmed
+4 sec
+Stripe
+Restricted API Key (read-only scope: Customers, Subscriptions, Invoices, Payment Intents)
+AUTHENTICATED — Account ID confirmed; livemode detection scheduled for Stage 3
+5 sec
+Rippling
+OAuth 2.0 service account
+AUTHENTICATED — Company ID confirmed
+6 sec
+Table GPES-S2.1 — Per-connector authentication results. All four complete within 8 seconds; no retries required in this reference path.
+ 
+Field
+Specification
+Purpose
+Verify authentication succeeds for every connector in CEP.connector_inventory before any discovery or extraction begins.
+Responsible Worker
+COORD-003 (Discovery Agent) — 4 parallel invocations, one per connector
+Role Playbook
+APB-003 Section 4 (Core Instruction Set)
+Tools Used
+authenticate_connector, detect_connector_environment (environment detection begins here but completes in Stage 3), write_implementation_log
+Inputs
+credential_reference_id per connector (provided by customer before kickoff, stored via create_connector_credential_reference by the Implementation Consultant)
+Actions
+COORD-001 dispatches 4 parallel CONNECTOR_DISCOVER jobs (fan-out per EIS-002 Section 3.3). Each Connector Worker calls authenticate_connector via Tool Gateway → Connector Proxy Service → Credential Vault (raw credentials never returned to worker).
+Outputs
+auth_status = AUTHENTICATED for all 4 connectors; account_id, auth_method, remaining_budget_pct returned per connector
+Expected State
+session_state.active_job_ids contains 4 entries; all in RUNNING then COMPLETE
+Checkpoint Created
+auth_status written to session_state per connector; checkpoint_version = 2
+Possible Errors
+AUTH_ERROR (invalid credentials) — 0 occurrences in this reference path; RATE_LIMIT_ERROR on the auth endpoint itself — extremely rare, 0 occurrences
+Retry Strategy
+3 retries with exponential backoff (10s/30s/60s) per EIS-002 Table EIS2-7.1 — not triggered in this reference path
+Customer Interaction
+None — fully automated. Credentials were provided before the kickoff call.
+Success Criteria
+All 4 connectors reach AUTHENTICATED status
+Estimated Duration
+45 seconds wall-clock (parallel; longest individual connector = NetSuite at 8 sec, remainder is job dispatch and queue overhead)
+Estimated AI Cost (Planning Estimate)
+$0.00 — authentication is a deterministic tool call with no LLM inference required
+Engineering Notes
+Authentication is the first point where EIS-002's TERMINAL_BLOCKED handling would activate if a connector failed — not triggered here, but engineers should write an integration test that verifies the other 3 connectors proceed uninterrupted if one auth call fails.
+Table GPES-S2.2 — Stage 2 complete specification.
+ 
+Stage 3 — Connector Discovery
+Environment detection, module inventory, and schema discovery for all four connectors — the IMS Section 1 discovery steps, executed in parallel, before any business data extraction begins.
+ 
+Connector
+Environment
+Modules Detected
+Key Discovery Finding
+NetSuite
+PRODUCTION (HIGH confidence — no _SB suffix)
+OneWorld: INACTIVE (single entity). ARM: INACTIVE (Revenue Schedule will use DR-M fallback). Budgeting: INACTIVE.
+Single-entity, standard-edition NetSuite — simplest ERP discovery gate profile in the library
+HubSpot
+PRODUCTION
+Sales Hub Professional confirmed. Marketing Hub Professional confirmed (native GTM data available). 1 active deal pipeline (default).
+Single pipeline — fastest possible Stage Normalization Gate path (Table X-CRM.1 pattern)
+Stripe
+livemode = true confirmed (HIGH confidence)
+No metered/usage pricing detected across sampled Prices. Multi-item subscriptions: present (some plans have add-ons).
+items[] array required for ARR — subscription.plan is never used for this customer
+Rippling
+PRODUCTION
+Payroll module: ACTIVE (compensation cross-validation available). GL cost center mapping: NOT YET CONFIGURED.
+Payroll active narrows the compensation gap; GL mapping absence flagged for Stage 4 CEP question
+Table GPES-S3.1 — Per-connector discovery findings.
+ 
+Field
+Specification
+Purpose
+Characterize each connector's environment and module configuration; produce the dispatch readiness assessment for Stage 4.
+Responsible Worker
+COORD-003 (Discovery Agent) — 4 parallel invocations
+Role Playbook
+APB-003 Section 4
+Tools Used
+detect_connector_environment, discover_connector_modules, discover_connector_schema, write_implementation_log
+Inputs
+auth_status = AUTHENTICATED from Stage 2 for all 4 connectors
+Actions
+For each connector: detect_connector_environment confirms production/sandbox; discover_connector_modules executes the connector-specific module detection queries from each IMS Section 1.2/1.3/1.5 (NetSuite: OneWorld, ARM, Budgeting per IMS-001 Table 1.5; HubSpot: Sales/Marketing/Service Hub tier per IMS-102 Table 102.1.2; Stripe: livemode + metered pricing + multi-item detection per IMS-201 Section 1.2; Rippling: Payroll module + GL cost center mapping status per IMS-302 Section 1.2–1.3).
+Outputs
+Per-connector environment_type, module inventory, and a dispatch_ready flag; CEP updated with module findings via COORD-002
+Expected State
+All 4 discovery jobs COMPLETE; session_state.dispatch_list = [NetSuite, HubSpot, Stripe, Rippling]
+Checkpoint Created
+Module inventory written to session_state per connector; checkpoint_version = 3
+Possible Errors
+SCHEMA_CHANGED if a module detection query returns unexpected structure — 0 occurrences; PERMISSION_ERROR if module-specific endpoint requires additional scope — 0 occurrences
+Retry Strategy
+CONNECTOR_UNAVAILABLE: retry with backoff per EIS-002 Table EIS2-7.1 — not triggered
+Customer Interaction
+None — fully automated
+Success Criteria
+All 4 connectors reach dispatch_ready = true
+Estimated Duration
+2 minutes wall-clock (parallel; NetSuite's 5-query module inventory is the longest individual path)
+Estimated AI Cost (Planning Estimate)
+~$0.01 (planning range: $0.005 – $0.02) — 4 connectors × 1 LLM call each, Haiku-tier deterministic task; actual cost depends on model selection and token pricing at time of execution — see Section 7.0
+Engineering Notes
+This is the first stage with non-zero LLM cost, and it uses Haiku 4.5, not Sonnet — module/environment detection is a deterministic classification task (Table EIS3-0.1 task-type routing), not a reasoning task. This is the model-tiering principle from the runtime cost design applied in practice.
+Table GPES-S3.2 — Stage 3 complete specification.
+ 
+Stage 4 — IMS Execution
+This is the stage where the four Implementation Mapping Specifications actually execute — IMS pre-fetch, discovery gate checks, and the four connector-specific gates (or their absence) that determine how much of this implementation proceeds automatically versus how much requires customer confirmation.
+ 
+4.1 IMS Pre-Fetch (per EIS-002 Section 0.1 and EIS-001 Category 5)
+Connector
+Sections Pre-Fetched
+Est. Tokens
+IMS Reference
+NetSuite
+Section 1 (Discovery Gate), Section 2 (Object Map), Section 3 (Field Map — GL Account, Transaction, Invoice, Payment), Section 4 (Transformation Rules 4.1–4.5)
+~9,200 tokens across 4 chunked sections
+IMS-001
+HubSpot
+Section 1 (Discovery Gate), Section 2, Section 3 (Deal, Deal Property History), Section 4 (Stage Normalization 4.1, Deal Type 4.2)
+~6,800 tokens across 3 chunked sections
+IMS-102
+Stripe
+Section 1 (Discovery Gate + Subscription Normalization Gate), Section 2, Section 3 (Subscription, Invoice), Section 4 (Status normalization, ARR derivation 4.3, currency 4.4)
+~7,600 tokens across 4 chunked sections
+IMS-201
+Rippling
+Section 1 (Discovery Gate + Payroll + GL mapping), Section 2, Section 3 (Employee), Section 4 (Employment type 4.1, manager hierarchy 4.2)
+~5,400 tokens across 3 chunked sections
+IMS-302
+Table GPES-S4.1 — IMS pre-fetch per connector. All four fit comfortably within the 32,000-token pre-fetch budget (EIS-002 Section 0.1) with no overflow handling required — none of these four connectors are in the SAP/Oracle Fusion high-volume-content category.
+ 
+4.2 Gate Resolution — The Core of This Stage
+Four connectors, four different gate profiles. This is the section that best demonstrates the platform's central design principle: extraction never stops for a gate, but specific canonical objects are blocked until their gate resolves.
+ 
+NetSuite — Pre-Extraction Gate
+Gate Item
+Result
+Action
+environment_type = PRODUCTION
+PASS (confirmed in Stage 3, HIGH confidence)
+No CEP question needed
+OneWorld module
+INACTIVE — single entity inferred, D-M confidence
+No CEP question — standard for this company profile; Legal Entity confidence auto-set to D-M
+ARM module
+INACTIVE
+Revenue Schedule will use DR-M fallback (invoice service period derivation) per IMS-001 Table 2.3; surfaced as a known limitation in Stage 7, not a blocking question
+Discovery Completion Gate (IMS-001 Table 1.8)
+PASS — all 8 items confirmed
+GATE FULLY RESOLVED — NetSuite proceeds to extraction with zero CEP questions
+Table GPES-S4.2 — NetSuite gate resolution. Zero CEP questions generated — the cleanest gate profile of the four connectors in this implementation.
+ 
+HubSpot — Stage Normalization Gate
+Gate Item
+Result
+Action
+Pipeline inventory
+1 active pipeline (default) with 6 stages
+Standard HubSpot stage set: Appointment Scheduled, Qualified to Buy, Presentation Scheduled, Decision Maker Bought-In, Contract Sent, Closed Won/Lost
+Stage fuzzy match against Tier 2 pattern cache (EIS-004 Connector Memory)
+5 of 6 stages match standard HubSpot pattern at D-H confidence (>90% frequency in Connector Memory)
+Auto-applied — no CEP question for these 5
+1 stage requires confirmation
+"Contract Sent" — ambiguous between canonical Proposal and Negotiate
+PAUSE_FOR_CEP created — CEP-002-0041: "Your HubSpot stage 'Contract Sent' — does this represent a proposal being prepared, or active negotiation on terms?" (urgency: NORMAL)
+CEP resolution
+Customer answers via portal at Day 1, 9:52 AM (32 min after question created): "Negotiate — contracts are sent after terms are agreed"
+update_cep(source=HUMAN_CONFIRMED); stage mapping completed; gate_tracker.resolution_pct = 100%
+Table GPES-S4.3 — HubSpot Stage Normalization Gate resolution. 5 of 6 stages auto-resolved from the Tier 2 pattern cache — a direct demonstration of EIS-004's memory system reducing CEP burden. Only 1 of 6 stages required a human answer.
+ 
+Stripe — Subscription Normalization Gate
+Gate Question
+CEP Default
+Customer Answer
+Time to Resolve
+Include trialing subscriptions in ARR?
+Exclude (default)
+Confirmed: Exclude — "we don't count trials until conversion"
+Day 1, 10:15 AM (55 min after question created)
+Usage-based ARR policy
+N/A — no metered pricing detected for this customer (Stage 3 finding)
+N/A — question not generated; gate item auto-marked N/A
+Immediate — no CEP question needed
+Include past_due/unpaid subscriptions in ARR?
+Exclude (default)
+Confirmed: Exclude — "if they haven't paid, it's not committed revenue to us"
+Day 1, 10:16 AM
+livemode=true filter
+N/A — enforced automatically, not a CEP question
+Enforced — 0 livemode=false objects detected in extraction
+Immediate — deterministic, no human input
+Table GPES-S4.4 — Stripe Subscription Normalization Gate. 2 of 3 universal questions required a CEP answer; the usage-treatment question was automatically skipped because Stage 3 discovery found no metered pricing for this customer — the gate correctly does not ask an inapplicable question.
+ 
+Rippling — Organizational Normalization Gate
+Gate Question
+Result
+Action
+Active employee definition
+CEP question: "Which employment statuses count as active headcount — Active only, or Active + Leave of Absence?"
+Customer answers Day 1, 9:35 AM: "Active only; LOA employees are excluded from our internal headcount count too."
+Contractor inclusion
+CEP question: "Should your 4 contractors be included in headcount?"
+Customer answers Day 1, 9:36 AM: "No — track separately."
+FTE methodology
+Auto-discoverable — Rippling exposes scheduledWeeklyHours for all employees
+AUTO_DISCOVERED — SCHEDULED_HOURS methodology applied automatically, no CEP question
+Canonical department object
+Auto-resolved — Rippling has no Supervisory Org disambiguation (flat Department model per IMS-302)
+AUTO_DISCOVERED — Department is canonical automatically; this gate item requires no CEP question for Rippling, unlike Workday
+GL cost center mapping (Rippling-specific, IMS-302 Section 1.3)
+CEP question: "Do you want SMPL to allocate employee costs to GL Cost Centers for Department Expense Forecasting?"
+Customer answers Day 1, 10:40 AM: "Yes, but we don't have the mapping ready — can we do this in phase 2?" → DEFERRED_BY_CUSTOMER
+Table GPES-S4.5 — Rippling Organizational Normalization Gate. 2 of 5 items required CEP questions with fast answers; 2 were auto-resolved (a direct Rippling advantage over Workday's Supervisory Org gate); 1 was explicitly deferred by the customer — Department Expense Forecasting will show PARTIAL in Stage 7 as a result, not an error.
+ 
+4.3 Stage 4 Summary
+Field
+Specification
+Purpose
+Execute IMS Sections 1–4 for all four connectors: discovery gate confirmation, canonical object mapping, field mapping, and transformation rule application — up to but not including canonical population writes.
+Responsible Worker
+ERP-DOMAIN, CRM-DOMAIN, BIL-DOMAIN, HRS-DOMAIN (4 parallel Domain Agent invocations)
+Role Playbook
+APB-006, APB-007, APB-008, APB-009
+Tools Used
+load_ims_spec, get_ims_section, run_ims_discovery_gate, normalize_field_value, normalize_currency, normalize_opportunity_stage, create_cep_question (via COORD-002), read_cep
+Inputs
+dispatch_ready connectors from Stage 3; CEP state from Stages 1–3
+Actions
+See Sections 4.1–4.2 above — pre-fetch, then per-connector gate resolution, then transformation rule loading for the extraction that begins in Stage 5.
+Outputs
+4 total CEP questions created (HubSpot: 1, Stripe: 2, Rippling: 2 — wait, table shows Rippling generated 2 CEP questions + 2 auto-resolved + 1 deferred = 5 gate items total); resolved stage mappings; resolved ARR policy; resolved headcount policy
+Expected State
+3 of 4 connectors reach gate_status = PASSED with zero or fully-resolved CEP items within the hour; Rippling reaches PASSED with one item DEFERRED_BY_CUSTOMER (non-blocking for extraction, blocking only for Department Expense Forecasting capability)
+Checkpoint Created
+Gate resolution status written per connector; checkpoint_version = 4; IMS pre-fetch manifest cached per connector job
+Possible Errors
+None encountered in this reference path
+Retry Strategy
+N/A for this stage — gate resolution waits on CEP, which is not a retriable error condition
+Customer Interaction
+4 CEP questions answered via customer portal across a ~90-minute window; no live conversation required
+Success Criteria
+All 4 connectors reach a gate status that allows Stage 5 to proceed (PASSED or PASSED_WITH_DEFERRAL)
+Estimated Duration
+Compute: 8 minutes total across 4 parallel connectors. Wall-clock including customer response: ~100 minutes (bounded by the slowest CEP response, not by compute).
+Estimated AI Cost (Planning Estimate)
+~$0.15 – $0.25 — breakdown: gate evaluation logic (16 LLM calls, Haiku-tier, deterministic); HubSpot fuzzy stage matching against Tier 2 pattern cache (1 call, Sonnet-tier); CEP question text generation (4 calls, Sonnet-tier, temperature 0.2); transformation rule application planning (8 calls, Haiku-tier). Actual cost is model- and pricing-dependent — see Section 7.0.
+Engineering Notes
+This stage is the clearest demonstration of the EIS-004 memory system's value: HubSpot's 5-of-6 auto-resolved stages and Rippling's 2 auto-resolved gate items both come from Connector Memory pattern matches rather than fresh CEP questions. As the Tier 2 pattern cache matures past its first 50 implementations of each connector, expect the CEP question count for this stage to decrease further.
+Table GPES-S4.6 — Stage 4 complete specification.
+ 
+Stage 5 — Canonical Population
+Extraction and canonical writes for all four connectors, followed by the Canonical Integration Agent's cross-system merge — SOF Table 4.2 cross-domain validation and identity resolution.
+ 
+5.1 Canonical Objects Created Per Connector
+Connector
+Canonical Objects
+Record Counts (approx.)
+NetSuite
+GL Account, GL Transaction, GL Transaction Line, Invoice, Payment, Department, Customer Account (reference)
+412 GL Accounts; 8,940 GL Transactions (24-month backfill); 3,120 Invoices; 2,980 Payments; 11 Departments
+HubSpot
+Deal (Opportunity), Deal Property History, Company (Customer Account), Contact, Line Item
+1,840 Deals; ~9,200 stage-change events; 1,205 Companies; 3,640 Contacts
+Stripe
+Customer Account, Subscription, Subscription Item, Invoice, Invoice Line, Payment, Product, Price
+890 Customers; 812 active Subscriptions; 1,340 Subscription Items; 9,480 Invoices (24-month); 780 Products/Prices
+Rippling
+Employee, Department, Manager Hierarchy, Employment History, Payroll Line
+142 Employees; 9 Departments (flat, resolved automatically); 24 months of Payroll Lines (~3,400 records)
+Table GPES-S5.1 — Canonical objects populated per connector, 24-month historical backfill.
+ 
+5.2 Cross-System Identity Resolution (COORD-004)
+Match Type
+Count
+Confidence
+Customer Account exact email match (NetSuite ↔ HubSpot ↔ Stripe)
+768 of 890 Stripe customers matched to both NetSuite and HubSpot
+D-H — 86.3% three-way match rate
+Customer Account fuzzy name match (flagged for CEP)
+34 accounts — company name similarity but no email match
+D-M — TENTATIVE_MATCH; deferred to Stage 8 review, not blocking
+No match found
+88 accounts (NetSuite-only or HubSpot-only, no Stripe subscription)
+Expected — these represent prospects (HubSpot only, no Stripe) or legacy customers (NetSuite only, pre-Stripe migration)
+Overall match rate
+86.3%
+Above the 80% threshold (SOF Table 3.4) — CONTINUE, no PAUSE_FOR_CEP triggered
+Table GPES-S5.2 — Customer Account identity resolution results.
+ 
+5.3 System-of-Authority Assignments (per SOF Table 4.1)
+Canonical Object Type
+System of Authority
+Basis
+Revenue (recognized)
+NetSuite
+ERP is unconditional canonical owner per SCBM
+ARR / Subscription
+Stripe
+Billing is unconditional canonical owner per SCBM
+Pipeline / Opportunity
+HubSpot
+CRM is unconditional canonical owner per SCBM
+Employee / Org Structure
+Rippling
+HRIS is unconditional canonical owner per SCBM
+Customer Account (identity)
+NetSuite (financial attribution) + HubSpot (commercial attribution) — dual-linked, not a conflict
+86.3% match rate resolved automatically; both records linked in the canonical identity graph
+Table GPES-S5.3 — System-of-authority assignments. Zero ESCALATE conditions — all four assignments follow the deterministic SOF Table 4.1 rule with no conflicting claims.
+ 
+5.4 Cross-Domain Validation (SOF Table 4.2)
+Validation
+Result
+Threshold
+Status
+CRM Closed Won → Billing Subscription
+91.2% match rate (167 of 183 Closed Won Deals in the trailing 12 months matched to a Stripe subscription within 30 days)
+> 85%
+PASS — no gap flag
+Billing Invoice → ERP GL Transaction
+94.6% match rate
+> 90%
+PASS — no gap flag
+HRIS headcount trend vs. ERP payroll expense trend
+Same direction — both trending up 12% YoY, consistent with the company's growth stage
+Qualitative directional check
+PASS
+Billing ARR vs. ERP recognized revenue
+ARR $18.2M vs. trailing-12-month recognized revenue $16.8M — 8.3% gap
+Expected magnitude gap for SaaS; flagged for information only, not a data quality issue
+PASS — informational note included in Stage 8 materials, not a blocking gap
+Table GPES-S5.4 — Cross-domain validation results. All four checks pass their thresholds — this is a clean implementation with no BOOKINGS_VALIDATION_GAP or REVENUE_RECONCILIATION_ITEMS flags requiring gap explanations.
+ 
+Field
+Specification
+Purpose
+Extract, transform, and write canonical objects for all four connectors; merge into a unified SCBM instance with resolved identity and system-of-authority.
+Responsible Worker
+ERP-DOMAIN, CRM-DOMAIN, BIL-DOMAIN, HRS-DOMAIN (extraction/write phase) then COORD-004 (Canonical Integration Agent, merge phase)
+Role Playbook
+APB-006 through APB-009 (Sections 6–8 of respective IMS); APB-004 (Canonical Integration)
+Tools Used
+extract_object_batch, get_extracted_records, upsert_canonical_object, assign_system_of_authority, record_cross_system_identity, run_validation_suite (preliminary)
+Inputs
+Resolved gate states and transformation rules from Stage 4
+Outputs
+Unified SCBM instance; identity resolution log; SOA registry entries; cross-domain validation report (Table GPES-S5.4)
+Expected State
+All 4 connector jobs COMPLETE; Stage 3 fan-in gate satisfied; COORD-004 job COMPLETE
+Checkpoint Created
+Canonical population progress checkpointed per connector every 10,000 records (NetSuite and Stripe cross this threshold); canonical merge checkpoint after identity resolution completes
+Possible Errors
+None encountered in this reference path — no TERMINAL_BLOCKED connectors, no BLOCK_CONDITIONs
+Retry Strategy
+N/A — no errors triggered
+Customer Interaction
+None — fully automated
+Success Criteria
+SCBM populated with all Tier 1 objects from all 4 connectors; identity match rate >= 80%; all cross-domain validations computed
+Estimated Duration
+14 minutes compute (parallel extraction + transform, then sequential canonical merge — merge cannot begin until all 4 connector jobs reach terminal status per the fan-in gate)
+Estimated AI Cost (Planning Estimate)
+~$1.10 – $1.60 — the highest-cost stage, driven by extraction volume: NetSuite (~89 transformation batches, Haiku-tier); HubSpot (~40 batches including stage event processing, mixed tier); Stripe (~52 batches including ARR derivation, mixed tier); Rippling (~18 batches, mostly Haiku-tier); Canonical Integration identity resolution (Sonnet-tier for fuzzy match evaluation). This range is the most sensitive stage to prompt caching effectiveness — see Section 7.0.
+Engineering Notes
+This stage dominates total implementation AI cost (~65% of the full-implementation total) because it has the highest tool-call volume. Prompt caching has the largest effect here — the same IMS Section 4 transformation rules are referenced across every batch within a connector's job, making this the highest-value target for the caching architecture recommended in EIS-002/003 follow-up.
+Table GPES-S5.5 — Stage 5 complete specification.
+ 
+Stage 6 — Validation
+Connector
+REJECT Rate
+FLAG Rate
+Health Score
+Notes
+NetSuite
+0.3%
+2.1%
+96
+27 GL Transaction Lines flagged for missing Department code — expected for overhead/corporate accounts
+HubSpot
+0.1%
+4.8%
+93
+88 Deals flagged for missing Amount at early pipeline stages — expected per IMS-102 Table 102.5.1 pattern (early-stage deals often lack sized amounts)
+Stripe
+0.0%
+1.2%
+98
+11 Invoices flagged for one-time line items correctly excluded from ARR — validation confirms exclusion was applied correctly, not an error
+Rippling
+0.0%
+0.7%
+99
+1 Employee flagged for missing manager reference — a departing executive whose reports have not been reassigned yet; non-blocking
+Table GPES-S6.1 — Per-connector validation results. All four connectors are well below their IMS Section 5.4 REJECT rate thresholds — no DATA_QUALITY_THRESHOLD_EXCEEDED conditions in this implementation.
+ 
+Field
+Specification
+Purpose
+Execute IMS Section 5 validation rules across all populated canonical objects; produce the aggregate implementation health score.
+Responsible Worker
+EVAL-002 (Validation Agent)
+Role Playbook
+APB-011
+Tools Used
+run_validation_suite, validate_required_fields, validate_referential_integrity, validate_arr_formula, validate_balance
+Inputs
+Populated canonical objects from Stage 5
+Outputs
+Per-connector validation report; aggregate implementation health score = 96.5 (weighted average across 4 connectors)
+Expected State
+EVAL-002 job COMPLETE; validation_report_id available for Stage 7 and Stage 8 consumption
+Checkpoint Created
+validation_report_id written to session_state; per-object validation_status written to canonical store
+Possible Errors
+DATA_QUALITY_THRESHOLD_EXCEEDED — not triggered in this reference path
+Retry Strategy
+N/A — no errors triggered
+Customer Interaction
+None — fully automated
+Success Criteria
+All 4 connectors validated; aggregate health score computed; zero BLOCK conditions
+Estimated Duration
+3 minutes compute
+Estimated AI Cost (Planning Estimate)
+~$0.07 – $0.12 — validation rule application is entirely deterministic (Haiku-tier, temperature 0.0); 4 connectors × ~6 validation batches each
+Engineering Notes
+Stripe's validate_arr_formula call (IMS-201 Table IMS-201.5.1 / EIS-001 Table EIS-C8.2) independently recomputes ARR from raw subscription items and compares against the Domain Agent's computed value for all 812 subscriptions — zero discrepancies above 1% in this reference implementation, confirming the ARR formula protection worked correctly.
+Table GPES-S6.2 — Stage 6 complete specification.
+ 
+Stage 7 — Capability Assessment
+The CAL run against the fully populated, validated, cross-domain-checked SCBM instance. This is the assessment that determines exactly what Meridian Analytics gets on Day 1.
+ 
+Capability
+Status
+Confidence
+Why
+Financial Statements (P&L, Balance Sheet, Cash Flow)
+READY
+94%
+NetSuite standard-edition data is clean; no OneWorld complexity
+Executive Dashboards
+READY
+92%
+Derives from Financial Statements + Stripe + HubSpot data, all READY
+ARR Reporting
+READY
+90%
+Subscription Normalization Gate fully resolved; Stripe is Production Ready reference connector
+MRR Reporting
+READY
+90%
+Derived directly from ARR
+Subscription Waterfall
+READY
+88%
+Full event stream available from Stripe
+Pipeline Analytics
+READY
+89%
+Stage Normalization Gate fully resolved (6 of 6 stages)
+Win Rate Analysis
+READY
+93%
+Binary outcome, reliable regardless of stage taxonomy nuance
+Bookings Validation
+READY
+87%
+91.2% CRM-to-Billing match rate, above threshold
+Headcount Reporting
+READY
+91%
+Organizational Normalization Gate resolved; flat Rippling Department model
+Compensation Planning
+READY
+85%
+Rippling Payroll module active — narrows planned-to-actual gap
+Revenue Recognition Waterfall
+PARTIAL
+52%
+NetSuite ARM inactive — DR-M fallback from invoice service periods only; would reach READY with ARM activation
+Department Expense Forecasting
+PARTIAL
+48%
+GL cost center mapping explicitly deferred by customer in Stage 4 (Table GPES-S4.5) — not a data gap, a customer-deferred configuration item
+Position Planning
+UNAVAILABLE
+N/A — structural
+Rippling has no formal Position object (same structural ceiling as documented in IMS-302); not resolvable via this connector
+Board Reporting
+READY
+86%
+All three required companion domains (ERP, CRM, Billing) are READY — the cross-domain capability that requires the full stack
+Table GPES-S7.1 — Full capability assessment. 10 of 13 assessed capabilities reach READY status on Day 1 — a strong outcome directly attributable to this connector combination's clean gate profile.
+ 
+Field
+Specification
+Purpose
+Run the CAL against the validated SCBM instance; produce per-module status, confidence, and the aggregate Readiness Score.
+Responsible Worker
+EVAL-001 (CAL Agent), EVAL-003 (Confidence Scoring Agent, runs concurrently)
+Role Playbook
+APB-010, APB-012
+Tools Used
+run_capability_assessment, calculate_capability_confidence, calculate_readiness_score, recommend_next_connector
+Inputs
+Validated SCBM instance (Stage 6); MCR module requirements
+Outputs
+13 capability assessments (Table GPES-S7.1); Readiness Score = 82%; recommended next connector: none required for core Financial Intelligence — NetSuite ARM activation recommended as the highest-value upgrade (would move Revenue Recognition Waterfall from 52% to an estimated 90%)
+Expected State
+EVAL-001 and EVAL-003 jobs COMPLETE; assessment_id available for Stage 8
+Checkpoint Created
+CAL assessment_id and readiness_score written to session_state
+Possible Errors
+None encountered
+Retry Strategy
+N/A
+Customer Interaction
+None — fully automated; results consumed by Implementation Consultant before Stage 8
+Success Criteria
+Every module has an explicit READY/PARTIAL/UNAVAILABLE status with numeric confidence; zero NULL statuses
+Estimated Duration
+90 seconds compute
+Estimated AI Cost (Planning Estimate)
+~$0.03 – $0.06 — CAL formula application is deterministic (Haiku-tier); the improvement-path text generation for the 2 PARTIAL and 1 UNAVAILABLE capabilities uses Sonnet-tier for specific, actionable phrasing
+Engineering Notes
+Readiness Score of 82% for a same-day implementation with zero data quality issues is a strong reference number — this is the number to benchmark future implementations against for this connector combination, and the number that should populate the Implementation Pattern Library (EIS-004 Section 1.2) as this pattern accumulates more instances.
+Table GPES-S7.2 — Stage 7 complete specification.
+ 
+Stage 8 — Customer Review
+What Meridian Analytics's CFO actually sees in the Day 2 review meeting — the Capability Summary, confidence-labeled throughout, honest about the two PARTIAL capabilities and the one structural limitation.
+ 
+Materials Presented
+Content Source
+Key Message
+Implementation Summary
+generate_implementation_summary (COORD-005)
+What was discovered (4 connectors), what was implemented (SCBM population counts from Table GPES-S5.1), what is ready (10 of 13 capabilities)
+Capability Summary
+generate_capability_summary — full Table GPES-S7.1 in customer-facing language
+READY capabilities described with confidence; PARTIAL capabilities explained with specific improvement paths (not "improve data quality" — specifically "activate NetSuite ARM" and "provide GL cost center mapping")
+Pending Decisions
+34 TENTATIVE_MATCH customer accounts (Table GPES-S5.2) for review
+Customer confirms or corrects the fuzzy-matched accounts — a 10-minute review during the meeting
+Confidence Summary
+Per-capability confidence with the audit trail available on request
+Every number in the meeting has a confidence score attached — no unqualified claims
+Gap Report
+Zero cross-domain gaps above threshold (Table GPES-S5.4) plus the ARR-vs-revenue informational note
+Nothing alarming to report — a genuinely clean implementation
+Recommended Next Steps
+recommend_next_connector output from Stage 7
+NetSuite ARM activation (internal NetSuite configuration, not a new connector) as the highest-value next step; GL cost center mapping completion as the second
+Table GPES-S8.1 — Stage 8 customer review materials.
+ 
+Field
+Specification
+Purpose
+Present the complete implementation to the customer; obtain confirmation of the Module Activation Plan and resolution of the 34 tentative identity matches.
+Responsible Worker
+COORD-005 (Reporting Agent) generates materials; human Implementation Consultant leads the meeting
+Role Playbook
+APB-005
+Tools Used
+generate_implementation_summary, generate_capability_summary, generate_readiness_score_report, generate_module_activation_plan
+Inputs
+CAL output (Stage 7); validation report (Stage 6); identity resolution log (Stage 5)
+Outputs
+Confirmed Module Activation Plan (all 10 READY capabilities approved for activation); 34 tentative matches resolved (31 confirmed correct, 3 corrected by customer); GL cost center mapping scheduled for phase 2, 3 weeks out
+Expected State
+session_state.status = PAUSED_FOR_HUMAN during the meeting; current_sof_stage = 6 (SOF numbering) throughout
+Checkpoint Created
+Stage 6 completion signal written to session_state; checkpoint_version incremented; module_activation_plan persisted
+Possible Errors
+None — this is a human-mediated stage with no automated failure mode
+Retry Strategy
+N/A
+Customer Interaction
+45-minute live meeting — CFO, VP of Finance, and Implementation Consultant. This is the second and final mandatory live conversation.
+Success Criteria
+Module Activation Plan confirmed; all pending items resolved or explicitly deferred with documented business reason
+Estimated Duration
+45 minutes (human-paced)
+Estimated AI Cost (Planning Estimate)
+~$0.10 – $0.18 — narrative generation for Implementation Summary and Executive Summary (Sonnet-tier, temperature 0.3, the highest per-token-cost calls in the implementation but low volume — 3 calls)
+Engineering Notes
+This is the only stage where LLM-generated narrative (not structured data) reaches the customer directly. The generate_gap_explanation template requirement (EIS-001 Design Decision 3) is not exercised in this reference path because there were zero cross-domain gaps above threshold — worth noting for engineers building the demo, since a "perfect" reference implementation does not exercise the gap-explanation code path and needs separate testing.
+Table GPES-S8.2 — Stage 8 complete specification.
+ 
+Stage 9 — Activation
+Field
+Specification
+Purpose
+Activate all confirmed READY modules; deliver final deliverables; transition the session to production monitoring.
+Responsible Worker
+COORD-001 triggers activation; COORD-005 generates final deliverables; EVAL-001 confirms post-activation status
+Role Playbook
+APB-001 Section 4 (Stage 7), APB-005
+Tools Used
+run_capability_assessment (confirmation pass), generate_executive_summary, close_session
+Inputs
+Confirmed Module Activation Plan from Stage 8
+Actions
+10 READY modules activated in Meridian Analytics's SMPL environment: Financial Statements, Executive Dashboards, ARR Reporting, MRR Reporting, Subscription Waterfall, Pipeline Analytics, Win Rate Analysis, Bookings Validation, Headcount Reporting, Compensation Planning. 2 PARTIAL modules remain visible with their specific improvement paths displayed. 1 UNAVAILABLE module (Position Planning) is documented as a structural limitation, not hidden.
+Outputs
+Live dashboards; Executive Summary PDF; Ongoing Monitoring Plan with daily incremental sync scheduled per EIS-002 Section 8.1
+Expected State
+session_state.status = COMPLETE; current_sof_stage = 7
+Checkpoint Created
+Final checkpoint — session marked COMPLETE; Continuous Production Monitoring mode initialized per EIS-002 Section 8.1
+Possible Errors
+None
+Retry Strategy
+N/A
+Customer Interaction
+None required — activation follows automatically from the Stage 8 confirmation; customer receives a confirmation email with dashboard access
+Success Criteria
+At least 1 module READY and activated (10 achieved); Implementation Summary delivered; session closed with status COMPLETE
+Estimated Duration
+1 minute compute
+Estimated AI Cost (Planning Estimate)
+~$0.02 – $0.04 — final Executive Summary narrative pass (Sonnet-tier, 1 call)
+Engineering Notes
+This is the transition point to EIS-002 Section 8.1 Continuous Production Monitoring — daily Incremental Canonical Sync begins the following day. This reference implementation becomes a candidate Implementation Pattern Library entry (EIS-004 Section 1.2) once 9 additional instances of this same connector combination reach the same outcome, per the minimum-count rule in EIS-004 Section 4.1.
+Table GPES-S9.1 — Stage 9 complete specification.
+ 
+Section 4 — Runtime State Evolution
+State snapshots at three points in the implementation — kickoff, mid-Stage-4 (gates actively resolving), and post-activation — showing how session_state, gate_states, and confidence evolve.
+ 
+4.1 T+0 — Immediately After Stage 1 (Kickoff Complete)
+session_state = {
+  current_sof_stage: 1,
+  status: "RUNNING",
+  active_job_ids: [],
+  completed_stages: [1],
+  pending_cep_items: [],
+  gate_states: {},
+  terminal_blocked_connectors: [],
+  readiness_score: null
+}
+CEP: {connector_inventory: [4 connectors], fiscal_calendar: SET,
+      functional_currency: "USD"}  — 5 fields populated, 0 pending
+ 
+4.2 T+20min — Mid-Stage 4 (Gates Actively Resolving)
+session_state = {
+  current_sof_stage: 3,  // SOF numbering — GPES Stage 4 is within SOF Stage 3
+  status: "RUNNING",
+  active_job_ids: [job_NetSuite, job_HubSpot, job_Stripe, job_Rippling],
+  completed_stages: [1, 2],
+  pending_cep_items: [
+    "CEP-002-0041" (HubSpot stage, NORMAL),
+    "CEP-002-0042" (Stripe trial treatment, NORMAL),
+    "CEP-002-0043" (Stripe delinquent treatment, NORMAL),
+    "CEP-002-0044" (Rippling active status, NORMAL),
+    "CEP-002-0045" (Rippling contractor inclusion, NORMAL),
+    "CEP-002-0046" (Rippling GL cost center mapping, NORMAL)
+  ],
+  gate_states: {
+    NetSuite: {gate_type: ERP_EXTRACTION, resolution_pct: 1.0},
+    HubSpot: {gate_type: STAGE_NORMALIZATION, resolution_pct: 0.83},
+    Stripe: {gate_type: SUBSCRIPTION_NORMALIZATION, resolution_pct: 0.33},
+    Rippling: {gate_type: ORG_NORMALIZATION, resolution_pct: 0.60}
+  },
+  terminal_blocked_connectors: [],  // none — all 4 proceeding
+  readiness_score: null  // not yet computed — awaits Stage 7
+}
+NOTE: NetSuite (100% resolved) is already extracting business data
+while the other 3 connectors have open CEP items. This is the
+non-blocking parallel execution model in action — NetSuite does not
+wait for HubSpot, Stripe, or Rippling to resolve their gates.
+ 
+4.3 T+26hr — Post-Activation (Session Complete)
+session_state = {
+  current_sof_stage: 7,
+  status: "COMPLETE",
+  active_job_ids: [],
+  completed_stages: [1, 2, 3, 4, 5, 6, 7],
+  pending_cep_items: [],  // all 6 resolved; GL cost center mapping DEFERRED,
+                          // not pending — deferred items are closed, not open
+  gate_states: {
+    NetSuite: {resolution_pct: 1.0}, HubSpot: {resolution_pct: 1.0},
+    Stripe: {resolution_pct: 1.0}, Rippling: {resolution_pct: 1.0}
+  },
+  terminal_blocked_connectors: [],
+  readiness_score: 82.0,
+  completed_at: "2026-06-[Day2]T10:46:00Z"
+}
+Total CEP fields: 47 populated (33 AUTO_DISCOVERED, 7 HUMAN_CONFIRMED,
+                   6 gate-resolution HUMAN_CONFIRMED, 1 DEFERRED_BY_CUSTOMER)
+ 
+Section 5 — Parallel Execution Map
+The critical path for this implementation runs through Stripe (the slowest connector to fully resolve its gate at 100 minutes wall-clock) into the canonical merge, which cannot begin until all four connectors reach terminal status (the fan-in gate from EIS-002 Section 0.2).
+ 
+PARALLEL EXECUTION MAP (wall-clock, Day 1 from 9:15 AM):
+  9:15  ┬── NetSuite  [auth][discover][gate:PASS][extract──────────][write] DONE 9:41
+        ├── HubSpot   [auth][discover][gate:83%→100% @9:52][extract────][write] DONE 10:05
+        ├── Stripe    [auth][discover][gate:33%→100% @10:16][extract───][write] DONE 10:38
+        └── Rippling  [auth][discover][gate:60%→DEFERRED @10:40][extract][write] DONE 10:52
+  10:52 ── FAN-IN GATE SATISFIED (all 4 connectors terminal) ──
+            ↓
+  10:52 ── Canonical Integration (COORD-004): identity resolution,
+            SOA assignment, cross-domain validation ── DONE 11:04
+            ↓
+  11:04 ── Stage 5 (EVAL-001, EVAL-002, EVAL-003 parallel) ── DONE 11:08
+            ↓
+  11:08 ── Capability Summary ready for Implementation Consultant review
+            ↓
+  [Day 2, 10:00 AM] ── Stage 8 Customer Review meeting ── DONE 10:45
+            ↓
+  [Day 2, 10:46 AM] ── Stage 9 Activation ── FINANCIAL INTELLIGENCE READY
+CRITICAL PATH: Rippling's GL cost center mapping deferral (10:40 AM) is
+the last-resolving gate item and the pacing item for the fan-in gate —
+NOT because Rippling required the most CEP questions, but because it
+was dispatched with the same start time as the others and its customer
+response happened to land last. NetSuite's zero-CEP-question gate
+profile made it the fastest connector to reach terminal status (26 min).
+ 
+5.1 Fan-Out / Fan-In Summary
+Fan-Out Point
+Children
+Fan-In Condition
+Fan-In Time
+Stage 2 dispatch
+4 authentication jobs
+All 4 reach AUTHENTICATED
+9:15:45 AM (45 sec after dispatch)
+Stage 4/5 dispatch (SOF Stage 3 parent)
+4 Domain Agent jobs (ERP, CRM, BIL, HRS)
+All 4 reach terminal status (COMPLETE or COMPLETE_WITH_GAPS)
+10:52 AM (97 min after dispatch — bounded by Rippling's CEP resolution)
+Stage 5 evaluation dispatch
+3 jobs (EVAL-001, EVAL-002, EVAL-003)
+All 3 reach COMPLETE
+11:08 AM (4 min after dispatch — all compute-bound, no CEP dependency)
+Table GPES-5.1 — Fan-out/fan-in points in this implementation, per the EIS-002 Section 0.2 dependency graph model.
+ 
+Section 6 — Common Execution Deviations
+GPES-001 documents the clean-path execution — the reference trace. Real implementations deviate from it. This section does not attempt to document every possible failure; it shows the ten most common deviation patterns and demonstrates that the runtime's response to each is deterministic, not improvised. Every deviation pattern below traces back to a specific rule already defined in EIS-002 (Section 7, Retry and Failure Recovery) or the SOF Decision Framework — this section shows those rules in the context of this reference implementation, it does not define new ones.
+ 
+6.1 Connector Authentication Failure
+Field
+Detail
+Trigger
+authenticate_connector returns AUTH_ERROR for one connector (e.g., Stripe API key was rotated by the customer's security team after credential setup but before Stage 2 executed)
+Runtime Behavior
+No retry — AUTH_ERROR is not retry-eligible per EIS-002 Table EIS2-7.1. The other 3 connectors (NetSuite, HubSpot, Rippling) proceed through Stage 2 and beyond without waiting.
+Worker Actions
+COORD-003 marks Stripe job status = ERROR; reports error_code = AUTH_ERROR to COORD-001; COORD-001 relays to COORD-002 as a BLOCKING PAUSE_FOR_CEP
+Checkpoint
+No checkpoint needed — job never progressed past authentication; no partial state to preserve
+Customer Experience
+Portal notification: "We couldn't connect to Stripe — the API key may have been rotated or revoked. Please provide an updated key." Other 3 connectors continue to show progress in the same portal view.
+Recovery Path
+Customer provides new credential_reference_id via create_connector_credential_reference. Stripe job re-queues with the same job_id (idempotent). Once Stripe reaches AUTHENTICATED, it proceeds through Stages 3–5 independently — it does not need to "catch up" to a synchronized point, it simply joins the fan-in gate whenever it completes.
+Table GPES-6.1 — Connector authentication failure.
+ 
+6.2 Connector Unavailable (API Outage)
+Field
+Detail
+Trigger
+Target API returns 503 or times out during extract_object_batch (e.g., NetSuite scheduled maintenance window overlaps with the extraction window)
+Runtime Behavior
+3 retries with exponential backoff: 30s, 60s, 120s, per EIS-002 Table EIS2-7.1. Other connectors are entirely unaffected — they do not share NetSuite's retry timer.
+Worker Actions
+ERP-DOMAIN suspends the affected extraction batch; retries per the backoff schedule; if all 3 retries fail, escalates to COORD-001 with error_code = CONNECTOR_UNAVAILABLE
+Checkpoint
+page_cursor from the last successful batch is preserved — retry resumes from that cursor, not from the beginning of the object type's extraction
+Customer Experience
+No customer-visible action required unless retries are exhausted. If exhausted: "NetSuite is temporarily unavailable — we'll automatically resume once it's back. No action needed from you."
+Recovery Path
+If retries exhaust: TERMINAL_BLOCKED per EIS-002 Section 0.2; fan-in gate proceeds without NetSuite; Stage 4/5 (Canonical Population) completes for the other 3 connectors; NetSuite job is automatically re-queued once the Connector Proxy Service detects the API is responding again (health check poll), and a partial canonical re-integration incorporates the delayed NetSuite objects without re-running the full Stage 5.
+Table GPES-6.2 — Connector unavailable (API outage).
+ 
+6.3 API Rate Limiting
+Field
+Detail
+Trigger
+Rate limit budget exhausted mid-extraction (e.g., HubSpot Property History API rate limit hit during Deal stage-event extraction for a customer with an unusually large deal history)
+Runtime Behavior
+RATE_LIMIT_ERROR triggers automatic backoff per EIS-002 Table EIS2-7.1: 10s, 30s, 60s, 120s, 300s. The extraction tool's response includes remaining_budget_pct and suggested_next_call_delay_ms, allowing the worker to self-regulate before hitting the limit again.
+Worker Actions
+CRM-DOMAIN reduces its call frequency proactively when remaining_budget_pct drops below 20% (per the EIS-003 Table EIS3-6.1 Rate Limit Self-Regulation test); if the limit is still hit, applies the backoff schedule
+Checkpoint
+page_cursor preserved; no data loss; extraction resumes from the exact point it paused
+Customer Experience
+Typically invisible — extraction simply takes longer for that connector. If the 300s backoff is reached: "This connector has a large amount of history to process; extraction may take longer than usual for this step." No action required.
+Recovery Path
+Automatic — no human intervention needed. If retry_after_seconds exceeds 300s repeatedly, COORD-001 may re-queue the remaining extraction for an off-peak window (LOW priority) per EIS-002 Table EIS2-7.1, without blocking the rest of the implementation.
+Table GPES-6.3 — API rate limiting.
+ 
+6.4 Schema Drift Detected
+Field
+Detail
+Trigger
+A connector API response no longer matches the field structure documented in its IMS Section 3 field map (e.g., Stripe deprecates a field or changes a nested structure between the IMS's reference version and the customer's live API version)
+Runtime Behavior
+No retry — SCHEMA_CHANGED is not retry-eligible. Extraction for the affected object type halts; other object types and other connectors continue.
+Worker Actions
+BIL-DOMAIN detects the mismatch during field mapping; returns error_code = SCHEMA_CHANGED; COORD-001 routes to ESCALATE (not PAUSE_FOR_CEP — this requires engineering judgment, not a business decision)
+Checkpoint
+Extraction state for unaffected object types is preserved; the specific object type with drift is marked PENDING_SCHEMA_REVIEW
+Customer Experience
+No customer-facing question — this is an engineering issue, not a business decision. Customer sees: "One data type from Stripe requires a brief technical review before it's included — the rest of your implementation continues normally."
+Recovery Path
+SMPL engineering reviews the schema change, updates the affected IMS section, and (per EIS-004 Section 3.2) the connector's memory records affecting the changed object type move to PENDING_REVALIDATION. Once the IMS update ships, the affected extraction resumes for this customer without re-running unaffected object types.
+Table GPES-6.4 — Schema drift detected.
+ 
+6.5 Missing Required Permissions
+Field
+Detail
+Trigger
+A discovery or extraction call returns PERMISSION_ERROR because the credential's scope does not include a required object type (e.g., the Rippling service account was created without Payroll read access)
+Runtime Behavior
+No retry — PERMISSION_ERROR requires a scope change, not a retry. Discovery correctly identifies this during Stage 3 (module inventory) rather than failing deep into extraction.
+Worker Actions
+HRS-DOMAIN detects the permission gap during discover_connector_modules; records Payroll module as INACCESSIBLE (distinct from INACTIVE — the module may exist but the credential can't see it); does not attempt extraction for that scope
+Checkpoint
+Module inventory checkpoint records the permission gap explicitly, distinguishing it from a genuinely inactive module
+Customer Experience
+"Your Rippling connection doesn't currently have permission to read Payroll data. If you'd like Compensation Planning to include payroll confirmation, please add Payroll read scope to the SMPL service account." Presented as an optional upgrade, not a blocking error — Headcount Reporting and other non-Payroll capabilities proceed normally.
+Recovery Path
+Customer (or their Rippling admin) updates the service account scope; a re-authentication picks up the new scope; Payroll extraction runs as an incremental addition without re-running the rest of the HRIS implementation.
+Table GPES-6.5 — Missing required permissions.
+ 
+6.6 Customer Delays CEP Response
+Field
+Detail
+Trigger
+A NORMAL-urgency CEP question (e.g., a stage mapping confirmation) receives no customer response within the expected window
+Runtime Behavior
+Per EIS-002 Section 8.1: BLOCKING items with a default apply the default after 48h; NORMAL items apply a default after 72h if one exists. In this reference implementation all CEP questions were answered within 90 minutes — this deviation shows what happens when they are not.
+Worker Actions
+COORD-002 continues to hold the item as PENDING; independent connectors and object types continue extracting; at the timeout, COORD-002 calls update_cep with source=DEFAULT_APPLIED and notifies the waiting job to resume with the default value
+Checkpoint
+No new checkpoint required — the waiting job was already checkpointed at the point it paused; it simply resumes
+Customer Experience
+A reminder notification at the 24h and 48h marks; if the default is applied, the customer sees: "We didn't hear back in time, so we proceeded with our standard assumption: [default value]. You can change this any time before your review meeting."
+Recovery Path
+No recovery needed — the implementation proceeds on the default. The DEFAULT_APPLIED item is surfaced prominently in Stage 8 (Customer Review) for explicit confirmation or correction — it is never silently left as an assumption past the review meeting.
+Table GPES-6.6 — Customer delays CEP response.
+ 
+6.7 Validation Threshold Exceeded
+Field
+Detail
+Trigger
+A connector's REJECT rate for a canonical object type exceeds its IMS Section 5.4 threshold (e.g., an unusually high rate of NetSuite GL Transactions missing required fields, suggesting a source data quality issue rather than a mapping issue)
+Runtime Behavior
+DATA_QUALITY_THRESHOLD_EXCEEDED is not retry-eligible — this is a data finding, not a technical failure. The affected object type's canonical population proceeds with only the passing records; the exceeded threshold is flagged, not blocking.
+Worker Actions
+EVAL-002 computes the REJECT rate during run_validation_suite; if above threshold, creates a PAUSE_FOR_CEP with urgency=BLOCKING surfacing the specific rate, affected capability, and example records
+Checkpoint
+Validation report checkpoint includes the threshold breach with full context for audit
+Customer Experience
+"We found more incomplete records than expected in your NetSuite General Ledger data (7.2% missing required fields, vs. our normal threshold of 1%). This may reflect a data entry pattern specific to your team. Would you like us to proceed with the complete records only, or would you like to investigate first?"
+Recovery Path
+If customer chooses to proceed: extraction continues with degraded confidence on the affected capability, clearly labeled in Stage 7. If customer wants to investigate: the affected object type's population pauses (not the whole implementation) while the customer's finance team reviews the source data; other connectors and object types are unaffected.
+Table GPES-6.7 — Validation threshold exceeded.
+ 
+6.8 Canonical Merge Conflict
+Field
+Detail
+Trigger
+Two connectors both claim a conflicting attribute for the same identity-resolved entity — most commonly a functional currency mismatch on a Customer Account matched across ERP and CRM (not encountered in this reference implementation, since Meridian Analytics is single-currency)
+Runtime Behavior
+ESCALATE — per SOF Table 3.4 and APB-004 Section 9, currency conflicts are never auto-resolved. COORD-004 does not merge the two records until a human confirms which value is correct.
+Worker Actions
+COORD-004 detects the conflict during record_cross_system_identity; halts the merge for that specific entity only; all other identity resolutions in the same batch proceed normally
+Checkpoint
+Conflict recorded in canonical store as CONFLICT_PENDING; does not block the broader canonical merge checkpoint
+Customer Experience
+Surfaced in Stage 8 materials as a specific, bounded item: "One customer account shows different currencies in your ERP and CRM systems — please confirm which is correct." Not framed as a data quality failure across the whole implementation.
+Recovery Path
+Human confirms the correct value during Stage 8 review (or earlier via CEP question if the conflict is detected before Stage 8); COORD-004 completes the merge for that entity; capability confidence for any capability depending on that entity is recalculated.
+Table GPES-6.8 — Canonical merge conflict.
+ 
+6.9 Capability Assessment Blocked
+Field
+Detail
+Trigger
+A required canonical object for a capability has zero populated records — for example, if Stripe had zero active Subscriptions at the time of extraction (not the case for Meridian Analytics, which has 812)
+Runtime Behavior
+EVAL-001 does not treat this as an error — a capability with a genuinely empty required object correctly assesses as UNAVAILABLE or PARTIAL depending on whether the emptiness is expected (e.g., a brand-new Stripe account) or unexpected (e.g., an established account that should have subscriptions)
+Worker Actions
+CAL Agent checks whether the zero-record condition matches an expected pattern (new implementation, recently connected) or an anomalous one (established account, extraction may have failed silently); anomalous zero-record conditions escalate as a distinct check from EIS-002 Table EIS2-7.1 "empty extraction" error handling
+Checkpoint
+CAL assessment checkpoint records the zero-record finding with its classification (expected vs. anomalous)
+Customer Experience
+If anomalous: "ARR Reporting couldn't be assessed — we found zero active subscriptions in Stripe, which is unusual for an account of this size. Please confirm this is expected, or let us know if there may be an extraction issue." If expected: the capability is simply marked UNAVAILABLE with a clear reason, no alarm framing.
+Recovery Path
+If anomalous and confirmed to be an extraction issue: re-run extraction for the affected connector. If confirmed as expected (e.g., pre-revenue company): capability remains UNAVAILABLE with no further action needed — this is a correct assessment, not a failure state.
+Table GPES-6.9 — Capability assessment blocked.
+ 
+6.10 Customer Defers Activation
+Field
+Detail
+Trigger
+At Stage 8, the customer confirms the technical implementation is accurate but requests that module activation wait — for example, wanting to complete an internal change management process before dashboards go live
+Runtime Behavior
+This is a normal, supported outcome — not a deviation from correctness, only from the default same-day activation path. Stage 9 (Activation) does not auto-trigger from Stage 8 completion; it always requires the explicit Stage 6 completion signal (SOF Section 8.2), which the customer controls.
+Worker Actions
+COORD-001 holds session_state at CUSTOMER_REVIEW state; no modules activate; the fully assessed Capability Summary and Readiness Score remain available for the customer's internal review
+Checkpoint
+Stage 8 completion checkpoint is written (technical review complete) separately from the activation trigger — the two are decoupled by design, not just in this deviation case
+Customer Experience
+"Your implementation is complete and reviewed. Activate whenever you're ready — nothing expires, and your data will continue to sync in the background so everything is current when you do."
+Recovery Path
+No recovery needed — this is not an error state. Activation triggers whenever the customer submits the Stage 6 completion signal with their approved Module Activation Plan, whether that is the same day or weeks later. Incremental sync (EIS-002 Section 8.1) continues in the background during the deferral so data is current at activation time.
+Table GPES-6.10 — Customer defers activation.
+ 
+Section 7 — Implementation Metrics Scorecard
+Every stage's metrics rolled into a single scorecard — GPES-001 is the benchmark execution pattern for the NetSuite + HubSpot + Stripe + Rippling connector combination, and this scorecard is the baseline that future implementations of this pattern, and future GPES documents for other connector combinations, are measured against.
+ 
+7.0 AI Cost Estimation Methodology
+All AI cost figures in this section are engineering planning estimates, not guaranteed production costs. Actual cost for any given implementation depends on: the selected model and its pricing tier, prompt token pricing at time of execution, prompt caching effectiveness (cache hit rate on repeated IMS content and system prompts), implementation size (record volume, connector count), historical extraction depth (backfill window), and connector-specific complexity (a SAP or Oracle Fusion implementation will cost materially more than this reference combination due to IMS content volume and extraction complexity). The figures below reflect the model-tiering and caching assumptions documented in EIS-002/EIS-003 follow-up guidance — Haiku-tier pricing for deterministic tasks, Sonnet-tier for reasoning tasks, partial prompt caching applied. Treat every dollar figure below as a planning range, not a quote.
+ 
+Stage
+Duration (compute)
+Duration (wall-clock)
+Est. AI Cost (Planning Range)
+Tool Calls
+LLM Calls
+Human Decisions
+1 — Customer Discovery
+< 1 min
+15 min
+$0.00
+4
+0
+4 (kickoff answers)
+2 — Authentication
+45 sec
+45 sec
+$0.00
+4
+0
+0
+3 — Discovery
+2 min
+2 min
+~$0.01
+16
+4
+0
+4 — IMS Execution
+8 min
+~100 min
+~$0.15 – $0.25
+~60
+29
+4 (CEP answers)
+5 — Canonical Population
+14 min
+14 min
+~$1.10 – $1.60
+~340
+~120
+0
+6 — Validation
+3 min
+3 min
+~$0.07 – $0.12
+24
+24
+0
+7 — Capability Assessment
+90 sec
+90 sec
+~$0.03 – $0.06
+12
+9
+0
+8 — Customer Review
+2 min (report gen)
+45 min (meeting)
+~$0.10 – $0.18
+8
+3
+2 (plan confirm + tentative match review)
+9 — Activation
+1 min
+1 min
+~$0.02 – $0.04
+6
+1
+0
+TOTAL
+~34 min
+~26 hours
+Approximately $2 (planning range: $1.50 – $2.50)
+~474
+~190
+10
+Table GPES-7.1 — Complete implementation scorecard. Total AI cost: approximately $2 (planning range $1.50–$2.50) for a full four-connector, 24-month-backfill implementation reaching an 82% Readiness Score — see Section 7.0 for the variables this estimate is subject to. Total human decisions: 10, of which 6 are CEP portal answers (~2 minutes each) and 4 are live-meeting minutes.
+ 
+7.1 Cost Composition
+Cost Driver
+Planning Range
+Approx. % of Total
+Canonical Population (Stage 5) — extraction and transformation volume
+~$1.10 – $1.60
+~73%
+IMS Execution (Stage 4) — gate resolution and CEP question generation
+~$0.15 – $0.25
+~10%
+Customer Review (Stage 8) — narrative generation
+~$0.10 – $0.18
+~8%
+Validation (Stage 6)
+~$0.07 – $0.12
+~5%
+Capability Assessment (Stage 7)
+~$0.03 – $0.06
+~2%
+Discovery + Activation
+~$0.02 – $0.05
+~2%
+Table GPES-7.2 — Cost composition (planning estimate). Canonical Population dominates because it has the highest tool-call volume; it is also the stage with the most cacheable, repeated context (same IMS Section 4 rules referenced across every batch) — the highest-leverage target for prompt caching, which is the single largest lever for moving actual cost toward the low end of the planning range.
+ 
+7.2 Memory System Contribution
+This implementation drew on Connector Memory (EIS-004 Tier 2) at several points, each reducing what would otherwise have been a CEP question:
+HubSpot: 5 of 6 stages auto-resolved from Connector Memory pattern matches — without memory, this would have been 6 CEP questions instead of 1.
+Rippling: FTE methodology auto-discovered (no memory needed — Rippling exposes this natively); canonical department object auto-resolved (structural, not memory-dependent for this connector).
+NetSuite: zero CEP questions — a combination of Rippling-style structural simplicity (single entity, no OneWorld) and Connector Memory confirming this is the expected profile for a company at this ARR/employee scale.
+Net effect: this implementation generated 6 CEP questions instead of an estimated 11–13 that a first-ever implementation of this connector combination (with no Tier 2 pattern cache) would have generated — consistent with the CEP question reduction rate target in EIS-004 Table EIS4-9.2.
+ 
+Section 8 — Customer Experience
+What Meridian Analytics's team actually did, versus what the platform did automatically.
+ 
+What the Customer Did
+Time Required
+What the AI Did
+Provided connector credentials before kickoff (one-time setup with their own admins)
+~20 min, done asynchronously before Day 1
+Nothing — this is customer-side credential creation, not an SMPL action
+Attended the Day 1 kickoff call and answered 4 discovery questions
+15 min
+Auto-populated 33 additional CEP fields from connector discovery that were never asked
+Answered 6 CEP portal questions across a 90-minute window (self-paced, not synchronous)
+~12 min of actual typing/clicking, spread across 90 min elapsed
+Continued extracting and transforming all 4 connectors' data throughout, never blocking on the customer's pace
+Attended the Day 2 Customer Review meeting
+45 min
+Generated the complete Capability Summary, Implementation Summary, and Executive Summary before the meeting; pre-computed all confidence scores and the Readiness Score
+Confirmed the Module Activation Plan and corrected 3 of 34 tentative identity matches
+Included in the 45-min meeting
+Activated 10 modules within 1 minute of confirmation
+TOTAL CUSTOMER TIME
+~72 minutes across 2 days
+TOTAL AI COMPUTE TIME: ~34 minutes; EST. AI COST: approximately $2 (planning estimate — see Section 7.0)
+Table GPES-8.1 — Customer effort summary. 72 minutes of customer time produced a Financial Intelligence Ready implementation across 4 connectors and ~27,000 canonical records.
+ 
+Section 9 — Success Criteria
+Criterion
+Achieved?
+Evidence
+Completed CEP
+✓
+47 fields populated; 0 pending; 1 explicitly deferred with documented reason (Table GPES-S9.1)
+Authenticated connectors
+✓
+All 4 connectors AUTHENTICATED within 45 seconds (Table GPES-S2.1)
+Canonical Business Model populated
+✓
+~27,000 canonical records across all 4 domains (Table GPES-S5.1)
+Validation complete
+✓
+Aggregate health score 96.5; zero BLOCK conditions (Table GPES-S6.1)
+Capability Assessment complete
+✓
+13 capabilities assessed; zero NULL statuses (Table GPES-S7.1)
+Confidence calculated
+✓
+Every capability and canonical object confidence-scored with audit trail
+Executive Summary generated
+✓
+Delivered ahead of Stage 8 meeting
+Dashboards activated
+✓
+10 of 13 modules READY and activated (Table GPES-S9.1)
+Customer approved
+✓
+Module Activation Plan confirmed in Day 2 meeting
+Implementation transitioned to production
+✓
+Continuous Production Monitoring initialized per EIS-002 Section 8.1
+Table GPES-9.1 — Success criteria checklist. All 10 criteria met.
+ 
+Reference Pattern Observations
+GPES-001 is the benchmark execution pattern for SMPL's Golden Path implementation model — the reference implementation, the baseline for runtime performance, and the baseline for implementation metrics. Every future GPES document should be directly comparable against the observations below.
+ 
+Metric
+Observed Value
+Connector Combination
+NetSuite (ERP) + HubSpot (CRM) + Stripe (Billing) + Rippling (HRIS)
+Implementation Duration (wall-clock)
+~26 hours (kickoff to activation, including one overnight and two live meetings)
+AI Compute Time
+~34 minutes (sum of all compute-bound stage durations)
+Customer Time
+~72 minutes (across 2 days, 2 live meetings)
+Number of CEP Questions
+6 (of an estimated 11–13 without Connector Memory — see Section 7.2)
+Auto-Discovered CEP Fields
+33 of 47 total CEP fields (70%)
+Canonical Objects Created
+~27,000 records across 4 domains (Table GPES-S5.1)
+Identity Match Rate
+86.3% (Customer Account, three-way match across NetSuite, HubSpot, Stripe)
+Validation Health Score
+96.5 (aggregate, weighted across 4 connectors)
+Readiness Score
+82%
+READY Capabilities
+10 of 13 assessed
+PARTIAL Capabilities
+2 of 13 assessed (Revenue Recognition Waterfall — NetSuite ARM inactive; Department Expense Forecasting — customer-deferred GL mapping)
+UNAVAILABLE Capabilities
+1 of 13 assessed (Position Planning — structural, Rippling has no Position object)
+AI Cost (Estimated Range)
+Approximately $2 (planning range: $1.50 – $2.50) — see Section 7.0 for the variables this is subject to
+Total Tool Calls
+~474
+Total LLM Calls
+~190
+Human Decisions Required
+10 (6 CEP portal answers + 4 live-meeting decision points)
+Implementation Pattern Candidate
+Yes — first candidate entry for the EIS-004 Implementation Pattern Library; requires 9 additional instances of this connector combination before promotion to APPROVED shared memory per EIS-004 Section 4.1
+Table GPES-9.2 — Reference Pattern Observations. This table is the benchmark against which future implementations of the NetSuite + HubSpot + Stripe + Rippling combination — and future GPES documents for other connector combinations — should be compared. Variance from these observations (different gate resolution times, different CEP question counts, different Readiness Scores) is itself useful signal for refining the Implementation Pattern Library.
+ 
+GPES-001 is both an execution specification and the first candidate entry for the EIS-004 Implementation Pattern Library. It establishes the reference trace against which the next 9 instances of the NetSuite + HubSpot + Stripe + Rippling combination will be compared, and the structural template — stage specification format, state machine, deviation catalog, metrics scorecard — that all future GPES documents should follow for other connector combinations.
+ 
+Three observations from this reference implementation are worth carrying into external conversations: same-day technical completion (34 minutes of compute across the full stack), 72 minutes of total customer time, and an AI cost planning estimate of approximately $2. These are directional numbers for a sales conversation about implementation speed and cost, grounded in a specific reference trace rather than a general claim — and they are the numbers that should tighten, not loosen, as the Implementation Pattern Library and Connector Memory system mature past this first reference instance.
+ 

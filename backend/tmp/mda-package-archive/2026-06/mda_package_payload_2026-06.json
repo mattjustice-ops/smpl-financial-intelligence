@@ -1,0 +1,2235 @@
+{
+  "task": "mda_full_package",
+  "close_period": "2026-06",
+  "close_period_label": "June 2026",
+  "current_quarter": "Q2",
+  "ytd_label": "Jan\u2013June 2026",
+  "prior_period_label": "May 2026",
+  "commentary_columns": {
+    "col_1": "period_vs_budget",
+    "col_2": "qtd_vs_budget",
+    "col_3": "ytd_vs_budget"
+  },
+  "sheets": {
+    "variance_commentary": {
+      "description": "Board-facing Variance Commentary tab \u2014 June Actual/Budget/QTD/YTD. 400 chars per column.",
+      "max_chars_per_column": 400,
+      "rows": [
+        {
+          "row_id": "vc_arr_ending",
+          "category": "ARR",
+          "metric": "Ending ARR",
+          "period": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "var": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "qtd": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "var": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "ytd": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "var": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "driver": "Net new ARR $1.68M vs budget $1.77M"
+        },
+        {
+          "row_id": "vc_net_new_arr",
+          "category": "ARR",
+          "metric": "Net New ARR",
+          "period": {
+            "actual": "$1.68M",
+            "budget": "$1.77M",
+            "var": "-$84.2K",
+            "var_pct": "-4.8%"
+          },
+          "qtd": {
+            "actual": "$5.13M",
+            "budget": "$5.08M",
+            "var": "+$53.8K",
+            "var_pct": "+1.1%"
+          },
+          "ytd": {
+            "actual": "$9.18M",
+            "budget": "$8.97M",
+            "var": "+$215.8K",
+            "var_pct": "+2.4%"
+          }
+        },
+        {
+          "row_id": "vc_revenue",
+          "category": "Revenue",
+          "metric": "Revenue",
+          "period": {
+            "actual": "$7.35M",
+            "budget": "$7.72M",
+            "var": "-$367.5K"
+          },
+          "qtd": {
+            "actual": "$21.05M",
+            "budget": "$22.10M",
+            "var": "-$1.05M"
+          },
+          "ytd": {
+            "actual": "$39.45M",
+            "budget": "$41.42M",
+            "var": "-$1.97M"
+          }
+        },
+        {
+          "row_id": "vc_gross_margin",
+          "category": "Revenue",
+          "metric": "Gross Margin %",
+          "period": {
+            "actual": "70.0%",
+            "budget": "70.0%",
+            "var": "",
+            "var_pct": ""
+          },
+          "qtd": {
+            "actual": "70.7%",
+            "budget": "70.7%",
+            "var": "",
+            "var_pct": ""
+          },
+          "ytd": {
+            "actual": "70.8%",
+            "budget": "70.8%",
+            "var": "",
+            "var_pct": ""
+          }
+        },
+        {
+          "row_id": "vc_ebitda",
+          "category": "P&L",
+          "metric": "EBITDA",
+          "period": {
+            "actual": "$661.5K",
+            "budget": "$647.5K",
+            "var": "+$14.0K"
+          },
+          "qtd": {
+            "actual": "$2.03M",
+            "budget": "$2.00M",
+            "var": "+$33.3K"
+          },
+          "ytd": {
+            "actual": "$3.87M",
+            "budget": "$3.81M",
+            "var": "+$59.1K"
+          }
+        },
+        {
+          "row_id": "vc_sm_pipeline",
+          "category": "GTM",
+          "metric": "S&M / Pipeline",
+          "period": {
+            "actual": "$2.50M",
+            "budget": "$2.65M",
+            "var": "-$151.2K",
+            "pipeline_ending": "$5.40M",
+            "coverage": "3.0x",
+            "top_channels": "Paid Social, Paid Search, Content Syndication"
+          },
+          "qtd": {
+            "actual": "$7.16M",
+            "budget": "$7.59M",
+            "var": "-$433.0K"
+          },
+          "ytd": {
+            "actual": "$13.41M",
+            "budget": "$14.22M",
+            "var": "-$811.5K"
+          }
+        },
+        {
+          "row_id": "vc_cash",
+          "category": "Cash",
+          "metric": "Ending Cash",
+          "period": {
+            "actual": "$48.43M",
+            "budget": "$31.46M",
+            "var": "+$16.98M",
+            "var_pct": "+54.0%"
+          },
+          "qtd": {
+            "actual": "$48.43M",
+            "budget": "$31.46M",
+            "var": "+$16.98M",
+            "var_pct": "+54.0%"
+          },
+          "ytd": {
+            "actual": "$48.43M",
+            "budget": "$31.46M",
+            "var": "+$16.98M",
+            "var_pct": "+54.0%"
+          }
+        },
+        {
+          "row_id": "vc_headcount",
+          "category": "Headcount",
+          "metric": "Total HC",
+          "period": {
+            "actual": "0",
+            "budget": "12",
+            "var": "-12",
+            "open_reqs": "0"
+          },
+          "qtd": {
+            "actual": "0",
+            "budget": "12",
+            "var": "-12",
+            "open_reqs": "0"
+          },
+          "ytd": {
+            "actual": "0",
+            "budget": "12",
+            "var": "-12",
+            "open_reqs": "0"
+          }
+        }
+      ]
+    },
+    "q2_vs_budget": {
+      "description": "Q2 vs Budget summary blocks \u2014 Income Statement, ARR, Cash. 300 chars per column.",
+      "max_chars_per_column": 300,
+      "rows": [
+        {
+          "row_id": "qvb_income_statement",
+          "category": "INCOME STATEMENT"
+        }
+      ]
+    },
+    "arr_waterfall": {
+      "description": "ARR waterfall rows. 300 chars per column.",
+      "max_chars_per_column": 300,
+      "rows": [
+        {
+          "row_id": "arr_new_business",
+          "metric": "New Business",
+          "period": {
+            "actual": "$1.68M",
+            "budget": "$1.77M"
+          },
+          "qtd": {
+            "actual": "$5.13M",
+            "budget": "$5.08M",
+            "var": "+$53.8K",
+            "var_pct": "+1.1%"
+          },
+          "ytd": {
+            "actual": "$9.18M",
+            "budget": "$8.97M",
+            "var": "+$215.8K",
+            "var_pct": "+2.4%"
+          }
+        },
+        {
+          "row_id": "arr_expansion",
+          "metric": "Expansion",
+          "period": {
+            "actual": "$869.1K",
+            "budget": "$912.6K"
+          },
+          "qtd": {
+            "actual": "$2.63M",
+            "budget": "$2.62M",
+            "var": "+$9.3K",
+            "var_pct": "+0.4%"
+          },
+          "ytd": {
+            "actual": "$4.78M",
+            "budget": "$4.71M",
+            "var": "+$73.8K",
+            "var_pct": "+1.6%"
+          }
+        },
+        {
+          "row_id": "arr_reactivation",
+          "metric": "Reactivation",
+          "period": {
+            "actual": "$142.9K",
+            "budget": "$150.0K"
+          },
+          "qtd": {
+            "actual": "$297.9K",
+            "budget": "$305.0K",
+            "var": "-$7.1K",
+            "var_pct": "-2.3%"
+          },
+          "ytd": {
+            "actual": "$492.9K",
+            "budget": "$500.0K",
+            "var": "-$7.1K",
+            "var_pct": "-1.4%"
+          }
+        },
+        {
+          "row_id": "arr_contraction",
+          "metric": "Contraction",
+          "period": {
+            "actual": "$313.7K",
+            "budget": "$329.3K"
+          },
+          "qtd": {
+            "actual": "-$778.7K",
+            "budget": "-$803.6K",
+            "var": "+$25.0K",
+            "var_pct": "-3.1%"
+          },
+          "ytd": {
+            "actual": "-$1.36M",
+            "budget": "-$1.40M",
+            "var": "+$36.7K",
+            "var_pct": "-2.6%"
+          }
+        },
+        {
+          "row_id": "arr_churn",
+          "metric": "Churn",
+          "period": {
+            "actual": "$520.2K",
+            "budget": "$546.2K"
+          },
+          "qtd": {
+            "actual": "-$1.48M",
+            "budget": "-$1.53M",
+            "var": "+$54.8K",
+            "var_pct": "-3.6%"
+          },
+          "ytd": {
+            "actual": "-$2.79M",
+            "budget": "-$2.88M",
+            "var": "+$94.0K",
+            "var_pct": "-3.3%"
+          }
+        },
+        {
+          "row_id": "arr_net_new",
+          "metric": "Net New ARR",
+          "period": {
+            "actual": "$1.68M",
+            "budget": "$1.77M"
+          },
+          "qtd": {
+            "actual": "$0.00",
+            "budget": "$0.00",
+            "var": "n/a",
+            "var_pct": "n/a"
+          },
+          "ytd": {
+            "actual": "$0.00",
+            "budget": "$0.00",
+            "var": "n/a",
+            "var_pct": "n/a"
+          }
+        },
+        {
+          "row_id": "arr_ending",
+          "metric": "Ending ARR",
+          "period": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "var": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "qtd": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "var": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "ytd": {
+            "actual": "$85.31M",
+            "fy_forecast": "$90.29M",
+            "fy_budget": "$96.10M"
+          }
+        }
+      ]
+    },
+    "income_statement": {
+      "description": "Income statement GL lines. 200 chars per column.",
+      "max_chars_per_column": 200,
+      "rows": [
+        {
+          "row_id": "is_total_revenue",
+          "period": {
+            "actual": "$7.35M",
+            "budget": "$7.72M",
+            "variance": "-$367.5K"
+          },
+          "qtd": {
+            "actual": "$21.05M",
+            "budget": "$22.10M",
+            "variance": "-$1.05M"
+          },
+          "ytd": {
+            "actual": "$39.45M",
+            "budget": "$41.42M",
+            "variance": "-$1.97M"
+          }
+        },
+        {
+          "row_id": "is_gross_profit",
+          "period": {
+            "actual": "$5.14M",
+            "budget": "$5.40M",
+            "variance": "-$257.2K"
+          },
+          "qtd": {
+            "actual": "$14.87M",
+            "budget": "$15.62M",
+            "variance": "-$743.6K"
+          },
+          "ytd": {
+            "actual": "$27.94M",
+            "budget": "$29.33M",
+            "variance": "-$1.40M"
+          }
+        },
+        {
+          "row_id": "is_sm",
+          "period": {
+            "actual": "$2.50M",
+            "budget": "$2.65M",
+            "variance": "-$151.2K"
+          },
+          "qtd": {
+            "actual": "$7.16M",
+            "budget": "$7.59M",
+            "variance": "-$433.0K"
+          },
+          "ytd": {
+            "actual": "$13.41M",
+            "budget": "$14.22M",
+            "variance": "-$811.5K"
+          }
+        },
+        {
+          "row_id": "is_rd",
+          "period": {
+            "actual": "$1.18M",
+            "budget": "$1.25M",
+            "variance": "-$71.1K"
+          },
+          "qtd": {
+            "actual": "$3.37M",
+            "budget": "$3.57M",
+            "variance": "-$203.8K"
+          },
+          "ytd": {
+            "actual": "$6.31M",
+            "budget": "$6.69M",
+            "variance": "-$381.9K"
+          }
+        },
+        {
+          "row_id": "is_ga",
+          "period": {
+            "actual": "$808.5K",
+            "budget": "$857.4K",
+            "variance": "-$48.9K"
+          },
+          "qtd": {
+            "actual": "$2.32M",
+            "budget": "$2.46M",
+            "variance": "-$140.1K"
+          },
+          "ytd": {
+            "actual": "$4.34M",
+            "budget": "$4.60M",
+            "variance": "-$262.5K"
+          }
+        },
+        {
+          "row_id": "is_ebitda",
+          "period": {
+            "actual": "$661.5K",
+            "budget": "$647.5K",
+            "variance": "+$14.0K"
+          },
+          "qtd": {
+            "actual": "$2.03M",
+            "budget": "$2.00M",
+            "variance": "+$33.3K"
+          },
+          "ytd": {
+            "actual": "$3.87M",
+            "budget": "$3.81M",
+            "variance": "+$59.1K"
+          }
+        }
+      ]
+    },
+    "cash_forecast": {
+      "description": "Cash bridge rows from cash_liquidity block. 200 chars per column.",
+      "max_chars_per_column": 200,
+      "rows": [
+        {
+          "row_id": "cf_collections",
+          "period": {
+            "cash_bop": "$48.02M",
+            "collections": "$6.81M",
+            "payroll": "$2.47M",
+            "vendor_payments": "$3.66M",
+            "commissions": "$199.9K",
+            "capex": "$220.0K",
+            "cash_eop_actual": "$50.26M",
+            "cash_eop_budget": "$48.17M",
+            "cfo_actual": "\u2014",
+            "cfo_budget": "\u2014",
+            "cash_headroom_vs_floor": "$38.43M",
+            "cash_floor": "$10.00M"
+          }
+        },
+        {
+          "row_id": "cf_payroll",
+          "period": {
+            "cash_bop": "$48.02M",
+            "collections": "$6.81M",
+            "payroll": "$2.47M",
+            "vendor_payments": "$3.66M",
+            "commissions": "$199.9K",
+            "capex": "$220.0K",
+            "cash_eop_actual": "$50.26M",
+            "cash_eop_budget": "$48.17M",
+            "cfo_actual": "\u2014",
+            "cfo_budget": "\u2014",
+            "cash_headroom_vs_floor": "$38.43M",
+            "cash_floor": "$10.00M"
+          }
+        },
+        {
+          "row_id": "cf_vendor_payments",
+          "period": {
+            "cash_bop": "$48.02M",
+            "collections": "$6.81M",
+            "payroll": "$2.47M",
+            "vendor_payments": "$3.66M",
+            "commissions": "$199.9K",
+            "capex": "$220.0K",
+            "cash_eop_actual": "$50.26M",
+            "cash_eop_budget": "$48.17M",
+            "cfo_actual": "\u2014",
+            "cfo_budget": "\u2014",
+            "cash_headroom_vs_floor": "$38.43M",
+            "cash_floor": "$10.00M"
+          }
+        },
+        {
+          "row_id": "cf_commissions",
+          "period": {
+            "cash_bop": "$48.02M",
+            "collections": "$6.81M",
+            "payroll": "$2.47M",
+            "vendor_payments": "$3.66M",
+            "commissions": "$199.9K",
+            "capex": "$220.0K",
+            "cash_eop_actual": "$50.26M",
+            "cash_eop_budget": "$48.17M",
+            "cfo_actual": "\u2014",
+            "cfo_budget": "\u2014",
+            "cash_headroom_vs_floor": "$38.43M",
+            "cash_floor": "$10.00M"
+          }
+        },
+        {
+          "row_id": "cf_capex",
+          "period": {
+            "cash_bop": "$48.02M",
+            "collections": "$6.81M",
+            "payroll": "$2.47M",
+            "vendor_payments": "$3.66M",
+            "commissions": "$199.9K",
+            "capex": "$220.0K",
+            "cash_eop_actual": "$50.26M",
+            "cash_eop_budget": "$48.17M",
+            "cfo_actual": "\u2014",
+            "cfo_budget": "\u2014",
+            "cash_headroom_vs_floor": "$38.43M",
+            "cash_floor": "$10.00M"
+          }
+        },
+        {
+          "row_id": "cf_cash_eop_actual",
+          "period": {
+            "cash_bop": "$48.02M",
+            "collections": "$6.81M",
+            "payroll": "$2.47M",
+            "vendor_payments": "$3.66M",
+            "commissions": "$199.9K",
+            "capex": "$220.0K",
+            "cash_eop_actual": "$50.26M",
+            "cash_eop_budget": "$48.17M",
+            "cfo_actual": "\u2014",
+            "cfo_budget": "\u2014",
+            "cash_headroom_vs_floor": "$38.43M",
+            "cash_floor": "$10.00M"
+          }
+        }
+      ]
+    },
+    "cash_flow_statement": {
+      "description": "YTD CFS lines from appendix. 200 chars per column.",
+      "max_chars_per_column": 200,
+      "rows": [
+        {
+          "row_id": "cfs_cfo",
+          "period": {
+            "cash_bop": "$48.02M",
+            "collections": "$6.81M",
+            "payroll": "$2.47M",
+            "vendor_payments": "$3.66M",
+            "commissions": "$199.9K",
+            "capex": "$220.0K",
+            "cash_eop_actual": "$50.26M",
+            "cash_eop_budget": "$48.17M",
+            "cfo_actual": "\u2014",
+            "cfo_budget": "\u2014",
+            "cash_headroom_vs_floor": "$38.43M",
+            "cash_floor": "$10.00M"
+          }
+        }
+      ]
+    },
+    "gtm_review": {
+      "description": "Marketing channel efficiency. 175 chars per column.",
+      "max_chars_per_column": 175,
+      "rows": [
+        {
+          "row_id": "gtm_paid_social",
+          "channel": "Paid Social",
+          "spend": "$12K",
+          "pipeline": "$524K",
+          "efficiency": "44.5x pipeline/spend",
+          "rank": "1"
+        },
+        {
+          "row_id": "gtm_paid_search",
+          "channel": "Paid Search",
+          "spend": "$8K",
+          "pipeline": "$508K",
+          "efficiency": "63.7x pipeline/spend",
+          "rank": "2"
+        },
+        {
+          "row_id": "gtm_content_syndication",
+          "channel": "Content Syndication",
+          "spend": "$7K",
+          "pipeline": "$310K",
+          "efficiency": "43.5x pipeline/spend",
+          "rank": "3"
+        },
+        {
+          "row_id": "gtm_organic_search",
+          "channel": "Organic Search",
+          "spend": "$5K",
+          "pipeline": "$443K",
+          "efficiency": "81.2x pipeline/spend",
+          "rank": "4"
+        },
+        {
+          "row_id": "gtm_outbound",
+          "channel": "Outbound",
+          "spend": "$5K",
+          "pipeline": "$484K",
+          "efficiency": "96.1x pipeline/spend",
+          "rank": "5"
+        }
+      ]
+    },
+    "headcount": {
+      "description": "Headcount by department. 200 chars per column.",
+      "max_chars_per_column": 200,
+      "rows": []
+    },
+    "risks_and_opportunities": {
+      "description": "Risks & Opportunities matrix. Description 350 chars, action 200 chars.",
+      "max_chars_description": 350,
+      "max_chars_action": 200,
+      "rows": [
+        {
+          "row_id": "ro_gtm_paid_search",
+          "type": "RISK",
+          "category": "GTM",
+          "impact": "HIGH",
+          "data": {
+            "title": "Deferred pipeline",
+            "detail": "Slipped pipeline 9.87M requires next-quarter coverage review.",
+            "action": "Re-stage opportunities with validated next steps and owners.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        },
+        {
+          "row_id": "ro_retention_smb",
+          "type": "RISK",
+          "category": "Retention",
+          "impact": "HIGH",
+          "data": {
+            "title": "Income Statement / Revenue",
+            "detail": "Revenue trailed budget in the close month. Validate expansion timing and churn pockets before board distribution.",
+            "action": "Review.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        },
+        {
+          "row_id": "ro_pipeline",
+          "type": "RISK",
+          "category": "Pipeline",
+          "impact": "MEDIUM",
+          "data": {
+            "title": "Close validation",
+            "detail": "Validation status: fail. Confirm tie-outs before distribution.",
+            "action": "Finance to certify waterfall and GL reconciliations.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        },
+        {
+          "row_id": "ro_cash_h2",
+          "type": "RISK",
+          "category": "Cash",
+          "impact": "LOW",
+          "data": {
+            "title": "Close validation",
+            "detail": "Validation status: fail. Confirm tie-outs before distribution.",
+            "action": "Finance to certify waterfall and GL reconciliations.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        },
+        {
+          "row_id": "ro_opp_gtm",
+          "type": "OPP",
+          "category": "GTM",
+          "impact": "HIGH",
+          "data": {
+            "title": "Liquidity headroom",
+            "detail": "Cash 50.26M provides runway for strategic investments.",
+            "action": "Prioritize high-ROI GTM and product bets with board approval.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        },
+        {
+          "row_id": "ro_opp_expansion",
+          "type": "OPP",
+          "category": "ARR",
+          "impact": "HIGH",
+          "data": {
+            "title": "Cash Forecast",
+            "detail": "Confirm ending cash ties to balance sheet cash in Validation tab.",
+            "action": "Review.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        },
+        {
+          "row_id": "ro_opp_margin",
+          "type": "OPP",
+          "category": "Margin",
+          "impact": "MEDIUM",
+          "data": {
+            "title": "SaaS MD&A Summary",
+            "detail": "Review Validation Checks before board distribution.",
+            "action": "Review.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        },
+        {
+          "row_id": "ro_opp_cash",
+          "type": "OPP",
+          "category": "Cash",
+          "impact": "MEDIUM",
+          "data": {
+            "title": "Risks & Opportunities",
+            "detail": "No Forecast ARR waterfall rows for 2026-06.; No Forecast revenue line for 2026-06. Resolve failed validations and reload missing CSV sources.",
+            "action": "Resolve failed validations and reload missing CSV sources.",
+            "pipeline_coverage": "3.0x",
+            "blended_eff": 60.7
+          }
+        }
+      ]
+    }
+  },
+  "variance_commentary_display": {
+    "sheet_title": "SMPL \u00b7 Variance Commentary \u00b7 June 2026",
+    "metric_columns": [
+      "June Actual",
+      "June Budget",
+      "June Var",
+      "Q2 Actual",
+      "Q2 Budget",
+      "Q2 Var",
+      "YTD Actual",
+      "YTD Budget",
+      "YTD Var"
+    ],
+    "rows": [
+      {
+        "row_id": "vc_arr_ending",
+        "category": "ARR",
+        "metric": "Ending ARR",
+        "value_kind": "money",
+        "cm": {
+          "actual": "$85.31M",
+          "budget": "$84.89M",
+          "var": "+$413.1K"
+        },
+        "qtd": {
+          "actual": "$85.31M",
+          "budget": "$84.89M",
+          "var": "+$413.1K"
+        },
+        "ytd": {
+          "actual": "$85.31M",
+          "budget": "$84.89M",
+          "var": "+$413.1K"
+        }
+      },
+      {
+        "row_id": "vc_net_new_arr",
+        "category": "ARR",
+        "metric": "Net New ARR",
+        "value_kind": "money",
+        "cm": {
+          "actual": "$1.68M",
+          "budget": "$1.77M",
+          "var": "-$84.2K"
+        },
+        "qtd": {
+          "actual": "$5.13M",
+          "budget": "$5.08M",
+          "var": "+$53.8K"
+        },
+        "ytd": {
+          "actual": "$9.18M",
+          "budget": "$8.97M",
+          "var": "+$215.8K"
+        }
+      },
+      {
+        "row_id": "vc_revenue",
+        "category": "Revenue",
+        "metric": "Revenue",
+        "value_kind": "money",
+        "cm": {
+          "actual": "$7.35M",
+          "budget": "$7.72M",
+          "var": "-$367.5K"
+        },
+        "qtd": {
+          "actual": "$21.05M",
+          "budget": "$22.10M",
+          "var": "-$1.05M"
+        },
+        "ytd": {
+          "actual": "$39.45M",
+          "budget": "$41.42M",
+          "var": "-$1.97M"
+        }
+      },
+      {
+        "row_id": "vc_gross_margin",
+        "category": "Revenue",
+        "metric": "Gross Margin %",
+        "value_kind": "percent",
+        "cm": {
+          "actual": "70.0%",
+          "budget": "70.0%",
+          "var": ""
+        },
+        "qtd": {
+          "actual": "70.7%",
+          "budget": "70.7%",
+          "var": ""
+        },
+        "ytd": {
+          "actual": "70.8%",
+          "budget": "70.8%",
+          "var": ""
+        }
+      },
+      {
+        "row_id": "vc_ebitda",
+        "category": "P&L",
+        "metric": "EBITDA",
+        "value_kind": "money",
+        "cm": {
+          "actual": "$661.5K",
+          "budget": "$647.5K",
+          "var": "+$14.0K"
+        },
+        "qtd": {
+          "actual": "$2.03M",
+          "budget": "$2.00M",
+          "var": "+$33.3K"
+        },
+        "ytd": {
+          "actual": "$3.87M",
+          "budget": "$3.81M",
+          "var": "+$59.1K"
+        }
+      },
+      {
+        "row_id": "vc_sm_pipeline",
+        "category": "GTM",
+        "metric": "S&M / Pipeline",
+        "value_kind": "money",
+        "cm": {
+          "actual": "$2.50M",
+          "budget": "$2.65M",
+          "var": "-$151.2K"
+        },
+        "qtd": {
+          "actual": "$7.16M",
+          "budget": "$7.59M",
+          "var": "-$433.0K"
+        },
+        "ytd": {
+          "actual": "$13.41M",
+          "budget": "$14.22M",
+          "var": "-$811.5K"
+        }
+      },
+      {
+        "row_id": "vc_cash",
+        "category": "Cash",
+        "metric": "Ending Cash",
+        "value_kind": "money",
+        "cm": {
+          "actual": "$48.43M",
+          "budget": "$31.46M",
+          "var": "+$16.98M"
+        },
+        "qtd": {
+          "actual": "$48.43M",
+          "budget": "$31.46M",
+          "var": "+$16.98M"
+        },
+        "ytd": {
+          "actual": "$48.43M",
+          "budget": "$31.46M",
+          "var": "+$16.98M"
+        }
+      },
+      {
+        "row_id": "vc_headcount",
+        "category": "Headcount",
+        "metric": "Total HC",
+        "value_kind": "headcount",
+        "cm": {
+          "actual": "0",
+          "budget": "12",
+          "var": "-12"
+        },
+        "qtd": {
+          "actual": "0",
+          "budget": "12",
+          "var": "-12"
+        },
+        "ytd": {
+          "actual": "0",
+          "budget": "12",
+          "var": "-12"
+        }
+      }
+    ]
+  },
+  "deck_payload": {
+    "organization": "simple",
+    "currency": "USD",
+    "period_context": {
+      "close_period": "2026-06",
+      "close_period_label": "June 2026",
+      "quarter": "Q2",
+      "year": "2026",
+      "ytd_label": "Jan\u2013Jun 2026",
+      "output_filename": "SMPL_Board_Review_2026-06.pptx",
+      "ytd_periods": [
+        "2026-01",
+        "2026-02",
+        "2026-03",
+        "2026-04",
+        "2026-05",
+        "2026-06"
+      ],
+      "qtd_periods": [
+        "2026-04",
+        "2026-05",
+        "2026-06"
+      ]
+    },
+    "period_matrix": {
+      "headers": [
+        "Metric",
+        "CM",
+        "QTD",
+        "YTD",
+        "FY Outlook",
+        "YTD vs Budget"
+      ],
+      "horizon_labels": {
+        "cm": "June 2026",
+        "qtd": "Q2",
+        "ytd": "Jan\u2013Jun 2026",
+        "fy_outlook": "FY 2026 Outlook"
+      },
+      "rows": [
+        {
+          "metric": "Ending ARR",
+          "currency": "USD",
+          "cm": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "variance": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "qtd": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "variance": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "ytd": {
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "variance": "+$413.1K",
+            "var_pct": "+0.5%"
+          },
+          "fy_outlook": {
+            "actual": "$90.29M",
+            "budget": "$96.10M",
+            "variance": "-$5.81M",
+            "var_pct": "-6.0%"
+          },
+          "ytd_vs_budget": "+0.5%"
+        },
+        {
+          "metric": "Revenue",
+          "currency": "USD",
+          "cm": {
+            "actual": "$2.20M",
+            "budget": "$2.32M",
+            "variance": "-$110.2K",
+            "var_pct": "-4.8%"
+          },
+          "qtd": {
+            "actual": "$6.18M",
+            "budget": "$22.10M",
+            "variance": "-$15.92M",
+            "var_pct": "-72.0%"
+          },
+          "ytd": {
+            "actual": "$11.51M",
+            "budget": "$12.09M",
+            "variance": "-$575.7K",
+            "var_pct": "-4.8%"
+          },
+          "fy_outlook": {
+            "actual": "$25.88M",
+            "budget": "$26.54M",
+            "variance": "-$652.3K",
+            "var_pct": "-2.5%"
+          },
+          "ytd_vs_budget": "-4.8%"
+        },
+        {
+          "metric": "EBITDA",
+          "currency": "USD",
+          "cm": {
+            "actual": "$661.5K",
+            "budget": "$647.5K",
+            "variance": "+$14.0K",
+            "var_pct": "+2.2%"
+          },
+          "qtd": {
+            "actual": "$2.03M",
+            "budget": "$2.00M",
+            "variance": "+$33.3K",
+            "var_pct": "+1.7%"
+          },
+          "ytd": {
+            "actual": "$3.87M",
+            "budget": "$3.81M",
+            "variance": "+$59.1K",
+            "var_pct": "+1.6%"
+          },
+          "fy_outlook": {
+            "actual": "$7.46M",
+            "budget": "$7.79M",
+            "variance": "-$328.7K",
+            "var_pct": "-4.2%"
+          },
+          "ytd_vs_budget": "+1.6%"
+        },
+        {
+          "metric": "Gross Margin %",
+          "currency": "USD",
+          "cm": {
+            "actual": "70.0%",
+            "budget": "70.0%"
+          },
+          "qtd": {
+            "actual": "70.7%",
+            "budget": "70.7%"
+          },
+          "ytd": {
+            "actual": "70.8%",
+            "budget": "70.8%"
+          },
+          "fy_outlook": {
+            "actual": "70.8%",
+            "budget": "70.8%"
+          }
+        },
+        {
+          "metric": "Ending Cash",
+          "currency": "USD",
+          "cm": {
+            "actual": "$48.43M",
+            "budget": "$31.46M",
+            "variance": "+$16.98M",
+            "var_pct": "+54.0%"
+          },
+          "qtd": {
+            "actual": "$48.43M",
+            "budget": "$31.46M",
+            "variance": "+$16.98M",
+            "var_pct": "+54.0%"
+          },
+          "ytd": {
+            "actual": "$48.43M",
+            "budget": "$31.46M",
+            "variance": "+$16.98M",
+            "var_pct": "+54.0%"
+          },
+          "fy_outlook": {
+            "actual": "$49.92M",
+            "budget": "$23.85M",
+            "variance": "+$26.07M",
+            "var_pct": "+109.3%"
+          },
+          "ytd_vs_budget": "+54.0%"
+        },
+        {
+          "metric": "Pipeline Created (flow)",
+          "currency": "USD",
+          "cm": {
+            "actual": "$5.40M",
+            "budget": "$5.31M",
+            "variance": "+$92.8K",
+            "var_pct": "+1.7%"
+          },
+          "qtd": {
+            "actual": "$5.40M",
+            "budget": "$15.24M",
+            "variance": "-$9.84M",
+            "var_pct": "-64.6%"
+          },
+          "ytd": {
+            "actual": "$5.40M",
+            "budget": "$26.91M",
+            "variance": "-$21.51M",
+            "var_pct": "-79.9%"
+          },
+          "fy_outlook": {
+            "actual": "$5.40M",
+            "budget": "$57.03M",
+            "variance": "-$51.63M",
+            "var_pct": "-90.5%"
+          },
+          "ytd_vs_budget": "-79.9%"
+        }
+      ],
+      "sources": [
+        {
+          "metric_id": "ending_arr",
+          "table": "comparison_waterfalls",
+          "field_or_line": "arr.ending_arr",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_ending_arr"
+        },
+        {
+          "metric_id": "revenue",
+          "table": "income_statement",
+          "field_or_line": "Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_revenue"
+        },
+        {
+          "metric_id": "gross_margin_pct",
+          "table": "income_statement",
+          "field_or_line": "Gross Margin / Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD",
+          "rollup_fn": "gross_margin_pct"
+        },
+        {
+          "metric_id": "ending_cash",
+          "table": "comparison_waterfalls",
+          "field_or_line": "cash_flow.ending_cash",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_cash"
+        }
+      ]
+    },
+    "executive_summary": {
+      "note": "Use period_matrix rows only \u2014 do not recalculate.",
+      "revenue": {
+        "metric": "Revenue",
+        "currency": "USD",
+        "cm": {
+          "actual": "$2.20M",
+          "budget": "$2.32M",
+          "variance": "-$110.2K",
+          "var_pct": "-4.8%"
+        },
+        "qtd": {
+          "actual": "$6.18M",
+          "budget": "$22.10M",
+          "variance": "-$15.92M",
+          "var_pct": "-72.0%"
+        },
+        "ytd": {
+          "actual": "$11.51M",
+          "budget": "$12.09M",
+          "variance": "-$575.7K",
+          "var_pct": "-4.8%"
+        },
+        "fy_outlook": {
+          "actual": "$25.88M",
+          "budget": "$26.54M",
+          "variance": "-$652.3K",
+          "var_pct": "-2.5%"
+        },
+        "ytd_vs_budget": "-4.8%"
+      },
+      "ending_arr": {
+        "metric": "Ending ARR",
+        "currency": "USD",
+        "cm": {
+          "actual": "$85.31M",
+          "budget": "$84.89M",
+          "variance": "+$413.1K",
+          "var_pct": "+0.5%"
+        },
+        "qtd": {
+          "actual": "$85.31M",
+          "budget": "$84.89M",
+          "variance": "+$413.1K",
+          "var_pct": "+0.5%"
+        },
+        "ytd": {
+          "actual": "$85.31M",
+          "budget": "$84.89M",
+          "variance": "+$413.1K",
+          "var_pct": "+0.5%"
+        },
+        "fy_outlook": {
+          "actual": "$90.29M",
+          "budget": "$96.10M",
+          "variance": "-$5.81M",
+          "var_pct": "-6.0%"
+        },
+        "ytd_vs_budget": "+0.5%"
+      },
+      "gross_margin_pct": {
+        "metric": "Gross Margin %",
+        "currency": "USD",
+        "cm": {
+          "actual": "70.0%",
+          "budget": "70.0%"
+        },
+        "qtd": {
+          "actual": "70.7%",
+          "budget": "70.7%"
+        },
+        "ytd": {
+          "actual": "70.8%",
+          "budget": "70.8%"
+        },
+        "fy_outlook": {
+          "actual": "70.8%",
+          "budget": "70.8%"
+        }
+      },
+      "ebitda": {
+        "metric": "EBITDA",
+        "currency": "USD",
+        "cm": {
+          "actual": "$661.5K",
+          "budget": "$647.5K",
+          "variance": "+$14.0K",
+          "var_pct": "+2.2%"
+        },
+        "qtd": {
+          "actual": "$2.03M",
+          "budget": "$2.00M",
+          "variance": "+$33.3K",
+          "var_pct": "+1.7%"
+        },
+        "ytd": {
+          "actual": "$3.87M",
+          "budget": "$3.81M",
+          "variance": "+$59.1K",
+          "var_pct": "+1.6%"
+        },
+        "fy_outlook": {
+          "actual": "$7.46M",
+          "budget": "$7.79M",
+          "variance": "-$328.7K",
+          "var_pct": "-4.2%"
+        },
+        "ytd_vs_budget": "+1.6%"
+      },
+      "ending_cash": {
+        "metric": "Ending Cash",
+        "currency": "USD",
+        "cm": {
+          "actual": "$48.43M",
+          "budget": "$31.46M",
+          "variance": "+$16.98M",
+          "var_pct": "+54.0%"
+        },
+        "qtd": {
+          "actual": "$48.43M",
+          "budget": "$31.46M",
+          "variance": "+$16.98M",
+          "var_pct": "+54.0%"
+        },
+        "ytd": {
+          "actual": "$48.43M",
+          "budget": "$31.46M",
+          "variance": "+$16.98M",
+          "var_pct": "+54.0%"
+        },
+        "fy_outlook": {
+          "actual": "$49.92M",
+          "budget": "$23.85M",
+          "variance": "+$26.07M",
+          "var_pct": "+109.3%"
+        },
+        "ytd_vs_budget": "+54.0%"
+      }
+    },
+    "arr_analysis": {
+      "arr_bop": "$83.44M",
+      "new_business": "$1.68M",
+      "new_business_budget": "$1.77M",
+      "expansion": "$869.1K",
+      "expansion_budget": "$912.6K",
+      "reactivation": "$142.9K",
+      "reactivation_budget": "$150.0K",
+      "contraction": "$313.7K",
+      "contraction_budget": "$329.3K",
+      "churn": "$520.2K",
+      "churn_budget": "$546.2K",
+      "net_new": "$1.68M",
+      "net_new_budget": "$1.77M",
+      "arr_eop": "$85.31M",
+      "arr_eop_budget": "$84.89M",
+      "gsr_pct": "1.0%",
+      "nsr_pct": "n/a",
+      "pipeline_coverage_x": "3.0x",
+      "waterfall_chart": {
+        "title": "ARR waterfall \u2014 June 2026",
+        "subtitle": "Begin ARR \u2192 components \u2192 Ending ARR ($M)",
+        "scenario": "Actual",
+        "labels": [
+          "Begin ARR",
+          "New Business",
+          "Expansion",
+          "Reactivation",
+          "Contraction",
+          "Churn",
+          "End ARR"
+        ],
+        "steps": [
+          {
+            "label": "Begin ARR",
+            "kind": "total",
+            "value_m": 83.445,
+            "display": "$83.44M",
+            "offset_m": 0,
+            "height_m": 83.445,
+            "bar_color": "00d4aa"
+          },
+          {
+            "label": "New Business",
+            "kind": "increase",
+            "value_m": 1.6848,
+            "display": "+$1.68M",
+            "offset_m": 83.445,
+            "height_m": 1.6848,
+            "bar_color": "166534"
+          },
+          {
+            "label": "Expansion",
+            "kind": "increase",
+            "value_m": 0.8691,
+            "display": "+$0.87M",
+            "offset_m": 85.12979999999999,
+            "height_m": 0.8691,
+            "bar_color": "166534"
+          },
+          {
+            "label": "Reactivation",
+            "kind": "increase",
+            "value_m": 0.1429,
+            "display": "+$0.14M",
+            "offset_m": 85.99889999999999,
+            "height_m": 0.1429,
+            "bar_color": "166534"
+          },
+          {
+            "label": "Contraction",
+            "kind": "decrease",
+            "value_m": -0.3137,
+            "display": "-$0.31M",
+            "offset_m": 85.82809999999999,
+            "height_m": 0.3137,
+            "bar_color": "991b1b"
+          },
+          {
+            "label": "Churn",
+            "kind": "decrease",
+            "value_m": -0.5202,
+            "display": "-$0.52M",
+            "offset_m": 85.30789999999999,
+            "height_m": 0.5202,
+            "bar_color": "991b1b"
+          },
+          {
+            "label": "End ARR",
+            "kind": "total",
+            "value_m": 85.30789999999999,
+            "display": "$85.31M",
+            "offset_m": 0,
+            "height_m": 85.30789999999999,
+            "bar_color": "00d4aa"
+          }
+        ],
+        "offsets_m": [
+          0,
+          83.44,
+          85.13,
+          86.0,
+          85.83,
+          85.31,
+          0
+        ],
+        "heights_m": [
+          83.44,
+          1.68,
+          0.87,
+          0.14,
+          0.31,
+          0.52,
+          85.31
+        ],
+        "signed_m": [
+          83.44,
+          1.68,
+          0.87,
+          0.14,
+          -0.31,
+          -0.52,
+          85.31
+        ],
+        "bar_colors": [
+          "00d4aa",
+          "166534",
+          "166534",
+          "166534",
+          "991b1b",
+          "991b1b",
+          "00d4aa"
+        ],
+        "shape_bars": [
+          {
+            "x": 0.548,
+            "y": 3.33,
+            "w": 0.547,
+            "h": 1.72,
+            "color": "00d4aa",
+            "label": "$83.44M",
+            "label_position": "above",
+            "category": "Begin ARR"
+          },
+          {
+            "x": 1.491,
+            "y": 2.49,
+            "w": 0.547,
+            "h": 0.84,
+            "color": "166534",
+            "label": "+$1.68M",
+            "label_position": "above",
+            "category": "New Business"
+          },
+          {
+            "x": 2.434,
+            "y": 2.05,
+            "w": 0.547,
+            "h": 0.435,
+            "color": "166534",
+            "label": "+$0.87M",
+            "label_position": "above",
+            "category": "Expansion"
+          },
+          {
+            "x": 3.377,
+            "y": 1.98,
+            "w": 0.547,
+            "h": 0.07,
+            "color": "166534",
+            "label": "+$0.14M",
+            "label_position": "above",
+            "category": "Reactivation"
+          },
+          {
+            "x": 4.319,
+            "y": 2.135,
+            "w": 0.547,
+            "h": 0.155,
+            "color": "991b1b",
+            "label": "-$0.31M",
+            "label_position": "below",
+            "category": "Contraction"
+          },
+          {
+            "x": 5.262,
+            "y": 2.395,
+            "w": 0.547,
+            "h": 0.26,
+            "color": "991b1b",
+            "label": "-$0.52M",
+            "label_position": "below",
+            "category": "Churn"
+          },
+          {
+            "x": 6.205,
+            "y": 2.395,
+            "w": 0.547,
+            "h": 2.655,
+            "color": "00d4aa",
+            "label": "$85.31M",
+            "label_position": "above",
+            "category": "End ARR"
+          }
+        ],
+        "chart_area": {
+          "x": 0.35,
+          "y": 1.05,
+          "w": 6.6,
+          "h": 4.0
+        },
+        "colors": {
+          "total": "00d4aa",
+          "increase": "166534",
+          "decrease": "991b1b"
+        },
+        "y_axis": {
+          "min_m": 80,
+          "max_m": 88,
+          "tick_format": "$0M"
+        },
+        "label_decimals": 2,
+        "render": "shape_rectangles",
+        "note": "MANDATORY: draw slide 3 waterfall with slide.addShape rectangles from shape_bars (one rect + one text label per bar). DO NOT use addChart on slide 3 \u2014 stacked charts corrupt the PPTX. Actuals only \u2014 never Budget in a waterfall."
+      },
+      "bridge_table": {
+        "columns": [
+          "Component",
+          "Actual",
+          "Budget",
+          "Variance"
+        ],
+        "rows": [
+          {
+            "label": "Beginning ARR",
+            "actual": "$83.44M",
+            "budget": "$82.94M",
+            "variance": "+$506.2K"
+          },
+          {
+            "label": "New Business",
+            "actual": "$1.68M",
+            "budget": "$1.77M",
+            "variance": "-$84.2K"
+          },
+          {
+            "label": "Expansion",
+            "actual": "$869.1K",
+            "budget": "$912.6K",
+            "variance": "-$43.5K"
+          },
+          {
+            "label": "Reactivation",
+            "actual": "$142.9K",
+            "budget": "$150.0K",
+            "variance": "-$7.1K"
+          },
+          {
+            "label": "Contraction",
+            "actual": "$313.7K",
+            "budget": "$329.3K",
+            "variance": "-$15.7K"
+          },
+          {
+            "label": "Churn",
+            "actual": "$520.2K",
+            "budget": "$546.2K",
+            "variance": "-$26.0K"
+          },
+          {
+            "label": "Ending ARR",
+            "actual": "$85.31M",
+            "budget": "$84.89M",
+            "variance": "+$413.1K"
+          }
+        ]
+      }
+    },
+    "pl_review": {
+      "note": "Use period_matrix Revenue and Gross Margin % rows for CM/QTD/YTD.",
+      "revenue_cm": {
+        "actual": "$2.20M",
+        "budget": "$2.32M",
+        "variance": "-$110.2K",
+        "var_pct": "-4.8%"
+      },
+      "revenue_qtd": {
+        "actual": "$6.18M",
+        "budget": "$22.10M",
+        "variance": "-$15.92M",
+        "var_pct": "-72.0%"
+      },
+      "revenue_ytd": {
+        "actual": "$11.51M",
+        "budget": "$12.09M",
+        "variance": "-$575.7K",
+        "var_pct": "-4.8%"
+      },
+      "gross_margin_cm": {
+        "actual": "70.0%",
+        "budget": "70.0%"
+      },
+      "ebitda_cm": {
+        "actual": "$661.5K",
+        "budget": "$647.5K",
+        "variance": "+$14.0K",
+        "var_pct": "+2.2%"
+      }
+    },
+    "cash_liquidity": {
+      "current_month": {
+        "cash_bop": "$48.02M",
+        "collections": "$6.81M",
+        "payroll": "$2.47M",
+        "vendor_payments": "$3.66M",
+        "commissions": "$199.9K",
+        "capex": "$220.0K",
+        "cash_eop_actual": "$50.26M",
+        "cash_eop_budget": "$48.17M",
+        "cfo_actual": "\u2014",
+        "cfo_budget": "\u2014",
+        "cash_headroom_vs_floor": "$38.43M",
+        "cash_floor": "$10.00M"
+      },
+      "bridge_table": {
+        "columns": [
+          "Line Item",
+          "Actual",
+          "Budget"
+        ],
+        "rows": [
+          {
+            "label": "Beginning cash",
+            "actual": "$48.02M",
+            "budget": "$29.60M"
+          },
+          {
+            "label": "Collections",
+            "actual": "$6.81M",
+            "budget": "$8.91M"
+          },
+          {
+            "label": "Payroll",
+            "actual": "$2.47M",
+            "budget": "$4.00M"
+          },
+          {
+            "label": "Vendor payments",
+            "actual": "$3.66M",
+            "budget": "$1.40M"
+          },
+          {
+            "label": "Commissions",
+            "actual": "$199.9K",
+            "budget": "$370.8K"
+          },
+          {
+            "label": "Capex",
+            "actual": "$220.0K",
+            "budget": "$220.0K"
+          },
+          {
+            "label": "Ending cash",
+            "actual": "$50.26M",
+            "budget": "$48.17M"
+          }
+        ]
+      },
+      "ytd": {
+        "collections": "$58.82M",
+        "cash_eop_actual": "$48.43M",
+        "cash_eop_budget": "$23.85M"
+      },
+      "currency": "USD"
+    },
+    "appendix": {
+      "ytd_cash_flow_statement": {
+        "label": "YTD Cash Flow Statement (Jan\u2013Jun 2026)",
+        "actual": {
+          "beginning_cash": "$45.30M",
+          "net_income": "$2.43M",
+          "depreciation_amortization": "$591.8K",
+          "stock_based_compensation": "n/a",
+          "change_in_ar": "$2.19M",
+          "change_in_deferred_revenue": "$232.0K",
+          "change_in_ap": "$373.5K",
+          "change_in_prepaids": "$75.0K",
+          "cfo": "$5.90M",
+          "capex": "-$335.5K",
+          "cfi": "-$335.5K",
+          "cff": "n/a",
+          "net_change_in_cash": "$4.96M",
+          "ending_cash": "$50.26M",
+          "ytd_periods": [
+            "2026-01",
+            "2026-02",
+            "2026-03",
+            "2026-04",
+            "2026-05",
+            "2026-06"
+          ],
+          "currency": "USD"
+        },
+        "budget": {
+          "beginning_cash": "$46.77M",
+          "net_income": "$2.36M",
+          "depreciation_amortization": "$621.3K",
+          "stock_based_compensation": "n/a",
+          "change_in_ar": "-$1.88M",
+          "change_in_deferred_revenue": "$249.2K",
+          "change_in_ap": "$917.7K",
+          "change_in_prepaids": "$75.0K",
+          "cfo": "$2.35M",
+          "capex": "-$352.3K",
+          "cfi": "-$352.3K",
+          "cff": "n/a",
+          "net_change_in_cash": "$1.39M",
+          "ending_cash": "$48.17M",
+          "ytd_periods": [
+            "2026-01",
+            "2026-02",
+            "2026-03",
+            "2026-04",
+            "2026-05",
+            "2026-06"
+          ],
+          "currency": "USD"
+        },
+        "source": "build_ts_data.cfs"
+      },
+      "label": "Appendix A \u2014 YTD Cash Flow Statement"
+    },
+    "ytd_cash_flow_statement": {
+      "label": "YTD Cash Flow Statement (Jan\u2013Jun 2026)",
+      "actual": {
+        "beginning_cash": "$45.30M",
+        "net_income": "$2.43M",
+        "depreciation_amortization": "$591.8K",
+        "stock_based_compensation": "n/a",
+        "change_in_ar": "$2.19M",
+        "change_in_deferred_revenue": "$232.0K",
+        "change_in_ap": "$373.5K",
+        "change_in_prepaids": "$75.0K",
+        "cfo": "$5.90M",
+        "capex": "-$335.5K",
+        "cfi": "-$335.5K",
+        "cff": "n/a",
+        "net_change_in_cash": "$4.96M",
+        "ending_cash": "$50.26M",
+        "ytd_periods": [
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "currency": "USD"
+      },
+      "budget": {
+        "beginning_cash": "$46.77M",
+        "net_income": "$2.36M",
+        "depreciation_amortization": "$621.3K",
+        "stock_based_compensation": "n/a",
+        "change_in_ar": "-$1.88M",
+        "change_in_deferred_revenue": "$249.2K",
+        "change_in_ap": "$917.7K",
+        "change_in_prepaids": "$75.0K",
+        "cfo": "$2.35M",
+        "capex": "-$352.3K",
+        "cfi": "-$352.3K",
+        "cff": "n/a",
+        "net_change_in_cash": "$1.39M",
+        "ending_cash": "$48.17M",
+        "ytd_periods": [
+          "2026-01",
+          "2026-02",
+          "2026-03",
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "currency": "USD"
+      },
+      "source": "build_ts_data.cfs"
+    },
+    "fy_outlook": {
+      "fy_year": "2026",
+      "fiscal_end_period": "2026-12",
+      "arr_eoy": {
+        "actual_or_outlook": "$90.29M",
+        "budget": "$96.10M",
+        "forecast": "$90.29M",
+        "source": "comparison_waterfalls.arr.ending_arr @ 2026-12"
+      },
+      "revenue_fy": {
+        "outlook": "$25.88M",
+        "budget": "$26.54M"
+      },
+      "gross_margin_fy": {
+        "outlook": "70.4%",
+        "budget": "70.9%"
+      },
+      "ebitda_fy": {
+        "outlook": "$7.46M",
+        "budget": "$7.79M"
+      },
+      "cash_eoy": {
+        "outlook": "$49.92M",
+        "budget": "$23.85M"
+      },
+      "summary_table": [
+        {
+          "metric": "Ending ARR (Dec EoY)",
+          "outlook": "$90.29M",
+          "budget": "$96.10M",
+          "note": "Point-in-time Dec \u2014 never sum monthly ARR"
+        },
+        {
+          "metric": "FY Revenue",
+          "outlook": "$25.88M",
+          "budget": "$26.54M",
+          "note": "Outlook = Actual closed months + Forecast open months"
+        },
+        {
+          "metric": "FY Gross Margin %",
+          "outlook": "70.4%",
+          "budget": "70.9%",
+          "note": "Outlook and budget GM% are computed independently \u2014 do not copy the same value"
+        },
+        {
+          "metric": "FY EBITDA",
+          "outlook": "$7.46M",
+          "budget": "$7.79M",
+          "note": ""
+        },
+        {
+          "metric": "Ending Cash (Dec EoY)",
+          "outlook": "$49.92M",
+          "budget": "$23.85M",
+          "note": "Point-in-time Dec ending cash"
+        }
+      ],
+      "headcount": {
+        "current_month_actual": 0,
+        "eoy_budget": 0,
+        "eoy_forecast": 16,
+        "open_reqs_current": 0,
+        "format": "integer_headcount_not_dollars"
+      }
+    },
+    "validation_status": "fail",
+    "data_gaps": [
+      {
+        "section": "MRR / ARR Waterfall",
+        "status": "missing",
+        "message": "No Forecast ARR waterfall rows for 2026-06."
+      },
+      {
+        "section": "Income Statement",
+        "status": "partial",
+        "message": "No Forecast revenue line for 2026-06."
+      }
+    ],
+    "formatting_rules": {
+      "money": "Use display strings exactly as provided (e.g. $7.41M).",
+      "percent": "Use display strings exactly (e.g. 79.2%).",
+      "headcount": "Integers only \u2014 never format as dollars or divide by 1000.",
+      "no_recalculation": "Every table cell must copy a value from this payload verbatim."
+    },
+    "data_map": {
+      "canonical_engine": "board_platform_metrics",
+      "shared_payload_builder": "build_deck_payload",
+      "shared_deliverables": [
+        "board_platform_ui \u2014 executive period table / board tabs",
+        "mda_deck_pptx \u2014 Prompt 5 (period_matrix, arr_analysis, pl_detail, cash_liquidity)",
+        "mda_package_xlsx \u2014 Prompt 2 Variance Commentary metrics + Claude commentary"
+      ],
+      "period_matrix_sources": [
+        {
+          "metric_id": "ending_arr",
+          "table": "comparison_waterfalls",
+          "field_or_line": "arr.ending_arr",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_ending_arr"
+        },
+        {
+          "metric_id": "revenue",
+          "table": "income_statement",
+          "field_or_line": "Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_revenue"
+        },
+        {
+          "metric_id": "gross_margin_pct",
+          "table": "income_statement",
+          "field_or_line": "Gross Margin / Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD",
+          "rollup_fn": "gross_margin_pct"
+        },
+        {
+          "metric_id": "ending_cash",
+          "table": "comparison_waterfalls",
+          "field_or_line": "cash_flow.ending_cash",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_cash"
+        }
+      ],
+      "variance_commentary_rows": {
+        "vc_arr_ending": {
+          "metric": "Ending ARR",
+          "table": "comparison_waterfalls",
+          "field": "arr.ending_arr",
+          "rollup_fn": "rollup_ending_arr",
+          "deck_block": "period_matrix"
+        },
+        "vc_net_new_arr": {
+          "metric": "Net New ARR",
+          "table": "comparison_waterfalls",
+          "field": "arr.new_arr | arr.new_business",
+          "rollup_fn": "rollup_waterfall_metric(flow=True)",
+          "deck_block": "arr_analysis.bridge_table"
+        },
+        "vc_revenue": {
+          "metric": "Revenue",
+          "table": "income_statement",
+          "field": "Revenue",
+          "rollup_fn": "rollup_revenue",
+          "deck_block": "period_matrix"
+        },
+        "vc_gross_margin": {
+          "metric": "Gross Margin %",
+          "table": "income_statement",
+          "field": "Gross Profit / Revenue",
+          "rollup_fn": "gross_margin_pct_horizon",
+          "deck_block": "period_matrix"
+        },
+        "vc_ebitda": {
+          "metric": "EBITDA",
+          "table": "income_statement",
+          "field": "EBITDA",
+          "rollup_fn": "rollup_ebitda",
+          "deck_block": "period_matrix"
+        },
+        "vc_sm_pipeline": {
+          "metric": "S&M / Pipeline",
+          "table": "income_statement",
+          "field": "Sales & Marketing (P&L)",
+          "rollup_fn": "build_pl_detail_block.sm",
+          "deck_block": "pl_detail + gtm_performance.channels"
+        },
+        "vc_cash": {
+          "metric": "Ending Cash",
+          "table": "comparison_waterfalls",
+          "field": "cash_flow.ending_cash",
+          "rollup_fn": "rollup_cash",
+          "deck_block": "period_matrix | cash_liquidity"
+        },
+        "vc_headcount": {
+          "metric": "Total HC",
+          "table": "workforce_period_summary | headcount_plan",
+          "field": "sum(headcount) @ close month",
+          "rollup_fn": "headcount_totals",
+          "deck_block": "fy_outlook.headcount",
+          "format": "integer \u2014 never dollars"
+        }
+      },
+      "future": "Customer-facing Validation sheet will assert these tie-outs automatically."
+    }
+  },
+  "instructions": "Generate commentary for all sheets. Return a single JSON object with sheet name keys. For all sheets except risks_and_opportunities, each row_id maps to an object with period_vs_budget, qtd_vs_budget, ytd_vs_budget strings. For risks_and_opportunities, each row_id maps to description and recommended_action. Enforce character limits. Each column must stand alone. No bullets. No line breaks.",
+  "payload_meta": {
+    "version": "prompt2_v1",
+    "schema": "SMPL_API_Prompts_BoardDeck_MDA_v8_prompt2",
+    "data_source": "board_platform_metrics.build_deck_payload",
+    "data_map": {
+      "canonical_engine": "board_platform_metrics",
+      "shared_payload_builder": "build_deck_payload",
+      "shared_deliverables": [
+        "board_platform_ui \u2014 executive period table / board tabs",
+        "mda_deck_pptx \u2014 Prompt 5 (period_matrix, arr_analysis, pl_detail, cash_liquidity)",
+        "mda_package_xlsx \u2014 Prompt 2 Variance Commentary metrics + Claude commentary"
+      ],
+      "period_matrix_sources": [
+        {
+          "metric_id": "ending_arr",
+          "table": "comparison_waterfalls",
+          "field_or_line": "arr.ending_arr",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_ending_arr"
+        },
+        {
+          "metric_id": "revenue",
+          "table": "income_statement",
+          "field_or_line": "Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_revenue"
+        },
+        {
+          "metric_id": "gross_margin_pct",
+          "table": "income_statement",
+          "field_or_line": "Gross Margin / Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD",
+          "rollup_fn": "gross_margin_pct"
+        },
+        {
+          "metric_id": "ending_cash",
+          "table": "comparison_waterfalls",
+          "field_or_line": "cash_flow.ending_cash",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_cash"
+        }
+      ],
+      "variance_commentary_rows": {
+        "vc_arr_ending": {
+          "metric": "Ending ARR",
+          "table": "comparison_waterfalls",
+          "field": "arr.ending_arr",
+          "rollup_fn": "rollup_ending_arr",
+          "deck_block": "period_matrix"
+        },
+        "vc_net_new_arr": {
+          "metric": "Net New ARR",
+          "table": "comparison_waterfalls",
+          "field": "arr.new_arr | arr.new_business",
+          "rollup_fn": "rollup_waterfall_metric(flow=True)",
+          "deck_block": "arr_analysis.bridge_table"
+        },
+        "vc_revenue": {
+          "metric": "Revenue",
+          "table": "income_statement",
+          "field": "Revenue",
+          "rollup_fn": "rollup_revenue",
+          "deck_block": "period_matrix"
+        },
+        "vc_gross_margin": {
+          "metric": "Gross Margin %",
+          "table": "income_statement",
+          "field": "Gross Profit / Revenue",
+          "rollup_fn": "gross_margin_pct_horizon",
+          "deck_block": "period_matrix"
+        },
+        "vc_ebitda": {
+          "metric": "EBITDA",
+          "table": "income_statement",
+          "field": "EBITDA",
+          "rollup_fn": "rollup_ebitda",
+          "deck_block": "period_matrix"
+        },
+        "vc_sm_pipeline": {
+          "metric": "S&M / Pipeline",
+          "table": "income_statement",
+          "field": "Sales & Marketing (P&L)",
+          "rollup_fn": "build_pl_detail_block.sm",
+          "deck_block": "pl_detail + gtm_performance.channels"
+        },
+        "vc_cash": {
+          "metric": "Ending Cash",
+          "table": "comparison_waterfalls",
+          "field": "cash_flow.ending_cash",
+          "rollup_fn": "rollup_cash",
+          "deck_block": "period_matrix | cash_liquidity"
+        },
+        "vc_headcount": {
+          "metric": "Total HC",
+          "table": "workforce_period_summary | headcount_plan",
+          "field": "sum(headcount) @ close month",
+          "rollup_fn": "headcount_totals",
+          "deck_block": "fy_outlook.headcount",
+          "format": "integer \u2014 never dollars"
+        }
+      },
+      "future": "Customer-facing Validation sheet will assert these tie-outs automatically."
+    },
+    "deck_data_map": {
+      "canonical_engine": "board_platform_metrics",
+      "shared_payload_builder": "build_deck_payload",
+      "shared_deliverables": [
+        "board_platform_ui \u2014 executive period table / board tabs",
+        "mda_deck_pptx \u2014 Prompt 5 (period_matrix, arr_analysis, pl_detail, cash_liquidity)",
+        "mda_package_xlsx \u2014 Prompt 2 Variance Commentary metrics + Claude commentary"
+      ],
+      "period_matrix_sources": [
+        {
+          "metric_id": "ending_arr",
+          "table": "comparison_waterfalls",
+          "field_or_line": "arr.ending_arr",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_ending_arr"
+        },
+        {
+          "metric_id": "revenue",
+          "table": "income_statement",
+          "field_or_line": "Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_revenue"
+        },
+        {
+          "metric_id": "gross_margin_pct",
+          "table": "income_statement",
+          "field_or_line": "Gross Margin / Revenue",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD",
+          "rollup_fn": "gross_margin_pct"
+        },
+        {
+          "metric_id": "ending_cash",
+          "table": "comparison_waterfalls",
+          "field_or_line": "cash_flow.ending_cash",
+          "scenario": "Actual/Budget",
+          "horizon": "CM/QTD/YTD/FY",
+          "rollup_fn": "rollup_cash"
+        }
+      ],
+      "variance_commentary_rows": {
+        "vc_arr_ending": {
+          "metric": "Ending ARR",
+          "table": "comparison_waterfalls",
+          "field": "arr.ending_arr",
+          "rollup_fn": "rollup_ending_arr",
+          "deck_block": "period_matrix"
+        },
+        "vc_net_new_arr": {
+          "metric": "Net New ARR",
+          "table": "comparison_waterfalls",
+          "field": "arr.new_arr | arr.new_business",
+          "rollup_fn": "rollup_waterfall_metric(flow=True)",
+          "deck_block": "arr_analysis.bridge_table"
+        },
+        "vc_revenue": {
+          "metric": "Revenue",
+          "table": "income_statement",
+          "field": "Revenue",
+          "rollup_fn": "rollup_revenue",
+          "deck_block": "period_matrix"
+        },
+        "vc_gross_margin": {
+          "metric": "Gross Margin %",
+          "table": "income_statement",
+          "field": "Gross Profit / Revenue",
+          "rollup_fn": "gross_margin_pct_horizon",
+          "deck_block": "period_matrix"
+        },
+        "vc_ebitda": {
+          "metric": "EBITDA",
+          "table": "income_statement",
+          "field": "EBITDA",
+          "rollup_fn": "rollup_ebitda",
+          "deck_block": "period_matrix"
+        },
+        "vc_sm_pipeline": {
+          "metric": "S&M / Pipeline",
+          "table": "income_statement",
+          "field": "Sales & Marketing (P&L)",
+          "rollup_fn": "build_pl_detail_block.sm",
+          "deck_block": "pl_detail + gtm_performance.channels"
+        },
+        "vc_cash": {
+          "metric": "Ending Cash",
+          "table": "comparison_waterfalls",
+          "field": "cash_flow.ending_cash",
+          "rollup_fn": "rollup_cash",
+          "deck_block": "period_matrix | cash_liquidity"
+        },
+        "vc_headcount": {
+          "metric": "Total HC",
+          "table": "workforce_period_summary | headcount_plan",
+          "field": "sum(headcount) @ close month",
+          "rollup_fn": "headcount_totals",
+          "deck_block": "fy_outlook.headcount",
+          "format": "integer \u2014 never dollars"
+        }
+      },
+      "future": "Customer-facing Validation sheet will assert these tie-outs automatically."
+    }
+  },
+  "payload_warnings": [
+    "Headcount is zero \u2014 verify headcount_plan / workforce tables loaded.",
+    "vc_revenue cm.actual: MDA '$7.35M' != period_matrix '$2.20M'",
+    "vc_revenue cm.budget: MDA '$7.72M' != period_matrix '$2.32M'",
+    "vc_revenue cm.var: MDA '-$367.5K' != period_matrix '-$110.2K'",
+    "vc_revenue qtd.actual: MDA '$21.05M' != period_matrix '$6.18M'",
+    "vc_revenue qtd.var: MDA '-$1.05M' != period_matrix '-$15.92M'",
+    "vc_revenue ytd.actual: MDA '$39.45M' != period_matrix '$11.51M'",
+    "vc_revenue ytd.budget: MDA '$41.42M' != period_matrix '$12.09M'",
+    "vc_revenue ytd.var: MDA '-$1.97M' != period_matrix '-$575.7K'"
+  ],
+  "tie_out_warnings": [
+    "vc_revenue cm.actual: MDA '$7.35M' != period_matrix '$2.20M'",
+    "vc_revenue cm.budget: MDA '$7.72M' != period_matrix '$2.32M'",
+    "vc_revenue cm.var: MDA '-$367.5K' != period_matrix '-$110.2K'",
+    "vc_revenue qtd.actual: MDA '$21.05M' != period_matrix '$6.18M'",
+    "vc_revenue qtd.var: MDA '-$1.05M' != period_matrix '-$15.92M'",
+    "vc_revenue ytd.actual: MDA '$39.45M' != period_matrix '$11.51M'",
+    "vc_revenue ytd.budget: MDA '$41.42M' != period_matrix '$12.09M'",
+    "vc_revenue ytd.var: MDA '-$1.97M' != period_matrix '-$575.7K'"
+  ]
+}

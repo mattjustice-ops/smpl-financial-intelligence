@@ -1,0 +1,789 @@
+{
+  "ARR Waterfall": {
+    "header_row3": [
+      null,
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+      "Q1\nActual",
+      "Q2\nActual",
+      "H1 Act\n+Jun FC",
+      "FY Act\n+FC",
+      "Q1\nBudget",
+      "Q2\nBudget",
+      "H1\nBudget",
+      "FY\nBudget",
+      "Q1\nVar $",
+      "Q2\nVar $",
+      "H1\nVar $",
+      "FY\nVar $",
+      "Q1\nVar %",
+      "Q2\nVar %",
+      "H1\nVar %",
+      "FY\nVar %",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "row_labels": [
+      [
+        1,
+        "SMPL \u00b7 ARR / MRR Waterfall \u00b7 Q2 2026 Close \u2014 June "
+      ],
+      [
+        4,
+        "ARR MOVEMENT BRIDGE ($M)"
+      ],
+      [
+        5,
+        "Beginning ARR"
+      ],
+      [
+        6,
+        "+ New Business"
+      ],
+      [
+        7,
+        "+ Expansion"
+      ],
+      [
+        8,
+        "+ Reactivation"
+      ],
+      [
+        9,
+        "- Contraction"
+      ],
+      [
+        10,
+        "- Churn"
+      ],
+      [
+        12,
+        "NET NEW ARR & ENDING ARR"
+      ],
+      [
+        13,
+        "Net New ARR"
+      ],
+      [
+        14,
+        "Ending ARR"
+      ],
+      [
+        16,
+        "RETENTION METRICS"
+      ],
+      [
+        17,
+        "NRR %"
+      ],
+      [
+        18,
+        "GRR %"
+      ],
+      [
+        20,
+        "Note: Jun Actual column (yellow) is a user-input p"
+      ]
+    ]
+  },
+  "Income Statement": {
+    "header_row3": [
+      null,
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+      "Q1\nActual",
+      "Q2\nActual",
+      "H1 Act\n+Jun FC",
+      "FY Act\n+FC",
+      "Q1\nBudget",
+      "Q2\nBudget",
+      "H1\nBudget",
+      "FY\nBudget",
+      "Q1\nVar $",
+      "Q2\nVar $",
+      "H1\nVar $",
+      "FY\nVar $",
+      "Q1\nVar %",
+      "Q2\nVar %",
+      "H1\nVar %",
+      "FY\nVar %",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "row_labels": [
+      [
+        1,
+        "SMPL \u00b7 Income Statement \u00b7 Jan\u2013Dec 2026"
+      ],
+      [
+        4,
+        "REVENUE"
+      ],
+      [
+        5,
+        "Total Revenue"
+      ],
+      [
+        6,
+        "Subscription Rev"
+      ],
+      [
+        7,
+        "Services Rev"
+      ],
+      [
+        9,
+        "GROSS PROFIT"
+      ],
+      [
+        10,
+        "Cost of Revenue"
+      ],
+      [
+        11,
+        "Gross Profit"
+      ],
+      [
+        12,
+        "Gross Margin %"
+      ],
+      [
+        14,
+        "OPERATING EXPENSES"
+      ],
+      [
+        15,
+        "Sales & Marketing"
+      ],
+      [
+        16,
+        "Research & Development"
+      ],
+      [
+        17,
+        "General & Administrative"
+      ],
+      [
+        18,
+        "Total OpEx"
+      ],
+      [
+        20,
+        "EBITDA"
+      ],
+      [
+        21,
+        "EBITDA"
+      ],
+      [
+        22,
+        "Depreciation & Amort"
+      ],
+      [
+        23,
+        "Operating Income"
+      ],
+      [
+        25,
+        "Note: Jun Actual (yellow) is a user-input placehol"
+      ]
+    ]
+  },
+  "Cash Forecast": {
+    "header_row3": [
+      null,
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+      "Q1\nActual",
+      "Q2\nActual",
+      "H1 Act\n+Jun FC",
+      "FY Act\n+FC",
+      "Q1\nBudget",
+      "Q2\nBudget",
+      "H1\nBudget",
+      "FY\nBudget",
+      "Q1\nVar $",
+      "Q2\nVar $",
+      "H1\nVar $",
+      "FY\nVar $",
+      "Q1\nVar %",
+      "Q2\nVar %",
+      "H1\nVar %",
+      "FY\nVar %",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "row_labels": [
+      [
+        1,
+        "SMPL \u00b7 Cash Flow Bridge \u00b7 Jan\u2013Dec 2026"
+      ],
+      [
+        4,
+        "BEGINNING CASH"
+      ],
+      [
+        5,
+        "Beginning Cash"
+      ],
+      [
+        7,
+        "CASH INFLOWS"
+      ],
+      [
+        8,
+        "Collections (from Billings)"
+      ],
+      [
+        10,
+        "CASH OUTFLOWS"
+      ],
+      [
+        11,
+        "Payroll"
+      ],
+      [
+        12,
+        "Commissions"
+      ],
+      [
+        13,
+        "Vendor / AP Payments"
+      ],
+      [
+        14,
+        "Tax Payments"
+      ],
+      [
+        15,
+        "Interest Expense"
+      ],
+      [
+        16,
+        "Other Operating Cash Out"
+      ],
+      [
+        17,
+        "Capital Expenditures"
+      ],
+      [
+        19,
+        "Total Cash Outflows"
+      ],
+      [
+        20,
+        "Net Operating Cash Flow"
+      ],
+      [
+        22,
+        "ENDING CASH & LIQUIDITY"
+      ],
+      [
+        23,
+        "Ending Cash Balance"
+      ],
+      [
+        24,
+        "Cash Floor / Minimum"
+      ],
+      [
+        25,
+        "Cash Headroom vs Floor"
+      ],
+      [
+        27,
+        "Note: Jun Actual (yellow) is a user-input placehol"
+      ]
+    ]
+  },
+  "Cash Flow Statement": {
+    "header_row3": [
+      null,
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+      "Q1\nActual",
+      "Q2\nActual",
+      "H1 Act\n+Jun FC",
+      "FY Act\n+FC",
+      "Q1\nBudget",
+      "Q2\nBudget",
+      "H1\nBudget",
+      "FY\nBudget",
+      "Q1\nVar $",
+      "Q2\nVar $",
+      "H1\nVar $",
+      "FY\nVar $",
+      "Q1\nVar %",
+      "Q2\nVar %",
+      "H1\nVar %",
+      "FY\nVar %",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "row_labels": [
+      [
+        1,
+        "SMPL \u00b7 Cash Flow Statement (GAAP Indirect Method) "
+      ],
+      [
+        4,
+        "OPERATING ACTIVITIES"
+      ],
+      [
+        5,
+        "Net Income / (Loss)"
+      ],
+      [
+        6,
+        "Add: Depreciation & Amort"
+      ],
+      [
+        7,
+        "Change in AR / Collections vs Revenue"
+      ],
+      [
+        8,
+        "Change in Deferred Revenue"
+      ],
+      [
+        9,
+        "Change in AP & Accrued Liabilities"
+      ],
+      [
+        10,
+        "Commissions Paid"
+      ],
+      [
+        12,
+        "Cash from Operations (CFO)"
+      ],
+      [
+        14,
+        "INVESTING ACTIVITIES"
+      ],
+      [
+        15,
+        "Capital Expenditures (CapEx)"
+      ],
+      [
+        16,
+        "Cash from Investing (CFI)"
+      ],
+      [
+        18,
+        "FINANCING ACTIVITIES"
+      ],
+      [
+        19,
+        "Proceeds from Financing"
+      ],
+      [
+        20,
+        "Debt Repayments"
+      ],
+      [
+        21,
+        "Cash from Financing (CFF)"
+      ],
+      [
+        23,
+        "NET CASH MOVEMENT & RECONCILIATION"
+      ],
+      [
+        24,
+        "Net Change in Cash"
+      ],
+      [
+        25,
+        "Beginning Cash Balance"
+      ],
+      [
+        26,
+        "Ending Cash Balance"
+      ],
+      [
+        28,
+        "Note: GAAP indirect method approximation using ope"
+      ]
+    ]
+  },
+  "Q2 vs Budget": {
+    "header_row3": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "row_labels": [
+      [
+        1,
+        "SMPL \u00b7 Q2 2026 Variance Analysis \u2014 Actuals vs Budg"
+      ],
+      [
+        2,
+        "Q2 2026 (Apr\u2013Jun) and YTD (Jan\u2013Jun) \u00b7 Prepared by "
+      ],
+      [
+        4,
+        "Line Item"
+      ],
+      [
+        5,
+        "INCOME STATEMENT"
+      ],
+      [
+        6,
+        "Total Revenue"
+      ],
+      [
+        7,
+        "Gross Profit"
+      ],
+      [
+        8,
+        "Gross Margin %"
+      ],
+      [
+        10,
+        "Sales & Marketing"
+      ],
+      [
+        11,
+        "Research & Development"
+      ],
+      [
+        12,
+        "General & Administrative"
+      ],
+      [
+        14,
+        "EBITDA"
+      ],
+      [
+        16,
+        "ARR MOVEMENT"
+      ],
+      [
+        17,
+        "New Business"
+      ],
+      [
+        18,
+        "Expansion"
+      ],
+      [
+        19,
+        "Reactivation"
+      ],
+      [
+        20,
+        "Contraction"
+      ],
+      [
+        21,
+        "Churn"
+      ],
+      [
+        22,
+        "Net New ARR"
+      ],
+      [
+        23,
+        "Ending ARR (Jun EOP)"
+      ],
+      [
+        25,
+        "CASH"
+      ],
+      [
+        26,
+        "Q2 / YTD CFO"
+      ],
+      [
+        27,
+        "Ending Cash (Jun EOP)"
+      ]
+    ]
+  },
+  "GTM Review": {
+    "header_row3": [
+      "Organic Search",
+      0.08,
+      1.91,
+      0.72,
+      24.9,
+      1,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "row_labels": [
+      [
+        1,
+        "ClarityFP \u00b7 GTM & Marketing Channel Efficiency \u00b7 Y"
+      ],
+      [
+        2,
+        "Channel"
+      ],
+      [
+        3,
+        "Organic Search"
+      ],
+      [
+        4,
+        "Partner"
+      ],
+      [
+        5,
+        "Referral"
+      ],
+      [
+        6,
+        "Webinar"
+      ],
+      [
+        7,
+        "Outbound"
+      ],
+      [
+        8,
+        "Direct"
+      ],
+      [
+        9,
+        "Field Event"
+      ],
+      [
+        10,
+        "Content Syndic."
+      ],
+      [
+        11,
+        "Paid Search"
+      ],
+      [
+        12,
+        "Paid Social"
+      ]
+    ]
+  },
+  "Headcount": {
+    "header_row3": [
+      "Sales",
+      26,
+      27,
+      28,
+      28,
+      28,
+      29,
+      29,
+      0,
+      "$628K/emp",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "row_labels": [
+      [
+        1,
+        "SMPL \u00b7 Headcount & Productivity \u00b7 Jan\u2013Jun 2026"
+      ],
+      [
+        2,
+        "Department"
+      ],
+      [
+        3,
+        "Sales"
+      ],
+      [
+        4,
+        "Engineering"
+      ],
+      [
+        5,
+        "Customer Success"
+      ],
+      [
+        6,
+        "Marketing"
+      ],
+      [
+        7,
+        "G&A + Support"
+      ],
+      [
+        8,
+        "Product"
+      ],
+      [
+        9,
+        "Total"
+      ]
+    ]
+  }
+}

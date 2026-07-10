@@ -1,0 +1,327 @@
+{
+  "source_pptx": "mda_deck_reference.pptx",
+  "slide_count": 11,
+  "slides": [
+    {
+      "slide": 1,
+      "text_lead": [
+        "SMPL.ai",
+        "AI Operating System for SaaS Finance Teams",
+        "Board Operating Review",
+        "Q2 2026  \u00b7  June 2026  \u00b7  Series B",
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 1/11"
+      ],
+      "charts": [],
+      "tables": []
+    },
+    {
+      "slide": 2,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  2/11",
+        "EXECUTIVE SUMMARY",
+        "Executive Summary \u2014 June 2026",
+        "ENDING ARR",
+        "$85.31M",
+        "vs budget $84.89M  (+0.5%)",
+        "REVENUE (CM)",
+        "$2.20M",
+        "vs budget $2.32M  (-4.8%)",
+        "ENDING CASH",
+        "$48.43M",
+        "vs budget $31.46M  (+54.0%)"
+      ],
+      "charts": [],
+      "tables": [
+        {
+          "headers": [
+            "Metric",
+            "CM Actual",
+            "CM vs Bgt",
+            "QTD Actual",
+            "YTD Actual",
+            "YTD vs Bgt",
+            "FY Outlook"
+          ],
+          "row_count": 7
+        }
+      ]
+    },
+    {
+      "slide": 3,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  3/11",
+        "ARR ANALYSIS",
+        "ARR Analysis \u2014 June 2026",
+        "ENDING ARR",
+        "$85.31M",
+        "Budget $84.89M  +0.5%",
+        "NET NEW ARR",
+        "$1.68M",
+        "Budget $1.77M",
+        "EXPANSION",
+        "$869.1K",
+        "Budget $912.6K"
+      ],
+      "charts": [
+        {
+          "chart_type": "COLUMN_CLUSTERED",
+          "series": [
+            "Actual ($M)",
+            "Budget ($M)"
+          ]
+        }
+      ],
+      "tables": [
+        {
+          "headers": [
+            "Component",
+            "Actual",
+            "Budget"
+          ],
+          "row_count": 8
+        }
+      ]
+    },
+    {
+      "slide": 4,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  4/11",
+        "P&L REVIEW",
+        "P&L Review \u2014 June 2026",
+        "REVENUE (CM)",
+        "$7.35M",
+        "Budget $7.72M  (-4.8%)",
+        "GROSS PROFIT",
+        "$5.14M",
+        "Budget $5.40M  (-4.8%)",
+        "EBITDA (CM)",
+        "$661.5K",
+        "Budget $647.5K  (+2.2%)"
+      ],
+      "charts": [],
+      "tables": [
+        {
+          "headers": [
+            "Line Item",
+            "CM Actual",
+            "CM Budget",
+            "CM Var",
+            "YTD Actual",
+            "YTD Budget",
+            "YTD Var"
+          ],
+          "row_count": 11
+        }
+      ]
+    },
+    {
+      "slide": 5,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  5/11",
+        "CASH & LIQUIDITY",
+        "Cash & Liquidity \u2014 June 2026",
+        "CASH BRIDGE \u2014 JUNE 2026",
+        "YTD CASH SUMMARY",
+        "YTD Collections: $58.82M  \u00b7  YTD Ending Cash: $48.43M  \u00b7  Budget: $23.85M  \u00b7  Variance: +$24.58M",
+        "ENDING CASH",
+        "$48.43M",
+        "Budget $31.46M  (+54.0%)",
+        "CASH HEADROOM",
+        "$38.43M",
+        "Above $10M floor"
+      ],
+      "charts": [],
+      "tables": [
+        {
+          "headers": [
+            "Line Item",
+            "Actual",
+            "Budget"
+          ],
+          "row_count": 8
+        }
+      ]
+    },
+    {
+      "slide": 6,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  6/11",
+        "GTM PERFORMANCE",
+        "GTM Performance \u2014 June 2026",
+        "PIPELINE CREATED",
+        "$5.40M",
+        "Budget $57.03M  (-79.9% YTD)",
+        "TOTAL MQLs",
+        "119",
+        "June 2026",
+        "CLOSED WON",
+        "$1.80M",
+        "BEST WIN RATE"
+      ],
+      "charts": [
+        {
+          "chart_type": "COLUMN_CLUSTERED",
+          "series": [
+            "Pipeline ($M)",
+            "Spend ($M)"
+          ]
+        }
+      ],
+      "tables": [
+        {
+          "headers": [
+            "Channel",
+            "Spend ($M)",
+            "Budget ($M)",
+            "MQLs",
+            "Pipeline ($M)",
+            "Efficiency",
+            "Win Rate"
+          ],
+          "row_count": 6
+        }
+      ]
+    },
+    {
+      "slide": 7,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  7/11",
+        "GTM FUNNEL",
+        "GTM Funnel Analysis \u2014 YTD Jan\u2013Jun 2026",
+        "Q1 2026",
+        "Q2 2026",
+        "YTD JAN\u2013JUN 2026",
+        "PIPELINE COVERAGE SUMMARY",
+        "PIPELINE COVERAGE",
+        "3.0x",
+        "vs FY ARR budget",
+        "YTD PIPELINE CREATED",
+        "$27.90M"
+      ],
+      "charts": [],
+      "tables": [
+        {
+          "headers": [
+            "Metric",
+            "Actual",
+            "Budget"
+          ],
+          "row_count": 8
+        },
+        {
+          "headers": [
+            "Metric",
+            "Actual",
+            "Budget"
+          ],
+          "row_count": 8
+        },
+        {
+          "headers": [
+            "Metric",
+            "Actual",
+            "Budget"
+          ],
+          "row_count": 8
+        }
+      ]
+    },
+    {
+      "slide": 8,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  8/11",
+        "STRATEGIC ASSESSMENT",
+        "Risks & Opportunities \u2014 June 2026",
+        "RISKS",
+        "MEDIUM RISK",
+        "Deferred Pipeline",
+        "Slipped pipeline $9.87M requires next-quarter coverage review and re-staging.",
+        "Action: Re-stage opportunities with validated next steps and owners.",
+        "Impact: $9.87M",
+        "Revenue vs Budget",
+        "Revenue trailed budget -4.8% CM; validate expansion timing and churn pockets.",
+        "Action: Review expansion timing and churn pockets before board distribution."
+      ],
+      "charts": [],
+      "tables": []
+    },
+    {
+      "slide": 9,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  9/11",
+        "FINANCIAL OUTLOOK",
+        "Financial Outlook \u2014 FY 2026",
+        "FY 2026 OUTLOOK SUMMARY",
+        "H2 PRIORITIES",
+        "ARR & GTM",
+        "FY ARR outlook $90.29M vs $96.10M budget; pipeline coverage 3.0x must convert in H2.",
+        "Profitability",
+        "YTD gross margin 70.8% on track; EBITDA $3.87M ahead of budget by +$59.1K.",
+        "Cash & Runway",
+        "Ending cash $48.43M; FY cash outlook $49.92M vs budget $23.85M (+109.3%).",
+        "Workforce"
+      ],
+      "charts": [
+        {
+          "chart_type": "LINE",
+          "series": [
+            "Actual ($M)",
+            "Budget ($M)",
+            "Outlook ($M)"
+          ]
+        }
+      ],
+      "tables": [
+        {
+          "headers": [
+            "Metric",
+            "FY Outlook",
+            "FY Budget",
+            "Note"
+          ],
+          "row_count": 6
+        }
+      ]
+    },
+    {
+      "slide": 10,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  10/11",
+        "BOARD ACTIONS",
+        "Board Actions \u2014 Q2 2026",
+        "01",
+        "FOR APPROVAL",
+        "Approve June 2026 Financial Close Package",
+        "Review and approve the June 2026 financial close package including ARR waterfall, income statement, cash flow statement,",
+        "Owner: CFO  \u00b7  Due: Board meeting",
+        "02",
+        "Approve Updated FY ARR Outlook and GTM Plan",
+        "Approve revised FY 2026 ARR outlook of $90.29M vs $96.10M budget (-6.0%). Align on H2 GTM acceleration plan including pi",
+        "Owner: CEO / CRO  \u00b7  Due: Next board cycle"
+      ],
+      "charts": [],
+      "tables": []
+    },
+    {
+      "slide": 11,
+      "text_lead": [
+        "SMPL \u00b7 Board Operating Review \u00b7 Q2 2026 \u00b7 CONFIDENTIAL  11/11",
+        "APPENDIX A",
+        "YTD Cash Flow Statement \u2014 Jan\u2013Jun 2026"
+      ],
+      "charts": [],
+      "tables": [
+        {
+          "headers": [
+            "Line Item",
+            "YTD Actual",
+            "YTD Budget",
+            "YTD Variance"
+          ],
+          "row_count": 18
+        }
+      ]
+    }
+  ],
+  "note": "Match this structure when adapting the reference script. Same slide count, chart types, series names, table column headers, and section labels."
+}

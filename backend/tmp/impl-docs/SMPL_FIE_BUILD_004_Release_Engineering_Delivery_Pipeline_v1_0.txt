@@ -1,0 +1,334 @@
+FIE-BUILD-004
+RELEASE ENGINEERING & DELIVERY PIPELINE
+Version 1.0
+How changes safely move from development into production while preserving determinism, auditability, customer trust, and architectural integrity
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — RELEASE ENGINEERING HANDBOOK
+Correctness always takes priority over deployment speed. Every production change is Deterministic, Auditable, Repeatable, Recoverable, and Customer-Safe.
+Purpose and Authority
+FIE-BUILD-001 established what gets built. FIE-BUILD-002 established how engineers build each service. FIE-BUILD-003 established how those services integrate into one deployable platform. This document establishes how a change moves, safely and auditably, from a developer's first commit to a real customer's production environment. It redesigns nothing — ABS, BIS, FIE, and BUILD-001 through BUILD-003 remain frozen and authoritative; every mechanism here operationalizes a principle one of them already established (determinism, immutability, fail-closed verification, customer trust) rather than inventing a new one.
+Section 1 — Scope
+This Document Owns
+This Document Does Not Own
+Release lifecycle (Section 2)
+Runtime architecture — ABS/BIS/FIE remain authoritative
+CI/CD pipeline (Section 4)
+Service implementation — FIE-BUILD-002 owns this
+Git workflow (Section 3)
+Platform deployment topology — FIE-BUILD-003 owns this
+Version management (Section 6)
+Platform operations (monitoring, DR runbooks) — FIE-BUILD-003 §9/11, and the future FIE-BUILD-005 Production Operations document
+Release pipeline and artifact generation (Sections 4, 13)
+Customer onboarding mechanics — FIE-BUILD-001 §4/§7, FIE-BUILD-003 §7
+Database migrations (Section 7)
+Release approvals (Sections 5, 11, 14)
+Feature flag governance (Section 8)
+Rollout and rollback strategy (Sections 9, 12, 16)
+Production promotion (Section 9)
+Table D1.1 — Scope. This document sits directly on top of FIE-BUILD-002's CI/CD Quality Gates and Testing Pyramid and FIE-BUILD-003's Deployment Pipeline — it does not replace either, it is the release-engineering detail both of them deferred.
+Section 2 — Engineering Lifecycle
+Developer     ↓Pull Latest     ↓Implement Change             (per FIE-BUILD-002's standard service structure)     ↓Local Validation     ↓Unit Tests                   (Testing Pyramid Layer 1)     ↓Contract Tests                (Testing Pyramid Layer 2)     ↓Architecture Validation        (Architecture Compliance Automation, below)     ↓Pull Request     ↓Peer Review                   (FIE-BUILD-002 §19's seven gates)     ↓Merge     ↓Continuous Integration         (Section 4)     ↓Integration Testing            (Testing Pyramid Layer 3)     ↓GPES Validation                 (path-agnostic subset, per FIE-BUILD-001 §9/§6)     ↓Staging     ↓Release Certification          (Section 11)     ↓Production
+Stage
+Why It Exists
+Local Validation
+Catches the cheapest-to-fix mistakes before they ever reach shared infrastructure
+Unit / Contract Tests
+Layers 1–2 of FIE-BUILD-002's Testing Pyramid — isolated correctness and shape verification before anything cross-service is exercised
+Architecture Validation
+Catches an anti-pattern (FIE-BUILD-002 §14) mechanically, before a human reviewer has to catch it by reading the diff
+Peer Review
+Human judgment on the things automation cannot check — is this the right design, not just a compliant one
+Continuous Integration
+Re-verifies everything the developer already ran locally, against the actual merged state, not just their local branch
+Integration Testing
+Layer 3 of the Testing Pyramid — real cross-service behavior, not mocked dependencies
+GPES Validation
+The platform's own acceptance test (FIE-BUILD-003 §6) — proves the change didn't silently break the reference trace
+Staging
+Production-like validation against anonymized or design-partner data, per FIE-BUILD-003 §2
+Release Certification
+The human sign-off gate (Section 11) — nothing reaches Production without an explicit, recorded decision
+Section 3 — Source Control Standards
+Standard
+Rule
+Repository strategy
+Per FIE-BUILD-002 §2 — one repository housing platform/services/ as peers, plus shared/; brownfield bootstrap (FIE-BUILD-002 §2.1) permits modules inside the existing monolith through Phase 0–2
+Branch strategy
+Trunk-based: short-lived feature branches off main, merged frequently; no long-lived divergent branches per service
+Commit conventions
+Conventional Commits style (type(scope): description) so release notes (Section 13) can be partially generated from commit history
+Branch naming
+{type}/{ticket-id}-{short-description}, e.g. feat/FIE-1234-restatement-cascade
+Pull Request expectations
+Every PR maps to FIE-BUILD-002 §19's seven review gates, checked explicitly, not assumed
+CODEOWNERS
+Every path in platform/services/{service}/ is owned by the discipline named in FIE-BUILD-001's Engineering Ownership Matrix — a PR touching that path requires that discipline's review
+Protected branches
+main requires passing CI (Section 4) and at least one approval before merge; direct pushes disabled
+Semantic Versioning
+MAJOR.MINOR.PATCH per service, per Section 6 — a breaking API or event change is always a MAJOR increment, never silently absorbed into MINOR
+Release branches
+Cut from main at release-candidate time; only cherry-picked fixes land on a release branch, never new feature work
+Hotfix branches
+Cut from the current production tag, not from main, per Section 17
+Tagging strategy
+Every production release is tagged with its full version and linked to its Release Artifacts (Section 13) — a tag with no corresponding artifact set is treated as a process failure, not a shortcut
+Section 4 — Continuous Integration Pipeline
+Lint     ↓Compile     ↓Static Analysis     ↓Unit Tests     ↓Contract Tests          (the five platform-critical contracts, FIE-BUILD-001 §8, always included)     ↓Schema Validation        (migrations are forward-only and reversible where required, per Section 7)     ↓API Validation           (OpenAPI contract match, per FIE-BUILD-002 §6)     ↓Architecture Validation   (Architecture Compliance Automation, below)     ↓Security Scan     ↓Build Artifact     ↓Publish Release Candidate
+This is FIE-BUILD-002's CI/CD Quality Gates pipeline, expanded with the three stages this document adds: Schema Validation and API Validation (making Sections 7 and FIE-BUILD-002 §6 mechanically enforced rather than just documented), and Architecture Validation (making FIE-BUILD-002 §14's anti-patterns and FIE-BUILD-002's Dependency Direction Rules mechanically enforced). Every stage failure blocks the pipeline — this is fail-closed applied to the build process, the same logic FIE-BUILD-002 §12 already established for its own, shorter pipeline.
+Section 5 — Release Gates
+Gate
+What It Verifies
+Traces To
+Architecture Compliance
+No anti-pattern, no dependency-direction violation
+FIE-BUILD-002 §14, Dependency Direction Rules; Architecture Compliance Automation below
+Contract Compatibility
+No breaking change without a version increment
+Section 6, Section 10
+GPES Validation
+The platform's own acceptance trace still passes
+FIE-BUILD-001 §9, FIE-BUILD-003 §6
+Performance Verification
+Meets the relevant service's own Performance Targets section
+Every owning spec's Performance Targets section
+Security Review
+Per FIE-BUILD-002 §10
+FIE-BUILD-002 §10
+Observability Verification
+Logging, metrics, tracing present for new code paths
+FIE-BUILD-002 §11
+Migration Safety
+Forward-only, safe against a populated production table
+Section 7
+Documentation Complete
+docs/ reflects the actual change
+FIE-BUILD-002 §4 Step 14
+Feature Flags Configured
+Any customer-visible change is flag-gated, per Section 8
+FIE-BUILD-002 §5, §12
+Rollback Verified
+A tested rollback path exists for this specific change
+Section 12
+No production release bypasses these gates. A release missing any one of them is not release-candidate, regardless of how urgent it feels — Section 17 (Emergency Releases) is the only documented exception, and even it does not skip Architecture Validation.
+Section 6 — Versioning Strategy
+Version Type
+Scope
+Owned By
+Platform Version
+The overall SMPL platform release, incrementing with every production promotion (Section 9)
+This document
+Service Version
+Per-service SemVer, per Section 3
+This document, applied to each service in FIE-BUILD-002 §2
+API Version
+Per-endpoint, path-based (/v1/...), per FIE-BUILD-002 §6
+FIE-BUILD-002
+Database Schema Version
+Per-service migration sequence, per Section 7
+This document, applied per FIE-BUILD-002 §8
+Registry Version
+Business Themes, Narrative Policies, Industry Templates, and every other append-only registry
+Each owning FIE/BIS document
+Operating Model Version
+Frozen at composition, per FIE-002 §1.7
+FIE-002
+Methodology Version
+Per methodology, per FIE-002 §1.7–1.8
+FIE-002
+Calculation Version
+Implicit in calculation_run_id and the Operating Model version it references
+FIE-003
+Narrative Version
+Per narrative_object_id, immutable content per version, per FIE-005 §1.10
+FIE-005
+Independent versioning is required because these axes change at different rates and for different reasons — a Platform Version increment doesn't require every Methodology to also version, and a customer approving a new Methodology version doesn't require a platform-wide release. Collapsing these into one version number would force unrelated changes to travel together, which is precisely the coupling FIE-BUILD-002's Small Services principle exists to avoid.
+Section 7 — Database Migration Strategy
+Forward-only migrations — no migration is ever edited after running in any environment, per FIE-BUILD-002 §8; a correction is a new migration
+Append-only architecture — no migration ever adds an UPDATE/DELETE grant on a column this platform's own architecture has marked immutable (FIE-BUILD-002 §8, §14's 'Mutate immutable objects' anti-pattern)
+Idempotent migrations — safely re-runnable without duplicating effect, verified by a dedicated test per migration
+Safe retries — a migration interrupted mid-run can be safely re-attempted from the beginning without corrupting state
+Online migrations — no migration locks a production table for longer than a documented, reviewed threshold; large-table changes use batching (below) instead
+Large-table batching — a migration touching a high-volume table (FIE-001 temporal_records, FIE-003 financial_intelligence_objects) runs in bounded batches with progress checkpointing, never a single long-running transaction
+Roll-forward philosophy — the default response to a migration problem discovered post-deploy is a corrective forward migration, not a destructive rollback, consistent with this platform's universal append-only discipline
+Rollback guidance — where a true schema rollback is unavoidable (e.g. a migration that hasn't yet been used by any written data), it is documented and tested before the forward migration ships, never improvised after the fact
+Customer migration sequencing — a migration affecting customer-visible behavior is sequenced against Section 16's customer release strategy, never applied to all customers simultaneously by default
+Section 8 — Feature Flag Governance
+OFF     ↓Internal              (engineering-only visibility)     ↓Design Partners        (opt-in, consented data per FIE-BUILD-003 §2)     ↓Pilot Customers     ↓General Availability     ↓Platform Standard      (flag retired — behavior is now unconditional)
+Feature flags are retired, not accumulated. A flag that has been at Platform Standard for a defined grace period is removed from the codebase entirely — permanent feature flags are themselves a form of undocumented architecture, and this platform does not carry undocumented architecture anywhere else, per FIE-BUILD-002's Engineering Decision Records discipline. Every flag has a named owner (Section 14) responsible for both its rollout and its eventual retirement.
+Section 9 — Release Promotion
+Development     ↓QA     ↓Integration     ↓Staging     ↓Pilot            (a small, named subset of production customers — new relative to FIE-BUILD-003 §2's five environments)     ↓Production
+ASSUMED  Pilot is a release-engineering concept layered on top of FIE-BUILD-003 §2's Production environment, not a sixth physical environment — it is a subset of real production customers (Section 16's Pilot Customers stage) receiving a release before General Availability, running on the same infrastructure FIE-BUILD-003 §2 already describes. FIE-BUILD-003 §2 remains the authoritative environment list; this section adds a customer-cohort dimension within its Production tier.
+Promotion to each stage requires certification from the previous stage — a release does not skip from Integration to Staging without Integration's own gates (Section 5) passing, and does not reach Production without Staging's certification (Section 11) and, for anything customer-visible, at least a Pilot cohort's worth of real-world validation.
+Section 10 — Backward Compatibility
+Compatibility Type
+Expectation
+API compatibility
+A previous API version continues to be served for at least one deprecation window after a new version ships, per FIE-BUILD-002 §6
+Event compatibility
+schema_version (FIE-BUILD-002 §7) allows a consumer to detect and reject or branch on a shape it doesn't understand — never a silent break
+Schema compatibility
+A migration never removes a column or table a still-deployed prior service version reads, until that version is fully retired
+Contract compatibility
+shared/contracts (FIE-BUILD-002 §2) versions independently of the service implementing them
+Registry compatibility
+A new Business Theme, Narrative Policy, or Industry Template version never invalidates a reference to a prior version — append-only, per every owning spec
+Configuration compatibility
+A new configuration key ships with a default that preserves prior behavior; removing a key follows the same deprecation window as an API
+Customer compatibility
+A customer's existing Methodology, Operating Model, and Narrative Policy continue to resolve correctly across a platform release unless they explicitly opt into a new version
+No breaking change ships without an explicit version increment, per Section 6 — this is the release-engineering enforcement of FIE-BUILD-002 §6's versioning standard, not a new rule.
+Section 11 — Release Certification
+Review
+Confirms
+Architecture Review
+No anti-pattern, no unresolved EDR (FIE-BUILD-002) for this release
+Engineering Review
+FIE-BUILD-002 §13's Definition of Done is met for every service in scope
+Performance Review
+Section 5's Performance Verification gate passed with real, not synthetic-only, evidence where practical
+Security Review
+FIE-BUILD-002 §10 and Section 4's Security Scan stage both clear
+Operations Review
+FIE-BUILD-003 §13's Operational Readiness Checklist items relevant to this release are satisfied
+Support Review
+Support documentation (Section 13) is complete and support staff have been briefed on customer-visible changes
+Customer Success Review
+Section 16's rollout cohort and communication plan are ready
+Documentation Review
+Every changed service's docs/ folder and this release's Release Artifacts (Section 13) are complete
+All approvals are recorded against the release's tag (Section 3), forming a permanent, auditable record of who approved what and when — the same audit discipline FIE-BUILD-002 §10 requires for every governed decision inside the platform, applied here to the decision to ship the platform itself.
+Section 12 — Rollback Strategy
+Feature Flag           (fastest — toggle off, no redeploy)     ↓Service Rollback        (redeploy prior version of one service)     ↓Release Rollback        (redeploy prior version of the full release)     ↓Database Mitigation     (roll-forward corrective migration, per Section 7 — never a destructive schema rollback against live data)     ↓Customer Rollback       (per-customer cutover flag reverted, per FIE-BUILD-001 §18 / FIE-BUILD-003 §8)     ↓Platform Recovery       (disaster recovery procedures, per FIE-BUILD-003 §11 — the last resort)
+This hierarchy is ordered fastest-and-narrowest to slowest-and-broadest. Every production release demonstrates at least the top two tiers' rollback capability before Section 11 certification is granted — a release nobody has verified can be flagged off or redeployed backward is not a certified release, regardless of how confident the team is in the forward path.
+Section 13 — Release Artifacts
+Every release generates, and permanently retains:
+Release Notes — customer- and internal-facing summary of what changed
+Migration Notes — every Section 7 migration included, with its batching/rollback plan
+API Changes — every version increment and its compatibility classification (Section 10)
+Schema Changes — every table/column added, changed, or deprecated
+Feature Flag Summary — every flag touched, its current lifecycle stage (Section 8), and its owner
+Known Issues — anything shipped with a documented, accepted limitation
+Upgrade Guide — for any customer-facing breaking change requiring action
+Rollback Guide — the specific Section 12 tier this release's rollback has been verified against
+Related EDRs — any Engineering Decision Record (FIE-BUILD-002) this release's changes reference
+These are permanent engineering records, not release-cycle-scoped documents — they are the audit trail Section 11's approvals point to and the first place a future engineer looks when asking "why does this behave this way."
+Section 14 — Release Governance
+Discipline
+Approval Responsibility
+Engineering
+Section 11's Engineering Review; day-to-day release-candidate readiness
+Architecture
+Section 11's Architecture Review; EDR review for any intentional divergence
+Product
+Section 16's customer rollout cohort and sequencing decisions
+Operations
+Section 11's Operations Review; Section 9's promotion gate from Staging onward
+Security
+Section 11's Security Review; Section 4's Security Scan stage ownership
+Customer Success
+Section 11's Customer Success Review; Section 16's communication execution
+Support
+Section 11's Support Review; Section 13's support documentation completeness
+This table names approval responsibility per release; it does not replace FIE-BUILD-001's Engineering Ownership Matrix or FIE-BUILD-003's Platform Ownership Matrix, both of which name long-term area ownership. Where a discipline here and a named owner in either prior matrix disagree, reconcile toward whichever was established first, per FIE-BUILD-001's own reconciliation rule.
+Section 15 — Production Readiness Checklist
+This restates, at release-decision granularity, FIE-BUILD-003 §13's Operational Readiness Checklist — the same items, checked again specifically for this release rather than for the platform's certification as a whole. It does not redefine any of them.
+Health checks, monitoring, logging, tracing, alerting — per FIE-BUILD-002 §11 and FIE-BUILD-003 §9
+Backups and recovery procedures — per FIE-BUILD-003 §11
+Security controls — per FIE-BUILD-002 §10
+Performance targets — per Section 5
+Support readiness — per Section 11's Support Review
+Customer communication — per Section 16 and FIE-BUILD-001 §18.7's honest-discontinuity principle
+Everything on this list passes before production, with no partial-credit exception — this is Section 5's Release Gates restated as a final pre-flight check immediately before promotion, not a new, separate bar.
+Section 16 — Customer Release Strategy
+Internal     ↓Design Partners     ↓Pilot Customers        (Section 9's Pilot stage)     ↓Early Access     ↓General Availability     ↓Platform Standard
+Feature flags (Section 8) support gradual customer adoption at every stage above. A release is customer-safe by construction when tenant isolation (FIE-BUILD-002 §10) guarantees one customer's flag state has no effect on another's — this is what makes Pilot a meaningful stage rather than a formality: a Pilot customer genuinely runs different code than a General Availability customer, safely, at the same time, on the same infrastructure.
+Section 17 — Emergency Releases
+Critical Issue     ↓Hotfix Branch          (cut from the current production tag, per Section 3)     ↓Targeted Testing        (the specific fix and its immediate blast radius, not the full Testing Pyramid)     ↓Architecture Validation  (never skipped, even under emergency pressure)     ↓Production     ↓Post-Incident Review     ↓Merge Back to Main
+An emergency release compresses Section 2's lifecycle, it does not bypass Section 5's Architecture Compliance gate — the one gate this document treats as truly non-negotiable even under incident pressure, since an architecturally-unsound hotfix trades a customer-visible incident for a harder-to-detect structural one. Every emergency release requires a Post-Incident Review before it is considered closed, and its fix is merged back to main promptly so the hotfix branch does not silently diverge from the ongoing release train (Release Trains, below).
+Section 18 — Release Metrics
+Metric
+Supports
+Deployment Frequency
+How often the team can safely ship — a leading indicator of pipeline health
+Lead Time
+Commit to production duration — reveals where the lifecycle (Section 2) actually bottlenecks
+Release Duration
+How long a release takes once promotion begins (Section 9)
+Build Success Rate
+CI pipeline health (Section 4)
+Rollback Rate
+How often Section 12's hierarchy is actually invoked, and at which tier
+MTTR
+Mean time to recover, across Section 12's tiers
+Production Failure Rate
+Post-release defect rate, feeding Section 19
+Certification Success Rate
+How often a release passes Section 11 on the first attempt vs. requires rework
+Customer Incident Rate
+The ultimate customer-facing measure of release quality
+These metrics exist to support Section 19's continuous improvement loop — none of them is a target to optimize in isolation; a rising Deployment Frequency achieved by lowering Section 5's gates would be a regression dressed as progress.
+Section 19 — Continuous Improvement
+Telemetry Review        (Section 18's metrics, reviewed on a regular cadence)     ↓Customer Feedback     ↓Support Analysis     ↓Performance Review     ↓Engineering Decision Record   (if a divergence from architecture is proposed, per FIE-BUILD-002)     ↓Engineering Backlog     ↓Next Release
+Operational learning closes the loop this document opened in Section 2 — a release's real-world behavior (Section 18) feeds directly into what the next release prioritizes, rather than each release cycle starting from a blank slate.
+Section 20 — Relationship to Previous BUILD Documents
+Document
+Defines
+FIE-BUILD-001
+What gets built
+FIE-BUILD-002
+How engineers build each service
+FIE-BUILD-003
+How services integrate into a production platform
+FIE-BUILD-004
+How platform changes safely reach production (this document)
+Future BUILD documents inherit this release engineering process rather than redefining it — a future FIE-BUILD-005 Production Operations document, for instance, governs what happens after a release has already gone through this document's pipeline, not an alternative path around it.
+Release Trains
+Continuous feature deployment (per-PR release candidates, Section 4) and a release cadence are not mutually exclusive — release candidates are built continuously; promotion to Production follows a train schedule.
+Cadence
+Use Case
+Tradeoff
+Weekly Patch Releases
+Bug fixes, small non-breaking improvements
+Fast feedback, but too frequent for customers who need advance notice of any change
+Monthly Feature Releases
+New customer-visible capability, behind Section 8 flags
+The default cadence most customers should expect and can plan around
+Quarterly Platform Releases
+Larger, potentially cross-cutting changes (e.g. a new FIE service reaching General Availability)
+Slowest, but gives Customer Success (Section 14) real lead time for communication and training
+Customer communication follows the same cadence — a customer told to expect monthly feature releases and quarterly platform releases can plan their own change-management around SMPL's schedule, rather than being surprised by an arbitrary deployment.
+Architecture Compliance Automation
+The Architecture Validation stage in Sections 2 and 4 is not a single generic check — it is a specific, growing set of automated rules, each one a mechanical version of an anti-pattern FIE-BUILD-002 §14 already named in prose.
+Automated Rule
+Prevents (FIE-BUILD-002 §14 / Dependency Direction Rules)
+No dependency direction violations
+A lower-level service importing from or calling a higher-level one
+No duplicate domain ownership
+Two services independently storing the same fact — the Reference Instead of Copy principle, checked mechanically via schema/field naming conventions
+No direct connector access outside BIS-001
+'Bypass Canonical' — any service other than BIS-001 importing a connector SDK or credential
+No non-deterministic execution within FIE-003
+A wall-clock call, random seed, or LLM invocation appearing inside FIE-003's Graph Executor or Execution Planner code paths
+No prohibited cross-service references
+A service importing another service's internal (non-contracts/) module directly, bypassing shared/contracts
+The objective stated plainly: architecture becomes executable engineering policy, not just a document a reviewer has to remember to check against. Every rule here should have a corresponding, specific test — 'no non-deterministic execution within FIE-003,' for instance, is enforceable by static analysis flagging any wall-clock or randomness API call inside that service's package boundary.
+Customer-Safe Releases
+Can this feature be safely enabled for one customer without affecting every other customer? If the answer is no, the release does not proceed.
+This is the single question every release answers before Production, and it is answerable concretely, not rhetorically, because of three mechanisms this document and its predecessors already establish:
+Feature flags (Section 8) — a new behavior can be enabled for exactly one customer cohort without a code branch per customer
+Tenant isolation (FIE-BUILD-002 §10) — a flag enabled for one customer_id has no code path capable of affecting another's data or behavior
+Staged rollout (Section 16) — Pilot Customers validate a release against real, consenting customers before General Availability, so the answer to the question above is empirically tested, not just architecturally asserted
+A release that cannot honestly answer this question yes should not proceed to Production, regardless of Section 5's other gates passing — this is the release-engineering restatement of FIE-BUILD-003 §14's customer acceptance questions, checked one release earlier than a customer ever sees the result.
+Final Engineering Review
+Reviewed as a Principal Software Architect responsible for release integrity across the entire platform.
+A Roadmap Naming Note
+ASSUMED  FIE-BUILD-003's authoritative BUILD Series Roadmap names FIE-BUILD-004 as "CI/CD & Automated Governance." This document, as actually commissioned, is titled "Release Engineering & Delivery Pipeline" — a superset of that description, not a conflict with it: CI/CD (Section 4) and Automated Governance (Architecture Compliance Automation, above) are both fully covered here, alongside source control, versioning, migrations, feature flags, and customer rollout strategy the shorter title didn't originally imply. Recommendation: update FIE-BUILD-002's and FIE-BUILD-003's roadmap table entries for FIE-BUILD-004 to this document's actual title the next time either is revised — low urgency, since the substance is a superset rather than a departure.
+1. Are There Remaining Release Engineering Gaps?
+No blockers. Two items are named rather than silently assumed: the specific static-analysis tooling behind Architecture Compliance Automation is left to the implementing team's language choice (consistent with FIE-BUILD-002's language-agnostic stance), and Section 9's Pilot stage is explicitly marked as layered on FIE-BUILD-003's existing environment list rather than a sixth physical environment, so the two documents don't quietly diverge on how many environments actually exist.
+2. Should Any Recommendations Become Future BUILD Documents Instead?
+Detailed on-call rotation, incident severity classification, and runbook content beyond Section 17's emergency release process belong in FIE-BUILD-005 Production Operations, per the authoritative roadmap
+Formal compliance certification (SOC 2, ISO, or similar) referenced implicitly by Section 11's Security Review belongs in FIE-BUILD-007 Security, Compliance & Governance, not as an expansion of this document's Release Certification
+Nothing else in this document's scope is misplaced — release engineering is a cohesive enough domain that it holds together as one document, per the same judgment FIE-BUILD-003 made for platform integration
+3. Is FIE-BUILD-004 Ready to Become the Authoritative Release Engineering Handbook?
+Yes. Every one of the twenty required sections plus all three additional recommendations are present, every mechanism traces back to a specific principle already established in ABS/BIS/FIE or a prior BUILD document, and the one naming variance against the roadmap is named explicitly with a low-urgency fix rather than either ignored or treated as a reason to reopen a frozen document. Recommend freezing FIE-BUILD-004 and proceeding to FIE-BUILD-005 (Production Operations) per the authoritative roadmap.

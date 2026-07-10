@@ -1,0 +1,1 @@
+version,invoice_id,customer_id,customer_name,invoice_period,service_period_start,service_period_end,invoice_date,due_date,invoice_amount,payment_status,billing_cadence,billing_terms,currency

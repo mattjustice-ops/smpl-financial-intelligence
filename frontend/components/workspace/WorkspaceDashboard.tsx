@@ -1,13 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 
 import { AppSessionBanner } from "@/components/app/AppSessionBanner";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { DEFAULT_USAGE_LIMITS } from "@/lib/entitlements/usage-limits";
 
 type TabId = "usage" | "data" | "ledger";
+
+type DataTrace = {
+  database: { host: string; database: string; provider: string };
+  neon_query_hint: string;
+  mrr_tables: Record<
+    string,
+    {
+      table: string;
+      exists: boolean;
+      row_count: number;
+      periods: string[];
+      sample_rows: Array<Record<string, unknown>>;
+    }
+  >;
+};
+
+type BatchTrace = {
+  database: { host: string; database: string; provider: string };
+  neon_query_hint: string;
+  destination: {
+    destination_kind: string;
+    destination_table: string | null;
+    reporting_table: string | null;
+    reporting_reads_this_table: boolean;
+    replace_all_org_rows: boolean;
+    warnings: string[];
+  };
+  destination_live: {
+    table?: string;
+    row_count: number;
+    periods?: string[];
+    sample_rows?: Array<Record<string, unknown>>;
+  } | null;
+  reporting_live: {
+    table: string;
+    row_count: number;
+    periods: string[];
+    sample_rows: Array<Record<string, unknown>>;
+  } | null;
+};
+
+type IngestResponse = {
+  batch?: { batch_id: string; rows_imported: number; rows_rejected: number };
+  destination?: BatchTrace["destination"];
+  destination_live?: BatchTrace["destination_live"];
+  reporting_live?: BatchTrace["reporting_live"];
+  database?: { host: string; database: string; provider: string };
+  neon_query_hint?: string;
+  warnings?: string[];
+  detail?: unknown;
+};
 
 type WorkspaceSummary = {
   organization_name: string;
@@ -81,6 +132,10 @@ export function WorkspaceDashboard() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [uploadTrace, setUploadTrace] = useState<IngestResponse | null>(null);
+  const [dataTrace, setDataTrace] = useState<DataTrace | null>(null);
+  const [batchTraces, setBatchTraces] = useState<Record<string, BatchTrace>>({});
+  const [traceBusy, setTraceBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!organizationId) return;
@@ -110,9 +165,50 @@ export function WorkspaceDashboard() {
     }
   }, [organizationId]);
 
+  const loadDataTrace = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const res = await fetch(
+        `/api/workspace/data-trace?organization_id=${encodeURIComponent(organizationId)}`,
+        { cache: "no-store" },
+      );
+      if (res.ok) {
+        setDataTrace((await res.json()) as DataTrace);
+      }
+    } catch {
+      // Trace is optional until API is deployed
+    }
+  }, [organizationId]);
+
+  const loadBatchTrace = useCallback(
+    async (batchId: string) => {
+      if (!organizationId) return;
+      setTraceBusy(batchId);
+      try {
+        const res = await fetch(
+          `/api/workspace/batches/${encodeURIComponent(batchId)}/trace?organization_id=${encodeURIComponent(organizationId)}`,
+          { cache: "no-store" },
+        );
+        if (res.ok) {
+          const payload = (await res.json()) as BatchTrace;
+          setBatchTraces((prev) => ({ ...prev, [batchId]: payload }));
+        }
+      } finally {
+        setTraceBusy(null);
+      }
+    },
+    [organizationId],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (tab === "data") {
+      void loadDataTrace();
+    }
+  }, [tab, loadDataTrace]);
 
   const limits = summary?.plan_limits ?? DEFAULT_USAGE_LIMITS;
   const usage = summary?.usage.usage;
@@ -122,25 +218,27 @@ export function WorkspaceDashboard() {
     if (!organizationId || !uploadFile) return;
     setUploadBusy(true);
     setUploadMessage(null);
+    setUploadTrace(null);
     setError(null);
     try {
       const fd = new FormData();
       fd.append("organization_id", organizationId);
       fd.append("file", uploadFile);
       const res = await fetch("/api/ingest/csv", { method: "POST", body: fd });
-      const body = (await res.json()) as {
-        batch?: { batch_id: string; rows_imported: number; rows_rejected: number };
-        detail?: unknown;
-      };
+      const body = (await res.json()) as IngestResponse;
       if (!res.ok) {
         throw new Error(typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail));
       }
+      setUploadTrace(body);
+      const dest = body.destination?.destination_table ?? "unknown";
+      const periods = body.destination_live?.periods?.join(", ") ?? "—";
       setUploadMessage(
-        `Import complete — ${body.batch?.rows_imported ?? 0} rows imported, ${body.batch?.rows_rejected ?? 0} rejected.`,
+        `Import complete — ${body.batch?.rows_imported ?? 0} rows imported to ${dest}. Periods in table: ${periods}.`,
       );
       setUploadFile(null);
       await load();
-      setTab("ledger");
+      await loadDataTrace();
+      setTab("data");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -231,6 +329,26 @@ export function WorkspaceDashboard() {
       {uploadMessage ? (
         <div className="rounded-xl border border-teal-400/30 bg-teal-400/10 px-4 py-3 text-sm text-teal-200">
           {uploadMessage}
+          {uploadTrace?.warnings?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100">
+              {uploadTrace.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          ) : null}
+          {uploadTrace?.database ? (
+            <p className="mt-2 text-xs text-teal-300/80">
+              DB: {uploadTrace.database.host} / {uploadTrace.database.database} ({uploadTrace.database.provider})
+            </p>
+          ) : null}
+          {uploadTrace?.reporting_live ? (
+            <p className="mt-1 text-xs text-teal-300/80">
+              Reporting table {uploadTrace.reporting_live.table}: {uploadTrace.reporting_live.row_count} rows
+              {uploadTrace.reporting_live.periods.length
+                ? ` · periods ${uploadTrace.reporting_live.periods.join(", ")}`
+                : ""}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -266,7 +384,8 @@ export function WorkspaceDashboard() {
           <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
             <h2 className="text-sm font-medium text-white">Upload CSV</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Same SMPL warehouse templates as demo data. API customers use POST /api/v1/ingest/batches.
+              Use exact SMPL template names (e.g. <code className="text-slate-400">Actual_MRR_Waterfall.csv</code>).
+              Renamed files land in a separate table that reporting does not read.
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <input
@@ -286,6 +405,39 @@ export function WorkspaceDashboard() {
             </div>
           </div>
 
+          {dataTrace ? (
+            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+              <h2 className="text-sm font-medium text-white">Live database trace (MRR tables)</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Matches Railway prod DATABASE_URL — confirm this host in Neon SQL Editor:{" "}
+                <span className="font-mono text-slate-400">{dataTrace.database.host}</span>
+              </p>
+              <div className="mt-4 overflow-x-auto rounded-lg border border-white/10">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-white/10 bg-white/5 text-xs uppercase tracking-widest text-slate-400">
+                    <tr>
+                      <th className="px-4 py-2">Table</th>
+                      <th className="px-4 py-2 text-right">Rows</th>
+                      <th className="px-4 py-2">Periods</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-slate-200">
+                    {Object.values(dataTrace.mrr_tables).map((t) => (
+                      <tr key={t.table}>
+                        <td className="px-4 py-2 font-mono text-xs">{t.table}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{formatInt(t.row_count)}</td>
+                        <td className="px-4 py-2 text-xs text-slate-400">
+                          {t.periods.length ? t.periods.join(", ") : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 font-mono text-xs text-slate-500">{dataTrace.neon_query_hint}</p>
+            </div>
+          ) : null}
+
           <div className="overflow-x-auto rounded-xl border border-white/10">
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-white/10 bg-white/5 text-xs uppercase tracking-widest text-slate-400">
@@ -298,30 +450,88 @@ export function WorkspaceDashboard() {
                   <th className="px-4 py-3 text-right">Staged</th>
                   <th className="px-4 py-3 text-right">Imported</th>
                   <th className="px-4 py-3 text-right">Rejected</th>
+                  <th className="px-4 py-3">Trace</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-slate-200">
                 {ledgerRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                       No imports yet. Upload a CSV or send an API batch.
                     </td>
                   </tr>
                 ) : (
-                  ledgerRows.map((row) => (
-                    <tr key={row.batch_id}>
-                      <td className="px-4 py-3 text-xs text-slate-400">
-                        {new Date(row.created_at).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3">{row.source}</td>
-                      <td className="px-4 py-3 text-slate-400">{row.entity_type ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-400">{row.filename ?? "—"}</td>
-                      <td className="px-4 py-3">{row.status}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{formatInt(row.rows_staged)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{formatInt(row.rows_imported)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{formatInt(row.rows_rejected)}</td>
-                    </tr>
-                  ))
+                  ledgerRows.map((row) => {
+                    const trace = batchTraces[row.batch_id];
+                    return (
+                      <Fragment key={row.batch_id}>
+                        <tr>
+                          <td className="px-4 py-3 text-xs text-slate-400">
+                            {new Date(row.created_at).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">{row.source}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                            {row.entity_type ?? "—"}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400">{row.filename ?? "—"}</td>
+                          <td className="px-4 py-3">{row.status}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{formatInt(row.rows_staged)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{formatInt(row.rows_imported)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{formatInt(row.rows_rejected)}</td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              disabled={traceBusy === row.batch_id}
+                              onClick={() => void loadBatchTrace(row.batch_id)}
+                              className="text-xs text-teal-300 hover:text-teal-200 disabled:opacity-50"
+                            >
+                              {traceBusy === row.batch_id ? "…" : trace ? "Refresh" : "Verify"}
+                            </button>
+                          </td>
+                        </tr>
+                        {trace ? (
+                          <tr key={`${row.batch_id}-trace`}>
+                            <td colSpan={9} className="bg-slate-950/50 px-4 py-3 text-xs text-slate-400">
+                              <p>
+                                Wrote to{" "}
+                                <span className="font-mono text-slate-300">
+                                  {trace.destination.destination_table ?? "?"}
+                                </span>
+                                {trace.destination.reporting_table &&
+                                trace.destination.reporting_table !== trace.destination.destination_table ? (
+                                  <>
+                                    {" "}
+                                    · reporting reads{" "}
+                                    <span className="font-mono text-amber-200">
+                                      {trace.destination.reporting_table}
+                                    </span>{" "}
+                                    ({trace.reporting_live?.row_count ?? 0} rows
+                                    {trace.reporting_live?.periods?.length
+                                      ? `: ${trace.reporting_live.periods.join(", ")}`
+                                      : ""}
+                                    )
+                                  </>
+                                ) : (
+                                  <>
+                                    {" "}
+                                    · {trace.destination_live?.row_count ?? 0} rows live
+                                    {trace.destination_live?.periods?.length
+                                      ? ` · periods ${trace.destination_live.periods.join(", ")}`
+                                      : ""}
+                                  </>
+                                )}
+                              </p>
+                              {trace.destination.warnings.map((w) => (
+                                <p key={w} className="mt-1 text-amber-200">
+                                  {w}
+                                </p>
+                              ))}
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })
                 )}
               </tbody>
             </table>

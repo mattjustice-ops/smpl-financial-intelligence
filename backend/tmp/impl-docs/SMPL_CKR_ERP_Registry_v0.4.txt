@@ -1,0 +1,2156 @@
+CONNECTOR KNOWLEDGE REGISTRY
+ERP Registry — Enterprise Implementation Intelligence
+ABS-001  ·  Version 0.4
+Sage Intacct · Oracle NetSuite · QuickBooks Online
+Microsoft Dynamics 365 Finance · Oracle Fusion Cloud ERP
+Chief Enterprise Architect · ERP Domain Architect · SMPL.ai
+June 2026 · CONFIDENTIAL — INTERNAL ARCHITECTURE DOCUMENT
+Built on frozen CKR v0.3 template · Companion to SKA v0.4
+Version History — Changes from v0.2
+ERP Registry v0.4 is an additive enrichment iteration. The CKR architecture is frozen. No sections are redesigned, renamed, or reorganized. This version adds three new sections to every connector specification, and recalibrates language throughout the document to support AI-driven implementation agents alongside human implementation consultants.
+Addition
+Purpose
+Estimated SCBM Coverage (per connector)
+New section immediately following the Connector Readiness Summary. Estimates business-understanding coverage of the overall SCBM by domain — not field coverage. Gives implementation agents and Sales Engineering a single, scannable view of how much of the canonical model a connector alone can populate.
+Data Confidence Profile (per connector)
+New section distinguishing "data exists" from "SMPL can confidently reason over it." Every major business object receives an estimated confidence level with a brief explanation, feeding directly into Capability Assessment Layer reasoning and future AI implementation agent decision-making.
+Standalone Capability Summary (per connector)
+New closing section answering "if this is the only system connected, what can customers expect?" Organized as Ready / Partial / Unavailable, closing with a Sales- and Solutions-Engineering-facing executive summary of standalone business value.
+AI implementation agent language throughout
+Recalibrated wording across the document — "the implementation agent evaluates," "the Capability Assessment Layer determines," "the Connector Engine validates," "the CEP requests customer confirmation" — replacing language that assumed a human consultant manually performs every step. The architecture itself is unchanged; only the language describing how it operates is updated to reflect that SMPL onboarding is designed for automation.
+Table V.2 — ERP Registry v0.4 additions. All changes are additive enrichment. No architectural redesign.
+Connector Maturity Model
+This five-level maturity framework replaces the simple Certified/Validated/Preview certification labels used in CKR v0.1–v0.3 and ERP Registry v0.1. It provides more precise, more actionable communication of implementation confidence at every stage of a connector's lifecycle — for internal engineering planning, for Sales and Solutions Engineering customer conversations, and for the Capability Assessment Layer's confidence calibration.
+Level
+Name
+Definition
+Production Customer Threshold
+Tier 2 Pattern Library
+Customer Communication
+1
+Draft
+The connector specification has been authored based on vendor documentation and architectural analysis, but has not yet been implemented against a real customer environment. Mapping rules are architectural hypotheses.
+0 customers
+Empty or theoretical only
+"This connector is in development. Production availability is not yet confirmed."
+2
+Validated
+The connector has been implemented against at least one real production customer environment. Core Tier 1 mapping rules have been confirmed correct. Tier 2 pattern library has begun to accumulate from the first implementation(s).
+1–2 customers
+Sparse — early patterns only
+"This connector has been validated in a live customer environment. Some configuration variants may require additional discovery during your onboarding."
+3
+Pilot Ready
+The connector has been implemented across 3–4 production customers with consistent results. Tier 1 mapping rules are stable. Common configuration variants are documented. The connector is suitable for new customer pilots with standard expectations.
+3–4 customers
+Moderate — common patterns documented
+"This connector is pilot-ready. Standard configurations onboard efficiently. Less common configurations may require brief additional discovery."
+4
+Production Ready
+The connector has been implemented across ≥5 production customers with full Tier 1 test coverage and a substantial Tier 2 pattern library. This is functionally equivalent to the "Certified" level used in prior CKR versions.
+≥5 customers
+Substantial — most common patterns documented
+"This connector is production-ready with full SMPL support. Implementation is fast and predictable for standard configurations."
+5
+Enterprise Certified
+The connector has been implemented across ≥10 production customers including at least 2 large enterprise or complex multi-entity environments. Tier 2 pattern library covers enterprise-specific variants (multi-book, complex consolidation, heavy customization). Full certification test suite passing.
+≥10 customers, including ≥2 enterprise-tier
+Comprehensive — including enterprise-specific variants
+"This connector is enterprise-certified. SMPL has deep, validated experience with complex deployments of this system."
+Table M.1 — Connector Maturity Model. Five levels replace the prior three-level certification framework.
+Maturity level determination is owned by the Connector Engineering team under Chief Enterprise Architect governance, consistent with the CKR v0.3 governance model. The Capability Assessment Layer references the connector's current maturity level when calibrating confidence framing in customer-facing output. Level promotion requires meeting both the customer count threshold and the corresponding Tier 2 pattern library depth — customer count alone is not sufficient for promotion.
+✱ ARCHITECT NOTE: The five-level model gives connectors room to mature naturally as SMPL's customer base grows, rather than forcing a binary Certified/Not-Certified distinction that does not reflect the real difference between "implemented once" and "implemented at ten enterprise customers." This also gives Sales and Solutions Engineering more precise language for setting customer expectations during the sales cycle — a Pilot Ready connector and a Production Ready connector warrant different onboarding conversations.
+ERP Category Overview
+This section establishes universal knowledge about Enterprise Resource Planning systems before any vendor-specific documentation begins. It is the Tier 1 foundation that every ERP connector specification in this registry builds upon.
+✱ ARCHITECT NOTE: This registry is designed to be consumed equally well by human implementation consultants and AI implementation agents. Throughout this document, the implementation agent evaluates connector readiness, the Capability Assessment Layer determines module status, the Connector Engine validates mapping output, and the CEP requests customer confirmation for ambiguous configuration — the architecture is implementation-neutral, but SMPL's onboarding workflow is designed for automation.
+What an ERP System Is
+An Enterprise Resource Planning system is the system of record for an organization's core financial transactions and the master data that supports them. At minimum, every ERP maintains a General Ledger, a Chart of Accounts, and the transactional subsystems that post to it — Accounts Receivable, Accounts Payable, and Cash Management. Beyond this financial core, ERPs typically extend into adjacent operational domains: procurement, inventory, fixed assets, project accounting, and in some cases CRM and HR functionality.
+For SMPL, the ERP is almost always the highest-value single connector category. It is the system from which GAAP-compliant financial statements, GL-level variance analysis, multi-entity consolidation, and budget-to-actual reporting are derived. No other connector category can substitute for the ERP in producing these outputs.
+Typical Business Responsibilities
+Recording every financial transaction as a double-entry journal posting against the Chart of Accounts
+Maintaining the authoritative Chart of Accounts and its hierarchy
+Managing Accounts Receivable: customer invoicing, collections, and aging
+Managing Accounts Payable: vendor bills, payment runs, and aging
+Producing the three core financial statements: Income Statement, Balance Sheet, and Cash Flow Statement
+Supporting period close: accruals, reclassifications, and period lock
+Maintaining fixed asset registers and depreciation schedules
+Supporting multi-entity and multi-currency consolidation where applicable
+Enforcing approval workflows and segregation-of-duties controls
+Maintaining a complete, immutable audit trail of all financial transactions
+Common Business Objects Across ERP Systems
+The following business objects appear, in some form, in every ERP system in this registry. Vendor-specific naming varies; the underlying business concept is universal.
+Universal ERP Concept
+Business Definition
+SCBM Canonical Target
+General Ledger / Chart of Accounts
+The complete set of accounts used to classify all financial transactions
+GL Account (Entity)
+Accounting Periods
+The fiscal calendar structure governing when transactions can post
+Accounting Period (Entity)
+Journal Entries
+Double-entry postings that change GL Account balances
+Journal Entry (Movement)
+Customers (AR master)
+Entities the organization bills and collects from
+Customer Account (Entity)
+Vendors (AP master)
+Entities the organization pays for goods and services
+Vendor (Entity)
+Items / Products
+Goods or services that appear on transactions
+Product (Entity, Tier 2)
+Inventory
+Stock-on-hand tracking for physical goods (rare in SaaS customers)
+Out of SCBM Tier 1/2 scope — noted where present
+Purchase Orders
+Commitments to buy goods or services from a vendor
+Purchase Order (Entity, Tier 2 — Procurement domain)
+Sales Orders
+Commitments to sell goods or services to a customer
+Out of SCBM Tier 1/2 scope for SaaS — noted where present
+Invoices (AR and AP)
+Formal billing documents — customer-facing (AR) or vendor-facing (AP)
+Invoice (Movement) / Vendor Invoice (Movement)
+Payments
+Cash receipts and disbursements
+Payment (Movement)
+Cash / Bank Accounts
+The physical and virtual accounts holding company cash
+Cash Account (Entity)
+Fixed Assets
+Capitalized assets and their depreciation schedules
+Asset (Entity, deferred to SCDM v1.1)
+Projects
+Cost and revenue tracking by project or job
+Out of SCBM Tier 1/2 scope — noted where present
+Departments
+Organizational units used for GL expense allocation
+Department (Entity)
+Locations
+Physical or logical location dimension for transactions
+Extension field — not yet a Tier 1/2 canonical object
+Legal Entities / Subsidiaries
+Distinct legal organizations within a corporate structure
+Legal Entity (Entity)
+Dimensions / Segments
+Custom classification tags applied to transactions (varies by vendor)
+Extension fields, mapped per customer via CEP
+Currencies
+The transaction and functional currencies in use
+Currency Code (SCDM field) + FX Rate (Tier 2 object, deferred)
+Intercompany Transactions
+Transactions between related legal entities requiring elimination
+Journal Entry.is_intercompany flag
+Consolidations
+The process of combining multiple entities into group financials
+Consolidation Scenario (FP&A domain)
+Budgets
+Planned financial values by period, account, and dimension
+Budget Line (Movement)
+Revenue Recognition
+ASC 606 / IFRS 15 compliant recognition of revenue over the service period
+Revenue Schedule (Movement)
+Deferred Revenue
+The balance sheet liability representing unrecognized billed revenue
+Derived from Revenue Schedule
+Tax
+Sales tax, VAT, and other tax obligations tracked on transactions
+Out of SCBM Tier 1/2 scope — noted where present
+Approval Workflows
+Multi-step approval chains for transactions above defined thresholds
+Not canonical — CEP/operational concern
+Security Roles
+Permission structures governing who can view or modify data
+Not canonical — connector authentication concern (S6)
+Audit History
+The system-maintained log of who changed what and when
+Provenance chain input — not a canonical object
+Table 0.1 — Universal ERP business objects and their SCBM canonical targets. This table governs Section S8 (Vendor Object Inventory) for every ERP connector in this registry.
+Typical ERP Implementation Complexity
+ERP implementation complexity is driven primarily by three factors that vary significantly across the five systems in this registry:
+Customization depth: how much the customer has extended the system beyond its standard configuration — custom fields, custom workflows, custom dimensions.
+Module breadth: how many optional modules are licensed and active — revenue recognition, multi-entity consolidation, project accounting, advanced inventory.
+Data model rigidity: whether the vendor enforces a fixed schema (lower implementation complexity, lower customization risk) or allows extensive configuration (higher implementation complexity, higher customization risk).
+Typical Customization Patterns
+Custom GL dimensions for product line, project, or initiative tracking beyond standard Department/Location
+Custom fields on Customer, Vendor, and Transaction objects to capture business-specific attributes
+Custom approval workflows that vary by transaction type, amount threshold, or department
+Non-standard Chart of Accounts structures — numbering conventions, account type usage, and rollup hierarchies vary significantly by customer even within the same ERP
+Custom reporting dimensions layered on top of standard GL structure
+Common Enterprise Modules
+Across the five ERPs in this registry, the following optional modules most significantly affect canonical mapping confidence and capability unlocks:
+Advanced Revenue Management / Revenue Recognition modules — unlock high-confidence Revenue Schedule population
+Multi-entity / multi-subsidiary modules — unlock Legal Entity hierarchy and consolidation
+Budgeting and Planning modules — unlock Budget Line population
+Project Accounting modules — unlock project-level cost and revenue tracking
+Fixed Asset Management modules — unlock Asset and depreciation schedule population
+Multi-book Accounting — unlocks parallel GAAP/IFRS/Tax basis reporting
+Typical Integration Patterns
+REST API — the dominant pattern across modern cloud ERPs (NetSuite, Dynamics 365, Fusion, Intacct, QBO all expose REST endpoints)
+Bulk/batch query languages — SuiteQL (NetSuite), Intacct Query API, OData (Dynamics 365, Fusion) for high-volume data extraction
+Webhook/event-driven patterns — increasingly available but not yet universal across ERP vendors (less mature than CRM or Billing connector categories)
+Scheduled/batch synchronization — the most common pattern for ERP connectors generally, given the batch-oriented nature of period-end financial processes
+1. Sage Intacct
+Sage Intacct is a cloud-native financial management platform purpose-built for mid-market organizations with complex multi-entity, multi-dimensional reporting requirements. It is the most "born cloud" of the five ERPs in this registry and is frequently the ERP of choice for venture-backed SaaS companies in the $10M–$200M ARR range.
+S1: Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_sage_intacct_v1
+vendor_name
+Sage Intacct
+vendor_type
+ERP (Enterprise Resource Planning) — Financial Management
+vendor_description
+Sage Intacct is a cloud-native, multi-tenant financial management system built around a flexible multi-dimensional GL. It is designed from the ground up for multi-entity organizations and is widely regarded as having the strongest native dimensional reporting of any mid-market ERP.
+primary_value_proposition
+Connecting Sage Intacct enables Financial Reporting, multi-dimensional P&L analysis, multi-entity consolidation, and native revenue recognition. Intacct's dimensional GL structure produces unusually high-confidence Department, Location, and custom-dimension reporting without additional configuration.
+connector_maturity_level
+Production Ready (Level 4)
+current_specification_version
+1.0.0
+min_vendor_version_supported
+Intacct API v3 (current as of 2024+)
+max_vendor_version_supported
+Current release — Intacct ships continuous updates, no discrete version numbers
+S2: SCBM Domain Coverage
+Domain
+Coverage
+Notes
+General Ledger
+Full
+Native multi-dimensional GL. Account, Department, Location, and up to 8 custom dimensions all postable on every transaction line.
+Revenue
+Full (with Revenue Management module)
+Native ASC 606 module with contract-level performance obligation tracking. Among the strongest revenue recognition modules in the mid-market ERP category.
+Billing (AR)
+Full
+Native AR with recurring billing support — overlaps meaningfully with billing connector functionality for simpler subscription models.
+Billing (AP)
+Full
+Native AP with approval workflow and payment automation.
+Cash Management
+Full
+Native bank feed integration and cash position reporting.
+Financial Planning
+Partial — requires Planning module or Sage Intacct Planning (separate product)
+Native budgeting limited; most customers pair with an external FP&A tool.
+Multi-Entity
+Full — core architectural strength
+Intacct's multi-entity and consolidation capability is best-in-class for the mid-market segment.
+Project Accounting
+Full (with Projects module)
+Strong project costing and revenue tracking — relevant for SaaS customers with professional services components.
+Table 1.2 — Sage Intacct SCBM domain coverage.
+S3: Connector Strengths
+Native multi-dimensional GL: every transaction line can be tagged with Account, Department, Location, and up to 8 additional custom dimensions. This produces the richest out-of-box dimensional P&L of any connector in this registry without requiring custom field mapping.
+Revenue recognition depth: the native Revenue Management module supports contract-level performance obligations, multiple recognition methods, and automatic schedule generation — frequently eliminating the need for a separate billing-system-derived revenue schedule.
+Multi-entity architecture: entity structure, ownership percentage, and consolidation method are all natively modeled. Intercompany transactions are flagged automatically by the platform, reducing the elimination-detection burden on the Transformation Engine.
+API consistency and modernity: Intacct's REST API (v3) is well-documented, consistently versioned, and has strong sandbox/production parity — reducing implementation risk relative to older SOAP-based predecessor APIs still common elsewhere in the ERP market.
+S4: Architectural Characteristics
+Characteristic
+Value
+Schema Variability
+Medium. Dimensional structure is flexible (customers define their own custom dimensions) but the core object model (GL Account, AR, AP, Journal Entry) is consistent.
+Optional Modules
+Revenue Management (ASC 606), Projects, Multi-Entity/Consolidations, Contracts, Fixed Assets, Intacct Planning.
+Object Polymorphism
+Low. Distinct objects for Journal Entry, AR Invoice, AP Bill, and Payment. Cleaner separation than NetSuite's Transaction polymorphism.
+Customization Depth
+Medium-High. Custom dimensions are a designed extensibility point, not a workaround — this is architecturally different from "custom fields bolted onto a rigid schema."
+Historical Data Availability
+Complete from implementation date. No retention limits on financial data.
+Real-Time vs Batch
+Batch-oriented. REST API supports near-real-time queries but Intacct does not offer native webhooks for financial transaction events as of this specification version.
+S5: Connector Capability Characteristics
+Capability
+Support Level
+Notes
+Webhooks
+Not natively supported
+Platform Events API offers limited event notifications for some objects; not yet comprehensive for financial transactions.
+Incremental Sync
+Supported
+WHENMODIFIED query filtering available on most objects.
+Historical Backfill
+Fully supported
+Complete historical data accessible via API query with date range filtering.
+Bulk Export
+Supported
+REST API supports paginated bulk queries. No dedicated bulk export endpoint as of v3 — pagination-based extraction is the standard pattern.
+Rate Limits
+Moderate
+Concurrent session limits apply. Rate limiting is enforced per company file (per legal entity) — multi-entity customers may need careful session pooling.
+Delta Detection
+Supported
+Deleted records require explicit audit trail query — not automatically surfaced in standard object queries.
+Change Tracking
+Supported via Audit Trail
+Comprehensive field-level audit trail available, exceeding most competitors in this registry.
+S8–S9: Object Inventory and Population Map (Summary)
+Canonical Object
+Expected Completeness
+Confidence
+Notes
+GL Account
+99%
+Direct — High
+Account Group hierarchy maps cleanly to SCBM account type taxonomy.
+Journal Entry
+97%
+Direct — High
+Clean object separation from AR/AP transactions — no polymorphism issue.
+Department
+98%
+Direct — High
+Native dimension — typically the cleanest Department mapping in the registry.
+Legal Entity
+100%
+Direct — High
+Native multi-entity structure maps completely and without ambiguity.
+Invoice (AR)
+95%
+Direct — High
+Service period fields available natively, improving deferred revenue confidence relative to ERPs without explicit service-period invoice fields.
+Revenue Schedule
+92% (with Revenue Mgmt module) / 20% (without)
+Direct — High (module active) / Inferred — Low (module inactive)
+The single largest swing factor in Intacct implementation confidence.
+Budget Line
+70% (native) / 95% (with Intacct Planning or external FP&A)
+Derived — Medium / Direct — High
+Native budgeting is functional but most growth-stage customers pair with a dedicated planning tool.
+Table 1.3 — Sage Intacct Business Object Population Map (summary). Full field-level mapping maintained in implementation repository per S10.
+S13: Common Configuration Variants
+Variant
+Frequency
+Impact
+Revenue Management module active
+Common (~55% of SaaS customers on Intacct)
+Revenue Schedule confidence rises from ~20% to ~92%. The single most consequential configuration variant for this connector.
+Multi-entity / consolidation active
+Very Common (>70% — this is Intacct's core market positioning)
+Legal Entity hierarchy populated. Intercompany elimination flags available natively.
+Custom dimensions beyond standard Department/Location
+Very Common (>80%)
+Additional dimensions typically map to extension fields pending CEP-level resolution of business meaning per customer.
+Contracts module active
+Occasional (~25%)
+Improves Subscription-adjacent contract data when present, though Intacct Contracts is not a substitute for a dedicated billing system for high-volume subscription businesses.
+Table 1.4 — Sage Intacct configuration variants (Tier 2 pattern library, excerpt).
+S15: Implementation Risk Register
+Custom dimension proliferation: Intacct customers frequently define 4–8 custom dimensions. Without CEP-documented business meaning for each, canonical mapping of dimensional data defaults to extension fields, reducing AI reasoning depth on department/segment analysis.
+Multi-book accounting complexity: customers running parallel GAAP/Tax/IFRS books must have the correct book explicitly designated in the CEP — defaulting to the wrong book silently produces incorrect canonical financials.
+Session and concurrency limits: Intacct enforces per-company-file session limits that can throttle initial historical backfill for customers with several legal entities. Implementation must account for multi-session orchestration.
+S17–S18: Lifecycle and Capability Unlocks
+Capability
+Objects Populated
+Contribution
+Financial Statements
+GL Account (99%), Journal Entry (97%), Legal Entity (100%)
+Ready at ~96% — among the highest-confidence Financial Statements connector in the registry.
+Multi-Entity Consolidation
+Legal Entity (100%), intercompany flags native
+Ready — Intacct's strongest relative capability unlock.
+Revenue Recognition
+Revenue Schedule (92% with module)
+Ready when Revenue Management module active; Unavailable-equivalent otherwise.
+Department / Dimensional Reporting
+Department (98%), custom dimensions (extension fields)
+Ready for standard dimensions; Partial for custom dimensions pending CEP resolution.
+Table 1.5 — Sage Intacct capability unlocks.
+Best Fit Customer
+Ideal Customer Profile
+High-growth, venture-backed SaaS companies in the $10M–$200M ARR range — Intacct's core market positioning
+Multi-entity businesses, including companies with multiple subsidiaries from acquisitions or international expansion
+Organizations with complex ASC 606 revenue recognition requirements — multi-element arrangements, contract modifications, or usage-based components
+Companies requiring rich departmental or project-level P&L reporting without heavy IT involvement to maintain it
+Finance teams that value native dimensional reporting over building custom reporting infrastructure
+Less Ideal Customer Profile
+Very small or pre-revenue companies — Intacct's pricing and implementation overhead typically exceed seed-stage needs
+Single-entity companies with simple, low-dimensional reporting needs — QuickBooks Online is a better fit
+Companies requiring extensive manufacturing or supply chain functionality — Intacct's strength is financial management, not operations
+Organizations expecting native, deep FP&A/planning capability without a separate planning tool — Intacct's native budgeting is functional but limited
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Medium. Multi-entity structure and custom dimension business-meaning resolution are the primary discovery items. System-of-record determination (is Intacct the sole financial system, or paired with a separate billing/CRM system) is always confirmed during Pre-POC Discovery.
+Manual Mapping Expectations
+Low-Medium for standard Chart of Accounts; Medium for custom dimensions, which require the implementation agent to request CEP confirmation of business meaning before they can move beyond extension-field status.
+Customization Level (typical)
+Medium — Intacct's dimensional framework is a designed extensibility point, so customization is expected and architecturally accommodated rather than a deviation from a "standard" configuration.
+Estimated Onboarding Effort
+Low relative to enterprise-tier ERPs. Intacct's modern API and consistent object model support efficient initial connection and validation.
+Expected Implementation Duration
+Planning estimate only, not contractual: typically faster than NetSuite for comparable scope, given Intacct's lower customization variance and cleaner object polymorphism.
+Table — Sage Intacct implementation effort estimate. Planning guidance only.
+Pilot Readiness Expectations
+Capability
+Status
+Why
+Financial Statements
+Ready
+GL Account, Journal Entry, and Legal Entity all populate at 97%+ confidence from Intacct alone.
+Executive Dashboards
+Ready
+Core financial KPIs derive directly from Financial Statements readiness.
+Board Reporting
+Partial
+Financial and multi-entity sections are Ready; ARR and GTM sections require a Billing and CRM connector respectively.
+Executive Briefings
+Ready (financial scope)
+Narrative financial commentary is well-supported; ARR/GTM commentary requires additional connectors.
+Cash Forecasting
+Ready
+Native cash management and bank feed integration support strong cash position and bridge reporting.
+Budget Analysis
+Partial
+Native budgeting functional but most growth-stage customers pair with external FP&A — Ready when Intacct Planning or an FP&A connector is also present.
+Revenue Analytics
+Ready (with Revenue Management module) / Partial (without)
+The single largest swing factor for this connector — see Configuration Variants.
+Workforce Planning
+Unavailable
+Requires HRIS/Payroll connector — not populated by Intacct alone.
+Renewal Analytics
+Unavailable
+Requires Billing and/or CRM connector for subscription and customer health data.
+GTM Analytics
+Unavailable
+Requires CRM and Marketing connectors.
+Product Analytics
+Unavailable
+Requires Product Analytics connector — out of ERP scope entirely.
+Table — Sage Intacct pilot readiness by SMPL module, aligned to Capability Assessment Layer and Module Capability Registry definitions.
+Connector Readiness Summary
+Sage Intacct does exceptionally well at producing rich, multi-dimensional financial statements with minimal implementation friction, and is the strongest native multi-entity consolidation connector in the registry for mid-market organizational complexity. Connecting Intacct alone delivers Ready status for Financial Statements, Executive Dashboards, and Cash Forecasting immediately.
+Pairing Intacct with a Billing connector (Stripe, Chargebee, Recurly) and a CRM connector (Salesforce, HubSpot) maximizes customer value — unlocking Board Reporting, Revenue Analytics depth, Renewal Analytics, and GTM Analytics. Approximately 55–65% of the full Tier 1 SCBM can typically be populated from Intacct alone for a standard multi-entity SaaS customer with Revenue Management active.
+After connecting Intacct alone, recommended SMPL module status: Ready — Financial Statements, Executive Dashboards, Cash Forecasting. Partial — Board Reporting, Budget Analysis, Revenue Analytics (module-dependent). Unavailable — Workforce Planning, Renewal Analytics, GTM Analytics, Product Analytics.
+Estimated SCBM Coverage
+The implementation agent and the Capability Assessment Layer use this estimate as the starting reference point when Sage Intacct is the first or only connected system. Values reflect business-understanding coverage of the canonical model — not raw field coverage — and assume Revenue Management module active, the common configuration for SMPL's core Intacct customer segment.
+Overall SCBM Coverage   ≈ 60%
+SCBM Domain
+Coverage
+General Ledger
+99%
+Financial Reporting
+98%
+Revenue
+88% (Revenue Mgmt active) / 22% (inactive)
+Billing
+55%
+Customer
+20%
+Headcount
+4%
+Pipeline
+0%
+Marketing
+0%
+Product Analytics
+0%
+Table — Sage Intacct estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+The Capability Assessment Layer references the following object-level confidence estimates when determining whether AI reasoning over Sage Intacct data should be presented as high-confidence or flagged for additional validation.
+Business Object
+Confidence
+Why
+General Ledger
+99%
+Native multi-dimensional GL with direct, unambiguous mapping to the canonical Account model.
+Journal Entries
+97%
+Clean object separation — no polymorphism issue. Direct mapping confidence is high across all standard implementations.
+Departments
+98%
+Native dimension framework produces the cleanest Department mapping the implementation agent encounters across the registry.
+Legal Entities
+100%
+Native multi-entity structure maps completely and without ambiguity in every observed implementation.
+Revenue Schedule
+92% (module active) / 22% (inactive)
+High when Revenue Management module is confirmed active during Pre-POC Discovery. Low otherwise — the implementation agent should always verify module status before assuming high confidence.
+Budget
+72%
+Native budgeting functional but most growth-stage customers pair an external FP&A tool — the CEP should confirm the authoritative budget source before the implementation agent treats native data as complete.
+Customer
+55%
+Identity and entity fields are high-confidence; commercial fields (ARR, health score) are not populated by Intacct alone and require a paired Billing connector.
+ARR
+8%
+Intacct is not a billing system of record. ARR-related fields should not be reasoned over from Intacct data alone — the implementation agent should flag this explicitly and recommend a Billing connector.
+Pipeline
+0%
+Out of scope for an ERP connector entirely.
+Headcount
+4%
+Basic department headcount inference only; not a substitute for an HRIS connector.
+Table — Sage Intacct Data Confidence Profile. Used by the Capability Assessment Layer and future implementation agents to calibrate reasoning trust.
+Standalone Capability Summary
+Ready
+Financial Statements
+Executive Dashboards
+Cash Reporting
+Financial Commentary
+GL Variance Analysis
+Partial
+Board Reporting
+Budget Analysis
+Revenue Analytics
+Unavailable
+Pipeline
+Bookings
+Renewals
+Sales Forecast
+Workforce Planning
+Marketing Analytics
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting Sage Intacct alone delivers immediate, high-confidence value across the full financial reporting suite — Financial Statements, Executive Dashboards, Cash Reporting, and AI-generated financial commentary are all Ready on day one, with GL-level variance analysis supported by Intacct's native dimensional reporting. This is sufficient to support a board-ready financial package without any additional connector. Customers evaluating SMPL primarily for financial reporting and multi-entity consolidation will see strong standalone value. Customers expecting ARR, pipeline, or workforce intelligence will need a Billing and/or HRIS connector before those capabilities activate — this should be set as an explicit expectation during the sales conversation, not discovered post-purchase.
+Expanded Configuration Variants
+Variant
+Frequency
+Implementation Impact
+Multi-book accounting (parallel GAAP/Tax books)
+Occasional (~15–20%, more common in PE-backed customers)
+Requires explicit book designation in CEP. Defaulting to the wrong book silently produces incorrect canonical financials — a high-severity, low-frequency risk.
+Localization packages (non-US entities)
+Occasional, rising with international expansion
+Chart of Accounts and tax handling vary by localization package. Requires entity-by-entity validation for customers with non-US subsidiaries.
+Custom objects beyond standard dimensions
+Rare-Occasional
+When present, typically represent industry-specific tracking (e.g., grant tracking for B-corp/nonprofit-adjacent customers) — captured as extension fields pending CEP resolution.
+Contracts module for non-subscription revenue
+Occasional (~25%)
+Relevant for customers with material professional services or non-recurring revenue components alongside core subscription revenue.
+Table — Sage Intacct expanded configuration variants (Tier 2 pattern library, v0.2 additions).
+Expanded Implementation Risk Register
+Common implementation mistake: treating all custom dimensions as immediately canonical without CEP business-meaning resolution, which produces dimensional reporting that the AI Reasoning Engine cannot reliably interpret. The correct sequence is always: discover dimensions during Pre-POC Discovery, resolve business meaning in CEP, then enable dimensional reasoning.
+Reporting inconsistency risk: customers running multi-book accounting who do not explicitly confirm which book SMPL should treat as canonical will see Financial Statement values that do not match their internal reporting — the implementation agent must resolve this during onboarding via explicit CEP confirmation, not discover it post-launch.
+Audit consideration: Intacct's field-level audit trail is comprehensive and should be the preferred source for provenance validation when reconciliation questions arise — stronger than several other connectors in this registry.
+2. Oracle NetSuite
+Oracle NetSuite is the most widely deployed cloud ERP among SMPL's target customer base (Series A–D SaaS companies). It has the broadest functional footprint of any connector in this registry — spanning GL, multi-entity consolidation, advanced revenue recognition, and CRM-adjacent functionality — at the cost of the highest schema variability and customization burden.
+S1: Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_netsuite_v1
+vendor_name
+Oracle NetSuite
+vendor_type
+ERP (Enterprise Resource Planning)
+vendor_description
+Oracle NetSuite is a cloud-based ERP providing general ledger, multi-entity accounting, revenue recognition, and financial management for mid-market to enterprise organizations.
+primary_value_proposition
+Connecting NetSuite enables Financial Reporting, GL-level variance analysis, multi-entity consolidation, and GAAP-compliant cash flow statements.
+connector_maturity_level
+Production Ready (Level 4)
+current_specification_version
+1.3.0
+min_vendor_version_supported
+2021.1
+max_vendor_version_supported
+Current release
+S2: SCBM Domain Coverage
+Domain
+Coverage
+Notes
+General Ledger
+Full
+11 of 11 required GL Account fields populatable. Highest-confidence connector for Chart of Accounts mapping in the registry.
+Revenue
+Partial (Full with Advanced Revenue Management)
+Without ARM: confidence ~15–20%, derived from invoice service period fields. With ARM: ~90%, native Revenue Element objects.
+Billing
+Full for AP, Partial for AR
+AP transactional flow is clean. AR is functional but service-period fields require either ARM or custom fields.
+Cash Management
+Full
+Native bank reconciliation and cash position reporting.
+Financial Planning
+Partial — requires Budget module
+Budget module unlocks Budget Line population; without it, budget data must come from FP&A tool or SMPL native upload.
+Multi-Entity
+Full (with OneWorld module)
+Subsidiary hierarchy, intercompany elimination, and multi-currency consolidation all available natively.
+HRIS (limited)
+Partial (with SuiteHR)
+Basic employee data only — not a substitute for a dedicated HRIS connector.
+Table 2.2 — NetSuite SCBM domain coverage.
+S3: Connector Strengths
+Accounting model completeness: full double-entry accrual accounting with debit/credit at the journal line level. Highest-confidence source of GAAP financial statements across all SMPL connectors.
+Financial dimension richness: Department, Class, Location, and custom segment dimensions on transaction lines. Enables dimensional P&L without additional mapping effort.
+Multi-entity architecture: native Subsidiary hierarchy with intercompany transaction tracking. Among the most mature multi-entity connectors in the registry alongside Sage Intacct.
+Revenue recognition (when ARM active): native ASC 606 revenue element objects. Highest-confidence path to compliant Revenue Schedule canonical objects when the module is licensed.
+Historical data integrity: complete transactional history from implementation date. No data retention limits — enables full historical trend analysis.
+Market breadth: the most commonly deployed ERP in SMPL's target customer segment, meaning the highest cumulative implementation knowledge and pattern library depth of any connector in this registry.
+S4: Architectural Characteristics
+Characteristic
+Value
+Schema Variability
+High — NetSuite is highly configurable. Custom segments, custom fields, and optional modules significantly affect available data.
+Optional Modules
+ARM (Revenue Recognition), Budget, SuiteHR, OneWorld (Multi-entity), Advanced Inventory, Project Management.
+Object Polymorphism
+Yes — Transaction object is used for Invoice, Journal Entry, Vendor Bill, Payment, and Credit Memo. Type discrimination required via recordtype field.
+Customization Depth
+Very common. Almost all enterprise NetSuite implementations have custom fields. Custom segments used for product line or project tracking.
+Historical Data Availability
+Complete — NetSuite preserves all historical transactions from implementation date. No data retention limits.
+Real-Time vs Batch
+Batch — NetSuite uses REST/SuiteQL for bulk queries. No native event streaming.
+S5: Connector Capability Characteristics
+Capability
+Support Level
+Notes
+Webhooks
+Not supported natively
+Polling required. SuiteScript customization can approximate but is non-standard.
+Incremental Sync
+Supported
+lastModified date filter on most objects.
+Historical Backfill
+Fully supported
+SuiteQL with pagination. Parallel queries recommended for large volumes.
+Bulk Export
+Supported
+SuiteQL is the recommended bulk access pattern.
+Rate Limits
+Moderate — monitor required
+10 concurrent requests, 250 requests/second.
+Delta Detection
+Supported with care
+Deleted records require separate audit log query — not automatic.
+Change Tracking
+Limited
+Transaction history preserved; field-level change history requires SuiteScript customization.
+S8–S9: Object Inventory and Population Map (Summary)
+Canonical Object
+Expected Completeness
+Confidence
+Notes
+GL Account
+98%
+Direct — High
+Account type normalization via lookup table required.
+Journal Entry
+96%
+Normalized — High
+Transaction.type discrimination required.
+Invoice
+94%
+Normalized — High
+service_start_date/end_date require custom fields or ARM.
+Legal Entity
+100%
+Direct — High
+Subsidiary hierarchy fully preserved.
+Department
+97%
+Direct — High
+P&L mapping requires department-to-account cost center configuration.
+Revenue Schedule
+90% (ARM active) / 15% (ARM inactive)
+Direct — High / Inferred — Low
+ARM is the architectural dependency for compliant revenue recognition.
+Customer
+85%
+Direct — High (identity) / Not Available (commercial fields)
+arr_current, health_score require Billing/CS connectors.
+Table 2.3 — NetSuite Business Object Population Map (summary).
+S13: Common Configuration Variants
+Variant
+Frequency
+Impact
+OneWorld multi-subsidiary active
+Very Common (>80% of Series B+ customers)
+Legal Entity hierarchy populated. Intercompany elimination and currency translation required.
+Advanced Revenue Management active
+Common (>60% of customers with revenue recognition complexity)
+Revenue Schedule confidence rises from ~15% to ~90%.
+Budget module active
+Common (>50%)
+Budget Line population enabled.
+SuiteHR active
+Occasional (~30%)
+Employee object rises from partial (payroll-only) to full.
+Custom segment for product line
+Common (~50%)
+Additional GL dimension requiring CEP resolution.
+Cash basis accounting
+Occasional (~15%)
+Revenue recognition timing reflects cash receipts, not service period amortization.
+Table 2.4 — NetSuite configuration variants (Tier 2, excerpt).
+S15: Implementation Risk Register
+Transaction type discrimination: incorrect type discrimination produces wrong canonical object assignments. Use Transaction.recordtype + Transaction.type composite key.
+Non-standard Chart of Accounts types: custom account types/sub-types may not map to SCBM taxonomy. Flag unmapped types for review — do not default to "Expense."
+Intercompany transactions without OneWorld: appear as normal transactions, producing overstated consolidated revenue if not flagged.
+Date field ambiguity: use postingDate (accounting date) for canonical mapping, not tranDate (transaction date). Common implementation error.
+Deleted records: NetSuite API returns deleted records as inactive — track deletion events to tombstone canonical objects appropriately.
+S17–S18: Lifecycle and Capability Unlocks
+Capability
+Objects Populated
+Contribution
+Financial Statements
+GL Account (98%), Journal Entry (96%), Legal Entity (100%), Department (97%)
+Ready at 94%+ as the standalone primary connector.
+Budget vs Actual Variance
+Budget Line (full, when module active)
+Enables period-level GL variance.
+Multi-Entity Consolidation
+Legal Entity (100%), intercompany flag
+Ready when OneWorld active.
+Revenue Recognition
+Revenue Schedule (90% when ARM active)
+Primary connector for GAAP revenue recognition with ARM.
+Cash Flow Statement
+Payment (95%)
+Enables indirect-method CFS.
+Department Reporting
+Department (97%), Journal Entry allocation (95%)
+Enables P&L by department.
+Table 2.5 — NetSuite capability unlocks.
+Best Fit Customer
+Ideal Customer Profile
+Broad horizontal fit across Series A–D SaaS companies, $5M–$500M ARR — the most commonly encountered ERP in SMPL's target segment
+Companies with complex multi-subsidiary structures requiring OneWorld-based consolidation
+Organizations with sophisticated revenue recognition needs supported by Advanced Revenue Management
+Finance teams comfortable with a highly configurable system and willing to invest in custom segment/dimension design
+Companies that have outgrown QuickBooks Online and need multi-entity or advanced revenue recognition capability
+Less Ideal Customer Profile
+Very small or pre-revenue companies — NetSuite's implementation overhead typically exceeds early-stage needs
+Organizations seeking a low-customization, "out of the box" system — NetSuite's flexibility is a double-edged sword for teams without dedicated NetSuite administration capability
+Companies lacking internal or consultant-supported NetSuite expertise — the customization depth that makes NetSuite powerful also makes misconfiguration common
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Medium-High. NetSuite's schema variability is the highest among the three most mature connectors in this registry — custom segments, Transaction type discrimination edge cases, and OneWorld configuration all require discovery.
+Manual Mapping Expectations
+Medium. Standard Chart of Accounts and core transaction types map cleanly; custom segments and non-standard account type usage require validation against the customer's specific NetSuite configuration.
+Customization Level (typical)
+High — NetSuite customers frequently have years of accumulated customization. Implementation should budget time for customization discovery even for "standard" implementations.
+Estimated Onboarding Effort
+Medium — NetSuite's breadth of accumulated CKR pattern library (the deepest in the registry, given highest production customer count) partially offsets its schema variability.
+Expected Implementation Duration
+Planning estimate only: typically the median implementation duration across the registry — faster than Dynamics 365 or Oracle Fusion, comparable to or modestly longer than Sage Intacct depending on customization depth.
+Table — NetSuite implementation effort estimate. Planning guidance only.
+Pilot Readiness Expectations
+Capability
+Status
+Why
+Financial Statements
+Ready
+GL Account, Journal Entry, Legal Entity, and Department all populate at 96%+ confidence.
+Executive Dashboards
+Ready
+Derives directly from Financial Statements readiness.
+Board Reporting
+Partial
+Financial and multi-entity sections Ready; ARR and GTM sections require Billing and CRM connectors.
+Executive Briefings
+Ready (financial scope)
+Strong financial narrative support; ARR/GTM commentary requires additional connectors.
+Cash Forecasting
+Ready
+Native cash and payment data supports strong cash bridge reporting.
+Budget Analysis
+Partial
+Ready when Budget module active; otherwise requires external FP&A tool or SMPL budget upload.
+Revenue Analytics
+Ready (ARM active) / Partial (ARM inactive)
+The single largest confidence swing factor for this connector.
+Workforce Planning
+Partial (SuiteHR active) / Unavailable (SuiteHR inactive)
+SuiteHR provides basic employee data but is not a substitute for a dedicated HRIS connector.
+Renewal Analytics
+Unavailable
+Requires Billing and/or CRM connector.
+GTM Analytics
+Unavailable
+Requires CRM and Marketing connectors.
+Product Analytics
+Unavailable
+Requires dedicated Product Analytics connector.
+Table — NetSuite pilot readiness by SMPL module.
+Connector Readiness Summary
+NetSuite does exceptionally well at producing complete, dimensionally-rich financial statements and supporting complex multi-entity consolidation when OneWorld is active. It has the deepest accumulated SMPL implementation pattern library of any connector in this registry, reflecting its position as the most commonly deployed ERP among SMPL's target customer base.
+Pairing NetSuite with a Billing connector and CRM connector unlocks the full Board Reporting and GTM Analytics suite. Approximately 50–60% of the full Tier 1 SCBM can typically be populated from NetSuite alone for a standard multi-entity SaaS customer with ARM active — slightly below Intacct due to NetSuite's higher schema variability requiring more CEP resolution before reaching equivalent confidence.
+After connecting NetSuite alone, recommended SMPL module status: Ready — Financial Statements, Executive Dashboards, Cash Forecasting. Partial — Board Reporting, Budget Analysis, Revenue Analytics (module-dependent), Workforce Planning (module-dependent). Unavailable — Renewal Analytics, GTM Analytics, Product Analytics.
+Estimated SCBM Coverage
+The implementation agent and the Capability Assessment Layer use this estimate as the starting reference point when NetSuite is the first or only connected system. Values assume Advanced Revenue Management active, the configuration most common among SMPL's Series B+ NetSuite customer base.
+Overall SCBM Coverage   ≈ 56%
+SCBM Domain
+Coverage
+General Ledger
+98%
+Financial Reporting
+96%
+Revenue
+90% (ARM active) / 15% (inactive)
+Billing
+50%
+Customer
+17%
+Headcount
+6% (SuiteHR active) / 0% (inactive)
+Pipeline
+0%
+Marketing
+0%
+Product Analytics
+0%
+Table — NetSuite estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+The Capability Assessment Layer references the following object-level confidence estimates when determining whether AI reasoning over NetSuite data should be presented as high-confidence or flagged for additional validation.
+Business Object
+Confidence
+Why
+General Ledger
+98%
+Account type normalization is well-understood across the implementation agent's accumulated pattern library — the deepest in the registry given NetSuite's production customer count.
+Journal Entries
+96%
+Requires Transaction.recordtype + Transaction.type composite discrimination — well-validated but introduces a small confidence reduction relative to ERPs without object polymorphism.
+Departments
+97%
+Direct mapping; P&L allocation confidence depends on department-to-account cost center configuration, which the CEP should confirm during onboarding.
+Legal Entities
+100%
+Subsidiary hierarchy is unambiguous in every observed implementation when OneWorld is active.
+Revenue Schedule
+90% (ARM active) / 15% (inactive)
+The implementation agent must confirm ARM module status explicitly during Pre-POC Discovery — this is the single largest confidence swing factor for this connector.
+Budget
+68% (module active) / 0% (inactive)
+Budget module activation should be confirmed before the implementation agent presents Budget data as reliable.
+Customer
+52%
+Identity fields high-confidence; commercial fields require a paired Billing connector.
+ARR
+10%
+NetSuite is not a billing system of record — the implementation agent should not reason over ARR from NetSuite data alone.
+Pipeline
+0%
+Out of scope for an ERP connector.
+Headcount
+6%
+SuiteHR, when active, provides basic employee data; not a substitute for a dedicated HRIS connector.
+Table — NetSuite Data Confidence Profile.
+Standalone Capability Summary
+Ready
+Financial Statements
+Executive Dashboards
+Cash Reporting
+Financial Commentary
+GL Variance Analysis
+Partial
+Board Reporting
+Budget Analysis
+Revenue Analytics
+Workforce Planning (SuiteHR active only)
+Unavailable
+Pipeline
+Bookings
+Renewals
+Sales Forecast
+Marketing Analytics
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting NetSuite alone delivers the same Ready-level financial reporting suite as the registry's other Production Ready connectors — Financial Statements, Executive Dashboards, Cash Reporting, and AI-generated financial commentary are immediately available. NetSuite's deeper accumulated implementation pattern library — reflecting its position as SMPL's most commonly deployed ERP — means the implementation agent typically encounters fewer novel configuration patterns during onboarding than with less mature connectors. Customers should expect the same ARR/pipeline/marketing gap as other ERP-only connections; this is a standard, well-understood expectation-setting conversation, not a connector-specific limitation.
+Expanded Configuration Variants
+Variant
+Frequency
+Implementation Impact
+Multi-book accounting
+Occasional (~15%, more common in larger Series C+ customers)
+Similar risk profile to Intacct multi-book — requires the CEP to explicitly request book designation from the customer.
+Localization SuiteApps (non-US entities)
+Common among OneWorld customers with international subsidiaries
+Country-specific tax and statutory reporting requirements vary by localization package — entity-by-entity validation required.
+Heavy SuiteScript customization
+Common (~40%+) among customers with 3+ years on NetSuite
+Business logic embedded in SuiteScript may produce derived field values not visible via standard API queries — flagged as a Tier 2 pattern requiring case-by-case discovery.
+Advanced Inventory / Manufacturing modules active
+Rare in SMPL's SaaS customer base, more common in hybrid SaaS/hardware models
+Out of SCBM Tier 1/2 scope but noted for completeness — does not affect core financial canonical mapping.
+Table — NetSuite expanded configuration variants (v0.2 additions).
+Expanded Implementation Risk Register
+Common implementation mistake: assuming Transaction.type discrimination is sufficient without also checking Transaction.recordtype — the composite key is required for reliable canonical classification, and using type alone is the single most common NetSuite mapping error observed across implementations.
+Module dependency risk: assuming ARM is active without explicit CEP confirmation produces silently low-confidence Revenue Schedule data labeled as if it were high-confidence — the implementation agent always confirms module status during Pre-POC Discovery and never infers it from API access alone.
+Reporting inconsistency risk: SuiteScript-derived custom calculations (e.g., a customer's custom ARR calculation script) may produce values that differ from SMPL's canonical ARR computation — this should be surfaced as a reconciliation conversation during onboarding, not treated as a data error.
+Audit consideration: NetSuite's system notes and audit trail are reliable for transaction-level provenance but field-level change history requires SuiteScript customization to access reliably — set customer expectations accordingly during onboarding.
+3. QuickBooks Online
+Intuit QuickBooks Online is the most common accounting platform among SMPL's earliest-stage customers (Seed through Series A). It offers the simplest schema and fastest mapping speed of any connector in this registry, in exchange for materially lower functional depth — no multi-entity support, no native revenue recognition, and limited dimensional reporting.
+S1: Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_qbo_v1
+vendor_name
+Intuit QuickBooks Online
+vendor_type
+SMB Accounting Platform
+vendor_description
+QuickBooks Online is a cloud-based accounting platform designed for small and early-stage businesses, providing core GL, AR, AP, and cash management without the multi-entity or advanced revenue recognition capabilities of mid-market ERPs.
+primary_value_proposition
+QuickBooks Online enables Financial Reporting for single-entity, early-stage customers with minimal implementation overhead. Simpler schema than NetSuite or Intacct means faster mapping and higher out-of-box confidence for standard configurations.
+connector_maturity_level
+Production Ready (Level 4)
+current_specification_version
+1.1.0
+min_vendor_version_supported
+QBO API v3
+max_vendor_version_supported
+Current release
+S2: SCBM Domain Coverage
+Domain
+Coverage
+Notes
+General Ledger
+Full (single-entity only)
+No multi-entity / multi-subsidiary support. Consolidated reporting unavailable from QBO alone.
+Revenue
+Partial
+Invoice-date recognition only. No ASC 606 module. Deferred revenue must be estimated from invoice service period fields — labeled Derived-Medium at best.
+Billing (AR/AP)
+Full
+Clean, simple AR/AP transactional model.
+Cash Management
+Full (single-entity)
+Native bank feed integration.
+Financial Planning
+None — no native budget module
+Budget Line population requires external FP&A tool or SMPL native budget upload.
+Multi-Entity
+None
+Single legal entity only. This is the most consequential limitation relative to NetSuite, Intacct, Dynamics 365, and Fusion.
+Table 3.2 — QuickBooks Online SCBM domain coverage.
+S3: Connector Strengths
+Implementation speed: the simplest schema of any ERP in this registry. Standard configurations can be mapped to canonical objects with minimal CEP intervention.
+API consistency: stable, well-documented REST API with strong sandbox parity — among the lowest-implementation-risk connectors in the registry.
+Predictable Chart of Accounts: QBO enforces a more rigid Account Type taxonomy than NetSuite or Intacct, reducing the normalization burden for GL Account mapping.
+Fast onboarding: for the single-entity, accrual-basis, standard-configuration customer (the most common QBO profile in SMPL's target segment), Financial Statements can typically reach Ready status faster than any other ERP connector.
+S4: Architectural Characteristics
+Characteristic
+Value
+Schema Variability
+Low. QBO enforces a largely fixed schema with limited customization surface relative to mid-market and enterprise ERPs.
+Optional Modules
+Minimal. QBO Advanced adds some reporting depth; no equivalent to NetSuite ARM or Intacct Revenue Management.
+Object Polymorphism
+Low. Distinct objects for Invoice, Bill, JournalEntry, Payment, CreditMemo — cleaner than NetSuite's Transaction model.
+Customization Depth
+Low. Custom fields available but used far less extensively than in NetSuite or Intacct implementations.
+Historical Data Availability
+Complete from account creation. No retention limits on financial data.
+Real-Time vs Batch
+Batch. REST API supports near-real-time queries; no native webhook support for financial transaction events.
+S5: Connector Capability Characteristics
+Capability
+Support Level
+Notes
+Webhooks
+Limited
+QBO webhooks available for a subset of entity types; coverage materially narrower than Stripe-class connectors.
+Incremental Sync
+Supported
+Change data capture via LastUpdatedTime filtering.
+Historical Backfill
+Fully supported
+Complete history accessible via API.
+Bulk Export
+Limited
+No dedicated bulk API — pagination-based REST queries are the standard pattern. Sufficient for typical early-stage data volumes.
+Rate Limits
+Low consideration
+Generous limits relative to typical early-stage company transaction volumes.
+Delta Detection
+Supported
+Deleted/voided transactions are queryable via CDC.
+Change Tracking
+Limited
+Basic audit log available; less granular than NetSuite or Intacct.
+S8–S9: Object Inventory and Population Map (Summary)
+Canonical Object
+Expected Completeness
+Confidence
+Notes
+GL Account
+96%
+Direct — High
+Account Type taxonomy is more rigid than NetSuite — fewer normalization edge cases.
+Journal Entry
+95%
+Direct — High
+Clean object model, no polymorphism issue.
+Invoice
+92%
+Direct — High
+Basic service period support; ARM-equivalent module does not exist.
+Legal Entity
+100% (single-entity only)
+Direct — High
+No multi-entity structure to map — this is a hard ceiling, not a confidence issue.
+Revenue Schedule
+35%
+Derived — Medium
+Estimated from invoice service period dates. Materially lower confidence than NetSuite-with-ARM or Intacct-with-Revenue-Management.
+Budget Line
+0% native / 95% with external source
+Not Available / Direct — High
+No native budget module — entirely dependent on FP&A connector or SMPL upload.
+Table 3.3 — QuickBooks Online Business Object Population Map (summary).
+S15: Implementation Risk Register — Key Limitations vs Mid-Market ERPs
+Limitation
+Impact
+No multi-entity / multi-subsidiary support
+Cannot produce consolidated financial statements. Single legal entity only. Customers with multiple entities require a different ERP for consolidated reporting.
+No Advanced Revenue Management equivalent
+Revenue recognized on invoice date by default. Deferred revenue estimated from invoice service period fields — confidence significantly lower than NetSuite ARM or Intacct Revenue Management.
+Limited dimensional depth
+Class and Location dimensions are simpler than NetSuite Department or Intacct's 8-dimension model. Limited GL-level department P&L without supplementary HRIS-based allocation.
+No native budget module
+Budget vs Actual GL variance requires external data source — FP&A tool, SMPL native upload, or spreadsheet.
+Table 3.4 — QuickBooks Online key limitations. These are structural product ceilings, not implementation gaps.
+S17–S18: Lifecycle and Capability Unlocks
+Capability
+Objects Populated
+Contribution
+Financial Statements (single-entity)
+GL Account (96%), Journal Entry (95%)
+Ready at ~93% for single-entity customers — fastest path to Financial Statements readiness in the registry.
+Multi-Entity Consolidation
+Not available
+Unavailable from QBO alone regardless of customer configuration.
+Revenue Recognition
+Revenue Schedule (35%)
+Partial at best — materially below NetSuite-ARM or Intacct-Revenue-Management ceiling.
+Cash Flow Statement
+Payment (90%)
+Ready for single-entity indirect-method CFS.
+Table 3.5 — QuickBooks Online capability unlocks.
+Best Fit Customer
+Ideal Customer Profile
+Seed through Series A SaaS companies, $0–$10M ARR, single legal entity
+Companies prioritizing implementation speed and low overhead over dimensional reporting depth
+Finance teams without dedicated ERP administration resources — QBO's rigid schema reduces misconfiguration risk
+Customers whose revenue model does not yet require complex ASC 606 revenue recognition (e.g., simple monthly subscription billing without multi-element arrangements)
+Less Ideal Customer Profile
+Multi-entity organizations of any kind — this is a hard structural ceiling, not a configuration gap
+Companies with complex revenue recognition requirements — multi-element arrangements, long-term contracts with variable consideration
+PE-backed or post-acquisition companies likely to require consolidated multi-entity reporting in the near term
+Organizations requiring deep dimensional/departmental P&L reporting beyond basic Class and Location tracking
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Low. Single-entity structure eliminates the largest CEP discovery burden present in every other connector in this registry. Primary discovery item is simply confirming accounting basis (cash vs accrual).
+Manual Mapping Expectations
+Low. QBO's rigid Account Type taxonomy and simple object model require minimal customer-specific validation.
+Customization Level (typical)
+Low. Custom fields exist but are used far less extensively than in NetSuite or Intacct implementations.
+Estimated Onboarding Effort
+Lowest in the registry. The combination of simple schema, single entity, and low customization produces the fastest standard implementation path.
+Expected Implementation Duration
+Planning estimate only: typically the shortest implementation duration in the registry for standard configurations.
+Table — QuickBooks Online implementation effort estimate. Planning guidance only.
+Pilot Readiness Expectations
+Capability
+Status
+Why
+Financial Statements
+Ready (single-entity)
+GL Account and Journal Entry populate at 95%+ confidence for single-entity reporting.
+Executive Dashboards
+Ready
+Derives from Financial Statements readiness.
+Board Reporting
+Partial
+Financial section Ready; multi-entity consolidation unavailable; ARR/GTM sections require additional connectors.
+Executive Briefings
+Ready (financial scope, single-entity)
+Strong for single-entity financial narrative.
+Cash Forecasting
+Ready (single-entity)
+Native bank feed integration supports cash bridge reporting.
+Budget Analysis
+Unavailable (native) / Ready (with external source)
+No native budget module — entirely dependent on FP&A connector or SMPL upload.
+Revenue Analytics
+Partial
+No ASC 606 module — Revenue Schedule confidence capped at Derived-Medium (~35%) regardless of configuration.
+Workforce Planning
+Unavailable
+Requires HRIS/Payroll connector.
+Renewal Analytics
+Unavailable
+Requires Billing and/or CRM connector.
+GTM Analytics
+Unavailable
+Requires CRM and Marketing connectors.
+Product Analytics
+Unavailable
+Requires dedicated Product Analytics connector.
+Table — QuickBooks Online pilot readiness by SMPL module.
+Connector Readiness Summary
+QuickBooks Online does exceptionally well at delivering fast, low-friction Financial Statements readiness for single-entity, early-stage customers — the fastest implementation path of any connector in this registry. Its structural ceiling (no multi-entity, no native revenue recognition module) is honest and well-understood rather than a hidden limitation.
+Pairing QBO with a Billing connector materially improves Revenue Analytics depth beyond what QBO alone can provide, and is the most common pairing pattern observed in SMPL's early-stage customer base. Approximately 40–50% of the full Tier 1 SCBM can typically be populated from QBO alone — lower than the mid-market ERPs, reflecting QBO's intentionally narrower functional scope rather than implementation difficulty.
+After connecting QBO alone, recommended SMPL module status: Ready — Financial Statements (single-entity), Executive Dashboards, Cash Forecasting. Partial — Board Reporting, Revenue Analytics. Unavailable — Budget Analysis (native), Workforce Planning, Renewal Analytics, GTM Analytics, Product Analytics.
+Estimated SCBM Coverage
+The implementation agent and the Capability Assessment Layer use this estimate as the starting reference point when QuickBooks Online is the first or only connected system. Values reflect QBO's single-entity structural ceiling — this is not a configuration gap the implementation agent can resolve through discovery.
+Overall SCBM Coverage   ≈ 45%
+SCBM Domain
+Coverage
+General Ledger
+96%
+Financial Reporting
+93%
+Revenue
+35%
+Billing
+48%
+Customer
+15%
+Headcount
+0%
+Pipeline
+0%
+Marketing
+0%
+Product Analytics
+0%
+Table — QuickBooks Online estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+The Capability Assessment Layer references the following object-level confidence estimates when determining whether AI reasoning over QuickBooks Online data should be presented as high-confidence or flagged for additional validation.
+Business Object
+Confidence
+Why
+General Ledger
+96%
+Rigid native Account Type taxonomy produces fewer normalization edge cases than any other connector in the registry.
+Journal Entries
+95%
+Clean object model, no polymorphism — high confidence is the norm rather than the exception.
+Departments
+55%
+Class and Location dimensions are simpler and less consistently used than in mid-market ERPs — the CEP should confirm business meaning before the implementation agent treats dimensional data as reliable.
+Legal Entities
+100% (single-entity ceiling)
+Not a confidence issue — there is structurally only one entity to map.
+Revenue Schedule
+35%
+Estimated from invoice service period dates. No ASC 606 module equivalent exists — the implementation agent should always present this as Medium confidence regardless of customer configuration.
+Budget
+0% (native) / 90% (external source confirmed)
+No native budget module. The implementation agent should not present Budget confidence above 0% unless the CEP confirms an external FP&A tool or SMPL upload as the source.
+Customer
+48%
+Identity fields reasonably reliable; commercial fields require a paired Billing connector.
+ARR
+5%
+QBO is not a billing system of record.
+Pipeline
+0%
+Out of scope for an ERP connector.
+Headcount
+0%
+No HR functionality in QuickBooks Online.
+Table — QuickBooks Online Data Confidence Profile.
+Standalone Capability Summary
+Ready
+Financial Statements (single-entity)
+Executive Dashboards
+Cash Reporting (single-entity)
+Financial Commentary (single-entity scope)
+GL Variance Analysis (basic — limited dimensional depth)
+Partial
+Board Reporting
+Revenue Analytics
+Unavailable
+Budget Analysis (native)
+Pipeline
+Bookings
+Renewals
+Sales Forecast
+Workforce Planning
+Marketing Analytics
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting QuickBooks Online alone delivers fast, reliable single-entity Financial Statements and Cash Reporting — the implementation agent typically completes QBO onboarding faster than any other connector in the registry given its low schema variability. This is the right connector to position for early-stage, single-entity customers prioritizing speed to first value. It is not the right connector to position for customers with multi-entity structure or complex revenue recognition needs — those limitations are structural, not configuration gaps, and should be set as an explicit expectation during the sales conversation rather than discovered during onboarding.
+Expanded Configuration Variants
+Variant
+Frequency
+Implementation Impact
+QuickBooks Online Advanced tier
+Increasingly common among Series A customers approaching QBO's functional ceiling
+Adds some additional reporting and custom field capacity, but does not add multi-entity or revenue recognition capability — still a single-entity, invoice-date-recognition system.
+Cash-basis accounting (vs accrual)
+Occasional, more common in pre-Series A companies
+Must be explicitly confirmed in CEP — significantly changes Revenue Schedule and GL timing interpretation.
+Class and Location dimension usage
+Common but inconsistent — usage patterns vary widely by customer
+Unlike Intacct or Dynamics 365, there is no standardized dimensional framework, so business meaning must be confirmed per customer even though the dimension count is low.
+Table — QuickBooks Online expanded configuration variants (v0.2 additions).
+Expanded Implementation Risk Register
+Common implementation mistake: assuming a customer's growth trajectory means a QBO implementation should be designed for future multi-entity needs — QBO has no migration path within the product for this; the correct guidance is to flag likely future ERP migration during onboarding rather than over-engineer the QBO connector implementation.
+Reporting inconsistency risk: customers who have used QBO Classes inconsistently across periods (e.g., introduced a new Class mid-year without restating prior periods) will see discontinuities in dimensional reporting that are a data artifact, not a SMPL mapping error — the implementation agent documents this expectation during onboarding.
+Audit consideration: QBO's audit log is functional but less granular than NetSuite or Intacct — the implementation agent sets realistic expectations with customers about provenance-level detail available for older transactions.
+4. Microsoft Dynamics 365 Finance
+Microsoft Dynamics 365 Finance is an enterprise-grade ERP most commonly encountered in larger SMPL customers — typically post-Series D or PE-backed organizations, particularly those with existing Microsoft enterprise agreements (Azure, Office 365, Power Platform). It offers deep financial dimension modeling and tight integration with the broader Microsoft enterprise stack, at the cost of materially higher implementation complexity than the mid-market ERPs in this registry.
+S1: Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_dynamics365_finance_v1
+vendor_name
+Microsoft Dynamics 365 Finance
+vendor_type
+ERP (Enterprise Resource Planning) — Enterprise Tier
+vendor_description
+Dynamics 365 Finance is Microsoft's cloud ERP for mid-market to large enterprise financial management, built on the Microsoft Power Platform / Dataverse architecture with deep integration into the broader Microsoft 365 and Azure ecosystem.
+primary_value_proposition
+Connecting Dynamics 365 Finance enables Financial Reporting, multi-entity consolidation, and advanced financial dimension analysis for enterprise-tier customers, particularly those already standardized on the Microsoft technology stack.
+connector_maturity_level
+Pilot Ready (Level 3)
+current_specification_version
+0.4.0
+min_vendor_version_supported
+Dynamics 365 Finance (current generation, post-AX migration)
+max_vendor_version_supported
+Current release
+S2: SCBM Domain Coverage
+Domain
+Coverage
+Notes
+General Ledger
+Full
+Financial Dimensions framework (up to 10 dimensions per transaction) is among the most powerful dimensional GL architectures in the enterprise ERP category.
+Revenue
+Partial — Full with Revenue Recognition module
+Module-dependent, similar pattern to NetSuite ARM and Intacct Revenue Management.
+Billing (AR/AP)
+Full
+Enterprise-grade AR/AP with sophisticated approval workflow support.
+Cash Management
+Full
+Native cash and bank management module.
+Financial Planning
+Partial — typically paired with Power BI / external FP&A
+Native budgeting exists but enterprise customers typically use a dedicated planning tool.
+Multi-Entity
+Full — core enterprise strength
+Legal entity hierarchy, intercompany, and multi-currency consolidation are mature and well-suited to complex enterprise structures.
+Project Accounting
+Full (with Project Operations module)
+Strong project costing — relevant for SaaS customers with significant professional services or custom development revenue.
+Table 4.2 — Dynamics 365 Finance SCBM domain coverage.
+S3: Connector Strengths
+Financial Dimensions framework: up to 10 configurable dimensions per transaction line, each independently hierarchical. This produces the deepest out-of-box dimensional reporting capability of any connector in this registry — exceeding even Sage Intacct's 8-dimension model.
+Enterprise-grade multi-entity: legal entity structure, intercompany elimination, and consolidation are built for complex corporate structures with many subsidiaries — well-suited to PE-backed or post-acquisition SMPL customers.
+Microsoft ecosystem integration: native Power BI, Power Automate, and Azure integration reduces the operational friction of building supplementary reporting and automation alongside the core ERP.
+OData API standardization: Dynamics 365 Finance exposes data via the OData v4 standard, which is a well-documented, widely-tooled industry standard rather than a proprietary query language — reducing some implementation risk relative to vendor-specific query languages.
+S4: Architectural Characteristics
+Characteristic
+Value
+Schema Variability
+High. Enterprise Dynamics 365 implementations are frequently customized via the Power Platform extensibility layer, which can introduce significant schema variation between customers.
+Optional Modules
+Revenue Recognition, Project Operations (project accounting), Advanced Inventory, Asset Management, Intercompany Accounting.
+Object Polymorphism
+Medium. GeneralJournalEntry serves multiple transaction types in some configurations; cleaner separation exists for AR/AP-specific objects.
+Customization Depth
+Very high. The Power Platform extensibility layer allows customers to build custom entities, workflows, and business logic extensively — among the highest customization ceilings in the registry.
+Historical Data Availability
+Complete from implementation. Subject to customer-configured data retention policies in larger deployments — verify during CEP onboarding.
+Real-Time vs Batch
+Batch primary, with event-driven options via Power Automate / Dataverse change tracking for customers with that integration layer configured.
+S5: Connector Capability Characteristics
+Capability
+Support Level
+Notes
+Webhooks
+Supported via Dataverse change tracking
+Not native to the core Finance module API — requires Power Platform / Dataverse layer configuration.
+Incremental Sync
+Supported
+OData $filter on modifiedDateTime supported across standard entities.
+Historical Backfill
+Fully supported
+Complete historical data via OData query with pagination.
+Bulk Export
+Supported — OData batch requests
+Standard OData batch operation support; well-documented pattern.
+Rate Limits
+High consideration
+Enterprise tenant throttling policies vary by Microsoft licensing tier — must be assessed per customer during onboarding.
+Delta Detection
+Supported
+Soft-delete patterns vary by entity; some entities support hard delete requiring change-feed monitoring.
+Change Tracking
+Supported — Dataverse change tracking
+Strong when Power Platform layer is configured; more limited on core Finance-only deployments.
+S8–S9: Object Inventory and Population Map (Summary)
+Canonical Object
+Expected Completeness
+Confidence
+Notes
+GL Account
+96%
+Direct — High
+Chart of Accounts maps cleanly; Financial Dimension framework requires CEP-level business meaning resolution per dimension.
+Journal Entry
+93%
+Derived — Medium
+Some transaction-type discrimination complexity in highly customized implementations.
+Legal Entity
+98%
+Direct — High
+Enterprise multi-entity structure maps well; very large entity counts (20+) require pagination-aware extraction design.
+Department
+85%
+Derived — Medium
+Department mapping depends on which of the up-to-10 Financial Dimensions the customer uses for organizational structure — requires CEP resolution.
+Revenue Schedule
+80% (module active) / 18% (inactive)
+Direct — High / Inferred — Low
+Similar pattern to NetSuite ARM dependency.
+Customer
+78%
+Direct — High (identity) / Not Available (commercial)
+Commercial/ARR fields require Billing connector pairing, consistent with other ERPs in this registry.
+Table 4.3 — Dynamics 365 Finance Business Object Population Map (summary).
+S15: Implementation Risk Register
+Financial Dimension business-meaning ambiguity: unlike NetSuite's relatively standardized Department/Class/Location, Dynamics 365's 10-dimension framework is fully customer-defined. Each dimension's business purpose must be resolved via CEP before reliable canonical mapping is possible.
+Power Platform customization variance: enterprise implementations with extensive Power Platform customization may have business logic embedded outside the core Finance module, creating data that is not visible via standard OData queries.
+Tenant complexity in PE/multi-acquisition structures: customers with many legal entities from sequential acquisitions may have inconsistent Chart of Accounts structures across entities, requiring entity-by-entity mapping validation rather than a single registry-wide mapping.
+Licensing-tier-dependent API throttling: rate limits vary materially by Microsoft licensing tier — must be confirmed during onboarding rather than assumed from documentation alone.
+S17–S18: Lifecycle and Capability Unlocks
+Capability
+Objects Populated
+Contribution
+Financial Statements
+GL Account (96%), Journal Entry (93%), Legal Entity (98%)
+Ready at ~92% — strong but slightly below NetSuite/Intacct due to dimension resolution overhead.
+Multi-Entity Consolidation
+Legal Entity (98%)
+Ready — among the strongest enterprise multi-entity unlocks in the registry, well-suited to complex corporate structures.
+Department / Dimensional Reporting
+Department (85%, pending CEP resolution)
+Partial until Financial Dimension business meaning is resolved per customer.
+Revenue Recognition
+Revenue Schedule (80% with module)
+Ready when Revenue Recognition module active.
+Table 4.5 — Dynamics 365 Finance capability unlocks.
+Best Fit Customer
+Ideal Customer Profile
+Series D+ or PE-backed SaaS companies, typically $100M+ ARR, already standardized on the Microsoft enterprise stack
+Organizations with complex global operations requiring deep, customer-defined dimensional reporting (up to 10 dimensions)
+Companies with significant project-based or professional services revenue alongside core subscription revenue, benefiting from Project Operations
+Enterprises with existing Power Platform / Azure investment where integration synergy reduces total implementation friction
+Less Ideal Customer Profile
+Companies without existing Microsoft enterprise stack investment — the integration advantages are less compelling without that context
+Earlier-stage or mid-market companies for whom the implementation complexity exceeds the organizational complexity that justifies it
+Organizations needing fast time-to-value — Dynamics 365's Financial Dimension resolution burden typically extends implementation timelines beyond Intacct or NetSuite
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+High. The 10-dimension Financial Dimensions framework is fully customer-defined with no standardized convention — this is the largest CEP-resolution burden among the three more-mature connectors in the registry.
+Manual Mapping Expectations
+Medium-High. Core GL and AR/AP map cleanly; Financial Dimension business-meaning resolution requires the implementation agent to initiate dedicated discovery time per customer, especially in heavily Power-Platform-customized environments.
+Customization Level (typical)
+Very High. Enterprise Dynamics 365 deployments frequently include multi-year Power Platform customization layered on top of core Finance functionality.
+Estimated Onboarding Effort
+Medium-High. Partially offset by OData API standardization, which is more broadly tooled than vendor-proprietary query languages.
+Expected Implementation Duration
+Planning estimate only: typically longer than the three Production Ready connectors, reflecting both dimension resolution overhead and the generally larger organizational complexity of Dynamics 365 customers.
+Table — Dynamics 365 Finance implementation effort estimate. Planning guidance only.
+Pilot Readiness Expectations
+Capability
+Status
+Why
+Financial Statements
+Ready
+GL Account, Journal Entry, and Legal Entity populate at 93%+ confidence.
+Executive Dashboards
+Ready
+Derives from Financial Statements readiness.
+Board Reporting
+Partial
+Financial section strong; Department/dimensional sections Partial pending CEP resolution; ARR/GTM require additional connectors.
+Executive Briefings
+Ready (financial scope)
+Strong financial narrative support once dimension resolution is complete.
+Cash Forecasting
+Ready
+Native cash management module supports strong cash bridge reporting.
+Budget Analysis
+Partial
+Native budgeting exists but enterprise customers typically pair with Power BI or external FP&A.
+Revenue Analytics
+Ready (module active) / Partial (inactive)
+Module-dependent, same pattern as NetSuite ARM and Intacct Revenue Management.
+Workforce Planning
+Unavailable
+Requires HRIS/Payroll connector — Dynamics 365 Finance does not include HR functionality in this scope.
+Renewal Analytics
+Unavailable
+Requires Billing and/or CRM connector.
+GTM Analytics
+Unavailable
+Requires CRM and Marketing connectors.
+Product Analytics
+Unavailable
+Requires dedicated Product Analytics connector.
+Table — Dynamics 365 Finance pilot readiness by SMPL module.
+Connector Readiness Summary
+Dynamics 365 Finance does exceptionally well at supporting the deepest customer-defined dimensional reporting of any connector in this registry, and at managing complex multi-entity, multi-currency global consolidation. Its core financial statement capability is strong and comparable to NetSuite and Intacct once Financial Dimension business meaning is resolved.
+Pairing Dynamics 365 with Power BI or an external FP&A tool maximizes planning capability; pairing with Billing and CRM connectors unlocks Board Reporting and GTM Analytics as with the other ERPs in this registry. Approximately 45–55% of the full Tier 1 SCBM can typically be populated from Dynamics 365 alone, with the range depending heavily on how quickly Financial Dimension resolution is completed during onboarding.
+After connecting Dynamics 365 alone, recommended SMPL module status: Ready — Financial Statements, Executive Dashboards, Cash Forecasting. Partial — Board Reporting, Budget Analysis, Revenue Analytics (module-dependent). Unavailable — Workforce Planning, Renewal Analytics, GTM Analytics, Product Analytics.
+Estimated SCBM Coverage
+The implementation agent and the Capability Assessment Layer use this estimate as the starting reference point when Dynamics 365 Finance is the first or only connected system. Values assume Revenue Recognition module active and standard Financial Dimension resolution complete during Pre-POC Discovery.
+Overall SCBM Coverage   ≈ 50%
+SCBM Domain
+Coverage
+General Ledger
+96%
+Financial Reporting
+93%
+Revenue
+80% (module active) / 18% (inactive)
+Billing
+42%
+Customer
+14%
+Headcount
+0%
+Pipeline
+0%
+Marketing
+0%
+Product Analytics
+0%
+Table — Dynamics 365 Finance estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+The Capability Assessment Layer references the following object-level confidence estimates when determining whether AI reasoning over Dynamics 365 Finance data should be presented as high-confidence or flagged for additional validation. Given the connector's Pilot Ready maturity level, the implementation agent should weight several of these estimates more conservatively than the equivalent objects in the registry's Production Ready connectors until additional production implementations are completed.
+Business Object
+Confidence
+Why
+General Ledger
+96%
+Chart of Accounts maps cleanly once Financial Dimension business meaning is resolved — the resolution step is the primary confidence gate, not the GL mapping itself.
+Journal Entries
+93%
+Some transaction-type discrimination complexity in highly customized implementations reduces confidence slightly relative to less customizable connectors.
+Departments
+60%
+Department mapping depends entirely on which of the up-to-10 Financial Dimensions the customer uses for organizational structure — the CEP must resolve this before the implementation agent can present Department data with confidence.
+Legal Entities
+98%
+Enterprise multi-entity structure maps well; very large entity counts require pagination-aware extraction but do not reduce mapping confidence itself.
+Revenue Schedule
+80% (module active) / 18% (inactive)
+Module-dependent, same pattern as NetSuite ARM — the implementation agent must confirm module status during Pre-POC Discovery.
+Budget
+55% (native) / 90% (external source confirmed)
+Native budgeting exists but enterprise customers typically pair Power BI or a dedicated FP&A tool — the CEP should confirm the authoritative source.
+Customer
+45%
+Identity fields moderate confidence; commercial fields require a paired Billing connector.
+ARR
+6%
+Dynamics 365 Finance is not a billing system of record.
+Pipeline
+0%
+Out of scope for an ERP connector.
+Headcount
+0%
+No HR functionality within Dynamics 365 Finance scope.
+Table — Dynamics 365 Finance Data Confidence Profile.
+Standalone Capability Summary
+Ready
+Financial Statements
+Executive Dashboards
+Cash Reporting
+Financial Commentary
+Partial
+GL Variance Analysis (pending Financial Dimension resolution)
+Board Reporting
+Budget Analysis
+Revenue Analytics
+Unavailable
+Pipeline
+Bookings
+Renewals
+Sales Forecast
+Workforce Planning
+Marketing Analytics
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting Dynamics 365 Finance alone delivers strong Financial Statements and Executive Dashboard readiness comparable to the registry's Production Ready connectors, but GL-level dimensional variance analysis and Board Reporting should be positioned as Partial until the implementation agent completes Financial Dimension resolution with the customer's finance team. This is the primary driver of Dynamics 365's typically longer time-to-full-value relative to NetSuite or Sage Intacct — it should be set as an explicit, upfront expectation during the sales conversation rather than discovered mid-implementation. Customers already standardized on the Microsoft stack will find the onboarding experience smoother due to existing organizational familiarity with the platform's data structure.
+Expanded Configuration Variants
+Variant
+Frequency
+Implementation Impact
+Heavy Power Platform customization
+Common (~50%+) in enterprise deployments
+Business logic outside core Finance module may produce data not visible via standard OData queries — requires architecture discovery during Pre-POC.
+Multiple legal entities from sequential acquisitions
+Common in PE-backed customer base
+Chart of Accounts structure may be inconsistent across entities, requiring entity-by-entity mapping validation rather than a single registry-wide approach.
+Project Operations module active
+Occasional (~30%), more common in customers with professional services revenue
+Unlocks project-level cost and revenue tracking relevant to customers with hybrid subscription/services revenue models.
+Table — Dynamics 365 Finance expanded configuration variants (v0.2 additions).
+Expanded Implementation Risk Register
+Common implementation mistake: assuming Financial Dimensions follow a standard convention similar to NetSuite's Department/Class/Location — they do not. Every Dynamics 365 implementation requires fresh dimension-purpose discovery regardless of implementation experience with prior Dynamics 365 customers.
+Module dependency risk: licensing-tier-dependent API throttling means rate limit assumptions from one customer's tenant may not transfer to another — the implementation agent always confirms tenant licensing tier during Pre-POC Discovery.
+Reporting inconsistency risk: large entity counts from sequential acquisitions may carry forward Chart of Accounts inconsistencies from pre-acquisition systems — the implementation agent flags this explicitly as a customer data characteristic, not a SMPL mapping limitation.
+5. Oracle Fusion Cloud ERP
+Oracle Fusion Cloud ERP is the enterprise-tier offering most likely to be encountered in SMPL's largest customers — typically late-stage, PE-backed, or post-IPO organizations with complex global operations. It offers the deepest functional breadth of any connector in this registry, spanning GL, advanced revenue management, project accounting, and procurement, at the cost of the highest implementation complexity and the lowest current SMPL implementation maturity.
+S1: Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_oracle_fusion_erp_v1
+vendor_name
+Oracle Fusion Cloud ERP
+vendor_type
+ERP (Enterprise Resource Planning) — Enterprise/Global Tier
+vendor_description
+Oracle Fusion Cloud ERP is Oracle's flagship cloud ERP for large and global enterprises, offering comprehensive financial management, procurement, project management, and advanced revenue recognition built on Oracle's cloud infrastructure.
+primary_value_proposition
+Connecting Oracle Fusion enables Financial Reporting, complex multi-entity/multi-currency consolidation, and advanced revenue recognition for large, globally distributed enterprise customers.
+connector_maturity_level
+Validated (Level 2)
+current_specification_version
+0.2.0
+min_vendor_version_supported
+Oracle Fusion Cloud ERP (current generation REST API)
+max_vendor_version_supported
+Current release
+S2: SCBM Domain Coverage
+Domain
+Coverage
+Notes
+General Ledger
+Full
+Oracle's GL architecture supports extensive chart-of-accounts segment structures (typically 5–10+ segments) for complex global organizations.
+Revenue
+Full (with Revenue Management Cloud)
+Among the most sophisticated native ASC 606/IFRS 15 engines in the enterprise ERP category — purpose-built for complex multi-element arrangements.
+Billing (AR/AP)
+Full
+Enterprise-grade AR/AP with extensive approval and controls framework.
+Cash Management
+Full
+Native treasury and cash management module for complex global cash positions.
+Financial Planning
+Partial — typically paired with Oracle EPM Cloud (separate product) or external FP&A
+Native Fusion budgeting exists but large enterprise customers typically use a dedicated planning suite.
+Multi-Entity
+Full — designed for global complexity
+Ledger and Legal Entity structures support highly complex global consolidation scenarios, including multiple primary/secondary/reporting ledgers per entity.
+Project Accounting
+Full (with Project Financial Management)
+Enterprise-grade project costing and revenue tracking.
+Table 5.2 — Oracle Fusion Cloud ERP SCBM domain coverage.
+S3: Connector Strengths
+Revenue recognition sophistication: the Revenue Management Cloud module is purpose-built for complex multi-element arrangements, bundled performance obligations, and variable consideration — exceeding the revenue recognition depth of every other connector in this registry.
+Global multi-ledger architecture: Fusion's ledger structure (primary, secondary, and reporting ledgers per legal entity) supports simultaneous multi-GAAP, multi-currency, and multi-calendar reporting — relevant for SMPL's largest, most globally distributed customers.
+Extensive chart-of-accounts segmentation: typically 5–10+ configurable segments support extremely granular dimensional reporting for large, complex organizations.
+Comprehensive controls and approval framework: enterprise-grade segregation of duties and approval workflow capability exceeds the requirements of SMPL's typical mid-market customer but is essential for the largest, most regulated customers SMPL may eventually serve.
+S4: Architectural Characteristics
+Characteristic
+Value
+Schema Variability
+Very High. Fusion implementations at large enterprises are frequently the result of multi-year, heavily customized deployments. Schema variability exceeds every other connector in this registry.
+Optional Modules
+Revenue Management Cloud, Project Financial Management, Procurement Cloud, Asset Management, Intercompany.
+Object Polymorphism
+Medium-High. GL Journal structures support multiple posting sources; AR/AP objects are more cleanly separated.
+Customization Depth
+Very high. Large Fusion deployments frequently include custom segments, custom workflows, and integration with Oracle's broader Cloud Applications suite (HCM, SCM) that affects available financial data context.
+Historical Data Availability
+Complete from implementation, subject to enterprise data retention and archival policies that must be confirmed during CEP onboarding.
+Real-Time vs Batch
+Batch primary. REST API supports query-based extraction; native event streaming is more limited than modern API-first platforms.
+S5: Connector Capability Characteristics
+Capability
+Support Level
+Notes
+Webhooks
+Limited
+Business Events framework exists for some object types but is not yet comprehensively mapped for SMPL connector purposes — flagged for further evaluation as certification matures.
+Incremental Sync
+Supported
+REST API supports date-based filtering on most objects.
+Historical Backfill
+Supported with care
+Complete history accessible but large enterprise data volumes require careful pagination and extraction sequencing design.
+Bulk Export
+Supported — BI Publisher / FBDI extracts available as alternative to REST
+Enterprise customers frequently have existing BI Publisher reporting infrastructure that may offer a complementary extraction path.
+Rate Limits
+High consideration — not yet fully characterized
+Given Preview certification status, rate limit behavior across customer environments requires further production validation.
+Delta Detection
+Supported
+Audit and history tables available; specifics vary by module configuration.
+Change Tracking
+Supported — Oracle Audit Framework
+Comprehensive when configured; requires confirmation of audit framework activation during CEP onboarding.
+S8–S9: Object Inventory and Population Map (Summary)
+Canonical Object
+Expected Completeness
+Confidence
+Notes
+GL Account
+90%
+Derived — Medium
+Multi-segment chart of accounts structure requires careful CEP-level segment-to-canonical-field mapping per customer — more variable than NetSuite or Intacct.
+Journal Entry
+88%
+Derived — Medium
+Posting source variety in large enterprise configurations introduces more mapping complexity than other registry connectors.
+Legal Entity
+95%
+Direct — High
+Multi-ledger structure maps well once primary/secondary/reporting ledger roles are resolved.
+Revenue Schedule
+85% (module active)
+Direct — High (when active)
+Among the highest-confidence Revenue Schedule connectors in the registry when Revenue Management Cloud is active, reflecting the module's purpose-built sophistication.
+Department
+70%
+Derived — Medium
+Highly dependent on which chart-of-accounts segment the customer uses for organizational reporting — requires CEP resolution per customer, more so than any other connector in this registry.
+Table 5.3 — Oracle Fusion Cloud ERP Business Object Population Map (summary). Confidence levels reflect Preview certification status — expected to improve as production implementation count grows.
+S15: Implementation Risk Register
+Chart-of-accounts segment ambiguity: with 5–10+ configurable segments and no standardized segment-purpose convention across customers, segment-to-canonical mapping requires customer-specific CEP resolution for nearly every implementation — the highest mapping ambiguity risk in this registry.
+Preview certification status: this connector has not yet reached the ≥5 production customer threshold required for Certified status. Implementation teams should expect to encounter and document new patterns during early implementations, with corresponding Tier 2 pattern library growth.
+Multi-ledger role confusion: primary, secondary, and reporting ledgers can each contain overlapping but distinct financial data for the same legal entity. Incorrect ledger selection produces canonical financials that do not match the customer's expected GAAP-basis reporting.
+Enterprise data volume and extraction sequencing: the largest Fusion deployments may have transaction volumes that require careful initial backfill sequencing to avoid extraction timeouts or rate limit exhaustion.
+◆ RISK: Given Preview certification status, this connector specification should be treated as a strong starting point rather than a fully validated production specification. The Tier 1 / Tier 2 boundary for several sections (particularly S8 segment mapping and S15 risk entries) will likely shift as production implementation count grows toward the Validated and Certified thresholds.
+S17–S18: Lifecycle and Capability Unlocks
+Capability
+Objects Populated
+Contribution
+Financial Statements
+GL Account (90%), Journal Entry (88%), Legal Entity (95%)
+Partial at ~88% — strong functional capability with elevated mapping ambiguity pending broader production validation.
+Multi-Entity Consolidation
+Legal Entity (95%), multi-ledger structure
+Ready once ledger roles are resolved — among the most globally sophisticated consolidation unlocks in the registry.
+Revenue Recognition
+Revenue Schedule (85% with module)
+Ready when Revenue Management Cloud active — highest-sophistication revenue recognition unlock in the registry.
+Department / Segment Reporting
+Department (70%, pending CEP resolution)
+Partial — requires the implementation agent to initiate the most extensive per-customer CEP resolution workflow work of any connector in this registry.
+Table 5.5 — Oracle Fusion Cloud ERP capability unlocks.
+Best Fit Customer
+Ideal Customer Profile
+Late-stage, PE-backed, or post-IPO organizations with complex global operations, typically $250M+ ARR
+Companies requiring simultaneous multi-GAAP, multi-currency, and multi-calendar reporting via multiple ledgers
+Organizations with sophisticated multi-element revenue arrangements requiring the most advanced native ASC 606/IFRS 15 capability available
+Enterprises with dedicated Oracle administration expertise able to support the platform's implementation complexity
+Less Ideal Customer Profile
+Any customer below enterprise scale — Oracle Fusion's functional depth and implementation complexity are architecturally mismatched to mid-market needs
+Companies without existing Oracle ecosystem investment or dedicated Oracle administration support
+Organizations seeking fast implementation timelines — Fusion is currently the longest-implementation-duration connector in this registry
+Companies with simple, single-entity, single-currency operations — the platform's capability far exceeds the need
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Highest in the registry. 5–10+ configurable chart-of-accounts segments with no standardized purpose convention require extensive per-customer discovery.
+Manual Mapping Expectations
+High. Segment-to-canonical-field mapping requires customer-specific resolution for nearly every implementation.
+Customization Level (typical)
+Highest in the registry — large Fusion deployments are frequently the product of multi-year, heavily customized implementations integrated with the broader Oracle Cloud Applications suite.
+Estimated Onboarding Effort
+Highest in the registry, reflecting both Validated maturity status and the inherent complexity of enterprise Fusion deployments.
+Expected Implementation Duration
+Planning estimate only: expect the longest implementation duration of any connector in this registry. Should be scoped and communicated accordingly during the sales cycle.
+Table — Oracle Fusion Cloud ERP implementation effort estimate. Planning guidance only.
+Pilot Readiness Expectations
+Capability
+Status
+Why
+Financial Statements
+Partial
+Strong functional capability (88% confidence) but elevated mapping ambiguity pending broader production validation at this maturity level.
+Executive Dashboards
+Partial
+Derives from Financial Statements partial status.
+Board Reporting
+Partial
+Same caveats as Financial Statements, compounded by additional connector dependencies for ARR/GTM sections.
+Executive Briefings
+Partial
+Narrative commentary functional but should be reviewed with appropriate confidence framing given connector maturity.
+Cash Forecasting
+Ready
+Native treasury and cash management module is mature and well-suited to complex global cash positions.
+Budget Analysis
+Partial
+Native budgeting exists but large enterprise customers typically use Oracle EPM Cloud or another dedicated planning suite.
+Revenue Analytics
+Ready (module active)
+Among the highest-sophistication revenue recognition unlocks in the registry when Revenue Management Cloud is active.
+Workforce Planning
+Unavailable
+Requires HRIS/Payroll connector.
+Renewal Analytics
+Unavailable
+Requires Billing and/or CRM connector.
+GTM Analytics
+Unavailable
+Requires CRM and Marketing connectors.
+Product Analytics
+Unavailable
+Requires dedicated Product Analytics connector.
+Table — Oracle Fusion Cloud ERP pilot readiness by SMPL module. Confidence reflects current Validated maturity level.
+Connector Readiness Summary
+Oracle Fusion Cloud ERP does exceptionally well at revenue recognition sophistication and global multi-ledger consolidation — capabilities purpose-built for the most complex enterprise scenarios SMPL may eventually serve. Native cash management is mature and Ready immediately.
+Given current Validated maturity status, Financial Statements and Board Reporting should be communicated to customers as Partial rather than Ready, with the explicit expectation that confidence will improve as production implementation count grows toward Pilot Ready and Production Ready thresholds. Approximately 45–55% of the full Tier 1 SCBM can typically be populated from Oracle Fusion alone, with revenue recognition representing an unusually strong component of that coverage relative to general ledger and dimensional reporting confidence.
+After connecting Oracle Fusion alone, recommended SMPL module status: Ready — Cash Forecasting, Revenue Analytics (module-dependent). Partial — Financial Statements, Executive Dashboards, Board Reporting, Executive Briefings, Budget Analysis. Unavailable — Workforce Planning, Renewal Analytics, GTM Analytics, Product Analytics.
+Estimated SCBM Coverage
+The implementation agent and the Capability Assessment Layer use this estimate as the starting reference point when Oracle Fusion Cloud ERP is the first or only connected system. Given the connector's Validated maturity level, these values should be treated as the least production-validated estimates in the registry and revisited as implementation count grows toward Pilot Ready.
+Overall SCBM Coverage   ≈ 48%
+SCBM Domain
+Coverage
+General Ledger
+90%
+Financial Reporting
+86%
+Revenue
+85% (module active) / 20% (inactive)
+Billing
+40%
+Customer
+12%
+Headcount
+0%
+Pipeline
+0%
+Marketing
+0%
+Product Analytics
+0%
+Table — Oracle Fusion Cloud ERP estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+The Capability Assessment Layer references the following object-level confidence estimates when determining whether AI reasoning over Oracle Fusion data should be presented as high-confidence or flagged for additional validation. Given Validated maturity status, the implementation agent should default to more conservative confidence framing than these point estimates suggest until further production implementations are completed, and should expect to encounter and document new configuration patterns during early implementations.
+Business Object
+Confidence
+Why
+General Ledger
+90%
+Multi-segment chart of accounts requires careful CEP-level segment-to-canonical-field mapping per customer — more variable than NetSuite, Intacct, or Dynamics 365.
+Journal Entries
+88%
+Posting source variety in large enterprise configurations introduces more mapping complexity than other registry connectors.
+Legal Entities
+95%
+Multi-ledger structure maps well once primary/secondary/reporting ledger roles are explicitly resolved — the implementation agent must never assume a default ledger role.
+Revenue Schedule
+85% (module active)
+Among the highest-confidence Revenue Schedule estimates in the registry when Revenue Management Cloud is active, reflecting the module's purpose-built sophistication for complex arrangements.
+Departments / Segments
+40%
+Highly dependent on which chart-of-accounts segment the customer uses for organizational reporting — requires the most extensive CEP resolution of any connector in this registry.
+Budget
+50% (native) / 90% (external source confirmed)
+Native budgeting exists but large enterprise customers typically use Oracle EPM Cloud or a dedicated planning suite — the CEP should confirm the authoritative source.
+Customer
+38%
+Identity fields moderate confidence; commercial fields require a paired Billing connector.
+ARR
+5%
+Oracle Fusion is not a billing system of record.
+Pipeline
+0%
+Out of scope for an ERP connector.
+Headcount
+0%
+No HR functionality within Fusion ERP scope as documented in this registry.
+Table — Oracle Fusion Cloud ERP Data Confidence Profile.
+Standalone Capability Summary
+Ready
+Cash Reporting
+Revenue Analytics (module active)
+Partial
+Financial Statements
+Executive Dashboards
+Financial Commentary
+GL Variance Analysis
+Board Reporting
+Budget Analysis
+Unavailable
+Pipeline
+Bookings
+Renewals
+Sales Forecast
+Workforce Planning
+Marketing Analytics
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting Oracle Fusion Cloud ERP alone delivers genuinely strong revenue recognition and cash reporting capability — among the most sophisticated in the registry when the Revenue Management Cloud module is active — but Financial Statements and Board Reporting should be positioned as Partial rather than Ready, reflecting the connector's current Validated maturity level rather than any structural limitation of the platform itself. This connector is correctly positioned for SMPL's largest, most globally complex prospective customers, where Fusion's capability depth is a genuine differentiator — but the sales conversation should set explicit, honest expectations about implementation timeline and current confidence level rather than presenting Fusion-connected output with the same certainty as the registry's Production Ready connectors.
+Expanded Configuration Variants
+Variant
+Frequency
+Implementation Impact
+Multiple ledger roles per legal entity (primary/secondary/reporting)
+Common in target customer base by design — this is Fusion's core architectural pattern
+Requires explicit ledger-role resolution in CEP before any canonical financial data can be reliably extracted — the single most consequential configuration step for this connector.
+Integration with Oracle HCM / SCM Cloud
+Occasional, more common in the largest deployments
+When present, may provide richer organizational and workforce context than Finance-module-only deployments — flagged as a future compound-mapping opportunity per CKR v0.3 Section 8.6.2.
+BI Publisher / FBDI extract usage alongside REST API
+Common — many enterprise customers have existing BI Publisher reporting infrastructure
+May offer a complementary or alternative extraction path worth evaluating per-customer during implementation planning.
+Table — Oracle Fusion Cloud ERP expanded configuration variants (v0.2 additions).
+Expanded Implementation Risk Register
+Common implementation mistake: assuming a single, unambiguous "the ledger" exists for a legal entity — Fusion's multi-ledger architecture means the wrong ledger selection produces canonical financials that do not match the customer's expected GAAP-basis reporting. The implementation agent must resolve this explicitly via CEP confirmation — it is never assumed.
+Module dependency risk: given Validated maturity status, Tier 2 pattern library coverage is still developing — implementation teams should expect to encounter and document new configuration patterns during early Fusion implementations rather than relying on an exhaustively validated pattern library.
+Audit consideration: the Oracle Audit Framework is comprehensive when activated, but activation status varies by customer configuration and is confirmed by the implementation agent during Pre-POC Discovery rather than assumed present.
+ERP Connector Comparison Matrix
+A capability-first comparison across all five ERP connectors, spanning Financial Intelligence capabilities, canonical mapping characteristics, and technical integration properties. This matrix is the primary reference for Sales, Solutions Engineering, and Implementation teams — human or AI-agent-driven — assessing connector fit for a prospective customer. See each connector's Estimated SCBM Coverage and Data Confidence Profile sections for object-level detail underlying this comparison.
+Financial Intelligence Capability Comparison
+Capability
+Sage Intacct
+NetSuite
+QuickBooks Online
+Dynamics 365 Finance
+Oracle Fusion ERP
+Financial Statements
+Ready
+Ready
+Ready (single-entity)
+Ready
+Partial
+Executive Dashboards
+Ready
+Ready
+Ready
+Ready
+Partial
+Board Reporting
+Partial
+Partial
+Partial
+Partial
+Partial
+Budget vs Actual
+Partial (module-dep.)
+Partial (module-dep.)
+Unavailable (native)
+Partial (module-dep.)
+Partial (module-dep.)
+Cash Forecasting
+Ready
+Ready
+Ready (single-entity)
+Ready
+Ready
+Revenue Recognition
+Ready (module active)
+Ready (module active)
+Partial
+Ready (module active)
+Ready (module active) — highest sophistication
+Deferred Revenue
+Ready (module active)
+Ready (module active)
+Partial (estimated)
+Ready (module active)
+Ready (module active)
+Multi-Entity Support
+Ready — core strength
+Ready (OneWorld)
+Unavailable
+Ready
+Ready — deepest (multi-ledger)
+Consolidation
+Ready
+Ready (OneWorld)
+Unavailable
+Ready
+Ready — most sophisticated
+Department Reporting
+Ready — native dimensions
+Ready
+Partial (Class/Location only)
+Partial (pending dimension resolution)
+Partial (pending segment resolution)
+Dimension Support
+8 native dimensions
+3 standard + custom segments
+2 (Class, Location)
+10 native dimensions — deepest
+5–10+ configurable segments
+Budget Management
+Partial (native limited)
+Partial (module-dep.)
+Unavailable (native)
+Partial (native limited)
+Partial (native limited)
+Planning Support
+Requires external tool (typical)
+Requires external tool (typical)
+Requires external tool (always)
+Requires external tool (typical, Power BI common)
+Requires external tool (typical, Oracle EPM common)
+Project Accounting
+Ready (module active)
+Ready (module active)
+Unavailable
+Ready (module active)
+Ready (module active)
+Table CM.1 — Financial Intelligence capability comparison. Status reflects standalone connection (no additional connectors paired).
+Technical and Canonical Mapping Comparison
+Dimension
+Sage Intacct
+NetSuite
+QuickBooks Online
+Dynamics 365 Finance
+Oracle Fusion ERP
+API Maturity
+High — modern REST v3
+High — mature, SuiteQL-centric
+High — simple, stable REST
+Medium-High — OData standard
+Medium — REST + BI Publisher hybrid
+Schema Variability
+Medium
+High
+Low
+High
+Very High
+Customization Depth
+Medium-High (designed extensibility)
+Very High
+Low
+Very High
+Highest
+Historical Backfill
+Fully supported
+Fully supported
+Fully supported
+Fully supported
+Supported with sequencing care
+Incremental Sync
+Supported (WHENMODIFIED)
+Supported (lastModified)
+Supported (LastUpdatedTime)
+Supported ($filter modifiedDateTime)
+Supported (date-based filtering)
+Webhook Support
+Limited (Platform Events, partial)
+Not supported natively
+Limited (subset of entities)
+Supported via Dataverse change tracking
+Limited (Business Events, partial)
+Rate Limiting
+Moderate — per company file
+Moderate — 10 concurrent / 250 req/sec
+Low consideration
+High consideration — tier-dependent
+High consideration — not fully characterized
+Canonical Coverage (Tier 1 objects)
+High (~96–100% on core objects)
+High (~94–100% on core objects)
+Moderate-High (~92–100%, single-entity ceiling)
+High (~85–98%, pending dimension resolution)
+Medium-High (~70–95%, pending segment resolution)
+Expected Connector Confidence
+High
+High
+High (within structural scope)
+Medium-High
+Medium (maturing)
+Overall Implementation Complexity
+Medium
+Medium-High
+Low
+High
+Highest
+Table CM.2 — Technical and canonical mapping comparison.
+Maturity and Implementation Effort Comparison
+Dimension
+Sage Intacct
+NetSuite
+QuickBooks Online
+Dynamics 365 Finance
+Oracle Fusion ERP
+Connector Maturity Level
+Production Ready (4)
+Production Ready (4)
+Production Ready (4)
+Pilot Ready (3)
+Validated (2)
+Typical CEP Complexity
+Medium
+Medium-High
+Low
+High
+Highest
+Customization Level (typical)
+Medium
+High
+Low
+Very High
+Highest
+Relative Implementation Duration
+Fast
+Medium
+Fastest
+Slow
+Slowest
+SCBM Coverage from Connector Alone (estimated, see per-connector detail)
+≈60%
+≈56%
+≈45%
+≈50%
+≈48%
+Table CM.3 — Maturity and implementation effort comparison. SCBM coverage estimates reflect standard configuration with primary optional modules active.
+Cross-ERP Transformation Considerations
+The following transformation challenges recur across multiple ERPs in this registry. Each is documented once here rather than repeated in every connector specification, with vendor-specific notes where materially different.
+Chart of Accounts Normalization
+Every ERP in this registry allows customer-defined account numbering and naming conventions. None enforces a universal account type taxonomy that maps 1:1 to the SCBM Account Type taxonomy (Asset, Liability, Equity, Revenue, Expense). All five connectors require a lookup-table-based normalization step (S10 Field Mapping Rules) from the vendor's native account type field to the SCBM taxonomy. QuickBooks Online has the most rigid native taxonomy (fewest normalization edge cases). Oracle Fusion has the most flexible, customer-defined segment structure (most normalization complexity).
+Dimension Normalization
+Department, Location, Class, Segment, and custom dimension fields vary enormously in both naming and business meaning across the five ERPs. Sage Intacct and Dynamics 365 both offer purpose-built multi-dimensional frameworks (8 and 10 dimensions respectively) where dimension business meaning is entirely customer-defined — this is the highest CEP-resolution burden across the registry. NetSuite's Department/Class/Location are more conventionally named but still require per-customer validation. QuickBooks Online has the simplest dimensional model (Class and Location only) and correspondingly the lowest normalization burden.
+Department and Entity Hierarchy
+All five ERPs support hierarchical Department structures, but hierarchy depth and rollup behavior vary. Entity (Legal Entity / Subsidiary) hierarchy is fully supported in NetSuite (OneWorld), Sage Intacct, Dynamics 365, and Oracle Fusion. QuickBooks Online has no entity hierarchy concept — it is architecturally single-entity.
+Multi-Currency and Multi-Book Accounting
+NetSuite, Sage Intacct, Dynamics 365, and Oracle Fusion all support multi-currency consolidation with functional and reporting currency distinction. Oracle Fusion additionally supports multi-book accounting (parallel GAAP/Tax/IFRS books) at the deepest level in this registry, followed by Sage Intacct. QuickBooks Online supports single-currency, single-book accounting only.
+Custom Dimensions and Custom Fields
+Custom fields and dimensions are common across NetSuite, Sage Intacct, Dynamics 365, and Oracle Fusion, and rare in QuickBooks Online. Where present, custom fields are captured as extension fields (ext_ prefix) pending CEP-level business meaning resolution — they do not participate in canonical formulas or AI reasoning until formally promoted, consistent with SKA Principle 5 (Configuration Instead of Customization).
+Revenue Recognition and Deferred Revenue
+This is the single largest confidence swing factor across all five connectors. Each ERP has an optional advanced revenue recognition module (NetSuite ARM, Sage Intacct Revenue Management, Dynamics 365 Revenue Recognition, Oracle Fusion Revenue Management Cloud) that, when active, raises Revenue Schedule mapping confidence from the 15–35% range (estimated from invoice service period fields) to the 80–92% range (native ASC 606 objects). QuickBooks Online has no equivalent module and is structurally capped at lower confidence regardless of configuration.
+Intercompany Transactions
+NetSuite, Sage Intacct, Dynamics 365, and Oracle Fusion all support intercompany transaction flagging, though the reliability of automatic flagging varies. Sage Intacct and Oracle Fusion have the most mature native intercompany elimination support. NetSuite requires OneWorld to be active for reliable intercompany flagging. Without intercompany flagging, multi-entity consolidation risks overstating consolidated revenue from unflagged related-party transactions.
+Custom Approval Workflows
+Approval workflows are operational/security concerns (S6 of the connector specification) rather than canonical mapping concerns. They do not affect Business Object Population Maps but are documented in each connector's Implementation Risk Register where they affect data availability timing (e.g., a transaction pending approval may not yet be queryable as a finalized Journal Entry).
+Future ERP Registry Expansion
+The following ERP systems are recommended for future registry expansion, prioritized by expected business value to SMPL based on target customer segment overlap and market presence.
+Priority
+System
+Rationale
+Target Segment
+1
+SAP S/4HANA
+The dominant enterprise ERP globally. Will become necessary as SMPL moves further upmarket into large enterprise and PE-backed customers with existing SAP investments.
+Enterprise / PE-backed, $250M+ ARR
+2
+Sage X3
+Common in manufacturing and distribution-adjacent SaaS companies (usage-based and hardware-attached models). Distinct from Sage Intacct — different product, different architecture.
+Mid-market, hybrid SaaS/hardware models
+3
+Acumatica
+Growing presence in the SMPL target segment, particularly companies that evaluated NetSuite/Intacct and chose Acumatica for licensing model reasons (consumption-based pricing).
+Series A–C, cost-sensitive mid-market
+4
+Workday Financial Management
+Increasingly common in customers who adopted Workday for HCM first and extended to Financial Management. Relevant overlap with the planned Workday HRIS connector.
+Series D+, particularly Workday HCM customers
+5
+Odoo
+Open-source/lower-cost option occasionally encountered in earlier-stage or international customers. Lower priority given limited current customer overlap.
+Seed–Series A, cost-sensitive, international
+6
+Epicor
+Manufacturing-focused ERP, lower priority given SMPL's SaaS-first customer base, but relevant for hybrid SaaS/manufacturing companies.
+Niche — manufacturing-adjacent SaaS
+7
+Infor
+Similar profile to Epicor — manufacturing and distribution focus, lower near-term priority for SMPL's core SaaS segment.
+Niche — manufacturing-adjacent
+8
+IFS
+Enterprise asset management and field service focus — low priority given minimal overlap with SMPL's target customer profile.
+Niche — low priority
+9
+Deltek
+Government contracting and professional services focus — relevant only for SMPL customers in those specific verticals.
+Niche — vertical-specific
+10
+Blackbaud Financial Edge
+Nonprofit-focused — relevant only if SMPL expands into nonprofit/B-corp SaaS verticals.
+Niche — vertical-specific
+Table F.1 — Future ERP registry expansion priorities, ranked by expected business value.
+ERP Registry Readiness Assessment — v0.4
+Formal evaluation of the ERP Registry following the third enrichment iteration. This version added Estimated SCBM Coverage, Data Confidence Profile, and Standalone Capability Summary to every connector, and recalibrated language throughout to support AI implementation agents alongside human consultants. The CKR architecture remains frozen; no sections were redesigned, renamed, or reorganized in this iteration.
+Dimension
+Score
+v0.2 Score
+Change
+Assessment
+Enterprise Readiness
+9 / 10
+9 / 10
+Unchanged
+The Connector Maturity Model from v0.2 is preserved unchanged, consistent with the freeze directive. AI-agent language recalibration improves operational readiness for automated implementation workflows without altering the underlying maturity framework.
+Connector Completeness
+10 / 10
+9 / 10
++1
+Every connector now includes Estimated SCBM Coverage and Data Confidence Profile at the object level, closing the gap between qualitative capability description (v0.1–v0.2) and quantitative, machine-consumable confidence data that the Capability Assessment Layer and future implementation agents require.
+Canonical Coverage
+9 / 10
+9 / 10
+Unchanged
+Coverage documentation is now quantified per domain per connector rather than described qualitatively — a precision improvement, not a substantive scope change.
+Capability Coverage
+10 / 10
+9 / 10
++1
+Standalone Capability Summary sections now give an unambiguous Ready / Partial / Unavailable verdict per connector, directly consumable by Sales Engineering, Solutions Engineering, and the Capability Assessment Layer without interpretation.
+AI / Automation Readiness
+9 / 10
+(not scored v0.2)
+NEW
+Language throughout the document now consistently frames the implementation agent, the Capability Assessment Layer, the Connector Engine, and the CEP as the acting components in the onboarding workflow. One point withheld: this recalibration has not yet been validated against an actual automated POC execution — the language is implementation-neutral and automation-ready in principle, but unproven in automated practice.
+Maintainability
+9 / 10
+8 / 10
++1
+The three new sections follow an identical structure across all five connectors (Coverage table → Confidence table → Ready/Partial/Unavailable summary), making future connector additions to this registry mechanically straightforward.
+Implementation Utility
+9 / 10
+9 / 10
+Unchanged
+Implementation Effort and Pilot Readiness from v0.2 are preserved; the new sections add machine-readable precision on top of the existing planning-grade guidance rather than replacing it.
+Customer Onboarding Value
+9 / 10
+9 / 10
+Unchanged
+Best Fit Customer and Connector Readiness Summary from v0.2 remain the primary customer-facing qualification tools; Standalone Capability Summary reinforces this with a sharper Ready/Partial/Unavailable framing.
+Future Scalability
+9 / 10
+9 / 10
+Unchanged
+The three-section v0.4 enrichment pattern scales cleanly to future connector registries (Billing, CRM, HRIS) without requiring further structural change — confirmed by successfully applying the identical pattern across all five ERPs in this iteration.
+Table R.3 — ERP Registry v0.4 Readiness Assessment. Aggregate score: 83 / 90 (92%), up from 71/80 (89%) in v0.2.
+Remaining ERP Knowledge Gaps
+Field-level mapping rules (S10) for Dynamics 365 and Oracle Fusion remain at the pattern level — this gap, carried forward from v0.1 and v0.2, persists in v0.4. It is independent of this iteration's scope and should be prioritized as these connectors progress through the maturity model.
+The SCBM Coverage and Data Confidence Profile estimates introduced in this version are planning-grade estimates derived from architectural analysis and accumulated implementation pattern knowledge — they have not yet been validated against a statistically significant sample of actual Capability Assessment Layer output per connector. This should be the first validation priority once sufficient production data accumulates.
+The Financial Dimension / Segment resolution playbook recommendation, carried forward from v0.1 and reaffirmed in v0.2, remains unbuilt. Its absence is now somewhat more visible given that Data Confidence Profile explicitly quantifies Department/Segment confidence as the lowest-confidence object for Intacct, Dynamics 365, and Oracle Fusion — reinforcing this as the highest-leverage next investment.
+Deferred Enhancements
+Automated reconciliation of Data Confidence Profile estimates against live Capability Assessment Layer output, once available, to confirm the planning-grade estimates in this document remain accurate as production implementation count grows for each connector.
+A formal validation exercise running an actual AI implementation agent against this registry's language and structure, to confirm the document is genuinely machine-actionable and not merely written in agent-adjacent prose.
+Compound mapping dependency documentation, still pending CKR v0.3 Section 8.6.2 S19 development.
+Version 2 Considerations
+Once the Financial Dimension resolution playbook is built, Department/Segment confidence estimates for Intacct, Dynamics 365, and Oracle Fusion should be revisited — the playbook is likely to materially improve these specific confidence figures by standardizing the resolution workflow.
+As Dynamics 365 and Oracle Fusion progress through the Connector Maturity Model, their SCBM Coverage and Data Confidence Profile sections should be recalculated against accumulated production data rather than the architectural estimates currently documented.
+Consider whether Estimated SCBM Coverage and Data Confidence Profile should eventually be computed dynamically by the Capability Assessment Layer from live customer data, with the values in this registry serving as the baseline prior used before any customer-specific data is available — this would represent the natural evolution from static planning estimates to a dynamically-updated knowledge asset, without requiring CKR architectural changes.
+Items Intentionally Excluded from This Version
+No new connectors were added in this iteration — scope was strictly depth enrichment of the existing five, consistent with the freeze directive.
+No CKR template sections were added, removed, or renamed — the three new per-connector sections follow the existing "additive enhancement" pattern established in v0.2, not a template modification.
+No changes were made to the Connector Maturity Model levels themselves in this iteration — maturity level changes require an actual promotion event, not a documentation enrichment pass.
+Final Determination
+Does the ERP Registry now provide sufficient depth to support AI-driven implementation, automated capability assessment, and confident Sales and Solutions Engineering qualification — in addition to the human-consultant-facing guidance already established in prior versions?
+Yes, with one validation step still pending before declaring full automation-readiness proven rather than architecturally designed.
+Every connector in this registry now provides three layers of machine-consumable precision that did not exist before this iteration: a quantified SCBM coverage estimate by domain, an object-level confidence profile with explicit reasoning for each score, and an unambiguous Ready/Partial/Unavailable verdict per SMPL capability. Combined with the Capability Assessment Layer and Module Capability Registry definitions this data is designed to feed, an implementation agent — or a human consultant working alongside one — now has a single, consistent reference for every decision point in ERP onboarding: what to expect, how confident to be in what the system produces, and what to communicate to the customer.
+The language recalibration throughout the document — implementation agent evaluates, Capability Assessment Layer determines, Connector Engine validates, CEP requests confirmation — is architecturally consistent and applied uniformly across all five connectors. This satisfies the requirement that the registry read naturally for both human and AI-agent consumption.
+The one remaining gap before declaring full automation-readiness proven: this registry has not yet been tested against an actual automated POC execution. The structure, language, and data are designed for that use case, but design intent and validated operation are different claims. This should be the first priority of the next iteration — not a redesign, but a live test of whether an implementation agent operating from this document alone can execute a representative POC against each of the five connectors with results consistent with the estimates documented here.
+With that single caveat, the ERP Registry is considered complete and production-ready for its intended purpose: a frozen, mature enterprise implementation knowledge asset serving human implementation consultants, Sales Engineering, Solutions Engineering, Customer Success, future connector developers, and — pending the validation step above — AI implementation agents, consistently.

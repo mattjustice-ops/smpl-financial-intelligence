@@ -1,0 +1,1333 @@
+ 
+BUILD IMPLEMENTATION SPECIFICATION
+BIS-003 · Canonical Platform
+Version 1.0
+ 
+System of record for canonical business objects, identity resolution, and system-of-authority governance
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Implements: SCBM · SCDM · SOF · EIS-001 · EIS-002 · EIS-004 · GPES-001 · BIS-001 · BIS-002
+Section 1 — Scope Decisions
+BIS-003 is the third Build Implementation Specification, following the discipline established in BIS-001 and BIS-002. The first six decisions were specified in the build brief; this section restates them for completeness and adds five further resolutions the canonical storage and identity resolution model requires to be build-ready.
+ 
+1.1 Canonical Platform vs. Connector Workers
+Connector Workers transform vendor data into canonical object payloads — that transformation logic lives entirely in the IMS libraries and the Connector Worker playbooks. The Canonical Platform validates structural requirements, stores canonical objects, links source references, applies identity rules, and persists canonical relationships. It performs no connector-specific extraction or transformation of its own — if a payload arrives structurally invalid, this service rejects it; it does not attempt to fix it.
+ 
+1.2 Canonical Platform vs. CAL
+The Canonical Platform stores objects and object-level confidence. The CAL Service (EVAL-001/EVAL-003, per BIS-002's Capability Worker) evaluates module readiness and capability-level confidence, reading object-level confidence from this service as an input. This service never computes or returns a module status of READY, PARTIAL, or UNAVAILABLE — that vocabulary does not exist in this service's API surface.
+ 
+1.3 Canonical Platform vs. Orchestration Service
+The Canonical Platform does not own session state or workflow state. It stores created_from_session_id and created_from_job_id on every canonical object and version for lineage, but the Orchestration Service (BIS-002) remains the exclusive system of record for implementation progress. This service never calls BIS-002's endpoints to check or influence session state — the reference is one-directional, for audit trail only.
+ 
+1.4 Canonical Store Granularity
+MVP uses a flexible canonical object store: a generic canonical_objects table (Postgres JSONB payload plus typed indexes on customer_id, object_type, normalized_key, and source reference lookups), not a separate physical table per SCBM object type. Typed projection tables are backlog (Section 29), added only when a specific high-volume analytics or reporting need justifies the schema-migration cost.
+ 
+1.5 Immutable Source References
+Raw source references are immutable. If a source object's mapping changes, the service creates a new canonical object version or updates the canonical link — it never mutates a source_references row in place. The full history of which source objects fed which canonical objects, and when, is always reconstructable.
+ 
+1.6 Merge Decisions Require Auditability
+All identity merge decisions are logged and reversible. No merge destroys source object identity. A merged object retains all source references and relationship history from every constituent object — merge is a status change and a survivorship decision, never a deletion.
+ 
+1.7 New Resolution — Canonical Object Schema Registry
+Section 1.1's "validates structural requirements" needs a concrete source of truth for what structurally valid means per object_type. Resolution: a Canonical Object Schema Registry, one JSON Schema document per SCBM object type (GL Account, Subscription, Opportunity, Employee, etc.), derived from and versioned alongside the SCDM. The registry is loaded at service startup from a versioned configuration store — the same architectural pattern as BIS-001's IMS Content Service (EIS-001 Category 5), not a new mechanism. Every POST or PATCH to a canonical object validates canonical_payload against the registry entry for that object_type before any write occurs; a payload missing a required field or containing a field of the wrong type is rejected with VALIDATION_FAILED, never silently accepted with nulls filled in.
+ 
+1.8 New Resolution — normalized_key Computation
+normalized_key is computed by the Canonical Platform itself at write time, never accepted as caller input. Each object_type has a registered normalization function (part of the same Schema Registry entry from 1.7): for Customer Account, normalized_key is derived from lowercased, trimmed email if present, else lowercased, punctuation-stripped company name; for Employee, from lowercased work email; for GL Account, from account_code within the customer's chart of accounts. This is what makes identity resolution (Section 10) and source-reference-based lookup (Section 8) deterministic — two source records that should resolve to the same canonical object produce the same normalized_key independent of which connector or which order they were written in.
+ 
+1.9 New Resolution — Bulk vs. Single-Object Write Boundary
+POST /v1/canonical-objects/bulk-upsert is the primary write path for Connector Worker extraction output — batch size matches BIS-001's extraction page_size (default 1,000, max 5,000, per BIS-001 Table BIS-3.6) so the two services' batching boundaries align and a single extraction batch maps to a single canonical write call. POST /v1/canonical-objects (single) is reserved for individually-triggered writes: a Canonical Integration Agent's identity-resolution-driven update to one object, or a human-initiated correction. Connector Workers never call the single-object endpoint in a loop — that pattern is explicitly disallowed and is not a supported integration pattern for this service.
+ 
+1.10 New Resolution — Identity Candidate Generation Timing
+For MVP, identity candidate generation runs synchronously as part of the Canonical Integration job (BIS-002 Table BIS2-7.2, Step 13) — the Canonical Worker calls POST /v1/identity-resolution/candidates as one step in its Stage 4 (CANONICAL_POPULATION) execution, not as a separately scheduled background process. The brief's mention of an "optional background job" describes a backlog capability (Section 29) — a periodic re-scan across a customer's full canonical store to catch merge opportunities that were not detected at initial write time (e.g., a new connector added months later introduces a match to an existing object). That capability is out of scope for MVP.
+ 
+1.11 New Resolution — SOA Conflict Routing
+When SOA_CONFLICT is detected (Section 17), this service does not create a human task itself — it has no such endpoint and, per Section 1.3, stays out of workflow-state territory. Instead, it returns SOA_CONFLICT to the calling Canonical Worker job via the standard error envelope; the Canonical Worker reports this through its normal PATCH job status call to BIS-002, which routes it exactly as BIS-002 Table BIS2-11.1 already specifies: a SYSTEM_OF_AUTHORITY_DISPUTE human task, routed to the Implementation Consultant only, urgency BLOCKING. No new escalation path is introduced — this service produces the signal, BIS-002 owns the human routing, consistent with the boundary established in Section 1.3.
+ 
+Section 2 — Service Purpose
+The Canonical Platform is the only component in the SMPL platform authorized to write a canonical business object. Every capability assessment, every confidence score, every customer-facing report ultimately reads from what this service stores.
+ 
+This Service Is
+This Service Is Not
+The system of record for canonical objects, their versions, their source references, their relationships, and their system-of-authority assignments
+A connector integration layer — it never calls an external API; that is BIS-001
+The identity resolution engine — the only place cross-system matching (NetSuite Customer ↔ HubSpot Company ↔ Stripe Customer) actually happens and is stored
+A workflow engine — it holds no session or job state; that is BIS-002
+The merge/unmerge authority — the only service permitted to change which canonical object a set of source references resolves to
+A capability assessment engine — it stores object-level confidence but never computes module readiness; that is CAL (EVAL-001/003)
+The lineage and audit trail for every canonical write — which session, which job, which source record produced or changed a canonical object, forever queryable
+A reporting service — it serves canonical data to the Reporting Worker but generates no customer-facing narrative itself
+Table BIS3-2.1 — Service purpose boundary.
+ 
+2.1 Position in the Runtime
+  Connector Workers ─────┐
+  Canonical Worker ──────┤
+  (COORD-004)            │  writes via bulk-upsert / identity-resolution /
+                          │  merge / SOA-assign endpoints
+                          ▼
+  ══════════════════════════════════════
+  CANONICAL PLATFORM  (this document)
+  ══════════════════════════════════════
+                          │
+                          ▼
+  Postgres (canonical_objects, canonical_object_versions,
+            source_references, canonical_relationships,
+            identity_resolution_candidates,
+            system_of_authority_assignments)
+  Reads served to: Capability Worker (CAL/Confidence),
+                    Reporting Worker, Validation Agent (EVAL-002)
+ 
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Canonical object storage
+Persist canonical_payload validated against the Schema Registry (1.7), keyed by object_id, scoped to customer_id
+SCBM; SCDM
+Canonical object versioning
+Create a new canonical_object_versions row on every version-triggering change (Section 12); never overwrite history
+Section 1.5, 1.6
+Source reference linkage
+Record and preserve the immutable link from every vendor source record to the canonical object it produced or updated
+Section 1.5; SCBM identity model
+System-of-authority assignment and enforcement
+Store and serve object-type-level and field-path-level SOA assignments; detect and surface conflicts
+SOF Table 4.1; BIS-002 Table BIS2-11.1
+Cross-system identity resolution
+Generate, score, and store identity match candidates; apply the confirm/reject decision, human or automatic
+GPES-001 Section 5.2 (Identity Resolution); EIS-001 Table EIS-C7.1
+Duplicate detection
+Identify multiple canonical objects that should represent one real-world entity, surfacing them as identity candidates rather than silently merging
+Section 10
+Canonical merge and unmerge
+Execute reversible survivorship decisions that consolidate identity-resolved objects while preserving full source and relationship history
+Section 11
+Lineage
+Answer "what session, job, and source record produced or last changed this canonical object" for any object, at any point in its version history
+Section 12
+Confidence storage
+Store object-level confidence and its full breakdown (source, mapping, identity, validation, SOA components) — never compute capability-level confidence
+EIS-001 Table EIS-C9.1; Section 1.2
+Canonical read APIs
+Serve canonical objects, relationships, and confidence to downstream services with customer-isolated, low-latency reads
+Section 14, 16
+Table BIS3-3.1 — Complete responsibility list with architectural traceability.
+ 
+Section 4 — Public API Endpoints
+Twenty-four endpoints across seven groups, callable only by the Tool Gateway and approved internal services. Endpoints with real branching logic (bulk-upsert, identity candidate generation and confirmation, merge/unmerge, SOA assignment) receive full detail tables; simpler CRUD-style endpoints are grouped into compact summary tables.
+ 
+4.0 Standard Response Envelope
+{
+  "request_id": "UUID",
+  "customer_id": "UUID | null",
+  "status": "SUCCESS | ERROR",
+  "data": { ... } | null,
+  "error": {"error_code": "string (Section 17)", "message": "string",
+            "retry_after_seconds": "integer | null"} | null,
+  "latency_ms": "integer"
+}
+ 
+4.1 Canonical Object Endpoints
+POST /v1/canonical-objects
+Field
+Specification
+Request
+{customer_id: UUID, object_type: string, canonical_payload: object, source_system_refs: [{source_system, source_connector_id, source_object_id}], confidence: decimal, confidence_breakdown: object, created_from_session_id: UUID, created_from_job_id: UUID, idempotency_key: UUID}
+Response (data)
+{object_id: UUID, normalized_key: string (computed, Section 1.8), version: 1, status: string, created_at: ISO8601}
+Error Codes
+VALIDATION_FAILED (payload fails Schema Registry validation); DUPLICATE_OBJECT (normalized_key already exists for this customer + object_type with an ACTIVE object and no explicit merge intent — see Section 6 status model)
+Idempotency
+IDEMPOTENT — same idempotency_key returns the existing object_id
+Retry Rules
+Safe to retry with the same idempotency_key
+Logging
+CANONICAL_OBJECT_CREATED event
+Metrics
+canonical_objects_total{object_type, status}; canonical_write_latency_seconds{object_type}
+Table BIS3-4.1 — Create single canonical object. Reserved for individually-triggered writes per Section 1.9 — not the primary extraction write path.
+ 
+POST /v1/canonical-objects/bulk-upsert
+Field
+Specification
+Request
+{customer_id: UUID, object_type: string, objects: [{canonical_payload, source_system_refs, confidence, confidence_breakdown}] (max 5,000 per call, per Section 1.9), created_from_session_id: UUID, created_from_job_id: UUID, idempotency_key: UUID}
+Response (data)
+{created_count: integer, updated_count: integer, rejected: [{index: integer, error_code, message}], object_ids: UUID[]}
+Error Codes
+Per-object VALIDATION_FAILED entries in rejected[] — a batch is never fully rejected for one bad record; INVALID_INPUT only for a malformed request envelope (e.g., objects array empty or exceeding 5,000)
+Idempotency
+IDEMPOTENT — same idempotency_key returns the original created_count/updated_count/rejected result without reprocessing
+Retry Rules
+Safe to retry the full batch with the same idempotency_key; for a batch with partial rejections, the caller corrects only the rejected entries and resubmits those with a new idempotency_key — the successfully written entries are never reprocessed
+Logging
+One CANONICAL_OBJECT_CREATED or CANONICAL_OBJECT_UPDATED event per successful object, plus one aggregate BULK_UPSERT_COMPLETE summary event with created_count/updated_count/rejected_count — individual events are not suppressed, since each must be independently queryable by object_id, but the aggregate event keeps batch-level monitoring cheap
+Metrics
+canonical_object_upserts_total{object_type, status}; canonical_bulk_upsert_duration_seconds{object_type}
+Table BIS3-4.2 — Bulk upsert. The primary write path for Connector Worker extraction output; the highest-volume endpoint in this service.
+ 
+Endpoint
+Purpose
+Key Behavior
+GET /v1/canonical-objects/{object_id}
+Read a single canonical object at its current_version
+Returns NOT_FOUND if archived_at is set and include_archived is not passed — archived objects are excluded from default reads
+PATCH /v1/canonical-objects/{object_id}
+Update fields on an existing object, creating a new version if the change qualifies (Section 12)
+Rejects any attempt to write object_id, customer_id, or normalized_key directly — normalized_key is always recomputed by the service, never set by the caller, even on update
+GET /v1/canonical-objects
+List/filter canonical objects — query params: customer_id (required), object_type, status, confidence_lt, created_from_session_id, source_connector_id
+Backs the Section 16 query patterns; paginated, default page size 100, max 1,000
+POST /v1/canonical-objects/{object_id}/version
+Explicitly create a new version without changing current data (used for human-correction audit trail entries where the payload is identical but change_reason must be recorded)
+Rare — most versioning is implicit via PATCH; this endpoint exists for the specific case of recording a reviewed-and-confirmed-unchanged event
+Table BIS3-4.3 — Read/update/list/explicit-version endpoints (compact).
+ 
+4.2 Source Reference Endpoints
+Endpoint
+Purpose
+Key Behavior
+POST /v1/canonical-objects/{object_id}/source-references
+Link a vendor source record to a canonical object
+Rejects if this exact {source_system, source_connector_id, source_object_id} combination already has an immutable source_references row (Section 1.5) — the caller must use a version/reassignment path (Section 12), never a duplicate-then-ignore pattern
+GET /v1/canonical-objects/{object_id}/source-references
+List all source references for a canonical object
+Returns the full immutable history — every source record that has ever fed this object, including references whose mapping was later reassigned (mapping_status reflects current vs. historical)
+GET /v1/source-references/{source_system}/{source_object_type}/{source_object_id}
+Reverse lookup — find the canonical object a specific vendor record maps to
+The primary lookup Connector Workers use to check "have I already written this record's canonical counterpart" before deciding whether a bulk-upsert entry is a create or an update
+Table BIS3-4.4 — Source reference endpoints (compact — see Section 8 for the full source reference model).
+ 
+4.3 Relationship Endpoints
+Endpoint
+Purpose
+Key Behavior
+POST /v1/canonical-relationships
+Create a relationship between two canonical objects (e.g., Invoice Line → Invoice, Subscription → Customer Account)
+Validates both from_object_id and to_object_id exist and belong to the same customer_id; relationship_type must be a registered type per the SCBM relationship model
+GET /v1/canonical-relationships
+List relationships, filterable by from_object_id, to_object_id, or relationship_type
+Backs graph-adjacent queries (Section 16) without requiring a graph database at MVP (Section 29 backlog)
+DELETE /v1/canonical-relationships/{relationship_id}
+Archive a relationship (soft delete — sets archived_at, never a hard delete)
+Matches the immutability philosophy of Section 1.5/1.6 — relationship history is never destroyed, only marked inactive
+Table BIS3-4.5 — Relationship endpoints (compact — see Section 7 for the full relationship model).
+ 
+Section 4 — Public API Endpoints (continued)
+4.4 Identity Resolution Endpoints
+POST /v1/identity-resolution/candidates
+Field
+Specification
+Request
+{customer_id: UUID, object_type: string, scope: "SESSION"|"OBJECT_TYPE" (SESSION scopes to a specific created_from_session_id's newly-written objects; OBJECT_TYPE scans the full customer canonical store for this type), proposed_by_job_id: UUID}
+Response (data)
+{candidates_generated: integer, candidates: [{candidate_id, source_object_ids, candidate_object_ids, match_type, match_score, confidence, status}]}
+Error Codes
+INVALID_INPUT (object_type not registered in the Schema Registry)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — re-running candidate generation for the same session and object_type does not create duplicate candidate rows for the same object pair; it returns the existing candidates
+Retry Rules
+Safe to retry
+Logging
+IDENTITY_CANDIDATE_CREATED event per candidate
+Metrics
+canonical_identity_candidates_total{object_type, match_type}
+Table BIS3-4.6 — Generate identity candidates. Runs synchronously within the Canonical Integration job per Section 1.10.
+ 
+POST /v1/identity-resolution/confirm
+Field
+Specification
+Request
+{candidate_id: UUID, reviewed_by: UUID | "SYSTEM_AUTO_CONFIRM", decision_reason: string}
+Response (data)
+{candidate_id: UUID, status: "CONFIRMED", surviving_object_id: UUID, merge_triggered: bool, merge_operation_id: UUID | null}
+Error Codes
+INVALID_INPUT (candidate already reviewed — status is not PENDING)
+Idempotency
+IDEMPOTENT — confirming an already-confirmed candidate with the same reviewed_by returns the same result
+Retry Rules
+Safe to retry
+Logging
+IDENTITY_CANDIDATE_CONFIRMED event; if merge_triggered, also emits CANONICAL_OBJECT_MERGED via the internal call to the Merge Engine (Section 11)
+Metrics
+canonical_identity_auto_confirm_rate (ratio of SYSTEM_AUTO_CONFIRM to total confirmations); canonical_merge_operations_total{trigger="identity_confirm"}
+Behavior
+Confirming a candidate above the merge threshold (Section 10.2) automatically invokes the Merge Engine — the caller does not separately call the merge endpoint for identity-driven merges; the merge endpoint (4.5) is for explicitly customer-directed merges outside the identity resolution flow.
+Table BIS3-4.7 — Confirm identity candidate.
+ 
+Endpoint
+Purpose
+Key Behavior
+POST /v1/identity-resolution/reject
+Mark a candidate as not a match
+Sets status=REJECTED with decision_reason; the two objects remain permanently unmerged unless a new candidate is generated by a future scan and independently confirmed — a rejection does not suppress future candidate generation for the same pair, since new evidence (e.g., a corrected email) may change the outcome
+GET /v1/identity-resolution/pending
+List candidates awaiting human review
+Filters to status=PENDING and confidence in the human-review band (Section 10.2); backs the Implementation Consultant's review queue and the GPES-001-style "34 tentative matches" review list
+Table BIS3-4.8 — Reject/list identity resolution endpoints (compact).
+ 
+4.5 Merge Endpoints
+POST /v1/canonical-objects/merge
+Field
+Specification
+Request
+{customer_id: UUID, object_ids: UUID[] (2 or more), surviving_object_id: UUID | null (if null, the service selects survivor per Section 11.1 survivorship rules), reason: string, merge_operation_id: UUID (idempotency key)}
+Response (data)
+{merge_operation_id: UUID, surviving_object_id: UUID, merged_object_ids: UUID[], relationships_repointed: integer}
+Error Codes
+INVALID_INPUT (fewer than 2 object_ids, or object_ids span more than one customer_id — cross-customer merge is never permitted, no exception); IDENTITY_CONFLICT (one of the objects is already MERGED into a different surviving object — merge chains require an unmerge first, not a cascading re-merge)
+Idempotency
+IDEMPOTENT — same merge_operation_id returns the original result without re-executing
+Retry Rules
+Safe to retry with the same merge_operation_id
+Logging
+CANONICAL_OBJECT_MERGED event with the full merged_object_ids list and surviving_object_id
+Metrics
+canonical_merge_operations_total{trigger="explicit"}
+Table BIS3-4.9 — Explicit merge. Full mechanics in Section 11.
+ 
+Endpoint
+Purpose
+Key Behavior
+POST /v1/canonical-objects/{object_id}/unmerge
+Reverse a merge operation, restoring the prior object states
+Requires the object_id of the surviving object; restores every merged object to status=ACTIVE with its pre-merge canonical_payload from canonical_object_versions — this is why versioning (Section 12) captures a version immediately before merge, specifically to make unmerge exact rather than approximate
+GET /v1/canonical-objects/{object_id}/merge-history
+Full merge/unmerge audit trail for an object
+Returns every merge_operation_id this object has ever been party to, whether as survivor or as merged-away, with timestamps and reasons — satisfies Section 1.6's auditability requirement directly
+Table BIS3-4.10 — Unmerge/merge-history endpoints (compact).
+ 
+4.6 System of Authority Endpoints
+POST /v1/system-of-authority/assign
+Field
+Specification
+Request
+{customer_id: UUID, object_type: string, field_path: string | null (null = object-type-level assignment), authoritative_system: string, authoritative_connector_id: string, precedence_order: integer, reason: string, confidence: decimal, source: "SOF_RULE_AUTOMATIC"|"CEP_HUMAN_CONFIRMED"|"ESCALATION_RESOLVED"|"DEFAULT_APPLIED"}
+Response (data)
+{assignment_id: UUID, status: "ACTIVE", conflict_detected: bool, conflicting_assignment_id: UUID | null}
+Error Codes
+SOA_CONFLICT (an ACTIVE assignment already exists for this exact object_type + field_path with a different authoritative_system and source is not ESCALATION_RESOLVED — see Section 1.11 for the resulting routing)
+Idempotency
+IDEMPOTENT — same object_type + field_path + authoritative_system returns the existing assignment
+Retry Rules
+Safe to retry
+Logging
+SOA_ASSIGNED event; SOA_CONFLICT_DETECTED event on conflict, in addition to the error response
+Metrics
+canonical_soa_conflicts_total{object_type}
+Table BIS3-4.11 — Assign system of authority. Full model in Section 9.
+ 
+Endpoint
+Purpose
+Key Behavior
+GET /v1/system-of-authority
+List SOA assignments, filterable by customer_id, object_type, field_path
+Backs both downstream consumers (a worker asking "who is authoritative for Revenue") and Implementation Consultant review
+PATCH /v1/system-of-authority/{assignment_id}
+Update an assignment — used exclusively for ESCALATION_RESOLVED corrections after a SOA_CONFLICT human decision
+Requires source=ESCALATION_RESOLVED; rejects any attempt to PATCH an assignment with source=SOF_RULE_AUTOMATIC, since automatic assignments are corrected by creating a new assignment through the normal flow, not by editing history
+Table BIS3-4.12 — List/update SOA endpoints (compact).
+ 
+4.7 Health Endpoints
+Endpoint
+Purpose
+Key Behavior
+GET /v1/health
+Service-wide health
+{status, dependencies: {postgres: bool}}
+GET /v1/customers/{customer_id}/canonical-health
+Customer-scoped canonical data health
+{object_count_by_type, low_confidence_object_count, pending_identity_candidates_count, soa_conflict_count, last_write_at} — backs the Section 27 observability dashboards at a per-customer granularity
+Table BIS3-4.13 — Health endpoints (compact).
+ 
+4.8 Core Data Models
+Six Postgres tables. Field lists match the build brief exactly, with types and constraints added.
+ 
+canonical_objects:
+  object_id                UUID PRIMARY KEY
+  customer_id                UUID NOT NULL
+  object_type                 VARCHAR(64) NOT NULL
+  normalized_key                VARCHAR(256) NOT NULL  -- computed, Section 1.8
+  canonical_payload              JSONB NOT NULL
+  status                          VARCHAR(16) NOT NULL   -- Section 6
+  confidence                       DECIMAL(4,3) NOT NULL
+  confidence_breakdown              JSONB NOT NULL
+  version                            INTEGER NOT NULL DEFAULT 1
+  current_version                     INTEGER NOT NULL DEFAULT 1
+  source_system_refs                   JSONB NOT NULL
+  system_of_authority                   VARCHAR(64)
+  created_from_session_id                UUID
+  created_from_job_id                     UUID
+  created_at                               TIMESTAMPTZ NOT NULL
+  updated_at                                TIMESTAMPTZ NOT NULL
+  archived_at                                TIMESTAMPTZ
+  UNIQUE (customer_id, object_type, normalized_key)
+    WHERE status = 'ACTIVE'  -- enforces Section 1.8 identity determinism
+canonical_object_versions:
+  object_version_id         UUID PRIMARY KEY
+  object_id                   UUID NOT NULL REFERENCES canonical_objects
+  customer_id                   UUID NOT NULL
+  object_type                     VARCHAR(64) NOT NULL
+  version                           INTEGER NOT NULL
+  canonical_payload                  JSONB NOT NULL
+  confidence                          DECIMAL(4,3) NOT NULL
+  confidence_breakdown                 JSONB NOT NULL
+  source_system_refs                    JSONB NOT NULL
+  change_reason                          VARCHAR(32) NOT NULL  -- Section 12 triggers
+  changed_by                              VARCHAR(64) NOT NULL
+  session_id                               UUID
+  job_id                                    UUID
+  created_at                                 TIMESTAMPTZ NOT NULL
+  UNIQUE (object_id, version)
+source_references:
+  source_ref_id             UUID PRIMARY KEY
+  customer_id                 UUID NOT NULL
+  object_id                     UUID NOT NULL REFERENCES canonical_objects
+  source_system                  VARCHAR(32) NOT NULL
+  source_connector_id              VARCHAR(16) NOT NULL  -- IMS-001 etc.
+  source_object_type                VARCHAR(64) NOT NULL
+  source_object_id                   VARCHAR(256) NOT NULL
+  source_payload_hash                 VARCHAR(64)   -- SHA-256, not raw payload
+  source_updated_at                    TIMESTAMPTZ
+  first_seen_at                         TIMESTAMPTZ NOT NULL
+  last_seen_at                           TIMESTAMPTZ NOT NULL
+  mapping_confidence                      DECIMAL(4,3)
+  mapping_status                           VARCHAR(16) NOT NULL  -- CURRENT|HISTORICAL
+  immutable                                 BOOLEAN NOT NULL DEFAULT true
+  UNIQUE (customer_id, source_system, source_connector_id,
+          source_object_type, source_object_id)
+canonical_relationships:
+  relationship_id            UUID PRIMARY KEY
+  customer_id                  UUID NOT NULL
+  from_object_id                 UUID NOT NULL REFERENCES canonical_objects
+  to_object_id                     UUID NOT NULL REFERENCES canonical_objects
+  relationship_type                  VARCHAR(64) NOT NULL
+  confidence                           DECIMAL(4,3)
+  source_ref_id                          UUID REFERENCES source_references
+  status                                   VARCHAR(16) NOT NULL  -- ACTIVE|ARCHIVED
+  created_from_session_id                    UUID
+  created_from_job_id                         UUID
+  created_at                                    TIMESTAMPTZ NOT NULL
+  archived_at                                    TIMESTAMPTZ
+identity_resolution_candidates:
+  candidate_id                UUID PRIMARY KEY
+  customer_id                   UUID NOT NULL
+  object_type                     VARCHAR(64) NOT NULL
+  source_object_ids                 UUID[] NOT NULL
+  candidate_object_ids                UUID[] NOT NULL
+  match_type                            VARCHAR(32) NOT NULL  -- Section 10.1
+  match_score                             DECIMAL(4,3) NOT NULL
+  confidence                               VARCHAR(16) NOT NULL  -- Section 10.2 band
+  status                                     VARCHAR(16) NOT NULL  -- PENDING|CONFIRMED|REJECTED
+  proposed_by_job_id                           UUID
+  reviewed_by                                    VARCHAR(64)
+  reviewed_at                                     TIMESTAMPTZ
+  decision_reason                                  TEXT
+  created_at                                        TIMESTAMPTZ NOT NULL
+system_of_authority_assignments:
+  assignment_id                UUID PRIMARY KEY
+  customer_id                    UUID NOT NULL
+  object_type                      VARCHAR(64) NOT NULL
+  field_path                         VARCHAR(256)   -- null = object-type-level
+  authoritative_system                 VARCHAR(32) NOT NULL
+  authoritative_connector_id             VARCHAR(16) NOT NULL
+  precedence_order                         INTEGER NOT NULL
+  reason                                     TEXT
+  confidence                                   DECIMAL(4,3)
+  source                                         VARCHAR(32) NOT NULL  -- Section 1.11
+  status                                           VARCHAR(16) NOT NULL  -- ACTIVE|SUPERSEDED
+  created_at                                        TIMESTAMPTZ NOT NULL
+  updated_at                                         TIMESTAMPTZ NOT NULL
+ 
+Section 5 — Internal Components
+Seven internal components, each independently unit-testable (Section 25).
+ 
+  ┌────────────────────────────────────────────────────────┐
+  │                  API Layer (Section 4)                  │
+  └───────┬──────────────────────────────────────────┬─────┘
+          │                                           │
+  ┌───────▼────────┐                         ┌────────▼───────┐
+  │ Schema Registry │                         │ Identity        │
+  │ Validator       │                         │ Resolution      │
+  │ (Section 1.7)   │                         │ Engine          │
+  └───────┬────────┘                         │ (Section 10)    │
+          │                                    └───────┬───────┘
+  ┌───────▼────────┐                                    │
+  │ Normalized Key  │                          ┌─────────▼──────┐
+  │ Computer        │                          │ Merge Engine    │
+  │ (Section 1.8)   │                          │ (Section 11)    │
+  └───────┬────────┘                          └─────────┬──────┘
+          │                                               │
+  ┌───────▼────────┐                          ┌───────────▼─────┐
+  │ Canonical Write │◄─────────────────────────┤ SOA Assignment   │
+  │ Coordinator     │                          │ & Conflict       │
+  └───────┬────────┘                          │ Detector         │
+          │                                    └──────────────────┘
+  ┌───────▼────────┐
+  │ Version /        │
+  │ Lineage Writer    │
+  └──────────────────┘
+ 
+Component
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Schema Registry Validator
+object_type, canonical_payload
+PASS or VALIDATION_FAILED with the specific field(s) that failed
+Schema Registry (static, versioned config loaded at startup)
+object_type not registered → INTERNAL_ERROR (registry configuration gap, not a runtime data condition)
+Normalized Key Computer
+object_type, canonical_payload
+normalized_key string
+Schema Registry (holds the per-object_type normalization function)
+No normalization function registered for object_type → INTERNAL_ERROR
+Canonical Write Coordinator
+Validated payload + computed normalized_key
+canonical_objects row created/updated; triggers Version/Lineage Writer
+Schema Registry Validator, Normalized Key Computer, Postgres
+Concurrent write race on the same normalized_key → resolved by the UNIQUE constraint (Section 4.8); second writer receives DUPLICATE_OBJECT and must retry as an update, not a create
+Version / Lineage Writer
+Every accepted write to Canonical Write Coordinator
+canonical_object_versions row when a version trigger (Section 12) is met
+Postgres
+N/A — this component has no independent failure mode beyond Postgres availability
+Identity Resolution Engine
+object_type, scope (Section 4.4)
+identity_resolution_candidates rows with match_type, match_score, confidence band
+canonical_objects (reads across the customer's existing store), source_references
+Poorly-populated source data (e.g., no email on either side) → produces low match_score candidates or none at all, which is a correct outcome, not a failure
+Merge Engine
+confirmed candidate or explicit merge request
+Surviving object updated; merged objects → status=MERGED; relationships repointed
+Version/Lineage Writer (captures pre-merge state), canonical_relationships (repointing)
+Attempted merge across customer_id boundary → rejected at validation, never partially executed
+SOA Assignment & Conflict Detector
+New assignment request
+ACTIVE assignment created, or SOA_CONFLICT returned
+system_of_authority_assignments
+Conflicting assignment detection is a simple existing-row check — no complex failure mode beyond Postgres read consistency
+Table BIS3-5.1 — Internal component specifications.
+ 
+Section 6 — Canonical Object Model
+Every SCBM object type is stored using the same generic structure (Section 1.4); this section defines the status lifecycle every canonical object moves through, independent of its type.
+ 
+Status
+Applies When
+Visible in Default Reads?
+ACTIVE
+The object is the current, confirmed representation of a real-world entity — the normal state for the large majority of canonical objects
+Yes
+PARTIAL
+Required fields per the Schema Registry are present, but the object is missing optional fields the IMS Section 3 field map would normally populate — reflects genuine data gaps in the source, not a mapping failure
+Yes — PARTIAL is a normal, expected status, not an error condition
+TENTATIVE
+The object was created from a fuzzy or low-confidence identity match (Section 10.2) and has not yet been confirmed — most commonly seen on the candidate_object_ids side of an identity_resolution_candidates row before confirmation
+Yes, but flagged — downstream consumers (CAL, Reporting) treat TENTATIVE objects as lower-confidence by definition
+MERGED
+The object lost survivorship in a merge operation (Section 11) — its canonical_payload is frozen at its pre-merge state for audit purposes, and all active references now point to the surviving object
+No — excluded from default reads; queryable explicitly via merge-history or with include_archived-equivalent flags
+ARCHIVED
+The object is no longer active for reasons other than merge — e.g., the source record was deleted at the vendor (tombstoned) or the customer's connector was disconnected
+No — same exclusion behavior as MERGED
+REJECTED
+A candidate identity resolution was proposed and explicitly rejected as a real object state — used narrowly, for cases where a TENTATIVE object is determined to not represent a real entity at all (e.g., a test record) rather than simply not-yet-confirmed
+No
+Table BIS3-6.1 — Canonical object status lifecycle.
+ 
+6.1 Field Classification
+Per object_type, the Schema Registry (Section 1.7) classifies every field as required, optional, or derived — directly reflecting the IMS Section 3 field mapping tables's Req/Opt/Derived classification for that connector and object type. A required field missing from canonical_payload always produces VALIDATION_FAILED; a missing optional field is accepted and may drive the object toward PARTIAL status if enough optional fields are absent to affect the object's completeness scoring (this scoring is object-level confidence input, per Section 13, not a separate mechanism).
+ 
+Section 7 — Canonical Relationship Model
+Relationship Type (example)
+From Object
+To Object
+Confidence Source
+SUBSCRIPTION_BELONGS_TO_CUSTOMER
+Subscription
+Customer Account
+Direct — from the source connector's own foreign key (Stripe subscription.customer)
+INVOICE_LINE_BELONGS_TO_INVOICE
+Invoice Line
+Invoice
+Direct — structural, always D-H confidence
+OPPORTUNITY_LINKED_TO_SUBSCRIPTION
+Opportunity
+Subscription
+Derived — from the SOF Table 4.2 cross-domain validation match (GPES-001's 91.2% CRM-to-Billing match rate is exactly this relationship type's confirmation rate)
+EMPLOYEE_BELONGS_TO_DEPARTMENT
+Employee
+Department
+Direct — from the source HRIS connector's org assignment
+GL_TRANSACTION_LINE_REFERENCES_ACCOUNT
+GL Transaction Line
+GL Account
+Direct — structural
+Table BIS3-7.1 — Example relationship types. The relationship_type registry is not exhaustively enumerated in this document — it is derived from the SCBM canonical relationship definitions and grows as new object types are onboarded; new types are registered the same way new object types are (Section 1.7), not hardcoded into this service's logic.
+ 
+Relationships are directional (from_object_id → to_object_id) and typed, never generic "related to" links — this is what makes Section 16's query patterns (e.g., "get all relationships for an object") deterministic and typed rather than requiring the caller to interpret an ambiguous edge. A relationship's confidence is independent of either endpoint object's own confidence — a high-confidence Subscription linked to a high-confidence Customer Account can still have a derived, lower-confidence relationship between them if the link itself required inference (as in the Opportunity-to-Subscription example above).
+ 
+Section 8 — Source Reference Model
+How vendor source records remain linked to canonical objects, forever, regardless of what merges or identity resolution happens on the canonical side.
+ 
+Example
+Source Object
+Canonical Target
+Stripe Customer → Canonical Customer Account
+{source_system: "stripe", source_connector_id: "IMS-201", source_object_type: "Customer", source_object_id: "cus_abc123"}
+Customer Account object_id
+HubSpot Company → Canonical Customer Account
+{source_system: "hubspot", source_connector_id: "IMS-102", source_object_type: "Company", source_object_id: "8412093"}
+Same Customer Account object_id, if identity-resolved (Section 10)
+NetSuite Customer → Canonical Customer Account
+{source_system: "netsuite", source_connector_id: "IMS-001", source_object_type: "Customer", source_object_id: "1001"}
+Same Customer Account object_id, if identity-resolved
+Rippling Employee → Canonical Employee
+{source_system: "rippling", source_connector_id: "IMS-302", source_object_type: "Employee", source_object_id: "empl_9284"}
+Employee object_id
+Table BIS3-8.1 — Source reference examples, matching GPES-001's reference implementation. All three of the first row's examples resolving to the same Customer Account object_id is exactly what GPES-001's 86.3% three-way identity match rate produced.
+ 
+8.1 Source Reference Rules
+Source references are immutable (Section 1.5) — a row, once written, is never updated. A change in mapping is recorded by inserting a new source_references row and setting mapping_status=HISTORICAL on the prior one, never by mutating the prior row.
+Source references are customer-scoped — the UNIQUE constraint (Table BIS3-4 schema) includes customer_id explicitly, so the same vendor object_id from two different SMPL customers who happen to use the same connector never collides.
+Source references preserve vendor object identity permanently — even after a canonical object is merged away (status=MERGED) or archived, its source_references rows remain queryable, satisfying Section 1.6's auditability requirement.
+Source references do not store raw payloads — only source_payload_hash (SHA-256), enabling change detection (has this vendor record changed since we last saw it) without duplicating potentially sensitive customer data into this service's storage.
+Source references support lineage and replay — first_seen_at and last_seen_at bound exactly when this service has observed this source record, which is the foundation for the Section 29 backlog replay capability.
+ 
+Section 9 — System of Authority Model
+Object Type / Field
+Authoritative System
+Assignment Level
+Revenue (recognized)
+ERP
+Object-type-level — always ERP, per SOF Table 4.1, no field-level override exists for this one
+ARR / Subscription
+Billing
+Object-type-level
+Pipeline / Opportunity
+CRM
+Object-type-level
+Employee / Org Structure
+HRIS
+Object-type-level
+Customer Account — identity fields (name, email)
+Whichever connector first established the canonical record, OR the highest-confidence source per GPES-001's identity resolution outcome
+Field-path-level: field_path="name", field_path="email" may have different authoritative_system values than the object as a whole
+Customer Account — commercial fields (ARR, subscription status)
+Billing
+Field-path-level override on an otherwise multi-source-linked object
+Table BIS3-9.1 — System of authority examples.
+ 
+9.1 Rules
+SOA can be assigned at object-type level (field_path=null) or field-path level — a field-path assignment always takes precedence over an object-type assignment for that specific field, per the precedence_order column.
+SOA assignments are customer-specific — no default assignment is shared across customers, even though the SOF Table 4.1 rules that generate SOF_RULE_AUTOMATIC assignments are the same rules for every customer; the resulting assignment row is still customer_id-scoped, never global.
+SOA decisions are auditable — every assignment records its source (Section 1.11 enum) and reason; PATCH is restricted to ESCALATION_RESOLVED corrections only, so the history of how an assignment came to be is never lost to an edit.
+SOA conflicts create identity/governance flags, routed per Section 1.11 — this service detects and signals the conflict; it never resolves one itself.
+ 
+Section 10 — Identity Resolution Engine
+The matching logic that produced GPES-001's 86.3% three-way Customer Account match rate across NetSuite, HubSpot, and Stripe. This section specifies the match types, scoring, and confirmation thresholds precisely enough to implement.
+ 
+10.1 Match Types
+Match Type
+Logic
+Base Match Score
+EXACT
+Identical normalized_key across two source-derived candidate objects
+1.00
+NORMALIZED_EMAIL
+Lowercased, trimmed email matches exactly, even if normalized_key differs for other reasons (e.g., company name differs)
+0.95
+NORMALIZED_DOMAIN
+Email domains match (e.g., both @acme.com) but full addresses differ — used as a supporting signal, rarely sufficient alone
+0.60 (supporting signal only — see 10.2 for how it combines with other signals)
+EXTERNAL_ID
+A connector-provided cross-reference field explicitly names the other system's ID (e.g., Stripe metadata.netsuite_customer_id)
+0.98
+FUZZY_NAME
+Company or person name similarity above a Levenshtein-distance-derived threshold, per the pattern established in EIS-004's Connector Memory generalization pipeline
+0.50–0.75, scaled by edit distance
+COMPOSITE_KEY
+A combination of two or more weaker signals (e.g., FUZZY_NAME + NORMALIZED_DOMAIN) that together exceed a single-signal threshold
+Computed as 1 − ((1−signal1) × (1−signal2)) — independent-signal combination, not a simple average
+CUSTOMER_CONFIRMED
+A human (Implementation Consultant or customer) has explicitly confirmed this pair as a match, overriding any computed score
+1.00, regardless of underlying signal strength
+REJECTED
+A human has explicitly rejected this pair
+N/A — not a positive match type, recorded as the candidate's terminal status instead
+Table BIS3-10.1 — Identity match types and base scoring.
+ 
+10.2 Confidence Bands and Confirmation Thresholds
+Confidence Band
+Match Score Range
+Action
+AUTO_CONFIRM
+>= 0.95
+Candidate is automatically confirmed (reviewed_by="SYSTEM_AUTO_CONFIRM") and, if it triggers a merge, the Merge Engine runs immediately — no human review. This is the band EXACT, EXTERNAL_ID, and NORMALIZED_EMAIL matches typically fall into.
+TENTATIVE
+0.70 – 0.94
+Candidate is created and the candidate_object_ids are marked status=TENTATIVE (Table BIS3-6.1), but no merge occurs until a human confirms via POST /identity-resolution/confirm. This is GPES-001's "34 tentative matches" band exactly.
+HUMAN_REVIEW_REQUIRED
+0.40 – 0.69
+Candidate is created but the underlying objects remain status=ACTIVE independently (not even TENTATIVE) — the match is weak enough that surfacing it as a maybe-match without visually suggesting a merge is likely correct.
+REJECT
+< 0.40
+No candidate is created at all — scores this low are treated as noise, not a genuine ambiguous case, to keep the pending-review queue meaningful rather than flooded with implausible pairs.
+Table BIS3-10.2 — Confidence bands. These thresholds are configuration (Section 24), not hardcoded, so they can be tuned per observed false-positive/false-negative rates without a code change.
+ 
+10.3 Candidate Generation Algorithm
+ON POST /identity-resolution/candidates (scope=SESSION, per Section 1.10):
+  1. LOAD all canonical objects created_from_session_id = {this session}
+     for the requested object_type.
+  2. FOR each newly-created object O:
+     SEARCH existing canonical_objects for the same customer_id + object_type
+     WHERE status IN (ACTIVE, TENTATIVE, PARTIAL)
+     STEP A — EXACT: compare normalized_key directly.
+       IF match found → match_type=EXACT, score=1.00
+     STEP B — EXTERNAL_ID (if Step A found nothing):
+       CHECK canonical_payload for connector-documented cross-reference
+       fields (e.g., IMS-201 Section 4.6 pattern: metadata.opportunity_id)
+       IF match found → match_type=EXTERNAL_ID, score=0.98
+     STEP C — NORMALIZED_EMAIL (if Steps A-B found nothing):
+       Compare normalized email fields if present on both sides
+       IF match found → match_type=NORMALIZED_EMAIL, score=0.95
+     STEP D — FUZZY_NAME + supporting signals (if Steps A-C found nothing):
+       Compute edit-distance-based name similarity
+       Compute NORMALIZED_DOMAIN if email present but full match failed
+       COMBINE per Table BIS3-10.1's COMPOSITE_KEY formula if both present
+       IF combined score >= 0.40 → create candidate at that score
+  3. FOR each candidate found: WRITE identity_resolution_candidates row
+     with the confidence band from Table BIS3-10.2 applied to match_score.
+  4. IF confidence band = AUTO_CONFIRM: immediately invoke the confirm
+     logic internally (no separate API round-trip) and proceed to merge
+     if applicable.
+  5. RETURN candidates_generated count and the full candidate list to caller.
+ 
+Section 11 — Merge Engine
+Executes reversible survivorship decisions. Every rule here traces back to the Section 1.6 auditability requirement: nothing a merge does is destructive.
+ 
+11.1 Survivorship Rules
+ON merge request (from identity confirmation or explicit POST /merge):
+  1. IF surviving_object_id explicitly provided: use it.
+     ELSE compute survivor by priority:
+       a. Highest object-level confidence wins
+       b. Tie-break: object with the most source_references wins
+          (more corroborating sources = more likely correct/complete)
+       c. Tie-break: earliest created_at wins (stability preference)
+  2. FOR each non-surviving object O in the merge set:
+     CAPTURE a canonical_object_versions snapshot of O's current state
+     (change_reason="PRE_MERGE_SNAPSHOT") — this is what makes unmerge exact.
+  3. FOR each non-surviving object O:
+     SET O.status = "MERGED"
+     RECORD merge_operation_id and surviving_object_id on O
+     (stored in O's confidence_breakdown.merge_context for query convenience,
+      full detail in the merge history table)
+  4. REPOINT all source_references from non-surviving objects to the
+     surviving object_id — WITHOUT deleting or mutating the original
+     source_ref_id rows (Section 1.5); a new field on source_references,
+     current_object_id, is updated while object_id (the original link)
+     remains as historical record. Downstream consumers always read
+     current_object_id for active lookups.
+  5. REPOINT all canonical_relationships where from_object_id or
+     to_object_id references a non-surviving object, to reference the
+     surviving object_id instead — original relationship rows are
+     versioned via their own audit trail (Section 12), not silently edited.
+  6. MERGE confidence_breakdown: the surviving object's confidence is
+     recalculated using the UNION of all source_system_refs from every
+     merged object — a merge can increase confidence (more corroborating
+     sources) even though no new data was extracted.
+  7. WRITE merge_history record: {merge_operation_id, surviving_object_id,
+     merged_object_ids, reason, executed_at, executed_by}
+ 
+11.2 Unmerge
+ON POST /canonical-objects/{surviving_object_id}/unmerge:
+  1. LOOKUP the merge_history record for this surviving object's
+     most recent merge operation.
+  2. FOR each merged_object_id in that operation:
+     RESTORE canonical_objects row from its PRE_MERGE_SNAPSHOT version
+     (Section 11.1 Step 2) — status back to its pre-merge value
+     (typically ACTIVE or TENTATIVE).
+  3. RESTORE source_references.current_object_id to each object's own
+     object_id for references that were repointed during this merge.
+  4. RESTORE canonical_relationships that were repointed during this merge.
+  5. RECALCULATE the surviving object's confidence_breakdown, removing
+     the contribution of the now-restored objects' source references.
+  6. WRITE a new merge_history entry documenting the unmerge, referencing
+     the original merge_operation_id — the original merge record is never
+     deleted, only superseded by the unmerge record, preserving full
+     history of the merge-then-unmerge sequence.
+ 
+Customer-facing identity always shows the current surviving canonical object — any downstream service reading through GET /canonical-objects/{object_id} for a merged object_id is redirected (HTTP 301-equivalent in the response envelope: {status: "SUCCESS", data: {redirected_to: surviving_object_id}}) rather than returning stale data. Internal audit — merge-history, source_references with mapping_status=HISTORICAL — preserves every prior identity permanently, satisfying Section 1.6 without compromising the clean single-object view every other service expects.
+ 
+Section 12 — Versioning and Lineage
+ 
+12.1 Version Triggers
+Trigger
+change_reason Value
+New Version Created?
+canonical_payload field value changes
+PAYLOAD_CHANGE
+Yes
+system_of_authority changes for this object
+SOA_CHANGE
+Yes
+confidence changes by more than a configured threshold (default 5 percentage points)
+CONFIDENCE_CHANGE
+Yes — small confidence fluctuations from routine recalculation do not each produce a version; this threshold prevents version-table bloat from noise
+Object is merged away
+PRE_MERGE_SNAPSHOT
+Yes — captured immediately before status changes to MERGED (Section 11.1)
+Object is unmerged
+POST_UNMERGE_RESTORE
+Yes — captured at the restore point
+A human correction is applied via PATCH
+HUMAN_CORRECTION
+Yes, always — even if the payload value happens to match the prior version, since the review event itself is worth recording
+A source reference is reassigned (Section 8.1)
+SOURCE_REASSIGNMENT
+Yes, if the reassignment changes canonical_payload; no new version if the reassignment is purely a mapping-status change with no payload impact
+Table BIS3-12.1 — Version triggers.
+ 
+12.2 Lineage Queries
+Every canonical_object_versions row carries session_id and job_id, directly answering "what implementation session and what specific job produced this exact version of this object" — this is the mechanism BIS-002's created_from_session_id / created_from_job_id references on implementation_jobs connect to. A full lineage trace for any canonical object is: current canonical_objects row → canonical_object_versions history ordered by version → for each version, the session_id/job_id that produced it → cross-reference to BIS-002's implementation_jobs for what IMS section and connector that job executed → cross-reference to source_references for the exact vendor record(s) involved.
+ 
+12.3 Replay (Backlog Reference)
+Full replay — reconstructing what canonical state existed at any historical point in time by walking version history backward — is architecturally supported by this data model (nothing is destructively overwritten) but the replay execution engine itself is Section 29 backlog, not MVP. The MVP guarantee is that the data required for replay is captured correctly from day one; building the replay query engine is deferred.
+ 
+Section 13 — Confidence Storage
+This service stores confidence and its breakdown — it never computes capability-level confidence (Section 1.2). The confidence and confidence_breakdown values arrive from the calling worker (which computed them per EIS-001 Table EIS-C9.1 / IMS Section 7), already calculated; this service's only computation is the confidence-change-triggers-a-version check (Table BIS3-12.1) and the merge-time recalculation (Section 11.1 Step 6).
+ 
+confidence_breakdown Component
+Source
+Example
+source_confidence
+The base confidence for this object's mapping type (D-H, D-M, DR-H, etc.) per IMS Section 7.1
+0.90 for a D-H NetSuite GL Account
+mapping_confidence
+Adjustments from IMS Section 7.2 factors applied by the writing Connector Worker
+−0.05 for a business validation FLAG
+identity_confidence
+Set by the Identity Resolution Engine (Section 10) when this object participates in a confirmed or tentative match — null for objects with no identity resolution history
+0.95 for a NORMALIZED_EMAIL-confirmed Customer Account
+validation_confidence
+Adjustments from EVAL-002 (Validation Agent) findings, written back to this object after validation runs
+−0.10 for a REJECT-rate threshold breach affecting this object's batch
+soa_confidence
+Reflects whether this object's system-of-authority assignment is SOF_RULE_AUTOMATIC (high) or still pending resolution (lower, per EIS-001 Table EIS-C9.1's CEP-pending -15% rule)
+−0.15 if an SOA assignment for this object type is still pending human resolution
+Table BIS3-13.1 — Confidence breakdown components. The final confidence field is not a fixed formula computed by this service — it is set by the writer (typically following the IMS-001 Section 7.3 capability-aggregation-adjacent per-object formula) and this service stores it verbatim, along with the breakdown that explains it.
+ 
+Section 14 — Read APIs
+The engine-level behavior underlying every GET endpoint in Section 4 — consistency guarantees and caching decisions that apply uniformly across the read surface, distinct from the per-endpoint contracts already specified.
+ 
+Property
+Specification
+Consistency model
+Read-after-write consistent for the same customer_id within a single Postgres primary — a read immediately following a write from the same or a different service always sees that write, since there is no read replica lag in the MVP deployment (Section 23)
+Merged object redirection
+Every read of a MERGED-status object transparently redirects to its surviving object (Section 11.2) — callers never need to check status before reading and separately resolve a merge chain themselves
+Default exclusions
+MERGED, ARCHIVED, and REJECTED objects are excluded from default list/filter reads (GET /canonical-objects) unless the caller explicitly requests include_archived=true — this keeps the default read surface clean for the overwhelmingly common case of "give me the active data"
+Caching
+No caching layer at MVP — every read hits Postgres directly. This is a deliberate simplicity choice for MVP; Section 22 performance targets are set assuming no cache, and the deployment model (Section 23) revisits this only if load data justifies the added complexity
+Pagination
+Cursor-based (not offset), matching the pattern established in BIS-001 Section 10.1 for consistency across services — default page size 100, max 1,000
+Table BIS3-14.1 — Read API engine behavior.
+ 
+Section 15 — Write APIs
+Every write endpoint (single create, bulk-upsert, merge, SOA assign, relationship create) passes through the same five-stage pipeline before touching Postgres.
+ 
+WRITE PIPELINE (applies to every write endpoint):
+  STAGE 1 — Input validation:
+    Request envelope shape check (required fields present, types correct)
+    → INVALID_INPUT if malformed
+  STAGE 2 — Schema Registry validation (canonical object writes only):
+    canonical_payload validated against the object_type's registered schema
+    → VALIDATION_FAILED with specific field errors if non-conforming
+  STAGE 3 — Identity/uniqueness check:
+    normalized_key computed (Section 1.8); UNIQUE constraint evaluated
+    → DUPLICATE_OBJECT if an ACTIVE object already claims this key and no
+      merge intent is signaled (this is a create-vs-update disambiguation,
+      not necessarily an error — the caller typically retries as an update)
+  STAGE 4 — Authorization check:
+    Caller's service identity scope validated against the requested
+    operation (Section 21) — e.g., only the Canonical Worker's identity
+    may call the merge endpoint in the identity-confirmation-triggered path
+  STAGE 5 — Persist:
+    Postgres write, wrapped in a transaction that includes the
+    corresponding canonical_object_versions insert when a version
+    trigger (Table BIS3-12.1) applies — both writes succeed or both fail,
+    never a partial state where a payload changes without a version record
+ 
+Section 16 — Query Patterns
+Pattern
+Endpoint
+Index Used
+Get all canonical customers for a customer
+GET /canonical-objects?customer_id=X&object_type=CustomerAccount
+(customer_id, object_type) composite index
+Get canonical object by source reference
+GET /source-references/{system}/{type}/{id}
+UNIQUE index on (customer_id, source_system, source_connector_id, source_object_type, source_object_id)
+Get all relationships for an object
+GET /canonical-relationships?from_object_id=X (or to_object_id=X)
+Composite index on (from_object_id, relationship_type) and (to_object_id, relationship_type)
+Get all objects created by a session
+GET /canonical-objects?customer_id=X&created_from_session_id=Y
+Index on (customer_id, created_from_session_id)
+Get all tentative matches awaiting review
+GET /identity-resolution/pending?customer_id=X
+Index on (customer_id, status) WHERE status='PENDING'
+Get all objects with confidence below threshold
+GET /canonical-objects?customer_id=X&confidence_lt=0.70
+Index on (customer_id, confidence) — a partial index WHERE confidence < 0.80 keeps this fast without indexing the full high-confidence majority
+Get all objects from a specific connector
+GET /canonical-objects?customer_id=X&source_connector_id=IMS-001
+Requires a join through source_references, or a denormalized array field on canonical_objects populated from source_system_refs for this specific fast-path query — MVP uses the denormalized array with a GIN index
+Get all objects impacted by a merge
+GET /canonical-objects/{id}/merge-history
+Index on merge_history(surviving_object_id) and merge_history(merged_object_id) via a GIN index on the merged_object_ids array
+Table BIS3-16.1 — Common query patterns and their backing indexes. Every pattern in the build brief's list is addressed with a specific, named index — no query pattern in this table relies on an unindexed sequential scan at customer scale.
+ 
+Section 17 — Error Handling
+This service introduces three error codes beyond the base EIS-001 taxonomy — DUPLICATE_OBJECT, IDENTITY_CONFLICT, SOA_CONFLICT — because canonical storage has failure modes no other BIS document's error surface needs to express.
+ 
+Error Code
+Meaning
+Response
+INVALID_INPUT
+Malformed request envelope
+Reject synchronously; no partial write ever occurs
+PERMISSION_ERROR
+Caller's service identity lacks scope for this operation (Section 21)
+Reject synchronously
+VALIDATION_FAILED
+canonical_payload fails Schema Registry validation
+Reject with the specific field(s) and reason(s) — for bulk-upsert, this rejects only the specific failing objects, not the batch (Table BIS3-4.2)
+DUPLICATE_OBJECT
+A create request's computed normalized_key already matches an ACTIVE object, with no merge intent
+Reject the create; caller retries as an update or investigates why it expected a create
+IDENTITY_CONFLICT
+A merge request references an object already MERGED elsewhere (merge chain attempted)
+Reject; caller must unmerge the prior chain first — no automatic chain resolution
+SOA_CONFLICT
+An SOA assignment request conflicts with an existing ACTIVE assignment for the same object_type/field_path
+Reject the new assignment; routed per Section 1.11 to BIS-002's SYSTEM_OF_AUTHORITY_DISPUTE human task
+NOT_FOUND
+Referenced object_id, relationship_id, candidate_id, or assignment_id does not exist (or is excluded by default read filtering — Section 14)
+Standard 404-equivalent
+INTERNAL_ERROR
+This service's own Postgres or Schema Registry failure
+Retried per Section 18, then escalated
+Table BIS3-17.1 — Error handling.
+ 
+Section 18 — Retry Strategy
+Rule
+Specification
+Writes are idempotent by idempotency_key
+Every create/update endpoint (Table BIS3-4.1, 4.2) accepts and requires an idempotency_key; retry with the same key is always safe and returns the original result, never a duplicate
+Bulk upserts are safely retryable
+Per-object rejection (Table BIS3-4.2) means a partially-failed batch can be corrected and resubmitted for only the failing entries — the caller never needs to re-derive which subset succeeded, since rejected[] names them explicitly by index
+Merge/unmerge is idempotent with merge_operation_id
+Retry of the same merge_operation_id returns the original outcome without re-executing survivorship logic a second time — critical since re-running survivorship computation on an already-merged state would be nonsensical
+Source reference creation rejects duplicates deterministically
+No retry logic is needed here because the operation is not meant to be retried on conflict — a duplicate source reference attempt (Section 4.2) signals a caller-side logic error (attempting to re-link an already-linked record) more often than a transient condition
+Internal Postgres errors retry internally then escalate
+Linear backoff: 30s, 30s, 30s (3 attempts), matching the pattern established in BIS-001 and BIS-002 for consistency; pages on-call after exhaustion
+Table BIS3-18.1 — Retry strategy.
+ 
+Section 19 — Logging
+event_type
+Emitted When
+Notes
+CANONICAL_OBJECT_CREATED
+New object persisted
+Includes confidence_after; confidence_before is null
+CANONICAL_OBJECT_UPDATED
+Existing object payload changed
+Includes both confidence_before and confidence_after
+CANONICAL_OBJECT_VERSIONED
+A canonical_object_versions row is written
+Includes the change_reason from Table BIS3-12.1
+SOURCE_REFERENCE_LINKED
+A new source_references row created
+Includes source_system, source_object_id
+RELATIONSHIP_CREATED
+New canonical_relationships row
+Includes relationship_type
+RELATIONSHIP_ARCHIVED
+A relationship is soft-deleted
+—
+IDENTITY_CANDIDATE_CREATED
+A new identity_resolution_candidates row
+Includes match_type, match_score
+IDENTITY_CANDIDATE_CONFIRMED
+A candidate is confirmed, auto or human
+Includes reviewed_by
+IDENTITY_CANDIDATE_REJECTED
+A candidate is rejected
+Includes decision_reason
+CANONICAL_OBJECT_MERGED
+A merge operation completes
+Includes merge_operation_id, surviving_object_id, merged_object_ids
+CANONICAL_OBJECT_UNMERGED
+An unmerge operation completes
+Includes the original merge_operation_id being reversed
+SOA_ASSIGNED
+A new SOA assignment is created
+Includes authoritative_system
+SOA_CONFLICT_DETECTED
+An assignment request conflicts with an existing one
+Emitted in addition to, not instead of, the SOA_CONFLICT error response
+LOW_CONFIDENCE_OBJECT_FLAGGED
+An object's confidence drops below a configured threshold (default 0.40) as a result of any write
+Feeds the Section 27 low-confidence dashboard; not itself a rejection or error
+Table BIS3-19.1 — Log event types. Every event includes request_id, customer_id, object_id, object_type, source_system, source_object_id, session_id, job_id, actor_type, actor_id, confidence_before, confidence_after, and timestamp per the build brief's field list.
+ 
+Section 20 — Metrics
+Metric Name
+Type
+Labels
+Purpose
+canonical_objects_total
+Counter
+object_type, status
+Object volume and status distribution
+canonical_object_upserts_total
+Counter
+object_type, status (created\|updated\|rejected)
+Write throughput and rejection rate — a rising rejected rate for one object_type is the first signal of an upstream IMS or Schema Registry mismatch
+canonical_relationships_total
+Counter
+relationship_type
+Relationship volume by type
+canonical_identity_candidates_total
+Counter
+object_type, match_type
+Candidate generation volume, broken down by which match type is producing them — informs where matching logic quality investment is most valuable
+canonical_identity_auto_confirm_rate
+Gauge (computed)
+object_type
+Ratio of AUTO_CONFIRM to total candidates — the production analog of GPES-001's 86.3% reference figure, tracked per connector combination over time
+canonical_identity_human_review_rate
+Gauge (computed)
+object_type
+Ratio of HUMAN_REVIEW_REQUIRED-band candidates — a rising rate suggests either genuinely ambiguous customer data or a matching threshold that needs tuning (Section 24)
+canonical_merge_operations_total
+Counter
+trigger (identity_confirm\|explicit)
+Merge volume by trigger source
+canonical_unmerge_operations_total
+Counter
+—
+Unmerge volume — a non-trivial rate here is itself a signal worth investigating, since it suggests either auto-confirm thresholds are too aggressive or explicit merges are being made in error
+canonical_low_confidence_objects_total
+Counter
+object_type
+Cumulative count of LOW_CONFIDENCE_OBJECT_FLAGGED events
+canonical_soa_conflicts_total
+Counter
+object_type
+SOA conflict frequency — feeds the same dashboard as BIS-002's human task metrics, since every conflict here becomes a human task there
+canonical_write_latency_seconds
+Histogram
+object_type, endpoint
+Single-write latency distribution
+canonical_read_latency_seconds
+Histogram
+endpoint
+Read latency distribution
+canonical_bulk_upsert_duration_seconds
+Histogram
+object_type, batch_size_bucket
+Bulk write performance — the primary input to validating the Section 22 30-second/10,000-record target
+Table BIS3-20.1 — Canonical Platform metrics.
+ 
+Section 21 — Security
+Control
+Implementation
+Internal-only service
+Not reachable from the public internet; callable only by the Tool Gateway and approved worker service identities, matching BIS-001 and BIS-002's network isolation model exactly
+Customer isolation by customer_id
+Every table in Section 4.8 carries customer_id; Postgres row-level security enforces that a request scoped to customer A can never read or write customer B's canonical_objects, source_references, canonical_relationships, identity_resolution_candidates, or system_of_authority_assignments rows — matching the pattern established in EIS-004 Section 8.1
+Role-scoped endpoint access
+Merge, unmerge, and SOA-assign operations require an elevated service-identity scope beyond standard read/write — a Connector Worker's identity can bulk-upsert but cannot call merge directly (only the Canonical Worker's identity, executing identity-confirmation-triggered merges, can)
+No raw credentials
+This service has no relationship to connector credentials whatsoever — it never receives a credential_reference_id in any request
+No direct customer system access
+This service has no network path to any external connector API — it only ever writes what a Connector Worker or Canonical Worker has already transformed
+Source payload hashes only
+source_references stores source_payload_hash (SHA-256), never the raw vendor record — satisfying Section 1.5's immutability intent without duplicating potentially sensitive customer data into a second storage location
+PII field handling
+canonical_payload may contain PII (names, emails) as legitimate canonical business data — this is expected and different from BIS-001/BIS-002's stricter no-PII-in-logs stance; PII appears in canonical_payload by design, but never in log output_summary fields (Section 19 events reference object_id and field-level metadata, never payload content)
+Audit log requirements
+Every write produces a log event (Section 19) with confidence_before/after and actor identity — the full history of every canonical object is reconstructable from logs independent of the current Postgres row, matching BIS-002's auditability standard
+Merge/unmerge permission restrictions
+Restricted to the Canonical Worker's service identity for automatic (identity-confirmation-triggered) merges, and to Implementation-Consultant-authenticated requests (routed through the Tool Gateway with human-actor context, not a bare worker identity) for explicit merges — a Connector Worker or Reporting Worker identity can never call merge under any circumstance
+Table BIS3-21.1 — Security controls.
+ 
+Section 22 — Performance Targets
+Metric
+Target
+Notes
+Single object upsert (p95)
+< 100ms
+Includes Schema Registry validation and version-trigger evaluation
+Bulk upsert, 10,000 records (p95)
+< 30 seconds
+Approximately 3ms/record average, achievable via batched Postgres inserts rather than row-by-row transactions
+Source reference lookup (p95)
+< 50ms
+Single indexed lookup — the highest-frequency read pattern (Connector Workers checking for existing mappings before every bulk-upsert)
+Identity candidate generation, 10,000 records (p95)
+< 2 minutes
+The most computationally intensive operation in this service — bounded primarily by the number of existing objects each new object must be compared against, not raw record count alone
+Relationship query (p95)
+< 200ms
+Indexed lookup with typical result sets in the tens to low hundreds of rows
+Merge operation (p95)
+< 500ms
+Includes pre-merge snapshot capture, repointing, and confidence recalculation — the most write-heavy single operation in this service, hence the higher target than simple upserts
+Concurrent customers (MVP target)
+50
+Matches BIS-002 Section 20's equivalent target — the platform scales together
+Concurrent canonical write jobs (MVP target)
+100
+Higher than BIS-002's 500-concurrent-jobs figure divided across worker types, reflecting that canonical writes are the highest-volume single category of job activity
+Table BIS3-22.1 — Performance targets.
+ 
+Section 23 — Deployment Model
+Property
+Specification
+Runtime
+FastAPI (Python), matching BIS-001 and BIS-002
+Deployment unit
+Single containerized service, horizontally scaled by replica count
+Network exposure
+Internal-only, matching BIS-001/BIS-002 Section 19/21
+State
+Stateless application tier; Postgres is the sole source of truth — no local caching (Section 14), no session affinity required
+Storage
+Postgres with JSONB payload columns (Section 1.4) plus typed B-tree indexes on customer_id, object_type, normalized_key, and GIN indexes on array/JSONB fields used in Section 16 query patterns
+Scaling trigger
+Horizontal autoscale on bulk-upsert request rate and identity candidate generation queue depth
+Resource profile (per replica, starting point)
+4 vCPU, 8GB RAM — higher than BIS-001/BIS-002's starting profile because Schema Registry validation and identity matching (Section 10.3) are more CPU-intensive than the largely I/O-bound work in those services
+Background processing
+Identity candidate generation runs synchronously within the request (Section 1.10) at MVP — no separate background worker pool is deployed for this service; the Section 29 backlog background re-scan capability would introduce one
+Health checks
+Liveness: GET /v1/health, 10s interval. Readiness: same endpoint, gates traffic until Postgres reports healthy and the Schema Registry has successfully loaded.
+Table BIS3-23.1 — Deployment model.
+ 
+Section 24 — Configuration
+ 
+24.1 Schema Registry Configuration
+One JSON Schema document per SCBM object_type, version-controlled and loaded at startup, per Section 1.7. Each entry additionally carries the object_type's normalization function reference (Section 1.8) and its version-trigger confidence-change threshold (Table BIS3-12.1, default 0.05, overridable per object_type).
+ 
+24.2 Identity Resolution Threshold Configuration
+identity_thresholds.yaml (loaded at startup; hot-reloadable without a full
+ redeploy, unlike the Schema Registry, since threshold tuning is expected
+ to happen more frequently than schema changes):
+  default:
+    auto_confirm_min: 0.95
+    tentative_min: 0.70
+    human_review_min: 0.40
+  overrides:
+    CustomerAccount:
+      auto_confirm_min: 0.95   # can be tuned per object_type if
+                                 # observed false-positive rates differ
+ 
+24.3 Environment Variables
+Variable
+Purpose
+DATABASE_URL
+Postgres connection string
+SCHEMA_REGISTRY_CONFIG_PATH
+Path to the versioned Schema Registry documents
+IDENTITY_THRESHOLDS_CONFIG_PATH
+Path to identity_thresholds.yaml
+LOW_CONFIDENCE_ALERT_THRESHOLD
+Default 0.40, per Section 19's LOW_CONFIDENCE_OBJECT_FLAGGED trigger
+BULK_UPSERT_MAX_BATCH_SIZE
+Default 5,000, per Section 1.9
+LOG_LEVEL
+INFO for production, DEBUG for development
+Table BIS3-24.1 — Environment configuration.
+ 
+Section 25 — Unit Testing
+Component
+Test Focus
+Example Test Cases
+Canonical Write Coordinator
+Create/update correctness, idempotency
+A create with a duplicate normalized_key correctly returns DUPLICATE_OBJECT; the same idempotency_key submitted twice returns the identical object_id both times
+Bulk upsert
+Idempotency and partial-batch handling
+A batch of 100 with 3 intentionally invalid entries returns exactly 97 created_count and 3 entries in rejected[] with correct indices; resubmitting the same batch with the same idempotency_key does not create duplicates for the 97 successful entries
+Source Reference Model
+Immutability enforcement
+Attempting to create a second source_references row for an already-linked {source_system, source_connector_id, source_object_id} tuple is rejected, not silently updated
+Relationship Model
+Create/archive correctness
+A relationship spanning two different customer_id objects is rejected at creation; DELETE sets archived_at rather than removing the row
+SOA Assignment
+Conflict detection
+Two assignment requests for the same object_type + field_path with different authoritative_system values: the second correctly returns SOA_CONFLICT, not a silent overwrite
+Identity Resolution Engine
+Match scoring correctness per Table BIS3-10.1
+EXACT match produces score 1.00; a COMPOSITE_KEY combination of two 0.6 signals produces 1-(0.4×0.4)=0.84, not a naive average of 0.6
+Auto-confirm threshold
+Band boundary correctness
+A candidate at exactly 0.95 is AUTO_CONFIRM; a candidate at 0.9499 is TENTATIVE — boundary conditions tested explicitly, not just interior values
+Human-review threshold
+Band boundary correctness
+A candidate at exactly 0.40 is HUMAN_REVIEW_REQUIRED; below it, no candidate is created at all
+Merge Engine
+Survivorship and reversibility
+A merge with no explicit surviving_object_id correctly selects by confidence-then-source-count-then-recency; a subsequent unmerge exactly restores the pre-merge canonical_payload of every merged object, byte-for-byte against the PRE_MERGE_SNAPSHOT version
+Version creation
+Trigger correctness per Table BIS3-12.1
+A payload change creates a version; a confidence change of 0.02 (below the 0.05 threshold) does not; a confidence change of 0.06 does
+Lineage preservation
+Full trace reconstruction
+Given a canonical object with 3 versions and 2 source references (one HISTORICAL), the full lineage trace correctly reconstructs session_id/job_id for every version and both the current and historical source mapping
+Table BIS3-25.1 — Unit test coverage by component.
+ 
+Section 26 — Integration Testing
+Scenario
+Verification
+GPES-001 canonical population (full reference trace)
+NetSuite, HubSpot, Stripe, and Rippling bulk-upsert calls produce the ~27,000 canonical records from GPES-001 Table GPES-S5.1; final object counts and status distribution match the reference trace's expectations
+NetSuite / HubSpot / Stripe customer account linking
+Three bulk-upserts (one per connector) for the same underlying customer, with matching emails, correctly produce a single ACTIVE Customer Account object_id with three source_references rows, reaching AUTO_CONFIRM via NORMALIZED_EMAIL — reproducing GPES-001's 86.3% match rate scenario at the unit-of-work level
+Stripe subscription to customer relationship
+A Subscription canonical object correctly creates a SUBSCRIPTION_BELONGS_TO_CUSTOMER relationship to the correct, already-identity-resolved Customer Account
+HubSpot opportunity to Stripe subscription relationship
+Verifies the derived, cross-domain relationship type (Table BIS3-7.1) is created with appropriately lower confidence than the direct structural relationships
+Rippling employee to department relationship
+A direct, structural relationship reaching D-H confidence, contrasted against the derived Opportunity-Subscription case above
+Duplicate customer merge
+Two Customer Account objects with a TENTATIVE-band match, explicitly confirmed by a human — verifies the full merge flow including relationship repointing and confidence recalculation
+Rejected identity candidate
+A candidate explicitly rejected remains as two separate ACTIVE objects; a subsequent candidate generation run for the same pair (simulating new evidence) is not suppressed by the prior rejection
+Source reference reassignment
+A source record's canonical mapping changes (e.g., corrected after a data quality fix); verifies the prior source_references row moves to mapping_status=HISTORICAL rather than being deleted or overwritten
+SOA field-level override
+An object-type-level SOA assignment (e.g., ERP for the whole GL Account type) coexists correctly with a field-path-level override for one specific field, and downstream reads correctly resolve which applies per field
+Low-confidence object flagging
+A bulk-upsert with several objects below the 0.40 threshold produces the correct LOW_CONFIDENCE_OBJECT_FLAGGED events and populates the Section 27 dashboard-backing query correctly
+Table BIS3-26.1 — Integration test scenarios, directly traced against GPES-001's reference implementation and extending BIS-001/BIS-002's test suites to the canonical storage layer.
+ 
+Section 27 — Observability
+ 
+27.1 Dashboards
+Canonical object volume by type — total counts and status distribution, per customer and platform-wide
+Canonical write throughput — bulk-upsert and single-write rates, correlated against BIS-001's extraction batch rate to confirm the two services' throughput stays matched (per the Section 1.9 batch-size alignment decision)
+Identity match rate — the production analog of GPES-001's 86.3% reference figure, tracked per connector pair and object_type over time, feeding EIS-004's Connector Memory generalization pipeline with real observed match-quality data
+Merge rate — merges per session, correlated against session connector count, to catch anomalies (an implementation producing far more merges than typical for its connector combination warrants investigation)
+Low-confidence object rate — by object_type and connector, the earliest operational signal of an IMS or Connector Proxy Service quality regression
+SOA conflict count — by object_type, cross-referenced against BIS-002's human task dashboard for the same conflicts
+Source reference lookup latency — the highest-frequency read pattern; latency creep here directly slows every Connector Worker's bulk-upsert decision logic
+Bulk upsert duration — by object_type and batch size, validating the Section 22 performance targets continuously in production, not just at test time
+ 
+27.2 Alerts
+Alert
+Threshold
+Severity
+Bulk upsert failure rate above threshold
+rejected_count / total_count > 5% for any single bulk-upsert call
+Warning — likely an upstream IMS/Schema Registry mismatch, not a data quality issue per se
+Identity candidate backlog aging
+Any candidate in HUMAN_REVIEW_REQUIRED or TENTATIVE band unresolved for > 5 business days
+Warning
+SOA conflict rate spike
+canonical_soa_conflicts_total rate > 3x the trailing 7-day average
+Warning
+Low-confidence object spike
+canonical_low_confidence_objects_total rate > 3x the trailing 7-day average for any object_type
+Warning
+Postgres latency
+p95 write or read latency exceeding Section 22 targets by more than 2x for 5 consecutive minutes
+Critical
+Customer row-level isolation violation attempt
+Any query execution plan or application-layer check indicating an attempted cross-customer_id access (Section 21)
+Critical — pages on-call immediately regardless of whether the attempt succeeded, since the attempt itself indicates either a bug or a security probe
+Table BIS3-27.1 — Alerting thresholds.
+ 
+Section 28 — Failure Recovery
+Failure
+Immediate Effect
+Recovery Behavior
+Postgres unreachable
+All reads and writes fail with INTERNAL_ERROR — hard dependency, matching BIS-001/BIS-002
+Fail closed, no workaround. This service holds no application-layer cache of durable state, so recovery is automatic and complete once Postgres returns — no reconciliation step is needed.
+This service crashes or is redeployed mid-request
+In-flight requests fail; callers receive a connection error
+Stateless design (Section 23) means any replacement replica serves the next request identically. A bulk-upsert interrupted mid-batch is safely retried in full by the caller using the same idempotency_key (Section 18) — the caller does not need to know which subset of the batch was persisted before the crash, since a full retry correctly no-ops the already-persisted entries.
+Concurrent write race on the same normalized_key
+Two callers simultaneously attempt to create an object for the same identity
+Resolved by the Postgres UNIQUE constraint (Table BIS3-4.8 schema note) — one write succeeds, the other receives DUPLICATE_OBJECT and is expected to retry as an update or investigate; this is a correctness guarantee at the database layer, not application-layer locking, so it holds even under this service's horizontally-scaled multi-replica deployment.
+Merge operation fails partway through the pipeline (Section 11.1)
+Partial repointing could theoretically leave relationships or source references in an inconsistent state
+The full merge pipeline (Steps 2–7) executes inside a single Postgres transaction — any failure at any step rolls back the entire operation, leaving all objects in their pre-merge state exactly as if the merge had never been attempted; there is no partial-merge state that can persist.
+Schema Registry fails to load at startup
+Service fails readiness checks and does not receive traffic
+This is treated as a deployment-blocking condition, not a runtime failure to recover from — the CI/CD pipeline's readiness gate (Section 23) prevents a replica with a broken Schema Registry from ever serving requests.
+Table BIS3-28.1 — Failure recovery by dependency and failure type.
+ 
+Section 29 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+Typed projection tables for high-volume reporting
+Physical, typed Postgres tables for specific object_types (e.g., a dedicated gl_transactions table) rather than the generic JSONB store, for query patterns where JSONB indexing proves insufficient at scale
+Section 22 performance targets are consistently missed for a specific high-volume object_type despite index tuning
+Graph database for relationship traversal
+A dedicated graph store (e.g., Neo4j) for multi-hop relationship queries that the current canonical_relationships table + application-layer traversal handles adequately at MVP scale but would not at significantly higher relationship density
+Query patterns requiring 3+ hop traversal become common and current latency is inadequate
+Vector-assisted fuzzy matching
+Replace or augment the edit-distance FUZZY_NAME matching (Section 10.1) with embedding-based similarity for names and addresses that edit distance handles poorly (e.g., legitimate abbreviations, transliterations)
+Identity match quality metrics (Section 27) show FUZZY_NAME as a disproportionate source of false negatives
+Customer-facing identity resolution UI
+Expose the pending identity candidates queue (Section 4.4) directly to customers for self-service review, rather than exclusively through the Implementation Consultant
+Customer feedback indicates a desire for direct visibility/control over identity decisions
+Merge recommendation engine
+Proactive suggestion of merge candidates beyond the session-scoped generation (Section 1.10), using patterns observed across the full Implementation Pattern Library (EIS-004 Section 1.2)
+Sufficient implementation volume accumulates to make cross-customer pattern-informed suggestions statistically meaningful — analogous to EIS-004's own 5-implementation minimum for pattern promotion
+Canonical object replay
+The execution engine referenced in Section 12.3 — reconstructing historical canonical state at any point in time
+A concrete use case (compliance audit, debugging a confidence regression) makes replay valuable enough to justify building the query engine
+Event sourcing
+A more fundamental architectural shift from the current version-table approach to full event sourcing, where canonical state is always derived from an immutable event log rather than stored directly
+The current versioning model (Section 12) proves insufficient for a specific auditability or replay requirement that projection-table-based replay cannot satisfy
+Warehouse sync
+Direct, scheduled replication of canonical objects to a customer-facing or SMPL-internal data warehouse for analytics beyond what this service's own query patterns (Section 16) support
+Analytics or BI use cases emerge that are poorly served by this service's operational-store-optimized schema
+Table BIS3-29.1 — Backlog. Matches the pattern established in BIS-001 Section 25 and BIS-002 Section 27: every item has an explicit trigger condition, not a target date.
+ 
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+API completeness
+10 / 10
+All 24 endpoints specified; the 7 endpoints with real branching logic (create, bulk-upsert, candidate generation, confirm, merge, unmerge-adjacent, SOA assign) receive full detail tables, and the remaining 17 are captured completely in compact summary tables.
+Data model completeness
+10 / 10
+All six Postgres schemas fully specified with types, constraints, and the UNIQUE constraints that enforce the identity-determinism and immutability guarantees Sections 1.5, 1.6, and 1.8 depend on.
+Consistency with BIS-001/BIS-002 and GPES-001
+10 / 10
+The batch-size alignment with BIS-001 (1.9), the SOA conflict routing into BIS-002's existing human task type (1.11), and the identity resolution algorithm traced directly against GPES-001's 86.3% reference figure throughout (Sections 8, 10, 26, 27) all demonstrate this document was built as an extension of the existing specification set, not in isolation.
+Identity resolution and merge precision
+10 / 10
+The match-type scoring table, confidence bands, candidate generation algorithm, and merge/unmerge pipelines are specified at pseudocode-level precision — the exact level needed to implement deterministic, testable identity resolution rather than an approximate description of intent.
+Testability
+9 / 10
+Unit and integration tests cover every component and explicitly test boundary conditions (exact threshold values, not just interior cases) for the identity resolution bands — the highest-risk logic in this service. One point withheld: concurrent-write race testing under horizontal scaling (Section 28's UNIQUE-constraint guarantee) is described but not enumerated as an explicit load-test scenario in Section 26.
+Table BIS3-FA.1 — Build readiness assessment. Aggregate: 49 / 50 (98%).
+ 
+BIS-003 is complete and ready for engineering to begin implementation. Together, BIS-001, BIS-002, and BIS-003 specify the three services that carry an implementation from external data through orchestration to durable canonical storage — the complete write path GPES-001 traces end to end. CAL Service and Reporting Service remain as natural next BIS documents, each reading from what BIS-003 stores rather than introducing new storage of their own.
+ 
+The most consequential design decision in this document is Section 1.8 — normalized_key computed by this service, never accepted from the caller. Without that resolution, two Connector Workers writing what should be the same canonical Customer Account from different connectors could easily compute their own, inconsistent keys, silently defeating identity resolution before it ever runs. Making key computation this service's exclusive responsibility, driven by a per-object_type registered function rather than caller-supplied logic, is what makes the 86.3% match rate in GPES-001 a property of the platform's design rather than a coincidence of how one implementation happened to be extracted.
+ 

@@ -1,0 +1,300 @@
+FIE-BUILD-006
+PERFORMANCE & SCALABILITY
+Version 1.0
+How the platform scales while preserving every architectural guarantee established throughout ABS, BIS, FIE, and the BUILD series
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — PERFORMANCE & SCALABILITY HANDBOOK
+A faster incorrect answer is a regression. Performance is never measured independently of correctness, determinism, explainability, evidence, confidence, and auditability.
+Purpose and Authority
+FIE-BUILD-001 established what gets built. FIE-BUILD-002 established how engineers build it. FIE-BUILD-003 established how services integrate. FIE-BUILD-004 established how releases reach production. FIE-BUILD-005 established how production remains operational. This document establishes how the platform scales without compromising determinism, explainability, evidence, lineage, confidence, auditability, or customer trust — not simply how to increase throughput. It redefines nothing: ABS, BIS, FIE, and BUILD-001 through BUILD-005 remain authoritative. This document operationalizes performance engineering against everything they already guarantee.
+Scope
+This Document Owns
+This Document Does Not Own
+Performance Engineering, Scalability Strategy (Sections 1–2, 6)
+Platform Architecture — ABS/BIS/FIE remain authoritative
+Load Testing, Benchmarking (Section 12)
+Production Operations — FIE-BUILD-005
+Capacity Expansion, Throughput Planning (Sections 4, 14)
+Release Engineering — FIE-BUILD-004
+Resource Utilization, Database/Queue/Connector Scaling (Sections 7–9)
+Security — the future FIE-BUILD-007
+AI Workload Scaling (Section 11)
+Customer Implementations — FIE-BUILD-001 §4/§7, FIE-BUILD-003 §7
+Performance Certification (Section 13)
+This document extends FIE-BUILD-003's Capacity Expansion Guidelines and FIE-BUILD-005 §14's Capacity Management from decision points and ongoing practice into full scaling engineering — the deeper methodology both explicitly deferred.
+Section 1 — Performance Philosophy
+Correctness before speed — the same priority FIE-BUILD-004's Release Philosophy and FIE-BUILD-002's Engineering Philosophy both already establish for their own domains
+Determinism before optimization — FIE-003's Deterministic Core (FIE-BUILD-002 §1) is never traded for latency; an optimization that introduces even occasional non-determinism is rejected regardless of its speed gain
+Scale through architecture — horizontal scaling and caching (Section 6) extend the platform's existing service boundaries; scaling never means bypassing Canonical, Validation, or Orchestration to go faster, per FIE-BUILD-002's Dependency Direction Rules
+Predictability over peak benchmarks — a service that performs consistently at its Performance Targets is preferred over one with a higher peak but wider variance
+Customer trust over throughput — Scalability Gates (below) exist specifically so a throughput improvement is never shipped at trust's expense
+Section 2 — Scalability Model
+Infrastructure     (compute, storage, network — FIE-BUILD-003 §3)     ↓Platform           (the eleven services, scaling per FIE-BUILD-002 §9)     ↓Services           (per-service horizontal/vertical scaling, Section 6)     ↓Customers          (per-tenant load, isolated per FIE-BUILD-002 §10)     ↓Financial Objects  (Observations, FIOs — volume scaling, Section 10)     ↓Narratives         (FIE-005 output volume, Section 11)     ↓Evidence           (lineage and evidence packages — the most sensitive layer to scale without loss, Section 10)
+Each layer's scaling strategy is independent, but a change at a lower layer (e.g. database partitioning) must never silently change behavior observed at a higher layer (e.g. a Narrative's evidence trail) — this is the same Reference Instead of Copy and Immutability discipline (FIE-BUILD-002 §1) applied to the act of scaling itself.
+Section 3 — Performance Domains
+Domain
+Primary Concern
+Infrastructure
+Compute, memory, disk, network headroom, per FIE-BUILD-003 §3
+API
+Per-endpoint latency, per every owning spec's own Performance Targets section
+Workers
+Async job throughput, per FIE-BUILD-002 §9
+Database
+Query latency and write throughput at growing volume, per Section 7
+Storage
+Object storage growth and retrieval latency, per FIE-001 §17
+Queues
+Depth and processing latency, per Section 8
+AI
+LLM invocation latency and throughput, per Section 11
+Reporting
+Rendering and export latency, per BIS-006's own Performance Targets
+Customer Experience
+End-to-end perceived latency for a real user action
+Financial Intelligence
+Determinism, lineage, and evidence integrity under load — unique to this platform, per Section 10
+Section 4 — Capacity Model
+Growth assumptions this document plans against — extending FIE-BUILD-005 §14's ongoing capacity management practice with explicit modeled dimensions.
+Customers — active count and per-customer data volume
+Financial Concepts — count per customer, and growth as Industry Templates (FIE-002 §11) expand coverage
+Observations — volume per Financial Concept per customer, per FIE-001's own directional targets
+Methodologies — version count per customer as Addendum A restatement activity grows
+Financial Intelligence Objects — volume per Calculation Run, per FIE-003
+Narratives — volume per customer per Narrative Policy audience, per FIE-005
+Evidence Packages — assembled on read (FIE-003 §1.7) — the growth concern is query volume, not storage volume
+Connector traffic — per-domain, per-path (A/B/C) ingestion volume, per ABS-012
+Storage — Hot/Warm/Cold tier growth, per FIE-001 §17
+Historical archives — Cold-tier volume as customer tenure accumulates
+Section 5 — Performance Targets
+This document does not restate any service's own Performance Targets section — every FIE and BIS document already specifies its own p95 latency, throughput, and concurrency targets. This section names the categories those targets fall under, platform-wide, so a new service's Performance Targets section can be reviewed for completeness against a consistent checklist.
+Latency — per-endpoint, per each owning spec
+Throughput — requests or jobs processed per unit time
+Concurrency — simultaneous in-flight operations a service supports, per its own ceiling (FIE-BUILD-002 §9)
+Availability — per FIE-BUILD-005 §16's SLO/SLA
+Recovery — per FIE-BUILD-005 §12's RPO/RTO
+Queue time — per FIE-BUILD-003 §9's Queue Health domain
+Calculation duration — per FIE-003 §27
+Narrative generation — per FIE-005 §29
+Dashboard rendering — per BIS-006's own Performance Targets
+FIE-BUILD-001's own directional, platform-level Performance Targets section remains the aggregate reference point; per-service specs remain the authoritative node-level SLA, exactly as FIE-BUILD-002 §9 already established.
+Section 6 — Scaling Strategies
+Strategy
+Application
+Horizontal
+Stateless API layers and worker pools scale by adding instances, per FIE-BUILD-002 §9 — the default strategy wherever a service's design permits it
+Vertical
+Reserved for genuinely single-threaded bottlenecks that don't parallelize — the exception, not the default
+Partitioning
+High-volume tables partitioned by customer_id and time, per FIE-001 §25 — extended to any future table crossing comparable volume
+Caching
+Read-through caches only where a service's own spec explicitly permits one (e.g. FIE-002 §24's methodology resolution cache), per FIE-BUILD-002 §9's existing rule — never a generic cache-everything default
+Async execution
+Any operation exceeding roughly one second dispatches as a job, per FIE-BUILD-002 §9
+Queue fan-out
+Independent parallel branches (FIE-003's Graph Executor) dispatch concurrently, bounded per Calculation Profile, per FIE-003 §18
+Worker pools
+Sized and scaled independently per job type, per FIE-BUILD-003 §3
+Cold storage
+FIE-001 §17's Hot/Warm/Cold tiering — the primary lever for controlling storage cost as historical volume grows
+Archive strategy
+Cold-tier compressed detail plus reproducible Snapshot summaries, per FIE-001 §17 — never a lossy aggregation nobody can regenerate
+Section 7 — Database Scalability
+Partitioning — per FIE-001 §25, by customer_id and time, applied to every high-volume table as it emerges
+Indexes — every foreign key and every documented Query Pattern (each service's own Query Patterns section) has a supporting index before that endpoint ships, per FIE-BUILD-002 §8
+Retention — per each service's own retention policy, consistently enforced
+Archive — Cold-tier movement per FIE-001 §17, extended to any comparable future store
+Compression — applied at the Cold tier, never at Hot, where query latency matters most
+Append-only optimization — write-heavy, append-only tables (FIE-001 temporal_records, FIE-003 financial_intelligence_objects) are indexed for write throughput first, read patterns second, since they are written far more often per row than they are individually queried
+Historical storage — reproducible Snapshot summaries (FIE-001 §12) reduce the need to scan raw historical detail for common aggregate queries
+Section 8 — Queue Engineering
+Job prioritization — a SEV-1-triggered job (FIE-BUILD-005 §9) preempts routine batch work
+Concurrency — bounded per Calculation Profile (FIE-003 §12) and per queue type
+Back-pressure — a queue approaching its configured depth threshold slows acceptance of new low-priority work rather than growing unbounded
+Retry strategy — exponential backoff, per every service's own Retry Strategy section
+Dead-letter queues — per FIE-BUILD-002 §7, retained and alertable, never silently discarded
+Worker sizing — scaled per job type independently, per Section 6
+Queue monitoring — per FIE-BUILD-003 §9's Queue Health domain and FIE-BUILD-005 §4's Infrastructure Metrics
+Section 9 — Connector Scalability
+API rate limits — respected per external system, with backoff matching each connector's own documented limits
+Polling — used only where a source system offers no event-driven alternative
+Event-driven connectors — preferred where available, reducing unnecessary polling load as customer count grows
+Path A (CSV/Excel) — scales by upload volume and mapping-confirmation throughput, per ABS-012 §5
+Path B (Connector-native) — scales by API rate limit and per-domain connector count, per ABS-012 §1.2
+Path C (Hybrid) — scales as the sum of both, per customer, per ABS-012 §1.3
+Synchronization — incremental by default; a full resync is an explicit, rare operation, never the default refresh behavior
+Incremental loading — only changed records since the last successful sync are processed, per each connector's own extraction logic
+Section 10 — Financial Intelligence Scaling
+Unique to this platform. Every dimension below must scale without compromising determinism, lineage, evidence, or confidence — the four guarantees this entire document exists to protect, restated here at their most concentrated point.
+Scaling Dimension
+What Must Never Degrade
+Observations (FIE-001)
+Bi-temporal correctness and confidence persistence at any volume
+Methodologies (FIE-002)
+Version resolution correctness — a busier registry never resolves an as_of query incorrectly
+Calculation Runs (FIE-003)
+The determinism guarantee — byte-identical output for identical inputs, regardless of concurrent load, per FIE-003 §1.11
+Narratives (FIE-005)
+Fail-closed Verification — never relaxed to keep pace with generation volume
+Evidence Packages (FIE-003 §1.7)
+Full resolvability on demand — an evidence query never degrades to a partial or approximate answer under load
+Knowledge Objects (FIE-004)
+The no-duplication rule and evidence chain integrity, regardless of volume
+Operational Confidence (FIE-BUILD-005 §6)
+Accuracy of the composite signal — a scaling change never silently biases Operational Confidence upward by dropping a contributing metric
+Table F10.1 — Financial Intelligence scaling constraints. If a proposed optimization cannot honestly check every row in this table, it does not proceed, per Scalability Gates below.
+Section 11 — AI Scaling
+LLM throughput — scaled via provider-level capacity and, where available, batching compatible providers/models
+Prompt caching — cacheable only where FIE-005's own architecture permits (e.g. stable system-prompt segments); never applied to the evidence content itself, which must always reflect the actual current data
+Parallel reasoning — independent Reasoning Packages (FIE-005 §10) may generate concurrently; a single Reasoning Package's internal steps (Question Understanding → Evidence Assembly → Reasoning → Verification) remain sequential, per FIE-005's own architecture
+Model routing — per FIE-BUILD-002 §28's Multi-Model Support, llm_version is recorded on every Narrative regardless of which model served a given request, so routing for cost or latency never breaks auditability
+Cost optimization — routing to a cheaper model is permitted only where it does not change Verification pass rate or Operational Confidence, checked empirically, not assumed
+Narrative batching — multiple audience-specific Narratives for the same Reasoning Package may generate together, since the underlying reasoning is identical, per FIE-005's Narrative Policy model
+Verification scaling — parallelized across independent Narratives; never relaxed or sampled to keep pace with volume, per Section 10's guarantee above
+Section 12 — Performance Testing
+Test Type
+Purpose
+Benchmarking
+Establish a baseline for each Performance Domain (Section 3) against which regressions are measured
+Load Testing
+Verify behavior at expected production volume, per Section 4's capacity model
+Stress Testing
+Verify graceful degradation (never silent failure) beyond expected volume
+Spike Testing
+Verify behavior under sudden, short-duration load increases (e.g. a large batch CSV upload)
+Endurance Testing
+Verify no degradation or resource leak over sustained operation, particularly relevant to FIE-003's Graph Executor and FIE-005's Reasoning Engine
+Recovery Testing
+Verify performance returns to baseline after a load spike or partial failure, per FIE-BUILD-005 §12
+GPES Validation
+The platform's reference trace (FIE-BUILD-001 §9, FIE-BUILD-003 §6) run under load, not only at rest — a performance change must not silently break the reference trace's own correctness
+Every test type above sits on top of FIE-BUILD-002's Testing Pyramid — Performance Testing is not a sixth pyramid layer, it is load applied to the existing layers (particularly Integration and Golden Path) rather than a parallel test suite.
+Section 13 — Scalability Certification
+Before any production capacity expansion, all of the following must pass — the scaling-specific counterpart to FIE-BUILD-003 §13's Platform Certification.
+Performance — meets Section 5's targets at the new expected volume
+Correctness — output at scale matches output at current scale for identical inputs
+Determinism — FIE-003's guarantee holds under the new load profile, verified explicitly, not assumed from lower-volume testing
+Evidence — every Financial Evidence Package still fully resolves at the new volume
+Confidence — Section 10's four-dimensional confidence model shows no unexplained shift under load
+Lineage — full lineage resolution (FIE-BUILD-002 §17) verified at the new volume, not sampled
+Verification — FIE-005's fail-closed pass rate holds steady, not merely "acceptable" under the new load
+Certification is granted per capacity tier and customer cohort, the same per-cohort discipline FIE-BUILD-003 §13 already established for platform certification generally — a platform certified to scale for 100 customers is not automatically certified for 1,000.
+Section 14 — Capacity Forecasting
+Engineering growth — team capacity to build and maintain scaling infrastructure itself
+Storage growth — projected against FIE-001 §17's tiering and Section 7's archive strategy
+Connector growth — per-path (A/B/C) ingestion volume projected per ABS-012
+Customer growth — projected against FIE-BUILD-005 §14's ongoing capacity management practice
+Historical data growth — Cold-tier volume as tenure accumulates across the customer base
+AI consumption growth — LLM invocation volume and cost, projected against Section 11's scaling strategies
+Infrastructure costs — projected against Section 17's cost engineering
+Section 15 — Performance Dashboards
+Dashboard
+Audience
+Purpose
+Infrastructure
+Platform Operations
+Compute/storage/network headroom
+Platform
+All engineering
+Cross-service performance rollup, per FIE-BUILD-005 §5's Platform Health Dashboard
+Financial Engine
+Financial Intelligence Team
+Section 10's scaling constraints, tracked continuously
+Connector
+Integration Engineering
+Per-domain, per-path ingestion throughput
+Customer
+Customer Success
+Per-customer performance experience
+Operations
+Platform Operations
+Cross-references FIE-BUILD-005 §5 directly rather than duplicating it
+AI
+AI Engineering
+LLM throughput, cost, and Verification pass rate under load
+Executive
+Leadership
+Section 16's KPIs and Section 17's cost trends, aggregated
+Section 16 — Performance KPIs
+Complements, and does not duplicate, FIE-BUILD-005's Operational KPIs — those measure operational response; these measure scaling efficiency.
+Latency (p50/p95/p99, trended)
+Throughput
+Concurrency
+Utilization
+Cost per unit of throughput
+Scaling efficiency (cost/performance ratio as load grows)
+Calculation throughput (Financial Throughput, below)
+Narrative throughput
+Operational Confidence under load (does Section 10's guarantee hold as volume grows)
+Section 17 — Cost Engineering
+Cost Category
+Tracked Against
+Infrastructure cost
+Section 14's forecast
+Storage cost
+FIE-001 §17's tiering — Cold-tier cost efficiency is the primary lever
+AI cost
+Section 11's model routing and batching decisions
+Connector cost
+Per-path (A/B/C) ingestion cost, per ABS-012
+Customer cost
+Per-customer infrastructure cost, informing unit economics
+Unit economics
+Cost per customer against revenue, the ultimate business check on every scaling decision
+Optimization
+Never pursued in isolation from Section 13's certification — a cost reduction that fails Scalability Gates (below) does not ship regardless of savings
+Section 18 — Continuous Performance Improvement
+Telemetry              (Section 15–16)     ↓Benchmarking           (Section 12)     ↓Load Testing           (Section 12)     ↓Capacity Planning       (Section 4, 14)     ↓Architecture Review     ↓Engineering Backlog     ↓Platform Improvements
+This is the third continuous-improvement loop in the BUILD series, alongside FIE-BUILD-004 §19 (release-side) and FIE-BUILD-005 §20 (operations-side) — all three feed the same engineering backlog rather than competing for separate prioritization processes.
+Section 19 — Relationship to BUILD Series
+BUILD-005   Operations     ↓BUILD-006   Scalability   (this document)     ↓BUILD-007   Security
+Performance engineering extends operations. It never replaces it — every Section 10 scaling constraint is checked against guarantees FIE-BUILD-005 already monitors continuously (Operational Confidence, Financial Integrity), not a competing set of criteria.
+Performance Trust
+Optimization without preserving trust is a failed optimization, not a successful one with an acceptable tradeoff.
+A concept unique to this platform: performance improvements must never reduce Explainability, Lineage, Evidence, or Confidence. This is not a balancing consideration weighed against speed — it is a hard gate (Scalability Gates, below). A cache that serves stale evidence faster, a batching strategy that obscures which specific inputs produced a result, or a model-routing decision that degrades Verification pass rate are all, by this document's own definition, regressions dressed as improvements.
+Financial Throughput
+Platform throughput is tracked in financial units, not only infrastructure units — this is what makes performance meaningful to the business, not just to engineering.
+Observations/sec
+Calculation Runs/hour
+Narratives/hour
+Evidence Packages/hour (query volume, per Section 4)
+Customers onboarded/day
+Financial Concepts processed/hour
+A platform reporting "10,000 requests/second" says nothing to a CFO; a platform reporting "2,000 Calculation Runs/hour, each fully verified and evidenced" says everything this document's own trust principles care about.
+Scalability Gates
+Before any architecture change intended to improve performance is approved:
+Does this scale?
+Does this preserve determinism?
+Does this preserve lineage?
+Does this preserve evidence?
+Does this preserve explainability?
+Does this preserve confidence?
+Only once every question above is answered yes may the optimization proceed. This is the performance-specific extension of FIE-BUILD-004's Architecture Compliance Automation — the same mechanical, non-bypassable gate discipline, applied specifically to changes whose stated purpose is speed, since that is exactly the category of change most tempted to trade away a guarantee for a benchmark win.
+Performance Budget
+Every service defines an explicit budget across six dimensions — the engineering equivalent of a financial budget, reviewed with the same seriousness Section 17 gives to cost.
+Budget
+Constrains
+Latency Budget
+Maximum acceptable per-endpoint latency before a request is considered a Performance Target miss
+CPU Budget
+Per-instance compute ceiling before horizontal scaling (Section 6) is triggered
+Memory Budget
+Per-instance memory ceiling, particularly relevant to FIE-003's Graph Executor under large Execution Plans
+Storage Budget
+Per-service, per-tier (Hot/Warm/Cold) storage ceiling before archive policy (Section 7) is reviewed
+Queue Budget
+Maximum acceptable queue depth before back-pressure (Section 8) engages
+Cost Budget
+Per-service infrastructure cost ceiling, reviewed against Section 17's unit economics
+Table F.PB.1 — Performance budgets. A service exceeding its own budget is a capacity-review trigger (FIE-BUILD-005 §14, extended here), not a silent, unreviewed scale-up.
+Principal Software Architect Review
+Reviewed for whether scaling engineering preserves every trust guarantee established throughout the architecture, not only whether it improves throughput.
+1. Are Any Scalability Responsibilities Misplaced?
+No. This document extends, rather than duplicates, FIE-BUILD-003's Capacity Expansion Guidelines and FIE-BUILD-005 §14's Capacity Management — both remain correct at their own level of detail; this document is the deeper scaling methodology both explicitly deferred. Section 16's Performance KPIs are stated as complementary to, not a replacement for, FIE-BUILD-005's Operational KPIs.
+2. Does Any Content Belong in BUILD-007?
+Nothing in this document's core scaling methodology belongs in Security, Compliance & Governance — the two domains are genuinely independent
+One boundary worth naming: Section 9's connector scaling touches credential and rate-limit handling, which has a security dimension: FIE-BUILD-007 should reference this document's connector scaling model rather than redefine it, the same non-duplication discipline this series has applied at every prior boundary
+3. Does This Preserve Every Trust Guarantee Established Throughout the Architecture?
+Yes, by construction rather than by assertion. Section 10 names the four guarantees (determinism, lineage, evidence, confidence) at their most concentrated point and states explicitly what must never degrade for each scaling dimension. Scalability Gates makes those four guarantees, plus explainability, a mandatory checklist before any performance-motivated architecture change — not a value this document merely praises in its introduction and then leaves unenforced in its own mechanisms.
+4. Is BUILD-006 Ready to Become the Authoritative Performance & Scalability Handbook?
+Yes. Every one of the nineteen required sections plus all four additional recommendations (Performance Trust, Financial Throughput, Scalability Gates, Performance Budget) are present, every mechanism traces back to a specific guarantee already established in ABS/BIS/FIE or a prior BUILD document, and the one cross-document boundary worth watching (connector scaling's security dimension, relevant to FIE-BUILD-007) is named explicitly rather than left for that future document to rediscover. Recommend freezing FIE-BUILD-006 and proceeding to FIE-BUILD-007 (Security, Compliance & Governance) per the authoritative roadmap.

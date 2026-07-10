@@ -1,0 +1,444 @@
+﻿Reference: mda_deck_2026-06 v3.pptx (128,529 bytes, 11 slides)
+Recreated: mda_deck_2026-06_recreated.pptx (1,001,585 bytes, 11 slides)
+
+--- SLIDE 1 ΓÇö DIFFERENCES ---
+  shape count: ref=9 new=8
+
+--- SLIDE 2 ΓÇö DIFFERENCES ---
+  shape count: ref=51 new=54
+  text count: ref=37 new=42
+  text[1] ref: Executive Summary ΓÇö June 2026
+  text[1] new: Executive Summary
+  text[8] ref: $2.20M
+  text[8] new: $7.35M
+  text[12] ref: vs budget $84.89M (+0.5%)
+  text[12] new: Budget: $84.89M
+  text[13] ref: vs budget $2.32M (-4.8%)
+  text[13] new: Budget: $7.72M
+  text[14] ref: vs budget $31.46M (+54.0%)
+  text[14] new: Budget: $31.46M
+  text[15] ref: vs budget 70.0% (on target)
+  text[15] new: Budget: 70.0%
+  text[16] ref: vs budget $647.5K (+2.2%)
+  text[16] new: Budget: $647.5K
+  text[17] ref: PERIOD MATRIX
+  text[17] new: vs Budget: +$413.1K (+0.5%)
+  text[18] ref: KEY TAKEAWAYS
+  text[18] new: vs Budget: -4.8%
+  text[19] ref: 1. Ending ARR $85.31M beats budget by +$413K (+0.5%); ARR grew +2.2% MoM from $83.44M in May.
+  text[19] new: vs Budget: +$16.98M (+54.0%)
+  text[20] ref: 2. Revenue $2.20M trails budget by -4.8% CM; YTD revenue $11.51M vs $12.09M budget (-4.8%).
+  text[20] new: CM Actual
+  text[21] ref: 3. Cash $48.43M exceeds budget by +$16.98M (+54.0%); headroom $38.43M above $10M floor.
+  text[21] new: vs Budget: +$14.0K (+2.2%)
+  text[22] ref: 4. EBITDA $661.5K beats budget by +$14K (+2.2%); YTD EBITDA $3.87M ahead +$59K vs budget.
+  text[22] new: PERIOD MATRIX
+  text[23] ref: 5. FY ARR outlook $90.29M vs $96.10M budget (-6.0%); pipeline coverage 3.0x supports H2 plan.
+  text[23] new: KEY TAKEAWAYS
+  text[24] ref: YTD REVENUE
+  text[24] new: ΓÇó ARR reached $85.31M, +$413.1K vs budget ΓÇö expansion and new business tracking on plan.
+  text[25] ref: YTD EBITDA
+  text[25] new: ΓÇó Revenue $7.35M CM, -4.8% vs budget; YTD $39.45M reflects timing of recognition.
+  text[26] ref: FY ARR OUTLOOK
+  text[26] new: ΓÇó EBITDA $661.5K CM, +2.2% vs budget; YTD $3.87M ahead by +$59.1K.
+  text[27] ref: FY CASH EOY
+  text[27] new: ΓÇó Cash $48.43M, +$16.98M vs budget ΓÇö strong collections and payroll efficiency.
+  text[28] ref: $11.51M
+  text[28] new: ΓÇó FY ARR outlook $90.29M vs $96.10M budget; pipeline coverage at 3.0x requires H2 acceleration.
+  text[29] ref: $3.87M
+  text[29] new: YTD REVENUE
+  text[30] ref: $90.29M
+  text[30] new: YTD EBITDA
+  text[31] ref: $49.92M
+  text[31] new: FY ARR OUTLOOK
+  text[32] ref: Budget $12.09M
+  text[32] new: FY CASH EOY
+  text[33] ref: Budget $3.81M
+  text[33] new: $39.45M
+  text[34] ref: Budget $96.10M
+  text[34] new: $3.87M
+  text[35] ref: Budget $23.85M
+  text[35] new: $90.29M
+  text[36] ref: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 2/11
+  text[36] new: $49.92M
+  text only in new: Budget: $41.42M | Var: -4.8%
+  text only in new: Budget: $3.81M | Var: +1.6%
+  text only in new: Budget: $96.10M | Var: -6.0%
+  text only in new: Budget: $23.85M | Var: +109.3%
+  text only in new: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 2/11
+  table[0] ref: [['Metric', 'CM Actual', 'CM vs Bgt', 'QTD Actual', 'YTD Actual', 'YTD vs Bgt', 'FY Outlook'], ['Ending ARR', '$85.31M', '+0.5%', '$85.31M', '$85.31M', '+0.5%', '$90.29M'], ['Revenue', '$2.20M', '-4.8
+  table[0] new: [['Metric', 'CM Actual', 'QTD Actual', 'YTD Actual', 'FY Outlook', 'YTD vs Budget'], ['Ending ARR', '$85.31M', '$85.31M', '$85.31M', '$90.29M', '+0.5%'], ['Revenue', '$7.35M', '$21.05M', '$39.45M', '$
+
+--- SLIDE 3 ΓÇö DIFFERENCES ---
+  shape count: ref=29 new=33
+  text count: ref=21 new=25
+  text[1] ref: ARR Analysis ΓÇö June 2026
+  text[1] new: ARR Analysis
+  text[4] ref: Budget $84.89M +0.5%
+  text[4] new: Budget: $84.89M
+  text[5] ref: NET NEW ARR
+  text[5] new: Var: +$413.1K (+0.5%)
+  text[6] ref: $1.68M
+  text[6] new: NET NEW ARR
+  text[7] ref: Budget $1.77M
+  text[7] new: $1.68M
+  text[8] ref: EXPANSION
+  text[8] new: Budget: $1.77M
+  text[9] ref: $869.1K
+  text[9] new: Var: -$84.2K
+  text[10] ref: Budget $912.6K
+  text[10] new: EXPANSION
+  text[11] ref: CHURN
+  text[11] new: $869.1K
+  text[12] ref: $520.2K
+  text[12] new: Budget: $912.6K
+  text[13] ref: Budget $546.2K
+  text[13] new: Var: -$43.5K
+  text[14] ref: ARR BRIDGE
+  text[14] new: CHURN
+  text[15] ref: KEY TAKEAWAYS
+  text[15] new: $520.2K
+  text[16] ref: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 3/11
+  text[16] new: Budget: $546.2K
+  text[17] ref: 1. ARR $85.31M beats budget +$413K; MoM growth +2.2% from $83.44M in May 2026.
+  text[17] new: ARR BRIDGE
+  text[18] ref: 2. Churn $520.2K below budget $546.2K; G$R 99.4% indicates strong retention.
+  text[18] new: KEY TAKEAWAYS
+  text[19] ref: 3. New Business $1.68M slightly below $1.77M budget; pipeline coverage 3.0x.
+  text[19] new: Var: -$26.0K (favorable)
+  text[20] ref: 4. FY ARR outlook $90.29M vs $96.10M budget; H2 ramp required to close gap.
+  text[20] new: ΓÇó Ending ARR $85.31M, +$413.1K vs budget ΓÇö new business and expansion both near plan.
+  text only in new: ΓÇó Churn $520.2K vs $546.2K budget ΓÇö favorable by $26.0K; retention holding.
+  text only in new: ΓÇó G$R 99.4%; pipeline coverage 3.0x supports near-term ARR targets.
+  text only in new: ΓÇó FY ARR outlook $90.29M vs $96.10M budget ΓÇö H2 acceleration required.
+  text only in new: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 3/11
+  table[0] ref: [['Component', 'Actual', 'Budget'], ['Beginning ARR', '$83.44M', '$82.94M'], ['+ New Business', '$1.68M', '$1.77M'], ['+ Expansion', '$869.1K', '$912.6K'], ['+ Reactivation', '$142.9K', '$150.0K'], ['
+  table[0] new: [['Component', 'Actual', 'Budget', 'Variance'], ['Beginning ARR', '$83.44M', '$82.94M', '+$506.2K'], ['New Business', '$1.68M', '$1.77M', '-$84.2K'], ['Expansion', '$869.1K', '$912.6K', '-$43.5K'], ['
+
+--- SLIDE 4 ΓÇö DIFFERENCES ---
+  shape count: ref=30 new=29
+  text[1] ref: P&L Review ΓÇö June 2026
+  text[1] new: P&L Review
+  text[3] ref: GROSS PROFIT
+  text[3] new: GROSS MARGIN (CM)
+  text[7] ref: $5.14M
+  text[7] new: 70.0%
+  text[10] ref: Budget $7.72M (-4.8%)
+  text[10] new: Budget: $7.72M | Var: -4.8%
+  text[11] ref: Budget $5.40M (-4.8%)
+  text[11] new: Budget: 70.0%
+  text[12] ref: Budget $647.5K (+2.2%)
+  text[12] new: Budget: $647.5K | Var: +2.2%
+  text[13] ref: Budget $393.4K (+4.0%)
+  text[13] new: Budget: $393.4K | Var: +4.0%
+  text[14] ref: INCOME STATEMENT DETAIL
+  text[14] new: P&L DETAIL
+  text[16] ref: 1. Revenue $7.35M trails budget $7.72M by -4.8% CM; YTD $39.45M vs $41.42M budget.
+  text[16] new: ΓÇó Revenue $7.35M CM, -4.8% vs budget; YTD $39.45M vs $41.42M budget.
+  text[17] ref: 2. Gross margin 70.0% on target vs budget; YTD 70.8% consistent with FY outlook.
+  text[17] new: ΓÇó Gross margin held at 70.0% CM and 70.8% YTD ΓÇö in line with budget.
+  text[18] ref: 3. EBITDA $661.5K beats budget by +$14K (+2.2%); opex underspend drives outperformance.
+  text[18] new: ΓÇó EBITDA $661.5K CM, +2.2% vs budget; operating leverage improving.
+  text[19] ref: 4. S&M spend $2.50M vs $2.65M budget (-5.7%); efficiency improving MoM vs May 2026.
+  text[19] new: ΓÇó S&M $2.50M vs $2.65M budget ΓÇö efficiency gains supporting margin.
+  text[20] ref: 5. Net income $409.0K exceeds budget $393.4K by +4.0%; YTD net income $2.43M ahead.
+  text[20] new: ΓÇó Net income $409.0K CM, +4.0% vs budget; YTD $2.43M vs $2.36M.
+  table[0] ref: [['Line Item', 'CM Actual', 'CM Budget', 'CM Var', 'YTD Actual', 'YTD Budget', 'YTD Var'], ['Revenue', '$7.35M', '$7.72M', '-4.8%', '$39.45M', '$41.42M', '-4.8%'], ['COGS', '$2.20M', '$2.32M', '-4.8%'
+  table[0] new: [['Line Item', 'CM Actual', 'CM Budget', 'CM Variance', 'YTD Actual', 'YTD Budget', 'YTD Variance'], ['Revenue', '$7.35M', '$7.72M', '-$367.5K', '$39.45M', '$41.42M', '-$1.97M'], ['COGS', '$2.20M', '$
+
+--- SLIDE 5 ΓÇö DIFFERENCES ---
+  shape count: ref=33 new=45
+  text count: ref=24 new=34
+  text[1] ref: Cash & Liquidity ΓÇö June 2026
+  text[1] new: Cash & Liquidity
+  text[2] ref: CASH BRIDGE ΓÇö JUNE 2026
+  text[2] new: ENDING CASH (CM)
+  text[3] ref: ENDING CASH
+  text[3] new: ENDING CASH (YTD)
+  text[5] ref: $48.43M
+  text[5] new: YTD COLLECTIONS
+  text[6] ref: $38.43M
+  text[6] new: $50.26M
+  text[7] ref: Budget $31.46M (+54.0%)
+  text[7] new: $48.43M
+  text[8] ref: Above $10M floor
+  text[8] new: $38.43M
+  text[9] ref: COLLECTIONS
+  text[9] new: $58.82M
+  text[10] ref: FY CASH OUTLOOK
+  text[10] new: Budget: $48.17M
+  text[11] ref: $6.81M
+  text[11] new: Budget: $31.46M | +54.0%
+  text[12] ref: $49.92M
+  text[12] new: Floor: $10.00M
+  text[13] ref: Budget $8.91M
+  text[13] new: CM Collections: $6.81M
+  text[14] ref: Budget $23.85M (+109.3%)
+  text[14] new: CASH BRIDGE ΓÇö JUNE 2026
+  text[16] ref: 1. Ending cash $48.43M exceeds budget by +$16.98M (+54.0%); cash declined -26.7% MoM from $66.04M in May.
+  text[16] new: ΓÇó Ending cash $50.26M CM, +$2.09M vs budget of $48.17M.
+  text[17] ref: YTD CASH SUMMARY
+  text[17] new: FY CASH EOY OUTLOOK
+  text[18] ref: 2. Cash headroom $38.43M above $10M floor; FY outlook $49.92M vs budget $23.85M (+109.3%).
+  text[18] new: $49.92M
+  text[19] ref: YTD Collections: $58.82M ┬╖ YTD Ending Cash: $48.43M ┬╖ Budget: $23.85M ┬╖ Variance: +$24.58M
+  text[19] new: ΓÇó YTD ending cash $48.43M vs $31.46M budget ΓÇö +54.0% favorable.
+  text[20] ref: 3. Payroll $2.47M vs budget $4.00M (-38.3%); vendor payments $3.66M above budget $1.40M.
+  text[20] new: Budget: $23.85M
+  text[21] ref: 4. Collections $6.81M below budget $8.91M; YTD collections $58.82M support H2 runway.
+  text[21] new: Var: +$26.07M (+109.3%)
+  text[22] ref: 5. Capex $220.0K on budget; commissions $199.9K vs budget $370.8K (-46.1%) reflects pipeline timing.
+  text[22] new: BEGINNING CASH (CM)
+  text[23] ref: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 5/11
+  text[23] new: ΓÇó Cash headroom $38.43M above $10.00M floor ΓÇö strong liquidity position.
+  text only in new: $48.02M
+  text only in new: Prior month ending
+  text only in new: ΓÇó FY cash outlook $49.92M vs $23.85M budget ΓÇö +109.3% upside.
+  text only in new: CAPEX (CM)
+  text only in new: $220.0K
+  text only in new: Budget: $220.0K
+  text only in new: CASH FLOOR
+  text only in new: $10.00M
+  text only in new: Headroom: $38.43M
+  text only in new: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 5/11
+  table[0] ref: [['Line Item', 'Actual', 'Budget'], ['Beginning Cash', '$48.02M', '$29.60M'], ['Collections', '$6.81M', '$8.91M'], ['Payroll', '-$2.47M', '-$4.00M'], ['Vendor Payments', '-$3.66M', '-$1.40M'], ['Commi
+  table[0] new: [['Line Item', 'Actual', 'Budget'], ['Beginning cash', '$48.02M', '$29.60M'], ['Collections', '$6.81M', '$8.91M'], ['Payroll', '$2.47M', '$4.00M'], ['Vendor payments', '$3.66M', '$1.40M'], ['Commissio
+
+--- SLIDE 6 ΓÇö DIFFERENCES ---
+  shape count: ref=24 new=29
+  text count: ref=16 new=21
+  text[0] ref: GTM PERFORMANCE
+  text[0] new: GTM & MARKETING PERFORMANCE
+  text[1] ref: GTM Performance ΓÇö June 2026
+  text[1] new: GTM & Marketing Performance
+  text[2] ref: PIPELINE CREATED
+  text[2] new: TOTAL MQLs
+  text[3] ref: TOTAL MQLs
+  text[3] new: PIPELINE CREATED
+  text[4] ref: CLOSED WON
+  text[4] new: TOTAL SPEND
+  text[5] ref: BEST WIN RATE
+  text[5] new: CLOSED WON
+  text[6] ref: $5.40M
+  text[6] new: 119
+  text[7] ref: 119
+  text[7] new: $5.40M
+  text[8] ref: $1.80M
+  text[8] new: $50K
+  text[9] ref: 23.8%
+  text[9] new: $1.80M
+  text[10] ref: Budget $57.03M (-79.9% YTD)
+  text[10] new: CM Actual
+  text[11] ref: June 2026
+  text[11] new: CM Actual
+  text[12] ref: June 2026
+  text[12] new: Blended Efficiency: 60.7x
+  text[13] ref: Organic Search
+  text[13] new: Best Win Rate: Organic 23.8%
+  text[14] ref: TOP 5 CHANNELS BY SPEND
+  text[14] new: CHANNEL PERFORMANCE
+  text[15] ref: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 6/11
+  text[15] new: KEY TAKEAWAYS
+  text only in new: ΓÇó Outbound leads efficiency at 96.1x pipeline/spend; Organic Search best win rate 23.8%.
+  text only in new: ΓÇó Total pipeline created $5.40M CM; blended efficiency 60.7x across all channels.
+  text only in new: ΓÇó Paid Social highest MQL volume (28) but lowest win rate (10.6%) ΓÇö review qualification.
+  text only in new: ΓÇó Pipeline coverage 3.0x ΓÇö adequate near-term; H2 ramp required for FY targets.
+  text only in new: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 6/11
+  chart[0] ref: COLUMN_CLUSTERED|cats=['Paid Social', 'Paid Search', 'Content Synd.', 'Organic Search', 'Outbound']|series=[{'name': 'Pipeline ($M)', 'values': [0.524, 0.508, 0.31, 0.443, 0.484]}, {'name': 'Spend ($M
+  chart[0] new: COLUMN_CLUSTERED|cats=['Paid Social', 'Paid Search', 'Content Syndication', 'Organic Search', 'Outbound']|series=[{'name': 'Pipeline ($M)', 'values': [0.524, 0.508, 0.31, 0.443, 0.484]}, {'name': 'Spe
+  table[0] ref: [['Channel', 'Spend ($M)', 'Budget ($M)', 'MQLs', 'Pipeline ($M)', 'Efficiency', 'Win Rate'], ['Paid Social', '$0.01', '$0.00', '28', '$0.52', '44.5x', '10.6%'], ['Paid Search', '$0.01', '$0.01', '19'
+  table[0] new: [['Channel', 'Spend (Act)', 'Spend (Bud)', 'Pipeline (Act)', 'MQLs', 'Efficiency', 'Win Rate'], ['Paid Social', '$12K', '$2K', '$524K', '28', '44.5x', '10.6%'], ['Paid Search', '$8K', '$8K', '$508K', 
+
+--- SLIDE 7 ΓÇö DIFFERENCES ---
+  shape count: ref=34 new=32
+  text count: ref=24 new=23
+  text[0] ref: GTM FUNNEL
+  text[0] new: GTM FUNNEL ANALYSIS
+  text[1] ref: GTM Funnel Analysis ΓÇö YTD JanΓÇôJun 2026
+  text[1] new: GTM Funnel Analysis
+  text[2] ref: Q1 2026
+  text[2] new: YTD MQLs
+  text[3] ref: Q2 2026
+  text[3] new: YTD SQLs
+  text[4] ref: YTD JANΓÇôJUN 2026
+  text[4] new: YTD PIPELINE ARR
+  text[5] ref: PIPELINE COVERAGE SUMMARY
+  text[5] new: YTD CLOSED WON ARR
+  text[6] ref: PIPELINE COVERAGE
+  text[6] new: 721
+  text[7] ref: YTD PIPELINE CREATED
+  text[7] new: 251
+  text[8] ref: YTD CLOSED WON
+  text[8] new: $27.90M
+  text[9] ref: YTD SPEND
+  text[9] new: $9.30M
+  text[10] ref: 3.0x
+  text[10] new: Q1: 362 | Q2: 359
+  text[11] ref: $27.90M
+  text[11] new: Q1: 126 | Q2: 125
+  text[12] ref: $9.30M
+  text[12] new: Q1: $12.15M | Q2: $15.75M
+  text[13] ref: $290.8K
+  text[13] new: Q1: $4.05M | Q2: $5.25M
+  text[14] ref: vs FY ARR budget
+  text[14] new: Q1 2026 FUNNEL
+  text[15] ref: Q1 + Q2 combined
+  text[15] new: Q2 2026 FUNNEL
+  text[16] ref: Q1 + Q2 combined
+  text[16] new: YTD 2026 FUNNEL
+  text[17] ref: Q1 + Q2 combined
+  text[17] new: KEY TAKEAWAYS
+  text[18] ref: KEY TAKEAWAYS
+  text[18] new: ΓÇó YTD MQLs 721 ΓÇö Q1 362 and Q2 359 showing consistent top-of-funnel volume.
+  text[19] ref: 1. YTD MQLs 721 with 87 opportunities created; Q2 MQLs 359 slightly below Q1 362 (-0.8% MoM trend).
+  text[19] new: ΓÇó YTD pipeline ARR $27.90M; closed won $9.30M ΓÇö conversion rate tracking.
+  text[20] ref: 2. YTD closed won $9.30M from $27.90M pipeline; pipeline coverage 3.0x supports H2 ARR ramp.
+  text[20] new: ΓÇó YTD spend $290.8K generating $27.90M pipeline ΓÇö strong efficiency.
+  text[21] ref: 3. YTD spend $290.8K generating $27.90M pipeline; blended efficiency 96x pipeline-to-spend ratio.
+  text[21] new: ΓÇó Budget pipeline data not loaded; re-stage with marketing ops for H2 planning.
+  text[22] ref: 4. Q2 pipeline $15.75M exceeds Q1 $12.15M (+29.6%); forward implication: H2 conversion critical to FY plan.
+  text[22] new: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 7/11
+  text only in ref: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 7/11
+  table[0] ref: [['Metric', 'Actual', 'Budget'], ['MQLs', '362', 'ΓÇö'], ['SALs', '100', 'ΓÇö'], ['SQLs', '126', 'ΓÇö'], ['Opportunities', '45', 'ΓÇö'], ['Pipeline ARR', '$12.15M', '$0.00'], ['Closed Won ARR', '$4.05M', '$0.
+  table[0] new: [['Q1 Metric', 'Actual', 'Budget'], ['MQLs', '362', '0'], ['SQLs', '126', 'ΓÇö'], ['SALs', '100', 'ΓÇö'], ['Opportunities', '45', 'ΓÇö'], ['Pipeline ARR', '$12.15M', '$0.00'], ['Closed Won ARR', '$4.05M', '
+  table[1] ref: [['Metric', 'Actual', 'Budget'], ['MQLs', '359', 'ΓÇö'], ['SALs', '97', 'ΓÇö'], ['SQLs', '125', 'ΓÇö'], ['Opportunities', '42', 'ΓÇö'], ['Pipeline ARR', '$15.75M', '$0.00'], ['Closed Won ARR', '$5.25M', '$0.0
+  table[1] new: [['Q2 Metric', 'Actual', 'Budget'], ['MQLs', '359', '0'], ['SQLs', '125', 'ΓÇö'], ['SALs', '97', 'ΓÇö'], ['Opportunities', '42', 'ΓÇö'], ['Pipeline ARR', '$15.75M', '$0.00'], ['Closed Won ARR', '$5.25M', '$
+  table[2] ref: [['Metric', 'Actual', 'Budget'], ['MQLs', '721', 'ΓÇö'], ['SALs', '197', 'ΓÇö'], ['SQLs', '251', 'ΓÇö'], ['Opportunities', '87', 'ΓÇö'], ['Pipeline ARR', '$27.90M', '$0.00'], ['Closed Won ARR', '$9.30M', '$0.
+  table[2] new: [['YTD Metric', 'Actual', 'Budget'], ['MQLs', '721', '0'], ['SQLs', '251', 'ΓÇö'], ['SALs', '197', 'ΓÇö'], ['Opportunities', '87', 'ΓÇö'], ['Pipeline ARR', '$27.90M', '$0.00'], ['Closed Won ARR', '$9.30M', 
+
+--- SLIDE 8 ΓÇö DIFFERENCES ---
+  shape count: ref=63 new=55
+  text count: ref=45 new=37
+  text[0] ref: STRATEGIC ASSESSMENT
+  text[0] new: RISKS & OPPORTUNITIES
+  text[1] ref: Risks & Opportunities ΓÇö June 2026
+  text[1] new: Risks & Opportunities
+  text[7] ref: Cash Outperformance
+  text[7] new: Liquidity Headroom
+  text[8] ref: Slipped pipeline $9.87M requires next-quarter coverage review and re-staging.
+  text[8] new: Slipped pipeline $9.87M requires next-quarter coverage review.
+  text[9] ref: Ending cash $48.43M exceeds budget by +$16.98M (+54.0%); FY outlook $49.92M.
+  text[9] new: Cash $50.26M provides runway for strategic investments.
+  text[10] ref: Action: Re-stage opportunities with validated next steps and owners.
+  text[10] new: Action: Re-stage opportunities with validated next steps and owners. | Impact: $9.87M
+  text[11] ref: Action: Confirm ending cash ties to balance sheet; deploy excess for strategic initiatives.
+  text[11] new: Action: Prioritize high-ROI GTM and product bets with board approval. | Upside: $40.26M
+  text[12] ref: Impact: $9.87M
+  text[12] new: MEDIUM RISK
+  text[13] ref: Upside: +$16.98M vs budget
+  text[13] new: MEDIUM OPP
+  text[14] ref: MEDIUM RISK
+  text[14] new: Revenue vs Budget
+  text[15] ref: MEDIUM OPP
+  text[15] new: Cash Forecast Upside
+  text[16] ref: Revenue vs Budget
+  text[16] new: Revenue trailed budget in the close month. Validate expansion timing and churn pockets before board distribution.
+  text[17] ref: Operating Leverage
+  text[17] new: Confirm ending cash ties to balance sheet cash in Validation tab.
+  text[18] ref: Revenue trailed budget -4.8% CM; validate expansion timing and churn pockets.
+  text[18] new: Action: Review expansion timing and churn pockets.
+  text[19] ref: YTD EBITDA $3.87M ahead of budget; opex underspend -5.7% across S&M, R&D, G&A.
+  text[19] new: Action: Review.
+  text[20] ref: Action: Review expansion timing and churn pockets before board distribution.
+  text[20] new: MEDIUM RISK
+  text[21] ref: Action: Maintain opex discipline through H2; reinvest savings into pipeline acceleration.
+  text[21] new: MEDIUM OPP
+  text[22] ref: Impact: -$110.2K CM
+  text[22] new: Close Validation
+  text[23] ref: Upside: +$59.1K YTD EBITDA
+  text[23] new: SaaS MD&A Summary
+  text[24] ref: MEDIUM RISK
+  text[24] new: Validation status: fail. Confirm tie-outs before distribution.
+  text[25] ref: MEDIUM OPP
+  text[25] new: Review Validation Checks before board distribution.
+  text[26] ref: Close Validation
+  text[26] new: Action: Finance to certify waterfall and GL reconciliations.
+  text[27] ref: Organic Search Efficiency
+  text[27] new: Action: Review.
+  text[28] ref: Validation status: FAIL. Missing Forecast ARR waterfall rows for 2026-06.
+  text[28] new: MEDIUM RISK
+  text[29] ref: Organic Search win rate 23.8% ΓÇö highest of all channels; 81.2x pipeline/spend.
+  text[29] new: MEDIUM OPP
+  text[30] ref: Action: Finance to certify waterfall and GL reconciliations before distribution.
+  text[30] new: Data Gaps
+  text[31] ref: Action: Increase content investment to scale highest-efficiency channel in H2.
+  text[31] new: Resolve Data Gaps
+  text[32] ref: Impact: Data integrity
+  text[32] new: No Forecast ARR waterfall rows for 2026-06. No Forecast revenue line for 2026-06.
+  text[33] ref: Upside: 23.8% win rate
+  text[33] new: No Forecast ARR waterfall rows for 2026-06. No Forecast revenue line for 2026-06. Resolve failed validations and reload missing CSV sources.
+  text[34] ref: MEDIUM RISK
+  text[34] new: Action: Finance to certify waterfall and GL reconciliations.
+  text[35] ref: MEDIUM OPP
+  text[35] new: Action: Resolve failed validations and reload missing CSV sources.
+  text[36] ref: Pipeline YTD Gap
+  text[36] new: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 8/11
+  text only in ref: ARR Retention Strength
+  text only in ref: YTD pipeline created $5.40M vs budget $26.91M (-79.9%); H2 coverage at risk.
+  text only in ref: G$R 99.4% indicates strong base retention; churn $520.2K below budget $546.2K.
+  text only in ref: Action: Accelerate demand gen and channel reallocation in H2 GTM plan.
+  text only in ref: Action: Leverage retention strength in expansion motion to close FY ARR gap vs budget.
+  text only in ref: Impact: -$21.51M YTD
+  text only in ref: Upside: G$R 99.4%
+  text only in ref: SMPL ┬╖ Board Operating Review ┬╖ Q2 2026 ┬╖ CONFIDENTIAL 8/11
+
+.\.venv312\Scripts\python.exe : Traceback (most recent call last):
+At C:\Users\mattj\AppData\Local\Temp\ps-script-8040c336-f110-40b6-832d-4d28e2d8ab89.ps1:108 char:119
++ ... ONPATH="."; .\.venv312\Scripts\python.exe scripts\_compare_decks.py 2 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\scripts\_compare_decks.py", 
+line 52, in extract_slide
+    pts = [round(float(v), 3) for v in s.values]
+                                       ^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\chart\series.py", line 83, in values
+    return tuple(iter_values())
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\chart\series.py", line 81, in iter_values
+    yield val.pt_v(idx)
+          ^^^^^^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\oxml\chart\series.py", line 103, in pt_v
+    return results[0].value if results else None
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\oxml\chart\series.py", line 254, in value
+    return float(self.v.text)
+           ^^^^^^^^^^^^^^^^^^
+TypeError: float() argument must be a string or a real number, not 'NoneType'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\scripts\_compare_decks.py", 
+line 137, in <module>
+    main()
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\scripts\_compare_decks.py", 
+line 111, in main
+    new_info = extract_slide(new_slide) if new_slide else []
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\scripts\_compare_decks.py", 
+line 54, in extract_slide
+    pts = list(s.values)
+               ^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\chart\series.py", line 83, in values
+    return tuple(iter_values())
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\chart\series.py", line 81, in iter_values
+    yield val.pt_v(idx)
+          ^^^^^^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\oxml\chart\series.py", line 103, in pt_v
+    return results[0].value if results else None
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence\backend\.venv312\Lib\site-packages\ppt
+x\oxml\chart\series.py", line 254, in value
+    return float(self.v.text)
+           ^^^^^^^^^^^^^^^^^^
+TypeError: float() argument must be a string or a real number, not 'NoneType'

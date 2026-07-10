@@ -1,0 +1,562 @@
+FINANCIAL INTELLIGENCE ENGINE — ENGINEERING SPECIFICATION
+FIE-003 · Financial Calculation Engine
+Version 1.0
+Deterministic, reproducible, and fully explainable execution of an organization's approved financial methodologies
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Third service of the Financial Intelligence Engine (FIE) layer · Implements: FIE-003 Conceptual Model v1.0 · Reads: FIE-001 · FIE-002 · BIS-001 through BIS-006
+Section 1 — Scope Decisions
+The FIE-003 conceptual model is frozen and is not redesigned here. This section translates its Scope Boundaries into the numbered, restated-plus-new-resolutions format used since BIS-001, and adds six further resolutions — three closing execution-level ambiguities the conceptual model left to "the engineering specification," and one closing a real dependency gap this document's own Governed execution mode surfaced against FIE-002 as actually built.
+1.1 Calculation Engine vs. Observation Engine
+The Observation Engine (FIE-001) records financial history as immutable Observations and Revisions. This service reads Snapshots and Revision references through FIE-001's existing timeline and snapshot APIs and never calls a FIE-001 write endpoint under any circumstance — not even for scenario approval, per Section 1.6 below. Every calculation input is a reference to a FIE-001 record; no calculation input is ever fabricated when a reference is unavailable (Section 17).
+1.2 Calculation Engine vs. Methodology Engine
+The Methodology Engine (FIE-002) owns Methodologies, the Formula Registry, the Driver Registry, Financial Operating Models, and governance state. This service resolves a specific Financial Operating Model version through FIE-002's GET /v1/operating-models/{id} and GET /v1/methodologies/resolve endpoints and executes exactly what they return. It holds no write path into any FIE-002 table and performs no independent judgment about which methodology version is correct for a given moment beyond the Execution Mode rules in Section 1.9.
+1.3 Calculation Engine vs. Financial Memory (FIE-004)
+This service produces Financial Intelligence Objects. Financial Memory reasons across them over time — forecast accuracy, recurring drivers of variance, longitudinal pattern recognition. This service performs no cross-run reasoning of its own; it produces the FIOs, in full, with lineage, that make such reasoning possible downstream.
+1.4 Calculation Engine vs. Narrative Intelligence (FIE-005)
+This service produces explainable FIOs with complete Calculation Lineage (Section 8) and Financial Evidence (Section 1.7). Narrative Intelligence consumes that evidence to generate commentary; it never recalculates a value and has no write path into this service's tables.
+1.5 Calculation Engine vs. Reporting Platform (BIS-006)
+This service produces financial intelligence. Reporting presents it, following exactly the same read-only relationship BIS-006 already has with Canonical, Validation, and CAL — see BIS-006 §1.2–1.4. Reporting reads Published-visibility FIOs (Section 8) through this service's query API; it never triggers a calculation and never sees Internal-visibility FIOs unless explicitly scoped to a debugging or audit context (Section 24).
+1.6 New Resolution — Scenario Approval Write Path Never Passes Through This Service
+Per the conceptual model's Decision 9: Scenario execution produces an ordinary, independent Calculation Run (Execution Mode = SCENARIO, per Section 12) and creates no FIE-001 Revision. When a scenario is approved, the caller is Financial Governance (a FIE-002 capability) acting through Orchestration (BIS-002), which reads the approved Scenario Calculation Run's output FIOs and calls FIE-001's POST /v1/revisions directly, supplying the approver identity FIE-001 requires and referencing the Scenario Calculation Run's FIOs as related_observation_refs. This service's own API surface has no endpoint capable of writing to FIE-001, closing the boundary the conceptual review flagged as contradicted between this document's Scope Boundaries and its original Decision 9.
+1.7 New Resolution — Financial Evidence Is Assembled on Read, Never Persisted
+Per Decision 14: a Financial Evidence Package is computed at query time (GET /v1/evidence/{fio_id}, Section 4.4) by joining a Financial Intelligence Object to its Calculation Run and to every upstream FIO its lineage references, recursively. No evidence_packages table exists. This keeps evidence permanently consistent with its underlying Calculation Run — there is no second copy that could drift — at the cost of a join-heavy read path, which Section 26 sets an explicit, separate performance target for rather than folding it into ordinary FIO read latency.
+1.8 New Resolution — Confidence Propagation Combination Rule
+Per Decision 13, this document requires the combination rule be explicitly defined rather than left implicit. Every FIO retains the full three-dimensional confidence structure established in FIE-001 (Mapping, Data, Reasoning). Where a formula combines multiple inputs — Observations, Revisions, or upstream FIOs — each of the three confidence dimensions on the resulting FIO is the minimum of that dimension across every direct input, never an average or a weighted blend. A formula is only as trustworthy as its least-trustworthy input; this is the same conservative posture BIS-006 §17 already applies to narrative generation ("never inflate confidence"), extended here to numeric propagation. Where an input dimension is null (e.g. a Revision's Mapping/Data Confidence, per FIE-001 §15), that dimension is excluded from the minimum for that input but still evaluated across all other contributing inputs — a Revision-derived input never silently forces a null result.
+1.9 New Resolution — Governed Execution Mode Scoped to What FIE-002 Currently Supports
+The conceptual model's Decision 15/16 describes Governed execution as resolving methodology versions against Financial Governance policies including retirement dates and restatement windows — capabilities FIE-002, as actually built, does not yet expose (its governance model provides effective_date and the six-state lifecycle in BIS/FIE2 §16, but no retirement_date field and no restatement_policy concept). Rather than build against fields that do not exist, this document scopes MVP Governed execution to exactly what FIE-002 supports today: resolving "which methodology version was ACTIVE as of a given business_effective_date," using FIE-002's existing as_of parameter on GET /v1/methodologies/resolve. Custom historical restatement windows and full historical rebuilds are explicitly deferred to Section 31's backlog, pending a FIE-002 addendum introducing retirement_date and a restatement_policy entity — this service's Governed mode is designed to extend to that capability without a redesign once it exists, but does not implement it now.
+1.10 New Resolution — Cache Key and Staleness Model
+Per Decision 8: a Calculation Run is cache-eligible, and reusable in place of re-execution, exactly when a prior COMPLETE run exists with an identical (snapshot_ids, financial_operating_model_version, calculation_intent) tuple. Snapshot IDs are drawn directly from FIE-001's Domain and Composite Snapshot identifiers (FIE-001 §12–13), which already carry their own completeness and supersession semantics — this service performs no independent Observation-level change detection. A new Observation Event that produces a new Snapshot automatically invalidates cache eligibility for any Calculation Run referencing the superseded snapshot, and only those runs, giving Incremental Execution (Section 15) its blast-radius calculation for free rather than requiring a second mechanism.
+1.11 New Resolution — This Is the Only FIE Service With No LLM in Its Execution Path
+Worth stating as an explicit architectural property, not an incidental fact: unlike BIS-006's narrative generation or FIE-005's future commentary, no step in this service's execution path invokes an LLM. This is precisely what makes Decision 15 (the platform's determinism guarantee) achievable at the source rather than bounded after the fact — BIS-006 §1.10 had to guarantee narrative stability through immutable storage because the LLM generating it is inherently non-deterministic; this service is deterministic in its actual computation, and immutability (Section 9) exists here to guarantee reproducibility of a process that was already deterministic, not to contain one that wasn't.
+Section 2 — Service Purpose
+The Financial Calculation Engine is the only component in the SMPL platform that actually produces a financial number — and the only one obligated to produce the exact same number again, forever, given the exact same inputs.
+This Service Is
+This Service Is Not
+The deterministic executor of FIE-002's approved methodologies against FIE-001's recorded financial state
+A source of financial definitions — every formula, driver, and methodology it executes is resolved from FIE-002, never invented or modified here
+The producer of every Financial Intelligence Object and Calculation Run in the platform, each with complete lineage back to its sources
+A data warehouse or a reasoning engine — it computes exactly what a resolved formula specifies, nothing more
+The only service in the platform guaranteed to be fully deterministic and reproducible given pinned inputs, per Section 1.11
+A scenario-approval or governance authority — approval and governance both live outside this service, per Sections 1.6 and 1.9
+The foundation Financial Memory (FIE-004) reasons across and Narrative Intelligence (FIE-005) explains
+A narrative or presentation layer — Reporting (BIS-006) and FIE-005 own explanation; this service owns computation
+Table FIE3-2.1 — Service purpose boundary.
+2.1 Position in the Runtime
+Orchestration (BIS-002) — scheduled refresh / Financial Governance — scenario request                    │                    │  POST /v1/calculation-runs                    ▼     ═══════════════════════════════════════════════        FINANCIAL CALCULATION ENGINE  (this document)     ═══════════════════════════════════════════════         │                    │  reads  │             reads  │         ▼                    ▼ Methodology Engine (FIE-002)   Observation Engine (FIE-001) (methodologies, formulas,      (Snapshots, Observations, Revisions)  drivers, operating models)         writes: calculation_runs, financial_intelligence_objects,                 execution_plans         read by: Reporting (BIS-006), Financial Memory (FIE-004),                  Narrative Intelligence (FIE-005)         never writes to: FIE-001, FIE-002 — scenario approval flows         through Financial Governance → Orchestration → FIE-001 instead
+Figure FIE3-2.1 — The Calculation Engine sits between the two foundational FIE services and the two reasoning/presentation layers above it, writing to neither of its own inputs.
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Financial Operating Model and Methodology resolution
+Resolve the correct FIE-002 Operating Model version and constituent methodology/formula versions per the requested Execution Mode
+Section 1.9, 8, 12
+Execution Plan generation
+Determine required Snapshots, Revisions, dependency order, and parallel opportunities before execution begins
+Section 11
+Execution Graph construction and traversal
+Build the runtime dependency graph from FIE-002's declarative edges and execute it in dependency order
+Section 10, 13
+Financial Intelligence Object production
+Compute and persist an independently addressable, fully-lineaged FIO for every meaningful calculation node
+Section 8
+Calculation Run management
+Persist every execution as an immutable, auditable Calculation Run
+Section 9
+Confidence propagation
+Combine upstream confidence into every FIO's three-dimensional confidence per the minimum-across-inputs rule
+Section 14
+Caching and incremental execution
+Reuse prior Calculation Runs where cache-eligible; recalculate only the dependency-graph subset actually affected by a change
+Section 15, 16
+Evidence assembly
+Serve a complete, join-based Financial Evidence view for any FIO on demand
+Section 1.7
+Table FIE3-3.1 — Core responsibilities and where each is specified.
+Section 4 — Public APIs
+Callable by Orchestration-dispatched workers, Financial Governance (a FIE-002 capability) for scenario requests, and every downstream FIE/BIS service for read access. All endpoints return the standard response envelope established across BIS-001 through BIS-006 and FIE-001/FIE-002. Three representative endpoints receive full detail; the remaining endpoints are captured completely in the summary table that follows.
+Standard Response Envelope
+{  "request_id": "UUID",  "customer_id": "UUID",  "status": "SUCCESS | ERROR",  "data": {},  "error": { "error_code": "string", "message": "string", "retry_after_seconds": "integer | null" } | null,  "latency_ms": "integer"}
+4.1 POST /v1/calculation-runs
+Field
+Detail
+Request
+customer_id, execution_mode (HISTORICAL | CURRENT | GOVERNED), calculation_profile (Section 12), financial_operating_model_id (+ version, required for HISTORICAL), as_of (required for GOVERNED, per Section 1.9), target_financial_concepts[] (optional — defaults to every concept the resolved Operating Model covers), idempotency_key (optional)
+Response
+calculation_run_id, status (QUEUED | RUNNING | COMPLETE | PARTIAL | FAILED), execution_plan_id
+Error Codes
+INVALID_INPUT, OPERATING_MODEL_NOT_FOUND, MISSING_AS_OF, CIRCULAR_DEPENDENCY, EVIDENCE_UNAVAILABLE, PERMISSION_ERROR
+Idempotency
+A repeated call with the same idempotency_key returns the existing calculation_run_id, including a cache-hit run reused per Section 1.10
+Retry Rules
+Safe to retry on timeout or 5xx; a 4xx requires correcting the input before retry
+Logging
+CALCULATION_RUN_STARTED on accept; CALCULATION_RUN_COMPLETED / _PARTIAL / _FAILED on terminal state
+Metrics
+calculation_runs_total{execution_mode, calculation_profile}, calculation_run_duration_seconds{execution_mode}
+Table FIE3-4.1 — POST /v1/calculation-runs.
+4.2 GET /v1/fios/{fio_id}
+Field
+Detail
+Request
+fio_id (path), include_lineage (boolean, default true), visibility_scope (PUBLISHED | INTERNAL — caller must be authorized for INTERNAL, per Section 24)
+Response
+Full FIO record: value, unit, financial_concept_id, calculation_intent, confidence_context (three-dimensional), calculation_run_id, status (READY | UNAVAILABLE), visibility, lineage (if requested)
+Error Codes
+FIO_NOT_FOUND, PERMISSION_ERROR
+Idempotency
+N/A — read-only
+Retry Rules
+Freely retryable
+Logging
+Not logged individually; covered by request-level access logging
+Metrics
+fio_read_requests_total{visibility}
+Table FIE3-4.2 — GET /v1/fios/{fio_id}.
+4.3 GET /v1/evidence/{fio_id}
+Field
+Detail
+Request
+fio_id (path), depth (optional — how many upstream lineage hops to recursively include, default: full)
+Response
+Assembled Financial Evidence Package per Section 1.7: the FIO, its Calculation Run, every upstream FIO in its lineage, and the Operating Model / methodology / formula / Observation / Revision references each resolves to
+Error Codes
+FIO_NOT_FOUND, EVIDENCE_ASSEMBLY_FAILED, PERMISSION_ERROR
+Idempotency
+N/A — read-only, though computationally heavier than 4.2 per Section 1.7
+Retry Rules
+Freely retryable
+Logging
+EVIDENCE_ASSEMBLED on completion
+Metrics
+evidence_assembly_duration_seconds{depth}
+Table FIE3-4.3 — GET /v1/evidence/{fio_id}. The endpoint Narrative Intelligence, Finance review, and audit workflows all call, per Decision 14.
+4.4 Remaining Endpoints
+Endpoint
+Purpose
+Notes
+GET /v1/calculation-runs/{id}
+Retrieve a Calculation Run's full record
+Section 9
+GET /v1/calculation-runs/{id}/execution-plan
+Retrieve the Execution Plan generated for a run
+Section 11
+GET /v1/calculation-runs/{id}/fios
+List every FIO produced by a run
+Filterable by visibility
+POST /v1/calculation-runs/{id}/cancel
+Cancel a RUNNING calculation run
+Cooperative cancellation at the next dependency-graph checkpoint, not mid-node
+GET /v1/fios
+List/query FIOs across runs
+Section 22 query patterns
+GET /v1/fios/{fio_id}/dependents
+List downstream FIOs depending on this one
+Supports Incremental Execution impact review
+GET /v1/calculation-profiles
+List available Calculation Profiles
+Section 12
+GET /v1/health
+Liveness/readiness probe
+No auth required, internal network only
+Table FIE3-4.4 — Remaining endpoints, complete at summary detail.
+Section 5 — Internal Components
+Component
+Responsibility
+Resolution Layer
+Resolves Financial Operating Model, methodology, formula, and driver versions from FIE-002 per the requested Execution Mode (Section 12)
+Execution Planner
+Produces a deterministic Execution Plan (Section 11): required Snapshots/Revisions, dependency order, parallel opportunities, missing-input detection
+Graph Executor
+Traverses the Execution Graph (Section 10) in dependency order, dispatching parallel branches per Section 18
+FIO Writer
+Persists each computed node as an independently addressable, immutable Financial Intelligence Object with full lineage
+Confidence Propagator
+Applies the minimum-across-inputs combination rule (Section 1.8) at every graph node
+Cache Resolver
+Checks (snapshot_ids, operating_model_version, calculation_intent) against prior COMPLETE runs before executing a node, per Section 1.10
+Evidence Assembler
+Serves GET /v1/evidence/{fio_id} by recursively joining a FIO to its Calculation Run and upstream lineage, per Section 1.7
+Table FIE3-5.1 — Internal components.
+Section 6 — Data Models
+This service's data model has two core, immutable tables — calculation_runs and financial_intelligence_objects — plus a supporting execution_plans table. Every FIO carries a foreign key to exactly one Calculation Run, per Decision 3; nothing in this service is ever updated in place, following the same append-only discipline as every prior BIS and FIE document.
+Entity
+Purpose
+calculation_runs
+Every execution, immutable, per Section 9
+execution_plans
+The deterministic plan generated before each run's execution, per Section 11
+financial_intelligence_objects
+Every independently addressable calculation result, per Section 8
+fio_lineage_refs
+The specific Observation/Revision/upstream-FIO references each FIO's lineage resolves to, per Section 8
+Table FIE3-6.1 — Entity overview; full column definitions follow in Section 7.
+Section 7 — Database Schema
+7.1 calculation_runs
+Field
+Type
+Notes
+calculation_run_id
+UUID, PK
+customer_id
+UUID
+execution_mode
+ENUM(HISTORICAL, CURRENT, GOVERNED)
+Per Section 12
+calculation_profile
+TEXT
+e.g. INTERACTIVE, PLANNING, BOARD, SCENARIO, BATCH — Section 12
+financial_operating_model_id
+UUID, FK → FIE-002
+financial_operating_model_version
+INTEGER
+Pinned at run creation, per FIE-002 §1.7
+as_of
+TIMESTAMPTZ, NULLABLE
+Populated for GOVERNED mode, per Section 1.9
+snapshot_ids
+UUID[]
+FIE-001 Domain/Composite Snapshot references consumed by this run
+execution_graph
+JSONB
+The resolved, run-specific dependency graph
+status
+ENUM(QUEUED, RUNNING, COMPLETE, PARTIAL, FAILED)
+Per Decision 17
+started_at
+TIMESTAMPTZ
+completed_at
+TIMESTAMPTZ, NULLABLE
+warnings
+JSONB
+cache_hit
+BOOLEAN
+True if this run reused a prior COMPLETE run's results, per Section 1.10
+Table FIE3-7.1 — calculation_runs. No UPDATE path exists on any field once status reaches a terminal value.
+7.2 execution_plans
+Field
+Type
+Notes
+execution_plan_id
+UUID, PK
+calculation_run_id
+UUID, FK
+required_snapshot_ids
+UUID[]
+required_revision_refs
+UUID[]
+dependency_order
+JSONB
+Topologically sorted node list
+parallel_groups
+JSONB
+Node groups eligible for concurrent execution, per Section 18
+missing_inputs
+JSONB
+Detected at plan time, feeds Decision 17's PARTIAL status
+estimated_runtime_ms
+INTEGER
+created_at
+TIMESTAMPTZ
+Table FIE3-7.2 — execution_plans. Generated once per run, before execution begins, and never modified thereafter.
+7.3 financial_intelligence_objects
+Field
+Type
+Notes
+fio_id
+UUID, PK
+calculation_run_id
+UUID, FK → calculation_runs
+Exactly one, per Decision 3
+financial_concept_id
+UUID, FK → FIE-001/FIE-002
+calculation_intent
+TEXT
+Per FIE-002 §1.6
+value
+NUMERIC
+unit
+TEXT
+business_effective_date
+TIMESTAMPTZ
+system_recorded_date
+TIMESTAMPTZ
+Server-assigned at write time
+mapping_confidence
+NUMERIC, NULLABLE
+Propagated per Section 1.8
+data_confidence
+NUMERIC, NULLABLE
+Propagated per Section 1.8
+reasoning_confidence
+NUMERIC, NULLABLE
+Propagated per Section 1.8
+status
+ENUM(READY, UNAVAILABLE)
+Per Decision 17
+visibility
+ENUM(PUBLISHED, INTERNAL)
+Per Decision 2
+methodology_id
+UUID, FK
+Pinned version used
+methodology_version
+INTEGER
+formula_id
+UUID, FK
+Pinned version used
+formula_version
+INTEGER
+Table FIE3-7.3 — financial_intelligence_objects. Immutable from creation; a recalculation always produces a new fio_id under a new calculation_run_id.
+7.4 fio_lineage_refs
+Field
+Type
+Notes
+lineage_ref_id
+UUID, PK
+fio_id
+UUID, FK → financial_intelligence_objects
+ref_type
+ENUM(OBSERVATION, REVISION, UPSTREAM_FIO, DRIVER)
+ref_id
+UUID
+The referenced FIE-001 temporal_record_id, upstream fio_id, or FIE-002 driver_id
+created_at
+TIMESTAMPTZ
+Table FIE3-7.4 — fio_lineage_refs. This table, joined recursively via UPSTREAM_FIO refs, is what the Evidence Assembler (Section 5) walks to build a Financial Evidence Package without a separate stored copy, per Section 1.7.
+Section 8 — Financial Intelligence Object Model
+Per Decision 2: every meaningful node in an Execution Graph — not only the terminal outputs a caller requested — produces its own FIO. A Board KPI request against the Pipeline→Bookings→Revenue→Gross Margin→Operating Income→EBITDA→Rule of 40→Board KPIs graph produces eight independently addressable FIOs, not one. The seven upstream nodes are written with visibility=INTERNAL unless independently requested as a target_financial_concept; the terminal node(s) explicitly requested are visibility=PUBLISHED. This is what makes Incremental Execution (Section 15) possible — each node's result is independently identifiable and independently cache-checkable — and what closes the conceptual review's "intermediate results" ambiguity: there is no separate intermediate-results concept, only INTERNAL-visibility FIOs.
+Section 9 — Calculation Run Model
+A Calculation Run is the immutable record of one execution: which Operating Model version, which Snapshots, which Execution Mode and Profile, and the resulting status. Every FIO it produces references it. A Calculation Run is never re-executed in place — a cache miss or a forced re-run always creates a new calculation_run_id, even if every input happens to be identical to a prior run (in which case Section 1.10's cache resolution would have returned the prior run before a new one was ever created).
+Section 10 — Execution Graph Model
+The Execution Graph is built at run time from FIE-002's declarative methodology_dependencies edges (FIE-002 §14), scoped to exactly the target_financial_concepts requested and their transitive upstream dependencies — not the customer's entire dependency graph. It is stored per-run in calculation_runs.execution_graph as a resolved, concrete structure (specific methodology and formula versions at each node), distinct from FIE-002's abstract, version-independent declarative graph.
+Section 11 — Execution Plan Model
+Generated once, before any node executes, and never modified. The Execution Planner performs circular dependency detection (Decision 10) at this stage — a CIRCULAR_DEPENDENCY error here means the Execution Plan is never created and the run fails immediately, before any computation is attempted. Detecting cycles at plan time rather than mid-execution keeps a bad dependency declaration from ever producing a partially-computed, inconsistent Calculation Run.
+Section 12 — Calculation Profiles
+Profile
+Behavior
+INTERACTIVE
+Optimizes for latency; aggressive cache reuse; lower parallelism ceiling to conserve resources for a single-user dashboard refresh
+PLANNING
+Used for forecast generation; expects frequent re-execution as assumptions change; cache keys checked but not required to hit
+BOARD
+Maximum auditability; forces INTERNAL-visibility FIOs for every graph node regardless of whether they were individually requested, to guarantee a complete evidence trail for board-package generation
+SCENARIO
+High parallelism; execution_mode always effectively HISTORICAL against a pinned or draft Operating Model; produces no FIE-001 write path, per Section 1.6
+BATCH
+High throughput; used for scheduled Month-End Close style runs across many target_financial_concepts at once
+Table FIE3-12.1 — Calculation Profiles alter execution strategy only, never financial methodology, per the conceptual model's Platform Principle.
+Section 13 — Dependency Resolution
+This service resolves execution order, parallel grouping, incremental scope, and cycle detection from FIE-002's declarative edges; it never resolves which methodology version is correct — that is Section 1.9's Execution Mode responsibility, kept structurally separate so a dependency-resolution bug can never accidentally alter which methodology gets executed.
+Section 14 — Confidence Propagation
+Implements Section 1.8's minimum-across-inputs rule at every Graph Executor node. A node with two inputs — an upstream FIO (all three dimensions populated) and a driver value resolved to a FIE-001 Assumption Revision (Reasoning Confidence only) — computes its own Mapping and Data Confidence as the minimum across only the FIO input (the Revision contributes nothing to those two dimensions), and its own Reasoning Confidence as the minimum across both inputs. This is computed once at write time and never recalculated after the FIO is persisted, consistent with FIE-001's confidence-immutability discipline.
+Section 15 — Incremental Execution
+When a new FIE-001 Snapshot supersedes a prior one, every Calculation Run referencing the superseded snapshot_id becomes cache-ineligible, per Section 1.10. A subsequent calculation request against the same target concepts triggers execution only for the graph nodes whose required Snapshot or Revision set actually changed, plus every downstream node depending on them — nodes on independent branches (e.g. Headcount Forecast when only Pipeline changed) are served from their existing cached FIOs untouched.
+Section 16 — Caching
+Cache resolution is a lookup, not a heuristic: given (snapshot_ids, financial_operating_model_version, calculation_intent) for a requested node, the Cache Resolver checks for an existing FIO produced by a COMPLETE Calculation Run with an identical tuple. A hit returns the existing fio_id directly; the new Calculation Run (if one was created for other nodes in the same request) references the existing FIO via an UPSTREAM_FIO lineage ref rather than duplicating it. This guarantees Decision 8's requirement that caching never compromises reproducibility — a cache hit is definitionally identical to a fresh computation of the same inputs, not an approximation of one.
+Section 17 — Materialization Strategy
+Every FIO is materialized — there is no calculate-on-demand-and-discard mode in this MVP, since Section 1.7's evidence-assembly model depends on every lineage node being a persisted, queryable FIO. What Decision 11 leaves open — the balance between performance and storage — is addressed through Section 16's caching (avoiding recomputation, not avoiding storage) and Section 8's INTERNAL-visibility model (avoiding unnecessary customer-facing exposure, not avoiding persistence). A future storage-tiering strategy for FIOs, analogous to FIE-001's Hot/Warm/Cold model, is backlogged in Section 31 rather than assumed here.
+Section 18 — Parallel Execution
+The Graph Executor dispatches every node in a given execution_plans.parallel_groups entry concurrently; a node begins only once every node in its direct dependency set has reached a terminal state. Parallelism is bounded per Calculation Profile (Section 12) — INTERACTIVE caps concurrency to protect shared resources during a live dashboard session; BATCH and SCENARIO allow the platform's full configured ceiling (Section 25).
+Section 19 — Administrative Metadata
+Per Decision 18: every Calculation Run and FIO exposes a stable, human-oriented metadata surface (name, description, business purpose reference, owner, impacted downstream FIOs and reports) even though this service has no administrative UI of its own. This metadata is derived, not separately entered — name and description are resolved from the FIO's financial_concept_id and calculation_intent through FIE-002's registry; owner is resolved from the Financial Operating Model's constituent methodology ownership (FIE-002 §7.1). No new free-text administrative field is stored redundantly in this service; every administrative attribute is a read-through reference to the service that actually owns that fact.
+Section 20 — Logging
+CALCULATION_RUN_STARTED
+CALCULATION_RUN_COMPLETED
+CALCULATION_RUN_PARTIAL
+CALCULATION_RUN_FAILED
+EXECUTION_PLAN_GENERATED
+CACHE_HIT
+CACHE_MISS
+FIO_WRITTEN
+EVIDENCE_ASSEMBLED
+CIRCULAR_DEPENDENCY_DETECTED
+Every log entry includes: request_id, customer_id, calculation_run_id, financial_operating_model_version, execution_mode, calculation_profile, actor_type, actor_id, timestamp — the same field discipline used by every prior document.
+Section 21 — Metrics
+Metric
+Type
+calculation_runs_total{execution_mode, calculation_profile}
+Counter
+calculation_run_duration_seconds{execution_mode, calculation_profile}
+Histogram
+cache_hit_ratio{calculation_intent}
+Gauge
+fios_written_total{financial_concept, visibility}
+Counter
+evidence_assembly_duration_seconds{depth}
+Histogram
+circular_dependency_detected_total
+Counter
+partial_execution_total{financial_concept}
+Counter
+parallel_execution_concurrency_gauge{calculation_profile}
+Gauge
+Table FIE3-21.1 — Prometheus-style metrics.
+Section 22 — Observability
+Dashboards
+Calculation run volume and latency by execution mode and profile
+Cache hit ratio trend
+PARTIAL/FAILED run rate by financial concept
+Evidence assembly latency
+Parallel execution utilization
+Alerts
+Calculation run failure rate spike
+Cache hit ratio sudden drop (signals an upstream invalidation storm)
+Circular dependency detection spike (signals a FIE-002 dependency declaration error)
+Evidence assembly latency SLA breach
+Query Patterns
+Pattern
+Supported Via
+Latest Published FIO for a concept and intent
+GET /v1/fios?financial_concept_id=&calculation_intent=&visibility=PUBLISHED&sort=latest
+Historical FIO as of a past business date
+GET /v1/fios?...&business_effective_date=
+Every FIO produced by a run
+GET /v1/calculation-runs/{id}/fios
+What depends on this FIO downstream
+GET /v1/fios/{fio_id}/dependents
+Runs by cache_hit status
+GET /v1/calculation-runs?cache_hit=false
+Runs with PARTIAL or FAILED status
+GET /v1/calculation-runs?status=PARTIAL,FAILED
+Table FIE3-22.1 — Query patterns.
+Section 23 — Error Handling
+Error Code
+Meaning
+INVALID_INPUT
+Request fails schema validation
+OPERATING_MODEL_NOT_FOUND
+Referenced Financial Operating Model version does not exist in FIE-002
+MISSING_AS_OF
+GOVERNED execution mode requested without a required as_of date, per Section 1.9
+CIRCULAR_DEPENDENCY
+Execution Planner detected a cycle in the resolved dependency graph, per Section 11
+MISSING_DEPENDENCY
+A required upstream methodology has no resolvable version
+EVIDENCE_UNAVAILABLE
+A required FIE-001 or FIE-002 read failed or returned no data
+FIO_NOT_FOUND
+Requested fio_id does not exist or caller lacks visibility scope
+EVIDENCE_ASSEMBLY_FAILED
+Recursive lineage join failed or exceeded configured depth
+PERMISSION_ERROR
+Caller not authorized for this customer scope or visibility level
+INTERNAL_ERROR
+Unclassified failure
+Table FIE3-23.1 — Error codes, extending the EIS-001 taxonomy consistent with every prior document.
+Section 24 — Retry Strategy
+Calculation Run creation is idempotent by idempotency_key
+A failed run is safely retryable on timeout or 5xx; a 4xx requires input correction before retry
+A cancelled run (Section 4.4) can be safely re-submitted as a new calculation_run_id
+A PARTIAL run is not automatically retried by this service — the caller (typically Orchestration) decides whether to re-request once the missing input becomes available
+Evidence assembly failures are safely retryable; they never affect the underlying FIO or Calculation Run they describe
+Section 25 — Security
+Internal-only service at MVP — no direct external exposure
+Customer isolation enforced by customer_id on every table and query, no exceptions
+INTERNAL-visibility FIOs require an explicit, elevated permission scope beyond ordinary PUBLISHED-visibility read access, per Section 4.2
+No write path exists into FIE-001 or FIE-002 from this service under any circumstance, enforced at the network/API-client layer, not only by convention
+No mutation path exists for value, confidence, or lineage fields on any persisted FIO or Calculation Run — enforced at the schema layer
+Data at rest encrypted, consistent with every prior document's storage posture
+Section 26 — Deployment Model
+FastAPI service for the stateless Execution Planner and query layer
+Postgres for calculation_runs, execution_plans, financial_intelligence_objects, and fio_lineage_refs, partitioned by customer_id and business_effective_date month
+Async Graph Executor worker pool, consuming dispatched calculation jobs and executing parallel branches (Section 18) across worker processes
+Internal-only network access at MVP
+Horizontal scaling of both the stateless API layer and the worker pool independently, since planning and execution have different resource profiles
+Section 27 — Performance Targets
+Target
+Value
+Execution Plan generation
+p95 < 500 ms
+Cache hit resolution (single node)
+p95 < 50 ms
+Full calculation run, INTERACTIVE profile, 8-node graph, cache miss
+p95 < 5 seconds
+Full calculation run, BATCH profile, Month-End Close scope
+p95 < 5 minutes
+FIO read (GET /v1/fios/{fio_id})
+p95 < 150 ms
+Evidence assembly (GET /v1/evidence/{fio_id}), default depth
+p95 < 2 seconds — measured separately per Section 1.7, not folded into FIO read latency
+Concurrent calculation run throughput (MVP target)
+100 concurrent runs
+Table FIE3-27.1 — Performance targets.
+Section 28 — Unit Testing
+Determinism: identical (Operating Model version, Snapshot IDs, Revision refs) inputs produce byte-identical FIO values across repeated executions
+Confidence propagation correctly applies the minimum-across-inputs rule, including the null-dimension exclusion case from Section 14
+Cache Resolver returns an exact prior FIO for an identical cache-key tuple and correctly misses on any single differing element
+Circular dependency detection at Execution Plan generation, never mid-execution
+PARTIAL status correctly applied when one target concept's required input is UNAVAILABLE while others remain READY
+GOVERNED mode correctly rejects a request missing as_of with MISSING_AS_OF
+Scenario execution (Calculation Profile = SCENARIO) never produces a call to any FIE-001 write endpoint
+FIO immutability — no code path permits updating value, confidence, or lineage on a persisted FIO
+Section 29 — Integration Testing
+End-to-end 8-node Board KPI calculation (Pipeline→...→Board KPIs) against live FIE-001/FIE-002 data, verifying every intermediate node produces its own INTERNAL FIO
+Incremental execution: a Pipeline-only Observation change triggers recalculation of exactly the Bookings→Revenue→Cash→KPIs branch and leaves an independent Headcount Forecast branch's FIOs untouched
+Full evidence assembly for a Board KPI FIO, recursively resolving through every upstream FIO to its originating FIE-001 Observations and Revisions
+GOVERNED mode reproducibility: two GOVERNED runs with the same as_of date, taken before and after a new methodology version activates, both resolve to the methodology that was ACTIVE as of that as_of date
+Scenario run followed by simulated Financial Governance approval, verifying the resulting FIE-001 Revision write happens outside this service's own request path entirely
+Cross-service read by a stub Reporting Platform call against GET /v1/fios
+Section 30 — Failure Recovery
+Failure Mode
+Recovery Behavior
+FIE-001 or FIE-002 read failure mid-plan
+Execution Plan generation fails with EVIDENCE_UNAVAILABLE; no Calculation Run is created
+Node execution failure mid-run
+The run completes with status=PARTIAL if other target concepts succeeded, or FAILED if none did; failed nodes are marked UNAVAILABLE, never silently substituted
+Worker crash mid-parallel-execution
+Completed nodes' FIOs remain valid and persisted; the run resumes execution of only the incomplete parallel group on worker restart
+Cache Resolver false-negative (fails to find an eligible prior run)
+Falls back safely to full re-execution — a missed cache opportunity costs time, never correctness
+Evidence assembly recursion exceeds configured depth
+Returns a partial evidence tree with a truncation flag rather than failing the entire request
+Table FIE3-30.1 — Failure modes and recovery behavior.
+Section 31 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+Full Governed restatement windows and historical rebuilds
+Extending Section 1.9's narrowed Governed mode to support retirement dates and restatement policies
+FIE-002 is extended with a retirement_date field and a restatement_policy entity
+FIO storage tiering
+A Hot/Warm/Cold model for financial_intelligence_objects analogous to FIE-001's, to control long-term storage cost
+Production FIO volume makes flat storage a measured cost concern
+FIE-002 acyclicity validation at declaration time
+Adding cycle detection to FIE-002's POST /v1/dependencies write path, so a bad edge is rejected at declaration rather than only caught at Execution Plan time here
+Production circular_dependency_detected_total volume shows this surfacing too late to be convenient for methodology authors
+Speculative/predictive caching
+Pre-computing likely-requested calculations ahead of an anticipated Snapshot arrival
+INTERACTIVE profile latency (Section 27) becomes a measured user-experience problem despite cache-hit optimization
+Evidence Package export formats
+PDF/DOCX rendering of an assembled Financial Evidence Package for offline audit use, likely delegated to BIS-006's Artifact Rendering Worker
+A concrete audit or board workflow requires an exportable evidence document rather than an API response
+Cross-run comparison API
+Structured diffing between two Calculation Runs (e.g. this month's Board Package vs. last month's)
+Financial Memory (FIE-004) is specified and its comparison needs are concretely known
+Table FIE3-31.1 — Backlog. Every item carries an explicit trigger condition, not a target date, matching the pattern established across BIS-001 through FIE-002.
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+Conceptual fidelity
+10 / 10
+Every frozen decision — independently addressable FIOs for every node, Evidence as a derived view, three Execution Modes, the minimum-across-inputs confidence rule, and snapshot-keyed caching — is translated into schema and API without redesign.
+Schema completeness
+10 / 10
+All four tables fully specified, including the explicit no-UPDATE-path design note on FIO value, confidence, and lineage that makes the determinism guarantee a storage-layer fact.
+Consistency with FIE-001, FIE-002, and BIS-001 through BIS-006
+10 / 10
+The snapshot-keyed cache model reuses FIE-001's existing completeness semantics directly rather than inventing change detection; the signal-not-enforce boundary on dependency resolution (never version resolution) mirrors the discipline established since BIS-004 §1.10.
+Boundary discipline
+10 / 10
+Section 1.6 fully resolves the one real contradiction the conceptual review found between this document's own Scope Boundaries and its original Decision 9, naming the exact actor chain (Financial Governance → Orchestration → FIE-001) rather than leaving "through the Observation Engine" ambiguous about who calls the write endpoint.
+Honest scope narrowing
+9 / 10
+Section 1.9 explicitly narrows Governed execution to what FIE-002 currently supports rather than building against fields that don't exist, and backlogs the gap with a named trigger condition. One point withheld: this narrowing means a customer-facing capability described in the conceptual model (restatement windows) is not actually deliverable at MVP, and that gap is visible only in this document's own Section 1 and backlog — it is not yet reflected back into FIE-002's own documentation as an open item.
+Testability
+9 / 10
+Unit and integration tests cover every component, including a dedicated determinism test and a dedicated scenario-never-writes-to-FIE-001 test. One point withheld: no explicit test scenario covers the Evidence Assembler's truncation behavior (Section 30) when recursion depth is exceeded, only the full-depth success case.
+Table FIE3-FA.1 — Build readiness assessment. Aggregate: 58 / 60 (97%).
+FIE-003 is complete and ready for engineering to begin implementation. FIE-001 through FIE-003 now form a complete, deterministic pipeline: what happened and what we believed (FIE-001), how it should be calculated (FIE-002), and the actual, reproducible calculation (FIE-003). The next document in the series is FIE-004, Financial Memory — the first FIE service that reasons rather than records or computes. It should open its own Section 1 by explicitly reconciling itself against this document's Section 1.3 boundary (Calculation Engine never performs longitudinal reasoning) the same way this document reconciled itself against FIE-001 and FIE-002, and it inherits one open item directly: Section 1.9's narrowed Governed mode means Financial Memory's own reasoning about "how did this forecast change over time" cannot yet rely on full historical restatement being available — that gap should be named again in FIE-004's own scope section, not rediscovered.
+The most consequential decision in this document is Section 1.9 — narrowing Governed execution rather than building it in full against a Financial Governance capability the conceptual model described but FIE-002 never actually implemented. It would have been easy to write Section 1.9 as if retirement dates and restatement policies already existed in FIE-002, since the conceptual model states plainly that Financial Governance "remains owned by FIE-002." Building against a described-but-unbuilt dependency is exactly the failure mode this documentation series has avoided everywhere else — BIS-004's FIDS boundary, BIS-006's Memory-naming correction, FIE-002's Knowledge Platform reconciliation — and the same discipline applies here: say plainly what exists today, build against that, and backlog the rest with a named condition for when it stops being backlog.

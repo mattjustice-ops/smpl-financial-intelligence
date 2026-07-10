@@ -1,0 +1,648 @@
+FIE-BUILD-002
+FINANCIAL INTELLIGENCE ENGINE
+Engineering Playbook
+Version 1.0
+HOW every engineer builds every service, consistently — companion to FIE-BUILD-001 (WHAT and in what order)
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING HANDBOOK
+Wherever this playbook and a frozen architecture document conflict, the architecture document is correct and this playbook is wrong. This document eliminates implementation ambiguity — it does not create new authority.
+Section 1 — Engineering Philosophy
+Ten principles. Every one already exists somewhere in frozen architecture — this section names them once, together, so no engineer has to reconstruct them by reading eleven documents.
+Canonical First
+No service reads a source system directly except Connector Proxy (BIS-001). Every other service — every FIE service, Reporting, Validation, Knowledge — reads only Canonical Business Objects or another service's derived output. If a new feature seems to need a direct connector read, that is a signal the design is wrong, not that an exception is warranted.
+Established in: BIS-003 §1.1; ABS-012 §2 Canonical Convergence
+Deterministic Core
+FIE-003 is the only service with no LLM anywhere in its execution path. Given identical Operating Model version, methodology/formula versions, and Observation/Revision inputs, it produces byte-identical output, forever. No engineer may introduce non-determinism (wall-clock time, random ordering, floating model temperature) into this path under any circumstance, including for performance.
+Established in: FIE-003 §1.11, §Core Architectural Principle
+AI Never Changes Numbers
+AI participates in mapping proposals, methodology template guidance, and reasoning/narrative generation — never in calculation. FIE-005's Financial Reasoning Engine reasons about numbers FIE-003 already produced; it does not recompute them. See FIE-003 §1.2–1.3 (calculation is deterministic, no LLM anywhere in the path) and FIE-005 §1.3 (reasoning about, not recomputing, FIE-003 outputs) for the full AI boundary.
+Established in: FIE-003 §1.2–1.3; FIE-005 §1.3
+Small Services
+Prefer many focused services over a small number of large ones. Each service owns one primary responsibility, exposes a well-defined contract (Section 6/15), and evolves independently of every other service's release cycle. This is not a new idea introduced here — it is the reason BIS-001 through BIS-006 and FIE-001 through FIE-005 exist as eleven separate specifications instead of one. A service that starts accumulating a second primary responsibility is a signal to split it, not to document an exception.
+Established in: Reflects the architecture already established throughout BIS and FIE, restated here as an explicit engineering principle rather than left implicit
+Immutability
+Nothing in this platform is ever edited in place. A correction is a new version, a new row, a new run — never an UPDATE to an existing value, confidence, or timestamp field. Every schema in Appendix A must be reviewed against this rule before merge, with an explicit note on which columns have no UPDATE grant.
+Established in: Universal — first established BIS-003 §1.5, restated in every subsequent document
+Reference Instead of Copy
+A fact or value owned by one service is referenced by ID from another, never duplicated as a second stored copy. This is the single most common category of design mistake this platform's own review process has caught (Driver Registry vs. Assumption Library, Decision Memory vs. FIE-001 values, Financial Evidence vs. Reasoning Package) — treat any PR that stores a value already owned elsewhere as a blocking review comment.
+Established in: FIE-002 §1.1; FIE-004 §8
+Fail Closed
+When evidence is missing, confidence is insufficient, or verification cannot complete, the default behavior is to block, not to proceed with a caveat baked silently into the output. There is no code path where uncertainty is resolved by guessing in the direction of availability.
+Established in: BIS-004 core principle; FIE-005 §1.10, §14
+Explainability by Default
+Every published value must be able to answer where it came from, without a special debug mode. Explainability is not a feature added later — it's satisfied by every table having lineage references from the day the table is created, per Section 17 below.
+Established in: FIE-005 §1.6, §15
+Version Everything
+Registries (methodologies, formulas, drivers, templates, business themes, narrative policies) are append-only and versioned; a change creates a new version, never an in-place edit. This is what makes reproducibility (Deterministic Core) and auditability (Explainability) actually hold at the schema level, not just as documented intent.
+Established in: FIE-002 §1.7–1.8; pattern repeated in every registry across the platform
+Build Interfaces Before Implementations
+Where a capability doesn't have a dedicated owning service yet (Explainability), specify its interface contract first and build an interim adapter against it — never build ad hoc, undocumented calls that a future extraction would have to reverse-engineer.
+Established in: FIE-005 §1.11
+Engineering Conventions
+Naming and organization decisions left to individual developer judgment quietly diverge across teams within weeks. These conventions remove that judgment call — not because any single choice here is uniquely correct, but because consistency across eleven services matters more than any one team's stylistic preference.
+Convention
+Rule
+Example
+Service naming
+kebab-case, matches its repository folder exactly
+fie-003-calculation
+Repository naming
+platform/services/{service-name}/, per Section 2
+platform/services/fie-005-reasoning/
+API endpoint naming
+/v1/{plural-resource}, per Section 6's versioning standard
+/v1/financial-intelligence-objects
+Event naming
+{domain}.{entity}.{action}, lowercase, dot-separated
+fie003.calculation_run.completed
+Database table naming
+snake_case, plural
+financial_intelligence_objects
+DTO / Request / Response naming
+{Verb}{Resource}Request / {Verb}{Resource}Response
+CreateReasoningPackageRequest
+Environment variable naming
+SCREAMING_SNAKE_CASE, service-prefixed
+FIE003_DB_URL
+Configuration object naming
+{Service}Config
+CalculationEngineConfig
+Feature flag naming
+{service}.{feature}.enabled, lowercase, dot-separated
+bis006.pdf_export.enabled
+Migration numbering
+Timestamp-prefixed, sequential, zero-padded
+20260706_0001_create_temporal_records.sql
+Package / module organization
+Mirrors Section 3's standard service structure exactly — no service-specific reorganization
+api/, services/, repositories/, domain/, ...
+Table P1a.1 — Engineering conventions. Enforced the same way as Section 5's coding standards: code review, not just documentation.
+Versioning Philosophy
+"Version Everything" (Section 1) is not limited to financial registries. Reproducibility across this platform depends on version pinning consistently, everywhere:
+APIs — versioned in path (Section 6); a breaking change is a new version, never an in-place contract change
+Events — schema_version on every event envelope (Section 7), so a consumer can detect a shape it doesn't yet understand
+Database schema — every migration is versioned and forward-only (Section 8)
+Methodologies — every version pinned, per FIE-002 §1.7–1.8
+Financial Operating Models — frozen at creation, never recomputed, per FIE-002 §1.7
+Configuration — every configuration change is itself a versioned, auditable event, not a silent overwrite
+Contracts — published to shared/contracts (Section 2) with their own version, imported by consumers, never copy-pasted at a point in time and left to drift
+Registries — Business Themes, Narrative Policies, Driver definitions, Industry Templates — all append-only and versioned, per the pattern established since FIE-001 §1.9
+The unifying reason all eight of these are versioned the same way: a historical result — a calculation, a narrative, a report — is only reproducible if every input that produced it can be resolved to the exact version that was active at the time. Version pinning is not a data-hygiene nicety; it is the mechanism the platform's entire reproducibility guarantee runs on.
+Configuration Hierarchy
+Where more than one configuration source could apply to the same setting, precedence resolves in exactly one order, highest to lowest:
+Platform Defaults       ↓Industry Template       ↓Operating Model       ↓Customer Configuration       ↓Feature Flags       ↓Runtime Overrides   (highest precedence — applies last)
+Platform Defaults — the platform's own out-of-the-box values, lowest precedence
+Industry Template — a recommended starting configuration for a vertical (FIE-002 §11), overrides platform defaults
+Operating Model — a specific customer's frozen, composed methodology set (FIE-002 §1.7), overrides template defaults
+Customer Configuration — explicit customer-specific overrides layered on top of their Operating Model
+Feature Flags — platform-controlled toggles (Section 5, Section 12) that can override customer configuration for rollout or rollback purposes
+Runtime Overrides — the narrowest, most temporary layer (e.g. a single request specifying as_of or execution_mode) — applies last and never persists beyond the request that set it
+This hierarchy exists to remove ambiguity, not to encourage overriding — most settings should resolve at Platform Defaults or Industry Template and never need a customer- or request-level override at all.
+Section 2 — Repository Organization
+platform/  services/    bis-001-connectors/    bis-002-orchestration/    bis-003-canonical/    bis-004-validation/    bis-005-knowledge/    bis-006-reporting/    fie-001-observation/    fie-002-methodology/    fie-003-calculation/    fie-004-memory/    fie-005-reasoning/  shared/    contracts/    events/    schemas/    clients/  deployment/  observability/  tests/  docs/
+Why this matters: every service directory is a peer, not a hierarchy — BIS and FIE services live at the same level because neither is architecturally 'inside' the other; only their runtime dependency direction differs (Section 15). shared/contracts and shared/schemas exist specifically so that a consuming service never redefines a producing service's shape locally — the FIE-002 methodology resolution response shape lives in one place, imported by FIE-003 and FIE-005, never copy-pasted. This is the Reference Instead of Copy principle applied to the codebase itself, not just to data.
+2.1 Brownfield Bootstrap
+ASSUMED  The production codebase today is a modular monolith under backend/app/ with a prototype warehouse layer (per FIE-BUILD-001 §0). Phases 0–2 (FIE-BUILD-001 §1) MAY implement BIS/FIE modules inside that existing structure before physical extraction to platform/services/, as long as each module's internal folder layout still follows Section 3's standard structure. Extraction to peer service directories, as shown above, is required before Milestone 7 cutover (FIE-BUILD-001 §19), not before.
+Prototype coexistence: new target-architecture code must never read prototype aggregate tables (actual_mrr_waterfall and similar) directly, except through an explicit, feature-flagged migration or comparison adapter, per FIE-BUILD-001 §18's rollback strategy. The prototype stays live and untouched until its own per-customer cutover criteria are met — bootstrapping inside the existing repository does not mean bootstrapping against the existing warehouse tables.
+Section 3 — Standard Service Structure
+service-name/  api/            controllers/  services/       business logic  repositories/   data access only  domain/         entities and value objects  events/         published + consumed event definitions  contracts/      this service's own public API/schema contract  schemas/        database schema + migration definitions  jobs/           async workers (per EIS-002 worker pattern)  tests/          unit, integration, contract  config/         environment-driven configuration  migrations/     versioned, forward-only  docs/           service-specific README, linking back to its owning spec
+Folder
+Responsibility
+Must Never Contain
+api/
+Request/response marshaling, input validation, auth check delegation
+Business logic, SQL, direct repository calls bypassing services/
+services/
+Business logic — the actual rules from this service's owning spec
+SQL, HTTP client calls to other services (delegate to clients/ in shared/)
+repositories/
+Data access — reads and writes, nothing else
+Any calculation, any business rule, any conditional logic beyond query construction
+domain/
+Entities and value objects matching the owning spec's data model exactly
+Persistence logic, API shape
+events/
+Event schema definitions this service produces or consumes
+Business logic that should live in services/
+contracts/
+This service's own versioned public contract, published to shared/contracts
+A copy of another service's contract — import it instead
+jobs/
+Async worker entry points (e.g. FIE-003's Graph Executor, BIS-006's Artifact Rendering Worker)
+Synchronous request-handling logic that belongs in api/
+Table P3.1 — Standard folder responsibilities, identical across every service in the platform.
+Section 4 — Standard Service Build Sequence
+Step
+Item
+Why This Order
+1
+Database Schema
+Every other layer depends on the shape of the data; changing it after repositories exist is the most expensive kind of rework
+2
+Migrations
+Establishes the append-only, forward-only discipline (Section 8) from the first commit, not retrofitted later
+3
+Domain Objects
+Encodes the owning spec's data model in code before any layer that consumes it exists, catching modeling gaps early and cheaply
+4
+Repository Layer
+Built directly against Domain Objects and Schema — no business logic exists yet to tempt a shortcut
+5
+Contracts
+Defining the public API shape before implementing business logic forces the team to agree on the interface first, per Section 1's 'Build Interfaces Before Implementations'
+6
+Events
+Same reasoning as Contracts — define the event shape before the logic that fires it
+7
+Business Logic
+Now built against a stable schema, repository layer, and already-agreed contracts/events — the single most change-prone layer is built last among the core layers, when the surrounding shape is most stable
+8
+APIs
+Wires Contracts to Business Logic; by this point both are stable
+9
+Authentication
+Applied once the API surface is complete, so auth rules can be reviewed against the full surface at once rather than piecemeal
+10
+Integration
+Cross-service calls are wired only once this service's own internals are stable enough to be a reliable integration partner
+11
+Observability
+Instrumented once real code paths exist to instrument — earlier instrumentation churns constantly as logic changes
+12
+Testing
+Full test suite (unit, integration, contract) written against a feature-complete service, not a moving target
+13
+Performance
+Tuned against real, tested code — premature optimization against unstable logic wastes effort
+14
+Documentation
+Written last so it describes what was actually built, not what was originally planned
+Table P4.1 — This sequence is a default, not a rigid gate — Contracts and Events (Steps 5–6) are frequently drafted in parallel with Domain Objects when a cross-team dependency needs early agreement. What it protects against is building Business Logic (Step 7) before the schema and contracts it depends on have stabilized.
+ASSUMED  Exception to Step 12's placement: the five platform-critical contracts named in FIE-BUILD-001 §8 (Canonical Convergence, methodology resolution as_of semantics, Financial Evidence assembly, the no-duplication rule, and fail-closed Verification) get their contract tests written at Steps 5–7, as soon as the relevant Contract is defined — not held until Step 12 with the rest of the test suite. This matches FIE-BUILD-001 §9's testing sequence, which runs these five before any service-specific feature testing begins.
+Section 5 — Engineering Standards
+Standard
+Guidance
+Controllers contain no business logic
+A controller's only job is marshaling — parse request, call a service method, marshal response. If a controller has an if/else branching on business state, that logic belongs in services/
+Repositories never calculate
+A repository returns rows or writes rows. Any derived value, sum, or conditional transformation belongs in services/, not repositories/
+Services never know SQL
+A service calls a repository method by name (e.g. findActiveByCustomer) and never constructs or sees a query string
+No SQL in controllers
+The strongest form of the above two — enforced by code review, not just convention
+UTC everywhere
+Every timestamp stored, transmitted, or logged is UTC; timezone conversion happens only at the final presentation layer (BIS-006)
+ISO-8601 timestamps
+No epoch integers, no locale-formatted strings in any API response or stored field
+UUID primary keys
+Every table's primary key is a UUID, matching every schema already specified across BIS-001 through FIE-005 — never an auto-incrementing integer, which would leak sequence information across tenants
+Environment-driven configuration
+No hardcoded connection strings, feature flags, or thresholds in code — every configurable value (Section 25/26-style config tables already specified per service) is environment-injected
+Feature flags
+Any behavior change that could affect a live customer (e.g. Section 18 of FIE-BUILD-001's per-customer cutover flag) is flag-gated, never a direct code branch on environment name
+Dependency injection
+Services receive their repository and client dependencies through constructor injection, never through direct instantiation or global singletons — this is what makes contract testing with mocked dependencies possible
+Consistent error handling
+Every service uses the same standard error envelope (Section 6) and the same EIS-001 error code taxonomy extended per service, never a locally invented error shape
+Table P5.1 — Engineering standards, enforced through code review, not just documentation.
+Section 6 — API Standards
+Standard
+Guidance
+Authentication
+Every internal call passes through Tool Gateway routing patterns (per EIS-001/002, inlined at MVP per FIE-BUILD-001's Tool Gateway note); no service accepts an unauthenticated internal call
+Authorization
+Role and customer-scope checks happen at the API layer before any service method executes, never inside business logic as an afterthought
+Versioning
+Every endpoint is versioned in its path (/v1/...); a breaking change ships as /v2/... alongside the still-running /v1/..., never as an in-place contract change
+Pagination
+Every list endpoint is cursor-paginated with a documented default and maximum page size, matching the pattern already set by BIS-003/004/006 and every FIE service
+Correlation IDs
+Every request carries a request_id, propagated through every downstream call it triggers, appearing in every log line and metric it produces
+Idempotency
+Every write endpoint accepts an idempotency_key and honors it exactly as specified in each service's own API section — a repeated call never creates a duplicate
+Timeouts
+Every outbound call to another service has an explicit timeout, never an indefinite wait
+Retries
+Retries follow each service's own documented Retry Strategy section — exponential backoff by default, never a tight retry loop
+Structured errors
+Every error response uses the standard envelope's error object (error_code, message, retry_after_seconds) — never a bare string or stack trace
+OpenAPI documentation
+Every endpoint is documented in OpenAPI format, generated from the Contracts layer (Section 3), never hand-maintained separately and left to drift
+Response consistency
+Every endpoint returns the standard response envelope (request_id, customer_id, status, data, error, latency_ms) established since BIS-001, with no per-service variation
+Table P6.1 — API standards. Every one of these is already demonstrated in at least one existing BIS/FIE document's own API section — this table generalizes the pattern explicitly rather than leaving it to be inferred by example.
+Section 7 — Event Standards
+Every platform event, regardless of producer, shares one envelope. The tenant-scoping field is named customer_id, matching the API envelope (Section 6), logging fields (Section 11), and database standards (Section 8) exactly — there is no separate tenant_id concept anywhere in this platform; using a different name for the same scoping concept in one layer is exactly the kind of silent drift Section 5's naming conventions exist to prevent.
+{  "event_id": "UUID",  "event_type": "string",  "correlation_id": "UUID",  "customer_id": "UUID",  "producer": "string  (e.g. \"fie-003-calculation\")",  "timestamp": "ISO-8601 UTC",  "schema_version": "integer",  "payload": {}}
+Retry philosophy: a consumer that fails processing an event retries with exponential backoff up to a configured limit before routing to a dead-letter queue — never silently drops an event
+Dead-letter philosophy: a dead-lettered event is never discarded; it is retained and alertable, per Section 11's observability standards, and requires explicit human triage before replay or discard
+Idempotency: every event consumer is written assuming at-least-once delivery — processing the same event_id twice must be a safe no-op, verified by a dedicated idempotency test per consumer
+schema_version exists specifically so a consumer can reject or branch on an event shape it doesn't yet understand, rather than crash on an unexpected payload shape
+Section 8 — Database Standards
+Standard
+Guidance
+Migration strategy
+Forward-only, versioned migrations; no migration is ever edited after it has run in any environment — a correction is a new migration
+Indexes
+Every foreign key column is indexed; every field appearing in a documented Query Pattern (per each service's own Query Patterns section) has a supporting index before that endpoint ships
+Foreign keys
+Declared at the schema level wherever one table references another within the same service; cross-service references are UUIDs with no database-level FK, since no service's database may directly reference another service's tables
+Version columns
+Every versioned entity (Section 1's 'Version Everything') carries an explicit integer version column, never inferred from row order or timestamp alone
+Audit fields
+created_at on every table, minimum; created_by/actor fields wherever a human or agent action produced the row
+Soft delete policy
+There is no soft-delete flag anywhere in this platform's core financial data model — records are archived (a status/lifecycle field, per FIE-004 §19's pattern) or superseded (a new version), never marked deleted, since deletion of financial history is not a concept this architecture supports
+Append-only policy
+No UPDATE grant exists on value, confidence, or timestamp columns for any row that has left DRAFT-equivalent status, enforced at the database permission layer wherever the underlying database supports it, not only at the application layer
+Partitioning guidance
+High-volume time-series tables (FIE-001 temporal_records, FIE-003 financial_intelligence_objects) are partitioned by customer_id and a time dimension (business_effective_date month), per FIE-001 §25's own partitioning guidance — apply the same pattern to any future table exceeding comparable volume
+Table P8.1 — Database standards. The append-only and soft-delete rules are the schema-level enforcement of Section 1's Immutability principle — not a separate rule, the same rule expressed as a database permission.
+Section 9 — Performance Standards
+Batch reads: every read of more than a handful of records uses a bulk-paginated endpoint (the pattern established by BIS-003/004 and reused by every FIE service) — never an N+1 loop of single-record calls
+Streaming writes: high-volume ingestion (e.g. a large CSV upload) streams rows through validation and canonical write rather than loading the entire file into memory first
+Caching: read-through caches are permitted only where a service's own spec explicitly allows one (e.g. FIE-002 §24's methodology resolution cache) and must implement the invalidation rule that spec defines — never a generic cache-everything default
+Avoid N+1 queries: any code path issuing one query per item in a loop is a blocking review comment, not a performance nice-to-have
+Pagination: every list-shaped response is paginated by default, even where present volume is low — this is a standard, not a scale-triggered optimization
+Async jobs: any operation exceeding roughly one second of synchronous work is dispatched as a job (per EIS-002's worker pattern), never held open on a synchronous request
+Concurrency: parallel execution (e.g. FIE-003's Graph Executor) respects each service's own documented concurrency ceiling — never unbounded parallelism against shared resources
+Queue usage: every async job is dispatched through the standard job queue (BIS-002's dispatch model), never a service-specific ad hoc queue
+Expected latency goals: every service's own Performance Targets section is the authoritative per-endpoint SLA; FIE-BUILD-001's Performance Targets section is the directional, platform-level goal — engineers build to the per-service spec, not the directional goal
+Section 10 — Security Standards
+Tenant isolation: customer_id scoping on every table and every query, with no code path capable of a cross-tenant read, verified by a dedicated cross-tenant-isolation test per service
+RBAC: role checks are declarative (a decorator or middleware, not inline conditional checks scattered through business logic), matching each service's own documented role requirements (e.g. FIE-002 Addendum A's elevated approver role)
+Least privilege: a service's database credentials grant only the tables and operations that service actually needs — no service's credentials span another service's schema
+Secret management: no secret (API key, credential, connection string) is ever committed to a repository; all secrets are injected through the platform's secret manager at deploy time
+Audit logging: every write to a governed entity (methodology approval, restatement approval, promotion decision) logs actor, timestamp, and decision, matching each service's own Logging section
+Encryption: data at rest encrypted everywhere, matching every service's own stated Security section
+Administrative actions: any action reachable only by an elevated role (BIS-005 promotion approval, FIE-002 Addendum A restatement approval) is logged with the same rigor as a customer-facing write, not treated as a lower-scrutiny internal action
+Operational logging: infrastructure-level logs (deploys, config changes, scaling events) are kept separate from application audit logs, but both are retained per the platform's retention policy
+ASSUMED  POC-stage exception: FIE-BUILD-001 §12 permits auto-approve for BIS-005 knowledge promotion during POC to avoid building a full review UI before it's needed. Any such bypass must be feature-flagged and explicitly labeled temporary in code and configuration — it must never become the default production behavior by omission, and the flag must default to full governance review in any environment beyond the specific POC customer set it was scoped for.
+Section 11 — Observability Standards
+Health endpoints: every service exposes GET /v1/health, per the pattern already specified in every BIS/FIE document's own API section
+Readiness endpoints: distinct from health — readiness reflects whether the service can currently accept traffic (e.g. database connection established), health reflects whether the process is alive at all
+Structured logging: every log line is structured JSON with the standard field set (request_id, customer_id, actor_type, actor_id, timestamp, plus service-specific fields already named in each service's own Logging section) — never unstructured free text
+Distributed tracing: a trace ID propagates across every service boundary a single customer-facing request touches, so a slow narrative generation can be traced back through FIE-005 → FIE-003 → FIE-002 → FIE-001 → BIS-003 in one view
+Metrics: every service exposes the Prometheus-style metrics already specified in its own Metrics section — this playbook adds no new metric, only the requirement that they exist and are scraped consistently
+Audit events: governed decisions (Section 10) additionally emit a platform event, not only a log line, so downstream systems (e.g. FIE-004's Decision Memory) can react to them
+Queue metrics: queue depth, processing latency, and dead-letter rate are tracked for every async job type, per Section 7
+Performance metrics: p50/p95/p99 latency tracked per endpoint, compared against each service's own Performance Targets section
+Dashboards: one dashboard per service, minimum, following the Dashboards subsection already specified in every service's own Observability section
+Alert philosophy: alert on symptoms a human needs to act on (failure rate spikes, SLA breaches, dead-letter growth), not on every possible metric crossing an arbitrary threshold — alert fatigue is itself an observability failure
+Section 12 — Deployment Standards
+Environment
+Purpose
+Development
+Local or shared dev environment; fixture data only, never real customer data
+QA
+Automated test execution environment; fixture and synthetic data
+Staging
+Production-like environment for pre-release validation; may include anonymized or design-partner data with explicit consent
+Production
+Live customer data; every deploy here follows the full Section 19 governance review
+Feature flags gate any customer-visible behavior change, per Section 5 — this is what makes FIE-BUILD-001's per-customer cutover flag (Section 18) possible without a code branch per customer
+Backward compatibility: a service must continue serving its previous API version for at least one deprecation window after a new version ships, per Section 6's versioning standard
+Migration safety: every migration is reviewed for whether it can run against a live, populated production table without locking it unacceptably long; large migrations are batched
+Rollback strategy: every deploy has a defined rollback path — for a stateless API layer, redeploying the prior version; for a schema migration, a corresponding down-migration or an explicitly documented forward-only mitigation if a down-migration isn't safe
+Blue/Green deployment, where the deployment platform supports it, is preferred for stateless API layers to make rollback a traffic-routing change rather than a redeploy
+Section 13 — Engineering Definition of Done
+A service is complete only when every item below is true — this is the generic version of the per-service Definition of Done already specified in FIE-BUILD-001 §16 for FIE-001 through FIE-005; the same checklist applies to every BIS service as well.
+Architecture compliant — verified against the service's own owning specification, not this playbook
+APIs documented — OpenAPI generated from Contracts, per Section 6
+Unit tests pass — per the service's own Unit Testing section
+Integration tests pass — per the service's own Integration Testing section
+Contract tests pass — including the five platform-critical contracts named in FIE-BUILD-001 §8
+Golden Path passes — the end-to-end walking-skeleton test (FIE-BUILD-001 §4) still succeeds with this service's changes included
+Performance validated — against the service's own Performance Targets section
+Observability complete — per Section 11 above
+Security reviewed — per Section 10 above and Section 19's review gate
+Documentation updated — docs/ folder (Section 3) reflects the current state, not the originally planned state
+Demo completed — a working demonstration against the relevant FIE-BUILD-001 milestone, if applicable
+Testing Pyramid
+Five layers, each with a distinct purpose. A service is not adequately tested by having a large number of tests at one layer while skipping another — each layer catches a different class of failure the others cannot.
+Layer
+Purpose
+When to Use
+1. Unit Tests
+Verify one function or class in isolation, with dependencies mocked
+Every non-trivial function, especially business logic in services/ (Section 3)
+2. Contract Tests
+Verify a service's API or event shape matches its published contract, independent of the consumer's actual implementation
+Every public endpoint and event, and mandatorily for the five platform-critical contracts (FIE-BUILD-001 §8), per Section 4's exception above
+3. Integration Tests
+Verify a service's real components (repository, database, business logic) work together correctly
+Every service, per its own owning spec's Integration Testing section
+4. Golden Path Tests
+Verify the full cross-service walking-skeleton (FIE-BUILD-001 §4) still succeeds end to end
+After every phase and before every FIE-BUILD-001 milestone review, not only at final release
+5. Production Verification
+Verify real production behavior post-deploy — synthetic transactions, canary checks, or monitoring-based confirmation that a deploy behaves as tested
+Every production deploy, especially any change touching a platform-critical contract
+Table P13a.1 — Testing pyramid. Layers 1–3 are the traditional pyramid; Layers 4–5 are specific to this platform's cross-service architecture and its emphasis on end-to-end reproducibility.
+Section 14 — Engineering Anti-Patterns
+Never
+Why It's Dangerous
+Bypass Canonical
+Breaks Canonical Convergence — the single property (ABS-012 §2, §11) that lets every downstream service and every ingestion path work without knowing about each other. One bypass reintroduces exactly the fragmentation the whole architecture exists to prevent
+Duplicate financial values
+Creates two systems of record for the same fact — the specific failure mode this platform's own review process caught and fixed repeatedly (FIE-002 §1.1, FIE-004 §8). Two copies eventually disagree, and nobody can tell which one is right
+Mutate immutable objects
+Breaks reproducibility (Deterministic Core) and auditability (Explainability) simultaneously — a value that changed silently can never again be trusted as a historical fact
+Store derived values as authoritative
+This is exactly the mistake the existing prototype warehouse made (ABS-012 §10) — aggregate tables became the source of truth instead of a derived view, and the result had no canonical history underneath it to migrate from
+Bypass Validation
+Publishes unverified data into a platform whose entire premise (Section 18 of FIE-BUILD-001, Product Acceptance Criteria) is that every number can be trusted and explained
+Calculate inside Reporting
+Violates the content/presentation boundary (FIE-005 §1.5, BIS-006 §1) — Reporting renders, it does not compute; a calculation done there has no lineage, no confidence, and no place in the Explainability chain
+Use AI inside deterministic execution
+Breaks FIE-003's determinism guarantee at its root — the entire point of separating Calculation from Reasoning (Section 1's Deterministic Core / AI Never Changes Numbers) is to keep the one place numbers are computed free of model non-determinism
+Publish without Verification
+Defeats the platform's central trust premise before a customer ever sees the consequence — FIE-005 §1.10's fail-closed rule exists specifically to make this impossible, not just discouraged
+Skip lineage
+An unexplainable number is, per this platform's own Product Acceptance Criteria, not a shippable number — lineage is not a nice-to-have field, it's the mechanism the entire Explainability principle depends on
+Skip confidence propagation
+Silently makes a result look more trustworthy than its weakest input — the minimum-across-inputs rule (FIE-003 §1.8, FIE-005 §19) exists precisely to prevent this
+Skip Orchestration
+Reintroduces a second scheduling/dispatch mechanism outside BIS-002's ownership — every service that has needed to trigger work has deferred to Orchestration for exactly this reason (BIS-004 §1.8, FIE-001 §1.7, FIE-003's job-triggered model)
+Table P14.1 — Every anti-pattern here is a documented, already-resolved mistake somewhere in this platform's own design history, not a hypothetical risk.
+Section 15 — Cross-Service Contracts
+Canonical (BIS-003)     ↓  bulk-paginated read, source_system as metadata onlyObservation (FIE-001)     ↓  timeline API, Snapshot/Revision referencesMethodology (FIE-002)     ↓  resolved methodology + formula + driver versionsCalculation (FIE-003)     ↓  Financial Intelligence Objects, full lineageMemory (FIE-004)          ←→  parallel accumulation, referencing FIE-001–003     ↓  Knowledge Objects, Evidence ChainsReasoning (FIE-005)     ↓  Reasoning Packages, verified Narrative ObjectsReporting (BIS-006)     →  renders and exports; computes nothing
+Boundary
+Responsibility Split
+Canonical → Observation
+Canonical owns current trusted state; Observation owns historical, bi-temporal record derived from it
+Observation → Methodology
+Observation owns facts and beliefs; Methodology owns definitions of how to interpret them — Methodology reads Observation only to resolve driver values, never to define anything
+Methodology → Calculation
+Methodology owns what to calculate; Calculation owns execution — Calculation never modifies a methodology, formula, or driver
+Calculation → Memory
+Calculation produces FIOs; Memory preserves organizational knowledge referencing them — never duplicating their values
+Calculation + Memory → Reasoning
+Reasoning consumes both as evidence; it writes to neither directly except through Memory's own governed Knowledge Object API
+Reasoning → Reporting
+Reasoning supplies verified content; Reporting supplies presentation — Reporting never generates reasoning or narrative text of its own for financial content
+Table P15.1 — Cross-service contracts, restated in one place for engineering reference. Full detail lives in each service's own Section 1 Scope Decisions.
+Dependency Direction Rules
+Section 15's stack implies a strict direction. Made explicit here as engineering guardrails, not assumptions an engineer has to infer from the diagram:
+Higher-level services may consume lower-level services. A service anywhere in the Section 15 stack may call any service below it
+Lower-level services never depend upon higher-level services. Canonical does not call Observation; Observation does not call Methodology; and so on up the stack — a dependency arrow only ever points downward
+Circular dependencies are prohibited, full stop. If two services appear to need each other, the design is wrong and one direction needs to be inverted or a third, lower-level service needs to own the shared concern
+Services communicate only through published contracts (Section 2's shared/contracts) — never through direct database access to another service's schema, and never through an undocumented internal call
+Reporting never performs calculations. It renders and exports FIE-005 content and FIE-003 FIOs; any number appearing in a report was computed upstream
+Calculation never depends upon Reporting. FIE-003 has no code path that calls, imports from, or is aware of BIS-006's existence
+Memory never recalculates Financial Intelligence Objects. FIE-004 references FIE-003 output by ID; it has no execution engine of its own
+Reasoning never modifies Memory directly. FIE-005 creates Knowledge Objects exclusively through FIE-004's own governed API, never through a direct write
+Service boundaries must remain intact even under schedule pressure. A shortcut that reaches across a boundary to save time is the single most common source of the anti-patterns in Section 14, and is never an acceptable tradeoff for a deadline
+Section 16 — Confidence Standards
+Confidence never disappears — every value that has confidence at capture retains it through every downstream transformation that references it
+Confidence always carries lineage — a confidence value is meaningless without the reference back to what produced it; never store a bare confidence number with no traceable origin
+Confidence explains origin — which of the four dimensions (Mapping, Data, Reasoning, Knowledge) is limiting a result, not just an aggregate score
+Confidence explains timestamp — confidence is fixed at the moment it was assigned and never silently recalculated as if it were current
+Confidence explains dependencies — a combined value's confidence names which inputs it took the minimum across (FIE-003 §1.8, FIE-005 §19)
+Confidence explains calculation — the combination rule applied (minimum-across-inputs) is documented and consistent everywhere it's used, never reinvented per service
+Section 17 — Explainability Standards
+Every published value must be able to answer, without a special debug mode:
+Question
+Answered By
+Where did this come from?
+Data Lineage (FIE-005 §15) → FIE-001 Observations → source Canonical objects
+Which observations?
+supporting_evidence_refs / fio_lineage_refs, resolved transitively
+Which methodology?
+methodology_id + methodology_version pinned on the producing FIO
+Which calculation?
+calculation_run_id, resolvable to the full Execution Graph
+Which assumptions?
+Assumption Revisions referenced by the methodology's driver inputs
+Which confidence?
+The four-dimensional confidence context, never collapsed (Section 16)
+Which version?
+Every registry entity's explicit version field — never inferred
+Which evidence?
+The assembled Financial Evidence Package (FIE-003 §1.7) or Reasoning Package (FIE-005 §10)
+Which source systems?
+source_system metadata on the originating Temporal Record — descriptive only, per ABS-012 §2, never a behavioral branch
+Table P17.1 — This table is engineering's implementation checklist for Section 1's 'Explainability by Default' principle. Every row must resolve for every customer-facing published value before that feature ships.
+Section 18 — Customer Trust Requirements
+The platform must always allow a customer to inspect Evidence, Lineage, Methodology, Definitions, Assumptions, Calculations, Confidence, and Narratives — no black boxes. The authoritative trust checklist is FIE-BUILD-001 §13 (What Cannot Be Mocked), §16 (Engineering Acceptance Criteria), §18 (Production Cutover), and its Product Acceptance Criteria section (the CFO-trust-specific checklist, positioned immediately before that document's Closing Note). This playbook does not restate that checklist's content a second time — engineers building any customer-facing feature must treat those FIE-BUILD-001 sections as required review gates, not optional context.
+Section 19 — Engineering Governance
+Every pull request affecting a service in Section 2's repository structure is reviewed against the following gates before merge. Not every gate requires a different reviewer, but every gate requires an explicit check — a PR template should make each one a checkbox, not an assumption.
+Review
+Checks
+Architecture review
+Does this change comply with the service's own owning ABS/BIS/FIE specification? Does it introduce any Section 14 anti-pattern?
+Performance review
+Does this change meet the service's own Performance Targets section? Does it introduce an N+1 query or unbounded loop (Section 9)?
+Security review
+Does this change preserve tenant isolation, least privilege, and secret management (Section 10)?
+Documentation review
+Is docs/ updated to reflect the actual change, per Section 4 Step 14?
+Testing review
+Do unit, integration, and contract tests exist and pass for the changed behavior, per Section 13?
+Observability review
+Are new code paths logged, metriced, and traceable per Section 11?
+Deployment review
+Is this change backward compatible, feature-flagged if customer-visible, and does it have a defined rollback path per Section 12?
+Table P19.1 — Engineering governance gates, applied to every PR regardless of service.
+CI/CD Quality Gates
+Section 19's review gates are human judgment calls. This is the automated pipeline every change passes through before those human gates are even reached — establishing baseline engineering quality mechanically, rather than relying solely on a reviewer catching it.
+Lint  ↓Static Analysis  ↓Unit Tests  ↓Contract Tests   (the five platform-critical contracts, FIE-BUILD-001 §8, always included)  ↓Integration Tests  ↓Migration Validation   (per Section 8 — forward-only, safe against a populated table)  ↓Security Scan  ↓Golden Path Validation   (FIE-BUILD-001 §4)  ↓Deployment
+A failure at any stage blocks progression to the next — this pipeline is fail-closed by the same logic as Section 1's platform principle, applied to the build process itself rather than to financial data.
+Section 20 — Relationship to FIE-BUILD-001
+FIE-BUILD-001
+FIE-BUILD-002
+Project roadmap
+Engineering playbook
+Milestones
+Implementation standards
+Dependencies
+Coding standards
+Implementation sequencing
+Repository standards
+What to build, and in what order
+How to build it, consistently, regardless of order
+Operational standards
+Testing standards
+Deployment standards
+Table P20.1 — FIE-BUILD-001 answers WHAT and WHEN; FIE-BUILD-002 answers HOW. Neither document has authority to redesign architecture — both are subordinate to ABS/BIS/FIE specifications, and to each other only in their own stated domain (a milestone's sequencing is FIE-BUILD-001's call; how an engineer structures the code to hit it is FIE-BUILD-002's call).
+Appendix A — Service-by-Service Engineering Checklists
+One generic checklist, applicable identically to every service, plus a short list of service-specific additions where a service has a genuinely distinctive engineering requirement beyond the generic list. This replaces eleven near-duplicate checklists with one shared template — the same simplification recommended in this document's own Final Engineering Review.
+Generic Engineering Checklist (applies to every service)
+Schema and migrations complete, append-only, per Section 8
+Domain objects match the owning spec's data model exactly
+Repository layer complete, contains no business logic
+Contracts published to shared/contracts, no local duplication
+Events (if applicable) match the standard envelope, per Section 7
+Business logic implements every rule in the owning spec's Section 1 Scope Decisions
+All endpoints implemented per the owning spec's API section, using the standard response envelope
+Auth and tenant isolation verified, per Section 10
+Cross-service integration points tested against Section 15's contracts and Dependency Direction Rules
+Observability complete, per Section 11
+Unit, integration, and contract tests pass, per the Testing Pyramid above
+Performance validated against the owning spec's Performance Targets section
+Documentation complete
+BIS-001 — Connector Proxy
+Additional Requirements
+File-upload adapter contract verified against ABS-012 §7 (POC scope)
+Live API connector adapters certified per-domain before Milestone 8 use, per FIE-BUILD-001 §19
+BIS-002 — Orchestration Service
+Additional Requirements
+Job dispatch and stage-transition logic verified against every service that depends on it for scheduling, per Dependency Direction Rules
+BIS-003 — Canonical Platform
+Additional Requirements
+Canonical Convergence contract test passes for every ingestion path exercised (Path A, B, or C per ABS-012)
+BIS-004 — Validation Platform
+Additional Requirements
+Every validation failure produces an explainable result (what failed, why it matters, severity) — never a bare pass/fail
+BIS-005 — Knowledge Platform
+Additional Requirements
+Promotion governance gate verified; POC-stage auto-approve bypass (if used) is feature-flagged per Section 10's P2-2 note
+BIS-006 — Reporting Platform
+Additional Requirements
+Verified to perform no calculation of its own — every rendered number traces to an upstream FIE-003 FIO or FIE-005 Narrative
+FIE-001 — Observation Engine
+Additional Requirements
+Bi-temporal correctness verified (business_effective_date vs. system_recorded_date independently queryable)
+Snapshot completeness status (COMPLETE/PARTIAL/FAILED/SUPERSEDED) verified against real fixture data
+FIE-002 — Methodology Engine (+ Addendum A)
+Additional Requirements
+Methodology resolution correctness verified for both current and as_of queries
+Financial Operating Model freeze-on-creation verified immutable
+If Addendum A is in scope: cascade resolution and elevated-approval gating both verified independently
+FIE-003 — Calculation Engine
+Additional Requirements
+Deterministic execution verified — identical inputs produce byte-identical output across repeated runs
+Execution Graph validated against the resolved methodology dependency set
+Confidence propagation validated (minimum-across-inputs rule)
+Financial Evidence Package generated and resolvable on demand
+Execution lineage complete for every produced FIO
+FIE-004 — Organizational Memory Platform
+Additional Requirements
+No-duplication rule verified — no Knowledge Object stores a value already owned by FIE-001/002/003
+Evidence Chains implemented as a typed, queryable reference table, not a JSON blob
+FIE-005 — Financial Reasoning Platform
+Additional Requirements
+Verification's fail-closed behavior demonstrated against a deliberately broken input
+Four-dimensional confidence preserved through to the published Narrative, never collapsed
+Explainability Adapter's five-operation contract satisfied against live FIE-001/003/004/BIS-006 data
+Appendix B — Reference Sequence Diagrams
+Provided as Mermaid source. These are reference sequences for engineering discussion, not a new specification — every message shown corresponds to an endpoint already defined in the relevant service's own API section.
+Canonical → Observation
+sequenceDiagram  participant C as Canonical (BIS-003)  participant O as Observation (FIE-001)  O->>C: bulk-paginated read (canonical objects)  C-->>O: canonical object page(s)  O->>O: capture Observation (temporal_records)
+Observation → Methodology
+sequenceDiagram  participant O as Observation (FIE-001)  participant M as Methodology (FIE-002)  M->>O: GET /v1/timeline/{financial_concept_id}  O-->>M: Observations + Revisions  M->>M: resolve driver values
+Methodology → Calculation
+sequenceDiagram  participant M as Methodology (FIE-002)  participant Ca as Calculation (FIE-003)  Ca->>M: GET /v1/methodologies/resolve  M-->>Ca: methodology + formula + driver versions  Ca->>Ca: build Execution Graph, execute
+Calculation → Memory
+sequenceDiagram  participant Ca as Calculation (FIE-003)  participant Me as Memory (FIE-004)  Me->>Ca: GET /v1/evidence/{fio_id}  (referenced, not copied)  Ca-->>Me: Financial Evidence Package  Me->>Me: create Knowledge Object referencing fio_id
+Calculation + Memory → Reasoning
+sequenceDiagram  participant Ca as Calculation (FIE-003)  participant Me as Memory (FIE-004)  participant R as Reasoning (FIE-005)  R->>Ca: GET /v1/evidence/{fio_id}  R->>Me: GET /v1/knowledge-objects/query  R->>R: reason, produce Finding/Insight  R->>R: Verification (fail-closed)  R->>Me: POST /v1/knowledge-objects (Recommendation Candidate only)
+Reasoning → Reporting
+sequenceDiagram  participant R as Reasoning (FIE-005)  participant Rep as Reporting (BIS-006)  Rep->>R: GET /v1/narratives/{id}  (Published only)  R-->>Rep: Narrative Object content  Rep->>Rep: render + export (no computation)
+Orchestration Dispatch
+sequenceDiagram  participant Orc as Orchestration (BIS-002)  participant Svc as Any Service  Orc->>Svc: dispatch job (scheduled cadence or business event)  Svc-->>Orc: job accepted, job_id  Svc->>Svc: execute  Svc-->>Orc: job status (COMPLETE | PARTIAL | FAILED)
+Job Execution (Async Worker Pattern)
+sequenceDiagram  participant Api as Stateless API Layer  participant Q as Job Queue  participant W as Async Worker  Api->>Q: enqueue job  Api-->>Api: return job_id, status=QUEUED  Q->>W: dispatch  W->>W: execute (may exceed sync request time)  W-->>Q: status=COMPLETE | FAILED
+Error Handling
+sequenceDiagram  participant Consumer  participant Producer  Consumer->>Producer: request  Producer--xConsumer: error (structured envelope, Section 6)  Consumer->>Consumer: classify: retryable vs. not (Section 6 Retries)  alt retryable    Consumer->>Producer: retry with backoff  else not retryable    Consumer->>Consumer: fail closed (Section 1)  end
+Appendix C — Engineering Examples
+Pseudocode only, deliberately not tied to any specific language — every service in this platform may be implemented in whatever language its owning team chooses, provided it conforms to Sections 1–19.
+Repository Pattern
+class TemporalRecordRepository:  function findByFinancialConcept(customer_id, concept_id, date_range):    return db.query(      table: temporal_records,      where: customer_id = customer_id        and financial_concept_id = concept_id        and business_effective_date within date_range,      order_by: business_effective_date    )  // No calculation. No business rule. Returns rows or nothing.
+Service Pattern
+class ObservationService:  constructor(repository: TemporalRecordRepository, canonicalClient: CanonicalClient):    this.repository = repository    this.canonicalClient = canonicalClient  // dependency injection — no direct instantiation, no global singleton  function captureObservation(request):    canonicalData = this.canonicalClient.bulkRead(request.scope)    observation = buildImmutableObservation(canonicalData, request.confidence_context)    return this.repository.insert(observation)    // business logic lives here — never in the repository or controller
+Event Publishing
+function publishEvent(event_type, payload, correlation_id, customer_id):  envelope = {    event_id: generateUUID(),    event_type: event_type,    correlation_id: correlation_id,    customer_id: customer_id,    producer: SERVICE_NAME,    timestamp: nowUTC_ISO8601(),    schema_version: CURRENT_SCHEMA_VERSION,    payload: payload  }  queue.publish(envelope)  // every event, every service, this exact shape — Section 7. customer_id, never tenant_id.
+Job Handler
+class GraphExecutorWorker:  function handle(job):    plan = executionPlanRepository.get(job.execution_plan_id)    for group in plan.parallel_groups:      results = executeConcurrently(group, maxConcurrency: profileConcurrencyLimit(job.calculation_profile))      persistResults(results)  // each result its own immutable FIO    markJobStatus(job, deriveOverallStatus(results))  // COMPLETE | PARTIAL | FAILED, never silently downgraded
+API Controller
+function postReasoningPackage(request):  validateSchema(request)              // api/ layer only  authCheck(request.caller, request.customer_id)  result = reasoningService.createPackage(request.body)   // delegate immediately  return standardEnvelope(status: SUCCESS, data: result)  // no branching on business state here — that's the service's job
+Contract Validation
+function validateAgainstContract(payload, contract_version):  schema = contractRegistry.get(SERVICE_NAME, contract_version)  errors = schema.validate(payload)  if errors.length > 0:    return INVALID_INPUT(errors)  return VALID  // contracts live in shared/contracts — never redefined locally per Section 2
+Dependency Injection
+class Application:  function wire():    repository = new TemporalRecordRepository(db)    canonicalClient = new CanonicalClient(config.canonical_base_url)    service = new ObservationService(repository, canonicalClient)    controller = new ObservationController(service)    return controller  // every dependency constructed once, injected explicitly — no global state, per Section 5
+Engineering Decision Records (EDRs)
+Lightweight governance for the moments an implementation decision intentionally diverges from architecture — not for ordinary engineering choices already covered by Sections 1–19, but for the specific case where a team decides to do something the frozen architecture didn't anticipate. Any such divergence requires an EDR before merge, reviewed under Section 19's Architecture review gate.
+EDR Field
+Content
+Problem
+What situation the frozen architecture doesn't cleanly address
+Alternatives Considered
+What options were evaluated, including 'do nothing and accept the gap'
+Decision
+What was actually chosen
+Rationale
+Why this option over the others
+Impact
+What this changes for other services, teams, or future work
+Referenced Architecture Documents
+Which ABS/BIS/FIE/BUILD document(s) this decision touches or diverges from
+Owner
+Who is accountable for this decision
+Date
+When it was made
+Table PA.1 — EDR template. This creates long-term engineering continuity — a future engineer encountering an unexpected divergence from spec finds the EDR that explains why, rather than having to guess whether it was a mistake.
+Engineering Trust Checklist
+The engineering interpretation of this platform's defining characteristic — customer trust. Every customer-facing feature should be able to answer yes to all eight before it ships, independent of and in addition to Section 18's Customer Trust Requirements and FIE-BUILD-001's Product Acceptance Criteria.
+Can this result be explained? — per Section 17's Explainability Standards
+Can it be reproduced? — per Section 1's Deterministic Core and Version Everything principles
+Can it be verified? — per FIE-005's fail-closed Verification Engine
+Can it be reconciled? — per the Financial Tie-Out pattern (FIE-005 §15)
+Can it be audited? — per Section 10's audit logging standard
+Can it be traced? — per Section 16's Confidence Standards and Section 17's lineage requirements
+Can it be restated? — per FIE-002 Addendum A, where applicable
+Can it be proven? — the sum of all seven above: a customer or auditor can independently verify the claim without taking the platform's word for it
+BUILD Series Roadmap
+Formalizing this document's own Final Engineering Review recommendations into a named sequence for engineering leadership.
+Document
+Purpose
+Status
+FIE-BUILD-001
+Implementation roadmap — what to build, in what order, with what milestones
+CONFIRMED frozen
+FIE-BUILD-002
+Engineering playbook — how to build it, consistently, across every service
+CONFIRMED this document
+FIE-BUILD-003
+CI/CD & Automated Governance — turning Section 19's review gates and this document's CI/CD Quality Gates into non-bypassable automated checks
+ASSUMED recommended next
+FIE-BUILD-004
+Testing & Certification — formal certification criteria for a service or connector beyond this document's Testing Pyramid
+ASSUMED
+FIE-BUILD-005
+Performance & Scaling — load testing methodology and scaling playbooks beyond this document's directional targets
+ASSUMED
+FIE-BUILD-006
+Production Operations — incident response, on-call, and runbook standards
+ASSUMED
+FIE-BUILD-007
+Security & Compliance — formal audit and compliance certification process beyond Section 10's standards
+ASSUMED
+FIE-BUILD-008
+Customer Implementation Playbook — the customer-facing counterpart to this internal engineering playbook
+ASSUMED
+Table PB.1 — BUILD series roadmap. None of FIE-BUILD-003 through 008 are required before FIE-BUILD-002 can be used as the engineering handbook — they extend it, per each document's own future scope, rather than complete it.
+Final Engineering Review
+Reviewed as a Principal Software Architect preparing a multi-team engineering organization to build against this playbook and FIE-BUILD-001 together, after incorporating two rounds of external review (Cursor's issue list and a structural revision pass).
+Remaining Implementation Risks
+The append-only, no-UPDATE-grant database discipline (Section 8) is easy to state and easy to violate under deadline pressure — the single highest-value automated guardrail this platform could add is a CI check that fails a migration granting UPDATE on a column this playbook or an owning spec has marked immutable
+Multi-language implementation (Appendix C's deliberate language-agnosticism) means the standard response envelope, error taxonomy, and event envelope must be enforced by shared contract libraries per language, not by convention alone — if two languages end up with two subtly different envelope implementations, Section 6/7's consistency promise quietly breaks
+FIE-003 and FIE-005's Very High complexity rating (FIE-BUILD-001's Complexity Assessment) means this playbook's standard build sequence (Section 4) will likely need the most deviation for exactly those two services — plan for that explicitly rather than being surprised by it
+Recommended Future BUILD Documents
+Formalized above in the BUILD Series Roadmap — FIE-BUILD-003 (CI/CD & Automated Governance) is the nearest-term recommendation, since it directly closes this section's first Remaining Implementation Risk. FIE-BUILD-004 through 008 are real but not urgent; none blocks using this playbook today.
+Final Answers
+1. Are there any remaining implementation blockers? No new blockers were introduced by this revision. The blockers already named in FIE-BUILD-001 (ABS-013, ABS-015) remain the only hard blockers in the platform, and neither is a FIE-BUILD-002 concern — this playbook governs how services are built, not whether the two missing architecture documents exist yet.
+2. Are there any recommendations that should become future BUILD documents rather than changes to this playbook? Yes — see the BUILD Series Roadmap above. CI/CD automation (FIE-BUILD-003) is the one worth prioritizing; the rest can wait for a concrete triggering need rather than being built speculatively, consistent with this entire documentation series' discipline of not designing ahead of a named requirement.
+3. Is FIE-BUILD-002 ready to freeze as the engineering handbook for the Financial Intelligence Engine? Yes. Every P0 cross-reference has been corrected or confirmed already valid against the current FIE-BUILD-001; the tenant_id/customer_id inconsistency is resolved; brownfield bootstrap and prototype coexistence guidance is in place; contract-test timing and POC governance exceptions are reconciled with FIE-BUILD-001; Appendix A's duplication is resolved; and all eleven structural revisions (Engineering Conventions, Dependency Direction Rules, Small Services, Testing Pyramid, Versioning Philosophy, Configuration Hierarchy, CI/CD Quality Gates, simplified Appendix A, Engineering Decision Records, Engineering Trust Checklist, and the BUILD Series Roadmap) are incorporated without reopening any architectural decision. The BUILD series should proceed to FIE-BUILD-003 without reopening FIE-BUILD-002.
+Engineering Assumptions
+Every team building against this playbook has already read the specific ABS/BIS/FIE document(s) their service implements — this playbook assumes that context, it does not substitute for it
+A shared contracts/events library exists or will be built early (Section 2) — without it, Sections 6 and 7's consistency standards are aspirational rather than enforced
+Potential Simplifications
+Appendix A's duplication has already been resolved in this revision — one generic checklist plus service-specific deltas, replacing eleven near-identical lists
+Sections 9 and 11 (Performance and Observability Standards) restate guidance already implicit in every service's own spec — this remains intentional consolidation, not redundancy, but a future revision could shorten both to pure cross-references once every team has internalized the pattern
+Areas Intentionally Deferred
+Specific language/framework choice per service — deliberately out of scope, per Appendix C's language-agnostic stance
+CI/CD pipeline implementation details — flagged above as a candidate future BUILD document rather than specified here
+Team-specific sprint/ticketing process — this playbook governs engineering standards, not project management process
+Is FIE-BUILD-002 Sufficiently Complete?
+Yes. Every required section is present, every standard traces to an already-established pattern in frozen architecture rather than inventing a new one, and the one real gap (automated enforcement vs. documented convention) is named explicitly as future work rather than silently assumed. This document is ready to become the engineering handbook for all Financial Intelligence Engine development.

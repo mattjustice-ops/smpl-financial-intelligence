@@ -1,0 +1,1900 @@
+CONNECTOR KNOWLEDGE REGISTRY
+HRIS Registry — Workforce Intelligence
+ABS-004  ·  Version 0.1
+Workday HCM · Rippling · BambooHR
+UKG Pro · ADP Workforce Now
+Chief Enterprise Architect · HRIS Domain Architect · SMPL.ai
+June 2026 · CONFIDENTIAL — INTERNAL ARCHITECTURE DOCUMENT
+Built on the CKR Standard v1.0 · Fourth registry, following ERP v1.0, CRM v1.0, and Billing v1.0
+Scope Note — Fourth Registry Under the CKR Standard
+This is the fourth Connector Knowledge Registry built under the CKR Standard, following the ERP Registry (v1.0), the CRM Registry (v1.0), and the Billing Registry (v1.0). This registry includes Confidence Drivers as a standard section per the build brief's explicit Connector Specifications list — confirming the Billing Registry v0.2 review's recommendation that this section be adopted permanently.
+Implementation Decision Flow, the second section recommended for standard adoption by the Billing Registry v0.2 review, is not explicitly requested in this build brief's Connector Specifications list. It is included in this registry for cross-registry consistency, on the basis that a structured implementation decision tree is at least as valuable for HRIS's organizational-hierarchy and compensation-policy questions as it was for Billing's usage-policy and Rate Plan questions. This inclusion is flagged explicitly in the Final Review rather than assumed silently, and the Final Review revisits whether both sections should now be formally and permanently added to the CKR standard's required section list, closing the loop opened by the Billing Registry review.
+Cross-Domain Relationships, recommended for standard adoption by the CRM Registry v0.4 review and included in the Billing Registry, is explicitly requested again in this build brief — the second confirmation that this section is being treated as de facto standard content.
+Category Overview
+This section establishes universal knowledge about HRIS platforms before any vendor-specific documentation begins — Tier 1 foundation that every HRIS connector specification in this registry builds upon, consistent with the category overview pattern established in the ERP, CRM, and Billing registries.
+✱ ARCHITECT NOTE: This registry is designed to be consumed equally well by human implementation consultants and AI implementation agents. Throughout this document, the implementation agent evaluates connector readiness, the Connector Engine maps vendor objects to canonical targets, the Capability Assessment Layer determines module status, and the CEP requests customer confirmation for ambiguous configuration.
+What Defines an HRIS Platform
+A Human Resources Information System is the operational system of record for how an organization's people are structured, employed, compensated, and managed. Where ERP explains financial truth, CRM explains commercial intent, and Billing explains commercial execution, HRIS explains workforce execution: who works at the company, in what role, reporting to whom, at what compensation, and with what employment status.
+Every HRIS platform in this registry maintains, at minimum, an Employee object, a Department or organizational unit structure, a Position or Job object defining roles, and a reporting relationship hierarchy. Beyond this core, HRIS platforms extend into compensation management, position and requisition planning, leave and absence tracking, and — in the most comprehensive platforms — workforce planning and organizational design functionality that overlaps meaningfully with FP&A.
+For SMPL, HRIS is the primary connector category for Workforce Planning, Headcount Reporting, and Department-level expense forecasting. No ERP can produce trustworthy headcount or organizational structure data — ERPs record GL-level payroll postings, not individual employee records or reporting relationships. No Payroll system, while authoritative for compensation amounts actually paid, typically owns the organizational hierarchy, job architecture, or position planning data that HRIS does. HRIS is the connector category that answers, with operational authority: who works here, in what structure, and what is the organization planning to look like going forward?
+HRIS vs. Payroll — Where the Boundary Sits
+This is the single most consequential boundary in this registry, and it is frequently a source of customer confusion since many vendors (Rippling, ADP Workforce Now, UKG Pro) offer combined HRIS-and-Payroll product suites. HRIS owns the organizational record: who is employed, in what role, in what department, reporting to whom, and what their target compensation is. Payroll owns the execution record: what was actually paid, when, with what tax withholding and deductions, in a specific pay run.
+The distinction matters architecturally because the two domains have different canonical objects and different confidence profiles. An Employee's base_salary field in HRIS represents the compensation plan; a Payroll Line's gross_pay field represents what was actually disbursed in a specific period. These are related but distinct figures — a mid-cycle raise, a one-time bonus, or a payroll error can cause them to diverge temporarily, and SMPL must never conflate the two. Per the Cross-Domain Relationships section below, HRIS is the canonical owner of the organizational and compensation-plan record; Payroll (where connected as a distinct system, or as a module within a combined HRIS+Payroll platform) is the canonical owner of actual disbursement.
+HRIS vs. ERP — Where the Boundary Sits
+HRIS owns headcount and organizational structure; ERP owns the financial consequence of that structure once it is posted to the General Ledger. An employee's existence, department assignment, and compensation plan are HRIS facts. The GL journal entries generated by payroll runs, and the resulting Department-level P&L expense, are ERP facts. HRIS-derived headcount and compensation data is the leading indicator; ERP-confirmed payroll expense is the lagging, recognized confirmation — both are necessary for trusted Workforce Planning and Labor Cost Forecasting, neither substitutes for the other.
+HRIS vs. Recruiting — Where the Boundary Sits
+HRIS owns the employed workforce; dedicated Recruiting or Applicant Tracking Systems (Greenhouse, Lever, and similar — out of scope for this registry but referenced in Future Registry Expansion) own the candidate pipeline before hire. Most HRIS platforms in this registry expose Open Requisition and Scheduled Hire data representing planned future headcount, but this is materially lower-confidence than confirmed Employee records, and is never treated as equivalent to it.
+Workforce Lifecycle
+Every HRIS platform models an Employee moving through a defined lifecycle: Requisition (planned, not yet filled) → Hire → Active (with possible Promotions, Transfers, and Leaves of Absence along the way) → Termination. The specific state names and workflow steps vary by vendor, but this general lifecycle shape is universal across every platform in this registry.
+Hiring lifecycle: an Open Requisition is approved, a Scheduled Hire is recorded with an expected start date, and a Hire event creates the Employee record on or near the actual start date.
+Promotions and transfers: a change in an Employee's Job, Position, compensation band, or Department/reporting line without an intervening termination — the HRIS-side trigger for internal mobility analysis.
+Leaves of absence: a temporary, defined-duration suspension of active work status (parental leave, medical leave, sabbatical) without termination — relevant for accurate headcount-vs-FTE distinction during the leave period.
+Terminations: the end of an employment relationship, typically classified as voluntary or involuntary — the HRIS-side trigger for Attrition Analysis.
+Contractor management: many HRIS platforms track contractors and contingent workers alongside full-time employees, typically with a distinct Employment Type classification that affects FTE calculation and headcount reporting.
+Organizational Hierarchy and Manager Hierarchy
+Department, Cost Center, Business Unit, and Division represent the organizational classification dimensions used for headcount and expense reporting — conceptually similar to the Department dimension already established in the ERP Registry, but HRIS is typically the canonical source for the org structure itself, with ERP's cost center mapping derived from it. Manager Hierarchy — the reporting-relationship chain from any Employee up to the CEO — is a distinct dimension from Department, used for span-of-control analysis and approval routing, and is documented per connector since manager-hierarchy data completeness varies meaningfully across the five platforms in this registry.
+Job Architecture
+Job, Job Family, and Position represent the role-classification layer: Job Family groups related roles (e.g., "Engineering"), Job represents a specific role definition within that family (e.g., "Senior Software Engineer"), and Position represents a specific instance of that Job that can be filled, vacant, or planned within the org structure. Job architecture sophistication varies significantly across the five platforms in this registry, from Workday's formal, configurable job architecture to simpler title-based models in platforms positioned for smaller organizations.
+Compensation
+Base Salary, Variable Compensation, Bonus Plans, and Equity Grants (referenced, not canonically owned by HRIS — equity administration platforms like Carta are the canonical source) together represent an Employee's total compensation plan. HRIS-recorded compensation is the planned/target figure; actual disbursed compensation is a Payroll fact, per the HRIS-vs-Payroll boundary established above.
+Workforce Planning and Position Management
+The most financially consequential HRIS functionality for SMPL: Budgeted Positions (planned headcount, whether filled or not), Filled Positions (current headcount), and Open Positions (approved but unfilled) together support Vacancy Analysis and Hiring Forecast. Workforce Plan objects, where present, represent forward-looking headcount and compensation planning that — like Budget Line in the ERP Registry — requires Scenario-level versioning (Actual vs. Plan) to be used correctly in canonical reasoning.
+Universal HRIS Business Objects
+The following business objects appear, in some form, across all five HRIS platforms in this registry. Vendor-specific naming varies; the underlying business concept and its SCBM canonical target are universal. This table governs the Canonical Mapping section for every HRIS connector in this registry.
+Universal HRIS Concept
+Business Definition
+SCBM Canonical Target
+Employee
+A person with an active or historical employment relationship
+Employee (Entity)
+Position
+A specific, fillable instance of a Job within the org structure
+Extension field pending Position canonical object (deferred to SCDM v1.1)
+Job
+A defined role with associated title, level, and compensation band
+Extension field pending Job canonical object (deferred)
+Job Family
+A grouping of related Jobs (e.g., Engineering, Sales, G&A)
+Extension field — contributes to Department-equivalent reporting where Department itself is not granular enough
+Department
+An organizational unit grouping Employees by function
+Department (Entity) — shared canonical target with ERP
+Cost Center
+A financial allocation grouping, sometimes but not always identical to Department
+Extension field — mapped to Department or GL Account allocation per customer via CEP
+Manager
+The Employee an individual reports to
+Employee.reports_to_employee_id (SCDM field)
+Legal Entity
+A distinct legal employer, relevant for multi-entity or multi-country organizations
+Legal Entity (Entity) — shared canonical target with ERP
+Business Unit / Division
+A higher-level organizational grouping above Department
+Extension field pending formal hierarchy object (deferred)
+Location
+The physical or registered work location of an Employee
+Extension field — not yet a Tier 1/2 canonical object, consistent with ERP Registry treatment
+Compensation (Base Salary)
+An Employee's planned annual or hourly base pay rate
+Employee.base_compensation (SCDM field) — planned, not actual; see Payroll Line for disbursed amounts
+Variable Compensation
+Planned commission, bonus, or incentive pay not included in base salary
+Extension field pending Compensation Plan canonical object (deferred)
+Equity Grant (reference)
+A reference to equity compensation; HRIS is rarely the canonical source
+Extension field — canonical ownership typically resides with a dedicated equity platform (e.g., Carta), out of this registry's scope
+Bonus Plan
+A defined incentive compensation structure
+Extension field pending Compensation Plan canonical object (deferred)
+Employment Status
+Active, Leave of Absence, Terminated, or equivalent
+Employee.status (SCDM field)
+Employment Type
+Full-Time, Part-Time, Contractor, Intern, or equivalent
+Employee.employment_type (SCDM field) — affects FTE calculation
+Hire
+The event of an Employee record becoming active
+Employee.hire_date (SCDM field); contributes to Headcount Movement where tracked as a discrete event
+Termination
+The event of an Employee record becoming inactive
+Employee.termination_date (SCDM field); contributes to Attrition Analysis
+Transfer
+A change in Department, Job, or Manager without termination
+Extension field pending Employee Movement canonical object (deferred) — structurally analogous to ARR Movement in the Billing Registry
+Promotion
+A change in Job level or compensation band without termination
+Extension field pending Employee Movement canonical object (deferred)
+Leave of Absence
+A temporary, defined-duration suspension of active work status
+Extension field — affects FTE calculation during the leave period
+Contractor
+A non-employee worker tracked within the HRIS for headcount or cost purposes
+Employee (Entity) with employment_type = Contractor, where the platform tracks contractors as Employee-equivalent records
+Organization (hierarchy)
+The full structural representation of Departments, Business Units, and reporting lines
+Department (Entity) hierarchy + Employee.reports_to_employee_id chain
+Reporting Relationship
+The manager-to-report chain
+Employee.reports_to_employee_id (SCDM field)
+Requisition
+An approved but unfilled Position, representing planned hiring
+Extension field pending Requisition canonical object (deferred)
+Candidate (reference)
+A reference to a recruiting-stage individual; HRIS is rarely the canonical source
+Out of scope — canonical ownership resides with a dedicated Recruiting/ATS platform, not addressed in this registry
+Scheduled Hire
+A Requisition with a confirmed candidate and expected start date
+Extension field pending Requisition canonical object (deferred) — a sub-state of Requisition
+Headcount
+The count of active Employee records, typically segmented by Department, Employment Type, or Location
+Derived field: count of Employee where status = Active — not independently canonical per the same principle governing MRR in the Billing Registry
+FTE
+Full-Time-Equivalent headcount, accounting for part-time and contractor fractional contribution
+Derived field: weighted Employee count — methodology is a CEP-configurable policy, never a platform default
+Workforce Plan
+A forward-looking headcount and compensation plan, typically versioned by Scenario
+Budget Line (Movement) — Workforce/Headcount variant, shared canonical target with the ERP Registry's Financial Planning domain
+Benefit Plan (reference)
+A reference to health, retirement, or other benefit elections; rarely a canonical SMPL concern
+Out of scope — relevant only as a contributor to fully-loaded cost-per-employee calculations where available
+Table U.1 — Universal HRIS business objects and their SCBM canonical targets. Employee, Department, and the Headcount/FTE derived fields are the most consequential objects in this table for SMPL's core Workforce Planning capability.
+Universal Workforce Business Concepts
+The following business concepts are common across every HRIS platform in this registry but require explicit disambiguation, consistent with the Business Concept Registry treatment established in the SKA and applied in the prior three registries.
+Concept
+Business Definition
+Disambiguation Required
+Workforce Planning
+The forward-looking process of planning headcount and compensation by department and role.
+Distinct from payroll processing or accounting — Workforce Planning is a planning activity, with actuals reconciled against it after the fact, structurally analogous to Budget vs. Actual in the ERP Registry.
+Headcount
+A point-in-time count of active employees.
+Whether contractors are included, and whether the count is as-of a specific date or averaged over a period, are both CEP-configurable policies that materially affect the reported figure.
+FTE
+Full-Time-Equivalent — a normalized headcount figure accounting for part-time work.
+The conversion methodology (e.g., is a 0.5 FTE part-time employee counted as 0.5, or does the platform use a different fractional convention?) varies by vendor and customer policy — never assumed, always CEP-confirmed.
+Compensation Planning
+The process of setting and adjusting planned compensation, typically through Merit Cycles.
+Planned compensation (HRIS) vs. actually disbursed compensation (Payroll) are different figures that should agree over time but can diverge temporarily — never conflated.
+Hiring Plan
+A forward-looking plan for headcount growth by role and department.
+Distinguished from current Open Requisitions — a Hiring Plan may include positions not yet formally requisitioned, representing earlier-stage planning intent.
+Attrition
+The rate at which employees leave the organization, typically expressed as an annualized percentage.
+Voluntary vs. involuntary attrition should be distinguished where source data supports it — these represent different business problems requiring different interventions, structurally analogous to the voluntary/involuntary churn distinction in the Billing Registry.
+Internal Mobility
+The rate and pattern of employees moving between roles or departments without leaving the organization.
+Distinguished from both Hiring (external) and Attrition (departure) — internal mobility is a retention-positive signal that some platforms track explicitly and others require derivation from Transfer/Promotion event history.
+Organizational Design
+The structure of departments, reporting lines, and span of control across the organization.
+A point-in-time snapshot concept — organizational design changes over time, and historical org structure queries require the same point-in-time reasoning capability the SKA establishes for all canonical objects.
+Span of Control
+The number of direct reports a manager has.
+A derived metric from the reporting relationship chain, not independently stored — computed from Employee.reports_to_employee_id, consistent with the principle that metrics are computed, not sourced pre-computed from any connector.
+Cost Center Allocation
+The mapping of employee compensation cost to financial reporting dimensions.
+Cost Center is sometimes, but not always, identical to Department — the mapping between the two (1:1, many:1, or independent dimension) is a CEP-configurable decision specific to each customer's chart of accounts design.
+Department Planning
+Forward-looking headcount and budget planning at the department level.
+The HRIS-side planning figure (Workforce Plan) and the ERP-side Budget Line for department payroll expense should reconcile but are recorded in different systems and may use different period or currency conventions.
+Salary Bands
+A defined compensation range associated with a Job or Job Level.
+Band structure sophistication varies enormously across the five platforms in this registry, from Workday's formal, multi-dimensional band architecture to simpler or absent band structures in platforms positioned for smaller organizations.
+Merit Cycles
+A periodic, organization-wide compensation review and adjustment process.
+Merit cycle timing and structure is entirely customer-configured — never assumed to follow a calendar-year or any other default cadence.
+Workforce Forecasting
+Projecting future headcount and labor cost based on current trends and planned hiring.
+Requires both HRIS (current state and plan) and ERP (realized labor cost) for full confidence — an HRIS-only forecast can project headcount but not fully validate the resulting financial cost.
+Budgeted vs. Filled vs. Open Positions
+The three-way state of a Position: planned but not yet active, currently filled, or approved-but-vacant.
+This three-way distinction is the foundation of Vacancy Analysis and is more reliably available in platforms with formal Position Management functionality (Workday) than in simpler platforms that model headcount primarily through filled Employee records.
+Vacancy Analysis
+The identification and aging of open, unfilled positions.
+Requires Position Management functionality specifically — platforms without a formal Position object can only approximate this from Open Requisition data, which is a less structured proxy.
+Organizational Changes
+Department restructuring, reporting line changes, or business unit reorganization.
+Historical organizational change tracking varies significantly by platform — some maintain a full audit history of org changes, others reflect only the current state.
+Labor Cost Planning
+Forward-looking financial planning specifically for compensation and headcount-driven expense.
+The most consequential cross-domain workforce concept in this registry — requires HRIS for headcount and compensation plan, Payroll for actual disbursement patterns (including employer taxes and benefits load), and ERP for GL-level expense recognition.
+Table U.2 — Universal Workforce Business Concepts. Workforce Planning, FTE methodology, and the Compensation-Plan-vs-Disbursed distinction are the three most consequential disambiguation points in this table.
+Cross-Domain Relationships
+This section documents how HRIS contributes to each adjacent business domain, maintaining strict alignment with SCBM canonical ownership principles. For every domain: what HRIS contributes, what HRIS does not own, who the canonical owner is, what cross-validation is possible, and the resulting Capability Assessment implication.
+Domain
+What HRIS Contributes
+What HRIS Does Not Own
+Canonical Owner
+Cross-Validation Opportunity
+Capability Assessment Impact
+ERP
+Department and Cost Center structure for GL expense allocation; planned compensation figures contributing to Budget Line for headcount-driven expense.
+Recognized payroll expense in the GL; the Chart of Accounts; actual disbursed compensation.
+ERP — GL Account, Journal Entry, confirmed payroll expense.
+HRIS-derived headcount and planned compensation vs. ERP-recognized payroll expense — the foundation of Workforce Budget vs. Actual.
+Labor Cost Forecasting and Department Expense Forecasting require ERP pairing to move from Partial to Ready — HRIS alone can plan, never confirm.
+Payroll (where distinct from HRIS)
+Organizational structure, employment status, and planned compensation that Payroll uses as its system-of-record input for calculating actual pay.
+Actual gross/net pay, tax withholding, deductions, or benefits administration — these are Payroll-owned execution facts.
+Payroll — Payroll Line (Movement), actual disbursed compensation.
+HRIS-planned base compensation vs. Payroll-actual gross pay — confirms whether compensation changes (raises, bonuses) have been correctly executed.
+Compensation Validation and Labor Cost Reconciliation require Payroll pairing — relevant primarily for the subset of HRIS platforms in this registry where Payroll is a logically separate (even if commonly bundled) system.
+CRM
+Sales organization headcount and territory staffing context, contributing to Sales Capacity Planning.
+Pipeline, Opportunity, or sales performance data — entirely outside HRIS scope.
+CRM — Opportunity, Sales Forecast.
+HRIS-confirmed sales headcount vs. CRM-recorded quota-carrying representative count — a data-quality check on whether CRM user accounts accurately reflect actual sales headcount.
+Sales Capacity Planning and Territory Staffing Analysis require CRM pairing for full context — HRIS alone provides headcount without sales-performance context.
+Billing
+Customer-facing headcount (support, professional services, customer success) contributing to staffing-intensity analysis relative to revenue.
+Subscription, ARR, or any commercial execution data — entirely outside HRIS scope.
+Billing — Subscription, ARR Movement.
+HRIS-confirmed customer-facing headcount vs. Billing-derived ARR — the basis for Revenue per Employee and customer support staffing ratio analysis.
+Revenue per Employee and Professional Services Utilization require Billing pairing — a distinctively cross-domain capability that neither HRIS nor Billing can produce alone.
+Product Analytics
+Engineering and product organization headcount, contributing to engineering productivity and resource allocation analysis.
+Product usage, feature adoption, or any product telemetry — entirely outside HRIS scope.
+Product Analytics domain — Usage Event, Feature Adoption (deferred SCBM objects).
+HRIS-confirmed engineering headcount vs. Product Analytics-derived shipped-feature velocity — relevant for engineering productivity and resource allocation analysis.
+Engineering Productivity Analysis and Product Investment Analysis require Product Analytics pairing — a forward-looking, lower-priority capability relative to core Workforce Planning.
+Customer Success
+Customer-facing headcount and team structure contributing to support capacity and Customer Health signal context.
+The composite Health Score itself; support ticket history; NPS.
+Customer Success domain — Health Score (Summary, multi-domain composite).
+HRIS-confirmed CS team headcount vs. Customer Success-recorded ticket volume — a capacity-planning cross-check, not a Health Score input.
+Minimal direct Capability Assessment impact — HRIS contributes organizational context to Customer Success capacity planning, not to the Health Score itself.
+Marketing
+Marketing organization headcount, contributing to marketing efficiency and resourcing analysis.
+Campaign, MQL, or any marketing attribution data — entirely outside HRIS scope.
+Marketing Automation domain — Campaign, MQL.
+HRIS-confirmed marketing headcount vs. Marketing-derived pipeline generated per headcount — a resourcing-efficiency cross-check.
+Minimal direct Capability Assessment impact in this registry — relevant only as a future GTM efficiency capability requiring three-way HRIS+Marketing+CRM pairing.
+Banking
+None directly — HRIS has no native cash or banking data.
+Bank account balances, payroll funding, or any cash management data.
+Cash Management domain — Cash Account, Bank Transaction (deferred SCBM objects).
+Not applicable — no meaningful direct cross-validation surface; the relationship is mediated through Payroll and ERP.
+No direct Capability Assessment impact — HRIS does not contribute to Cash Forecasting directly; Labor Cost Forecasting reaches Cash Forecasting only through ERP and Payroll.
+Data Warehouse
+Raw export of all HRIS canonical objects for customer-managed analytics or blending with non-SMPL data sources.
+Nothing — a Data Warehouse connector is a downstream consumer of HRIS data, not a source HRIS depends on.
+Not applicable — Data Warehouse is a destination, not a canonical domain owner.
+Reconciliation between SMPL's canonical HRIS objects and a customer's independently-maintained warehouse copy, where both exist.
+No direct Capability Assessment impact; relevant only as an implementation pattern for customers with existing data warehouse infrastructure.
+Table CD.1 — HRIS cross-domain relationships. The ERP and Payroll relationships are the two most consequential for SMPL Financial Intelligence; the Billing relationship (Revenue per Employee) is this registry's most distinctive cross-domain capability.
+The Governing Ownership Principle for HRIS
+Throughout this registry, the following ownership boundaries are maintained without exception:
+HRIS is not Payroll. It does not own actual disbursed compensation, tax withholding, or benefits administration. Payroll (whether a logically distinct system or a module within a combined platform) is the canonical owner of execution-level compensation facts.
+HRIS is not ERP. It does not own recognized payroll expense or the Chart of Accounts. The ERP is the canonical owner of GL-level financial reporting, even when HRIS provides the organizational structure that GL expense allocation depends on.
+HRIS is not Recruiting. It does not own candidate pipeline data prior to hire. A dedicated Applicant Tracking System, where connected, is the canonical owner of pre-hire candidate data — HRIS's Requisition and Scheduled Hire objects represent planned headcount, not candidate-stage detail.
+HRIS contributes workforce intelligence. This is its canonical role: confirming who is employed, in what structure, at what planned compensation, supporting Workforce Planning, Headcount Reporting, and Labor Cost Forecasting in combination with Payroll and ERP confirmation.
+1. Workday HCM
+Workday HCM is the enterprise-tier HRIS platform in this registry, offering the most sophisticated native job architecture, position management, and organizational planning functionality of any connector SMPL supports — at the cost of the highest implementation complexity in the category, consistent with the pattern observed for Oracle Fusion (ERP) and Zuora (Billing) as the enterprise-tier connector in their respective registries.
+Business Purpose
+Workday HCM serves as the operational system of record for workforce management at SMPL's largest, most organizationally complex customers, with formal Position Management functionality that provides the most reliable Budgeted/Filled/Open position tracking of any connector in this registry — the foundation of high-confidence Vacancy Analysis and Workforce Planning.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_workday_hcm_v1
+vendor_name
+Workday, Inc.
+vendor_type
+HRIS — Enterprise Tier, with native Position Management and Workforce Planning
+vendor_description
+Workday HCM is an enterprise-grade human capital management platform offering formal job architecture, position management, organizational planning, and compensation management for large, complex organizations.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth, not vendor platform sophistication
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Worker
+An employee or contingent worker record
+Employee (Entity)
+Direct — High for core fields; formal Employment Type classification distinguishes employees from contingent workers reliably.
+Position
+A specific, fillable instance of a Job within the org structure, with explicit Budgeted/Filled/Open status
+Extension field pending Position canonical object; among the highest-confidence Position data in this registry
+Direct — High. Workday's formal Position Management is the most structurally complete in this registry.
+Job Profile
+A defined role with title, level, and compensation grade
+Extension field pending Job canonical object
+Direct — High.
+Supervisory Organization
+Workday's term for an organizational unit with a manager and reporting structure
+Department (Entity) — mapped via Supervisory Organization hierarchy
+Direct — High, though Workday's Supervisory Organization model does not always map 1:1 to a customer's Cost Center structure, requiring CEP reconciliation.
+Compensation Package
+An Employee's base, variable, and total compensation plan
+Employee.base_compensation and extension fields for variable components
+Direct — High.
+Business Process (Hire, Termination, Transfer events)
+Workday's formal workflow-driven record of workforce events
+Contributes to Employee Movement (deferred canonical object) — among the most reliable event-history sources in this registry
+Direct — High. Workday's Business Process framework produces a more complete audit trail than most other connectors.
+Table — Workday HCM primary business objects.
+Canonical Mapping
+Headcount and FTE are derived from Worker records filtered by Employment Type and Active status, with FTE percentage natively available on the Worker object — reducing the FTE-derivation ambiguity that affects several other connectors in this registry. Position-to-Worker linkage provides reliable Budgeted/Filled/Open classification directly from the platform, without requiring the inference logic needed for HRIS platforms without formal Position Management.
+Transformation Guidance
+The Connector Engine treats Workday as authoritative for organizational structure, Position status, and planned compensation. It is never treated as the authoritative source for actual disbursed compensation (Payroll-owned, even when Workday Payroll is the connected module) or recognized payroll expense (ERP-owned), per the Cross-Domain Relationships principles established for this registry.
+Configuration Variants
+Variant
+Frequency
+Impact
+Supervisory Organization structure not aligned 1:1 with Cost Center
+Common (~45%, reflecting Workday's flexible org modeling)
+Requires CEP-driven reconciliation between Workday's organizational hierarchy and the customer's financial reporting structure.
+Workday Payroll module active alongside HCM
+Occasional (~25%, more common in customers consolidating on a single Workday platform)
+When active, narrows the Payroll cross-validation gap since both HCM and Payroll data originate from the same platform.
+Multiple Business Process configurations for different worker types
+Common (~50%, reflecting Workday's configurable workflow engine)
+Event-history extraction must account for multiple distinct hire/termination/transfer workflows, each potentially with different field population.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Formal Position Management active, multi-level Supervisory Organization hierarchy, standard Business Process workflows for hire/termination/transfer.
+Common Variants
+Workday Payroll module active alongside HCM; multiple Job Profile libraries for different business units.
+Less Common Variants
+Workday Adaptive Planning (workforce planning module) active, providing native Workforce Plan data with elevated confidence.
+Rare / Complex Variants
+Highly customized Business Process workflows with extensive approval chains that obscure standard event timing; multiple, loosely federated Supervisory Organization hierarchies from a multi-acquisition corporate history.
+Table — Workday HCM Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Supervisory Organization always equals Cost Center
+Workday's organizational model is flexible by design and frequently does not align 1:1 with the customer's financial cost center structure — always confirm via CEP rather than assuming equivalence.
+Missing historical data from Business Process workflow customization
+Highly customized approval chains can delay or obscure the timing of when a Hire, Termination, or Transfer event is considered "effective," producing date misalignment if not investigated.
+Customer ownership ambiguity in multi-acquisition Supervisory Organization structures
+Organizations that grew through acquisition may have federated, inconsistent org hierarchies that require explicit reconciliation rather than being treated as a single coherent structure.
+Inactive Job Profiles or Positions retained from past reorganizations
+Stale Position records not cleaned up after a reorganization can introduce noise into Vacancy Analysis if not filtered.
+Compensation represented inconsistently across base/variable/total fields
+Customers vary in whether they track variable compensation as a separate Workday field or blend it into total compensation — confirm explicitly during onboarding.
+Table — Workday HCM Common Failure Modes.
+Capability Unlocks — Capability Progression
+Each capability below reflects standalone status when Workday is the only connected system, current confidence, what additional connectors would improve it, and the expected confidence range once those connectors are present. Planning guidance, not contractual guarantee.
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Workforce Planning
+Ready
+82%
+ERP (cost confirmation)
+88–93%
+Headcount Reporting
+Ready
+85%
+ERP, additional SMPL implementation experience
+89–93%
+Department Reporting
+Ready
+78%
+ERP (Cost Center reconciliation)
+85–90%
+Organizational Dashboards
+Ready
+80%
+Additional SMPL implementation experience
+85–90%
+Compensation Planning
+Partial
+62%
+Payroll (disbursement confirmation)
+78–85%
+Hiring Forecast
+Partial
+68%
+Additional SMPL implementation experience
+78–85%
+Attrition Analysis
+Ready
+75%
+Customer Success (context)
+82–88%
+Labor Cost Forecasting
+Partial
+50%
+ERP, Payroll (both required for confirmation)
+78–85%
+Workforce Budget vs Actual
+Partial
+55%
+ERP (required for confirmation)
+80–87%
+Manager Span Analysis
+Ready
+78%
+Additional SMPL implementation experience
+83–88%
+Department Expense Forecasting
+Partial
+52%
+ERP (required for confirmation)
+78–85%
+Position Planning
+Ready
+80%
+Additional SMPL implementation experience
+85–90%
+Organizational Growth Analysis
+Ready
+77%
+CRM, Billing (revenue-per-employee context)
+82–88%
+Board Reporting
+Partial
+55%
+ERP
+78–85%
+Table — Workday HCM capability progression. Position Planning and Organizational Dashboards show the strongest confidence in this registry, reflecting Workday's formal Position Management functionality.
+Confidence Drivers
+The following explains the architectural reasoning behind Workday's confidence estimates — selected to represent the full range of this connector's confidence profile.
+Headcount Reporting
+Current Confidence: 85%
+High confidence because:
+Worker object provides reliable, consistently populated Employment Type and Active status fields
+Native FTE percentage field reduces the FTE-derivation ambiguity present in platforms without this field
+Confidence may be limited because:
+Validated maturity status means fewer cumulative SMPL production implementations than this registry's more mature connectors
+Confidence improves with:
+ERP — cross-validating headcount-driven payroll expense against recognized GL figures
+Customer-specific factors include:
+FTE methodology policy defined in the CEP
+Whether contingent workers are included in headcount per customer policy
+Labor Cost Forecasting
+Current Confidence: 50%
+Confidence is limited because:
+Forecasting labor cost requires both HRIS-side planned compensation and ERP-side confirmed actual cost — Workday alone provides only the planning half
+Employer tax and benefits load, a material component of fully-loaded labor cost, is typically not available from HRIS alone
+Confidence improves after:
+ERP integration — required for actual cost confirmation
+Payroll integration — required for fully-loaded cost including employer tax and benefits, where Payroll is a logically distinct system from Workday HCM
+Position Planning
+Current Confidence: 80%
+High confidence because:
+Workday's formal Position Management explicitly tracks Budgeted, Filled, and Open status — the most structurally reliable Position data of any connector in this registry
+Confidence improves with:
+Additional SMPL implementation experience, to validate this strength across a broader set of production Workday customers
+Recommended Companion Connectors
+Workday delivers strong standalone Workforce Planning and Position-level intelligence, and its Financial Intelligence value grows substantially when paired with complementary business systems.
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP (NetSuite, Sage Intacct, etc.)
+Provides recognized payroll expense ground truth against which Workday-derived headcount and planned compensation can be confirmed.
+Labor Cost Forecasting, Workforce Budget vs. Actual, Department Expense Forecasting
+Recognized payroll expense (GL-confirmed)
+Labor Cost Forecasting and Workforce Budget vs. Actual move from Partial toward Ready
+Payroll (where logically distinct from Workday HCM)
+Confirms that planned compensation in Workday matches actual disbursed pay, closing the compensation-validation gap.
+Compensation Planning, Compensation Validation
+Confirmed disbursed compensation
+Compensation Planning moves toward Ready
+CRM (Salesforce, HubSpot, etc.)
+Adds sales-performance context to sales organization headcount.
+Sales Capacity Planning, Territory Staffing
+Confirmed quota-carrying headcount
+Organizational Growth Analysis confidence increases
+Billing (Stripe, Chargebee, etc.)
+Adds ARR context to customer-facing headcount, enabling revenue-per-employee analysis.
+Revenue per Employee, Customer Support Staffing
+ARR-to-headcount ratio
+Organizational Growth Analysis confidence increases
+Table — Workday HCM recommended companion connectors.
+Connector Synergies
+Workday + ERP
+Workforce expense forecasting: combining Workday's planned headcount and compensation with ERP-confirmed actual payroll expense for forward-looking labor cost projection
+Department cost analysis: reconciling Workday's organizational structure against ERP's GL-level department expense
+Labor cost reconciliation: confirming that headcount-driven payroll expense in the GL matches what Workday's organizational and compensation data would predict
+Operating expense forecasting: using Workday's hiring plan to project future GL-level operating expense growth
+Workday + Payroll
+Compensation validation: confirming planned compensation in Workday matches actual disbursed pay in Payroll
+Labor cost reconciliation: closing the gap between planned and actual cost, including employer tax and benefits load
+Benefits analysis: combining Workday's benefit plan references with Payroll-confirmed benefit deduction amounts
+Payroll forecasting: using Workday's hiring plan and compensation bands to forecast future payroll runs
+Workday + CRM
+Sales capacity planning: combining confirmed sales headcount with CRM quota and pipeline data
+Territory staffing: aligning HRIS-confirmed headcount with CRM territory assignment
+Sales productivity: relating headcount investment to CRM-derived sales output
+Workday + Billing
+Revenue per employee: combining HRIS headcount with Billing-derived ARR for a core SaaS efficiency metric
+Customer support staffing: relating customer-facing headcount to ARR or customer count
+Professional services utilization: combining services-team headcount with Billing-recorded services revenue
+Workday + Product Analytics
+Engineering productivity: relating engineering headcount to shipped feature velocity
+Resource allocation: informing where engineering investment is concentrated relative to product area usage
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Worker (core fields)
+83%
+Reliable Employment Type and status fields; native FTE percentage reduces derivation ambiguity.
+Position (Budgeted/Filled/Open)
+80%
+The strongest Position-status data in this registry, given Workday's formal Position Management.
+Supervisory Organization (Department mapping)
+72%
+Reliable hierarchy data; Cost Center reconciliation requires CEP confirmation.
+Compensation Package
+70%
+Reliable base compensation; variable component classification requires CEP confirmation.
+Business Process event history (Hire/Termination/Transfer)
+75%
+Among the most complete event audit trails in this registry; effective-dating can be obscured by complex approval workflows.
+Table — Workday HCM Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 38%
+SCBM Domain
+Coverage
+Headcount / Workforce
+78%
+Department / Organizational Structure
+72%
+Compensation (planned)
+62%
+Financial Planning (Workforce variant)
+45%
+Payroll (actual disbursement)
+5% (requires Payroll connector)
+Revenue (recognized variant)
+0%
+Customer Health (signal only)
+3%
+Table — Workday HCM estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Connector Maturity
+Validated (Level 2) — SMPL has implemented this connector against at least one real production customer with core Tier 1 mapping rules confirmed correct. Tier 2 pattern library is in early accumulation, reflecting both fewer cumulative implementations and Workday's genuinely higher configuration complexity relative to this registry's simpler connectors.
+Authentication
+OAuth 2.0 is the standard authentication method. The Connector Engine requests read-only access to Worker, Position, Supervisory Organization, and Compensation data, consistent with D-019 (read-only connectors) across the SKA.
+APIs
+Workday REST API — primary pattern for standard object access
+Workday RaaS (Report-as-a-Service) — used for complex, customer-configured report-based extraction, a pattern unique to Workday among the connectors in this registry
+Event Support
+Supported via Workday's Business Process event framework, though configuration is more involved than the registry's simpler HRIS connectors and typically requires explicit setup with the customer's Workday administration team.
+Historical Backfill
+Supported via REST API or RaaS reports, with RaaS generally preferred for large historical datasets given Workday's typically larger enterprise customer data volumes.
+Incremental Synchronization
+Supported via effective-dated queries on standard objects, supplemented by Business Process event notifications where configured.
+Known Customizations
+Customer-specific RaaS report configurations that may not map predictably to standard object structures
+Highly customized Business Process workflows with extensive approval chains
+Custom Supervisory Organization hierarchies not aligned with standard Cost Center structures
+Implementation Characteristics
+High typical complexity — the highest in this registry, reflecting Workday's enterprise positioning, configurable Business Process framework, and the connector's earlier SMPL implementation maturity. Implementation duration is generally the longest of any HRIS connector in this registry.
+Best Fit Customers
+Ideal Customer Profile
+Large, enterprise-tier organizations with complex organizational structures requiring formal Position Management and sophisticated workforce planning
+Companies with existing Workday investment across HCM, Payroll, and Adaptive Planning modules
+Less Ideal Customer Profile
+Early-stage or smaller organizations — Workday's implementation complexity and platform cost generally exceed the needs of SMPL's smaller customer segment
+Companies without dedicated HRIS administration resources — Workday's configurability requires sustained internal expertise to maintain
+Implementation Risks
+Supervisory Organization to Cost Center mapping must always be confirmed via CEP — never assumed to align 1:1.
+Given Validated maturity status combined with the platform's inherent complexity, expect to encounter and document new patterns during early implementations more frequently than with this registry's simpler connectors.
+RaaS report configurations are customer-specific and require coordination with the customer's Workday administration team rather than relying on a universal standard report.
+Implementation Decision Flow
+The following represents the business implementation workflow an implementation consultant or AI implementation agent follows when onboarding a Workday HCM connection — the most involved decision flow in this registry, reflecting Workday's genuinely higher configuration complexity.
+Customer uses Workday HCM
+  ↓
+Confirm Workday is the authoritative source for organizational structure
+  ↓
+Supervisory Organization aligned 1:1 with Cost Center?
+  (never assume — confirm explicitly via CEP)
+  ├─ Yes → Continue
+  └─ No → Determine reconciliation mapping; record in CEP
+  ↓
+Workday Payroll module active alongside HCM?
+  ├─ Yes → Narrower Payroll cross-validation gap; confirm shared data lineage
+  └─ No → Identify separate Payroll system, if any, for compensation validation
+  ↓
+Formal Position Management in active use?
+  ├─ Yes → High-confidence Budgeted/Filled/Open classification available
+  └─ No → Approximate Position status from Worker and Requisition data
+  ↓
+Workday Adaptive Planning active for Workforce Plan data?
+  ├─ Yes → Elevated Workforce Plan confidence; confirm Scenario versioning
+  └─ No → Workforce Plan derived from current Position/Requisition state only
+  ↓
+Multiple, federated Supervisory Organization hierarchies present
+(e.g., from acquisition history)?
+  ├─ Yes → Determine cross-hierarchy reconciliation strategy
+  └─ No → Continue
+  ↓
+FTE methodology for part-time/contingent workers confirmed?
+  ↓
+Record FTE policy in the CEP
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+Workforce Planning
+Headcount Reporting
+Department Reporting
+Organizational Dashboards
+Attrition Analysis
+Manager Span Analysis
+Position Planning
+Organizational Growth Analysis
+Partial
+Compensation Planning
+Hiring Forecast
+Labor Cost Forecasting
+Workforce Budget vs Actual
+Department Expense Forecasting
+Board Reporting
+Unavailable
+Pipeline Analytics
+Financial Statements
+Revenue Recognition
+Connector Fingerprint
+Business Purpose
+Workday HCM serves as the operational system of record for workforce management at SMPL's largest, most organizationally complex customers, distinguished by formal Position Management functionality unmatched elsewhere in this registry.
+Typical Customer
+Large, enterprise-tier organizations with complex organizational structures, often with existing investment across multiple Workday modules.
+Primary Strengths
+Formal Position Management providing the most reliable Budgeted/Filled/Open status data in this registry
+Native FTE percentage field reducing FTE-derivation ambiguity
+Comprehensive Business Process event history for workforce movement tracking
+Known Implementation Challenges
+Supervisory Organization to Cost Center alignment must always be confirmed, never assumed
+Highest implementation complexity in this registry, compounded by earlier SMPL connector maturity
+Implementation Characteristics
+High typical complexity — the highest in this registry. Implementation duration is generally the longest of any HRIS connector.
+Ideal Companion Systems
+ERP is required for Labor Cost Forecasting and Workforce Budget vs. Actual confirmation. Payroll closes the compensation-validation gap, with particular value where it is a logically distinct system from Workday HCM. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Workday HCM occupies the operational workforce system-of-record role for SMPL's largest, most organizationally complex customers, distinguished by enterprise-grade Position Management and organizational planning. Its contribution to Financial Intelligence is the strongest standalone Position-level and organizational confidence of any connector in this registry. Within the SCBM, it populates Employee, Department, and planned Compensation, with above-baseline confidence specifically for Position and organizational hierarchy data.
+Immediately after connection, Workday delivers board-relevant Workforce Planning, Headcount Reporting, and Position Planning — sufficient on its own to give executive leadership a strong organizational picture. The additional value unlocked through ERP and Payroll pairing is substantial: paired with ERP, Workday's planned headcount and compensation becomes cross-validated against recognized payroll expense; paired with Payroll, planned compensation becomes confirmed against actual disbursement. For SMPL's largest customers, Workday is frequently the foundation upon which the full Workforce Intelligence picture is built.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+2. Rippling
+Rippling is an all-in-one HRIS, Payroll, and IT management platform, frequently chosen by SMPL's growth-stage customer base specifically because it consolidates HRIS and Payroll within a single connector — narrowing the cross-validation gap that most other connectors in this registry require a separate Payroll system to close.
+Business Purpose
+Rippling serves as the operational system of record for workforce management with the distinguishing characteristic that Payroll is natively integrated rather than a separate system — Employee, Department, and Payroll Line data all originate from the same platform, reducing the identity-resolution and cross-validation burden that a logically separate HRIS-Payroll pairing requires.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_rippling_v1
+vendor_name
+Rippling, Inc.
+vendor_type
+HRIS / Payroll / IT Management Platform
+vendor_description
+Rippling is a cloud-based all-in-one workforce platform combining HRIS, Payroll, Benefits, and IT device management in a single connected data model, commonly replacing separate point solutions for growth-stage companies.
+connector_maturity_level
+Production Ready (Level 4) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Worker
+An employee record
+Employee (Entity)
+Direct — High. Reliable hire_date, employment_type, department, and location fields.
+Department
+An organizational unit grouping employees by function
+Department (Entity)
+Direct — High. Native dimension with clean department assignment.
+Pay Schedule / Pay Stub
+Per-employee, per-period compensation breakdown by type
+Payroll Line (Movement)
+Direct — High, given Rippling's native Payroll integration.
+Compensation
+Base salary and variable compensation plan
+Employee.base_compensation (SCDM field)
+Direct — High.
+Benefits
+Benefit plan elections and employer/employee contribution amounts
+Out of SCBM Tier 1/2 scope — contributes to fully-loaded cost-per-employee where available
+Direct — Medium. Requires Rippling Benefits module active.
+Employee → Department (belongs_to relationship)
+The organizational assignment of each employee
+belongs_to relationship (Employee → Department)
+Direct — High. Historical department changes preserved.
+Table — Rippling primary business objects.
+Canonical Mapping
+Headcount and FTE are derived from Worker records filtered by employment_type and active status. Because Payroll Line data originates from the same platform as Worker and Department data, GL-cost-center mapping (where configured) and compensation validation against actual disbursement both benefit from higher identity-resolution confidence than the registry's HRIS-only connectors require when paired with a separate Payroll system.
+Transformation Guidance
+The Connector Engine treats Rippling as authoritative for organizational structure, employment status, and — given the native Payroll integration — actual disbursed compensation as well, a broader authoritative scope than HRIS-only connectors in this registry. It remains never authoritative for recognized payroll expense in the GL, which is ERP-owned, per the Cross-Domain Relationships principles established for this registry.
+Configuration Variants
+Variant
+Frequency
+Impact
+Rippling Payroll module active (vs. HRIS-only with external payroll)
+Very common (~75%, reflecting Rippling's core all-in-one positioning)
+When active, Payroll Line data is available natively with high confidence; when inactive, compensation validation requires a separately connected Payroll system.
+GL cost center mapping configured for department-to-account allocation
+Common (~50%)
+Not a Rippling-native feature — requires Configuration Layer mapping; without it, payroll costs are available but not allocated to GL accounts.
+Rippling Benefits module active
+Occasional (~35%)
+Required for fully-loaded cost-per-employee calculation including employer benefit contributions.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Rippling Payroll and HRIS both active, standard department structure, no GL cost center mapping configured yet.
+Common Variants
+GL cost center mapping configured for department-level payroll allocation; Rippling Benefits module active.
+Less Common Variants
+Rippling IT/device management module active (no SMPL relevance, but indicates broader platform adoption); multi-entity payroll for companies with international employees.
+Rare / Complex Variants
+HRIS-only Rippling usage with payroll processed through a separate, legacy system — uncommon given Rippling's all-in-one positioning, but occurs in companies transitioning from a prior payroll vendor.
+Table — Rippling Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Rippling Payroll is always active
+Some customers use Rippling for HRIS only, with payroll on a separate legacy system — confirm explicitly during Pre-POC Discovery rather than assuming the all-in-one configuration.
+Missing historical activity from GL cost center mapping not configured
+Without explicit Configuration Layer mapping, payroll costs are available but not allocated to GL accounts, limiting Department Expense Forecasting confidence.
+Customer ownership ambiguity when contractors are tracked inconsistently
+Contractor records may or may not be included in standard Worker queries depending on customer configuration — confirm explicitly.
+Compensation represented inconsistently when Benefits module is partially configured
+Fully-loaded cost calculations can be incomplete if benefit contribution data is only partially populated.
+Table — Rippling Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Workforce Planning
+Ready
+84%
+ERP (cost confirmation)
+89–93%
+Headcount Reporting
+Ready
+88%
+Additional SMPL implementation experience
+91–95%
+Department Reporting
+Ready
+85%
+ERP (GL mapping)
+89–93%
+Compensation Planning
+Ready
+82%
+Additional SMPL implementation experience
+86–91%
+Labor Cost Forecasting
+Partial
+65%
+ERP (required for full confirmation)
+82–88%
+Workforce Budget vs Actual
+Partial
+62%
+ERP (required for confirmation)
+80–87%
+Attrition Analysis
+Ready
+80%
+Customer Success (context)
+85–90%
+Position Planning
+Partial
+55%
+Additional SMPL implementation experience
+75–82%
+Table — Rippling capability progression. Compensation Planning shows unusually strong confidence for a non-ERP, non-enterprise connector, reflecting native Payroll integration.
+Confidence Drivers
+Compensation Planning
+Current Confidence: 82%
+High confidence because:
+Rippling's native Payroll integration means planned compensation (HRIS) and actual disbursed compensation (Payroll) originate from the same platform with consistent identity resolution — a structural advantage most other connectors in this registry do not have
+Confidence improves with:
+Additional SMPL implementation experience to validate this strength across a broader production customer base
+Customer-specific factors include:
+Whether Rippling Payroll module is active, vs. HRIS-only with an external payroll system
+Labor Cost Forecasting
+Current Confidence: 65%
+Confidence is elevated relative to other connectors in this registry because:
+Native Payroll data partially closes the planned-vs-actual gap without requiring a separate Payroll connector
+Confidence is still Partial, not Ready, because:
+ERP remains the canonical owner of recognized payroll expense — Rippling's strong Payroll data narrows the gap but does not eliminate the ERP requirement
+Confidence improves after:
+ERP integration for GL-confirmed expense recognition
+Position Planning
+Current Confidence: 55%
+Confidence is limited because:
+Rippling does not offer formal Position Management comparable to Workday — Budgeted/Open position status must be approximated from headcount trends and open requisition data rather than a dedicated Position object
+Confidence improves with:
+Additional SMPL implementation experience to refine the approximation methodology
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Confirms Rippling's already-strong native Payroll data against GL-recognized payroll expense — a narrower gap than most HRIS connectors in this registry require.
+Labor Cost Forecasting, Workforce Budget vs. Actual
+Recognized payroll expense (GL-confirmed)
+Labor Cost Forecasting and Workforce Budget vs. Actual move toward Ready faster than for most connectors in this registry
+CRM
+Adds sales-performance context to sales organization headcount.
+Sales Capacity Planning
+Confirmed quota-carrying headcount
+Organizational Growth Analysis confidence increases
+Billing
+Adds ARR context to customer-facing headcount.
+Revenue per Employee
+ARR-to-headcount ratio
+Organizational Growth Analysis confidence increases
+Table — Rippling recommended companion connectors.
+Connector Synergies
+Rippling + ERP
+Workforce expense forecasting with an unusually narrow confidence gap to close, given Rippling's native Payroll integration
+Department cost analysis and labor cost reconciliation, following the standard pattern established across this registry
+Rippling + CRM
+Sales capacity planning and territory staffing, following the standard pattern established across this registry
+Rippling + Billing
+Revenue per employee, a core SaaS efficiency metric combining Rippling headcount with Billing-derived ARR
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Worker (core fields)
+86%
+Reliable hire date, employment type, department, location.
+Department
+85%
+Native dimension; GL cost center linkage requires Configuration Layer mapping.
+Payroll Line (when Payroll module active)
+82%
+Strong native integration; equity compensation and complex benefit deductions require additional modules.
+Compensation (planned)
+80%
+Reliable base compensation tracking.
+Table — Rippling Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 44%
+SCBM Domain
+Coverage
+Headcount / Workforce
+85%
+Department / Organizational Structure
+82%
+Compensation (planned)
+78%
+Payroll (actual disbursement)
+70% (when Payroll module active) / 5% (inactive)
+Financial Planning (Workforce variant)
+40%
+Revenue (recognized variant)
+0%
+Table — Rippling estimated SCBM coverage by domain. The highest non-ERP-paired Payroll coverage in this registry, reflecting native integration.
+Connector Maturity
+Production Ready (Level 4) — SMPL has implemented this connector across ≥5 production customers with full Tier 1 test coverage and a substantial Tier 2 pattern library.
+Authentication
+OAuth 2.0. The Connector Engine requests read-only access to Worker, Department, Payroll, and Compensation data.
+APIs
+REST API — primary pattern, well-documented and consistent
+Event Support
+Limited native webhook support for HR events; full synchronization typically relies on polling.
+Historical Backfill
+Fully supported via paginated REST API queries.
+Incremental Synchronization
+Supported via updatedAfter filtering.
+Known Customizations
+GL cost center mapping configuration, where present, for department-to-account payroll allocation
+HRIS-only deployments with payroll on a separate, legacy system
+Implementation Characteristics
+Low-Medium typical complexity — Rippling's consistent API and native Payroll integration produce comparatively fast, predictable implementations relative to the registry's enterprise-tier connector.
+Best Fit Customers
+Ideal Customer Profile
+Growth-stage companies wanting a consolidated HRIS and Payroll platform rather than separate point solutions
+Less Ideal Customer Profile
+Large enterprises with complex, multi-country, multi-entity workforce structures requiring Workday-level organizational sophistication
+Implementation Risks
+Payroll module activation status must be confirmed explicitly — never assumed from Rippling's all-in-one platform positioning.
+GL cost center mapping, where absent, limits Department Expense Forecasting confidence until configured.
+Implementation Decision Flow
+Customer uses Rippling
+  ↓
+Confirm Rippling is the authoritative source for organizational structure
+  ↓
+Rippling Payroll module active?
+  ├─ Yes → High-confidence native compensation validation available
+  └─ No → Identify separate Payroll system for compensation validation
+  ↓
+GL cost center mapping configured?
+  ├─ Yes → Department-level payroll allocation available
+  └─ No → Flag for Configuration Layer mapping; payroll costs unallocated until configured
+  ↓
+Contractors tracked within standard Worker queries?
+  ↓
+Confirm contractor inclusion policy; record in CEP
+  ↓
+Rippling Benefits module active?
+  ├─ Yes → Fully-loaded cost-per-employee calculation available
+  └─ No → Fully-loaded cost limited to base + variable compensation only
+  ↓
+FTE methodology for part-time workers confirmed?
+  ↓
+Record FTE policy in the CEP
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+Workforce Planning
+Headcount Reporting
+Department Reporting
+Compensation Planning
+Attrition Analysis
+Partial
+Labor Cost Forecasting
+Workforce Budget vs Actual
+Position Planning
+Unavailable
+Pipeline Analytics
+Financial Statements
+Connector Fingerprint
+Business Purpose
+Rippling serves as the operational system of record for workforce management with native Payroll integration that narrows the planned-vs-actual compensation gap more than any other connector in this registry.
+Typical Customer
+Growth-stage companies wanting a consolidated HRIS and Payroll platform.
+Primary Strengths
+Native Payroll integration producing strong compensation validation without a separate connector
+Consistent, well-documented API supporting fast implementation
+Known Implementation Challenges
+Payroll module activation status must always be confirmed
+GL cost center mapping requires explicit Configuration Layer setup
+Implementation Characteristics
+Low-Medium typical complexity, among the faster HRIS implementations in this registry.
+Ideal Companion Systems
+ERP closes an unusually narrow gap for this connector given native Payroll integration. CRM and Billing follow the standard pattern for revenue-per-employee and sales capacity analysis. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Rippling occupies the operational workforce system-of-record role with a distinctive advantage in native Payroll integration. Its contribution to Financial Intelligence is unusually strong for compensation validation specifically, given that planned and actual compensation originate from the same platform. Within the SCBM, it populates Employee, Department, and Payroll Line with above-baseline confidence.
+Immediately after connection, Rippling delivers reliable Workforce Planning, Headcount Reporting, and Compensation Planning. The additional value unlocked through ERP pairing, while still required for full GL-level confirmation, closes a narrower gap than for HRIS-only connectors in this registry.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+3. BambooHR
+BambooHR is an HRIS platform purpose-built for small and mid-sized businesses, offering a simpler, more opinionated data model than Workday or UKG Pro in exchange for faster implementation — structurally analogous to QuickBooks Online's position in the ERP Registry or Pipedrive's position in the CRM Registry.
+Business Purpose
+BambooHR serves the standard operational workforce system-of-record role for SMPL's smaller customers, with a simpler object model that trades organizational sophistication (no formal Position Management, limited job architecture) for implementation speed.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_bamboohr_v1
+vendor_name
+BambooHR, LLC
+vendor_type
+HRIS Platform — SMB/Mid-Market Tier
+vendor_description
+BambooHR is a cloud-based HRIS platform offering employee records, basic organizational structure, time-off tracking, and applicant tracking for small and mid-sized businesses, with a simpler data model than enterprise-tier platforms.
+connector_maturity_level
+Pilot Ready (Level 3) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Employee
+An employee record
+Employee (Entity)
+Direct — High. Simple, consistent field structure.
+Department
+An organizational unit
+Department (Entity)
+Direct — High, though typically a flat, single-level structure rather than a deep hierarchy.
+Job Title
+A free-text or semi-structured role title
+Extension field — limited job architecture relative to enterprise-tier connectors
+Direct — Medium. No formal Job Family or leveling structure in most implementations.
+Compensation
+Base salary information
+Employee.base_compensation (SCDM field)
+Direct — High.
+Employment Status
+Active, Terminated, or equivalent
+Employee.status (SCDM field)
+Direct — High.
+Table — BambooHR primary business objects.
+Canonical Mapping
+Headcount and FTE are derived directly from Employee status and employment type fields, with a simpler, more consistent classification scheme than enterprise-tier platforms — fewer edge cases, but also less granularity for sophisticated workforce segmentation.
+Transformation Guidance
+The Connector Engine treats BambooHR as authoritative for organizational structure and planned compensation at the same confidence level as the registry's other HRIS-only connectors, with the caveat that BambooHR's simpler Department model may not support the dimensional reporting depth that Workday or UKG Pro customers expect.
+Configuration Variants
+Variant
+Frequency
+Impact
+Flat, single-level Department structure (no Business Unit/Division layer)
+Very common (~70%, reflecting BambooHR's SMB positioning)
+Limits multi-level organizational reporting relative to enterprise-tier connectors; rarely a practical limitation for this connector's typical customer size.
+Custom fields for job-leveling approximation
+Common (~40%, given the absence of a native Job Family structure)
+Captured as extension fields pending CEP business-meaning resolution.
+Separate, non-BambooHR payroll system
+Very common (~80%, since BambooHR does not natively include payroll for most customers)
+Compensation validation requires a separately connected Payroll system in the large majority of implementations.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Flat department structure, simple job titles without formal leveling, separate external payroll system.
+Common Variants
+Custom fields used to approximate job-level or department-budget tracking.
+Less Common Variants
+BambooHR Payroll add-on active (less common than Rippling's native integration, given BambooHR's smaller payroll market share).
+Rare / Complex Variants
+Multi-entity employee tracking for companies with international contractors managed through a separate Employer-of-Record arrangement, requiring careful identity reconciliation.
+Table — BambooHR Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Department structure supports multi-level reporting
+BambooHR's flat department model does not natively support Business Unit/Division hierarchy — confirm customer expectations during Pre-POC Discovery rather than assuming enterprise-tier depth.
+Missing historical activity for employees terminated before BambooHR implementation
+Customers migrating from a prior HRIS may have incomplete historical employee data if records were not migrated — confirm data migration scope during onboarding.
+Customer ownership ambiguity for international contractors managed via Employer-of-Record
+EOR-managed workers may appear inconsistently in BambooHR depending on the customer's specific EOR integration — confirm explicitly.
+Compensation represented inconsistently when job-leveling is approximated via custom fields
+Without a native Job Family structure, compensation-band analysis relies on customer-specific custom field conventions that vary widely.
+Table — BambooHR Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Workforce Planning
+Ready
+78%
+ERP, Payroll
+84–89%
+Headcount Reporting
+Ready
+85%
+Additional SMPL implementation experience
+88–92%
+Department Reporting
+Partial
+65%
+Limited by flat department structure
+72–78%
+Compensation Planning
+Partial
+60%
+Payroll (required for validation)
+75–82%
+Attrition Analysis
+Ready
+76%
+Customer Success
+82–87%
+Labor Cost Forecasting
+Partial
+45%
+ERP, Payroll (both required)
+72–80%
+Position Planning
+Unavailable
+—
+No native Position Management; not expected to reach Ready status from BambooHR alone
+40–55% (with significant external data)
+Table — BambooHR capability progression. Department Reporting and Position Planning show structurally limited confidence ceilings reflecting BambooHR's simpler object model, not implementation maturity alone.
+Confidence Drivers
+Headcount Reporting
+Current Confidence: 85%
+High confidence because:
+Simple, consistent Employee status and employment type classification produces few edge cases
+Confidence improves with:
+Additional SMPL implementation experience
+Customer-specific factors include:
+FTE methodology policy defined in the CEP
+Department Reporting
+Current Confidence: 65%
+Confidence is structurally limited because:
+BambooHR's flat, single-level Department model does not natively support Business Unit/Division hierarchy — this is a platform characteristic, not a confidence gap that more SMPL implementation experience alone can close
+Confidence improves with:
+ERP — providing a more granular cost-center structure that can supplement BambooHR's flatter department model
+Position Planning
+Current Confidence: Unavailable from BambooHR alone
+Confidence is structurally unavailable because:
+BambooHR has no native Position Management object — Budgeted/Open status cannot be derived from the platform's data model, unlike Workday
+This ceiling does not improve with additional SMPL implementation experience — it reflects a genuine platform capability gap, addressable only through a supplementary planning tool or significant external data.
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Provides recognized payroll expense and a more granular cost-center structure than BambooHR's flat department model offers natively.
+Labor Cost Forecasting, Department Reporting
+Recognized payroll expense; granular cost center mapping
+Department Reporting and Labor Cost Forecasting both improve
+Payroll (separately connected, given BambooHR rarely includes native payroll)
+Confirms planned compensation against actual disbursement — required for this connector more often than for Rippling.
+Compensation Planning, Compensation Validation
+Confirmed disbursed compensation
+Compensation Planning moves toward Ready
+Table — BambooHR recommended companion connectors.
+Connector Synergies
+BambooHR + ERP
+Workforce expense forecasting and department cost analysis, with ERP providing the dimensional depth BambooHR's flat structure lacks natively
+BambooHR + Payroll
+Compensation validation, a more consequential pairing for this connector than for Rippling given BambooHR's typical lack of native payroll
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Employee (core fields)
+83%
+Simple, consistent field structure.
+Department
+65%
+Flat structure limits dimensional depth.
+Compensation (planned)
+62%
+Reliable base salary; variable compensation tracking is less standardized.
+Table — BambooHR Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 28%
+SCBM Domain
+Coverage
+Headcount / Workforce
+72%
+Department / Organizational Structure
+45% — structurally limited by flat model
+Compensation (planned)
+55%
+Payroll (actual disbursement)
+8% (requires separate Payroll connector in most cases)
+Financial Planning (Workforce variant)
+20%
+Table — BambooHR estimated SCBM coverage by domain.
+Connector Maturity
+Pilot Ready (Level 3) — SMPL has implemented this connector across 3–4 production customers with consistent results.
+Authentication
+API key authentication. The Connector Engine requests read-only access to Employee, Department, and Compensation data.
+APIs
+REST API — primary pattern, simple and well-documented
+Event Support
+Limited webhook support; primarily polling-based synchronization.
+Historical Backfill
+Supported via standard paginated REST queries; data volumes for this connector's typical customer size are modest.
+Incremental Synchronization
+Supported via lastChanged timestamp filtering.
+Known Customizations
+Custom fields used to approximate job-leveling or department-budget tracking in the absence of native structures
+Implementation Characteristics
+Low typical complexity — BambooHR's simple object model produces fast, predictable implementations for its typical SMB/mid-market customer size.
+Best Fit Customers
+Ideal Customer Profile
+Small to mid-sized companies with simple, single-level organizational structures prioritizing implementation speed
+Less Ideal Customer Profile
+Companies requiring formal Position Management, multi-level organizational hierarchy, or sophisticated job architecture
+Implementation Risks
+Department hierarchy expectations must be set explicitly — BambooHR's flat model does not support multi-level Business Unit/Division reporting.
+Separate Payroll system identification is required for the large majority of implementations, given BambooHR's limited native payroll adoption.
+Implementation Decision Flow
+Customer uses BambooHR
+  ↓
+Confirm BambooHR is the authoritative source for organizational structure
+  ↓
+Separate Payroll system in use?
+  ├─ Yes (most common) → Identify Payroll system for compensation validation
+  └─ No (BambooHR Payroll add-on active) → Confirm native payroll data availability
+  ↓
+Multi-level Department hierarchy expected by customer?
+  ├─ Yes → Set explicit expectation that BambooHR's flat model limits this;
+  │         recommend ERP pairing for dimensional depth
+  └─ No → Continue
+  ↓
+Custom fields used for job-leveling approximation?
+  ├─ Yes → Confirm business meaning via CEP
+  └─ No → Continue
+  ↓
+International contractors managed via EOR?
+  ├─ Yes → Confirm identity reconciliation approach
+  └─ No → Continue
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+Workforce Planning
+Headcount Reporting
+Attrition Analysis
+Partial
+Department Reporting
+Compensation Planning
+Labor Cost Forecasting
+Unavailable
+Position Planning
+Pipeline Analytics
+Financial Statements
+Connector Fingerprint
+Business Purpose
+BambooHR serves as the operational system of record for workforce management at SMPL's smaller customers, trading organizational sophistication for implementation speed.
+Typical Customer
+Small to mid-sized companies with simple, single-level organizational structures.
+Primary Strengths
+Simple, consistent Employee data producing reliable Headcount Reporting
+Fast, predictable implementation given the platform's narrower object model
+Known Implementation Challenges
+Flat Department structure limits multi-level organizational reporting
+Separate Payroll system identification required for most implementations
+Implementation Characteristics
+Low typical complexity, among the faster HRIS implementations in this registry.
+Ideal Companion Systems
+ERP supplements BambooHR's flat department structure with dimensional depth. Payroll is required for compensation validation in most implementations, more often than for Rippling. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, BambooHR occupies the operational workforce system-of-record role for SMPL's smaller customers, with a structurally simpler model that trades organizational depth for onboarding speed. Its contribution to Financial Intelligence centers on reliable Headcount Reporting and Workforce Planning at a scale appropriate to its typical customer size. Within the SCBM, it populates Employee and a flat Department structure with reliable core fields.
+Immediately after connection, BambooHR delivers reliable Headcount Reporting and Workforce Planning. The additional value unlocked through ERP pairing is more consequential for this connector than for Rippling, since ERP supplies the dimensional depth BambooHR's flat model lacks; Payroll pairing is similarly more consequential given the platform's typical lack of native payroll.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+4. UKG Pro
+UKG Pro (formerly Ultimate Software UltiPro) is a mid-market-to-enterprise HRIS and Payroll platform with native compensation management and reasonably formal organizational structure, positioned between BambooHR's simplicity and Workday's enterprise sophistication — structurally analogous to Sage Intacct's positioning in the ERP Registry.
+Business Purpose
+UKG Pro serves the standard operational workforce system-of-record role with native Payroll integration comparable to Rippling's, combined with somewhat more formal organizational and compensation structure than platforms positioned for smaller companies, making it a common choice for SMPL's mid-market customer segment.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_ukg_pro_v1
+vendor_name
+UKG (Ultimate Kronos Group)
+vendor_type
+HRIS / Payroll Platform — Mid-Market to Enterprise Tier
+vendor_description
+UKG Pro is a cloud-based human capital management platform offering HRIS, Payroll, and talent management functionality with native compensation structure and organizational hierarchy for mid-market to enterprise organizations.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Employee
+An employee record
+Employee (Entity)
+Direct — High.
+Organizational Level (Department/Division/Business Unit hierarchy)
+UKG Pro's multi-level organizational structure
+Department (Entity) hierarchy
+Direct — High, with reasonably formal multi-level support.
+Job
+A defined role with title and compensation grade
+Extension field pending Job canonical object
+Direct — Medium. Less formally structured than Workday's Job Profile.
+Compensation
+Base, variable, and total compensation tracking
+Employee.base_compensation and extension fields
+Direct — High.
+Payroll (native module)
+Per-employee, per-period compensation breakdown
+Payroll Line (Movement)
+Direct — High, given UKG Pro's native Payroll integration, comparable to Rippling.
+Position (where Position Management is configured)
+A specific, fillable role instance
+Extension field pending Position canonical object
+Direct — Medium. Less universally configured than in Workday, but available as an optional module.
+Table — UKG Pro primary business objects.
+Canonical Mapping
+Headcount and FTE are derived from Employee status and employment type, with multi-level Organizational Level data providing more dimensional depth than BambooHR's flat model, though less formally structured than Workday's Supervisory Organization framework. Native Payroll integration, where active, narrows the compensation validation gap similarly to Rippling.
+Transformation Guidance
+The Connector Engine treats UKG Pro as authoritative for organizational structure and, where the native Payroll module is active, actual disbursed compensation as well — a broader authoritative scope than HRIS-only connectors, consistent with the pattern established for Rippling. Position Management, where configured, contributes Budgeted/Open status with Medium confidence — less reliable than Workday's formal implementation but more structured than the approximation required for connectors without any Position object.
+Configuration Variants
+Variant
+Frequency
+Impact
+UKG Pro Payroll module active
+Common (~60%, reflecting UKG Pro's combined HRIS/Payroll positioning)
+When active, narrows the Payroll cross-validation gap, comparable to Rippling.
+Position Management module configured
+Occasional (~30%)
+When active, improves Position Planning confidence above the registry's HRIS-only connectors without formal Position support.
+Multi-entity organizational structure for companies with international operations
+Occasional (~25%)
+Requires CEP confirmation of cross-entity consolidation approach.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+UKG Pro Payroll active, multi-level Organizational Level structure, standard Job/Compensation tracking.
+Common Variants
+Position Management module configured for select departments; multi-entity structure for companies with limited international presence.
+Less Common Variants
+UKG Pro Workforce Management (time and attendance) module active, providing more granular hourly-workforce data not typically relevant to SMPL's salaried-workforce-focused customer base.
+Rare / Complex Variants
+Highly customized Organizational Level hierarchies from legacy UltiPro configurations predating the UKG Pro rebrand, occasionally carrying forward inconsistent historical structure.
+Table — UKG Pro Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Position Management is always configured
+Position Management is an optional module in UKG Pro, not universal — confirm activation status explicitly rather than assuming Workday-equivalent functionality.
+Missing historical activity from legacy UltiPro-to-UKG-Pro migration
+Customers who migrated from the legacy UltiPro platform may have data structure inconsistencies predating the rebrand.
+Customer ownership ambiguity in multi-entity Organizational Level structures
+Companies with international operations may have inconsistent entity-to-organizational-level mapping requiring explicit reconciliation.
+Compensation represented inconsistently across base/variable tracking
+Similar to Workday, customers vary in how granularly they track variable compensation components.
+Table — UKG Pro Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Workforce Planning
+Ready
+76%
+ERP, additional SMPL implementation experience
+83–89%
+Headcount Reporting
+Ready
+80%
+Additional SMPL implementation experience
+85–90%
+Department Reporting
+Ready
+74%
+ERP (Cost Center reconciliation)
+80–86%
+Compensation Planning
+Partial
+68%
+Additional SMPL implementation experience (Payroll module active) / Payroll (inactive)
+78–85%
+Labor Cost Forecasting
+Partial
+52%
+ERP (required for confirmation)
+75–82%
+Position Planning
+Partial
+58% (module active) / 30% (inactive)
+Additional SMPL implementation experience
+70–80%
+Attrition Analysis
+Ready
+73%
+Customer Success
+80–85%
+Table — UKG Pro capability progression.
+Confidence Drivers
+Compensation Planning
+Current Confidence: 68%
+Confidence is moderate because:
+UKG Pro's native Payroll module, when active, provides reasonable compensation validation comparable in principle to Rippling — but with fewer cumulative SMPL production implementations to validate the pattern
+Confidence improves with:
+Additional SMPL implementation experience, when the Payroll module is active
+A separately connected Payroll system, when UKG Pro's native Payroll module is inactive
+Position Planning
+Current Confidence: 58% (Position Management module active) / 30% (inactive)
+Confidence is moderate, not high, because:
+Position Management is an optional module, less universally configured than in Workday — confidence depends heavily on whether the customer has activated it
+Confidence improves with:
+Additional SMPL implementation experience to validate Position data quality across a broader set of UKG Pro customers with the module active
+Labor Cost Forecasting
+Current Confidence: 52%
+Confidence is limited because:
+Same structural ERP-confirmation requirement as every HRIS connector in this registry
+Confidence improves after:
+ERP integration for GL-confirmed labor expense
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Provides recognized payroll expense and Cost Center reconciliation for UKG Pro's Organizational Level structure.
+Labor Cost Forecasting, Department Reporting
+Recognized payroll expense (GL-confirmed)
+Labor Cost Forecasting and Department Reporting both improve
+Payroll (where UKG Pro Payroll module is inactive)
+Confirms planned compensation against actual disbursement.
+Compensation Planning, Compensation Validation
+Confirmed disbursed compensation
+Compensation Planning moves toward Ready
+Table — UKG Pro recommended companion connectors.
+Connector Synergies
+UKG Pro + ERP
+Workforce expense forecasting and department cost analysis, following the standard pattern established across this registry
+UKG Pro + Payroll
+Compensation validation, particularly relevant when the native Payroll module is inactive
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Employee (core fields)
+78%
+Reasonable confidence; reflects Validated maturity status.
+Organizational Level (Department mapping)
+72%
+Reasonably formal multi-level structure; Cost Center reconciliation requires CEP confirmation.
+Payroll Line (when module active)
+70%
+Comparable in principle to Rippling, with fewer cumulative implementations to validate.
+Position (when Position Management active)
+55%
+Less universally configured than Workday's equivalent.
+Table — UKG Pro Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 36%
+SCBM Domain
+Coverage
+Headcount / Workforce
+70%
+Department / Organizational Structure
+64%
+Compensation (planned)
+58%
+Payroll (actual disbursement)
+48% (module active) / 6% (inactive)
+Financial Planning (Workforce variant)
+30%
+Table — UKG Pro estimated SCBM coverage by domain.
+Connector Maturity
+Validated (Level 2) — SMPL has implemented this connector against at least one real production customer with core Tier 1 mapping rules confirmed correct.
+Authentication
+OAuth 2.0 or API key, depending on the customer's UKG Pro configuration. The Connector Engine requests read-only access to Employee, Organizational Level, Compensation, and Payroll data where applicable.
+APIs
+REST API — primary pattern
+BI Connector — used for complex, report-based extraction for large historical datasets
+Event Support
+Limited native webhook support; synchronization primarily relies on scheduled polling.
+Historical Backfill
+Supported via REST API or BI Connector for larger datasets.
+Incremental Synchronization
+Supported via modified-date filtering on standard objects.
+Known Customizations
+Legacy UltiPro configuration artifacts predating the UKG Pro rebrand
+Optional Position Management module, not universally configured
+Implementation Characteristics
+Medium typical complexity — between BambooHR's simplicity and Workday's enterprise complexity, reflecting UKG Pro's mid-market-to-enterprise positioning.
+Best Fit Customers
+Ideal Customer Profile
+Mid-market to lower-enterprise companies wanting native Payroll integration with somewhat more organizational sophistication than BambooHR offers
+Less Ideal Customer Profile
+Very large, complex enterprises better served by Workday's more sophisticated organizational planning functionality
+Implementation Risks
+Position Management activation status must be confirmed explicitly — never assumed.
+Given Validated maturity status, expect to encounter and document new patterns during early implementations.
+Implementation Decision Flow
+Customer uses UKG Pro
+  ↓
+Confirm UKG Pro is the authoritative source for organizational structure
+  ↓
+UKG Pro Payroll module active?
+  ├─ Yes → Native compensation validation available, comparable to Rippling
+  └─ No → Identify separate Payroll system for compensation validation
+  ↓
+Position Management module configured?
+  ├─ Yes → Medium-confidence Position Planning available
+  └─ No → Position status approximated from headcount/requisition trends only
+  ↓
+Multi-entity organizational structure present?
+  ├─ Yes → Determine cross-entity consolidation strategy
+  └─ No → Continue
+  ↓
+Legacy UltiPro migration artifacts present?
+  ├─ Yes → Validate historical data consistency before full backfill
+  └─ No → Continue
+  ↓
+FTE methodology confirmed?
+  ↓
+Record FTE policy in the CEP
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+Workforce Planning
+Headcount Reporting
+Department Reporting
+Attrition Analysis
+Partial
+Compensation Planning
+Labor Cost Forecasting
+Position Planning
+Unavailable
+Pipeline Analytics
+Financial Statements
+Connector Fingerprint
+Business Purpose
+UKG Pro serves as the operational workforce system of record with native Payroll integration comparable to Rippling, positioned for SMPL's mid-market customer segment between BambooHR's simplicity and Workday's enterprise sophistication.
+Typical Customer
+Mid-market to lower-enterprise companies wanting native Payroll integration with moderate organizational sophistication.
+Primary Strengths
+Native Payroll integration narrowing the compensation-validation gap, comparable to Rippling
+Reasonably formal multi-level organizational structure exceeding BambooHR's flat model
+Known Implementation Challenges
+Position Management activation status must always be confirmed, never assumed
+Legacy UltiPro migration artifacts occasionally introduce historical data inconsistency
+Implementation Characteristics
+Medium typical complexity, between BambooHR and Workday.
+Ideal Companion Systems
+ERP follows the standard pattern for Labor Cost Forecasting confirmation. Payroll is valuable specifically when the native module is inactive. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, UKG Pro occupies the operational workforce system-of-record role for SMPL's mid-market customer segment, combining native Payroll integration with moderate organizational sophistication. Its contribution to Financial Intelligence centers on Workforce Planning and Headcount Reporting with reasonable confidence, and Compensation Planning at a level comparable to Rippling when the native Payroll module is active. Within the SCBM, it populates Employee, Department (via Organizational Level), and Payroll Line where applicable.
+Immediately after connection, UKG Pro delivers reliable Workforce Planning, Headcount Reporting, Department Reporting, and Attrition Analysis. The additional value unlocked through ERP pairing follows the standard registry pattern for Labor Cost Forecasting confirmation.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+5. ADP Workforce Now
+ADP Workforce Now is a widely deployed HRIS and Payroll platform with the deepest payroll-tax and compliance heritage of any connector in this registry, reflecting ADP's origin as a payroll processing company — a distinctive strength for compensation and tax-related data, paired with a more variable, customer-specific organizational data model than purpose-built modern HRIS platforms.
+Business Purpose
+ADP Workforce Now serves the standard operational workforce system-of-record role, with a distinguishing strength in payroll and tax data depth inherited from ADP's decades of payroll processing heritage — the most granular employer-tax and compliance-related data of any connector in this registry, valuable specifically for fully-loaded cost-per-employee calculations.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_adp_workforce_now_v1
+vendor_name
+ADP, Inc.
+vendor_type
+HRIS / Payroll Platform
+vendor_description
+ADP Workforce Now is a cloud-based human capital management and payroll platform combining HRIS, payroll, tax compliance, and benefits administration, with particular strength in payroll tax and compliance data given ADP's payroll-processing heritage.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Worker
+An employee record
+Employee (Entity)
+Direct — High for core fields.
+Organizational Unit
+A department or organizational grouping, with variable structural depth depending on customer configuration
+Department (Entity)
+Direct — Medium. Structural consistency varies more than in purpose-built modern HRIS platforms, given ADP's broad and varied customer base.
+Pay Data / Payroll Run
+Per-employee, per-period compensation, tax withholding, and deduction detail
+Payroll Line (Movement)
+Direct — High. The deepest payroll-tax detail of any connector in this registry.
+Compensation
+Base and variable compensation plan
+Employee.base_compensation (SCDM field)
+Direct — High.
+Benefits
+Benefit elections and employer/employee contribution amounts
+Out of SCBM Tier 1/2 scope — strong contributor to fully-loaded cost-per-employee given ADP's payroll-tax heritage
+Direct — High when benefits administration is active through ADP.
+Table — ADP Workforce Now primary business objects.
+Canonical Mapping
+Headcount and FTE are derived from Worker status and employment classification, with reasonable but more customer-variable consistency than purpose-built modern HRIS platforms — ADP's broad, long-tenured customer base includes many heavily customized legacy configurations. Payroll Line data, by contrast, is unusually deep and reliable given ADP's payroll-processing heritage, including granular employer-tax and benefits-contribution detail that most other connectors in this registry cannot match.
+Transformation Guidance
+The Connector Engine treats ADP Workforce Now as authoritative for organizational structure with Medium confidence (reflecting greater customer-to-customer variability than purpose-built HRIS platforms) and as a particularly strong source for actual disbursed compensation, including employer-tax and benefits load, given ADP's payroll-processing depth.
+Configuration Variants
+Variant
+Frequency
+Impact
+Organizational Unit structure varies significantly by customer (legacy configuration variance)
+Common (~50%, reflecting ADP's long customer tenure and broad market presence)
+Requires more CEP-driven discovery than purpose-built modern HRIS platforms — organizational structure should never be assumed consistent across ADP customers.
+Benefits administration active through ADP
+Common (~55%)
+When active, enables strong fully-loaded cost-per-employee calculation given ADP's payroll-tax depth.
+Multi-state or multi-jurisdiction payroll tax complexity
+Common (~45%, reflecting ADP's strength in this area)
+Improves Payroll Line confidence specifically for tax-related fields, a distinctive strength relative to other connectors in this registry.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Standard Organizational Unit structure, ADP Payroll active with multi-state tax handling, Benefits administration active.
+Common Variants
+Legacy organizational structure carried forward from a long-tenured ADP relationship, occasionally inconsistent with current org chart.
+Less Common Variants
+ADP Workforce Now used for payroll only, with a separate dedicated HRIS for organizational structure — an inversion of the typical pattern in this registry.
+Rare / Complex Variants
+Highly customized, customer-specific Organizational Unit hierarchies from decades-long ADP relationships, requiring significant CEP-driven reconciliation.
+Table — ADP Workforce Now Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Organizational Unit structure is as consistent as purpose-built HRIS platforms
+ADP's broad, long-tenured customer base includes more legacy configuration variance than modern HRIS platforms — never assume structural consistency without CEP confirmation.
+Inactive business processes: stale Organizational Units from past reorganizations
+Long-tenured ADP customers may have accumulated unused organizational structure over many years — filter explicitly during onboarding.
+Customer ownership ambiguity when ADP is payroll-only with a separate HRIS
+In the less common inverted pattern, ADP should not be treated as the organizational system of record — confirm explicitly during Pre-POC Discovery.
+Missing historical activity from pre-ADP-Workforce-Now legacy ADP products
+Customers who migrated from an older ADP product to Workforce Now may have incomplete historical continuity.
+Table — ADP Workforce Now Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Workforce Planning
+Ready
+72%
+ERP, additional SMPL implementation experience
+80–86%
+Headcount Reporting
+Ready
+75%
+Additional SMPL implementation experience
+82–87%
+Department Reporting
+Partial
+58%
+ERP, additional SMPL implementation experience — structural variability limits ceiling
+70–78%
+Compensation Planning
+Ready
+78%
+Additional SMPL implementation experience
+83–88%
+Labor Cost Forecasting
+Partial
+62%
+ERP (required for confirmation)
+78–85%
+Fully-Loaded Cost per Employee
+Ready
+80%
+ERP (GL confirmation)
+85–90%
+Attrition Analysis
+Ready
+70%
+Customer Success
+78–84%
+Table — ADP Workforce Now capability progression. Compensation Planning and Fully-Loaded Cost per Employee show unusually strong confidence given ADP's payroll-tax heritage, offsetting structurally weaker Department Reporting confidence.
+Confidence Drivers
+Compensation Planning
+Current Confidence: 78%
+High confidence because:
+ADP's payroll-processing heritage produces unusually deep and reliable Pay Data, including granular tax withholding and deduction detail most other connectors in this registry cannot match
+Confidence improves with:
+Additional SMPL implementation experience to validate this strength across a broader production customer base
+Department Reporting
+Current Confidence: 58%
+Confidence is limited because:
+ADP's broad, long-tenured customer base includes significantly more Organizational Unit structural variance than purpose-built modern HRIS platforms — this is a customer-base characteristic, not purely an implementation maturity gap
+Confidence improves with:
+ERP — providing an independent cost-center structure to cross-validate against ADP's more variable organizational data
+Additional SMPL implementation experience to build a richer Tier 2 pattern library for common ADP organizational variance patterns
+Fully-Loaded Cost per Employee
+Current Confidence: 80%
+High confidence because:
+ADP's combined payroll, tax, and benefits administration data provides the most complete fully-loaded cost picture of any connector in this registry, when Benefits administration is active through ADP
+Confidence improves with:
+ERP — confirming the resulting GL-level expense matches the ADP-derived fully-loaded estimate
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Provides an independent cost-center structure to cross-validate ADP's more variable Organizational Unit data, and confirms GL-level recognized payroll expense.
+Department Reporting, Labor Cost Forecasting
+Recognized payroll expense; independent cost center structure
+Department Reporting and Labor Cost Forecasting both improve, with Department Reporting benefiting more than for most connectors in this registry
+Table — ADP Workforce Now recommended companion connectors.
+Connector Synergies
+ADP Workforce Now + ERP
+Workforce expense forecasting with unusually strong fully-loaded cost data given ADP's payroll-tax heritage
+Department cost analysis, particularly valuable for this connector given its more variable native organizational structure
+Labor cost reconciliation, benefiting from ADP's deep payroll-tax detail
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Worker (core fields)
+75%
+Reasonable confidence; reflects Validated maturity status.
+Organizational Unit
+58%
+More customer-variable than purpose-built modern HRIS platforms, given ADP's broad and long-tenured customer base.
+Pay Data (Payroll Line)
+82%
+The deepest payroll-tax detail in this registry, a genuine connector strength.
+Compensation (planned)
+76%
+Strong given native payroll integration.
+Benefits / fully-loaded cost contribution
+78%
+Strong when Benefits administration is active through ADP.
+Table — ADP Workforce Now Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 38%
+SCBM Domain
+Coverage
+Headcount / Workforce
+65%
+Department / Organizational Structure
+42% — structurally limited by customer-base variance
+Compensation (planned)
+68%
+Payroll (actual disbursement)
+75% — the highest Payroll coverage in this registry given native payroll-tax depth
+Financial Planning (Workforce variant)
+25%
+Table — ADP Workforce Now estimated SCBM coverage by domain.
+Connector Maturity
+Validated (Level 2) — SMPL has implemented this connector against at least one real production customer with core Tier 1 mapping rules confirmed correct.
+Authentication
+OAuth 2.0. The Connector Engine requests read-only access to Worker, Organizational Unit, Pay Data, and Benefits data.
+APIs
+REST API — primary pattern, though with more variable customer-specific configuration than purpose-built modern HRIS platforms given ADP's broad product history
+Event Support
+Limited native webhook support; synchronization primarily relies on scheduled polling.
+Historical Backfill
+Supported via REST API with standard pagination; payroll-tax historical depth is generally strong given ADP's payroll-processing heritage.
+Incremental Synchronization
+Supported via standard timestamp-based filtering.
+Known Customizations
+Highly variable Organizational Unit structures reflecting ADP's long-tenured, broad customer base
+Legacy data continuity issues for customers who migrated from older ADP products to Workforce Now
+Implementation Characteristics
+Medium typical complexity — payroll and compensation data implementation is comparatively straightforward given ADP's strength in this area, while organizational structure implementation requires more CEP discovery than purpose-built modern HRIS platforms.
+Best Fit Customers
+Ideal Customer Profile
+Companies prioritizing payroll-tax depth and compliance sophistication, particularly those with multi-state or complex tax jurisdiction requirements
+Less Ideal Customer Profile
+Companies prioritizing modern, formally structured organizational planning — Workday or UKG Pro better serve this need
+Implementation Risks
+Organizational Unit structural consistency must never be assumed — confirm explicitly via CEP given ADP's broad customer-base variance.
+Confirm whether ADP is the organizational system of record or payroll-only with a separate HRIS, since the less common inverted pattern changes the connector's authoritative scope.
+Implementation Decision Flow
+Customer uses ADP Workforce Now
+  ↓
+Confirm whether ADP is the organizational system of record
+  (or payroll-only, with a separate HRIS for org structure)
+  ├─ ADP is organizational system of record → Continue
+  └─ ADP is payroll-only → Treat as a Payroll-equivalent connector;
+            identify separate HRIS for organizational structure
+  ↓
+Benefits administration active through ADP?
+  ├─ Yes → Strong fully-loaded cost-per-employee data available
+  └─ No → Fully-loaded cost limited to base + variable compensation
+  ↓
+Multi-state or multi-jurisdiction payroll tax complexity present?
+  ├─ Yes → Leverage ADP payroll-tax depth for compensation confidence
+  └─ No → Continue
+  ↓
+Organizational Unit structure reflects current org chart,
+or carries forward legacy/stale structure?
+  ↓
+Validate against customer-provided current org chart; filter stale units
+  ↓
+FTE methodology confirmed?
+  ↓
+Record FTE policy in the CEP
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+Workforce Planning
+Headcount Reporting
+Compensation Planning
+Fully-Loaded Cost per Employee
+Attrition Analysis
+Partial
+Department Reporting
+Labor Cost Forecasting
+Unavailable
+Position Planning
+Pipeline Analytics
+Financial Statements
+Connector Fingerprint
+Business Purpose
+ADP Workforce Now serves as the operational workforce system of record with a distinguishing strength in payroll-tax and compliance depth, inherited from ADP's payroll-processing heritage — the strongest fully-loaded cost-per-employee data of any connector in this registry.
+Typical Customer
+Companies prioritizing payroll-tax depth and compliance sophistication, particularly with multi-state or complex tax jurisdiction needs.
+Primary Strengths
+The deepest payroll-tax and compliance data of any connector in this registry
+Strong fully-loaded cost-per-employee calculation when Benefits administration is active
+Known Implementation Challenges
+Organizational Unit structure is more customer-variable than purpose-built modern HRIS platforms — never assumed consistent
+Must confirm whether ADP is the organizational system of record or payroll-only
+Implementation Characteristics
+Medium typical complexity — payroll data implementation is comparatively easy; organizational structure implementation requires more discovery than purpose-built platforms.
+Ideal Companion Systems
+ERP is particularly valuable for this connector, both for standard Labor Cost Forecasting confirmation and for providing an independent cost-center structure given ADP's more variable native organizational data. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, ADP Workforce Now occupies the operational workforce system-of-record role with a distinctive strength in payroll-tax and compliance depth inherited from ADP's payroll-processing origins. Its contribution to Financial Intelligence is strongest specifically in Compensation Planning and Fully-Loaded Cost per Employee — the most complete payroll-tax-inclusive cost data of any connector in this registry. Within the SCBM, it populates Employee, a more customer-variable Department structure, and unusually deep Payroll Line data.
+Immediately after connection, ADP delivers reliable Workforce Planning, Headcount Reporting, Compensation Planning, and Fully-Loaded Cost per Employee. The additional value unlocked through ERP pairing is particularly significant for Department Reporting specifically, given ADP's more variable native organizational structure relative to purpose-built modern HRIS platforms.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+HRIS Registry Readiness Assessment
+Formal evaluation of the HRIS Connector Knowledge Registry, the fourth registry built under the CKR Standard. Per the build brief, this review identifies only improvements that strengthen the permanent CKR standard — HRIS-specific enhancements are out of scope unless they apply to all future registries.
+Dimension
+Score
+Assessment
+Enterprise Readiness
+9 / 10
+All five connectors follow the now-24-section structure (22 original + Cross-Domain Relationships + Confidence Drivers, both explicitly requested in this build brief's Connector Specifications list) consistently. Authentication, APIs, Event Support, Historical Backfill, and Incremental Synchronization are documented as discrete sections, matching the granular technical breakdown pattern established in the Billing Registry.
+Workforce Intelligence Coverage
+9 / 10
+The HRIS-vs-Payroll and HRIS-vs-ERP boundary sections in the Category Overview directly address the most consequential ambiguity in workforce data: planned compensation (HRIS) vs. actual disbursed compensation (Payroll) vs. recognized GL expense (ERP) — a three-way distinction more complex than the two-way distinctions established in the ERP, CRM, and Billing registries, reflecting HRIS's genuinely more complex position in the cross-domain picture.
+Canonical Coverage
+9 / 10
+Every connector's Estimated SCBM Coverage and Data Confidence Profile honestly reflects this registry's central finding: Department/Organizational Structure confidence varies more by platform design than by implementation maturity alone — Workday and Rippling show strong structural confidence, BambooHR is structurally capped by its flat model, and ADP is structurally capped by customer-base configuration variance, three different reasons for similar numeric outcomes, each correctly explained rather than collapsed into a single undifferentiated score.
+Capability Coverage
+9 / 10
+Capability Progression is populated for all five connectors against the Workforce-specific capability list requested in the brief, with the Fully-Loaded Cost per Employee sub-capability added for ADP specifically where it represents a genuine connector-specific strength worth surfacing distinctly rather than burying inside a general Labor Cost Forecasting figure.
+AI Implementation Readiness
+8 / 10
+Confidence Drivers and Implementation Decision Flow are both present per connector, extending the pattern from the Billing Registry. Unchanged from prior registries — still pending the automated-POC validation step noted in every version of this review across all four registries built under the standard.
+Customer Onboarding Utility
+9 / 10
+Connector Fingerprint and Standalone Capability Summary differentiate the five connectors clearly — Workday shows the broadest Ready-status coverage standalone among the enterprise-tier connectors in this registry, while BambooHR explicitly shows Position Planning as structurally Unavailable rather than merely low-confidence, an honest distinction the registry makes consistently.
+Sales Engineering Utility
+9 / 10
+Best Fit Customer sections clearly differentiate the five connectors by customer segment and by which workforce capability each is strongest at — Workday for enterprise Position Management, Rippling for consolidated HRIS+Payroll, ADP for payroll-tax depth — giving Sales Engineering specific, differentiated qualification criteria rather than generic HRIS-platform claims.
+Long-Term Maintainability
+9 / 10
+All sections, including the now twice-confirmed Cross-Domain Relationships and Confidence Drivers, were applied without requiring any structural modification — the fourth consecutive registry to validate that the CKR standard generalizes across categories with fundamentally different data models.
+Table R.1 — HRIS Registry Readiness Assessment. Aggregate score: 71 / 80 (89%), consistent with or modestly ahead of the final scores achieved by the ERP, CRM, and Billing registries.
+Standard-Level Finding: Implementation Decision Flow Should Now Be Formally Confirmed
+This build brief's Connector Specifications list explicitly requested Confidence Drivers — confirming its adoption as permanent standard content, as recommended by the Billing Registry v0.2 review. It did not explicitly request Implementation Decision Flow. This registry included it anyway, on the basis stated in the Scope Note at the start of this document, and that inclusion is revisited here rather than left as a silent assumption.
+Having now built Implementation Decision Flow for a second registry — HRIS, with a meaningfully different decision structure than Billing's usage-policy and Rate Plan questions (HRIS's flow centers on organizational-system-of-record confirmation, Payroll module activation, and Position Management configuration) — the section has demonstrated category-agnostic value twice, not once. This strengthens, rather than weakens, the case for its formal adoption.
+Recommendation: Implementation Decision Flow should be formally and permanently added to the CKR standard's required section list, alongside Cross-Domain Relationships and Confidence Drivers. This closes the loop opened by the Billing Registry v0.2 review, which recommended adoption but left the decision pending a second registry's validation. That validation is now complete.
+No Other Architectural Gaps Identified
+Per the build brief's instruction to identify only improvements that strengthen the permanent CKR standard, no other gaps are identified. The HRIS-specific characteristics observed in this registry — Workday's formal Position Management, ADP's payroll-tax depth, BambooHR's flat organizational model, the three-way HRIS/Payroll/ERP compensation distinction — are all HRIS-specific content correctly captured within the existing standard structure, not gaps in the structure itself.
+Final Determination
+If a prospective customer told SMPL they use one of these five HRIS platforms, does this registry provide sufficient implementation knowledge for AI implementation agents and human implementation teams to consistently onboard the platform, accurately populate the SCBM, support the Capability Assessment Layer, and deliver trusted Financial Intelligence?
+Yes — for all five connectors, with maturity- and platform-design-appropriate confidence framing that differs meaningfully and honestly by connector, consistent with the standard now validated across four registries.
+For consistency of onboarding: every connector follows the identical structure, validated now across ERP, CRM, Billing, and HRIS — four fundamentally different underlying data models (GL-centric, pipeline-centric, subscription-lifecycle-centric, and now organizational-hierarchy-centric) all accommodated by the same standard without modification. This is the strongest cumulative evidence yet that the standard is durable.
+For accurate Capability Assessment: Capability Progression and Confidence Drivers are populated for all five connectors, with differentiation that reflects genuine, explainable differences — Workday's Position Management strength, ADP's payroll-tax strength, BambooHR's structural simplicity, each correctly and distinctly characterized rather than flattened into a uniform HRIS confidence profile.
+For trusted Financial Intelligence specifically: the structural caveat established across every prior registry holds here with a notable addition — HRIS introduces a three-way distinction (planned compensation in HRIS, actual disbursement in Payroll, recognized expense in ERP) that is more complex than the two-way CRM-vs-ERP or Billing-vs-ERP distinctions in prior registries. No HRIS connector in this registry, regardless of maturity or native Payroll integration sophistication, fully substitutes for ERP-confirmed recognized payroll expense — even Rippling and UKG Pro with native Payroll modules active remain explicitly subordinate to ERP for GL-level confirmation. Trusted Workforce Financial Intelligence requires the three-way combination this registry consistently recommends: HRIS for organizational and planned-compensation truth, Payroll for disbursement confirmation, ERP for recognized-expense confirmation.
+What remains before declaring full production validation, not architectural completion: the same gap named consistently across all four registries — confidence figures throughout this registry are SMPL's best architecturally-derived planning estimates, not yet confirmed against production Capability Assessment Layer output at scale, particularly for the three Validated-maturity connectors (Workday, UKG Pro, ADP). This is stated explicitly throughout via the standardized Planning Guidance section.
+The HRIS Connector Knowledge Registry, as it stands at the conclusion of this review, is ready to be frozen as Version 1.0 — the fourth registry to reach this status under the CKR Standard, and the registry that completes the validation case for Implementation Decision Flow's formal standard adoption.

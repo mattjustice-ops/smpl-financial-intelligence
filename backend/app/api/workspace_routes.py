@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
+from app.services.workspace.import_trace import org_mrr_data_trace, trace_batch
 from app.services.workspace.pipeline_ledger import (
     close_ledger_summary,
     get_batch,
@@ -71,3 +72,27 @@ def get_ingest_batch_detail(
         "batch": batch_to_payload(batch),
         "events": list_batch_events(db, organization_id=organization_id, batch_id=batch_id),
     }
+
+
+@workspace_router.get("/batches/{batch_id}/trace")
+def get_ingest_batch_trace(
+    batch_id: uuid.UUID,
+    organization_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Live DB row counts for a batch's destination table (verify Neon vs Railway prod)."""
+    get_organization_or_404(db, organization_id)
+    payload = trace_batch(db, organization_id=organization_id, batch_id=batch_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return payload
+
+
+@workspace_router.get("/data-trace")
+def get_org_data_trace(
+    organization_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db),
+) -> dict:
+    """MRR physical table row counts + periods — confirms which Neon branch Railway uses."""
+    get_organization_or_404(db, organization_id)
+    return org_mrr_data_trace(db, organization_id)

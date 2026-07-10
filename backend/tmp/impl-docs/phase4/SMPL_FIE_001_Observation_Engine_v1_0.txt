@@ -1,0 +1,675 @@
+FINANCIAL INTELLIGENCE ENGINE — ENGINEERING SPECIFICATION
+FIE-001 · Observation Engine
+Version 1.0
+The foundational time-aware record of what the business looked like and what the organization expected
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+First service of the Financial Intelligence Engine (FIE) layer · Implements: FIE-001 Conceptual Model v0.2 · Reads: BIS-001 through BIS-006
+Section 1 — Scope Decisions
+The FIE-001 conceptual model is frozen and is not redesigned here. This section translates the frozen model's Scope Boundaries into the numbered, restated-plus-new-resolutions format every BIS document has used since BIS-001, and adds the five further resolutions the build requires to be engineering-ready. This is the first document in the Financial Intelligence Engine series; it inherits the discipline of BIS-001 through BIS-006 rather than starting a new documentation convention.
+1.1 Observation Engine vs. Canonical Platform
+The Canonical Platform (BIS-003) is the system of record for current, trusted business objects. The Observation Engine stores historical Temporal Records derived from canonical objects at the moment they were observed. It reads canonical data through BIS-003's paginated list endpoints, following the exact bulk-read pattern BIS-004 §1.7 and BIS-006 §1.2 already established against the same API. It never writes to, mutates, or duplicates canonical storage — a Temporal Record is a historical derivative, not a competing copy.
+1.2 Observation Engine vs. Validation Platform
+Validation (BIS-004) determines whether canonical data can be trusted, at the moment validation runs. The Observation Engine permanently records the confidence state of a Temporal Record at capture time, per Section 15. If confidence for the underlying canonical data later improves or degrades, that change is reflected in new Validation results and, if relevant, new Observations going forward — it never rewrites the confidence already stored on a historical Temporal Record. This is the same immutability discipline BIS-004 §1.6 applies to validation_results, extended to this service's own store.
+1.3 Observation Engine vs. Reporting Platform
+Reporting (BIS-006) explains state to a human audience across every implementation-stage report type. The Observation Engine has no narrative or presentation responsibility at all — it stores structured, queryable Temporal Records and exposes them through Section 18's query patterns. Reporting, and later Narrative Intelligence (FIE-005), are expected consumers of this service's read API; this service is never a consumer of Reporting's output.
+1.4 Observation Engine vs. Financial Memory (FIE-004)
+The Observation Engine captures financial history as discrete, immutable facts and revisions. Financial Memory reasons across that history — recognizing recurring patterns, evaluating forecast accuracy over time, and answering longitudinal questions no single Temporal Record can answer alone. This service performs no cross-record reasoning, pattern detection, or accuracy scoring; those are FIE-004 responsibilities reading this service's output as an input, the same directional relationship BIS-004 has to CAL.
+1.5 Observation Engine vs. Orchestration Service
+Scheduling — cadence timers, business-event triggers, month-end/quarter-end coordination — remains owned entirely by the Orchestration Service (BIS-002). The Observation Engine exposes no scheduler, cron, or polling loop of its own; per Section 14, it only ever records a Temporal Record in direct response to a call it received. This mirrors the synchronous, job-triggered pattern BIS-003 §1.10, BIS-004 §1.8, and BIS-006 §1.9 already established across the platform — this is the fourth service to adopt it, not a new pattern.
+1.6 New Resolution — Bulk Read Pattern from Canonical Platform
+Consistent with BIS-004 §1.7 and BIS-006 §1.2: this service reads canonical data exclusively through BIS-003's paginated list endpoint at BIS-003's stated default and maximum page sizes. A single Entity State Observation capture pass for 10,000 opportunities issues on the order of 10 paginated read calls, not 10,000 — the difference between meeting and missing Section 24's performance targets, and the third document in the series to require this exact clarification.
+1.7 New Resolution — Capture Trigger Model: Push, Job-Triggered, Never Self-Scheduled
+Per Section 1.5, this service never initiates its own capture. Every Observation or Revision write originates from an explicit POST call — dispatched by an Orchestration-scheduled job (Section 14's Recording Policy trigger), a business-event handler (forecast approval, month-end close), or a manual/API request. There is no background scanner in this service comparing canonical state to the last known Observation and deciding independently that a new one is due. This keeps capture behavior fully auditable to a specific triggering call, per Section 21's logging requirement that every write traces to a request_id.
+1.8 New Resolution — Financial Concept and Composite Snapshot Definition Are Versioned Registry Artifacts
+Financial Concepts (Section 8) and Composite Snapshot Definitions (Section 13) are not free-text labels chosen at write time — they are versioned, engineering- or admin-managed registry entries, the same governance model BIS-004 §1.5/§1.9 applies to validation rules and BIS-006 §4.4 applies to report_templates. A Temporal Record references a specific financial_concept_id and, where relevant, composite_snapshot_definition_id with its version; updating a definition creates a new version rather than mutating the one already referenced by historical records, so a Composite Snapshot's completeness can always be evaluated against the exact definition that was active when it was captured.
+1.9 New Resolution — Revision Confidence Storage: Nullable Dimensional Fields, Not a Separate Schema
+Per the frozen model, Observations carry all three confidence dimensions (Mapping, Data, Reasoning) while Revisions carry only Reasoning Confidence directly, with Mapping and Data Confidence evaluable only indirectly through referenced Observations. At the schema level, this is implemented as the same three nullable columns on every Temporal Record row, not two different row shapes: an Observation row populates all three; a Revision row populates only reasoning_confidence and leaves mapping_confidence and data_confidence null. This keeps Temporal Record genuinely one inheritance hierarchy at the storage layer, consistent with Section 1 of the frozen model stating Observation and Revision are siblings under one parent, rather than requiring two physically different table shapes that a query layer must reconcile.
+1.10 New Resolution — Storage Tier Transitions Are Metadata Changes, Never Data Rewrites
+Hot/Warm/Cold transitions (Section 17) change where and how a Temporal Record is stored and how expensive it is to query — they never change the record's content, confidence, or timestamps. A tier transition is implemented as a background lifecycle job that relocates or recompresses storage and updates a storage_tier field; it holds no code path capable of altering business_effective_date, system_recorded_date, value fields, or confidence fields. This is what makes Section 1.2's confidence-immutability guarantee a storage-layer fact rather than a documented intention, following the exact discipline BIS-004 §1.6 applied via its explicit "no UPDATE path" design note on validation_results.
+Section 2 — Service Purpose
+The Observation Engine is the only component in the SMPL platform whose entire responsibility is answering, for any moment in a customer's history: what was true, and what did the organization expect.
+This Service Is
+This Service Is Not
+The immutable, append-only, bi-temporal record of every Observation and Revision ever captured for a customer
+A data warehouse — it has no general-purpose analytical query surface; Section 18 defines a fixed set of finance-shaped query patterns
+The single source of truth for "what did we know, when did we know it" across the entire platform
+A calculation engine — it derives aggregates from lowest-grain records but computes no forecasts, waterfalls, or variance
+The foundation every other Financial Intelligence Engine service (FIE-002 through FIE-005) reads from
+A reasoning engine — it asserts only relationships explicitly declared at capture time (Section 16); it infers nothing
+A permanent, non-rewritable historical archive — confidence, values, and timestamps captured at a moment never change
+A scheduler — every write is triggered by an external caller (Section 1.7); it has no timer or poller of its own
+Table FIE1-2.1 — Service purpose boundary.
+2.1 Position in the Runtime
+Orchestration Service (BIS-002) — cadence / business-event triggerManual / API caller — ad hoc capture request                    │                    │  POST /v1/observations  or  POST /v1/revisions                    ▼     ═══════════════════════════════════════════          OBSERVATION ENGINE  (this document)     ═══════════════════════════════════════════         │              │              │  reads  │       reads  │       reads  │         ▼              ▼              ▼ Canonical (BIS-003)  Validation (BIS-004)  Report/Financial Concept Registry         writes: temporal_records, snapshots, composite_snapshots,                 financial_concepts, recording_policies, relationships         read by: Reporting (BIS-006), Methodology Engine (FIE-002),                  Calculation Engine (FIE-003), Financial Memory (FIE-004),                  Narrative Intelligence (FIE-005)
+Figure FIE1-2.1 — The Observation Engine sits downstream of the Implementation Platform and upstream of every later FIE service.
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Temporal Record capture
+Accept and persist Observation and Revision writes as immutable, bi-temporal records
+Section 9–11
+Financial Concept and Recording Policy registry
+Store and version the organizational model every capture is filed under and the cadence rules governing it
+Section 8
+Snapshot assembly
+Assemble Domain Snapshots and, per configured Composite Snapshot Definitions, Composite Snapshots with rolled-up completeness
+Section 12–13
+Relationship recording
+Persist explicitly asserted relationships between Temporal Records; assert none itself
+Section 16
+Confidence preservation
+Store the three-dimensional confidence context at capture time and never rewrite it
+Section 15
+Storage lifecycle management
+Manage Hot/Warm/Cold tier transitions without altering record content
+Section 17
+Timeline and query serving
+Serve every finance-shaped query pattern defined in Section 18 to authorized upstream FIE services and Reporting
+Section 18
+Table FIE1-3.1 — Core responsibilities and where each is specified.
+Section 4 — Public APIs
+Callable only by Orchestration-dispatched workers, the Tool Gateway on behalf of authorized internal services, and — starting with FIE-002 — other Financial Intelligence Engine services. All endpoints return the standard response envelope established in BIS-001 through BIS-006. Three representative endpoints receive full detail; the remaining endpoints are captured completely in the summary table that follows.
+Standard Response Envelope
+{  "request_id": "UUID",  "customer_id": "UUID",  "status": "SUCCESS | ERROR",  "data": {},  "error": { "error_code": "string", "message": "string", "retry_after_seconds": "integer | null" } | null,  "latency_ms": "integer"}
+4.1 POST /v1/observations
+Field
+Detail
+Request
+customer_id, financial_concept_id, observation_type (METRIC | ENTITY_STATE), business_effective_date, source_system, value_payload, related_object_refs, confidence_context (mapping/data/reasoning), observation_event_id, idempotency_key (optional)
+Response
+temporal_record_id, record_version, system_recorded_date (server-assigned), storage_tier (initial: HOT)
+Error Codes
+INVALID_INPUT, FINANCIAL_CONCEPT_NOT_FOUND, MISSING_REQUIRED_FIELD, EVIDENCE_UNAVAILABLE, PERMISSION_ERROR
+Idempotency
+A repeated call with the same idempotency_key returns the existing temporal_record_id rather than creating a duplicate
+Retry Rules
+Safe to retry on timeout or 5xx; a 4xx requires correcting the input before retry
+Logging
+OBSERVATION_CAPTURED on success
+Metrics
+observations_captured_total{financial_concept, observation_type}
+Table FIE1-4.1 — POST /v1/observations.
+4.2 POST /v1/revisions
+Field
+Detail
+Request
+customer_id, financial_concept_id, revision_type (FORECAST | BUDGET | SCENARIO | ASSUMPTION), business_effective_date, previous_value, new_value, reason, business_impact, approver, reasoning_confidence, related_observation_refs (required — at least one, per Section 16), idempotency_key (optional)
+Response
+temporal_record_id, record_version, system_recorded_date, scenario_promotion_ref (null unless this Forecast Revision references a promoted Scenario Revision, per the Scenario Promotion Rule)
+Error Codes
+INVALID_INPUT, FINANCIAL_CONCEPT_NOT_FOUND, MISSING_APPROVER, MISSING_RELATED_OBSERVATION, PERMISSION_ERROR
+Idempotency
+Same as 4.1
+Retry Rules
+Same as 4.1
+Logging
+REVISION_RECORDED on success, including approver and revision_type
+Metrics
+revisions_recorded_total{financial_concept, revision_type}
+Table FIE1-4.2 — POST /v1/revisions. A Scenario Revision that is later adopted is never edited in place; a new Forecast Revision is created referencing it, enforced by validation at write time.
+4.3 GET /v1/timeline/{financial_concept_id}
+Field
+Detail
+Request
+financial_concept_id (path), customer_id, date_range (business_effective_date bounds), as_of (optional — system_recorded_date bound, for bi-temporal "what did we believe back then" queries), record_types (optional filter: OBSERVATION | REVISION)
+Response
+Ordered array of Temporal Records satisfying both date filters, each with confidence_context and relationship_refs
+Error Codes
+INVALID_INPUT, FINANCIAL_CONCEPT_NOT_FOUND, PERMISSION_ERROR
+Idempotency
+N/A — read-only
+Retry Rules
+Freely retryable
+Logging
+Not logged individually; covered by request-level access logging
+Metrics
+timeline_query_duration_seconds{financial_concept}
+Table FIE1-4.3 — GET /v1/timeline/{financial_concept_id}. This is the endpoint every FIE-002 through FIE-005 service and Reporting call to answer "show me the timeline."
+4.4 Remaining Endpoints
+Endpoint
+Purpose
+Notes
+POST /v1/observation-events
+Register an Observation Event that a subsequent capture call references
+Section 14
+GET /v1/snapshots/{snapshot_id}
+Retrieve a Domain or Composite Snapshot with rolled-up completeness
+Section 12–13
+POST /v1/snapshots/domain
+Assemble a Domain Snapshot for a Financial Concept + business_effective_date
+Called by the capture job after the last expected Observation for that moment lands
+POST /v1/snapshots/composite
+Assemble a Composite Snapshot per a Composite Snapshot Definition
+Fails with INCOMPLETE_COMPOSITE if a required concept's Domain Snapshot is not COMPLETE, per Section 13's publication rules
+GET /v1/financial-concepts
+List active Financial Concepts
+Registry read
+POST /v1/financial-concepts
+Create a Financial Concept
+Admin/engineering-only
+GET /v1/recording-policies/{financial_concept_id}
+Retrieve the active Recording Policy for a concept
+Registry read
+PATCH /v1/recording-policies/{financial_concept_id}
+Create a new Recording Policy version
+Append-only, per Section 1.8
+GET /v1/composite-snapshot-definitions
+List active Composite Snapshot Definitions
+Registry read
+POST /v1/composite-snapshot-definitions
+Create a Composite Snapshot Definition
+Admin/engineering-only
+GET /v1/relationships/{temporal_record_id}
+Retrieve all relationships asserted for a record
+Section 16
+GET /v1/health
+Liveness/readiness probe
+No auth required, internal network only
+Table FIE1-4.4 — Remaining endpoints, complete at summary detail.
+Section 5 — Internal Components
+Component
+Responsibility
+Capture API
+Stateless request handling for Observation and Revision writes; validates against the active Financial Concept and Recording Policy before persisting
+Canonical Reader
+Bulk-paginated reads from Canonical Platform (BIS-003), per Section 1.6
+Snapshot Assembler
+Rolls up Domain Snapshots from constituent Observations and Composite Snapshots from constituent Domain Snapshots, per Composite Snapshot Definitions
+Relationship Store
+Persists explicitly asserted relationship edges between Temporal Records; performs no inference
+Storage Lifecycle Manager
+Background job transitioning records between Hot/Warm/Cold tiers per Retention Policy and age, per Section 1.10
+Timeline Query Engine
+Serves bi-temporal timeline and comparison queries (Section 18) against both hot and warm/cold storage transparently to the caller
+Registry Store
+Postgres persistence for Financial Concepts, Recording Policies, and Composite Snapshot Definitions, all append-only versioned per Section 1.8
+Table FIE1-5.1 — Internal components.
+Section 6 — Data Models
+The Observation Engine's data model is organized around one physical inheritance pattern: every Observation and Revision is stored as a row in a single temporal_records table (Section 1.9), discriminated by record_family (OBSERVATION | REVISION) and record_subtype. This keeps the sibling relationship the frozen conceptual model requires — Section 1 of the conceptual model — a storage-layer fact, not just a documented intention, the same discipline Section 1.10 applies to confidence immutability.
+Entity
+Purpose
+temporal_records
+The single table storing every Observation and Revision, per Section 9
+financial_concepts
+Versioned registry of organizational concepts (Revenue, Cash, Pipeline, ...), per Section 8
+recording_policies
+Versioned cadence/retention/comparison rules per Financial Concept, per Section 8
+observation_events
+Registered triggering events a capture call references, per Section 14
+snapshots
+Domain Snapshot records, per Section 12
+composite_snapshot_definitions
+Versioned registry of required-concepts templates, per Section 13
+composite_snapshots
+Composite Snapshot instances rolling up constituent Domain Snapshots, per Section 13
+temporal_record_relationships
+Explicitly asserted edges between temporal_records rows, per Section 16
+Table FIE1-6.1 — Entity overview; full column definitions follow in Section 7.
+Section 7 — Database Schema
+7.1 temporal_records
+Field
+Type
+Notes
+temporal_record_id
+UUID, PK
+customer_id
+UUID
+Indexed; every query scoped by this per Section 23
+record_family
+ENUM(OBSERVATION, REVISION)
+Sibling discriminator, never a hierarchy — Section 1.9
+record_subtype
+ENUM(METRIC, ENTITY_STATE, FORECAST_REVISION, BUDGET_REVISION, SCENARIO_REVISION, ASSUMPTION_REVISION)
+financial_concept_id
+UUID, FK → financial_concepts
+business_effective_date
+TIMESTAMPTZ
+When the business event became true
+system_recorded_date
+TIMESTAMPTZ
+Server-assigned at write time; never client-supplied
+source_system
+TEXT
+Metadata only, per frozen model Revision 2
+value_payload
+JSONB
+Observation: scalar or entity-state payload. Revision: previous_value / new_value / reason / business_impact / approver
+mapping_confidence
+NUMERIC, NULLABLE
+Populated for Observations; null for Revisions — Section 1.9
+data_confidence
+NUMERIC, NULLABLE
+Populated for Observations; null for Revisions
+reasoning_confidence
+NUMERIC, NULLABLE
+Populated for both families
+observation_event_id
+UUID, FK → observation_events, NULLABLE
+Required for Observations; null permitted only for manual Revision entries with an approver
+storage_tier
+ENUM(HOT, WARM, COLD)
+Managed exclusively by the Storage Lifecycle Manager, per Section 1.10
+record_version
+INTEGER
+Always 1 — records are never versioned in place; a correction is a new row
+created_at
+TIMESTAMPTZ
+Row creation timestamp
+Table FIE1-7.1 — temporal_records. No UPDATE path exists on value_payload, confidence fields, or either date field, per Section 1.10.
+7.2 financial_concepts
+Field
+Type
+Notes
+financial_concept_id
+UUID, PK
+concept_name
+TEXT
+Revenue, Bookings, Pipeline, Cash, Forecast, Workforce, Marketing, ...
+concept_version
+INTEGER
+Append-only, per Section 1.8
+active
+BOOLEAN
+created_at
+TIMESTAMPTZ
+Table FIE1-7.2 — financial_concepts.
+7.3 recording_policies
+Field
+Type
+Notes
+recording_policy_id
+UUID, PK
+financial_concept_id
+UUID, FK
+policy_version
+INTEGER
+Append-only
+observation_cadence
+TEXT
+e.g. DAILY, WEEKLY, MONTHLY, ON_APPROVAL
+comparison_cadence
+JSONB
+Comparison points, e.g. ["prior_period", "budget", "quarter_start"]
+refresh_trigger
+TEXT
+Scheduled cadence or named business event, dispatched by Orchestration per Section 1.5
+retention_policy
+JSONB
+Hot/Warm/Cold age thresholds feeding Section 17
+customer_id
+UUID, NULLABLE
+Null = platform default; populated = customer-specific override
+Table FIE1-7.3 — recording_policies.
+7.4 observation_events
+Field
+Type
+Notes
+observation_event_id
+UUID, PK
+customer_id
+UUID
+event_type
+TEXT
+e.g. DAILY_CASH_REFRESH, MONTH_END_CLOSE, FORECAST_PUBLISHED
+triggered_by
+TEXT
+SCHEDULED | BUSINESS_EVENT | MANUAL | API
+business_effective_date
+TIMESTAMPTZ
+created_at
+TIMESTAMPTZ
+Table FIE1-7.4 — observation_events.
+7.5 snapshots (Domain Snapshot)
+Field
+Type
+Notes
+snapshot_id
+UUID, PK
+customer_id
+UUID
+financial_concept_id
+UUID, FK
+business_effective_date
+TIMESTAMPTZ
+status
+ENUM(COMPLETE, PARTIAL, FAILED, SUPERSEDED)
+coverage_pct
+NUMERIC
+missing_sources
+JSONB
+Array of source_system values expected but absent
+confidence_context
+JSONB
+Rolled-up three-dimensional confidence across constituent records
+constituent_temporal_record_ids
+UUID[]
+created_at
+TIMESTAMPTZ
+Table FIE1-7.5 — snapshots.
+7.6 composite_snapshot_definitions
+Field
+Type
+Notes
+composite_snapshot_definition_id
+UUID, PK
+definition_name
+TEXT
+e.g. MONTH_END_CLOSE, FRIDAY_SALES_REVIEW
+definition_version
+INTEGER
+Append-only, per Section 1.8
+required_financial_concept_ids
+UUID[]
+completeness_rule
+ENUM(ALL_REQUIRED_COMPLETE, THRESHOLD_PCT)
+MVP default: ALL_REQUIRED_COMPLETE
+completeness_threshold_pct
+NUMERIC, NULLABLE
+Populated only if completeness_rule = THRESHOLD_PCT
+publication_rules
+JSONB
+e.g. whether a PARTIAL composite may still be published, and to whom
+active
+BOOLEAN
+Table FIE1-7.6 — composite_snapshot_definitions.
+7.7 composite_snapshots
+Field
+Type
+Notes
+composite_snapshot_id
+UUID, PK
+composite_snapshot_definition_id
+UUID, FK
+References the exact definition_version active at assembly time, per Section 1.8
+customer_id
+UUID
+business_effective_date
+TIMESTAMPTZ
+Shared across every constituent Domain Snapshot
+status
+ENUM(COMPLETE, PARTIAL, FAILED, SUPERSEDED)
+Rolled up from constituent snapshots per the definition's completeness_rule
+constituent_snapshot_ids
+UUID[]
+missing_concepts
+JSONB
+Financial Concepts required by the definition but not yet COMPLETE
+created_at
+TIMESTAMPTZ
+Table FIE1-7.7 — composite_snapshots.
+7.8 temporal_record_relationships
+Field
+Type
+Notes
+relationship_id
+UUID, PK
+source_temporal_record_id
+UUID, FK
+target_temporal_record_id
+UUID, FK
+relationship_type
+TEXT
+e.g. INFORMED_BY, REFERENCES, PROMOTED_FROM
+asserted_by
+TEXT
+The capturing event or approver that declared this relationship — never system-inferred, per Section 1
+created_at
+TIMESTAMPTZ
+Table FIE1-7.8 — temporal_record_relationships. The PROMOTED_FROM type is how a Forecast Revision references an adopted Scenario Revision, per the Scenario Promotion Rule.
+Section 8 — Recording Policy Model
+Every Financial Concept owns exactly one active Recording Policy at a time, versioned per Section 1.8. A policy defines observation_cadence, comparison_cadence, refresh_trigger, and retention_policy. Policies may be platform-default (customer_id null) or customer-specific overrides. The Capture API rejects a write whose financial_concept_id has no active policy with INVALID_INPUT, and rejects a write whose triggering event does not match the policy's refresh_trigger with a warning-level log entry (not a hard failure, since manual and API-triggered captures per Section 1.7 are always permitted outside the configured cadence).
+Section 9 — Temporal Record Model
+Implements the frozen model's Temporal Record concept and the storage decision in Section 1.9: one table, two sibling record_family values, discriminated but never hierarchical. Every field common to both families — business_effective_date, system_recorded_date, customer_id, financial_concept_id, source_system, relationship references, confidence context — lives directly on temporal_records (Section 7.1). No field is duplicated under a different name for Revisions, closing the gap the conceptual review round explicitly flagged before freeze.
+Section 10 — Observation Model
+An Observation row (record_family = OBSERVATION) populates all three confidence dimensions and one of the two Observation subtypes:
+Metric Observation (record_subtype = METRIC) — a scalar value_payload, e.g. {"metric": "cash_balance", "value": 4200000, "currency": "USD"}
+Entity State Observation (record_subtype = ENTITY_STATE) — the state of one business object at the lowest meaningful grain, e.g. {"entity_type": "opportunity", "entity_id": "...", "stage": "...", "amount": ...}
+Observations are never edited. A corrected value is a new Observation row with a later system_recorded_date and the same or a corrected business_effective_date; the prior row remains permanently queryable, satisfying the bi-temporal "what did we believe back then" requirement in Section 4.3.
+Section 11 — Revision Model
+A Revision row (record_family = REVISION) populates reasoning_confidence only, leaves mapping_confidence and data_confidence null, and requires at least one related_observation_refs entry supplying the Observations it is based on (enforced at the API layer, Section 4.2). The four record_subtype values — FORECAST_REVISION, BUDGET_REVISION, SCENARIO_REVISION, ASSUMPTION_REVISION — share identical storage shape and differ only in this discriminator and, by convention, the vocabulary used in value_payload.reason. A Scenario Revision that is adopted is never rewritten into a Forecast Revision; per the Scenario Promotion Rule, a new Forecast Revision row is created with a PROMOTED_FROM relationship (Section 7.8) to the originating Scenario Revision.
+Section 12 — Snapshot Model
+A Domain Snapshot represents one Financial Concept at one business_effective_date, assembled by the Snapshot Assembler from the constituent Observations captured for that moment. Its status is COMPLETE only if every source_system the active Recording Policy expects for that concept contributed at least one Observation; otherwise PARTIAL (some sources present), FAILED (no sources present), or SUPERSEDED (a later snapshot for the same concept and date has since been assembled). coverage_pct and missing_sources give downstream callers a quantified, not just categorical, view of completeness.
+Section 13 — Composite Snapshot Definitions
+Per Section 1.8, a Composite Snapshot Definition is a named, versioned template (e.g. MONTH_END_CLOSE) declaring the Financial Concepts that must each produce a COMPLETE Domain Snapshot, sharing one business_effective_date, for the composite to count as that named business event. The MVP completeness_rule is ALL_REQUIRED_COMPLETE — a composite is COMPLETE only if every required concept's Domain Snapshot is COMPLETE; a THRESHOLD_PCT rule is defined in the schema (Section 7.6) for future use but not exercised by any MVP definition. publication_rules determine whether a PARTIAL composite may still be exposed to downstream callers (e.g. Reporting) with an explicit PARTIAL flag, or is withheld until COMPLETE — configured per definition, since a Friday Sales Review tolerating partial data is a different business judgment than a Month-End Close requiring full data.
+Section 14 — Event Processing
+An Observation Event is registered (POST /v1/observation-events) before or atomically with the capture calls that reference it. Processing is synchronous per capture call — there is no event queue internal to this service. For Orchestration-scheduled cadences, the calling worker registers the event, then issues one or more capture calls referencing observation_event_id, then optionally triggers Domain/Composite Snapshot assembly once it knows all expected captures for that event are complete. This service never determines on its own that "all expected captures" have arrived; that determination is the calling worker's responsibility, informed by the Recording Policy's declared sources.
+Section 15 — Confidence Handling
+Per Section 1.9 and the frozen model's Confidence resolution: an Observation's mapping_confidence and data_confidence are copied at capture time from the Validation Platform's (BIS-004) current object-level confidence for the canonical object(s) the Observation derives from; reasoning_confidence, where populated on an Observation, reflects any interpretation applied during capture (e.g. currency conversion, unit normalization). A Revision's reasoning_confidence is supplied by the approver or capturing process and reflects confidence in the judgment itself, not in underlying data — data confidence for a Revision is only evaluable by a downstream consumer walking its related_observation_refs to the Observations it cites. No confidence field on any persisted row is ever recalculated or rewritten after creation, per Section 1.10.
+Section 16 — Relationship Handling
+Relationships are recorded only when explicitly asserted by the capturing caller — the Capture API accepts related_temporal_record_ids (for Observations, optional) or related_observation_refs (for Revisions, required) directly in the write request and persists them as temporal_record_relationships rows in the same transaction as the Temporal Record itself. This service runs no correlation, similarity, or pattern-matching logic to discover relationships after the fact; per Section 1 of the frozen model, that reasoning belongs to later Financial Intelligence services, and this service's API surface has no endpoint capable of creating a relationship without an explicit source and target supplied by the caller.
+Section 17 — Storage Lifecycle
+Tier
+Criteria
+Characteristics
+Hot
+Age within the Recording Policy's hot_window (default: 90 days)
+Full-fidelity, low-latency storage; primary target for Section 18 queries
+Warm
+Age beyond hot_window, within warm_window (default: 2 years)
+Full-fidelity, higher-latency storage; queried transparently, no caller-visible difference in API shape
+Cold
+Age beyond warm_window
+Compressed detailed records plus reproducible Domain/Composite Snapshot summaries; detail-level queries against Cold storage carry a documented higher-latency SLA (Section 24)
+Table FIE1-17.1 — Storage lifecycle tiers. Transitions are executed by the Storage Lifecycle Manager as a scheduled background job that relocates storage and updates storage_tier only — per Section 1.10, no code path in this job can alter value_payload, confidence fields, or either date field.
+Section 18 — Query Patterns
+Pattern
+Supported Via
+Timeline for a Financial Concept over a date range
+GET /v1/timeline/{financial_concept_id}?date_range=
+"What did we believe as of a past system date" (bi-temporal)
+GET /v1/timeline/{financial_concept_id}?as_of=
+Latest Observation for a concept
+GET /v1/timeline/{financial_concept_id}?date_range=latest&record_types=OBSERVATION
+All Revisions of a given type in a period
+GET /v1/timeline/{financial_concept_id}?record_types=REVISION&revision_type=
+Domain Snapshot for a concept and date
+GET /v1/snapshots/{snapshot_id} or POST /v1/snapshots/domain lookup
+Composite Snapshot for a named business event and date
+GET /v1/snapshots/{snapshot_id} scoped to a composite_snapshot_definition_id
+Relationships for a record (what informed it / what it informed)
+GET /v1/relationships/{temporal_record_id}
+Records by confidence threshold
+GET /v1/timeline/{financial_concept_id}?min_confidence=
+Table FIE1-18.1 — Query patterns.
+Section 19 — Error Handling
+Error Code
+Meaning
+INVALID_INPUT
+Request fails schema validation
+FINANCIAL_CONCEPT_NOT_FOUND
+financial_concept_id does not exist or is inactive
+MISSING_REQUIRED_FIELD
+A field required by the record_subtype (e.g. approver for a Revision) is absent
+MISSING_APPROVER
+A Revision write omitted the required approver field
+MISSING_RELATED_OBSERVATION
+A Revision write supplied no related_observation_refs
+EVIDENCE_UNAVAILABLE
+A required upstream Canonical or Validation read failed or returned no data
+INCOMPLETE_COMPOSITE
+A Composite Snapshot assembly was requested before all required Domain Snapshots reached COMPLETE, under an ALL_REQUIRED_COMPLETE definition
+PERMISSION_ERROR
+Caller not authorized for this customer scope or record type
+INTERNAL_ERROR
+Unclassified failure
+Table FIE1-19.1 — Error codes, extending the EIS-001 taxonomy consistent with every prior BIS document.
+Section 20 — Retry Strategy
+Observation and Revision capture is idempotent by idempotency_key (Sections 4.1–4.2)
+A failed capture can be retried safely on timeout or 5xx; a 4xx requires input correction before retry
+Snapshot assembly is safely re-callable — re-assembling a Domain or Composite Snapshot for the same concept/date produces a new snapshot_id with status=SUPERSEDED applied to the prior one, never an in-place overwrite
+Storage tier transitions are retryable at the individual-record level; a partial batch failure does not affect records that already completed their transition
+Section 21 — Logging
+OBSERVATION_CAPTURED
+REVISION_RECORDED
+SNAPSHOT_ASSEMBLED
+COMPOSITE_SNAPSHOT_ASSEMBLED
+SNAPSHOT_SUPERSEDED
+STORAGE_TIER_TRANSITIONED
+RELATIONSHIP_RECORDED
+FINANCIAL_CONCEPT_CREATED
+RECORDING_POLICY_UPDATED
+COMPOSITE_SNAPSHOT_DEFINITION_UPDATED
+Every log entry includes: request_id, customer_id, temporal_record_id (where applicable), financial_concept_id, record_family, record_subtype, observation_event_id, actor_type, actor_id, timestamp — the same field discipline used by every prior BIS document, so cross-service correlation requires no field-name translation.
+Section 22 — Metrics
+Metric
+Type
+observations_captured_total{financial_concept, observation_type}
+Counter
+revisions_recorded_total{financial_concept, revision_type}
+Counter
+snapshot_assembly_duration_seconds{financial_concept}
+Histogram
+composite_snapshot_completeness_ratio{definition}
+Gauge
+storage_tier_transition_total{from_tier, to_tier}
+Counter
+timeline_query_duration_seconds{financial_concept, tier}
+Histogram
+relationship_records_total{relationship_type}
+Counter
+capture_rejection_total{error_code}
+Counter
+Table FIE1-22.1 — Prometheus-style metrics.
+Section 23 — Security
+Internal-only service — no direct external exposure
+Customer isolation enforced by customer_id on every table and every query, no exceptions
+Role-scoped access: Revision writes require an authenticated approver identity; Observation writes require an authenticated system or worker identity
+No raw credentials pass through this service under any circumstance
+No direct connector access — all canonical data arrives via BIS-003's own APIs, per Section 1.6
+No mutation path exists for confidence, value, or date fields on any persisted record, per Section 1.10 — this is enforced at the schema layer (no UPDATE grant on those columns), not only at the application layer
+Data at rest encrypted, consistent with every prior BIS document's storage posture
+Section 24 — Performance Targets
+Target
+Value
+Observation capture (single record)
+p95 < 300 ms
+Revision capture (single record)
+p95 < 300 ms
+Timeline query, Hot tier, 1-year range
+p95 < 500 ms
+Timeline query, Warm/Cold tier, 1-year range
+p95 < 3 seconds (documented higher-latency SLA, per Section 17)
+Domain Snapshot assembly (10,000 Entity State Observations)
+p95 < 60 seconds, achieved via the bulk-read pattern in Section 1.6
+Composite Snapshot assembly (6 constituent concepts)
+p95 < 5 seconds once all constituents are COMPLETE
+Concurrent capture throughput (MVP target)
+500 writes/second
+Table FIE1-24.1 — Performance targets.
+Section 25 — Deployment Model
+FastAPI service for the stateless Capture API and query layer
+Postgres for temporal_records, financial_concepts, recording_policies, observation_events, snapshots, composite_snapshot_definitions, composite_snapshots, and temporal_record_relationships
+Partitioning on temporal_records by customer_id and business_effective_date month, to keep Hot-tier queries fast as volume grows
+Object storage for Cold-tier compressed record archives, consistent with the object storage pattern BIS-006 already uses for report artifacts
+Internal-only network access at MVP
+Stateless API layer; horizontal scaling with no session affinity requirement
+Async Storage Lifecycle Manager worker, consuming a scheduled job queue, following the same worker pattern established across BIS-001, BIS-002, and BIS-006
+Section 26 — Configuration
+Setting
+Purpose
+evidence_read_page_size
+Page size for bulk-paginated Canonical Platform reads (default aligned to the platform's established default of 100)
+default_hot_window_days
+Default Hot-tier age threshold (default 90) absent a customer-specific override
+default_warm_window_days
+Default Warm-tier age threshold (default 730)
+capture_idempotency_key_ttl_hours
+Window during which a repeated idempotency_key returns the existing record (default 24)
+composite_assembly_retry_interval_minutes
+How often a PARTIAL Composite Snapshot's constituent completeness is re-checked when re-assembly is requested
+storage_lifecycle_batch_size
+Number of records processed per Storage Lifecycle Manager job invocation
+Table FIE1-26.1 — Configuration.
+Section 27 — Unit Testing
+Temporal Record write path rejects any attempt to reuse an existing temporal_record_id for a value or confidence change
+Revision write path enforces MISSING_APPROVER and MISSING_RELATED_OBSERVATION correctly
+Confidence field population matches Section 1.9's rule exactly: three dimensions for Observations, reasoning-only for Revisions
+Scenario Promotion Rule — a promoted Scenario Revision produces a new Forecast Revision with a PROMOTED_FROM relationship, never an edit to the Scenario Revision row
+Domain Snapshot completeness calculation against a fixture with known missing sources
+Composite Snapshot roll-up under ALL_REQUIRED_COMPLETE, including the case where exactly one required concept is PARTIAL
+Relationship recording rejects any request lacking an explicit source and target
+Storage tier transition job correctly updates storage_tier and touches no other field
+Section 28 — Integration Testing
+End-to-end Month-End Close Composite Snapshot assembly against live Revenue, Cash, Bookings, Pipeline, Headcount, and Forecast Domain Snapshots
+Bi-temporal timeline query correctly distinguishing business_effective_date and as_of (system_recorded_date) filters against a fixture with a known historical correction
+Forecast Revision referencing a Pipeline Snapshot with degraded confidence — verify the Revision's own reasoning_confidence is unaffected while the referenced Observation's confidence remains queryable
+Canonical Platform bulk-read integration for a 10,000-object Entity State Observation capture, verified against the Section 24 performance target
+Storage tier transition end-to-end: a record ages from Hot through Warm to Cold with identical query results returned at every stage except latency
+Cross-service read by a stub Reporting Platform call against GET /v1/timeline
+Section 29 — Observability
+Dashboards
+Capture volume by Financial Concept and record type
+Timeline query latency by storage tier
+Domain and Composite Snapshot completeness trends
+Storage tier distribution and transition volume
+Relationship graph growth
+Capture rejection rate by error code
+Alerts
+Capture rejection spike
+Composite Snapshot stuck in PARTIAL beyond its Recording Policy's expected completion window
+Storage tier transition job failure
+Timeline query latency SLA breach on Warm/Cold tier
+Section 30 — Failure Recovery
+Failure Mode
+Recovery Behavior
+Canonical Platform read failure during capture
+Capture fails with EVIDENCE_UNAVAILABLE; no Temporal Record is written from partial or inferred data
+Snapshot assembly fails mid-roll-up
+Domain or Composite Snapshot status is written as FAILED, never left in an ambiguous state; re-assembly is safely re-callable per Section 20
+Storage Lifecycle Manager job crash mid-batch
+Resumes from the last successfully transitioned record in the batch; already-transitioned records are not re-processed
+Relationship write fails after the Temporal Record write succeeds
+The Temporal Record remains valid and queryable; the missing relationship is surfaced via a reconciliation job comparing declared related_observation_refs against persisted relationship rows
+Composite Snapshot Definition updated mid-assembly
+The in-flight assembly completes against the definition_version it started with, per Section 1.8 — never switches definitions mid-roll-up
+Table FIE1-30.1 — Failure modes and recovery behavior.
+Section 31 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+THRESHOLD_PCT composite completeness in production use
+Activating the schema-reserved partial-completeness rule for a Composite Snapshot Definition
+A specific business event's definition requires publishing before every constituent concept is COMPLETE
+Cross-customer benchmark aggregation
+Anonymized, aggregate comparison of Recording Policy cadences and confidence trends across customers
+Sufficient customer volume accumulates to make aggregate benchmarking statistically meaningful
+Automatic Recording Policy tuning
+Suggesting cadence adjustments based on observed capture patterns
+Sufficient capture history exists to identify a customer's actual usage pattern diverging from its configured cadence
+Relationship graph traversal API
+Multi-hop relationship queries (e.g. everything that ultimately informed a given Forecast Revision)
+A concrete FIE-002/003 use case requires traversal beyond Section 18's single-hop GET /v1/relationships
+Warm/Cold tier query latency reduction
+Materialized rollups to reduce the Section 24 documented latency gap
+Production Warm/Cold query volume makes the current gap a measured customer-facing problem
+Financial Memory read optimization
+Purpose-built read paths for FIE-004's longitudinal pattern queries beyond the general timeline API
+FIE-004's own architecture is specified and its query needs are concretely known
+Table FIE1-31.1 — Backlog. Every item carries an explicit trigger condition, not a target date, matching the pattern established across BIS-001 through BIS-006.
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+Conceptual fidelity
+10 / 10
+Every frozen-model decision — the Observation/Revision sibling split, bi-temporal dates, three-dimensional confidence with nullable Revision fields, Composite Snapshot Definitions, the Scenario Promotion Rule — is translated into schema and API without redesign, and each is traced back to its specific conceptual-review resolution.
+Schema completeness
+10 / 10
+All eight tables fully specified with types and constraints, including the explicit no-UPDATE-path design note on confidence, value, and date fields that makes Section 1.10's immutability guarantee a storage-layer fact.
+Consistency with BIS-001 through BIS-006
+10 / 10
+The bulk-read pattern (1.6), the synchronous job-triggered capture model (1.7, the fourth instance of this exact pattern), and the versioned-registry treatment of Financial Concepts and Composite Snapshot Definitions (1.8) all reuse established platform patterns rather than introducing new ones.
+API completeness
+10 / 10
+All 12 endpoints specified; the three with the most execution complexity (observation capture, revision capture, timeline query) receive full detail tables, the remaining nine captured completely in a compact summary table.
+Boundary discipline
+9 / 10
+Section 1 cleanly restates all five frozen scope boundaries and resolves five further build-level ambiguities. One point withheld: the exact mechanism by which a calling worker determines "all expected captures for an Observation Event have arrived" (Section 14) is explicitly left to the caller rather than specified here — a reasonable boundary, but one that shifts real complexity onto Orchestration or FIE-002 rather than eliminating it.
+Testability
+9 / 10
+Unit and integration tests cover every component, including a dedicated Scenario Promotion Rule test. One point withheld: no explicit test scenario covers a Composite Snapshot Definition being updated mid-assembly (Section 30), only the steady-state and crash-recovery cases.
+Table FIE1-FA.1 — Build readiness assessment. Aggregate: 58 / 60 (97%).
+FIE-001 is complete and ready for engineering to begin implementation. It is the foundational service of the Financial Intelligence Engine layer: every Observation and Revision captured here becomes the substrate FIE-002 (Methodology Engine) interprets, FIE-003 (Calculation Engine) computes from, FIE-004 (Financial Memory) reasons across, and FIE-005 (Narrative Intelligence) explains. The next document in the series is FIE-002, and it should open its own Section 1 the same way this one did — by restating this document's scope boundaries rather than assuming them, since that discipline is what has kept eleven documents across two platform layers from silently drifting apart.
+The most consequential decision in this document is Section 1.9 — collapsing the frozen model's Observation/Revision sibling relationship into one physical table with nullable confidence columns rather than two table shapes. The conceptual review process spent three rounds making sure Observation and Revision were never modeled as parent/child; it would have been easy to reintroduce exactly that hierarchy at the schema layer by giving Revision a separate, narrower table that a query layer has to special-case. One table, one discriminator, and a documented rule for which columns a given record_family populates is what keeps the sibling relationship real all the way down to the row.

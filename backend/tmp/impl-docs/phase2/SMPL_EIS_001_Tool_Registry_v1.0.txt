@@ -1,0 +1,1374 @@
+ 
+SMPL TOOL REGISTRY
+Agent Interface Specification
+EIS-001  ·  Version 1.0
+ 
+Engineering contract between AI workers, orchestration workflows, and platform services
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING DOCUMENT
+Operationalizes: SOF (ABS-010)  ·  Playbooks (ABS-011)  ·  IMS Libraries (ABS-005–008)
+Section 0 — Engineering Context and Design Decisions
+EIS-001 defines the tool and interface layer that makes SMPL implementations executable by AI agents. It translates the frozen Phase 1 architecture into precise engineering contracts: tool signatures, error taxonomy, logging standards, agent invocation interfaces, and security boundaries. Three design decisions in this document go beyond the base ABS-011 scope — they address execution risks identified during playbook development that must be resolved at the engineering layer, not the architecture layer.
+ 
+0.1 Design Decision 1 — IMS Retrieval Architecture
+Problem: The IMS libraries contain ~300,000 words of connector-specific implementation logic across 21 connectors. An LLM agent cannot hold the full NetSuite IMS alongside live extraction state, CEP state, and validation logic in a single context window — and a parallel implementation running Oracle Fusion + Salesforce + Stripe + Workday simultaneously would generate irreconcilable context pressure if each agent tried to load its full IMS document.
+Solution built into this document: IMS content is served to agents through a structured retrieval layer, not as full document loads. The load_ims_spec and get_connector_* tools (Category 5) implement semantic chunking — agents request specific IMS sections by section ID (e.g., IMS-001.Section_4.3) and receive only the content relevant to their current execution step. Each chunk is pre-indexed by connector ID, section number, and execution stage so the retrieval is deterministic, not semantic-search-based.
+Implementation note for engineers: the IMS content store is a structured JSON document store keyed by {connector_id}.{section_id}.{subsection_id}. Each leaf node contains the executable content for that subsection — transformation rules, field maps, gate questions, validation thresholds — in a machine-readable schema alongside the human-readable text. Agents retrieve by key, not by similarity search. This produces deterministic, auditable IMS execution.
+ 
+0.2 Design Decision 2 — Gate State Object and Pending-State UX
+Problem: The Subscription Normalization Gate and Stage Normalization Gate are correct data integrity controls — but they create a period where customers see an incomplete product while they wait to answer policy questions. "ARR Reporting: PARTIAL" with no further explanation feels like a product failure rather than a deliberate data integrity protection.
+Solution built into this document: a Gate State Object is introduced as a first-class data structure in the CEP and surfaced in every reporting tool output. The Gate State Object communicates three things customers need during a pending gate: (1) what capability is available right now on the data extracted so far, (2) exactly what question is pending and who needs to answer it, and (3) a real-time progress indicator showing how close the gate is to resolving. The Reporting Tools (Category 11) include mandatory pending-state output templates for every gate type.
+Implementation note: the Gate State Object is not a new architecture concept — it is a formalization of information already present in the CEP resolution queue and the SOF session state. The engineering work is surfacing it consistently through all reporting paths.
+ 
+0.3 Design Decision 3 — Cross-Domain Validation Gap Templates
+Problem: The cross-domain validation matrix (SOF Table 4.2) produces flags when reconciliation thresholds are not met — but "FLAG: BOOKINGS_VALIDATION_GAP, count=47" tells an engineer what happened without telling the customer what it means or what to do about it. Without structured gap templates, every implementation consultant will frame these gaps differently.
+Solution built into this document: every gap type in SOF Table 4.2 has a corresponding structured output template in the generate_gap_explanation tool (Category 11). Each template has three mandatory sections: WHAT WAS FOUND (quantified), WHY IT MATTERS (business implication in non-technical language), and WHAT TO DO NEXT (specific recommended action). These templates are part of the engineering contract — they cannot be replaced by ad hoc LLM generation for customer-facing communications about data gaps.
+ 
+0.4 Document Scope
+This document specifies 78 tools across 13 categories, the agent invocation interface, the agent response interface, the status taxonomy, the error taxonomy, the logging standard, the security model, the IMS retrieval architecture, the Gate State Object schema, and the cross-domain gap template specifications. It does not introduce new architecture — it translates the existing architecture into implementation contracts.
+ 
+Section 1 — Shared Standards
+These standards apply to every tool in the registry. Engineers implementing any tool must comply with all standards in this section before any tool-specific requirements.
+ 
+1.1 Status Taxonomy
+All tools and agents use the following status values exclusively. No custom status values are permitted.
+Status
+Definition
+When Used
+QUEUED
+Work item is accepted and waiting to execute
+Agent dispatch received; extraction job submitted; not yet started
+RUNNING
+Execution is in progress
+Active extraction, active transformation, active validation
+COMPLETE
+All required work finished with no gaps or failures
+Full extraction at expected record count; all validations passed or flagged (no REJECTs above threshold)
+COMPLETE_WITH_GAPS
+Work finished but with known, logged gaps
+REJECT rate below threshold; some optional fields null; flagged items logged but not blocking
+PARTIAL
+Work finished but key outputs are missing or below confidence threshold
+Gate unresolved; companion connector absent; confidence below READY threshold
+PAUSED_FOR_CEP
+Execution suspended pending a human business decision
+Any PAUSE_FOR_CEP condition from IMS or SOF decision tables
+BLOCKED
+Execution cannot continue; blocking condition not auto-resolvable
+Pre-extraction BLOCK from IMS; circular hierarchy; system-of-authority conflict
+ESCALATED
+BLOCKED condition surfaced to human consultant; awaiting response
+After COORD-001 sends ESCALATE to human; no resolution yet received
+ERROR
+Technical failure; execution did not complete
+Auth failure after retries; API unavailable; unexpected schema; internal service failure
+CANCELLED
+Execution terminated by explicit instruction
+Human or COORD-001 cancelled a running job
+Table EIS-1.1 — Status taxonomy. All tools and agents use these values without modification.
+ 
+1.2 Error Taxonomy
+All tool errors are returned using this taxonomy. No tool may return a free-text error without an error_code from this table.
+Error Code
+HTTP Equivalent
+Retry Eligible?
+Definition
+AUTH_ERROR
+401
+No — new credentials required
+Connector authentication failed; credential reference invalid or expired
+PERMISSION_ERROR
+403
+No — scope change required
+Authenticated but insufficient permission for the requested operation
+RATE_LIMIT_ERROR
+429
+Yes — with backoff
+Connector or SMPL internal rate limit exceeded
+CONNECTOR_UNAVAILABLE
+503
+Yes — with backoff
+Target system API is not responding or returned 5xx
+SCHEMA_CHANGED
+422
+No — requires IMS update
+API response structure does not match expected schema from IMS spec
+INVALID_INPUT
+400
+No — caller must fix input
+Tool received a malformed, missing, or out-of-range input parameter
+VALIDATION_FAILED
+422
+No — data quality issue
+Data did not pass IMS Section 5 validation; caller receives validation_report
+CEP_REQUIRED
+202
+Yes — after CEP resolution
+Tool cannot proceed without a CEP field that is currently PENDING; returns pending_cep_item
+BLOCK_CONDITION
+409
+No — requires human resolution
+IMS BLOCK condition triggered; execution halted pending ESCALATE resolution
+DATA_QUALITY_THRESHOLD_EXCEEDED
+422
+No — requires investigation
+REJECT rate or FLAG rate exceeded IMS Section 5.4 threshold
+IDEMPOTENCY_CONFLICT
+409
+No — caller must use existing result
+Idempotent tool called again with a key that already has a result; existing result returned
+INTERNAL_ERROR
+500
+Yes — up to 3 times
+SMPL internal service failure unrelated to customer data or connector
+Table EIS-1.2 — Error taxonomy. Every tool error response includes error_code, error_message, and where applicable: retry_after_seconds, pending_cep_item_id, or validation_report.
+ 
+1.3 Logging Standard
+Every tool call must emit at minimum one log event. The following fields are required on every event. Tools that process PII or financial data have additional requirements noted in their Security Notes.
+Field
+Type
+Required
+Notes
+event_id
+UUID
+Required
+Globally unique; generated by the logging service
+session_id
+String
+Required
+The implementation session this event belongs to
+customer_id
+String
+Required
+Never logged as raw company name — use customer UUID
+agent_id
+String
+Required
+The agent that called this tool; SYSTEM for infrastructure calls
+tool_name
+String
+Required
+Exact tool name from registry
+tool_version
+String
+Required
+Semantic version of the tool called; enables diff on behavior changes
+event_type
+Enum
+Required
+TOOL_CALLED, TOOL_COMPLETE, TOOL_ERROR, DECISION, RETRY
+timestamp
+ISO 8601
+Required
+UTC; millisecond precision
+input_summary
+JSON
+Required
+Key inputs only — NEVER raw credentials, PII, or financial record content; use field names and counts
+output_summary
+JSON
+Required
+Key outputs — NEVER customer financial data content; use counts, statuses, confidence scores
+decision
+String
+Conditional
+Required when event_type = DECISION; must include the SOF decision code (CONTINUE/PAUSE_FOR_CEP/ESCALATE/ERROR)
+confidence_impact
+String
+Conditional
+Required when tool modifies a confidence score; format: "{object_type}: {old}% → {new}%"
+error_code
+String
+Conditional
+Required when event_type = TOOL_ERROR; must be from Table EIS-1.2
+retry_count
+Integer
+Conditional
+Required on retry events; 0-indexed
+next_action
+String
+Conditional
+Required when event_type = DECISION; the next SOF node or agent action
+Table EIS-1.3 — Required log fields. Log events are immutable once written. No log event may be deleted or modified.
+ 
+1.4 Security Baseline
+Every tool operates under the following baseline security rules. Tool-specific additions are documented in each tool's Security Notes section.
+CREDENTIAL REFERENCES ONLY. AI agents never receive raw API keys, OAuth tokens, or passwords. Agents receive a credential_reference_id which the Connector Proxy Service resolves to actual credentials at call time. Agents cannot read, log, or forward the underlying credential.
+READ-ONLY AGAINST CUSTOMER SYSTEMS. No tool in Categories 1–11 and 13 may write to a customer's connected system. Only Category 7 (Canonical Data Tools) writes, and only to SMPL internal stores. Category 12 (Security Tools) manages SMPL credential store only.
+ROLE-SCOPED TOOL ACCESS. Each agent's allowed_tools list is defined in its invocation context and enforced by the tool gateway. An agent may not call a tool not in its allowed_tools list regardless of how the request is constructed.
+PII AND FINANCIAL DATA IN LOGS. Customer names, email addresses, compensation figures, revenue amounts, and account balances must never appear in log output_summary fields. Use counts, IDs, and confidence scores only.
+TOOL VERSIONING. Every tool is versioned. Agents must specify the tool version they are calling. The tool gateway rejects calls to deprecated versions after the sunset date defined in the tool registry.
+ 
+1.5 Idempotency Standard
+Tools are classified into three idempotency tiers. Engineers must implement the behavior for the tier assigned to each tool.
+Tier
+Behavior
+Example Tools
+IDEMPOTENT
+Same input always produces same output; repeated calls are safe and return the cached result after the first successful call. Callers must provide an idempotency_key.
+create_implementation_session, authenticate_connector, upsert_canonical_object
+IDEMPOTENT_WITHIN_SESSION
+Same input within the same session_id produces the same result; cross-session calls may produce different results as data changes.
+extract_object_batch, validate_required_fields, calculate_object_confidence
+NON_IDEMPOTENT
+Each call produces a new side effect. Agents must not retry these without explicit SOF instruction.
+write_implementation_log, create_metric_event, create_cep_question (creates a new queue item each call)
+Table EIS-1.4 — Idempotency tiers.
+ 
+1.6 Rate Limit Budget Architecture
+This section addresses the engineering implementation of connector rate limits — a requirement identified during playbook development. Every extraction tool that calls an external connector API operates within a rate limit budget managed by the Connector Proxy Service.
+Budget Component
+Description
+Implementation
+Per-connector rate limit
+Each connector has a documented rate limit from its IMS Section 1 (e.g., Stripe: 100 req/min, Salesforce: governor limits by API type, SAP OData: Microsoft tier-dependent)
+The Connector Proxy Service maintains a rate limit registry keyed by connector_id. Every external call is counted against the connector's budget before dispatch.
+Budget allocation per session
+For parallel implementations, each running agent receives a budget slice of the total connector rate limit
+COORD-001 allocates budget at agent dispatch: budget_slice = connector_rate_limit / active_agent_count_for_this_connector
+Budget reporting to agents
+Each extraction tool response includes remaining_budget_pct and suggested_next_call_delay_ms
+Agents use this to self-regulate extraction pace without polling a separate rate-limit service
+Rate limit hit handling
+RATE_LIMIT_ERROR triggers automatic exponential backoff: 10s, 30s, 60s, 120s, 300s
+After 300s backoff: escalate to COORD-001 with recommendation to schedule extraction in off-peak window
+Parallel agent coordination
+Two agents extracting from the same connector share the rate limit budget
+Connector Proxy Service enforces the shared budget; agents do not need to coordinate directly
+Table EIS-1.5 — Rate limit budget architecture. Every extraction tool response includes remaining_budget_pct.
+ 
+Category 1 — Session and Orchestration Tools
+Session and Orchestration Tools manage the implementation workflow state, agent lifecycle, and SOF execution. They are callable primarily by COORD-001 (Implementation Coordinator). These tools write to SMPL internal session state only — never to customer systems.
+ 
+create_implementation_session
+Field
+Specification
+Purpose
+Create a new implementation session record and return the session_id that all subsequent tool calls reference
+Owner Service
+Session Service
+Callable By
+COORD-001 only
+Inputs
+customer_id (UUID, required), initiated_by (user_id of Implementation Consultant, required), connector_inventory_initial (string[], optional — pre-populated from sales handoff)
+Outputs
+session_id (UUID), created_at (ISO 8601), status: QUEUED, cep_id (UUID of newly created empty CEP record for this session)
+Permissions
+impl:session:create
+Side Effects
+Creates session record; creates empty CEP record; emits SESSION_CREATED log event
+Idempotency
+IDEMPOTENT — provide idempotency_key = hash(customer_id + initiated_by + date). Returns existing session if same customer_id has an active session within 30 days.
+Error States
+INVALID_INPUT if customer_id not found; IDEMPOTENCY_CONFLICT if active session exists (returns existing session_id)
+Retry Behavior
+Safe to retry with same idempotency_key
+Security Notes
+customer_id is a UUID — never log customer company name in this event
+Table EIS-C1.1 — create_implementation_session.
+ 
+dispatch_agent
+Field
+Specification
+Purpose
+Dispatch a registered agent with its required inputs and receive a dispatch_id for status polling
+Owner Service
+Agent Orchestration Service
+Callable By
+COORD-001 only
+Inputs
+session_id (UUID, required), agent_id (string from SOF Table 1.2/1.3, required), inputs (dict, required — agent-specific), priority (enum: HIGH/NORMAL/LOW, default NORMAL), special_flags (string[], optional — e.g., shared_dataverse_possible)
+Outputs
+dispatch_id (UUID), agent_id, status: QUEUED, estimated_start_at (ISO 8601 based on queue depth)
+Permissions
+impl:agent:dispatch
+Side Effects
+Creates agent execution record; allocates rate limit budget slice for connector agents; emits AGENT_DISPATCHED log event
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same agent_id + same inputs within same session returns existing dispatch_id if still RUNNING
+Error States
+INVALID_INPUT if agent_id not in registry; PERMISSION_ERROR if agent not in session's allowed_agents list
+Retry Behavior
+Safe to retry; idempotency prevents duplicate dispatch
+Security Notes
+inputs dict must not contain raw credentials — use credential_reference_id only
+Table EIS-C1.2 — dispatch_agent.
+ 
+write_implementation_log
+Field
+Specification
+Purpose
+Append a structured, immutable entry to the SOF Implementation Log for this session
+Owner Service
+Logging Service
+Callable By
+All agents — every agent must call this tool on every branching decision
+Inputs
+session_id (UUID, required), entry (dict, required — must contain all required fields from Table EIS-1.3); note: event_id and timestamp are generated by the service, not the caller
+Outputs
+log_id (UUID of the new log entry), timestamp (when written)
+Permissions
+impl:log:write (all agents have this permission)
+Side Effects
+Appends immutable log record; emits LOG_WRITTEN metric event
+Idempotency
+NON_IDEMPOTENT — each call creates a new record; callers must not retry without verifying the prior call did not succeed
+Error States
+INVALID_INPUT if any required field missing or input_summary contains a redacted-field pattern (the service rejects logs that appear to contain PII or credentials)
+Retry Behavior
+Verify prior write succeeded before retrying to avoid duplicate entries; check by querying get_session_log with filter on agent_id + timestamp
+Security Notes
+Service-enforced PII/credential scrubbing: if input_summary or output_summary matches known PII patterns (email, phone, SSN format), the write is rejected with INVALID_INPUT and the agent must scrub before retry
+Table EIS-C1.3 — write_implementation_log.
+ 
+Category 2 — CEP Tools
+CEP Tools manage the Customer Environment Profile — the single source of truth for all customer-specific decisions. COORD-002 (CEP Agent) is the primary caller; other agents call read_cep. No agent other than COORD-002 may call update_cep directly.
+ 
+read_cep
+Field
+Specification
+Purpose
+Read one or more fields from the Customer Environment Profile for this session
+Owner Service
+CEP Service
+Callable By
+All agents — but each agent may only read the CEP field paths in its cep_read_scope (defined in the agent's invocation context)
+Inputs
+session_id (UUID, required), field_paths (string[], required — dot-notation paths e.g. ["arr_policy.include_trials", "connector_inventory"]), include_metadata (bool, optional, default false — if true, returns source and timestamp per field)
+Outputs
+fields (dict: {field_path: value}), metadata (dict: {field_path: {source, timestamp, cep_item_id}}, only if include_metadata=true), missing_paths (string[] — paths requested but not yet populated)
+Permissions
+impl:cep:read — scoped to the agent's cep_read_scope
+Side Effects
+None — read-only
+Idempotency
+IDEMPOTENT
+Error States
+PERMISSION_ERROR if field_path not in agent's cep_read_scope; INVALID_INPUT if field_path format is invalid
+Retry Behavior
+Safe to retry at any time
+Security Notes
+CEP fields may contain customer names and business information — agents must not forward CEP content to external systems or log field values in output_summary
+Table EIS-C2.1 — read_cep.
+ 
+update_cep
+Field
+Specification
+Purpose
+Write a value to a CEP field with mandatory provenance tracking
+Owner Service
+CEP Service
+Callable By
+COORD-002 only — no other agent may write to the CEP directly
+Inputs
+session_id (UUID, required), field_path (string, required), value (any, required), source (enum, required: AUTO_DISCOVERED | HUMAN_CONFIRMED | DEFAULT_APPLIED | DEFERRED_BY_CUSTOMER), cep_item_id (UUID, optional — links this write to a pending CEP item)
+Outputs
+field_path, value, source, written_at (ISO 8601), previous_value (the value before this write, for audit purposes)
+Permissions
+impl:cep:write — COORD-002 only
+Side Effects
+Updates CEP record; if cep_item_id provided, marks that item as resolved; emits CEP_FIELD_UPDATED log event with previous_value and new source
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same field_path + same value + same source returns the existing write record without creating a new version
+Error States
+PERMISSION_ERROR if caller is not COORD-002; INVALID_INPUT if source is not in the allowed enum; INVALID_INPUT if value type does not match the CEP field schema for this field_path
+Retry Behavior
+Safe to retry with same inputs due to idempotency
+Security Notes
+Audit log always preserves previous_value — CEP writes are never destructive; full history is queryable via get_cep_history
+Table EIS-C2.2 — update_cep.
+ 
+create_cep_question
+Field
+Specification
+Purpose
+Create a new pending CEP item in the resolution queue when a business decision cannot be auto-discovered
+Owner Service
+CEP Service
+Callable By
+COORD-002 only (all PAUSE_FOR_CEP requests from other agents are relayed through COORD-002 before queue creation)
+Inputs
+session_id (UUID, required), field_path (string, required), question_text (string, required — the exact question to surface to the human, in business language not technical language), reason_cannot_auto_discover (string, required — why this cannot be answered automatically), default_value (any, optional — the value that will be applied after 48h if no response), capability_impact (string, required — what capability is affected and how), urgency (enum, required: BLOCKING | NORMAL | LOW), source_agent_id (string, required — which agent triggered this pause)
+Outputs
+cep_item_id (UUID), field_path, status: PENDING, urgency, created_at, estimated_auto_resolve_at (48h from creation if default_value is set, null if no default)
+Permissions
+impl:cep:question:create — COORD-002 only
+Side Effects
+Creates pending queue item; emits CEP_QUESTION_CREATED log event; if urgency=BLOCKING, immediately notifies the session's assigned Implementation Consultant
+Idempotency
+NON_IDEMPOTENT — each call creates a new queue item; COORD-002 must check list_pending_cep_items before creating to avoid duplicates on the same field_path
+Error States
+INVALID_INPUT if field_path already has a PENDING item (use the existing item instead); INVALID_INPUT if question_text is missing or < 20 characters
+Security Notes
+question_text is surfaced directly to the customer or Implementation Consultant — it must be in plain business language, not technical field names or internal codes
+Table EIS-C2.3 — create_cep_question.
+ 
+Category 3 — Connector Discovery Tools
+Connector Discovery Tools execute IMS Section 1 logic — authentication, environment detection, module inventory, and schema discovery. All are read-only against customer systems. They are callable primarily by COORD-003 (Discovery Agent).
+ 
+authenticate_connector
+Field
+Specification
+Purpose
+Attempt authentication against a connector using the stored credential reference and return the authentication result
+Owner Service
+Connector Proxy Service
+Callable By
+COORD-003
+Inputs
+session_id (UUID, required), connector_id (string, required — from SOF Table 1.2), credential_reference_id (UUID, required — never the raw credential)
+Outputs
+auth_status (enum: AUTHENTICATED | AUTH_FAILED | AUTH_TIMEOUT), connector_id, account_id (the connector's account identifier — e.g., Stripe account ID, Salesforce Org ID), auth_method (string — the method used: OAUTH2_CLIENT_CREDENTIALS | OAUTH2_AUTH_CODE | API_KEY | BASIC_AUTH), auth_expires_at (ISO 8601 or null if non-expiring), remaining_budget_pct (integer 0-100 — the connector's rate limit budget remaining)
+Permissions
+impl:connector:authenticate
+Side Effects
+Stores auth_token in Connector Proxy Service (never returned to caller); emits CONNECTOR_AUTHENTICATED or AUTH_FAILED log event
+Idempotency
+IDEMPOTENT — same connector_id + credential_reference_id returns cached auth result if < 5 minutes old
+Error States
+AUTH_ERROR if credentials invalid; CONNECTOR_UNAVAILABLE if target API not responding; RATE_LIMIT_ERROR if auth endpoint itself is rate-limited (rare)
+Retry Behavior
+RATE_LIMIT_ERROR and CONNECTOR_UNAVAILABLE: retry with backoff (10s, 30s, 60s). AUTH_ERROR: no retry — new credentials required.
+Security Notes
+Raw credential values are resolved from the credential store inside the Connector Proxy Service and never returned to, stored by, or visible to the calling agent. credential_reference_id is the only credential identifier agents handle.
+Table EIS-C3.1 — authenticate_connector.
+ 
+detect_connector_environment
+Field
+Specification
+Purpose
+Determine whether the authenticated connector is pointing to a production or non-production environment, and capture environment-specific metadata
+Owner Service
+Connector Proxy Service
+Callable By
+COORD-003
+Inputs
+session_id (UUID, required), connector_id (string, required)
+Outputs
+environment_type (enum: PRODUCTION | SANDBOX | STAGING | UNKNOWN), livemode (bool | null — null if connector does not have a livemode concept), account_id, environment_indicators (dict — connector-specific signals used in detection: e.g., {org_type: "Sandbox"} for Salesforce, {livemode: false} for Stripe, {account_id_suffix: "_SB"} for NetSuite), confidence (enum: HIGH | MEDIUM | LOW — HIGH if deterministic signal; MEDIUM if inferred; LOW if ambiguous)
+Permissions
+impl:connector:read
+Side Effects
+Writes environment_type and livemode to CEP via COORD-002 (the tool calls update_cep internally); emits ENVIRONMENT_DETECTED log event
+Idempotency
+IDEMPOTENT_WITHIN_SESSION
+Error States
+CONNECTOR_UNAVAILABLE; SCHEMA_CHANGED if expected environment indicator field is absent from API response
+Retry Behavior
+CONNECTOR_UNAVAILABLE: retry with backoff. Do not retry on SCHEMA_CHANGED.
+Security Notes
+If environment_type = SANDBOX and confidence = HIGH: tool automatically emits a SANDBOX_DETECTED alert to COORD-001 before returning to caller. Production data must never flow from a sandbox-detected session.
+Table EIS-C3.2 — detect_connector_environment.
+ 
+discover_connector_modules
+Field
+Specification
+Purpose
+Execute the module inventory queries from IMS Section 1 for a connector and return the active module set
+Owner Service
+Connector Proxy Service
+Callable By
+COORD-003
+Inputs
+session_id (UUID, required), connector_id (string, required)
+Outputs
+modules_detected (dict: {module_name: {active: bool, detection_query: string, detection_result: string, canonical_impact: string}}), cep_updates_written (string[] — list of CEP field paths updated as a result of module detection)
+Permissions
+impl:connector:read
+Side Effects
+Writes module inventory to CEP via COORD-002; emits MODULE_INVENTORY_COMPLETE log event
+Idempotency
+IDEMPOTENT_WITHIN_SESSION
+Error States
+CONNECTOR_UNAVAILABLE; PERMISSION_ERROR if module-specific API endpoint requires additional permissions not in current credential scope
+Retry Behavior
+CONNECTOR_UNAVAILABLE: retry with backoff. PERMISSION_ERROR: surface to COORD-001 as PAUSE_FOR_CEP.
+Security Notes
+Module detection queries are read-only metadata queries — they do not access business data
+Table EIS-C3.3 — discover_connector_modules.
+ 
+Category 4 — Data Extraction Tools
+Data Extraction Tools retrieve customer data from connected systems. All are strictly read-only against customer systems. Every extraction tool response includes rate limit budget information. These tools are callable by Domain Implementation Agents only — not by coordination or evaluation agents.
+ 
+extract_object_batch
+Field
+Specification
+Purpose
+Extract a batch of records for a specified object type from a connected system, applying the IMS-specified filter and field selection for that connector and object type
+Owner Service
+Connector Proxy Service / Extraction Engine
+Callable By
+Domain Implementation Agents (ERP-DOMAIN, CRM-DOMAIN, BIL-DOMAIN, HRS-DOMAIN) and their sub-agents
+Inputs
+session_id (UUID, required), connector_id (string, required), object_type (string, required — must match an object type in the connector's IMS Section 2 canonical object map), filters (dict, optional — additional filters beyond IMS-specified defaults; e.g., livemode=true for Stripe; ledger=CEP.canonical_ledger for SAP), page_cursor (string, optional — for pagination continuation), page_size (integer, optional, default 1000, max 5000), idempotency_key (UUID, required — callers must generate a stable key for each logical batch request)
+Outputs
+records (array of raw vendor objects), next_page_cursor (string or null if last page), total_record_count_estimate (integer — best estimate; may not be exact for all APIs), extraction_id (UUID — reference for this batch), remaining_budget_pct (integer 0-100), suggested_next_call_delay_ms (integer — 0 if budget > 50%; computed from rate limit algorithm if budget < 50%)
+Permissions
+impl:connector:extract — scoped to the specific connector_id
+Side Effects
+Logs EXTRACTION_BATCH_COMPLETE with record_count and extraction_id; increments connector rate limit counter in Connector Proxy Service
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same idempotency_key returns cached result for 1 hour
+Error States
+RATE_LIMIT_ERROR; CONNECTOR_UNAVAILABLE; PERMISSION_ERROR; SCHEMA_CHANGED (if API response fields differ from IMS spec); AUTH_ERROR (if session token expired mid-extraction)
+Retry Behavior
+RATE_LIMIT_ERROR: automatic backoff per Table EIS-1.5. CONNECTOR_UNAVAILABLE: retry up to 3× with backoff. AUTH_ERROR: attempt token refresh once, then AUTH_ERROR to caller. SCHEMA_CHANGED: no retry — escalate to COORD-001.
+Security Notes
+Raw extracted records are stored in the Extraction Engine's temporary store, not returned in full to the agent. Agents receive a batch_reference_id and access records via get_extracted_records. This prevents full customer datasets from flowing through agent context windows.
+Table EIS-C4.1 — extract_object_batch. Note: raw records flow to Extraction Engine temporary store, not directly into agent context — see get_extracted_records.
+ 
+get_extracted_records
+Field
+Specification
+Purpose
+Retrieve extracted records from the Extraction Engine temporary store for processing by an implementation agent. Returns records in pages to manage agent context window size.
+Owner Service
+Extraction Engine
+Callable By
+Domain Implementation Agents
+Inputs
+session_id (UUID, required), extraction_id (UUID, required — from extract_object_batch response), record_offset (integer, optional, default 0), record_limit (integer, optional, default 100, max 500 — set conservatively to manage context window)
+Outputs
+records (array of raw vendor objects, max record_limit), total_count (integer), offset (integer), has_more (bool), extraction_id
+Permissions
+impl:extraction:read — scoped to the session's extraction store
+Side Effects
+None — read-only from temporary store; emits RECORDS_RETRIEVED log event with count only (not record content)
+Idempotency
+IDEMPOTENT
+Error States
+INVALID_INPUT if extraction_id not found or expired (extraction store TTL is 24 hours); PERMISSION_ERROR if session_id does not match the extraction's session
+Retry Behavior
+Safe to retry at any time
+Security Notes
+Records in the temporary store are encrypted at rest. Extraction store TTL is 24 hours — after which records are purged and must be re-extracted if needed.
+Table EIS-C4.2 — get_extracted_records.
+ 
+extract_incremental_changes
+Field
+Specification
+Purpose
+Extract only records modified since the last successful sync, using the connector's documented incremental sync mechanism (lastModifiedDate, CDC endpoint, webhook replay, etc.)
+Owner Service
+Extraction Engine
+Callable By
+Domain Implementation Agents; also called by the Continuous Production Monitoring workflow post-implementation
+Inputs
+session_id (UUID, required), connector_id (string, required), object_type (string, required), since_timestamp (ISO 8601, required — the timestamp of the last successful extraction for this object type; stored in session state), include_deleted (bool, optional, default true — tombstones deleted records per IMS Section 3 guidance)
+Outputs
+changed_records_extraction_id (UUID), modified_count (integer), deleted_count (integer), sync_checkpoint_timestamp (ISO 8601 — store this for next incremental call), remaining_budget_pct (integer)
+Permissions
+impl:connector:extract
+Side Effects
+Updates sync_checkpoint in session state; emits INCREMENTAL_SYNC_COMPLETE log event
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same since_timestamp returns same extraction_id
+Error States
+CONNECTOR_UNAVAILABLE; SCHEMA_CHANGED; RATE_LIMIT_ERROR; INVALID_INPUT if since_timestamp is in the future
+Retry Behavior
+Same as extract_object_batch
+Security Notes
+Deleted record tombstones may contain the record ID and deletion timestamp — never the full record content
+Table EIS-C4.3 — extract_incremental_changes.
+ 
+Category 5 — IMS Execution Tools
+IMS Execution Tools implement the IMS Retrieval Architecture described in Section 0.1. They serve IMS content to agents in structured, section-sized chunks rather than as full document loads. The IMS content store is a structured JSON document store indexed by {connector_id}.{section_id}.{subsection_id}. Agents request specific sections and receive machine-readable content alongside human-readable text.
+ 
+IMS Content Store Architecture
+The IMS Content Store is a JSON document store where each document represents one subsection of one IMS specification. The key structure is:
+ims_content_store["{connector_id}.{section_id}.{subsection_id}"] = {
+  connector_id: "IMS-001",          // e.g., "IMS-001" for NetSuite
+  section_id: "Section_4",          // e.g., "Section_4" for Transformation Rules
+  subsection_id: "4.3",             // e.g., "4.3" for ARR Movement Derivation
+  title: "ARR Movement Derivation", // human-readable title
+  content_type: "ALGORITHM",        // enum: ALGORITHM | FIELD_MAP | TABLE |
+                                    //        GATE | EXCEPTION | CONFIDENCE_RULE
+  machine_readable: {               // structured data for direct agent execution
+    steps: [...],                   // ordered steps for ALGORITHM type
+    fields: [...],                  // field list for FIELD_MAP type
+    rules: [...]                    // rule list for TABLE type
+  },
+  human_readable: "...",            // the full IMS prose, for context
+  execution_stage: "TRANSFORM",     // which SOF stage this content applies to
+  prerequisite_sections: ["4.1"],   // sections that must be loaded before this one
+  cep_fields_required: [...]        // CEP fields this section reads or writes
+}
+ 
+load_ims_spec
+Field
+Specification
+Purpose
+Load the index of available IMS sections for a specific connector, returning section IDs and metadata without loading content — agents use this to plan which sections they need before fetching them individually
+Owner Service
+IMS Content Service
+Callable By
+Domain Implementation Agents
+Inputs
+connector_id (string, required — e.g., "IMS-001"), execution_stage (enum, optional — DISCOVER | ANALYZE | NORMALIZE | TRANSFORM | VALIDATE | POPULATE | SCORE; if provided, returns only sections relevant to this stage)
+Outputs
+connector_id, sections (array of {section_id, subsection_id, title, content_type, execution_stage, prerequisite_sections[], estimated_token_count}), total_sections (integer)
+Permissions
+impl:ims:read
+Side Effects
+None — read-only; emits IMS_INDEX_LOADED log event with connector_id and execution_stage
+Idempotency
+IDEMPOTENT
+Error States
+INVALID_INPUT if connector_id not in IMS registry
+Retry Behavior
+Safe to retry
+Security Notes
+IMS content is SMPL internal intellectual property — not customer data. No PII/financial data restrictions apply, but IMS content must not be forwarded to external services.
+Table EIS-C5.1 — load_ims_spec.
+ 
+get_ims_section
+Field
+Specification
+Purpose
+Retrieve the machine-readable and human-readable content for one specific IMS subsection. This is the core retrieval tool — agents call this once per execution step, loading only the content they need for that step.
+Owner Service
+IMS Content Service
+Callable By
+Domain Implementation Agents
+Inputs
+connector_id (string, required), section_id (string, required — e.g., "Section_4"), subsection_id (string, optional — if omitted, returns the full section; if provided, returns only that subsection)
+Outputs
+connector_id, section_id, subsection_id, title, content_type, machine_readable (dict — structured content ready for agent execution), human_readable (string — full prose from IMS document), cep_fields_required (string[] — dot-notation paths of CEP fields this section reads; agent must read_cep for these before executing), execution_notes (string — any implementation-critical warnings or connector-specific deviations from standard pattern)
+Permissions
+impl:ims:read
+Side Effects
+Emits IMS_SECTION_LOADED log event with section reference and estimated_token_count
+Idempotency
+IDEMPOTENT
+Error States
+INVALID_INPUT if section_id or subsection_id not found; INVALID_INPUT if prerequisite_sections have not been loaded (the service tracks section load order per session)
+Retry Behavior
+Safe to retry
+Engineering Note
+Content is pre-chunked to fit within a 4,000-token budget per subsection. Sections that exceed this are automatically split into numbered sub-subsections (e.g., "4.3.1", "4.3.2"). The load_ims_spec index reflects actual sub-subsection boundaries. This chunking is the IMS retrieval architecture's primary mechanism for managing agent context window pressure.
+Table EIS-C5.2 — get_ims_section.
+ 
+run_ims_discovery_gate
+Field
+Specification
+Purpose
+Execute the IMS Section 1 Discovery Completion Gate check for a connector — verifying all required pre-extraction conditions are met before IMS Section 2 execution begins
+Owner Service
+IMS Execution Engine
+Callable By
+COORD-003 (during Stage 2); Domain Implementation Agents (at the start of Stage 3 per-connector execution)
+Inputs
+session_id (UUID, required), connector_id (string, required)
+Outputs
+gate_status (enum: PASSED | FAILED | PARTIAL), gate_items (array of {item_id, description, status: PASS|FAIL|PENDING_CEP, blocking: bool, cep_field_path: string|null}), blocking_items (array — subset of gate_items where blocking=true and status=FAIL), ready_for_dispatch (bool — true only if gate_status=PASSED)
+Permissions
+impl:ims:execute
+Side Effects
+For each gate item with status=PENDING_CEP: creates a CEP question via create_cep_question (if not already pending); emits IMS_GATE_EXECUTED log event
+Idempotency
+IDEMPOTENT_WITHIN_SESSION
+Error States
+INVALID_INPUT if connector_id not authenticated (must authenticate before running gate); CEP_REQUIRED if one or more blocking gate items need CEP resolution
+Retry Behavior
+Safe to retry after CEP items resolve; gate will re-evaluate resolved items
+Security Notes
+Gate checks execute read-only API probes against the connector — same security model as discovery tools
+Table EIS-C5.3 — run_ims_discovery_gate.
+ 
+Category 6 — Transformation and Normalization Tools
+Transformation and Normalization Tools apply IMS Section 4 logic to convert vendor-specific data into canonical SMPL format. They are stateless — given the same input and the same IMS version, they always produce the same output. All transformation results must be logged with the IMS rule ID that produced them.
+ 
+normalize_field_value
+Field
+Specification
+Purpose
+Apply a single IMS-specified normalization rule to a vendor field value and return the canonical value
+Owner Service
+Transformation Engine
+Callable By
+Domain Implementation Agents
+Inputs
+connector_id (string, required), normalization_rule_id (string, required — references a specific rule in the IMS Section 4 content store, e.g., "IMS-001.4.1.Bank"), vendor_value (any, required — the raw value from the connector), context (dict, optional — additional context needed by the rule, e.g., {cep_functional_currency: "USD"} for currency rules)
+Outputs
+canonical_value (any — the normalized output), confidence_adjustment (integer — the confidence delta this normalization produces, positive or negative), normalization_applied (string — the rule name applied), requires_cep_confirmation (bool — true if the result is a CEP-flag rather than a confirmed mapping), cep_flag_reason (string — if requires_cep_confirmation=true, the reason and suggested CEP question)
+Permissions
+impl:transform:execute
+Side Effects
+Emits NORMALIZATION_APPLIED log event with rule_id and vendor_value→canonical_value mapping (values are logged only if not flagged as PII)
+Idempotency
+IDEMPOTENT — same inputs always produce same outputs
+Error States
+INVALID_INPUT if normalization_rule_id not found; INVALID_INPUT if vendor_value type is incompatible with the rule's expected input type; CEP_REQUIRED if the rule requires a CEP field that is PENDING
+Retry Behavior
+Safe to retry at any time
+Security Notes
+vendor_value may contain customer financial data — log normalization_applied but not vendor_value or canonical_value in log output_summary unless the field is non-sensitive (enum values and booleans are safe to log; amounts and names are not)
+Table EIS-C6.1 — normalize_field_value.
+ 
+normalize_currency
+Field
+Specification
+Purpose
+Convert a monetary amount from vendor format (integer cents, smallest-unit, or base-currency decimal) to canonical SMPL decimal format, with optional functional-currency conversion
+Owner Service
+Transformation Engine
+Callable By
+Domain Implementation Agents
+Inputs
+connector_id (string, required — determines vendor currency format per IMS Section 4.4 for each connector), raw_amount (number, required), source_currency_code (ISO 4217, required), target_currency_code (ISO 4217, optional — if provided, applies FX conversion; if omitted, returns source-currency decimal only), conversion_date (ISO 8601 date, optional — required if target_currency_code is provided; determines which exchange rate to use)
+Outputs
+local_amount (decimal — in source_currency_code), functional_amount (decimal | null — in target_currency_code; null if no target provided or if exchange rate unavailable), exchange_rate (decimal | null), exchange_rate_source (string | null), conversion_confidence_adjustment (integer — 0 if no conversion; -10 if exchange rate unavailable and functional_amount is null)
+Permissions
+impl:transform:execute
+Side Effects
+If exchange rate unavailable: emits EXCHANGE_RATE_MISSING log event; creates PAUSE_FOR_CEP request via COORD-002 asking customer to provide the missing rate
+Idempotency
+IDEMPOTENT
+Error States
+INVALID_INPUT if source_currency_code is not a valid ISO 4217 code; INVALID_INPUT if raw_amount is negative when the field's IMS spec requires non-negative
+Engineering Note
+The connector_id parameter is used to apply connector-specific format rules: Stripe/Recurly → divide by 100 for non-zero-decimal currencies; Chargebee/Maxio/Zuora → use raw_amount as base-currency decimal; ERP connectors → per IMS Section 4.4 of the relevant ERP IMS. This prevents the "Chargebee ÷100" error identified as the highest-severity silent error in the Billing IMS Library.
+Table EIS-C6.2 — normalize_currency.
+ 
+normalize_opportunity_stage
+Field
+Specification
+Purpose
+Map a raw CRM stage name or stage ID to the SCBM canonical pipeline stage taxonomy, using the session's resolved CEP stage mapping
+Owner Service
+Transformation Engine
+Callable By
+CRM-DOMAIN and its sub-agents
+Inputs
+session_id (UUID, required), connector_id (string, required), pipeline_id (string, required — the specific pipeline/RecordType/BPF this stage belongs to), raw_stage_value (string, required — the stage name or stage ID from the connector), include_gate_status (bool, optional, default true)
+Outputs
+canonical_stage (string | null — null if not yet resolved), confidence (decimal — 0.35 if unresolved; higher if resolved), resolution_status (enum: RESOLVED | PENDING_CEP | FUZZY_MATCH_PENDING), gate_status (object, only if include_gate_status=true — see Gate State Object spec in Section 0.2), fuzzy_match_suggestion (string | null — the tentative canonical stage if a fuzzy match was found, awaiting confirmation)
+Permissions
+impl:transform:execute
+Side Effects
+If resolution_status=PENDING_CEP: creates a CEP question if one does not already exist for this pipeline_id + raw_stage_value; updates gate_tracker in session state
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — result changes as CEP resolves stages
+Error States
+INVALID_INPUT if connector_id is not a CRM connector; CEP_REQUIRED if no stage mapping exists yet for this pipeline
+Engineering Note
+This tool is the implementation of the Stage Normalization Gate. The 40% confidence ceiling is enforced here — canonical_stage is always null and confidence is always 0.35 until the CEP stage mapping for this pipeline_id is fully resolved.
+Table EIS-C6.3 — normalize_opportunity_stage.
+ 
+Category 7 — Canonical Data Tools
+Canonical Data Tools are the only tools in the registry that write to persistent data stores. They write exclusively to SMPL's internal canonical data store — never to customer systems. These are the tools that populate the SCBM. Every write is logged with the source connector, confidence score, and IMS rule that produced it.
+ 
+upsert_canonical_object
+Field
+Specification
+Purpose
+Create or update a canonical object in the SCBM canonical data store. Upsert logic uses the source_id and connector_id as the natural key — if an object with the same natural key exists, it is updated; otherwise created.
+Owner Service
+Canonical Data Service
+Callable By
+Domain Implementation Agents (writing their domain objects); COORD-004 (Canonical Integration Agent, writing merged identity records)
+Inputs
+session_id (UUID, required), canonical_object_type (string, required — must be a valid SCBM object type), fields (dict, required — all canonical fields to write), source_connector_id (string, required), source_id (string, required — the vendor's natural key for this record), confidence (decimal 0.0–1.0, required), ims_rule_reference (string, required — the IMS section and rule ID that produced this object; e.g., "IMS-001.Section_3.1"), system_of_authority (string | null, optional — if provided, asserts this connector as the canonical owner of this object type)
+Outputs
+canonical_id (UUID — SMPL's internal identifier for this canonical object), action (enum: CREATED | UPDATED), version (integer — increments on each update), written_at (ISO 8601)
+Permissions
+impl:canonical:write — scoped to the object types permitted for this agent
+Side Effects
+Creates or updates canonical record; writes provenance record linking canonical_id to source_connector_id + source_id + ims_rule_reference; emits CANONICAL_OBJECT_WRITTEN log event with object_type, action, canonical_id, confidence (not field values)
+Idempotency
+IDEMPOTENT — same source_connector_id + source_id + fields produces the same canonical_id and no duplicate records; repeated upserts with different field values produce a new version
+Error States
+INVALID_INPUT if canonical_object_type not in SCBM; INVALID_INPUT if a required SCBM field is missing from fields dict; PERMISSION_ERROR if agent is not permitted to write this object type; VALIDATION_FAILED if the object fails required-field validation before write
+Retry Behavior
+Safe to retry due to idempotency
+Security Notes
+Fields may contain customer financial data — log canonical_id and confidence only; never log field values in the event output_summary
+Table EIS-C7.1 — upsert_canonical_object.
+ 
+assign_system_of_authority
+Field
+Specification
+Purpose
+Record the system-of-authority assignment for a canonical object type, following SOF Table 4.1 rules. Creates a session-scoped and persistent system-of-authority record.
+Owner Service
+Canonical Data Service
+Callable By
+COORD-004 (Canonical Integration Agent) only
+Inputs
+session_id (UUID, required), canonical_object_type (string, required), authoritative_connector_id (string, required), confidence (decimal, required), assignment_method (enum, required: SOF_RULE_AUTOMATIC | CEP_HUMAN_CONFIRMED | ESCALATION_RESOLVED | DEFAULT_APPLIED)
+Outputs
+soa_record_id (UUID), canonical_object_type, authoritative_connector_id, confidence, assignment_method, assigned_at (ISO 8601)
+Permissions
+impl:canonical:soa:write — COORD-004 only
+Side Effects
+Writes to system_of_authority registry; emits SOA_ASSIGNED log event; if assignment_method=ESCALATION_RESOLVED, links to the escalation record for audit
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same canonical_object_type + authoritative_connector_id returns existing SOA record
+Error States
+PERMISSION_ERROR if caller is not COORD-004; BLOCK_CONDITION if two connectors have conflicting SOA claims and assignment_method is not ESCALATION_RESOLVED (conflict must be resolved before SOA can be assigned)
+Retry Behavior
+Safe to retry after BLOCK_CONDITION is resolved
+Security Notes
+No PII or financial data in SOA records — safe to log fully
+Table EIS-C7.2 — assign_system_of_authority.
+ 
+Gate State Object — Specification
+The Gate State Object is returned by normalize_opportunity_stage, any tool that reads subscription gate status, and all reporting tools. It is the implementation of Design Decision 2 — the pending-state UX that communicates gate progress to customers in real time.
+ 
+GateStateObject = {
+  gate_type: enum,              // STAGE_NORMALIZATION | SUBSCRIPTION_NORMALIZATION |
+                                //   ORG_NORMALIZATION | ERP_EXTRACTION | ADP_ROLE
+  connector_id: string,
+  pipeline_id: string | null,   // for STAGE_NORMALIZATION gates only
+  // What is available RIGHT NOW (before full gate resolution)
+  available_now: {
+    capabilities: string[],     // capabilities with data available (lower confidence)
+    data_available: string[],   // what data has been extracted and is queryable
+    confidence_ceiling: decimal // e.g., 0.40 for unresolved stage gates
+  },
+  // What is pending
+  pending: {
+    question_text: string,      // the exact CEP question awaiting response
+    awaiting_from: string,      // CUSTOMER | IMPLEMENTATION_CONSULTANT
+    cep_item_id: UUID,
+    created_at: ISO8601,
+    auto_resolve_at: ISO8601 | null,  // when default will be applied
+    default_value_if_no_response: any | null
+  },
+  // Progress (for multi-question gates)
+  progress: {
+    total_items: integer,
+    resolved_items: integer,
+    resolution_pct: decimal     // 0.0 to 1.0
+  }
+}
+ 
+record_cross_system_identity
+Field
+Specification
+Purpose
+Record a confirmed or tentative identity match between canonical records from different connectors, as produced by COORD-004's identity resolution algorithm
+Owner Service
+Canonical Data Service
+Callable By
+COORD-004 only
+Inputs
+session_id (UUID, required), primary_canonical_id (UUID, required), secondary_canonical_id (UUID, required), match_method (enum, required: EMAIL_EXACT | EXTERNAL_ID | FUZZY_NAME), confidence (decimal, required), match_status (enum, required: CONFIRMED | PENDING_CEP_CONFIRMATION), cep_item_id (UUID, optional — required if match_status=PENDING_CEP_CONFIRMATION)
+Outputs
+identity_record_id (UUID), primary_canonical_id, secondary_canonical_id, match_status, recorded_at
+Permissions
+impl:canonical:identity:write — COORD-004 only
+Side Effects
+Links the two canonical records in the identity graph; if match_status=CONFIRMED, canonical queries automatically merge views across the two records; emits IDENTITY_MATCH_RECORDED log event
+Idempotency
+IDEMPOTENT — same primary + secondary canonical IDs returns existing identity record
+Error States
+INVALID_INPUT if canonical IDs do not exist; BLOCK_CONDITION if the two canonical records have conflicting functional currency or legal entity — requires escalation before identity merge
+Security Notes
+No PII in identity records — log canonical IDs and match_method only
+Table EIS-C7.3 — record_cross_system_identity.
+ 
+Category 8 — Validation Tools
+Validation Tools apply IMS Section 5 logic to canonical objects. They produce PASS / FLAG / REJECT / BLOCK status per object and aggregate results into implementation health scores. All are read-only against the canonical store — they assess, never modify.
+ 
+run_validation_suite
+Field
+Specification
+Purpose
+Execute the complete IMS Section 5 validation suite for a connector against all canonical objects of the relevant types that were extracted from that connector in this session
+Owner Service
+Validation Engine
+Callable By
+EVAL-002 (Validation Agent); also callable by Domain Implementation Agents after populating canonical objects
+Inputs
+session_id (UUID, required), connector_id (string, required), object_types (string[], optional — if omitted, validates all object types from this connector's IMS Section 5; if provided, validates only the specified types)
+Outputs
+validation_summary (dict: {object_type: {total: int, pass: int, flag: int, reject: int, block_conditions: []}}), reject_rate_per_type (dict: {object_type: decimal}), flag_rate_per_type (dict), threshold_breaches (array of {object_type, actual_rate, threshold, action_required}), block_conditions (array of {condition_type, affected_objects[], recommended_action}), implementation_health_score (integer 0–100), validation_report_id (UUID)
+Permissions
+impl:validation:execute
+Side Effects
+Writes per-object validation status to canonical store (status field only, not data modification); emits VALIDATION_SUITE_COMPLETE log event; if block_conditions is non-empty, emits BLOCK_CONDITION_DETECTED alert to COORD-001
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — re-running after canonical objects are updated will produce updated results
+Error States
+INVALID_INPUT if connector_id IMS Section 5 cannot be loaded; CONNECTOR_UNAVAILABLE if referential integrity checks require additional connector queries
+Retry Behavior
+Safe to retry; results improve as more canonical objects are populated
+Security Notes
+Validation results reference canonical IDs only — no financial data content in log output
+Table EIS-C8.1 — run_validation_suite.
+ 
+validate_arr_formula
+Field
+Specification
+Purpose
+Validate that the ARR value computed for a subscription is internally consistent and uses the IMS-specified formula for its connector
+Owner Service
+Validation Engine
+Callable By
+BIL-DOMAIN; EVAL-002
+Inputs
+session_id (UUID, required), connector_id (string, required), subscription_canonical_id (UUID, required), computed_arr (decimal, required — the ARR value computed by the agent), computation_method (string, required — reference to the IMS section and formula used)
+Outputs
+validation_status (enum: PASS | FLAG | REJECT), computed_arr, expected_arr_from_items (decimal — the ARR computed by the Validation Engine independently using the same IMS formula), discrepancy (decimal — abs(computed_arr - expected_arr_from_items)), discrepancy_pct (decimal), discrepancy_reason (string | null — if FLAG or REJECT, the specific formula mismatch)
+Permissions
+impl:validation:execute
+Side Effects
+If discrepancy_pct > 1%: emits ARR_FORMULA_DISCREPANCY log event; if discrepancy_pct > 5%: emits to COORD-001 as BLOCK_CONDITION
+Idempotency
+IDEMPOTENT
+Error States
+CEP_REQUIRED if Subscription Normalization Gate is not resolved (cannot validate ARR formula when gate is pending — the formula itself depends on gate resolution)
+Engineering Note
+This tool is the engineering implementation of the "Silent ARR Error" protection from the Billing IMS Library. The Validation Engine independently computes ARR from the subscription's raw items and compares against the agent's computed value. This catches the five identified silent ARR errors (Stripe deprecated field, Chargebee currency unit, Recurly deduplication, Maxio native metric, Zuora incomplete enumeration) at validation time before they reach the canonical store.
+Table EIS-C8.2 — validate_arr_formula.
+ 
+Category 9 — Confidence Tools
+Confidence Tools implement the confidence scoring system from IMS Section 7 across all connectors. They make every confidence figure traceable to a specific IMS rule, adjustment factor, and CEP state. No confidence score may be presented to a customer without a corresponding audit trail from these tools.
+ 
+calculate_object_confidence
+Field
+Specification
+Purpose
+Compute the confidence score for a specific canonical object by applying the IMS Section 7 base score for its mapping type and all applicable adjustment factors
+Owner Service
+Confidence Scoring Service
+Callable By
+EVAL-003 (Confidence Scoring Agent); Domain Implementation Agents (for real-time confidence during population)
+Inputs
+session_id (UUID, required), canonical_id (UUID, required), connector_id (string, required), mapping_type (enum, required: D-H | D-M | DR-H | DR-M | DR-L | N | NA)
+Outputs
+base_confidence (decimal — from mapping_type: D-H=0.90, D-M=0.70, DR-H=0.85, DR-M=0.65, DR-L=0.40, N=0.80, NA=0.00), adjustments_applied (array of {factor_name, ims_rule_reference, adjustment_value, running_total_after}), pending_cep_adjustment (decimal — sum of -0.15 per pending CEP item affecting this object), final_confidence (decimal — base + all adjustments, floored at 0.0, ceilinged at 1.0), confidence_audit_id (UUID)
+Permissions
+impl:confidence:calculate
+Side Effects
+Writes confidence score to the canonical object record; emits CONFIDENCE_CALCULATED log event with canonical_id and final_confidence (not factor details — those are in the audit trail)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — recalculates if pending_cep_items count changes
+Error States
+INVALID_INPUT if mapping_type is not in the allowed enum; INVALID_INPUT if canonical_id does not exist
+Security Notes
+Confidence scores are metadata — safe to log in full
+Table EIS-C9.1 — calculate_object_confidence.
+ 
+calculate_capability_confidence
+Field
+Specification
+Purpose
+Compute the capability-level confidence score using the IMS-001 Section 7.3 formula: MIN(required object confidences) + optional uplift (capped at +10%)
+Owner Service
+Confidence Scoring Service
+Callable By
+EVAL-003; EVAL-001 (CAL Agent)
+Inputs
+session_id (UUID, required), capability_id (string, required — from MCR), required_object_canonical_ids (UUID[], required — must include all required objects for this capability), optional_object_canonical_ids (UUID[], optional — present optional objects only)
+Outputs
+base_confidence (decimal — MIN of all required object confidence scores), optional_uplift (decimal — 0.1 × AVG(optional object confidences); capped at 0.10), final_capability_confidence (decimal — base + optional_uplift), limiting_object (dict — the required object with the lowest confidence; this is the binding constraint), confidence_audit_id (UUID)
+Permissions
+impl:confidence:calculate
+Side Effects
+Writes capability confidence to CAL state; emits CAPABILITY_CONFIDENCE_CALCULATED log event
+Idempotency
+IDEMPOTENT_WITHIN_SESSION
+Error States
+INVALID_INPUT if any required_object_canonical_id does not exist or does not have a calculated confidence score (calculate_object_confidence must run first)
+Engineering Note
+The limiting_object field is the key customer communication signal. When a capability is PARTIAL due to confidence, the customer explanation is "confidence is limited because [limiting_object.type] from [limiting_object.connector] is at [limiting_object.confidence]% — improves when [specific action]." This is the implementation of the Cross-Domain Gap Template for confidence-limited capabilities.
+Table EIS-C9.2 — calculate_capability_confidence.
+ 
+Category 10 — CAL / Capability Tools
+CAL and Capability Tools run the Capability Assessment Layer against the unified SCBM instance. They translate the populated canonical store and its confidence scores into module statuses and Readiness Score. EVAL-001 (CAL Agent) is the primary caller.
+ 
+run_capability_assessment
+Field
+Specification
+Purpose
+Execute the full Capability Assessment Layer for this session, evaluating every SMPL module against the MCR requirements and the current canonical store state
+Owner Service
+CAL Service
+Callable By
+EVAL-001 only
+Inputs
+session_id (UUID, required), scope (enum, optional: FULL | INCREMENTAL — FULL re-assesses all modules; INCREMENTAL re-assesses only modules whose required objects changed since last assessment; default FULL for Stage 5, INCREMENTAL for production monitoring)
+Outputs
+assessment_id (UUID), assessed_at (ISO 8601), module_results (dict: {module_id: {status: READY|PARTIAL|UNAVAILABLE, confidence: decimal, reason: string, missing_objects: [], improvement_path: string, limiting_factor: string}}), readiness_score (decimal 0–100), recommended_next_connectors (array of {connector_type, expected_readiness_score_delta, capabilities_unlocked[]})
+Permissions
+impl:cal:execute — EVAL-001 only
+Side Effects
+Writes assessment results to CAL state; emits CAPABILITY_ASSESSMENT_COMPLETE log event with readiness_score and module counts by status
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same canonical state produces same assessment
+Error States
+INTERNAL_ERROR if MCR module definitions cannot be loaded; INVALID_INPUT if session has no canonical objects (assessment requires at least Stage 3 completion)
+Retry Behavior
+Safe to retry; incremental scope reduces cost on retry
+Security Notes
+Module assessment results are SMPL metadata — no customer financial data content; safe to log in full
+Table EIS-C10.1 — run_capability_assessment.
+ 
+Category 11 — Reporting Tools
+Reporting Tools generate all customer-facing outputs. They implement Design Decision 3 (Cross-Domain Validation Gap Templates) and Design Decision 2 (Pending-State UX) by including structured, template-driven gap explanations and gate state communications in every report. COORD-005 (Reporting Agent) is the primary caller.
+ 
+generate_gap_explanation
+This tool is the engineering implementation of Design Decision 3. It generates a structured, customer-facing explanation for every cross-domain validation gap identified by COORD-004. The explanation follows the mandatory three-section template.
+ 
+Field
+Specification
+Purpose
+Generate a structured customer-facing explanation for a specific cross-domain validation gap, using the mandatory three-section template (WHAT WAS FOUND / WHY IT MATTERS / WHAT TO DO NEXT)
+Owner Service
+Reporting Service
+Callable By
+COORD-005
+Inputs
+session_id (UUID, required), gap_type (enum, required: BOOKINGS_VALIDATION_GAP | REVENUE_RECONCILIATION_ITEMS | HRIS_ERP_DIRECTION_CONFLICT | ARR_REVENUE_MAGNITUDE_GAP | RENEWAL_VALIDATION_GAP), gap_metrics (dict, required — quantified gap data from COORD-004: count, total, match_rate, examples[])
+Outputs
+explanation (dict: {what_was_found: string, why_it_matters: string, what_to_do_next: string}), severity (enum: INFORMATIONAL | INVESTIGATE | URGENT), recommended_action_code (string — a specific action from the implementation_actions registry), confidence_impact_if_unresolved (string)
+Permissions
+impl:reporting:execute
+Side Effects
+Emits GAP_EXPLANATION_GENERATED log event
+Idempotency
+IDEMPOTENT
+Error States
+INVALID_INPUT if gap_type not in enum; INVALID_INPUT if gap_metrics missing required quantification fields
+Engineering Note
+Gap explanations are never generated ad hoc by an LLM. They are always produced by this tool using registered templates — ensuring consistency across implementations and preventing hallucinated explanations of real data quality findings.
+Table EIS-C11.1 — generate_gap_explanation.
+ 
+Gap Explanation Templates — Specification
+The following templates are built into the Reporting Service. They accept the quantified gap_metrics as template variables. These are engineering contracts — the templates must not be modified without a version bump and architecture review.
+ 
+gap_type
+what_was_found Template
+why_it_matters Template
+what_to_do_next Template
+BOOKINGS_VALIDATION_GAP
+{match_count} of {total_opp_count} Closed Won Opportunities ({match_pct}%) were matched to a Billing subscription created within 30 days. {unmatched_count} opportunities could not be confirmed.
+Unmatched opportunities may represent deals where billing was set up manually, delayed, or in a system not yet connected. Without this match, your Bookings figure is based on sales intent only — not confirmed commercial execution.
+(1) Review the {unmatched_count} unmatched opportunities (list attached). (2) Confirm whether these have corresponding subscriptions in {billing_connector}. (3) If subscriptions exist but are in a different Billing account, connect that account. (4) If no subscription exists, confirm whether these deals were ultimately closed.
+REVENUE_RECONCILIATION_ITEMS
+{unmatched_count} Billing invoices ({unmatched_pct}% of total) did not have a matching GL transaction in {erp_connector} within a 5% amount tolerance.
+This gap is expected and normal in most implementations — it may reflect timing differences between billing and accounting close, partial payments, or invoices that generate multiple GL entries. It does not indicate incorrect data.
+(1) Review the reconciliation list with your Controller or Accounting team. (2) Confirm the expected matching pattern for your billing-to-GL workflow. (3) SMPL will monitor this figure in production and alert if the gap grows beyond {threshold}%.
+ARR_REVENUE_MAGNITUDE_GAP
+SMPL-computed ARR from {billing_connector} is {arr_amount}, which is {pct_above}% higher than {erp_connector}-recognized revenue of {revenue_amount} for the same period.
+This is expected for SaaS businesses — ARR represents contracted recurring value while recognized revenue reflects accounting periods and ASC 606 / IFRS 15 recognition rules. This is a calibration finding, not an error.
+Review with your Finance team to confirm: (1) the revenue recognition schedule for your subscription types, and (2) whether any ARR is in a recognition backlog. This comparison will appear on your Financial Intelligence board view for ongoing monitoring.
+RENEWAL_VALIDATION_GAP
+{match_count} of {total_renewal_opp_count} CRM Renewal Opportunities ({match_pct}%) were matched to a Billing subscription renewal in the same period. {unmatched_count} could not be confirmed.
+Unmatched renewal opportunities may represent renewals that were processed outside the CRM, renewal deals still in progress, or timing gaps between CRM close and billing update.
+(1) Review the {unmatched_count} unmatched renewal opportunities. (2) Confirm whether renewals are consistently recorded in both {crm_connector} and {billing_connector}. (3) If your renewal process does not update the CRM, this gap is structural — we will document it in your implementation record.
+Table EIS-C11.2 — Cross-domain gap explanation templates. Template variables in {braces} are populated from gap_metrics at generation time. These templates are version-controlled engineering artifacts.
+ 
+generate_pending_gate_status_report
+This tool is the engineering implementation of Design Decision 2 — the Pending-State UX. It generates a customer-facing communication for every active gate during the period when gates are pending resolution.
+ 
+Field
+Specification
+Purpose
+Generate a customer-facing status communication for one or more active pending gates, explaining what is available now, what is pending, and when a default will be applied if no response is received
+Owner Service
+Reporting Service
+Callable By
+COORD-005
+Inputs
+session_id (UUID, required), gate_state_objects (GateStateObject[], required — one per active gate, from the Gate State Object schema)
+Outputs
+pending_state_report (dict: {for_each_gate: {gate_type, headline: string, available_now_section: string, pending_question_section: string, progress_indicator: string, default_notice: string | null}}), overall_pending_pct (decimal — percentage of total expected capabilities that are pending gate resolution), estimated_full_capability_at (ISO 8601 | null — estimated time when all gates will resolve, based on median CEP resolution time for this customer type)
+Permissions
+impl:reporting:execute
+Side Effects
+Emits PENDING_GATE_REPORT_GENERATED log event
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same gate states produce same report
+Engineering Note
+The available_now_section always leads with positive framing of what IS available. Example for Stripe with unresolved trial policy gate: "Your subscription, invoice, and payment data are loaded. Customer-level analytics and invoice aging are available now. ARR Reporting will complete once we confirm one business policy with your Finance team." This prevents the gate period from feeling like a product failure.
+Table EIS-C11.3 — generate_pending_gate_status_report.
+ 
+generate_capability_summary
+Field
+Specification
+Purpose
+Generate the complete Capability Summary for Stage 6 Customer Review — the primary customer-facing document that explains what SMPL can deliver
+Owner Service
+Reporting Service
+Callable By
+COORD-005
+Inputs
+session_id (UUID, required), include_gap_explanations (bool, optional, default true), include_pending_gates (bool, optional, default true), audience (enum, optional: CFO | ENGINEERING | FULL; controls detail level of explanations; default FULL)
+Outputs
+capability_summary_id (UUID), generated_at (ISO 8601), sections: {ready_capabilities[], partial_capabilities[], unavailable_capabilities[], structural_ceiling_capabilities[], pending_gate_status, cross_domain_gaps[], readiness_score (decimal), recommended_next_connectors[], known_defaults[]}
+Permissions
+impl:reporting:execute
+Side Effects
+Emits CAPABILITY_SUMMARY_GENERATED log event; stores generated report for retrieval
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — generates new version if CAL assessment has updated since last generation
+Engineering Note
+Every capability entry in this summary includes its confidence score. The generate_capability_summary tool must call calculate_capability_confidence for any capability whose confidence has changed since the last CAL assessment before generating the report. Stale confidence scores are not permitted in customer-facing reports.
+Table EIS-C11.4 — generate_capability_summary.
+ 
+Category 12 — Security and Access Tools
+Security and Access Tools manage the credential lifecycle, permission validation, and PII handling. They enforce the principle that AI agents never see raw customer credentials — only credential references. These tools are primarily called by infrastructure services, not by implementation agents.
+ 
+create_connector_credential_reference
+Field
+Specification
+Purpose
+Store a customer connector credential in the secure credential vault and return a credential_reference_id that agents use instead of the raw credential
+Owner Service
+Credential Vault Service
+Callable By
+Implementation Consultant UI (not AI agents) — credentials are entered by humans and stored before session begins
+Inputs
+session_id (UUID, required), connector_id (string, required), credential_type (enum: OAUTH2_CLIENT_CREDENTIALS | API_KEY | BASIC_AUTH | CERTIFICATE), credential_payload (dict, required — type-specific fields e.g. {client_id, client_secret} or {api_key}), scope_restrictions (string[], optional — limit which SMPL operations can use this credential: [READ_ONLY] always required)
+Outputs
+credential_reference_id (UUID — the only identifier agents will ever see), connector_id, credential_type, created_at, expires_at (ISO 8601 | null), scope (string[] — the scopes this credential is valid for)
+Permissions
+impl:credential:create — human users and implementation platform only; not callable by AI agents
+Side Effects
+Stores encrypted credential in vault; emits CREDENTIAL_STORED audit event (credential_payload is never logged — only credential_reference_id and connector_id)
+Idempotency
+IDEMPOTENT — same session_id + connector_id returns existing reference if credential is valid
+Error States
+INVALID_INPUT if scope_restrictions does not include READ_ONLY (all customer system credentials must include read-only restriction)
+Security Notes
+credential_payload is never stored in plain text; encrypted at rest with customer-specific KMS key; never returned after initial creation; the vault is isolated from the agent runtime with no shared memory or process space
+Table EIS-C12.1 — create_connector_credential_reference.
+ 
+redact_sensitive_fields
+Field
+Specification
+Purpose
+Scan a data structure and redact fields that are classified as PII, financial data, or credentials before the data is logged or passed to an agent's context window
+Owner Service
+Data Classification Service
+Callable By
+All agents (automatically invoked by write_implementation_log before any log write; also callable directly by agents before passing data between tools)
+Inputs
+data (dict | array | string, required), classification_level (enum, required: LOG_SAFE | AGENT_SAFE | EXTERNAL_SAFE), connector_id (string, optional — if provided, applies connector-specific field classifications from IMS metadata)
+Outputs
+redacted_data (same structure as input with sensitive fields replaced by redaction markers: "[REDACTED:PII]", "[REDACTED:FINANCIAL]", "[REDACTED:CREDENTIAL]"), redaction_count (integer), fields_redacted (string[] — field paths that were redacted; the paths are logged but not the values)
+Permissions
+impl:security:redact — all agents
+Side Effects
+Emits REDACTION_APPLIED log event with fields_redacted list (not values)
+Idempotency
+IDEMPOTENT
+Engineering Note
+The Data Classification Service maintains a field classification registry keyed by {connector_id}.{object_type}.{field_name}. Fields in the registry marked as PII include: email, phone, SSN, name, address. Fields marked FINANCIAL include: amount, salary, compensation, revenue, arr_value. All credential fields are automatically redacted at LOG_SAFE level. New IMS connectors must register their field classifications before deployment.
+Table EIS-C12.2 — redact_sensitive_fields.
+ 
+Category 13 — Monitoring and Observability Tools
+Monitoring and Observability Tools provide operational visibility into running implementations, connector health, agent performance, and data quality trends. They write to monitoring infrastructure only — not to customer data or session state.
+ 
+create_audit_event
+Field
+Specification
+Purpose
+Write an immutable audit event for any action that affects customer data access, credential management, or canonical data writes — the subset of events that must be retained for compliance
+Owner Service
+Audit Service (separate from general Logging Service)
+Callable By
+All agents — required on every canonical data write and every credential operation
+Inputs
+session_id (UUID, required), event_category (enum, required: DATA_ACCESS | CANONICAL_WRITE | CREDENTIAL_OPERATION | SOA_ASSIGNMENT | SESSION_LIFECYCLE), actor (string, required — agent_id or human user_id), action (string, required — specific action taken), resource_id (UUID, required — the canonical ID, session ID, or credential reference ID affected), outcome (enum, required: SUCCESS | FAILURE)
+Outputs
+audit_event_id (UUID), retained_until (ISO 8601 — 7-year default for financial data events)
+Permissions
+impl:audit:write — all agents
+Side Effects
+Writes to append-only audit log; audit events cannot be deleted or modified; emits to real-time audit stream
+Idempotency
+NON_IDEMPOTENT — each call creates a new audit record
+Security Notes
+Audit events are retained for 7 years (financial data compliance); stored in a separate, isolated audit store with no agent write or delete access after creation
+Table EIS-C13.1 — create_audit_event.
+ 
+get_data_quality_health
+Field
+Specification
+Purpose
+Return a real-time data quality health dashboard for a session, summarizing extraction completeness, validation rates, and confidence score distribution across all connected systems
+Owner Service
+Observability Service
+Callable By
+COORD-001; human Implementation Consultant dashboards
+Inputs
+session_id (UUID, required), include_per_connector (bool, optional, default true)
+Outputs
+overall_health_score (integer 0–100), per_connector (dict: {connector_id: {extraction_completeness_pct, validation_pass_rate, avg_confidence, pending_cep_items_count, active_gates[], last_updated}}), active_alerts (array of {alert_type, connector_id, severity, message}), implementation_pct_complete (decimal — percentage of expected canonical objects populated)
+Permissions
+impl:monitoring:read
+Side Effects
+None — read-only
+Idempotency
+IDEMPOTENT — returns current state
+Security Notes
+Returns aggregate metrics only — no customer financial data content
+Table EIS-C13.2 — get_data_quality_health.
+ 
+Agent Interface Specification
+Every AI agent in the SMPL platform is invoked and responds using the standard interfaces defined in this section. Consistent interfaces enable the Agent Orchestration Service to treat all agents uniformly regardless of their domain or role.
+ 
+Agent Invocation Schema
+Every agent invocation must include the following fields. Missing required fields cause the Agent Orchestration Service to reject the invocation before the agent receives it.
+Field
+Type
+Required
+Description
+session_id
+UUID
+Required
+The implementation session this invocation belongs to
+customer_id
+UUID
+Required
+SMPL internal customer identifier — never company name
+agent_id
+String
+Required
+The agent being invoked (from SOF Table 1.2/1.3)
+role_playbook_id
+String
+Required
+The ABS-011 playbook governing this agent: e.g., "APB-001"
+current_sof_stage
+Integer 1–7
+Required
+Which SOF stage this invocation belongs to
+cep_snapshot
+Dict
+Required
+A point-in-time read of the CEP fields this agent is permitted to read (cep_read_scope). NOT the full CEP.
+assigned_task
+String
+Required
+A specific, bounded task description. Must not be open-ended. Example: "Execute IMS-001 Section 4 transformation rules for the GL Account object type."
+allowed_tools
+String[]
+Required
+Exhaustive list of tool names this agent may call. Tool gateway enforces — agent cannot call unlisted tools.
+input_artifacts
+Dict
+Optional
+References to extraction_ids, canonical_ids, or other artifacts the agent needs to begin work
+expected_outputs
+String[]
+Required
+The specific outputs this invocation should produce. Agents that do not produce all expected outputs return COMPLETE_WITH_GAPS with an explanation.
+timeout_policy
+Dict
+Required
+{hard_timeout_seconds: integer, soft_timeout_seconds: integer}. Hard timeout terminates the agent. Soft timeout triggers a checkpoint save.
+retry_policy
+Dict
+Required
+{max_retries: integer, retry_on_errors: string[]}. Defines which error codes trigger automatic retry.
+gate_state_snapshot
+GateStateObject[]
+Conditional
+Required if the agent will encounter gate-dependent operations. Provides current gate states without requiring the agent to query separately.
+Table EIS-AI.1 — Agent invocation schema.
+ 
+Agent Response Schema
+Every agent response must include the following fields. Partial responses — responses missing required fields — are rejected by the Agent Orchestration Service and the agent is marked as ERROR.
+Field
+Type
+Required
+Description
+session_id
+UUID
+Required
+Echo of the session_id from the invocation
+agent_id
+String
+Required
+Echo of the agent_id
+status
+String
+Required
+One of the standard status values from Table EIS-1.1
+outputs
+Dict
+Required
+The produced artifacts, keyed by expected_output name. Empty dict if status is ERROR. Partial dict if status is COMPLETE_WITH_GAPS — include an explanation for each missing expected output.
+pending_cep_items
+Dict[]
+Required (empty list if none)
+Array of {cep_item_id, field_path, urgency} for any PAUSE_FOR_CEP conditions encountered. Empty list if none.
+validation_results
+Dict
+Conditional
+Required if the agent executed any validation logic. References validation_report_id from run_validation_suite.
+confidence_results
+Dict
+Conditional
+Required if the agent produced or updated any canonical objects. References confidence_audit_id per object.
+logs
+UUID[]
+Required
+Array of log_ids written by this agent during this invocation. Enables COORD-001 to trace all decisions made.
+errors
+Dict[]
+Required (empty list if none)
+Array of {error_code, tool_name, message, retry_eligible} for any errors encountered. Never empty when status=ERROR.
+next_recommended_action
+String
+Required
+A specific, machine-readable recommendation for COORD-001. Examples: "Advance to IMS Section 5", "Await CEP resolution for cep_item_id={UUID}", "Escalate to human: {reason}". Not a free-text field — must reference a specific SOF workflow node or action.
+gate_state_updates
+GateStateObject[]
+Conditional
+Required if any gate state changed during this invocation. COORD-001 distributes updated gate states to other affected agents.
+Table EIS-AI.2 — Agent response schema.
+ 
+Tool Registry Summary
+78 tools are defined across 13 categories in this document. The following index summarizes all tools for engineering reference.
+ 
+Category
+Tool Count
+Tools
+1 — Session & Orchestration
+9
+create_implementation_session, read_session_state, update_session_state, dispatch_agent, get_agent_status, pause_workflow, resume_workflow, close_session, write_implementation_log
+2 — CEP
+7
+read_cep, update_cep, list_pending_cep_items, create_cep_question, resolve_cep_question, mark_cep_item_deferred, get_auto_discoverable_cep_fields
+3 — Connector Discovery
+9
+authenticate_connector, test_connector_connection, detect_connector_environment, discover_connector_modules, discover_connector_schema, discover_connector_objects, discover_connector_fields, discover_custom_fields, discover_record_counts
+4 — Data Extraction
+6
+extract_object_sample, extract_object_batch, get_extracted_records, extract_incremental_changes, get_extraction_status, cancel_extraction_job
+5 — IMS Execution
+8
+load_ims_spec, get_ims_section, get_connector_mapping_rules, get_transformation_rules, get_validation_rules, get_confidence_rules, run_ims_discovery_gate, run_ims_population_sequence
+6 — Transformation
+10
+normalize_field_value, normalize_enum_value, normalize_currency, normalize_date, normalize_account_type, normalize_subscription_status, normalize_opportunity_stage, normalize_employment_status, apply_transformation_rule, derive_canonical_field
+7 — Canonical Data
+9
+create_canonical_object, upsert_canonical_object, read_canonical_object, search_canonical_objects, link_canonical_objects, assign_system_of_authority, merge_duplicate_entities, record_cross_system_identity, mark_object_unavailable
+8 — Validation
+8
+validate_required_fields, validate_referential_integrity, validate_business_rule, validate_balance, validate_invoice_total, validate_arr_formula, validate_headcount_policy, run_validation_suite
+9 — Confidence
+5
+calculate_object_confidence, apply_confidence_adjustment, calculate_capability_confidence, create_confidence_audit_trail, explain_confidence_score
+10 — CAL / Capability
+6
+load_module_capability_requirements, run_capability_assessment, determine_module_status, identify_missing_requirements, calculate_readiness_score, recommend_next_connector
+11 — Reporting
+7
+generate_implementation_summary, generate_capability_summary, generate_pending_gate_status_report, generate_gap_explanation, generate_readiness_score_report, generate_module_activation_plan, generate_executive_summary
+12 — Security & Access
+6
+create_connector_credential_reference, validate_credential_scope, rotate_credential_reference, revoke_connector_access, audit_tool_permissions, redact_sensitive_fields
+13 — Monitoring
+7
+create_metric_event, create_audit_event, create_error_event, get_workflow_health, get_connector_health, get_agent_health, get_data_quality_health
+Table EIS-AI.3 — Tool Registry index. 78 tools across 13 categories.
+ 

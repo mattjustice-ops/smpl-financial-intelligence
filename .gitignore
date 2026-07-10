@@ -8,6 +8,7 @@ venv/
 .env.staging.local
 .env.vercel-production.local
 .env.neon-production.local
+.env.stripe-live.prod
 scripts/config/staging.local.env
 backend/secrets.env
 *.egg-info/
@@ -32,3 +33,5 @@ merge-gl5b-to-main.log
 git-push-log.txt
 commit-local-wip.log
 .wip-restore-backup/
+
+.env*

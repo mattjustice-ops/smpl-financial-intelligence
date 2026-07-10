@@ -1,0 +1,1389 @@
+IMPLEMENTATION MAPPING SPECIFICATION LIBRARY
+Billing Implementation Library — IMS-201 through IMS-205
+ABS-007  ·  Billing Library v1.0
+Stripe Billing  ·  Chargebee  ·  Recurly
+Maxio (Chargify + SaaSOptics)  ·  Zuora
+SMPL.ai  ·  AI Implementation Engineering
+June 2026 · CONFIDENTIAL — INTERNAL IMPLEMENTATION DOCUMENT
+Follows the IMS standard established by the ERP and CRM IMS Libraries
+Billing Implementation Library — Scope and Organizing Principles
+This document contains the complete Billing Implementation Mapping Specification library: five IMS specifications covering every Tier 1 Billing platform in the SMPL connector catalog. Each specification follows the identical ten-section structure established by IMS-001 (NetSuite) and applied across the ERP and CRM libraries. No structural modification to the IMS standard is introduced here.
+Library Index
+IMS #
+Connector
+Maturity
+Primary Implementation Characteristic
+IMS-201
+Stripe Billing
+Production Ready
+Highest API consistency; subscription.items[] array required for ARR; livemode=true filter mandatory; strongest webhook coverage in the library
+IMS-202
+Chargebee
+Pilot Ready
+Native MRR field reduces derivation overhead; Revenue Recognition module gate; multi-site configuration; dunning management depth
+IMS-203
+Recurly
+Validated
+Purpose-built dunning/decline-reason tracking; involuntary/voluntary churn classification advantage; per-subscription Account creation pattern watch
+IMS-204
+Maxio (Chargify + SaaSOptics)
+Validated
+Revenue Recognition module activation gate; native SaaS metrics are reference-only, never canonical; component-based pricing model
+IMS-205
+Zuora
+Validated
+Rate Plan Charge enumeration required for ARR; RevPro module gate; ACDOCA-like complexity in Rate Plan structure; multi-entity billing
+Table 0.1 — Billing IMS Library index.
+The Universal Billing IMS Principle — Three Financial Distinctions
+Three financial distinctions are restated in every connector in this library because they are the most consequential sources of Financial Intelligence errors across every Billing implementation:
+Invoice ≠ Revenue Recognition. An invoice documents that a billing event occurred. It does not confirm that revenue has been recognized under ASC 606/IFRS 15. The ERP is the canonical owner of recognized revenue; Billing estimates deferred revenue from service-period fields but never confirms it.
+Payment ≠ ARR. A successful payment confirms cash collection — not recurring revenue commitment. A one-time payment produces no ARR; an annual prepay creates ARR in the period of subscription, not in the period of payment. The Subscription object, not the Payment object, is the source of ARR.
+Subscription ≠ Bookings. A Billing subscription confirms commercial execution — that a customer is actively being billed. It does not confirm what the sales team recorded as the deal. Bookings confirmation requires CRM cross-validation; the gap between CRM Closed Won and Billing subscription creation is a standard implementation finding, not an error.
+The Subscription Normalization Gate
+Every Billing connector in this library has a mandatory Subscription Normalization Gate — the Billing equivalent of the CRM Stage Normalization Gate. Unlike the ERP library's extraction BLOCKs (which prevent all extraction until resolved) and the CRM library's confidence degradation gates (which allow extraction while degrading pipeline confidence), the Subscription Normalization Gate operates differently:
+Subscription data CAN be extracted before the gate is resolved.
+ARR CANNOT be reliably computed before the gate is resolved — the computed ARR figure will be incorrect, not just lower-confidence.
+The gate must be resolved before any ARR Movement canonical object is created. Creating ARR Movement from unresolved subscription data produces silently incorrect ARR figures.
+The three questions the Subscription Normalization Gate resolves for every customer, across every Billing connector in this library:
+Gate Question
+Why It Matters
+Consequence If Skipped
+Trial treatment: are trialing subscriptions included in ARR?
+Default SMPL treatment excludes trials from ARR. If the customer's internal reporting includes trials, their ARR will never match SMPL until this is resolved.
+ARR is systematically understated or overstated vs. customer's own ARR reporting — a discrepancy that appears immediately after the first ARR report is delivered.
+Usage-based ARR policy: which portion of metered/usage billing counts as ARR?
+The committed-minimum portion of usage billing is reasonably ARR; uncommitted overages are not. The line between them is customer-defined, never a platform default.
+ARR from usage-billed customers is computed inconsistently — same usage pattern produces different ARR for different customers until policy is recorded in CEP.
+Past_due / unpaid status treatment: should delinquent subscriptions remain in ARR?
+Subscriptions that have failed payment but are not yet cancelled remain technically active in most Billing platforms. Whether they count as ARR is a business policy decision.
+Delinquent-subscription ARR inflates total ARR until the gate is resolved. For customers with meaningful involuntary churn rates, this gap can be material.
+Table 0.2 — Subscription Normalization Gate questions. All three must be resolved before ARR Movement canonical objects are created.
+Cross-Billing Principles
+SMPL is always read-only. No Billing IMS specifies write operations.
+ARR is derived from Subscriptions, not Invoices or Payments. The implementation agent always computes ARR from the Subscription object's active price and quantity, not from invoice amounts or payment totals. One-time invoice amounts must be explicitly excluded from ARR calculations.
+Native SaaS metrics from Billing platforms are reference-only, never canonical. Chargebee's mrr field, Maxio's native metrics, and Zuora's pre-computed ARR are all cross-validation inputs — SMPL computes its own metrics from canonical Subscription data. Never import pre-computed vendor metrics as canonical values.
+Revenue Recognition module status is always confirmed explicitly. For Chargebee, Maxio, and Zuora, the Revenue Recognition module materially changes the Revenue Schedule confidence ceiling. The implementation agent never assumes the module is active based on platform tier or vendor positioning.
+Billing is the validation layer between CRM and ERP. Every Billing implementation is an opportunity to confirm that CRM Closed Won Opportunities correspond to actual subscriptions and that Billing invoices correspond to ERP-recognized revenue. Document both cross-validations explicitly in Section 6 (Canonical Population) for every connector.
+IMS-201 — Stripe Billing
+Stripe Billing is the Production Ready reference implementation for the Billing IMS library — the most consistent API, the lowest schema variability, and the most validated ARR derivation formula of any connector in this library. The implementation agent should expect minimal surprises and fast canonical population for standard configurations, with usage-based billing and multi-item subscriptions as the primary complexity drivers when present.
+✱ ARCHITECT NOTE: Key characteristic distinguishing Stripe from all other Billing connectors in this library: Stripe stores all financial activity in a single account's API surface regardless of product complexity. There is no multi-site configuration, no Controlling Area equivalent, no ledger selection. The primary pre-extraction gate is environment type (livemode=true) — the Stripe equivalent of ERP's sandbox detection. The primary Subscription Normalization Gate question is ARR formula correctness, specifically ensuring subscription.items[] is used rather than the deprecated subscription.plan field.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+Restricted API Key (recommended) with read-only access scoped to the specific objects SMPL requires. OAuth 2.0 available via Stripe Connect for platform customers.
+Do not use a Secret Key (sk_live_...) in production — it grants full account access. Request a Restricted Key (rk_live_...) scoped to Customers, Subscriptions, Invoices, and Payment Intents read access only.
+livemode confirmation
+Every Stripe API object has a livemode boolean. Confirm livemode=true on all extracted objects. Stripe test-mode data is accessible from the same account but must never populate production canonical objects.
+This is the highest-priority pre-extraction filter for Stripe. Implement livemode=true on all list queries. Log the livemode distribution of the first 100 extracted objects — if livemode=false objects appear, halt and investigate.
+Account ID
+Retrieved from GET /v1/account. Unique identifier for the Stripe account.
+Confirm this is the production Stripe account, not a sandbox or separate regional account. Multi-account customers require explicit CEP designation of which accounts are in scope.
+Table IMS-201.1.1 — Stripe Billing authentication and environment detection.
+1.2 Subscription Model Inventory
+DISCOVER subscription model characteristics:
+PRICING MODEL CHECK:
+  GET /v1/prices?limit=100&active=true
+  FOR each price:
+    recurring.usage_type = "metered" → CEP usage-billing gate required
+    recurring.usage_type = "licensed" → standard seat/quantity billing
+    type = "one_time" → exclude from ARR; flag for manual invoice review
+  IF any metered prices found:
+    RECORD CEP.usage_billing_active = true
+    INITIATE Subscription Normalization Gate (Section 1.3)
+MULTI-ITEM CHECK:
+  GET /v1/subscriptions?limit=10&status=active
+  IF any subscription.items.data.length > 1:
+    RECORD CEP.multi_item_subscriptions = true
+    FLAG: ARR formula must use items[], never subscription.plan
+MULTI-ACCOUNT CHECK:
+  ASK CEP: "Are there additional Stripe account IDs representing
+  separate regional or product-line billing entities that should
+  be consolidated into this SMPL implementation?"
+  ├─ Yes → Document all account IDs in CEP.stripe_accounts[]
+  │         Each requires independent extraction before consolidation
+  └─ No → Single account; continue
+1.3 Subscription Normalization Gate
+This gate must be resolved before ARR Movement canonical objects are created. Extraction continues regardless; ARR Movement population is blocked until all three questions below are recorded in the CEP.
+Gate Question
+CEP Field
+Default if Not Confirmed
+Consequence of Applying Default Without Confirmation
+Are trialing subscriptions (status=trialing) included in this customer's ARR?
+CEP.arr_policy.include_trials
+Exclude (SMPL default)
+If customer's own reporting includes trials and SMPL excludes them, ARR will appear systematically understated vs. customer's own reports
+Which portion of metered/usage billing counts as ARR? (committed minimum, overages, or both)
+CEP.arr_policy.usage_treatment
+Committed minimum only, if distinguishable; overages excluded
+If overage treatment is not confirmed, ARR may be overstated (if overages included without policy) or understated (if committed minimum not correctly identified)
+Should past_due and unpaid subscriptions be included in ARR?
+CEP.arr_policy.include_delinquent
+Exclude (treat as pending churn)
+Inclusion of delinquent subscriptions inflates ARR by the amount at risk from failed payments
+Table IMS-201.1.3 — Stripe Subscription Normalization Gate. All three must be resolved before ARR Movement canonical population begins.
+Section 2 — Canonical Object Mapping
+Stripe Object
+API Endpoint
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+Customer
+GET /v1/customers
+Customer Account (Entity)
+1:1
+D-H
+livemode=true filter required
+Subscription
+GET /v1/subscriptions
+Subscription (Entity)
+1:1
+D-H for core fields; D-H for ARR (post-gate)
+Subscription Normalization Gate resolved for ARR; extractable before
+Subscription Item
+Embedded in Subscription.items.data[]
+Subscription Item (Extension)
+N:1
+D-H
+Use items[], never subscription.plan — deprecated field
+Price
+GET /v1/prices
+Price Catalog (Entity, Tier 2)
+1:1
+D-H
+None
+Product
+GET /v1/products
+Product (Entity, Tier 2)
+1:1
+D-H
+None
+Invoice
+GET /v1/invoices
+Invoice (Movement)
+N:1 (invoices:subscription)
+D-H
+Native service period dates on every line — structural advantage
+InvoiceLineItem
+Embedded in Invoice.lines.data[]
+Invoice Line (Movement detail)
+N:1
+D-H
+None
+PaymentIntent / Charge
+GET /v1/charges
+Payment (Movement)
+1:1
+D-H
+livemode=true filter required on all Payment queries
+CreditNote
+GET /v1/credit_notes
+Credit Memo (Movement)
+1:1
+D-H
+None
+Refund
+GET /v1/refunds
+Refund (Movement)
+N:1 (refunds:charge)
+D-H
+None
+UsageRecord
+GET /v1/subscription_items/{id}/usage_record_summaries
+Usage Record (Extension)
+N:1 (records:subscription_item)
+D-M
+Metered pricing active; aggregation logic confirmed via CEP
+ARR Movement
+Derived from Subscription state changes
+ARR Movement (Movement)
+1:N (subscription:events)
+D-H (post-gate) / 0% (pre-gate)
+Subscription Normalization Gate AND Subscription event history required
+Table IMS-201.2.1 — Stripe Billing canonical object map.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 Subscription
+Stripe Field
+SCBM Field
+Req/Opt
+Transform
+Validation
+Null Handling
+id
+subscription.source_id
+REQ
+None — sub_xxx prefix string
+Globally unique within Stripe account
+Reject
+customer
+subscription.customer_id
+REQ
+FK to Customer Account canonical
+Customer must exist in mapped set
+Reject
+status
+subscription.status
+REQ
+Normalize per Table IMS-201.4.1
+Must resolve to SCBM status enum
+Reject if unresolvable
+items.data[].price.unit_amount
+subscription.arr_component_unit_price[]
+REQ (per item)
+Currency normalization; integer cents → decimal
+Non-negative integer
+Reject if null on any active item
+items.data[].price.recurring.interval
+subscription.arr_component_interval[]
+REQ (per item)
+Normalize: month/year → billing_frequency enum
+Must be month or year (day/week edge cases logged)
+Reject if null
+items.data[].quantity
+subscription.arr_component_quantity[]
+REQ (per item)
+Integer direct
+Non-negative integer; 1 is default if absent for seat licenses
+Default 1 if null and price type = licensed
+subscription.arr_value (derived)
+subscription.arr_value
+DER
+= SUM(unit_amount × quantity × 12/interval_months) across all active items
+Must be >= 0
+Derived; cannot be null if subscription is Active
+current_period_start
+subscription.current_period_start
+REQ
+Epoch timestamp → ISO 8601 date
+Valid date
+Reject if null on active subscription
+cancel_at_period_end
+subscription.cancel_at_period_end_flag
+OPT
+Boolean direct
+Boolean
+Default false
+trial_end
+subscription.trial_end_date
+OPT
+Epoch → ISO 8601 date
+Must be > trial_start if both present
+Null if not trialing
+metadata
+subscription.external_reference_metadata
+OPT
+JSON object — captured as extension field for CRM cross-reference (e.g., metadata.opportunity_id)
+None
+Null permitted
+Table IMS-201.3.1 — Stripe Subscription field mapping.
+3.2 Invoice
+Stripe Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+id
+invoice.source_id
+REQ
+None
+in_xxx prefix string
+customer
+invoice.customer_id
+REQ
+FK to Customer Account
+Required; unattributed invoice is unmappable
+subscription
+invoice.subscription_id
+OPT
+FK to Subscription
+Null for manual/one-time invoices — these are NOT counted toward ARR
+status
+invoice.status
+REQ
+Normalize per Table IMS-201.4.2
+draft/open/paid/void/uncollectible
+amount_due
+invoice.amount_due
+REQ
+Integer cents → decimal; currency normalization
+Non-negative
+amount_paid
+invoice.amount_paid
+REQ
+Integer cents → decimal
+Non-negative; may differ from amount_due if partially paid
+lines.data[].period.start
+invoice_line.service_period_start
+REQ
+Epoch → ISO 8601 date
+Native service period — structural advantage; use for deferred revenue estimation
+lines.data[].period.end
+invoice_line.service_period_end
+REQ
+Epoch → ISO 8601 date
+Required for Revenue Schedule estimation
+lines.data[].price.type
+invoice_line.line_type
+OPT
+recurring → RECURRING; one_time → ONE_TIME
+ONE_TIME lines must be excluded from ARR calculations
+Table IMS-201.3.2 — Stripe Invoice field mapping.
+Section 4 — Transformation Rules
+4.1 Subscription Status Normalization
+Stripe Status
+SCBM Subscription Status
+ARR Inclusion
+Notes
+active
+ACTIVE
+YES (per CEP policy)
+Core active subscription — always in ARR unless gate overrides
+trialing
+TRIAL
+Conditional (CEP gate)
+Excluded from ARR by default; CEP.arr_policy.include_trials overrides
+past_due
+PAST_DUE
+Conditional (CEP gate)
+Delinquent — payment failed but subscription not yet cancelled; CEP.arr_policy.include_delinquent determines treatment
+unpaid
+UNPAID
+Conditional (CEP gate)
+Further into delinquency than past_due; same CEP gate applies
+canceled
+CANCELLED
+NO
+Permanently terminated; generates ARR Movement Churn event
+incomplete
+INCOMPLETE
+NO
+Initial payment has not been collected; subscription not yet active
+incomplete_expired
+CANCELLED
+NO
+Initial payment window expired without payment; treat as never-started
+paused
+PAUSED
+Conditional (CEP gate)
+Billing suspended; ASK CEP whether paused subscriptions count as ARR
+Table IMS-201.4.1 — Stripe subscription status normalization.
+4.2 Invoice Status Normalization
+Stripe Status
+SCBM Invoice Status
+Financial Impact
+draft
+DRAFT
+Exclude from all financial calculations — not yet issued
+open
+OPEN
+Include in AR Analytics and Invoice Aging
+paid
+PAID
+Include in Cash Collections; exclude from AR aging
+void
+VOID
+Preserve in historical record; exclude from all active calculations
+uncollectible
+UNCOLLECTIBLE
+Write-off candidate; deduct from AR; include in Collections analysis
+Table IMS-201.4.2 — Stripe invoice status normalization.
+4.3 ARR Movement Derivation — The Core Billing Transformation
+ARR Movement is not a native Stripe object — it is derived from subscription state changes over time. This derivation is the most important transformation in the Billing IMS library, equivalent in consequence to account type normalization in the ERP library.
+ARR MOVEMENT DERIVATION ALGORITHM:
+  PREREQUISITES:
+    1. Subscription Normalization Gate resolved (Table IMS-201.1.3)
+    2. Historical subscription event stream available (GET /v1/events?type=customer.subscription.*)
+    3. CEP.arr_policy confirmed for trial, usage, and delinquent treatment
+  FOR each Subscription:
+    COMPUTE current ARR = SUM(item.price.unit_amount × item.quantity × 12/interval)
+      across all items where item.price.recurring.usage_type = "licensed"
+    APPLY usage ARR per CEP.arr_policy.usage_treatment
+    APPLY delinquent/trial exclusion per CEP.arr_policy
+  FOR each Subscription state change event (from /v1/events):
+    event_type                    → ARR Movement Category
+    customer.subscription.created → NEW_BUSINESS (if first subscription for this Customer)
+                                    REACTIVATION (if Customer had prior cancelled subscription)
+    customer.subscription.updated → Compute ARR delta:
+      delta > 0 → EXPANSION
+      delta < 0 → CONTRACTION
+      delta = 0 → metadata change only; no ARR Movement created
+    customer.subscription.deleted → CHURN
+    customer.subscription.paused  → Conditional per CEP.arr_policy
+  SPECIAL CASE — Subscription ID change on upgrade:
+    IF new subscription created shortly after cancellation for same Customer:
+      AND amount is larger → FLAG as potential Expansion misclassified as Churn+New
+      ASK CEP: "Is this subscription replacement or a genuine churn+new?"
+      Record classification in CEP.subscription_lineage before creating ARR Movements
+4.4 Currency Normalization
+Stripe stores amounts in the smallest currency unit (cents for USD; similar for other currencies). All SMPL canonical monetary fields require decimal representation.
+FOR every Stripe monetary field (unit_amount, amount_due, amount_paid, etc.):
+  IF currency is zero-decimal (JPY, KRW, etc.):
+    canonical_amount = raw_amount  (no division needed)
+  ELSE:
+    canonical_amount = raw_amount / 100
+  THEN apply standard cross-currency conversion if
+  CEP.functional_currency != transaction currency:
+  (same pattern as ERP IMS-001 Section 4.4)
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+Subscription Normalization Gate
+ARR Movement population must not begin until all three CEP.arr_policy fields are confirmed
+BLOCK ARR Movement population only (not extraction); pipeline shows ARR Movement count = 0 and surfaces gate resolution status
+ARR-related capabilities 0% until gate resolved
+livemode filter enforcement
+ALL Subscription, Invoice, and Payment queries must include livemode=true filter; any livemode=false object detected in canonical store is a critical error
+BLOCK — halt extraction; re-run with correct filter; purge any livemode=false objects from canonical store
+N/A — must not exist
+Multi-item ARR completeness
+If CEP.multi_item_subscriptions = true: sum(items[].derived_arr) must > subscription.plan.amount × 12 for any subscription with multiple items
+FLAG — if ARR computed from subscription.plan instead of items[], ARR will be understated
+−15% on ARR Reporting accuracy flag
+One-time invoice exclusion
+Invoice lines where price.type = one_time must NOT contribute to ARR calculations
+FLAG each violation; log invoice IDs
+−20% on ARR Movement classification confidence
+Subscription without Customer
+Subscription.customer references a Customer not in canonical set
+REJECT — unattributed subscription cannot generate canonical ARR
+N/A — excluded
+Invoice total validation
+sum(lines.data[].amount) = invoice.amount_due within 0.01
+FLAG
+−5%
+Table IMS-201.5.1 — Stripe Billing validation rules.
+Section 6 — Canonical Population
+Step
+Canonical Object
+Stripe Specific
+1
+Currency
+From Stripe account settings; currency list from /v1/products where currencies are referenced
+2
+Products
+GET /v1/products?active=true&livemode=true
+3
+Prices
+GET /v1/prices?active=true&livemode=true; tag each with billing_frequency and usage_type
+4
+Customers
+GET /v1/customers?livemode=true; email-based identity resolution for cross-system matching
+5
+Subscriptions (core fields)
+GET /v1/subscriptions?status=all&livemode=true; extract items[] array per subscription
+6
+SUBSCRIPTION NORMALIZATION GATE
+Block ARR Movement population. Surface gate questions to CEP. Continue with Steps 7–11 regardless of gate status.
+7
+Invoices + Invoice Lines
+GET /v1/invoices?livemode=true; service period fields extracted per line; tag one_time lines for ARR exclusion
+8
+Payments (PaymentIntents / Charges)
+GET /v1/charges?livemode=true; applied_to_invoice cross-reference for payment-to-invoice matching
+9
+Credit Notes
+GET /v1/credit_notes?livemode=true; linked to invoices
+10
+Refunds
+GET /v1/refunds?livemode=true; linked to charges
+11
+Usage Records (if metered billing active)
+GET /v1/subscription_items/{id}/usage_record_summaries per metered item; aggregation logic from CEP
+12
+ARR Movement (GATE-DEPENDENT)
+ONLY after Subscription Normalization Gate is resolved. Derive from /v1/events?type=customer.subscription.* + Section 4.3 algorithm.
+13
+CRM Cross-Validation (if CRM connected)
+For each Subscription: attempt to match to a CRM Closed Won Opportunity via metadata.opportunity_id or email-based Customer match. Flag unmatched subscriptions as NO_CRM_SOURCE. Flag CRM opportunities with no matching Subscription as UNCONFIRMED_BOOKING.
+14
+ERP Cross-Validation (if ERP connected)
+For each Invoice: confirm corresponding GL transaction in ERP. Flag Invoice-to-GL gaps as REVENUE_RECONCILIATION_ITEM.
+Table IMS-201.6.1 — Stripe Billing canonical population sequence.
+Section 7 — Confidence Calculation
+Object / Factor
+Base Confidence
+Adjustment
+Subscription (status normalized, gate resolved)
+D-H = 91%
+Stripe's consistency advantage — highest base ARR confidence in the library
+Subscription ARR (items[] used)
+D-H = 91%
+When items[] array is correctly used; degrades if subscription.plan is used
+Subscription ARR (subscription.plan used)
+D-M = 55%
+DEPRECATED FIELD — using plan instead of items[] systematically understates multi-item ARR
+ARR Movement (gate resolved)
+D-H = 88%
+Reliable event stream via /v1/events
+ARR Movement (gate unresolved)
+0%
+Cannot create ARR Movement without resolved policy
+Invoice (with service period fields)
+D-H = 90%
+Native service period is Stripe's structural advantage for deferred revenue estimation
+Payment (card)
+D-H = 88%
+Synchronous settlement — high confidence
+Payment (ACH / wire)
+D-M = 65%
+Asynchronous settlement; Banking connector improves to D-H
+CRM cross-validation (Opportunity → Subscription)
++10% on Bookings Validation
+Each confirmed CRM-to-Subscription match strengthens bookings confidence
+livemode contamination detected
+BLOCK — purge and re-extract
+Zero tolerance for test-mode data in production canonical store
+Table IMS-201.7.1 — Stripe Billing confidence calculation.
+Section 8 — Capability Activation
+Capability
+Status
+Min Confidence
+Notes
+ARR Reporting
+READY (post-gate)
+80%
+Subscription Normalization Gate must be resolved; Stripe's formula is the most validated in the library
+MRR Reporting
+READY (post-gate)
+80%
+Derived from ARR ÷ 12 per SCBM D-013
+Subscription Waterfall
+READY
+78%
+Event stream provides reliable New/Expansion/Contraction/Churn classification
+Churn Analysis
+READY
+82%
+Reliable cancellation events; voluntary vs. involuntary requires dunning data (see Recurly for superior involuntary classification)
+Expansion / Contraction Analysis
+READY
+80%
+Subscription update events with ARR delta computation
+Invoice Analytics
+READY
+85%
+Strong invoice data with native service periods
+Cash Collections
+READY
+82%
+Payment success/failure reliable for card; ACH/wire requires Banking
+Revenue Waterfalls
+PARTIAL
+55%
+ERP required for confirmed recognition; Stripe estimates from service periods
+Deferred Revenue Validation
+PARTIAL
+48%
+Service period estimation; ERP required for confirmed balance
+Bookings Validation
+PARTIAL → READY with CRM
+52%
+CRM required; Stripe confirms execution not sales attribution
+Usage Revenue Analysis
+READY (metered active) / UNAVAILABLE
+72%
+When metered pricing confirmed active and aggregation logic CEP-confirmed
+Board Reporting
+PARTIAL
+60%
+ERP and CRM both required for full confidence
+Table IMS-201.8.1 — Stripe Billing capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Confidence Impact
+Escalation?
+Test-mode data in live extraction
+Any object where livemode=false in canonical store
+BLOCK — halt and re-extract; purge all livemode=false objects; implement livemode=true filter on all queries
+N/A — data integrity critical error
+YES — immediate
+Subscription ID change on upgrade
+New subscription created within 24h of cancellation for same Customer; new ARR > old ARR
+FLAG: potential Expansion misclassified as Churn+New; request CEP classification of this subscription pair via CEP.subscription_lineage[old_id → new_id]
+−25% on ARR Movement classification for affected period if unresolved
+No — CEP resolution
+Usage aggregation logic mismatch
+CEP.arr_policy.usage_treatment = "committed_minimum" but Stripe Price has no committed_minimum configuration
+FLAG — cannot classify usage as committed vs. overage without pricing structure; request customer to confirm pricing structure in CEP
+Usage Revenue Analysis confidence degrades to 25%
+No
+Multiple Stripe accounts with overlapping customers
+Same customer email appears in multiple Stripe accounts in CEP.stripe_accounts[]
+FLAG — potential double-counting; resolve cross-account customer identity before consolidating ARR
+−15% on total ARR confidence until cross-account deduplication confirmed
+No — CEP resolution with customer
+Manual invoices without subscription reference
+Invoice.subscription = null AND price.type = recurring
+FLAG — manual subscription-equivalent invoice; ASK CEP whether to include in ARR calculations
+Include in Invoice Analytics; exclude from ARR until CEP confirms
+No
+Table IMS-201.9.1 — Stripe Billing exception handling.
+Section 10 — AI Implementation Workflow
+STRIPE BILLING — IMPLEMENTATION WORKFLOW
+DISCOVER:
+  1. Restricted API Key authentication + account ID confirmation
+  2. LIVEMODE VERIFICATION — check first 10 extracted objects for livemode=true
+     "This is the highest-severity pre-extraction check for Stripe.
+     Test-mode data must never enter the production canonical store."
+  3. Subscription model inventory:
+     - Metered pricing detection → usage billing gate
+     - Multi-item subscription detection → items[] formula required
+     - Multi-account detection → consolidation planning
+  4. Subscription Normalization Gate (Table IMS-201.1.3)
+     Begin CEP gate resolution; extraction continues regardless
+BRANCH 1 — Metered/usage-based pricing present?
+  YES → Usage billing gate active
+         CEP must confirm committed-minimum vs. overage policy before
+         usage-sourced ARR values are included in ARR Movement
+  NO → Standard subscription ARR derivation only
+BRANCH 2 — Multi-item subscriptions present?
+  YES → items[] array required for all ARR calculations; subscription.plan deprecated
+  NO → items[] still preferred; subscription.plan acceptable as fallback
+ANALYZE: Map all Stripe objects (Table IMS-201.2.1)
+SUBSCRIPTION NORMALIZATION GATE:
+  Three policy questions must be resolved (Table IMS-201.1.3)
+  BLOCK ARR Movement creation until all three confirmed
+  All other canonical objects continue populating normally
+NORMALIZE:
+  Subscription status normalization (Table IMS-201.4.1)
+  Invoice status normalization (Table IMS-201.4.2)
+  Currency normalization — integer cents to decimal (Section 4.4)
+TRANSFORM:
+  ARR derivation per subscription (post-gate)
+  ARR Movement derivation from event stream (Section 4.3)
+VALIDATE: Table IMS-201.5.1
+  Priority 1: livemode filter enforcement
+  Priority 2: one-time invoice line exclusion from ARR
+  Priority 3: gate status check before ARR Movement creation
+POPULATE: Steps 1-14 (Table IMS-201.6.1)
+  Steps 12-14 are gate-dependent or companion-connector-dependent
+SCORE: Table IMS-201.7.1
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+IMS-202 — Chargebee
+Chargebee is a purpose-built SaaS billing platform whose native MRR field is its primary implementation advantage: it reduces the ARR derivation complexity that requires items[] array summation in Stripe. The Revenue Recognition module is the primary gate — its presence or absence creates a materially different implementation profile. Multi-site configurations require explicit CEP inventory, similar to Intacct's multi-entity pattern.
+✱ ARCHITECT NOTE: Key departure from Stripe IMS: Chargebee exposes a native subscription.mrr field that, when populated and validated, eliminates the need for manual ARR derivation from price × quantity × (12/interval). However, this field requires validation against manual line-item summation — it can drift in edge cases involving proration. The implementation agent validates the native MRR field rather than blindly accepting it.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+API Key (v2 API). Chargebee uses HTTP Basic Auth with the API key as the username and empty password.
+Use a site-specific API key with read-only scopes. Chargebee API keys are site-scoped — a key for site "mycompany" cannot access "mycompany-test" and vice versa.
+Site name
+The customer's Chargebee site identifier (e.g., "acme" in "acme.chargebee.com"). Required as part of the API base URL.
+Confirm site name resolves to the production environment, not a test site. Chargebee test sites end in -test by convention.
+API version
+Chargebee API v2 is the standard. Version 1 is deprecated.
+Confirm v2 by checking response structure on a test query.
+Table IMS-202.1.1 — Chargebee authentication.
+1.2 Multi-Site Detection
+ASK CEP: "Does this customer have multiple Chargebee sites?
+  (e.g., separate sites for different regions, product lines, or trial environments)"
+  ├─ Single site → Continue with standard single-site extraction
+  └─ Multiple sites → Record all site names in CEP.chargebee_sites[]
+                       Extract each site independently
+                       Consolidate after deduplication
+                       WARN: Customer IDs are site-scoped; same customer may
+                       appear in multiple sites with different IDs
+1.3 Revenue Recognition Module Detection
+CHECK Revenue Recognition module activation:
+  GET /api/v2/revenue_recognition_rules (or applicable endpoint)
+  ├─ 200 with data → Module active; record CEP.revenue_recognition_active = true
+  └─ 404 or empty → Module inactive; record CEP.revenue_recognition_active = false
+  IMPACT:
+    Active: Revenue Schedule D-H confidence available
+    Inactive: Revenue Schedule falls to DR-M from invoice service period estimation
+              (same ceiling as Stripe)
+  NOTE: Revenue Recognition module is NOT universally active.
+  Do not assume based on Chargebee platform tier alone.
+  Always confirm via API.
+1.4 Subscription Normalization Gate
+Same three questions as Stripe, applied to Chargebee's status values. Record in CEP.arr_policy.
+Gate Question
+Chargebee Status Value Affected
+Default
+Include trialing subscriptions in ARR?
+status = "in_trial"
+Exclude
+Usage-based ARR policy for metered/usage components?
+Subscriptions with usage_metering addon components
+Committed minimum only; overages excluded
+Include delinquent (past due) subscriptions in ARR?
+status = "non_renewing" and past due payment
+Exclude
+Table IMS-202.1.4 — Chargebee Subscription Normalization Gate.
+Section 2 — Canonical Object Mapping
+Chargebee Object
+API Endpoint
+Canonical Target
+Confidence
+Key Difference from Stripe
+Customer
+GET /api/v2/customers
+Customer Account (Entity)
+D-H
+Same pattern; Chargebee Customer.id is the identity key
+Subscription
+GET /api/v2/subscriptions
+Subscription (Entity)
+D-H; native MRR field validates but requires cross-check
+Native subscription.mrr field available — validation shortcut vs. manual derivation
+Subscription Item / Addon
+Embedded in Subscription.subscription_items[]
+Subscription Item (Extension)
+D-H
+Items available in subscription_items[] array; similar to Stripe's items[]
+Invoice
+GET /api/v2/invoices
+Invoice (Movement)
+D-H
+Service period dates natively available on invoice lines
+Payment / Transaction
+GET /api/v2/transactions
+Payment (Movement)
+D-H
+Chargebee uses Transaction object; same canonical target as Stripe Payment
+Credit Note
+GET /api/v2/credit_notes
+Credit Memo (Movement)
+D-H
+Revenue Recognition Schedule
+GET /api/v2/revenue_recognition_schedules
+Revenue Schedule (Movement) — higher confidence than Stripe when module active
+D-H (module active) / DR-M (inactive)
+Module gate required; this is the primary capability differentiator for Chargebee
+Addon / Usage
+Embedded in Subscription or separately via GET /api/v2/usages
+Usage Record (Extension)
+D-M
+Usage components tracked as Addons in Chargebee
+Table IMS-202.2.1 — Chargebee canonical object map.
+Section 3 — Canonical Field Mapping (Key: Subscription MRR Validation)
+Chargebee's native MRR field is the implementation agent's primary shortcut — and the primary validation requirement.
+Chargebee Field
+SCBM Field
+Req/Opt
+Transform
+Validation — the critical step
+subscription.id
+subscription.source_id
+REQ
+None
+Globally unique within site
+subscription.status
+subscription.status
+REQ
+Normalize per Table IMS-202.4.1
+subscription.mrr (native field)
+subscription.arr_value (via MRR × 12)
+OPT → REQ if present
+mrr × 12 = arr_value (or direct arr_value if field exists)
+VALIDATE: mrr × 12 must match manual derivation SUM(item.unit_price × item.quantity × 12/interval) within 0.01. If mismatch > 0.01: FLAG; use manual derivation; investigate source of discrepancy.
+subscription.subscription_items[].unit_price
+subscription.arr_component_unit_price[]
+REQ (per item)
+Currency normalization (Chargebee uses base currency units, not smallest unit like Stripe)
+Chargebee does NOT use integer cents — amounts are in base currency decimal directly
+subscription.subscription_items[].quantity
+subscription.arr_component_quantity[]
+REQ (per item)
+Integer
+invoice.line_items[].date_from
+invoice_line.service_period_start
+OPT (REQ for Rev Rec)
+ISO 8601 date
+Required when Revenue Recognition module active
+invoice.line_items[].date_to
+invoice_line.service_period_end
+OPT (REQ for Rev Rec)
+ISO 8601 date
+Table IMS-202.3.1 — Chargebee key field mapping. Currency unit difference from Stripe is critical: Chargebee amounts are already in base currency decimal, not integer cents.
+Section 4 — Transformation Rules
+4.1 Subscription Status Normalization
+Chargebee Status
+SCBM Status
+ARR Inclusion
+Notes
+active
+ACTIVE
+YES
+Core active
+in_trial
+TRIAL
+Conditional (CEP gate)
+Same trial gate as Stripe
+future
+FUTURE
+NO
+Scheduled future subscription; not yet billing
+non_renewing
+NON_RENEWING
+YES (until end date)
+Will not renew but still active until period end; ARR should reflect remaining committed value
+paused
+PAUSED
+Conditional (CEP gate)
+cancelled
+CANCELLED
+NO
+Generates CHURN ARR Movement
+Table IMS-202.4.1 — Chargebee subscription status normalization.
+4.2 Currency Unit Normalization — Critical Difference from Stripe
+Chargebee stores monetary amounts in base currency units (dollars, euros), not integer smallest-unit (cents). Applying Stripe's ÷100 conversion to Chargebee amounts will produce values 100x too small.
+FOR every Chargebee monetary field:
+  canonical_amount = raw_amount  (NO division — already in base currency units)
+  VALIDATE: If any Chargebee amount appears unusually large (e.g., $120,000
+  for what should be a $1,200/yr subscription), this may indicate accidental
+  Stripe-style ÷100 was NOT applied — the value from Chargebee is correct.
+  Investigate context before assuming data error.
+  If applying cross-currency conversion:
+  Same pattern as ERP IMS-001 Section 4.4 and Stripe IMS-201 Section 4.4
+  (Chargebee stores amounts in base currency; conversion applies normally)
+Sections 5–10 Summary — Chargebee
+Section 5 (Validation): Subscription Normalization Gate same as Stripe. Additional validation: native MRR field cross-check (MRR × 12 vs. manual derivation). Revenue Recognition module gating — Revenue Schedule population blocked until module confirmed active or explicitly set to DR-M fallback.
+Section 6 (Population): Same sequence as Stripe with two additions: (a) multi-site consolidation step before customer deduplication if CEP.chargebee_sites[] has multiple entries; (b) Revenue Recognition schedule population after invoices only if module is active. CRM and ERP cross-validation steps same as Stripe.
+Section 7 (Confidence): ARR confidence 87% (slightly below Stripe's 91% due to Pilot Ready vs. Production Ready maturity). Native MRR field validated: +5% boost when validation passes. Revenue Schedule: D-H (80%) when module active; DR-M (45%) when inactive. Currency unit difference: if Stripe-style conversion incorrectly applied, all monetary amounts are 100x wrong — a distinct category of error from standard confidence degradation.
+Section 8 (Capability Activation): Same activation pattern as Stripe with one differentiator: Revenue Waterfalls reach a higher confidence ceiling when Revenue Recognition module is active (65% vs. Stripe's 55%). ARR Reporting is READY post-gate.
+Section 9 (Exception Handling): Multi-site customer duplication (same customer in multiple sites with different IDs — most common Chargebee-specific exception); MRR field drift (native MRR doesn't match manual derivation — FLAG and use manual derivation); partial Revenue Recognition module configuration (some subscriptions have schedules, others don't — flag as PARTIAL_REV_REC_COVERAGE).
+Section 10 (AI Workflow): Same structure as Stripe. Primary branch: Revenue Recognition module active? YES → D-H Revenue Schedule available; NO → DR-M fallback, surface ERP pairing recommendation. Multi-site branch: multiple sites → consolidation planning before any extraction begins.
+IMS-203 — Recurly
+Recurly's defining implementation characteristic is the strongest dunning and decline-reason tracking of any connector in this library — enabling involuntary/voluntary churn classification that Stripe and Chargebee cannot match at equivalent confidence. The implementation agent should leverage this advantage explicitly in Churn Analysis capability activation, while applying standard Validated-maturity caution to the broader ARR and pipeline capabilities.
+✱ ARCHITECT NOTE: Key departure from Stripe and Chargebee: Recurly's Account object is sometimes created per-subscription rather than per-customer — a data modeling choice that fragments canonical Customer Account identity and must be explicitly detected and reconciled during discovery. If undetected, the same customer appears as multiple Customer Accounts in the canonical store, producing duplicate ARR attribution.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+API Key (v3 API). Recurly uses HTTP Basic Auth with the API key as the username.
+Always use v3 API (recurly.com/v3/...). v2 is deprecated and returns different object schemas.
+Subdomain
+Customer's Recurly subdomain (e.g., "acme" in "acme.recurly.com").
+Confirm production subdomain vs. test subdomain. Test subdomains are typically "-test" suffixed.
+Table IMS-203.1.1 — Recurly authentication.
+1.2 Account Creation Pattern Detection — The Primary Discovery Step
+Recurly's most consequential implementation discovery item is whether the customer has created one Recurly Account per customer (standard) or one Recurly Account per subscription (non-standard). This determines whether canonical Customer Account deduplication is required.
+DETECT Account creation pattern:
+  GET /accounts?limit=200&state=active
+  GET /subscriptions?limit=200&state=active
+  COUNT unique account_code values vs. unique email addresses:
+  IF unique_emails << unique_account_codes:
+    → Per-subscription Account pattern likely
+    → FLAG: "Multiple Recurly Accounts likely represent the same customer.
+       Customer Account deduplication required before ARR computation."
+    → ASK CEP: "Does this Recurly account create a new Account record
+       for each subscription, or does each customer have one Account?"
+  RECORD in CEP.recurly_account_pattern:
+    PER_CUSTOMER (standard) or PER_SUBSCRIPTION (non-standard)
+  IF PER_SUBSCRIPTION:
+    Group Accounts by email before creating canonical Customer Accounts
+    Use email as the true customer identity key, not account_code
+1.3 Dunning Configuration Discovery
+DISCOVER dunning retry schedule:
+  GET /dunning_campaigns
+  FOR each active dunning campaign:
+    Record: name, retry_intervals[], expire_subscription_after_days
+    Record in CEP.dunning_config
+  WHY THIS MATTERS:
+  Recurly's dunning data distinguishes voluntary from involuntary churn.
+  Subscriptions that cancel after exhausting dunning retries are INVOLUNTARY churn.
+  Subscriptions that cancel via customer request are VOLUNTARY churn.
+  This distinction requires knowing the dunning retry schedule to interpret
+  the timeline between first payment failure and subscription cancellation.
+Section 2 — Canonical Object Mapping
+Recurly Object
+API Endpoint
+Canonical Target
+Confidence
+Key Difference
+Account
+GET /accounts
+Customer Account (Entity)
+D-H (per-customer pattern) / D-M (per-subscription pattern — requires deduplication)
+Per-subscription pattern degrades identity confidence until deduplication complete
+Subscription
+GET /subscriptions
+Subscription (Entity)
+D-H
+Standard
+Subscription Add-On
+Embedded in Subscription
+Subscription Item (Extension)
+D-H
+Invoice
+GET /invoices
+Invoice (Movement)
+D-H
+Transaction
+GET /transactions
+Payment (Movement)
+D-H
+Recurly Transaction covers both payments and declines — filter by type
+CreditPayment
+GET /credit_payments
+Credit Memo (Movement)
+D-M
+Invoice.error_code (from failed transactions)
+Decline Reason (Extension)
+ARR Movement.cancellation_type contribution
+D-H for involuntary churn classification
+Strongest decline-reason tracking in the library
+Table IMS-203.2.1 — Recurly canonical object map.
+Section 4 — Transformation Rules (Excerpt)
+4.1 Involuntary vs. Voluntary Churn Classification — Recurly's Distinctive Transformation
+INVOLUNTARY/VOLUNTARY CHURN CLASSIFICATION:
+FOR each subscription with status = expired (cancelled):
+  RETRIEVE: last N transactions WHERE type IN (payment, declined)
+  N = CEP.dunning_config.retry_intervals.count
+  IF subscription has declined transactions matching dunning retry schedule
+     AND cancellation follows exhausted retries:
+     → ARR Movement.cancellation_type = INVOLUNTARY_CHURN
+     → ARR Movement.decline_reason = transaction.error_code (normalized)
+  IF subscription has no recent payment failures AND
+     cancellation via explicit customer request (subscription.cancelled_at present):
+     → ARR Movement.cancellation_type = VOLUNTARY_CHURN
+  IF ambiguous (mixed signals):
+     → ARR Movement.cancellation_type = UNKNOWN
+     → FLAG_FOR_CEP for manual classification
+Decline reason normalization (error_code → canonical):
+  insufficient_funds → INSUFFICIENT_FUNDS
+  card_declined → CARD_DECLINED
+  expired_card → EXPIRED_CARD
+  do_not_honor → CARD_ISSUER_DECLINED
+  invalid_number → INVALID_PAYMENT_METHOD
+  [other] → FLAG_FOR_CEP
+Sections 5–10 Summary — Recurly
+Section 5 (Validation): Account creation pattern gate — if PER_SUBSCRIPTION detected, Customer Account deduplication must complete before ARR computation begins. Same Subscription Normalization Gate as Stripe/Chargebee. Involuntary churn classification completeness check.
+Section 6 (Population): Customer Account deduplication step added before Step 4 if PER_SUBSCRIPTION pattern detected. Involuntary/voluntary churn classification runs as part of ARR Movement derivation (Step 12), using dunning config from CEP.
+Section 7 (Confidence): ARR confidence 78% (Validated maturity). Churn Analysis receives +8% confidence boost vs. Stripe/Chargebee baseline specifically due to dunning/decline-reason strength — Recurly's genuine capability advantage. Identity confidence D-M until Account deduplication is confirmed complete.
+Section 8 (Capability Activation): Churn Analysis READY with above-baseline confidence for involuntary/voluntary classification. ARR Reporting READY post-gate. Collections Forecasting benefits from dunning data more than any other connector in the library.
+Section 9 (Exception Handling): Per-subscription Account pattern (most common Recurly-specific exception — deduplication required); custom dunning sequence outside Recurly native (external dunning communication obscures retry-state data); decline reason codes not in normalization table (FLAG_FOR_CEP for new code pattern documentation).
+IMS-204 — Maxio (Chargify + SaaSOptics)
+Maxio is the most architecturally distinctive Billing connector in this library: a merged platform (Chargify billing engine + SaaSOptics revenue recognition) that requires the implementation agent to confirm which parts of the merged platform the customer has adopted before mapping proceeds. The Revenue Recognition module is the primary gate — but here the gate changes not just confidence levels but the entire canonical mapping for Revenue Schedule objects.
+✱ ARCHITECT NOTE: Key departure from all other Billing connectors in this library: Maxio's native pre-computed SaaS metrics (MRR, ARR, churn rate) must be treated as reference-only, never as canonical SMPL metric values. This principle — that SMPL computes its own metrics rather than importing vendor-computed ones — applies to all connectors, but Maxio makes it most consequential because its metrics are prominently surfaced in the API. The implementation agent must actively resist the apparent shortcut of using Maxio's pre-computed ARR as the canonical SMPL ARR figure.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+Chargify (billing) API uses an API key per site. SaaSOptics (revenue recognition) API uses its own authentication. For most customers, a single Maxio-integrated API key covers both.
+Confirm which API endpoint covers the customer's configuration. Post-merger Maxio API may differ from pre-merger Chargify API documentation — verify endpoint availability before planning extraction.
+Site domain
+Maxio/Chargify uses a site-scoped URL: {site}.chargify.com or app.maxio.com depending on migration status.
+Confirm current platform URL. Customers in transition between Chargify and Maxio branding may have mixed endpoint availability.
+Table IMS-204.1.1 — Maxio authentication.
+1.2 Revenue Recognition Module Gate — The Primary Discovery Step
+DETECT Revenue Recognition module:
+  GET /revenue_recognition_events OR
+  GET /saas_metrics/revenue_recognition?date={today}
+  ├─ 200 with data → Module active
+  │   Record CEP.maxio_rev_rec_active = true
+  │   Record CEP.rev_rec_confidence_ceiling = D-H (68%)
+  └─ 404 / error → Module inactive (legacy Chargify-only configuration)
+      Record CEP.maxio_rev_rec_active = false
+      Record CEP.rev_rec_confidence_ceiling = DR-M (35%)
+  CRITICAL WARNING:
+  Do NOT assume Revenue Recognition is active because the customer says
+  they "use Maxio." Many legacy Chargify customers migrated to Maxio
+  branding without adopting the SaaSOptics-origin Revenue Recognition
+  module. The API is the only reliable source of truth on this.
+1.3 Native SaaS Metrics — Reference-Only Configuration
+CONFIRM native SaaS metrics treatment:
+  GET /saas_metrics/mrr OR /saas_metrics/arr
+  These endpoints return Maxio's pre-computed metrics.
+  RECORD in CEP: maxio_native_metrics_available = true/false
+  RECORD in CEP: maxio_native_metrics_treatment = REFERENCE_ONLY
+                 (never CANONICAL — SMPL always computes its own metrics)
+  USE for: cross-validation against SMPL-computed ARR after canonical population
+  DO NOT USE for: populating SMPL canonical ARR values directly
+  If Maxio native ARR differs from SMPL-computed ARR by > 2%:
+  FLAG for investigation — may indicate a CEP policy difference
+  (e.g., Maxio includes trials that SMPL excludes, or vice versa)
+Section 2 — Canonical Object Mapping
+Maxio Object
+API Endpoint
+Canonical Target
+Confidence
+Key Note
+Customer
+GET /customers
+Customer Account (Entity)
+D-H
+Subscription
+GET /subscriptions
+Subscription (Entity)
+D-H
+Component-based pricing; see Section 3
+Component / Subscription Component
+GET /subscriptions/{id}/components
+Subscription Item (Extension)
+D-H
+Chargify-origin component model — equivalent to Stripe's Subscription Items
+Invoice
+GET /invoices
+Invoice (Movement)
+D-H
+Payment
+GET /payments
+Payment (Movement)
+D-H
+Revenue Recognition Schedule (SaaSOptics-origin)
+GET /revenue_recognition_schedules
+Revenue Schedule (Movement)
+D-H (module active) / N/A (inactive)
+This object does not exist when module is inactive — do not attempt to query it
+SaaS Metrics (native)
+GET /saas_metrics/...
+Reference only — NOT canonical
+D-M (reference)
+Cross-validation use only; never imported as canonical SMPL metric
+Table IMS-204.2.1 — Maxio canonical object map.
+Section 3 — Canonical Field Mapping (Component-Based ARR)
+Maxio's Chargify-origin component model is structurally equivalent to Stripe's Subscription Item but uses different field names and a different ARR derivation pattern.
+Maxio Field
+SCBM Field
+Transform
+Notes
+subscription.id
+subscription.source_id
+None
+subscription.state
+subscription.status
+Normalize per Table IMS-204.4.1
+Chargify/Maxio uses "active", "trialing", "canceled", "expired", "on_hold"
+component.unit_price
+subscription.arr_component_unit_price
+Currency: Maxio uses base currency decimal (not cents)
+Same as Chargebee — NOT integer cents
+component.allocated_quantity
+subscription.arr_component_quantity
+Integer
+component.pricing_scheme
+ARR treatment type
+Normalize: per_unit → standard ARR; stairstep / tiered / volume → FLAG_FOR_CEP (complex pricing)
+Non-per-unit pricing schemes require explicit CEP classification before ARR computation
+revenue_recognition_schedule.recognized_amount (per period)
+revenue_schedule.recognized_amount
+Direct
+Only when CEP.maxio_rev_rec_active = true
+Table IMS-204.3.1 — Maxio component-based ARR field mapping.
+Sections 4–10 Summary — Maxio
+Section 4 (Transformation): ARR derivation from components (not a native MRR field like Chargebee). Component pricing scheme normalization — per_unit is standard; stairstep/tiered/volume require CEP policy before ARR classification. Native metrics treated as reference; SMPL-computed ARR compared against Maxio native as a validation step.
+Section 5 (Validation): Revenue Recognition module gate — Revenue Schedule population blocked until module status confirmed. Native metric cross-validation check: if Maxio native ARR differs from SMPL-computed by > 2%, FLAG for investigation. Component pricing scheme gate: non-per-unit schemes produce FLAG until CEP resolves classification.
+Section 6 (Population): Revenue Recognition schedule population is module-dependent (skip entirely when inactive, not just lower confidence — the objects don't exist). Native SaaS metric cross-validation step runs after SMPL ARR computation (Step 12b) — compare SMPL ARR vs. Maxio native; surface discrepancy for CEP review.
+Section 7 (Confidence): ARR confidence 76% (Validated maturity). Revenue Schedule D-H (65% post-module-gate) — unusually strong for Billing-sourced revenue recognition. Native metrics cross-validation: when Maxio native ARR matches SMPL-computed within 2%, +5% on overall ARR confidence as a validation bonus.
+Section 8 (Capability Activation): ARR Reporting and MRR Reporting READY post-gate. Revenue Waterfalls PARTIAL → higher ceiling than Stripe when module active (60% vs. 55%). Deferred Revenue Validation same advantage.
+Section 9 (Exception Handling): Legacy Chargify-only configuration (module inactive; redirect to Stripe-equivalent confidence ceilings); pre-computed native metric import attempt (BLOCK — native metrics must never replace SMPL-computed canonical metrics); component pricing scheme requiring manual CEP classification (stairstep/tiered/volume).
+IMS-205 — Zuora
+Zuora is the most complex Billing connector in this library — the enterprise-tier equivalent of Oracle Fusion in the ERP library. Its Rate Plan/Rate Plan Charge structure is the most granular pricing model in the library, and RevPro (the Revenue Recognition module) is the most sophisticated revenue recognition of any Billing connector SMPL supports. The implementation cost is front-loaded in discovery and Rate Plan enumeration; the extraction itself is more reliable once the structure is understood.
+✱ ARCHITECT NOTE: Key departure from every other Billing connector in this library: Zuora's pricing model uses a three-level hierarchy — Product Catalog → Rate Plan → Rate Plan Charges — where ARR is derived from Rate Plan Charges, not from a flat price × quantity on a Subscription Item. Incomplete Rate Plan Charge enumeration (e.g., mapping only the primary recurring charge and ignoring usage or one-time charges) is the most common Zuora-specific implementation error, producing systematically understated ARR.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+OAuth 2.0 (client credentials) is the standard and required method for SMPL Zuora connectors.
+Zuora also supports cookie-based authentication (legacy) — do not use. OAuth client_id + client_secret is the only production-appropriate method.
+REST API base URL
+https://rest.zuora.com (production) or https://rest.apisandbox.zuora.com (sandbox).
+Always confirm production vs. sandbox base URL before any extraction. Zuora sandbox data must never populate production canonical objects.
+Zuora tenant edition
+Zuora Enterprise Edition vs. Zuora for Salesforce CPQ vs. Zuora Revenue — feature availability varies.
+Record CEP.zuora_edition. RevPro availability depends on edition.
+Table IMS-205.1.1 — Zuora authentication.
+1.2 Rate Plan Structure Inventory — The Primary Discovery Step
+Zuora's Rate Plan structure is the equivalent of Oracle Fusion's CoA segment inventory — a required discovery step that must complete before ARR derivation can begin. Without understanding the Rate Plan hierarchy, ARR computation is incorrect.
+DISCOVER Rate Plan structure:
+LEVEL 1 — Product Catalog:
+  GET /v1/catalog/products
+  Record: productId, name, description, effectiveStartDate, effectiveEndDate
+LEVEL 2 — Rate Plans per Product:
+  GET /v1/catalog/products/{productId}/rateplans
+  Record: ratePlanId, name, description
+LEVEL 3 — Rate Plan Charges per Rate Plan:
+  GET /v1/catalog/products/{productId}/rateplans/{ratePlanId}/rateplancharges
+  Record per charge: chargeId, name, chargeType, chargeModel, billingPeriod
+  CRITICAL: chargeType determines ARR inclusion:
+    Recurring → Include in ARR computation (primary ARR source)
+    OneTime → Exclude from ARR
+    Usage → Apply CEP.arr_policy.usage_treatment
+  CRITICAL: chargeModel determines derivation formula:
+    FlatFee → ARR = price × (12 / billing_period_months)
+    PerUnit → ARR = price × quantity × (12 / billing_period_months)
+    Tiered → FLAG_FOR_CEP (tiered pricing requires classification)
+    Volume → FLAG_FOR_CEP
+    DiscountFixedAmount / DiscountPercentage → Discount; apply after base ARR
+  RECORD in CEP.zuora_rate_plan_hierarchy:
+    {product → [ratePlan → [rateplancharge: {type, model, include_in_arr}]]}
+1.3 RevPro Module Gate
+DETECT RevPro (Revenue Accounting) module:
+  GET /v1/revenue-schedules?limit=1
+  ├─ 200 with data → RevPro active
+  │   Record CEP.zuora_revpro_active = true
+  └─ 403 / empty → RevPro inactive
+      Record CEP.zuora_revpro_active = false
+  RevPro is the most sophisticated native revenue recognition in this library.
+  When active, Revenue Schedule D-H confidence (70%) is the highest in the library.
+  When inactive, Revenue Schedule falls to DR-L (approximately 30%).
+  Do NOT assume RevPro is active based on Zuora enterprise tier alone.
+  API confirmation is required.
+Section 2 — Canonical Object Mapping
+Zuora Object
+API Endpoint
+Canonical Target
+Confidence
+Key Note
+Account
+GET /v1/accounts
+Customer Account (Entity)
+D-H
+Zuora Account maps cleanly to Customer Account; parentId supports parent-child Account hierarchy
+Subscription
+GET /v1/subscriptions
+Subscription (Entity)
+D-H core; D-H ARR only after Rate Plan Charge enumeration
+Must enumerate ALL Rate Plan Charges to compute ARR — partial enumeration is worse than no enumeration
+SubscriptionRatePlanCharge (Recurring)
+Via Subscription.ratePlans[].ratePlanCharges[] (inline)
+Subscription Item (Extension) — the source of ARR
+D-H (after full enumeration)
+The primary ARR source in Zuora — equivalent to Stripe's Subscription Items but three levels deep
+Invoice
+GET /v1/transactions/invoices
+Invoice (Movement)
+D-H
+Payment
+GET /v1/transactions/payments
+Payment (Movement)
+D-H
+Revenue Schedule (RevPro)
+GET /v1/revenue-schedules
+Revenue Schedule (Movement)
+D-H (RevPro active, 70%) / DR-L (inactive, 30%)
+Highest non-ERP Revenue Schedule confidence in the library when active
+Amendment
+GET /v1/amendments/{key}
+ARR Movement source
+D-H
+Zuora's formal Amendment object is a more structured ARR Movement source than subscription event logs in other connectors
+Refund
+GET /v1/transactions/refunds
+Refund (Movement)
+D-H
+Table IMS-205.2.1 — Zuora canonical object map.
+Section 3 — Canonical Field Mapping (Rate Plan Charge → ARR)
+Zuora's ARR derivation is the most complex in this library because it requires traversing three levels of the product hierarchy per subscription. Every step must handle all charge types correctly.
+Zuora Field (via Subscription response)
+SCBM Field
+Req/Opt
+Transform
+Notes
+ratePlans[].ratePlanCharges[].chargeType
+arr_component.charge_type
+REQ
+Direct: Recurring / OneTime / Usage
+Filter: only Recurring charges contribute to ARR; others flagged per type
+ratePlans[].ratePlanCharges[].chargeModel
+arr_component.charge_model
+REQ
+Direct: FlatFee / PerUnit / Tiered / Volume
+Non-FlatFee/PerUnit models require CEP resolution before ARR computation
+ratePlans[].ratePlanCharges[].price (FlatFee model)
+arr_component.unit_price
+REQ
+Currency normalization
+ARR = price × (12 / billing_period_in_months)
+ratePlans[].ratePlanCharges[].pricePerUnit (PerUnit model)
+arr_component.unit_price
+REQ
+Currency normalization
+ARR = pricePerUnit × quantity × (12 / billing_period_in_months)
+ratePlans[].ratePlanCharges[].quantity (PerUnit model)
+arr_component.quantity
+REQ
+Integer
+ratePlans[].ratePlanCharges[].billingPeriod
+arr_component.billing_period
+REQ
+Normalize: Month=1, Annual=12, Semi_Annual=6, Quarter=3
+Used in ARR annualization formula
+Table IMS-205.3.1 — Zuora Rate Plan Charge → ARR derivation field mapping.
+Section 4 — Transformation Rules
+4.1 Rate Plan Charge ARR Derivation — The Core Zuora Transformation
+ZUORA ARR DERIVATION (per subscription):
+FOR each Subscription:
+  subscription_arr = 0
+  FOR each ratePlan in subscription.ratePlans:
+    FOR each charge in ratePlan.ratePlanCharges:
+      IF charge.chargeType = "Recurring":
+        IF charge.chargeModel = "FlatFee":
+          charge_arr = charge.price × (12 / billing_period_months(charge.billingPeriod))
+        ELIF charge.chargeModel = "PerUnit":
+          charge_arr = charge.pricePerUnit × charge.quantity × (12 / billing_period_months(charge.billingPeriod))
+        ELIF charge.chargeModel IN ("Tiered", "Volume"):
+          FLAG_FOR_CEP: "Rate Plan Charge {charge.name} uses {model} pricing.
+          What quantity tier should SMPL use for ARR computation?"
+          charge_arr = 0  // pending CEP resolution
+        ELIF charge.chargeModel CONTAINS "Discount":
+          discount_arr += compute_discount(charge)
+          charge_arr = 0  // applied separately
+        subscription_arr += charge_arr
+      ELIF charge.chargeType = "Usage":
+        Apply CEP.arr_policy.usage_treatment
+      ELIF charge.chargeType = "OneTime":
+        EXCLUDE from ARR; include in Invoice Analytics only
+  subscription.arr_value = subscription_arr - total_discounts
+  VALIDATE: subscription.arr_value > 0 for any active, non-discounted subscription
+  If = 0: FLAG — likely incomplete Rate Plan Charge enumeration
+4.2 Amendment-Based ARR Movement Derivation
+Zuora's Amendment object provides a more formally structured ARR Movement source than subscription event logs — the equivalent of SAP's BKPF document header in terms of providing clear, typed records of subscription changes.
+FOR each Amendment:
+  amendment.type → ARR Movement Category:
+    NewProduct → NEW_BUSINESS (if first subscription for Account)
+                 EXPANSION (if Account had existing active subscriptions)
+    RemoveProduct → CONTRACTION (if subscription remains) / CHURN (if no products remain)
+    UpdateProduct → Compute ARR delta before/after:
+      delta > 0 → EXPANSION
+      delta < 0 → CONTRACTION
+      delta = 0 → No ARR Movement (metadata change only)
+    Renewal → RENEWAL (confirm with CRM Renewal Opportunity if connected)
+    Cancellation → CHURN
+  FLAG: Amendment.type does not always equal the canonical movement category.
+  An "UpdateProduct" with delta > 0 is EXPANSION.
+  A "RemoveProduct" leaving one product remaining is CONTRACTION, not CHURN.
+  Compute ARR delta rather than trusting amendment type directly.
+Sections 5–10 Summary — Zuora
+Section 5 (Validation): Rate Plan Charge enumeration gate — if any subscription has subscription_arr = 0 after derivation, FLAG as likely incomplete enumeration (not a data error — an implementation error to investigate). RevPro module gate same pattern as Maxio. Subscription Normalization Gate same three questions as all other connectors.
+Section 6 (Population): Rate Plan Catalog population precedes Subscription population (hierarchy must be understood before ARR can be computed). RevPro Revenue Schedule population is module-dependent. Amendment-based ARR Movement derivation as a distinct post-subscription step. CRM and ERP cross-validation steps same as Stripe.
+Section 7 (Confidence): ARR confidence 70% (Validated maturity + Rate Plan complexity). Revenue Schedule D-H (70%) when RevPro active — highest in the library. Amendment-based ARR Movement: D-H (75%) — more reliable than event-log-based derivation due to formal structure. Rate Plan Charge with tiered/volume pricing: 0% until CEP resolves the tier question.
+Section 8 (Capability Activation): No capabilities reach READY standalone — Validated maturity + highest configuration complexity in the library. All capabilities Partial at best standalone. Revenue Waterfalls reach the highest ceiling when RevPro is active (65% standalone, 85% with ERP). This honest framing is consistent with the HRIS library's treatment of Workday and the ERP library's treatment of Oracle Fusion.
+Section 9 (Exception Handling): Incomplete Rate Plan Charge enumeration (most common Zuora-specific error — subscription_arr = 0 is the detection signal); tiered/volume pricing scheme classification (FLAG_FOR_CEP); RevPro active but empty (module licensed but no schedules created — operational gap, not implementation error); multi-entity Account hierarchy (parent-child Account structure creates consolidated vs. entity-level ARR ambiguity requiring CEP policy).
+Section 10 (AI Workflow): Longest workflow in the Billing library. Primary branches: Rate Plan Catalog inventory (required before any ARR computation); RevPro gate; tiered/volume pricing scheme; multi-entity ARR consolidation policy. Communicate implementation timeline upfront — Rate Plan Catalog discovery for large enterprise Zuora deployments requires multiple structured sessions.
+Cross-Billing Implementation Comparison Matrix
+ARR Derivation Complexity by Connector
+Connector
+ARR Source Object
+Derivation Complexity
+Primary ARR Risk
+Stripe Billing
+subscription.items[].price × quantity × (12/interval)
+Low — well-validated formula across many implementations
+Using deprecated subscription.plan instead of items[] understates multi-item ARR
+Chargebee
+subscription.mrr (native, requires validation) OR items-based derivation
+Low — native MRR field; validation required
+MRR field drift from proration edge cases; Stripe-style ÷100 conversion incorrectly applied to Chargebee base-currency amounts
+Recurly
+subscription.unit_amount × quantity × (12/interval) per add-on
+Medium — per-subscription Account pattern fragments customer identity
+Per-subscription Account pattern produces duplicate Customer Accounts before deduplication
+Maxio
+component.unit_price × quantity × (12/interval) per component
+Medium — component-based model; tiered pricing schemes need CEP classification
+Pre-computed native metrics used as canonical ARR (must not occur)
+Zuora
+Rate Plan Charge (price × quantity × 12/billing_period) per Recurring charge
+High — three-level hierarchy; all charge types must be enumerated
+Incomplete Rate Plan Charge enumeration produces subscription.arr = 0 for affected subscriptions
+Table X-BIL.1 — Billing ARR derivation complexity comparison.
+Subscription Normalization Gate Summary
+Gate Question
+Stripe
+Chargebee
+Recurly
+Maxio
+Zuora
+Trial treatment field
+CEP.arr_policy.include_trials
+Same
+Same
+Same
+Same — universal across all five
+Usage-based ARR policy
+CEP.arr_policy.usage_treatment
+Same
+Same
+Same
+Same — universal
+Delinquent status treatment
+past_due, unpaid, paused
+non_renewing, paused
+past_due (within dunning)
+on_hold
+Suspended, PendingCancellation
+Additional gate (connector-specific)
+livemode=true filter
+Revenue Recognition module + multi-site
+Account deduplication (per-subscription pattern)
+Revenue Recognition module + native metrics reference-only confirmation
+Rate Plan Charge full enumeration + RevPro module
+Table X-BIL.2 — Subscription Normalization Gate by connector. First three questions are universal; additional connector-specific gates extend the pattern.
+Revenue Recognition Capability Comparison
+Capability
+Stripe
+Chargebee
+Recurly
+Maxio
+Zuora
+Revenue Schedule confidence (native module active)
+DR-M (45% — service period est.)
+D-H (65%) — when Rev Rec module active
+DR-M (40% — service period est.)
+D-H (65%) — when Rev Rec module active
+D-H (70%) — when RevPro active — HIGHEST
+Revenue Schedule confidence (module inactive)
+DR-M (45% — only option)
+DR-M (45%)
+DR-M (40%)
+DR-M (35%)
+DR-L (30%)
+Deferred Revenue Validation standalone
+48%
+50% (module inactive) / 65% (active)
+42%
+58% (active) / 30% (inactive)
+65% (active) / 28% (inactive)
+ERP required to reach Ready?
+YES — always
+YES — always
+YES — always
+YES — always (but narrower gap when module active)
+YES — always (narrowest gap when RevPro active)
+Table X-BIL.3 — Revenue Recognition capability comparison. Zuora RevPro produces the highest standalone Revenue Schedule confidence; ERP confirmation is always required regardless.
+Billing IMS Library — Readiness Assessment
+Dimension
+Score
+Assessment
+Standard Conformance
+9 / 10
+All five specifications follow the ten-section IMS standard. IMS-203, IMS-204, and IMS-205 use Sections 5–10 summary format consistent with the CRM library's treatment of Validated-maturity connectors.
+Subscription Normalization Gate
+10 / 10
+The gate is documented consistently across all five connectors: three universal questions (trial treatment, usage ARR policy, delinquent treatment) plus connector-specific additional gates. The gate correctly blocks ARR Movement creation only — not extraction — matching the appropriate confidence degradation (not extraction block) behavior established in the CRM library.
+Three Financial Distinctions
+10 / 10
+Invoice ≠ Revenue Recognition, Payment ≠ ARR, and Subscription ≠ Bookings are restated explicitly and consistently throughout every connector and the cross-library principles section.
+ARR Derivation Accuracy
+9 / 10
+The most consequential ARR error for each connector is documented explicitly: Stripe's subscription.plan deprecated field; Chargebee's currency unit difference; Recurly's Account deduplication; Maxio's native metric import prohibition; Zuora's incomplete Rate Plan Charge enumeration. These are not generic cautions — each is connector-specific and operationally distinct.
+Revenue Recognition Module Framing
+9 / 10
+Module activation is always confirmed via API, never assumed from platform tier or vendor positioning — this principle is applied consistently across Chargebee, Maxio, and Zuora.
+Cross-Domain Validation
+10 / 10
+CRM → Billing (Opportunity to Subscription) and Billing → ERP (Invoice to GL Transaction) cross-validation steps are documented in Section 6 (Population) for every connector, making the Billing library the explicit validation layer between CRM intent and ERP truth.
+Table X-BIL.R — Billing IMS Library readiness. Aggregate: 57 / 60 (95%).
+Final Determination
+The Billing Implementation Mapping Specification Library (IMS-201 through IMS-205) is complete. Implementation agents and human consultants have sufficient implementation knowledge to begin onboarding any Tier 1 Billing platform. HRIS IMS Library development may begin.
+The Billing library introduces one IMS concept that had no direct equivalent in the ERP or CRM libraries: the distinction between a confidence degradation gate (CRM Stage Normalization: pipeline capabilities degrade while extraction continues) and a population block gate (Billing Subscription Normalization: ARR Movement creation is blocked, not just degraded, while extraction continues for all other objects). This distinction matters because incorrectly computed ARR is actively worse than missing ARR — a wrong number is used for decisions; a missing number is at least known to be absent. Blocking ARR Movement creation until the three policy questions are resolved ensures that the first ARR figure a customer sees is correct, not just present.
+The cross-connector pattern from building all five simultaneously: every Billing connector's highest-severity implementation risk is a silent ARR computation error, not a data quality gap that surfaces in validation. Stripe's deprecated subscription.plan field, Chargebee's currency unit difference, Recurly's Account fragmentation, Maxio's native metric import, and Zuora's incomplete Rate Plan Charge enumeration all share the same failure mode: the canonical store is populated with data that appears complete but produces incorrect ARR figures. The Subscription Normalization Gate and connector-specific additional gates in Section 1 of each IMS exist specifically to prevent these silent errors — this is why the gate blocks ARR Movement creation rather than simply degrading its confidence.

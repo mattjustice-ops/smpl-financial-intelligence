@@ -1,0 +1,647 @@
+FINANCIAL INTELLIGENCE ENGINE — ENGINEERING SPECIFICATION
+FIE-005 · Financial Reasoning Platform
+Version 1.0
+Evidence-based financial reasoning, producing structured Reasoning Packages that narratives render — never the reverse
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Fifth service of the Financial Intelligence Engine (FIE) layer · Implements: FIE-005 Conceptual Model v2.0 · Reads: FIE-001 · FIE-002 · FIE-003 · FIE-004 · Reconciles: BIS-006 · Consumes: Explainability Platform (interim adapter)
+Section 1 — Scope Decisions
+The FIE-005 conceptual model is frozen and is not redesigned here. This section restates its Section 1 Architectural Reconciliation in the numbered format used since BIS-001, and adds five further resolutions the build requires — most importantly, giving Financial Findings and Business Insights the independent, addressable identity the conceptual review's final round established, without disturbing anything else in the frozen model.
+1.1 Financial Reasoning vs. Observation Engine
+The Observation Engine (FIE-001) owns immutable financial facts. This service consumes Observation Snapshots and Revisions through FIE-001's existing timeline API and never creates, corrects, or writes an Observation or Revision of its own.
+1.2 Financial Reasoning vs. Methodology Engine
+The Methodology Engine (FIE-002) owns financial definitions. This service resolves and consumes Methodologies, Formulas, and Drivers through FIE-002's existing resolution API and never creates or modifies a methodology, formula, or driver definition.
+1.3 Financial Reasoning vs. Calculation Engine
+The Calculation Engine (FIE-003) owns deterministic execution and produces Financial Intelligence Objects. This service consumes FIOs — including their full lineage and Financial Evidence (FIE-003 §1.7) — and never recalculates a financial value or writes to any FIE-003 table.
+1.4 Financial Reasoning vs. Organizational Memory (FIE-004)
+FIE-004 preserves organizational knowledge; this service reasons over it. This service never writes directly to a FIE-004 Knowledge Object. Every durable conclusion this service produces — a Recommendation Candidate always, a Financial Finding or Business Insight when explicitly promoted (Section 13) — enters FIE-004 exclusively through FIE-004's own governed POST /v1/knowledge-objects workflow, never through a direct table write or an assumed side channel.
+1.5 Financial Reasoning vs. Reporting Platform (BIS-006)
+This service supplies content — Reasoning Packages and Narrative Objects. BIS-006 supplies presentation — report assembly, PDF/DOCX/PPTX rendering, board package production, exactly the boundary BIS-006 §1 already draws against Canonical, Validation, and CAL. A Narrative Object is a first-class content object this service owns; a rendered board deck containing it is a BIS-006 report_artifact (BIS-006 §7) that references it. Additionally, this service inherits BIS-006 §17's Narrative Generation Rules as its own foundation rather than re-deriving equivalent rules independently — never fabricate a missing result, never suppress a blocker, always cite evidence, label estimates clearly — since FIE-005 is functionally the generalization of narrative generation from the implementation domain (BIS-006) to the financial domain, and the two should not develop divergent narrative-safety rules.
+1.6 The Explainability Platform Is Not Owned by This Service
+Financial Explainability — Data Lineage, Calculation Lineage, Business Context, Confidence Context, and Financial Tie-Out — is a shared platform capability this service consumes, not a component this service builds or owns. This is a deliberate architectural position, not a deferred decision: every fact Explainability surfaces already has a system of record (FIE-001 for data lineage, FIE-003 §1.7 for calculation lineage and evidence, FIE-004 for business context, FIE-001/003/004 for the three-plus-one confidence dimensions, BIS-006 §18 for the general evidence-attribution pattern this generalizes). Building Explainability inside this service would duplicate all four. Section 15 defines the interface contract this service requires from Explainability and how MVP satisfies it before a dedicated Explainability service exists.
+1.7 Inherited Limitation from FIE-003/FIE-004
+Per FIE-004 §1.6, which itself restated FIE-003 §1.9: Governed execution's full historical restatement remains dependent on a FIE-002 addendum that does not yet exist. This service inherits that limitation a second time and, per the pattern both prior documents established, restates rather than rediscovers it: Question Understanding (Section 8) classifies every question as either a current-understanding question (answerable from live FIE-003 execution and FIE-004 knowledge) or a historical-understanding question (answerable only from what FIE-004 preserved at the time, per FIE-004 §1.6). A historical-understanding question that would require unavailable restatement returns its answer grounded in preserved organizational knowledge and explicitly labels it as such — it never silently presents a preserved belief as if it were a live recalculation, and never attempts the recalculation and fails partway through.
+1.8 New Resolution — Financial Findings and Business Insights Are Independently Addressable, FIE-005-Scoped Objects
+Per the conceptual review's final resolution: Findings and Insights are not trapped inside a Reasoning Package's private structure. Each is its own immutable, versioned row with a stable finding_id or insight_id (Section 11–12) from the moment it is created — addressable, referenceable, and reusable across Reasoning Packages — but remains entirely FIE-005-scoped and invisible to the rest of the platform unless explicitly promoted. This resolves the tension the conceptual model left unstated: a Narrative Object's "Financial Finding References" field (Section 17) requires something stable to reference, which a Finding buried inside a Reasoning Package's internal structure cannot provide. Addressability and promotion are two independent properties — a Finding can be permanently addressable within FIE-005 and never once become FIE-004 organizational memory.
+1.9 New Resolution — Recommendation Candidates and Findings Follow Deliberately Different Tracks
+This is a stated asymmetry, not an oversight. A Recommendation Candidate has no FIE-005-local existence at all — per Section 1.4 and the conceptual model, it is created directly via FIE-004's Knowledge Object API and this service stores nothing beyond a reference to the resulting knowledge_object_id (Section 13). A Finding or Insight, by contrast, is always FIE-005-local first (Section 1.8) and promoted to FIE-004 only as an explicit, separate second step (Section 13). The asymmetry reflects a real difference in stakes: a Recommendation suggests action and carries governance weight from the moment it exists, warranting FIE-004's audit trail immediately; a Finding is an observational conclusion that may never need to leave this service's own store.
+1.10 New Resolution — Verification Fails Closed; Draft Mode Is the Only Exception
+Per the conceptual model: Verification fails closed by default, and Narrative publication is blocked on failure unless the request explicitly specifies Draft Mode. This document makes the consequence concrete: a Narrative Object generated under a failed Verification always persists with lifecycle_state=DRAFT and a non-null verification_failure_reason (Section 17); it can never transition to PUBLISHED (Section 20) while that failure reason remains unresolved, regardless of caller intent. Draft Mode exists for internal review and iteration, never as a route to publishing an unverified conclusion — there is no API path that both requests Draft Mode and requests publication in the same call.
+1.11 New Resolution — Explainability Interface Contract and Interim Adapter
+Per Section 1.6, this service does not own Explainability, but it cannot function without it, and no dedicated Explainability service exists yet to depend on. This document therefore specifies the interface contract this service requires — five read operations: resolve_data_lineage, resolve_calculation_lineage, resolve_business_context, resolve_confidence_context, resolve_tie_out (Section 15) — and satisfies it at MVP through an internal Explainability Adapter component (Section 6) that implements this exact contract by calling FIE-001, FIE-003, FIE-004, and BIS-006 directly. When a dedicated, shared Explainability service is built, this service's Verification and Narrative Generation components change nothing about how they call the adapter — only the adapter's internal implementation is replaced, never the contract.
+Section 2 — Service Purpose
+The Financial Reasoning Platform is the only component in the SMPL platform whose job is to look across everything the rest of the platform knows — facts, definitions, calculations, and institutional memory — and produce a conclusion a finance professional can independently verify.
+This Service Is
+This Service Is Not
+The producer of Reasoning Packages, Financial Findings, Business Insights, and Narrative Objects — structured, evidence-traced conclusions
+A calculation engine — every number it reasons over comes from FIE-003; it computes nothing itself
+The only service whose output can be blocked from publication by a failed internal verification, per Section 1.10
+An Explainability provider — it consumes the shared Explainability contract (Section 15), it does not define lineage or confidence rules
+A stable, addressable store of Findings and Insights reusable across Reasoning Packages
+A second Knowledge Platform — durable promotion always exits through FIE-004's own governance, per Section 13
+The content layer BIS-006 renders and exports
+A rendering or export layer — PDF/PPTX/board-deck production remains BIS-006's role entirely, per Section 1.5
+Table FIE5-2.1 — Service purpose boundary.
+2.1 Position in the Runtime
+User / Orchestration — question or narrative request                    │                    │  POST /v1/reasoning-packages                    ▼     ══════════════════════════════════════════════        FINANCIAL REASONING PLATFORM  (this document)     ══════════════════════════════════════════════     │        │        │        │        │  reads    reads    reads    reads   consumes     ▼        ▼        ▼        ▼        ▼ FIE-001  FIE-002  FIE-003  FIE-004  Explainability (facts) (methods) (FIOs)  (memory)  Adapter (Section 1.11)         writes: reasoning_packages, financial_findings,                 business_insights, narrative_objects         creates via FIE-004 API only: recommendation_candidate                 knowledge objects, promoted findings/insights         read by: BIS-006 (rendering/export), future agent workflows
+Figure FIE5-2.1 — This service reads from all four prior FIE services and consumes Explainability through a stable contract; it writes only to its own store and to FIE-004, and only through FIE-004's own API.
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Question understanding and evidence planning
+Classify intent and determine required evidence without reasoning
+Section 8
+Evidence assembly
+Retrieve planned evidence from FIE-001 through FIE-004 without reasoning
+Section 9
+Financial reasoning
+Produce Findings, Insights, Recommendation Candidates, and confidence from validated evidence only
+Section 10
+Finding and Insight persistence
+Store both as independently addressable, versioned FIE-005-local objects
+Section 11–12
+Verification
+Fail-closed confirmation that every conclusion resolves through the Explainability contract before publication
+Section 14
+Narrative generation
+Render audience-specific Narrative Objects from Reasoning Packages, never the reverse
+Section 16
+Durable knowledge promotion
+Route Recommendation Candidates immediately, and Findings/Insights on explicit request, into FIE-004 through its own API
+Section 13
+Confidence preservation
+Carry four-dimensional confidence through Findings, Insights, and Narratives without collapsing it
+Section 19
+Table FIE5-3.1 — Core responsibilities and where each is specified.
+Section 4 — Public APIs
+Callable by Orchestration, Tool Gateway on behalf of human users, BIS-006 for content retrieval, and future agent workflows. All endpoints return the standard response envelope established across BIS-001 through FIE-004. Three representative endpoints receive full detail; the remaining endpoints are captured completely in the summary table that follows.
+Standard Response Envelope
+{  "request_id": "UUID",  "customer_id": "UUID",  "status": "SUCCESS | ERROR",  "data": {},  "error": { "error_code": "string", "message": "string", "retry_after_seconds": "integer | null" } | null,  "latency_ms": "integer"}
+4.1 POST /v1/reasoning-packages
+Field
+Detail
+Request
+customer_id, question (structured intent, per Section 8 taxonomy, or free text for AI classification), scope (financial_concept_ids, date_range), understanding_mode (CURRENT | HISTORICAL, per Section 1.7)
+Response
+reasoning_package_id, status (COMPLETE | INSUFFICIENT_EVIDENCE), finding_ids[], insight_ids[], recommendation_candidate_refs[] (FIE-004 knowledge_object_ids)
+Error Codes
+INVALID_INPUT, UNRECOGNIZED_INTENT, INSUFFICIENT_EVIDENCE, EVIDENCE_UNAVAILABLE, PERMISSION_ERROR
+Idempotency
+A repeated call with the same idempotency_key returns the existing reasoning_package_id
+Retry Rules
+Safe to retry on timeout or 5xx; a 4xx requires correcting the input before retry
+Logging
+REASONING_PACKAGE_CREATED on success
+Metrics
+reasoning_packages_created_total{understanding_mode}
+Table FIE5-4.1 — POST /v1/reasoning-packages.
+4.2 POST /v1/narratives
+Field
+Detail
+Request
+reasoning_package_id, audience (per Section 18's Narrative Policy), draft_mode (boolean, default false, per Section 1.10)
+Response
+narrative_object_id, narrative_version, lifecycle_state (DRAFT | PUBLISHED), verification_status, verification_failure_reason (null if passed)
+Error Codes
+REASONING_PACKAGE_NOT_FOUND, NARRATIVE_POLICY_NOT_FOUND, VERIFICATION_FAILED (only if draft_mode=false), PERMISSION_ERROR
+Idempotency
+Same as 4.1
+Retry Rules
+Safe to retry; a VERIFICATION_FAILED response with draft_mode=false is not resolved by retrying — the caller must either fix the underlying evidence gap or explicitly request draft_mode=true
+Logging
+NARRATIVE_GENERATED, VERIFICATION_PASSED or VERIFICATION_FAILED
+Metrics
+narratives_created_total{audience, verification_status}
+Table FIE5-4.2 — POST /v1/narratives. Per Section 1.10, there is no request shape that sets draft_mode=true and also requests publication — publication requires a separate explicit call (Table FIE5-4.4) against an already-PASSED narrative.
+4.3 POST /v1/findings/{id}/promote
+Field
+Detail
+Request
+finding_id or insight_id, target_knowledge_type (RISK | OPPORTUNITY | PATTERN_RECORD, per FIE-004's enum), business_rationale
+Response
+fie004_knowledge_object_id, fie004_promotion_status
+Error Codes
+FINDING_NOT_FOUND, INELIGIBLE_FOR_PROMOTION, FIE004_UNAVAILABLE, PERMISSION_ERROR
+Idempotency
+A repeated call for an already-promoted finding_id returns the existing fie004_knowledge_object_id rather than creating a duplicate
+Retry Rules
+Safe to retry on timeout or 5xx
+Logging
+FINDING_PROMOTED / INSIGHT_PROMOTED
+Metrics
+findings_promoted_total{target_knowledge_type}
+Table FIE5-4.3 — POST /v1/findings/{id}/promote. This is the explicit, separate second step Section 1.9 requires — promotion is never automatic, and this call always writes through FIE-004's own POST /v1/knowledge-objects, never directly to a FIE-004 table.
+4.4 Remaining Endpoints
+Endpoint
+Purpose
+Notes
+GET /v1/reasoning-packages/{id}
+Retrieve a full Reasoning Package
+Immutable, per Section 10
+GET /v1/findings/{id}
+Retrieve a Finding by its stable finding_id
+Section 11
+GET /v1/insights/{id}
+Retrieve an Insight by its stable insight_id
+Section 12
+GET /v1/narratives/{id}
+Retrieve a Narrative Object
+Section 17
+POST /v1/narratives/{id}/publish
+Transition a PASSED narrative from DRAFT to PUBLISHED
+Only callable when verification_status=PASSED, per Section 1.10
+GET /v1/narrative-policies
+List configured audience-specific policies
+Section 18
+POST /v1/narrative-policies
+Create/version a Narrative Policy
+Admin-only
+GET /v1/explainability/{fio_id_or_finding_id}
+Retrieve the assembled Explainability view for a value or conclusion
+Delegates to the Explainability Adapter, per Section 1.11 and Section 15
+GET /v1/health
+Liveness/readiness probe
+No auth required, internal network only
+Table FIE5-4.4 — Remaining endpoints, complete at summary detail.
+Section 5 — Internal Components
+Component
+Responsibility
+Question Understanding Engine
+Classifies intent into the taxonomy in Section 8; performs no reasoning
+Evidence Planner
+Determines required evidence per the classified intent; performs no reasoning
+Evidence Assembler
+Retrieves planned evidence from FIE-001 through FIE-004; performs no reasoning
+Financial Reasoning Engine
+The only component permitted to draw conclusions; consumes assembled evidence exclusively
+Verification Engine
+Fail-closed check that every conclusion resolves through the Explainability Adapter, per Section 14
+Explainability Adapter
+Implements the five-operation contract in Section 15 by calling FIE-001/003/004/BIS-006 directly, per Section 1.11
+Narrative Generator
+Renders a Reasoning Package into an audience-specific Narrative Object per its Narrative Policy
+Promotion Gateway
+Calls FIE-004's own Knowledge Object API for Recommendation Candidates (always) and Findings/Insights (on explicit request only)
+Table FIE5-5.1 — Internal components. Only the Financial Reasoning Engine draws conclusions; every other component is planning, retrieval, verification, rendering, or routing.
+Section 6 — Data Models
+Per Section 1.8, financial_findings and business_insights are independent, versioned tables with their own stable IDs — not fields nested inside reasoning_packages. reasoning_packages itself stores references to the Findings and Insights it drew on, never a copy of their content, the same reference-not-copy discipline FIE-004 §8 established for Decision and Forecast Memory.
+Entity
+Purpose
+reasoning_packages
+Immutable record of one reasoning pass: question, evidence used, and references to the Findings/Insights/Recommendations it produced, per Section 10
+financial_findings
+Independently addressable, versioned objective conclusions, per Section 11
+business_insights
+Independently addressable, versioned interpretations of Findings, per Section 12
+narrative_objects
+Immutable audience-specific renderings of a Reasoning Package, per Section 17
+narrative_policies
+Versioned, audience-specific presentation rules, per Section 18
+Table FIE5-6.1 — Entity overview; full column definitions follow in Section 7. Recommendation Candidates have no table here, per Section 1.9 — they exist only as FIE-004 Knowledge Objects.
+Section 7 — Database Schema
+7.1 reasoning_packages
+Field
+Type
+Notes
+reasoning_package_id
+UUID, PK
+customer_id
+UUID
+question
+JSONB
+Classified intent per Section 8, plus original free-text input if applicable
+understanding_mode
+ENUM(CURRENT, HISTORICAL)
+Per Section 1.7
+evidence_refs
+JSONB
+Typed references into FIE-001/002/003/004, assembled by the Evidence Assembler
+finding_ids
+UUID[]
+References into financial_findings
+insight_ids
+UUID[]
+References into business_insights
+recommendation_candidate_refs
+UUID[]
+FIE-004 knowledge_object_ids, per Section 1.9
+status
+ENUM(COMPLETE, INSUFFICIENT_EVIDENCE)
+created_at
+TIMESTAMPTZ
+Table FIE5-7.1 — reasoning_packages. Immutable from creation.
+7.2 financial_findings
+Field
+Type
+Notes
+finding_id
+UUID, PK
+Stable across versions, per Section 1.8
+finding_version
+INTEGER
+Append-only
+customer_id
+UUID
+statement
+TEXT
+e.g. "Enterprise pipeline conversion decreased"
+supporting_evidence_refs
+JSONB
+Typed references, same shape discipline as FIE-004's evidence_chain_refs
+counter_evidence_refs
+JSONB, NULLABLE
+business_impact
+TEXT, NULLABLE
+financial_impact
+NUMERIC, NULLABLE
+With an fio_ref if quantified — never a duplicated value, per FIE-004 §8's no-duplication rule extended here
+mapping_confidence
+NUMERIC, NULLABLE
+Four-dimensional, per Section 19
+data_confidence
+NUMERIC, NULLABLE
+reasoning_confidence
+NUMERIC
+Always populated — every Finding is itself a reasoning output
+knowledge_confidence
+NUMERIC, NULLABLE
+Populated only if the Finding draws on FIE-004 content
+promoted
+BOOLEAN
+True once Table FIE5-4.3 has been called successfully
+fie004_knowledge_object_id
+UUID, NULLABLE
+Populated only if promoted
+created_at
+TIMESTAMPTZ
+Table FIE5-7.2 — financial_findings. Independently addressable and reusable across reasoning_packages, per Section 1.8; no UPDATE path on statement, evidence, or confidence fields for an existing version.
+7.3 business_insights
+Field
+Type
+Notes
+insight_id
+UUID, PK
+Stable across versions
+insight_version
+INTEGER
+Append-only
+customer_id
+UUID
+statement
+TEXT
+e.g. "Enterprise capacity constraints are reducing conversion"
+interpreted_finding_ids
+UUID[]
+References into financial_findings this Insight interprets
+mapping_confidence
+NUMERIC, NULLABLE
+data_confidence
+NUMERIC, NULLABLE
+reasoning_confidence
+NUMERIC
+Always populated
+knowledge_confidence
+NUMERIC, NULLABLE
+promoted
+BOOLEAN
+fie004_knowledge_object_id
+UUID, NULLABLE
+created_at
+TIMESTAMPTZ
+Table FIE5-7.3 — business_insights. Schema-identical in spirit to financial_findings but always references one or more Findings rather than raw evidence directly, per the conceptual model's Finding/Insight distinction.
+7.4 narrative_objects
+Field
+Type
+Notes
+narrative_object_id
+UUID, PK
+Stable across versions
+narrative_version
+INTEGER
+Append-only, per FIE-004 §1.9's Lifecycle/Version split, applied here
+reasoning_package_id
+UUID, FK
+audience
+TEXT
+Resolves to a narrative_policy_id + version
+narrative_policy_id
+UUID, FK
+narrative_policy_version
+INTEGER
+Pinned at generation time
+content
+TEXT
+The rendered narrative text — immutable once written
+finding_refs
+UUID[]
+References into financial_findings
+insight_refs
+UUID[]
+References into business_insights
+knowledge_object_refs
+UUID[]
+References into FIE-004
+mapping_confidence
+NUMERIC, NULLABLE
+Four-dimensional, per Section 19
+data_confidence
+NUMERIC, NULLABLE
+reasoning_confidence
+NUMERIC
+knowledge_confidence
+NUMERIC, NULLABLE
+llm_version
+TEXT
+prompt_version
+TEXT
+verification_status
+ENUM(PASSED, FAILED)
+Per Section 14
+verification_failure_reason
+TEXT, NULLABLE
+Per Section 1.10
+lifecycle_state
+ENUM(DRAFT, REVIEWED, APPROVED, PUBLISHED, ARCHIVED)
+Independent of narrative_version, per Section 20
+reviewer
+TEXT, NULLABLE
+created_at
+TIMESTAMPTZ
+Table FIE5-7.4 — narrative_objects. No UPDATE path exists on content or any confidence dimension for an existing version; only lifecycle_state transitions in place, per Section 20.
+7.5 narrative_policies
+Field
+Type
+Notes
+narrative_policy_id
+UUID, PK
+Stable across versions
+policy_version
+INTEGER
+Append-only
+audience_name
+TEXT
+e.g. Board, CEO, FP&A, Investor Relations, Audit, Lender
+presentation_rules
+JSONB
+Tone, length, terminology, and formatting rules — never reasoning rules
+active
+BOOLEAN
+Table FIE5-7.5 — narrative_policies. Governs presentation only — the underlying Reasoning Package a Narrative Policy renders is identical regardless of audience, per the conceptual model's explicit principle.
+Section 8 — Question Understanding and Evidence Planning
+Question Understanding classifies incoming intent into a controlled taxonomy (VARIANCE_ANALYSIS, BOARD_COMMENTARY, FORECAST_REVIEW, CASH_ANALYSIS, RISK_REVIEW, PIPELINE_REVIEW, EXECUTIVE_SUMMARY, RECOMMENDATION_REQUEST) and assigns understanding_mode (CURRENT or HISTORICAL, per Section 1.7). Evidence Planning then determines the specific evidence types required for that classification — Observation Snapshots, FIOs, Methodology versions, Knowledge Objects, and so on — without retrieving anything or drawing any conclusion. Both steps are deterministic given the same classified intent; neither invokes the Financial Reasoning Engine.
+Section 9 — Evidence Assembly
+Retrieves exactly what Evidence Planning specified, from FIE-001's timeline API, FIE-002's methodology resolution API, FIE-003's FIO and evidence APIs, and FIE-004's knowledge query API. Assembly performs no filtering for relevance beyond what was planned and draws no conclusions; an assembly that cannot satisfy the Evidence Plan returns status=INSUFFICIENT_EVIDENCE on the Reasoning Package (Table FIE5-7.1) rather than proceeding with a partial evidence set silently.
+Section 10 — Financial Reasoning Engine
+The only component permitted to produce a Financial Finding, Business Insight, or Recommendation Candidate. It consumes exclusively the evidence Section 9 assembled — never a live call back to FIE-001 through FIE-004 mid-reasoning — which is what makes a Reasoning Package's output reproducible given the same evidence_refs. Its output is written as new financial_findings and business_insights rows (Section 11–12) and, where applicable, an immediate FIE-004 Recommendation Candidate call (Section 13); the reasoning_packages row itself stores only references to all three, never their content.
+Section 11 — Financial Finding Model
+A Finding is an objective, evidence-traced conclusion — "enterprise pipeline conversion decreased" — never an interpretation. Its supporting_evidence_refs must resolve through the Explainability Adapter (Section 15) before the Finding can be persisted; a Finding whose evidence cannot be resolved is not written at all, consistent with Section 1.6's fail-closed philosophy applied at creation as well as at Verification. Findings are reusable: a second Reasoning Package covering the same period and concept resolves to the same finding_id rather than creating a duplicate, checked by a straightforward lookup on (customer_id, statement_hash, evidence_refs) before creating a new one.
+Section 12 — Business Insight Model
+An Insight interprets one or more Findings — "enterprise capacity constraints are reducing conversion" — and always carries interpreted_finding_ids rather than re-deriving supporting evidence independently. This is the structural rule that keeps Findings and Insights genuinely distinct rather than two names for the same thing: a Finding never references another Finding; an Insight always references at least one.
+Section 13 — Recommendation, Finding, and Insight Promotion
+Per Section 1.9's stated asymmetry: a Recommendation Candidate is created directly via a call to FIE-004's POST /v1/knowledge-objects (knowledge_type=RECOMMENDATION_CANDIDATE) the moment the Financial Reasoning Engine produces it — this service stores only the resulting fie004_knowledge_object_id reference in reasoning_packages.recommendation_candidate_refs, never a local Recommendation row. A Finding or Insight, by contrast, exists locally first and is promoted only via an explicit call to Table FIE5-4.3, which itself calls FIE-004's own knowledge-object API — this service never writes to a FIE-004 table directly under any circumstance, for Recommendations or for promoted Findings/Insights alike.
+Section 14 — Verification
+Before a Narrative Object can reach verification_status=PASSED, the Verification Engine confirms, via the Explainability Adapter (Section 15): every referenced Finding/Insight/FIO/Knowledge Object resolves; every financial value reconciles through Financial Tie-Out; every confidence dimension meets the customer's configured threshold; no two referenced Findings contradict one another. Any single failure sets verification_status=FAILED with a specific verification_failure_reason and, per Section 1.10, blocks Table FIE5-4.4's publish endpoint unconditionally — there is no override path, only correcting the underlying evidence gap and generating a new narrative_version.
+Section 15 — Explainability Platform Integration
+Per Section 1.11, this service depends on exactly five operations, specified here as the contract a future shared Explainability service must satisfy identically:
+Operation
+Purpose
+MVP Implementation
+resolve_data_lineage(entity_ref)
+Source records (customers, invoices, opportunities, employees) underlying a value
+Explainability Adapter calls FIE-001's timeline API directly
+resolve_calculation_lineage(fio_id)
+Operating Model, methodology/formula versions, Calculation Run, intermediate FIOs
+Adapter calls FIE-003's GET /v1/evidence/{fio_id} directly, per FIE-003 §1.7
+resolve_business_context(entity_ref)
+Related Knowledge Objects, decisions, meetings, themes
+Adapter calls FIE-004's query and relationship APIs directly
+resolve_confidence_context(entity_ref)
+All four confidence dimensions with their sources
+Adapter aggregates directly from FIE-001/003/004's own confidence fields
+resolve_tie_out(financial_concept_id, period)
+End-to-end reconciliation from source records to reported value
+Adapter composes the prior four operations into one tie-out view
+Table FIE5-15.1 — Explainability contract. Every operation's MVP implementation is a direct call to an existing service's existing API — no new fact is invented or duplicated by the adapter itself.
+Section 16 — Narrative Generation
+Renders a Reasoning Package into a Narrative Object for a specific audience by resolving the requested audience to an active narrative_policy_id/version (Table FIE5-7.5) and generating content through the LLM runtime under BIS-006 §17's inherited Narrative Generation Rules (Section 1.5). Generation always runs before Verification, never after — a Narrative Object is created with verification_status determined by Section 14's check performed against its actual generated content, never a pre-check against the Reasoning Package alone.
+Section 17 — Narrative Object Model
+Implements Table FIE5-7.4 exactly: immutable content, version, and four-dimensional confidence; independently transitioning lifecycle_state. A Narrative Object always references a specific reasoning_package_id and specific finding_refs/insight_refs — never a copy of Finding or Insight content — so that a later correction to an underlying Finding (via a new finding_version) is visible through the reference without requiring the Narrative to regenerate, though Section 20 governs whether such drift triggers a recommended regeneration.
+Section 18 — Narrative Policy Model
+A Narrative Policy governs tone, length, terminology, and formatting only — presentation_rules never contains a reasoning rule, a confidence threshold, or an evidence requirement, all of which are fixed platform-wide by Sections 10 and 14 regardless of audience. This is the schema-level enforcement of the conceptual model's principle that "only presentation changes; reasoning never changes" — there is no field in narrative_policies capable of altering what a Narrative is permitted to claim.
+Section 19 — Four-Dimensional Confidence Propagation
+Findings, Insights, and Narratives all carry Mapping, Data, Reasoning, and Knowledge Confidence as four separate fields, never collapsed into one score, per the frozen model. Combination follows FIE-003 §1.8's minimum-across-inputs rule, extended with a fourth dimension: a Finding drawing on an FIO (Mapping/Data/Reasoning populated) and a FIE-004 Knowledge Object (Knowledge Confidence populated) takes the minimum across whichever inputs populate each dimension — a dimension with no contributing input on a given Finding remains null, exactly as FIE-003 §14 established for Revision-derived nulls.
+Section 20 — Versioning and Lifecycle
+State
+Meaning
+Valid Transitions
+DRAFT
+Generated, not yet reviewed; includes every narrative generated under Draft Mode or a failed Verification
+→ REVIEWED, → ARCHIVED (discarded)
+REVIEWED
+A human has read it; not yet formally approved
+→ APPROVED, → DRAFT (sent back for regeneration as a new narrative_version)
+APPROVED
+Approved for publication, contingent on verification_status=PASSED
+→ PUBLISHED
+PUBLISHED
+Live, customer- or board-facing
+→ ARCHIVED
+ARCHIVED
+Terminal; retained, queryable, never deleted
+None
+Table FIE5-20.1 — Lifecycle state machine, independent of narrative_version per Section 1.10/17. APPROVED → PUBLISHED is blocked at the schema and API layer whenever verification_status=FAILED, with no override.
+Section 21 — Query Patterns
+Pattern
+Supported Via
+Every Narrative for a given audience and period
+GET /v1/narratives?audience=&date_range=
+A Finding's full evidence trail
+GET /v1/explainability/{finding_id}
+Every Insight interpreting a specific Finding
+GET /v1/insights?interpreted_finding_id=
+Reasoning Packages that produced a specific Recommendation Candidate
+GET /v1/reasoning-packages?recommendation_candidate_ref=
+Narratives blocked on verification failure
+GET /v1/narratives?verification_status=FAILED
+Findings not yet promoted
+GET /v1/findings?promoted=false
+Table FIE5-21.1 — Query patterns.
+Section 22 — Error Handling
+Error Code
+Meaning
+INVALID_INPUT
+Request fails schema validation
+UNRECOGNIZED_INTENT
+Question Understanding cannot classify the request into the Section 8 taxonomy
+INSUFFICIENT_EVIDENCE
+Evidence Assembly could not satisfy the Evidence Plan
+EVIDENCE_UNAVAILABLE
+A required upstream FIE-001/002/003/004 read failed
+REASONING_PACKAGE_NOT_FOUND
+Referenced reasoning_package_id does not exist
+NARRATIVE_POLICY_NOT_FOUND
+Requested audience has no active narrative_policy
+VERIFICATION_FAILED
+Narrative failed Section 14's check and draft_mode was not set
+FINDING_NOT_FOUND
+Referenced finding_id or insight_id does not exist
+INELIGIBLE_FOR_PROMOTION
+A Finding/Insight fails a promotion precondition (e.g. missing business_rationale)
+FIE004_UNAVAILABLE
+The downstream FIE-004 write call failed during promotion
+PERMISSION_ERROR
+Caller not authorized for this customer scope or operation
+INTERNAL_ERROR
+Unclassified failure
+Table FIE5-22.1 — Error codes, extending the EIS-001 taxonomy consistent with every prior document.
+Section 23 — Retry Strategy
+All writes are idempotent by idempotency_key, consistent with every prior BIS/FIE document
+A failed reasoning or narrative generation is safely retryable on timeout or 5xx
+VERIFICATION_FAILED is not resolved by blind retry — the caller must correct the evidence gap or explicitly request draft_mode, per Section 1.10
+Promotion calls (Table FIE5-4.3) are safely retryable; a repeated call against an already-promoted Finding returns the existing fie004_knowledge_object_id rather than attempting a second FIE-004 write
+Section 24 — Logging
+REASONING_PACKAGE_CREATED
+FINDING_CREATED
+INSIGHT_CREATED
+RECOMMENDATION_CANDIDATE_SUBMITTED
+NARRATIVE_GENERATED
+VERIFICATION_PASSED
+VERIFICATION_FAILED
+NARRATIVE_PUBLISHED
+FINDING_PROMOTED
+INSIGHT_PROMOTED
+Every log entry includes: request_id, customer_id, reasoning_package_id, finding_ids/insight_ids, narrative_object_id, verification_status, actor_type, actor_id, timestamp — the same field discipline used by every prior document.
+Section 25 — Metrics
+Metric
+Type
+reasoning_packages_created_total{understanding_mode}
+Counter
+findings_created_total{promoted}
+Counter
+narratives_created_total{audience, verification_status}
+Counter
+verification_failure_total{failure_reason}
+Counter
+recommendation_candidates_submitted_total
+Counter
+findings_promoted_total{target_knowledge_type}
+Counter
+explainability_adapter_call_duration_seconds{operation}
+Histogram
+narrative_generation_duration_seconds{audience}
+Histogram
+Table FIE5-25.1 — Prometheus-style metrics.
+Section 26 — Observability
+Dashboards
+Reasoning Package volume by understanding_mode
+Verification pass/fail rate by failure_reason
+Finding/Insight promotion funnel
+Narrative generation latency by audience
+Explainability Adapter call latency by operation (leading indicator for when a dedicated Explainability service becomes justified)
+Alerts
+Verification failure rate spike
+Explainability Adapter call failure spike (signals an upstream FIE-001/003/004 dependency issue)
+Narrative stuck in DRAFT beyond a configured SLA
+INSUFFICIENT_EVIDENCE rate spike for a given understanding_mode
+Section 27 — Security
+Internal-only service at MVP — no direct external exposure
+Customer isolation enforced by customer_id on every table and query, no exceptions
+Publication (Table FIE5-4.4) requires an elevated reviewer permission distinct from ordinary reasoning-request access
+No mutation path exists for content, statement, or confidence fields on any existing Finding, Insight, or Narrative version — enforced at the schema layer
+No write path exists into FIE-001, FIE-002, or FIE-003 from this service under any circumstance; the only outbound write is to FIE-004's own API, per Section 13
+Data at rest encrypted, consistent with every prior document's storage posture
+Section 28 — Multi-Model Support
+The Financial Reasoning Engine and Narrative Generator both invoke the LLM runtime through Tool Gateway / Prompt Registry (EIS-003), never a direct model API call — the same discipline BIS-006 §27 already established. llm_version and prompt_version are recorded on every Narrative Object (Table FIE5-7.4) specifically so that a model or prompt change is auditable against every narrative it produced; a model upgrade never silently changes what an already-PUBLISHED Narrative claims, since that Narrative's content is immutable, per Section 1.10's storage-layer bounding of non-determinism — the same technique BIS-006 §1.10 pioneered for its own narrative generation, applied here to a domain where the stakes of an unreviewed model-version drift are considerably higher.
+Section 29 — Performance Targets
+Target
+Value
+Question Understanding and Evidence Planning
+p95 < 500 ms
+Evidence Assembly (typical Reasoning Package)
+p95 < 3 seconds
+Financial Reasoning Engine execution
+p95 < 10 seconds
+Verification (per Narrative)
+p95 < 5 seconds
+Narrative generation (single audience)
+p95 < 15 seconds
+Explainability Adapter call (single operation)
+p95 < 1 second
+Concurrent Reasoning Package throughput (MVP target)
+50 concurrent packages
+Table FIE5-29.1 — Performance targets.
+Section 30 — Unit Testing
+Finding creation rejects a Finding whose supporting_evidence_refs cannot resolve through the Explainability Adapter
+Insight creation rejects an Insight with zero interpreted_finding_ids
+Recommendation Candidate submission never creates a local table row — verified by asserting no recommendation-shaped table exists to write to
+Verification correctly fails closed on every one of its five checks (evidence resolution, tie-out, confidence threshold, contradiction, reference validity) independently
+Publish endpoint rejects any narrative with verification_status=FAILED regardless of caller-supplied override attempts
+Confidence combination applies the minimum-across-inputs rule correctly across all four dimensions, including the null-dimension case
+Promotion is idempotent — a repeated call against an already-promoted Finding returns the existing FIE-004 reference rather than a duplicate write
+Section 31 — Integration Testing
+End-to-end Reasoning Package generation against live FIE-001/002/003/004 data, verifying Evidence Assembly retrieves exactly what Evidence Planning specified
+Full Narrative generation and publish flow for a Board audience, including a live BIS-006 rendering handoff
+Verification failure scenario: a Finding whose supporting FIO is deleted mid-flow correctly blocks publication with a specific failure_reason
+Recommendation Candidate submission verified end-to-end as a live FIE-004 knowledge_object_id, never a local row
+Historical-understanding question against a period where FIE-003 Governed restatement is unavailable, verifying the response is grounded in preserved FIE-004 knowledge and explicitly labeled, per Section 1.7
+Explainability Adapter contract test verifying all five operations resolve correctly against live FIE-001/003/004/BIS-006 data
+Section 32 — Failure Recovery
+Failure Mode
+Recovery Behavior
+Evidence Assembly partially fails
+Reasoning Package status=INSUFFICIENT_EVIDENCE; no Finding or Insight is produced from a partial evidence set
+Explainability Adapter call fails during Finding creation
+Finding is not persisted; the caller receives EVIDENCE_UNAVAILABLE and may retry once the underlying dependency recovers
+FIE-004 write fails during Recommendation Candidate submission or promotion
+reasoning_packages/financial_findings retain no reference until the FIE-004 write succeeds; a retry re-attempts only the FIE-004 call, not the full reasoning pass
+LLM generation failure during Narrative rendering
+Retried up to a configured limit; terminal failure leaves no Narrative Object created rather than persisting partial content
+Verification check itself fails to execute (not the same as failing its checks)
+Treated as a hard failure — the Narrative is not persisted at all, distinct from a completed Verification that returns FAILED with a reason
+Table FIE5-32.1 — Failure modes and recovery behavior.
+Section 33 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+Dedicated Explainability Platform service
+Extracting Section 15's contract out of this service's local Adapter into a genuinely shared service consumed by Reporting, dashboards, APIs, and future agents
+A second consumer beyond FIE-005 and BIS-006 needs the same lineage/tie-out views, making local duplication of the adapter pattern costly
+Automated Finding deduplication across customers (aggregate patterns)
+Anonymized, cross-customer recognition of recurring Finding patterns
+Sufficient customer volume exists to make cross-customer pattern recognition statistically meaningful, and FIE-004's Promotion Pipeline governance model is extended to support it
+Narrative regeneration triggers on upstream drift
+Automatically flagging a PUBLISHED Narrative for review when a Finding it references gains a new finding_version
+Sufficient production volume shows this drift happening often enough to need automation rather than manual awareness
+Multi-turn reasoning conversations
+Supporting a follow-up question against an existing Reasoning Package rather than requiring a new one from scratch
+A concrete user workflow demonstrates repeated follow-up questions against the same evidence scope
+Full historical restatement integration
+Extending Section 1.7's inherited limitation once FIE-002's retirement_date/restatement_policy addendum exists
+That FIE-002 addendum, first backlogged in FIE-003 §31 and restated in FIE-004 §34, is built
+Table FIE5-33.1 — Backlog. Every item carries an explicit trigger condition, not a target date, matching the pattern established across BIS-001 through FIE-004.
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+Conceptual fidelity
+10 / 10
+Every frozen decision — the four-dimensional confidence, fail-closed Verification, BIS-006 content/presentation split, and the shared, non-owned Explainability Platform — is translated into schema and API without redesign.
+Independent-identity resolution
+10 / 10
+Section 1.8's Finding/Insight addressability is fully implemented as its own versioned, referenceable table (Section 7.2–7.3), resolving the reference-integrity gap the conceptual review's final round identified before any engineering existed to make it expensive.
+Schema completeness
+10 / 10
+All five tables fully specified, including the explicit no-UPDATE-path design note that makes narrative content immutability and confidence-dimension permanence storage-layer facts, not just documented intentions.
+Consistency with FIE-001 through FIE-004 and BIS-006
+10 / 10
+The minimum-across-inputs confidence rule (FIE-003 §1.8) extended to a fourth dimension, the Lifecycle/Version split (FIE-004 §1.9), and the inherited Narrative Generation Rules (BIS-006 §17) are all reused directly rather than re-derived.
+Boundary discipline
+10 / 10
+Section 1.9's stated asymmetry between Recommendation and Finding/Insight promotion tracks is named explicitly as a design choice rather than left for a future reader to wonder whether it was an oversight — the sixth instance of this series catching an adjacent-territory question before it became a build-time surprise.
+Interim dependency honesty
+9 / 10
+Section 1.11's Explainability Adapter is specified as a real, buildable MVP component with an explicit five-operation contract a future shared service must match exactly. One point withheld: the adapter's own internal caching strategy against repeated identical lineage requests (e.g. multiple Findings citing the same FIO) is not yet specified, though Table FIE5-29.1's performance targets assume it exists.
+Table FIE5-FA.1 — Build readiness assessment. Aggregate: 59 / 60 (98%).
+FIE-005 is complete and ready for engineering to begin implementation. FIE-001 through FIE-005 now form the complete Financial Intelligence Engine: fact (FIE-001), definition (FIE-002), calculation (FIE-003), institutional memory (FIE-004), and now reasoning and explanation (FIE-005) — five services, each depending only on what came before it, none duplicating what any other already owns. This closes the FIE layer as originally scoped in the FIE-001 conceptual review. Whatever comes next — a dedicated Explainability Platform, the Financial Governance addendum to FIE-002 backlogged three documents running, or a genuinely new capability — should open by reconciling against all five of these documents, the same discipline each one of them applied to the ones before it.
+The most consequential decision in this document is Section 1.8, and it is worth being honest about why it was cheap to make here and would have been expensive to make later. Findings were proposed as content living quietly inside a Reasoning Package, promoted to real identity only on request — a reasonable, minimal design. But the same document's own Narrative Object already needed a stable 'Financial Finding Reference' field, which only means something if the thing on the other end of it can't disappear or get renumbered. Noticing that a document's own two requirements were in tension, before a single migration existed to make fixing it costly, is the entire value of running four rounds of conceptual review before writing an engineering specification instead of one.

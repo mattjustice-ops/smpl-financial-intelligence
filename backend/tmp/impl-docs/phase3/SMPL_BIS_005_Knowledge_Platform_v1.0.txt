@@ -1,0 +1,1187 @@
+ 
+BUILD IMPLEMENTATION SPECIFICATION
+BIS-005 · Knowledge Platform
+Version 1.0
+ 
+The institutional memory of SMPL — capturing, governing, retrieving, and publishing reusable implementation knowledge
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Implements: EIS-004 · SOF · EIS-001 · EIS-002 · GPES-001 · BIS-001 through BIS-004
+Section 1 — Scope Decisions
+BIS-005 is the fifth Build Implementation Specification, following the discipline established in BIS-001 through BIS-004. The first five decisions were specified in the build brief; this section restates them for completeness and adds six further resolutions the knowledge model requires to be build-ready — several of which reconcile this brief's terminology against EIS-004's already-detailed architecture rather than leaving the two documents to quietly disagree.
+ 
+1.1 Knowledge Platform vs. EIS-004
+EIS-004 defined the architecture: the three-tier memory model, the taxonomy-keyed retrieval design, the conflict resolution protocol, the API-version-anchored expiration policy, and the Memory Generalization Pipeline. BIS-005 does not redesign any of this — it is the build specification that makes EIS-004's architecture a running service. Every design decision in this section that appears to introduce something new is, unless stated otherwise, a build-level translation of an EIS-004 decision, not a departure from it.
+ 
+1.2 Knowledge Platform vs. Canonical Platform
+The Canonical Platform (BIS-003) stores customer business data — GL Accounts, Subscriptions, Employees. The Knowledge Platform stores implementation knowledge — how those objects are typically mapped, what patterns resolve common issues, what a customer has previously decided. These are categorically different assets with different isolation rules (Section 1.9) and different lifecycles (Section 18); no canonical business data of the kind BIS-003 stores is ever written to this service's tables.
+ 
+1.3 Knowledge Platform vs. Orchestration
+The Orchestration Service (BIS-002) manages implementation workflow state — sessions, jobs, gates. The Knowledge Platform provides reusable knowledge that workers consult while executing that workflow. This service holds no session or job state of its own beyond the narrow, ephemeral Working Memory scope defined in Section 1.6.
+ 
+1.4 Knowledge Platform vs. Validation
+The Validation Platform (BIS-004) creates validation findings — the record of what was checked and what was found for one specific implementation. The Knowledge Platform stores reusable validation patterns — the generalized, anonymized knowledge of what a specific finding usually means and how it is usually resolved, once that pattern has been observed across enough implementations to be worth generalizing (Section 12).
+ 
+1.5 Working Memory — Separate From Long-Term Knowledge
+Short-lived execution context is architecturally and physically separate from long-term reusable implementation knowledge. Working Memory (Section 14) never becomes long-term knowledge automatically — promotion from ephemeral context to a durable Knowledge Record always passes through the same Discovery → Candidate → Review → Approved pipeline (Section 18) that any other knowledge candidate does, regardless of where the candidate observation originated.
+ 
+1.6 New Resolution — Working Memory Is Not EIS-002's Worker State
+EIS-002 Section 4.1 already defines a "Worker State" layer: rate limit buckets, IMS pre-fetch caches, extraction page cursors — held in Redis and in-process worker memory, owned by the Connector Proxy Service and the worker process itself, scoped to job execution mechanics. This brief's Working Memory (Section 14) is not a second implementation of that layer. It is narrower and different in kind: the cache of knowledge records retrieved from this service during a job's execution, held so that repeated retrieval calls within the same job do not re-hit the Retrieval Engine, and so that the job's end-of-execution outcome recording (Section 11.2) can reference exactly what was retrieved and whether it was used, without the calling worker needing to resubmit full context. Working Memory rows are keyed by job_id (BIS-002's implementation_jobs.job_id) and carry a TTL matching job duration, mirroring EIS-002's TTL philosophy for a different data class. No other ephemeral execution state — rate limits, extraction cursors, tool call history — lives in this service; that remains exclusively EIS-002/BIS-001 territory.
+ 
+1.7 New Resolution — Six Knowledge Domains Reconciled Against EIS-004's Six Memory Types
+EIS-004 Table EIS4-1.1 defined six memory domains: Customer, Connector, Transformation, Validation, Implementation Pattern, and Organizational. This brief's six knowledge domains are: Customer, Connector, Pattern Library, Transformation, Validation, and Decision. Five of the six map directly (Pattern Library = Implementation Pattern, renamed for this document's vocabulary). The sixth does not: Decision Knowledge is new, and Organizational Memory is absent from this brief's list.
+EIS-004 Memory Type
+BIS-005 Domain
+Resolution
+CUSTOMER
+Customer Knowledge
+Direct mapping
+CONNECTOR
+Connector Knowledge
+Direct mapping
+IMPLEMENTATION_PATTERN
+Pattern Library
+Direct mapping, renamed
+TRANSFORMATION
+Transformation Knowledge
+Direct mapping
+VALIDATION
+Validation Knowledge
+Direct mapping
+(none — new in this document)
+Decision Knowledge
+New domain, formalized here. Decision Knowledge is a specialized schema (decision, reason, approver, date, affected_objects, impact, audit trail — Section 13) layered on top of, not replacing, Customer Knowledge. Most decisions are customer-scoped and isolated exactly as Customer Knowledge is; unlike generic Customer Knowledge records, Decision Knowledge additionally supports platform-level (non-customer-scoped) entries for architectural or governance decisions, which is why it is broken out as its own domain rather than folded into Customer Knowledge.
+ORGANIZATIONAL
+(absent from this brief)
+NOT dropped from the architecture — out of MVP build scope for this BIS. EIS-004's aggregate, anonymized platform analytics (most common CEP questions, average implementation duration, etc.) remain valid architecture; this service's Section 6 domain list and Knowledge Record Model (Section 7) reserve knowledge_domain="ORGANIZATIONAL" as a recognized-but-unpopulated value so a future revision can activate it without a schema change. Section 32 (Future Enhancements) documents the trigger.
+Table BIS5-1.1 — Domain reconciliation between EIS-004 and this build specification.
+ 
+1.8 New Resolution — retrieval_key Is Derived, Not Caller-Supplied
+This brief's Knowledge Record Model lists customer_scope, connector_scope, and object_scope as discrete fields, distinct from EIS-004's single composed retrieval_key string. Resolution: both exist, and the discrete fields are primary at write time. This service computes retrieval_key from {knowledge_domain, connector_scope, object_scope, and a task-equivalent tag drawn from retrieval_tags} at write time — mirroring the pattern BIS-003 established for normalized_key (Section 1.8 of that document) — never accepting a caller-supplied retrieval_key directly. This preserves EIS-004 Section 0.1's taxonomy-keyed retrieval safety property (deterministic, auditable, no vector-search customer-isolation risk) while giving the API surface the discrete, filterable fields this brief's endpoint definitions expect.
+ 
+1.9 New Resolution — Semantic Retrieval Remains Backlog
+This brief notes "semantic retrieval may be used as a fallback" and lists a vector index as optional deployment infrastructure. EIS-004 Section 9.3 already scoped semantic retrieval as a future roadmap item with an explicit trigger condition (minimum 200 APPROVED shared knowledge records). This document does not change that decision: MVP builds structured, taxonomy-keyed retrieval only (Section 15); no vector index is deployed at MVP; the retrieval engine's internal interface is designed to accommodate a semantic fallback path later (an unused hook, not built logic) so that adding it in the future is additive, not a redesign.
+ 
+1.10 New Resolution — Approval Governance Reuses EIS-004's Role Model
+This brief's Publication endpoints (POST /publish, /approve, /archive) do not re-specify who may call them. Resolution: this service enforces the exact role and permission model EIS-004 Table EIS4-5.1 already defined (Implementation Engineer creates DRAFT only; Senior Implementation Engineer reviews and approves LOW/MEDIUM sensitivity; Engineering Team Lead approves HIGH sensitivity; the Memory Review Bot equivalent — this service's automated candidate pipeline, Section 18 — creates but never approves; Platform Admin retires only). The self-approval prohibition (approved_by must differ from created_by) is enforced at the API layer, not left as a process convention.
+ 
+1.11 New Resolution — Working Memory Schema
+This brief describes Working Memory's contents loosely (current worker, current task, checkpoint, retrieved knowledge, execution context). Section 14.1 specifies the concrete schema: a working_memory table keyed by job_id, storing retrieved_knowledge_ids (an array of knowledge_id references, not duplicated content), the retrieval_key each was retrieved for, a used boolean per entry (set by the worker's outcome-recording call), and a TTL matching the job's own timeout_policy from BIS-002's implementation_jobs record.
+ 
+Section 2 — Service Purpose
+The Knowledge Platform is the only component in the SMPL platform that gets smarter as the platform runs more implementations, in the specific, bounded sense that EIS-004 defined: without ever compromising customer isolation, determinism, or auditability.
+ 
+This Service Is
+This Service Is Not
+The system of record for every knowledge domain EIS-004 defined — customer decisions, connector patterns, transformation mappings, validation resolutions, implementation patterns
+A connector integration layer, a canonical data store, a workflow engine, or a validation execution engine — those are BIS-001 through BIS-004
+The taxonomy-keyed retrieval engine every worker consults before executing a task, per EIS-004's deterministic-key-over-semantic-search design
+A vector database or semantic search service — structured retrieval is the MVP default and, per Section 1.9, the only implemented path
+The governance and approval authority for what knowledge is safe to reuse across customers — the boundary that prevents customer-specific data from leaking into shared patterns
+A customer data store of any kind — no canonical business data, no raw extracted records, no financial figures of the kind BIS-003 or BIS-004 handle
+The narrow, ephemeral cache of knowledge retrieved during one job's execution (Working Memory)
+A general-purpose execution-state store — job status, tool call history, and rate limit tracking remain EIS-002 and BIS-001 territory (Section 1.6)
+Table BIS5-2.1 — Service purpose boundary.
+ 
+2.1 Position in the Runtime
+  Any Worker (Connector, Canonical, Capability, Reporting)
+         │  POST /retrieve {retrieval context}
+         │  POST /working-memory {record what was retrieved}
+         │  POST /knowledge {record_successful_pattern / record_failed_pattern}
+         ▼
+  ══════════════════════════════════════
+  KNOWLEDGE PLATFORM  (this document)
+  ══════════════════════════════════════
+         │
+         ▼
+  Postgres (knowledge_records, working_memory, publication/approval state)
+  Governance input from: Senior Implementation Engineers, Engineering Team Lead
+  (human review queue per Section 17)
+ 
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Knowledge record storage
+Persist knowledge across all six domains (Section 6), with the derived retrieval_key (1.8) and full EIS-004 Knowledge Record Model fields (Section 7)
+EIS-004 Section 2
+Structured retrieval
+Serve knowledge to workers by taxonomy-keyed lookup, ranked and conflict-resolved per EIS-004's established protocol
+EIS-004 Section 6; Section 15
+Working memory
+Cache retrieved-knowledge context for the duration of one job's execution, distinct from EIS-002's worker state
+Section 1.6; Section 14
+Knowledge publication and approval
+Move candidate knowledge through Draft → Review → Approved → Published, enforcing the reused governance role model
+EIS-004 Section 3, 5; Section 16, 17
+Knowledge lifecycle enforcement
+Discovery through Archived, including PENDING_REVALIDATION on connector schema change and expiration-by-event rather than by time for shared knowledge
+EIS-004 Section 3.4, Design Decision 3; Section 18
+Conflict resolution
+Apply EIS-004's three-tier precedence rule (API version dominance, confidence×usage score, approval recency) when retrieval returns competing records
+EIS-004 Section 0.2, Table EIS4-3.1
+Customer isolation enforcement
+Guarantee Customer Knowledge and customer-scoped Decision Knowledge are never returned outside their owning customer's context
+EIS-004 Section 8; Section 24
+Generalization pipeline execution
+Promote customer-scoped observations to anonymized shared knowledge only through the certified, human-reviewed pipeline
+EIS-004 Section 4
+Table BIS5-3.1 — Complete responsibility list with architectural traceability.
+ 
+Section 4 — Public API Endpoints
+Twelve endpoints across five groups, callable only by the Tool Gateway and approved internal services. This is the smallest endpoint surface of any BIS document so far, reflecting that knowledge retrieval and publication are narrower operations than canonical storage or validation execution.
+ 
+4.0 Standard Response Envelope
+{
+  "request_id": "UUID",
+  "customer_id": "UUID | null",
+  "status": "SUCCESS | ERROR",
+  "data": { ... } | null,
+  "error": {"error_code": "string (Section 20)", "message": "string",
+            "retry_after_seconds": "integer | null"} | null,
+  "latency_ms": "integer"
+}
+ 
+4.1 Knowledge Endpoints
+POST /v1/knowledge
+Field
+Specification
+Request
+{knowledge_type: "AUTO_EXTRACTED"|"HUMAN_AUTHORED"|"GENERALIZATION_PIPELINE", knowledge_domain: string (Section 6 enum), customer_scope: UUID | null, connector_scope: string | null, object_scope: string | null, source: string, content: object (domain-specific, Section 7.2), confidence: decimal, retrieval_tags: string[], supporting_artifacts: object[], created_by: UUID}
+Response (data)
+{knowledge_id: UUID, retrieval_key: string (derived, Section 1.8), approval_status: "DRAFT", version: 1}
+Error Codes
+INVALID_SCOPE (customer_scope is null for knowledge_domain=CUSTOMER, or non-null for a domain that must be customer-agnostic per Section 24); INVALID_INPUT (content fails domain-specific schema validation, Section 7.2)
+Idempotency
+IDEMPOTENT — a create with content matching an existing record for the same derived retrieval_key returns the existing knowledge_id rather than duplicating
+Retry Rules
+Safe to retry
+Logging
+KNOWLEDGE_CREATED event
+Metrics
+knowledge_records_total{knowledge_domain, knowledge_type}
+Table BIS5-4.1 — Create knowledge record. For CUSTOMER and Decision-Knowledge-customer-scoped domains, this is the primary write path from COORD-002 (CEP Agent) recording confirmed decisions; for shared domains, this is the entry point for the Section 18 Discovery stage.
+ 
+Endpoint
+Purpose
+Key Behavior
+GET /v1/knowledge/{knowledge_id}
+Read a single knowledge record
+Enforces customer isolation (Section 24) — a request without matching customer_id context for a CUSTOMER-domain record returns NOT_FOUND, never a permission-denied leak of existence
+PATCH /v1/knowledge/{knowledge_id}
+Update a record — for CUSTOMER domain, a new confirmed value; for shared domains, a revision requiring re-review
+For shared domains: always resets approval_status to DRAFT and increments version, per EIS-004's versioned-record pattern (Table EIS4-1.2) — a PATCH never silently updates an already-Published record in place
+Table BIS5-4.2 — Read/update knowledge endpoints (compact).
+ 
+4.2 Knowledge Search Endpoints
+POST /v1/search
+Field
+Specification
+Request
+{customer_id: UUID | null, knowledge_domain: string | null, connector_scope: string | null, object_scope: string | null, retrieval_tags: string[] | null, approval_status: "APPROVED" (default — see Section 15.3 for override rules), top_k: integer (default 3)}
+Response (data)
+{results: [{knowledge_id, retrieval_key, knowledge_domain, confidence, usage_count, content_summary}], conflict_flag: bool}
+Error Codes
+INVALID_SCOPE (a search with knowledge_domain=CUSTOMER but no customer_id is always rejected — there is no cross-customer CUSTOMER-domain search, ever)
+Idempotency
+IDEMPOTENT — read-only, no side effects
+Retry Rules
+Safe to retry at any time
+Logging
+KNOWLEDGE_RETRIEVED event per returned result
+Metrics
+knowledge_retrieval_total{knowledge_domain}; knowledge_hit_rate (computed — results.length > 0 / total searches)
+Behavior
+This is the structured search endpoint — filters by discrete fields, ranked per Section 15.2, conflict-resolved per EIS-004 Table EIS4-3.1 before returning. This is the endpoint most workers call for exploratory or filter-based lookup.
+Table BIS5-4.3 — Search knowledge.
+ 
+POST /v1/retrieve
+Field
+Specification
+Request
+{customer_id: UUID | null, job_id: UUID, retrieval_key: string (exact or prefix match), top_k: integer (default 3)}
+Response (data)
+{results: [resolved knowledge records, post-conflict-resolution], working_memory_id: UUID (the Working Memory row this retrieval was recorded against)}
+Error Codes
+Same as search
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — repeated identical retrieve calls within the same job_id return the same result and do not create duplicate Working Memory entries
+Retry Rules
+Safe to retry
+Logging
+KNOWLEDGE_RETRIEVED event
+Metrics
+knowledge_retrieval_total{knowledge_domain}; average_retrieval_latency
+Behavior
+This is the exact-key retrieval endpoint — the primary path described in EIS-004 Section 6.3's worker retrieval pattern (e.g., a Connector Worker retrieving Connector Memory for a specific transformation_rule_id). Every call automatically writes or updates the corresponding Working Memory row (Section 14) for this job_id — the caller does not separately call POST /working-memory for retrieval tracking.
+Table BIS5-4.4 — Retrieve knowledge by key (primary worker-facing endpoint).
+ 
+4.3 Publication Endpoints
+POST /v1/publish
+Field
+Specification
+Request
+{knowledge_id: UUID, submitted_by: UUID}
+Response (data)
+{knowledge_id: UUID, approval_status: "REVIEW", submitted_at: ISO8601}
+Error Codes
+CONFLICT (knowledge_id is already in REVIEW or APPROVED status — a second publish submission is rejected, not queued); PERMISSION_DENIED (caller lacks the create-and-submit scope for this knowledge_domain's sensitivity level, Section 1.10)
+Idempotency
+IDEMPOTENT — resubmitting an already-REVIEW record returns the existing state
+Retry Rules
+Safe to retry
+Logging
+PATTERN_PUBLISHED event (despite the name, applies to all shared-domain knowledge_types, not solely Pattern Library records — named for the most common case per the build brief)
+Metrics
+knowledge_publication_rate
+Behavior
+Moves a DRAFT record (Table BIS5-4.1) to REVIEW, entering the human governance queue (Section 17). This does not apply to CUSTOMER-domain or customer-scoped Decision Knowledge records — those are ACTIVE immediately upon creation per EIS-004's Customer Memory lifecycle (Table EIS4-3.1 no-approval-required rule) and never pass through this endpoint.
+Table BIS5-4.5 — Submit for publication.
+ 
+POST /v1/approve
+Field
+Specification
+Request
+{knowledge_id: UUID, approved_by: UUID, decision: "APPROVE"|"REJECT"|"RETURN_FOR_REVISION", notes: string}
+Response (data)
+{knowledge_id: UUID, approval_status: "APPROVED"|"REJECTED"|"DRAFT", approved_at: ISO8601 | null}
+Error Codes
+PERMISSION_DENIED (approved_by lacks the required sensitivity-level scope, or approved_by = the record's created_by — self-approval is rejected outright per Section 1.10, not just discouraged); CONFLICT (record is not currently in REVIEW status)
+Idempotency
+IDEMPOTENT — re-submitting the same decision by the same approver returns the existing result
+Retry Rules
+Safe to retry
+Logging
+KNOWLEDGE_APPROVED event, or the corresponding REJECTED/DRAFT-returned event
+Metrics
+approval_time (histogram, created_at-to-decision duration)
+Table BIS5-4.6 — Approve, reject, or return a knowledge record.
+ 
+Endpoint
+Purpose
+Key Behavior
+POST /v1/archive
+Retire a knowledge record — sets approval_status=ARCHIVED
+Never a hard delete, matching the immutability philosophy established across BIS-003 and BIS-004; requires Engineering Team Lead or Platform Admin scope per Section 1.10
+Table BIS5-4.7 — Archive endpoint (compact).
+ 
+4.4 Working Memory Endpoints
+Endpoint
+Purpose
+Key Behavior
+POST /v1/working-memory
+Explicitly create or update a Working Memory row
+Used directly only when a worker needs to record an outcome (used=true/false) for a previously-retrieved knowledge_id — most Working Memory writes happen implicitly via POST /retrieve (Table BIS5-4.4), this endpoint exists for the explicit outcome-recording follow-up call
+GET /v1/working-memory
+Read the current Working Memory state for a job_id
+Query param job_id required; returns all knowledge retrieved during this job's execution so far
+DELETE /v1/working-memory/{memory_id}
+Explicit early cleanup
+Rarely called directly — Working Memory expires automatically per its TTL (Section 14.2); this endpoint exists for a worker that completes early and wants to free the row before TTL, not as the primary cleanup mechanism
+Table BIS5-4.8 — Working Memory endpoints (compact — full model in Section 14).
+ 
+4.5 Health Endpoint
+Endpoint
+Purpose
+Key Behavior
+GET /v1/health
+Service-wide health
+{status, dependencies: {postgres: bool, redis: bool}} — Redis backs Working Memory (Section 14); Postgres backs durable knowledge storage
+Table BIS5-4.9 — Health endpoint (compact).
+ 
+Section 5 — Internal Components
+Ten internal components, matching the build brief's list exactly.
+ 
+  ┌────────────────────────────────────────────────────────┐
+  │                  API Layer (Section 4)                  │
+  └───────┬──────────────────────────────────────┬─────────┘
+          │                                       │
+  ┌───────▼────────┐                    ┌─────────▼──────┐
+  │ Knowledge       │                    │ Working Memory  │
+  │ Repository      │                    │ Cache           │
+  │ (+ Pattern Lib) │                    │ (Redis)         │
+  └───────┬────────┘                    └─────────────────┘
+          │
+  ┌───────▼────────┐          ┌──────────────┐
+  │ Knowledge Index │◄─────────┤ Knowledge     │
+  │                 │          │ Metadata      │
+  └───────┬────────┘          │ Registry       │
+          │                    └──────────────┘
+  ┌───────▼────────┐
+  │ Retrieval        │
+  │ Engine           │
+  └───────┬────────┘
+          │
+  ┌───────▼────────┐          ┌──────────────┐
+  │ Publication      │◄─────────┤ Approval      │
+  │ Manager          │          │ Manager       │
+  └───────┬────────┘          └──────────────┘
+          │
+  ┌───────▼────────┐          ┌──────────────┐
+  │ Governance        │◄─────────┤ Lineage       │
+  │ Engine            │          │ Manager       │
+  └───────────────────┘          └──────────────┘
+ 
+Component
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Knowledge Repository
+Knowledge CRUD requests
+knowledge_records rows across all six domains
+Postgres
+Domain-specific content schema validation failure → INVALID_INPUT (Section 7.2)
+Pattern Library
+Same interface as Knowledge Repository, scoped to knowledge_domain=PATTERN_LIBRARY
+Same
+Knowledge Repository
+No independent failure mode — a logical grouping within the Repository, not a separately-deployed component
+Retrieval Engine
+retrieval_key (exact or prefix), search filters
+Ranked, conflict-resolved results (Section 15)
+Knowledge Index, Knowledge Metadata Registry
+Zero results is a valid, non-error outcome — the caller falls back to IMS content directly per EIS-004 Section 6.2's Tier 3 fallback
+Publication Manager
+publish/archive requests
+approval_status transitions
+Approval Manager, Governance Engine
+A publish request for an already-Published record → CONFLICT
+Approval Manager
+approve/reject decisions
+approval_status transitions, approved_by/approved_at written
+Governance Engine (role/permission check)
+Self-approval attempt → PERMISSION_DENIED, enforced here specifically, not just documented as policy
+Working Memory Cache
+job_id-scoped retrieval events
+working_memory rows, TTL-bound
+Redis
+Redis unavailable → retrieval still succeeds (the Retrieval Engine does not depend on Working Memory to serve results), but outcome tracking for that job is degraded — logged as a WARNING, not a blocking failure, matching BIS-001's Rate Limiter fail-open philosophy for a comparably non-critical-path cache
+Knowledge Index
+Every knowledge write
+Indexed lookup structures (Postgres indexes, Section 19)
+Postgres
+N/A — a database-index concept, not an independently-failing component
+Knowledge Metadata Registry
+Controlled vocabulary terms (domains, connector_scope values, object_scope values)
+Validated vocabulary set for retrieval_key derivation (1.8) and content schema selection (7.2)
+Static, versioned config loaded at startup, per the pattern BIS-003 and BIS-004 both established for their own registries
+Unregistered vocabulary term submitted → INVALID_SCOPE
+Lineage Manager
+Every knowledge version transition
+version history, source traceability (which session/job produced or promoted this knowledge)
+Postgres
+N/A — pure record-keeping
+Governance Engine
+Role/permission checks on every publish/approve/archive call
+ALLOW or PERMISSION_DENIED
+Static role configuration (Section 1.10)
+A role check for an unrecognized actor_id → PERMISSION_DENIED, never a default-allow
+Table BIS5-5.1 — Internal component specifications.
+ 
+Section 6 — Knowledge Domains
+Six durable knowledge domains plus Working Memory as a categorically distinct, non-domain ephemeral concept (Section 1.5). Each domain's detailed model is specified in its own section (8–13); this section is the index.
+ 
+Domain
+Customer-Isolated?
+Requires Approval?
+Full Detail
+Customer Knowledge
+Yes — never shared
+No — active immediately on creation
+Section 8
+Connector Knowledge
+No — shared after anonymization + approval
+Yes
+Section 9
+Pattern Library
+No — shared after anonymization + approval
+Yes, human review required (Engineering Team Lead)
+Section 10
+Transformation Knowledge
+No — shared after anonymization + approval
+Yes
+Section 11
+Validation Knowledge
+No — shared after anonymization + approval
+Yes
+Section 12
+Decision Knowledge
+Conditional — customer-scoped entries isolated; platform-level entries not customer-scoped
+Platform-level: yes. Customer-scoped: no, same as Customer Knowledge.
+Section 13
+Table BIS5-6.1 — Knowledge domain index.
+ 
+Section 7 — Knowledge Record Model
+This is the physical implementation of EIS-004's memory_records table (EIS-004 Section 2.1), field-renamed for this document's vocabulary and extended with the discrete scope columns from Section 1.8. Every field in the build brief's list is present.
+ 
+7.1 Universal Schema
+knowledge_records table (Postgres):
+  knowledge_id              UUID PRIMARY KEY
+  knowledge_type              VARCHAR(32) NOT NULL
+             -- AUTO_EXTRACTED | HUMAN_AUTHORED | GENERALIZATION_PIPELINE
+  knowledge_domain              VARCHAR(32) NOT NULL
+             -- CUSTOMER | CONNECTOR | PATTERN_LIBRARY | TRANSFORMATION |
+             -- VALIDATION | DECISION | ORGANIZATIONAL (reserved, Section 1.7)
+  customer_scope                  UUID
+             -- non-null for CUSTOMER and customer-scoped DECISION records
+  connector_scope                    VARCHAR(16)
+             -- IMS-001 through IMS-305, or null for cross-connector knowledge
+  object_scope                          VARCHAR(64)
+             -- SCBM object_type or vendor object name, per domain (Section 8-13)
+  retrieval_key                           VARCHAR(256) NOT NULL
+             -- DERIVED at write time, never caller-supplied (Section 1.8)
+  content                                   JSONB NOT NULL
+             -- domain-specific structured content (Section 7.2)
+  source                                      VARCHAR(32) NOT NULL
+  confidence                                    DECIMAL(4,3) NOT NULL
+  usage_count                                     INTEGER NOT NULL DEFAULT 0
+  success_rate                                      DECIMAL(4,3)
+  last_used                                           TIMESTAMPTZ
+  retrieval_tags                                        VARCHAR[] NOT NULL DEFAULT '{}'
+  supporting_artifacts                                    JSONB
+  expiration_policy                                         VARCHAR(32) NOT NULL
+             -- EVENT_DRIVEN (default, EIS-004 Section 3.4) | TIME_BASED
+             -- (CUSTOMER and ORGANIZATIONAL domains only)
+  version                                                     INTEGER NOT NULL DEFAULT 1
+  lineage                                                       JSONB
+             -- {promoted_from_working_memory_id, generalization_pipeline_run_id,
+             --  source_session_ids[]}
+  approval_status                                                 VARCHAR(32) NOT NULL
+             -- DRAFT|REVIEW|APPROVED|PUBLISHED|DEPRECATED|REJECTED|ARCHIVED|
+             -- PENDING_REVALIDATION (Section 18)
+  created_at                                                        TIMESTAMPTZ NOT NULL
+  updated_at                                                          TIMESTAMPTZ NOT NULL
+  created_by                                                            UUID NOT NULL
+  approved_by                                                             UUID
+  UNIQUE (retrieval_key) WHERE approval_status IN ('APPROVED','PUBLISHED')
+             -- enforces one authoritative record per key at any time,
+             -- superseded records move to DEPRECATED, never coexist as duplicates
+ 
+7.2 Domain-Specific Content Schemas
+content (JSONB) follows a domain-specific schema, validated against the Knowledge Metadata Registry (Section 5) at write time. The detailed content shape per domain is specified in that domain's own section (8 through 13) — this section establishes only that the field exists and is schema-validated, not left as unstructured free text.
+ 
+Section 8 — Customer Knowledge
+The build-level implementation of EIS-004 Section 3.1's Customer Memory Lifecycle — the operational expansion of the CEP that persists across sessions for a given customer.
+ 
+content Field
+Purpose
+cep_field_path
+The CEP field this knowledge answers, e.g., "arr_policy.include_trials"
+confirmed_value
+The customer's confirmed answer
+confirmation_source
+HUMAN_CONFIRMED | AUTO_DISCOVERED | DEFAULT_APPLIED — mirrors CEP's own source vocabulary exactly (EIS-002 Table EIS2-2.2)
+session_id
+Which implementation session this decision was confirmed in
+superseded_by
+knowledge_id of a later confirmation for the same cep_field_path, if the customer has changed their answer — null for the current value
+Table BIS5-8.1 — Customer Knowledge content schema.
+ 
+Rule
+Detail
+Never shared
+Enforced at the Postgres row-level security layer (Section 24), not just at the API layer — even a Retrieval Engine bug could not leak a CUSTOMER-domain record across customer_id boundaries
+Immediately active
+No Publication Manager involvement — a Customer Knowledge write via POST /knowledge is approval_status=DRAFT for exactly the write transaction, then the service auto-transitions it to an active, retrievable state without a human review step, matching EIS-004's "Customer Memory's no-publication-required" rule
+Versioned on change
+A new confirmation for the same cep_field_path does not overwrite — it creates a new knowledge_record and sets superseded_by on the prior one, preserving the full history of a customer's evolving decisions, consistent with the immutability philosophy this BIS series has maintained since BIS-003
+Purged on offboarding
+The only hard deletion pathway in this entire service — matching EIS-004 Section 3.1's stated exception to the platform's general immutability default
+Table BIS5-8.2 — Customer Knowledge rules.
+ 
+Section 9 — Connector Knowledge
+The build-level implementation of EIS-004 Section 3.1's Connector Memory — reusable, anonymized patterns specific to one connector.
+ 
+content Field
+Purpose
+pattern_type
+SCHEMA_QUIRK | API_BEHAVIOR | CONFIGURATION | OPTIMIZATION | COMMON_CUSTOMIZATION | GATE_RESOLUTION | ERROR_RESOLUTION — matching EIS-004 Table EIS4-2.2's exact enum
+description
+Human-readable pattern description for reviewer and worker consumption
+trigger_conditions
+[{field, operator, value}] — when this pattern applies
+recommendation
+{action, tool_calls: [{tool_name, parameter_guidance}], ims_section_reference}
+api_version_validated
+The connector API version this pattern was confirmed against — required for this domain, per EIS-004 Section 0.3
+api_version_range_valid
+The continuous range across which this has been validated without a schema change
+observed_in_implementation_count
+Anonymized count of implementations where this was observed — must be >= 5 before this record can leave DRAFT (Section 18.1)
+Table BIS5-9.1 — Connector Knowledge content schema.
+ 
+Connector Knowledge is the domain most directly subject to EIS-004's API-version-anchored expiration (Design Decision 3): a SCHEMA_CHANGED event from BIS-001 for a given connector_scope moves every APPROVED or PUBLISHED record for that connector to PENDING_REVALIDATION (Section 18.4), never to silent continued use. This is the one domain where a Connector Worker retrieval (POST /retrieve, Table BIS5-4.4) most frequently occurs — every connector job's IMS pre-fetch step (BIS-001 Section 0.1) is typically followed by a Connector Knowledge retrieval for the same connector_scope before extraction begins.
+ 
+Section 10 — Pattern Library
+The build-level implementation of EIS-004's Implementation Pattern Library — end-to-end implementation strategies, not individual field mappings.
+ 
+content Field
+Purpose
+pattern_name
+e.g., "SaaS Series B-D reference implementation" — the GPES-001 reference trace is this domain's first populated example
+connector_combination
+The specific set of connectors this pattern applies to (e.g., NetSuite + HubSpot + Stripe + Rippling)
+recommended_sequencing
+Dispatch order and CEP question sequencing that produced the fastest, cleanest implementation for this profile
+reference_metrics
+{implementation_duration, cep_question_count, readiness_score, validation_health_score} — the exact metric shape GPES-001 Section 7 (Reference Pattern Observations) already established
+observed_implementation_count
+Must be >= 10 before promotion from candidate, per EIS-004 Section 4.1's minimum count for Implementation Pattern (higher than the 5-count minimum for Connector or Transformation Knowledge, reflecting that a full-implementation pattern claim requires more corroboration than a single field mapping)
+Table BIS5-10.1 — Pattern Library content schema.
+ 
+GPES-001 itself, per its own closing note, is the first candidate entry for this domain. Once nine additional implementations of the NetSuite + HubSpot + Stripe + Rippling combination complete, this service's Generalization Pipeline (Section 16.2) is what promotes that pattern from a single reference document into a queryable, retrievable Knowledge Record other implementations can be compared against.
+ 
+Approval for this domain requires Engineering Team Lead review specifically (not Senior Implementation Engineer alone), per Section 1.10 — a full implementation strategy claim carries more downstream weight than a single connector pattern, warranting the higher governance bar EIS-004 Table EIS4-5.1 already assigned to it.
+ 
+Section 11 — Transformation Knowledge
+The build-level implementation of EIS-004's Transformation Memory — field-level mapping patterns validated across multiple implementations.
+ 
+content Field
+Purpose
+vendor_field_path
+Dot-notation source field, e.g., "subscription.items[].price.unit_amount"
+canonical_field_path
+Target SCBM field
+transformation_rule_id
+Reference to the IMS transformation rule this pattern corroborates, e.g., "IMS-201.Section_4.4"
+mapping_type
+D-H \| D-M \| DR-H \| DR-M \| DR-L \| N \| NA
+frequency_pct
+% of implementations of this connector where this mapping was used
+success_rate
+% of uses producing a correct canonical value — this is the field that, when it drops below 0.70 over the trailing 50 uses, triggers the automatic DEPRECATED transition (EIS-004 Table EIS4-3.2)
+cep_required
+Whether this transformation always requires a CEP decision, and if not, auto_apply_threshold — the minimum confidence at which a Connector Worker may apply this transformation without a CEP question
+Table BIS5-11.1 — Transformation Knowledge content schema.
+ 
+11.2 Direct Confidence Pipeline note: this is the domain where knowledge retrieval most directly reduces a CEP question count in practice — a Connector Worker's field-level normalization step (per BIS-001 Section 1) retrieves Transformation Knowledge before deciding whether to auto-apply a mapping or escalate to CEP, exactly as the auto_apply_threshold field is designed to support.
+ 
+Section 12 — Validation Knowledge
+The build-level implementation of EIS-004's Validation Memory — recurring validation failures and their confirmed resolutions, generalized from BIS-004's per-implementation validation_results.
+ 
+content Field
+Purpose
+validation_rule_id
+Reference to the BIS-004 validation_rules.rule_id this pattern relates to
+failure_type
+BLOCK_CONDITION \| REJECT \| FLAG \| THRESHOLD_BREACH
+failure_description
+Written for detection — what this failure looks like
+detection_pattern
+{detection_method, tool_call: {tool_name, parameter}}
+resolution
+{resolution_type: AUTOMATIC\|CEP_REQUIRED\|ESCALATE_ALWAYS, automatic_resolution, cep_question_template, escalation_guidance}
+recurrence_rate
+% of implementations where this failure was observed
+false_positive_rate
+% of detections where the issue did not actually exist — the field that triggers automatic DEPRECATED at > 0.15 (EIS-004 Table EIS4-3.2), the same threshold this document's BIS-004 companion already established for its own validation rule tuning (BIS-004 Section 24)
+Table BIS5-12.1 — Validation Knowledge content schema.
+ 
+This domain is populated from BIS-004's validation_results at generalization time (Section 16.2) — the specific examples in the build brief (missing currencies, pipeline inconsistencies, duplicate customers, orphan invoices, payroll hierarchy issues) each correspond to a recurring FLAG or REJECT pattern in BIS-004's per-customer results that, once observed across enough implementations, becomes a reusable detection-and-resolution pattern here — reducing the time a future implementation spends discovering the same issue from scratch.
+ 
+Section 13 — Decision Knowledge
+The new domain formalized in this document per Section 1.7 — every significant implementation decision, with its full accountability trail.
+ 
+content Field
+Purpose
+decision
+The decision made, in plain language
+reason
+Why this decision was made
+approver
+Who made or confirmed the decision
+date
+When
+affected_objects
+Canonical object types or specific object_ids this decision affects
+impact
+The downstream effect — e.g., "Department Expense Forecasting remains PARTIAL until this is resolved"
+audit_trail
+References to the source: session_id, job_id, and, for customer-scoped decisions, the related CEP item — mirroring Customer Knowledge's own lineage fields but formalized specifically for decisions that carry accountability weight beyond a routine CEP answer
+Table BIS5-13.1 — Decision Knowledge content schema.
+ 
+Decision Scope
+customer_scope
+Approval Required?
+Example
+Customer-specific implementation decision
+Non-null — isolated exactly as Customer Knowledge
+No — active immediately, same as Customer Knowledge
+A customer's explicit deferral of GL cost center mapping (per GPES-001 Table GPES-S4.5)
+Platform-level architectural or governance decision
+Null
+Yes — Engineering Team Lead
+A decision to change a default CEP timeout, or to retire support for a connector API version
+Table BIS5-13.2 — Decision Knowledge scope-dependent governance. This dual-mode governance is exactly why Decision Knowledge is its own domain rather than a subtype of Customer Knowledge — no other domain has this split behavior.
+ 
+Section 14 — Working Memory
+Per Section 1.6 and 1.11, this is a narrow, ephemeral cache of retrieved-knowledge context — never job execution mechanics, never long-term knowledge.
+ 
+14.1 Schema
+working_memory table (Redis hash, mirrored to Postgres only for the
+ expiration audit trail — Redis is the primary store, per the build
+ brief's "Redis (working memory)" deployment guidance):
+  memory_id                 UUID
+  job_id                      UUID   -- BIS-002 implementation_jobs.job_id
+  session_id                    UUID
+  worker_type                     VARCHAR(32)
+  current_task                      VARCHAR(64)
+  retrieved_knowledge                 JSONB
+             -- [{knowledge_id, retrieval_key, retrieved_at, used: bool|null}]
+  checkpoint_ref                        VARCHAR(256)
+             -- mirrors BIS-002 implementation_jobs.checkpoint_ref for
+             -- cross-reference only — this service does not own or
+             -- interpret checkpoint content, per Section 1.6
+  created_at                              TIMESTAMPTZ
+  expires_at                                TIMESTAMPTZ
+             -- = job.timeout_policy.hard_timeout_seconds from BIS-002,
+             -- fetched once at Working Memory creation, not re-checked
+             -- against a live BIS-002 call on every access
+ 
+14.2 Lifecycle
+Stage
+Trigger
+Behavior
+Creation
+First POST /retrieve call for a given job_id (Table BIS5-4.4)
+A working_memory row is created with expires_at set from the job's timeout_policy
+Update
+Every subsequent POST /retrieve for the same job_id
+retrieved_knowledge array appended, not replaced — the full retrieval history for the job is visible, not just the latest call
+Outcome recording
+A worker's explicit POST /working-memory call, or the implicit call made at job completion (mirroring EIS-004 Table EIS4-7.1's record_successful_pattern / record_failed_pattern worker-completion protocol)
+Sets used=true or used=false on the specific retrieved_knowledge entries this job actually applied — this is the data source for Section 16.2's generalization pipeline's usage_count and success_rate updates on the underlying knowledge_records
+Expiration
+TTL reached (expires_at passed)
+Redis TTL eviction — automatic, no explicit cleanup call required; the Postgres audit mirror retains a WORKING_MEMORY_EXPIRED log event (Section 22) but the Redis row itself is simply gone
+Explicit early cleanup
+DELETE /working-memory/{memory_id}
+Rare path (Table BIS5-4.8) — most jobs simply let TTL expiration handle cleanup
+Table BIS5-14.1 — Working Memory lifecycle.
+ 
+Working Memory never becomes long-term knowledge automatically (Section 1.5). The only path from a Working Memory entry to a durable Knowledge Record is: the worker's outcome recording marks a retrieval as used=true or produces a new observation via record_successful_pattern-equivalent logic, which creates a DRAFT knowledge_records row through the normal POST /knowledge path (Table BIS5-4.1) — a distinct, explicit write, never an automatic promotion triggered by TTL or by the Working Memory row itself.
+ 
+Section 15 — Retrieval Engine
+Implements EIS-004 Section 6 exactly — structured, taxonomy-keyed retrieval as the only MVP path (Section 1.9), with the same ranking and conflict resolution algorithm already specified.
+ 
+15.1 Retrieval Dimensions
+Matching the build brief's list exactly, all nine dimensions are supported as filter parameters on POST /search (Table BIS5-4.3): connector, domain, task (via retrieval_tags), object, validation rule (via content.validation_rule_id for the VALIDATION domain), CEP item (via content.cep_field_path for CUSTOMER/DECISION domains), error (via retrieval_tags), worker type, and implementation stage (via retrieval_tags, e.g., "stage:IMS_RUNNING").
+ 
+15.2 Ranking
+Reuses EIS-004 Table EIS4-6.2's weighted ranking formula without modification: 0.40×confidence + 0.25×normalized_usage_count + 0.15×key_specificity_bonus + 0.10×human_approval_recency + 0.10×api_version_match. Customer scope is handled as a pre-filter, not a ranking weight — a CUSTOMER-domain search always scopes to the requesting customer_id before ranking begins, since cross-customer ranking comparison is never a valid operation (Section 24).
+ 
+15.3 Conflict Resolution
+Reuses EIS-004 Table EIS4-3.1's three-tier precedence exactly: API version dominance first, confidence×usage product score second, approval recency third, with the same escalate-to-human-review-queue condition (both records unversioned, scores within 10%, neither approved in the past 90 days) producing a conflict_flag=true in the search response (Table BIS5-4.3) rather than an ambiguous result set.
+ 
+15.4 Approval Status Filtering
+POST /search and POST /retrieve default to approval_status=APPROVED or PUBLISHED only. A caller may not override this to retrieve DRAFT or REVIEW-status records under any circumstance — unreviewed knowledge is never served to a production worker, full stop. The only exception is CUSTOMER and customer-scoped DECISION domain records, which per Section 8.2/13 are active immediately without passing through REVIEW at all, so this restriction does not apply to them.
+ 
+Section 16 — Knowledge Publication
+ 
+16.1 Publication Flow
+DRAFT ──(POST /publish)──► REVIEW ──(POST /approve, decision=APPROVE)──► APPROVED
+                              │                                             │
+                              ├──(decision=REJECT)──► REJECTED              │
+                              │                                             │
+                              └──(decision=RETURN_FOR_REVISION)──► DRAFT    │
+                                                                             ▼
+                                                                       PUBLISHED
+                                                            (Section 18.2 — the
+                                                             distinction between
+                                                             APPROVED and PUBLISHED
+                                                             mirrors EIS-004's
+                                                             ACTIVE/available-for-
+                                                             retrieval state exactly)
+ 
+16.2 Generalization Pipeline
+The build-level implementation of EIS-004 Section 4's Memory Generalization Pipeline, unchanged in algorithm: nightly scheduled, minimum observation counts per domain (5 for Connector/Transformation, 3 for Validation, 10 for Pattern Library per Section 10.1), regex-based anonymization at MVP (NER model deferred, per EIS-004 Section 10.1), anonymization_certificate required before any DRAFT record from this pipeline can proceed to REVIEW. This service's Governance Engine (Section 5) rejects any REVIEW-status submission from knowledge_type=GENERALIZATION_PIPELINE that lacks a valid certificate — the same hard requirement EIS-004 Section 8.1 established.
+ 
+Section 17 — Knowledge Governance
+Reuses EIS-004 Table EIS4-5.1's role model exactly (Section 1.10) — restated here at the level of concrete permission checks this service's Governance Engine enforces.
+ 
+Governance Action
+Who
+Enforcement Point
+Creation (DRAFT)
+Any Implementation Engineer, or the Generalization Pipeline (system actor)
+POST /knowledge — no restriction on create, per EIS-004's "pipeline creates but never approves" principle
+Review
+Senior Implementation Engineer (owns the review queue)
+Implicit — REVIEW status makes a record visible in the governance queue (Section 19 query pattern), reviewed_by is recorded on the eventual approve/reject decision
+Approval
+Senior Implementation Engineer (LOW/MEDIUM sensitivity) or Engineering Team Lead (HIGH sensitivity, including all Pattern Library per Section 10)
+POST /approve — Governance Engine checks the approver's role against the record's domain-derived sensitivity level before allowing the call to succeed
+Publication
+System-automatic upon APPROVED, or a final explicit step depending on deployment configuration (Section 27)
+Section 18.2
+Deprecation
+Automatic (success_rate or false_positive_rate threshold breach, Section 18.3) or Senior Implementation Engineer manual action
+Both paths converge on the same approval_status=DEPRECATED transition
+Retirement (Archive)
+Engineering Team Lead or Platform Admin
+POST /archive — the highest permission bar in this service, matching EIS-004's Platform Admin "emergency retirement, requires written justification" characterization
+Conflict resolution
+Weekly human review queue (Section 15.3's escalate condition) — Senior Implementation Engineer
+GET /knowledge?approval_status=CONFLICT_PENDING (Section 19 query pattern)
+Knowledge ownership
+Domain-level: no single human owns a domain; every record has created_by and, where applicable, approved_by — ownership is per-record, not per-domain, consistent with this being an append-only, versioned system rather than a domain with a single accountable curator
+N/A — a design property, not an enforced permission check
+Table BIS5-17.1 — Knowledge governance actions.
+ 
+Section 18 — Knowledge Lifecycle
+ 
+18.1 Lifecycle States
+  DISCOVERY ──► CANDIDATE ──► REVIEW ──► APPROVED ──► PUBLISHED
+                                 │                        │
+                                 ▼                        ▼
+                            REJECTED               RETRIEVED (usage,
+                                                     not a stored state)
+                                                             │
+                                                             ▼
+                                                          UPDATED
+                                                     (new version, restarts
+                                                      at REVIEW for shared
+                                                      domains)
+                                                             │
+                                                             ▼
+                                                       DEPRECATED
+                                                             │
+                                                             ▼
+                                                        ARCHIVED
+ 
+18.2 Approved vs. Published Distinction
+APPROVED means a human has confirmed the record is technically accurate and safe to share. PUBLISHED means the record is actually live and returned by Section 15's retrieval — for most domains these transitions are simultaneous (approval triggers immediate publication), but the two states are kept distinct in the model so a future workflow (e.g., staged rollout of a new pattern to a subset of implementations before full publication) can be added without a schema change, mirroring the extensibility principle this BIS series has applied consistently since BIS-003's Section 1.9.
+ 
+18.3 Automatic Deprecation Triggers
+Domain
+Trigger
+Threshold
+Transformation Knowledge
+success_rate drops below threshold over trailing 50 uses
+0.70, per EIS-004 Table EIS4-3.2
+Validation Knowledge
+false_positive_rate exceeds threshold over trailing 50 uses
+0.15
+Any shared domain
+Zero usage for 90+ days
+Flagged UNUSED_KNOWLEDGE for next review cycle, not auto-deprecated — a human decides whether the pattern is genuinely unused or the retrieval_key is wrong (EIS-004 Table EIS4-5.2)
+Table BIS5-18.1 — Automatic deprecation triggers.
+ 
+18.4 Event-Driven Expiration (Connector Knowledge)
+Per EIS-004 Design Decision 3, Connector Knowledge and Transformation Knowledge expire on SCHEMA_CHANGED events, not on a timer. When BIS-001 emits SCHEMA_CHANGED_DETECTED (BIS-004 Table BIS4-19.1 mirrors this event type), every APPROVED or PUBLISHED knowledge_record with matching connector_scope transitions to PENDING_REVALIDATION and is immediately excluded from Section 15 retrieval results until a human re-confirms it, per EIS-004 Section 3.4.
+ 
+Section 19 — Query Patterns
+Pattern
+Endpoint
+Index Used
+Find NetSuite revenue recognition patterns
+POST /search {connector_scope: "IMS-001", retrieval_tags: ["revenue_recognition"]}
+Composite index on (connector_scope, knowledge_domain, approval_status)
+Find Stripe billing mappings
+POST /search {connector_scope: "IMS-201", knowledge_domain: "TRANSFORMATION"}
+Same composite index
+Find previous CEP decisions
+POST /search {customer_id: X, knowledge_domain: "CUSTOMER"}
+Partial index on (customer_id, knowledge_domain) WHERE knowledge_domain='CUSTOMER'
+Retrieve ERP implementation pattern
+POST /search {knowledge_domain: "PATTERN_LIBRARY", retrieval_tags: ["erp_first"]}
+GIN index on retrieval_tags
+Retrieve validation resolutions
+POST /search {knowledge_domain: "VALIDATION", object_scope: X}
+Composite index on (knowledge_domain, object_scope)
+Retrieve approved transformations
+POST /search {knowledge_domain: "TRANSFORMATION", approval_status: "APPROVED"}
+Composite index on (knowledge_domain, approval_status)
+Retrieve implementation decisions
+POST /search {knowledge_domain: "DECISION", customer_id: X}
+Composite index on (customer_id, knowledge_domain) for scoped; (knowledge_domain, approval_status) for platform-level
+Retrieve customer-specific knowledge
+GET /knowledge with customer_id filter across all domains
+Composite index on customer_scope, applicable to CUSTOMER and scoped DECISION rows only
+Conflict resolution queue
+GET /knowledge?approval_status=CONFLICT_PENDING (Section 15.3)
+Partial index on (approval_status) WHERE approval_status='CONFLICT_PENDING'
+Table BIS5-19.1 — Common query patterns and their backing indexes.
+ 
+Section 20 — Error Handling
+Error Code
+Meaning
+Response
+NOT_FOUND
+knowledge_id, working_memory memory_id does not exist, or exists but is excluded from the caller's visibility (e.g., a CUSTOMER record outside the caller's customer_id)
+Standard 404-equivalent; never distinguishes "does not exist" from "exists but not visible to you," to avoid leaking existence information across customer boundaries
+NOT_APPROVED
+A retrieval attempt (outside the CUSTOMER/DECISION exception) targets a DRAFT or REVIEW-status record directly by knowledge_id
+Reject — Section 15.4's restriction applies even to direct-by-ID reads, not just search
+EXPIRED
+A Working Memory read targets a memory_id past its TTL (already evicted from Redis, or present in the Postgres audit mirror but logically expired)
+Reject with a message directing the caller to re-retrieve if needed
+PERMISSION_DENIED
+Governance Engine rejects a publish/approve/archive call, including self-approval attempts
+Reject synchronously
+CONFLICT
+A publish/approve call targets a record not in the expected state for that transition (Table BIS5-4.5, 4.6)
+Reject with the record's actual current approval_status included in the error message
+INVALID_SCOPE
+A CUSTOMER-domain operation is attempted without a customer_id, or a scope combination the Knowledge Metadata Registry does not recognize
+Reject synchronously — this is the primary defense against a caller accidentally constructing a cross-customer or malformed query
+INTERNAL_ERROR
+This service's own Postgres or Redis failure
+Retried per Section 21, then escalated
+Table BIS5-20.1 — Error handling.
+ 
+Section 21 — Retry Strategy
+Rule
+Specification
+Knowledge writes are idempotent by derived retrieval_key
+A create with content matching an existing record for the same computed key (Section 1.8) returns the existing knowledge_id — retries never duplicate
+Retrieval is always safe to retry
+POST /search and POST /retrieve are pure reads with respect to knowledge_records; the only side effect (Working Memory update) is itself idempotent within a job_id (Table BIS5-4.4)
+Publication state transitions are idempotent
+Resubmitting the same publish/approve/archive call in the same target state returns the existing result rather than erroring or double-transitioning
+Postgres/Redis errors retry internally then escalate
+Linear backoff: 30s, 30s, 30s (3 attempts), matching the pattern established across BIS-001 through BIS-004; pages on-call after exhaustion
+Working Memory Redis unavailability does not block retrieval
+Per Table BIS5-5.1, this is a fail-open condition for the cache specifically — the Retrieval Engine's core function (serving knowledge) does not depend on Working Memory being writable
+Table BIS5-21.1 — Retry strategy.
+ 
+Section 22 — Logging
+event_type
+Emitted When
+Notes
+KNOWLEDGE_CREATED
+New knowledge_records row
+—
+KNOWLEDGE_UPDATED
+A PATCH creates a new version
+Includes previous_version, new_version
+KNOWLEDGE_APPROVED
+POST /approve with decision=APPROVE
+Includes approved_by
+KNOWLEDGE_RETRIEVED
+Every returned result from search/retrieve
+High-volume — the primary evidence for knowledge_hit_rate and reuse metrics
+KNOWLEDGE_ARCHIVED
+POST /archive succeeds
+—
+WORKING_MEMORY_CREATED
+First retrieval for a new job_id
+—
+WORKING_MEMORY_EXPIRED
+TTL eviction (Postgres audit mirror only, Section 14.1)
+—
+PATTERN_PUBLISHED
+A record transitions to PUBLISHED (any domain, named per the build brief's convention)
+—
+Table BIS5-22.1 — Log event types. Every event includes request_id, customer_id, session_id, job_id, knowledge_id, knowledge_domain, actor_type, actor_id, and timestamp, matching the field pattern established across BIS-001 through BIS-004.
+ 
+Section 23 — Metrics
+Metric Name
+Type
+Labels
+Purpose
+knowledge_records_total
+Counter
+knowledge_domain, knowledge_type
+Growth tracking per domain
+knowledge_retrieval_total
+Counter
+knowledge_domain
+Retrieval volume
+knowledge_hit_rate
+Gauge (computed)
+knowledge_domain
+% of searches returning >= 1 result — the primary ROI signal EIS-004 Table EIS4-9.2 already targets
+knowledge_publication_rate
+Counter
+knowledge_domain
+Records reaching PUBLISHED per unit time
+knowledge_reuse_rate
+Gauge (computed)
+knowledge_domain
+usage_count distribution — a rising average indicates the library is compounding in value
+knowledge_expiration_rate
+Counter
+knowledge_domain, reason (auto_deprecation\|schema_change\|manual)
+Tracks why knowledge leaves circulation
+working_memory_usage
+Gauge
+—
+Active Working Memory row count, a proxy for concurrent job load
+average_retrieval_latency
+Histogram
+knowledge_domain
+Validated against Section 25 targets
+approval_time
+Histogram
+knowledge_domain, sensitivity_level
+Time from REVIEW to decision — the same field EIS-004 Table EIS4-9.2 tracks as approval cycle time
+pattern_success_rate
+Gauge
+pattern_id (Pattern Library only)
+The GPES-001-derived reference metric tracked in production
+Table BIS5-23.1 — Knowledge Platform metrics.
+ 
+Section 24 — Security
+Control
+Implementation
+Internal-only service
+Not reachable from the public internet; callable only by the Tool Gateway and approved worker/human-consultant service identities, matching BIS-001 through BIS-004
+Customer isolation by customer_id
+Postgres row-level security on knowledge_records: customer_scope IS NULL (shared, always readable subject to approval status) OR customer_scope = current_setting('app.current_customer_id') — the exact policy pattern EIS-004 Section 10.2 already specified for memory_records, applied here verbatim
+Knowledge scopes enforced at write time
+The Knowledge Metadata Registry (Section 5) rejects any write whose knowledge_domain/customer_scope combination is invalid per Table BIS5-1.1's rules — a CUSTOMER-domain write without customer_scope is INVALID_SCOPE, not silently accepted with a null
+Row-level security extends to Working Memory
+job_id-scoped Redis keys are namespaced by customer_id in their key structure (working_memory:{customer_id}:{job_id}) so a cross-customer key collision is structurally impossible, not just unlikely
+Artifact references, not content duplication
+supporting_artifacts (Section 7.1) stores references (extraction_batch_id, session_id) per EIS-004's "reference artifacts rather than duplicate them" security requirement — never raw extracted records or canonical payloads
+Audit logging
+Every write and every approval decision produces a log event (Section 22) with full actor identity — the complete governance history of any knowledge_record is reconstructable independent of its current row
+Approval permissions
+Enforced by the Governance Engine (Section 17) at the API layer, not left as a documented convention — self-approval and under-privileged approval attempts are both hard rejections, not warnings
+PII restrictions
+content JSONB fields pass through the same regex-based anonymization check as the Generalization Pipeline (Section 16.2) applies to pipeline-sourced records — this applies even to HUMAN_AUTHORED shared-domain records, since a well-meaning engineer could otherwise paste a customer name into a Pattern Library description by accident
+Table BIS5-24.1 — Security controls.
+ 
+Section 25 — Performance Targets
+Metric
+Target
+Notes
+Knowledge retrieval (p95)
+< 100ms
+Structured, indexed lookup — no vector search overhead at MVP (Section 1.9)
+Knowledge publish (p95)
+< 250ms
+Includes the Governance Engine permission check and PII scan
+Working memory retrieval (p95)
+< 50ms
+Redis read — the fastest operation in this service, by design, since it sits in the hot path of every worker's retrieval call
+Concurrent retrieval requests (MVP target)
+500
+The highest concurrency target of any BIS document so far, reflecting that every worker across every active session calls this service frequently, unlike BIS-003/BIS-004's more occasional write-heavy operations
+Concurrent workers (MVP target)
+250
+Matches the platform-wide worker concurrency implied by BIS-002's 500-concurrent-jobs target — roughly one Knowledge Platform interaction per active job at any given time
+Table BIS5-25.1 — Performance targets.
+ 
+Section 26 — Deployment Model
+Property
+Specification
+Runtime
+FastAPI (Python), matching BIS-001 through BIS-004
+Deployment unit
+Single containerized service, horizontally scaled by replica count
+Network exposure
+Internal-only, matching prior BIS documents
+State
+Stateless application tier for the API layer; Postgres is the source of truth for durable knowledge; Redis is the source of truth for Working Memory specifically (Section 14.1) — the one place in this service where Redis, not Postgres, is authoritative rather than a performance cache, since Working Memory's correctness requirement (fast, ephemeral, auto-expiring) is better served by Redis TTL semantics than by a Postgres row with an application-enforced expiration check
+Vector index
+Not deployed at MVP (Section 1.9) — the deployment model reserves this as optional future infrastructure, not a day-one requirement
+Scaling trigger
+Horizontal autoscale on retrieval request rate (Section 25's 500-concurrent target is the primary scaling signal)
+Resource profile (per replica, starting point)
+2 vCPU, 4GB RAM — lower than BIS-003/BIS-004's profile, since retrieval is a lighter-weight, more I/O-bound operation than identity matching or rule evaluation
+Health checks
+Liveness: GET /v1/health, 10s interval. Readiness: same endpoint, gating on both Postgres and Redis reachability — unlike BIS-004's fail-open Redis tolerance for its own working state (BIS-004 does not depend on Redis at all), this service treats Redis as a required dependency for full functionality even though individual retrieval calls can degrade gracefully (Table BIS5-5.1) if Redis is briefly unavailable.
+Table BIS5-26.1 — Deployment model.
+ 
+Section 27 — Configuration
+ 
+27.1 Knowledge Metadata Registry Configuration
+The controlled vocabulary for knowledge_domain, connector_scope, and object_scope values, loaded at startup from a versioned configuration store — the same architectural pattern as EIS-001's IMS Content Service and BIS-003's Schema Registry, not a new mechanism.
+ 
+27.2 Deprecation Threshold Configuration
+deprecation_thresholds.yaml (Section 18.3, hot-reloadable):
+  transformation_knowledge:
+    success_rate_floor: 0.70
+  validation_knowledge:
+    false_positive_rate_ceiling: 0.15
+  minimum_observation_counts:
+    connector: 5
+    transformation: 5
+    validation: 3
+    pattern_library: 10
+ 
+27.3 Environment Variables
+Variable
+Purpose
+DATABASE_URL
+Postgres connection string
+REDIS_URL
+Working Memory backing store
+KNOWLEDGE_METADATA_REGISTRY_CONFIG_PATH
+Path to the versioned controlled vocabulary
+DEPRECATION_THRESHOLDS_CONFIG_PATH
+Path to deprecation_thresholds.yaml
+GENERALIZATION_PIPELINE_SCHEDULE
+Cron expression, default nightly, per EIS-004 Section 4.1
+LOG_LEVEL
+INFO for production, DEBUG for development
+Table BIS5-27.1 — Environment configuration.
+ 
+Section 28 — Unit Testing
+Component
+Test Focus
+Example Test Cases
+Retrieval Engine
+Ranking formula correctness; conflict resolution tiers
+Reproduces the exact worked example from EIS-004 Table EIS4-6.2's ranking score computation; conflict resolution correctly applies Tier 1 (API version) before Tier 2 (confidence×usage) before Tier 3 (recency)
+Approval workflow
+Role/permission enforcement
+A Senior Implementation Engineer cannot approve a Pattern Library (HIGH sensitivity) record; a self-approval attempt (approved_by=created_by) is rejected regardless of role
+Publication
+State machine correctness (Section 18.1)
+Every transition in Table BIS5-16.1's flow is tested for both the happy path and the rejection of invalid transitions (e.g., APPROVED cannot go directly to DRAFT without an explicit RETURN_FOR_REVISION-equivalent action)
+Working memory expiration
+TTL correctness
+A working_memory row created with a 3600-second job timeout expires at exactly created_at + 3600s, not before or after
+Pattern search
+Domain-specific filter correctness
+A Pattern Library search with connector_combination filters correctly excludes patterns for a different connector set
+Connector knowledge retrieval
+api_version_match scoring
+A Connector Knowledge record with api_version_validated matching the query context scores 1.0 on that ranking component; a null value scores 0.0, per Table EIS4-6.2
+Customer isolation
+Cross-customer leak prevention
+A search with knowledge_domain=CUSTOMER and a customer_id belonging to a different tenant than the record's customer_scope returns zero results, not a permission error that would confirm the record's existence
+Ranking
+Weighted score computation
+Verified against hand-computed expected scores for a fixture set spanning all five ranking components, not just the dominant confidence term
+Lifecycle transitions
+Automatic deprecation triggers (Section 18.3)
+A Transformation Knowledge record with success_rate computed at exactly 0.69 over 50 uses triggers DEPRECATED; at 0.70 it does not
+Conflict resolution
+Escalation condition correctness (Section 15.3)
+Two records with scores within 10% and neither api_version_validated nor recently approved correctly produce conflict_flag=true; a 15% score gap does not
+Table BIS5-28.1 — Unit test coverage by component.
+ 
+Section 29 — Integration Testing
+Scenario
+Verification
+GPES-001 pattern promotion path
+A simulated set of 10 implementations of the NetSuite+HubSpot+Stripe+Rippling combination, each recording reference metrics matching GPES-001's reference trace, correctly triggers Pattern Library candidate generation at the 10th observation and produces a DRAFT record with reference_metrics matching Table GPES-9.2's Reference Pattern Observations
+Connector knowledge SCHEMA_CHANGED cascade
+A mocked SCHEMA_CHANGED_DETECTED event for IMS-001 correctly moves every APPROVED NetSuite Connector Knowledge record to PENDING_REVALIDATION, and those records are immediately excluded from subsequent POST /retrieve calls for connector_scope=IMS-001
+Working memory to knowledge promotion
+A worker's retrieval-then-outcome-recording sequence (POST /retrieve, then POST /working-memory marking used=true) correctly feeds usage_count and success_rate updates on the underlying knowledge_record, without any automatic promotion of the Working Memory content itself into a new knowledge_record (Section 1.5/14.2)
+Customer knowledge versioning
+Two sequential CEP confirmations for the same cep_field_path within the same customer correctly produce two knowledge_records with the second's superseded_by field empty and the first's pointing to the second
+Cross-domain retrieval consistency
+A single job_id's Working Memory correctly accumulates retrievals spanning multiple knowledge_domains (e.g., both Connector Knowledge and Transformation Knowledge retrieved within the same Connector Worker job) without cross-contamination between domain-specific content shapes
+Decision knowledge dual-mode governance
+A customer-scoped Decision Knowledge write is immediately active with no approval step; a platform-level (customer_scope=null) Decision Knowledge write correctly requires Engineering Team Lead approval before becoming retrievable
+Approval backlog and self-approval rejection
+A REVIEW-status record submitted by Engineer A is correctly rejected when Engineer A attempts to approve it, and correctly succeeds when Engineer B (Senior, appropriate sensitivity scope) approves it
+Working memory Redis outage degradation
+With Redis unavailable, POST /retrieve still returns correct, ranked results (Table BIS5-5.1's fail-open behavior), while the corresponding Working Memory write is logged as a WARNING and does not block the response
+Table BIS5-29.1 — Integration test scenarios, directly extending the GPES-001 and EIS-004 reference material this document builds from.
+ 
+Section 30 — Observability
+ 
+30.1 Dashboards
+Knowledge growth — new records per domain over time, the primary "is the platform actually learning" signal
+Knowledge reuse — usage_count distribution and knowledge_reuse_rate trend, the direct evidence of EIS-004's core value proposition
+Retrieval latency — p50/p95/p99 by knowledge_domain, validated continuously against Section 25 targets
+Approval backlog — REVIEW-status record count and age, by sensitivity level, surfaced to the Senior Implementation Engineer and Engineering Team Lead review queues
+Working memory utilization — active row count and Redis memory consumption, the operational health signal for the highest-throughput component in this service
+Pattern effectiveness — pattern_success_rate per Pattern Library entry over time, the production-scale analog of GPES-001's single reference trace
+ 
+30.2 Alerts
+Alert
+Threshold
+Severity
+Knowledge retrieval failures
+Error rate on POST /search or /retrieve > 2% over 5 minutes
+Critical — this is the hot-path endpoint every worker depends on
+Approval backlog
+Any BLOCKING-equivalent (HIGH sensitivity) record in REVIEW for > 3 business days
+Warning, escalating to Critical past 5 days
+Expired working memory leak
+working_memory_usage gauge growing without corresponding TTL-driven decline over a 24-hour window
+Warning — may indicate Redis TTL misconfiguration
+Knowledge conflict spike
+conflict_flag=true rate in search results > 3x the trailing 7-day average
+Warning
+High retrieval latency
+p95 exceeding Section 25 targets by more than 2x for 5 consecutive minutes
+Critical
+Table BIS5-30.1 — Alerting thresholds.
+ 
+Section 31 — Failure Recovery
+Failure
+Immediate Effect
+Recovery Behavior
+Postgres unreachable
+All durable knowledge reads/writes fail with INTERNAL_ERROR
+Fail closed, matching BIS-001 through BIS-004. No application-layer cache of durable knowledge exists, so recovery is automatic once Postgres returns.
+Redis unreachable
+Working Memory reads/writes fail; retrieval itself (the core function) continues to succeed via Postgres, degraded only in outcome-tracking fidelity (Table BIS5-5.1)
+Degraded but functional for the primary use case. Once Redis recovers, new Working Memory rows are created normally; no reconciliation of the gap period is attempted, since Working Memory is explicitly ephemeral and not expected to be gap-free.
+This service crashes or is redeployed mid-request
+In-flight requests fail; callers receive a connection error
+Stateless design (Section 26) means any replacement replica serves the next request identically. A worker's interrupted retrieval call simply retries (Section 21) — no partial knowledge write can occur given the atomic, single-transaction write pattern established across every prior BIS document.
+Generalization Pipeline run fails partway
+Some candidate records may be created, others not, for that nightly run
+The pipeline is naturally re-runnable — the next scheduled run re-evaluates the same minimum-count criteria and will pick up any implementations the failed run missed; no manual intervention is required unless the failure recurs across multiple scheduled runs, which pages on-call per the general INTERNAL_ERROR escalation path (Section 21).
+SCHEMA_CHANGED cascade fails to reach all matching records
+A connector's Connector/Transformation Knowledge records are inconsistently left in PENDING_REVALIDATION vs. still APPROVED
+This is treated as a correctness-critical failure, not a performance degradation — the cascade update runs inside a single transaction scoped to connector_scope, so a partial failure rolls back entirely rather than leaving a mixed, inconsistent state; a retry of the full cascade is safe and idempotent (Section 21).
+Table BIS5-31.1 — Failure recovery by dependency and failure type.
+ 
+Section 32 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+Automatic pattern extraction
+ML-driven identification of reusable patterns in production logs without human-authored candidates, per EIS-004 Section 9.3
+500+ completed implementations, per EIS-004's stated dependency
+Knowledge recommendations
+Proactive surfacing of relevant knowledge to human reviewers, not just to workers during execution
+Implementation Consultant UI integration and a human feedback loop to improve recommendation quality
+Implementation benchmarking
+Comparing a specific customer's implementation metrics against anonymized aggregates from similar profiles, extending the Organizational Memory domain reserved in Section 1.7
+Organizational domain activation (its own trigger, Section 1.7) plus sufficient volume per profile bucket
+Knowledge graph
+Graph-structured relationships between knowledge records (e.g., "this Transformation pattern is often retrieved alongside this Validation pattern"), per EIS-004 Section 9.3
+1,000+ co-retrieval events to seed a meaningful graph
+Semantic clustering
+Grouping related knowledge records by embedding similarity for discovery purposes, distinct from the retrieval-path semantic fallback already scoped as backlog in Section 1.9
+200+ approved records in a domain, the same threshold EIS-004 set for semantic retrieval generally
+Agent-assisted publication
+An LLM-assisted first-pass review to triage the REVIEW queue before human review, reducing Senior Implementation Engineer load without removing human approval authority
+Approval backlog metrics (Section 30) show human review capacity as a genuine bottleneck
+Customer implementation benchmarking
+Customer-facing (not just internal) comparison of an implementation's metrics against the Pattern Library's reference figures
+Product decision to expose this level of comparative detail to customers directly
+Knowledge quality scoring
+A composite quality score per knowledge_record beyond the existing confidence/usage_count/success_rate fields, informing which patterns most deserve promotion or retirement attention
+Sufficient production history to validate a composite scoring model against actual outcomes
+Table BIS5-32.1 — Backlog. Matches the pattern established in BIS-001 Section 25, BIS-002 Section 27, BIS-003 Section 29, and BIS-004 Section 29: every item has an explicit trigger condition, not a target date.
+ 
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+API completeness
+10 / 10
+All 12 endpoints specified — the smallest, most focused surface of any BIS document so far, correctly reflecting that this service does fewer distinct operations than BIS-002 through BIS-004, even though its retrieval concurrency target is the highest.
+Data model completeness
+10 / 10
+The Knowledge Record Model (Section 7) implements every field the build brief requested and reconciles it exactly against EIS-004's memory_records schema, with the retrieval_key-is-derived resolution (1.8) preserving EIS-004's customer-isolation safety property.
+Consistency with EIS-004 and prior BIS documents
+10 / 10
+This document introduces no new architecture — every algorithm (ranking, conflict resolution, generalization pipeline, deprecation triggers) is a direct reuse of an EIS-004 decision, cited by table number rather than re-derived, and the domain reconciliation table (1.7) resolves the one place this brief's vocabulary diverged from EIS-004's without silently redesigning either document.
+Working Memory / Worker State boundary clarity
+10 / 10
+Section 1.6 is the most consequential resolution in this document — without it, engineering could plausibly have built a second, competing implementation of EIS-002's existing Worker State layer. The narrow, retrieval-specific scope given to Working Memory here, keyed by job_id and limited to knowledge-retrieval context, avoids that duplication entirely.
+Testability
+9 / 10
+Unit and integration tests cover every component and explicitly test the boundary conditions (self-approval rejection, exact deprecation thresholds, conflict resolution tier ordering) that carry the most correctness risk. One point withheld: the SCHEMA_CHANGED cascade's all-or-nothing transaction behavior (Section 31) is described but not enumerated as an explicit partial-failure test scenario in Section 29.
+Table BIS5-FA.1 — Build readiness assessment. Aggregate: 49 / 50 (98%).
+ 
+BIS-005 is complete and ready for engineering to begin implementation. It completes the five-service foundation this BIS series set out to specify: Connector Proxy (external interface), Orchestration (workflow control), Canonical Platform (business data), Validation Platform (trust assessment), and now Knowledge Platform (institutional memory) — the complete architecture GPES-001 traces end to end, now specified at build-ready detail throughout.
+ 
+The most consequential design decision in this document is Section 1.6 — the explicit boundary between Working Memory and EIS-002's existing Worker State. Of every resolution across all five BIS documents, this is the one most likely to have produced genuine, silent architectural drift if left unaddressed: two services independently building "temporary execution context in Redis" under different names, gradually diverging until a debugging session eventually surfaces the duplication as a production confusion rather than a design-time decision. Naming the overlap explicitly and drawing a narrow, specific boundary — Working Memory is retrieval context only, keyed by job_id, and nothing else — is what keeps this platform's ephemeral-state story singular rather than fragmented.
+ 

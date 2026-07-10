@@ -1,0 +1,38 @@
+source_dataset,consumed_by_outputs,has_downstream_calc,status
+Actual_DeferredRevenueWaterfall,income_statement,Y,connected
+Billing_Customer_Export,,N,orphan
+Billing_Invoice_Register,deferred_revenue_waterfall,Y,connected
+Billing_Subscription_Export,mrr_waterfall,Y,connected
+CRM_Account_Export,,N,orphan
+CRM_Opportunity_Export,marketing_pipeline; mrr_waterfall,Y,connected
+CRM_Pipeline_Export,marketing_pipeline,Y,connected
+ERP_Chart_of_Accounts_Export,,N,orphan
+ERP_GL_Detail_Export,,N,orphan
+HRIS_Compensation_Export,,N,orphan
+HRIS_Employee_Roster,headcount_plan,Y,connected
+balance_sheet,balance_sheet,Y,connected
+cash_flow_bridge,balance_sheet; cash_flow_bridge,Y,connected
+commission_plans,cash_flow_bridge,Y,connected
+customers,,N,orphan
+deferred_revenue_waterfall,balance_sheet; deferred_revenue_waterfall,Y,connected
+forecast_assumptions,cash_flow_bridge,Y,connected
+forecast_quota_capacity,headcount_plan,Y,connected
+forecast_revenue_schedule,income_statement,Y,connected
+gl_actuals,balance_sheet; cash_flow_bridge; deferred_revenue_waterfall; income_statement; marketing_pipeline,Y,connected
+headcount_plan,cash_flow_bridge; headcount_plan,Y,connected
+income_statement,balance_sheet; cash_flow_bridge; income_statement,Y,connected
+invoices,balance_sheet; cash_flow_bridge; deferred_revenue_waterfall,Y,connected
+marketing_pipeline,marketing_pipeline,Y,connected
+mrr_waterfall,mrr_waterfall,Y,connected
+mrr_waterfall_customer_level,mrr_waterfall,Y,connected
+opportunities,marketing_pipeline,Y,connected
+opportunity_movements,cash_flow_bridge; marketing_pipeline,Y,connected
+payments,balance_sheet; cash_flow_bridge,Y,connected
+revenue_schedule,balance_sheet; cash_flow_bridge; income_statement,Y,connected
+sales_quotas,cash_flow_bridge,Y,connected
+subscriptions,deferred_revenue_waterfall; mrr_waterfall,Y,connected
+vendor_contracts,balance_sheet; cash_flow_bridge,Y,connected
+workforce_compensation_bands,headcount_plan,Y,connected
+workforce_department_allocation_rules,income_statement,Y,connected
+workforce_employees,cash_flow_bridge; headcount_plan,Y,connected
+working_capital_metrics,balance_sheet,Y,connected

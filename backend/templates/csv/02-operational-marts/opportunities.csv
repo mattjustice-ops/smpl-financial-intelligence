@@ -1,0 +1,1 @@
+opportunity_id,customer_id,customer_name,opportunity_name,opportunity_type,stage,amount_arr,expected_close_date,close_date,contract_start_date,probability,segment,owner_rep_id,owner,forecast_period,source_crm,marketing_channel,version

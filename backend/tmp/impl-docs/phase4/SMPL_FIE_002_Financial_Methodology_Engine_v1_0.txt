@@ -1,0 +1,651 @@
+FINANCIAL INTELLIGENCE ENGINE — ENGINEERING SPECIFICATION
+FIE-002 · Financial Methodology Engine
+Version 1.0
+The authoritative, versioned definition of how this organization defines and operates finance
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Second service of the Financial Intelligence Engine (FIE) layer · Implements: FIE-002 Conceptual Model v0.2 · Reads: FIE-001 · BIS-001 through BIS-006
+Section 1 — Scope Decisions
+The FIE-002 conceptual model is frozen and is not redesigned here. This section translates the frozen model's Scope Boundaries into the numbered, restated-plus-new-resolutions format every prior document has used since BIS-001, and adds the six further resolutions the build requires to be engineering-ready — most of them closing gaps the conceptual review's second pass identified between this document and FIE-001 or BIS-005.
+1.1 Methodology Engine vs. Observation Engine — Definitions vs. Values
+The Observation Engine (FIE-001) records financial reality as immutable Observations and Revisions. The Methodology Engine defines how that reality should be interpreted and calculated. This boundary has one specific, previously ambiguous consequence made explicit here: Driver definitions (unit, cadence, default, description) live in this service's Driver Registry (Section 10); Driver values over time — a specific Close Rate on a specific date, with its reason, approver, and confidence — live exclusively in FIE-001 as Assumption Revisions or Observations, per Section 8's Driver Types split. This service's Assumption Library is a logical view over FIE-001 records filtered by driver_id, not a second store. There is exactly one system of record for historical driver values, and it is FIE-001.
+1.2 Methodology Engine vs. Calculation Engine (FIE-003)
+Methodology owns the definition — what should be calculated, using which formula, with which drivers and dependencies. Calculation owns execution — actually running a formula against actual Observation and Revision data to produce a result. This service stores no calculation results, no execution history, and no runtime state of any kind. The Formula Registry (Section 9) it owns contains declarative formula definitions only; FIE-003 reads them but never stores its own competing copy, per Section 1.4 below.
+1.3 Methodology Engine vs. Financial Memory (FIE-004)
+This service stores current and historical methodology definitions — what a methodology said at any point in time. Financial Memory reasons about how those methodologies performed once executed by FIE-003 — forecast accuracy, recurring override patterns, and longitudinal effectiveness. This service performs no effectiveness scoring or historical performance analysis of its own methodologies.
+1.4 Methodology Engine vs. Narrative Intelligence (FIE-005)
+Narrative Intelligence consumes methodology definitions — for example, to explain that a variance is partly attributable to a Close Rate assumption changing mid-quarter — but never defines, modifies, or overrides a methodology. This service exposes no write path reachable by Narrative Intelligence.
+1.5 New Resolution — Methodology Engine vs. Knowledge Platform (BIS-005)
+Per the conceptual review's Revision 7: the Knowledge Platform (BIS-005) stores reusable implementation knowledge, guidance, best practices, mappings, and organizational learning — content that helps a human or an implementation agent do something correctly. The Methodology Engine stores structured, executable financial methodologies — content a Calculation Engine can run. Knowledge may reference a methodology_id for context ("this customer's ARR Methodology excludes services revenue because..."); a Methodology may reference a knowledge_record_id for supporting rationale. Neither service owns the other's artifacts, and neither has a write path into the other's tables. This is the third boundary reconciliation of this kind in the documentation set — see BIS-005 §1.1 (vs. EIS-004) and BIS-006 §1.7 (vs. the interim Memory proposal) for the two prior instances of the same discipline.
+1.6 New Resolution — Calculation Intent Is Part of the Methodology Registry's Identity
+Per Revision 4: methodology lookup requires (financial_concept_id, calculation_intent), not financial_concept_id alone. Board ARR, Investor ARR, Operational ARR, and Sales ARR are independent, independently versioned Methodology Registry rows sharing a financial_concept_id, not one methodology branching internally on intent. This keeps every individual methodology's formula and driver set simple and avoids conditional logic inside a single formula definition, consistent with the composable architecture principle stated throughout the conceptual model.
+1.7 New Resolution — Financial Operating Model Is a Frozen, Versioned Bundle
+Per Revision 6: a Financial Operating Model is not a live pointer to "whichever methodology versions are currently Active." It is itself a versioned object whose composition — a specific methodology_version_id for every included methodology — is fixed at creation and never changes. A new Financial Operating Model version is created whenever any constituent methodology advances; the prior version remains permanently valid and queryable. This is the mechanism that makes Revision 11's (FIE-002 conceptual model) reproducibility guarantee real: a historical calculation references a specific Financial Operating Model version, which in turn resolves to an exact, unchanging set of methodology and formula versions, with no ambiguity about what was active at calculation time.
+1.8 New Resolution — Provenance Link to FIE-001 Lives in Calculation Engine, Not Here
+FIE-001 is frozen and is not modified to add a methodology_version_id or financial_operating_model_id column. The link between a specific Forecast Revision (or any FIE-001 record) and the Financial Operating Model version used to produce it is owned by FIE-003's own execution record (a calculation_run row, out of scope for this document), which references the FIE-001 temporal_record_id via an explicit FIE-001 relationship assertion (relationship_type = INFORMED_BY, per FIE-001 §16) alongside its own financial_operating_model_version_id. This service exposes the Financial Operating Model version as a stable, resolvable reference; it does not itself track which calculations used it.
+1.9 New Resolution — Dependency Graph Is Declarative Only; No Execution State in This Service
+Per Revision 5: this service stores and serves the dependency graph (Section 14) as a static, declarative structure — which methodologies depend on which others. It performs no runtime impact analysis, no recalculation planning, and holds no record of which calculations exist or are stale. When a methodology's status changes, this service's only action is to make the updated graph and version available for FIE-003 to query; FIE-003 owns entirely determining what is impacted and re-triggering recalculation. This is the same signal-not-enforce pattern BIS-004 §1.10 established for validation blockers — the fourth instance of it across the documentation set.
+1.10 New Resolution — Driver Types Determine Value Source, Never Definition Shape
+Per Revision 8: every Driver Registry entry is tagged driver_type ∈ {OBSERVED, ASSUMED}, determining only where its values are expected to come from — Observed Drivers (FX, DSO, actual headcount) resolve to FIE-001 Observations; Assumed Drivers (Close Rate, Sales Capacity, hiring plan) resolve to FIE-001 Assumption Revisions. The Driver Registry schema itself (Section 10) is identical for both types; driver_type is a lookup discriminator for the Assumption Library view (Section 1.1), not a fork in the data model.
+1.11 New Resolution — Ownership Is Independent of Lineage
+Per Revision 9: every Methodology Registry version carries both an owner (CUSTOMER | SMPL | PARTNER — who is accountable for this version) and, independently, a lineage reference (which Industry Template, if any, it was derived from). A customer-derived methodology retains its template lineage permanently for traceability while its owner is CUSTOMER from the moment it diverges from the template, per Revision 7 of the conceptual model (customer overrides inherit without modifying the template). These are two separate, non-overlapping fields on the same row, never conflated.
+Section 2 — Service Purpose
+The Financial Methodology Engine is the only component in the SMPL platform whose entire responsibility is defining, in versioned and governed form, how a specific organization calculates its own financial concepts — without that definition ever being application code.
+This Service Is
+This Service Is Not
+The authoritative, versioned registry of every methodology, formula, driver definition, and Financial Operating Model a customer runs
+A calculation engine — it defines what to compute and how; FIE-003 executes it against real data
+The single source of truth for what a customer's ARR, Bookings, or Cash methodology says, at any point in its version history
+A values store — driver and assumption values over time live exclusively in FIE-001, per Section 1.1
+The reproducibility guarantee for every historical calculation, via frozen Financial Operating Model versions
+A runtime dependency resolver — it exposes a declarative graph; FIE-003 owns all impact analysis and recalculation planning
+A composable, template-accelerated starting point for new customers via Industry Templates
+A reusable-implementation-knowledge store — that remains BIS-005's role, referenced but not duplicated here
+Table FIE2-2.1 — Service purpose boundary.
+2.1 Position in the Runtime
+Implementation Consultant / Customer admin — methodology configurationIndustry Template selection — implementation-time default                    │                    │  POST /v1/methodologies, /v1/formulas, /v1/drivers, /v1/operating-models                    ▼     ══════════════════════════════════════════════        FINANCIAL METHODOLOGY ENGINE  (this document)     ══════════════════════════════════════════════         │                              │  reads (driver value  │       references (optional,  resolution only)     │       non-owning)         ▼                              ▼ Observation Engine (FIE-001)   Knowledge Platform (BIS-005)         writes: methodologies, formula_registry, driver_registry,                 industry_templates, financial_operating_models,                 methodology_dependencies         read by: Calculation Engine (FIE-003), Financial Memory (FIE-004),                  Narrative Intelligence (FIE-005), Reporting (BIS-006)
+Figure FIE2-2.1 — The Methodology Engine defines; it reads FIE-001 only to resolve driver values for display/validation purposes, and is read by every downstream FIE service.
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Methodology Registry management
+Store, version, and govern every methodology definition through its Draft→Archived lifecycle
+Section 8, 16
+Formula Registry management
+Store and version declarative formula definitions, one-to-one or one-to-many with methodologies
+Section 9
+Driver Registry management
+Store and version driver definitions, tagged Observed or Assumed
+Section 10
+Industry Template management
+Store and version reusable methodology bundles new customers can adopt
+Section 11
+Customer override management
+Track customer-specific methodology versions and their template lineage
+Section 12
+Financial Operating Model composition
+Compose and freeze versioned bundles of methodology versions
+Section 13
+Dependency graph maintenance
+Store and serve the declarative graph of methodology dependencies
+Section 14
+Calculation Intent resolution
+Resolve (financial_concept, calculation_intent) to the correct active methodology
+Section 15
+Table FIE2-3.1 — Core responsibilities and where each is specified.
+Section 4 — Public APIs
+Callable by Tool Gateway on behalf of authorized internal services and implementation consultants, and by every downstream FIE service for read access. All endpoints return the standard response envelope established across BIS-001 through BIS-006 and FIE-001. Three representative endpoints receive full detail; the remaining endpoints are captured completely in the summary table that follows.
+Standard Response Envelope
+{  "request_id": "UUID",  "customer_id": "UUID | null",  "status": "SUCCESS | ERROR",  "data": {},  "error": { "error_code": "string", "message": "string", "retry_after_seconds": "integer | null" } | null,  "latency_ms": "integer"}
+4.1 POST /v1/methodologies
+Field
+Detail
+Request
+customer_id, financial_concept_id, calculation_intent, name, description, formula_id, driver_ids[], dependency_ids[], owner (CUSTOMER | SMPL | PARTNER), lineage_template_id (optional), business_rationale (optional), effective_date
+Response
+methodology_id, methodology_version, status (DRAFT)
+Error Codes
+INVALID_INPUT, FINANCIAL_CONCEPT_NOT_FOUND, FORMULA_NOT_FOUND, DUPLICATE_INTENT, PERMISSION_ERROR
+Idempotency
+A repeated call with the same idempotency_key returns the existing methodology_id rather than creating a duplicate
+Retry Rules
+Safe to retry on timeout or 5xx; a 4xx requires correcting the input before retry
+Logging
+METHODOLOGY_CREATED on success, status=DRAFT
+Metrics
+methodologies_created_total{financial_concept, calculation_intent}
+Table FIE2-4.1 — POST /v1/methodologies. DUPLICATE_INTENT fires if an active methodology already exists for this exact (financial_concept_id, calculation_intent) pair, per Section 1.6.
+4.2 POST /v1/operating-models
+Field
+Detail
+Request
+customer_id, name, methodology_version_refs[] (one methodology_id + methodology_version pair per included methodology), effective_date
+Response
+financial_operating_model_id, operating_model_version, resolved_composition (the frozen set of methodology + formula versions)
+Error Codes
+INVALID_INPUT, METHODOLOGY_VERSION_NOT_FOUND, INCOMPLETE_COMPOSITION, PERMISSION_ERROR
+Idempotency
+Same as 4.1
+Retry Rules
+Same as 4.1
+Logging
+OPERATING_MODEL_FROZEN on success — the record is immutable from creation, per Section 1.7
+Metrics
+operating_models_created_total
+Table FIE2-4.2 — POST /v1/operating-models. Once created, an operating model version's resolved_composition can never change — a new methodology version requires a new operating_model_version, never an in-place update.
+4.3 GET /v1/methodologies/resolve
+Field
+Detail
+Request
+customer_id, financial_concept_id, calculation_intent, as_of (optional — resolves the version active at a past date, default: current)
+Response
+methodology_id, methodology_version, formula (resolved), driver_definitions[] (resolved), dependency_ids[]
+Error Codes
+METHODOLOGY_NOT_FOUND, PERMISSION_ERROR
+Idempotency
+N/A — read-only
+Retry Rules
+Freely retryable
+Logging
+Not logged individually; covered by request-level access logging
+Metrics
+methodology_resolution_duration_seconds{financial_concept, calculation_intent}
+Table FIE2-4.3 — GET /v1/methodologies/resolve. This is the endpoint FIE-003 calls before every calculation run.
+4.4 Remaining Endpoints
+Endpoint
+Purpose
+Notes
+PATCH /v1/methodologies/{id}
+Create a new methodology_version
+Append-only, per Section 16
+POST /v1/methodologies/{id}/transition
+Move a methodology through Draft→Review→Approved→Active→Deprecated→Archived
+Section 16 governance state machine
+POST /v1/formulas
+Create a formula definition
+Section 9
+PATCH /v1/formulas/{id}
+Create a new formula_version
+Append-only
+GET /v1/formulas/{id}
+Retrieve a formula definition
+Registry read
+POST /v1/drivers
+Create a driver definition
+Section 10
+PATCH /v1/drivers/{id}
+Create a new driver_version
+Append-only
+GET /v1/drivers
+List drivers, filterable by driver_type
+Registry read
+GET /v1/drivers/{id}/values
+Logical view over FIE-001 Assumption Revisions / Observations for this driver
+Proxies FIE-001's timeline API, per Section 1.1 — never a local read
+POST /v1/industry-templates
+Create an Industry Template
+Admin/engineering-only, Section 11
+GET /v1/industry-templates
+List active templates
+Registry read
+POST /v1/methodologies/{id}/override
+Derive a customer methodology version from a template
+Section 12
+GET /v1/operating-models/{id}
+Retrieve a specific Financial Operating Model version
+Section 13
+GET /v1/dependencies/{methodology_id}
+Retrieve the declarative dependency graph for a methodology
+Section 14
+GET /v1/health
+Liveness/readiness probe
+No auth required, internal network only
+Table FIE2-4.4 — Remaining endpoints, complete at summary detail.
+Section 5 — Internal Components
+Component
+Responsibility
+Registry API
+Stateless request handling for methodology, formula, driver, template, and operating-model writes and reads
+Governance State Machine
+Enforces valid Draft→Review→Approved→Active→Deprecated→Archived transitions, per Section 16
+Composition Resolver
+Resolves a Financial Operating Model's methodology_version_refs into a frozen resolved_composition at creation time
+Driver Value Proxy
+Translates GET /v1/drivers/{id}/values into a call against FIE-001's timeline API — holds no local copy of values
+Dependency Graph Store
+Persists and serves the declarative methodology dependency graph
+Template Inheritance Engine
+Derives a customer override methodology version from an Industry Template without mutating the template, per Section 12
+Table FIE2-5.1 — Internal components.
+Section 6 — Data Models
+Every entity in this service follows the same append-only versioning discipline established by BIS-004's validation rules, BIS-006's report_templates, and FIE-001's financial_concepts: a PATCH creates a new version row; nothing is ever updated in place. This is what makes Section 1.7's Financial Operating Model reproducibility guarantee hold — every reference it resolves to is itself permanently stable.
+Entity
+Purpose
+methodologies
+Versioned methodology definitions, keyed by (financial_concept_id, calculation_intent), per Section 8
+formula_registry
+Versioned declarative formula definitions, per Section 9
+driver_registry
+Versioned driver definitions, tagged Observed or Assumed, per Section 10
+industry_templates
+Versioned reusable methodology bundles, per Section 11
+methodology_overrides
+Customer-specific methodology versions with template lineage, per Section 12
+financial_operating_models
+Frozen, versioned bundles of methodology versions, per Section 13
+methodology_dependencies
+Declarative edges between methodologies, per Section 14
+Table FIE2-6.1 — Entity overview; full column definitions follow in Section 7.
+Section 7 — Database Schema
+7.1 methodologies
+Field
+Type
+Notes
+methodology_id
+UUID, PK
+Stable across versions
+methodology_version
+INTEGER
+Append-only, per Section 16
+customer_id
+UUID
+financial_concept_id
+UUID, FK → FIE-001 financial_concepts
+calculation_intent
+TEXT
+e.g. BOARD, INVESTOR, OPERATIONAL, SALES — part of identity per Section 1.6
+formula_id
+UUID, FK → formula_registry
+formula_version
+INTEGER
+Pinned at this methodology version's creation
+driver_ids
+UUID[]
+References into driver_registry
+owner
+ENUM(CUSTOMER, SMPL, PARTNER)
+Accountability, independent of lineage — Section 1.11
+lineage_template_id
+UUID, NULLABLE, FK → industry_templates
+Traceability only, never mutated on override
+business_rationale
+TEXT, NULLABLE
+Optional per the conceptual model's explicit non-requirement
+status
+ENUM(DRAFT, REVIEW, APPROVED, ACTIVE, DEPRECATED, ARCHIVED)
+Section 16
+effective_date
+TIMESTAMPTZ
+created_at
+TIMESTAMPTZ
+Table FIE2-7.1 — methodologies. Unique constraint on (customer_id, financial_concept_id, calculation_intent) among ACTIVE rows only — multiple versions may exist, but only one may be ACTIVE at a time per intent.
+7.2 formula_registry
+Field
+Type
+Notes
+formula_id
+UUID, PK
+formula_version
+INTEGER
+Append-only
+financial_concept_id
+UUID, FK
+formula_definition
+JSONB
+Declarative expression tree, e.g. Beginning + New + Expansion − Contraction − Churn + Reactivation = Ending
+input_driver_refs
+UUID[]
+References into driver_registry consumed by this formula
+created_at
+TIMESTAMPTZ
+Table FIE2-7.2 — formula_registry. Owned exclusively by this service, per Section 1.2; Calculation Engine reads, never writes.
+7.3 driver_registry
+Field
+Type
+Notes
+driver_id
+UUID, PK
+driver_version
+INTEGER
+Append-only
+driver_name
+TEXT
+e.g. Close Rate, DSO, FX Rate
+driver_type
+ENUM(OBSERVED, ASSUMED)
+Per Section 1.10 — determines value source only, not schema shape
+financial_concept_id
+UUID, FK
+unit
+TEXT
+e.g. PERCENT, DAYS, CURRENCY
+default_value
+NUMERIC, NULLABLE
+recommended_range
+JSONB, NULLABLE
+{min, max}
+cadence
+TEXT
+Recommended observation/revision cadence for this driver
+lineage_template_id
+UUID, NULLABLE
+dependencies
+UUID[]
+Other driver_ids this driver's default derivation may reference
+created_at
+TIMESTAMPTZ
+Table FIE2-7.3 — driver_registry. No confidence field, per Section 1.10 — confidence lives exclusively on the FIE-001 record a value resolves to.
+7.4 industry_templates
+Field
+Type
+Notes
+industry_template_id
+UUID, PK
+template_version
+INTEGER
+Append-only
+template_name
+TEXT
+e.g. Enterprise SaaS, PLG SaaS, Professional Services
+included_methodology_refs
+JSONB
+Array of {financial_concept_id, calculation_intent, formula_id, driver_ids} recommended defaults
+active
+BOOLEAN
+created_at
+TIMESTAMPTZ
+Table FIE2-7.4 — industry_templates.
+7.5 methodology_overrides
+Field
+Type
+Notes
+override_id
+UUID, PK
+methodology_id
+UUID, FK → methodologies
+The customer-specific methodology this override produced
+source_industry_template_id
+UUID, FK
+source_template_version
+INTEGER
+Pinned at derivation time
+overridden_fields
+JSONB
+Which fields diverge from the template, for audit/diff purposes
+created_at
+TIMESTAMPTZ
+Table FIE2-7.5 — methodology_overrides. The template row itself (7.4) is never modified by an override, per Section 12 of the conceptual model.
+7.6 financial_operating_models
+Field
+Type
+Notes
+financial_operating_model_id
+UUID, PK
+Stable across versions
+operating_model_version
+INTEGER
+Append-only, per Section 1.7
+customer_id
+UUID
+name
+TEXT
+resolved_composition
+JSONB
+Frozen array of {methodology_id, methodology_version, formula_id, formula_version} — computed once at creation, never recomputed
+effective_date
+TIMESTAMPTZ
+created_at
+TIMESTAMPTZ
+Table FIE2-7.6 — financial_operating_models. No UPDATE path exists on resolved_composition — the storage-layer enforcement of Section 1.7's reproducibility guarantee.
+7.7 methodology_dependencies
+Field
+Type
+Notes
+dependency_id
+UUID, PK
+upstream_methodology_id
+UUID, FK
+e.g. Pipeline Methodology
+downstream_methodology_id
+UUID, FK
+e.g. Bookings Methodology
+declared_at
+TIMESTAMPTZ
+Table FIE2-7.7 — methodology_dependencies. Purely declarative, per Section 1.9 — no execution or impact-tracking fields exist on this table.
+Section 8 — Methodology Registry Model
+A methodology is uniquely identified for lookup purposes by (customer_id, financial_concept_id, calculation_intent); methodology_id is the stable identity across versions of that same triple. Only one version per triple may hold status=ACTIVE at a time — activating a new version automatically transitions the previously active version to DEPRECATED in the same write, per Section 16's governance state machine. Every methodology references exactly one formula (pinned by version at methodology-version creation) and zero or more drivers.
+Section 9 — Formula Registry Model
+A formula is a declarative expression tree over named driver references and constants — never executable code, and never stored or interpreted by this service beyond structural validation (Section 19). Formula versions are independent of methodology versions: a formula can be reused unchanged across multiple methodology versions, and a methodology version pins a specific formula_version at creation, per Table FIE2-7.1.
+Section 10 — Driver Registry Model
+Implements Section 1.10 exactly: one schema, a driver_type discriminator, no confidence field. Resolving a driver's actual values for a given customer and date range is never a local table read — it is always a call through the Driver Value Proxy (Section 5) to FIE-001's GET /v1/timeline/{financial_concept_id} endpoint, filtered to this driver's related Observations or Assumption Revisions. This guarantees the one-source-of-truth property Section 1.1 requires structurally, not just by convention.
+Section 11 — Industry Template Model
+A template is a named, versioned bundle of recommended (financial_concept, calculation_intent, formula, drivers) tuples — a starting point, never a constraint. Selecting a template during implementation does not itself create methodology rows; it creates methodology_overrides rows (Section 12) that reference the template and copy its recommendations as a customer's initial DRAFT methodologies, immediately editable and independently versioned from that point forward.
+Section 12 — Customer Override Model
+An override always produces a new, independently-owned methodology row (owner=CUSTOMER from creation, per Section 1.11) with a permanent lineage_template_id reference. The source template row is read-only from this flow's perspective — no override operation has a code path capable of writing to industry_templates. overridden_fields captures a field-level diff against the template at derivation time for audit and "how does this customer differ from the recommended template" reporting.
+Section 13 — Financial Operating Model
+Composing a Financial Operating Model resolves every methodology_version_ref supplied in the request into its concrete formula and driver versions and writes the result into resolved_composition once, at creation. INCOMPLETE_COMPOSITION is returned if any referenced methodology_version is not status=ACTIVE at composition time — a Financial Operating Model can only be built from methodologies the customer has actually approved into active use, never from Draft or Review versions. Once created, a Financial Operating Model version is the permanent, immutable contract Calculation Engine (FIE-003) references for every calculation run against it, per Section 1.7.
+Section 14 — Dependency Graph Model
+methodology_dependencies stores directed edges only — upstream_methodology_id feeds downstream_methodology_id. This service provides no traversal beyond one-hop GET /v1/dependencies/{methodology_id} (Section 4.4); multi-hop traversal (e.g. "everything ultimately affected by a Pipeline Methodology change") is a Calculation Engine responsibility reading the full edge set, per Section 1.9 and consistent with FIE-001 §31's identical deferral of relationship-graph traversal to a future consumer.
+Section 15 — Calculation Intent Model
+calculation_intent is a controlled-vocabulary text field (BOARD, INVESTOR, OPERATIONAL, SALES, MANAGEMENT, TREASURY, FORECAST, and customer-extensible values registered through the same admin flow as Financial Concepts) rather than a fixed enum, since the conceptual model's own examples (Board ARR, Investor ARR, Treasury Cash, Forecast Cash) suggest intents are domain-specific and likely to grow. New intent values require an engineering or admin review before use, mirroring FIE-001 §1.9's controlled-vocabulary treatment of relationship_type.
+Section 16 — Governance and Versioning
+State
+Meaning
+Valid Transitions
+DRAFT
+Newly created or newly overridden; not yet reviewed
+→ REVIEW, → ARCHIVED (discarded before review)
+REVIEW
+Under active evaluation by an implementation consultant or customer owner
+→ APPROVED, → DRAFT (sent back)
+APPROVED
+Reviewed and accepted, not yet the operative version
+→ ACTIVE
+ACTIVE
+The operative version for its (financial_concept, calculation_intent) triple
+→ DEPRECATED (automatically, when a new version activates)
+DEPRECATED
+No longer operative but retained for historical reference and reproducibility
+→ ARCHIVED
+ARCHIVED
+Terminal; retained, queryable, never deleted
+None
+Table FIE2-16.1 — Governance state machine. Every methodology, formula, driver, template, and operating model version follows this same lifecycle independently.
+Section 17 — Query Patterns
+Pattern
+Supported Via
+Active methodology for a concept and intent
+GET /v1/methodologies/resolve?financial_concept_id=&calculation_intent=
+Methodology active as of a past date (for reproducing a historical calculation)
+GET /v1/methodologies/resolve?...&as_of=
+Full version history of a methodology
+GET /v1/methodologies/{id}?include_versions=true
+All methodologies depending on a given upstream methodology
+GET /v1/dependencies/{methodology_id}?direction=downstream
+Driver's actual values over time
+GET /v1/drivers/{id}/values?date_range=
+A specific Financial Operating Model version's resolved composition
+GET /v1/operating-models/{id}?version=
+Methodologies diverging from a given Industry Template
+GET /v1/methodology-overrides?source_industry_template_id=
+Methodologies by owner
+GET /v1/methodologies?owner=CUSTOMER
+Table FIE2-17.1 — Query patterns.
+Section 18 — Error Handling
+Error Code
+Meaning
+INVALID_INPUT
+Request fails schema validation
+FINANCIAL_CONCEPT_NOT_FOUND
+Referenced financial_concept_id does not exist in FIE-001's registry
+FORMULA_NOT_FOUND
+Referenced formula_id/version does not exist
+DUPLICATE_INTENT
+An ACTIVE methodology already exists for this (financial_concept, calculation_intent) pair
+METHODOLOGY_NOT_FOUND
+No methodology resolves for the requested lookup
+METHODOLOGY_VERSION_NOT_FOUND
+A specific methodology_version referenced in an Operating Model composition does not exist
+INCOMPLETE_COMPOSITION
+An Operating Model composition references a methodology_version that is not status=ACTIVE
+INVALID_STATE_TRANSITION
+A governance transition request violates Section 16's state machine
+PERMISSION_ERROR
+Caller not authorized for this customer scope or write operation
+INTERNAL_ERROR
+Unclassified failure
+Table FIE2-18.1 — Error codes, extending the EIS-001 taxonomy consistent with every prior document.
+Section 19 — Retry Strategy
+All registry writes are idempotent by idempotency_key, consistent with every prior BIS/FIE document
+A failed write is safely retryable on timeout or 5xx; a 4xx requires input correction before retry
+Governance state transitions are safely re-callable — a repeated transition request to a state already reached is a no-op success, not an error
+Formula structural validation (Section 9) runs synchronously at write time so a malformed formula never reaches ACTIVE status to fail unpredictably later inside FIE-003
+Section 20 — Logging
+METHODOLOGY_CREATED
+METHODOLOGY_VERSION_CREATED
+METHODOLOGY_STATE_TRANSITIONED
+FORMULA_CREATED
+FORMULA_VERSION_CREATED
+DRIVER_CREATED
+DRIVER_VERSION_CREATED
+INDUSTRY_TEMPLATE_CREATED
+METHODOLOGY_OVERRIDE_CREATED
+OPERATING_MODEL_FROZEN
+DEPENDENCY_DECLARED
+Every log entry includes: request_id, customer_id, methodology_id, methodology_version, financial_concept_id, calculation_intent, actor_type, actor_id, timestamp — the same field discipline used by every prior document, so cross-service correlation requires no field-name translation.
+Section 21 — Metrics
+Metric
+Type
+methodologies_created_total{financial_concept, calculation_intent}
+Counter
+methodology_state_transitions_total{from_state, to_state}
+Counter
+operating_models_created_total
+Counter
+methodology_resolution_duration_seconds{financial_concept, calculation_intent}
+Histogram
+driver_value_proxy_duration_seconds{driver_type}
+Histogram
+template_override_total{source_industry_template}
+Counter
+formula_validation_failures_total
+Counter
+active_methodologies_gauge{financial_concept}
+Gauge
+Table FIE2-21.1 — Prometheus-style metrics.
+Section 22 — Security
+Internal-only service at MVP — no direct external exposure
+Customer isolation enforced by customer_id on every table and query, no exceptions
+Methodology and Operating Model writes require an authenticated owner identity (customer admin, implementation consultant, or SMPL engineering, matching the owner field being set)
+Industry Template writes are admin/engineering-only — no customer-facing write path exists for template creation
+No mutation path exists for resolved_composition, formula_definition, or any versioned field on any prior version — enforced at the schema layer, per the append-only discipline in Section 6
+Data at rest encrypted, consistent with every prior document's storage posture
+Section 23 — Performance Targets
+Target
+Value
+Methodology resolution (GET /v1/methodologies/resolve)
+p95 < 200 ms
+Methodology or formula write
+p95 < 300 ms
+Operating Model composition (typical: 6 constituent methodologies)
+p95 < 1 second
+Driver value proxy call (delegates to FIE-001)
+p95 < 500 ms, bounded by FIE-001's own Section 24 targets
+Dependency graph one-hop lookup
+p95 < 150 ms
+Concurrent methodology resolution throughput (MVP target)
+1,000 requests/second — this endpoint is called on the hot path of every FIE-003 calculation
+Table FIE2-23.1 — Performance targets. Methodology resolution is the highest-traffic endpoint in this service, since FIE-003 calls it before every calculation run, per Table FIE2-4.3.
+Section 24 — Deployment Model
+FastAPI service for the stateless Registry API
+Postgres for methodologies, formula_registry, driver_registry, industry_templates, methodology_overrides, financial_operating_models, and methodology_dependencies
+Read-through cache (e.g. Redis) in front of GET /v1/methodologies/resolve, invalidated on any methodology state transition — justified by Section 23's throughput target and the fact that ACTIVE methodology resolution changes far less often than it is read
+Internal-only network access at MVP
+Stateless API layer; horizontal scaling with no session affinity requirement
+No async workers required at MVP — every write in this service completes synchronously; there is no long-running rendering or extraction analog to BIS-001 or BIS-006's worker patterns here
+Section 25 — Configuration
+Setting
+Purpose
+methodology_resolution_cache_ttl_seconds
+TTL for the read-through resolution cache (default 300, invalidated early on state transition)
+driver_value_proxy_timeout_ms
+Timeout for the delegated call to FIE-001's timeline API
+formula_validation_max_depth
+Maximum nesting depth accepted for a formula_definition expression tree
+calculation_intent_controlled_vocabulary
+The current set of registered intent values, per Section 15
+idempotency_key_ttl_hours
+Window during which a repeated idempotency_key returns the existing record (default 24)
+Table FIE2-25.1 — Configuration.
+Section 26 — Unit Testing
+Methodology uniqueness constraint on (customer_id, financial_concept_id, calculation_intent) among ACTIVE rows
+Governance state machine rejects every invalid transition in Table FIE2-16.1
+Activating a new methodology version correctly auto-deprecates the prior ACTIVE version in the same transaction
+Driver Registry write path rejects any request containing a confidence field, per Section 1.10
+Operating Model composition correctly returns INCOMPLETE_COMPOSITION when a referenced methodology_version is not ACTIVE
+Operating Model resolved_composition is never recomputed after creation, verified by a direct attempted-mutation test
+Template override creates a new methodology row and never mutates the source industry_templates row
+Formula structural validation rejects a malformed expression tree before it can reach ACTIVE status
+Section 27 — Integration Testing
+End-to-end Industry Template selection → customer override creation → methodology activation, for a full Enterprise SaaS template
+Financial Operating Model composition against six live ACTIVE methodologies, verifying resolved_composition matches exactly
+Reproducibility test: resolve a methodology as_of a past date, activate a new version, re-resolve as_of the same past date, verify identical result
+Driver Value Proxy round-trip against a live FIE-001 Assumption Revision and a live Observation, verifying both driver_type paths resolve correctly
+Calculation Intent isolation: activating a Board ARR methodology does not affect the independently active Investor ARR methodology for the same financial_concept_id
+Cross-service read by a stub Calculation Engine call against GET /v1/methodologies/resolve
+Section 28 — Observability
+Dashboards
+Methodology resolution volume and cache hit rate
+Governance state transition volume by state
+Operating Model composition volume
+Driver value proxy latency and failure rate
+Template override adoption by Industry Template
+Active methodology count by financial concept and intent
+Alerts
+Methodology resolution latency SLA breach (Section 23)
+Formula validation failure spike
+Driver value proxy failure spike (signals a FIE-001 dependency issue)
+Operating Model composition failure spike
+Section 29 — Failure Recovery
+Failure Mode
+Recovery Behavior
+FIE-001 unavailable during a driver value proxy call
+GET /v1/drivers/{id}/values fails with EVIDENCE_UNAVAILABLE; methodology resolution itself (Section 4.3) is unaffected, since it never depends on live driver values
+Methodology resolution cache stale after a state transition
+Cache invalidation is synchronous with the transition write, in the same request; a cache read during the narrow invalidation window falls back to a direct database read rather than serving stale data
+Operating Model composition partially resolves before failure
+The write fails entirely; no financial_operating_models row is created with a partial resolved_composition — composition is all-or-nothing
+Concurrent activation race on the same (concept, intent)
+Enforced by the unique constraint in Table FIE2-7.1; the losing transaction receives DUPLICATE_INTENT and must retry against the now-current ACTIVE version
+Formula validation service dependency unavailable
+Formula and methodology writes fail closed with INTERNAL_ERROR rather than skipping validation and allowing an unvalidated formula to reach ACTIVE
+Table FIE2-29.1 — Failure modes and recovery behavior.
+Section 30 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+Multi-hop dependency traversal
+Answering "everything ultimately affected by this methodology" beyond the current one-hop API
+A concrete FIE-003 use case requires it, per Section 14's deferral
+Methodology diff/comparison API
+Structured comparison between two versions of the same methodology, or a customer override against its source template
+Sufficient version history accumulates to make comparison broadly useful
+Formula simulation/dry-run
+Evaluating a draft formula against sample data before activation, without a full FIE-003 calculation run
+FIE-003 exists and a lightweight evaluation path is scoped
+Cross-customer methodology benchmarking
+Anonymized comparison of methodology choices across customers on the same Industry Template
+Sufficient customer volume exists per template to make benchmarking statistically meaningful
+Calculation Intent taxonomy governance UI
+Formal review workflow for registering new calculation_intent values beyond the current admin-review process
+The controlled vocabulary in Section 15 grows large enough to need self-service governance
+Automated Operating Model drift detection
+Alerting when a customer's constituent methodologies advance without a new Operating Model version being composed
+Sufficient production usage shows customers forgetting to re-freeze after methodology updates
+Table FIE2-30.1 — Backlog. Every item carries an explicit trigger condition, not a target date, matching the pattern established across BIS-001 through FIE-001.
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+Conceptual fidelity
+10 / 10
+Every frozen-model decision from both conceptual review rounds — the Driver/Assumption separation, Calculation Intent as identity, the frozen Financial Operating Model, declarative-only dependencies, Observed/Assumed driver types, and Ownership/Lineage independence — is translated into schema and API without redesign.
+Schema completeness
+10 / 10
+All seven tables fully specified with types and constraints, including the explicit no-recompute design note on resolved_composition that makes Section 1.7's reproducibility guarantee a storage-layer fact.
+Consistency with FIE-001 and BIS-001 through BIS-006
+10 / 10
+The Driver Value Proxy's exclusive delegation to FIE-001 (1.1, 10), the signal-not-enforce dependency pattern (1.9, the fourth instance across the set), and the same append-only versioning discipline used by BIS-004, BIS-005, BIS-006, and FIE-001 all reuse established patterns rather than introducing new ones.
+Boundary discipline
+10 / 10
+Section 1.5 explicitly reconciles this document against BIS-005, the third such reconciliation in the series, closing the gap the conceptual review flagged before it could become a fourth instance of the EIS-004/BIS-005 or BIS-004/interim-memo ambiguity.
+API completeness
+10 / 10
+All 15 endpoints specified; the three on FIE-003's hot path (methodology creation, operating model composition, methodology resolution) receive full detail tables, the remaining twelve captured completely in a compact summary table.
+Testability
+9 / 10
+Unit and integration tests cover every component, including a dedicated reproducibility test resolving a methodology as_of a past date across an intervening version change. One point withheld: no explicit test scenario covers the read-through cache's behavior under the Section 29 invalidation-window fallback specifically, only the steady-state cache-hit and direct-database-read cases.
+Table FIE2-FA.1 — Build readiness assessment. Aggregate: 59 / 60 (98%).
+FIE-002 is complete and ready for engineering to begin implementation. Together, FIE-001 and FIE-002 establish the two-part foundation every remaining Financial Intelligence service depends on: what happened and what we believed (FIE-001), and how that should be calculated (FIE-002). The next document in the series is FIE-003, the Calculation Engine — the first FIE service that actually produces a number. It should open its own Section 1 restating the boundaries both this document and FIE-001 have now established, particularly Section 1.8's provenance link, which FIE-003 is the service responsible for actually implementing.
+The most consequential decision in this document is Section 1.7 — freezing the Financial Operating Model as an immutable, versioned bundle rather than a live pointer to "whatever's currently active." It would have been simpler to let an Operating Model be a named alias that always resolves to current ACTIVE methodologies; it would also have quietly broken the reproducibility guarantee the conceptual model spent its own final round establishing, since a board deck generated in March and regenerated in June would silently use different methodology versions with no record that anything had changed. Resolving the composition once, at creation, and never again, is what keeps a historical calculation a historical fact rather than a moving target.

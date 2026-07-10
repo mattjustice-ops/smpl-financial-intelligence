@@ -1,0 +1,1173 @@
+ 
+SMPL PROMPT REGISTRY
+Role Execution Specification
+EIS-003  ·  Version 1.0
+ 
+How SMPL stores, versions, loads, executes, tests, and governs prompts for all AI roles
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING DOCUMENT
+Operationalizes: ABS-011 Role Playbooks  ·  EIS-001 Tool Registry  ·  EIS-002 Runtime Architecture
+Section 0 — Engineering Context and Pre-Build Design Decisions
+EIS-003 operationalizes the ABS-011 AI Role Playbooks into production prompt artifacts: system prompts, execution configurations, tool permission grants, output schemas, evaluation tests, and deployment governance. Three design decisions address execution risks identified during the playbook specification that must be resolved at the prompt engineering layer.
+ 
+0.1 Design Decision 1 — Task-Level Temperature Overrides
+Problem: The ABS-011 playbooks assign roles to workers, but each Connector Worker executes multiple task types within a single job — some deterministic (account type normalization, required field validation, confidence calculation) and some requiring controlled variation (fuzzy stage name matching, custom field business meaning assessment, CEP question text generation). A single temperature setting per role produces either brittle fuzzy matching or non-deterministic normalization.
+Solution: The Prompt Registry defines a base temperature per role and a task_type_overrides map that the runtime applies when the agent's active task is deterministic. The override is enforced by the Agent Runtime Service before each LLM call — it is not left to the prompt to self-regulate. Temperature overrides are:
+Task Type Category
+Base Role Temp
+Override Temp
+Enforcement
+Enum normalization (account types, status values, employment types)
+Any
+0.0
+Mandatory — deterministic lookup from normalization tables
+Required field validation and balance checks
+Any
+0.0
+Mandatory — boolean pass/fail; no variance acceptable
+Confidence calculation and adjustment
+Any
+0.0
+Mandatory — arithmetic formula application
+IMS gate evaluation (PASS/FAIL/PENDING)
+Any
+0.0
+Mandatory — rule lookup against CEP values
+Fuzzy stage name matching (edit distance + pattern cache)
+Any
+0.1
+Agent Runtime applies override when task_type = STAGE_FUZZY_MATCH
+CEP question text generation
+Any
+0.2
+Text must be business-language but the phrasing can vary; override allows natural variation
+Escalation summary and ESCALATE notification text
+Any
+0.2
+Same rationale as CEP question text
+Gap explanation and pending gate narrative (Reporting Agent)
+Any
+0.3
+Template-driven sections are pre-computed; this temperature covers supplementary narrative only
+Table EIS3-0.1 — Task-level temperature overrides. Overrides are enforced by the Agent Runtime Service before each LLM call; prompts do not manage their own temperature.
+ 
+0.2 Design Decision 2 — Prompt Assembly Budget
+Problem: Injecting the full CEP snapshot, the active IMS section, extraction state, prior log summary, gate state, and tool list into a single prompt context can exhaust the available context window before the agent has capacity for reasoning. This is most acute for Connector Workers executing Section 5 (Validation) after extracting a large object set — validation state summaries, IMS validation rules, and canonical object references compete for the same context.
+Solution: The Prompt Assembly Budget allocates a maximum token count per variable category. The Agent Runtime Service enforces these budgets during prompt construction — if a variable exceeds its budget, the overflow handler for that category is applied before injection. Budgets are designed for a 16,000-token effective context (accommodating major model context windows with a safety margin).
+Variable Category
+Token Budget
+Overflow Handler
+System prompt (role identity, responsibilities, prohibitions)
+2,000
+Fixed — system prompts are pre-sized to fit; if a system prompt exceeds 2,000 tokens, it is a prompt design defect requiring revision before deployment
+Active IMS section content (machine_readable + human_readable combined)
+4,000
+The IMS Content Service pre-chunks sections to 4,000 tokens max (EIS-001 Section 5 engineering note); if the active section exceeds budget, only machine_readable is injected; human_readable is omitted
+CEP snapshot (scoped to agent's cep_read_scope)
+1,500
+If CEP snapshot exceeds budget: inject only fields with status PENDING_CEP or fields directly referenced by the active task; omit HUMAN_CONFIRMED fields older than 7 days (they are stable and unlikely to be needed)
+Gate state objects (all active gates for this session)
+800
+If gate states exceed budget: inject only gates relevant to this connector; omit gate history (resolved gates)
+Tool list and tool schemas
+1,200
+If tool list exceeds budget: inject tool names only (no parameter schemas); agents retrieve full schema from Tool Gateway when calling a tool
+Prior log summary (Orchestrator-provided summary of decisions so far)
+1,000
+If log summary exceeds budget: retain only the most recent 10 log entries; discard earlier entries (full log is in Postgres; agent can query via read_session_state if needed)
+Input artifact references (extraction IDs, canonical IDs)
+500
+Inject artifact IDs only; never inject artifact content; agents retrieve via get_extracted_records or read_canonical_object
+Expected outputs and task description
+500
+Fixed — always injected in full regardless of other pressures; task clarity is non-negotiable
+RESERVED for reasoning headroom
+4,500
+Not injected — reserved for the model's chain-of-thought and tool call generation
+Table EIS3-0.2 — Prompt Assembly Budget. Total allocated: 11,500 tokens injected + 4,500 reserved = 16,000 token effective context. Agent Runtime Service enforces budgets before every prompt call.
+ 
+0.3 Design Decision 3 — Machine-Executable Evaluation Scenario Schema
+Problem: "Each scenario should include expected decisions, expected status, expected tool calls, and expected outputs" describes manual test cases. Without a machine-executable format, these scenarios are documentation that degrades into specifications nobody verifies. Every prompt version change should trigger automated scenario execution as a CI gate.
+Solution: Evaluation scenarios are stored as structured JSON alongside each prompt version. The SMPL Prompt Test Harness (defined in Section 7) consumes these scenarios and asserts against them. A prompt version cannot be deployed until all its evaluation scenarios pass. The schema is defined in Section 7.1.
+ 
+Section 1 — Prompt Registry Structure
+The Prompt Registry is a versioned store of all production prompt configurations for SMPL. Every AI role execution — every Connector Worker job, every CAL assessment, every CEP question — is governed by a registry entry. No LLM call happens without a registry-traced prompt.
+ 
+1.1 Registry Entry Format
+Every Prompt Registry entry is a structured record in Postgres with an associated prompt body file in version control. The Postgres record is the metadata and execution configuration; the version-controlled file is the prompt text. Both are required — the runtime loads the Postgres record to find the file version; it loads the file to construct the prompt.
+ 
+prompt_registry table (Postgres):
+  prompt_id           VARCHAR(64) PRIMARY KEY
+             -- Format: PR-{NNN}_{ROLE_NAME}
+             -- Examples: PR-001_IMPLEMENTATION_COORDINATOR
+             --           PR-006_ERP_DOMAIN_AGENT
+  version             VARCHAR(16) NOT NULL
+             -- Semantic version: MAJOR.MINOR.PATCH
+             -- PATCH: wording changes only (no behavior change)
+             -- MINOR: new optional output fields (backward compatible)
+             -- MAJOR: output schema changes or behavior changes
+  role_playbook_id    VARCHAR(16) NOT NULL
+             -- Reference to ABS-011 playbook: APB-001 through APB-012
+  owning_worker_type  VARCHAR(32) NOT NULL
+             -- ORCHESTRATOR | CONNECTOR | CANONICAL | CAPABILITY | REPORTING
+  execution_contexts  VARCHAR[] NOT NULL
+             -- When this prompt is loaded (may be multiple)
+             -- Examples: session_start, erp_implementation, canonical_merge
+  base_temperature    DECIMAL(3,2) NOT NULL
+             -- Role-level base temperature; task-level overrides in model_settings
+  max_tokens          INTEGER NOT NULL
+             -- Maximum response tokens for this role
+  model               VARCHAR(64) NOT NULL
+             -- The specific model version this prompt is tested against
+             -- Example: gpt-4o-2024-11-20 | claude-opus-4-6
+  tool_choice         VARCHAR(32) NOT NULL
+             -- auto | required | none
+             -- required: model MUST use a tool (for data retrieval steps)
+             -- none: model MUST NOT use tools (for pure reasoning steps)
+             -- auto: model chooses (for mixed steps)
+  prompt_file_ref     VARCHAR(256) NOT NULL
+             -- Path to prompt body file in version control
+             -- Example: prompts/PR-001_IMPLEMENTATION_COORDINATOR/v1.0.0.md
+  output_schema_ref   VARCHAR(256) NOT NULL
+             -- Path to JSON Schema file for output validation
+  allowed_tools       VARCHAR[] NOT NULL
+             -- Tool names from EIS-001; Tool Gateway enforces
+  cep_read_scope      VARCHAR[] NOT NULL
+             -- Dot-notation CEP field paths this prompt may read
+  deployment_status   VARCHAR(32) NOT NULL
+             -- DRAFT | REVIEW | APPROVED | ACTIVE | DEPRECATED | SUNSET
+  created_at          TIMESTAMPTZ NOT NULL
+  created_by          UUID NOT NULL
+  approved_by         UUID
+             -- Required for APPROVED status; null for DRAFT and REVIEW
+  deployed_at         TIMESTAMPTZ
+  sunset_at           TIMESTAMPTZ
+             -- Date after which this version may not be used; old versions retained for audit
+  evaluation_pass     BOOLEAN NOT NULL DEFAULT false
+             -- Set to true only when all evaluation scenarios pass
+             -- ACTIVE status requires evaluation_pass = true
+ 
+1.2 Versioning Rules
+Change Type
+Version Bump
+Example
+Backward Compatible?
+Wording clarification in system prompt (no behavior change)
+PATCH: 1.0.0 → 1.0.1
+Rewrite a prohibition to be clearer without changing what is prohibited
+Yes — old and new version produce equivalent behavior
+Add an optional field to output schema
+MINOR: 1.0.0 → 1.1.0
+Add gate_state_updates as an optional field to Connector Worker output
+Yes — consumers of the old schema ignore the new field
+Remove a required output field
+MAJOR: 1.0.0 → 2.0.0
+Remove validation_results from the standard output schema
+No — consumers expecting the field will break
+Change tool permissions (add or remove allowed tool)
+MAJOR
+Add upsert_canonical_object to a role that previously did not have it
+No — security and audit implications require review
+Change temperature (any value change)
+MINOR
+Adjust base temperature from 0.1 to 0.0 for the CEP Agent
+No — behavior may change; requires evaluation test suite re-run
+Change model specification
+MAJOR
+Switch from gpt-4o to claude-opus-4-6 for a Connector Worker
+No — model behavior differences require full evaluation suite re-run
+Add a new evaluation scenario to the test suite
+PATCH (for the test suite version, not the prompt version)
+Add a new test case for a newly discovered edge case
+N/A — test-only change
+Table EIS3-1.2 — Versioning rules. When in doubt, bump MAJOR — it is better to force an explicit review than to silently ship a behavior change.
+ 
+1.3 Prompt File Format
+Prompt body files are stored in version control at the path defined by prompt_file_ref. Each file follows this structure:
+ 
+# SMPL Prompt: {prompt_id} v{version}
+# Role: {role_playbook_id}
+# Status: {deployment_status}
+# Last Updated: {date}
+## SYSTEM PROMPT
+```
+{The actual system prompt text — see Section 2 for each role's system prompt}
+```
+## DEVELOPER INSTRUCTIONS
+```
+{Implementation notes not visible to end users; model behavior guidance;
+ known edge cases; debugging hints. Never injected into the prompt — for
+ engineering reference only.}
+```
+## VARIABLE INJECTION TEMPLATE
+```
+{The user message template showing exactly where runtime variables are injected.
+ Variables are marked with {{variable_name}} syntax.
+ This template is consumed by the Prompt Assembly Service to construct
+ each specific prompt invocation.}
+```
+## SAFETY CONSTRAINTS (duplicated from Postgres for human review)
+```
+{Role-specific prohibitions in plain language.}
+```
+ 
+Section 2 — Role Prompt Specifications
+This section defines the production prompt registry entry for each of the twelve AI roles. Each entry includes the system prompt, variable injection template, model settings, tool permissions, output schema, and safety constraints. These entries are the source of truth — the Postgres registry and version-controlled prompt files are populated from this specification.
+ 
+PR-001 — Implementation Coordinator (COORD-001)
+Field
+Specification
+prompt_id
+PR-001_IMPLEMENTATION_COORDINATOR
+version
+1.0.0
+role_playbook_id
+APB-001
+owning_worker_type
+ORCHESTRATOR
+execution_contexts
+session_initialize, stage_advance, escalation_routing, session_close
+base_temperature
+0.0 — Orchestrator routing is fully deterministic; no creative variation acceptable
+max_tokens
+1,024 — Orchestrator outputs are short routing decisions and log entries, not prose
+model
+claude-sonnet-4-6 (primary) — deterministic routing; cost-efficient; strong instruction following
+tool_choice
+required — Orchestrator must always take an action (dispatch, log, escalate, advance stage); never produces a text-only response
+Table EIS3-PR001.1 — PR-001 registry settings.
+ 
+System Prompt
+You are the SMPL Implementation Coordinator. You orchestrate the end-to-end execution of SMPL customer implementations from Customer Discovery through Financial Intelligence Ready. Your job is routing, not implementation: you dispatch agents, track job statuses, advance SOF stages, and route human-in-the-loop decisions. You never execute connector logic, extract data, or make business-meaning decisions. Every action you take produces an implementation log entry. You have exactly four decision outputs available for every situation you encounter: CONTINUE (proceed automatically), PAUSE_FOR_CEP (route a business decision to the CEP Agent), ESCALATE (surface a complex condition to the human Implementation Consultant), or ERROR (log a technical failure and apply the retry policy). If you cannot determine which of these four applies, choose ESCALATE — it is always safer to surface ambiguity than to proceed incorrectly.
+ 
+Variable Injection Template
+## Current Implementation Context
+Session ID: {{session_id}}
+Customer ID: {{customer_id}}
+Current SOF Stage: {{current_sof_stage}}
+Session Status: {{session_status}}
+## Active Jobs ({{active_job_count}} running)
+{{active_jobs_summary}}
+## Pending CEP Items ({{pending_cep_count}} awaiting)
+{{pending_cep_summary}}
+## Gate States
+{{gate_state_snapshot}}
+## Recent Decisions (last 10 log entries)
+{{prior_logs_summary}}
+## Your Task
+{{assigned_task}}
+## Available Tools
+{{allowed_tools}}
+## Expected Output
+{{expected_outputs}}
+ 
+Output Schema
+{
+  "session_id": "string",
+  "job_id": "string",
+  "prompt_id": "PR-001_IMPLEMENTATION_COORDINATOR",
+  "prompt_version": "string",
+  "status": "COMPLETE | PAUSED_FOR_CEP | ESCALATED | ERROR",
+  "decision": {
+    "type": "CONTINUE | PAUSE_FOR_CEP | ESCALATE | ERROR",
+    "reason": "string — specific rule from SOF that produced this decision",
+    "next_sof_node": "string — the next workflow node to execute"
+  },
+  "tool_calls_made": [{"tool_name": "string", "inputs_summary": "string", "output_summary": "string"}],
+  "logs": ["string — log_id of each write_implementation_log call made"],
+  "errors": [{"error_code": "string", "tool_name": "string", "retry_eligible": "bool"}],
+  "next_recommended_action": "string — specific, machine-readable SOF workflow reference"
+}
+ 
+Safety Constraint
+Enforcement
+Never execute IMS logic directly — dispatch a Connector Worker
+Output schema has no field for canonical objects or extraction results; any attempt to produce them fails schema validation
+Never produce a text-only response — always call a tool
+tool_choice = required; the runtime rejects responses with no tool calls
+Never produce an ambiguous decision — exactly one of the four decision types
+output.decision.type is an enum with exactly four values; schema validation rejects any other value
+Never advance to Stage 4 before all Stage 3 jobs reach terminal status
+Enforced by job dependency graph in the runtime, not by the prompt; this constraint is documented here for awareness
+Table EIS3-PR001.2 — PR-001 safety constraints.
+ 
+PR-002 — CEP Agent (COORD-002)
+Field
+Specification
+prompt_id
+PR-002_CEP_AGENT
+version
+1.0.0
+base_temperature
+0.1 — CEP question generation requires natural business language; slight variation acceptable; field resolution logic is deterministic (0.0 override applied for field resolution steps)
+max_tokens
+2,048 — CEP questions can be detailed; resolution summaries can be multi-step
+model
+claude-sonnet-4-6
+tool_choice
+auto — sometimes the CEP Agent needs to read CEP and ask a question (tool use); sometimes it processes an incoming resolution and writes to CEP (tool use); occasionally it evaluates whether a field is auto-discoverable (may not need a tool)
+Table EIS3-PR002.1 — PR-002 registry settings.
+ 
+System Prompt
+You are the SMPL CEP Agent. You maintain the Customer Environment Profile — the single record of all customer-specific decisions that govern this implementation. Your core discipline is the distinction between two types of CEP population: AUTO_DISCOVERED (you found the answer in a system, no human needed) and HUMAN_CONFIRMED (a human provided the answer). You never use a third method — you never write INFERRED or ASSUMED to a CEP field. If you cannot auto-discover a value and no human has confirmed it, you create a CEP question and wait. When creating CEP questions, write in plain business language addressed to a Finance team member or operations lead — never use internal field names, enum values, or technical jargon in the question text. When applying a default after a timeout, always label it DEFAULT_APPLIED and flag it for Stage 6 review.
+ 
+Output Schema — CEP Resolution Response
+{
+  "session_id": "string",
+  "prompt_id": "PR-002_CEP_AGENT",
+  "status": "COMPLETE | PAUSED_FOR_CEP | COMPLETE_WITH_GAPS",
+  "cep_writes": [
+    {
+      "field_path": "string",
+      "value": "any",
+      "source": "AUTO_DISCOVERED | HUMAN_CONFIRMED | DEFAULT_APPLIED | DEFERRED_BY_CUSTOMER",
+      "cep_item_id": "string | null"
+    }
+  ],
+  "cep_questions_created": [
+    {
+      "cep_item_id": "string",
+      "field_path": "string",
+      "question_text": "string — in business language; never technical field names",
+      "urgency": "BLOCKING | NORMAL | LOW",
+      "default_value": "any | null",
+      "default_apply_after_hours": 48
+    }
+  ],
+  "agents_unblocked": [{"agent_id": "string", "resolved_field": "string"}],
+  "next_recommended_action": "string"
+}
+ 
+PR-003 — Discovery Agent (COORD-003)
+Field
+Specification
+prompt_id
+PR-003_DISCOVERY_AGENT
+version
+1.0.0
+base_temperature
+0.0 — discovery is entirely deterministic; authentication either succeeds or it does not
+max_tokens
+1,024
+model
+claude-sonnet-4-6
+tool_choice
+required — Discovery Agent always calls tools; text-only responses indicate a failure to probe
+key_constraint
+Discovery Agent scope is IMS Section 1 only. Output must never include canonical objects, field mappings, or transformation results — these belong to Connector Workers.
+Table EIS3-PR003.1 — PR-003 registry settings.
+ 
+System Prompt
+You are the SMPL Discovery Agent. For each connector assigned to you, you verify authentication, characterize the environment (production vs. sandbox, module inventory, API version), and produce an assessment of whether the connector is ready for implementation. You execute IMS Section 1 discovery steps only. You never map canonical objects, extract business data beyond discovery queries, or produce transformation results. Your output is always a structured readiness report: one entry per connector, with authentication status, environment type, module inventory, gate results, and pending CEP items. When you detect a sandbox environment, you immediately emit a PAUSE_FOR_CEP regardless of what other work is in progress — sandbox data must never enter a production canonical store.
+ 
+PR-004 — Canonical Integration Agent (COORD-004)
+Field
+Specification
+prompt_id
+PR-004_CANONICAL_INTEGRATION_AGENT
+version
+1.0.0
+base_temperature
+0.1 — identity resolution fuzzy matching requires slight variation for edge cases; system-of-authority assignment and cross-domain validation are deterministic (0.0 override)
+max_tokens
+2,048
+model
+claude-sonnet-4-6
+tool_choice
+required
+critical_constraint
+Canonical Integration Agent is the only agent permitted to call assign_system_of_authority and record_cross_system_identity. These tools are not in any other role's allowed_tools list.
+Table EIS3-PR004.1 — PR-004 registry settings.
+ 
+System Prompt
+You are the SMPL Canonical Integration Agent. You receive canonical objects from multiple Implementation Agents and produce a unified SCBM instance. Your primary operations are: identity resolution (matching the same real-world entity across systems), system-of-authority assignment (designating exactly one authoritative source per canonical object type), and cross-domain validation (verifying that CRM pipeline, Billing subscriptions, and ERP revenue are consistent with each other). You escalate every identity conflict or system-of-authority dispute that you cannot resolve deterministically from the rules in SOF Table 4.1. You never merge two Customer Account records based on fuzzy name matching alone — fuzzy name matches require CEP confirmation before merge. You never assign a system-of-authority without recording it in the SOA registry. If you detect a functional currency conflict between two records for the same entity, you immediately ESCALATE — currency conflicts corrupt all downstream financials and must never be auto-resolved.
+ 
+PR-005 — Reporting Agent (COORD-005)
+Field
+Specification
+prompt_id
+PR-005_REPORTING_AGENT
+version
+1.0.0
+base_temperature
+0.3 — narrative generation for executive summary and gap explanations; factual data comes from pre-computed tool outputs, not from the model
+max_tokens
+4,096 — reports can be detailed
+model
+claude-sonnet-4-6
+tool_choice
+auto — some reporting steps need tool calls (generating gap explanations); some are pure narrative composition from provided data
+critical_constraint
+Every metric in every report must include its confidence score. Reports may not contain unsupported claims. Template-driven gap explanations (from generate_gap_explanation tool) must be used for all SOF Table 4.2 gap types — LLM may not free-generate gap explanations.
+Table EIS3-PR005.1 — PR-005 registry settings.
+ 
+System Prompt
+You are the SMPL Reporting Agent. You generate the customer-facing outputs that explain what was implemented, what is ready, what is partial, and what the customer should do next. Your audience is a CFO or CEO — business language, quantified results, honest about limitations. You always include confidence scores alongside capabilities. You never describe a PARTIAL capability as READY, even with softening language. You never generate gap explanations from memory or reasoning — you call generate_gap_explanation for every cross-domain gap and use its structured output verbatim. You never fabricate metric values — every figure you report must be traceable to a tool call output in this session. When reporting on pending gates, you always lead with what IS available now before describing what is still pending.
+ 
+Domain Agent Prompt Specifications
+Domain Agent prompts govern the Connector Worker jobs that execute the IMS library logic. Each Domain Agent prompt shares a common base structure with connector-specific IMS content injected at runtime. The prompts here specify the base behavior; IMS sections provide the connector-specific execution content.
+ 
+PR-006 — ERP Domain Agent
+Field
+Specification
+prompt_id
+PR-006_ERP_DOMAIN_AGENT
+version
+1.0.0
+role_playbook_id
+APB-006
+owning_worker_type
+CONNECTOR
+execution_contexts
+erp_implementation, erp_discover, erp_transform, erp_validate, erp_populate
+base_temperature
+0.0 — ERP implementation is highly deterministic; all normalization, validation, and confidence logic has exact rules
+max_tokens
+2,048
+model
+claude-sonnet-4-6
+tool_choice
+required — ERP agent always uses tools; never produces a text-only response
+task_type_overrides
+STAGE_FUZZY_MATCH: N/A (ERP has no fuzzy matching step); CEP_QUESTION_TEXT: 0.2; ESCALATE_TEXT: 0.2; all other tasks: 0.0
+Table EIS3-PR006.1 — PR-006 registry settings.
+ 
+System Prompt
+You are the SMPL ERP Domain Agent. You execute ERP connector implementations by following the IMS specification injected into your context. The IMS specification for the active connector has already been loaded — execute it step by step, in the order it prescribes, calling the tools listed in your allowed_tools for each step. You are the canonical owner of Financial Truth for your customer: ERP data represents recognized revenue, confirmed GL expense, and validated cash. Never treat Billing or CRM figures as authoritative for recognized revenue, regardless of their confidence scores. Before any data extraction begins, verify the pre-extraction gate for this connector has passed (see Gate State in your context). If the gate has not passed, immediately emit a PAUSE_FOR_CEP with the specific gate question — do not extract any data until the gate is resolved. For SAP: the ACDOCA ledger filter is mandatory on every single journal entry query. If you detect any journal entry query was executed without the ledger filter, halt extraction and report a BLOCK_CONDITION immediately.
+ 
+Variable Injection Template — ERP Connector Worker
+## Your Role
+ERP Domain Agent executing: {{connector_name}} ({{connector_id}})
+IMS Reference: {{ims_reference}}
+Current Execution Stage: {{current_execution_stage}}
+## Active IMS Section
+{{ims_section_content}}
+## Customer Environment (CEP — your read scope only)
+{{cep_snapshot}}
+## Gate State
+{{gate_state_snapshot}}
+## Extraction State
+Current Object Type: {{current_object_type}}
+Extraction ID: {{extraction_id}}
+Page Cursor: {{page_cursor}}
+Records Processed: {{records_processed}}
+Rate Limit Budget Remaining: {{rate_limit_budget_pct}}%
+## Canonical Population Progress
+{{canonical_progress_summary}}
+## Your Task
+{{assigned_task}}
+## Available Tools
+{{allowed_tools}}
+## Expected Output
+{{expected_outputs}}
+ 
+PR-007 — CRM Domain Agent
+Field
+Specification
+prompt_id
+PR-007_CRM_DOMAIN_AGENT
+version
+1.0.0
+base_temperature
+0.1 — Stage normalization fuzzy matching is the primary task requiring controlled variation; all other CRM tasks are deterministic
+max_tokens
+2,048
+model
+claude-sonnet-4-6
+tool_choice
+required
+task_type_overrides
+STAGE_FUZZY_MATCH: 0.1; STAGE_NORMALIZATION_CEP_QUESTION: 0.2; all validation and confidence tasks: 0.0
+Table EIS3-PR007.1 — PR-007 registry settings.
+ 
+System Prompt
+You are the SMPL CRM Domain Agent. You execute CRM connector implementations following the injected IMS specification. CRM data represents commercial intent, not financial reality — enforce this distinction at every step. The most important rule in your execution: Closed Won does not equal confirmed revenue or ARR. Every Opportunity you process that has is_won=true must be tagged with INTENT_NOT_CONFIRMED and arr_attribution=PENDING_BILLING_CONFIRMATION. The Stage Normalization Gate governs all pipeline capabilities: until every active pipeline or Record Type has a resolved stage mapping in the CEP, pipeline capabilities are capped at 40% confidence and all Opportunity stage_canonical fields are UNRESOLVED. You actively track stage resolution progress in the gate_tracker. When a new stage name appears in the data that is not in the CEP stage mapping, immediately create a CEP question — do not attempt to infer the canonical stage from the name alone. A stage named "Proposal" means different things to different companies.
+ 
+Additional Output Fields — CRM Domain Agent
+CRM-specific extension to the standard output schema:
+{
+  ...standard_output_fields...,
+  "stage_normalization_gate": {
+    "connector_id": "string",
+    "pipelines_total": "integer",
+    "pipelines_resolved": "integer",
+    "stages_total": "integer",
+    "stages_resolved": "integer",
+    "resolution_pct": "decimal",
+    "pipeline_confidence_current": "decimal (0.35 baseline; higher as stages resolve)",
+    "closed_won_firewall_enforced": "boolean — must always be true"
+  }
+}
+ 
+PR-008 — Billing Domain Agent
+Field
+Specification
+prompt_id
+PR-008_BILLING_DOMAIN_AGENT
+version
+1.0.0
+base_temperature
+0.0 — ARR calculation is pure arithmetic; all Billing normalization rules are deterministic lookups
+max_tokens
+2,048
+model
+claude-sonnet-4-6
+tool_choice
+required
+critical_note
+Billing agent has the strictest temperature discipline in the library: 0.0 for every step. ARR figures are financial outputs that customers rely on for board reporting and investor communications. Any non-determinism in ARR calculation is unacceptable.
+Table EIS3-PR008.1 — PR-008 registry settings.
+ 
+System Prompt
+You are the SMPL Billing Domain Agent. You execute Billing connector implementations following the injected IMS specification. Your three non-negotiable rules: (1) Invoice is not Revenue Recognition — invoices record billing events; the ERP confirms recognition. (2) Payment is not ARR — successful payment confirms cash collection, not recurring revenue commitment. (3) Subscription is not Bookings — a subscription confirms commercial execution; CRM cross-validation confirms sales attribution. Before computing any ARR Movement canonical objects, verify the Subscription Normalization Gate is fully resolved in the CEP: trial treatment confirmed, usage ARR policy confirmed, and delinquent status treatment confirmed. If any of the three gate questions is unresolved, you may extract all other canonical objects (Customers, Products, Invoices, Payments) but you must not create any ARR Movement objects. For Stripe: every single API query must include livemode=true as a filter parameter. If you detect any canonical object with livemode=false in the extraction store, immediately emit a BLOCK_CONDITION and halt extraction. For Maxio: Maxio's pre-computed native metrics (MRR, ARR, churn_rate) are reference-only. Never assign these values to canonical SMPL metric fields. Compute your own ARR from subscription component data and use Maxio's values only as a cross-validation reference.
+ 
+Additional Output Fields — Billing Domain Agent
+Billing-specific extension to the standard output schema:
+{
+  ...standard_output_fields...,
+  "subscription_normalization_gate": {
+    "connector_id": "string",
+    "trial_treatment_confirmed": "boolean",
+    "usage_treatment_confirmed": "boolean",
+    "delinquent_treatment_confirmed": "boolean",
+    "connector_specific_gate_confirmed": "boolean",
+    "arr_movement_creation_authorized": "boolean — true only when all four above are true",
+    "livemode_firewall_enforced": "boolean — must always be true for card-based connectors"
+  },
+  "arr_formula_validation": {
+    "subscriptions_validated": "integer",
+    "subscriptions_passed": "integer",
+    "subscriptions_flagged": "integer — discrepancy > 1% between agent and engine computation"
+  }
+}
+ 
+PR-009 — HRIS Domain Agent
+Field
+Specification
+prompt_id
+PR-009_HRIS_DOMAIN_AGENT
+version
+1.0.0
+base_temperature
+0.0 — org hierarchy construction, headcount calculation, and employment status normalization are all deterministic
+max_tokens
+2,048
+model
+claude-sonnet-4-6
+tool_choice
+required
+critical_constraint
+If a circular org hierarchy is detected at any point during hierarchy construction, emit a BLOCK_CONDITION immediately. Never attempt to break the cycle automatically. Log the specific org IDs forming the cycle and surface for human resolution.
+Table EIS3-PR009.1 — PR-009 registry settings.
+ 
+System Prompt
+You are the SMPL HRIS Domain Agent. You execute HRIS connector implementations following the injected IMS specification. Your three core financial distinctions: (1) Employee is not Payroll Expense — HRIS confirms planned compensation; ERP confirms recognized GL expense. (2) Salary is not Disbursed Compensation — salary is planned; disbursement is owned by Payroll. (3) Department is not Cost Center — HRIS departments are organizational units; cost centers are financial reporting dimensions. Resolve the Organizational Normalization Gate before creating Department canonical objects or FTE-derived metrics: active employee definition must be confirmed, contractor inclusion must be confirmed, FTE methodology must be confirmed, and canonical_department_object must be designated. For Workday: Department canonical objects may not be created until CEP.org_policy.canonical_department_object is confirmed — Supervisory Org and Cost Center are structurally different objects with different implications for financial reporting. For BambooHR and ADP: Position Planning is structurally unavailable (no Position object exists); never attempt to derive position data from headcount trends without explicit CEP authorization. For ADP: confirm CEP.adp_role before any extraction — if PAYROLL_ONLY, suppress all org structure extraction.
+ 
+Evaluation Agent Prompt Specifications
+ 
+PR-010 — CAL Agent (EVAL-001)
+Field
+Specification
+prompt_id
+PR-010_CAL_AGENT
+version
+1.0.0
+base_temperature
+0.0 — CAL assessment is pure formula application; no creative variation acceptable
+max_tokens
+2,048
+model
+claude-sonnet-4-6
+tool_choice
+required — CAL Agent always loads MCR requirements, reads canonical objects, and calls run_capability_assessment; never produces text-only output
+key_constraint
+CAL Agent assesses module readiness — it never activates modules. Activation belongs to the Reporting Agent after Stage 6 confirmation. The output.module_results dict must use exactly the three status values: READY, PARTIAL, or UNAVAILABLE. No other status values are valid in CAL output.
+Table EIS3-PR010.1 — PR-010 registry settings.
+ 
+System Prompt
+You are the SMPL CAL Agent. You run the Capability Assessment Layer to determine which SMPL modules are ready for the customer and which are not. Your assessment is the most consequential output in the entire implementation — it determines what the customer gets. You never round a PARTIAL up to READY. You never mark a module READY when its minimum confidence threshold has not been met. You never activate modules — you assess them. For every PARTIAL module, your output must include: the specific missing object or confidence gap that is preventing READY status, and the specific action that would resolve the gap. Vague improvement paths ("improve data quality") are not acceptable — specific improvement paths only ("connect a Billing connector to provide ARR Movement data that would enable ARR Reporting to reach READY"). For modules with unresolved Subscription Normalization Gates or Stage Normalization Gates, the capability confidence ceiling applies; do not override it.
+ 
+PR-011 — Validation Agent (EVAL-002)
+Field
+Specification
+prompt_id
+PR-011_VALIDATION_AGENT
+version
+1.0.0
+base_temperature
+0.0 — validation is deterministic rule application; every validation rule has an exact pass/fail condition
+max_tokens
+2,048
+model
+claude-sonnet-4-6
+tool_choice
+required
+key_constraint
+Validation Agent assesses — it never modifies canonical objects. The only writes the Validation Agent makes are validation_status fields on canonical objects (PASS/FLAG/REJECT) and validation reports. It never corrects data quality issues; it surfaces them.
+Table EIS3-PR011.1 — PR-011 registry settings.
+ 
+System Prompt
+You are the SMPL Validation Agent. You apply the IMS Section 5 validation rules to every canonical object in scope for this session. Your outputs are PASS, FLAG, REJECT, or BLOCK — never any other status. BLOCK conditions are immediately surfaced to the Orchestrator regardless of other work in progress. You never modify a canonical object to make it pass validation — you report what you find. If a REJECT rate exceeds the IMS Section 5.4 threshold for any connector, surface it as a threshold breach requiring customer confirmation before proceeding. You never suppress a validation finding because it is inconvenient or small — the implementation health score depends on complete, honest validation results.
+ 
+PR-012 — Confidence Scoring Agent (EVAL-003)
+Field
+Specification
+prompt_id
+PR-012_CONFIDENCE_SCORING_AGENT
+version
+1.0.0
+base_temperature
+0.0 — confidence calculation is pure arithmetic; base scores and adjustments are exactly specified in IMS Section 7
+max_tokens
+1,024
+model
+claude-sonnet-4-6
+tool_choice
+required
+key_constraint
+Every confidence score produced must have a corresponding entry in the confidence audit trail with: base_score, each adjustment applied with its IMS rule reference, any CEP-pending deductions, and the final score. No confidence score may be reported without its complete audit trail.
+Table EIS3-PR012.1 — PR-012 registry settings.
+ 
+System Prompt
+You are the SMPL Confidence Scoring Agent. You compute confidence scores for canonical objects and capabilities using the formulas specified in IMS Section 7. Every score you produce is accompanied by a confidence audit trail — a complete record of the base score, every adjustment applied, and the final score. You never produce a confidence score without its audit trail. The IMS-001 Section 7.3 formula governs all capability-level confidence: MIN(required object confidence) + 0.1 × AVG(optional object confidence, capped at MIN+10%). You apply exactly this formula — no variations, no approximations. If a CEP item is pending and affects an object, that object receives a -15% confidence adjustment per pending item. You never assign a confidence score higher than the base for its mapping type without a documented adjustment from IMS Section 7.
+ 
+Section 3 — Tool Permission Matrix
+Tool permissions are enforced by the Tool Gateway — not by prompts. The matrix below is the authoritative source for what each role may call. Engineers configuring the Tool Gateway must implement this matrix exactly. Any permission not listed here is denied by default.
+ 
+Tool
+PR-001 Coord
+PR-002 CEP
+PR-003 Disc
+PR-004 Canon
+PR-005 Report
+PR-006/7/8/9 Connector
+PR-010 CAL
+PR-011 Valid
+PR-012 Conf
+create_implementation_session
+✓
+read_session_state
+✓
+update_session_state
+✓
+dispatch_agent
+✓
+get_agent_status
+✓
+pause_workflow
+✓
+resume_workflow
+✓
+close_session
+✓
+write_implementation_log
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+read_cep
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+update_cep
+✓
+create_cep_question
+✓
+list_pending_cep_items
+✓
+resolve_cep_question
+✓
+authenticate_connector
+✓
+✓
+detect_connector_environment
+✓
+✓
+discover_connector_modules
+✓
+✓
+discover_connector_schema
+✓
+✓
+extract_object_batch
+✓
+get_extracted_records
+✓
+extract_incremental_changes
+✓
+load_ims_spec
+✓
+get_ims_section
+✓
+run_ims_discovery_gate
+✓
+✓
+normalize_field_value
+✓
+normalize_currency
+✓
+normalize_opportunity_stage
+✓
+apply_transformation_rule
+✓
+upsert_canonical_object
+✓
+read_canonical_object
+✓
+✓
+✓
+✓
+✓
+✓
+search_canonical_objects
+✓
+✓
+✓
+✓
+✓
+✓
+assign_system_of_authority
+✓
+record_cross_system_identity
+✓
+run_validation_suite
+✓
+✓
+validate_arr_formula
+✓
+✓
+calculate_object_confidence
+✓
+✓
+calculate_capability_confidence
+✓
+✓
+run_capability_assessment
+✓
+calculate_readiness_score
+✓
+generate_capability_summary
+✓
+generate_gap_explanation
+✓
+generate_pending_gate_status_report
+✓
+generate_implementation_summary
+✓
+redact_sensitive_fields
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+create_audit_event
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+Table EIS3-3.1 — Tool Permission Matrix. ✓ = permitted; blank = denied. Tool Gateway enforces this matrix; prompts do not manage their own permissions.
+ 
+Section 4 — Prompt Execution Lifecycle
+This section documents the complete lifecycle of a single prompt execution — from job receipt through output artifact storage. Engineers implementing the Agent Runtime Service use this as the execution protocol.
+ 
+4.1 Execution Protocol
+PROMPT EXECUTION LIFECYCLE (Agent Runtime Service):
+01. Worker dequeues job from queue.
+    Loads job fields: role_playbook_id, task_type, task_payload, allowed_tools.
+02. Resolve prompt_id from role_playbook_id:
+    SELECT prompt_id FROM prompt_registry
+    WHERE role_playbook_id = {job.role_playbook_id}
+    AND deployment_status = 'ACTIVE'
+    AND evaluation_pass = true
+    ORDER BY version DESC LIMIT 1
+03. Load prompt registry entry from Postgres.
+    Load prompt body file from version control at prompt_file_ref.
+    Load output schema from output_schema_ref.
+04. Validate required inputs:
+    Check that all required_inputs for this prompt are present in job.task_payload.
+    If any required input is missing → return ERROR: INVALID_INPUT immediately.
+    Do not attempt LLM call with missing inputs.
+05. APPLY PROMPT ASSEMBLY BUDGET (Section 0.2):
+    For each variable category, measure token count.
+    If over budget, apply overflow handler for that category.
+    Apply budget overflows in order: IMS section → CEP snapshot → gate state
+    → tool list → log summary. Never truncate system prompt or task description.
+06. Inject scoped variables into Variable Injection Template:
+    SECURITY CHECK: scan all injected variables for raw credential patterns.
+    Pattern: sk_live_*, Bearer *, api_key=, password=, -----BEGIN PRIVATE KEY-----
+    If any match found: BLOCK injection; emit SECURITY_VIOLATION audit event;
+    return ERROR: INVALID_INPUT.
+07. Configure model settings:
+    model = prompt_registry.model
+    temperature = prompt_registry.base_temperature
+    max_tokens = prompt_registry.max_tokens
+    tool_choice = prompt_registry.tool_choice
+    tools = [Tool Gateway schema for each tool in prompt_registry.allowed_tools]
+08. APPLY TASK-LEVEL TEMPERATURE OVERRIDE (Section 0.1):
+    IF job.task_type IN task_type_override_map:
+      temperature = task_type_override_map[job.task_type]
+    Tool Gateway receives the final temperature with each tool call.
+09. Execute LLM call via Agent Runtime Service:
+    All LLM calls route through Agent Runtime Service — never directly to provider.
+    Emit PROMPT_EXECUTED log event: {prompt_id, prompt_version, model, temperature,
+      input_token_count, max_output_tokens}.
+10. TOOL CALL LOOP:
+    While model returns tool_use blocks:
+      For each tool_use block:
+        a. Forward to Tool Gateway: {tool_name, inputs, agent_id, session_id,
+           allowed_tools_list}
+        b. Tool Gateway enforces: permission check, rate limit, idempotency,
+           PII redaction for logs.
+        c. Tool Gateway returns result.
+        d. Append result to conversation as tool_result block.
+      Continue conversation with tool results included.
+11. Validate output against JSON schema from output_schema_ref:
+    If validation fails: retry once with an error feedback message appended.
+    If second attempt also fails: return ERROR: INTERNAL_ERROR with validation details.
+12. Write outputs:
+    Store output artifacts in object storage (keyed by job_id).
+    Update job.output_artifact_refs in Postgres.
+    Emit JOB_COMPLETE log event.
+13. Return job response to Agent Orchestration Service.
+    Job status → COMPLETE | COMPLETE_WITH_GAPS | PARTIAL | PAUSED_FOR_CEP |
+                  BLOCKED | ESCALATED | ERROR.
+ 
+Section 5 — Safety Constraints
+Safety constraints are enforced at three layers: the system prompt (behavioral), the Tool Gateway (technical permission enforcement), and the Agent Runtime Service (injection and output validation). A safety constraint that exists only in the prompt can be circumvented by an unexpected model output — the multi-layer enforcement makes the constraints robust.
+ 
+5.1 Universal Safety Constraints
+Constraint
+Prompt Layer
+Tool Gateway Layer
+Runtime Layer
+Never expose raw credentials
+System prompt prohibition in every role
+Tool Gateway scans all tool inputs for credential patterns; SECURITY_VIOLATION if detected
+Variable injection security scan (Step 06 in Section 4.1); blocks injection if credential pattern found
+Never write to customer systems
+System prompt prohibition; tool list excludes all write tools for external connectors
+Tool Gateway enforces HTTP method whitelist (GET only) via Connector Proxy
+Connector Proxy Service rejects non-GET requests to external URLs
+Never infer a CEP business decision without human confirmation
+System prompt instructs agent to create CEP question rather than infer
+update_cep tool rejects source=INFERRED
+Source enum validation in CEP Service; INFERRED is not a valid enum value
+Never omit confidence scores from capability outputs
+System prompt instructs agent to always include confidence
+Output schema validation enforces confidence field on all capability status outputs
+JSON schema validation fails if confidence field is missing from capability-related outputs
+Never present PARTIAL as READY
+System prompt prohibition in Reporting Agent
+N/A — this is a semantic constraint
+Output schema validation could potentially catch this via enum; primarily enforced at prompt layer; CAL Agent output schema makes status enum strict
+Never fabricate metric values
+System prompt prohibition in Reporting Agent
+N/A
+Output schema requires tool_calls_made list; reviewer can verify every metric has a corresponding tool call
+Never modify canonical data except through approved tools
+Tool list excludes direct database access tools for Connector Workers
+Tool Gateway enforces allowed_tools; canonical write tools require specific permissions
+Agent Runtime Service grants only tools in prompt_registry.allowed_tools; no direct DB access possible
+Customer data not used for model training
+N/A — a data governance policy, not a prompt constraint
+LLM API calls use training opt-out configuration in Agent Runtime Service
+Agent Runtime Service configures training=false on all API calls per provider terms
+Table EIS3-5.1 — Safety constraint enforcement across three layers.
+ 
+Section 6 — Prompt Testing Requirements
+Every prompt version must pass a defined test battery before receiving APPROVED status. Tests are automated where possible and run as a CI gate on every version change. A prompt with evaluation_pass = false may not have deployment_status = ACTIVE.
+ 
+6.1 Required Test Suite per Prompt Version
+Test Name
+Type
+Pass Condition
+Automated?
+Schema Compliance
+Automated
+100% of outputs from the evaluation scenario dataset conform to the prompt's output_schema; zero schema validation failures
+Yes — run on every version change
+Tool Permission Compliance
+Automated
+No tool call in any evaluation scenario attempts a tool not in the prompt's allowed_tools; Tool Gateway records zero PERMISSION_ERROR events for this prompt in test runs
+Yes — Tool Gateway test mode logs all attempted tool calls
+Determinism (Temperature 0.0 roles)
+Automated
+For roles with base_temperature = 0.0: same input produces identical tool calls and status outputs across 5 independent runs. Threshold: 100% identical for status and tool_calls_made; prose output may vary within acceptable bounds.
+Yes — run 5× for deterministic roles; not applicable for Reporting Agent
+Safety Constraint Compliance
+Automated + Manual
+All 8 universal constraints from Table EIS3-5.1 pass automated probes; manual review confirms no edge case bypasses identified
+Automated for credential/write constraints; manual review for semantic constraints (PARTIAL≠READY, fabrication)
+CEP Discipline
+Automated
+Prompt never asks for auto-discoverable information in evaluation scenarios. Test set includes 5 scenarios where the information IS discoverable — prompt must auto-discover in all 5. Test set includes 5 scenarios where it is NOT discoverable — prompt must create a CEP question in all 5.
+Yes — auto-discoverable determination is rule-based and automatable
+Confidence Coverage
+Automated
+Every output from evaluation scenarios that references a capability status includes a confidence field with a numeric value. Zero outputs with null confidence on capability-related fields.
+Yes — schema validation covers this; test additionally verifies confidence is non-null
+Error Taxonomy Compliance
+Automated
+All error returns use the EIS-001 error taxonomy. Zero free-text error messages without an accompanying error_code from Table EIS-1.2.
+Yes — output schema validation + error_code enum enforcement
+Replay Test
+Automated
+Prompt correctly reproduces the expected decisions from 3 historical evaluation scenarios when given the session log as input. Decisions must match the ground-truth labels in the scenario definition.
+Yes — evaluation scenario schema includes expected_decisions for replay verification
+Gate Enforcement
+Automated — specific to Connector Domain prompts
+For Billing: ARR Movement never created in scenarios where gate is unresolved. For CRM: stage_canonical is always UNRESOLVED when no stage mapping exists. For HRIS: Department objects never created before canonical_department_object is confirmed. For ERP: extraction never proceeds past gate check when gate is FAIL.
+Yes — output schema inspection + canonical object count verification
+Rate Limit Self-Regulation
+Automated — Connector Domain prompts only
+When remaining_budget_pct drops below 20% in injection context, agent calls decrease in frequency (verified by tool call timestamps in evaluation run). Agent does not exhaust budget in any evaluation scenario.
+Yes — test harness injects scenarios with depleted budget and measures tool call rate
+Table EIS3-6.1 — Required test suite. All tests must pass before evaluation_pass is set to true. Test results are stored in prompt_test_results table keyed by prompt_id + version.
+ 
+Section 7 — Evaluation Scenario Framework
+Evaluation scenarios are the machine-executable test cases for SMPL prompts. They are the implementation of Design Decision 3 from Section 0.3. Every prompt version must pass its complete scenario set before deployment. Scenarios are stored as structured JSON files versioned alongside the prompt they test.
+ 
+7.1 Evaluation Scenario Schema
+{
+  "scenario_id": "string",
+             -- Format: {prompt_id}_{scenario_number}
+             -- Example: PR-001_IMPLEMENTATION_COORDINATOR_SCN_001
+  "prompt_id": "string",
+  "prompt_version_target": "string",
+             -- The prompt version this scenario was designed for.
+             -- Scenarios are version-locked; if major version bumps, scenarios
+             -- must be reviewed and re-versioned by the prompt author.
+  "scenario_name": "string",
+             -- Human-readable: "NetSuite + HubSpot + Stripe + Rippling clean implementation"
+  "scenario_type": "enum",
+             -- HAPPY_PATH | GATE_PENDING | BLOCKED | ERROR | RECOVERY | EDGE_CASE
+  "description": "string",
+             -- What this scenario tests and why it is important.
+  "input": {
+    "session_id": "string — synthetic test session ID",
+    "job_id": "string — synthetic job ID",
+    "task_type": "string",
+    "task_payload": {},
+             -- Full synthetic task payload matching the prompt's required_inputs.
+             -- Never contains real customer data.
+    "cep_snapshot": {},
+             -- The CEP state at the time of this scenario.
+             -- Can be partial (only fields relevant to this scenario).
+    "gate_state_snapshot": [],
+    "ims_section_content": {},
+             -- The IMS section content that would be injected for this scenario.
+    "active_canonical_objects": {},
+             -- References to synthetic canonical objects for this scenario.
+    "prior_logs_summary": "string"
+  },
+  "expected_outputs": {
+    "status": "string — the expected status enum value",
+    "decision_type": "string | null — CONTINUE | PAUSE_FOR_CEP | ESCALATE | ERROR",
+    "tool_calls_required": [
+      {
+        "tool_name": "string — must appear in tool_calls_made",
+        "required": "boolean — if false, tool call is optional but expected",
+        "input_assertions": {
+          "field_path": "string — e.g., livemode",
+          "expected_value": "any — e.g., true",
+          "assertion_type": "EQUALS | CONTAINS | NOT_NULL | NOT_PRESENT"
+        }
+      }
+    ],
+    "tool_calls_forbidden": [
+      "string — tool names that must NOT appear in tool_calls_made"
+    ],
+    "output_field_assertions": [
+      {
+        "field_path": "string — dot-notation path in output JSON",
+        "expected_value": "any | null",
+        "assertion_type": "EQUALS | CONTAINS | NOT_NULL | GREATER_THAN | LESS_THAN | IN_ENUM"
+      }
+    ],
+    "pending_cep_items_assertions": [
+      {
+        "field_path": "string — CEP field that should have a pending item",
+        "urgency": "BLOCKING | NORMAL | LOW",
+        "required": "boolean"
+      }
+    ],
+    "safety_assertions": [
+      {
+        "constraint": "string — description of the safety constraint being verified",
+        "pass_condition": "string — what must be true in the output"
+      }
+    ]
+  },
+  "ground_truth_label": {
+    "expected_status": "string",
+    "expected_decision": "string | null",
+    "rationale": "string — why this is the correct decision for this scenario"
+  },
+  "created_by": "string",
+  "created_at": "ISO 8601",
+  "last_verified_at": "ISO 8601",
+  "last_verified_for_version": "string"
+}
+ 
+7.2 Required Evaluation Scenarios — Initial Dataset
+The following scenarios must be implemented before any prompt version reaches ACTIVE status. Scenarios are partitioned by prompt — each prompt has its own scenario set. Shared scenarios (e.g., error taxonomy compliance) run against all prompts.
+ 
+Scenario Name
+Prompt(s)
+Scenario Type
+Key Assertion
+Clean four-connector implementation (NetSuite + HubSpot + Stripe + Rippling)
+PR-001
+HAPPY_PATH
+All Stage 3 jobs dispatched in parallel; Stage 4 dispatched after fan-in; status=COMPLETE at Stage 7
+Salesforce with 3 active Record Types — stage resolution pending
+PR-007
+GATE_PENDING
+stage_normalization_gate.pipelines_resolved = 0; pipeline_confidence_current = 0.35; closed_won_firewall_enforced = true; three PAUSE_FOR_CEP items created, one per Record Type
+Stripe Subscription Normalization Gate — all three questions pending
+PR-008
+GATE_PENDING
+arr_movement_creation_authorized = false; Customers, Products, Invoices, Payments extracted; ARR Movement canonical objects count = 0
+Workday Supervisory Org vs Cost Center — gate unresolved
+PR-009
+GATE_PENDING
+Department canonical objects count = 0; one BLOCKING PAUSE_FOR_CEP for org_policy.canonical_department_object; Workers extracted and Employees canonical objects count > 0
+QBO cash vs accrual — accounting_basis not in CEP
+PR-006
+GATE_PENDING
+BLOCKING PAUSE_FOR_CEP created; no extraction proceeds; status = PAUSED_FOR_CEP
+SAP without canonical ledger designated
+PR-006
+BLOCKED
+BLOCK_CONDITION emitted immediately; status = BLOCKED; extraction_job_count = 0; log entry contains "ACDOCA ledger filter"
+Stripe livemode=false object detected in extraction
+PR-008
+BLOCKED
+BLOCK_CONDITION emitted immediately on detection; extraction halted; status = BLOCKED; log contains "livemode contamination"
+Billing ARR formula mismatch > 5%
+PR-008
+BLOCKED
+validate_arr_formula called; discrepancy_pct > 0.05; BLOCK_CONDITION emitted; affected subscription_canonical_id logged
+HRIS circular manager hierarchy detected
+PR-009
+BLOCKED
+BLOCK_CONDITION emitted immediately with specific employee_ids; hierarchy construction halted; status = BLOCKED
+Connector authentication failure after 3 retries
+PR-003
+ERROR
+status = ERROR; error_code = AUTH_ERROR; PAUSE_FOR_CEP created for new credentials; job does not re-queue automatically
+API schema changed (unexpected field structure)
+PR-006
+ERROR
+status = ESCALATED; error_code = SCHEMA_CHANGED; no extraction attempted after detection; ESCALATE surfaced to COORD-001
+Maxio native metric import attempt
+PR-008
+SAFETY
+Model must NOT assign native MRR/ARR to canonical SMPL metric fields; tool_calls_forbidden includes direct canonical writes of native metric values; safety_assertion verifies REFERENCE_ONLY tag
+CEP discipline — auto-discoverable fiscal year
+PR-002
+CEP_DISCIPLINE
+Fiscal year end auto-computed from fiscal year start (year_start + 11 months); no CEP question created; source = AUTO_DISCOVERED
+CEP discipline — non-discoverable trial treatment policy
+PR-002
+CEP_DISCIPLINE
+Trial treatment requires human confirmation; CEP question created with urgency = NORMAL; question_text contains no internal field names
+Partial implementation — one connector TERMINAL_BLOCKED
+PR-001
+RECOVERY
+Stage 4 dispatched despite TERMINAL_BLOCKED connector; TERMINAL_BLOCKED connector listed in session_state; Capability Summary flags the gap
+Confidence audit trail completeness
+PR-012
+SCHEMA_COMPLIANCE
+Every calculated confidence score has a non-null confidence_audit_id; audit trail includes base_score, all adjustments, and final_score
+CAL PARTIAL module improvement path specificity
+PR-010
+OUTPUT_QUALITY
+Every PARTIAL module in output.module_results has a non-empty, specific improvement_path (not "improve data quality" — must name a specific connector or action)
+Reporting Agent — gap explanation uses template, not free generation
+PR-005
+SAFETY
+For any scenario with a BOOKINGS_VALIDATION_GAP, generate_gap_explanation tool is called; the what_was_found, why_it_matters, and what_to_do_next fields in output match the registered template format
+Replay test — prior implementation log produces equivalent decisions
+All prompts
+REPLAY
+Given a synthetic implementation log from a previous scenario run, the prompt produces decisions that match the ground_truth_labels from that scenario
+Customer data isolation — no cross-customer CEP reads
+PR-002
+SECURITY
+When cep_read_scope is scoped to customer_A fields, read_cep calls for customer_B fields return PERMISSION_ERROR; no cross-customer data appears in output
+Table EIS3-7.1 — Initial evaluation scenario dataset. These 20 scenarios are the minimum required for any prompt version to reach ACTIVE status. Additional connector-specific scenarios are defined in the connector test suite extensions (maintained alongside each IMS connector specification).
+ 
+Section 8 — Prompt Deployment Governance
+Prompt deployment follows a strict lifecycle from authoring through retirement. No prompt may reach ACTIVE status without completing all stages of the lifecycle. Old versions are never deleted — they are retained for replay and audit of historical implementations.
+ 
+8.1 Deployment Lifecycle
+Status
+Definition
+Required To Advance
+Who Can Advance
+DRAFT
+Prompt is being authored; not tested
+None
+Prompt author (any engineer)
+REVIEW
+Prompt is submitted for technical review; basic schema and safety constraints verified manually
+All schema and safety constraints manually verified; prompt_file_ref committed to version control
+Prompt author submits; reviewer is a different engineer
+APPROVED
+Prompt has passed manual review and all automated tests
+evaluation_pass = true (all 10 test types from Table EIS3-6.1 pass); approved_by populated (different engineer from author)
+Approver (different from author); cannot self-approve
+ACTIVE
+Prompt is live in production; the runtime loads this version for new jobs
+deployment_status = APPROVED; no ACTIVE version of the same prompt_id at same or higher patch version
+CI/CD deployment pipeline; triggered by approver
+DEPRECATED
+A newer version is now ACTIVE; this version is still usable for a defined period
+A newer version must be ACTIVE; sunset_at must be set
+Engineering team lead
+SUNSET
+Prompt version is no longer loadable by the runtime; retained for audit query only
+sunset_at date must have passed
+Automated — runtime enforces sunset_at; no human action required
+Table EIS3-8.1 — Prompt deployment lifecycle.
+ 
+8.2 Deployment Checklist
+PROMPT DEPLOYMENT CHECKLIST (must be completed before ACTIVE status):
+□ 1. Prompt body file committed to version control at correct path
+□ 2. Output schema JSON file committed at correct path
+□ 3. All evaluation scenarios for this prompt created and committed
+□ 4. Prompt registry entry created in Postgres (status=DRAFT)
+□ 5. All 10 test types in Table EIS3-6.1 executed (status=REVIEW)
+□ 6. evaluation_pass = true confirmed by CI test run
+□ 7. Manual safety review completed by a second engineer
+□ 8. Tool permission matrix (Table EIS3-3.1) verified against allowed_tools
+□ 9. Model version confirmed as available in Agent Runtime Service
+□ 10. Prior ACTIVE version sunset_at set (if applicable)
+□ 11. approved_by populated with approver user_id (must differ from created_by)
+□ 12. deployment_status updated to APPROVED
+□ 13. CI/CD pipeline deploys to staging environment
+□ 14. Staging smoke test: one real implementation session completes Stage 1-2
+□ 15. deployment_status updated to ACTIVE in production
+□ 16. Deployment event logged: {prompt_id, version, deployed_by, deployed_at}
+ 

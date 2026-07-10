@@ -1,0 +1,171 @@
+FIE-000
+FINANCIAL INTELLIGENCE ENGINE
+Architecture Overview
+Version 1.0
+An orientation guide to FIE-001 through FIE-005 for engineers, implementation teams, and product stakeholders
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — INTERNAL ORIENTATION DOCUMENT
+Five services. One rule: nothing is invented, nothing is duplicated, and every conclusion traces back to something real.
+How to Read This Document
+This document does not redesign, extend, or reinterpret FIE-001 through FIE-005. Everywhere this overview and one of the five engineering specifications appear to disagree, the engineering specification is correct and this document has a stale summary that should be fixed. Its only job is to make the completed FIE layer understandable to someone who has not read, and may never need to read, all five specifications in full.
+Engineers implementing a specific service should still read that service's own document — this overview does not contain endpoint definitions, schemas, or error codes. Implementation teams onboarding a customer, and product stakeholders trying to understand what the platform actually does, should be able to stop here.
+1. Purpose of the FIE Layer
+The Implementation Foundation — Connector Proxy, Orchestration, Canonical, Validation, and Knowledge (BIS-001 through BIS-005), plus Reporting (BIS-006) — answers one question: can we acquire, standardize, validate, and understand a customer's data? The Financial Intelligence Engine answers a different one: given trustworthy data, what does it mean, and what should the organization do about it?
+Where the Implementation Foundation ends at trusted Canonical Business Objects, the FIE layer begins there and produces five things no prior layer could: a permanent historical record of what happened and what the organization believed (FIE-001), an explicit, versioned definition of how this specific organization calculates its own numbers (FIE-002), deterministic execution of that definition against that history (FIE-003), a permanent record of the organizational reasoning and decisions surrounding all of it (FIE-004), and evidence-based reasoning that turns all of the above into explanations, findings, and recommendations a finance professional can independently verify (FIE-005).
+2. Why the Five Services Exist Separately
+Every one of the five answers a genuinely different question. Building them as one monolithic 'Financial Intelligence' service would have collapsed distinctions this platform depends on — most importantly, the boundary between what is a fact, what is a belief, what is a rule, and what is a conclusion.
+Service
+The Question It Answers
+FIE-001 — Observation Engine
+What did we know, and when did we know it?
+FIE-002 — Financial Methodology Engine
+How does this organization define and calculate its own finance?
+FIE-003 — Financial Calculation Engine
+Given this methodology and this history, what are the correct results?
+FIE-004 — Organizational Financial Memory Platform
+What organizational knowledge should never be lost?
+FIE-005 — Financial Reasoning Platform
+Given everything we know, what can we confidently explain, and what should we do?
+Table FIE0-2.1 — Five questions, five services. No service can answer another's question, and none is permitted to try.
+3–4. What Each Service Owns, and What It Explicitly Does Not
+Service
+Owns
+Explicitly Does Not Own
+FIE-001
+Immutable Observations and Revisions; bi-temporal history; Domain and Composite Snapshots
+Calculation, methodology, reasoning, scheduling of its own capture
+FIE-002
+Methodologies, the Formula Registry, the Driver Registry, Financial Operating Models, Industry Templates
+Any observed or assumed value over time (that's FIE-001); execution (that's FIE-003)
+FIE-003
+Deterministic execution and every Financial Intelligence Object it produces, with complete lineage
+Any financial definition; any organizational reasoning; any write path into FIE-001 or FIE-002
+FIE-004
+Customer Organizational Knowledge — Decisions, Forecast History, Patterns, Recommendation Candidates — immutable and versioned
+Any financial value already owned by FIE-001/002/003 (referenced, never duplicated); reusable platform knowledge (that remains BIS-005)
+FIE-005
+Reasoning Packages, independently addressable Findings and Insights, audience-specific Narrative Objects
+Calculation; methodology; organizational memory storage (Recommendations always, Findings/Insights on request, exit through FIE-004's own API); report rendering (that's BIS-006)
+Table FIE0-4.1 — Ownership and non-ownership, side by side. Every 'does not own' column entry names the service that does.
+5. End-to-End Data Flow
+FIE-001            FIE-002              FIE-003                FIE-004              FIE-005Observation   →   Methodology     →    Calculation      →    Organizational   →    FinancialEngine             Engine               Engine                 Memory               ReasoningWhat happened     How we define        What the correct       What we should       What we can& what we         & calculate our      results are, given      never lose about     confidentlybelieved           own finance          methodology + history  why any of it        explain                                                                matteredrecords    →    defines calculation →  executes, produces  →  preserves context →  reasons overfacts &         rules referencing      independently-         referencing FIOs     everything,beliefs         FIE-001 drivers        addressable FIOs       & Observations        produces                                        with full lineage       without copying      Findings,                                                                                     Insights,                                                                                     Narratives
+Figure FIE0-5.1 — Each service reads only from what came before it. No service writes upstream of itself; FIE-005 is the only one with a downstream write path at all, and it is exclusively into FIE-004, through FIE-004's own governed API (Section 10).
+6. Runtime Flow, Source Data to Reasoning
+ERP / CRM / Billing / HRIS  (API, CSV, or Hybrid — ABS-012)         ↓Connector Proxy (BIS-001)  →  Canonical Platform (BIS-003)         ↓Validation (BIS-004)   +   Knowledge Platform (BIS-005)         ↓FIE-001 Observation Engine  (facts + beliefs, bi-temporal)         ↓FIE-002 Methodology Engine  (resolves the customer's methodology + Operating Model)         ↓FIE-003 Calculation Engine  (deterministic execution → Financial Intelligence Objects)         ↓                                              ↑FIE-004 Organizational Memory  ←──── organizational context, decisions, forecasts         ↓FIE-005 Financial Reasoning  (Findings, Insights, Narratives — verified before publish)         ↓Reporting (BIS-006)  →  dashboards, exports, board packages
+Figure FIE0-6.1 — The complete runtime path. FIE-004 sits beside FIE-003 rather than strictly after it in practice — organizational knowledge accumulates continuously, informed by and informing calculation, which is why Section 10 below treats Memory as a parallel accumulation rather than a single downstream stage.
+7. How CSV/API Ingestion Reaches FIE Through Canonical
+ABS-012 established the governing principle every FIE service depends on structurally, not just by convention: every implementation path — CSV/Excel upload (Path A), live connector API (Path B), or a per-domain mix of both (Path C) — converges into the same Canonical Business Objects before anything downstream ever sees it. No FIE service, and no BIS-004 through BIS-006 service, has any code path that behaves differently based on how a canonical object was populated.
+Concretely: FIE-001's source_system field on a Temporal Record is descriptive metadata, not a behavioral branch — an Observation derived from a CSV-sourced invoice and one derived from a live NetSuite sync are structurally identical records. This is why building five FIE services against Canonical, without reference to any specific ingestion mechanism, turned out to make ABS-012 possible without modifying a single one of them (ABS-012 §11 verifies this document by document). It is also why a customer can start on Path A and later graduate a single domain to Path B without re-implementing anything above Canonical — FIE-001's history simply continues under a new source_system from the graduation date forward.
+8. Confidence Propagation
+Confidence is never a single number anywhere in this platform. Four dimensions exist, and no service is permitted to collapse them:
+Dimension
+Answers
+Owned/Set By
+Mapping Confidence
+Was this field or record interpreted correctly?
+Set at capture in FIE-001 (or BIS-003/004 for the canonical data underneath it)
+Data Confidence
+Is the underlying source data reliable?
+Set at capture in FIE-001, inherited from Validation (BIS-004)
+Reasoning Confidence
+How confident is the judgment or interpretation itself?
+Set on FIE-001 Revisions, propagated and combined through FIE-003, always populated on FIE-005 Findings
+Knowledge Confidence
+How organizationally certain are we in preserved understanding?
+Set once per version by FIE-004, fixed permanently at that version's creation
+Table FIE0-8.1 — The four confidence dimensions and where each originates.
+When a value combines multiple inputs — a formula drawing on an Observation and an Assumption Revision, or a Finding drawing on an FIO and a Knowledge Object — the platform's rule is the minimum across contributing inputs, per dimension, first established in FIE-003 §1.8 and extended to a fourth dimension in FIE-005 §19. A result is only as trustworthy as its least-trustworthy input; nothing is ever averaged into looking more confident than its weakest contributor. Once written, no confidence value on any persisted record is ever recalculated retroactively, anywhere in the platform — confidence is a fact about a moment, not a live-updating score.
+9. Explainability Relationship
+Financial Explainability — showing the source records, calculation lineage, business context, and confidence behind any conclusion — is deliberately not owned by any single FIE service, and specifically not by FIE-005 despite being its first and most demanding consumer. Every fact Explainability surfaces already has a system of record: FIE-001 for data lineage, FIE-003 for calculation lineage (its own Financial Evidence Package, assembled on read rather than stored separately), FIE-004 for business context, and all four services collectively for confidence context.
+At MVP, FIE-005 satisfies its own need for this through an internal Explainability Adapter — a component that implements a fixed five-operation contract (resolve data lineage, calculation lineage, business context, confidence context, and tie-out) by calling the four owning services directly. This is a deliberate placeholder for a future shared Explainability Platform serving FIE-005, Reporting, dashboards, and future agent workflows alike, without duplicating any of the four services it currently calls directly. The contract is fixed specifically so that building the shared version later changes nothing about how FIE-005 asks for what it needs.
+10. Memory and Promotion Flows
+Two separate promotion mechanisms exist in the platform, and they move in different directions for different reasons.
+10.1 FIE-005 → FIE-004: Reasoning Into Organizational Memory
+What
+How It Reaches FIE-004
+Recommendation Candidates
+Always, immediately, automatically — created directly via FIE-004's own Knowledge Object API the moment FIE-005's reasoning engine produces one; no local FIE-005 storage exists for these at all
+Financial Findings / Business Insights
+Only on explicit request — each exists first as its own independently addressable, versioned FIE-005 object, and is promoted into FIE-004 only through a separate, deliberate call
+Table FIE0-10.1 — A stated asymmetry, not an inconsistency: Recommendations carry governance weight from the moment they exist; Findings may never need to leave FIE-005's own store.
+10.2 FIE-004 → BIS-005: Customer Knowledge Into Platform Knowledge
+Customer Organizational Memory never automatically becomes reusable platform knowledge. The only path is FIE-004's Promotion Pipeline: Governance Review → Anonymization → Approval → BIS-005. This is never triggered by FIE-004 itself — it requires an explicit request and a human governance reviewer, and only an approved request ever results in a write to BIS-005, which happens through BIS-005's own API rather than a direct table write.
+11. How Reporting Consumes FIE Outputs
+BIS-006 (Reporting) supplies presentation; FIE-005 supplies content. A Narrative Object is content FIE-005 owns outright — the text, its evidence references, its four-dimensional confidence, all immutable once verified. A rendered board deck, PDF export, or dashboard view containing that Narrative is a BIS-006 artifact that references it. BIS-006 never generates reasoning or narrative text of its own for financial content; it renders and exports what FIE-005 already produced and verified. This mirrors exactly the relationship BIS-006 already has with Canonical, Validation, and CAL data for implementation-stage reporting — Reporting has never, at any layer, been the place conclusions originate.
+12. Key Architectural Principles
+Principle
+What It Means in Practice
+Canonical Convergence
+Every ingestion path (CSV, API, hybrid, and future mechanisms) converges on the same Canonical Business Objects before any FIE service sees the data — ingestion mechanism is invisible above Canonical
+Reference, never duplicate
+A fact or value owned by one service is always referenced by another, never copied — Decision Memory references an FIO rather than storing its own copy of the number; a Finding references an Observation rather than restating its value
+Immutability with versioning
+Nothing in the FIE layer is ever edited in place — a change is always a new version, and history is always reconstructable exactly as it was at any past point in time
+Deterministic execution, separate from reasoning
+FIE-003 is the only FIE service with no LLM anywhere in its execution path — determinism is achievable at the source there, and bounded through immutable storage everywhere reasoning or narrative generation is involved instead
+Fail-closed verification
+FIE-005 blocks publication by default on any unresolved evidence, contradiction, or confidence shortfall — there is no override path, only Draft Mode for internal iteration
+Promotion is never automatic
+Both promotion mechanisms in Section 10 require an explicit, separate, governed action — nothing organizational or customer-specific becomes durable or shared without a deliberate step
+Confidence is never collapsed
+Four dimensions, always kept separate, combined by minimum-across-inputs when necessary — a result is never made to look more trustworthy than its weakest input
+Table FIE0-12.1 — The seven principles that recur across all five FIE documents and the ABS/BIS layer beneath them.
+13. Implementation-Readiness Checklist
+Document
+Status
+Build Readiness Score
+FIE-001 — Observation Engine
+Frozen, engineered
+58 / 60 (97%)
+FIE-002 — Financial Methodology Engine
+Frozen, engineered
+59 / 60 (98%)
+FIE-003 — Financial Calculation Engine
+Frozen, engineered
+58 / 60 (97%)
+FIE-004 — Organizational Financial Memory Platform
+Frozen, engineered
+59 / 60 (98%)
+FIE-005 — Financial Reasoning Platform
+Frozen, engineered
+59 / 60 (98%)
+Table FIE0-13.1 — All five FIE services are frozen and engineered. No document in this layer is pending conceptual review.
+Before beginning cross-service integration work, confirm the following:
+BIS-001's file-upload adapter (ABS-012 §7) exists, if any customer in scope uses Path A or Path C
+FIE-002's Financial Operating Model composition has been exercised for the target customer before FIE-003 is invoked against it
+FIE-004's Business Theme registry is populated with the organization's actual recurring themes before Decision/Pattern Records reference them
+FIE-005's Narrative Policies are configured for every audience the implementation actually needs (Board, CFO, FP&A, Investor Relations, etc.) before narrative generation is requested
+Every service's Explainability-relevant read paths (FIE-003 §1.7, FIE-004 §9, FIE-005 §15) are reachable from the environment FIE-005 runs in
+14. Future Backlog Items
+Consolidated from the individual backlogs of FIE-002 through FIE-005 and ABS-012 — nothing here blocks current implementation; each item carries the same trigger-condition discipline used throughout this documentation set rather than a target date.
+Item
+Originates In
+Trigger to Reconsider
+FIE-002 Financial Governance addendum (retirement_date, restatement_policy)
+Backlogged in FIE-003, restated in FIE-004, restated again in FIE-005
+Built once, closes an inherited limitation now stated in three FIE documents
+Dedicated Explainability Platform service
+FIE-005 §33
+A second consumer beyond FIE-005 and BIS-006 needs the same lineage/tie-out views
+ABS-013 — Canonical Identity & Entity Resolution
+ABS-012 §13
+First domain graduation from CSV to API, or first Path C entity overlap in production
+Semantic retrieval implementation
+FIE-004 §34
+A concrete FIE-005 use case emerges that structured filtering cannot serve
+Multi-hop knowledge/dependency graph traversal
+FIE-002 §30, FIE-004 §34
+A concrete downstream use case requires it beyond current one-hop APIs
+Automated Finding deduplication across customers
+FIE-005 §33
+Sufficient customer volume to make cross-customer pattern recognition meaningful
+Narrative regeneration triggers on upstream drift
+FIE-005 §33
+Production volume shows Finding-version drift happening often enough to need automation
+Full historical restatement integration
+FIE-003 §31, restated in FIE-004/FIE-005
+The FIE-002 Financial Governance addendum above is built
+Table FIE0-14.1 — Consolidated FIE-layer backlog. The Financial Governance addendum and the Explainability Platform are the two items referenced by the most downstream documents, and are the best candidates for prioritization if backlog capacity opens up.
+Closing Note
+The Financial Intelligence Engine is complete as five services, each answering exactly one question, each depending only on the services before it, and none duplicating what another already owns. That property was not achieved by planning it all at once — it emerged from reviewing each service's conceptual architecture against every service that came before it, catching adjacent-territory conflicts (BIS-005 vs. FIE-002 vs. FIE-004, the Financial Evidence/Reasoning Package overlap, the Findings addressability gap) before they became schema migrations instead of clarifying paragraphs.
+This document will go stale the moment any of FIE-001 through FIE-005 changes. It should be treated as a map, not a territory — useful for orientation, never authoritative over the documents it summarizes.

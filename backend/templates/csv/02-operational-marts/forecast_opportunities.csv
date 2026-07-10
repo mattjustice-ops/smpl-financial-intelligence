@@ -1,0 +1,1 @@
+version,forecast_period,opportunity_id,customer_id,customer_name,segment,region,marketing_channel,opportunity_type,stage,amount_arr,probability,weighted_arr,billing_cadence,billing_terms,historical_nrr_assumption

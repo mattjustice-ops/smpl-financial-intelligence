@@ -1,0 +1,834 @@
+SMPL ORCHESTRATION FRAMEWORK
+SOF — Customer Onboarding Orchestration
+ABS-010  ·  Version 1.0
+The Operational Framework Governing AI-Assisted Customer Implementations
+SMPL.ai  ·  AI Implementation Engineering
+June 2026 · CONFIDENTIAL — INTERNAL ARCHITECTURE DOCUMENT
+Operationalizes: SKA · SCBM · SCDM · CKR · IMS Libraries · CEP · CAL · MCR
+Document Purpose and Scope
+The SMPL Orchestration Framework (SOF) is the operational backbone of the SMPL platform. Where the architecture documents (SKA, SCBM, SCDM) define what SMPL produces, the registry documents (CKR, IMS Libraries) define how individual connectors are implemented, and the CEP, CAL, and MCR define how customer-specific decisions are stored and evaluated, the SOF defines how all of these systems collaborate in real time to onboard a customer from first engagement to Financial Intelligence Ready status.
+The SOF is not a connector specification. It does not replace or modify any IMS document. It is the coordination layer that determines which IMS agents run, in what order, with what inputs, producing what outputs, and subject to what decision criteria at every stage. If the IMS libraries are the playbooks for individual connectors, the SOF is the coaching staff that assembles them into a team for a specific customer engagement.
+What the SOF Governs
+Domain
+SOF Responsibility
+Governed By (Architecture Asset)
+Customer discovery
+Understanding the customer's business environment before any technical work begins
+CEP — Customer Environment Profile
+Agent coordination
+Determining which implementation agents run, in what order, and with what dependencies
+SOF Agent Registry (this document)
+Decision routing
+Determining whether each orchestration node produces CONTINUE, PAUSE_FOR_CEP, ESCALATE, or ERROR
+SOF Decision Framework (this document)
+Canonical integration
+Merging outputs from multiple implementation agents into a unified SCBM instance
+SCBM — Canonical Business Model
+Capability assessment
+Running the CAL against the populated SCBM to determine module readiness
+CAL — Capability Assessment Layer
+Customer communication
+Presenting findings, requesting confirmations, delivering the Implementation Summary
+CEP and SOF Customer Review protocol
+Audit and explainability
+Recording every orchestration decision with its reasoning, inputs, and outputs
+SOF Implementation Log (this document)
+Table SOF-0.1 — SOF governance scope.
+The Single Governing Principle
+Automate everything possible. Ask only what cannot be discovered.
+Every decision the SOF makes must be traceable to this principle. When a node routes to PAUSE_FOR_CEP, it is because the required information cannot be reliably inferred from available data — not because it is easier to ask than to discover. When a node routes to CONTINUE, it is because the decision is deterministic from available inputs. This principle is enforced throughout the Decision Framework in Section 4.
+Relationship to Prior Architecture Assets
+The SOF is the fourth and final layer of the SMPL implementation stack, sitting above the three prior layers:
+Layer 1 — Architecture (SKA, SCBM, SCDM): Defines the canonical model that implementations populate.
+Layer 2 — Registries (CKR, MCR): Defines what each connector can produce and at what confidence.
+Layer 3 — Execution (IMS Libraries, CEP, CAL): Defines how each connector is implemented and assessed.
+Layer 4 — Orchestration (SOF): Defines how all of the above collaborate to onboard a specific customer.
+The SOF never modifies or redesigns any asset from Layers 1–3. It coordinates them. A change to the IMS for Salesforce updates the Salesforce implementation agent's behavior; the SOF's coordination logic for that agent does not change unless the agent's inputs, outputs, or decision branch points change.
+Section 1 — SOF Agent Registry
+Every participant in a SMPL implementation is registered here with its responsibilities, inputs, outputs, and relationship to other agents. The SOF's coordination logic references agent IDs rather than agent names, ensuring that future agent additions or modifications require only Agent Registry updates rather than SOF logic rewrites.
+1.1 Agent Taxonomy
+SMPL implementation participants fall into three categories: Coordination Agents (manage orchestration flow, not implementation content), Implementation Agents (execute connector-specific IMS logic), and Evaluation Agents (assess outputs and activate capabilities). Human implementation consultants are registered as a fourth participant type — not agents, but with defined intervention points and communication protocols.
+1.2 Coordination Agents
+Agent ID
+Agent Name
+Primary Responsibility
+Key Outputs
+COORD-001
+Implementation Coordinator
+Master orchestration agent. Owns the implementation session lifecycle from Customer Engagement through Financial Intelligence Ready. Routes decisions, manages agent parallelism, and maintains the Implementation Log.
+Implementation session state, agent dispatch instructions, PAUSE/ESCALATE decisions, Implementation Summary
+COORD-002
+CEP Agent
+Maintains the Customer Environment Profile throughout the implementation. Receives inputs from all agents, asks customers only what cannot be auto-discovered, and resolves pending CEP fields.
+CEP state updates, pending CEP field list, resolved CEP confirmations
+COORD-003
+Discovery Agent
+Executes Stage 2 (Connector Discovery). Probes the customer environment to identify connected business systems and their API availability without attempting canonical mapping.
+Validated system inventory, agent dispatch list for Implementation Coordinator, authentication status per connector
+COORD-004
+Canonical Integration Agent
+Executes Stage 4. Merges canonical objects from multiple Implementation Agents into the unified SCBM instance, resolving cross-system relationships, duplicate entities, and system-of-authority conflicts.
+Unified SCBM instance, cross-system identity resolution log, system-of-authority record per canonical object type
+COORD-005
+Reporting Agent
+Generates all customer-facing outputs: Implementation Summary, Capability Summary, Readiness Score, Module Activation Plan, Executive Summary, and future scheduled reports.
+All customer-facing deliverables; board package (future)
+Table SOF-1.1 — Coordination agents.
+1.3 Implementation Agents
+One Implementation Agent exists per supported connector. Each agent encapsulates the full IMS logic for its connector — Sections 1 through 10 of the relevant IMS document. The SOF dispatches agents and receives their canonical objects, confidence scores, and pending CEP requests; it does not execute IMS logic directly.
+Agent ID
+Connector
+IMS Reference
+Parallel Execution Capable?
+ERP-001
+NetSuite
+IMS-001
+Yes — can run in parallel with CRM, Billing, and HRIS agents
+ERP-002
+Sage Intacct
+IMS-002
+Yes
+ERP-003
+QuickBooks Online
+IMS-003
+Yes
+ERP-004
+Dynamics 365 Finance
+IMS-004
+Yes — shares Dataverse with CRM-003; coordinate if both are dispatched
+ERP-005
+Oracle Fusion ERP
+IMS-005
+Yes — longest expected runtime; dispatch first among ERP agents
+ERP-006
+SAP S/4HANA
+IMS-006
+Yes — ACDOCA extraction is time-intensive; dispatch first
+CRM-001
+Salesforce
+IMS-101
+Yes
+CRM-002
+HubSpot
+IMS-102
+Yes
+CRM-003
+Dynamics 365 Sales
+IMS-103
+Yes — shares Dataverse with ERP-004; coordinate if both dispatched
+CRM-004
+Zoho CRM
+IMS-104
+Yes
+CRM-005
+Pipedrive
+IMS-105
+Yes
+BIL-001
+Stripe Billing
+IMS-201
+Yes
+BIL-002
+Chargebee
+IMS-202
+Yes
+BIL-003
+Recurly
+IMS-203
+Yes
+BIL-004
+Maxio
+IMS-204
+Yes
+BIL-005
+Zuora
+IMS-205
+Yes — Rate Plan enumeration is time-intensive; dispatch early
+HRS-001
+Workday HCM
+IMS-301
+Yes — RaaS coordination requires customer admin; flag during discovery
+HRS-002
+Rippling
+IMS-302
+Yes
+HRS-003
+BambooHR
+IMS-303
+Yes
+HRS-004
+UKG Pro
+IMS-304
+Yes
+HRS-005
+ADP Workforce Now
+IMS-305
+Yes — role confirmation (HRIS vs. payroll-only) required before dispatch
+Table SOF-1.2 — Implementation agents. All can run in parallel except for the Dataverse shared-tenant coordination note for ERP-004 and CRM-003.
+1.4 Evaluation Agents
+Agent ID
+Agent Name
+Primary Responsibility
+Key Outputs
+EVAL-001
+CAL Agent
+Runs the Capability Assessment Layer against the populated SCBM after Stage 4 (Canonical Integration). Evaluates each SMPL module as READY, PARTIAL, or UNAVAILABLE based on canonical object completeness and confidence thresholds.
+CAL output: module status per capability, confidence scores, missing-object list per partial capability
+EVAL-002
+Validation Agent
+Executes Section 5 (Validation Rules) logic from each IMS document after an Implementation Agent completes. Produces PASS/FLAG/REJECT/BLOCK status per canonical object, aggregating into an implementation health score.
+Validation report: object-level results, data quality threshold breach notifications, BLOCK conditions requiring human intervention
+EVAL-003
+Confidence Scoring Agent
+Aggregates per-object confidence scores into capability-level confidence using the formula established in IMS-001 Section 7.3. Applies all relevant adjustment factors from each connector's IMS Section 7.
+Per-capability confidence scores, confidence audit trail (base score + all adjustments applied), CEP pending items that are reducing confidence
+Table SOF-1.3 — Evaluation agents.
+1.5 Human Participant Protocol
+Human implementation consultants are not agents — they participate at defined PAUSE points and cannot be replaced by automated agents at those points. The SOF surfaces the minimum required human intervention and provides all context needed for rapid decision-making.
+Intervention Type
+When Triggered
+Context Provided to Human
+Expected Response Time
+CEP resolution
+PAUSE_FOR_CEP node triggered by any agent; question cannot be auto-answered
+The specific CEP field, the question text, why it cannot be auto-discovered, the capability impact of leaving it unresolved, and a default value if one exists
+< 2 business days; SOF continues other non-dependent work while waiting
+ESCALATE resolution
+ESCALATE node triggered by BLOCK condition or multi-system conflict
+Full context of the BLOCK condition, the implementation log at the time of trigger, and a specific question or decision required to unblock
+< 1 business day for blocking conditions; SOF pauses dependent agents while waiting
+Stage 6 customer review
+Scheduled at end of Stage 5; always involves human consultant
+Implementation Summary, Capability Summary, and the list of CEP items requiring customer business validation (not technical questions)
+Customer review session scheduled within 5 business days of Stage 5 completion
+Table SOF-1.4 — Human participant protocol.
+Section 2 — Core Orchestration Workflow
+The SOF orchestration workflow is a seven-stage process from Customer Engagement to Financial Intelligence Ready. Each stage has explicit inputs, outputs, responsible agents, decision criteria, and success conditions. Stages 3 and 4 are the most parallelizable; Stages 1, 6, and 7 always require human involvement.
+Stage 1 — Customer Discovery
+Field
+Content
+Purpose
+Establish the minimum viable CEP necessary to begin technical discovery. Understand the customer's business context, primary pain points, and expected system landscape before any API call is made.
+Responsible Agent
+COORD-002 (CEP Agent) conducts the discovery conversation; COORD-001 (Implementation Coordinator) maintains session state.
+Human Involvement
+Implementation Consultant leads or reviews the customer discovery session. This is always a human-mediated interaction — the first customer contact is never fully automated.
+Inputs
+Empty CEP template; customer context from sales handoff (company name, industry, primary use case, expected connector list).
+Outputs
+Initial CEP populated with: company name, industry, fiscal calendar start, primary ERP, CRM, Billing, and HRIS systems, and any pre-identified constraints. A minimum of CEP.connector_inventory must be populated before Stage 2 can begin.
+Success Condition
+CEP.connector_inventory contains at least one confirmed connector. CEP.fiscal_calendar.year_start is confirmed. CEP.functional_currency is confirmed.
+Failure Handling
+If customer cannot confirm any connector during Stage 1: PAUSE. Engage sales team to confirm scope. Do not advance to Stage 2 without at least one confirmed connector to authenticate.
+Table SOF-2.1 — Stage 1: Customer Discovery.
+Stage 2 — Connector Discovery
+Field
+Content
+Purpose
+Validate the connector inventory from Stage 1 by attempting authentication and basic API probes for each system listed in CEP.connector_inventory. Identify any additional systems not mentioned during Stage 1.
+Responsible Agent
+COORD-003 (Discovery Agent). Operates independently per connector; results reported to COORD-001.
+Human Involvement
+Minimal. Customer may be required to provide API credentials; this is a mechanical step, not a business conversation.
+Inputs
+CEP.connector_inventory (from Stage 1); authentication credentials provided by customer.
+Outputs
+Validated system inventory: for each connector, one of: AUTHENTICATED (ready for IMS dispatch), AUTH_FAILED (credentials invalid; pause), UNAVAILABLE (API not accessible; flag), or NOT_CONFIRMED (customer mentioned but no credentials provided; defer). Agent dispatch list for Implementation Coordinator.
+Parallelism
+All connectors in CEP.connector_inventory can be probed simultaneously. Authentication probes are independent.
+Success Condition
+At least one connector reaches AUTHENTICATED status. Implementation can proceed with the authenticated subset while AUTH_FAILED and NOT_CONFIRMED connectors are resolved asynchronously.
+Table SOF-2.2 — Stage 2: Connector Discovery.
+Stage 3 — Connector Implementation
+Field
+Content
+Purpose
+Execute the full IMS workflow (Sections 1–10) for each authenticated connector. This is the most time-intensive stage and the one with the most parallelism.
+Responsible Agent
+One Implementation Agent per connector (Table SOF-1.2), coordinated by COORD-001 (Implementation Coordinator).
+Human Involvement
+CEP Agent (COORD-002) surfaces PAUSE_FOR_CEP requests to the human consultant as they arise. Other than CEP resolution, Stage 3 is fully automated.
+Inputs
+Authentication credentials and CEP state for each connector.
+Outputs
+Per connector: populated canonical objects, per-object confidence scores, validation report, pending CEP items, and an Implementation Agent completion status (COMPLETE, COMPLETE_WITH_GAPS, PARTIAL, or BLOCKED).
+Parallelism
+All Implementation Agents can run simultaneously. The only coordination constraint is the Dataverse shared-tenant note for ERP-004 and CRM-003 (see Table SOF-1.2). Time-intensive agents (ERP-005, ERP-006, BIL-005, HRS-001) should be dispatched first within their domain group.
+Dependency management
+If an agent is BLOCKED (an IMS Section 9 block condition that cannot be auto-resolved), COORD-001 suspends that agent and dispatches a PAUSE_FOR_CEP or ESCALATE request. Other agents continue uninterrupted.
+Success Condition
+All dispatched Implementation Agents reach COMPLETE, COMPLETE_WITH_GAPS, or PARTIAL status. A BLOCKED agent with no pending resolution after 2 business days triggers an ESCALATE to the human consultant.
+Table SOF-2.3 — Stage 3: Connector Implementation.
+Stage 4 — Canonical Integration
+Field
+Content
+Purpose
+Merge canonical objects from all completed Implementation Agents into a single unified SCBM instance. Resolve cross-system identity conflicts, duplicate entities, and system-of-authority assignments per canonical object type.
+Responsible Agent
+COORD-004 (Canonical Integration Agent).
+Human Involvement
+System-of-authority conflicts that cannot be auto-resolved require human review (see ESCALATE conditions in Section 4). All other integration is automated.
+Inputs
+All completed Implementation Agent outputs; current CEP state; SCBM canonical object definitions.
+Outputs
+Unified SCBM instance; cross-system identity resolution log; system-of-authority record; list of unresolved conflicts requiring ESCALATE.
+Key Integration Operations
+(1) Customer Account identity resolution across ERP, CRM, and Billing connectors using email, name, and external ID matching. (2) ARR Movement cross-validation: CRM Closed Won → Billing Subscription confirmation; Billing Invoice → ERP GL Transaction confirmation. (3) Department/Cost Center reconciliation: HRIS Department → ERP Cost Center mapping where CEP provides the link. (4) Legal Entity consolidation: same Legal Entity appearing in multiple connectors unified under a single canonical record.
+Success Condition
+Unified SCBM instance created. All Tier 1 canonical objects (GL Account, Employee, Subscription, Opportunity) have a designated system-of-authority. Identity resolution rate for Customer Account >= 80% (see IMS-001 Section 5.4 threshold).
+Table SOF-2.4 — Stage 4: Canonical Integration.
+Stage 5 — Capability Assessment
+Field
+Content
+Purpose
+Run the CAL against the unified SCBM instance to determine which SMPL modules are READY, PARTIAL, or UNAVAILABLE, and at what confidence.
+Responsible Agent
+EVAL-001 (CAL Agent) and EVAL-003 (Confidence Scoring Agent). EVAL-002 (Validation Agent) runs concurrently if not already complete.
+Human Involvement
+None — fully automated. Results are prepared for Stage 6 customer review.
+Inputs
+Unified SCBM instance (from Stage 4); MCR module definitions; confidence scores from EVAL-003.
+Outputs
+CAL output: per-module status (READY/PARTIAL/UNAVAILABLE), confidence scores, missing-object list for PARTIAL modules, recommended next integrations to improve PARTIAL capabilities.
+Success Condition
+All supported SMPL modules assessed with an explicit READY/PARTIAL/UNAVAILABLE status and a numeric confidence score. No module returns NULL status — UNAVAILABLE with 0% is an explicit, valid result.
+Table SOF-2.5 — Stage 5: Capability Assessment.
+Stage 6 — Customer Review
+Field
+Content
+Purpose
+Present the Implementation Summary to the customer, validate business decisions, confirm the system-of-authority record, and identify any remaining capability gaps the customer wants to close before activation.
+Responsible Agent
+COORD-005 (Reporting Agent) prepares materials; human Implementation Consultant leads the review session; COORD-002 (CEP Agent) records any new CEP inputs from the session.
+Human Involvement
+Always required. Stage 6 is the one stage that is never automated. The customer validates business decisions; the Implementation Consultant facilitates.
+Inputs
+CAL output (Stage 5); CEP current state; all pending CEP items; system-of-authority record.
+Customer Confirms
+(1) System-of-authority designations for any contested canonical objects. (2) Business definition interpretations flagged by CEP Agent during Stage 3. (3) Desired activation sequence if phased rollout is preferred. (4) Acceptance of known gaps (PARTIAL/UNAVAILABLE capabilities).
+Outputs
+Confirmed CEP (all pending items resolved or explicitly deferred); confirmed system-of-authority record; Module Activation Plan; any new connectors to be added in a future implementation phase.
+Success Condition
+Customer signature or explicit acceptance of the Implementation Summary. All pending CEP items are either resolved or explicitly marked DEFERRED_BY_CUSTOMER with an acknowledgment of the capability impact.
+Table SOF-2.6 — Stage 6: Customer Review.
+Stage 7 — Implementation Completion
+Field
+Content
+Purpose
+Activate all READY modules, generate final deliverables, transition the customer to production monitoring, and establish the baseline for future scheduled refreshes.
+Responsible Agent
+COORD-001 (Implementation Coordinator) triggers activation; COORD-005 (Reporting Agent) generates deliverables; EVAL-001 (CAL Agent) confirms post-activation module status.
+Human Involvement
+Implementation Consultant confirms activation readiness and delivers the Implementation Summary to the customer's executive sponsor.
+Inputs
+Confirmed CEP (Stage 6); Module Activation Plan (Stage 6); confirmed SCBM instance.
+Outputs
+Activated SMPL modules (READY status confirmed); Implementation Summary; Capability Summary; Readiness Score; Executive Summary; Ongoing Monitoring Plan with scheduled refresh cadence.
+Success Condition
+At least one SMPL module reaches READY status and is activated. Implementation Summary delivered to customer. Implementation session closed in the SOF log with status COMPLETE.
+Transition to Production
+After Stage 7, the customer transitions from Implementation to Production. The SOF switches from onboarding orchestration to scheduled refresh orchestration (see Section 7 — Future Orchestration).
+Table SOF-2.7 — Stage 7: Implementation Completion.
+Section 3 — Decision Framework
+Every decision node in the SOF produces exactly one of four outcomes: CONTINUE (automated execution resumes), PAUSE_FOR_CEP (human input required for a specific business decision), ESCALATE (human consultant must assess and resolve a complex condition), or ERROR (technical failure requiring investigation). No decision produces an ambiguous output — the SOF's determinism is its operational integrity.
+3.1 Decision Node Taxonomy
+Outcome
+Meaning
+SOF Behavior
+Human Required?
+CONTINUE
+All required inputs are available; the next step is deterministic
+SOF proceeds automatically to the next node in the workflow DAG
+No — fully automated
+PAUSE_FOR_CEP
+A business decision cannot be auto-discovered and requires customer or human consultant confirmation
+SOF queues a CEP resolution request to COORD-002; dependent agents wait; independent agents continue
+Yes — specific business question surfaced to human consultant or customer
+ESCALATE
+A condition exists that exceeds the SOF's ability to resolve automatically, or that carries implementation risk requiring human judgment
+SOF suspends the relevant workflow branch; logs the full context; alerts the Implementation Consultant with specific decision context
+Yes — Implementation Consultant must assess and respond before SOF can continue
+ERROR
+A technical failure has occurred (authentication error, API outage, data corruption) that prevents execution
+SOF logs the error with full context; attempts automatic retry per retry policy (Section 6); escalates to SMPL Engineering if retry exhausted
+Possibly — SMPL Engineering if retry policy exhausted; customer if credential-related
+Table SOF-3.1 — Decision node taxonomy.
+3.2 Discovery Phase Decision Rules
+Condition
+SOF Decision
+Reason
+Connector authentication succeeds on first attempt
+CONTINUE → dispatch Implementation Agent
+No human input required
+Connector authentication fails
+ERROR → retry up to 3 times with exponential backoff
+Technical failure; automatic retry before ESCALATE
+Connector authentication fails after 3 retries
+ESCALATE → customer must provide new credentials
+Credentials are invalid or expired; human required
+Connector API responds but returns unexpected schema
+PAUSE_FOR_CEP → confirm whether this is a sandbox or staging environment
+Environment detection required before proceeding; risk of contaminating production canonical store with test data
+Customer mentions a connector during Stage 1 but provides no credentials in Stage 2
+PAUSE_FOR_CEP → request credentials; defer connector; dispatch other agents
+No block; other agents continue; defer this connector until credentials arrive
+Discovery Agent detects a connector not mentioned in CEP.connector_inventory
+PAUSE_FOR_CEP → "We detected {system_name} connected to your environment. Should it be included in this implementation?"
+Never auto-include unconfirmed systems — always get explicit customer confirmation
+Table SOF-3.2 — Discovery phase decision rules.
+3.3 Implementation Agent Decision Rules
+Condition
+SOF Decision
+Reason
+All IMS Section 1 discovery steps complete without BLOCK
+CONTINUE → proceed to Section 2 (Canonical Object Mapping)
+Fully deterministic; no human input needed
+IMS gate question cannot be auto-answered (e.g., stage normalization, FTE methodology)
+PAUSE_FOR_CEP → surface specific gate question
+Cannot proceed without human confirmation; gate-specific default applied to maintain progress on non-gated capabilities
+IMS pre-extraction BLOCK condition triggered (e.g., SAP ACDOCA without ledger filter)
+PAUSE_FOR_CEP → surface blocking question
+Extraction must not proceed without resolution; other non-blocked connectors continue
+Implementation Agent reaches BLOCKED status after 2 business days without CEP resolution
+ESCALATE → Implementation Consultant must intervene
+BLOCK that customer cannot resolve may indicate a data or access issue requiring SMPL expertise
+Implementation Agent produces 0 canonical objects after extraction (empty result)
+ESCALATE → "Extraction returned no records for {connector}. This may indicate incorrect API scope or an empty environment. Please verify."
+Silent empty extraction is more dangerous than an error — it can produce seemingly complete but actually empty canonical state
+Confidence score for a Tier 1 canonical object drops below 30%
+PAUSE_FOR_CEP → surface reason and ask whether to continue or investigate
+Low confidence on a required object undermines capability quality; customer should be aware before activation
+REJECT rate exceeds threshold from IMS Section 5.4
+PAUSE_FOR_CEP → surface data quality issue with specific record count and examples
+Exceeding the threshold degrades capability confidence; customer should confirm whether this reflects actual data or an implementation issue
+Table SOF-3.3 — Implementation agent decision rules.
+3.4 Canonical Integration Decision Rules
+Condition
+SOF Decision
+Reason
+Customer Account identity match rate >= 80% across all connected systems
+CONTINUE → proceed with matched set; log unmatched for review
+80% match is the minimum acceptable threshold (IMS-001 Section 5.4); above threshold, proceed automatically
+Customer Account identity match rate < 80%
+PAUSE_FOR_CEP → "Only {N}% of customer accounts could be matched across your connected systems. Should we proceed with unmatched accounts excluded, or would you like to review the unmatched list?"
+Below-threshold identity resolution may indicate data quality issue or missing connectors; customer must decide
+Two connectors claim system-of-authority for the same canonical object type
+ESCALATE → "Both {Connector A} and {Connector B} appear to be authoritative sources for {object_type}. Please confirm which should be treated as the canonical source."
+System-of-authority conflicts cannot be resolved by the SOF — they require business judgment
+ARR Movement cross-validation finds > 15% of CRM Closed Won Opportunities with no matching Billing subscription
+PAUSE_FOR_CEP → surface the gap count and ask whether to flag as UNCONFIRMED_BOOKING or investigate provisioning lag
+This is a normal implementation finding; threshold of 15% requires customer awareness before proceeding
+ERP GL transaction does not match any Billing invoice within a 5% tolerance
+FLAG → log as REVENUE_RECONCILIATION_ITEM; continue without blocking
+Common reconciliation gap; surfaced in Stage 6 customer review; not a blocking condition
+Legal Entity exists in multiple connectors with conflicting attributes (e.g., different functional currency)
+ESCALATE → attribute conflict requires human resolution
+Currency conflicts cannot be auto-resolved; wrong resolution produces incorrect financials
+Table SOF-3.4 — Canonical integration decision rules.
+3.5 Human Intervention Mandatory Conditions
+The following conditions always require human intervention — they cannot be automated regardless of available data:
+Business definition interpretations where multiple valid canonical mappings exist (e.g., a Billing status that could be ACTIVE or PAST_DUE depending on business policy)
+System-of-authority conflicts between two systems with equal or similar confidence for the same canonical object type
+Cross-domain conflicts where a customer's existing business logic produces outcomes that contradict SCBM canonical ownership (e.g., a customer who uses their ERP as their system of record for ARR, not their Billing platform)
+Structural ceiling disclosures (e.g., Position Planning unavailable from BambooHR) that require customer acknowledgment before implementation proceeds
+Any BLOCK condition that persists beyond 2 business days
+Stage 6 Customer Review — always human-mediated
+Section 4 — Canonical Integration Detail
+The Canonical Integration Agent (COORD-004) executes the most complex coordination in the SOF — merging outputs from up to 21 Implementation Agents into a single coherent SCBM instance. This section documents the integration logic for the canonical objects most likely to appear in multiple connectors simultaneously.
+4.1 Customer Account Identity Resolution
+Customer Account (Legal Entity) records are the canonical object most likely to appear in multiple connectors. The same customer may be an Account in Salesforce, a Customer in Stripe, and a Customer in NetSuite — all representing the same business entity and needing a single canonical Customer Account record.
+CUSTOMER ACCOUNT IDENTITY RESOLUTION ALGORITHM:
+FOR each new Customer Account candidate from any Implementation Agent:
+STEP 1 — Exact match (highest confidence):
+  IF email matches an existing canonical Customer Account.primary_email:
+    → MATCH (D-H confidence)
+    → Link to existing canonical record; record source connector as contributor
+STEP 2 — External ID match (high confidence):
+  IF connector provides an external_id field that matches another
+  connector's external_id for the same canonical record (e.g., Salesforce
+  Account ID stored in NetSuite Customer.externalId):
+    → MATCH (D-H confidence)
+    → Record bidirectional ID link in canonical Customer Account
+STEP 3 — Name-based fuzzy match (medium confidence):
+  IF normalized company name (lowercase, stripped punctuation) has
+  edit distance <= 2 from an existing canonical Customer Account.name:
+    → TENTATIVE MATCH (D-M confidence)
+    → FLAG for CEP confirmation before treating as confirmed match
+    → Record as MATCH_PENDING in canonical Customer Account
+STEP 4 — No match:
+  → Create new canonical Customer Account record
+  → Tag as source connector only
+  → Log as UNMATCHED for Stage 6 review
+POST-RESOLUTION:
+  Compute match rate = confirmed_matches / total_candidates
+  IF rate < 80% → PAUSE_FOR_CEP (Table SOF-3.4)
+  IF rate >= 80% → CONTINUE with matched set
+4.2 System-of-Authority Assignment
+Every canonical object type in the SCBM has exactly one system-of-authority — the canonical owner of that data. System-of-authority assignments follow the SCBM-defined ownership hierarchy and are codified in the CEP record during Stage 4.
+Canonical Object Type
+Default System of Authority
+Override Condition
+SOF Action if Conflict
+Revenue (recognized)
+ERP — always
+None — ERP is the unconditional canonical owner of recognized revenue per SCBM D-001 through D-019
+If no ERP connected: system-of-authority = UNCONFIRMED; Revenue Recognition capabilities UNAVAILABLE until ERP connects
+ARR / Subscription
+Billing — always
+None — Billing is the canonical owner of ARR and Subscription data
+If no Billing connected: ARR derived from ERP invoice patterns (DR-M confidence); surfaced to customer in CAL output
+Pipeline / Opportunity
+CRM — always
+None — CRM is the canonical owner of pipeline and sales intent
+If no CRM connected: pipeline capabilities UNAVAILABLE
+Employee / Org Structure
+HRIS — always
+None — HRIS is the canonical owner of organizational structure
+If no HRIS connected: workforce capabilities UNAVAILABLE
+Customer Account (identity)
+Highest-confidence connector at time of integration
+If ERP and CRM both have Customer Account: ERP identity is preferred for financial attribution; CRM identity is preferred for commercial attribution; both are linked in the canonical record
+ESCALATE if functional currency conflict exists between the two records for the same entity
+Health Score (Customer)
+Customer Success domain (no connector in current library)
+Not applicable — no SMPL connector currently maps to this canonical object
+UNAVAILABLE until Customer Success connector is added to the IMS library
+Table SOF-4.1 — System-of-authority assignment rules.
+4.3 Cross-Domain Validation Matrix
+After all Implementation Agents complete and canonical objects are merged, the Canonical Integration Agent executes the following cross-domain validations. These are the critical reconciliation checks that make SMPL's Financial Intelligence trustworthy rather than merely aggregated.
+Validation
+Source → Target
+Threshold
+Outcome if Below Threshold
+CRM Opportunity → Billing Subscription confirmation
+CRM Closed Won Opportunities → Billing active Subscriptions (by Customer Account)
+> 85% of Closed Won Opportunities have a matching Billing Subscription within 30 days of Close Date
+FLAG as BOOKINGS_VALIDATION_GAP; surface count and examples in Stage 6
+Billing Invoice → ERP GL Transaction confirmation
+Billing Invoices → ERP GL Transactions (AR entries matching invoice amounts within 5%)
+> 90% of Billing Invoices with ERP GL counterparts
+FLAG as REVENUE_RECONCILIATION_ITEMS; surface in Stage 6
+HRIS Employee → ERP Payroll Expense confirmation
+HRIS headcount by department → ERP GL payroll expense by department
+Qualitative directional check — headcount growth should correlate with payroll expense growth
+FLAG if headcount and payroll expense move in opposite directions over the same period
+Billing ARR → ERP Revenue confirmation
+Billing-derived ARR by customer → ERP-recognized revenue by customer (fiscal year total)
+Directional check — ARR and recognized revenue should be in the same order of magnitude
+FLAG if ARR exceeds ERP-recognized revenue by > 20% (may indicate unbilled ARR or revenue recognition gap)
+CRM Renewal Opportunity → Billing Subscription renewal confirmation
+CRM Renewal stage Opportunities → Billing Subscription renewals (same customer, same period)
+> 80% match rate
+FLAG as RENEWAL_VALIDATION_GAP
+Table SOF-4.2 — Cross-domain validation matrix.
+Section 5 — Error Handling
+Error handling in the SOF is deterministic, documented, and branch-specific. No error produces an undefined behavior. Every error has an explicit response: retry, continue-with-degraded-confidence, pause-for-CEP, or escalate-to-human.
+Error Category
+Detection
+Retry Policy
+Escalation Threshold
+Confidence Impact
+Authentication failure
+HTTP 401 or 403 on initial connector probe
+3 retries with 30s / 60s / 120s backoff
+After 3 retries: ESCALATE with specific error code and credential guidance
+N/A until resolved; connector excluded from current session
+API rate limit
+HTTP 429; connector returns Too Many Requests
+Exponential backoff per connector's documented rate limit (from IMS Section 1); queue extraction in off-peak windows for sustained limit hits
+After 5 retry cycles: PAUSE_FOR_CEP to confirm whether to continue overnight or pause the session
+None — rate limit is a scheduling issue, not a data quality issue
+API timeout
+HTTP 504 or connection timeout during extraction
+3 retries with increasing page size reduction (split batch into smaller chunks)
+After 3 retries with minimum batch size: ESCALATE; API may be experiencing availability issues
+If partial data was extracted before timeout: flag affected canonical objects with INCOMPLETE_EXTRACTION tag; reduce confidence by −10%
+Unexpected schema
+Field present in IMS field map not found in API response; or field with unexpected data type
+No retry — schema change detected
+PAUSE_FOR_CEP: "The {field_name} field in {connector} has changed. This may affect {canonical_field}. Please confirm whether to proceed with null handling or investigate the schema change."
+−15% on affected canonical object confidence until resolved
+Empty extraction
+Extraction completes successfully but returns 0 records for a required object
+Verify filter parameters and retry once with expanded parameters
+If retry returns 0: ESCALATE — empty production environment is unusual and warrants investigation
+N/A — no canonical objects created; capabilities dependent on this object are UNAVAILABLE
+Conflicting data
+Two connectors return conflicting values for the same canonical field on the same entity (e.g., different functional currencies for the same Legal Entity)
+No retry — conflict detected on first comparison
+ESCALATE with specific entity ID, field name, and both conflicting values
+BLOCK for affected canonical object until resolved; object held in CONFLICT_PENDING state
+Circular reference
+Org hierarchy cycle detected (HRIS) or account hierarchy cycle detected (ERP)
+No retry — cycle confirmed on detection
+PAUSE_FOR_CEP: "A circular reporting/hierarchy relationship was detected at [org IDs]. This prevents hierarchy calculations. Please confirm which record should be updated."
+−25% on affected hierarchy branch; rollup calculations BLOCKED for affected branch until resolved
+Partial implementation
+Implementation Agent completes but with REJECT rate above IMS threshold
+No retry — data quality issue in source system
+PAUSE_FOR_CEP: surface REJECT rate, affected capability, and request whether to accept with degraded confidence or pause for data quality investigation
+Confidence degraded per IMS Section 5 threshold table; capability marked PARTIAL
+Table SOF-5.1 — Error handling catalog.
+Section 6 — Logging and Explainability
+Every orchestration decision produces an immutable audit trail entry in the SOF Implementation Log. The goal is complete implementation transparency — a human consultant or the customer themselves should be able to trace every capability status, every confidence score, and every system-of-authority assignment to a specific decision with documented reasoning.
+6.1 Implementation Log Structure
+The Implementation Log is a chronological record of every node execution in the SOF workflow. Each log entry follows a standard schema:
+Log Field
+Content
+Example
+log_id
+UUID for this log entry
+log_7a3c4f2e-...
+session_id
+The implementation session this entry belongs to
+sess_smpl_acme_2024_01
+timestamp
+ISO 8601 timestamp of the decision
+2024-01-15T14:32:11Z
+stage
+The SOF Stage number (1–7)
+Stage 3
+node
+The specific workflow node within the stage
+IMS_EXECUTION / ERP-001 / Section_5_Validation
+agent_id
+The agent responsible for this decision
+ERP-001
+decision
+The outcome: CONTINUE / PAUSE_FOR_CEP / ESCALATE / ERROR
+PAUSE_FOR_CEP
+reason
+The specific rule from Section 3 that produced this decision
+IMS-001 Section 5.4: GL Transaction REJECT rate = 2.3%, exceeds 1.0% threshold
+inputs
+Key inputs at time of decision (abbreviated)
+REJECT_count=47, TOTAL_count=2043, THRESHOLD=0.01
+outputs
+Key outputs produced (abbreviated)
+REJECT_list=[ids...], FLAG_TO_CEP_AGENT=true
+confidence_impact
+Confidence adjustment triggered, if any
+GL Transaction confidence: −20% on affected batch
+next_action
+What the SOF will do next
+COORD-002: surface REJECT rate to Implementation Consultant; suspend Stage 3 / ERP-001 / Section_6_pending CEP resolution; continue Stage 3 / CRM-001, BIL-001, HRS-002
+cep_item_id
+If PAUSE_FOR_CEP, the ID of the queued CEP item
+cep_item_0041
+resolution
+When resolved: the resolution value and who provided it
+Accepted by customer: 2024-01-16T09:12:00Z via Implementation Consultant
+Table SOF-6.1 — Implementation log entry schema.
+6.2 Customer-Facing Explainability
+Beyond the technical Implementation Log, the SOF produces a customer-readable Explanation Record for every capability status. Customers should be able to answer the question "why is this capability PARTIAL?" without reading technical logs.
+Explanation Type
+Trigger
+Customer-Facing Text Format
+Capability READY
+CAL marks a module as READY
+"[Capability name] is ready. This capability is powered by data from [Connector A] and [Connector B], with [X]% confidence."
+Capability PARTIAL — missing connector
+A required companion connector is not connected
+"[Capability name] is partially available. To reach full capability, connect [Connector Type]. [Connector Type] would provide [specific data] that completes this analysis."
+Capability PARTIAL — confidence below threshold
+Confidence is below READY threshold but above 0
+"[Capability name] is partially available at [X]% confidence. Confidence is limited because [specific reason from IMS Confidence Drivers]. This improves when [specific action]."
+Capability UNAVAILABLE — structural
+A platform does not support the required object (e.g., BambooHR + Position Planning)
+"[Capability name] is not available from [Connector]. This is a platform limitation of [Connector] — it does not have a [Position/Feature] object. This capability becomes available if [alternative connector] is connected."
+Capability UNAVAILABLE — no connector
+No connector in scope supports this capability
+"[Capability name] requires connecting [Connector Type]. It is not available from any currently connected system."
+Table SOF-6.2 — Customer-facing explainability format.
+Section 7 — Implementation Success Criteria
+A successful SOF orchestration is not defined by the number of connectors implemented or the number of modules activated — it is defined by the quality and trustworthiness of what is produced. A single high-confidence Financial Statements module is a better implementation outcome than five low-confidence modules activated simultaneously.
+7.1 Required Outputs for Implementation Completion
+Output
+Description
+Minimum Standard
+Completed CEP
+The Customer Environment Profile is fully populated — no PENDING fields without explicit DEFERRED_BY_CUSTOMER acknowledgment.
+All Tier 1 CEP fields confirmed. DEFERRED fields documented with capability impact.
+Populated SCBM
+The SMPL Canonical Business Model is populated with all available canonical objects from connected systems.
+All Tier 1 canonical objects from every connected system are present. System-of-authority assigned for every Tier 1 object type.
+Updated CAL
+The Capability Assessment Layer has assessed all modules.
+Every supported SMPL module has an explicit READY / PARTIAL / UNAVAILABLE status and a numeric confidence score.
+Capability Summary
+A module-by-module summary of what is ready, what is partial, and what is unavailable.
+No module status is NULL. Every PARTIAL module documents its missing requirements.
+Readiness Score
+A single aggregate score representing the overall implementation quality.
+Computed as: weighted average of READY module confidence scores, with PARTIAL modules at 50% weight and UNAVAILABLE modules at 0%.
+Implementation Summary
+A customer-readable narrative summarizing what was discovered, what was implemented, and what is available.
+Delivered to the customer's executive sponsor by the Implementation Consultant during Stage 7.
+Activated Modules
+All READY modules are live in the customer's SMPL environment.
+At least one module activated. No module activated below 60% confidence without explicit customer acknowledgment.
+Table SOF-7.1 — Required implementation outputs.
+7.2 Readiness Score Calculation
+READINESS SCORE = weighted average of all assessed capabilities:
+  FOR each capability c in CAL_output:
+    IF c.status = READY:
+      contribution = c.confidence × c.importance_weight × 1.0
+    ELIF c.status = PARTIAL:
+      contribution = c.confidence × c.importance_weight × 0.5
+    ELIF c.status = UNAVAILABLE:
+      contribution = 0
+  READINESS_SCORE = SUM(contributions) / SUM(importance_weights)
+  EXPRESSED AS: percentage (0–100%)
+  Importance weights are defined in the MCR for each capability.
+  Core Financial Reporting and ARR Reporting receive the highest weights.
+  Niche capabilities (e.g., specific territory reporting) receive lower weights.
+  COMMUNICATE alongside the score:
+  "Your SMPL Readiness Score is {N}%. This reflects the completeness and
+  confidence of your current connected systems. Connecting {Recommended
+  Connector} would improve this score by an estimated {delta}%."
+Section 8 — Future Orchestration
+The SOF is designed for extensibility. The onboarding orchestration defined in this document is the first operational mode. The architecture explicitly supports three additional future modes without requiring redesign: Continuous Production Monitoring, Scheduled Reporting, and AI Narration. Each is described here at sufficient architectural detail to inform future development without over-specifying implementation.
+8.1 Continuous Production Monitoring
+After Stage 7, the customer transitions from Implementation to Production. The SOF's Continuous Production Monitoring mode runs the following workflows on a scheduled basis:
+Workflow
+Frequency
+SOF Behavior
+Human Required?
+Incremental Canonical Sync
+Daily (or configurable)
+Each Implementation Agent executes its IMS Section 3 (Incremental Synchronization) logic, updating canonical objects modified since the last sync. EVAL-002 (Validation Agent) runs post-sync.
+No — fully automated; alert if REJECT rate exceeds threshold
+Confidence Drift Detection
+Weekly
+EVAL-003 (Confidence Scoring Agent) re-evaluates confidence scores against updated canonical objects. If any module's confidence drops below its READY threshold, PAUSE_FOR_CEP to alert the customer.
+Yes — if confidence drops below threshold; otherwise automated
+Cross-Domain Reconciliation
+Monthly
+COORD-004 (Canonical Integration Agent) re-runs Table SOF-4.2 cross-domain validations. Flags new reconciliation gaps. Produces reconciliation summary for customer.
+No — alert-driven; human involved only if gaps widen significantly
+Capability Reassessment
+Quarterly (or on connector addition)
+EVAL-001 (CAL Agent) re-runs full capability assessment. Provides updated Capability Summary and Readiness Score.
+No — automated; human delivers updated Capability Summary to customer if significant change
+Table SOF-8.1 — Continuous production monitoring workflows.
+8.2 Scheduled Reporting Orchestration
+Board packages, executive dashboards, and periodic financial reports can be orchestrated by the SOF on customer-defined schedules. The Reporting Agent (COORD-005) assembles reports from the canonical store using the following workflow:
+SCHEDULED REPORT ORCHESTRATION:
+  TRIGGER: Scheduled date/time OR manual request
+  1. COORD-005 queries canonical store for the requested report period
+  2. COORD-005 validates that all required canonical objects for the report
+     are current (modified within the report's recency threshold)
+  3. IF any required canonical object is stale:
+     → Trigger incremental sync for affected connector(s)
+     → Wait for sync completion before proceeding
+  4. COORD-005 assembles report from canonical objects
+  5. EVAL-003 appends per-metric confidence scores to the report
+  6. Report delivered via configured channel (email, dashboard, PDF)
+  CONFIDENCE DISPLAY RULE:
+  Every metric in every scheduled report displays its confidence score.
+  No metric is presented without its confidence context.
+  This is a non-negotiable SOF reporting standard.
+8.3 AI Narration and Commentary
+Future AI narration — the generation of natural-language commentary explaining financial results, workforce trends, and commercial pipeline movements — is a COORD-005 extension that operates on the canonical store after canonical objects are populated and validated. The narration agent is outside the scope of this v1.0 SOF but is architecturally positioned here to confirm that the canonical store structure and confidence scoring framework it requires are already in place.
+Narration will always be confidence-gated: the narration agent does not provide commentary on metrics below a configurable confidence threshold, and any commentary generated below the full-confidence ceiling is labeled with its confidence level. This prevents the generation of confident-sounding narrative from low-confidence data — consistent with the SOF's core transparency principle.
+8.4 Architecture Extensibility — New Connector Addition
+Adding a new connector to the SMPL platform requires the following SOF changes, and only these changes — the core workflow, decision framework, and logging structure require no modification:
+Register a new Implementation Agent in Table SOF-1.2 with its IMS reference, agent ID, and parallelism notes.
+Add any connector-specific dispatch conditions (time-sensitive agents, shared-platform coordination) to Stage 3 notes.
+Update Table SOF-4.2 (Cross-Domain Validation Matrix) if the new connector introduces new cross-domain validation relationships.
+No other changes are required. The SOF's design ensures that connector additions are additive, not structural.
+Section 9 — Implementation Playbook
+This section is a condensed operational reference for Implementation Consultants and AI agents executing a customer implementation. The full Decision Framework and stage documentation in Sections 2–6 governs; this Playbook provides rapid orientation for the most common execution paths.
+9.1 Standard Implementation DAG
+The following is the canonical execution sequence for a standard multi-connector implementation. Parallel lanes run simultaneously; sequential dependencies are noted.
+STAGE 1 — CUSTOMER DISCOVERY (Human + COORD-002)
+  Output: CEP.connector_inventory (minimum viable)
+  Gate: At least 1 connector confirmed + fiscal calendar + functional currency
+STAGE 2 — CONNECTOR DISCOVERY (COORD-003) [parallel per connector]
+  For each connector in CEP.connector_inventory:
+    Probe authentication → AUTHENTICATED / AUTH_FAILED / UNAVAILABLE
+  Output: Validated system inventory + dispatch list
+  Gate: At least 1 connector AUTHENTICATED
+STAGE 3 — IMPLEMENTATION [parallel lanes]
+  ┌─────────────────┬────────────────┬────────────────┬──────────────────┐
+  │   ERP LANE      │   CRM LANE     │  BILLING LANE  │   HRIS LANE      │
+  │  Dispatch first  │                │                │                  │
+  │  if Oracle/SAP  │                │                │  Flag if Workday  │
+  │  (long runtime)  │                │  Dispatch Zuora │  (RaaS required) │
+  │                 │                │  early          │                  │
+  └─────────────────┴────────────────┴────────────────┴──────────────────┘
+  Each lane: IMS Section 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+  PAUSE_FOR_CEP nodes surface to COORD-002 without blocking other lanes
+  All lanes must reach COMPLETE/COMPLETE_WITH_GAPS/PARTIAL before Stage 4
+STAGE 4 — CANONICAL INTEGRATION (COORD-004) [sequential]
+  Requires: All Stage 3 lanes complete
+  Customer Account identity resolution
+  System-of-authority assignment
+  Cross-domain validation (Table SOF-4.2)
+  Output: Unified SCBM instance
+STAGE 5 — CAPABILITY ASSESSMENT [sequential, after Stage 4]
+  EVAL-001: CAL run → READY / PARTIAL / UNAVAILABLE per module
+  EVAL-003: Confidence scoring
+  EVAL-002: Final validation pass
+  Output: Capability Summary + Readiness Score
+STAGE 6 — CUSTOMER REVIEW (Human required)
+  Present: Capability Summary, system-of-authority, pending CEP items
+  Obtain: Customer acceptance + Module Activation Plan
+STAGE 7 — COMPLETION
+  Activate READY modules → Deliver Implementation Summary → Transition to Production
+9.2 Common Branch Scenarios
+Scenario
+SOF Response
+Human Action Required?
+Only ERP connected (no CRM, Billing, or HRIS)
+Single ERP lane executes; Financial Statements and Cash Forecasting reach READY; ARR Reporting, Pipeline Analytics, Workforce Planning all UNAVAILABLE; CAL marks missing-connector recommendations prominently
+No — automated; present capability gap clearly in Capability Summary
+CRM connected without Billing
+Bookings Forecast PARTIAL; Win Rate Analysis READY; Pipeline Analytics READY; ARR Reporting UNAVAILABLE; Capability Summary recommends Billing as highest-value next connector
+No — automated
+Multiple ERP connectors claimed (e.g., NetSuite + QBO for the same entity)
+ESCALATE — two ERPs for the same entity is a system-of-authority conflict that cannot be auto-resolved
+YES — determine which ERP is authoritative for which legal entity
+ADP is payroll-only with Rippling for HRIS
+ADP dispatched as payroll-equivalent scope (Payroll Line only); Rippling dispatched as standard HRIS scope; Canonical Integration merges the two; Compensation Planning reaches READY
+No — role confirmation surfaced as PAUSE_FOR_CEP in ADP IMS-305 Section 1.2; automated after CEP confirms
+Dynamics 365 Finance + Dynamics 365 Sales (shared Dataverse)
+Coordinate ERP-004 and CRM-003 dispatch; shared Account table check during Stage 4; elevated identity resolution confidence if confirmed
+No — automated coordination; PAUSE_FOR_CEP only if shared table is ambiguous
+Customer requests phased activation (ERP first, CRM in 3 months)
+Stage 7 activates ERP-ready modules; CRM connectors deferred; Stage 2–3 CRM work suspended pending customer timeline; SOF documents deferred scope in CEP and Implementation Summary
+No — document deferral in CEP and Implementation Summary; schedule CRM discovery for deferred phase
+Table SOF-9.1 — Common branch scenarios and SOF responses.
+Section 10 — SOF Readiness Assessment
+The SOF is evaluated against the same standard applied to every prior architecture asset in the SMPL project: does it enable AI implementation agents and human teams to execute consistently, efficiently, and transparently?
+Dimension
+Score
+Assessment
+Determinism
+10 / 10
+Every decision node produces exactly one of four typed outcomes (CONTINUE / PAUSE_FOR_CEP / ESCALATE / ERROR). No decision produces an ambiguous output. The Decision Framework in Section 3 covers the full enumeration of decision conditions without gaps.
+Governing Principle Adherence
+10 / 10
+"Automate everything possible. Ask only what cannot be discovered" is operationalized at every PAUSE_FOR_CEP node — each pause is justified by the specific reason the information cannot be auto-discovered, not by convenience.
+Agent Architecture
+9 / 10
+The Agent Registry separates coordination, implementation, and evaluation concerns cleanly. The 21 Implementation Agents are pre-registered with their IMS references and parallelism notes. One point withheld: agent-to-agent communication protocol (message queue vs. synchronous API vs. shared state) is not specified in this v1.0 — it is deferred to the engineering implementation specification.
+Extensibility
+10 / 10
+Adding a new connector requires only three localized changes (Agent Registry, Stage 3 dispatch notes, Cross-Domain Validation Matrix). Adding a new orchestration mode (narration, board package generation) requires only COORD-005 extension. No core SOF logic changes for either.
+Human Intervention Design
+10 / 10
+Human intervention points are exactly-specified — the SOF surfaces the minimum required human judgment with full context, not open-ended questions. Stage 6 (Customer Review) is the only always-required human stage; all others are automated unless a specific condition triggers a PAUSE or ESCALATE.
+Explainability
+9 / 10
+The Implementation Log schema captures every orchestration decision with its reasoning, inputs, outputs, confidence impact, and next action. The customer-facing Explanation Record (Table SOF-6.2) translates capability statuses into plain-language explanations without requiring the customer to read technical logs.
+Future Readiness
+9 / 10
+Continuous Production Monitoring, Scheduled Reporting, and AI Narration are all architecturally positioned with sufficient detail to begin engineering without redesign. AI Narration's confidence-gating requirement is documented as a non-negotiable standard.
+Table SOF-10.1 — SOF Readiness Assessment. Aggregate: 67 / 70 (96%).
+Final Determination
+The SMPL Orchestration Framework v1.0 is complete. It defines how every major SMPL architecture asset — SKA, SCBM, SCDM, CKR, IMS Libraries, CEP, CAL, and MCR — collaborates during customer implementation. It is ready to serve as the foundation for all future AI Agent Playbooks.
+The SOF closes a gap that existed across the entire prior body of architecture: the individual IMS documents define how each connector is implemented in isolation; the SOF defines how they coordinate in combination. The Customer Account identity resolution algorithm (Section 4.1), the Cross-Domain Validation Matrix (Table SOF-4.2), and the System-of-Authority Assignment rules (Table SOF-4.1) are the three pieces of coordination logic that no individual IMS document could specify — they required a view across all four domains simultaneously.
+The Readiness Score formula (Section 7.2) is the SOF's most consequential customer-facing contribution: a single number that summarizes the implementation quality of a multi-connector, multi-domain SMPL deployment, with a clear explanation of what would improve it. Combined with the confidence-labeled capability explanations (Table SOF-6.2), the SOF ensures that the first thing a customer sees is not a list of technical statuses but a clear, honest picture of what SMPL can deliver today and what additional steps would expand that picture.
+The governing principle — Automate everything possible. Ask only what cannot be discovered — has been operationalized throughout. Every PAUSE_FOR_CEP node in the Decision Framework is accompanied by the explicit reason the information cannot be auto-discovered. Every CONTINUE decision documents why human input is not required. The SOF never asks a question it could answer itself, and it never answers a question that requires human business judgment.

@@ -1,0 +1,454 @@
+FIE-BUILD-005
+PRODUCTION OPERATIONS
+Version 1.0
+How the production platform is continuously operated after deployment, while preserving reliability, auditability, financial correctness, and customer trust
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — PRODUCTION OPERATIONS HANDBOOK
+A platform that is online but producing incorrect financial conclusions is unhealthy. Infrastructure health alone is insufficient.
+Purpose and Authority
+FIE-BUILD-001 established what gets built. FIE-BUILD-002 established how engineers build each service. FIE-BUILD-003 established how services integrate into one production platform. FIE-BUILD-004 established how platform changes safely reach production. This document establishes how the production platform is continuously operated afterward — monitoring, incident response, disaster recovery, capacity, and the customer-facing operational discipline that keeps trust intact between releases, not just during them. It redefines nothing: ABS, BIS, FIE, and BUILD-001 through BUILD-004 remain authoritative. This document operationalizes them.
+Section 1 — Scope and Authority
+This Document Owns
+This Document Does Not Own
+Production Operations (Sections 3–4)
+Platform Architecture — ABS/BIS/FIE remain authoritative
+Monitoring and Alerting (Sections 4–7)
+Engineering Standards — FIE-BUILD-002
+Operational Governance (Section 19)
+Release Engineering — FIE-BUILD-004
+Incident Response (Sections 8–10)
+Deployment Topology — FIE-BUILD-003
+Disaster Recovery (Section 12)
+Customer Implementation — FIE-BUILD-001 §4/§7, FIE-BUILD-003 §7
+Capacity Planning (Section 14)
+Operational Runbooks (Section 11)
+Operational Metrics (Section 15)
+Customer Communication (Section 17)
+This document extends, rather than replaces, two sections already established elsewhere: FIE-BUILD-003 §9 (Operational Monitoring) and §11 (Disaster Recovery) named the categories at a platform-integration level; this document is the operational depth behind both — RPOs, RTOs, runbook content, on-call rotations, and the incident lifecycle FIE-BUILD-003 explicitly deferred to "a dedicated Production Operations document."
+Section 2 — Operational Philosophy
+Reliability over speed — an operational decision under pressure defaults to the safer, slower path, the same priority FIE-BUILD-004's Release Philosophy establishes for shipping
+Automation first — a runbook that can be executed by a script should be, freeing human judgment for the cases that actually need it
+Humans remain accountable — automation executes; a named human owns the outcome, per Section 19
+Evidence before trust — an operational claim ("the platform is healthy") is only as good as the metric backing it, per Section 6
+Fail closed — the same principle FIE-BUILD-002 §1 established for code applies to operations: an ambiguous signal defaults to raising an alert, not to assuming health
+Customer-first operations — an incident's severity (Section 9) is classified by customer impact, not by which system happened to fail
+Operational transparency — customers are told what happened, per Section 17, not left to infer it from a status page's silence
+Financial correctness over infrastructure availability — a platform serving stale or unverified financial output quickly is worse than a platform correctly reporting it cannot answer yet
+Operational Maturity Model
+A long-term operational roadmap, not a static model — the same maturity-levels discipline FIE-BUILD-003 established for the platform overall, applied specifically to operations.
+Level
+Description
+1
+Basic infrastructure monitoring and alerting
+2
+Automated operational monitoring and incident response (Sections 4–10)
+3
+Financial Integrity Monitoring and Operational Confidence (Section 6, and above) — where this document's operations currently target
+4
+Predictive Operations using historical operational trends — anticipating a Section 6 degradation before it crosses alert threshold
+5
+Self-optimizing operations with human governance retained — automation proposes, Section 19's named humans still decide
+Table E.OM.1 — Operational Maturity Model. This document specifies Level 3 in full; Levels 4–5 are named so future operational investment has a shared vocabulary to aim at, the same way FIE-BUILD-003's Platform Maturity Model gave engineering leadership one for the platform overall.
+Operational Confidence
+Production health is the combination of five domains, not infrastructure metrics alone. A platform can be green on the first and red on the third simultaneously — and when it is, this document treats it as unhealthy, full stop.
+Health Domain
+Answers
+Infrastructure Health
+Are the servers, databases, and queues up and responsive?
+Platform Health
+Are the eleven services themselves passing their own health/readiness checks, per FIE-BUILD-002 §11?
+Financial Health
+Are calculations deterministic, validations passing, and confidence within expected range? (Section 6)
+Customer Health
+Per FIE-BUILD-003 §9's Customer Health domain — is a specific customer's pipeline actually working?
+Operational Confidence
+The composite signal (Section 6) — can we currently trust what the platform is telling customers?
+A system producing incorrect financial outputs is unhealthy even if every infrastructure dashboard is green. This is the organizing idea behind every section that follows.
+Section 3 — Production Architecture
+Production               (the eleven services, per FIE-BUILD-003 §4's startup order)     ↓Monitoring               (Section 4 — all five health domains, above)     ↓Alerting                 (Section 7)     ↓Incident Detection       (automated, from Alerting; or customer-reported)     ↓Incident Response        (Section 8–10)     ↓Recovery                 (Section 11–13)     ↓Continuous Improvement   (Section 20)
+This is the operational lifecycle every production incident moves through, the same way FIE-BUILD-004 §2 described the engineering lifecycle a code change moves through — the two are companion loops, one for shipping change, one for running what was shipped.
+Section 4 — Operational Observability
+Monitoring Type
+Tracks
+Traces To
+Infrastructure Metrics
+CPU, memory, disk, network across every deployed component
+FIE-BUILD-003 §3
+Application Metrics
+Per-service Prometheus-style metrics
+Every owning spec's own Metrics section
+Distributed Tracing
+Cross-service request paths
+FIE-BUILD-002 §11
+Logging
+Structured JSON, per the standard field set
+FIE-BUILD-002 §11
+Health Checks
+Per-service liveness/readiness
+FIE-BUILD-003 §4
+Synthetic Monitoring
+Scripted, scheduled transactions exercising the golden path (FIE-BUILD-001 §4) continuously in production, not only pre-release
+New in this document
+Business Monitoring
+Customer onboarding volume, active customer count, usage trends
+FIE-BUILD-003's Capacity Expansion Guidelines
+Financial Monitoring
+Calculation success, validation pass rate, confidence trends
+Section 6
+Connector Monitoring
+Per-domain, per-path (A/B/C) ingestion success rate
+FIE-BUILD-003 §9
+Customer Monitoring
+Per-customer health composite
+FIE-BUILD-003 §9's Customer Health domain
+Operational Confidence Monitoring
+The composite trust signal
+Section 6
+Section 5 — Operational Dashboards
+Dashboard
+Audience
+Purpose
+Engineering Dashboard
+On-call engineers
+Per-service technical health, deep enough to debug from
+Operations Dashboard
+Platform Operations
+Cross-service rollup, queue/worker health, per FIE-BUILD-003 §9
+Customer Health Dashboard
+Customer Success, Support
+Per-customer pipeline status
+Connector Health Dashboard
+Integration Engineering
+Per-domain, per-path ingestion health
+Financial Health Dashboard
+Financial Intelligence Team
+Calculation, validation, and confidence trends, per Section 6
+Narrative Health Dashboard
+AI Engineering
+Verification pass rate, generation latency
+Platform Health Dashboard
+All engineering
+The FIE-BUILD-003 §9 rollup, unchanged, cross-referenced here
+Executive Operations Dashboard
+Leadership
+The Production Health Scorecard (FIE-BUILD-003 §9), plus Operational Confidence Score (Section 6)
+Section 6 — Operational Confidence Dashboard
+Unique to this platform. Infrastructure monitoring alone cannot answer "can we currently trust what the platform is telling customers" — this dashboard exists specifically to answer that question, continuously, in production.
+Operational Confidence is the platform's Golden Signal. While infrastructure metrics measure whether the system is up, Operational Confidence measures whether customers can currently trust the financial conclusions being produced.
+Every other operational metric in this document ultimately contributes toward maintaining or improving this one signal — it is the single number Operations checks first, with every contributing factor below always one click away, never presented as an opaque score standing on its own.
+Metric
+Definition
+Observation Freshness
+Time since the most recent FIE-001 Observation for each active Financial Concept
+Connector Freshness
+Time since the most recent successful ingestion per domain/path
+Validation Success Rate
+BIS-004 pass rate, trended, not just point-in-time
+Methodology Drift
+Frequency and scope of methodology version changes per customer, surfaced so an unusually high rate of change is visible, not just individually approved
+Calculation Success Rate
+FIE-003 COMPLETE vs. PARTIAL vs. FAILED run rate
+Evidence Completeness
+Percentage of FIOs with a fully resolvable Financial Evidence Package, per FIE-003 §1.7
+Narrative Verification Rate
+FIE-005 Verification pass rate
+Confidence Distribution
+Aggregate spread of four-dimensional confidence (FIE-005 §19) across recent output — a shift toward low confidence is a leading indicator, not just a lagging one
+Data Lineage Integrity
+Percentage of published values whose full lineage chain (FIE-BUILD-002 §17) resolves without a break
+Calculation Coverage
+Percentage of in-scope Financial Concepts with a current, non-stale Financial Intelligence Object
+Narrative Coverage
+Percentage of customers with a current, verified Narrative for their configured audiences
+Financial Concept Coverage
+Percentage of a customer's expected Financial Concepts actively producing output
+Operational Confidence Score
+A composite of the above — the single number the Executive Operations Dashboard (Section 5) surfaces, always with its contributing factors one click away, never presented as an opaque score
+Table E6.1 — Operational Confidence metrics. This dashboard is the operational equivalent of the platform's own 'Evidence Before Trust' design principle, applied to the platform's own health rather than to a single customer's financial output.
+Explainability Monitoring
+A focused subset of Section 6, called out on its own because it measures trust directly rather than as one input among many:
+Percentage of outputs with complete lineage
+Percentage of outputs with complete evidence
+Percentage of outputs fully explainable end to end, per FIE-BUILD-002 §17's nine questions
+Percentage of narratives verified before publication, per FIE-005 §1.10
+Trust itself becomes an operational metric here, not a qualitative property assumed to hold because the architecture says it should. A declining trend in any of these four numbers is a Financial Integrity alert (below), not merely a dashboard curiosity.
+Customer Confidence Reporting (Future Capability)
+ASSUMED  Not built in this document — named here as a future capability rather than left undiscovered. Each customer may optionally receive a continuously calculated Operational Confidence summary specific to their own data: Observation Freshness, Validation Health, Methodology Currency, Evidence Completeness, Lineage Completeness, Narrative Verification, and Financial Integrity Status. The purpose is letting a customer understand not only their financial outputs but why those outputs remain trustworthy — the customer-facing extension of this document's own internal Operational Confidence principle. This must remain informational only and never become a contractual SLA (Section 16) — conflating a transparency feature with a guaranteed commitment would create exactly the kind of obligation this document's SLO/SLA gap (internal tighter than external) exists to avoid.
+Section 7 — Alerting Strategy
+Alert severity maps directly to Section 9's incident severity model — an alert's configured severity is not a separate scale
+Routing sends an alert to the on-call rotation (Section 10) owning the affected Platform Area, per FIE-BUILD-001's Engineering Ownership Matrix and FIE-BUILD-003's Platform Ownership Matrix
+Deduplication collapses repeated firings of the same underlying condition into one active incident, never a flood of identical pages
+Escalation follows Section 9's timing per severity if the primary on-call does not acknowledge within the expected window
+Suppression is time-boxed and requires a reason logged against the suppressed alert — silence is never the default response to a noisy alert, fixing the alert or its threshold is
+Alert ownership: every alert has a named owning discipline (Section 19), so an unowned alert is itself treated as a gap to close, not a permanent state
+Noise reduction: an alert with a chronically low signal-to-action ratio is retuned or retired, per FIE-BUILD-003 §9's alert-fatigue guidance
+Customer-visible alerting: a subset of alerts (severe, customer-impacting) feed directly into Section 17's status page and communication flow, automatically, not by manual relay
+Financial Integrity Monitoring
+The following are first-class operational alerts, not merely dashboard metrics (Section 6) someone happens to be watching — each has a defined severity (Section 9) and owning discipline (Section 19):
+Condition
+Why It Alerts
+Validation failures (sustained rate increase)
+BIS-004 catching something is normal; a rate spike signals an upstream data or connector problem, per FIE-BUILD-003 §10
+Observation freshness beyond expected cadence
+A Recording Policy (FIE-001 §8) is silently not being honored
+Missing evidence
+A Financial Evidence Package (FIE-003 §1.7) that cannot fully resolve is a direct Explainability Monitoring failure
+Broken lineage
+The same failure Section 6's Data Lineage Integrity metric tracks, alerted the moment it crosses threshold rather than only reviewed on a dashboard
+Incomplete Financial Intelligence Objects
+A FIO stuck in a non-terminal state, or a PARTIAL run rate spike, per FIE-003 §17
+Failed narrative verification (rate increase)
+FIE-005's fail-closed Verification is working as designed; a rate spike still needs investigation, since it usually means an upstream evidence gap, not a Verification bug
+Methodology version mismatches
+A calculation resolving against an unexpected or stale methodology version — a direct threat to FIE-003's determinism guarantee if left uninvestigated
+Unexpected confidence degradation
+A sudden shift in Section 6's Confidence Distribution metric, investigated before it reaches customer-visible output
+Table E.FIM.1 — Financial Integrity alerts. These exist specifically so a platform that is infrastructure-green but financially wrong is caught by monitoring, not by a customer noticing first.
+ASSUMED  During per-customer cutover parallel-run (per frozen FIE-BUILD-001 §18 and FIE-BUILD-004 §12's rollback hierarchy), Operational Confidence and Customer Health monitoring must include reconciliation status for that customer specifically — unreconciled divergence between prototype-derived and FIE-derived output for the same period is at minimum a Financial Integrity investigation, and a SEV-2 (Section 9) if the divergence is customer-visible. This references frozen prior documents; it does not modify either.
+Section 8 — Incident Management
+Detection            (automated alert or customer report)     ↓Classification        (Section 9 severity)     ↓Assignment            (on-call, per Section 10)     ↓Investigation     ↓Mitigation            (may include Section 12 rollback tiers, borrowed from FIE-BUILD-004 §12)     ↓Recovery     ↓Customer Communication  (Section 17)     ↓Postmortem            (Section 18)     ↓Preventive Action      (feeds Section 20)
+Section 9 — Incident Severity Model
+Severity
+Expected Response
+Escalation Timing
+Communication
+Recovery Objective
+SEV-1
+Immediate, all-hands
+Escalate if unacknowledged in 5 minutes
+Status page + direct customer outreach within 15 minutes
+Platform-wide outage or financial-integrity failure — fastest possible mitigation, per Section 12
+SEV-2
+Immediate, primary on-call
+Escalate if unacknowledged in 15 minutes
+Status page update within 30 minutes
+Significant customer-facing degradation, single domain or customer cohort
+SEV-3
+Business-hours priority
+Escalate if unresolved in 4 hours
+Internal tracking; customer notice only if directly affected
+Non-critical degradation, workaround available
+SEV-4
+Scheduled work
+No escalation timer
+None required
+Minor issue, cosmetic or low-impact
+Severity is classified by customer impact, per Section 2's Operational Philosophy — a SEV-1 in an internal-only tool is still a SEV-3 if no customer is affected; a narrow but financially-incorrect output reaching even one customer is at minimum a SEV-2, regardless of how small the affected infrastructure footprint is.
+Section 10 — On-call Operations
+Rotations are per discipline, matching FIE-BUILD-001's Engineering Ownership Matrix and FIE-BUILD-003's Platform Ownership Matrix — Backend Engineering rotates for Canonical/Observation/Calculation/Memory issues, AI Engineering for Reasoning, and so on
+Ownership: every rotation has a named primary and secondary, never an unowned gap
+Escalation follows Section 9's per-severity timing
+Coverage is continuous — a rotation handoff never leaves a window with no assigned on-call
+Shift handoffs include a written summary of any in-flight incident or elevated-risk condition, not a verbal-only pass
+Operational responsibilities during on-call include acknowledging Section 7 alerts, triaging per Section 9, and executing Section 11's runbooks where applicable
+After-hours expectations are explicit and reasonable — an on-call engineer is expected to respond within Section 9's timing, not to be instantly available for SEV-4 items
+Section 11 — Operational Runbooks
+Every critical failure category already has a documented failure mode in its owning specification's own Failure Recovery section — this section indexes them into runbook form for on-call use, it does not redefine any of them.
+Runbook
+Primary Reference
+Connector outage
+BIS-001's own Failure Recovery section; FIE-BUILD-003 §10
+Canonical synchronization failure
+BIS-003's own Failure Recovery section
+Validation failure
+BIS-004's own Failure Recovery section; Financial Integrity Monitoring, above
+Calculation failure
+FIE-003 §30
+Reasoning verification failure
+FIE-005 §32
+Reporting outage
+BIS-006's own Failure Recovery section
+Queue backlog
+FIE-BUILD-003 §9's Queue Health domain
+Database issue
+Section 12–13, below
+Infrastructure outage
+FIE-BUILD-003 §11
+Authentication issue
+FIE-BUILD-002 §6's Tool Gateway pattern
+Table E11.1 — Runbook index. A runbook's content is a step-by-step operational procedure written against its primary reference's documented failure mode — this table exists so on-call engineers have one place to start, not a reason to re-derive failure handling that already exists.
+ASSUMED  Each indexed runbook category must have a written, version-controlled operational procedure linked from this handbook before the platform is certified for Production, per FIE-BUILD-003 §13. The index above is the catalog; the runbook artifacts are the procedures — a category listed here with no linked document is a gap to close, not a satisfied requirement.
+Section 12 — Disaster Recovery
+Expands FIE-BUILD-003 §11's named categories into concrete operational targets.
+ASSUMED  Concrete RPO and RTO values are set at implementation time, recorded in operational configuration, and reviewed under Section 19's Operational Governance cadence — this section defines what they govern (the categories and the discipline), not the numbers themselves.
+Category
+Target / Approach
+Recovery Point Objective (RPO)
+Maximum acceptable data loss window, set per the platform's backup cadence (Section 13) — tightest for FIE-001/FIE-003's high-volume, append-only stores
+Recovery Time Objective (RTO)
+Maximum acceptable downtime, tiered by Section 9 severity — a SEV-1 platform-wide outage has the tightest RTO
+Regional recovery
+Documented failover procedure if multi-region; otherwise an honestly communicated single-region RTO, per FIE-BUILD-003 §11's own guidance not to silently assume this away
+Database recovery
+Point-in-time recovery, exploiting the platform's append-only, versioned model (FIE-BUILD-002 §8) — a PITR restore of immutable data has no in-place edit history to lose
+Infrastructure recovery
+Per-component runbook, owned per Section 19
+Customer recovery
+Verified against Section 6's Operational Confidence metrics for that customer specifically before declaring recovery complete — infrastructure back online is not the same as a customer's financial output being trustworthy again
+Recovery validation
+A defined post-recovery checklist, including a Golden Path (FIE-BUILD-001 §4) run against the recovered environment
+Testing cadence
+DR procedures are exercised on a schedule, not only when an actual disaster occurs, per FIE-BUILD-003 §11
+Section 13 — Backup and Restore
+Database backups: automated, regular, per-service, retained per the platform's data retention policy
+Object storage backups: artifacts and Cold-tier archives (FIE-001 §17) backed up on the same cadence discipline
+Registry backups: Methodologies, Business Themes, Narrative Policies, and every other registry are themselves append-only and versioned (FIE-BUILD-002's Versioning Philosophy) — their own history is a backup in structure, but physical backup still applies for infrastructure-loss scenarios
+Configuration backups: environment configuration (FIE-BUILD-002 §5) versioned and backed up alongside code
+Verification: every backup is periodically verified restorable, not just assumed to have succeeded because the job reported success
+Restore testing: exercised on the same schedule as Section 12's DR testing cadence, not treated as a separate concern
+Retention: matches the platform's data retention policy, consistent across every service
+Recovery validation: a restored environment passes the same Golden Path check as Section 12's DR validation before being trusted
+Section 14 — Capacity Management
+Expands FIE-BUILD-003's Capacity Expansion Guidelines from decision points into an ongoing management practice.
+Growth forecasting: customer onboarding volume and per-customer data volume projected against current infrastructure sizing, reviewed on a regular cadence
+Scaling: horizontal scaling of stateless API layers and worker pools, per FIE-BUILD-002 §9, triggered by the decision points FIE-BUILD-003 already named
+Performance thresholds: tracked against every service's own Performance Targets section; sustained approach toward a threshold triggers a capacity review before it is breached, not after
+Queue sizing: per FIE-BUILD-003 §9's Queue Health domain, sized against observed depth trends, not a single historical peak
+Database growth: tracked per FIE-001 §25's partitioning guidance and extended to any other high-volume table as it emerges
+Storage growth: Cold-tier archive growth (FIE-001 §17) tracked against object storage cost and lifecycle policy
+Connector scaling: per-domain, per-path ingestion capacity reviewed as customer count per path grows
+Cost monitoring: infrastructure cost tracked against customer count and revenue, so scaling decisions are informed by unit economics, not only technical headroom
+Section 15 — Operational Metrics
+Metric
+Domain
+Availability
+Infrastructure Health
+Latency
+Infrastructure / Platform Health
+Error Rate
+Platform Health
+Queue Depth
+Infrastructure Health, per FIE-BUILD-003 §9
+Connector Success Rate
+Financial Health, per Section 6
+Calculation Throughput
+Financial Health
+Narrative Throughput
+Financial Health
+Verification Success
+Financial Health, per Section 6
+Platform Utilization
+Infrastructure Health, feeds Section 14
+Customer Health
+Per FIE-BUILD-003 §9
+Operational Confidence
+The Section 6 composite
+Operational KPIs
+Section 15's metrics are engineering telemetry — what on-call watches. These are the executive-facing companion: what leadership reviews to judge operational performance over time, distinct in audience even where the underlying data overlaps.
+Mean Time to Detect (MTTD)
+Mean Time to Acknowledge (MTTA)
+Mean Time to Recovery (MTTR)
+Operational Confidence Trend (Section 6, over time rather than point-in-time)
+Financial Integrity Incident Rate
+Incident Recurrence Rate (feeds Section 18's postmortem effectiveness)
+Customer Trust Score
+False Alert Rate (the direct measure of Section 7's noise-reduction discipline)
+Section 16 — SLO / SLA
+Target
+Internal SLO
+Customer SLA
+Availability
+Tighter internal target, reviewed continuously
+Published, contractual commitment — set only once the internal SLO has demonstrated headroom above it
+Latency
+Per-service Performance Targets sections
+Customer-facing commitment, a looser bound than the internal target
+Response Times (support)
+Internal triage target
+Contractual response time per Section 9 severity
+Recovery Times
+Section 12's RTOs
+Customer-facing commitment, set conservatively relative to the internal RTO
+Support Targets
+Internal staffing/coverage target
+Published support hours and escalation path
+Internal SLOs are always set tighter than the corresponding customer SLA — the gap is the operational margin this document's monitoring (Section 4–6) exists to protect, so a customer-visible SLA breach is a rare, already-anticipated event rather than a surprise.
+Section 17 — Customer Communications
+Status page: real-time, reflecting Section 9 severity classifications honestly, never quietly softened
+Maintenance windows: scheduled per FIE-BUILD-004's Release Calendar, communicated per that document's Release Freeze Windows discipline
+Incident updates: cadence tied to Section 9 severity — SEV-1 updates are frequent, SEV-4 requires none
+Planned downtime: communicated with lead time proportional to impact, never same-day for anything beyond emergency (FIE-BUILD-004 §17)
+Customer notifications: per-customer where the incident is customer-specific (e.g. a single customer's calculation pipeline), platform-wide where it isn't
+Communication templates: pre-drafted per Section 9 severity so an incident's first update doesn't wait on someone composing prose under pressure
+Section 18 — Postmortems
+Blameless culture — a postmortem investigates the system and process that allowed an incident, never assigns individual fault
+Evidence collection — logs, metrics, and the specific Section 6/Financial Integrity signals that fired or should have fired
+Timeline — reconstructed from Section 8's incident lifecycle timestamps
+Root cause analysis — the actual causal chain, not the first plausible explanation
+Corrective actions — immediate fixes, tracked to completion
+Preventive actions — systemic changes preventing recurrence, which may include a new Financial Integrity alert (above) if the gap was a monitoring blind spot
+Architecture implications — if a postmortem reveals a genuine architectural gap, it is raised as an EDR (FIE-BUILD-002) against the relevant owning specification, never silently patched around
+Engineering backlog — every preventive action becomes a tracked backlog item, feeding Section 20
+Operational Debt
+The operational counterpart to the Technical Debt Register already established in this documentation series (FIE-BUILD-001) — operational improvements compete for prioritization alongside engineering work, rather than remaining undocumented and perpetually deferred.
+Missing runbooks — a Table E11.1 category with no linked procedure, per the P3 note above
+Excessive alert noise — an alert with a chronically low signal-to-action ratio not yet retuned, per Section 7
+Manual operational procedures — a runbook step that could be automated but isn't yet, per Section 2's Automation First principle
+Missing dashboards — a Section 5 dashboard defined but not built
+Weak monitoring coverage — a Section 4 monitoring type with known gaps
+Missing ownership — an alert or runbook with no named owner, per Section 19
+Incomplete operational automation — any Section 3 lifecycle stage still requiring manual intervention where automation was intended
+Tracked the same way Technical Debt is tracked — with an owner and a trigger condition, not a vague aspiration to "get to eventually."
+Section 19 — Operational Governance
+Names operational approval authority. It does not replace FIE-BUILD-001's Engineering Ownership Matrix, FIE-BUILD-003's Platform Ownership Matrix, or FIE-BUILD-004's Release Governance table — where this table and any of those three disagree, reconcile toward whichever was established first, the same rule FIE-BUILD-004 §14 already applies to its own overlap with the two ownership matrices before it.
+Responsibility
+Owner
+Incident commander rotation
+Platform Operations
+Escalation authority beyond Section 9's default timing
+Engineering leadership
+DR/backup testing cadence approval
+Platform Operations, per Section 12–13
+Capacity investment decisions
+Platform Operations + Engineering leadership, per Section 14
+Postmortem process ownership
+Engineering, per Section 18
+Operational review cadence
+Platform Operations
+Risk review
+Security Engineering, cross-referencing FIE-BUILD-002 §10
+Audit requirements
+Security Engineering, feeding the future FIE-BUILD-007 Security, Compliance & Governance document
+Section 20 — Continuous Improvement
+Telemetry              (Section 4–6)     ↓Customer Feedback     ↓Support Trends     ↓Operational Metrics    (Section 15)     ↓Architecture Review     ↓Engineering Decision Records   (FIE-BUILD-002, where a divergence is proposed)     ↓Engineering Backlog     ↓Platform Improvements
+This is the operational twin of FIE-BUILD-004 §19's release-side continuous improvement loop — that one closes the loop from a release's real-world behavior back into the next release; this one closes the loop from ongoing operational experience back into the same backlog, so the two loops feed one prioritization process rather than two competing ones.
+This loop runs continuously, but its formal review checkpoints follow a defined cadence — operational excellence is a scheduled practice, not only a reaction to incidents:
+Cadence
+Review
+Daily
+Operations Review
+Weekly
+Incident Review
+Monthly
+Capacity Review, per Section 14
+Quarterly
+Architecture and Operational Health Review, cross-referencing Section 6's Operational Confidence trend
+Semi-Annual
+Disaster Recovery Exercise, per Section 12
+Annual
+Operational Governance Review, per Section 19
+Section 21 — Relationship to Previous BUILD Documents
+Document
+Defines
+FIE-BUILD-001
+Implementation Planning
+FIE-BUILD-002
+Engineering Standards
+FIE-BUILD-003
+Platform Integration
+FIE-BUILD-004
+Release Engineering
+FIE-BUILD-005
+Production Operations (this document)
+Future BUILD documents inherit these operational standards rather than redefining them — a future FIE-BUILD-006 Performance & Scalability document, for instance, extends Section 14's capacity management with load-testing methodology, it does not propose a competing operational model.
+Final Engineering Review
+Reviewed as a Principal Software Architect responsible for the platform's ongoing operational integrity, not just its release process.
+1. Are Any Operational Responsibilities Misplaced?
+No. This document deliberately expands, rather than duplicates, FIE-BUILD-003 §9 and §11 — those sections remain correct at the platform-integration level; this document is the operational depth both explicitly deferred. Section 19's governance table is stated as subordinate to the three prior ownership/governance tables (FIE-BUILD-001, FIE-BUILD-003, FIE-BUILD-004) rather than a fourth, competing one.
+2. Does Any Content Belong in BUILD-006 Instead?
+Formal load-testing methodology behind Section 14's capacity thresholds belongs in FIE-BUILD-006 Performance & Scalability, per the authoritative roadmap
+Multi-region and high-availability architecture referenced in Section 12's regional recovery entry belongs in FIE-BUILD-006 once Platform Maturity Level 4 (FIE-BUILD-003) is actually approached
+Formal audit trail and compliance certification implied by Section 19's audit requirements row belongs in FIE-BUILD-007 Security, Compliance & Governance, not as an expansion of this document
+For clarity going forward: FIE-BUILD-006 expands operational performance, scalability, throughput, and capacity engineering. FIE-BUILD-007 expands operational security, compliance, governance, and audit. Neither absorbs this document's own responsibility — FIE-BUILD-005 remains the authoritative handbook governing day-to-day production platform operations; FIE-BUILD-006 and 007 extend specific dimensions of it, they do not gradually replace it.
+3. Is BUILD-005 Ready to Become the Authoritative Production Operations Handbook?
+Yes. Every one of the twenty-one required sections plus all three additional operational capabilities (Operational Confidence, Financial Integrity Monitoring, Explainability Monitoring) are present, every mechanism traces back to a specific principle already established in ABS/BIS/FIE or a prior BUILD document, and the two sections this document most directly extends (FIE-BUILD-003 §9, §11) are cited explicitly as the boundary being extended rather than silently duplicated. Recommend freezing FIE-BUILD-005 and proceeding to FIE-BUILD-006 (Performance & Scalability) per the authoritative roadmap.

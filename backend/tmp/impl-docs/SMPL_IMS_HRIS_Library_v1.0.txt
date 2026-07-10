@@ -1,0 +1,1207 @@
+IMPLEMENTATION MAPPING SPECIFICATION LIBRARY
+HRIS Implementation Library — IMS-301 through IMS-305
+ABS-008  ·  HRIS Library v1.0
+Workday HCM  ·  Rippling  ·  BambooHR
+UKG Pro  ·  ADP Workforce Now
+SMPL.ai  ·  AI Implementation Engineering
+June 2026 · CONFIDENTIAL — INTERNAL IMPLEMENTATION DOCUMENT
+Follows the IMS standard established by the ERP, CRM, and Billing IMS Libraries
+HRIS Implementation Library — Scope and Organizing Principles
+This document contains the complete HRIS Implementation Mapping Specification library: five IMS specifications covering every Tier 1 HRIS platform in the SMPL connector catalog. Each specification follows the ten-section structure established by IMS-001 (NetSuite), validated across the ERP, CRM, and Billing libraries, and now applied to the HRIS domain.
+Library Index
+IMS #
+Connector
+Maturity
+Primary Implementation Characteristic
+IMS-301
+Workday HCM
+Validated
+Supervisory Organization ≠ Cost Center gate (mandatory CEP reconciliation); formal Position Management; Business Process workflow event history; RaaS extraction pattern unique in the library
+IMS-302
+Rippling
+Production Ready
+Native Payroll integration narrows planned-vs-actual compensation gap; GL cost center mapping requires Configuration Layer; fastest standard HRIS implementation in the library
+IMS-303
+BambooHR
+Pilot Ready
+Simplest schema; flat Department structure (structural ceiling on multi-level org reporting); Position Planning structurally unavailable; fastest time to Headcount Reporting
+IMS-304
+UKG Pro
+Validated
+Native Payroll comparable to Rippling; Position Management optional module (confirm activation); BI Connector for large-volume extraction; legacy UltiPro migration artifacts
+IMS-305
+ADP Workforce Now
+Validated
+Highest payroll-tax depth; Organizational Unit structural variance (customer-base characteristic, not data quality); ADP-as-payroll-only pattern requires explicit confirmation
+Table 0.1 — HRIS IMS Library index.
+The Three Universal HRIS Financial Distinctions
+Three distinctions govern every HRIS implementation in this library and are stated here once rather than repeated across five connectors:
+Employee ≠ Payroll Expense. An Employee record documents that a person is employed at a planned compensation. It does not confirm that payroll expense has been recognized in the GL. The ERP is the canonical owner of recognized payroll expense; HRIS contributes planned compensation only.
+Salary ≠ Disbursed Compensation. A salary field in HRIS documents the planned annual rate. What was actually disbursed in a specific payroll run — including employer taxes, benefits load, deductions, bonuses, and any mid-period changes — is owned by Payroll. These two figures are related but distinct: a mid-cycle raise, a one-time bonus, or a payroll error can cause them to diverge temporarily.
+Department ≠ Cost Center. An HRIS Department is an organizational unit for people management. A Cost Center is a financial reporting dimension for expense allocation. In many HRIS implementations, these two concepts are used interchangeably — but they are not the same canonical object and must not be treated as equivalent without explicit CEP confirmation of the mapping.
+The Organizational Normalization Gate
+Every HRIS connector in this library has a mandatory Organizational Normalization Gate — the HRIS equivalent of the Billing Subscription Normalization Gate. The gate operates as a population block for specific canonical objects: organizational hierarchy objects and headcount-derived metrics cannot be correctly built until the gate questions are resolved. The consequences of proceeding without resolution differ by question:
+Gate Question
+CEP Field
+Consequence if Skipped
+Gate Type
+Active employee definition: which Employment Types and Statuses constitute "active headcount"?
+CEP.headcount_policy.active_statuses
+Headcount figures will include or exclude workers in ways that systematically disagree with the customer's own reports — the most common first-day discrepancy between SMPL and customer internal headcount
+Confidence degradation gate (not extraction block — data can be extracted, but headcount-derived capabilities are wrong until resolved)
+Contractor treatment: are contractors (contingent workers) included in headcount?
+CEP.headcount_policy.include_contractors
+Headcount either over- or understates the customer's expected figure depending on whether contractors are included — a discrepancy that is immediate and visible
+Confidence degradation gate — same as active employee definition
+FTE methodology: what fraction of FTE is assigned to part-time and job-share workers?
+CEP.headcount_policy.fte_methodology
+FTE-based workforce planning will produce different results than the customer's own FTE calculation, even with identical headcount data
+Population block gate for FTE-derived metrics — FTE Reporting blocked until confirmed
+Org hierarchy canonical ownership: which HRIS organizational object is the canonical Department?
+CEP.org_policy.canonical_department_object
+Organizational hierarchy is built from the wrong object — for Workday, this is Supervisory Organization vs. Cost Center; for Dynamics 365, it was Financial Dimension; the same disambiguation is required here
+Population block gate — Department canonical objects cannot be created until designated
+Table 0.2 — Organizational Normalization Gate questions. The last two are population block gates; the first two are confidence degradation gates. All four must be resolved before Headcount Reporting reaches READY status.
+Cross-HRIS Implementation Principles
+SMPL is always read-only. No HRIS IMS specifies write operations.
+HRIS owns organizational structure and planned compensation; Payroll owns disbursed compensation; ERP owns recognized payroll expense. All three are required for trusted Labor Cost Forecasting. No HRIS connector in this library, regardless of how tightly integrated with Payroll, substitutes for ERP-confirmed GL expense.
+Manager hierarchy cycles are a block condition — not a data quality issue to be ignored. A circular reporting chain (A reports to B, B reports to A) makes it impossible to compute correct org depth, span of control, or rollup headcount. Detected cycles must be resolved before the organizational hierarchy canonical object is created.
+Position Planning requires a dedicated Position object. Connectors without a formal Position object (BambooHR, and Rippling with limited support) have a structural ceiling on Position Planning that cannot be overcome by SMPL implementation effort — it reflects a platform capability boundary, not an implementation maturity gap. This is analogous to QBO's multi-entity structural ceiling in the ERP library.
+Headcount-derived metrics (FTE, Revenue per Employee, Labor Cost per Headcount) are always computed by SMPL from canonical Employee data — never imported from pre-computed vendor metrics. ADP's native headcount reports and Workday's native workforce analytics are cross-validation references, not canonical sources, consistent with the principle established for Maxio's native SaaS metrics in the Billing library.
+IMS-301 — Workday HCM
+Workday HCM is the most complex HRIS implementation in this library — the enterprise-tier equivalent of Oracle Fusion (ERP) and Zuora (Billing). Its Supervisory Organization model is flexible, powerful, and frequently misaligned with financial Cost Center structures, creating the primary implementation challenge. The implementation agent's highest-priority discovery task is not extracting employees — it's confirming whether Supervisory Organizations map to Cost Centers, and if not, how they relate.
+✱ ARCHITECT NOTE: Key departure distinguishing Workday from all other HRIS connectors in this library: Workday exposes data primarily through a combination of REST API and Report-as-a-Service (RaaS) — the latter being a customer-configured report extraction mechanism unique in this library. The implementation agent cannot assume a universal standard RaaS report structure; it must coordinate with the customer's Workday administration team to confirm which reports exist and what their column structure is. This is analogous to Oracle Fusion's API version pinning requirement in the ERP library.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+OAuth 2.0 (client credentials) using a Workday Integration System User (ISU) with read-only security domain permissions. ISU is the standard non-human account type for integrations.
+Do not use a named user account — named accounts are subject to password expiry and policy changes that will break the connector silently. Request ISU creation from the customer's Workday Administrator.
+Workday tenant URL
+Format: https://{tenant}.workday.com/ccx/api/... The tenant name is customer-specific.
+Confirm the tenant name resolves to the production Workday environment, not an implementation or sandbox tenant. Workday sandbox tenants typically contain training/test data and must not populate production canonical objects.
+REST API vs RaaS access
+Both should be confirmed. REST API: GET /api/v1/{tenant}/workers. RaaS: customer-specific report URLs provided by Workday Admin.
+If RaaS is not available or not configured by the customer's Workday Admin, REST API is the fallback for all standard objects. Document RaaS availability in CEP.workday_raas_available.
+Table IMS-301.1.1 — Workday HCM authentication.
+1.2 Supervisory Organization vs. Cost Center Gate — The Primary Discovery Step
+This is the most consequential discovery question for any Workday HCM implementation. The answer determines how organizational hierarchy is constructed, how Department canonical objects are mapped, and whether ERP Cost Center reconciliation is required.
+DISCOVER organizational structure mapping:
+  REST API: GET /api/v1/{tenant}/organizationReferenceData
+  Returns: list of Organization Types (Supervisory, Cost Center, Company, etc.)
+  CHECK: Does this customer use Cost Centers as a separate dimension from
+  Supervisory Organizations, or are they equivalent?
+  ASK CEP:
+  "In this Workday implementation, does a Supervisory Organization correspond
+  1:1 to a GL Cost Center in the customer's financial reporting system?
+  Options:
+  A) YES: Supervisory Org = Cost Center (direct mapping possible)
+  B) NO: Cost Centers are maintained separately (mapping required)
+  C) UNKNOWN: Customer finance team should confirm"
+  RECORD in CEP.org_policy:
+    canonical_department_object = "SupervisoryOrganization" (most common)
+    cost_center_equivalent = true/false
+    cost_center_mapping_required = true/false
+  IF cost_center_mapping_required = true:
+    Department canonical objects will be created from Supervisory Organizations
+    A SEPARATE CEP mapping table will reconcile them to ERP Cost Centers
+    This table is required before Department Expense Forecasting can activate
+  BLOCK: Department canonical object creation is blocked until
+  CEP.org_policy.canonical_department_object is confirmed.
+1.3 Business Process Configuration Inventory
+DISCOVER active Business Processes for workforce events:
+  REST API: GET /api/v1/{tenant}/businessProcessTypes
+  Focus on: Hire, Termination, Transfer, Promotion, Compensation Change
+  FOR each event type:
+    ASK Customer Workday Admin:
+    "How many distinct Business Process definitions exist for {event_type}?
+    (Different BPDs may apply to different Worker Types or Supervisory Orgs)"
+    Record in CEP.workday_business_processes[event_type]: count, names
+  WARNING: Multiple Business Process definitions for the same event type
+  produce event history records with different field population completeness.
+  The implementation agent must account for this — do not assume all Hire
+  events have identical fields populated.
+1.4 Position Management Confirmation
+CHECK: Is formal Position Management active?
+  REST API: GET /api/v1/{tenant}/positions?limit=1
+  ├─ Returns data → Position Management active
+  │   Record CEP.position_management_active = true
+  └─ Returns empty/403 → Position Management inactive or not licensed
+      Record CEP.position_management_active = false
+  IF active: Budgeted/Filled/Open position tracking available (D-H)
+  IF inactive: Position status must be approximated from headcount trends
+               and Requisition data (D-M at best)
+  NOTE: Many Workday implementations configure Position Management but
+  leave many Positions without proper Budgeted/Filled status maintained.
+  "Active in the system" does not guarantee "actively maintained."
+  Validate data completeness before claiming D-H Position confidence.
+1.5 Organizational Normalization Gate
+Gate Question
+CEP Field
+Gate Type
+Block Condition
+Which Employment Types constitute active headcount?
+CEP.headcount_policy.active_statuses
+Confidence degradation
+Headcount Reporting PARTIAL until confirmed; extraction continues
+Are contingent workers (Worker Type = Contingent_Worker) included in headcount?
+CEP.headcount_policy.include_contractors
+Confidence degradation
+Same — headcount figures incorrect but still computed
+FTE methodology: what FTE fraction applies to part-time workers?
+CEP.headcount_policy.fte_methodology
+Population block for FTE metrics
+FTE-based Workforce Planning blocked until confirmed
+Canonical department object: Supervisory Organization or Cost Center?
+CEP.org_policy.canonical_department_object
+Population block for Department hierarchy
+Department canonical objects blocked until confirmed; Section 1.2 gate
+Table IMS-301.1.5 — Workday Organizational Normalization Gate.
+Section 2 — Canonical Object Mapping
+Workday Object
+API / Extraction Method
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+Worker
+GET /api/v1/{tenant}/workers
+Employee (Entity)
+1:1
+D-H for core fields; Normalized-M for derived FTE (pre-gate)
+None — extraction always proceeds; FTE blocked until gate
+Supervisory Organization
+GET /api/v1/{tenant}/supervisoryOrganizations
+Department (Entity)
+1:1 to N:1
+D-H (post-gate confirmation)
+CEP.org_policy.canonical_department_object = SupervisoryOrganization
+Position
+GET /api/v1/{tenant}/positions
+Position (Extension — canonical object pending SCDM v1.1)
+N:1 (positions:supervisory org)
+D-H (management active + maintained)
+Position Management active AND positions have complete Budgeted/Filled/Open status
+Job Profile
+GET /api/v1/{tenant}/jobProfiles
+Job (Extension)
+1:1
+D-H
+None
+Worker.primaryCompensation
+Embedded in Worker response
+Employee.base_compensation (SCDM field)
+1:1
+D-H (planned); Payroll required for disbursed
+None — always present on active Workers
+Business Process event (Hire)
+GET /api/v1/{tenant}/workers?includeTerminated=false + event history
+Employee Hire Event (Movement)
+N:1 (events:employee)
+D-H (standard BPD) / D-M (custom BPD)
+Business Process inventory confirms completeness
+Business Process event (Termination)
+Same as Hire, filtered by Termination type
+Employee Termination Event (Movement)
+N:1
+D-H / D-M (custom BPD)
+Same
+Business Process event (Transfer / Promotion)
+Same, filtered by respective types
+Employee Movement Event (Movement)
+N:1
+D-H / D-M
+Same
+Legal Entity (Company in Workday)
+GET /api/v1/{tenant}/companies
+Legal Entity (Entity)
+1:1
+D-H
+None
+Location
+GET /api/v1/{tenant}/locations
+Location (Extension)
+N:1
+D-H
+None
+Table IMS-301.2.1 — Workday HCM canonical object map.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 Worker (Employee Core Fields)
+Workday Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+workerId (or Employee_ID)
+employee.source_id
+REQ
+None — stable internal identifier
+Use Employee_ID (not GUID) where available — more human-readable and stable across system changes
+workerType
+employee.employment_type
+REQ
+Normalize per Table IMS-301.4.1
+Employee vs. Contingent Worker — critical for contractor inclusion gate
+employeeStatus
+employee.status
+REQ
+Normalize per Table IMS-301.4.2
+Active, Terminated, Leave, etc.
+hire_date (effectiveDate of Hire event)
+employee.hire_date
+REQ
+ISO 8601 date normalization
+Workday uses effective-date model; hire_date is from the Hire Business Process event
+termination_date (if applicable)
+employee.termination_date
+OPT
+ISO 8601 date normalization
+Null for active employees; required for terminated to enable Attrition Analysis
+primarySupervisoryOrganization
+employee.department_id
+REQ
+FK to Supervisory Organization canonical; post-gate mapping
+FK to Department canonical object; blocked until Supervisory Org canonical objects are created
+managerReference (of Supervisory Org)
+employee.manager_employee_id
+OPT
+FK to Employee canonical
+The manager is the Supervisory Org manager, not a direct field on the Worker; join required
+primaryCompensation.annualizedAmount
+employee.base_compensation
+OPT
+Currency normalization
+Planned annual compensation; Payroll required for actual disbursed
+FTE (from scheduledWeeklyHours / fullTimeEquivalentPercentage)
+employee.fte
+OPT (REQ post FTE gate)
+Calculate: scheduledWeeklyHours / 40 OR use nativeftePct if available
+FTE methodology from CEP.headcount_policy.fte_methodology
+location
+employee.location_id
+OPT
+FK to Location canonical
+Not always populated for all workers; null permitted
+Table IMS-301.3.1 — Workday Worker field mapping.
+Section 4 — Transformation Rules
+4.1 Worker Type Normalization
+Workday workerType
+SCBM employment_type
+Headcount Inclusion
+Notes
+Employee
+EMPLOYEE
+YES (standard)
+Full-time and part-time employees in standard headcount
+Contingent_Worker
+CONTRACTOR
+Conditional (CEP gate)
+Contractors/temps/consultants; CEP.headcount_policy.include_contractors determines inclusion
+Retiree (where configured)
+RETIREE
+Usually NO
+Most customers exclude retirees from active headcount — confirm via CEP
+Table IMS-301.4.1 — Workday worker type normalization.
+4.2 Employment Status Normalization
+Workday Status
+SCBM Status
+Active for Headcount?
+Notes
+Active
+ACTIVE
+YES
+Core active status
+Leave of Absence
+LEAVE
+Conditional (CEP gate)
+Leave workers may be included or excluded from active headcount per customer policy
+Terminated
+TERMINATED
+NO
+Preserve in historical record for Attrition Analysis; exclude from active headcount
+Retired
+RETIRED
+Usually NO
+Confirm per CEP; most exclude from active headcount
+Suspended
+SUSPENDED
+Usually NO
+Rare; confirm per CEP
+Table IMS-301.4.2 — Workday employment status normalization.
+4.3 Supervisory Organization Hierarchy Construction
+Workday's Supervisory Organization hierarchy is the HRIS equivalent of the GL Account hierarchy in ERP — a parent-child tree that must be constructed bottom-up before any rollup headcount calculations are possible.
+CONSTRUCT Supervisory Organization hierarchy:
+  STEP 1: Extract all Supervisory Organizations
+  GET /api/v1/{tenant}/supervisoryOrganizations?limit=9999
+  Record: orgId, name, managerReference, parentOrganization, isInactive
+  STEP 2: Filter to active organizations (isInactive = false)
+  Flag inactive orgs for historical record; exclude from current hierarchy
+  STEP 3: Build parent-child adjacency list
+  {childOrgId: parentOrgId} for all non-null parentOrganization references
+  STEP 4: DETECT CYCLES (block condition)
+  Traverse the adjacency list; if any cycle is detected:
+  → FLAG specific org IDs forming the cycle
+  → BLOCK hierarchy construction for the affected branch
+  → LOG: "Circular organizational hierarchy detected: [orgIds]. Cannot
+     compute rollup headcount until resolved. Customer admin must correct."
+  → Continue with non-cyclic portions of the hierarchy
+  STEP 5: Assign hierarchy depth (root orgs = depth 0)
+  STEP 6: For each Employee, record the full path from their
+  primary Supervisory Org to the root (for rollup aggregation)
+4.4 FTE Computation
+FTE methodology varies by customer policy and must always be confirmed via the Organizational Normalization Gate before FTE-based metrics are computed.
+FTE COMPUTATION (post-gate):
+  IF CEP.headcount_policy.fte_methodology = SCHEDULED_HOURS:
+    fte = employee.scheduledWeeklyHours / 40
+    (40 hours = 1.0 FTE standard; confirm denominator with customer)
+  IF CEP.headcount_policy.fte_methodology = NATIVE_FTE_PERCENTAGE:
+    fte = employee.fullTimeEquivalentPercentage / 100
+    (Workday natively exposes this field where configured)
+  IF CEP.headcount_policy.fte_methodology = BINARY (most conservative):
+    fte = 1.0 for all active employees regardless of hours
+    (Treats all employees as 1.0 FTE; simple but loses part-time distinction)
+  FOR contingent workers where FTE is applicable:
+    Apply CEP-designated FTE value per contractor type
+    Default: 0.0 (excluded from FTE count even if included in headcount)
+  VALIDATE: total FTE <= total headcount for any period
+  If total FTE > headcount: FLAG — likely a data issue or FTE > 1.0 for some workers
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+Supervisory Organization canonical object gate
+CEP.org_policy.canonical_department_object must be confirmed before Department canonical objects are created
+BLOCK Department creation until confirmed
+Department-dependent capabilities 0% until blocked condition resolved
+Circular hierarchy detection
+Supervisory Organization adjacency list traversal finds cycle
+BLOCK hierarchy construction for affected branch; log org IDs
+−25% on Organizational Dashboards for affected branches
+FTE gate
+CEP.headcount_policy.fte_methodology must be confirmed before FTE metrics are computed
+BLOCK FTE metric computation; headcount (non-FTE) capabilities proceed normally
+FTE-based capabilities 0% until confirmed
+Manager reference validation
+Employee.manager_employee_id references an Employee not in canonical set (e.g., terminated manager not yet updated)
+FLAG — common operational gap; do not REJECT
+−10% on Manager Span Analysis for affected workers
+Employment status vs. hire/termination date consistency
+Active status with termination_date set, OR Terminated status without termination_date
+FLAG
+−15% on Attrition Analysis accuracy
+Position-to-Worker orphan
+Position exists with Filled status but no Worker linked to it
+FLAG — common after reorganizations without Position cleanup
+−10% on Position Planning confidence
+Table IMS-301.5.1 — Workday HCM validation rules.
+Section 6 — Canonical Population
+Step
+Canonical Object
+Workday Specific
+1
+Legal Entity (Company)
+GET /api/v1/{tenant}/companies; multi-company = multi-entity structure
+2
+Location
+GET /api/v1/{tenant}/locations
+3
+Job Profile / Job Family
+GET /api/v1/{tenant}/jobProfiles; job architecture base objects
+4
+Supervisory Organization hierarchy
+Hierarchy construction (Section 4.3); CYCLE CHECK before proceeding; GATE: CEP.org_policy must be confirmed
+5
+Position (if Position Management active)
+GET /api/v1/{tenant}/positions; filter isOpen and isActive; Budgeted/Filled/Open status from Position object
+6
+Workers (Employees)
+GET /api/v1/{tenant}/workers?includeTerminated=true; apply status normalization; apply worker type normalization; department linkage to Step 4 hierarchy; FTE computation (GATE)
+7
+Compensation
+GET /api/v1/{tenant}/workers?fields=primaryCompensation; Payroll-confirmed disbursed compensation (if Workday Payroll module active)
+8
+Business Process Events (Hire/Term/Transfer)
+GET event history per Business Process type; multiple BPD awareness from Section 1.3; effective-date handling
+9
+Organizational Hierarchy (rollup paths)
+Constructed from Steps 4 and 6; rollup path per Employee from their org to the root
+10
+ERP Cross-Validation (if ERP connected)
+Department → ERP Cost Center mapping; Compensation → ERP Payroll Expense reconciliation; flag mapping gaps as COST_CENTER_RECONCILIATION_ITEM
+11
+Workforce Metrics (Headcount, FTE, Attrition)
+Derived after Steps 6–9; point-in-time and period-over-period calculations; FTE metrics gated on CEP confirmation from Step 6
+Table IMS-301.6.1 — Workday HCM canonical population sequence.
+Section 7 — Confidence Calculation
+Object / Factor
+Base Confidence
+Adjustment
+Worker (core fields)
+D-H = 83%
+Validated maturity; reliable core fields; FTE pre-gate = D-M
+Supervisory Organization (hierarchy, post-gate)
+D-H = 78%
+Post-CEP confirmation; Cost Center reconciliation gap acknowledged
+Position (Position Management active and maintained)
+D-H = 80%
+Workday's primary structural advantage; requires confirmation of active maintenance
+Position (Position Management active but poorly maintained)
+D-M = 52%
+Open positions without linked workers or unupdated Budgeted status
+Business Process event history (standard BPD)
+D-H = 75%
+Complete audit trail; effective-date alignment is strong
+Business Process event history (custom BPD)
+D-M = 55%
+Custom approval chains may obscure timing
+Supervisory Org ≠ Cost Center (reconciliation required)
+−15% on Department Expense Forecasting until mapping confirmed
+The gap between Workday org and ERP Cost Center is the primary Financial Intelligence gap for Workday customers
+Cycle in org hierarchy detected
+BLOCK rollup for affected branch
+Cannot compute rollup headcount without cycle resolution
+Workday Payroll module active
++8% on Compensation Planning
+Native planned-to-actual gap narrowed
+ERP connected
++12% on Labor Cost Forecasting and Workforce Budget vs Actual
+ERP closes the planning-to-GL gap
+Table IMS-301.7.1 — Workday HCM confidence calculation.
+Section 8 — Capability Activation
+Capability
+Status
+Key Note
+Headcount Reporting
+READY (post active-status gate)
+Rapid to READY for standard employees; contractor inclusion gate may delay
+Organizational Dashboards
+READY (post Supervisory Org gate)
+Depends on Supervisory Org canonical object creation gate
+Position Planning
+READY (Position Management active)
+Workday's primary competitive advantage; highest-confidence Position data in this library
+Attrition Analysis
+READY
+Termination events reliably captured via Business Process history
+Manager Span Analysis
+READY
+Org hierarchy supports span-of-control calculation directly
+Workforce Planning
+READY
+Strong post-gate; headcount and planned compensation both available
+Compensation Planning
+PARTIAL → improves with Payroll
+Planned compensation strong; disbursed requires Payroll cross-validation
+Labor Cost Forecasting
+PARTIAL
+ERP required for GL-confirmed payroll expense; both ERP and Payroll improve
+Department Expense Forecasting
+PARTIAL — blocked if Supervisory Org ≠ Cost Center
+Requires CEP cost center mapping reconciliation
+Table IMS-301.8.1 — Workday HCM capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Escalation?
+Supervisory Organization ≠ Cost Center (most common Workday-specific exception)
+CEP interview reveals separate Cost Center dimension in Workday or financial system
+Create two-dimensional Department structure: Supervisory Org (for headcount) + Cost Center (for financial reporting); build CEP mapping table linking the two
+No — standard process; add to SMPL Tier 2 pattern library
+Multiple Supervisory Organizations per employee (matrix org)
+Employee.supervisoryOrganizations[] returns count > 1
+Map primary Supervisory Org for headcount; secondary orgs captured as extension data; flag for CEP to confirm reporting preference
+No — document in implementation log; surface to customer
+RaaS report not configured or accessible
+CEP.workday_raas_available = false; REST API is fallback for all standard objects
+Use REST API exclusively; document RaaS gap in implementation health report; note that some custom fields may not be accessible without RaaS
+No — standard fallback
+Acquired entity with a separate Supervisory Organization hierarchy
+Multiple "root" organizations detected in hierarchy (count > 1 with no parent)
+Build separate hierarchy trees per root; ASK CEP: should they be unified under a single canonical root for consolidated headcount?
+No — CEP decision
+Position Management active but positions not maintained
+Position count > 0 but > 30% of Positions show null Budgeted/Filled status
+FLAG: Position Management is nominally active but data quality insufficient for reliable Position Planning; reduce Position confidence to D-M
+No — surface in capability report with data quality detail
+Table IMS-301.9.1 — Workday HCM exception handling.
+Section 10 — AI Implementation Workflow
+WORKDAY HCM — IMPLEMENTATION WORKFLOW
+(Highest CEP resolution burden in the HRIS library)
+PRE-DISCOVER:
+  Confirm RaaS availability with customer Workday Admin.
+  Plan a dedicated 1-2 hour session with the Workday Admin to:
+  (a) confirm ISU authentication setup
+  (b) run the Supervisory Org vs. Cost Center gate conversation
+  (c) confirm Business Process configurations
+DISCOVER:
+  1. ISU OAuth authentication + tenant URL confirmation
+  2. SUPERVISORY ORG vs. COST CENTER GATE (Section 1.2)
+     "This is the highest-priority discovery question for Workday.
+     All organizational hierarchy canonical objects depend on this answer."
+  3. Business Process configuration inventory (Section 1.3)
+  4. Position Management confirmation (Section 1.4)
+  5. Organizational Normalization Gate (Table IMS-301.1.5)
+BRANCH 1 — Supervisory Org ≠ Cost Center?
+  YES (most common in enterprise Workday):
+    Proceed with Supervisory Org as canonical Department
+    Build CEP cost center mapping table for ERP reconciliation
+    Department Expense Forecasting PARTIAL until mapping table complete
+  NO → Direct mapping; simpler implementation path
+BRANCH 2 — Circular hierarchy detected?
+  YES → BLOCK hierarchy construction for affected branch
+          Escalate to customer Workday Admin immediately
+          Continue with non-cyclic portions
+  NO → Build full hierarchy
+ORGANIZATIONAL NORMALIZATION GATE:
+  Active status gate: confidence degradation for headcount
+  Contractor gate: confidence degradation for headcount
+  FTE gate: BLOCK FTE metrics
+  Canonical department gate: BLOCK Department canonical objects
+ANALYZE: Map all objects (Table IMS-301.2.1)
+NORMALIZE:
+  Worker type normalization (Table IMS-301.4.1)
+  Employment status normalization (Table IMS-301.4.2)
+TRANSFORM:
+  Supervisory Org hierarchy construction (Section 4.3)
+  FTE computation (Section 4.4) — post-gate
+VALIDATE: Table IMS-301.5.1
+POPULATE: Steps 1-11 (Table IMS-301.6.1)
+SCORE: Table IMS-301.7.1
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+IMS-302 — Rippling
+Rippling is the fastest standard HRIS implementation in this library — Production Ready maturity, consistent REST API, and native Payroll integration that narrows the planned-vs-actual compensation gap without requiring a separate Payroll connector. The primary implementation complexity drivers are Payroll module activation (which must be confirmed, not assumed) and GL cost center mapping (which Rippling does not natively support — it requires SMPL Configuration Layer mapping).
+✱ ARCHITECT NOTE: Key departure from Workday: Rippling's flat, clean Department model eliminates the Supervisory Organization vs. Cost Center disambiguation challenge entirely. Department in Rippling is a single object that directly maps to SCBM Department with high confidence. The primary gate question is not organizational disambiguation — it is Payroll module confirmation and GL cost center mapping status. The implementation agent moves from discovery to canonical population faster than for any other connector in this library.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+OAuth 2.0 via Rippling API. Service account (non-user-specific) preferred.
+Rippling API access requires the customer to generate an API key with read-only HR and Payroll scopes. Confirm scopes include: employees, departments, payroll (if Payroll module active).
+API environment
+Production vs. Staging. Rippling does not expose a sandbox in the same way as Workday — confirm via account type.
+Do not use a Rippling staging account to test against production canonical objects.
+Table IMS-302.1.1 — Rippling authentication.
+1.2 Payroll Module Confirmation — The Primary Discovery Step
+CONFIRM Rippling Payroll module:
+  GET /api/v1/employees?fields=compensation
+  AND
+  GET /api/v1/payruns?limit=1
+  ├─ /payruns returns data → Payroll module active
+  │   Record CEP.rippling_payroll_active = true
+  │   Payroll Line data available; Compensation Planning confidence = D-H
+  │
+  └─ /payruns returns 403 or empty → Payroll module inactive
+      Record CEP.rippling_payroll_active = false
+      Compensation validation requires a separately connected Payroll system
+      Compensation Planning confidence = D-M (planned compensation only)
+  CRITICAL: Do not assume Payroll is active because the customer calls
+  Rippling "all-in-one." Some customers use Rippling only for HRIS,
+  with payroll on a legacy ADP or Gusto account.
+1.3 GL Cost Center Mapping Assessment
+CHECK: Is GL cost center mapping configured?
+  Rippling does not natively map Departments to GL Cost Centers.
+  This is a SMPL Configuration Layer capability, not a Rippling API feature.
+  ASK CEP:
+  "Does SMPL need to allocate employee labor costs to GL Cost Centers
+  for Department Expense Forecasting?
+  If yes, provide the mapping: Rippling Department → GL Cost Center code."
+  ├─ YES + mapping provided → Configure Configuration Layer mapping table
+  │                            Department Expense Forecasting becomes available
+  └─ YES but no mapping yet → Department Expense Forecasting PARTIAL
+                               Surface as a pending CEP item
+  └─ NO → Department Expense Forecasting UNAVAILABLE (by customer choice)
+  Record in CEP.gl_cost_center_mapping: [{rippling_dept_id: gl_cost_center_code}]
+1.4 Organizational Normalization Gate
+Gate Question
+CEP Field
+Gate Type
+Rippling-Specific Notes
+Which employment statuses constitute active headcount?
+CEP.headcount_policy.active_statuses
+Confidence degradation
+Rippling uses Active, Inactive, Terminated; confirm if recently-resigned (grace period) employees are included
+Are contractors tracked in Rippling included in headcount?
+CEP.headcount_policy.include_contractors
+Confidence degradation
+Rippling can track contractors as Employee records with a distinct employment type; confirm per customer
+FTE methodology for part-time workers?
+CEP.headcount_policy.fte_methodology
+FTE metric block
+Rippling does not natively expose a scheduled-hours field on all employee types — confirm with customer
+Canonical department object?
+CEP.org_policy.canonical_department_object
+Always Department for Rippling (no disambiguation needed)
+Rippling's flat Department model requires no disambiguation — set automatically to "RipplingDepartment"
+Table IMS-302.1.4 — Rippling Organizational Normalization Gate. Department gate is automatically resolved for Rippling — a structural speed advantage vs. Workday.
+Section 2 — Canonical Object Mapping
+Rippling Object
+API Endpoint
+Canonical Target
+Confidence
+Key Note
+Employee
+GET /api/v1/employees
+Employee (Entity)
+D-H
+Clean, consistent fields across implementations
+Department
+GET /api/v1/departments
+Department (Entity)
+D-H
+Flat model; no hierarchy ambiguity; Configuration Layer provides GL mapping
+Pay Schedule / Payroll Data
+GET /api/v1/payruns + /api/v1/payrollLines
+Payroll Line (Movement)
+D-H (Payroll module active)
+Structural advantage — compensation confirmation without separate connector
+Compensation (planned)
+Embedded in Employee response
+Employee.base_compensation
+D-H
+Reliable base salary field
+Benefits (if Benefits module active)
+GET /api/v1/benefitElections
+Benefit (Extension) — fully-loaded cost contribution
+D-M
+Required for fully-loaded cost-per-employee calculation
+Employment History
+GET /api/v1/employmentHistory
+Employee Movement Events (Movement)
+D-H
+Department transfers, title changes, compensation changes captured
+Table IMS-302.2.1 — Rippling canonical object map.
+Section 3 — Canonical Field Mapping (Employee)
+Rippling Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+id
+employee.source_id
+REQ
+None
+Globally unique within Rippling company
+workEmail
+employee.work_email
+REQ
+None
+Primary identity key for cross-system matching with CRM and Billing connectors
+employmentType
+employee.employment_type
+REQ
+Normalize per Table IMS-302.4.1
+Full Time, Part Time, Contractor, etc.
+startDate
+employee.hire_date
+REQ
+ISO 8601 date
+Employment start date
+endDate
+employee.termination_date
+OPT
+ISO 8601 date
+Null for active employees
+department.id
+employee.department_id
+REQ
+FK to Department canonical
+Standard flat department assignment
+managerId
+employee.manager_employee_id
+OPT
+FK to Employee canonical
+Direct manager; build hierarchy from this field
+annualSalary
+employee.base_compensation
+OPT
+Currency normalization (Rippling uses base currency decimal, not cents)
+Planned annual salary
+flsaStatus
+employee.exempt_status
+OPT
+Normalize: Exempt → EXEMPT; NonExempt → NON_EXEMPT
+Relevant for hourly vs. salaried distinction
+Table IMS-302.3.1 — Rippling Employee field mapping.
+Section 4 — Transformation Rules
+4.1 Employment Type Normalization
+Rippling Employment Type
+SCBM employment_type
+Headcount Inclusion
+Notes
+Full Time
+FULL_TIME_EMPLOYEE
+YES
+Standard headcount inclusion
+Part Time
+PART_TIME_EMPLOYEE
+YES (with FTE adjustment per methodology)
+FTE < 1.0 depending on CEP.headcount_policy.fte_methodology
+Contractor
+CONTRACTOR
+Conditional (CEP gate)
+Rippling can track contractors as Employee records; contractor inclusion determined by CEP
+Intern
+INTERN
+Conditional (CEP gate)
+Typically excluded from regular headcount in most customer policies; confirm
+Temporary
+TEMPORARY
+Conditional (CEP gate)
+Same as Contractor — confirm per CEP
+Table IMS-302.4.1 — Rippling employment type normalization.
+4.2 Manager Hierarchy Construction
+Rippling's managerId field builds the manager hierarchy directly — simpler than Workday's Supervisory Organization join. The same cycle detection logic applies.
+BUILD manager hierarchy:
+  1. Extract all active employees with non-null managerId
+  2. Build adjacency list: {employee_id: manager_id}
+  3. CYCLE DETECTION (block condition if cycle found)
+     Traverse from each employee to root (null managerId)
+     If any employee appears twice in a path → cycle detected → BLOCK
+  4. Assign hierarchy depth from root (depth 0) downward
+  5. Record full hierarchy path per employee for rollup aggregations
+  Rippling advantage: managerId is a direct Employee field, not a
+  Supervisory Organization join like Workday. Fewer null values expected.
+  Cycle detection is still required — hierarchy errors can occur from
+  mid-reorganization data states.
+Sections 5–10 Summary — Rippling
+Section 5 (Validation): Same organizational normalization gate validations as Workday. Additional validation: Payroll module active + Payroll Line data completeness check (if Payroll active but payruns return partial data, flag and investigate). GL cost center mapping completeness check if CEP.gl_cost_center_mapping is required.
+Section 6 (Population): Fastest population sequence in the library. No Supervisory Organization disambiguation step; Department mapping is direct. Payroll Line population added after Employee (Step 7b) when Payroll module active. Manager hierarchy construction simpler than Workday's Supervisory Org hierarchy. ERP cross-validation at Step 10 uses GL cost center mapping from CEP if configured.
+Section 7 (Confidence): Headcount Reporting 88% (highest in the library for Headcount — Production Ready maturity + clean API). Compensation Planning 82% when Payroll module active (same structural advantage as Rippling in the HRIS registry vs. Workday). Position Planning 55% (no formal Position Management — approximation from headcount trends). Department 85% (flat model; no disambiguation).
+Section 8 (Capability Activation): Compensation Planning READY when Payroll active (most distinctive Rippling capability vs. other non-enterprise connectors). Position Planning PARTIAL (no formal Position object; approximation from headcount). Labor Cost Forecasting PARTIAL → higher ceiling than most because native Payroll narrows the planned-to-actual gap. Headcount Reporting and Attrition Analysis READY.
+Section 9 (Exception Handling): Payroll module inactive despite all-in-one positioning (most common exception); GL cost center mapping not provided by customer (Department Expense Forecasting PARTIAL); contractor identity confusion (contractors stored as Employee records with ambiguous employment type values — confirm per CEP).
+Section 10 (AI Workflow): Simplest workflow in the HRIS library. Primary branch: Payroll module active? YES → compensation validation available; NO → Payroll cross-validation required from separate connector. Secondary branch: GL cost center mapping provided? YES → Department Expense Forecasting available; NO → PARTIAL.
+IMS-303 — BambooHR
+BambooHR is the simplest HRIS implementation in this library — the QBO equivalent of the HRIS domain. Its flat, single-level Department model is the primary structural limitation, and Position Planning is structurally unavailable (no Position object exists) — not a confidence gap that SMPL implementation effort can close, but a genuine platform capability boundary. For its target customer segment (small-to-mid-market), this is typically not a limitation in practice.
+✱ ARCHITECT NOTE: Key departure from all other HRIS connectors in this library: BambooHR has no Position object. The HRIS registry documents this as a structural unavailability analogous to QBO's multi-entity structural ceiling. The implementation agent must communicate this explicitly to the customer during the discovery session — not frame it as a confidence gap that will improve with time, but as a platform boundary that requires a different tool if Position Planning is required.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+API key (HTTP Basic Auth with API key as username). BambooHR uses a simple, non-expiring API key scoped to the company subdomain.
+API key is tied to a specific company subdomain (e.g., "acme.bamboohr.com"). Confirm subdomain resolves to production, not a trial or demo account.
+API version
+BambooHR v1 REST API (bamboohr.com/api/gateway.php/{company}/v1/...).
+No major version migration is anticipated; confirm v1 is current.
+Table IMS-303.1.1 — BambooHR authentication.
+1.2 Structural Ceiling Communication — Position Planning
+This communication step has no equivalent in any other connector in this library. It is a required disclosure conversation, not a technical discovery step.
+STRUCTURAL CEILING DISCLOSURE:
+  At the start of the Pre-POC Discovery session, the implementation agent
+  must communicate the following to the customer's decision-maker:
+  "BambooHR does not include a Position object. SMPL's Position Planning
+  capability (which tracks Budgeted, Open, and Filled headcount at the
+  position level) is structurally unavailable from BambooHR alone.
+  This is not an implementation limitation — it is a BambooHR platform
+  boundary. If Position Planning is a required capability, we recommend
+  evaluating a platform with native Position Management (Workday, UKG Pro).
+  BambooHR can support Headcount Reporting, Attrition Analysis, and
+  Workforce Planning at the department level."
+  Record customer acknowledgment in CEP.position_planning_acknowledged = true.
+  Do not proceed without this acknowledgment.
+1.3 Organizational Normalization Gate
+Simpler gate than Workday due to BambooHR's flat Department model — no org disambiguation needed.
+Gate Question
+CEP Field
+Notes
+Which employment statuses are active?
+CEP.headcount_policy.active_statuses
+BambooHR: Active, Inactive; confirm whether recently terminated within a grace period are included
+Are contractors included?
+CEP.headcount_policy.include_contractors
+BambooHR can track contractors as employees with custom Employment Status values; confirm
+FTE methodology?
+CEP.headcount_policy.fte_methodology
+BambooHR does not natively expose scheduled hours in all API tiers; BINARY FTE (everyone = 1.0) may be required if no part-time hours field available
+Table IMS-303.1.3 — BambooHR Organizational Normalization Gate.
+Section 2 — Canonical Object Mapping
+BambooHR Object
+API Endpoint
+Canonical Target
+Confidence
+Key Note
+Employee
+GET /v1/employees/directory
+Employee (Entity)
+D-H for core fields
+Simple, consistent fields; directory endpoint returns all active; /employees returns full details
+Department
+Embedded in Employee.department field
+Department (Entity)
+D-H — flat, single-level
+No parent-child hierarchy; structural ceiling on multi-level org reporting
+Employment Status
+Employee.status field
+Employee.status (SCDM)
+D-H
+Standard BambooHR values: Active, Inactive, Terminated
+Custom Fields
+GET /v1/meta/fields
+Extension fields — custom meaning requires CEP resolution
+D-H (after resolution)
+BambooHR customers use custom fields extensively for job level, pay grade, etc.
+Who's Out (Time-Off)
+GET /v1/time_off/requests
+Leave Event (Movement)
+D-H
+BambooHR's time-off tracking; relevant for Leave of Absence detection
+Position
+NOT AVAILABLE
+Structurally unavailable
+0%
+BambooHR has no Position object. Position Planning capability cannot be enabled from BambooHR alone.
+Table IMS-303.2.1 — BambooHR canonical object map.
+Section 4 — Transformation Rules (Key)
+4.1 Custom Field Discovery and Resolution
+BambooHR custom fields are widely used for job level, pay band, and
+department sub-classification. They require the same CEP resolution
+pattern as Salesforce's Custom Field Candidates.
+GET /v1/meta/fields → returns all standard and custom fields
+FOR each field where fieldType = "custom":
+  Record: fieldId, name, type (text, list, date, etc.)
+  ASK CEP: "Custom field '{name}': what business concept does this represent?
+  Examples: Job Level, Pay Band, Cost Center Code, Business Unit"
+  ├─ Known business concept → map to SCBM field or extension field
+  └─ Unknown → CCF (Custom Field Candidate); defer to CEP resolution
+  COMMON in BambooHR:
+  - "Level" or "Grade" custom fields for job architecture approximation
+  - "Cost Center" or "Department Code" for ERP cost center mapping
+  - "Manager" additional fields when matrix management is used
+Sections 5–10 Summary — BambooHR
+Section 5 (Validation): Standard organizational normalization gate validations. Additional validation: custom field completeness (if any required CEP-resolved custom fields have high null rates, FLAG). Position Planning absence validation: confirm CEP.position_planning_acknowledged = true before proceeding.
+Section 6 (Population): Simplest population sequence in the library — no Position step, no hierarchy disambiguation. Custom field CEP resolution runs as a gate before Employee population (because custom field values map to canonical fields on the Employee object itself). ERP cross-validation: Department → ERP Cost Center mapping, typically via custom field data rather than a separate Department object.
+Section 7 (Confidence): Headcount Reporting 85% (clean, consistent data; Pilot Ready maturity). Department 65% (flat structure limits dimensional depth; not a maturity gap — a structural ceiling). Position Planning 0% — structural unavailability, stated explicitly. Custom fields: 0% until CEP-resolved; D-H after.
+Section 8 (Capability Activation): Headcount Reporting READY. Attrition Analysis READY (termination dates reliable). Position Planning UNAVAILABLE (structural — communicate explicitly). Department Reporting PARTIAL (flat structure limits multi-level rollup). Labor Cost Forecasting PARTIAL (ERP and separate Payroll both required).
+Section 9 (Exception Handling): Customer expects Position Planning (handle in Section 1.2 disclosure before implementation begins — do not attempt to approximate Position Planning from headcount without explicit CEP guidance); flat Department structure limiting multi-level reporting (document as structural ceiling, not a gap to be resolved); custom field schema varies widely (custom field inventory and CEP resolution takes longer than expected for complex BambooHR implementations).
+IMS-304 — UKG Pro
+UKG Pro occupies the mid-market position between BambooHR's simplicity and Workday's enterprise complexity — comparable to Sage Intacct in the ERP library. Its native Payroll integration and reasonably formal organizational structure produce a strong implementation profile at Validated maturity. The Position Management module (when active) is the most consequential optional discovery item, and legacy UltiPro migration artifacts are the most common source of historical data inconsistency.
+✱ ARCHITECT NOTE: Key departure from Workday: UKG Pro's organizational structure (Organizational Levels) is more formal than BambooHR's flat model but less sophisticated than Workday's Supervisory Organization framework. It supports multi-level hierarchy without requiring the disambiguation step that Workday requires. The Position Management module is present but optional — its activation status is the most consequential binary discovery in this specification.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+OAuth 2.0 or API key, depending on UKG Pro licensing tier and customer configuration.
+Confirm authentication method with customer's UKG Pro system administrator. OAuth preferred for production; API key acceptable where OAuth is not configured.
+API base URL
+UKG Pro REST API: api.ultipro.com/{tenant}/... Tenant identifier required.
+Confirm tenant ID and production URL. UKG Pro's legacy UltiPro branding produced different URL patterns — verify current URL before extraction.
+Table IMS-304.1.1 — UKG Pro authentication.
+1.2 Position Management Module Confirmation
+CHECK: Is Position Management active?
+  GET /api/v1/position-management/positions?limit=1
+  ├─ Returns data → Position Management active
+  │   Record CEP.position_management_active = true
+  │   Position confidence = D-M (UKG Pro positions are less universally
+  │   maintained than Workday — validate data completeness before claiming)
+  └─ Returns 404 or empty → Module not activated
+      Record CEP.position_management_active = false
+      Position Planning approximated from headcount/requisition data
+  NOTE: UKG Pro Position Management is purchased separately and not
+  universally activated. Do not assume activation from platform tier.
+1.3 Payroll Module Confirmation
+CONFIRM UKG Pro Payroll module:
+  GET /api/v1/payroll/paystatements?limit=1
+  ├─ Returns data → Payroll active
+  │   Record CEP.ukg_payroll_active = true
+  │   Compensation validation available natively (comparable to Rippling)
+  └─ Returns 403 or empty → Payroll inactive; separate Payroll system required
+      Record CEP.ukg_payroll_active = false
+1.4 Legacy UltiPro Migration Check
+CHECK: Does this customer have legacy UltiPro data?
+  ASK CEP: "Has this company been using UKG/UltiPro for more than
+  3 years, and were they migrated from a legacy UltiPro platform to
+  UKG Pro Workforce Now?"
+  IF YES:
+    Record CEP.ukg_legacy_migration = true
+    Warn: "Historical employee data may include inconsistencies from
+    the legacy platform migration. Historical termination dates, org
+    structure changes, and department assignments prior to the migration
+    date should be treated as D-M confidence, not D-H."
+    Record CEP.ukg_migration_date for period-splitting of confidence claims
+Section 2 — Canonical Object Mapping
+UKG Pro Object
+API Endpoint
+Canonical Target
+Confidence
+Notes
+Employee
+GET /api/v1/employees
+Employee (Entity)
+D-H (post-migration date) / D-M (pre-migration, if applicable)
+Clean core fields; legacy data may have structural inconsistencies
+Organizational Level (multi-level)
+GET /api/v1/employees?expand=orgLevels
+Department (Entity) hierarchy
+D-H (no disambiguation needed; maps directly)
+Multi-level structure without the Workday Supervisory Org disambiguation
+Position (if module active)
+GET /api/v1/position-management/positions
+Position (Extension)
+D-M (less universally maintained than Workday)
+Optional module; validation of data completeness required
+Payroll Statement
+GET /api/v1/payroll/paystatements
+Payroll Line (Movement)
+D-H (module active)
+Native payroll comparable to Rippling when active
+Compensation
+Embedded in Employee response
+Employee.base_compensation
+D-H
+Employment History
+GET /api/v1/employees/{id}/changes
+Employee Movement Events
+D-H (post-migration) / D-M (pre-migration)
+Hire, termination, department change events
+Table IMS-304.2.1 — UKG Pro canonical object map.
+Sections 4–10 Summary — UKG Pro
+Section 4 (Transformation): Employment status normalization uses UKG Pro's Active/Terminated/LOA values; same pattern as Rippling. Organizational Level hierarchy construction uses parent-child linkage from the orgLevels expansion — simpler than Workday's Supervisory Org join; same cycle detection rule applies. Payroll Line normalization follows the same pattern as Rippling when Payroll module active.
+Section 5 (Validation): Position Management data completeness validation when module is active (if > 25% of positions have null Budgeted/Filled status, reduce Position confidence to D-L and surface to customer). Legacy migration period split: historical events before CEP.ukg_migration_date receive D-M confidence; subsequent events receive D-H.
+Section 6 (Population): Comparable to Rippling but with an additional Position Management step (conditional). Legacy migration date checkpoint: all historical events before migration date tagged with LEGACY_SOURCE metadata for transparency.
+Section 7 (Confidence): Headcount Reporting 80% (Validated; clean API; slight legacy risk). Organizational Level hierarchy 72% (reliable multi-level structure). Position Management 55% (when module active; lower than Workday due to less universal maintenance). Compensation Planning 68% (when Payroll active) — slightly below Rippling due to Validated vs. Production Ready maturity.
+Section 8 (Capability Activation): Same pattern as Rippling with one difference — Position Planning is PARTIAL (not UNAVAILABLE as in BambooHR) when Position Management module is active. Labor Cost Forecasting PARTIAL; ERP required for GL confirmation.
+Section 9 (Exception Handling): Legacy UltiPro migration artifacts (most common UKG Pro-specific exception — historical data inconsistency before migration date); Position Management module active but poorly maintained (same exception as Workday — reduce confidence to D-L and surface); multi-entity structure for international employees (UKG Pro multi-entity support less sophisticated than Workday — may require manual entity consolidation).
+IMS-305 — ADP Workforce Now
+ADP Workforce Now is the most distinctive HRIS connector in this library because of two characteristics that have no direct parallel in any other connector: (1) the Organizational Unit structural variance — ADP's broad, long-tenured customer base produces more organizational structure variability than purpose-built modern HRIS platforms; and (2) the ADP-as-payroll-only inversion pattern — some customers use ADP exclusively for payroll with a separate HRIS for org structure, which inverts the typical connector role entirely.
+✱ ARCHITECT NOTE: Key departure from all other HRIS connectors in this library: ADP Workforce Now's deepest capability advantage is in payroll-tax data (employer taxes, fully-loaded cost per employee), not organizational structure. This is the inverse of Workday, which is strongest on organizational structure and Position Management. The implementation agent should lead with payroll-tax capability in stakeholder conversations, not organizational reporting depth — ADP's organizational data is more variable, but its compensation data is the richest in the library.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+OAuth 2.0 via ADP API Central. ADP uses a client credentials grant with a client certificate for production.
+ADP's OAuth process is more involved than most connectors in this library — it requires an ADP-issued client certificate in addition to client ID and secret. Coordinate certificate acquisition with the customer's ADP representative during Pre-POC Discovery.
+ADP API environment
+Production: api.adp.com. Sandbox: api.adp.com/sandbox.
+Confirm production environment. ADP sandbox data is structurally incomplete and should never populate production canonical objects.
+Table IMS-305.1.1 — ADP Workforce Now authentication.
+1.2 ADP Role Confirmation — HRIS vs. Payroll-Only
+This is the highest-priority discovery item for ADP. Unlike every other connector in this library, ADP is sometimes deployed as payroll-only, with a separate dedicated HRIS for organizational structure. Failing to confirm this inverts the connector's role — it would be used as the organizational system of record when it is not.
+CONFIRM ADP role:
+  ASK CEP (not detectable via API alone):
+  [ASK CEP] Is ADP Workforce Now the primary system of record for:
+  (a) Employee records AND organizational structure → standard HRIS+Payroll role
+  (b) Payroll processing only, with HR data in a separate system → payroll-only role
+  ├─ (a) HRIS+Payroll → Proceed with standard IMS-305 implementation
+  │   Record CEP.adp_role = HRIS_AND_PAYROLL
+  │
+  └─ (b) Payroll only → REDIRECT:
+      "ADP will be connected as a Payroll-equivalent connector.
+      Identify the separate HRIS system; it requires its own IMS connector.
+      ADP will contribute: Payroll Lines, compensation actuals, employer taxes.
+      The separate HRIS will contribute: org structure, headcount, hierarchy."
+      Record CEP.adp_role = PAYROLL_ONLY
+      Proceed with limited scope: Payroll Line canonical objects only
+1.3 Organizational Unit Structural Variance Assessment
+ASSESS Organizational Unit structural consistency:
+  GET /api/v1/workers?$top=100&$select=workAssignment.homeOrganizationalUnit
+  FOR each unique Organizational Unit:
+    Record: orgUnitCode, orgUnitName, parentOrgUnit (if available)
+  CHECK consistency:
+  IF any Organizational Unit has null parentOrgUnit (besides root):
+    → FLAG: potential orphaned org units from legacy configurations
+  IF Organizational Unit codes appear inconsistent across time periods:
+    → FLAG: possible historical reorg artifacts
+  ASK CEP: "Please provide the current organizational chart (or confirm
+  that ADP Organizational Units accurately reflect the current structure).
+  ADP Organizational Unit data from long-tenured customers may carry forward
+  historical structures that no longer reflect current reporting."
+  Record in CEP.adp_org_assessment:
+    org_unit_count, active_units, orphaned_units_count, validation_status
+Section 2 — Canonical Object Mapping
+ADP Object
+API Endpoint
+Canonical Target
+Confidence
+Key Note
+Worker
+GET /api/v1/workers
+Employee (Entity)
+D-H for core fields (post-org-assessment)
+Core employment fields reliable; Organizational Unit confidence varies
+Organizational Unit
+Embedded in Worker.workAssignment.homeOrganizationalUnit
+Department (Entity)
+D-M — structural variance in ADP customer base
+Lower confidence than other HRIS connectors; requires org assessment (Section 1.3)
+Pay Data / Payroll Run
+GET /api/v1/payroll/payrollOutputs
+Payroll Line (Movement)
+D-H — ADP's deepest capability
+The most granular payroll-tax data in the library; employer taxes and benefits contributions available
+Compensation (planned)
+Embedded in Worker.payrollFileNumber or Worker.baseRemuneration
+Employee.base_compensation
+D-H
+Reliable base salary
+Benefits (if ADP Benefits active)
+GET /api/v1/benefits/enrollments
+Benefit (Extension) — fully-loaded cost contribution
+D-H (when active) — strongest benefits data in the library
+ADP's benefits integration is the most comprehensive in this library
+Employment History
+GET /api/v1/workers/{id}/work-assignments
+Employee Movement Events
+D-H (recent) / D-M (pre-migration or legacy period)
+Table IMS-305.2.1 — ADP Workforce Now canonical object map.
+Section 4 — Transformation Rules (Key)
+4.1 Fully-Loaded Cost Per Employee — ADP's Primary Capability Advantage
+ADP's payroll-tax and benefits data enables the most complete fully-loaded cost-per-employee calculation of any connector in this library. This is the HRIS analog of Stripe's ARR formula — the core derived metric that makes ADP most valuable for Financial Intelligence.
+FULLY-LOADED COST PER EMPLOYEE (per period):
+  REQUIRED components from ADP:
+    gross_pay = payroll_output.earningsSummary.totalGrossPay
+    employer_taxes = payroll_output.taxSummary.employerTaxes (all types)
+    benefits_employer_contribution = payroll_output.deductionSummary.employerDeductions
+  DERIVED:
+    fully_loaded_cost = gross_pay + employer_taxes + benefits_employer_contribution
+  ANNUALIZED:
+    annual_fully_loaded_cost = fully_loaded_cost_per_period × pay_periods_per_year
+    (pay_periods_per_year from CEP.headcount_policy.pay_frequency)
+  CONFIDENCE: D-H when all three components available
+  DEGRADES: if benefits module inactive → D-M (gross + taxes only; no benefits)
+  CROSS-VALIDATION:
+    Compare ADP-derived fully_loaded_cost against ERP GL payroll expense
+    Discrepancy > 3% → FLAG as COST_RECONCILIATION_ITEM for finance team review
+Sections 5–10 Summary — ADP Workforce Now
+Section 5 (Validation): ADP role confirmation validation (if CEP.adp_role = PAYROLL_ONLY, all org structure canonical objects are suppressed — not flagged, suppressed). Organizational Unit assessment validation: if orphaned_unit_count > 10% of total, reduce Department confidence to D-L and block Department hierarchy construction until customer provides current org chart. Fully-loaded cost completeness: if employer_taxes or benefits_employer_contribution are null for > 5% of pay statements, FLAG.
+Section 6 (Population): Population sequence depends on CEP.adp_role. HRIS+Payroll: full population sequence. PAYROLL_ONLY: skip Employee org structure, Department hierarchy, Manager hierarchy; populate Payroll Line, Compensation, and Employer Tax objects only. Fully-loaded cost derivation runs after Payroll Line population (Step 7b).
+Section 7 (Confidence): Headcount Reporting 75% (Validated maturity + Organizational Unit variance). Organizational Unit (Department) 58% (structural variance; ERP cost center cross-validation improves this significantly). Payroll Line 82% — the highest payroll-data confidence in the library. Fully-loaded cost per employee 80% when Benefits active — also the highest in the library. ERP cross-validation: +12% on Department confidence when ERP cost center mapping is confirmed.
+Section 8 (Capability Activation): Compensation Planning READY (payroll data is ADP's strength — this is the only Validated-maturity connector in the library where Compensation Planning reaches READY standalone). Fully-Loaded Cost per Employee READY when Benefits active — a capability unique to ADP in this library at this confidence level. Headcount Reporting READY. Department Reporting PARTIAL (organizational variance). Position Planning UNAVAILABLE (ADP has no formal Position object, same as BambooHR).
+Section 9 (Exception Handling): ADP-as-payroll-only pattern (Section 1.2 — most consequential ADP-specific exception; inverts the connector's role); stale Organizational Units from decades-long ADP relationships (historical org structures not cleaned up; filter by active status + validate against customer-provided current org chart); ADP-to-Workforce-Now legacy migration artifacts (same pattern as UKG Pro legacy data — tag pre-migration period data with D-M confidence).
+Section 10 (AI Workflow): Role confirmation branch is unique in the HRIS library: ADP-as-payroll-only produces a fundamentally different implementation path, not just a degraded version of the standard path. Organizational Unit assessment runs before any canonical Department creation. Fully-loaded cost derivation is the highest-value post-population step unique to ADP.
+Cross-HRIS Implementation Comparison Matrix
+Organizational Normalization Gate Complexity
+Connector
+Department Disambiguation?
+Position Planning
+Payroll Native?
+Primary Gate Complexity Driver
+Workday HCM
+YES — Supervisory Org vs. Cost Center gate (most complex in library)
+READY when Position Management active and maintained
+Optional module (~25%)
+Supervisory Org gate + FTE gate + multiple Business Process configurations
+Rippling
+NO — Department maps directly (fastest)
+PARTIAL — no formal Position object
+YES (~75%) — primary capability advantage
+Payroll module confirmation + GL cost center mapping
+BambooHR
+NO — flat Department maps directly
+UNAVAILABLE — structural boundary
+NO — separate Payroll required for most
+Structural ceiling disclosure (Position Planning) + custom field resolution
+UKG Pro
+NO — Organizational Level maps reasonably directly
+PARTIAL (module active) / UNAVAILABLE (inactive)
+YES (~60%) — comparable to Rippling
+Position Management module + legacy migration artifacts
+ADP Workforce Now
+YES — but for a different reason: Org Unit structural variance, not disambiguation
+UNAVAILABLE — structural boundary
+YES — deepest payroll-tax data in library
+ADP role confirmation (HRIS vs. payroll-only) + Org Unit variance assessment
+Table X-HRS.1 — HRIS organizational normalization gate comparison.
+Position Planning Structural Analysis
+Position Planning is the most differentiated capability across the HRIS library, with connector-specific structural explanations required:
+Connector
+Position Planning Status
+Reason (Capability or Structural Boundary)
+Workday HCM
+READY (when Position Management active and maintained)
+CAPABILITY: Formal Position Management with explicit Budgeted/Filled/Open tracking — the strongest in the library
+Rippling
+PARTIAL
+CAPABILITY GAP: Approximated from headcount trends; improves with SMPL implementation experience; not a structural boundary
+BambooHR
+UNAVAILABLE
+STRUCTURAL BOUNDARY: No Position object exists in BambooHR. This does not improve with SMPL implementation experience.
+UKG Pro
+PARTIAL (module active) / UNAVAILABLE (module inactive)
+CONDITIONAL: Module-dependent structural boundary when inactive; capability gap when active but poorly maintained
+ADP Workforce Now
+UNAVAILABLE
+STRUCTURAL BOUNDARY: ADP has no formal Position object, same as BambooHR
+Table X-HRS.2 — Position Planning status. Structural boundaries must be communicated explicitly during discovery — they are not gaps that SMPL implementation effort can close.
+Headcount Reporting Confidence Comparison
+Object / Capability
+Workday
+Rippling
+BambooHR
+UKG Pro
+ADP
+Employee (core fields)
+D-H (83%)
+D-H (86%)
+D-H (83%)
+D-H (78%)
+D-H (75%)
+Department / Org Structure
+D-H (72% post-gate)
+D-H (85%)
+D-H (65% — flat ceiling)
+D-H (72%)
+D-M (58% — variance)
+Headcount Reporting standalone
+85%
+88% (highest)
+85%
+80%
+75%
+Compensation (planned)
+D-H (70%)
+D-H (80% w/Payroll)
+D-M (60%)
+D-H (68% w/Payroll)
+D-H (76%)
+Payroll Line (actual disbursed)
+D-H (with Workday Payroll) / N/A
+D-H (82% — native)
+N/A
+D-H (70% — native)
+D-H (82%) — best payroll-tax depth
+Fully-Loaded Cost Per Employee
+D-M (requires ERP + Payroll)
+D-M (Payroll narrows gap)
+N/A
+D-M (Payroll narrows gap)
+D-H (80% — ADP's primary advantage)
+Table X-HRS.3 — Cross-connector confidence comparison.
+HRIS IMS Library — Readiness Assessment
+Dimension
+Score
+Assessment
+Standard Conformance
+9 / 10
+All five specifications follow the ten-section IMS standard. IMS-303, IMS-304, and IMS-305 use the Sections 5–10 summary pattern consistent with Validated and Pilot Ready connectors across the ERP, CRM, and Billing libraries.
+Organizational Normalization Gate
+10 / 10
+The gate is documented consistently across all five connectors with four gate questions: two confidence degradation gates (active employee definition, contractor treatment) and two population block gates (FTE methodology, canonical department object designation). The gate correctly allows extraction to continue while blocking FTE-derived metrics and Department canonical objects until resolved.
+Position Planning Structural Boundaries
+10 / 10
+BambooHR and ADP's Position Planning unavailability is explicitly framed as a structural boundary, not a confidence gap — consistent with the QBO multi-entity treatment in the ERP library. This prevents the implementation agent from attempting to approximate a capability that the platform fundamentally does not support.
+Three Financial Distinctions
+10 / 10
+Employee ≠ Payroll Expense, Salary ≠ Disbursed Compensation, and Department ≠ Cost Center are restated consistently throughout every connector and the library scope section.
+ADP Role Confirmation
+10 / 10
+ADP's payroll-only inversion pattern is the most consequential ADP-specific exception in the library — the implementation agent's role confirmation step (Section 1.2) is the only step in the entire IMS library that can redirect an implementation to a completely different canonical scope before extraction begins.
+AI Executability
+9 / 10
+Cycle detection in organizational hierarchies is the most consequential AI-executable rule in this library, documented consistently across Workday, Rippling, and UKG Pro. The rule is deterministic: cycle detected → BLOCK hierarchy construction for affected branch → log specific org IDs → continue with non-cyclic portions.
+Table X-HRS.R — HRIS IMS Library readiness. Aggregate: 58 / 60 (97%).
+Final Determination
+The HRIS Implementation Mapping Specification Library (IMS-301 through IMS-305) is complete. Implementation agents and human consultants have sufficient implementation knowledge to begin onboarding any Tier 1 HRIS platform. The SMPL Implementation Mapping Library — ERP, CRM, Billing, and HRIS — is now complete across all four foundational business domains.
+The HRIS library introduces two implementation concepts that had no precedent in the ERP, CRM, or Billing libraries: (1) the structural ceiling disclosure — BambooHR's Section 1.2 Position Planning communication is a required disclosure step that precedes technical discovery, because no amount of implementation effort can produce a capability the platform doesn't support; and (2) the role confirmation inversion — ADP's Section 1.2 role confirmation can redirect an implementation to a fundamentally different canonical scope before any extraction begins, producing a Payroll-equivalent connector rather than an HRIS connector. Both concepts extend the IMS standard's deterministic philosophy to cover situations where the implementation agent's first action is to clarify the scope of the implementation itself, not to begin extracting data.
+The cross-connector pattern from building all five simultaneously: every HRIS connector's most consequential gap — the gap between what HRIS reports and what Financial Intelligence requires — is the Employee-to-Expense chain. HRIS knows who is employed, in what role, at what planned compensation. Payroll knows what was actually disbursed. ERP knows what was recognized as GL expense. None of the three substitutes for the others; all three are required for trusted Labor Cost Forecasting. The HRIS IMS library documents exactly where each connector's contribution to this chain ends and where the next system's contribution must begin — consistently, explicitly, and without ambiguity, across all five connectors.
+With the completion of the HRIS IMS Library, the SMPL Implementation Mapping Library spans all four foundational business domains: ERP (financial truth), CRM (commercial intent), Billing (commercial execution), and HRIS (organizational execution). The IMS standard — established by IMS-001 (NetSuite) and validated across 20 additional connectors in four domain libraries — has proven durable, generalizable, and AI-executable. It is ready to govern future connector additions without structural modification.

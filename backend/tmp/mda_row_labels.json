@@ -1,0 +1,521 @@
+{
+  "Variance Commentary": [
+    [
+      1,
+      "SMPL \u00b7 Variance Commentary \u00b7 June 2026",
+      ""
+    ],
+    [
+      2,
+      "Category",
+      "Metric"
+    ],
+    [
+      3,
+      "ARR",
+      "Ending ARR"
+    ],
+    [
+      4,
+      "ARR",
+      "Net New ARR"
+    ],
+    [
+      5,
+      "Revenue",
+      "Revenue"
+    ],
+    [
+      6,
+      "Revenue",
+      "Gross Margin %"
+    ],
+    [
+      7,
+      "P&L",
+      "EBITDA"
+    ],
+    [
+      8,
+      "GTM",
+      "S&M / Pipeline"
+    ],
+    [
+      9,
+      "Cash",
+      "Ending Cash"
+    ],
+    [
+      10,
+      "Headcount",
+      "Total HC"
+    ]
+  ],
+  "Q2 vs Budget": [
+    [
+      1,
+      "SMPL \u00b7 Q2 2026 Variance Analysis \u2014 Actuals vs Budget",
+      ""
+    ],
+    [
+      2,
+      "Q2 2026 (Apr\u2013Jun) and YTD (Jan\u2013Jun) \u00b7 Prepared by Finance \u00b7 Confidential",
+      ""
+    ],
+    [
+      4,
+      "Line Item",
+      "Q2 Actual"
+    ],
+    [
+      5,
+      "INCOME STATEMENT",
+      ""
+    ],
+    [
+      6,
+      "Total Revenue",
+      "21.60089083"
+    ],
+    [
+      7,
+      "Gross Profit",
+      "17.07252141"
+    ],
+    [
+      8,
+      "Gross Margin %",
+      "0.7903619135137309"
+    ],
+    [
+      10,
+      "Sales & Marketing",
+      "9.293714199999998"
+    ],
+    [
+      11,
+      "Research & Development",
+      "8.23417901"
+    ],
+    [
+      12,
+      "General & Administrative",
+      "3.86343851"
+    ],
+    [
+      14,
+      "EBITDA",
+      "-4.3188103"
+    ],
+    [
+      16,
+      "ARR MOVEMENT",
+      ""
+    ],
+    [
+      17,
+      "New Business",
+      "5.37"
+    ],
+    [
+      18,
+      "Expansion",
+      "2.74"
+    ],
+    [
+      19,
+      "Reactivation",
+      "0.25"
+    ],
+    [
+      20,
+      "Contraction",
+      "-0.69"
+    ],
+    [
+      21,
+      "Churn",
+      "-1.075"
+    ],
+    [
+      22,
+      "Net New ARR",
+      "6.595"
+    ],
+    [
+      23,
+      "Ending ARR (Jun EOP)",
+      "86.1"
+    ],
+    [
+      25,
+      "CASH",
+      ""
+    ],
+    [
+      26,
+      "Q2 / YTD CFO",
+      "13.09716541"
+    ],
+    [
+      27,
+      "Ending Cash (Jun EOP)",
+      "70.61212207"
+    ]
+  ],
+  "ARR Waterfall": [
+    [
+      1,
+      "SMPL \u00b7 ARR / MRR Waterfall \u00b7 Q2 2026 Close \u2014 June Actuals",
+      ""
+    ],
+    [
+      2,
+      "",
+      "\u25c0  ACTUALS  \u25b6"
+    ],
+    [
+      3,
+      "",
+      "Jan"
+    ],
+    [
+      4,
+      "ARR MOVEMENT BRIDGE ($M)",
+      ""
+    ],
+    [
+      5,
+      "Beginning ARR",
+      "75"
+    ],
+    [
+      6,
+      "+ New Business",
+      "1.2"
+    ],
+    [
+      7,
+      "+ Expansion",
+      "0.65"
+    ],
+    [
+      8,
+      "+ Reactivation",
+      "0.06"
+    ],
+    [
+      9,
+      "- Contraction",
+      "0.18"
+    ],
+    [
+      10,
+      "- Churn",
+      "0.42"
+    ],
+    [
+      12,
+      "NET NEW ARR & ENDING ARR",
+      ""
+    ],
+    [
+      13,
+      "Net New ARR",
+      "1.31"
+    ],
+    [
+      14,
+      "Ending ARR",
+      "76.31"
+    ],
+    [
+      16,
+      "RETENTION METRICS",
+      ""
+    ],
+    [
+      17,
+      "NRR %",
+      "1.0007"
+    ],
+    [
+      18,
+      "GRR %",
+      "0.992"
+    ],
+    [
+      20,
+      "Note: Jun Actual column (yellow) is a user-input placeholder. Enter June actuals when the period closes. Q2 Act and H1 Act subtotals will auto-populate based on formulas. Forecast Jul\u2013Dec sourced from Forecast_mrr_waterfall.csv.",
+      ""
+    ]
+  ],
+  "Income Statement": [
+    [
+      1,
+      "SMPL \u00b7 Income Statement \u00b7 Jan\u2013Dec 2026",
+      ""
+    ],
+    [
+      2,
+      "",
+      "\u25c0  ACTUALS  \u25b6"
+    ],
+    [
+      3,
+      "",
+      "Jan"
+    ],
+    [
+      4,
+      "REVENUE",
+      ""
+    ],
+    [
+      5,
+      "Total Revenue",
+      "6.59"
+    ],
+    [
+      6,
+      "Subscription Rev",
+      "6.29"
+    ],
+    [
+      7,
+      "Services Rev",
+      "0.3"
+    ],
+    [
+      9,
+      "GROSS PROFIT",
+      ""
+    ],
+    [
+      10,
+      "Cost of Revenue",
+      "1.52"
+    ],
+    [
+      11,
+      "Gross Profit",
+      "5.07"
+    ],
+    [
+      12,
+      "Gross Margin %",
+      "0.77"
+    ],
+    [
+      14,
+      "OPERATING EXPENSES",
+      ""
+    ],
+    [
+      15,
+      "Sales & Marketing",
+      "3.43"
+    ],
+    [
+      16,
+      "Research & Development",
+      "1.12"
+    ],
+    [
+      17,
+      "General & Administrative",
+      "0.72"
+    ],
+    [
+      18,
+      "Total OpEx",
+      "5.27"
+    ],
+    [
+      20,
+      "EBITDA",
+      ""
+    ],
+    [
+      21,
+      "EBITDA",
+      "-0.2"
+    ],
+    [
+      22,
+      "Depreciation & Amort",
+      "0.165"
+    ],
+    [
+      23,
+      "Operating Income",
+      "-0.365"
+    ],
+    [
+      25,
+      "Note: Jun Actual (yellow) is a user-input placeholder \u2014 enter when June closes. Q2 and H1 actuals will reflect Apr+May until June is added.",
+      ""
+    ]
+  ],
+  "Risks & Opportunities": [
+    [
+      1,
+      "SMPL \u00b7 Risks & Opportunities \u00b7 Board Decision Matrix \u00b7 June 2026",
+      ""
+    ],
+    [
+      2,
+      "Type",
+      "Category"
+    ],
+    [
+      3,
+      "RISK",
+      "GTM"
+    ],
+    [
+      4,
+      "RISK",
+      "Retention"
+    ],
+    [
+      5,
+      "RISK",
+      "Pipeline"
+    ],
+    [
+      6,
+      "RISK",
+      "Cash"
+    ],
+    [
+      7,
+      "OPP",
+      "GTM"
+    ],
+    [
+      8,
+      "OPP",
+      "ARR"
+    ],
+    [
+      9,
+      "OPP",
+      "Margin"
+    ],
+    [
+      10,
+      "OPP",
+      "Cash"
+    ]
+  ],
+  "GTM Review": [
+    [
+      1,
+      "ClarityFP \u00b7 GTM & Marketing Channel Efficiency \u00b7 YTD 2026",
+      ""
+    ],
+    [
+      2,
+      "Channel",
+      "Mktg Spend ($M)"
+    ],
+    [
+      3,
+      "Organic Search",
+      "0.08"
+    ],
+    [
+      4,
+      "Partner",
+      "0.33"
+    ],
+    [
+      5,
+      "Referral",
+      "0.12"
+    ],
+    [
+      6,
+      "Webinar",
+      "0.19"
+    ],
+    [
+      7,
+      "Outbound",
+      "0.44"
+    ],
+    [
+      8,
+      "Direct",
+      "0.15"
+    ],
+    [
+      9,
+      "Field Event",
+      "0.52"
+    ],
+    [
+      10,
+      "Content Syndic.",
+      "0.38"
+    ],
+    [
+      11,
+      "Paid Search",
+      "1.56"
+    ],
+    [
+      12,
+      "Paid Social",
+      "1.27"
+    ]
+  ],
+  "Headcount": [
+    [
+      1,
+      "SMPL \u00b7 Headcount & Productivity \u00b7 Jan\u2013Jun 2026",
+      ""
+    ],
+    [
+      2,
+      "Department",
+      "Jan"
+    ],
+    [
+      3,
+      "Sales",
+      "26"
+    ],
+    [
+      4,
+      "Engineering",
+      "34"
+    ],
+    [
+      5,
+      "Customer Success",
+      "15"
+    ],
+    [
+      6,
+      "Marketing",
+      "13"
+    ],
+    [
+      7,
+      "G&A + Support",
+      "25"
+    ],
+    [
+      8,
+      "Product",
+      "8"
+    ],
+    [
+      9,
+      "Total",
+      "121"
+    ]
+  ]
+}

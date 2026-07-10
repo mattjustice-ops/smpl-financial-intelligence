@@ -1,0 +1,221 @@
+{
+  "variance_commentary": {
+    "vc_arr_ending": {
+      "period_vs_budget": "Ending ARR of $85.31M exceeded budget by +$413.1K (+0.5%), driven by lower-than-budgeted churn and contraction offsetting a modest New Business shortfall of -$84.2K; ARR base entering Q3 is ahead of plan.",
+      "qtd_vs_budget": "Q2 Ending ARR of $85.31M vs budget $84.89M, a +$413.1K (+0.5%) favorable result; the quarter-level outcome matches the June reading as ARR is a point-in-time metric, with churn and contraction both tracking below budget across Q2.",
+      "ytd_vs_budget": "YTD Ending ARR of $85.31M vs budget $84.89M, +$413.1K (+0.5%) favorable; trend is stable-to-improving through H1, though FY outlook of $90.29M trails FY budget of $96.10M by -$5.81M, signaling H2 New Business acceleration is required."
+    },
+    "vc_net_new_arr": {
+      "period_vs_budget": "Net New ARR of $1.68M trailed budget $1.77M by -$84.2K (-4.8%), driven by New Business and Expansion both coming in below budget; churn and contraction were favorable, partially offsetting the gross adds shortfall.",
+      "qtd_vs_budget": "Q2 Net New ARR of $5.13M exceeded budget $5.08M by +$53.8K (+1.1%), a stronger quarter-level result than the June-only reading, indicating earlier months in Q2 overperformed and more than offset the June shortfall.",
+      "ytd_vs_budget": "YTD Net New ARR of $9.18M vs budget $8.97M, +$215.8K (+2.4%) favorable; the trend is improving across H1, with New Business and Expansion both ahead YTD, providing a constructive base for H2 quota attainment."
+    },
+    "vc_revenue": {
+      "period_vs_budget": "Revenue of $7.35M missed budget $7.72M by -$367.5K, driven by timing of recognized subscription revenue relative to ARR adds; expansion and reactivation timing may shift recognition into Q3.",
+      "qtd_vs_budget": "Q2 Revenue of $21.05M vs budget $22.10M, a -$1.05M unfavorable variance; the quarter-level gap is wider than the June-only shortfall, indicating the revenue miss was distributed across Q2 and is not a single-month timing item.",
+      "ytd_vs_budget": "YTD Revenue of $39.45M vs budget $41.42M, -$1.97M unfavorable; the gap has been widening through H1 and, if unaddressed, pressures FY revenue outlook; management should validate expansion timing and deferred revenue release cadence for H2."
+    },
+    "vc_gross_margin": {
+      "period_vs_budget": "Gross Margin of 70.0% was exactly on budget at 70.0% for June; cost of revenue is tracking to plan with no material variance to report.",
+      "qtd_vs_budget": "Q2 Gross Margin of 70.7% matched budget of 70.7% precisely; margin quality is consistent across the quarter with no mix or timing distortion at the gross profit level.",
+      "ytd_vs_budget": "YTD Gross Margin of 70.8% is in line with budget of 70.8%; performance is stable through H1, though margin remains below the 75.0% healthy benchmark, warranting continued focus on COGS efficiency in H2."
+    },
+    "vc_ebitda": {
+      "period_vs_budget": "+$14.0K favorable: EBITDA of $661.5K exceeded budget $647.5K, driven by underspend across S&M, R&D, and G&A that more than offset the revenue shortfall; opex discipline is sustaining profitability above plan.",
+      "qtd_vs_budget": "Q2 EBITDA of $2.03M vs budget $2.00M, +$33.3K favorable; the quarter-level beat is larger than the June-only variance, confirming that opex underspend was consistent across Q2 and is not concentrated in a single month.",
+      "ytd_vs_budget": "YTD EBITDA of $3.87M vs budget $3.81M, +$59.1K (+1.6%) favorable; trend is stable and improving through H1; FY EBITDA outlook of $7.46M trails FY budget of $7.79M by -$328.7K, reflecting the cumulative revenue gap partially offset by opex savings."
+    },
+    "vc_sm_pipeline": {
+      "period_vs_budget": "S&M spend of $2.50M was -$151.2K below budget $2.65M, reflecting headcount underfill and deferred program spend; pipeline ending at $5.40M with 3.0x coverage is at the minimum healthy threshold, warranting close monitoring.",
+      "qtd_vs_budget": "Q2 S&M of $7.16M vs budget $7.59M, -$433.0K favorable on spend; however, pipeline coverage of 3.0x is at the floor of the healthy range (>3x), and the underspend may be contributing to pipeline creation risk heading into Q3.",
+      "ytd_vs_budget": "YTD S&M of $13.41M vs budget $14.22M, -$811.5K below plan; while the underspend supports EBITDA, top channels (Paid Social, Paid Search, Content Syndication) must be scaled in H2 to close the pipeline gap and protect Q3\u2013Q4 New Business targets."
+    },
+    "vc_cash": {
+      "period_vs_budget": "+$16.98M favorable: Ending Cash of $48.43M vs budget $31.46M (+54.0%), driven by higher beginning cash balance and lower payroll and commissions outflows; headroom of $38.43M above the $10.00M floor is strong.",
+      "qtd_vs_budget": "Q2 Ending Cash of $48.43M vs budget $31.46M, +$16.98M (+54.0%) favorable; the outperformance is consistent with the June reading as cash is a point-in-time metric; lower headcount-driven payroll is the primary structural driver of the favorable position.",
+      "ytd_vs_budget": "YTD Ending Cash of $48.43M vs budget $31.46M, +$16.98M (+54.0%) favorable; the position is strong with $38.43M headroom above the $10.00M floor; FY cash outlook of $49.92M vs FY budget $23.85M suggests sustained liquidity advantage through year-end."
+    },
+    "vc_headcount": {
+      "period_vs_budget": "Total headcount of 0 vs budget of 12, a -12 variance with 0 open reqs recorded; this likely reflects a data load issue \u2014 headcount plan and workforce tables should be verified before board distribution.",
+      "qtd_vs_budget": "Q2 headcount of 0 vs budget 12, -12 unfavorable across the full quarter with no open reqs; the zero actual is inconsistent with operating activity reflected in payroll and opex lines and requires reconciliation prior to distribution.",
+      "ytd_vs_budget": "YTD headcount of 0 vs budget 12, -12 gap persists through all of H1; finance should confirm workforce table load status, as the zero headcount reading conflicts with YTD payroll of $2.47M and ongoing opex, and may misstate FY EOY forecast of 16 hires."
+    }
+  },
+  "q2_vs_budget": {
+    "qvb_income_statement": {
+      "period_vs_budget": "Q2 Revenue of $21.05M trailed budget $22.10M by -$1.05M; EBITDA of $2.03M exceeded budget $2.00M by +$33.3K as opex underspend of -$777.0K across S&M, R&D, and G&A offset the gross profit shortfall of -$743.6K.",
+      "qtd_vs_budget": "Q2 Gross Margin held at 70.7% vs budget 70.7%, exactly on plan; the revenue miss did not compress margin, indicating cost of revenue scaled proportionally; Ending ARR of $85.31M was +$413.1K ahead of budget $84.89M.",
+      "ytd_vs_budget": "Through Q2, YTD Revenue of $39.45M trails budget $41.42M by -$1.97M while YTD EBITDA of $3.87M is +$59.1K ahead; opex discipline is preserving profitability but H2 revenue acceleration is needed to close the annual gap."
+    }
+  },
+  "arr_waterfall": {
+    "arr_new_business": {
+      "period_vs_budget": "New Business ARR of $1.68M trailed budget $1.77M in June; the shortfall reflects timing of late-quarter closes and is the primary driver of the period Net New ARR miss of -$84.2K vs budget.",
+      "qtd_vs_budget": "Q2 New Business of $5.13M exceeded budget $5.08M by +$53.8K (+1.1%); the quarter-level result is favorable, confirming that earlier Q2 months overperformed and offset the June shortfall.",
+      "ytd_vs_budget": "YTD New Business of $9.18M vs budget $8.97M, +$215.8K (+2.4%) favorable; trend is improving through H1 and provides a constructive foundation for H2 quota attainment."
+    },
+    "arr_expansion": {
+      "period_vs_budget": "Expansion ARR of $869.1K trailed budget $912.6K in June; the -$43.5K shortfall reflects timing of upsell closes and is expected to partially reverse in Q3 as pipeline matures.",
+      "qtd_vs_budget": "Q2 Expansion of $2.63M vs budget $2.62M, +$9.3K (+0.4%) favorable; the quarter-level result is marginally ahead of plan, indicating the June timing shortfall was offset by stronger earlier-quarter expansion activity.",
+      "ytd_vs_budget": "YTD Expansion of $4.78M vs budget $4.71M, +$73.8K (+1.6%) favorable; expansion is tracking above plan through H1 and represents a positive retention signal heading into H2 renewal cycles."
+    },
+    "arr_reactivation": {
+      "period_vs_budget": "Reactivation ARR of $142.9K was -$7.1K below budget $150.0K in June; the variance is immaterial and reflects normal monthly variability in win-back activity.",
+      "qtd_vs_budget": "Q2 Reactivation of $297.9K vs budget $305.0K, -$7.1K (-2.3%) unfavorable; the quarter-level gap mirrors the June shortfall, indicating no meaningful timing offset within Q2 for this motion.",
+      "ytd_vs_budget": "YTD Reactivation of $492.9K vs budget $500.0K, -$7.1K (-1.4%) unfavorable; the variance is stable and immaterial; no corrective action required at this scale."
+    },
+    "arr_contraction": {
+      "period_vs_budget": "Contraction of $313.7K was favorable vs budget $329.3K in June; lower-than-expected downgrades contributed positively to Net New ARR and reflect healthy customer retention behavior.",
+      "qtd_vs_budget": "Q2 Contraction of -$778.7K vs budget -$803.6K, +$25.0K (-3.1%) favorable; contraction tracked below budget across Q2, a consistent positive signal for net retention heading into H2.",
+      "ytd_vs_budget": "YTD Contraction of -$1.36M vs budget -$1.40M, +$36.7K (-2.6%) favorable; the improving trend through H1 supports G$R stability and reduces downside risk to the FY ARR outlook."
+    },
+    "arr_churn": {
+      "period_vs_budget": "Churn of $520.2K was favorable vs budget $546.2K in June; lower-than-budgeted logo losses contributed +$26.0K to Net New ARR and reflect effective retention efforts in the close month.",
+      "qtd_vs_budget": "Q2 Churn of -$1.48M vs budget -$1.53M, +$54.8K (-3.6%) favorable; churn tracked below budget across the full quarter, the largest single favorable component of the Q2 ARR waterfall.",
+      "ytd_vs_budget": "YTD Churn of -$2.79M vs budget -$2.88M, +$94.0K (-3.3%) favorable; churn is the strongest-performing waterfall component YTD and, if sustained, provides meaningful upside to H2 G$R and N$R metrics."
+    },
+    "arr_net_new": {
+      "period_vs_budget": "Net New ARR of $1.68M trailed budget $1.77M by -$84.2K in June; New Business and Expansion shortfalls were partially offset by favorable churn and contraction vs budget.",
+      "qtd_vs_budget": "Q2 Net New ARR waterfall components net to a favorable quarter vs budget; QTD New Business +$53.8K, Expansion +$9.3K, and Churn +$54.8K more than offset Reactivation -$7.1K, yielding a net positive Q2 ARR outcome.",
+      "ytd_vs_budget": "YTD Net New ARR waterfall is favorable across all major components; New Business +$215.8K, Expansion +$73.8K, and Churn +$94.0K drive the cumulative +$215.8K YTD Net New ARR outperformance vs budget."
+    },
+    "arr_ending": {
+      "period_vs_budget": "Ending ARR of $85.31M exceeded budget $84.89M by +$413.1K (+0.5%) in June; favorable churn and contraction more than offset New Business and Expansion shortfalls to deliver an above-budget ARR close.",
+      "qtd_vs_budget": "Q2 Ending ARR of $85.31M vs budget $84.89M, +$413.1K (+0.5%) favorable; the quarter closed ahead of plan with ARR momentum supported by below-budget churn across Q2.",
+      "ytd_vs_budget": "YTD Ending ARR of $85.31M vs budget $84.89M, +$413.1K favorable; FY outlook of $90.29M trails FY budget $96.10M, indicating H2 New Business must accelerate materially to close the annual ARR gap."
+    }
+  },
+  "income_statement": {
+    "is_total_revenue": {
+      "period_vs_budget": "Revenue $7.35M vs budget $7.72M, -$367.5K unfavorable; subscription timing drove the shortfall.",
+      "qtd_vs_budget": "Q2 Revenue $21.05M vs budget $22.10M, -$1.05M unfavorable; gap is consistent across Q2, not a single-month timing item.",
+      "ytd_vs_budget": "YTD Revenue $39.45M vs budget $41.42M, -$1.97M unfavorable; trend is widening and requires H2 acceleration."
+    },
+    "is_gross_profit": {
+      "period_vs_budget": "Gross Profit $5.14M vs budget $5.40M, -$257.2K unfavorable; driven by revenue shortfall with margin held flat at 70.0%.",
+      "qtd_vs_budget": "Q2 Gross Profit $14.87M vs budget $15.62M, -$743.6K unfavorable; margin of 70.7% matched budget, isolating revenue as the sole driver.",
+      "ytd_vs_budget": "YTD Gross Profit $27.94M vs budget $29.33M, -$1.40M unfavorable; margin stable at 70.8% vs budget 70.8%; revenue gap is the driver."
+    },
+    "is_sm": {
+      "period_vs_budget": "S&M $2.50M vs budget $2.65M, -$151.2K favorable; underspend reflects headcount gap and deferred program spend.",
+      "qtd_vs_budget": "Q2 S&M $7.16M vs budget $7.59M, -$433.0K favorable; consistent underspend across Q2 supports EBITDA but risks pipeline coverage.",
+      "ytd_vs_budget": "YTD S&M $13.41M vs budget $14.22M, -$811.5K favorable; cumulative underspend may constrain H2 pipeline if not redeployed."
+    },
+    "is_rd": {
+      "period_vs_budget": "R&D $1.18M vs budget $1.25M, -$71.1K favorable; underspend driven by open headcount and deferred vendor costs.",
+      "qtd_vs_budget": "Q2 R&D $3.37M vs budget $3.57M, -$203.8K favorable; underspend is consistent across Q2 and reflects headcount underfill.",
+      "ytd_vs_budget": "YTD R&D $6.31M vs budget $6.69M, -$381.9K favorable; savings are structural given headcount gap; monitor product delivery risk."
+    },
+    "is_ga": {
+      "period_vs_budget": "G&A $808.5K vs budget $857.4K, -$48.9K favorable; underspend reflects lower professional fees and headcount savings.",
+      "qtd_vs_budget": "Q2 G&A $2.32M vs budget $2.46M, -$140.1K favorable; consistent underspend across Q2 with no unusual timing items.",
+      "ytd_vs_budget": "YTD G&A $4.34M vs budget $4.60M, -$262.5K favorable; trend is stable; savings are expected to partially reverse as headcount fills in H2."
+    },
+    "is_ebitda": {
+      "period_vs_budget": "EBITDA $661.5K vs budget $647.5K, +$14.0K favorable; opex underspend offset the revenue miss to deliver above-budget profitability.",
+      "qtd_vs_budget": "Q2 EBITDA $2.03M vs budget $2.00M, +$33.3K favorable; opex discipline across S&M, R&D, and G&A sustained the beat through Q2.",
+      "ytd_vs_budget": "YTD EBITDA $3.87M vs budget $3.81M, +$59.1K favorable; trend is stable; FY outlook $7.46M trails FY budget $7.79M by -$328.7K."
+    }
+  },
+  "cash_forecast": {
+    "cf_collections": {
+      "period_vs_budget": "Collections of $6.81M vs budget $8.91M; lower inflows reflect the revenue shortfall and timing of customer payments in June.",
+      "qtd_vs_budget": "Q2 collections tracking below budget consistent with the revenue gap; beginning cash of $48.02M provides sufficient buffer to absorb the shortfall.",
+      "ytd_vs_budget": "YTD collections of $58.82M support ending cash of $48.43M vs budget $23.85M; strong liquidity position despite below-budget monthly collections."
+    },
+    "cf_payroll": {
+      "period_vs_budget": "Payroll of $2.47M vs budget $4.00M; -$1.53M favorable driven by headcount underfill relative to plan, the primary driver of the cash outperformance.",
+      "qtd_vs_budget": "Q2 payroll underspend is consistent with the zero-vs-12 headcount variance; lower labor costs are the structural source of the +$16.98M cash beat vs budget.",
+      "ytd_vs_budget": "YTD payroll savings from headcount underfill are the largest contributor to the $48.43M ending cash vs $23.85M budget; headcount ramp in H2 will reduce this tailwind."
+    },
+    "cf_vendor_payments": {
+      "period_vs_budget": "Vendor payments of $3.66M vs budget $1.40M; +$2.26M above budget, reflecting timing of vendor settlements or accrual releases concentrated in June.",
+      "qtd_vs_budget": "Q2 vendor payments exceeded budget; the overrun partially offsets payroll savings in the cash bridge and should be monitored for recurrence in Q3.",
+      "ytd_vs_budget": "YTD vendor payment timing has been a partial offset to payroll savings; ending cash of $48.43M remains $38.43M above the $10.00M floor despite the overrun."
+    },
+    "cf_commissions": {
+      "period_vs_budget": "Commissions of $199.9K vs budget $370.8K; -$170.9K favorable, consistent with below-budget New Business and headcount underfill reducing commission-eligible activity.",
+      "qtd_vs_budget": "Q2 commission outflows are below budget in line with the sales headcount gap; savings contribute to the favorable cash position but signal reduced GTM capacity.",
+      "ytd_vs_budget": "YTD commission underspend reflects the cumulative headcount and New Business shortfall vs budget; H2 hiring and quota attainment will increase commission outflows."
+    },
+    "cf_capex": {
+      "period_vs_budget": "Capex of $220.0K matched budget $220.0K exactly in June; no variance to report on capital expenditures for the close month.",
+      "qtd_vs_budget": "Q2 capex is tracking to budget with no material deviation; YTD capex of -$335.5K vs budget -$352.3K reflects minor timing of asset purchases.",
+      "ytd_vs_budget": "YTD capex of -$335.5K vs budget -$352.3K, -$16.8K favorable; immaterial variance with no forward implication on the cash position or FY outlook."
+    },
+    "cf_cash_eop_actual": {
+      "period_vs_budget": "Ending cash of $50.26M vs budget $48.17M, +$2.09M favorable in June; cash headroom of $38.43M above the $10.00M floor is strong and above the $50.00M headroom benchmark.",
+      "qtd_vs_budget": "Q2 ending cash of $50.26M exceeds budget $48.17M; the favorable position is driven by payroll underspend from headcount gap, partially offset by above-budget vendor payments.",
+      "ytd_vs_budget": "YTD ending cash of $48.43M vs budget $23.85M, +$16.98M favorable; FY cash outlook of $49.92M vs FY budget $23.85M signals sustained liquidity strength through year-end."
+    }
+  },
+  "cash_flow_statement": {
+    "cfs_cfo": {
+      "period_vs_budget": "YTD CFO of $5.90M vs budget $2.35M, +$3.55M favorable; driven by lower payroll outflows from headcount underfill and favorable AR collections of $2.19M vs budget -$1.88M.",
+      "qtd_vs_budget": "Q2 CFO outperformance reflects structural payroll savings and AR timing; net income of $2.43M vs budget $2.36M and D&A of $591.8K vs budget $621.3K contributed to the favorable operating cash\u2026",
+      "ytd_vs_budget": "YTD ending cash of $50.26M vs budget $48.17M; CFI of -$335.5K vs budget -$352.3K is marginally favorable; net change in cash of $4.96M vs budget $1.39M confirms strong H1 cash generation driven by\u2026"
+    }
+  },
+  "gtm_review": {
+    "gtm_paid_social": {
+      "period_vs_budget": "Paid Social generated $524.0K pipeline on $12.0K spend at 44.5x efficiency, ranking #1 by pipeline volume; strong absolute pipeline contribution supports continued investment.",
+      "qtd_vs_budget": "Paid Social is the top pipeline channel by volume in Q2; at 44.5x pipeline/spend, efficiency is above the blended rate of 60.7x on an absolute basis but trails Organic\u2026",
+      "ytd_vs_budget": "Paid Social ranks #1 in pipeline creation YTD; sustained investment in this channel is warranted given the 3.0x coverage ratio at the minimum healthy threshold and the need\u2026"
+    },
+    "gtm_paid_search": {
+      "period_vs_budget": "Paid Search delivered $508.0K pipeline on $8.0K spend at 63.7x efficiency, ranking #2 by pipeline volume;",
+      "qtd_vs_budget": "Q2 Paid Search efficiency of 63.7x exceeds the blended rate; the channel delivers strong pipeline per dollar and should be considered for budget reallocation from\u2026",
+      "ytd_vs_budget": "Paid Search is the #2 pipeline channel YTD with 63.7x efficiency; scaling spend here in H2 would directly address the pipeline coverage gap at 3.0x and support Q3\u2013Q4 New\u2026"
+    },
+    "gtm_content_syndication": {
+      "period_vs_budget": "Content Syndication produced $310.0K pipeline on $7.0K spend at 43.5x efficiency, ranking #3 by pipeline volume;",
+      "qtd_vs_budget": "Q2 Content Syndication efficiency of 43.5x is the lowest among the top five channels; pipeline volume is meaningful but cost-per-pipeline-dollar is higher than Paid Search\u2026",
+      "ytd_vs_budget": "Content Syndication ranks #3 YTD; at 43.5x efficiency, the channel contributes volume but management should evaluate audience quality and conversion rates before increasing\u2026"
+    },
+    "gtm_organic_search": {
+      "period_vs_budget": "Organic Search generated $443.0K pipeline on $5.0K spend at 81.2x efficiency, ranking #4 by pipeline volume but #2 by efficiency; high ROI channel with low incremental cost.",
+      "qtd_vs_budget": "Q2 Organic Search efficiency of 81.2x is the second-highest across channels; the low spend base limits absolute pipeline volume but the channel's efficiency warrants\u2026",
+      "ytd_vs_budget": "Organic Search delivers 81.2x pipeline/spend YTD, the second-best efficiency metric; scaling content and SEO investment in H2 could improve pipeline coverage above the\u2026"
+    },
+    "gtm_outbound": {
+      "period_vs_budget": "Outbound generated $484.0K pipeline on $5.0K spend at 96.1x efficiency, the highest efficiency rate across all channels;",
+      "qtd_vs_budget": "Q2 Outbound efficiency of 96.1x leads all channels; despite ranking #5 by pipeline volume, the channel's pipeline-per-dollar output is the best in the portfolio and\u2026",
+      "ytd_vs_budget": "Outbound ranks #1 in efficiency at 96.1x YTD; with pipeline coverage at 3.0x and $9.87M in slipped pipeline requiring re-staging, scaling outbound sequences is the\u2026"
+    }
+  },
+  "headcount": {},
+  "risks_and_opportunities": {
+    "ro_gtm_paid_search": {
+      "description": "Slipped pipeline of $9.87M requires immediate re-staging; with pipeline coverage at 3.0x \u2014 the minimum healthy threshold \u2014 any further slippage will compress Q3 New Business capacity. Outbound (96.1x efficiency) and Paid Search (63.7x) are the highest-ROI channels available to rebuild coverage quickly.",
+      "recommended_action": "Re-stage all slipped opportunities with validated next steps and named owners by July 15; prioritize Outbound and Paid Search spend increases to rebuild pipeline coverage above 3.0x before Q3\u2026"
+    },
+    "ro_retention_smb": {
+      "description": "Revenue of $7.35M trailed budget $7.72M by -$367.5K in June, with the YTD gap widening to -$1.97M vs budget $41.42M. The shortfall reflects subscription timing and potential expansion delays. Churn and contraction are favorable YTD, but revenue recognition timing must be validated against deferred revenue balances and expansion close dates\u2026",
+      "recommended_action": "Finance to validate expansion timing and deferred revenue release schedule; identify specific accounts with delayed recognition and confirm Q3 catch-up amounts before board distribution."
+    },
+    "ro_pipeline": {
+      "description": "Close validation status is fail; waterfall and GL reconciliations have not been certified. Revenue figures show tie-out discrepancies between the MDA sheet and period matrix (e.g., June Revenue $7.35M vs $2.20M). Headcount shows zero actuals vs 12 budget despite payroll activity.",
+      "recommended_action": "Finance to certify ARR waterfall, GL reconciliations, and headcount table loads; resolve all tie-out failures in the Validation tab and reload missing CSV sources before distribution."
+    },
+    "ro_cash_h2": {
+      "description": "Ending cash of $48.43M vs budget $31.46M is a +$16.98M favorable position, but the primary driver is headcount underfill (-12 vs budget) rather than operating outperformance. As H2 hiring ramps toward the FY EOY forecast of 16 hires, payroll and commission outflows will increase, reducing the structural cash tailwind.",
+      "recommended_action": "Finance to confirm ending cash ties to balance sheet in the Validation tab; model H2 cash impact of planned headcount ramp and update FY cash outlook accordingly before board distribution."
+    },
+    "ro_opp_gtm": {
+      "description": "Ending cash of $50.26M provides $38.43M of headroom above the $10.00M floor, well above the $50.00M strong headroom benchmark. FY cash outlook of $49.92M vs FY budget $23.85M confirms sustained liquidity.",
+      "recommended_action": "Prioritize incremental GTM spend in Outbound and Paid Search with board approval; target pipeline coverage above 3.0x by end of Q3 using available liquidity headroom."
+    },
+    "ro_opp_expansion": {
+      "description": "YTD Expansion ARR of $4.78M is +$73.8K (+1.6%) ahead of budget $4.71M, and YTD Churn of -$2.79M is +$94.0K better than budget -$2.88M. These signals indicate healthy net retention dynamics in the installed base.",
+      "recommended_action": "Customer Success to identify and accelerate June expansion opportunities that slipped into Q3; confirm close dates and expansion amounts with AEs to capture upside in the Q3 ARR waterfall."
+    },
+    "ro_opp_margin": {
+      "description": "YTD opex underspend of -$1.46M across S&M, R&D, and G&A has sustained EBITDA +$59.1K above budget despite a -$1.97M revenue shortfall. Gross Margin of 70.8% YTD is stable and on budget. If H2 headcount ramp is phased carefully, SMPL.ai can deploy savings into high-ROI GTM while maintaining EBITDA above the FY budget of $7.79M.",
+      "recommended_action": "CFO to model H2 opex phasing scenarios; prioritize redeployment of S&M underspend into Outbound and Paid Search before Q3 close to protect both pipeline coverage and FY EBITDA outlook."
+    },
+    "ro_opp_cash": {
+      "description": "Validation status is fail with missing Forecast ARR waterfall rows for 2026-06 and no Forecast revenue line for 2026-06. These gaps prevent full FY outlook certification and may cause discrepancies between the board package and the platform UI.",
+      "recommended_action": "Resolve all failed validations and reload missing CSV sources for Forecast ARR waterfall and revenue lines; re-run the full package validation before board distribution."
+    }
+  }
+}

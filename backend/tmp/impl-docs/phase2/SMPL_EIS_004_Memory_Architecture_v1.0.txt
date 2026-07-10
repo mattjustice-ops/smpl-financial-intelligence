@@ -1,0 +1,1015 @@
+ 
+SMPL IMPLEMENTATION MEMORY
+Knowledge Architecture
+EIS-004  ·  Version 1.0
+ 
+How SMPL captures implementation experience and turns it into reusable institutional knowledge
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING DOCUMENT
+Operationalizes: EIS-002 Memory Tier Model  ·  EIS-003 Prompt Registry  ·  ABS-011 Playbooks
+Section 0 — Engineering Context and Pre-Build Design Decisions
+EIS-004 defines how SMPL captures implementation experience and converts it into reusable operational knowledge that makes future implementations faster, more accurate, and less reliant on manual CEP resolution. Three design decisions address specific failure modes that would undermine the memory system's value and safety.
+ 
+0.1 Design Decision 1 — Taxonomy-Keyed Retrieval
+Problem: "Favor structured retrieval over full-text retrieval" is the right principle, but without specifying the key structure, engineers default to vector similarity search over memory text. Vector search introduces a customer data isolation risk: if a Connector Memory record for a Workday supervisory org pattern was embedded during context that included customer-specific terminology, a similarity search from a new customer's query can surface that context. The isolation guarantee depends on the embedding being clean — and embeddings are notoriously difficult to audit.
+Solution: Every memory record has a structured retrieval_key built from a controlled vocabulary. Workers retrieve by key, not by similarity. The retrieval_key is a hierarchical dot-notation path: {memory_type}.{connector_id}.{domain}.{object_type}.{task_type}. Examples: connector.IMS-001.erp.gl_account.account_type_normalization or validation.IMS-201.billing.subscription.arr_formula_mismatch. Semantic retrieval is never used for memory lookup in the MVP — it is a future roadmap item documented in Section 9. Structured key retrieval guarantees deterministic, auditable memory access.
+The controlled vocabulary for each key component is defined in Section 2.3. New vocabulary terms require an engineering review before they can be used in memory records — free-form key components are rejected by the Memory Service at write time.
+ 
+0.2 Design Decision 2 — Conflict Resolution Protocol
+Problem: Two Connector Memory records for the same connector and pattern with different success rates — or one approved record that was true for an older API version but is contradicted by a new implementation — need a deterministic resolution rule. Without one, workers receive conflicting memory and either (a) pick arbitrarily, undermining the memory system's reliability, or (b) escalate every conflict to humans, negating the efficiency gain.
+Solution: Memory conflicts are resolved by a three-tier precedence rule applied at retrieval time:
+Tier 1 — Version-specific dominance: a memory record with a matching api_version_validated beats a record without one. Newer api_version_validated always beats older.
+Tier 2 — Confidence × usage_count product score: among records with no version conflict, the record with the higher (confidence × usage_count) score wins. This rewards records that have been validated by many implementations at high confidence.
+Tier 3 — Human approval recency: if scores are tied, the most recently human_approved record wins.
+A conflict is only surfaced to humans when the top two conflicting records have a product score within 10% of each other AND both have api_version_validated = null — meaning neither has a clear version anchor. This is the only conflict state where the system cannot resolve deterministically.
+ 
+0.3 Design Decision 3 — API-Version-Anchored Expiration
+Problem: Time-based expiration is the wrong mechanism for connector memory. A SuiteQL optimization pattern written three years ago may still be perfectly valid — age is not the right expiration signal. Meanwhile, a Stripe livemode pattern written six months ago could be invalidated overnight by an API change. Retiring records by age discards valid knowledge; failing to retire after API changes propagates stale knowledge.
+Solution: Connector Memory expiration is triggered by SCHEMA_CHANGED events from EIS-001, not by timers. Every Connector Memory record stores api_version_validated (the API version it was confirmed against) and api_version_range_valid (the version range across which it has been continuously validated without schema changes). When a SCHEMA_CHANGED event fires for a connector, the Memory Service flags all records for that connector with status = PENDING_REVALIDATION. A human reviewer determines whether each flagged record still applies to the new schema version — confirming it extends api_version_range_valid, or retiring it.
+Time-based expiration applies only to Customer Memory (tied to the customer relationship lifecycle) and Organizational Memory analytics (rolling 12-month window). It never applies to Connector Memory, Transformation Memory, or Validation Memory — these expire only on schema changes or explicit human retirement.
+ 
+Section 1 — Memory Taxonomy
+SMPL Implementation Memory is divided into six domains. Each domain has different customer isolation rules, approval requirements, and expiration policies. The EIS-002 three-tier model (Tier 1 Customer-Scoped, Tier 2 Anonymized Pattern Cache, Tier 3 Engineering Knowledge Base) maps to these six domains as follows.
+ 
+1.1 Domain Overview
+Memory Domain
+EIS-002 Tier
+Customer Isolated?
+Requires Approval for Reuse?
+Expiration Policy
+Customer Memory
+Tier 1 — Customer-Scoped
+Yes — never shared
+No — scoped to one customer; no cross-customer reuse occurs
+Customer relationship lifetime; purged on offboarding
+Connector Memory
+Tier 2 — Anonymized Pattern Cache
+No — shared across customers after anonymization
+Yes — APPROVED status required before Tier 2 use
+API-version-anchored (Design Decision 3); PENDING_REVALIDATION on SCHEMA_CHANGED
+Transformation Memory
+Tier 2 — Anonymized Pattern Cache
+No — after anonymization pipeline
+Yes — APPROVED status required
+API-version-anchored; also expires if success_rate drops below 70% over trailing 50 uses
+Validation Memory
+Tier 2 — Anonymized Pattern Cache
+No — after anonymization
+Yes — APPROVED status required
+API-version-anchored; also expires if false_positive_rate exceeds 15%
+Implementation Pattern Library
+Tier 2 — Anonymized Pattern Cache
+No — after anonymization
+Yes — human review required; senior implementation engineer must approve
+Never time-expires; retired only when superseded by a better-validated pattern
+Organizational Memory
+Tier 2 — Anonymized, aggregated only
+No — aggregated statistics only; no individual customer identifiers ever present
+No — analytics only; human review of the aggregation method, not individual records
+Rolling 12-month window; older data moves to archive (read-only)
+Table EIS4-1.1 — Memory domain taxonomy. The six domains map to EIS-002's three-tier model; Tier 3 (Engineering Knowledge Base) is not implementation memory — it is the IMS content store, CKR registry, and MCR, maintained through architecture releases.
+ 
+1.2 Domain Descriptions
+Customer Memory
+Customer Memory is the complete set of customer-specific decisions recorded during and after an implementation. It is the operational expansion of the CEP — while the CEP holds decisions for a single active session, Customer Memory retains the history of all decisions across all sessions for a given customer, enabling implementations to build on prior work rather than starting from scratch on re-implementations or when adding a new connector.
+Customer Memory never leaves the customer's scope. It is the most voluminous memory type and the safest — there is no risk of cross-customer data leakage because there is no mechanism by which Customer Memory is ever read outside of the customer's own sessions.
+ 
+Connector Memory
+Connector Memory captures reusable implementation knowledge specific to a connector — patterns that appear consistently across multiple customer implementations and are safe to reuse because they do not contain customer-specific data. Examples include: common NetSuite custom field configurations and their canonical meanings, the typical Workday Supervisory Organization depth for mid-market customers, Stripe webhook configuration patterns that resolve specific livemode detection edge cases.
+Connector Memory is the primary mechanism by which the SMPL platform gets faster with scale. The tenth NetSuite implementation should generate fewer CEP questions than the first — because patterns identified in implementations 2 through 9 have been promoted to Connector Memory and are pre-applied, reducing discovery time.
+ 
+Transformation Memory
+Transformation Memory captures field-level mapping patterns — specific vendor field → canonical field transformations that have been validated across multiple implementations. A Transformation Memory record says: "In 87% of Salesforce implementations, the custom field SBQQ__Subscription__c.SBQQ__NetPrice__c maps to invoice_line.amount_local with Direct-High confidence." This pre-validates a common transformation pattern that would otherwise require per-customer CEP resolution.
+ 
+Validation Memory
+Validation Memory captures recurring validation failures and their confirmed resolutions. When the same validation issue appears across multiple implementations — SAP ACDOCA entries missing the ledger filter, Stripe subscriptions with livemode=false contaminating the extraction — and is resolved the same way each time, that resolution pattern becomes Validation Memory that future implementations can apply automatically rather than discovering through error.
+ 
+Implementation Pattern Library
+The Implementation Pattern Library captures successful end-to-end implementation strategies — the combination of connector sequencing, CEP question ordering, gate resolution approach, and capability activation sequence that produces the fastest, cleanest implementation for a given customer profile. Examples: the implementation strategy for a Series B SaaS company with NetSuite + Salesforce + Stripe is likely to be similar across customers in that segment; the Pattern Library codifies what works.
+ 
+Organizational Memory
+Organizational Memory is SMPL's platform-level operational analytics — aggregated, anonymized statistics about how implementations are progressing across the customer base. It answers operational questions: what percentage of implementations encounter a SAP ledger designation BLOCK? What is the median time-to-resolution for Salesforce stage normalization? Which connector generates the most CEP questions per implementation? This knowledge is used to improve the playbooks, the IMS documentation, and the CEP question templates — not to influence individual implementations.
+ 
+Section 2 — Memory Record Format and Storage
+Every memory record follows the standard schema defined in this section, with domain-specific extensions documented per domain. The retrieval_key is the most critical field — it is the structured access path that makes memory retrieval deterministic and auditable.
+ 
+2.1 Universal Memory Record Schema
+memory_records table (Postgres):
+  memory_id           UUID PRIMARY KEY
+  memory_type         VARCHAR(32) NOT NULL
+             -- CUSTOMER | CONNECTOR | TRANSFORMATION | VALIDATION |
+             --   IMPLEMENTATION_PATTERN | ORGANIZATIONAL
+  retrieval_key       VARCHAR(256) NOT NULL
+             -- Taxonomy-keyed path (see Section 2.3)
+             -- Example: connector.IMS-001.erp.gl_account.account_type_normalization
+  customer_scope      UUID | null
+             -- Non-null for CUSTOMER type; null for all others
+             -- Postgres RLS enforces: if customer_scope IS NOT NULL,
+             --   only sessions with matching customer_id can read
+  connector_scope     VARCHAR(16) | null
+             -- Connector ID (IMS-001 through IMS-305) or null for cross-connector
+  domain              VARCHAR(32) NOT NULL
+             -- erp | crm | billing | hris | cross_domain | platform
+  title               VARCHAR(256) NOT NULL
+             -- Human-readable title for review and audit
+  content             JSONB NOT NULL
+             -- Domain-specific structured content (see Section 2.2)
+             -- NEVER contains: customer IDs, email addresses, financial amounts,
+             --   employee names, company names, or raw extracted data
+  api_version_validated  VARCHAR(64) | null
+             -- The connector API version this record was confirmed against
+             -- Example: "v60.0" for Salesforce, "v2" for Chargebee
+             -- Null for cross-connector and customer-scoped records
+  api_version_range_valid  VARCHAR(128) | null
+             -- Range: "v58.0-v60.0" — versions across which continuously validated
+  confidence          DECIMAL(4,3) NOT NULL
+             -- 0.000 to 1.000; computed from (success_count / total_uses)
+             -- Initialized from first observation; updated on each use
+  usage_count         INTEGER NOT NULL DEFAULT 0
+  success_count       INTEGER NOT NULL DEFAULT 0
+             -- Count of uses where this record produced a correct result
+  failure_count       INTEGER NOT NULL DEFAULT 0
+             -- Count of uses where this record produced an incorrect result (discovered later)
+  false_positive_count  INTEGER NOT NULL DEFAULT 0
+             -- Count of uses where record was applied but the pattern did not match
+  approval_status     VARCHAR(32) NOT NULL DEFAULT 'DRAFT'
+             -- DRAFT | REVIEW | APPROVED | DEPRECATED | REJECTED | PENDING_REVALIDATION
+  sensitivity_level   VARCHAR(16) NOT NULL DEFAULT 'LOW'
+             -- LOW | MEDIUM | HIGH
+             -- HIGH: requires senior engineer approval; applies to financial and
+             --   confidence-affecting records
+  retrieval_tags      VARCHAR[] NOT NULL DEFAULT '{}'
+             -- Additional controlled-vocabulary tags for secondary retrieval
+             -- Example: ["gate_type:SUBSCRIPTION_NORMALIZATION", "connector:stripe"]
+  source              VARCHAR(32) NOT NULL
+             -- AUTO_EXTRACTED | HUMAN_AUTHORED | GENERALIZATION_PIPELINE
+  created_by          UUID NOT NULL
+  created_at          TIMESTAMPTZ NOT NULL
+  approved_by         UUID | null
+  approved_at         TIMESTAMPTZ | null
+  last_used_at        TIMESTAMPTZ | null
+  last_validated_at   TIMESTAMPTZ | null
+  expires_at          TIMESTAMPTZ | null
+             -- Only set for CUSTOMER type and ORGANIZATIONAL type; see Section 1.2
+  schema_change_event_id  UUID | null
+             -- Set when PENDING_REVALIDATION is triggered by a SCHEMA_CHANGED event
+  audit_history       JSONB NOT NULL DEFAULT '[]'
+             -- Append-only log of all status changes and approvals
+ 
+2.2 Domain-Specific Content Schemas
+The content JSONB field is domain-specific. The following schemas apply per memory_type.
+ 
+Connector Memory Content Schema
+CONNECTOR memory content:
+{
+  "pattern_type": "string",
+             -- SCHEMA_QUIRK | API_BEHAVIOR | CONFIGURATION | OPTIMIZATION |
+             --   COMMON_CUSTOMIZATION | GATE_RESOLUTION | ERROR_RESOLUTION
+  "description": "string",
+             -- What this pattern describes; written for an implementation engineer
+  "trigger_conditions": [
+    {"field": "string", "operator": "string", "value": "any"}
+  ],
+             -- When this pattern applies; evaluated against discovery results
+  "recommendation": {
+    "action": "string — the specific recommended action",
+    "tool_calls": [{"tool_name": "string", "parameter_guidance": "string"}],
+             -- Specific tool calls and parameter guidance; references EIS-001 tools
+    "ims_section_reference": "string — e.g., IMS-001.Section_4.3"
+  },
+  "validation_note": "string",
+             -- How to verify this pattern applied correctly
+  "observed_in_implementation_count": "integer",
+             -- Anonymized count of implementations where this was observed
+  "canonical_confidence_impact": "string"
+             -- How applying this pattern affects confidence scores
+}
+ 
+Transformation Memory Content Schema
+TRANSFORMATION memory content:
+{
+  "vendor_field_path": "string",
+             -- Dot-notation path in vendor object; e.g., "subscription.items[].price.unit_amount"
+  "canonical_field_path": "string",
+             -- Target SCBM field; e.g., "subscription.arr_component_unit_price[]"
+  "transformation_rule_id": "string",
+             -- Reference to IMS transformation rule; e.g., "IMS-201.Section_4.4"
+  "mapping_type": "string",
+             -- D-H | D-M | DR-H | DR-M | DR-L | N | NA
+  "transformation_logic": "string",
+             -- The exact transformation applied; must be a deterministic description
+  "frequency_pct": "decimal",
+             -- % of implementations where this mapping was used (0.0-1.0)
+  "success_rate": "decimal",
+             -- % of uses where transformation produced a correct canonical value
+  "failure_modes": [
+    {"condition": "string", "frequency_pct": "decimal", "resolution": "string"}
+  ],
+  "cep_required": "boolean",
+             -- Whether this transformation always requires a CEP decision
+  "cep_required_frequency": "decimal",
+             -- If not always required: % of implementations where CEP was needed
+  "auto_apply_threshold": "decimal"
+             -- Minimum confidence required to auto-apply without CEP; null if always CEP-required
+}
+ 
+Validation Memory Content Schema
+VALIDATION memory content:
+{
+  "validation_rule_id": "string",
+             -- Reference to IMS Section 5 rule; e.g., "IMS-006.Section_5.livemode_filter"
+  "failure_type": "string",
+             -- BLOCK_CONDITION | REJECT | FLAG | THRESHOLD_BREACH
+  "failure_description": "string",
+             -- What the failure looks like; written for detection
+  "detection_pattern": {
+    "detection_method": "string — how to detect this issue before it causes a failure",
+    "tool_call": {"tool_name": "string", "parameter": "string"}
+  },
+  "resolution": {
+    "resolution_type": "string — AUTOMATIC | CEP_REQUIRED | ESCALATE_ALWAYS",
+    "automatic_resolution": "string | null — the exact fix when resolution_type=AUTOMATIC",
+    "cep_question_template": "string | null — template for CEP question if CEP_REQUIRED",
+    "escalation_guidance": "string | null"
+  },
+  "recurrence_rate": "decimal",
+             -- % of implementations where this failure was observed
+  "resolution_time_median_minutes": "integer",
+             -- Median time to resolve; tracks improvement over time
+  "false_positive_rate": "decimal"
+             -- % of detections where the issue did not actually exist
+}
+ 
+2.3 Retrieval Key Controlled Vocabulary
+Every memory record's retrieval_key is built from controlled vocabulary terms at each path level. The Memory Service rejects records with vocabulary terms not in this registry. New terms require an engineering PR with justification.
+ 
+Key Level
+Position
+Controlled Values (initial set)
+Extension Process
+memory_type
+1
+connector | transformation | validation | pattern | organizational | customer
+Add via engineering PR; no approval required for new memory types
+connector_id
+2
+IMS-001 through IMS-305 (any registered IMS connector ID); cross_connector (for multi-connector patterns)
+Automatically added when a new IMS spec is registered
+domain
+3
+erp | crm | billing | hris | cross_domain | platform | orchestration
+Add via engineering PR; must correspond to an existing SMPL domain
+object_type
+4
+Any canonical SCBM object type (gl_account, subscription, opportunity, employee, etc.) OR any vendor object name from the IMS canonical object map
+Automatically derived from SCBM object registry; new objects require SCBM extension
+task_type
+5
+account_type_normalization | arr_formula | stage_normalization | gate_resolution | hierarchy_construction | field_mapping | validation_suite | confidence_calculation | identity_resolution | cep_question
+Add via engineering PR; must correspond to a documented task in an IMS or playbook
+Table EIS4-2.1 — Retrieval key controlled vocabulary. A valid retrieval_key: "connector.IMS-001.erp.gl_account.account_type_normalization". An invalid key (free-form): "netsuite_accounts_normalization_trick" — rejected by Memory Service at write time.
+ 
+Section 3 — Memory Lifecycle
+Every memory record passes through a defined lifecycle from discovery to archive. The lifecycle has two distinct tracks: the Customer Memory track (faster, no cross-customer reuse) and the Shared Memory track (slower, requires anonymization and approval before cross-customer availability).
+ 
+3.1 Customer Memory Lifecycle
+CUSTOMER MEMORY LIFECYCLE:
+  DISCOVERY: A CEP decision is made during an implementation.
+    Source: update_cep tool call with source=HUMAN_CONFIRMED or AUTO_DISCOVERED.
+    A Customer Memory record is created automatically for each confirmed CEP field.
+  ACTIVE: The record is immediately available for use in this customer's sessions.
+    No approval required.
+    Accessible only to sessions with this customer_id.
+  UPDATED: Customer confirms a new value for a previously confirmed field.
+    Old value is preserved in audit_history; new value becomes current.
+    Example: FTE methodology changes from SCHEDULED_HOURS to BINARY after a policy update.
+  DEPRECATED: Customer explicitly overrides a prior decision.
+    Prior record marked DEPRECATED; new record becomes ACTIVE.
+    Both retained in audit_history for the implementation record.
+  PURGED: Customer offboards from SMPL.
+    All Customer Memory for this customer_id is deleted.
+    Purge event written to audit log (not to the deleted records — those are gone).
+    This is the only hard deletion in the memory system.
+ 
+3.2 Shared Memory Lifecycle (Connector, Transformation, Validation, Pattern)
+SHARED MEMORY LIFECYCLE:
+DISCOVERY:
+  A pattern is observed during an implementation.
+  Source: Connector Worker, Validation Agent, or Implementation Engineer.
+  A CANDIDATE record is created by record_successful_pattern or record_failed_pattern.
+  Status: DRAFT.
+  customer_scope: null (no customer data in shared memory)
+CANDIDATE VALIDATION:
+  Memory Generalization Pipeline evaluates the candidate (see Section 4):
+    - Minimum observation count check (5 distinct implementations for Connector/Transformation;
+      3 for Validation; 10 for Implementation Pattern)
+    - Anonymization check: no customer identifiers, financial values, or PII
+    - Controlled vocabulary key check: retrieval_key must use registered terms
+  If checks pass: status → REVIEW
+  If any check fails: status → REJECTED; rejection reason written to audit_history
+REVIEW:
+  Assigned to a reviewer (different from record creator).
+  Reviewer validates:
+    - Technical accuracy of the pattern
+    - Absence of customer-identifying information
+    - Correct confidence calculation
+    - Appropriate retrieval_key
+  Reviewer decision: APPROVED or REJECTED.
+APPROVED:
+  Record is ACTIVE in the Tier 2 pattern cache.
+  Available for retrieval by any worker.
+  approved_by populated; approved_at set.
+IN USE:
+  Worker retrieves the record via search_memory tool.
+  usage_count incremented on each retrieval.
+  Outcome recorded by the worker after use:
+    success → success_count++
+    failure → failure_count++
+    false_positive → false_positive_count++
+  confidence updated: success_count / usage_count.
+PENDING_REVALIDATION (triggered by SCHEMA_CHANGED event):
+  A SCHEMA_CHANGED error from EIS-001 Section 1.2 triggers:
+    Memory Service queries: all records WHERE connector_scope = {connector_id}
+      AND approval_status = APPROVED
+    Sets status → PENDING_REVALIDATION for all matching records.
+    Sets schema_change_event_id for audit linkage.
+  Records in PENDING_REVALIDATION are NOT returned by search_memory.
+  A human reviewer re-validates each record against the new schema.
+  Outcome: APPROVED (confirmed still valid) or DEPRECATED.
+DEPRECATED:
+  Pattern is no longer valid or has been superseded.
+  Not returned by search_memory.
+  Retained for audit and replay purposes.
+ARCHIVED:
+  Records older than 2 years in DEPRECATED status move to archive.
+  Archive is read-only; queryable only by humans for audit.
+  Not accessible to workers.
+ 
+3.3 Conflict Resolution Protocol
+This section implements Design Decision 2. When search_memory returns multiple records for the same retrieval_key, the Memory Service resolves conflicts before returning results to the worker. Workers never see conflicting records — they receive only the resolved winner.
+ 
+Conflict Resolution Tier
+Condition
+Resolution
+Human Required?
+Tier 1 — API Version Dominance
+Two records for same key with different api_version_validated values
+Return the record with the higher (more recent) api_version_validated. The older version is demoted to DEPRECATED automatically.
+No — automatic
+Tier 1b — One versioned, one unversioned
+One record has api_version_validated; the other does not
+Return the versioned record. Versioned beats unversioned always.
+No — automatic
+Tier 2 — Confidence × Usage Product
+Two records with same or no api_version_validated; different (confidence × usage_count) scores
+Return the record with the higher product score. Minimum product score to win: confidence × usage_count >= 10 (i.e., at least 0.8 confidence across 12+ uses, or similar). If the winner's score is below the minimum: surface both to worker with conflict flag.
+Only if winner score < minimum threshold
+Tier 3 — Approval Recency Tiebreaker
+Product scores within 10% of each other AND neither has api_version_validated
+Return the most recently approved record. Flag the conflict in the worker's context: "Two competing patterns exist for this key; the more recently approved was returned."
+No — automatic, but conflict flag surfaces to human in next review cycle
+Escalate to Human
+Both records have api_version_validated = null AND product scores within 10% of each other AND neither has been human-approved in the past 90 days
+Return both records with status: CONFLICT_REQUIRES_RESOLUTION. Worker logs the conflict and falls back to IMS Section specification (Tier 3 Knowledge Base). Conflict added to next weekly memory review queue.
+Yes — weekly review queue
+Table EIS4-3.1 — Conflict resolution protocol. In every resolution tier, the losing record is not deleted — it is flagged for deprecation review at the next human review cycle.
+ 
+3.4 Expiration Policy by Domain
+Memory Domain
+Expiration Trigger
+Expiration Behavior
+Retention After Expiration
+Customer Memory
+Customer offboarding from SMPL
+Hard delete of all customer_scope records for this customer_id
+Purge event retained in audit log; records themselves deleted
+Connector Memory
+SCHEMA_CHANGED event for the connector
+Status → PENDING_REVALIDATION; record inaccessible to workers until revalidated
+Retained in PENDING_REVALIDATION indefinitely until human review; DEPRECATED records archived after 2 years
+Transformation Memory
+SCHEMA_CHANGED event; OR success_rate drops below 70% over trailing 50 uses
+SCHEMA_CHANGED: PENDING_REVALIDATION. Low success rate: Status → DEPRECATED with automatic note: "Success rate degraded below threshold"
+Retained in DEPRECATED; available for audit; archived after 2 years
+Validation Memory
+SCHEMA_CHANGED event; OR false_positive_rate exceeds 15% over trailing 50 uses
+Same as Transformation Memory
+Same as Transformation Memory
+Implementation Pattern Library
+Explicit human retirement only (never time-expires, never auto-expires)
+Status → DEPRECATED by human action with mandatory superseded_by field pointing to the new pattern
+Retained in DEPRECATED indefinitely; never auto-archived (pattern history is valuable)
+Organizational Memory
+Rolling 12-month window
+Records older than 12 months move to read-only archive; not returned by analytics queries by default
+Archived records available via explicit historical query with date range parameter
+Table EIS4-3.2 — Expiration policy by domain. Time-based expiration applies only to Customer Memory (offboarding) and Organizational Memory (rolling window). All other domains expire on events, not time.
+ 
+Section 4 — Memory Generalization Pipeline
+The Memory Generalization Pipeline is the process that promotes customer-scoped implementation observations into approved shared memory. It runs nightly for routine promotion and on-demand for urgent patterns identified during active implementations. The pipeline is the enforcement point for customer data isolation — it is the only pathway from customer-scoped observations to shared knowledge.
+ 
+4.1 Pipeline Architecture
+MEMORY GENERALIZATION PIPELINE (nightly scheduled + on-demand trigger):
+INPUTS: Implementation logs and outcome data from the past 24 hours.
+  Source: implementation_logs table + canonical_objects metadata + cep_fields.
+  Only metadata and pattern descriptions — no extracted customer records.
+STEP 1: Candidate Pattern Identification
+  Query implementation_logs for:
+    - Transformation rules applied with success_result = TRUE
+      WHERE connector_id = X AND transformation_rule_id = Y
+      GROUP BY transformation_rule_id HAVING count(DISTINCT customer_id) >= 5
+    - Validation failures with resolution_confirmed = TRUE
+      WHERE resolution_type = AUTOMATIC
+      GROUP BY validation_rule_id HAVING count(DISTINCT customer_id) >= 3
+    - CEP questions where auto_discoverable was set to TRUE after initial CEP
+      (indicates the field was auto-discovered but the pipeline did not catch it)
+STEP 2: Anonymization
+  FOR each candidate:
+    a. Strip all customer_id, session_id, and canonical_id references.
+    b. Replace company names with [COMPANY_TYPE] placeholder
+       (using NER model to detect company names in text fields).
+    c. Replace financial amounts with [AMOUNT] placeholder.
+    d. Replace employee names with [PERSON] placeholder.
+    e. Check: does the remaining content still contain enough context to be useful?
+       IF remaining content < 20 tokens after anonymization: discard candidate.
+STEP 3: Minimum Count Validation
+  Connector Memory: min 5 distinct customers
+  Transformation Memory: min 5 distinct customers + success_rate > 0.80
+  Validation Memory: min 3 distinct customers + false_positive_rate < 0.10
+  Implementation Pattern: min 10 distinct customers (manually triggered, not nightly)
+STEP 4: Retrieval Key Assignment
+  Parse the candidate's origin (connector_id, domain, object_type, task_type)
+  Build retrieval_key using controlled vocabulary (Section 2.3)
+  IF any key component requires a new vocabulary term: add to pending_vocabulary_review;
+    create the record with status=DRAFT (not REVIEW) until vocabulary is approved.
+STEP 5: Conflict Pre-Check
+  Search existing APPROVED records with the same retrieval_key.
+  IF existing record found:
+    Compute how this candidate differs from the existing record.
+    IF essentially the same (content similarity > 90%):
+      Instead of creating new record: update existing record's usage_count and confidence.
+    IF materially different:
+      Create new DRAFT record; flag it as POTENTIALLY_CONFLICTS_WITH:{existing_id}.
+      Human reviewer must resolve the conflict before APPROVED status.
+STEP 6: Anonymization Certificate Generation
+  Generate HMAC-signed certificate:
+  {pipeline_run_id, candidate_id, connector_scope, memory_type,
+   customer_count, anonymization_checks_passed: [step_2a, step_2b, step_2c, step_2d],
+   timestamp, pipeline_version}
+  Certificate signed with pipeline service private key.
+  Memory Service verifies certificate before accepting a REVIEW-status record.
+STEP 7: Submit to Review Queue
+  Create memory record with status=REVIEW.
+  Notify memory review team: {record_id, retrieval_key, candidate_summary}.
+  Record enters human review workflow (Section 5).
+ 
+4.2 What the Pipeline Extracts vs. What It Leaves Behind
+Data Element
+Captured by Pipeline?
+Rationale
+Transformation rule ID and its success rate across N implementations
+YES — captured as Transformation Memory
+Reusable; no customer data; directly improves future implementations
+CEP field path and whether it was auto-discoverable
+YES — captured as Connector Memory
+Reduces future CEP questions; no customer data in the key
+Validation rule ID, failure rate, and resolution method
+YES — captured as Validation Memory
+Prevents repeated error investigation; no customer data
+The specific vendor field value that caused a validation failure
+NO — customer data; stays in implementation log only
+Even anonymized, specific field values can identify customers in some cases
+The CEP answer a customer provided to a specific question
+NO — stays in Customer Memory only
+Customer-specific; never promoted to shared memory regardless of how common the answer is
+The canonical object confidence score for a specific customer's implementation
+NO — customer outcome data; not generalizable without context
+Confidence scores reflect a specific customer's data quality; not reusable across customers
+The count of implementations where a specific connector gate was triggered
+YES — captured as Organizational Memory (anonymized aggregate)
+Operational analytics; no customer identifiers; useful for playbook improvement
+The company name or industry of customers where a pattern was observed
+NO — stripped in Step 2b
+Even in aggregate, industry + connector + issue could identify specific customers
+The IMS section and rule that produced a successful transformation
+YES — the rule reference, not the data; captured as Transformation Memory
+The rule reference is SMPL-internal knowledge; it identifies the specification, not the customer
+Table EIS4-4.1 — Pipeline extraction scope. The distinction: SMPL captures knowledge about HOW implementations succeed; it never captures knowledge FROM the customer's data.
+ 
+Section 5 — Memory Governance
+Memory governance defines who creates, approves, reviews, and retires memory records. The governance model is designed to prevent stale or inaccurate knowledge from accumulating while enabling the system to evolve quickly enough to be operationally useful.
+ 
+5.1 Roles and Permissions
+Role
+Can Create
+Can Review
+Can Approve
+Can Retire
+Can Audit
+Implementation Engineer (any)
+Yes — DRAFT records only
+No
+No
+No
+No
+Implementation Engineer (senior)
+Yes
+Yes — owns the review queue
+Yes — for CONNECTOR, TRANSFORMATION, VALIDATION (sensitivity_level = LOW or MEDIUM)
+Yes — DEPRECATED only; cannot delete
+Yes — own records
+Engineering Team Lead
+Yes
+Yes
+Yes — all types including HIGH sensitivity
+Yes — DEPRECATED and ARCHIVED
+Yes — all records
+Memory Review Bot (automated pipeline)
+Yes — AUTO_EXTRACTED source only
+No — pipeline creates REVIEW-status records but does not approve them
+No — never
+No
+No
+Platform Admin
+No — not an operational role
+No
+No
+Yes — emergency retirement only; requires written justification
+Yes — all records, all time ranges
+Table EIS4-5.1 — Memory governance roles and permissions. The critical separation: the pipeline creates but never approves. No automated process may set approval_status = APPROVED.
+ 
+5.2 Approval Workflow
+MEMORY APPROVAL WORKFLOW:
+REVIEWER RECEIVES: notification with record_id, retrieval_key, candidate summary.
+REVIEWER EVALUATES (for CONNECTOR, TRANSFORMATION, VALIDATION):
+  □ Is the content technically accurate for this connector and API version?
+  □ Does the retrieval_key correctly represent the pattern?
+  □ Has all customer-identifying information been removed?
+  □ Is the confidence calculation correct (success_count / usage_count)?
+  □ Are there any existing APPROVED records this might conflict with?
+  □ Is the api_version_validated field set correctly?
+REVIEWER DECISION:
+  APPROVE: Set approval_status = APPROVED; set approved_by, approved_at.
+    If POTENTIALLY_CONFLICTS_WITH is set: resolve conflict using Table EIS4-3.1.
+  REJECT: Set approval_status = REJECTED; write rejection_reason to audit_history.
+    Rejection reasons are used to improve the pipeline's quality filters.
+  RETURN FOR REVISION: Set approval_status = DRAFT with revision_notes.
+    Creator revises and resubmits; creates a new version of the record.
+TIMEOUTS:
+  LOW sensitivity records unreviewed after 7 days: auto-escalate to team lead.
+  MEDIUM sensitivity records unreviewed after 5 days: auto-escalate.
+  HIGH sensitivity records unreviewed after 3 days: auto-escalate.
+  PENDING_REVALIDATION records from SCHEMA_CHANGED: priority queue; review within 2 days.
+ 
+5.3 Stale Memory Detection
+Detection Signal
+Threshold
+Automated Action
+Human Review?
+Low success_rate on APPROVED Transformation Memory
+success_rate < 0.70 over trailing 50 uses
+Status → DEPRECATED with auto-note: "Success rate degraded"; removed from search results
+Yes — reviewer investigates root cause before DEPRECATED is finalized
+High false_positive_rate on APPROVED Validation Memory
+false_positive_rate > 0.15 over trailing 50 uses
+Status → DEPRECATED with auto-note: "False positive rate exceeded"
+Yes — reviewer investigates
+Zero usage for > 90 days on APPROVED record
+usage_count unchanged for 90 days
+Flag with UNUSED_MEMORY tag; add to next review cycle
+Yes — reviewer decides: is this pattern genuinely unused (retire) or is the retrieval_key incorrect (update key)
+SCHEMA_CHANGED event for connector
+Any SCHEMA_CHANGED event from EIS-001
+All APPROVED records for that connector → PENDING_REVALIDATION
+Yes — mandatory review of all flagged records within 2 business days
+New record contradicts existing APPROVED record for same key
+Conflict detected in Step 5 of generalization pipeline
+Create new record with POTENTIALLY_CONFLICTS_WITH flag; do not auto-deprecate the existing record
+Yes — human must resolve using Table EIS4-3.1
+Table EIS4-5.2 — Stale memory detection. Automated signals reduce the human review burden by identifying the specific records that need attention rather than requiring periodic manual sweeps of the full memory store.
+ 
+Section 6 — Memory Retrieval Architecture
+Memory retrieval is structured, keyed, and minimal. Workers retrieve the specific memory records they need for a specific task — never the full memory library. The retrieval key taxonomy from Section 2.3 makes retrieval deterministic and auditable. Conflict resolution (Section 3.3) ensures workers never see ambiguous results.
+ 
+6.1 Retrieval Tools
+Tool
+Purpose
+Key Parameters
+Returns
+search_memory
+Primary retrieval tool — finds APPROVED memory records matching a structured key
+retrieval_key (required — exact or prefix match), memory_type (optional filter), connector_scope (optional filter), top_k (optional, default 3 — returns at most 3 records after conflict resolution)
+Resolved memory records with confidence and usage_count; never raw conflicting records; never customer_scope records (those are returned only by retrieve_customer_memory)
+retrieve_customer_memory
+Retrieve Customer Memory for the current customer — CEP history, resolved decisions, prior implementation outcomes
+session_id (required — used to enforce customer_id scope), retrieval_key (required)
+Customer Memory records scoped to this customer only; Postgres RLS enforces scope at query time
+record_successful_pattern
+Record a newly observed successful implementation pattern as a DRAFT Connector or Transformation Memory candidate
+connector_id (required), retrieval_key (required — must use controlled vocabulary), content (required — domain-specific content schema), source_session_id (required — used to extract anonymization context)
+candidate_memory_id; status: DRAFT; a DRAFT record is created; the pipeline processes it nightly
+record_failed_pattern
+Record a validation failure with its confirmed resolution as a DRAFT Validation Memory candidate
+Same as record_successful_pattern plus resolution details
+Same as record_successful_pattern
+get_memory_metadata
+Retrieve metadata for a specific memory record without its full content — useful for checking status, api_version_validated, and conflict flags before deciding whether to retrieve full content
+memory_id (required)
+Memory record metadata excluding content JSONB
+Table EIS4-6.1 — Memory retrieval tools. These tools are added to the EIS-001 Tool Registry as Category 14 (Memory Tools) in EIS-004. Workers access them through the Tool Gateway with the same permission and logging enforcement as all other tools.
+ 
+6.2 Retrieval Ranking
+When search_memory returns multiple candidates before conflict resolution, they are ranked by the following weighted score before the conflict resolution protocol is applied:
+ 
+RETRIEVAL RANKING SCORE (computed per candidate record):
+  score = (0.40 × confidence)
+         + (0.25 × normalized_usage_count)
+             -- normalized_usage_count = min(usage_count / 100, 1.0)
+             -- caps at 100 uses; prevents very high usage_count from dominating
+         + (0.15 × key_specificity_bonus)
+             -- 1.0 if retrieval_key matches all 5 levels (exact match)
+             -- 0.7 if matches 4 levels (prefix match)
+             -- 0.4 if matches 3 levels (partial match)
+         + (0.10 × human_approval_recency)
+             -- 1.0 if approved within last 30 days
+             -- 0.7 if approved within 90 days
+             -- 0.4 if approved within 180 days
+             -- 0.1 if approved more than 180 days ago
+         + (0.10 × api_version_match)
+             -- 1.0 if api_version_validated matches the active connector version
+             -- 0.5 if api_version is within the valid range
+             -- 0.0 if api_version_validated is null
+  After ranking: apply conflict resolution (Table EIS4-3.1) to the top candidates.
+  Return up to top_k = 3 non-conflicting, resolved records.
+  If top_k candidate set still contains a CONFLICT_REQUIRES_RESOLUTION after
+  conflict resolution: include the conflict flag in the returned record.
+ 
+6.3 Worker Memory Retrieval Pattern
+Workers retrieve memory at specific execution points during a job — not at job start (which would preload unnecessary memory) and not on every tool call (which would add latency). The correct retrieval points are:
+Retrieval Point
+Memory Type Retrieved
+Retrieval Key Pattern
+Top-K
+After IMS pre-fetch, before first extraction
+Connector Memory for this connector
+connector.{connector_id}.{domain}.*.*
+3 — general connector patterns for current session
+When encountering a field that requires normalization
+Transformation Memory for this field
+transformation.{connector_id}.{domain}.{object_type}.{task_type}
+1 — the single best-validated mapping for this field
+When a validation rule produces REJECT or BLOCK
+Validation Memory for this rule
+validation.{connector_id}.{domain}.{object_type}.{validation_rule_id}
+1 — the most-used resolution for this failure
+When generating a CEP question
+Customer Memory for this customer + Connector Memory for CEP patterns
+customer.{customer_id}.{domain}.{cep_field_path} then connector.{connector_id}.{domain}.*.cep_question
+Customer: 1 (exact match); Connector: 2
+When a SCHEMA_CHANGED error occurs mid-job
+Validation Memory for schema-change handling
+validation.{connector_id}.{domain}.*.schema_changed_resolution
+2 — most recent validated resolutions for this connector's schema changes
+At job completion (record_successful_pattern call)
+None — write-only step
+N/A
+N/A
+Table EIS4-6.2 — Worker memory retrieval pattern. Workers retrieve targeted memory at specific execution points; they do not preload the full memory library for a connector.
+ 
+Section 7 — Runtime Integration with EIS-002
+Memory retrieval integrates with the EIS-002 runtime through the Tool Gateway — the same enforcement path used for all other tools. Workers call memory tools, the Tool Gateway enforces permissions and logs each call, and the Memory Service resolves and returns records. No worker has direct database access to the memory store.
+ 
+7.1 Memory-Aware Prompt Assembly
+When the Agent Runtime Service constructs a prompt (EIS-003 Section 4 Execution Protocol), it includes a memory injection step between Step 5 (variable injection) and Step 6 (security scan). Memory is injected into the Variable Injection Template as a new variable: {{relevant_memory}}.
+ 
+MEMORY INJECTION IN PROMPT ASSEMBLY (inserted between Steps 5 and 6):
+5a. RETRIEVE relevant memory for this job:
+    FOR each retrieval_point in job.active_retrieval_points:
+      result = search_memory(retrieval_key=job.{retrieval_key_for_this_point},
+                             top_k=3)
+      relevant_memory.append(result)
+    Customer Memory retrieval:
+      IF customer_memory_applicable(job):
+        customer_result = retrieve_customer_memory(
+          session_id=job.session_id,
+          retrieval_key=job.{customer_retrieval_key})
+        relevant_memory.insert(0, customer_result)  // Customer Memory first
+5b. APPLY MEMORY BUDGET:
+    Total memory budget: 800 tokens (within the EIS-003 Table EIS3-0.2 allocation)
+    Note: 800 tokens for memory is carved from the "CEP snapshot" and "gate state"
+    allocations when memory records are present — those allocations reduce by
+    400 tokens each to fund the memory budget.
+    IF total memory content > 800 tokens:
+      Truncate: Customer Memory first (most specific, most valuable)
+      Then most highly ranked Shared Memory records
+      Drop lowest-ranked records until under budget
+5c. FORMAT memory for injection:
+    {{relevant_memory}} format:
+    "## Memory: Known Patterns for This Task
+     [CUSTOMER] {title}: {content_summary} (confidence: {confidence})
+     [CONNECTOR] {title}: {content_summary} (confidence: {confidence}, uses: {usage_count})
+     [TRANSFORMATION] {title}: {content_summary} (apply with: {auto_apply_threshold})"
+ 
+7.2 Worker Memory Recording at Job Completion
+Every Connector Worker, Validation Agent, and CAL Agent records memory outcomes at job completion. This is not optional — it is part of the job completion protocol in EIS-002 Section 5 (Checkpointing).
+Outcome Type
+Tool Called
+When Called
+What Is Recorded
+Successful transformation applied
+record_successful_pattern
+After upsert_canonical_object returns CREATED or UPDATED
+Transformation rule ID, mapping type, connector, domain, object type — no field values, no customer data
+Validation failure automatically resolved
+record_successful_pattern (with pattern_type=VALIDATION_RESOLUTION)
+After validation suite produces REJECT and automatic resolution is applied
+Validation rule ID, failure type, resolution type — no customer-specific data
+Memory record retrieved and used
+Automatic — Memory Service increments usage_count on each search_memory retrieval
+On every successful search_memory call
+usage_count++; last_used_at updated — no worker action required
+Memory record retrieved but pattern did not apply (false positive)
+record_failed_pattern
+When worker determines retrieved memory was not applicable to this situation
+Memory record ID + inapplicability reason code — triggers false_positive_count++ on the memory record
+New validation failure with unconfirmed resolution
+record_failed_pattern (status DRAFT for human resolution)
+When a new validation failure type is encountered that has no Validation Memory record
+Failure description and detected resolution attempt — goes to review queue as a new DRAFT Validation Memory candidate
+Table EIS4-7.1 — Worker memory recording protocol at job completion.
+ 
+Section 8 — Security and Customer Isolation
+Memory security is enforced at multiple layers. The most critical protection is customer data isolation — ensuring that one customer's implementation knowledge never appears in another customer's implementation context. This is implemented through Postgres row-level security, strict content schema enforcement, and the anonymization pipeline's certificate requirement.
+ 
+8.1 Customer Data Isolation Enforcement
+Layer
+Enforcement Mechanism
+What It Prevents
+Postgres Row-Level Security
+Postgres RLS policy on memory_records: IF customer_scope IS NOT NULL THEN require current_customer_id = customer_scope
+Any query that attempts to read Customer Memory outside the authorized customer context is silently filtered — returns zero rows, no error. Even a bug in the application layer cannot expose cross-customer memory.
+Memory Service API scope enforcement
+search_memory tool: does not return records with non-null customer_scope. retrieve_customer_memory tool: requires valid session_id and enforces customer_id match.
+Tool-level separation ensures workers use the right retrieval path for customer-scoped vs. shared memory
+Content schema enforcement at write time
+Memory Service validates content JSONB against domain-specific schema before write. Schema validation fails if content contains email patterns, customer_id format, financial amount patterns (large decimals), or company name patterns (detected by NER pre-check).
+Prevents customer data from entering shared memory records even if the pipeline's anonymization step had a bug
+Anonymization certificate requirement
+Memory Service rejects REVIEW-status writes for shared memory types (CONNECTOR, TRANSFORMATION, VALIDATION) without a valid anonymization_certificate signature.
+Prevents shared memory records from being created without passing through the generalization pipeline's anonymization checks
+Retrieval key taxonomy enforcement
+Memory Service rejects write of any record whose retrieval_key contains a component not in the controlled vocabulary.
+Prevents free-form, potentially identifying information from appearing in retrieval keys
+Table EIS4-8.1 — Customer isolation enforcement. Defense in depth: five independent mechanisms must all fail simultaneously for customer data to leak into shared memory.
+ 
+8.2 What Memory Must Never Contain
+This prohibition list applies to all memory records in all domains. Violations are detected by the content schema validator, the anonymization pipeline's NER check, and the human reviewer. Any record found to contain prohibited content after approval is immediately retired and the gap in the review process is investigated.
+Prohibited Content
+Detection Method
+Action If Found
+Customer names, company names
+NER model in pipeline Step 2b; content schema regex check
+REJECTED; alert to Memory Review team; pipeline rule updated to prevent recurrence
+Customer IDs (any format)
+Content schema validator; UUID and integer ID pattern matching
+REJECTED
+Employee names, email addresses, phone numbers
+NER model; email regex; phone regex
+REJECTED
+Financial amounts, contract values, ARR figures
+Large decimal pattern matching; currency symbol detection
+REJECTED — specific dollar/euro/pound amounts are prohibited; statistical rates are permitted
+Raw extracted records or canonical object content
+Content schema: connector Memory content schema has no field that accepts arrays of records
+Rejected by schema validation before write
+Credentials, API keys, tokens
+Credential pattern matching (same patterns as EIS-002 injection security scan)
+REJECTED; SECURITY_VIOLATION audit event emitted
+Session IDs from customer implementations
+UUID pattern matching cross-referenced against implementation_sessions table
+REJECTED
+Table EIS4-8.2 — Prohibited memory content.
+ 
+Section 9 — Memory Quality Metrics
+Memory quality is tracked at the record level and the aggregate level. Record-level metrics (confidence, usage_count, success_rate) are maintained automatically. Aggregate metrics demonstrate the ROI of the memory system and identify improvement opportunities.
+ 
+9.1 Record-Level Metrics
+Metric
+Computation
+Update Trigger
+Use
+confidence
+success_count / MAX(1, usage_count)
+On each search_memory retrieval + outcome recording
+Primary ranking factor; retirement trigger when < 0.70 for Transformation Memory
+success_rate
+success_count / MAX(1, usage_count + false_positive_count)
+On record_successful_pattern or record_failed_pattern call from worker
+Distinguishes records that work from records that are used but not applicable
+false_positive_rate
+false_positive_count / MAX(1, usage_count)
+On record_failed_pattern call with inapplicability reason
+Retirement trigger when > 0.15 for Validation Memory
+resolution_time_trend (Validation Memory only)
+Moving average of resolution_time_minutes across last 20 uses
+On each confirmed resolution
+Tracks whether the resolution is getting faster or slower over time — slowing trend may indicate the resolution is becoming less reliable
+coverage_score (Connector Memory only)
+Percentage of IMS Section 1 gate questions for this connector that have at least one APPROVED memory record
+Computed weekly by analytics job
+Measures how well the pattern library covers known implementation decision points for each connector
+Table EIS4-9.1 — Record-level memory quality metrics.
+ 
+9.2 Aggregate Memory Quality Metrics
+Metric
+Definition
+Target
+Measurement Frequency
+Memory usage rate
+% of Connector Worker jobs that retrieved at least one APPROVED memory record
+> 80% within 3 months of launch
+Weekly
+CEP question reduction rate
+% reduction in average CEP questions per implementation vs. baseline (first 10 implementations, no memory)
+> 30% reduction at 50 implementations; > 50% at 200
+Monthly
+Implementation duration reduction
+Average implementation duration vs. baseline
+> 20% reduction at 50 implementations; > 40% at 200
+Monthly
+Memory auto-apply rate
+% of Transformation Memory retrievals that result in automatic application (no CEP required, auto_apply_threshold exceeded)
+> 60% of transformation retrievals auto-applied within 6 months
+Monthly
+Approval cycle time
+Average hours from REVIEW to APPROVED status
+< 48 hours median; < 72 hours 95th percentile
+Weekly
+False positive rate (aggregate)
+Average false_positive_rate across all APPROVED records by memory_type
+< 10% for Transformation; < 15% for Validation
+Monthly
+Stale record rate
+% of APPROVED records in PENDING_REVALIDATION for > 5 business days
+< 5% of APPROVED records
+Weekly
+Memory-to-improvement velocity
+Number of new APPROVED records per 10 implementations
+Increasing trend over time; no specific target — trend is the signal
+Monthly
+Table EIS4-9.2 — Aggregate memory quality metrics. These metrics demonstrate the operational ROI of the memory system and identify where the review process or pipeline is creating bottlenecks.
+ 
+9.3 Future Extensions (Roadmap — Not MVP)
+The following capabilities are documented as future roadmap items. None are included in the MVP runtime defined in EIS-002.
+Extension
+Description
+Dependency Before Building
+Semantic retrieval fallback
+When structured key retrieval returns zero results, fall back to semantic similarity search over the Tier 2 pattern cache with strict customer-isolation safeguards
+Requires: minimum 200 APPROVED shared memory records to make semantic search meaningful; requires: dedicated anonymized vector store separate from Postgres
+Automatic pattern extraction
+ML model that identifies reusable patterns in implementation logs without human-authored candidates — auto-generates DRAFT records for pipeline processing
+Requires: 500+ completed implementations for training signal; requires: human review queue capacity to handle increased DRAFT volume
+Memory recommendation engine
+Proactive surface of relevant memory records to humans during implementation review, not just to workers during execution
+Requires: Implementation Consultant UI integration; requires: human feedback loop to improve recommendations
+Implementation benchmarking
+Compare a specific customer's implementation velocity and quality metrics against anonymized aggregate from similar customer profiles
+Requires: sufficient implementation volume for meaningful anonymized aggregation (minimum 50 implementations in the same profile bucket)
+Knowledge graph relationships
+Graph database layer that maps relationships between memory records (e.g., this Transformation Memory record was often retrieved alongside this Validation Memory record)
+Requires: graph database infrastructure; requires: minimum 1,000 co-retrieval events to seed meaningful graph
+Table EIS4-9.3 — Future memory extensions. These are roadmap items; their dependencies define when they become viable to build.
+ 
+Section 10 — MVP Scope and Storage Schema
+The MVP memory implementation is deliberately minimal — enough to demonstrate value from the first 10 implementations and to build the foundation for the Tier 2 pattern cache. The architectural boundaries are correct; the data volume is low at launch and grows organically.
+ 
+10.1 MVP Build Scope
+Component
+MVP? (Build Now)
+Rationale for Deferral
+Customer Memory store + retrieve_customer_memory tool
+YES
+Highest immediate value; enables re-implementations and connector additions to build on prior CEP decisions without starting from scratch
+Memory record schema (universal + domain-specific content schemas)
+YES
+Foundation for everything; must be correct before any records are created
+Retrieval key controlled vocabulary and enforcement
+YES
+Without this, future records will have inconsistent keys that are hard to query
+record_successful_pattern and record_failed_pattern tools
+YES
+Workers begin accumulating candidates from day one; creates the pipeline input
+Memory Generalization Pipeline (nightly, basic)
+YES — simplified version
+Simplified MVP: skip NER model (use regex-only anonymization); skip automatic conflict pre-check; minimum count validation only; human reviewer does full content review
+search_memory tool with conflict resolution
+YES
+Workers need retrieval on day one; conflict resolution prevents confused results even with few records
+Approval workflow (manual, no notification automation)
+YES — email only
+Formal approval from day one; notification automation (Slack, etc.) is MVP+ enhancement
+Organizational Memory (aggregate analytics)
+DEFER — 3 months
+Not enough implementation volume at launch to produce meaningful aggregates; defer until 20+ completed implementations
+SCHEMA_CHANGED → PENDING_REVALIDATION automation
+YES
+This is a safety feature, not a scale feature; implement from day one to prevent stale records from accumulating
+Automatic false_positive_count tracking
+YES — requires worker cooperation
+Workers must call record_failed_pattern when memory is inapplicable; add to Connector Worker job completion protocol in EIS-002
+NER model in anonymization pipeline
+DEFER — 1 month
+Start with regex-only anonymization; NER model adds quality but regex catches the most common PII patterns; add NER in month 2
+Semantic retrieval fallback
+DEFER — roadmap item
+See Section 9.3
+Memory recommendation engine (human-facing)
+DEFER — roadmap item
+See Section 9.3
+Implementation benchmarking
+DEFER — roadmap item
+See Section 9.3
+Table EIS4-10.1 — MVP scope. The build order: storage schema → retrieval tools → generalization pipeline → approval workflow → analytics.
+ 
+10.2 Complete Storage Schema
+-- PRIMARY TABLES
+CREATE TABLE memory_records (
+  memory_id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  memory_type            VARCHAR(32) NOT NULL
+                           CHECK (memory_type IN ('CUSTOMER', 'CONNECTOR',
+                           'TRANSFORMATION', 'VALIDATION',
+                           'IMPLEMENTATION_PATTERN', 'ORGANIZATIONAL')),
+  retrieval_key          VARCHAR(256) NOT NULL,
+  customer_scope         UUID REFERENCES customers(customer_id) ON DELETE SET NULL,
+  connector_scope        VARCHAR(16),
+  domain                 VARCHAR(32) NOT NULL,
+  title                  VARCHAR(256) NOT NULL,
+  content                JSONB NOT NULL,
+  api_version_validated  VARCHAR(64),
+  api_version_range_valid VARCHAR(128),
+  confidence             DECIMAL(4,3) NOT NULL DEFAULT 1.000
+                           CHECK (confidence BETWEEN 0.000 AND 1.000),
+  usage_count            INTEGER NOT NULL DEFAULT 0 CHECK (usage_count >= 0),
+  success_count          INTEGER NOT NULL DEFAULT 0,
+  failure_count          INTEGER NOT NULL DEFAULT 0,
+  false_positive_count   INTEGER NOT NULL DEFAULT 0,
+  approval_status        VARCHAR(32) NOT NULL DEFAULT 'DRAFT'
+                           CHECK (approval_status IN ('DRAFT', 'REVIEW',
+                           'APPROVED', 'DEPRECATED', 'REJECTED',
+                           'PENDING_REVALIDATION')),
+  sensitivity_level      VARCHAR(16) NOT NULL DEFAULT 'LOW'
+                           CHECK (sensitivity_level IN ('LOW', 'MEDIUM', 'HIGH')),
+  retrieval_tags         VARCHAR[] NOT NULL DEFAULT '{}'::VARCHAR[],
+  source                 VARCHAR(32) NOT NULL
+                           CHECK (source IN ('AUTO_EXTRACTED',
+                           'HUMAN_AUTHORED', 'GENERALIZATION_PIPELINE')),
+  created_by             UUID NOT NULL,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  approved_by            UUID,
+  approved_at            TIMESTAMPTZ,
+  last_used_at           TIMESTAMPTZ,
+  last_validated_at      TIMESTAMPTZ,
+  expires_at             TIMESTAMPTZ,
+  schema_change_event_id UUID,
+  audit_history          JSONB NOT NULL DEFAULT '[]'::JSONB,
+  conflict_flags         JSONB NOT NULL DEFAULT '{}'::JSONB,
+  CONSTRAINT chk_customer_scope_only_for_customer
+    CHECK (memory_type != 'CUSTOMER' OR customer_scope IS NOT NULL)
+);
+-- INDEXES
+CREATE INDEX idx_memory_retrieval_key
+  ON memory_records (retrieval_key, approval_status)
+  WHERE approval_status = 'APPROVED';
+CREATE INDEX idx_memory_customer_scope
+  ON memory_records (customer_scope)
+  WHERE customer_scope IS NOT NULL;
+CREATE INDEX idx_memory_connector_scope
+  ON memory_records (connector_scope, approval_status)
+  WHERE connector_scope IS NOT NULL;
+CREATE INDEX idx_memory_pending_revalidation
+  ON memory_records (connector_scope, created_at)
+  WHERE approval_status = 'PENDING_REVALIDATION';
+-- ROW-LEVEL SECURITY
+ALTER TABLE memory_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY customer_memory_isolation ON memory_records
+  FOR SELECT
+  USING (
+    customer_scope IS NULL  -- shared memory: always readable
+    OR
+    customer_scope = current_setting('app.current_customer_id')::UUID
+    -- customer memory: only readable by matching customer session
+  );
+-- No UPDATE policy: memory records are updated only through
+-- the Memory Service API (approval workflow, usage count tracking)
+-- Direct UPDATE is disabled for all application roles
+-- CONTROLLED VOCABULARY TABLE
+CREATE TABLE memory_vocabulary (
+  term          VARCHAR(128) PRIMARY KEY,
+  key_level     VARCHAR(32) NOT NULL,
+  description   TEXT,
+  added_by      UUID NOT NULL,
+  added_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ 

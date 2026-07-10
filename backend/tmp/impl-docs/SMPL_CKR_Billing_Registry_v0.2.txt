@@ -1,0 +1,2231 @@
+CONNECTOR KNOWLEDGE REGISTRY
+Billing Registry — Recurring Revenue Intelligence
+ABS-003  ·  Version 0.2 — Final Refinement Before Freeze
+Stripe Billing · Chargebee · Recurly
+Maxio (Chargify + SaaSOptics) · Zuora
+Chief Enterprise Architect · Billing Domain Architect · SMPL.ai
+June 2026 · CONFIDENTIAL — INTERNAL ARCHITECTURE DOCUMENT
+Built on the finalized 22-section CKR Standard v1.0 · Third registry under the standard, following ERP v1.0 and CRM v1.0
+Scope Note — Third Registry Under the Finalized CKR Standard
+This is the third Connector Knowledge Registry built under the CKR Standard v1.0, following the ERP Registry (v1.0) and the CRM Registry (v1.0, which served as the proving ground for the standard itself). All 22 standard sections are applied to every connector in this registry without modification. No new architectural concepts are introduced. Where the CRM Registry v0.4 review identified an ERP/CRM conformance gap and recommended a future ERP alignment pass, this Billing Registry is built to full 22-section conformance from v0.1 — there is no equivalent gap to retrofit.
+Version History — Changes from v0.1
+Billing Registry v0.2 is the final refinement iteration before this registry is frozen as Version 1.0. No architectural redesign. All sections marked frozen in the v0.2 build brief — canonical ownership principles, SCBM alignment, cross-domain ownership, Capability Progression, Recommended Companion Connectors, Connector Synergies, Universal Business Objects, Common Customer Variants, Common Failure Modes, Transformation Guidance, Data Confidence Profiles, Estimated SCBM Coverage, Planning Guidance, Connector Fingerprint, and Executive Architecture Summary — are unchanged in substance. This version adds two new sections per connector, both proposed for adoption into the permanent CKR standard.
+Addition
+Placement
+Purpose
+Confidence Drivers (per connector)
+Immediately following Capability Progression
+Explains the architectural reasoning behind confidence estimates for representative capabilities spanning the full range of this connector's confidence profile — why confidence is high, why it may be limited, which companion connectors improve it, and which customer-specific CEP decisions influence it. Makes confidence estimates explainable rather than asserted.
+Implementation Decision Flow (per connector)
+Following Implementation Risks, before Standalone Capability Summary
+A business-oriented decision tree documenting the implementation reasoning process — not API documentation — that an implementation consultant or AI implementation agent follows when onboarding this specific connector. Each connector's flow reflects its own distinct implementation characteristics, from Stripe's comparatively short flow to Zuora's longer, more involved one.
+Table V.1 — Billing Registry v0.2 additions. Both sections are proposed for adoption into the permanent CKR standard, per the final review below.
+Category Overview
+This section establishes universal knowledge about Billing platforms before any vendor-specific documentation begins — Tier 1 foundation that every Billing connector specification in this registry builds upon, consistent with the category overview pattern established in the ERP and CRM registries.
+✱ ARCHITECT NOTE: This registry is designed to be consumed equally well by human implementation consultants and AI implementation agents. Throughout this document, the implementation agent evaluates connector readiness, the Connector Engine maps vendor objects to canonical targets, the Capability Assessment Layer determines module status, and the CEP requests customer confirmation for ambiguous configuration.
+What Defines a Billing Platform
+A Billing platform is the operational system of record for recurring commercial execution — the system that actually charges customers, generates invoices, processes payments, and tracks the moment-by-moment state of every subscription. Where ERP explains financial truth (what was recognized as revenue under GAAP) and CRM explains commercial intent (what the sales team believes will happen), Billing explains commercial execution: what is actually happening to a customer's subscription right now, and what cash has actually moved as a result.
+Every Billing platform in this registry maintains, at minimum, a Customer object, a Subscription object representing an active recurring commitment, an Invoice object representing a billing event, and a Payment object representing cash collected. Beyond this core, Billing platforms extend into usage metering, dunning and collections workflows, proration logic, and — in the more financially sophisticated platforms — revenue recognition scheduling that overlaps meaningfully with ERP functionality.
+For SMPL, Billing is the primary connector category for ARR and MRR intelligence. No ERP can produce trustworthy subscription-level ARR Movement data — ERPs record GL-level financial postings, not subscription state changes. No CRM can confirm that a sales-recorded Closed Won deal actually became a paying, active subscription — CRMs record sales intent, not billing execution. Billing is the only connector category that can answer, with operational authority: is this customer's subscription active, and how much are they paying right now?
+How Billing Differs From ERP and CRM — and How All Three Complement Each Other
+The three domains answer related but distinct questions about the same underlying business activity. ERP answers: what revenue have we recognized under GAAP, and what does our balance sheet show? CRM answers: what are we trying to sell, and how likely is it to close? Billing answers: what is a customer's subscription actually doing right now, and what cash has it actually generated?
+None of the three domains can substitute for either of the others. ARR computed purely from Billing subscription data is operationally accurate but is not GAAP revenue — invoice timing and service-period amortization are an ERP concern. Bookings recorded purely in CRM are sales intent, not confirmed subscriptions — a Closed Won Opportunity does not guarantee a Billing system ever created the corresponding Subscription. Revenue recognized purely in the ERP, without Billing's subscription-level detail, cannot explain which specific subscriptions or customers drove a revenue change.
+SMPL's Financial Intelligence depends on connecting all three domains. The canonical ARR Movement object — the single most consequential object in the entire SCBM for SaaS companies — is most reliably populated from Billing data, validated against CRM's booking record, and reconciled against ERP's recognized revenue. This three-way reconciliation is the foundation of trusted Financial Intelligence, and Billing is the domain that makes the middle term of that reconciliation possible.
+Subscription Lifecycle Management
+Every Billing platform models a Subscription as a stateful object moving through a defined lifecycle: Trial (if applicable) → Active → (Paused, optionally) → (Amended: upgraded, downgraded, or add-ons changed, any number of times) → Renewed (any number of times) → Cancelled or Churned. The specific state names and allowed transitions vary by vendor, but this general lifecycle shape is universal across every platform in this registry.
+Trial: a time-bounded period of access before the first paid billing cycle, which may or may not require a payment method on file depending on vendor and customer configuration.
+Plan upgrades and downgrades: a change in the subscribed plan tier, typically triggering proration of the current billing period.
+Add-on management: the addition or removal of supplementary subscription items (seats, modules, usage allowances) without changing the base plan.
+Subscription amendments: any mid-cycle change to a subscription's terms — quantity, plan, price, or billing frequency — that is not a full upgrade or downgrade.
+Pauses and resumes: a temporary suspension of billing (and often product access) without cancelling the underlying subscription record, used for seasonal businesses or customer-requested holds.
+Reactivations: the resumption of a previously cancelled subscription, typically after a dormancy period — the Billing-side trigger for the canonical Reactivation ARR Movement category.
+Cancellations: the termination of a subscription, either immediately or at the end of the current billing period — the Billing-side trigger for the canonical Churn ARR Movement category.
+Invoice Lifecycle
+An Invoice moves from Draft (in some platforms) or Open, to Paid, Partially Paid, Void, or Uncollectible. Invoice generation is typically automated on a recurring schedule tied to the subscription's billing cycle, with proration applied automatically when a subscription change occurs mid-cycle. Credit Memos and Refunds are typically modeled as separate objects that reduce a customer's net billed amount without altering the original Invoice record.
+Payment Lifecycle and Collections
+A Payment is an attempt to collect funds against an Invoice, which may succeed, fail, or require retry. Failed payments trigger Dunning — an automated sequence of retry attempts and customer communications designed to recover a failed payment before the subscription is suspended or cancelled for non-payment. Collections management extends this further for invoiced (non-card) payment methods, where Accounts Receivable aging and manual collection follow-up become relevant — an area of meaningful overlap with ERP-side AR functionality.
+Usage-Based and Metered Billing
+Usage-based billing charges customers based on consumption — API calls, seats actively used, data processed — rather than (or in addition to) a fixed recurring fee. A Meter defines what is being measured; Usage Records capture the actual consumption events; the Billing platform aggregates usage against the customer's plan (which may include a committed minimum, a per-unit overage rate, or both) to determine the billed amount. Usage-based billing is the single largest source of ARR classification ambiguity across every Billing connector in this registry — committed minimums are reasonably treated as ARR, while uncommitted overages are not, and the boundary between the two is a customer-specific configuration decision, never a platform default.
+Proration and Billing Frequency
+Proration calculates a partial charge or credit when a subscription changes mid-billing-cycle — upgrading from a monthly to an annual plan halfway through a month, for example. Billing Frequency (monthly, quarterly, annual, or custom) determines the cadence of invoice generation and is itself a customer-configurable subscription attribute, not a platform-level setting.
+Billing vs. ERP — Where the Boundary Sits
+Billing platforms generate invoices and collect cash; they do not, on their own, determine when revenue should be recognized under ASC 606 / IFRS 15. Some Billing platforms (Zuora, and to a lesser extent Chargebee and Maxio) offer native revenue recognition scheduling that meaningfully overlaps with ERP functionality — where this exists, it is documented per-connector as a confidence-improving capability, never as a substitute for ERP-confirmed recognized revenue. The canonical ownership principle stated in the Cross-Domain Relationships section below is binding throughout this registry: Billing contributes a Revenue Schedule reference where its native recognition functionality exists, but the ERP remains the canonical owner of recognized revenue.
+Billing vs. CRM — Where the Boundary Sits
+CRM records sales intent; Billing records commercial execution. A Closed Won Opportunity in CRM does not guarantee a corresponding Subscription was ever created in Billing — sales and billing systems can and do fall out of sync, particularly for usage-based or negotiated enterprise deals where manual provisioning introduces a gap between contract signature and billing system setup. Every Billing connector specification in this registry documents this gap explicitly as a Common Failure Mode, and the canonical resolution — bookings confirmation via CRM+Billing reconciliation — is documented in Connector Synergies for every connector.
+Universal Billing Business Objects
+The following business objects appear, in some form, across all five Billing platforms in this registry. Vendor-specific naming varies; the underlying business concept and its SCBM canonical target are universal. This table governs the Canonical Mapping section for every Billing connector in this registry, consistent with the equivalent tables established in the ERP and CRM registries.
+Universal Billing Concept
+Business Definition
+SCBM Canonical Target
+Customer
+The billed entity — the organization or individual responsible for payment
+Customer Account (Entity) — shared canonical target with ERP and CRM
+Subscription
+An active contractual commitment to pay a recurring amount in exchange for product access
+Subscription (Entity) — the atomic unit of ARR
+Subscription Item
+A specific line within a subscription — a plan, add-on, or seat block — that can be independently priced and quantified
+Extension field pending Subscription Line Item canonical object (deferred to SCDM v1.1)
+Subscription Amendment
+A mid-cycle change to a subscription's terms — quantity, plan, price, or billing frequency
+ARR Movement (Movement) — the primary source object for Expansion and Contraction
+Invoice
+A formal billing document covering a defined service period
+Invoice (Movement)
+Invoice Line
+A specific charge within an Invoice, tied to a Subscription Item
+Extension field pending Invoice Line canonical object (deferred)
+Payment
+A cash receipt (or attempted receipt) against an Invoice
+Payment (Movement)
+Refund
+A return of previously collected funds
+Payment (Movement) — negative value, or dedicated Refund sub-type per SCDM
+Credit Memo
+A reduction in amount owed, not tied to a cash refund
+Invoice (Movement) — credit sub-type
+Usage Record
+A captured consumption event for usage-based billing
+Extension field pending Usage Record canonical object (deferred to SCDM v1.1, Product Analytics overlap)
+Meter
+The definition of what is being measured for usage-based billing
+Extension field — customer-specific, pending canonical Meter object
+Product
+The sellable offering a Subscription is associated with
+Product (Entity, Tier 2) — shared canonical target with ERP and CRM
+Plan
+A specific pricing and feature tier of a Product
+Extension field pending Plan canonical object (deferred)
+Price
+The specific dollar amount and billing frequency attached to a Plan
+Subscription.arr_value and Subscription.billing_frequency (SCDM fields)
+Coupon / Discount
+A reduction applied to a subscription or invoice, either one-time or recurring
+ARR Movement.movement_reason = Discount Change (when recurring and ARR-affecting)
+Tax
+Sales tax, VAT, or other tax obligations calculated on an invoice
+Out of SCBM Tier 1/2 scope — noted where present
+Billing Cycle / Billing Frequency
+The recurring cadence (monthly, annual, custom) at which a subscription is invoiced
+Subscription.billing_frequency (SCDM field)
+Trial
+A time-bounded pre-paid-subscription access period
+Subscription.status = Trial (SCDM enum value)
+Renewal
+The continuation of a subscription into a new billing term
+Renewal (Entity, Tier 2) — shared canonical target with ERP and CRM
+Cancellation
+The termination of a subscription
+ARR Movement.movement_category = Churn
+Pause
+A temporary suspension of an active subscription
+Subscription.status = Paused (SCDM enum value)
+Resume
+The reactivation of a paused (not cancelled) subscription
+Subscription.status transition; not an ARR Movement event since the subscription was never fully churned
+Dunning Event
+A failed-payment retry or customer communication attempt
+Extension field pending Dunning Event canonical object (deferred)
+Collection Attempt
+A specific attempt to collect a past-due invoice
+Extension field — contributes to AR Aging and Collections capabilities
+Payment Method
+The card, bank account, or other instrument on file for billing
+Out of SCBM Tier 1/2 scope — referenced but not independently canonical
+Invoice Status
+The current state of an Invoice (Draft, Open, Paid, Void, Uncollectible)
+Invoice.status (SCDM field)
+Payment Status
+The current state of a Payment (Pending, Succeeded, Failed, Refunded)
+Payment.status (SCDM field)
+ARR Movement
+A change in a Subscription's annualized recurring value, categorized per the canonical five-category taxonomy
+ARR Movement (Movement) — the primary Billing-sourced canonical object
+MRR Movement
+The monthly-equivalent view of an ARR Movement
+Derived field: ARR Movement.arr_delta / 12 — not independently canonical per SCBM D-013
+Deferred Revenue Reference
+The unearned-revenue balance implied by an Invoice's service period vs. payment timing
+Contributes to Revenue Schedule (Movement) — ERP remains canonical owner of confirmed deferred revenue
+Revenue Schedule (where applicable)
+A native revenue recognition schedule, when the Billing platform offers this functionality
+Revenue Schedule (Movement) — Billing-contributed variant; ERP-confirmed variant remains canonically authoritative
+Table U.1 — Universal Billing business objects and their SCBM canonical targets. ARR Movement is the single most consequential object in this table — it is the primary reason Billing is SMPL's highest-priority connector category for SaaS-specific Financial Intelligence.
+Universal Billing Business Concepts
+The following business concepts are common across every Billing platform in this registry but require explicit disambiguation, consistent with the Business Concept Registry treatment established in the SKA. Several of these concepts are the most consequential disambiguation points in the entire SMPL canonical model.
+Concept
+Business Definition
+Disambiguation Required
+Subscription Lifecycle
+The full state sequence a subscription moves through from creation to termination.
+Universal across platforms; specific state names and allowed transitions vary by vendor and are documented per connector.
+Invoice Generation
+The automated creation of a billing document tied to a subscription's billing cycle.
+Timing relative to service period (in-advance vs. in-arrears billing) varies by vendor default and customer configuration — affects deferred revenue calculation.
+Payment Collection
+The process of attempting to charge a customer's payment method.
+Synchronous (card) vs. asynchronous (ACH, wire, invoiced) collection produces materially different latency between invoice and confirmed payment.
+Failed Payments and Dunning
+The retry and communication sequence following an unsuccessful payment attempt.
+Dunning logic (retry count, retry interval, grace period before suspension) is customer-configurable in every platform in this registry — never assume a default.
+Renewals
+The continuation of a subscription into a new billing term, with or without changes.
+Auto-renewal vs. manual renewal approval is a customer-configurable policy that affects how confidently a future ARR Movement can be forecast.
+Churn
+The full cancellation of a subscription, with ARR going to zero for that customer.
+Voluntary vs. involuntary (failed-payment-driven) churn should be distinguished where the source data supports it — involuntary churn is a different business problem requiring a different intervention.
+Expansion
+An ARR increase on an existing active subscription.
+Seat increase, plan upgrade, add-on purchase, and usage growth are all valid expansion sources requiring different movement_reason classification per the SCBM ARR Movement model.
+Contraction
+An ARR decrease on an existing active subscription that remains active.
+Distinguished from Churn by subscription survival — if any subscription ARR remains active after the change, it is Contraction, not Churn.
+Reactivation
+ARR from a previously churned account restarting after a dormancy period.
+The dormancy window that qualifies a restart as Reactivation rather than New Business is a CEP-configurable parameter (SCBM default: 90 days), never platform-assumed.
+Add-on Purchases and Product Bundles
+The purchase of supplementary subscription items alongside a base plan.
+Whether add-ons are tracked as separate Subscription Items or folded into a single blended subscription amount varies significantly by platform and by customer configuration within a platform.
+Usage Billing and Metered Billing
+Charging based on measured consumption rather than a fixed fee.
+The single largest ARR classification ambiguity in this registry — committed minimums are reasonably ARR; uncommitted overages are not; the line is a CEP-configurable decision, never a platform default.
+Proration
+Partial charges or credits calculated for mid-cycle subscription changes.
+Proration methodology (exact day-count vs. flat half-period) varies by platform and affects the precision of mid-cycle ARR Movement amounts.
+Contract vs. Subscription
+The distinction between a signed commercial agreement and its operational billing representation.
+A single Contract may govern multiple Subscriptions (e.g., a multi-product deal); the relationship between the two is frequently not natively modeled in Billing platforms and may require CRM or Contract-object cross-reference.
+Bookings vs. Billings
+Bookings is the total contract value committed; Billings is what has actually been invoiced to date.
+For annual-prepay contracts, Billings can lag or lead Bookings significantly — the two terms are never interchangeable, and Billing platforms natively report Billings, not Bookings (which is primarily a CRM/Contract concept).
+ARR vs. MRR
+ARR is the annualized view; MRR is the monthly view of the same committed recurring value.
+Per SCBM D-013 and the SCBM canonical glossary, ARR is the primary reporting metric at SMPL; MRR is a derived field (ARR ÷ 12), never independently computed or stored.
+Deferred Revenue Relationships
+The balance sheet liability representing cash collected (or billed) but not yet recognized as revenue.
+Billing platforms with native revenue recognition can contribute a Deferred Revenue estimate; the ERP remains the canonical owner of the confirmed balance. Discrepancies between the two are a standard reconciliation pattern, not an error.
+Revenue Recognition Relationships
+The ASC 606 / IFRS 15 process of recognizing revenue over the service period.
+Billing platforms with native revenue recognition (most notably Zuora) can contribute a Revenue Schedule; this never supersedes ERP-confirmed recognized revenue per the canonical ownership principle stated in Cross-Domain Relationships below.
+Customer Payment History
+The complete record of a customer's past payment behavior — on-time, late, failed, disputed.
+A meaningful contributor to the composite canonical Health Score (Customer Success domain) and to Renewal Risk Analysis, but Billing is never the sole or authoritative source of Customer Health.
+Cash Application
+The process of matching a received payment to the specific invoice(s) it satisfies.
+Relevant primarily for invoiced (non-card) payment methods; card payments are typically auto-applied. Cash Application accuracy affects AR Aging confidence.
+Invoice Aging
+The classification of unpaid invoices by how long they have been outstanding.
+A standard AR Analytics concept; Billing-sourced aging should be cross-validated against ERP-sourced AR aging where both exist, since timing and write-off policies can diverge between the two systems.
+Table U.2 — Universal Billing Business Concepts. ARR vs. MRR, Bookings vs. Billings, and the usage-based ARR classification boundary are the three most consequential disambiguation points in this table.
+Cross-Domain Relationships
+This section documents how Billing contributes to each adjacent business domain, maintaining strict alignment with SCBM canonical ownership principles. For every domain: what Billing contributes, what Billing does not own, who the canonical owner is, what cross-validation is possible, and the resulting Capability Assessment implication.
+Domain
+What Billing Contributes
+What Billing Does Not Own
+Canonical Owner
+Cross-Validation Opportunity
+Capability Assessment Impact
+ERP
+Subscription-level detail behind invoiced amounts; payment timing and cash collection events; a Deferred Revenue estimate and, where natively supported, a Revenue Schedule contribution.
+Recognized revenue under ASC 606/IFRS 15; the General Ledger; the Chart of Accounts; confirmed Deferred Revenue balance.
+ERP — Revenue (recognized variant), GL Account, Journal Entry, confirmed Revenue Schedule.
+Billing-derived deferred revenue estimate vs. ERP-confirmed balance; Billing-derived cash collections vs. ERP bank reconciliation.
+Revenue Recognition and Deferred Revenue Validation capabilities require ERP pairing to move from Partial to Ready — Billing alone can only estimate, never confirm.
+CRM
+Confirmation that a sales-recorded Opportunity became an actual, paying Subscription; the validated ARR amount of that subscription as actually billed.
+Sales pipeline, forecast categories, territory assignment, win/loss reasons.
+CRM — Opportunity, Pipeline Stage, Sales Forecast.
+Billing-confirmed Subscription vs. CRM Closed Won Opportunity — the standard Bookings Validation reconciliation pattern documented in every connector's Connector Synergies section.
+Bookings Validation and Pipeline Conversion Analysis require CRM pairing — Billing alone confirms a subscription exists but cannot trace it back to the sales motion that produced it.
+Customer Success
+Payment history, subscription tenure, plan tier, and renewal-date signal contributing to the composite Health Score and Renewal Risk Analysis.
+The composite Health Score itself; support ticket history; NPS; product usage signal.
+Customer Success domain — Health Score (Summary, multi-domain composite).
+Billing-derived churn/renewal patterns vs. Customer Success-recorded health trajectory prior to the event.
+Renewal Analytics improves meaningfully with Customer Success pairing; Billing alone provides only the financial half of renewal risk, not the engagement half.
+Product Analytics
+Usage-based billing amounts and committed-minimum vs. overage classification, where usage billing is active.
+Feature-level adoption data; session and engagement data; product usage outside of what is directly billed.
+Product Analytics domain — Usage Event, Feature Adoption (deferred SCBM objects).
+Billed usage amounts vs. raw product usage events — confirms whether all product consumption is being correctly captured and monetized.
+Usage Revenue Analysis is Ready from Billing alone for platforms with native usage billing; Expansion Opportunity Detection requires Product Analytics pairing to identify usage growth before it becomes a billing event.
+Marketing Automation
+None directly — Billing has no native marketing or attribution data in any connector in this registry.
+Campaign attribution; lead source; marketing spend.
+Marketing Automation domain — Campaign, MQL.
+Not applicable — no meaningful cross-validation surface between Billing and Marketing Automation directly; the relationship is mediated through CRM.
+No Capability Assessment impact — Billing does not contribute to GTM Dashboards or Marketing capabilities in this registry.
+HRIS
+None directly — Billing has no native employee or organizational data.
+Sales owner attribution on a Subscription is sometimes present as metadata but is not authoritative.
+HRIS domain — Employee, Department.
+Sales-owner metadata on a Subscription (where present) vs. HRIS-confirmed employee record — a low-confidence, optional cross-reference only.
+Minimal Capability Assessment impact — relevant only for Sales Productivity attribution in combination with CRM, not a primary Billing-HRIS pairing.
+Banking
+None directly in most connectors — Billing initiates payment collection but does not itself reconcile against bank statements.
+Bank account balances; cleared vs. pending transaction status; bank-level cash position.
+Cash Management domain — Cash Account, Bank Transaction (deferred SCBM objects).
+Billing-recorded Payment success vs. bank-confirmed settled transaction — relevant for Cash Application accuracy and Collections Intelligence.
+Cash Forecasting confidence improves when Billing payment data is cross-validated against actual bank settlement, particularly for ACH and wire payment methods with multi-day settlement lag.
+Data Warehouse
+Raw export of all Billing canonical objects for customer-managed analytics or blending with non-SMPL data sources.
+Nothing — a Data Warehouse connector is a downstream consumer of Billing data, not a source that Billing depends on.
+Not applicable — Data Warehouse is a destination, not a canonical domain owner.
+Reconciliation between SMPL's canonical Billing objects and a customer's independently-maintained warehouse copy of the same data, where both exist.
+No direct Capability Assessment impact; relevant only as an implementation pattern for customers with existing data warehouse infrastructure who want SMPL canonical data alongside it.
+Table CD.1 — Billing cross-domain relationships. The ERP and CRM relationships are the two most consequential for SMPL Financial Intelligence; every Billing connector specification in this registry references both extensively.
+The Governing Ownership Principle for Billing
+Throughout this registry, the following ownership boundaries are maintained without exception:
+Billing is not the accounting system. It does not determine recognized revenue. The ERP is the canonical owner of recognized revenue under ASC 606/IFRS 15, even when a Billing platform offers native revenue recognition scheduling.
+Billing is not the CRM. It does not record sales intent, pipeline, or forecast. The CRM is the canonical owner of Opportunity and Pipeline Stage data, even when a Billing platform's CPQ-adjacent functionality (where present) touches similar concepts.
+Billing does not own Customer Health. The Customer Success domain owns the composite Health Score. Billing contributes a partial signal — payment history, tenure, renewal proximity — never the full picture.
+Billing validates recurring commercial execution. This is its canonical role: confirming that a subscription exists, is active, and is generating the ARR that CRM forecast and that ERP will eventually recognize as revenue.
+1. Stripe Billing
+Stripe Billing is the most widely deployed billing platform among SMPL's target customer base and offers the most consistent, best-documented API of any connector in this registry. It is frequently the first Billing connector implemented for a new SMPL customer.
+Business Purpose
+Stripe Billing serves as the operational system of record for subscription lifecycle execution — the authoritative source of what a customer is actually being charged, whether that charge succeeded, and how the subscription has changed over time. For SMPL, it is the highest-confidence source of ARR Movement data of any connector in this registry, given Stripe's API consistency and minimal customization surface.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_stripe_billing_v1
+vendor_name
+Stripe, Inc.
+vendor_type
+Billing / Subscription Management Platform
+vendor_description
+Stripe Billing is a cloud-based subscription and invoicing platform built on Stripe's broader payments infrastructure, offering subscription lifecycle management, usage-based billing, invoicing, and payment collection with strong API consistency across customers.
+connector_maturity_level
+Production Ready (Level 4) — reflects SMPL implementation depth; see Connector Maturity Model (ERP Registry, applied identically here)
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Customer
+The billed entity
+Customer Account (Entity)
+Direct — High. Stripe customer.email is the primary cross-system identity matching key.
+Subscription
+An active recurring billing commitment, composed of one or more Subscription Items
+Subscription (Entity)
+Direct — High for core fields; Derived — High for ARR computation.
+Subscription Item
+A specific Price attached to a Subscription, with quantity
+Extension field pending Subscription Line Item canonical object
+Direct — High.
+Invoice
+A billing document covering a defined service period, with line items
+Invoice (Movement)
+Direct — High. Service period dates natively present on every invoice, unlike several ERP connectors that require an add-on module for equivalent data.
+PaymentIntent / Charge
+A payment attempt and its outcome
+Payment (Movement)
+Direct — High.
+CreditNote
+A reduction in invoiced amount
+Invoice (Movement) — credit sub-type
+Direct — High.
+UsageRecord
+A captured consumption event for metered Subscription Items
+Extension field pending Usage Record canonical object
+Direct — Medium. Aggregation logic must be confirmed per customer.
+Price / Product
+The catalog definition of what is being sold and at what rate
+Product (Entity, Tier 2)
+Direct — High.
+Coupon
+A discount applied to a subscription or invoice
+ARR Movement.movement_reason = Discount Change (when recurring)
+Direct — Medium. One-time vs. recurring discount distinction must be confirmed.
+Table — Stripe Billing primary business objects.
+Canonical Mapping
+The Connector Engine derives ARR from Stripe subscription data using a consistent, well-validated formula: ARR = unit_amount × quantity × (12 / billing_interval_months), summed across all active Subscription Items on a Subscription. This formula is stable across the large majority of standard Stripe implementations and is the highest-confidence ARR derivation formula in this registry.
+Source Field
+Target Field
+Transform Type
+Confidence
+Notes
+subscription.status
+Subscription.status
+Normalized — High
+High
+active → Active, canceled → Cancelled, past_due → Active (flagged), trialing → Trial, unpaid → Active (flagged). Past_due/unpaid treatment as active ARR is a CEP-configurable policy.
+subscription.items[].price.unit_amount × quantity × (12/interval)
+Subscription.arr_value
+Derived — High
+High
+Standard formula across all subscription items, summed for multi-item subscriptions.
+subscription.current_period_start
+Subscription.start_date
+Direct
+High
+Reflects current billing cycle start, not original subscription creation date.
+subscription.cancel_at_period_end = true
+ARR Movement.movement_category = Churn (pending)
+Inferred — Medium
+Medium
+Creates a pending Churn Movement dated at period_end; confirmed when status transitions to canceled.
+invoice.lines[].period.start / period.end
+Invoice.service_start_date / service_end_date
+Direct
+High
+Native service period fields — a structural advantage over several ERP connectors requiring an add-on module for equivalent data.
+price.recurring.usage_type = "metered"
+ARR Movement candidate, pending CEP usage-inclusion policy
+Inferred — Low
+Low
+Committed-minimum vs. uncommitted-overage classification is always a CEP decision, never a platform default.
+Table — Stripe Billing field mapping rules (excerpt).
+Transformation Guidance
+The Connector Engine treats Stripe as the authoritative source for Subscription state, ARR value, and Invoice/Payment data. It is never treated as the authoritative source for recognized revenue (ERP-owned) or confirmed bookings attribution (CRM-owned), per the Cross-Domain Relationships principles established for this registry. Stripe's service-period fields on every invoice make it one of the stronger Billing connectors for deferred revenue estimation, though the ERP remains canonically authoritative for the confirmed balance.
+Configuration Variants
+Variant
+Frequency
+Impact
+Multi-item subscriptions (multiple Subscription Items per Subscription)
+Common (~40%)
+ARR must sum all active items, not just the primary plan — a common implementation oversight if only subscription.plan is mapped instead of subscription.items[].
+Metered/usage-based pricing active
+Common (~35% of SaaS customers using consumption-based models)
+Requires explicit CEP policy on committed-minimum vs. overage ARR inclusion.
+Trialing subscriptions counted toward ARR
+Occasional, customer-policy-dependent
+Default SMPL treatment excludes trials from ARR; this is a CEP-configurable override, never a platform default.
+Common Customer Variants
+This executive summary orients implementation teams and AI implementation agents to the most frequently encountered Stripe Billing customer configurations before reviewing detailed Configuration Variants.
+Variant Tier
+Description
+Typical Implementation
+A single-product, single-plan subscription model with monthly or annual billing, card payment only, no usage-based components.
+Common Variants
+Multi-tier plans (Starter/Pro/Enterprise) with a single Subscription Item per customer; basic coupon usage for promotional discounts; multi-item subscriptions combining a base plan with seat-based add-ons.
+Less Common Variants
+Metered/usage-based billing with committed minimums and overage tiers; ACH or invoiced (non-card) payment methods for larger accounts; Stripe Tax active for automated tax calculation.
+Rare / Complex Variants
+Multiple Stripe accounts (e.g., per-region or per-product-line) requiring consolidated cross-account ARR aggregation; custom-built subscription proration logic layered on top of Stripe's native proration via webhooks and external systems.
+Table — Stripe Billing Common Customer Variants.
+Common Failure Modes
+The following implementation issues are the most frequently encountered business and data-modeling problems when onboarding Stripe Billing.
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: trialing subscriptions counted as ARR
+Inflates ARR if the CEP default (exclude trials) is not explicitly confirmed with the customer during onboarding.
+Multi-item subscriptions mapped using only the primary plan field
+Understates ARR for any customer using seat-based or multi-product add-ons — the implementation agent must always map subscription.items[], never subscription.plan alone.
+Usage-based ARR represented inconsistently across customers
+Without explicit CEP confirmation of committed-minimum vs. overage policy, two customers with identical usage patterns can show materially different ARR figures.
+Customer ownership ambiguity when the same buyer has multiple Stripe Customer records
+Common when a customer signs up multiple times (e.g., separate teams within one company) without account consolidation — produces fragmented canonical Customer Account records unless explicitly reconciled.
+Missing historical data from test-mode subscriptions appearing in exports
+Stripe test-mode and live-mode data are API-separate, but customer-side data warehouse exports occasionally blend them — always confirm livemode=true filtering during Pre-POC Discovery.
+Incomplete historical activity due to subscription ID changes on major upgrades
+A significant plan change occasionally creates a new subscription ID rather than modifying the existing one, which can appear as Churn + New Business instead of Expansion if lineage is not tracked.
+Table — Stripe Billing Common Failure Modes.
+Capability Unlocks — Capability Progression
+Each capability below reflects standalone status when Stripe is the only connected system, current confidence, what additional connectors would improve it, and the expected confidence range once those connectors are present. Planning guidance, not contractual guarantee.
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+ARR Reporting
+Ready
+91%
+CRM (bookings validation)
+94–97%
+MRR Reporting
+Ready
+91%
+CRM (bookings validation)
+94–97%
+Subscription Waterfalls
+Ready
+89%
+CRM, Customer Success
+92–96%
+Revenue Waterfalls
+Partial
+55%
+ERP (recognized revenue confirmation)
+85–90%
+Deferred Revenue Validation
+Partial
+48%
+ERP (required for confirmation)
+82–88%
+Revenue Validation
+Partial
+50%
+ERP (required for confirmation)
+85–90%
+Bookings Validation
+Partial
+52%
+CRM (required for confirmation)
+86–91%
+Invoice Analytics
+Ready
+90%
+ERP (GL traceability)
+93–96%
+Accounts Receivable Analytics
+Partial
+60%
+ERP, Banking
+85–90%
+Cash Collections
+Ready
+85%
+Banking (settlement confirmation)
+90–94%
+Collections Forecasting
+Partial
+58%
+ERP, Banking
+83–88%
+Payment Analytics
+Ready
+88%
+Banking
+91–94%
+Churn Analysis
+Ready
+87%
+Customer Success (engagement context)
+90–94%
+Expansion Analysis
+Ready
+85%
+Product Analytics, CRM
+89–93%
+Contraction Analysis
+Ready
+85%
+Product Analytics
+88–92%
+Retention Analytics (N$R / G$R)
+Ready
+89%
+CRM, Customer Success
+92–96%
+Usage Revenue Analysis
+Ready (when metered billing active) / Unavailable (otherwise)
+75%
+Product Analytics (raw usage cross-validation)
+85–90%
+Executive Dashboards
+Ready
+90%
+ERP (financial KPI completion)
+93–96%
+Board Reporting
+Partial
+62%
+ERP, CRM
+85–90%
+Cash Flow Forecasting
+Partial
+55%
+ERP, Banking
+82–88%
+Table — Stripe Billing capability progression.
+Confidence Drivers
+The following explains the architectural reasoning behind Stripe's confidence estimates — not a repetition of the percentages above, but the specific business and technical characteristics that support or limit each. Capabilities are selected to represent the full range of confidence drivers relevant to this connector; the same reasoning patterns apply to capabilities not individually detailed here.
+ARR Reporting
+Current Confidence: 91%
+High confidence because:
+Native Subscription object with consistent status enumeration across all observed implementations
+Native Subscription Item array, enabling complete multi-item ARR summation without inference
+Stable Price and Product model with minimal schema variability
+Consistent API availability and the strongest webhook coverage of any connector in this registry
+Confidence improves with:
+CRM — bookings validation, confirming sales-recorded deals correspond to actual Stripe subscriptions
+ERP — revenue reconciliation against GAAP-recognized figures
+Customer-specific factors include:
+ARR policy defined in the CEP — specifically trial inclusion/exclusion and usage-based overage treatment
+Multi-account environments (regional or product-line Stripe account separation) requiring consolidation
+Product packaging strategy — single-plan vs. multi-item subscription structure
+Deferred Revenue Validation
+Current Confidence: 48%
+Confidence is limited because:
+Stripe estimates deferred revenue from invoice service-period fields; it does not perform GAAP-compliant revenue recognition
+ERP owns recognized deferred revenue under ASC 606/IFRS 15 — this is a canonical ownership boundary, not a data quality gap
+Revenue schedules can differ from Stripe's estimate based on customer-specific accounting policy elections (e.g., point-in-time vs. over-time recognition for certain product types)
+Confidence improves after:
+ERP integration, providing the confirmed deferred revenue balance to reconcile against
+Revenue Schedule reconciliation — comparing Stripe's service-period estimate line by line against ERP-confirmed entries
+Accounting policy confirmation through the CEP — specifically how the customer's finance team treats multi-element arrangements
+Bookings Validation
+Current Confidence: 52%
+Confidence is limited because:
+Stripe records what was actually billed, not what was sold — a Subscription confirms commercial execution, not sales attribution
+Without CRM, there is no way to confirm that every closed sales deal actually resulted in a Stripe subscription, or vice versa
+Confidence improves with:
+CRM — the required pairing for this capability; Stripe alone can never independently confirm bookings
+Customer-specific factors include:
+Sales-to-billing provisioning lag — how quickly a Closed Won deal typically becomes an active Stripe subscription, which affects how confidently a missing subscription can be flagged as an actual gap vs. normal provisioning delay
+Usage Revenue Analysis
+Current Confidence: 75% (when metered billing active)
+High confidence because:
+Stripe's UsageRecord object provides direct, timestamped consumption data tied to specific Subscription Items
+Aggregation logic (sum, last-during-period, max) is explicitly configured per Price, reducing ambiguity once confirmed
+Confidence may be limited because:
+Committed-minimum vs. uncommitted-overage ARR classification is always a CEP policy decision, never inferable from Stripe data alone
+Confidence improves with:
+Product Analytics — cross-validating billed usage against raw product consumption events to confirm complete capture
+Customer-specific factors include:
+Usage billing policy recorded in the CEP — specifically which portion of usage-based revenue the customer considers committed ARR
+Cash Collections
+Current Confidence: 85%
+High confidence because:
+Stripe's Payment/Charge objects provide reliable success/failure status for the large majority of payment methods
+Card payments settle synchronously, producing immediate, high-confidence collection confirmation
+Confidence may be limited because:
+ACH and other asynchronous payment methods show Stripe-side success before bank-side settlement is confirmed, introducing a timing gap
+Confidence improves with:
+Banking — confirming Stripe-recorded payment success against actual settled bank transactions, closing the gap for non-card payment methods
+Recommended Companion Connectors
+Stripe delivers strong standalone ARR and subscription intelligence, and its Financial Intelligence value grows substantially when paired with complementary business systems.
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP (NetSuite, Sage Intacct, etc.)
+Provides recognized-revenue ground truth against which Stripe-derived ARR and deferred revenue estimates can be confirmed.
+Revenue Validation, Deferred Revenue Validation, Revenue Waterfalls, Cash Flow Forecasting
+Revenue (recognized variant), confirmed Deferred Revenue balance
+Revenue Validation and Deferred Revenue Validation move from Partial toward Ready
+CRM (Salesforce, HubSpot, etc.)
+Confirms that sales-recorded Closed Won Opportunities correspond to actual Stripe subscriptions, closing the bookings-to-billing gap.
+Bookings Validation, Pipeline Conversion Analysis, Renewal Forecasting
+Confirmed bookings attribution
+Bookings Validation moves from Partial toward Ready
+Customer Success (Gainsight, ChurnZero, etc.)
+Adds engagement and support context to Stripe's payment-history-based churn and renewal signal.
+Renewal Analytics, Churn Analysis (root-cause depth)
+Health Score (composite, multi-domain)
+Churn Analysis confidence increases with engagement context
+Product Analytics (Amplitude, Mixpanel, etc.)
+Cross-validates billed usage against raw product consumption, confirming usage-based billing accuracy.
+Usage Revenue Analysis, Expansion Opportunity Detection
+Product Adoption signal contribution to Health Score
+Usage Revenue Analysis confidence increases; Expansion Analysis gains leading-indicator depth
+Banking / Cash Management
+Confirms that Stripe-recorded successful payments actually settled, closing the payment-to-cash gap, particularly for ACH and invoiced payment methods.
+Cash Collections, Collections Forecasting, Cash Flow Forecasting
+Confirmed bank settlement vs. payment-system success
+Collections Forecasting and Cash Flow Forecasting move from Partial toward Ready
+Table — Stripe Billing recommended companion connectors.
+Connector Synergies
+Stripe + ERP
+Revenue validation: confirming that Stripe-derived ARR and recognized revenue align, with discrepancies surfaced as a specific reconciling item rather than an unexplained variance
+Deferred revenue reconciliation: comparing Stripe's service-period-derived deferred revenue estimate against the ERP-confirmed balance sheet liability
+Invoice-to-GL traceability: tracing a specific Stripe invoice through to the specific GL journal entries it generated
+Cash reconciliation: confirming Stripe-recorded successful payments match ERP-recorded cash receipts
+Stripe + CRM
+Opportunity-to-subscription validation: confirming every Closed Won Opportunity produced an actual Stripe subscription, and flagging gaps
+Bookings validation: distinguishing sales-recorded bookings from billing-confirmed bookings as an explicit reconciliation metric
+Pipeline conversion analysis: measuring the rate and timing at which CRM pipeline actually converts into active Stripe subscriptions
+Renewal forecasting: combining CRM renewal-stage Opportunity tracking with Stripe subscription end-date data for higher-confidence renewal timing
+Stripe + Product Analytics
+Usage-to-revenue analysis: confirming that billed usage-based charges accurately reflect actual product consumption
+Feature monetization: correlating which product features drive usage-based revenue growth
+Expansion opportunity detection: identifying usage growth patterns that predict upcoming plan upgrades or seat expansion before the Stripe subscription change occurs
+Stripe + Customer Success
+Renewal risk: combining Stripe payment-history signal with Customer Success engagement and support signal for a more complete renewal risk picture
+Customer Health contribution: Stripe's payment reliability and tenure data as one input to the composite canonical Health Score
+Expansion readiness: cross-referencing Stripe subscription tier with Customer Success-recorded satisfaction signal to identify expansion-ready accounts
+Stripe + Banking
+Cash application: confirming Stripe-recorded successful payments correspond to actual settled bank transactions
+Payment reconciliation: closing the gap between payment-system success (Stripe) and bank-confirmed settlement, particularly relevant for ACH with multi-day settlement lag
+Collections intelligence: combining Stripe dunning and retry data with bank-level visibility into which payment attempts ultimately cleared
+Data Confidence Profile
+The Capability Assessment Layer references the following object-level confidence estimates when determining whether AI reasoning over Stripe data should be presented as high-confidence or flagged for additional validation.
+Business Object
+Confidence
+Why
+Subscription (core fields)
+93%
+Direct mapping with high field-standard consistency; the cleanest object model in this registry.
+Subscription ARR value
+91%
+Standard derivation formula validated across the large majority of implementations; multi-item subscriptions require complete item-array mapping.
+Invoice
+90%
+Native service-period fields produce high confidence without requiring an add-on module, unlike several ERP-equivalent connectors.
+Payment
+88%
+Reliable success/failure status; settlement confirmation requires Banking connector for full confidence.
+ARR Movement (category)
+85%
+New Business and Churn are high confidence; Expansion/Contraction classification depends on complete Subscription Item history.
+ARR Movement (usage-based)
+55%
+Committed-minimum vs. overage classification is always a CEP policy decision — confidence reflects policy ambiguity, not data quality.
+Customer (identity)
+88%
+Email-based matching is reliable; cross-system identity resolution with CRM/ERP requires confirmation.
+Deferred Revenue (estimate)
+50%
+Estimated from service-period fields; ERP cross-validation required for confirmed balance.
+Table — Stripe Billing Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 42%
+SCBM Domain
+Coverage
+ARR / SaaS Metrics
+88%
+Billing
+92%
+Accounts Receivable
+45%
+Revenue (recognized variant)
+12% (requires ERP)
+Customer (identity + commercial)
+58%
+Cash Management
+30% (requires Banking for settlement confirmation)
+General Ledger
+0%
+Customer Health (signal contribution only)
+12% — partial signal, not authoritative
+Pipeline / CRM
+0%
+Product Analytics
+0% native (usage data is billing-derived, not product-derived)
+Table — Stripe Billing estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Authentication
+API key (restricted key recommended) or OAuth 2.0 for Stripe Connect platform integrations. The Connector Engine requests read-only access to Customers, Subscriptions, Invoices, Charges, and Usage Records — never write access, consistent with D-019 (read-only connectors) across the SKA.
+APIs
+REST API — primary pattern, consistently documented and versioned across the platform
+Stripe Sigma — available for very large historical datasets requiring SQL-based bulk export
+Webhooks
+Comprehensive webhook event coverage for subscription lifecycle events (created, updated, deleted), invoice events (created, paid, payment_failed), and payment events. Among the strongest webhook implementations in any connector category SMPL supports, enabling near-real-time canonical object updates.
+Historical Backfill
+Fully supported via REST API with cursor-based pagination. Stripe Sigma recommended for very large historical datasets. Complete history available from account creation, subject to event log retention limits for older Stripe accounts (Sigma or Bulk export recommended for events beyond standard retention).
+Incremental Synchronization
+Fully supported via created/updated timestamps on all objects, supplemented by comprehensive webhook coverage for near-real-time updates between scheduled syncs.
+Known Customizations
+Metadata fields used for customer-specific tracking (e.g., CRM Opportunity ID cross-reference) — captured as extension fields, never canonically mapped without CEP confirmation of business meaning
+Custom proration logic implemented via webhooks and external systems layered on top of Stripe's native proration — occasional, primarily in highly customized enterprise implementations
+Multiple Stripe accounts per customer (e.g., regional or product-line separation) requiring consolidated cross-account extraction
+Implementation Characteristics
+Low-Medium typical complexity — Stripe's API consistency and minimal customization surface make it the fastest-to-implement Billing connector in this registry for standard subscription models. Usage-based billing and multi-item subscriptions are the primary complexity drivers when present.
+Best Fit Customers
+Ideal Customer Profile
+SaaS companies of any stage using Stripe as their primary billing and payments infrastructure — the most common billing platform among SMPL's target customer base
+Companies with usage-based or hybrid subscription models, given Stripe's native metered billing support
+Less Ideal Customer Profile
+Companies requiring native, sophisticated revenue recognition scheduling — Stripe's revenue recognition capability is less mature than Zuora's; ERP pairing is more consequential for Stripe customers than for Zuora customers
+Enterprise customers with complex multi-entity billing requiring native consolidation — Stripe does not natively support multi-entity billing structures the way Zuora does
+Implementation Risks
+Trial-as-ARR policy must be confirmed explicitly during onboarding — the most common single source of ARR figure disagreement with customers, since the CEP default (exclude trials) does not match every customer's internal reporting convention.
+Multi-item subscription mapping must always include the full items[] array — defaulting to a single-plan assumption silently understates ARR for any customer with seat-based or add-on pricing.
+Test-mode data filtering (livemode=true) must be confirmed during Pre-POC Discovery to avoid contaminating canonical data with non-production records.
+Implementation Decision Flow
+The following represents the business implementation workflow an implementation consultant or AI implementation agent follows when onboarding a Stripe Billing connection — the reasoning process, not API documentation or connector logic.
+Customer uses Stripe Billing
+  ↓
+Confirm Stripe is the authoritative source for subscriptions
+  (per CEP — Stripe may be paired with a separate CPQ/contract system)
+  ↓
+Usage-based billing enabled?
+  ├─ Yes
+  │   ↓
+  │  Confirm usage pricing methodology (per-unit, tiered, volume)
+  │   ↓
+  │  Confirm committed-minimum vs. overage ARR policy
+  │   ↓
+  │  Record ARR treatment in the CEP
+  │
+  └─ No → Continue
+  ↓
+Multiple active Subscription Items per subscription?
+  ├─ Yes → Determine item-level aggregation strategy
+  └─ No → Continue
+  ↓
+Trialing subscriptions present?
+  ↓
+Confirm customer trial-as-ARR policy (CEP default: exclude)
+  ↓
+Multiple Stripe accounts present (regional / product-line separation)?
+  ├─ Yes → Determine cross-account consolidation strategy
+  └─ No → Continue
+  ↓
+Non-card payment methods present (ACH, invoiced)?
+  ├─ Yes → Flag settlement-timing gap; recommend Banking pairing for Cash Collections confidence
+  └─ No → Continue
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+ARR Reporting
+MRR Reporting
+Subscription Waterfalls
+Invoice Analytics
+Cash Collections
+Payment Analytics
+Churn Analysis
+Expansion Analysis
+Contraction Analysis
+Retention Analytics
+Usage Revenue Analysis (when metered billing active)
+Executive Dashboards
+Partial
+Revenue Waterfalls
+Deferred Revenue Validation
+Revenue Validation
+Bookings Validation
+Accounts Receivable Analytics
+Collections Forecasting
+Board Reporting
+Cash Flow Forecasting
+Unavailable
+Pipeline Analytics
+Financial Statements
+Workforce Planning
+Product Analytics (native feature/session data)
+Connector Fingerprint
+Business Purpose
+Stripe Billing serves as the operational system of record for subscription lifecycle execution — the most direct, highest-confidence source of ARR Movement data SMPL can connect to, given Stripe's API consistency and minimal customization surface.
+Typical Customer
+SaaS companies of any stage, from seed through late-growth, using Stripe as primary billing infrastructure — the single most commonly encountered Billing connector among SMPL's target customer base.
+Primary Strengths
+Highest API consistency and lowest schema variability of any connector in this registry, producing fast, predictable implementations
+Native service-period fields on every invoice support strong deferred revenue estimation without requiring an add-on module
+Comprehensive webhook coverage enables near-real-time canonical object updates
+Known Implementation Challenges
+Trial-as-ARR policy and multi-item subscription mapping are the two most common sources of ARR figure disagreement if not confirmed explicitly during onboarding
+Usage-based ARR classification always requires CEP policy resolution, never a platform default
+Implementation Characteristics
+Low-Medium typical complexity — generally the fastest Billing connector to implement in this registry for standard subscription models, with usage-based billing and multi-item subscriptions as the primary complexity drivers when present.
+Ideal Companion Systems
+ERP and CRM are both required for confirmed Financial Intelligence — ERP for recognized-revenue validation, CRM for bookings confirmation. Banking pairing meaningfully improves Cash Flow Forecasting and Collections Forecasting given Stripe's payment-success-not-settlement visibility. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Stripe occupies the role of operational billing system of record — the most direct evidence of what customers are actually paying for, distinct from what was sold (CRM) and what has been recognized as revenue (ERP). Its contribution to Financial Intelligence is foundational: Stripe-derived ARR Movement data is the primary input to SMPL's ARR Waterfall and retention analytics across the majority of SMPL's customer base. Within the SCBM, Stripe populates the Subscription, Invoice, Payment, and ARR Movement canonical objects, and contributes a partial signal to the canonical Health Score.
+Immediately after connection, Stripe delivers board-relevant ARR Reporting, MRR Reporting, Subscription Waterfalls, and Retention Analytics — sufficient on its own to give executive leadership SMPL's signature SaaS metrics with high confidence. The additional value unlocked when Stripe is combined with complementary systems is substantial: paired with ERP, Stripe-derived ARR becomes cross-validated against recognized revenue; paired with CRM, sales-recorded bookings become confirmed billing reality; paired with Banking, payment success becomes confirmed cash settlement. Stripe is frequently the foundation upon which a customer's full SMPL implementation is built, with every subsequent connector strengthening the picture Stripe alone has already begun to establish.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery. No two customer implementations of this connector are guaranteed to produce identical confidence or coverage figures.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data. This connector's estimates will be revised as SMPL accumulates additional implementation experience; they are never derived from, or improved by, any individual customer's commercial data.
+2. Chargebee
+Chargebee is a subscription billing platform with native MRR/ARR fields and stronger out-of-box SaaS-metric support than Stripe's general-purpose billing API, frequently chosen specifically for this reason by SMPL's SaaS customer base.
+Business Purpose
+Chargebee serves the same operational system-of-record role as Stripe for subscription lifecycle execution, with the distinguishing characteristic that it natively computes and exposes MRR as a first-class field — reducing the derivation burden relative to platforms that require ARR computation from raw price and quantity data.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_chargebee_v1
+vendor_name
+Chargebee, Inc.
+vendor_type
+Billing / Subscription Management Platform
+vendor_description
+Chargebee is a cloud-based subscription billing and revenue management platform purpose-built for SaaS companies, offering native MRR/ARR tracking, dunning management, and a built-in revenue recognition module.
+connector_maturity_level
+Pilot Ready (Level 3) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Customer
+The billed entity
+Customer Account (Entity)
+Direct — High.
+Subscription
+An active recurring billing commitment with native MRR field
+Subscription (Entity)
+Direct — High. Native mrr field reduces derivation complexity relative to Stripe.
+Invoice
+A billing document with line items
+Invoice (Movement)
+Direct — High.
+Transaction
+A payment attempt and outcome
+Payment (Movement)
+Direct — High.
+CreditNote
+A reduction in invoiced amount
+Invoice (Movement) — credit sub-type
+Direct — High.
+Usage
+A captured consumption event for metered items
+Extension field pending Usage Record canonical object
+Direct — Medium.
+RevenueRecognition (add-on module)
+Native revenue recognition schedule, when module active
+Revenue Schedule (Movement) — Billing-contributed variant
+Derived — Medium (module active) / Not Available (inactive). ERP remains canonical owner of confirmed recognition.
+Table — Chargebee primary business objects.
+Canonical Mapping
+Chargebee's native cf_arr custom field (when configured) or mrr × 12 calculation provides ARR directly, reducing the derivation burden relative to Stripe's item-array summation. The Connector Engine prefers the native mrr field when present and validated, falling back to manual line-item derivation when mrr is absent or inconsistent with subscription line items.
+Transformation Guidance
+The Connector Engine treats Chargebee as authoritative for Subscription state and ARR value, consistent with the Billing domain's canonical role. Where Chargebee's native Revenue Recognition module is active, it contributes a Revenue Schedule estimate that remains subordinate to ERP-confirmed recognized revenue, per the Cross-Domain Relationships principles established for this registry.
+Configuration Variants
+Variant
+Frequency
+Impact
+Native Revenue Recognition module active
+Occasional (~20%)
+Improves Revenue Schedule contribution confidence; still subordinate to ERP per canonical ownership.
+Multi-currency subscriptions
+Common among internationally distributed customers
+Requires CEP confirmation of reporting currency handling.
+Add-on items tracked as separate subscription line items
+Common (~45%)
+Native mrr field generally aggregates correctly, but the implementation agent should validate against manual line-item summation during onboarding.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Single-product subscription with native MRR tracking, monthly or annual billing, card payment.
+Common Variants
+Multi-tier plans with add-on items; basic coupon and discount usage; Chargebee's native dunning management active.
+Less Common Variants
+Native Revenue Recognition module active; usage-based billing components alongside a base subscription fee.
+Rare / Complex Variants
+Multiple Chargebee sites (Chargebee's term for separate billing entities) requiring consolidated cross-site ARR aggregation.
+Table — Chargebee Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: native mrr field always reflects active line items
+The native field can drift from manual line-item summation in edge cases (e.g., mid-cycle proration) — the implementation agent should validate, not assume parity.
+Customer ownership ambiguity across multiple Chargebee sites
+Site-level data fragmentation is easy to miss if not inventoried during Pre-POC Discovery.
+ARR represented inconsistently when Revenue Recognition module is partially configured
+A partially configured module can produce Revenue Schedule entries for some subscriptions but not others, requiring explicit reconciliation.
+Inactive business processes: stale add-on items from deprecated product lines
+Legacy add-ons no longer sold but still present on older subscriptions can introduce noise if not classified correctly.
+Table — Chargebee Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+ARR Reporting
+Ready
+87%
+CRM (bookings validation)
+91–95%
+MRR Reporting
+Ready
+89%
+CRM (bookings validation)
+92–96%
+Subscription Waterfalls
+Ready
+82%
+CRM, Customer Success
+87–92%
+Revenue Waterfalls
+Partial
+50%
+ERP (required for confirmation)
+82–87%
+Deferred Revenue Validation
+Partial
+45% (module inactive) / 65% (module active)
+ERP (required for confirmation)
+80–88%
+Bookings Validation
+Partial
+48%
+CRM (required for confirmation)
+83–89%
+Invoice Analytics
+Ready
+85%
+ERP (GL traceability)
+89–93%
+Churn Analysis
+Ready
+82%
+Customer Success
+86–91%
+Expansion Analysis
+Ready
+80%
+Product Analytics, CRM
+85–90%
+Retention Analytics
+Ready
+85%
+CRM, Customer Success
+89–93%
+Usage Revenue Analysis
+Partial
+60%
+Product Analytics
+78–85%
+Table — Chargebee capability progression.
+Confidence Drivers
+The following explains the architectural reasoning behind Chargebee's confidence estimates.
+ARR Reporting
+Current Confidence: 87%
+High confidence because:
+Native mrr field, purpose-built for SaaS subscription tracking, reduces derivation complexity relative to platforms requiring manual ARR computation
+Stable Subscription and Invoice object model
+Confidence may be limited because:
+The native MRR field requires periodic validation against manual line-item summation, since drift can occur during mid-cycle proration
+Fewer cumulative SMPL production implementations than Stripe, reflecting Pilot Ready rather than Production Ready maturity
+Confidence improves with:
+CRM — bookings validation
+ERP — revenue reconciliation
+Customer-specific factors include:
+ARR policy defined in the CEP
+Multi-site Chargebee deployments requiring consolidation
+Add-on item tracking strategy — separate line items vs. blended subscription amount
+Deferred Revenue Validation
+Current Confidence: 45% (module inactive) / 65% (Revenue Recognition module active)
+Confidence is limited because:
+Without the native Revenue Recognition module, Chargebee estimates deferred revenue from invoice service periods only, the same structural limitation as Stripe
+ERP remains the canonical owner of confirmed deferred revenue regardless of module status
+Confidence improves after:
+Native Revenue Recognition module activation, which narrows (but does not eliminate) the gap to ERP-confirmed figures
+ERP integration for final confirmation
+Accounting policy confirmation through the CEP
+Churn Analysis
+Current Confidence: 82%
+High confidence because:
+Subscription cancellation events are clearly and consistently recorded
+Native dunning management provides some signal on payment-driven cancellation context
+Confidence improves with:
+Customer Success — adding engagement and support context to payment-history-based churn signal
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Provides recognized-revenue ground truth, particularly valuable given Chargebee's partial native revenue recognition module.
+Revenue Validation, Deferred Revenue Validation
+Revenue (recognized variant)
+Revenue Waterfalls and Deferred Revenue Validation move toward Ready
+CRM
+Confirms sales-recorded bookings against actual Chargebee subscriptions.
+Bookings Validation, Renewal Forecasting
+Confirmed bookings attribution
+Bookings Validation moves toward Ready
+Customer Success
+Adds engagement context to Chargebee's payment and tenure-based churn signal.
+Renewal Analytics
+Health Score (composite)
+Churn Analysis confidence increases
+Product Analytics
+Cross-validates usage-based charges against raw consumption.
+Usage Revenue Analysis, Expansion Detection
+Product Adoption signal
+Usage Revenue Analysis confidence increases
+Table — Chargebee recommended companion connectors.
+Connector Synergies
+Chargebee + ERP
+Revenue validation, particularly valuable where Chargebee's native Revenue Recognition module is only partially configured
+Deferred revenue reconciliation between Chargebee's module-derived estimate and ERP-confirmed balance
+Chargebee + CRM
+Bookings confirmation and pipeline conversion analysis, following the same pattern established for Stripe
+Chargebee + Product Analytics
+Usage-to-revenue analysis for customers with hybrid subscription/usage models
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Subscription (core fields, including native MRR)
+87%
+Native MRR field reduces derivation complexity but requires periodic validation against line-item summation.
+Invoice
+85%
+Reliable line-item detail.
+ARR Movement (category)
+78%
+Slightly lower than Stripe given fewer SMPL production implementations to validate movement classification patterns.
+Revenue Schedule (module active)
+55%
+Improving but still subordinate to ERP-confirmed recognition.
+Customer (identity)
+82%
+Reliable identity fields.
+Table — Chargebee Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 36%
+SCBM Domain
+Coverage
+ARR / SaaS Metrics
+82%
+Billing
+85%
+Accounts Receivable
+38%
+Revenue (recognized variant)
+15% (module active) / 8% (inactive)
+Customer
+50%
+Cash Management
+22%
+Customer Health (signal only)
+10%
+Table — Chargebee estimated SCBM coverage by domain.
+Connector Maturity
+Pilot Ready (Level 3) — SMPL has implemented this connector across 3–4 production customers with consistent results. Tier 1 mapping rules are stable. Tier 2 pattern library is moderate, reflecting fewer cumulative implementations than Stripe.
+Authentication
+API key authentication. The Connector Engine requests read-only access to Customers, Subscriptions, Invoices, and Transactions.
+APIs
+REST API — primary pattern, well-documented
+Export API — used for bulk historical data retrieval
+Webhooks
+Supported for core subscription and invoice lifecycle events. Reliable but with somewhat narrower event-type coverage than Stripe.
+Historical Backfill
+Fully supported via REST and Export APIs with standard pagination.
+Incremental Synchronization
+Supported via updated_at timestamp filtering on standard objects.
+Known Customizations
+Custom fields (cf_ prefix) used for customer-specific tracking, including occasional cf_arr overrides of the native MRR-derived ARR
+Multiple Chargebee sites for region or product-line separation
+Implementation Characteristics
+Low-Medium typical complexity, comparable to Stripe for standard configurations, with the native MRR field generally accelerating initial ARR mapping.
+Best Fit Customers
+Ideal Customer Profile
+SaaS companies prioritizing native MRR/ARR tracking and built-in dunning management over a more general-purpose payments platform
+Less Ideal Customer Profile
+Companies requiring the broadest possible payment method and currency support — Stripe's payments infrastructure is more extensive
+Implementation Risks
+Native MRR field should be validated against manual line-item summation during onboarding, not assumed correct by default.
+Partial Revenue Recognition module configuration can produce inconsistent Revenue Schedule coverage across a customer's subscription base.
+Implementation Decision Flow
+The following represents the business implementation workflow an implementation consultant or AI implementation agent follows when onboarding a Chargebee connection.
+Customer uses Chargebee
+  ↓
+Confirm Chargebee is the authoritative source for subscriptions
+  ↓
+Native Revenue Recognition module active?
+  ├─ Yes
+  │   ↓
+  │  Confirm recognition policy alignment with customer accounting practice
+  │   ↓
+  │  Record Revenue Schedule contribution status in the CEP
+  │
+  └─ No → Continue (Revenue Schedule confidence capped at Stripe-equivalent level)
+  ↓
+Native mrr field present and populated?
+  ├─ Yes → Validate against manual line-item summation during onboarding
+  └─ No → Derive ARR manually from subscription line items
+  ↓
+Usage-based billing components present?
+  ├─ Yes → Confirm committed-minimum vs. overage ARR policy; record in CEP
+  └─ No → Continue
+  ↓
+Multiple Chargebee sites present?
+  ├─ Yes → Determine cross-site consolidation strategy
+  └─ No → Continue
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+ARR Reporting
+MRR Reporting
+Subscription Waterfalls
+Invoice Analytics
+Churn Analysis
+Expansion Analysis
+Retention Analytics
+Partial
+Revenue Waterfalls
+Deferred Revenue Validation
+Bookings Validation
+Usage Revenue Analysis
+Unavailable
+Pipeline Analytics
+Financial Statements
+Workforce Planning
+Connector Fingerprint
+Business Purpose
+Chargebee serves as the operational system of record for subscription lifecycle execution, distinguished by native MRR/ARR field exposure that reduces derivation complexity relative to general-purpose payment platforms.
+Typical Customer
+SaaS companies prioritizing purpose-built subscription billing tooling, often choosing Chargebee specifically for its native SaaS-metric support over a more general payments platform.
+Primary Strengths
+Native MRR field reduces ARR derivation complexity
+Built-in dunning management with configurable retry logic
+Native Revenue Recognition module, when active, narrows the ERP cross-validation gap relative to platforms without this functionality
+Known Implementation Challenges
+Native MRR field requires periodic validation against manual line-item summation
+Multi-site configurations require explicit cross-site aggregation
+Implementation Characteristics
+Low-Medium typical complexity, comparable to Stripe for standard configurations.
+Ideal Companion Systems
+ERP and CRM follow the same priority pattern as every Billing connector in this registry. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Chargebee occupies the same operational billing system-of-record role as every connector in this registry, distinguished by purpose-built SaaS-metric tooling. Its contribution to Financial Intelligence centers on ARR and MRR reporting with reduced derivation overhead. Within the SCBM, it populates Subscription, Invoice, Payment, and ARR Movement, with a partial Revenue Schedule contribution where its native module is active.
+Immediately after connection, Chargebee delivers board-relevant ARR Reporting, MRR Reporting, and Retention Analytics. The additional value unlocked through ERP and CRM pairing follows the same pattern established across this registry — recognized-revenue confirmation and bookings validation, respectively.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+3. Recurly
+Recurly is a subscription billing platform positioned as a Stripe Billing alternative with particular strength in dunning and involuntary churn recovery, frequently chosen by SMPL customers with consumer-adjacent or high-volume subscription bases.
+Business Purpose
+Recurly serves the same operational billing system-of-record role as every connector in this registry, with a distinguishing strength in payment recovery — its dunning and retry logic is generally regarded as more sophisticated than the registry's general-purpose payment platforms, which is reflected in stronger involuntary-churn-related signal.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_recurly_v1
+vendor_name
+Recurly, Inc.
+vendor_type
+Billing / Subscription Management Platform
+vendor_description
+Recurly is a cloud-based subscription billing platform with particular strength in payment recovery, dunning management, and involuntary churn reduction, commonly used by subscription businesses with significant card-decline exposure.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Account
+The billed entity
+Customer Account (Entity)
+Direct — High.
+Subscription
+An active recurring billing commitment
+Subscription (Entity)
+Direct — High for core fields; Derived — High for ARR.
+Invoice
+A billing document
+Invoice (Movement)
+Direct — High.
+Transaction
+A payment attempt and outcome
+Payment (Movement)
+Direct — High.
+CreditPayment
+A credit applied to an account
+Invoice (Movement) — credit sub-type
+Direct — Medium.
+Usage
+A captured consumption event for metered add-ons
+Extension field pending Usage Record canonical object
+Direct — Medium.
+Table — Recurly primary business objects.
+Canonical Mapping
+ARR is derived from subscription.unit_amount × quantity × (12/billing_cycle), summed across active add-ons, structurally similar to the Stripe derivation pattern. Recurly's dunning-specific fields (decline reason codes, retry schedule status) provide unusually granular involuntary-churn signal relative to other connectors in this registry.
+Transformation Guidance
+The Connector Engine treats Recurly as authoritative for Subscription state and ARR value. Recurly's dunning data is treated as a high-value input to Churn Analysis specifically — the distinction between voluntary and involuntary churn is more reliably derivable from Recurly than from most other Billing connectors in this registry, given its purpose-built decline-reason tracking.
+Configuration Variants
+Variant
+Frequency
+Impact
+Custom dunning retry schedules
+Common (~50%, given Recurly's positioning around payment recovery)
+Retry schedule configuration affects the timing precision of involuntary churn classification.
+Multiple add-ons per subscription
+Common (~40%)
+ARR must sum all active add-ons, consistent with the multi-item pattern across this registry.
+Usage-based add-ons
+Occasional (~20%)
+Requires CEP policy on committed-minimum vs. overage ARR inclusion, same as every usage-billing connector in this registry.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Single-product subscription with standard dunning configuration, monthly or annual billing, card payment.
+Common Variants
+Custom retry schedules tuned for the customer's specific decline patterns; multiple add-ons per subscription.
+Less Common Variants
+Usage-based add-on components; multi-currency subscriptions.
+Rare / Complex Variants
+Highly customized dunning workflows integrated with external communication systems (e.g., custom email sequences triggered by Recurly webhook events) that obscure the native dunning state machine.
+Table — Recurly Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: all churn is voluntary
+Recurly's decline-reason data specifically enables voluntary/involuntary distinction — failing to use it produces a less actionable Churn Analysis than the connector is capable of supporting.
+Customer ownership ambiguity when Account records are created per-subscription rather than per-customer
+Some implementations create a new Recurly Account for each subscription rather than reusing one Account per customer, fragmenting canonical Customer Account identity.
+Missing historical activity from custom external dunning workflows
+When dunning communication is handled outside Recurly's native system, the platform's retry-state data alone does not fully represent the customer's recovery experience.
+ARR represented inconsistently for usage-based add-ons
+Same structural ambiguity as every usage-billing-capable connector in this registry.
+Table — Recurly Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+ARR Reporting
+Ready
+78%
+CRM, additional SMPL implementation experience
+85–90%
+MRR Reporting
+Ready
+78%
+CRM, additional SMPL implementation experience
+85–90%
+Subscription Waterfalls
+Partial
+65%
+CRM, additional SMPL implementation experience
+80–86%
+Churn Analysis (including involuntary/voluntary split)
+Ready
+80%
+Customer Success
+85–90%
+Bookings Validation
+Partial
+42%
+CRM (required)
+78–84%
+Invoice Analytics
+Ready
+75%
+ERP
+82–87%
+Collections Forecasting
+Partial
+55%
+ERP, Banking — Recurly's dunning data is a strong contributor here
+75–82%
+Table — Recurly capability progression. Lower baseline confidence throughout reflects Validated maturity status, not structural platform limitations — Recurly's dunning-specific capability (Churn Analysis, Collections Forecasting) is comparatively strong despite the connector's earlier maturity stage.
+Confidence Drivers
+The following explains the architectural reasoning behind Recurly's confidence estimates.
+ARR Reporting
+Current Confidence: 78%
+High confidence because:
+Native Subscription object with consistent unit_amount and billing_cycle fields
+Reliable add-on tracking via the subscription's add_ons array
+Confidence may be limited because:
+Fewer cumulative SMPL production implementations than Stripe or Chargebee, reflecting Validated rather than Pilot Ready maturity
+Tier 2 pattern library for edge-case configurations is still in early accumulation
+Confidence improves with:
+CRM — bookings validation
+Additional SMPL implementation experience — the primary path to closing the confidence gap with the registry's more mature connectors
+Customer-specific factors include:
+ARR policy defined in the CEP
+Per-subscription vs. per-customer Account creation pattern
+Churn Analysis (including involuntary/voluntary split)
+Current Confidence: 80%
+High confidence because:
+Recurly's purpose-built dunning system records decline reason codes more granularly than general-purpose payment platforms, enabling reliable voluntary-vs-involuntary churn classification
+Retry schedule state is explicitly tracked, providing a clear timeline of recovery attempts before final cancellation
+Confidence may be limited because:
+Customers who route dunning communication through external systems reduce the completeness of Recurly's native recovery picture
+Confidence improves with:
+Customer Success — adding engagement context to the financial recovery picture
+Collections Forecasting
+Current Confidence: 55%
+Confidence is limited because:
+Forecasting collections requires confirmed bank settlement data that Recurly's payment-system-level success status does not fully provide
+ERP cross-validation is needed to confirm AR aging consistency
+Confidence improves after:
+Banking integration — closing the gap between payment-attempt success and confirmed settlement, particularly valuable given Recurly's dunning specialization
+ERP integration for AR aging cross-validation
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Provides recognized-revenue ground truth.
+Revenue Validation, Invoice Analytics
+Revenue (recognized variant)
+Revenue Validation moves toward Ready
+CRM
+Confirms sales-recorded bookings against actual Recurly subscriptions.
+Bookings Validation
+Confirmed bookings attribution
+Bookings Validation moves toward Ready
+Banking
+Closes the loop between Recurly-recorded payment recovery success and confirmed bank settlement.
+Collections Forecasting, Collections Intelligence
+Confirmed bank settlement
+Collections Forecasting confidence increases significantly given Recurly's dunning specialization
+Table — Recurly recommended companion connectors.
+Connector Synergies
+Recurly + Banking
+Collections intelligence: combining Recurly's purpose-built dunning and decline-reason data with bank-level settlement visibility for the registry's most complete collections recovery picture
+Recurly + ERP
+Revenue validation and invoice-to-GL traceability, following the standard pattern established across this registry
+Recurly + CRM
+Bookings validation, following the standard pattern established across this registry
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Subscription (core fields)
+78%
+Reasonable confidence; lower than Stripe/Chargebee given fewer SMPL production implementations.
+ARR Movement (category)
+68%
+Reflects Validated maturity status.
+Dunning / decline-reason data
+82%
+A genuine connector strength — purpose-built tracking produces above-baseline confidence despite earlier overall maturity.
+Account (identity)
+75%
+Reasonable confidence; per-subscription Account creation pattern requires validation.
+Table — Recurly Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 28%
+SCBM Domain
+Coverage
+ARR / SaaS Metrics
+68%
+Billing
+72%
+Accounts Receivable
+35% — elevated relative to overall maturity given dunning-specific data strength
+Revenue (recognized variant)
+8%
+Customer
+42%
+Customer Health (signal only)
+8%
+Table — Recurly estimated SCBM coverage by domain.
+Connector Maturity
+Validated (Level 2) — SMPL has implemented this connector against at least one real production customer with core Tier 1 mapping rules confirmed correct. Tier 2 pattern library is in early accumulation.
+Authentication
+API key authentication. The Connector Engine requests read-only access to Accounts, Subscriptions, Invoices, and Transactions.
+APIs
+REST API (v3) — primary pattern
+Webhooks
+Supported for subscription and invoice lifecycle events, with particularly detailed dunning-state event coverage reflecting the platform's payment-recovery focus.
+Historical Backfill
+Supported via REST API with standard pagination.
+Incremental Synchronization
+Supported via updated_at timestamp filtering.
+Known Customizations
+Custom retry schedules tuned to customer-specific decline patterns
+External dunning workflow integration that may obscure native retry-state visibility
+Implementation Characteristics
+Medium typical complexity, elevated by the connector's earlier maturity stage relative to Stripe and Chargebee.
+Best Fit Customers
+Ideal Customer Profile
+Subscription businesses with meaningful card-decline exposure where payment recovery sophistication has material revenue impact
+Less Ideal Customer Profile
+Companies prioritizing the broadest ecosystem and integration breadth — Stripe's platform breadth exceeds Recurly's
+Implementation Risks
+Per-subscription Account creation pattern, when present, fragments canonical Customer Account identity and should be confirmed during Pre-POC Discovery.
+Given Validated maturity status, expect to encounter and document new patterns during early implementations.
+Implementation Decision Flow
+The following represents the business implementation workflow an implementation consultant or AI implementation agent follows when onboarding a Recurly connection.
+Customer uses Recurly
+  ↓
+Confirm Recurly is the authoritative source for subscriptions
+  ↓
+Account creation pattern: per-customer or per-subscription?
+  ├─ Per-subscription → Flag for customer identity consolidation strategy
+  └─ Per-customer → Continue
+  ↓
+Custom dunning retry schedule configured?
+  ├─ Yes → Document retry cadence for involuntary-churn timing accuracy
+  └─ No → Use Recurly default retry schedule
+  ↓
+External dunning communication system in use?
+  ├─ Yes → Flag reduced visibility into full recovery picture
+  └─ No → Continue (native dunning data fully representative)
+  ↓
+Usage-based add-on components present?
+  ├─ Yes → Confirm committed-minimum vs. overage ARR policy; record in CEP
+  └─ No → Continue
+  ↓
+Multiple active add-ons per subscription?
+  ├─ Yes → Determine aggregation strategy
+  └─ No → Continue
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+ARR Reporting
+MRR Reporting
+Churn Analysis
+Invoice Analytics
+Partial
+Subscription Waterfalls
+Bookings Validation
+Collections Forecasting
+Unavailable
+Pipeline Analytics
+Financial Statements
+Workforce Planning
+Connector Fingerprint
+Business Purpose
+Recurly serves as the operational billing system of record with a distinguishing strength in payment recovery — its dunning and decline-reason data produce above-baseline confidence for Churn Analysis and Collections capabilities specifically, despite the connector's earlier overall maturity stage.
+Typical Customer
+Subscription businesses with meaningful card-decline exposure, where sophisticated payment recovery has material revenue impact.
+Primary Strengths
+Purpose-built dunning and decline-reason tracking, the strongest in this registry for involuntary churn classification
+Reliable core Subscription and Invoice data
+Known Implementation Challenges
+Per-subscription Account creation pattern, when present, fragments customer identity
+Limited SMPL pattern library at current maturity level
+Implementation Characteristics
+Medium typical complexity, elevated by earlier connector maturity relative to Stripe and Chargebee.
+Ideal Companion Systems
+Banking is unusually valuable for this specific connector, closing the loop on Recurly's dunning specialization with confirmed settlement data. ERP and CRM follow the standard pattern. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Recurly occupies the operational billing system-of-record role with a distinctive specialization in payment recovery. Its contribution to Financial Intelligence is strongest in churn classification — distinguishing voluntary from involuntary churn with a precision few other Billing connectors in this registry can match. Within the SCBM, it populates Subscription, Invoice, Payment, and ARR Movement, with above-baseline confidence specifically for dunning-related fields.
+Immediately after connection, Recurly delivers reliable ARR Reporting and distinctively strong Churn Analysis. The additional value unlocked through Banking pairing is unusually significant for this connector given its payment-recovery focus; ERP and CRM pairing follow the standard pattern established across this registry.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+4. Maxio (Chargify + SaaSOptics)
+Maxio is the product of a 2022 merger between Chargify (subscription billing) and SaaSOptics (SaaS financial operations and revenue recognition), and as a result offers native revenue recognition functionality more comparable to an ERP-adjacent capability than any other connector in this registry except Zuora.
+Business Purpose
+Maxio serves the standard operational billing system-of-record role, with the distinguishing characteristic that its SaaSOptics heritage gives it native, purpose-built SaaS revenue recognition and metrics functionality that goes meaningfully beyond what Chargify's original billing-only product offered — narrowing the gap between Billing-contributed and ERP-confirmed revenue data more than most connectors in this registry.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_maxio_v1
+vendor_name
+Maxio, Inc. (formerly Chargify and SaaSOptics, merged 2022)
+vendor_type
+Billing / Subscription Management Platform with native Revenue Recognition
+vendor_description
+Maxio is a cloud-based subscription billing and SaaS financial operations platform combining Chargify's billing engine with SaaSOptics's purpose-built revenue recognition and SaaS metrics functionality.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Customer
+The billed entity
+Customer Account (Entity)
+Direct — High.
+Subscription
+An active recurring billing commitment
+Subscription (Entity)
+Direct — High.
+Invoice
+A billing document
+Invoice (Movement)
+Direct — High.
+Payment
+A payment attempt and outcome
+Payment (Movement)
+Direct — High.
+Component (Chargify-origin usage tracking)
+A metered usage component attached to a subscription
+Extension field pending Usage Record canonical object
+Direct — Medium.
+Revenue Recognition Schedule (SaaSOptics-origin)
+A native, purpose-built revenue recognition schedule
+Revenue Schedule (Movement) — Billing-contributed variant with unusually high native confidence
+Direct — High when active. Closest to ERP-grade revenue recognition of any non-ERP connector in this registry.
+SaaS Metrics (native MRR/ARR/churn calculations)
+Pre-computed SaaS metric values
+Cross-validation input only — SMPL computes its own canonical metrics rather than importing pre-computed vendor figures
+Reference — Medium. Useful for validation, not a canonical source.
+Table — Maxio primary business objects.
+Canonical Mapping
+Maxio's SaaSOptics-origin Revenue Recognition Schedule is the strongest native revenue recognition data of any connector in this registry apart from Zuora. The Connector Engine treats this as a high-confidence Revenue Schedule contribution — still subordinate to ERP-confirmed recognized revenue per canonical ownership principles, but requiring less aggressive discounting than the Stripe/Chargebee/Recurly equivalent.
+Transformation Guidance
+The Connector Engine treats Maxio as authoritative for Subscription state and ARR value, and as a high-confidence (though still non-canonical-owner) contributor to Revenue Schedule given its purpose-built revenue recognition heritage. Maxio's native pre-computed SaaS metrics (MRR, ARR, churn rate) are used only as a cross-validation reference against SMPL's independently computed canonical metrics — never imported directly as the canonical value, consistent with the SKA principle that metrics are computed by SMPL's Metric Registry, not sourced pre-computed from any connector.
+Configuration Variants
+Variant
+Frequency
+Impact
+Legacy Chargify-only configuration (Revenue Recognition not adopted)
+Occasional, more common in longer-tenured Chargify customers who have not migrated to the full Maxio platform
+Revenue Schedule contribution drops to Stripe/Chargebee-equivalent confidence when Revenue Recognition is not active.
+Component-based usage billing
+Common (~35%, reflecting Chargify's original strength in flexible component pricing)
+Requires CEP policy on committed-minimum vs. overage ARR inclusion, same as every usage-billing connector in this registry.
+Multi-entity consolidated revenue recognition
+Occasional, more common in larger Maxio customers using the full SaaSOptics-origin functionality
+Native multi-entity support exceeds most other Billing connectors in this registry — relevant for customers with complex corporate structures.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Single-product subscription billing with Revenue Recognition module active, monthly or annual billing.
+Common Variants
+Component-based usage pricing alongside a base subscription; multi-tier plans.
+Less Common Variants
+Multi-entity consolidated revenue recognition for customers with complex corporate structures.
+Rare / Complex Variants
+Legacy Chargify-only customers who have not adopted the merged platform's Revenue Recognition functionality, requiring the same lower-confidence treatment as billing-only connectors in this registry.
+Table — Maxio Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: all Maxio customers have Revenue Recognition active
+Legacy Chargify-only customers do not have this module — confirm activation status explicitly during Pre-POC Discovery rather than assuming based on vendor name alone.
+Native pre-computed SaaS metrics treated as canonical rather than reference-only
+Maxio's built-in MRR/ARR calculations should never be imported as the canonical SMPL metric value — SMPL computes its own metrics from canonical Subscription data, using Maxio's figures only for validation.
+Customer ownership ambiguity during Chargify-to-Maxio platform migration
+Customers who migrated from standalone Chargify may have residual data structure inconsistencies from the transition.
+Component-based usage represented inconsistently
+Same structural ARR classification ambiguity as every usage-billing connector in this registry.
+Table — Maxio Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+ARR Reporting
+Ready
+76%
+CRM, additional SMPL implementation experience
+84–89%
+MRR Reporting
+Ready
+76%
+CRM, additional SMPL implementation experience
+84–89%
+Revenue Waterfalls
+Partial
+60% (Rev Rec active) / 35% (inactive)
+ERP, additional SMPL implementation experience
+78–85%
+Deferred Revenue Validation
+Partial
+58% (Rev Rec active) / 30% (inactive)
+ERP (required for confirmation)
+78–85%
+Bookings Validation
+Partial
+40%
+CRM (required)
+76–82%
+Churn Analysis
+Ready
+72%
+Customer Success
+80–86%
+Usage Revenue Analysis
+Partial
+55%
+Product Analytics
+75–82%
+Table — Maxio capability progression. Revenue Waterfalls and Deferred Revenue Validation show unusually strong confidence relative to the connector's overall maturity level, reflecting the SaaSOptics-origin native revenue recognition strength.
+Confidence Drivers
+The following explains the architectural reasoning behind Maxio's confidence estimates.
+ARR Reporting
+Current Confidence: 76%
+High confidence because:
+Native Subscription object with stable core fields inherited from Chargify's billing engine
+Component-based pricing model provides explicit, structured usage and add-on tracking
+Confidence may be limited because:
+Fewer cumulative SMPL production implementations, reflecting Validated rather than Pilot Ready or Production Ready maturity
+Platform spans two merged products (Chargify and SaaSOptics), introducing some configuration variability not yet fully characterized in SMPL's pattern library
+Confidence improves with:
+CRM — bookings validation
+Additional SMPL implementation experience
+Customer-specific factors include:
+ARR policy defined in the CEP
+Revenue Recognition module activation status — must always be confirmed explicitly, never assumed from the Maxio brand name
+Revenue Waterfalls
+Current Confidence: 60% (Revenue Recognition active) / 35% (inactive)
+Confidence is higher than most non-ERP connectors in this registry because:
+Maxio's SaaSOptics-origin Revenue Recognition module is purpose-built for SaaS revenue recognition, more sophisticated than the billing-platform-native estimation used by Stripe, Chargebee, or Recurly
+Confidence is still limited because:
+ERP remains the canonical owner of recognized revenue regardless of module sophistication
+Customers on the legacy Chargify-only configuration without Revenue Recognition adoption receive confidence comparable to the registry's billing-only connectors
+Confidence improves after:
+ERP integration, which closes a narrower gap for Maxio than for most connectors in this registry given the native module's sophistication
+Confirmation of Revenue Recognition module activation status through Pre-POC Discovery
+Bookings Validation
+Current Confidence: 40%
+Confidence is limited because:
+Same structural limitation as every Billing connector in this registry — Maxio records billing execution, not sales attribution
+Confidence improves with:
+CRM — the required pairing for this capability
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Confirms Maxio's already-strong native Revenue Schedule contribution against GL-recognized revenue — a narrower gap to close than for most Billing connectors in this registry.
+Revenue Validation, Deferred Revenue Validation
+Revenue (recognized variant)
+Revenue Waterfalls and Deferred Revenue Validation move toward Ready faster than for most connectors in this registry
+CRM
+Confirms sales-recorded bookings against actual Maxio subscriptions.
+Bookings Validation
+Confirmed bookings attribution
+Bookings Validation moves toward Ready
+Product Analytics
+Cross-validates component-based usage billing against raw consumption.
+Usage Revenue Analysis
+Product Adoption signal
+Usage Revenue Analysis confidence increases
+Table — Maxio recommended companion connectors.
+Connector Synergies
+Maxio + ERP
+Revenue validation with an unusually narrow confidence gap to close, given Maxio's native SaaSOptics-origin revenue recognition functionality — the closest any non-Zuora Billing connector in this registry comes to ERP-grade revenue data on its own
+Deferred revenue reconciliation, similarly advantaged by the native module
+Maxio + CRM
+Bookings validation, following the standard pattern established across this registry
+Maxio + Product Analytics
+Usage-to-revenue analysis for component-based pricing models
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Subscription (core fields)
+76%
+Reasonable confidence; reflects Validated maturity status.
+Revenue Recognition Schedule (module active)
+68%
+Unusually strong relative to overall connector maturity, reflecting the SaaSOptics-origin purpose-built functionality.
+ARR Movement (category)
+65%
+Reflects Validated maturity status.
+Customer (identity)
+72%
+Reasonable confidence.
+Table — Maxio Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 32%
+SCBM Domain
+Coverage
+ARR / SaaS Metrics
+65%
+Billing
+68%
+Revenue (recognized variant)
+22% (Rev Rec active) / 8% (inactive) — highest non-Zuora Billing connector in this registry
+Accounts Receivable
+30%
+Customer
+40%
+Customer Health (signal only)
+8%
+Table — Maxio estimated SCBM coverage by domain.
+Connector Maturity
+Validated (Level 2) — SMPL has implemented this connector against at least one real production customer with core Tier 1 mapping rules confirmed correct.
+Authentication
+API key authentication. The Connector Engine requests read-only access to Customers, Subscriptions, Invoices, Payments, and Revenue Recognition Schedules.
+APIs
+REST API — primary pattern, reflecting the merged Chargify/SaaSOptics platform
+Webhooks
+Supported for subscription and invoice lifecycle events.
+Historical Backfill
+Supported via REST API with standard pagination.
+Incremental Synchronization
+Supported via updated timestamp filtering.
+Known Customizations
+Component-based usage pricing, reflecting Chargify's original flexible pricing model heritage
+Legacy Chargify-only configurations without Revenue Recognition module adoption
+Implementation Characteristics
+Medium typical complexity, elevated by the need to confirm Revenue Recognition module activation status explicitly and by the connector's earlier overall maturity stage.
+Best Fit Customers
+Ideal Customer Profile
+SaaS companies wanting purpose-built revenue recognition functionality alongside subscription billing, narrowing the gap to ERP-grade revenue data without requiring a separate FP&A or revenue recognition tool
+Less Ideal Customer Profile
+Companies on the legacy Chargify-only configuration without Revenue Recognition adoption — these customers receive billing-only confidence levels comparable to Stripe/Chargebee despite the platform's broader capability
+Implementation Risks
+Revenue Recognition module activation status must be confirmed explicitly — never assumed present based on the Maxio brand name alone, given the substantial number of legacy Chargify-only customers.
+Native pre-computed SaaS metrics must never be imported as canonical values — always reference-only, cross-validated against SMPL's independently computed figures.
+Implementation Decision Flow
+The following represents the business implementation workflow an implementation consultant or AI implementation agent follows when onboarding a Maxio connection.
+Customer uses Maxio
+  ↓
+Confirm Maxio is the authoritative source for subscriptions
+  ↓
+Revenue Recognition module active?
+  (never assume based on Maxio brand name — confirm explicitly)
+  ├─ Yes
+  │   ↓
+  │  Confirm recognition policy alignment with customer accounting practice
+  │   ↓
+  │  Record elevated Revenue Schedule contribution status in the CEP
+  │
+  └─ No → Continue (legacy Chargify-only configuration; Revenue Schedule
+            confidence capped at billing-only level)
+  ↓
+Component-based usage pricing present?
+  ├─ Yes → Confirm committed-minimum vs. overage ARR policy; record in CEP
+  └─ No → Continue
+  ↓
+Native pre-computed SaaS metrics present (MRR, ARR, churn rate)?
+  ↓
+Confirm these are used only as cross-validation reference,
+never imported as canonical values
+  ↓
+Multi-entity consolidated revenue recognition in use?
+  ├─ Yes → Determine cross-entity consolidation strategy
+  └─ No → Continue
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+Standalone Capability Summary
+Ready
+ARR Reporting
+MRR Reporting
+Churn Analysis
+Partial
+Revenue Waterfalls
+Deferred Revenue Validation
+Bookings Validation
+Usage Revenue Analysis
+Unavailable
+Pipeline Analytics
+Financial Statements
+Workforce Planning
+Connector Fingerprint
+Business Purpose
+Maxio serves as the operational billing system of record with a distinguishing strength in native revenue recognition, inherited from the SaaSOptics merger — narrowing the gap between Billing-contributed and ERP-confirmed revenue data more than most non-ERP connectors in this registry.
+Typical Customer
+SaaS companies wanting purpose-built revenue recognition alongside billing, often without a separate dedicated FP&A revenue recognition tool.
+Primary Strengths
+Native SaaSOptics-origin revenue recognition functionality, the strongest in this registry apart from Zuora
+Flexible component-based usage pricing, inherited from Chargify's original product strength
+Known Implementation Challenges
+Revenue Recognition module activation status must always be confirmed, never assumed
+Pre-computed native SaaS metrics must never be treated as canonical
+Implementation Characteristics
+Medium typical complexity, elevated by module-activation confirmation requirements and earlier connector maturity.
+Ideal Companion Systems
+ERP pairing closes an unusually narrow gap for this specific connector given its native revenue recognition strength. CRM follows the standard pattern. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Maxio occupies the operational billing system-of-record role with a distinctive capability extension into revenue recognition, inherited from its SaaSOptics origin. Its contribution to Financial Intelligence is unusually strong for a non-ERP connector specifically in the Revenue Waterfall and Deferred Revenue Validation capabilities. Within the SCBM, it populates Subscription, Invoice, Payment, ARR Movement, and — with above-baseline confidence — Revenue Schedule.
+Immediately after connection, Maxio delivers reliable ARR Reporting and Churn Analysis, with Revenue Waterfalls and Deferred Revenue Validation already meaningfully populated when the Revenue Recognition module is active — a head start most other Billing connectors in this registry do not offer standalone. The additional value unlocked through ERP pairing, while still required for full confirmation, closes a narrower gap for Maxio than for any other connector in this registry except Zuora.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+5. Zuora
+Zuora is the enterprise-tier billing platform in this registry, offering the most sophisticated native revenue recognition functionality (Zuora RevPro) of any Billing connector SMPL supports — narrowing the ERP confirmation gap further than any other connector in this registry, at the cost of the highest implementation complexity in the category.
+Business Purpose
+Zuora serves the standard operational billing system-of-record role for SMPL's largest, most complex Billing customers, with a native revenue recognition module (RevPro) that is purpose-built for ASC 606/IFRS 15 compliance at a sophistication level comparable to dedicated revenue recognition software rather than a billing-platform add-on.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_zuora_v1
+vendor_name
+Zuora, Inc.
+vendor_type
+Billing / Subscription Management Platform — Enterprise Tier, with native Revenue Recognition
+vendor_description
+Zuora is an enterprise-grade subscription billing and revenue management platform offering sophisticated billing, payments, and native ASC 606/IFRS 15-compliant revenue recognition (Zuora RevPro) for complex, high-volume subscription businesses.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth
+current_specification_version
+0.1.0
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Account
+The billed entity
+Customer Account (Entity)
+Direct — High.
+Subscription
+An active recurring billing commitment, with Rate Plan Charges defining pricing
+Subscription (Entity)
+Direct — High for core fields; Derived — High for ARR from Rate Plan Charges.
+Invoice
+A billing document
+Invoice (Movement)
+Direct — High.
+Payment
+A payment attempt and outcome
+Payment (Movement)
+Direct — High.
+Usage
+A captured consumption event for metered Rate Plan Charges
+Extension field pending Usage Record canonical object
+Direct — Medium.
+Revenue Recognition Schedule (RevPro)
+A native, enterprise-grade ASC 606/IFRS 15 revenue recognition schedule
+Revenue Schedule (Movement) — Billing-contributed variant with the highest native confidence of any connector in this registry
+Direct — High when active. Closest non-ERP connector to ERP-grade revenue confirmation in this registry.
+Amendment
+A formal record of a mid-term subscription change
+ARR Movement (Movement) — primary source for Expansion/Contraction
+Direct — High. Zuora's Amendment object is more formally structured than the equivalent change-tracking in most other connectors in this registry.
+Table — Zuora primary business objects.
+Canonical Mapping
+ARR is derived by summing all active Rate Plan Charges across a Subscription's Rate Plans, annualized per billing frequency. Zuora's Amendment object provides an unusually well-structured source for ARR Movement classification — Amendment.type values (NewProduct, RemoveProduct, UpdateProduct, Renewal, Cancellation) map with high confidence to the canonical movement_category and movement_reason taxonomy established in the SCBM, more directly than the inferred-from-state-change patterns required by most other Billing connectors.
+Transformation Guidance
+The Connector Engine treats Zuora as authoritative for Subscription state and ARR value, and as the highest-confidence non-ERP contributor to Revenue Schedule in this registry given RevPro's enterprise-grade ASC 606/IFRS 15 functionality. Even at this confidence level, RevPro remains subordinate to ERP-confirmed recognized revenue per the canonical ownership principle — Zuora narrows the gap further than any other Billing connector, but does not eliminate the requirement for ERP cross-validation.
+Configuration Variants
+Variant
+Frequency
+Impact
+RevPro (Revenue Recognition) module active
+Common among Zuora's enterprise customer base (~55%)
+Substantially improves Revenue Schedule confidence; Zuora customers without RevPro receive billing-only confidence comparable to other connectors in this registry.
+Complex Rate Plan structures with multiple charge types per subscription
+Very common (~70%, reflecting Zuora's enterprise positioning and flexible pricing model)
+Requires complete Rate Plan Charge enumeration for accurate ARR — a common implementation oversight if only the primary charge is mapped.
+Multi-entity billing with Zuora's native entity management
+Occasional (~25%, more common in the largest Zuora deployments)
+Native multi-entity support is more sophisticated than most other Billing connectors in this registry, relevant for complex global customers.
+Usage-based Rate Plan Charges
+Common (~40%, reflecting Zuora's strength in complex pricing models)
+Same structural ARR classification ambiguity as every usage-billing connector in this registry — always a CEP policy decision.
+Common Customer Variants
+Variant Tier
+Description
+Typical Implementation
+Multi-charge-type Rate Plans with RevPro active, reflecting Zuora's typical enterprise customer profile — there is no "simple" Zuora implementation in the way there is for Stripe.
+Common Variants
+Complex usage-based pricing combined with fixed recurring charges; multiple Rate Plans per subscription representing bundled products.
+Less Common Variants
+Multi-entity billing for global enterprise customers with Zuora's native entity management.
+Rare / Complex Variants
+Highly customized Zuora Workflow automation layered on top of standard objects, potentially obscuring data visible to standard API extraction; custom Zuora Billing Document configurations diverging significantly from standard Invoice structure.
+Table — Zuora Common Customer Variants.
+Common Failure Modes
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: RevPro is always active given Zuora's enterprise positioning
+Not every Zuora customer has adopted RevPro — confirm explicitly during Pre-POC Discovery rather than assuming based on platform tier.
+Incomplete ARR derivation from partial Rate Plan Charge mapping
+Zuora subscriptions frequently have multiple charge types (recurring, usage, one-time) within a single Rate Plan — mapping only the primary recurring charge understates ARR.
+Customer ownership ambiguity in complex Account hierarchies
+Zuora supports parent/child Account relationships for enterprise customers with subsidiary billing structures — failing to map this hierarchy can fragment or incorrectly consolidate canonical Customer Account records.
+Missing historical activity from custom Zuora Workflow automation
+Business logic implemented in Zuora Workflow (the platform's automation layer) may produce derived states not fully visible via standard object queries.
+ARR represented inconsistently across usage-based Rate Plan Charges
+Same structural ambiguity as every usage-billing connector in this registry, compounded by Zuora's greater pricing model complexity.
+Table — Zuora Common Failure Modes.
+Capability Unlocks — Capability Progression
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+ARR Reporting
+Partial
+70%
+CRM, additional SMPL implementation experience
+82–88%
+MRR Reporting
+Partial
+70%
+CRM, additional SMPL implementation experience
+82–88%
+Revenue Waterfalls
+Partial
+65% (RevPro active) / 30% (inactive)
+ERP, additional SMPL implementation experience
+80–87%
+Deferred Revenue Validation
+Partial
+65% (RevPro active) / 28% (inactive)
+ERP (required for confirmation)
+80–87%
+Bookings Validation
+Partial
+38%
+CRM (required)
+75–82%
+Subscription Waterfalls
+Partial
+60%
+CRM, additional SMPL implementation experience
+78–85%
+Usage Revenue Analysis
+Partial
+55%
+Product Analytics
+75–82%
+Table — Zuora capability progression. Revenue Waterfalls and Deferred Revenue Validation show the strongest relative confidence of any non-ERP connector in this registry when RevPro is active, reflecting enterprise-grade native revenue recognition — offset by lower-than-Stripe baseline confidence elsewhere given Zuora's earlier SMPL implementation maturity and higher inherent configuration complexity.
+Confidence Drivers
+The following explains the architectural reasoning behind Zuora's confidence estimates — a connector where confidence is shaped as much by inherent platform complexity as by SMPL implementation maturity.
+ARR Reporting
+Current Confidence: 70%
+Confidence is moderate (not yet high) because:
+ARR derivation requires complete Rate Plan Charge enumeration across potentially many charge types per subscription — more structurally complex than the single-plan or simple-multi-item models used by other connectors in this registry
+Fewer cumulative SMPL production implementations than any other connector in this registry except Maxio and Recurly
+Confidence is supported by:
+Zuora's formally structured Subscription and Rate Plan objects, which are well-documented and consistent once fully enumerated
+Confidence improves with:
+CRM — bookings validation, particularly valuable given Zuora's typically complex multi-product enterprise deals
+Additional SMPL implementation experience — the primary path to closing the gap with this registry's more mature connectors
+Customer-specific factors include:
+ARR policy defined in the CEP
+Rate Plan structural complexity — number of charge types per subscription
+Multi-entity billing configuration
+Revenue Waterfalls
+Current Confidence: 65% (RevPro active) / 30% (inactive)
+Confidence is the highest of any non-ERP connector in this registry when RevPro is active because:
+Zuora RevPro is an enterprise-grade, purpose-built ASC 606/IFRS 15 revenue recognition engine — closer in sophistication to dedicated revenue recognition software than to a billing-platform add-on
+Confidence is still Partial, not Ready, because:
+ERP remains the canonical owner of recognized revenue regardless of RevPro's sophistication — this is a structural ownership boundary, not a data quality limitation
+RevPro adoption is not universal even among Zuora's enterprise customer base — activation must always be confirmed
+Confidence improves after:
+ERP integration — closing the narrowest gap of any connector in this registry, though still required for full confirmation
+Confirmation of RevPro activation status through Pre-POC Discovery
+Bookings Validation
+Current Confidence: 38%
+Confidence is limited because:
+Same structural limitation as every Billing connector in this registry
+Zuora's enterprise customer base typically has more complex, multi-product, negotiated deals, increasing the risk of sales-to-billing provisioning gaps relative to simpler subscription models
+Confidence improves with:
+CRM — the required pairing, and unusually consequential for Zuora given deal complexity
+Recommended Companion Connectors
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+ERP
+Confirms Zuora RevPro's already-sophisticated native revenue recognition against GL-recognized revenue — the narrowest gap of any Billing connector in this registry, though still required for full confirmation.
+Revenue Validation, Deferred Revenue Validation
+Revenue (recognized variant)
+Revenue Waterfalls and Deferred Revenue Validation move toward Ready with the smallest required confidence gain of any connector in this registry
+CRM
+Confirms sales-recorded bookings against actual Zuora subscriptions — particularly valuable given Zuora's enterprise customer base, where complex multi-product deals increase the risk of sales-to-billing gaps.
+Bookings Validation
+Confirmed bookings attribution
+Bookings Validation moves toward Ready
+Product Analytics
+Cross-validates usage-based Rate Plan Charges against raw consumption for complex pricing models.
+Usage Revenue Analysis
+Product Adoption signal
+Usage Revenue Analysis confidence increases
+Table — Zuora recommended companion connectors.
+Connector Synergies
+Zuora + ERP
+Revenue validation with the narrowest confidence gap of any Billing connector in this registry when RevPro is active — Zuora customers are the closest to having ERP-grade revenue confirmation available from the Billing connector alone
+Deferred revenue reconciliation, similarly advantaged by RevPro's enterprise-grade functionality
+Zuora + CRM
+Bookings validation, particularly valuable for Zuora's enterprise customer base where complex multi-product deals increase sales-to-billing gap risk
+Zuora + Product Analytics
+Usage-to-revenue analysis for Zuora's typically more complex usage-based pricing models
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Subscription (core fields)
+72%
+Reasonable confidence; reflects Validated maturity status and Zuora's inherent configuration complexity.
+ARR value (from Rate Plan Charges)
+68%
+Requires complete Rate Plan Charge enumeration; multi-charge-type subscriptions introduce more derivation complexity than simpler connectors.
+Revenue Recognition Schedule (RevPro active)
+70%
+The strongest non-ERP Revenue Schedule confidence in this registry, reflecting RevPro's enterprise-grade ASC 606/IFRS 15 functionality.
+Amendment (ARR Movement source)
+75%
+Zuora's formally structured Amendment object produces above-baseline confidence for movement classification specifically.
+Account (identity, including hierarchy)
+68%
+Parent/child Account hierarchy requires explicit mapping; reasonable confidence once mapped.
+Table — Zuora Data Confidence Profile.
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 34%
+SCBM Domain
+Coverage
+ARR / SaaS Metrics
+62%
+Billing
+70%
+Revenue (recognized variant)
+26% (RevPro active) / 8% (inactive) — highest of any connector in this registry
+Accounts Receivable
+32%
+Customer
+38%
+Customer Health (signal only)
+7%
+Table — Zuora estimated SCBM coverage by domain. Revenue coverage is the highest of any Billing connector in this registry when RevPro is active, reflecting enterprise-grade native revenue recognition.
+Connector Maturity
+Validated (Level 2) — SMPL has implemented this connector against at least one real production customer with core Tier 1 mapping rules confirmed correct. Tier 2 pattern library is in early accumulation, reflecting both fewer cumulative implementations and Zuora's higher inherent configuration complexity relative to the registry's more mature connectors.
+Authentication
+OAuth 2.0 (client credentials) is the standard authentication method. The Connector Engine requests read-only access to Accounts, Subscriptions, Invoices, Payments, Amendments, and Revenue Recognition data where RevPro is active.
+APIs
+REST API — primary pattern for standard object access
+AQuA (Aggregate Query API) — Zuora's bulk data export mechanism, recommended for large historical backfills
+Zuora Data Query — SQL-based query interface for complex, large-scale extraction
+Webhooks
+Supported via Zuora's Notifications framework for core subscription and invoice lifecycle events, though configuration is more involved than the registry's simpler connectors and requires explicit setup rather than being available by default.
+Historical Backfill
+Supported via AQuA or Data Query for large-volume historical extraction — recommended over the standard REST API for Zuora's typically larger enterprise data volumes.
+Incremental Synchronization
+Supported via UpdatedDate filtering on standard objects, supplemented by Notifications for near-real-time updates where configured.
+Known Customizations
+Complex Rate Plan structures with multiple charge types per subscription, requiring complete enumeration for accurate ARR
+Zuora Workflow automation that may produce derived states not fully visible via standard object queries
+Custom Billing Document configurations diverging from standard Invoice structure
+Implementation Characteristics
+High typical complexity — the highest in this registry, reflecting Zuora's enterprise positioning, Rate Plan structural complexity, and the connector's earlier SMPL implementation maturity. Implementation duration is generally the longest of any Billing connector in this registry.
+Best Fit Customers
+Ideal Customer Profile
+Large, enterprise-tier SaaS or subscription businesses with complex, multi-product pricing models requiring sophisticated native revenue recognition
+Companies with existing RevPro adoption, where the ERP confirmation gap is narrower than for any other Billing connector in this registry
+Less Ideal Customer Profile
+Early-stage or simpler-pricing-model companies — Zuora's implementation complexity and platform cost generally exceed the needs of SMPL's smaller customer segment
+Companies without RevPro adoption — these customers receive billing-only confidence levels without the connector's primary differentiating strength
+Implementation Risks
+RevPro activation status must always be confirmed explicitly — never assumed from Zuora's enterprise platform tier alone.
+Complete Rate Plan Charge enumeration is required for accurate ARR — partial mapping (primary charge only) is the most common Zuora-specific implementation error.
+Given Validated maturity status combined with the platform's inherent complexity, expect to encounter and document new patterns during early implementations more frequently than with the registry's simpler connectors.
+Implementation Decision Flow
+The following represents the business implementation workflow an implementation consultant or AI implementation agent follows when onboarding a Zuora connection — the most involved decision flow in this registry, reflecting Zuora's genuinely higher configuration complexity.
+Customer uses Zuora
+  ↓
+Confirm Zuora is the authoritative source for subscriptions
+  ↓
+RevPro (Revenue Recognition) module active?
+  (never assume from enterprise platform tier alone — confirm explicitly)
+  ├─ Yes
+  │   ↓
+  │  Confirm recognition policy alignment with customer accounting practice
+  │   ↓
+  │  Record elevated Revenue Schedule contribution status in the CEP
+  │
+  └─ No → Continue (Revenue Schedule confidence capped at billing-only level)
+  ↓
+Enumerate all Rate Plans and Rate Plan Charges per subscription
+  (complete enumeration required — partial mapping is the most common
+   Zuora-specific implementation error)
+  ↓
+Multiple charge types present (recurring + usage + one-time)?
+  ├─ Yes → Confirm ARR derivation includes all recurring charge types
+  └─ No → Continue
+  ↓
+Usage-based Rate Plan Charges present?
+  ├─ Yes → Confirm committed-minimum vs. overage ARR policy; record in CEP
+  └─ No → Continue
+  ↓
+Parent/child Account hierarchy in use?
+  ├─ Yes → Map hierarchy explicitly to avoid Customer Account fragmentation
+  │         or incorrect consolidation
+  └─ No → Continue
+  ↓
+Zuora Workflow automation in use?
+  ├─ Yes → Assess whether business logic produces derived states not
+  │         visible via standard API queries
+  └─ No → Continue
+  ↓
+Multi-entity billing configured?
+  ├─ Yes → Determine cross-entity consolidation strategy
+  └─ No → Continue
+  ↓
+Canonical mapping completed
+  ↓
+Capability Assessment Layer evaluates readiness
+  ↓
+Module readiness determined
+  (expect Partial status across most capabilities standalone, reflecting
+   Validated maturity combined with inherent platform complexity)
+Standalone Capability Summary
+Ready
+(None — Zuora's combination of Validated maturity and configuration complexity means no capability reaches Ready status standalone in this version of the registry)
+Partial
+ARR Reporting
+MRR Reporting
+Revenue Waterfalls
+Deferred Revenue Validation
+Bookings Validation
+Subscription Waterfalls
+Usage Revenue Analysis
+Unavailable
+Pipeline Analytics
+Financial Statements
+Workforce Planning
+Connector Fingerprint
+Business Purpose
+Zuora serves as the operational billing system of record for SMPL's largest, most complex Billing customers, distinguished by RevPro's enterprise-grade native revenue recognition — the closest any non-ERP connector in this registry comes to ERP-grade revenue confirmation.
+Typical Customer
+Large, enterprise-tier subscription businesses with complex, multi-product pricing models, frequently already using or evaluating native revenue recognition functionality.
+Primary Strengths
+RevPro native revenue recognition, the strongest in this registry, narrowing the ERP confirmation gap further than any other connector
+Formally structured Amendment object producing above-baseline confidence for ARR Movement classification
+Sophisticated native multi-entity billing support for complex global customers
+Known Implementation Challenges
+RevPro activation status must always be confirmed, never assumed from platform tier
+Complex Rate Plan structures require complete charge enumeration for accurate ARR
+Highest implementation complexity in this registry, compounded by earlier SMPL connector maturity
+Implementation Characteristics
+High typical complexity — the highest in this registry. Implementation duration is generally the longest of any Billing connector.
+Ideal Companion Systems
+ERP pairing closes the narrowest gap of any connector in this registry when RevPro is active, though it remains required for full confirmation. CRM is particularly valuable given Zuora's enterprise customer base and complex deal structures. See Recommended Companion Connectors above.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Zuora occupies the operational billing system-of-record role for SMPL's largest and most complex Billing customers, with a distinctive extension into enterprise-grade revenue recognition via RevPro. Its contribution to Financial Intelligence is the strongest non-ERP Revenue Schedule confidence in this registry — Zuora customers with RevPro active come closer to having confirmed revenue data available from Billing alone than any other connector's customer base. Within the SCBM, it populates Subscription, Invoice, Payment, ARR Movement, and Revenue Schedule, with its formally structured Amendment object providing unusually reliable ARR Movement classification.
+Immediately after connection, Zuora's capabilities are appropriately positioned as Partial across the board — an honest reflection of both the connector's earlier SMPL implementation maturity and Zuora's genuinely higher configuration complexity relative to the rest of this registry, not a reflection of the platform's underlying sophistication. The additional value unlocked through ERP pairing is the most consequential of any connector in this registry: for RevPro-active Zuora customers, ERP pairing completes a Financial Intelligence picture that started from an unusually strong Billing-side foundation.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+Final Architecture Review — Billing Registry v0.2
+This review evaluates the Billing Connector Knowledge Registry following the addition of Confidence Drivers and Implementation Decision Flow, and determines whether the registry is ready to be frozen as Version 1.0. Per the build brief, only changes that would improve every future Connector Knowledge Registry — not Billing specifically — are recommended below.
+Dimension
+Score
+Assessment
+CKR Standard Compliance
+9 / 10
+All 22 standard sections remain unmodified in substance, ordering, and terminology. The two v0.2 additions were placed at clearly defined insertion points (after Capability Progression; before Standalone Capability Summary) without disturbing any frozen section. No architectural concept was added, removed, or reorganized, consistent with the build brief's explicit constraint.
+SCBM Alignment
+9 / 10
+Confidence Drivers consistently reinforces canonical ownership boundaries already established in the registry — every Deferred Revenue Validation and Revenue Waterfalls driver explanation restates that ERP, not Billing, owns recognized revenue, and every Bookings Validation driver restates that CRM, not Billing, owns sales attribution. The new sections deepen explanation of existing SCBM principles rather than introducing new ones.
+AI Implementation Readiness
+9 / 10
+Implementation Decision Flow is the most direct contribution to AI implementation readiness in this registry to date — a structured, business-oriented decision tree is precisely the format an implementation agent can execute against programmatically, more directly actionable than narrative Implementation Risk descriptions alone. One point withheld: this remains unvalidated against an actual automated POC execution, the same gap noted in every prior version of every registry under this standard.
+Human Implementation Utility
+9 / 10
+Confidence Drivers directly answers the question implementation consultants most often ask when reviewing a confidence figure — "why is it that number, and what would change it?" — with concrete, connector-specific reasoning rather than an unexplained percentage. Implementation Decision Flow gives consultants a checklist-equivalent structure without needing to read full narrative prose to reconstruct the same logic.
+Enterprise Readiness
+9 / 10
+The explainability that Confidence Drivers provides is itself an enterprise trust property — a customer's technical buyer or CFO evaluating SMPL can now see not just a confidence percentage but the specific reasoning behind it, consistent with the SKA's broader explainability and auditability principles.
+Customer Onboarding Utility
+8 / 10
+Implementation Decision Flow's connector-specific differentiation is meaningful — Zuora's flow is materially longer and more involved than Stripe's, correctly reflecting genuine implementation complexity differences rather than presenting a one-size-fits-all checklist.
+Sales Engineering Utility
+8 / 10
+Confidence Drivers' "customer-specific factors" subsections give Sales Engineering specific discovery questions to ask during a sales cycle (e.g., "is usage billing active, and what is your committed-minimum policy?") rather than generic platform capability claims.
+Long-Term Maintainability
+9 / 10
+Both new sections follow an identical structure across all five connectors and were successfully applied to connectors spanning Production Ready through Validated maturity and the full complexity range from Stripe to Zuora — confirming the pattern generalizes within the Billing category and, per the recommendation below, across categories.
+Table R.1 — Billing Registry v0.2 Final Architecture Review. Aggregate score: 70 / 80 (88%), consistent with the final scores achieved by the ERP and CRM registries at their respective freeze points.
+Recommended Standard-Level Changes
+Per the build brief's instruction, only changes that improve every future Connector Knowledge Registry are recommended here — no Billing-specific enhancements are proposed.
+Confidence Drivers should be formally adopted as a required section in the permanent 22-section CKR standard, positioned immediately following Capability Progression. Every registry built under the standard computes confidence estimates; every registry would benefit from explaining them with the same rigor this section now provides for Billing. This is the more architecturally significant of the two v0.2 additions — it directly serves the SKA's explainability and auditability principles, not merely Billing's specific needs.
+Implementation Decision Flow should be formally adopted as a required section in the permanent CKR standard, positioned after Implementation Risks and before Standalone Capability Summary. The business-oriented decision tree format is category-agnostic by construction — an ERP connector's flow would resolve Chart of Accounts and multi-entity questions, a CRM connector's flow would resolve stage-taxonomy and pipeline questions, in the same structural pattern demonstrated here for Billing's usage-policy and Rate Plan questions.
+Both recommendations carry forward a pattern already established once before: the CRM Registry's v0.4 review recommended that Cross-Domain Relationships (introduced in this Billing Registry's v0.1) be retrofitted into the standard. That recommendation, combined with these two, means three sections beyond the original 22 are now candidates for permanent standard adoption: Cross-Domain Relationships, Confidence Drivers, and Implementation Decision Flow. A single consolidated standard-update pass — rather than three separate retrofits — is the efficient way to action all three before the next registry begins.
+Items Explicitly Not Proposed as Standard Changes
+The specific number of capabilities detailed in each connector's Confidence Drivers section (four to five representative capabilities per connector in this registry, rather than all twenty from the Capability Progression table) is a content-depth choice, not a structural requirement — future registries should select representative capabilities spanning their own category's confidence range, not mechanically replicate Billing's specific count.
+Zuora's longer, more granular Implementation Decision Flow relative to Stripe's is a Zuora-specific characteristic correctly reflecting genuine complexity differences — not a standard-level requirement that every connector's flow reach a minimum length.
+Final Determination
+No further architectural improvements are identified. The Billing Connector Knowledge Registry is ready to be frozen as Version 1.0.
+This is the third registry to reach freeze-ready status under the CKR Standard, following the ERP Registry (v1.0) and the CRM Registry (v1.0). Its v0.2 refinement followed the same pattern as the CRM Registry's own final iteration: targeted, well-scoped additions that strengthen explainability and implementation execution without touching any frozen architectural element, followed by a review that recommends standard-level adoption rather than treating the additions as Billing-specific improvements.
+Confidence Drivers and Implementation Decision Flow, together with Cross-Domain Relationships (carried forward from this registry's v0.1 and already recommended for standard adoption by the CRM Registry's v0.4 review), now represent three consistent, well-tested candidates for permanent standard expansion. The recommended next step is a single consolidated CKR Standard update — formally elevating these three sections to the permanent 22-section (becoming 25-section) standard — performed once, before the next connector category registry begins, rather than as a repeated per-registry retrofit pattern.
+The Billing Connector Knowledge Registry, as it stands at the conclusion of this review, is frozen as Version 1.0.

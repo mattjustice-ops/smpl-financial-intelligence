@@ -1,0 +1,1376 @@
+{
+  "Q2 vs Budget": {
+    "dims": [
+      27,
+      9
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 Q2 2026 Variance Analysis \u2014 Actuals vs Budget",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          "Q2 2026 (Apr\u2013Jun) and YTD (Jan\u2013Jun) \u00b7 Prepared by Finance \u00b7 ",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "Line Item",
+          "Q2 Actual",
+          "Q2 Budget",
+          "Q2 Var $",
+          "Q2 Var %",
+          "YTD Actual",
+          "YTD Budget",
+          "YTD Var $",
+          "YTD Var %"
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "INCOME STATEMENT",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "Total Revenue",
+          "21.60089083",
+          "22.1025",
+          "-0.5016091700000018",
+          "-2.3%",
+          "41.71254",
+          "41.4225",
+          "0.29004",
+          "+0.7%"
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "Gross Profit",
+          "17.07252141",
+          "15.6156",
+          "1.45692141",
+          "+9.3%",
+          "32.88069818",
+          "29.3328",
+          "3.54789818",
+          "+12.1%"
+        ]
+      }
+    ],
+    "commentary_cols": []
+  },
+  "ARR Waterfall": {
+    "dims": [
+      20,
+      36
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 ARR / MRR Waterfall \u00b7 Q2 2026 Close \u2014 June Actuals",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          null,
+          "\u25c0  ACTUALS  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  FORECAST (Jul\u2013Dec)  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  ACTUAL SUBTOTALS  \u25b6",
+          null,
+          null,
+          null,
+          "\u25c0  BUDGET SUBTOTALS  \u25b6",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          null,
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+          "Q1\nActual",
+          "Q2\nActual",
+          "H1 Act\n+Jun FC",
+          "FY Act\n+FC",
+          "Q1\nBudget",
+          "Q2\nBudget",
+          "H1\nBudget"
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "  ARR MOVEMENT BRIDGE ($M)",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Beginning ARR",
+          "75",
+          "76.31",
+          "77.81",
+          "79.5",
+          "81.39",
+          "83.45",
+          "85.530473",
+          "87.716179",
+          "89.80240599999999",
+          "91.74254799999999",
+          "93.72290699999998",
+          "95.59781899999997",
+          "75",
+          "79.5",
+          "75",
+          "86.1",
+          "75",
+          "79.5",
+          "75"
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "+ New Business",
+          "1.2",
+          "1.35",
+          "1.5",
+          "1.65",
+          "1.8",
+          "1.842789",
+          "1.866715",
+          "1.750478",
+          "1.76511",
+          "1.678393",
+          "1.652682",
+          "1.745964",
+          "4.05",
+          "5.37",
+          "9.42",
+          "10.87",
+          "4.05",
+          "3.45",
+          "7.5"
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "+ Expansion",
+          "0.65",
+          "0.72",
+          "0.78",
+          "0.85",
+          "0.91",
+          "0.940818",
+          "0.995197",
+          "1.027047",
+          "0.922213",
+          "1.058122",
+          "0.982232",
+          "1.034765",
+          "2.15",
+          "2.74",
+          "4.89",
+          "5.89",
+          "2.15",
+          "1.76",
+          "3.91"
+        ]
+      }
+    ],
+    "commentary_cols": []
+  },
+  "Income Statement": {
+    "dims": [
+      25,
+      36
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 Income Statement \u00b7 Jan\u2013Dec 2026",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          null,
+          "\u25c0  ACTUALS  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  FORECAST (Jul\u2013Dec)  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  ACTUAL SUBTOTALS  \u25b6",
+          null,
+          null,
+          null,
+          "\u25c0  BUDGET SUBTOTALS  \u25b6",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          null,
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+          "Q1\nActual",
+          "Q2\nActual",
+          "H1 Act\n+Jun FC",
+          "FY Act\n+FC",
+          "Q1\nBudget",
+          "Q2\nBudget",
+          "H1\nBudget"
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "  REVENUE",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Total Revenue",
+          "6.59",
+          "6.71",
+          "6.85",
+          "7.01",
+          "7.18",
+          "7.4118",
+          "7.36",
+          "7.54",
+          "7.73",
+          "7.9",
+          "8.08",
+          "8.24",
+          "20.15",
+          "14.19",
+          "34.34",
+          "89.6",
+          "20.14",
+          "21.52",
+          "41.66"
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "  Subscription Rev",
+          "6.29",
+          "6.41",
+          "6.54",
+          "6.69",
+          "6.85",
+          "7.1694",
+          "7.0288",
+          "7.200699999999999",
+          "7.38215",
+          "7.5445",
+          "7.7164",
+          "7.8692",
+          "19.24",
+          "13.54",
+          "32.78",
+          "85.55330000000001",
+          "19.2337",
+          "20.5516",
+          "39.7853"
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "  Services Rev",
+          "0.3",
+          "0.3",
+          "0.31",
+          "0.32",
+          "0.33",
+          "0.2424",
+          "0.3312",
+          "0.3393",
+          "0.34785",
+          "0.3555",
+          "0.3636",
+          "0.3708",
+          "0.9099999999999999",
+          "0.65",
+          "1.56",
+          "4.0467",
+          "0.9062999999999999",
+          "0.9683999999999999",
+          "1.8747"
+        ]
+      }
+    ],
+    "commentary_cols": []
+  },
+  "Cash Forecast": {
+    "dims": [
+      27,
+      36
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 Cash Flow Bridge \u00b7 Jan\u2013Dec 2026",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          null,
+          "\u25c0  ACTUALS  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  FORECAST (Jul\u2013Dec)  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  ACTUAL SUBTOTALS  \u25b6",
+          null,
+          null,
+          null,
+          "\u25c0  BUDGET SUBTOTALS  \u25b6",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          null,
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+          "Q1\nActual",
+          "Q2\nActual",
+          "H1 Act\n+Jun FC",
+          "FY Act\n+FC",
+          "Q1\nBudget",
+          "Q2\nBudget",
+          "H1\nBudget"
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "  BEGINNING CASH",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Beginning Cash",
+          "46.1",
+          "48.71",
+          "51.01",
+          "58.09",
+          "62.57",
+          "66.037",
+          "70.61",
+          "69.76",
+          "69.1",
+          "68.6",
+          "68.28",
+          "68.14",
+          "46.1",
+          "58.09",
+          "46.1",
+          "46.1",
+          "37.95",
+          "49.62",
+          "37.95"
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "  CASH INFLOWS",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    ],
+    "commentary_cols": []
+  },
+  "Cash Flow Statement": {
+    "dims": [
+      28,
+      36
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 Cash Flow Statement (GAAP Indirect Method) \u00b7 Jan\u2013Dec ",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          null,
+          "\u25c0  ACTUALS  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  FORECAST (Jul\u2013Dec)  \u25b6",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "\u25c0  ACTUAL SUBTOTALS  \u25b6",
+          null,
+          null,
+          null,
+          "\u25c0  BUDGET SUBTOTALS  \u25b6",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          null,
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+          "Q1\nActual",
+          "Q2\nActual",
+          "H1 Act\n+Jun FC",
+          "FY Act\n+FC",
+          "Q1\nBudget",
+          "Q2\nBudget",
+          "H1\nBudget"
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "  OPERATING ACTIVITIES",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Net Income / (Loss)",
+          "-0.365",
+          "-0.368",
+          "-0.381",
+          "-0.385",
+          "-0.399",
+          "-1.424",
+          "-0.404",
+          "-0.419",
+          "-0.423",
+          "-0.437",
+          "-0.442",
+          "-0.456",
+          "-1.114",
+          "-0.784",
+          "-1.898",
+          "-4.94",
+          "-1.105",
+          "-1.178",
+          "-2.283"
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "Add: Depreciation & Amort",
+          "0.165",
+          "0.168",
+          "0.171",
+          "0.175",
+          "0.179",
+          "0.092",
+          "0.184",
+          "0.189",
+          "0.193",
+          "0.197",
+          "0.202",
+          "0.206",
+          "0.504",
+          "0.354",
+          "0.858",
+          "2.24",
+          "0.495",
+          "0.528",
+          "1.023"
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "Change in AR / Collections vs Revenue",
+          "2.68",
+          "1.96",
+          "6.74",
+          "3.81",
+          "2.470000000000001",
+          "-0.17",
+          "-1.15",
+          "-1.06",
+          "-0.8900000000000006",
+          "-0.6900000000000004",
+          "-0.4900000000000002",
+          "-0.2700000000000005",
+          "11.38",
+          "6.280000000000001",
+          "17.66",
+          "13.06",
+          "11.39",
+          "7.860000000000001",
+          "19.25"
+        ]
+      }
+    ],
+    "commentary_cols": []
+  },
+  "GTM Review": {
+    "dims": [
+      12,
+      8
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "  ClarityFP \u00b7 GTM & Marketing Channel Efficiency \u00b7 YTD 2026",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          "Channel",
+          "Mktg Spend ($M)",
+          "Pipeline Created ($M)",
+          "Closed Won ($M)",
+          "Pipeline / $1 Spend",
+          "Efficiency Rank",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          "Organic Search",
+          "0.08",
+          "1.91",
+          "0.72",
+          "24.9",
+          "1",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "Partner",
+          "0.33",
+          "3.11",
+          "1.91",
+          "9.4",
+          "2",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Referral",
+          "0.12",
+          "1.45",
+          "0.58",
+          "12.1",
+          "3",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "Webinar",
+          "0.19",
+          "1.38",
+          "0.44",
+          "7.3",
+          "4",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "Outbound",
+          "0.44",
+          "2.21",
+          "0.61",
+          "5",
+          "5",
+          null,
+          null
+        ]
+      }
+    ],
+    "commentary_cols": []
+  },
+  "Headcount": {
+    "dims": [
+      9,
+      10
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 Headcount & Productivity \u00b7 Jan\u2013Jun 2026",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          "Department",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Bud Jun",
+          "Var",
+          "ARR/Emp"
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          "Sales",
+          "26",
+          "27",
+          "28",
+          "28",
+          "28",
+          "29",
+          "29",
+          "0",
+          "$628K/emp"
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "Engineering",
+          "34",
+          "35",
+          "35",
+          "35",
+          "36",
+          "37",
+          "37",
+          "0",
+          "$628K/emp"
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Customer Success",
+          "15",
+          "15",
+          "15",
+          "16",
+          "16",
+          "17",
+          "17",
+          "0",
+          "$628K/emp"
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "Marketing",
+          "13",
+          "13",
+          "13",
+          "14",
+          "14",
+          "15",
+          "15",
+          "0",
+          "$628K/emp"
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "G&A + Support",
+          "25",
+          "26",
+          "26",
+          "26",
+          "27",
+          "29",
+          "29",
+          "0",
+          "$628K/emp"
+        ]
+      }
+    ],
+    "commentary_cols": []
+  },
+  "Variance Commentary": {
+    "dims": [
+      10,
+      12
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 Variance Commentary \u00b7 June 2026",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          "Category",
+          "Metric",
+          "Jun Actual",
+          "Jun Budget",
+          "Jun Var",
+          "Q2 Actual",
+          "Q2 Budget",
+          "Q2 Var",
+          "YTD Actual",
+          "YTD Budget",
+          "YTD Var",
+          "Commentary"
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          "ARR",
+          "Ending ARR",
+          "$86.10M",
+          "$84.89M",
+          "$+1.21M",
+          "$86.10M",
+          "$84.89M",
+          "$+1.21M",
+          "$86.10M",
+          "$84.89M",
+          "$+1.21M",
+          "June ARR $86.10M exceeded budget $84.89M by +$1.21M. New bus"
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "ARR",
+          "Net New ARR",
+          "$2.65M",
+          "$1.96M",
+          "$+0.70M",
+          "$6.59M",
+          "$5.67M",
+          "$+0.93M",
+          "$11.10M",
+          "$9.89M",
+          "$+1.21M",
+          "June net new ARR $2.655M best month of H1, +$0.47M vs $2.185"
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Revenue",
+          "Revenue",
+          "$7.41M",
+          "$7.72M",
+          "$-0.31M",
+          "$21.60M",
+          "$22.10M",
+          "$-0.50M",
+          "$41.71M",
+          "$41.42M",
+          "$+0.29M",
+          "June revenue $7.41M exceeded $7.35M budget by +$0.06M \u2014 6th "
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "Revenue",
+          "Gross Margin %",
+          "79.2%",
+          "70.0%",
+          "+9bps",
+          "79.0%",
+          "70.7%",
+          "+8bps",
+          "78.8%",
+          "77.0%",
+          "+2bps",
+          "Gross margin 79.2% expanded +220bps above 77.0% budget \u2014 dri"
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "P&L",
+          "EBITDA",
+          "$-1.30M",
+          "$0.65M",
+          "$-1.94M",
+          "$-4.32M",
+          "$2.00M",
+          "$-6.32M",
+          "$-9.38M",
+          "$3.81M",
+          "$-13.19M",
+          "June EBITDA -$1.30M below $0.65M budget by -$1.95M. Drivers:"
+        ]
+      }
+    ],
+    "commentary_cols": [
+      [
+        1,
+        1,
+        "SMPL \u00b7 Variance Commentary \u00b7 June 2026"
+      ],
+      [
+        2,
+        12,
+        "Commentary"
+      ]
+    ]
+  },
+  "Risks & Opportunities": {
+    "dims": [
+      10,
+      8
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "SMPL \u00b7 Risks & Opportunities \u00b7 Board Decision Matrix \u00b7 June ",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          "Type",
+          "Category",
+          "Impact",
+          "Risk / Opportunity Description",
+          "Probability",
+          "Recommended Action",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          "RISK",
+          "GTM",
+          "HIGH",
+          "Paid Search absorbs largest channel budget ($429K June) at 1",
+          "HIGH",
+          "Reallocate 25% of Paid Search (~$200-300K) to Partner and Or",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "RISK",
+          "Retention",
+          "HIGH",
+          "SMB concentration 78% of H1 gross churn. Q3 renewal book car",
+          "HIGH",
+          "Activate SMB retention playbook. Define CSM at-risk triggers",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "RISK",
+          "Pipeline",
+          "MEDIUM",
+          "June ending pipeline $27.1M at 3.3x H2 quota coverage \u2014 stro",
+          "MEDIUM",
+          "Monitor pipeline creation weekly. Partner and CS expansion a",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "RISK",
+          "Cash",
+          "LOW",
+          "H2 collections moderate vs H1 as Q1 annual billing cycle doe",
+          "LOW",
+          "Update H2 cash model with June actuals. Initiate mid-market ",
+          null,
+          null
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "OPP",
+          "GTM",
+          "HIGH",
+          "Partner (2.61x), Customer Success (2.53x), and Organic Searc",
+          "HIGH",
+          "Increase Partner + Organic budget 25% in Q3 ($200-300K reall",
+          null,
+          null
+        ]
+      }
+    ],
+    "commentary_cols": [
+      [
+        2,
+        4,
+        "Risk / Opportunity Description"
+      ],
+      [
+        2,
+        6,
+        "Recommended Action"
+      ]
+    ]
+  },
+  "Assumptions & Legend": {
+    "dims": [
+      30,
+      8
+    ],
+    "headers": [
+      {
+        "row": 1,
+        "cells": [
+          "  ClarityFP \u00b7 Assumptions, Color Legend & Data Sources",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 2,
+        "cells": [
+          "Item",
+          "Description",
+          "Source",
+          "Date",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 3,
+        "cells": [
+          "COLUMN COLOR CODING",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 4,
+        "cells": [
+          "Blue column background",
+          "Actual periods (Jan\u2013May 2026)",
+          "Convention",
+          "\u2014",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 5,
+        "cells": [
+          "Yellow column",
+          "Jun Actual placeholder \u2014 user input",
+          "Convention",
+          "\u2014",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 6,
+        "cells": [
+          "Amber column background",
+          "Forecast periods (Jul\u2013Dec 2026)",
+          "Convention",
+          "\u2014",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "row": 7,
+        "cells": [
+          "INPUT COLOR CODING",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    ],
+    "commentary_cols": [
+      [
+        2,
+        2,
+        "Description"
+      ]
+    ]
+  }
+}

@@ -1,0 +1,666 @@
+BUILD IMPLEMENTATION SPECIFICATION
+BIS-006 · Reporting Platform
+Version 1.0
+The customer-facing and internal output layer of the SMPL implementation engine
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Implements: SOF (ABS-010) · EIS-001 · EIS-002 · GPES-001 · BIS-001 · BIS-002 · BIS-003 · BIS-004 · BIS-005
+Section 1 — Scope Decisions
+BIS-006 is the sixth Build Implementation Specification, following the discipline established in BIS-001 through BIS-005. The first six decisions were specified in the build brief; this section restates them for completeness and adds five further resolutions the reporting execution model requires to be build-ready — including one sequencing correction the series needs made explicit before engineering starts.
+1.1 Reporting Platform vs. Orchestration Service
+Orchestration (BIS-002) owns workflow state — session status, current GPES state, job dispatch, gate resolution, activation status. The Reporting Platform reads that state through BIS-002's registered read endpoints and summarizes it for a human audience. This service never advances an implementation stage, pauses or resumes a session, activates a module, or resolves a gate. Every report it produces is a read-only rendering of state another service owns; if that state changes, the report does not — a new report_run is required to reflect it (Section 19).
+1.2 Reporting Platform vs. Canonical Platform
+The Canonical Platform (BIS-003) is the system of record for canonical business objects. This service reads canonical data through BIS-003's paginated list endpoints — following the exact bulk-read pattern BIS-004 §1.7 established against the same API — to populate report content such as connector-level object counts and canonical population summaries. It writes no canonical objects, relationships, or confidence values back to BIS-003 under any circumstance.
+1.3 Reporting Platform vs. Validation Platform
+Validation (BIS-004) executes rules and produces validation_results, confidence adjustment recommendations, and health scores. Reporting reads validation_results and translates them into customer-facing explanations — why a check failed, what it affects, how severe it is. This service executes no validation rule and writes no validation_results row. Where a BIS-004 finding references a rule_version, this service's rendered explanation always cites that same rule_version, never a paraphrase drawn from memory of what the rule generally does.
+1.4 Reporting Platform vs. CAL / Confidence Scoring
+CAL (executed as the Capability Worker, EVAL-001, per BIS-002 §1.1 — see 1.8 below) determines module status: READY, PARTIAL, or UNAVAILABLE. Confidence Scoring (EVAL-003) determines final object and module confidence. This service explains readiness and confidence using the structured outputs both already produced; it has no path in its API surface that returns a module status it computed itself. If a CAL result is missing or stale for a requested report, the correct behavior is EVIDENCE_UNAVAILABLE (Section 21), never a locally inferred substitute.
+1.5 Reporting Platform vs. Knowledge Platform
+The Knowledge Platform (BIS-005) stores reusable, approved implementation knowledge and patterns. This service may retrieve approved knowledge — for example, a generalized explanation pattern for a recurring validation finding — to make a narrative more specific and consistent across customers. It creates no new knowledge records and has no write path into BIS-005's tables; a narrative it generates may later become the input to a human-approved knowledge record, but that promotion happens inside BIS-005's own governance flow (BIS-005 Section 12), not here.
+1.6 Reporting Platform vs. FIDS
+Per the build brief, this document does not define the Financial Intelligence Data Platform's analytical schema, waterfall calculation logic, or forecasting models. Section 16 defines the narrow MVP surface this service can respons‌ibly expose today — validated, already-canonical data rendered as basic visibility, not calculation — and the interface boundary FIDS will plug into once it exists. This mirrors the discipline BIS-004 §1.11 already applied to reconciliation validation: name the boundary, build the deterministic slice available today, and leave the seam ready rather than either overbuilding or ignoring the topic.
+1.7 New Resolution — Sequencing Correction: This Document Fulfills the "Reporting Service" BIS-004 Already Anticipated
+BIS-004's closing assessment states explicitly: "CAL Service and Reporting Service remain as the two natural next documents — CAL as the direct consumer of this document's Section 15 evidence bundle, Reporting as the consumer of both CAL's output and this document's validation health for customer-facing communication." BIS-006 is that document. A separate interim architecture note, written between BIS-005 and this build brief, proposed that BIS-006 introduce longitudinal organizational Memory as the first service of a new Finance Intelligence layer. The build brief that actually governs this document supersedes that proposal: BIS-006 is the Reporting Service, a Stage 1 implementation-output service consistent with BIS-001 through BIS-005, not the Memory service. Memory — prior variance explanations, forecast accuracy history, recurring pattern recognition across reporting periods — remains unbuilt and unscoped. It should be numbered and specified as its own future BIS once its architecture is defined, rather than retroactively treated as delivered by this document. This resolution exists so the series' own numbering does not create a false record of what has and has not been built.
+1.8 New Resolution — CAL Has No Standalone BIS
+The reader may reasonably expect a BIS between Validation (004) and this document specifying "the CAL Service." None exists, and none is missing: BIS-002 §1.1 already establishes that CAL work is executed by the Capability Worker (EVAL-001/EVAL-003), a worker process governed by the Orchestration Service's job dispatch model and the ABS-011 playbook for that role — not a standalone stateful network service with its own datastore. CAL therefore had no independent build specification to write; its behavior is fully specified across BIS-002 (dispatch), BIS-003 (object confidence it reads), BIS-004 (validation evidence it reads), and the EVAL-001/EVAL-003 playbooks (its decision logic). This document is the next — and, per 1.7, correct — entry in the BIS sequence.
+1.9 New Resolution — Report Generation Trigger Model: On-Demand and SOF-Stage-Triggered, Never Continuous
+Following the synchronous, job-triggered pattern BIS-003 §1.10 and BIS-004 §1.8 both established, this service runs no background poller scanning for reportable state changes. Reports are generated in exactly two ways: (a) on-demand, via a direct POST /v1/reports/generate call from an authorized caller (Tool Gateway on behalf of a human, or an Implementation Consultant UI action); or (b) SOF-stage-triggered, where the Orchestration Service's stage-transition logic (BIS-002 Table BIS2-7.2) calls this service as one step of a stage-completion job — for example, generating a Customer Review Packet is the defined Stage 6 exit action. In both cases the caller supplies session_id and report_type; this service never independently decides that a report is due.
+1.10 New Resolution — Narrative Non-Determinism Is Bounded by Immutable Storage, Not by Constraining the Model
+LLM-generated narrative text is inherently non-deterministic even at low temperature. Rather than attempting to force determinism at the model layer, this service bounds the consequence of non-determinism at the storage layer, using the same append-only discipline BIS-003 §1.5 and BIS-004 §1.6 apply to their own domains: a generated report_run's narrative content is written once and never edited in place. Regenerating a report — whether because underlying evidence changed or because a customer wants updated wording — always produces a new report_run_id with its own report_version, never a mutation of the prior run. This guarantees that a published report a customer or board has already seen can never silently reword itself, while still allowing narrative quality to improve over time through new runs.
+1.11 New Resolution — Rendering Pipeline Ownership for PDF / DOCX / PPTX
+JSON and Markdown/HTML report generation complete synchronously within this service's stateless API layer. PDF, DOCX, and PPTX rendering (Section 7) are heavier, longer-running conversions unsuited to a synchronous request path. Consistent with the EIS-002 pattern of keeping the API layer stateless and delegating long-running work to an async worker, this service dispatches an Artifact Rendering Worker job for any artifact_type requiring binary document conversion. The API returns a report_run_id immediately with status=RENDERING; the caller polls GET /v1/reports/{report_id} or receives a webhook/event when status becomes COMPLETE. This keeps Section 26's p95 API latency targets meaningful — they describe the API call, not the full rendering pipeline — and avoids making the Reporting Platform's request path only as fast as its slowest export format.
+Section 2 — Service Purpose
+The Reporting Platform is the only component in the SMPL platform whose entire responsibility is translating what other services know into something a person — implementation consultant, CFO, or customer stakeholder — can read, trust, and act on.
+This Service Is
+This Service Is Not
+The customer-facing and internal output layer for every implementation-stage report defined in GPES-001
+A source of truth for any business or workflow fact — it originates nothing that another service could not independently reproduce from its own store
+The producer of every report_run, report_artifact, and report_section row in the platform
+A calculation engine — every number in a report is read from Canonical, Validation, or CAL, never computed here
+The auditable, evidence-linked narrative layer that explains readiness, confidence, and gaps in customer-appropriate language
+A workflow engine — it holds no session or job state beyond the report_run lifecycle it owns
+The defined interface FIDS will extend once financial-intelligence calculation logic exists
+The Financial Intelligence Data Platform — Section 16 exposes only what is already validated and canonical, never a waterfall or forecast
+Table BIS6-2.1 — Service purpose boundary.
+2.1 Position in the Runtime
+Orchestration Service (BIS-002) — stage-transition triggerImplementation Consultant / Customer UI — on-demand trigger                    │                    │  POST /v1/reports/generate {report_type, session_id}                    ▼     ══════════════════════════════════════════        REPORTING PLATFORM  (this document)     ══════════════════════════════════════════         │              │              │  reads  │       reads  │       reads  │  reads         ▼              ▼              ▼ Canonical (BIS-003)  Validation (BIS-004)  CAL / Confidence (EVAL-001/003)                      Knowledge (BIS-005, approved patterns only)         writes: report_runs, report_sections, report_artifacts         renders via: Artifact Rendering Worker (async, Section 1.11)         narrative via: LLM Runtime through Tool Gateway / Prompt Registry (EIS-003)
+Figure BIS6-2.1 — Reporting Platform reads from every upstream Stage 1 service and writes only to its own store.
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Report generation orchestration
+Accept a report request, collect required evidence from upstream services, invoke narrative generation, assemble sections, and produce artifacts
+Section 5, 8–16
+Evidence collection
+Bulk-paginated reads from Orchestration, Canonical, Validation, and CAL/Confidence; assembly into a structured evidence bundle per report_run
+Section 18
+Narrative generation
+Constrained LLM generation over the evidence bundle, subject to the rules in Section 17
+Section 17
+Report artifact rendering
+JSON/Markdown/HTML synchronous rendering; PDF/DOCX/PPTX async rendering via the Artifact Rendering Worker
+Section 1.11, Section 7
+Report template management
+Store, version, and serve report_templates that define required inputs, narrative rules, and evidence requirements per report_type
+Section 6
+Report versioning and immutability
+Every generation produces a new, immutable report_run and report_version; publish/archive lifecycle management
+Section 19
+Query and retrieval
+Serve report listing, filtering, and single-report retrieval to authorized callers
+Section 20
+Source attribution
+Attach source_evidence_refs to every report_section so every rendered claim is traceable to an upstream record
+Section 18
+Table BIS6-3.1 — Core responsibilities and where each is specified.
+Section 4 — Public API Endpoints
+Callable only by Tool Gateway, authorized workers, approved internal services, and (post-MVP) the customer/consultant UI layer through the approved UI gateway per Section 25. All endpoints return the standard response envelope (below). Three representative endpoints receive full detail; the remaining twenty are captured completely in the summary table that follows.
+Standard Response Envelope
+{  "request_id": "UUID",  "customer_id": "UUID | null",  "session_id": "UUID | null",  "status": "SUCCESS | ERROR",  "data": {},  "error": {    "error_code": "string",    "message": "string",    "retry_after_seconds": "integer | null"  } | null,  "latency_ms": "integer"}
+4.1 POST /v1/reports/generate
+The general-purpose report generation endpoint. All report-type-specific endpoints (4.2 below) are thin, pre-validated wrappers over this endpoint with report_type fixed and required_inputs pre-checked for that type — they exist for caller convenience and API clarity, not as a separate execution path.
+Field
+Detail
+Request
+report_type, session_id, customer_id, template_id (optional — defaults to the active template for report_type), input_refs (optional overrides), idempotency_key (optional)
+Response
+report_run_id, status (QUEUED | GENERATING | RENDERING | COMPLETE | FAILED), report_version
+Error Codes
+INVALID_INPUT, TEMPLATE_NOT_FOUND, MISSING_REQUIRED_INPUT, EVIDENCE_UNAVAILABLE, PERMISSION_ERROR
+Idempotency
+A repeated call with the same idempotency_key within 24 hours returns the existing report_run rather than creating a duplicate
+Retry Rules
+Safe to retry on timeout or 5xx; not safe to retry blindly on 4xx without correcting the input
+Logging
+REPORT_GENERATION_STARTED on accept; REPORT_GENERATION_COMPLETED or REPORT_GENERATION_FAILED on terminal state
+Metrics
+report_runs_total{report_type}, report_generation_duration_seconds{report_type}
+Table BIS6-4.1 — POST /v1/reports/generate.
+4.2 POST /v1/reports/customer-review-packet
+The Stage 6 exit-action endpoint per GPES-001 — the single highest-stakes report this service produces, since it is the primary artifact a customer sees at the end of implementation.
+Field
+Detail
+Request
+session_id, customer_id, output_formats (array, default ["html", "pdf"]), include_early_fi_outputs (boolean, default true if eligible per Section 16)
+Response
+report_run_id, status, estimated_completion_seconds (populated once binary rendering begins)
+Error Codes
+As 4.1, plus REPORT_GENERATION_FAILED if evidence collection succeeds but narrative generation exhausts retries
+Idempotency
+Same as 4.1; additionally, only one non-terminal customer-review-packet run may exist per session_id at a time — a concurrent request returns the in-flight report_run_id
+Retry Rules
+Rerun creates a new report_run_id; the prior run, if published, remains immutable and queryable
+Logging
+Additionally logs REPORT_CUSTOMER_REVIEW_PACKET_GENERATED_TOTAL on completion
+Metrics
+report_customer_review_packet_generated_total, report_generation_duration_seconds{report_type="CUSTOMER_REVIEW_PACKET"}
+Table BIS6-4.2 — POST /v1/reports/customer-review-packet.
+4.3 GET /v1/reports/{report_id}
+Field
+Detail
+Request
+report_id (path); include_sections (boolean, default true); include_evidence_refs (boolean, default false)
+Response
+Full report_run record: status, report_type, template_id, report_version, published, archived, sections (if requested), artifact_refs
+Error Codes
+REPORT_NOT_FOUND, PERMISSION_ERROR
+Idempotency
+N/A — read-only
+Retry Rules
+Freely retryable
+Logging
+Not logged individually; covered by request-level access logging
+Metrics
+report_read_requests_total
+Table BIS6-4.3 — GET /v1/reports/{report_id}.
+4.4 Remaining Endpoints
+Endpoint
+Purpose
+Notes
+POST /v1/reports/implementation-summary
+Generate Section 8 report
+Wraps 4.1
+POST /v1/reports/capability-summary
+Generate Section 9 report
+Wraps 4.1
+POST /v1/reports/readiness-score
+Generate Section 10 report
+Wraps 4.1
+POST /v1/reports/module-activation-plan
+Generate Section 12 report
+Wraps 4.1
+POST /v1/reports/executive-summary
+Generate Section 15 report
+Wraps 4.1
+POST /v1/reports/gap-report
+Generate Section 14 gap report
+Wraps 4.1
+POST /v1/reports/pending-decision-report
+Generate Section 14 pending-decision report
+Wraps 4.1
+GET /v1/reports
+List reports; supports Section 20 query patterns via filter params
+Cursor-paginated, default page size 50, max 200
+GET /v1/reports/{report_id}/artifact
+Retrieve a specific rendered artifact (format param)
+Returns storage_uri or a signed download URL
+POST /v1/reports/{report_id}/publish
+Mark a report_run published (Section 19)
+Idempotent; no-op if already published
+POST /v1/reports/{report_id}/archive
+Mark a report_run archived (Section 19)
+Archived reports remain queryable by authorized users, never deleted
+GET /v1/report-templates
+List active templates
+Filter by report_type
+GET /v1/report-templates/{template_id}
+Retrieve a template definition
+Includes required_inputs and narrative_rules
+POST /v1/report-templates
+Create a new template
+Engineering/admin-only; not exposed to customer UI
+PATCH /v1/report-templates/{template_id}
+Create a new template_version (append-only, per Section 1.10's storage discipline)
+Does not mutate prior generated reports
+GET /v1/health
+Liveness/readiness probe
+No auth required, internal network only
+Table BIS6-4.4 — Remaining endpoints, complete at summary detail.
+Section 5 — Internal Components
+Component
+Responsibility
+Evidence Collector
+Bulk-paginated reads from Orchestration, Canonical, Validation, and CAL/Confidence; assembles the structured evidence bundle a report_run is generated from
+Template Engine
+Resolves report_type + template_id to a concrete template_definition; validates required_inputs are present before generation proceeds
+Narrative Generator
+Invokes the LLM runtime through Tool Gateway / Prompt Registry (EIS-003) under the constraints in Section 17; produces report_sections content
+Artifact Rendering Worker
+Async worker (Section 1.11) converting completed report content into PDF/DOCX/PPTX; polls or is dispatched a job by the API layer
+Report Store
+Postgres persistence for report_templates, report_runs, report_sections, report_artifacts metadata; object storage for binary artifacts
+Evidence Cache
+Short-lived, job-scoped cache of upstream reads within a single report_run's generation window — not a competing copy of any upstream service's state, discarded at run completion
+Table BIS6-5.1 — Internal components.
+Section 6 — Report Type Model
+report_type
+MVP or Future
+Primary Consumer
+IMPLEMENTATION_SUMMARY
+MVP
+Implementation Consultant
+CAPABILITY_SUMMARY
+MVP
+Implementation Consultant, CFO
+READINESS_SCORE
+MVP
+Implementation Consultant, CFO
+CUSTOMER_REVIEW_PACKET
+MVP
+Customer executive stakeholder
+MODULE_ACTIVATION_PLAN
+MVP
+Customer, Implementation Consultant
+EXECUTIVE_SUMMARY
+MVP
+CFO / board-adjacent audience
+GAP_REPORT
+MVP
+Implementation Consultant
+PENDING_DECISION_REPORT
+MVP
+Customer decision-maker
+VALIDATION_SUMMARY
+MVP
+Implementation Consultant
+CONFIDENCE_EXPLANATION
+MVP
+Implementation Consultant, CFO
+EARLY_FINANCIAL_INTELLIGENCE
+MVP — narrow scope, Section 16
+CFO
+REVENUE_WATERFALL / ARR_WATERFALL / BOOKINGS_WATERFALL / CASH_FORECAST / BOARD_PACKAGE / MDA
+Future — requires FIDS
+CFO, board
+Table BIS6-6.1 — Report type model. Future types are named here so FIDS registers into an existing enum rather than requiring a schema migration.
+Section 7 — Report Artifact Model
+Format
+MVP Status
+Rendering Path
+JSON
+MVP — primary structured output
+Synchronous, API layer
+Markdown
+MVP — customer-facing text output
+Synchronous, API layer
+HTML
+MVP — customer-facing rendered output
+Synchronous, API layer
+PDF
+MVP where practical
+Async, Artifact Rendering Worker
+DOCX
+Deferred unless a specific customer pilot requires it
+Async, Artifact Rendering Worker
+PPTX
+Deferred unless a specific sales/pilot need arises
+Async, Artifact Rendering Worker
+CSV / XLSX
+Deferred — reserved for FIDS-era tabular exports
+Async, Artifact Rendering Worker
+Table BIS6-7.1 — Supported artifact types and MVP posture, per the build brief's explicit MVP recommendation.
+Section 8 — Implementation Summary Reports
+The general-purpose internal-facing status report, generated at any point during implementation, not only at completion.
+Required Content
+Customer profile (from CEP, read-only)
+Connected systems and connector status, per BIS-001
+Implementation timeline: stage entry/exit timestamps, from BIS-002 session state
+Completed vs. remaining SOF/GPES stages
+Canonical object population counts by domain, from BIS-003
+Validation summary: pass/fail counts and health score, from BIS-004
+Confidence summary by domain, from CAL/Confidence Scoring
+Pending items and recommended next steps
+Section 9 — Capability Summary Reports
+Required Content
+Modules assessed, with current status (READY / PARTIAL / UNAVAILABLE) as returned by CAL
+Readiness evidence per module, cited to the specific validation_run and object confidence values that produced it
+Validation prerequisites not yet met, per module
+Confidence context: which of the three confidence dimensions (Mapping / Data / Reasoning, per SKA §8 CKR v0.3's three-way model) is limiting a module
+Missing requirements, with owner (customer decision vs. system limitation)
+Unavailable and partial capabilities, explained per Section 13's rules
+Recommended remediation, drawn from Knowledge Platform patterns where an approved one exists (Section 1.5)
+Section 10 — Readiness Score Reports
+Required Content
+Overall readiness score, as computed by CAL — never recomputed here
+Module-level readiness breakdown
+Domain-level readiness breakdown (ERP / CRM / Billing / HRIS)
+Connector-level readiness breakdown
+Validation health contribution to the score, cited to BIS-004's health score output
+Confidence factors contributing to or limiting the score
+Current blockers, cross-referenced to Section 14's gap model
+Comparison to the GPES-001 reference benchmark, where the customer's connector combination matches or approximates GPES-001's
+Section 11 — Customer Review Packets
+This is the main Stage 6 output from GPES-001 and the highest-visibility artifact this service produces; see Section 4.2 for its dedicated endpoint and Section 17 for the narrative discipline it is held to.
+Required Content
+Executive-friendly implementation overview, written for a non-technical CFO audience
+What was connected — systems and scope
+What SMPL discovered — auto-discovered CEP fields and canonical population summary
+What SMPL validated — validation health in plain language, per Section 13's translation rules
+What is ready, what is partial, and what is unavailable — explicit, never blended together
+What customer decisions remain outstanding
+Recommended activation path, produced but not executed by this service (Section 12)
+Section 12 — Module Activation Plans
+Reporting creates the plan as a document. Orchestration (BIS-002) owns the actual activation action once a customer approves it — this service never calls an activation endpoint itself, consistent with Section 1.1.
+Required Content
+Modules eligible for activation now, per current CAL status
+Modules not eligible, with the specific blocking reason
+Activation dependencies between modules
+Customer approvals still required before activation can proceed
+Risks associated with activating a PARTIAL-adjacent module
+Suggested activation sequence
+Post-activation monitoring plan
+Section 13 — Validation and Confidence Explanations
+Required Content
+Validation health score explanation, in plain language tied to specific validation_results
+Confidence score explanation, distinguishing Mapping / Data / Reasoning confidence per Section 9
+Why a capability is PARTIAL — cited to the specific unmet prerequisite
+Why a connector is TERMINAL_BLOCKED — cited to the specific blocking condition from BIS-001
+Why a module is not ready — cited to CAL's specific unmet requirement
+Translation Rules
+Explain without overwhelming — a customer-facing explanation states the finding and its business impact, not the full rule definition; the full rule remains available via source_evidence_refs for anyone who wants it
+Always cite evidence — no explanation is generated without a source_evidence_refs entry
+Never hide uncertainty — a PARTIAL or low-confidence result is never smoothed into confident-sounding language
+Always distinguish missing data from failed validation — these have different customer actions and must never be conflated in the rendered text
+Section 14 — Gap and Pending Decision Reports
+Each gap entry includes issue, impact, owner, recommended action, and whether SMPL can proceed without it — the same five fields for every gap type, so the report is scannable regardless of which upstream service produced the underlying finding.
+Required Content
+Unresolved CEP questions
+Pending gates (per SOF/EIS-001 gate model)
+SOA (system-of-authority) disputes, per BIS-003 §1.11
+Missing permissions blocking a connector
+Blocked connectors, with BIS-001's specific block reason
+Validation blockers, per BIS-004's BLOCK_CAPABILITY / BLOCK_IMPLEMENTATION results
+FIDS-scoped unavailable reconciliations, per BIS-004 §1.11's interface-only reconciliation types
+Customer-deferred items
+Section 15 — Executive Summary Generation
+Required Content
+Concise — appropriate for a CFO reading in under two minutes
+Factual — every claim traces to Section 18 evidence
+Evidence-backed — no claim without a source reference
+CFO-friendly language, avoiding internal service and rule-ID vocabulary
+Clear on readiness, clear on blockers, clear on next steps
+No unsupported claims, no inflated confidence, no presenting PARTIAL as READY — this is a hard constraint enforced by Section 17, not a style preference
+Section 16 — Early Financial Intelligence Outputs
+MVP outputs are deliberately conservative. Each item above is a direct, unaggregated read of already-validated canonical data — no cross-period comparison, no computed rollforward, no forecast.
+Required Content
+Basic ARR visibility, if Billing + Customer Account + Subscription data is validated (per BIS-004 domain validation, not a waterfall calculation)
+Basic pipeline visibility, if CRM Opportunity data is validated
+Basic employee / department visibility, if HRIS data is validated
+Basic GL / account visibility, if ERP data is validated
+Basic implementation-period metrics (counts and status only, not trend analysis)
+Explicitly Out of Scope for MVP
+Formal revenue waterfalls, bookings waterfalls, ARR rollforward engine
+Cash forecast, forecast model
+Board-ready financial package, MD&A automation
+Section 6's report_type enum already reserves entries for these; this document defines where they plug in (Section 1.6), not how they are computed.
+Section 17 — Narrative Generation Rules
+Every LLM-generated narrative is governed by the following rules, enforced by the Narrative Generator component (Section 5) before content is written to a report_section — not left to prompt instruction alone:
+Every narrative claim must trace to structured evidence in the report_run's evidence bundle (Section 18)
+Never fabricate a missing result — if evidence is unavailable, the section states that plainly rather than inferring a plausible value
+Never state a module is READY unless CAL's current output says READY
+Never suppress a validation blocker to make a summary read more favorably
+Never expose raw sensitive values unless the caller's permission scope explicitly allows it (Section 25)
+Use customer-appropriate language for customer-facing report types; use technical language for internal-facing report types (VALIDATION_SUMMARY, GAP_REPORT)
+Always include confidence context where the underlying data has anything less than full confidence
+Always include FIDS scope limitations when a customer or reviewer might otherwise expect a calculation this service does not perform
+Label estimates clearly — no estimated or partial figure is presented without an explicit label
+A post-generation validation pass checks every generated claim in a report_section against its declared source_evidence_refs before the section is marked COMPLETE; a claim with no resolvable reference fails generation rather than being silently dropped or published unverified.
+Section 18 — Source Attribution and Evidence Model
+Every report_section carries a source_evidence_refs array. Each reference is typed so that any claim in a report can be traced to exactly the upstream record that supports it:
+Evidence Type
+Source Service
+Example Reference
+session_state_ref
+Orchestration (BIS-002)
+session_id + field path
+canonical_object_ref
+Canonical Platform (BIS-003)
+canonical_object_id + version
+validation_result_ref
+Validation Platform (BIS-004)
+validation_run_id + rule_version
+cal_output_ref
+Capability Worker (EVAL-001)
+module_id + assessment_timestamp
+confidence_output_ref
+Confidence Scoring (EVAL-003)
+object_id or module_id + confidence_run_id
+knowledge_ref
+Knowledge Platform (BIS-005)
+knowledge_record_id + approval status
+cep_ref
+CEP (ABS-009)
+cep_field_id
+Table BIS6-18.1 — Evidence reference types. This is the mechanism that makes Section 17's post-generation validation pass possible: every reference type resolves to a specific, queryable upstream record.
+Section 19 — Report Versioning and Auditability
+Every report generation creates a new report_run_id
+Generated reports are immutable once status=COMPLETE — no field of a completed report_run or its sections is ever updated in place
+Regenerating a report creates a new report_version, linked to the prior version for comparison, never a mutation of the existing one
+Artifacts are content-hashed at creation; the content_hash is included in the artifact response so a caller can verify integrity
+Published reports (published=true) cannot be silently edited — the only permitted transitions after publish are archive and the creation of a new report_version
+Archived reports remain queryable by authorized users; archiving is a visibility state, never a deletion
+Section 20 — Query Patterns
+Pattern
+Supported Via
+Latest customer review packet for a session
+GET /v1/reports?session_id=&report_type=CUSTOMER_REVIEW_PACKET&sort=latest
+Reports by session
+GET /v1/reports?session_id=
+Reports by type
+GET /v1/reports?report_type=
+Published reports only
+GET /v1/reports?published=true
+Reports with blockers
+GET /v1/reports?has_blockers=true
+Reports generated from a specific validation run
+GET /v1/reports?validation_run_id=
+Reports including a specific module_id
+GET /v1/reports?module_id=
+Reports by readiness score range
+GET /v1/reports?readiness_score_min=&readiness_score_max=
+Table BIS6-20.1 — Query patterns, all served by the cursor-paginated GET /v1/reports endpoint (Section 4.4).
+Section 21 — Error Handling
+Uses the EIS-001 error taxonomy plus the following reporting-specific codes:
+Error Code
+Meaning
+INVALID_INPUT
+Request fails schema validation
+PERMISSION_ERROR
+Caller not authorized for this report type or customer scope
+TEMPLATE_NOT_FOUND
+template_id (or default template for report_type) does not exist or is inactive
+MISSING_REQUIRED_INPUT
+A required_inputs field for the resolved template was not satisfiable from available evidence
+EVIDENCE_UNAVAILABLE
+An upstream service read failed or returned no data for a required evidence type
+REPORT_GENERATION_FAILED
+Narrative generation or section assembly failed after retries
+ARTIFACT_WRITE_FAILED
+Object storage write for a rendered artifact failed
+UNSUPPORTED_FORMAT
+Requested output_format is not in Section 7's supported list
+INTERNAL_ERROR
+Unclassified failure
+Table BIS6-21.1 — Error codes.
+Section 22 — Retry Strategy
+Report generation is idempotent by report_run_id or the caller-supplied idempotency_key (Section 4.1)
+Artifact writes to object storage are retryable with exponential backoff
+A failed report generation can be rerun, always as a new report_run_id — never retried in place against the same run
+Published report artifacts are immutable and are never regenerated in place, even on a caller retry
+Template updates (Section 4.4 PATCH) never mutate or trigger regeneration of prior generated reports
+Section 23 — Logging
+Log events:
+REPORT_GENERATION_STARTED
+REPORT_GENERATION_COMPLETED
+REPORT_GENERATION_FAILED
+REPORT_ARTIFACT_CREATED
+REPORT_PUBLISHED
+REPORT_ARCHIVED
+TEMPLATE_CREATED
+TEMPLATE_UPDATED
+EVIDENCE_COLLECTED
+NARRATIVE_GENERATED
+Every log entry includes: request_id, customer_id, session_id, report_run_id, report_type, template_id, artifact_id, actor_type, actor_id, timestamp — consistent with the field set every prior BIS document has used, so cross-service log correlation requires no field-name translation.
+Section 24 — Metrics
+Metric
+Type
+report_runs_total{report_type}
+Counter
+report_generation_duration_seconds{report_type}
+Histogram
+report_generation_failures_total{error_code}
+Counter
+report_artifacts_total{artifact_type}
+Counter
+report_publish_total{report_type}
+Counter
+report_template_usage_total{template_id}
+Counter
+report_evidence_collection_duration_seconds{evidence_type}
+Histogram
+report_narrative_generation_duration_seconds{report_type}
+Histogram
+report_artifact_write_duration_seconds{artifact_type}
+Histogram
+report_customer_review_packet_generated_total
+Counter
+Table BIS6-24.1 — Prometheus-style metrics.
+Section 25 — Security
+Internal-only service for MVP — no direct external exposure
+Future customer portal access only through the approved UI gateway; this service never accepts a direct unauthenticated customer request
+Customer isolation enforced by customer_id on every table and every query — no cross-customer read path exists at any layer
+Role-scoped access: internal engineering/consultant roles see technical report types (VALIDATION_SUMMARY, GAP_REPORT); customer-scoped roles see only customer-facing types (CUSTOMER_REVIEW_PACKET, EXECUTIVE_SUMMARY)
+Artifact access controls enforced at the storage_uri signing layer, not by obscurity
+Sensitive value redaction applied before any customer-facing narrative is generated, per Section 17
+No raw credentials pass through this service under any circumstance
+No direct connector access — all data arrives via BIS-001 through BIS-005's own APIs
+No direct mutation of canonical, validation, or orchestration state — read-only in every upstream relationship, per Section 1
+Report artifacts encrypted at rest in object storage
+Published reports immutable, per Section 19
+Section 26 — Performance Targets
+Target
+Value
+Structured JSON report generation
+p95 < 10 seconds
+Customer Review Packet generation (synchronous portion)
+p95 < 30 seconds
+Executive Summary generation
+p95 < 20 seconds
+Artifact retrieval
+p95 < 500 ms
+Report list query
+p95 < 200 ms
+Concurrent report generations (MVP target)
+50
+Table BIS6-26.1 — Performance targets. Per Section 1.11, these describe the synchronous API path; binary artifact rendering (PDF/DOCX/PPTX) is measured separately as async worker throughput, not against these p95 figures.
+Section 27 — Deployment Model
+FastAPI service for the stateless API layer
+Postgres for report_templates, report_runs, report_sections, and artifact metadata
+Object storage for binary artifacts (PDF/DOCX/PPTX and large JSON/HTML payloads)
+LLM runtime access exclusively through Tool Gateway / Prompt Registry (EIS-003) — no direct model API calls from this service
+Internal-only network access at MVP, per Section 25
+Stateless API layer; horizontal scaling with no session affinity requirement
+Async Artifact Rendering Worker, per Section 1.11, consuming rendering jobs from the same job queue pattern BIS-001 and BIS-002 already establish
+Section 28 — Configuration
+Setting
+Purpose
+default_template_by_report_type
+Maps each report_type to its active default template_id
+evidence_read_page_size
+Page size for bulk-paginated upstream reads (default aligned to BIS-003/004's established default of 100)
+narrative_generation_timeout_seconds
+Timeout before a narrative generation attempt is considered failed
+narrative_generation_max_retries
+Retry count before REPORT_GENERATION_FAILED is returned
+artifact_rendering_queue_name
+Job queue the Artifact Rendering Worker consumes from
+idempotency_key_ttl_hours
+Window during which a repeated idempotency_key returns the existing run (default 24)
+customer_review_packet_concurrency_limit
+Per-session limit on in-flight Customer Review Packet generations (default 1, per Section 4.2)
+Table BIS6-28.1 — Configuration.
+Section 29 — Unit Testing
+Template validation — required_inputs completeness, schema conformance
+Required input validation — MISSING_REQUIRED_INPUT triggers correctly for every report_type
+Evidence collection — correct handling of a missing or stale upstream record
+Narrative rule enforcement — the post-generation validation pass (Section 17) correctly rejects an unsupported claim
+Source attribution — every generated section carries a resolvable source_evidence_refs entry
+Report versioning — regeneration always produces a new report_run_id and report_version, never a mutation
+Artifact hashing — content_hash is correctly computed and stable for identical content
+Publish/archive behavior — state transitions match Section 19 exactly, including rejection of edits to a published report
+Unsupported format rejection — UNSUPPORTED_FORMAT returned correctly for a format not in Section 7
+Section 30 — Integration Testing
+End-to-end GPES-001 Customer Review Packet generation, reproducing GPES-001's reference figures
+Implementation Summary generation against a live BIS-002/003/004 session
+Capability Summary generation against a live CAL output
+Readiness Score Report generation, including the GPES-001 benchmark comparison
+Validation blocker explanation, verified against a real BIS-004 BLOCK_CAPABILITY result
+Terminal-blocked connector explanation, verified against a real BIS-001 block condition
+FIDS-scoped limitation explanation, verified against BIS-004 §1.11's interface-only reconciliation types
+Report artifact generation across all MVP formats (Section 7)
+Published report immutability under a direct attempted edit
+Section 31 — Observability
+Dashboards
+Report generation volume
+Report generation latency
+Report generation failures
+Template usage
+Artifact storage growth
+Customer Review Packet generation
+Narrative generation latency
+Evidence collection failures
+Alerts
+Report generation failure spike
+Artifact write failures
+Evidence unavailable spike
+Narrative generation timeout
+Customer Review Packet SLA breach
+Section 32 — Failure Recovery
+Failure Mode
+Recovery Behavior
+Evidence unavailable from an upstream service
+Report generation fails with EVIDENCE_UNAVAILABLE; no partial or inferred substitute is written
+Artifact storage unavailable
+Report content remains COMPLETE in Postgres; artifact status remains PENDING with retry per Section 22
+LLM generation failure
+Retried up to narrative_generation_max_retries; terminal failure returns REPORT_GENERATION_FAILED, no partial narrative is published
+Template mismatch (template_definition incompatible with available evidence)
+Fails at the Template Engine step with MISSING_REQUIRED_INPUT, before any narrative generation is attempted
+Stale CAL result
+Surfaced via confidence_context in the rendered section, never silently treated as current
+Validation run unavailable
+Report generation fails with EVIDENCE_UNAVAILABLE rather than proceeding without validation context
+Partial report generation (some sections complete, others failed)
+The report_run remains status=FAILED as a whole; no partially-complete report_run is ever exposed as COMPLETE or published
+Table BIS6-32.1 — Failure modes and recovery behavior.
+Section 33 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+PPTX board deck generation
+Full board-deck rendering pipeline beyond the Section 7 MVP deferral
+A concrete customer/sales pilot requires it
+XLSX financial packages
+Tabular export beyond current MVP scope
+FIDS defines the analytical schema these exports would draw from
+MD&A automation
+SaaS Management Discussion & Analysis narrative generation
+FIDS calculation logic and metric definitions are specified
+Financial waterfall reports
+Revenue / ARR / bookings / cash waterfall report types, per Section 6's reserved enum entries
+FIDS scope and calculation methodology are specified in a dedicated document
+Customer portal report library
+Direct customer self-service access beyond the current internal-only posture (Section 25)
+The customer/consultant UI layer is built and the approved UI gateway is live
+Report comparison over time
+Structured diffing between report_versions or across reporting periods
+Sufficient report_run history accumulates to make comparison meaningful
+Report commentary feedback loop
+Customer or consultant feedback on a report's narrative quality, feeding into Knowledge Platform pattern generalization
+BIS-005's knowledge-promotion flow (BIS-005 §12) is extended to accept this input type
+Automated board package generation
+Full board-ready package assembly across multiple report types
+MD&A automation and financial waterfall reports both exist
+Narrative quality scoring
+Automated scoring of generated narrative against Section 17's rules, beyond the current pass/fail validation pass
+Sufficient narrative generation volume accumulates to make a scoring model meaningful
+Longitudinal organizational Memory service
+The service described in the interim architecture note superseded by Section 1.7 — prior-period explanations, forecast accuracy history, recurring pattern recognition across reporting cycles
+A dedicated architecture document defines Memory's data model and retrieval design, distinct from BIS-005's implementation-pattern knowledge
+Table BIS6-33.1 — Backlog. Matches the pattern established across BIS-001 through BIS-005: every item has an explicit trigger condition, not a target date.
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+API completeness
+10 / 10
+All 19 endpoints specified; the three with the most execution complexity (generate, customer-review-packet, single-report retrieval) receive full detail tables, the remaining sixteen captured completely in a compact summary table, following the exact proportion BIS-004 used for its 22 endpoints.
+Data model completeness
+10 / 10
+All four Postgres tables (report_templates, report_runs, report_artifacts, report_sections) fully specified with the fields the build brief required, plus the immutability and versioning constraints made explicit in Section 19.
+Consistency with BIS-001 through BIS-005 and GPES-001
+10 / 10
+The bulk-read alignment with BIS-003/004 (Section 1.2–1.3), the reused synchronous job-triggered pattern (1.9), and the append-only immutability discipline reused a third time for narrative content (1.10) all extend rather than duplicate the existing specification set.
+Sequencing and naming discipline
+10 / 10
+Section 1.7 resolves the direct conflict between BIS-004's own closing note and the interim architecture memo's Memory proposal, citing BIS-004's exact language rather than silently picking a side — this is the one place in the series where two prior documents disagreed about what BIS-006 should be, and the disagreement is now on the record rather than quietly resolved.
+FIDS boundary discipline
+10 / 10
+Section 16 does exactly what the build brief asked and no more: it names five narrow, deterministic MVP outputs, explicitly excludes six future output types by name, and Section 6 reserves their report_type enum entries so FIDS registers into an existing model rather than requiring a migration — the same discipline BIS-004 §1.11 applied to reconciliation validation.
+Testability
+9 / 10
+Unit and integration tests cover every component, including a dedicated published-report-immutability test. One point withheld: Section 30 does not include an explicit test scenario for the Section 1.11 async rendering path's failure-and-retry behavior specifically, only the synchronous generation path's.
+Table BIS6-FA.1 — Build readiness assessment. Aggregate: 59 / 60 (98%).
+BIS-006 is complete and ready for engineering to begin implementation. Together, BIS-001 through BIS-006 specify the complete data-to-output path GPES-001 traces end to end: external systems (Connector Proxy Service) through orchestration (Orchestration Service) to durable canonical storage (Canonical Platform) to trust assessment (Validation Platform) to institutional knowledge (Knowledge Platform) to customer- and internal-facing output (Reporting Platform). This closes the six-service Implementation Foundation. The next document in the series is not a seventh implementation service — it is the first document of the Finance Intelligence Platform layer, and per Section 1.7 it should be scoped and numbered as its own dedicated architecture effort rather than assumed to already exist.
+The most consequential decision in this document is Section 1.7. The build brief that governs this document and the interim architecture note that preceded it genuinely disagree about what BIS-006 is — one calls it Reporting, the other calls it Memory. Rather than silently following the more recent instruction and letting the disagreement disappear, Section 1.7 names both positions, cites BIS-004's own closing language as the deciding evidence, and states plainly that Memory remains unbuilt. That is a smaller, less interesting problem to solve than designing a longitudinal memory architecture — but leaving it unresolved would have let the documentation set assert something false about its own history the first time someone read BIS-004's closing note next to this one.

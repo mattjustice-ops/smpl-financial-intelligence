@@ -1,0 +1,269 @@
+FIE-002 · ADDENDUM A
+FINANCIAL GOVERNANCE
+Retirement Dates and Restatement Policies
+Version 1.0
+Closing the limitation inherited across FIE-003 §1.9, FIE-004 §1.6, and FIE-005 §1.7
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+This addendum adds capability to FIE-002. It does not redesign it, and it requires zero schema changes to FIE-003, FIE-004, or FIE-005.
+Why This Addendum Exists
+FIE-003 §1.9 narrowed Governed execution to effective-date-based methodology resolution only, deferring "custom historical restatement windows" and "full historical rebuilds" pending this exact addendum. FIE-004 §1.6 restated the same gap rather than rediscovering it, distinguishing preserved historical belief from unavailable historical recalculation. FIE-005 §1.7 restated it a third time, requiring every historical-understanding question to be explicitly labeled as grounded in preserved knowledge rather than live recalculation. This addendum closes the gap all three were built around.
+Section 1 — Scope Decisions
+1.1 Relationship to FIE-002 v1.0
+Nothing in FIE-002 v1.0 is redesigned. Every existing table, endpoint, and governance rule remains exactly as specified. This addendum adds two new fields to methodologies, three new tables, and a set of new endpoints layered on top of the existing API. A methodology with no retirement_date and no attached restatement_policy behaves identically to FIE-002 v1.0 today — this addendum is additive and opt-in per methodology, not a platform-wide behavior change.
+1.2 Retirement Date vs. Effective Date vs. Lifecycle State
+Three independent fields now govern a methodology version, each answering a different question. effective_date (existing) answers "when did this version become the operative one going forward?" retirement_date (new) answers "as of what date does this version stop being the correct answer for a GOVERNED as_of query?" lifecycle_state (existing, DRAFT→...→ARCHIVED) answers "where is this version in its own approval workflow?" These three are deliberately decoupled, the same Lifecycle/Version independence FIE-004 §1.9 already established: a version can be ACTIVE in the registry sense with a retirement_date already in the past for governance-resolution purposes, and a version's retirement_date can be set without any change to its lifecycle_state.
+1.3 Restatement Policy Is Attached, Never Assumed
+A methodology carries no restatement behavior unless a restatement_policy is explicitly attached to it. Three modes exist:
+Mode
+Behavior
+RESTATE_FORWARD_ONLY
+Default for every methodology unless explicitly overridden — a new version applies only from its effective_date forward; no historical period is ever recalculated. Identical to all FIE-002 v1.0 behavior today.
+RESTATE_FULL_HISTORY
+A new version, once its Restatement Event is approved (Section 4), triggers recalculation of every prior period back to the methodology's inception
+RESTATE_WINDOW
+A new version's Restatement Event recalculates only a bounded historical range specified at Restatement Event creation (e.g. the current fiscal year)
+Table A-1.3 — Restatement Policy modes. Attaching a policy changes nothing by itself — restatement only ever happens through an approved Restatement Event, per Section 1.4.
+1.4 New Resolution — Restatement Approval Is a Separate, Elevated Governance Gate
+A Restatement Event is never approved through FIE-002's existing methodology governance state machine (Draft→Review→Approved→Active→Deprecated→Archived). It has its own, stricter approval flow (Section 5), reflecting that retroactively changing what a historical period's numbers were carries materially higher stakes — audit, board, and investor implications — than approving a new methodology version for forward use. A methodology version can reach ACTIVE status through ordinary governance while its associated Restatement Event remains independently PENDING_APPROVAL; the two approvals are never conflated into one action.
+1.5 New Resolution — Cascade Resolution Through the Dependency Graph Is Mandatory
+Per FIE-002's existing methodology_dependencies graph (FIE-002 §14): a Restatement Event targeting one methodology automatically resolves every downstream dependent methodology (e.g. restating ARR requires Bookings, Revenue, and Cash — whichever the graph declares depend on it) and requires them to be included in the same Restatement Event by default. Excluding a dependent from the cascade is possible only with an explicit, recorded justification at Restatement Event creation (Section 4) — never a silent omission. This prevents the platform from ever producing an internally contradictory state where one restated methodology's dependents still reflect the prior methodology version.
+1.6 New Resolution — FIE-005 Gains a First-Class Restatement Comparison Question Type
+RESTATEMENT_COMPARISON is added to FIE-005's Question Understanding taxonomy (FIE-005 §8) as a named, directly askable question type — "what would this look like under today's methodology" becomes a discoverable capability, not something a user must know special syntax to request. Section 10 below specifies exactly how FIE-005 resolves this question type once this addendum exists.
+1.7 New Resolution — Restatement Never Edits History; It Creates New Runs
+An approved Restatement Event never modifies an existing FIE-003 Calculation Run, FIE-003 Financial Intelligence Object, or FIE-001 Observation/Revision. It produces a new Financial Operating Model version (per FIE-002 §1.7's existing freeze-on-creation model) and dispatches new FIE-003 Calculation Runs, in GOVERNED execution mode, against every period the Restatement Event's scope covers. The original runs remain permanently valid, unmodified, and queryable — a restated period simply gains a second, later set of runs against the new Operating Model version. This is the identical "new version, never edit in place" discipline FIE-002 and FIE-003 already apply everywhere else, extended one level up rather than introduced as a new rule.
+1.8 New Resolution — Zero Schema Impact on FIE-003, FIE-004, and FIE-005
+Document
+Impact of This Addendum
+FIE-003 — Calculation Engine
+None. GOVERNED execution mode already calls FIE-002's as_of resolution generically (FIE-003 §1.9); it simply receives richer, restatement-aware answers once a restatement_policy and completed Restatement Event exist for a methodology. No new field, table, or endpoint is required in FIE-003.
+FIE-004 — Organizational Memory
+None to schema. A Restatement Event's approval is logged as a DECISION Knowledge Object through FIE-004's existing, unmodified POST /v1/knowledge-objects API (Section 4), the same way any other governance decision already enters Memory.
+FIE-005 — Financial Reasoning
+One taxonomy addition only (Section 1.6) — a new recognized value in an existing enum, not a schema or table change. Verification, Explainability, and every other FIE-005 component are unaffected.
+Table A-1.8 — Verified document by document, the same discipline ABS-012 §11 applied to confirm Canonical Convergence required no downstream changes.
+Footnote on the FIE-005 row above: this addendum requires a cross-reference update to FIE-005 §8's Question Understanding taxonomy when FIE-005 is next revised, adding RESTATEMENT_COMPARISON as a recognized value. This is a pointer addition, not a FIE-005 schema or redesign change — the addendum is complete and buildable without waiting for that FIE-005 revision to land.
+1.9 Restatement Events Are Not Scenario Promotion
+These are two structurally different flows and must never share an approval path or be conflated by an implementing agent. Scenario approval (FIE-003 §1.6) writes new FIE-001 Revisions, through Financial Governance → Orchestration → FIE-001 — it changes what the organization believes about the future. A Restatement Event (this addendum) creates a new Financial Operating Model version and new GOVERNED Calculation Runs — it changes which methodology version is treated as correct for a historical period; it writes no FIE-001 Revision and touches no belief about the future. A Scenario, once approved, may itself later become the primary_methodology_id input driving a Restatement Event, but the two approvals — Scenario adoption and Restatement approval — remain entirely independent gates, each with its own governance trail.
+Section 2 — Data Model Additions
+2.1 methodologies — Two New Fields
+Field
+Type
+Notes
+retirement_date
+TIMESTAMPTZ, NULLABLE
+Per Section 1.2. Null means this version has no defined retirement — it remains the correct GOVERNED answer indefinitely, until a later version's effective_date supersedes it
+restatement_policy_id
+UUID, NULLABLE, FK → restatement_policies
+Null means RESTATE_FORWARD_ONLY behavior, per Section 1.3 — the default, unchanged from FIE-002 v1.0
+Table A-2.1 — Additions to the existing methodologies table (FIE-002 §7.1). No existing field changes shape or meaning.
+2.2 restatement_policies (new)
+Field
+Type
+Notes
+restatement_policy_id
+UUID, PK
+policy_version
+INTEGER
+Append-only, same versioned-registry pattern as every other FIE-002 registry entity
+mode
+ENUM(RESTATE_FORWARD_ONLY, RESTATE_FULL_HISTORY, RESTATE_WINDOW)
+Per Section 1.3
+window_definition
+JSONB, NULLABLE
+Populated only for RESTATE_WINDOW — e.g. {"scope": "current_fiscal_year"}
+created_at
+TIMESTAMPTZ
+Table A-2.2 — restatement_policies.
+2.3 restatement_events (new)
+Field
+Type
+Notes
+restatement_event_id
+UUID, PK
+customer_id
+UUID
+primary_methodology_id
+UUID, FK
+The methodology whose new version triggered this event
+primary_methodology_version
+INTEGER
+The new version being applied retroactively
+cascade_methodology_refs
+JSONB
+Every dependent methodology_id + version included, resolved from methodology_dependencies per Section 1.5
+excluded_dependents
+JSONB, NULLABLE
+Any dependent explicitly excluded, each with a required justification field — never a silent omission
+scope
+JSONB
+The historical period(s) covered, derived from the attached restatement_policy's mode
+status
+ENUM(DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, EXECUTING, COMPLETE, FAILED)
+Per Section 5
+new_financial_operating_model_id
+UUID, NULLABLE
+Populated once approved and composed, per Section 1.7
+new_financial_operating_model_version
+INTEGER, NULLABLE
+created_at
+TIMESTAMPTZ
+completed_at
+TIMESTAMPTZ, NULLABLE
+Table A-2.3 — restatement_events. Immutable once APPROVED — the scope and cascade set cannot change after approval; a different scope requires a new Restatement Event.
+2.4 restatement_approvals (new)
+Field
+Type
+Notes
+approval_id
+UUID, PK
+restatement_event_id
+UUID, FK
+required_approver_role
+TEXT
+e.g. CFO, Controller — configured per customer, always a role above ordinary methodology-governance reviewer, per Section 1.4
+approver_id
+TEXT, NULLABLE
+Populated only on decision
+decision
+ENUM(PENDING, APPROVED, REJECTED)
+business_justification
+TEXT
+Required on submission, non-nullable
+affected_periods_acknowledgment
+BOOLEAN
+Approver must explicitly confirm they reviewed the exact historical periods in scope before approving
+decided_at
+TIMESTAMPTZ, NULLABLE
+Table A-2.4 — restatement_approvals. One row per Restatement Event; this table, not methodologies.status, is the sole gate on whether a Restatement Event may proceed to execution.
+Section 3 — API Additions
+Endpoint
+Purpose
+Notes
+PATCH /v1/methodologies/{id}/retirement
+Set retirement_date on a methodology version
+Does not require a new methodology_version — retirement_date may be set on an existing version
+POST /v1/restatement-policies
+Create/version a Restatement Policy
+Section 2.2
+POST /v1/restatement-events
+Create a Restatement Event; triggers cascade resolution automatically
+Returns cascade_methodology_refs computed from methodology_dependencies before any approval step
+GET /v1/restatement-events/{id}/cascade-impact
+Preview the full cascade set and affected periods before submitting for approval
+Read-only; used by an implementation consultant or CFO to review scope before formal submission
+POST /v1/restatement-events/{id}/submit
+Move a DRAFT Restatement Event to PENDING_APPROVAL
+Requires excluded_dependents (if any) to carry a justification, or the call fails
+POST /v1/restatement-events/{id}/approve
+Elevated-role approval per Section 5
+Requires business_justification and affected_periods_acknowledgment=true
+POST /v1/restatement-events/{id}/reject
+Elevated-role rejection
+Terminal for this event; a new Restatement Event must be created to retry
+GET /v1/restatement-events/{id}
+Retrieve full status, cascade set, and resulting Operating Model reference once complete
+Table A-3.1 — New endpoints, layered on FIE-002's existing API surface without modifying any existing endpoint's contract.
+Section 4 — Restatement Event Workflow
+Restatement Events are not Scenario promotion, per Section 1.9 — the two flows share no approval path, even though both ultimately produce new state elsewhere in the platform.
+1. POST /v1/restatement-events   → cascade resolution runs automatically against methodology_dependencies   → status = DRAFT2. GET /v1/restatement-events/{id}/cascade-impact  (optional review step)3. POST /v1/restatement-events/{id}/submit   → any excluded_dependents must carry a justification, or this call fails   → status = PENDING_APPROVAL4. POST /v1/restatement-events/{id}/approve  (elevated role only, Section 5)   → status = APPROVED   → a DECISION Knowledge Object is created in FIE-004 via its own unmodified API,     recording the approver, justification, and full cascade scope5. status = EXECUTING   → BIS-002 Orchestration owns the transition to EXECUTING and everything in this step.     FIE-002 does not invoke FIE-003 directly at any point.   → Orchestration composes the new Financial Operating Model via FIE-002's existing,     unmodified composition API (FIE-002 §1.7)   → Orchestration dispatches one FIE-003 GOVERNED calculation job per period in scope,     through the standard job queue (BIS-002's existing dispatch model)   → if any period's FIE-003 dispatch fails, Orchestration marks the Restatement Event     FAILED (Table A-5.1) — no partial COMPLETE state is ever permitted (Table A-11.1)6. status = COMPLETE  (or FAILED, per Section 11)   → new_financial_operating_model_id/version populated   → original FIE-003 runs and FIOs remain untouched and queryable, per Section 1.7
+Figure A-4.1 — The full Restatement Event lifecycle, from creation to executed recalculation. Step 5's dispatch responsibility sits with Orchestration (BIS-002), not FIE-002 itself — FIE-002 composes the Operating Model version and stops there, the same division of labor BIS-002 already has with every other job-triggered service in the platform.
+Section 5 — Restatement Approval Governance
+State
+Meaning
+Valid Transitions
+DRAFT
+Created, cascade resolved, not yet submitted
+→ PENDING_APPROVAL (via submit), → discarded
+PENDING_APPROVAL
+Submitted, awaiting elevated-role decision
+→ APPROVED, → REJECTED
+APPROVED
+Decision made; execution begins automatically
+→ EXECUTING
+REJECTED
+Terminal for this event
+None — a new Restatement Event must be created
+EXECUTING
+FIE-003 dispatch in progress
+→ COMPLETE, → FAILED
+COMPLETE
+Terminal, successful
+None
+FAILED
+Terminal, unsuccessful — no partial restatement is ever left half-applied
+None — a new Restatement Event must be created
+Table A-5.1 — This state machine is entirely separate from methodologies.lifecycle_state, per Section 1.4. required_approver_role (Table A-2.4) must be configured per customer above ordinary methodology-review permission before any Restatement Event can reach PENDING_APPROVAL.
+Section 6 — Cascade Resolution Logic
+At POST /v1/restatement-events, the primary_methodology_id is traversed through methodology_dependencies (FIE-002 §14) to find every downstream dependent — the same one-hop-then-transitive traversal FIE-002 §14 already defers to a future consumer for multi-hop cases; this is that consumer, exercised for the first time. Every methodology reached is added to cascade_methodology_refs, each pinned to its own currently-ACTIVE version. A caller may remove an entry from the cascade only by resubmitting with an excluded_dependents entry carrying a non-empty justification (Table A-2.3); the submit endpoint (Table A-3.1) rejects an empty or missing justification for any exclusion, closing off silent gaps in the restated set.
+On CASCADE_RESOLUTION_FAILED (Table A-11.1) — for example, a cycle or an unresolvable dependency edge in methodology_dependencies — the Restatement Event remains in DRAFT and is not submittable until the underlying dependency graph issue is resolved directly in FIE-002 (via its existing methodology_dependencies write path, unmodified by this addendum). There is no partial-cascade fallback and no path that allows submission with an unresolved cascade error.
+Section 7 — FIE-005 Restatement Comparison Question Type
+RESTATEMENT_COMPARISON (Section 1.6) resolves by: (1) identifying the applicable methodology and period from the question, (2) checking whether a COMPLETE Restatement Event exists covering that methodology and period, and (3a) if so, retrieving both the original and restated Financial Intelligence Objects and reasoning over the difference as an ordinary Financial Finding (FIE-005 §11) with both FIO references in supporting_evidence_refs, or (3b) if no completed Restatement Event exists, returning a Reasoning Package with status=INSUFFICIENT_EVIDENCE and a specific, user-facing explanation that a restatement would need to be run to answer this question — never a fabricated or approximated comparison.
+Section 8 — Impact on FIE-003 Governed Mode
+FIE-003 §1.9's narrowing is lifted exactly to the extent a restatement_policy and COMPLETE Restatement Event exist for the methodology and period in question — and no further. A GOVERNED as_of query against a methodology with RESTATE_FORWARD_ONLY (the default) behaves identically to today. Against a methodology with a completed RESTATE_FULL_HISTORY or RESTATE_WINDOW event, the same query now resolves to the restated Operating Model version for periods within scope. No FIE-003 code changes — this is entirely a consequence of FIE-002 returning richer resolution answers, per Section 1.8.
+Section 9 — Impact on FIE-004 Forecast Memory
+FIE-004 §1.6's distinction between preserved historical belief and unavailable historical recalculation remains structurally exactly as specified — this addendum does not change FIE-004 at all. What changes is that "unavailable" becomes "available" for any period a completed Restatement Event now covers, and FIE-004's existing Decision Memory (Section 4 of this addendum) automatically gains a durable record of every restatement decision made, available for exactly the kind of longitudinal query FIE-004 was built to answer — "did we ever restate this, and why."
+Section 10 — Impact on FIE-005 Historical-Understanding Questions
+FIE-005 §1.7's CURRENT/HISTORICAL question classification is unchanged in structure. A HISTORICAL question that previously always returned a preserved-knowledge-grounded answer now, for covered periods, has the option (Section 7) of answering as a live comparison instead, or of returning both: the preserved belief at the time, and the restated figure, explicitly labeled as two different things answering two different questions — never conflated into one number.
+Section 11 — Error Handling
+Error Code
+Meaning
+RESTATEMENT_POLICY_NOT_FOUND
+Referenced restatement_policy_id does not exist
+MISSING_EXCLUSION_JUSTIFICATION
+submit called with an excluded_dependents entry lacking a justification
+INSUFFICIENT_APPROVAL_ROLE
+approve/reject called by a caller without the configured required_approver_role
+MISSING_AFFECTED_PERIODS_ACKNOWLEDGMENT
+approve called without affected_periods_acknowledgment=true
+CASCADE_RESOLUTION_FAILED
+methodology_dependencies traversal could not complete (e.g. a cycle, which FIE-003 §11 already prevents at Execution Plan time for ordinary runs and is checked again here at cascade time)
+RESTATEMENT_EXECUTION_FAILED
+FIE-003 dispatch failed for one or more periods in scope — the entire Restatement Event is marked FAILED, never partially COMPLETE
+Table A-11.1 — New error codes, extending FIE-002's existing taxonomy.
+Section 12 — Security and Governance Controls
+required_approver_role is configured per customer and enforced at the API layer — approve/reject fail closed with INSUFFICIENT_APPROVAL_ROLE for any caller lacking it, per Section 1.4
+A Restatement Event's cascade_methodology_refs, once APPROVED, are immutable — no code path allows adding or removing a methodology from an already-approved event
+Every approval decision is permanently logged both in restatement_approvals and as a FIE-004 DECISION Knowledge Object, giving the decision two independent, cross-checkable audit trails
+A REJECTED or FAILED Restatement Event is terminal and retained, never deleted, consistent with the platform's universal no-deletion posture
+Section 13 — Testing Additions
+A methodology with no restatement_policy behaves identically to FIE-002 v1.0 in every existing FIE-002 test — regression coverage, not new behavior
+Cascade resolution correctly identifies every transitive dependent for a multi-level dependency graph (e.g. Pipeline → Bookings → Revenue → Cash)
+submit rejects any excluded_dependents entry with an empty justification
+approve rejects any caller without the configured required_approver_role, and rejects a missing affected_periods_acknowledgment
+A COMPLETE Restatement Event leaves every pre-existing FIE-003 Calculation Run and FIO completely unmodified — verified by content-hash comparison before and after execution
+RESTATEMENT_COMPARISON in FIE-005 correctly returns INSUFFICIENT_EVIDENCE for a period with no completed Restatement Event, and a correctly evidenced Finding for one that has completed
+A FAILED Restatement Event during EXECUTING never leaves a partial set of restated periods presented as if complete
+Backlog Closure
+Originating Document
+Status
+FIE-003 §31 — "Full Governed restatement windows and historical rebuilds"
+Closed by this addendum
+FIE-004 §34 — "Full historical restatement integration"
+Closed by this addendum
+FIE-005 §33 — "Full historical restatement integration"
+Closed by this addendum
+Table A-14.1 — The three-times-restated backlog item is resolved. FIE-000's consolidated backlog table should be updated to reflect this the next time it is revised.
+Housekeeping note: FIE-000 §14's consolidated backlog table currently lists this item as open. It should be marked CLOSED, with a pointer to this addendum, the next time FIE-000 is revised — this addendum does not itself edit FIE-000, consistent with every prior document's rule that a downstream document restates an inherited item rather than reaching back to silently edit the document that originated it.
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+Non-disruption to FIE-002 v1.0
+10 / 10
+Every addition is additive and opt-in per methodology; a methodology with no retirement_date and no restatement_policy is provably unchanged, per Section 13's regression requirement.
+Zero schema impact on FIE-003/004/005
+10 / 10
+Table A-1.8 verifies this document by document; the only cross-service touch is a taxonomy enum addition in FIE-005 and an ordinary, unmodified FIE-004 Knowledge Object write.
+Governance rigor
+10 / 10
+Restatement approval is structurally separated from ordinary methodology governance, requires an elevated role, a business justification, and an explicit affected-periods acknowledgment — retroactive change to historical financials is treated as categorically higher-stakes, not as a variant of an existing workflow.
+Cascade safety
+10 / 10
+Dependent methodologies are included by default via the existing dependency graph; exclusion requires an explicit, non-empty justification rather than being possible by omission.
+Historical immutability preserved
+10 / 10
+Section 1.7 makes explicit that restatement produces new runs rather than editing old ones — the single most important guarantee to protect, since violating it would be the first place in this entire documentation series where "immutable" stopped meaning immutable.
+Table A-14.2 — Build readiness assessment. Aggregate: 50 / 50 (100%).
+FIE-002 Addendum A is complete and ready for engineering. It closes the single most-referenced open item in the FIE layer without reopening or modifying any frozen document — FIE-002 v1.0 gains capability, FIE-003 gains richer answers to a call it already makes, and FIE-004/FIE-005 gain nothing they need to change to benefit from it. The next natural candidates remain the Explainability Platform extraction (FIE-005 §33) and ABS-013 (Canonical Identity & Entity Resolution), per FIE-000's backlog table.
+The one guarantee this addendum could not be allowed to weaken is the platform's central immutability promise — that history, once recorded, is never rewritten. A restatement is, on its face, exactly the kind of feature that could violate that promise if built carelessly: its entire purpose is to change what a historical period's numbers say. Section 1.7 is the resolution: a restatement never edits a record, it creates new ones, at a new Operating Model version, leaving the original permanently intact beside it. The feature that sounds most like an exception to the platform's core rule turns out, built this way, to be another instance of it.

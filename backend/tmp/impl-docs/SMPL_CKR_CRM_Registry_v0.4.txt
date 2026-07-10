@@ -1,0 +1,2441 @@
+CONNECTOR KNOWLEDGE REGISTRY
+CRM Registry — Commercial Intelligence
+ABS-002  ·  Version 0.4 — CKR Standard Finalization
+Salesforce · HubSpot CRM · Microsoft Dynamics 365 Sales
+Pipedrive · Zoho CRM
+Chief Enterprise Architect · CRM Domain Architect · Revenue Operations Architect · SMPL.ai
+June 2026 · CONFIDENTIAL — INTERNAL ARCHITECTURE DOCUMENT
+Built on frozen CKR v0.3 template · Companion to SKA v0.4 and ERP Registry v0.4
+Scope and Calibration Notes
+This registry follows the identical frozen CKR template structure established in the ERP Registry, applied to the CRM connector category. Three calibration decisions, agreed with the Architecture Review Board before this registry was built, govern how CRM-specific concepts are documented:
+Decision
+Resolution
+Customer Health
+Customer Health is documented as a canonical business concept owned by the Customer Success domain — not as a CRM-native object. CRM platforms contribute partial signals to the canonical Health Score object (account engagement, opportunity activity, renewal-stage movement) but are never documented as the authoritative source. Product Analytics, Billing, Support, and Customer Success platforms are the other contributing domains. This prevents CRM connectors from claiming a capability they cannot reliably deliver alone.
+Microsoft Dynamics 365 Sales
+Documented as a fully independent CRM connector, distinct from Microsoft Dynamics 365 Finance (ERP Registry). The two are separate products with separate object models on a shared Dataverse platform. Where integration synergy exists for customers running both, it is noted explicitly rather than assumed.
+Connector Maturity
+Maturity levels in this registry reflect the maturity of SMPL's connector implementation — documentation completeness, mapping rule validation, automation readiness, and accumulated implementation experience — not the maturity, market share, or technical sophistication of the underlying vendor platform. A vendor with smaller market share can have a more mature SMPL connector than a vendor with larger market share, if SMPL has invested more implementation depth in it. This distinction is maintained explicitly throughout every connector specification in this registry.
+Table S.1 — Scope and calibration decisions for the CRM Registry, agreed prior to registry construction.
+CRM Category Overview
+This section establishes universal knowledge about Customer Relationship Management systems before any vendor-specific documentation begins — the Tier 1 foundation every CRM connector specification in this registry builds upon, consistent with the category overview pattern established in the ERP Registry.
+✱ ARCHITECT NOTE: This registry is designed to be consumed equally well by human implementation consultants and AI implementation agents. Throughout this document, the implementation agent evaluates connector readiness, the Connector Engine maps vendor objects to canonical targets, the Capability Assessment Layer determines module status, and the CEP requests customer confirmation for ambiguous configuration.
+What Defines a CRM Platform
+A Customer Relationship Management system is the system of record for an organization's commercial relationships and the sales process that converts prospects into customers and grows existing accounts. Where an ERP explains what happened financially, a CRM explains how future revenue is expected to occur — it is the system of intent, not the system of settlement.
+Every CRM in this registry maintains, at minimum, an Account or Company object (the commercial entity), a Contact object (the individuals at that entity), and an Opportunity or Deal object (a tracked potential transaction moving through a defined sales process). Beyond this core, CRMs extend into lead management, activity tracking, forecasting, territory management, and — in platforms with broader platform ambitions — marketing automation and customer service functionality.
+For SMPL, the CRM is the primary connector category for Commercial Intelligence: pipeline analytics, sales forecasting, bookings attribution, and GTM performance reporting all depend primarily on CRM data. No other connector category can substitute for the CRM in producing forward-looking revenue intelligence, just as no connector category can substitute for the ERP in producing GAAP-compliant financial statements.
+How CRM Differs From ERP — and How They Complement Each Other
+The ERP and CRM domains answer different questions about the same business. The ERP answers: what did we actually bill, collect, and recognize as revenue? The CRM answers: what are we trying to sell, to whom, and how likely is it to close? Neither domain can answer the other's question reliably. ARR derived purely from CRM Opportunity data reflects sales intent, not billing reality — Opportunity "Closed Won" does not guarantee an invoice was issued or revenue recognized. ARR derived purely from ERP data has no forward-looking pipeline context — it can describe what has already happened but cannot forecast what is coming.
+SMPL's Financial Intelligence depends on connecting both domains: ERP for ground truth on realized revenue, CRM for forward visibility into expected revenue. The canonical Pipeline-to-Revenue reasoning chain — one of the SKA's primary AI Reasoning Engine traversal patterns — exists specifically because no single connector category can answer the full question alone.
+Typical Commercial Workflows
+Lead capture and qualification: a prospect enters the system, is scored or qualified, and is either converted to an Account/Contact/Opportunity or disqualified
+Opportunity management: a tracked potential deal moves through a defined sequence of stages from initial qualification to closed-won or closed-lost
+Quote and proposal generation: pricing is configured against a Price Book or Product Catalog and presented to the prospect, frequently as a formal Quote object
+Forecasting: sales representatives and managers categorize open Opportunities into forecast categories (Commit, Best Case, Pipeline, Omitted) on a recurring cadence, typically weekly or monthly
+Activity tracking: calls, emails, meetings, and tasks are logged against Contacts and Opportunities, providing engagement signal
+Renewal and expansion management: for existing customers, CRM tracks upcoming renewal opportunities and expansion/upsell opportunities, frequently as a distinct Opportunity Type
+Territory and quota management: sales organizations are structured into territories with assigned quota, and Opportunities are attributed to the territory and representative responsible for them
+Customer Lifecycle Management
+CRM platforms track a Customer Lifecycle Stage — typically Lead, Marketing Qualified Lead (MQL), Sales Qualified Lead (SQL), Opportunity, Customer, and sometimes Churned or Former Customer. This lifecycle stage is a CRM-native concept and is well-supported across all five platforms in this registry, in contrast to Customer Health, which is not.
+Opportunity Management, Pipeline Management, and Sales Forecasting
+The Opportunity (or Deal, in some platforms) is the central object of commercial intelligence. It tracks: the Account and primary Contact involved, the products/services and amount, the current Pipeline Stage, the expected close date, the assigned owner, and — critically for SMPL's Reasoning Engine — its full stage history over time. Pipeline Stage taxonomies vary significantly by platform and by customer configuration within a platform; normalizing stage names to the SCBM canonical stage taxonomy (established in the ERP Registry's Business Object Registry treatment) is one of the most consequential and most customer-specific mapping challenges in this registry.
+Sales Forecasting in most CRM platforms operates through Forecast Categories — a classification layer above Pipeline Stage that represents the sales team's subjective confidence in a deal closing within the forecast period, independent of where the deal sits in the formal stage sequence. Forecast Category data, when available, is a high-value input to SMPL's Revenue Forecasting and Bookings Forecast capabilities.
+Territory Management and Account Hierarchy
+Enterprise-tier CRM implementations frequently include Territory Management — assignment of Accounts and Opportunities to defined sales territories, often hierarchical (e.g., Region > Segment > Named Account). Account Hierarchy — parent/child relationships between Account records, used to represent corporate structures with multiple subsidiaries or business units — is a related but distinct concept, supported with varying depth across the five platforms in this registry.
+Customer Health — Scope Clarification
+Customer Health is not a CRM-native canonical object in the SMPL Business Object Registry. It is owned by the Customer Success domain and is computed as a composite Health Score from signals across multiple connector categories: CRM (account engagement, opportunity activity, renewal-stage movement), Product Analytics (usage and feature adoption), Billing (payment history, plan downgrades), Support (ticket volume and severity), and dedicated Customer Success platforms (Gainsight, ChurnZero, Vitally). Every CRM connector specification in this registry documents what it can contribute to this composite score — never what it can determine alone.
+Integration Patterns with Other Connector Categories
+CRM + ERP: the foundational pairing for Pipeline-to-Revenue reasoning — CRM provides forward pipeline visibility, ERP provides realized revenue ground truth.
+CRM + Billing: closes the loop between sales-recorded bookings and actual subscription/invoice creation — essential for validating that Closed Won Opportunities convert to real ARR.
+CRM + Marketing Automation: connects top-of-funnel lead generation and campaign attribution to downstream pipeline and revenue outcomes — the foundation of GTM Analytics and channel efficiency reporting.
+CRM + Customer Success: contributes account-level commercial context (contract value, renewal date, expansion history) to the composite Customer Health Score and Renewal Risk Analysis.
+CRM + Product Analytics: when paired, enables correlation between product usage patterns and Opportunity outcomes — a Tier 2/3 reasoning pattern not available from CRM data alone.
+Version History — Changes from v0.3 (Frozen as v1.0)
+CRM Registry v0.4 finalizes the CKR standard before it is replicated across every remaining connector category. This is not an architectural redesign — the SKA, SCBM, SCDM, CKR, CEP, CAL, and MCR remain frozen and unmodified. This iteration adds two new required sections, standardizes one closing statement, and — most importantly — formally establishes the 22-section CKR standard that this registry now conforms to and that all future registries must follow.
+Change
+What It Does
+Why
+Common Customer Variants added (per connector)
+New section following Configuration Variants. Four-tier executive summary — Typical Implementation, Common Variants, Less Common Variants, Rare/Complex Variants — describing business implementation patterns before the detailed Configuration Variants table.
+Gives implementation teams and AI implementation agents a fast orientation to expected customer configuration before consulting detailed mapping guidance.
+Common Failure Modes added (per connector)
+New section documenting the business and implementation issues most commonly encountered during onboarding — incorrect business assumptions, customer ownership ambiguity, ARR inconsistency, and similar patterns — with explicit explanation of why each affects canonical mapping or Capability Assessment.
+Closes the gap between "what could go wrong technically" (Implementation Risks) and "what business assumption is most likely to be wrong" — a distinct and equally important failure category.
+"Connector Synergy" renamed to "Connector Synergies"
+Pluralized to match the permanent CKR standard section list exactly.
+Naming consistency across the permanent standard.
+Planning Guidance standardized (per connector)
+A single, substantively identical closing statement — appearing now in every connector — clarifying that confidence percentages, coverage estimates, capability estimates, duration estimates, and maturity ratings are planning guidance determined dynamically by the CAL and CEP, and that platform intelligence never improves through customer data.
+Establishes one consistent, permanent closing statement across every registry rather than each registry developing its own variant phrasing over time.
+CKR Standard Alignment section added
+New registry-level section formally defining the 22-section permanent CKR standard, with category-level vs. per-connector scope clarified, the standardized Planning Guidance statement reproduced verbatim, and explicit confirmation of what remains outside the standard (Pre-POC Discovery Checklists, engineering KPIs, operational dashboards, Jira workflows, production statistics).
+This is the primary deliverable of v0.4 — not an enhancement to the CRM Registry, but the finalized standard the CRM Registry now serves as the reference implementation of.
+Table V.1 — CRM Registry v0.4 changes. The CKR Standard Alignment section, not the CRM-specific content, is the primary architectural deliverable of this iteration.
+Universal CRM Business Objects
+The following business objects appear, in some form, across all five CRM platforms in this registry. Vendor-specific naming varies; the underlying business concept and its SCBM canonical target are universal. This table governs Section S8 (Vendor Object Inventory) for every CRM connector in this registry, consistent with the equivalent table established in the ERP Registry.
+Universal CRM Concept
+Business Definition
+SCBM Canonical Target
+Lead
+An unqualified prospect prior to Account/Contact/Opportunity conversion
+MQL (Movement, pre-conversion) — see ERP/Marketing Registry treatment
+Contact
+An individual person associated with an Account
+Contact (Entity, Tier 2)
+Account / Company
+The commercial organization a CRM record represents
+Customer Account (Entity)
+Opportunity / Deal
+A tracked potential commercial transaction moving through a defined sales process
+Opportunity (Entity)
+Opportunity Line Item / Deal Product
+A specific product or service component of an Opportunity, with quantity and price
+Extension field pending product-catalog canonical object (deferred to SCDM v1.1)
+Quote / Proposal
+A formal pricing document presented to a prospect, often the precursor to a signed Contract
+Out of SCBM Tier 1/2 scope — noted where present
+Product / Price Book
+The catalog of sellable products/services and their pricing
+Product (Entity, Tier 2) — shared canonical target with Billing Registry
+Campaign
+A marketing initiative tracked for pipeline attribution
+Campaign (Entity) — shared canonical target with Marketing Automation Registry
+Campaign Member
+The association between a Lead/Contact and a Campaign, with response status
+linked_to relationship (Campaign ↔ Lead/Contact)
+Activity / Task / Event
+A logged interaction — call, email, meeting, or task — associated with a Contact or Opportunity
+Out of SCBM Tier 1/2 scope — contributes to engagement signal for Customer Health
+Territory
+A defined sales organization unit, often hierarchical, to which Accounts and Opportunities are assigned
+Extension field pending Territory canonical object (deferred)
+Forecast / Forecast Category
+The sales team's period-level revenue projection, organized by confidence category (Commit, Best Case, Pipeline)
+Forecast Line (Movement) — CRM-sourced variant
+Sales Representative / Sales Manager
+The Employee responsible for an Opportunity or a team of representatives
+Employee (Entity) — shared canonical target with HRIS Registry
+Pipeline Stage
+The current position of an Opportunity within the defined sales process sequence
+Opportunity.stage_normalized (SCDM field, normalized to SCBM stage taxonomy)
+Opportunity History
+The time-stamped record of stage changes, amount changes, and close date changes for an Opportunity
+ARR Movement (Movement) — when the Opportunity closes and generates an ARR event; otherwise contributes to Opportunity-level audit trail
+Opportunity Team
+The set of individuals (beyond the primary owner) collaborating on an Opportunity
+managed_by relationship (extended) — Tier 2
+Partner / Partner Account
+An organization through which deals are sourced or co-sold
+Extension field pending Partner canonical object (deferred) — relevant to partner-sourced ARR attribution per SCBM v0.2 open ambiguities
+Customer Lifecycle Stage
+The current stage of a commercial relationship — Lead, MQL, SQL, Opportunity, Customer, Churned
+Customer Account.account_status (SCDM field)
+Customer Health (signal only)
+Engagement, opportunity activity, and renewal-stage indicators contributed to the composite canonical Health Score
+Health Score (Summary, Customer Success domain) — CRM is a partial contributor, never the sole source
+Table U.1 — Universal CRM business objects and their SCBM canonical targets. Customer Health is explicitly marked as a partial-contribution signal, not a CRM-owned object, per the scope calibration in this registry.
+Typical CRM Implementation Complexity
+CRM implementation complexity is driven by three factors that vary significantly across the five platforms in this registry, paralleling the ERP Registry's complexity framework:
+Stage taxonomy customization: nearly every CRM customer renames default pipeline stages to match their internal sales process — this is the single most universal CRM customization pattern and the most consequential for canonical mapping confidence.
+Custom object and custom field depth: platforms with strong extensibility (Salesforce, Dynamics 365 Sales) frequently accumulate years of custom fields, custom objects, and custom automation; platforms with simpler, more opinionated data models (HubSpot, Pipedrive) accumulate this less.
+Multi-product / multi-line-item complexity: customers selling more than one product or service typically use Opportunity Line Items, which significantly increase the surface area of ARR attribution by product — relevant for SMPL customers with multi-product SaaS portfolios.
+Common Integration Patterns
+REST API — the dominant and near-universal pattern across all five CRM platforms in this registry
+Webhook / event-driven sync — materially more mature in the CRM category than in the ERP category; Salesforce, HubSpot, and Pipedrive all offer strong native webhook or Change Data Capture support
+Bulk/batch APIs for historical backfill — available across all five platforms, with varying API design (Salesforce Bulk API 2.0, HubSpot batch endpoints, etc.)
+OAuth 2.0 as the near-universal authentication standard — more consistent across CRM vendors than the ERP category, where authentication patterns vary more widely
+Connector Maturity Model — CRM Registry Application
+This registry applies the five-level Connector Maturity Model established in the ERP Registry without modification. One clarification is essential and is stated explicitly here because it materially affects how every maturity rating in this registry should be read.
+Maturity reflects the maturity of SMPL's connector implementation — not the maturity, market share, or technical sophistication of the underlying vendor platform.
+A maturity rating in this registry answers: how much production implementation experience, mapping rule validation, and Tier 2 pattern library depth has SMPL accumulated for this specific connector? It does not answer: how good, how popular, or how technically capable is the vendor's platform?
+This distinction matters because the two questions can have opposite answers. Salesforce is the most technically sophisticated and widely deployed CRM platform in this registry — but if SMPL has built deep implementation experience with HubSpot before Salesforce, HubSpot's SMPL connector maturity rating would correctly be higher, even though Salesforce remains the more capable platform in the abstract. A vendor's market position is a Best Fit Customer consideration. A connector's maturity rating is an implementation-confidence consideration. They are evaluated independently throughout this registry.
+Level
+Name
+What It Means for THIS Connector Specifically
+1
+Draft
+SMPL has authored a connector specification based on vendor API documentation and architectural analysis. No SMPL implementation has yet been built or run against a real customer environment for this connector.
+2
+Validated
+SMPL has implemented this connector against at least one real production customer. Core Tier 1 mapping rules are confirmed correct for that implementation. Tier 2 pattern library has begun to accumulate.
+3
+Pilot Ready
+SMPL has implemented this connector across 3–4 production customers with consistent results. SMPL's Tier 1 mapping rules are stable across those implementations. Common configuration variants are documented from direct SMPL implementation experience.
+4
+Production Ready
+SMPL has implemented this connector across ≥5 production customers with full Tier 1 test coverage and a substantial Tier 2 pattern library built from direct SMPL implementation experience.
+5
+Enterprise Certified
+SMPL has implemented this connector across ≥10 production customers including ≥2 large enterprise or complex deployments. SMPL's Tier 2 pattern library covers enterprise-specific variants encountered in SMPL's own implementation history.
+Table M.1 — Connector Maturity Model, CRM Registry application. Every criterion is phrased in terms of SMPL's accumulated implementation experience with the connector, never the vendor's platform characteristics.
+Because this is the inaugural CRM Registry build, maturity ratings in this version reflect SMPL's architectural confidence and the depth of pattern knowledge available from the ERP Registry's parallel construction (where applicable, e.g., shared patterns with the Dynamics 365 Finance connector) rather than CRM-specific production implementation history, which does not yet exist in volume at the time of this registry's construction. This is stated explicitly on every connector rather than allowed to imply a false production track record.
+✱ ARCHITECT NOTE: A vendor's market share, product sophistication, and ecosystem breadth are real, relevant facts — they belong in the Best Fit Customer and Connector Strengths sections of each specification. They must never be conflated with maturity. A future registry reviewer auditing maturity ratings should be able to ask "how many SMPL production implementations support this rating?" and get a direct, defensible answer — not a restatement of the vendor's Gartner Magic Quadrant position.
+1. Salesforce
+Salesforce is commonly deployed among SMPL's target customer base and is designed for extensive technical customization. It typically provides detailed opportunity lifecycle modeling and a broad customization surface, which generally results in higher schema variability than other CRM connectors SMPL supports.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_salesforce_v1
+vendor_name
+Salesforce, Inc.
+vendor_type
+CRM (Customer Relationship Management) — extensible platform
+vendor_description
+Salesforce is a cloud-based CRM and platform-as-a-service providing opportunity lifecycle management, account management, forecasting, and extensive customization capability through its underlying Force.com platform.
+primary_value_proposition
+Connecting Salesforce enables Pipeline Analytics, Sales Forecasting, Bookings attribution, and GTM Dashboards, typically supported by a detailed opportunity history and stage-change audit trail.
+connector_maturity_level
+Pilot Ready (Level 3) — reflects SMPL implementation depth; see Connector Maturity Model clarification
+current_specification_version
+0.3.0
+Business Purpose
+Salesforce serves as the system of intent for organizations' sales process — tracking how prospects become pipeline, how pipeline becomes bookings, and how sales teams forecast and manage territory. For SMPL, it is generally expected to be a high-confidence source of Opportunity-level data and stage-change history.
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Account
+A company or organization — the primary entity for customer relationship tracking
+Customer Account (Entity)
+Normalized — High. Identity resolution required when paired with Billing/ERP connectors.
+Opportunity
+A potential deal — the primary unit of pipeline management
+Opportunity (Entity)
+Direct — High for core fields; Normalized — Medium for stage mapping (highly customer-specific).
+Contact
+An individual person at an Account
+Contact (Entity, Tier 2)
+Direct — High.
+Lead
+An unqualified prospect prior to Account conversion
+MQL (Movement, pre-conversion)
+Inferred — Medium. Conversion event triggers MQL creation.
+Campaign
+A marketing initiative
+Campaign (Entity)
+Direct — High when Campaigns module used (~60% of customers).
+OpportunityHistory
+Time-stamped record of stage, amount, and close date changes
+Contributes to ARR Movement derivation and Opportunity audit trail
+Direct — High. Typically provides detailed stage-history data.
+ForecastingItem / Forecast
+Period-level sales forecast by category
+Forecast Line (Movement) — CRM-sourced variant
+Derived — Medium. Requires Salesforce Collaborative Forecasts module active.
+SBQQ__Subscription__c (Salesforce CPQ)
+Subscription record from the CPQ add-on
+Subscription (Entity) — cross-reference to Billing Registry
+Derived — High when CPQ active. Should be cross-validated against the Billing connector's ARR.
+Table — Salesforce primary business objects.
+Canonical Mapping — Stage Normalization
+The Connector Engine maps Opportunity.StageName through a lookup table to the SCBM canonical stage taxonomy. The following table covers Salesforce's standard stage names; custom stage names are routed to the Customer Environment Profile for resolution during onboarding.
+Standard Salesforce Stage
+SCBM Canonical Stage
+Confidence
+Prospecting
+SQL
+High
+Qualification
+SQL
+High
+Needs Analysis
+SQL
+High
+Value Proposition
+Opportunity
+High
+Proposal/Price Quote
+Proposal
+High
+Negotiation/Review
+Negotiate
+High
+Closed Won
+Closed Won
+High
+Closed Lost
+Closed Lost
+High
+[Customer custom stage]
+Requires CEP resolution
+Low until resolved
+Table — Salesforce stage normalization (Tier 2 pattern library). Custom stage names are common — the implementation agent should expect CEP resolution for most enterprise Salesforce customers.
+Supported Modules
+Salesforce CPQ (Configure-Price-Quote) — unlocks Subscription-adjacent data; should always be cross-validated against a Billing connector, never treated as the sole ARR source
+Collaborative Forecasts — unlocks Forecast Category data
+Service Cloud — unlocks Support Case data (Customer Success domain, not Commercial Intelligence)
+Territory Management 2.0 — unlocks hierarchical territory assignment
+Authentication
+OAuth 2.0 is the standard and required authentication method. The Connector Engine requests the minimum permission set required for Account, Opportunity, Contact, Lead, Campaign, and OpportunityHistory read access — never broader org-wide access than required for canonical object population.
+APIs and Data Extraction
+REST API — primary pattern for object-level queries and incremental sync
+Bulk API 2.0 — recommended for historical backfill exceeding 50,000 records
+SOQL (Salesforce Object Query Language) — used for complex relationship queries across the object graph
+Event Support, Incremental Sync, and Historical Backfill
+Capability
+Support Level
+Notes
+Webhooks / Change Data Capture
+Supported — CDC for core objects
+Not all custom objects support CDC; Outbound Messages available as a fallback pattern.
+Incremental Sync
+Supported
+SystemModstamp on all standard objects — reliable and consistent.
+Historical Backfill
+Fully supported
+Bulk API 2.0 recommended for large implementations; governor limits apply and require orchestration awareness.
+Known Customizations
+Custom Opportunity stages — the single most universal Salesforce customization, present in the large majority of enterprise implementations
+Custom objects for ARR tracking (e.g., a customer-built ARR__c object) — occasionally used in place of or alongside CPQ subscription data; the implementation agent should always ask whether such an object exists during Pre-POC Discovery
+Record types and page layouts that vary Opportunity field visibility by sales team — does not affect API-level data access but may affect data completeness if fields are hidden from certain user profiles
+Transformation Guidance
+The Connector Engine treats Salesforce as the authoritative source for Opportunity-level pipeline data but never as the authoritative source for realized ARR — Closed Won status indicates sales intent, not confirmed billing. Cross-validation against a Billing connector is the standard implementation pattern whenever both are connected.
+Configuration Variants
+Variant
+Frequency
+Impact
+Salesforce CPQ active
+Common (~35–40% of SMPL's Salesforce customer base)
+Subscription-adjacent data available from Salesforce; should be cross-validated against Billing connector ARR, never used as sole source.
+Custom stage taxonomy
+Very common (>70%)
+Requires CEP-driven stage mapping resolution during onboarding — the most consequential configuration variant for this connector.
+Multiple sales processes (Record Types) with different stage sets
+Occasional (~20%, more common in multi-product or multi-segment sales orgs)
+Each Record Type's stage set requires independent CEP resolution.
+Common Customer Variants
+Before reviewing the detailed Configuration Variants above, this executive summary orients implementation teams and AI implementation agents to the most frequently encountered Salesforce customer configurations, organized by how often they appear in practice.
+Variant Tier
+Description
+Typical Implementation
+A single sales process with customized stage names, standard Account/Opportunity/Contact structure, and no CPQ. Stage taxonomy resolution is the primary onboarding task; everything else maps cleanly.
+Common Variants
+Salesforce CPQ active for quote-to-cash workflows; multiple Record Types representing distinct sales motions (e.g., New Business vs. Renewal); Campaigns module used for basic marketing attribution.
+Less Common Variants
+Territory Management 2.0 active with hierarchical territory assignment; Service Cloud active alongside Sales Cloud; custom objects built specifically for ARR or contract-term tracking outside of CPQ.
+Rare / Complex Variants
+Multiple business units operating as functionally separate Salesforce orgs under one corporate parent; heavily customized Opportunity Teams and approval chains; legacy custom code (Apex triggers) that silently mutates standard field values after creation.
+Table — Salesforce Common Customer Variants. Orients implementation planning before consulting the detailed Configuration Variants table below.
+Common Failure Modes
+The following implementation issues are the most frequently encountered business and data-modeling problems when onboarding Salesforce — distinct from software defects, these are business-assumption and configuration mismatches that affect canonical mapping or Capability Assessment if not identified during Pre-POC Discovery.
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Closed Won treated as confirmed revenue
+Produces overstated Bookings Forecast and ARR figures until cross-validated against Billing — the single most common Salesforce-specific assumption error.
+Non-standard Opportunity stages with no clear win-probability progression
+Stage Conversion and Pipeline Coverage become unreliable if custom stage names do not represent a genuine sequential sales process — requires CEP clarification, not assumption.
+Customer ownership ambiguity across multiple Record Types or business units
+When the same Account exists differently across multiple sales processes, Customer Account identity resolution can produce duplicate or conflicting canonical records.
+Custom object overuse for ARR tracking instead of CPQ or Billing
+Custom ARR__c-style objects fragment the source of truth for Subscription data; the implementation agent should always ask whether such an object exists and what its relationship to CPQ or Billing is.
+Incomplete historical OpportunityHistory due to mid-implementation stage taxonomy changes
+Customers who renamed or restructured stages mid-year show discontinuities in historical Pipeline Waterfall data — a data artifact requiring explicit customer communication, not a mapping error.
+Inactive or abandoned sales processes (Record Types no longer in active use)
+Including stale Record Types in stage resolution wastes CEP discovery time and can introduce noise into Pipeline Analytics if not excluded.
+Missing historical activity data due to API governor limits during initial backfill
+Large enterprise orgs may silently truncate historical extraction if governor limits are hit without proper batching — produces incomplete OpportunityHistory that understates Sales Velocity confidence.
+Table — Salesforce Common Failure Modes.
+Capability Unlocks — Capability Progression
+Each capability below reflects the standalone status when Salesforce is the only connected system, the expected confidence at that status, what additional connectors would improve confidence, and the expected confidence range once those connectors are present, reflecting that confidence improves through complementary business systems rather than through a single deterministic calculation. These figures are planning guidance, not contractual guarantees, and are expected to be revised as SMPL accumulates additional Salesforce production implementations.
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Pipeline Analytics
+Ready
+88%
+Billing (bookings validation)
+93–97%
+Pipeline Waterfall
+Ready
+85%
+Billing (stage-to-revenue validation)
+91–95%
+Opportunity Movement Analysis
+Ready
+86%
+Product Analytics (adoption-correlated movement)
+90–94%
+Sales Forecasting
+Partial
+58% (module active) / 25% (inactive)
+ERP, Billing, Marketing Automation
+86–90%
+Bookings Forecast
+Partial
+45%
+Billing (required for confirmation)
+88–92%
+Win Rate Analysis
+Ready
+90%
+Product Analytics, Customer Success
+92–96%
+Stage Conversion
+Ready
+84%
+Billing (confirmed-revenue stage validation)
+89–93%
+Sales Velocity
+Ready
+82%
+ERP (cycle-time-to-cash correlation)
+87–91%
+Pipeline Coverage
+Ready
+87%
+ERP, Billing (target/quota cross-validation)
+90–94%
+GTM Dashboards
+Partial
+40% (pipeline-side only)
+Marketing Automation
+84–88%
+Territory Reporting
+Partial
+50% (module active) / 0% (inactive)
+HRIS (territory-to-employee mapping)
+81–85%
+Table — Salesforce capability progression. Status and Current Confidence reflect standalone connection; Expected Confidence Range reflects the registry's planning estimate once all listed companion connectors are present.
+Recommended Companion Connectors
+Salesforce delivers strong standalone Pipeline Analytics, and its Commercial Intelligence value grows substantially when paired with complementary business systems. The following describes how each companion connector strengthens — not merely adds to — the intelligence SMPL can produce from a Salesforce connection.
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+Billing (Stripe, Chargebee, etc.)
+Converts Salesforce's sales-recorded Closed Won amounts into validated, billing-confirmed bookings and ARR — closing the gap between sales intent and financial reality.
+Bookings Forecast, Renewal Forecasting, ARR validation
+ARR (validated variant), Subscription, Revenue Schedule
+Bookings Forecast moves from Partial toward Ready; Pipeline Analytics confidence increases
+ERP (NetSuite, Sage Intacct, etc.)
+Provides realized-revenue ground truth against which Salesforce pipeline forecasts can be measured for accuracy.
+Forecast Variance, Revenue Bridge Analysis, Sales Efficiency
+Revenue (recognized variant), GL Account linkage to commercial activity
+Sales Forecasting confidence increases; Pipeline Coverage gains financial grounding
+Customer Success (Gainsight, ChurnZero, etc.)
+Contributes the support history, NPS, and usage-correlated engagement signal needed to complete the composite Health Score that Salesforce alone can only partially populate.
+Renewal Analytics, Customer Health-informed pipeline prioritization
+Health Score (composite, multi-domain)
+Renewal Analytics moves from Partial toward Ready
+Product Analytics (Amplitude, Mixpanel, etc.)
+Enables correlation between product usage patterns and Opportunity outcomes that Salesforce data alone cannot establish.
+Expansion Opportunity Detection, Feature-Utilization-vs-Renewal-Risk reasoning
+Product Adoption signal contribution to Health Score
+Win Rate Analysis and Opportunity Movement Analysis gain usage-correlated context
+Marketing Automation (Marketo, Pardot, HubSpot Marketing, etc.)
+Completes the GTM Dashboard picture by adding spend-side and top-of-funnel attribution data to Salesforce's pipeline-side data.
+GTM Dashboards, Channel Efficiency Reporting
+Campaign, MQL-to-Opportunity attribution chain
+GTM Dashboards moves from Partial toward Ready
+HRIS (Rippling, BambooHR, etc.)
+Enables territory-to-employee mapping for richer sales organization context beyond what Salesforce alone provides.
+Sales Productivity, Quota Attainment Reasoning
+Employee linkage to sales territory and quota structures
+Territory Reporting confidence increases when Territory Management 2.0 is active
+Table — Salesforce recommended companion connectors. Every pairing is described in terms of business reasoning, not technical integration requirements.
+Connector Synergies
+Salesforce + ERP
+Pipeline-to-Revenue analysis: tracing how pipeline at the start of a period converted into recognized revenue by period end
+Forecast variance: comparing sales-team forecast category submissions against actual realized revenue, by representative and by territory
+Revenue bridge analysis: decomposing period-over-period revenue change into new business, expansion, and churn components using Salesforce Opportunity Type alongside ERP-confirmed revenue
+Sales efficiency: relating sales and marketing spend (from ERP GL data) to pipeline and bookings generated (from Salesforce)
+Salesforce + Billing
+ARR validation: confirming that Closed Won Opportunity amounts match actual subscription ARR created in the billing system
+Bookings confirmation: distinguishing sales-recorded bookings from billing-confirmed bookings, surfacing the gap as an explicit reconciliation metric
+Deferred revenue attribution: linking Salesforce Opportunity and Product Line Item data to the specific deferred revenue schedule it generated
+Renewal forecasting: combining Salesforce renewal Opportunity tracking with Billing subscription end-date data for higher-confidence renewal risk timing
+Salesforce + Product Analytics
+Product adoption analysis: correlating Opportunity stage progression with product usage signals for accounts already using a trial or land-and-expand product
+Expansion opportunity detection: identifying accounts with usage patterns suggesting expansion readiness before a sales representative manually creates the Opportunity
+Feature utilization vs. renewal risk: combining Salesforce renewal-stage Opportunity data with product usage trends to flag accounts where low feature adoption correlates with historical churn patterns
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 38%
+SCBM Domain
+Coverage
+CRM / Pipeline
+92%
+Marketing
+35% (Campaigns module active) / 5% (inactive)
+ARR / Billing
+22% (CPQ active, requires Billing cross-validation) / 5% (inactive)
+Customer (identity + commercial context)
+65%
+General Ledger
+0%
+Revenue Recognition
+0%
+Headcount
+3% (sales org structure only)
+Customer Health (signal contribution only)
+15% — partial signal, not authoritative
+Product Analytics
+0%
+Table — Salesforce estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Opportunity (core fields)
+90%
+Direct mapping for amount, close date, owner; stage requires normalization per customer.
+Opportunity Stage
+55% (standard stages) / requires CEP (custom stages)
+The implementation agent should always confirm whether stage names are standard or customized before presenting stage-derived data as high confidence.
+Account (identity)
+85%
+Strong identity fields; cross-system matching with Billing/ERP required for commercial context.
+Account (commercial fields — ARR, health)
+20%
+Not natively populated by Salesforce alone; requires Billing and Customer Success connectors.
+OpportunityHistory
+88%
+Reliable, complete stage-change audit trail across the large majority of observed implementations.
+Forecast Category
+60% (Collaborative Forecasts active) / 0% (inactive)
+Module-dependent — the implementation agent must confirm module status before assuming availability.
+Campaign
+55% (Campaigns module actively used) / 10% (sparse use)
+Usage varies significantly — many Salesforce customers use Campaigns minimally even when the module is technically active.
+Table — Salesforce Data Confidence Profile.
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+High. Custom stage taxonomy resolution is required for the large majority of implementations — the single largest discovery burden for this connector.
+Manual Mapping Expectations
+Medium-High. Core Opportunity/Account/Contact fields map cleanly; stage normalization and any custom ARR-tracking objects require dedicated discovery.
+Customization Level (typical)
+High. Salesforce's extensibility is its core value proposition for customers, and SMPL implementations should expect to encounter it.
+Estimated Onboarding Effort
+Medium-High relative to other CRM connectors in this registry, driven primarily by stage normalization work.
+Expected Implementation Duration
+Planning estimate only: typically longer than HubSpot or Pipedrive for comparable scope, reflecting Salesforce's higher customization ceiling.
+Best Fit Customer
+Ideal Customer Profile
+Series B+ SaaS companies with established, complex sales processes requiring extensive customization
+Organizations with multiple sales motions (e.g., separate SMB and Enterprise processes) requiring Record Type flexibility
+Companies using Salesforce CPQ for quoting, where Subscription-adjacent data can enrich (not replace) Billing-derived ARR
+Enterprise sales organizations requiring territory management and complex forecast rollups
+Less Ideal Customer Profile
+Very early-stage companies with simple, single sales process — the customization overhead exceeds the need
+Organizations without dedicated Salesforce administration resources — misconfiguration risk is real given the platform's flexibility
+Companies expecting fast time-to-value from CRM data alone — Salesforce implementations typically require more stage-normalization discovery time than simpler platforms
+Implementation Risks
+Common implementation mistake: presenting Closed Won Opportunity amount as confirmed ARR without Billing connector cross-validation — Closed Won reflects sales intent, not billing reality, and the gap between the two is a frequent source of customer-reported discrepancies.
+Stage taxonomy drift: customers who have changed their stage taxonomy over time (e.g., added or removed stages mid-year) will show discontinuities in historical pipeline waterfall data — this is a data artifact, not a SMPL mapping error, and should be documented as a known limitation during onboarding.
+Record Type proliferation: implementations with many active Record Types each carrying a different stage set significantly increase CEP resolution burden — the implementation agent should inventory all active Record Types during Pre-POC Discovery, not just the default sales process.
+API governor limits: large enterprise Salesforce orgs may hit daily API call limits during initial historical backfill — Bulk API 2.0 with appropriate batching mitigates this but requires implementation awareness.
+Standalone Capability Summary
+Ready
+Pipeline Analytics
+Pipeline Waterfall
+Opportunity Movement Analysis
+Win Rate Analysis
+Stage Conversion
+Sales Velocity
+Pipeline Coverage
+Partial
+Sales Forecasting (module-dependent)
+Bookings Forecast (requires Billing cross-validation)
+GTM Dashboards (pipeline-side only)
+Territory Reporting (module-dependent)
+Executive Commercial Briefings
+Unavailable
+Financial Statements
+Revenue Recognition
+Confirmed ARR / Bookings (without Billing connector)
+Workforce Planning
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting Salesforce alone is expected to deliver immediate, high-confidence Pipeline Analytics, Win Rate Analysis, and Sales Velocity reporting, generally supported by a detailed opportunity-history audit trail. The most important customer expectation to set during the sales conversation: Salesforce-derived "bookings" are sales-recorded intent, not confirmed revenue, until cross-validated against a Billing connector. Customers evaluating SMPL primarily for pipeline visibility and sales execution analytics will see strong standalone value; customers expecting confirmed Financial Intelligence from Salesforce data alone should be guided toward also connecting their Billing and ERP systems.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Salesforce occupies the role of commercial system of record — the authoritative source of how revenue is being pursued, not yet how it has been realized. Its contribution to Financial Intelligence is forward-looking: pipeline visibility, sales execution analytics, and forecast signal that no financial system alone can produce. Within the SCBM, Salesforce populates the Opportunity, Customer Account, and Contact canonical objects, and contributes a partial signal to the canonical Health Score owned by the Customer Success domain.
+Immediately after connection, Salesforce delivers board-relevant Pipeline Analytics, Win Rate Analysis, and Sales Velocity reporting — sufficient on its own to give executive leadership a clear, current view of sales execution. The business value unlocked when Salesforce is combined with complementary systems is substantially larger: paired with Billing, sales-recorded pipeline becomes validated bookings and confirmed ARR; paired with ERP, forecast accuracy can be measured against realized revenue; paired with Customer Success and Product Analytics, pipeline activity becomes part of a complete picture of customer health and expansion potential. Salesforce is the foundation of Commercial Intelligence at SMPL; its full value is realized in combination, not in isolation.
+Connector Fingerprint
+Business Purpose
+Salesforce serves as the system of intent for an organization's sales process — the authoritative record of how prospects become pipeline and how pipeline becomes bookings. Within SMPL, it is the primary source of forward-looking commercial visibility that no financial system can independently provide.
+Typical Customer
+Series B+ SaaS companies with established, often multi-process sales motions — organizations that have outgrown simpler pipeline tools and require territory management, complex forecast rollups, or extensive customization to match their commercial operating model.
+Primary Strengths
+Detailed Opportunity stage-change history (OpportunityHistory) supporting Pipeline Waterfall and Sales Velocity from day one
+Extensive customization support for complex, multi-process enterprise sales organizations
+Native territory management for enterprise customers requiring hierarchical sales org reporting
+Known Implementation Challenges
+Custom stage taxonomy resolution is required for the large majority of implementations
+Record Type proliferation in complex sales orgs multiplies the CEP resolution burden
+API governor limits may require batching awareness during large historical backfills
+Implementation Characteristics
+High typical complexity — driven primarily by stage-taxonomy normalization and Record Type inventory, offset by SMPL's accumulated pattern library from prior implementations. Implementation duration is generally longer than HubSpot or Pipedrive for comparable scope, reflecting Salesforce's higher customization ceiling.
+Ideal Companion Systems
+Billing is the single highest-value pairing, converting Salesforce's detailed-but-unconfirmed pipeline data into validated bookings and ARR. ERP follows closely behind for forecast variance and revenue bridge analysis. See Recommended Companion Connectors above for the complete picture.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery. No two customer implementations of this connector are guaranteed to produce identical confidence or coverage figures.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data. This connector's estimates will be revised as SMPL accumulates additional implementation experience; they are never derived from, or improved by, any individual customer's commercial data.
+2. HubSpot CRM
+HubSpot is the most commonly encountered CRM among SMPL's earlier-stage customer base. Its more opinionated, less customizable data model produces materially higher out-of-box mapping confidence than Salesforce, at the cost of lower flexibility for complex enterprise sales processes.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_hubspot_v1
+vendor_name
+HubSpot, Inc.
+vendor_type
+CRM / Marketing Automation Platform
+vendor_description
+HubSpot is a cloud-based CRM and marketing automation platform combining contact and deal management with native email, content, and campaign tooling in a single connected data model.
+primary_value_proposition
+Connecting HubSpot enables Pipeline Analytics and GTM Dashboards with materially less stage-normalization overhead than Salesforce, plus native marketing attribution data not separately available from a pure-CRM platform.
+connector_maturity_level
+Pilot Ready (Level 3) — reflects SMPL implementation depth; see Connector Maturity Model clarification
+current_specification_version
+0.3.0
+Business Purpose
+HubSpot serves the same system-of-intent role as Salesforce for SMPL's earlier-stage customer base, with the added advantage of native marketing attribution data in the same connector — relevant to GTM Analytics in a way that a standalone CRM cannot provide without a separate Marketing Automation connector.
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Company
+A business organization — HubSpot's equivalent of Salesforce's Account
+Customer Account (Entity)
+Direct — High. Stricter field standards than Salesforce produce higher out-of-box confidence.
+Deal
+A tracked potential transaction — HubSpot's equivalent of Opportunity
+Opportunity (Entity)
+Direct — High for core fields; Normalized — High for stage mapping (see below).
+Contact
+An individual person
+Contact (Entity, Tier 2)
+Direct — High.
+Deal Stage History
+Time-stamped property-change history for Deal stage transitions
+Contributes to ARR Movement derivation and Opportunity audit trail
+Direct — High via Property History API.
+Marketing Email / Campaign
+Native marketing campaign and email engagement data
+Campaign (Entity)
+Direct — High. HubSpot's native marketing integration produces stronger Campaign data than most pure-CRM platforms.
+Ticket (Service Hub)
+A customer support request, when Service Hub is active
+Support Case (Entity) — Customer Success domain
+Direct — High when Service Hub active; Not Available otherwise.
+Table — HubSpot primary business objects.
+Canonical Mapping — Stage Normalization
+HubSpot enforces a more standardized default pipeline stage set than Salesforce and exhibits less customer-to-customer stage-name variation in SMPL's implementation experience to date. Custom stage names still occur and are still routed to the Customer Environment Profile, but the implementation agent should expect materially fewer CEP resolution cycles than with Salesforce.
+Standard HubSpot Deal Stage
+SCBM Canonical Stage
+Confidence
+Appointment Scheduled
+SQL
+High
+Qualified to Buy
+SQL
+High
+Presentation Scheduled
+Opportunity
+High
+Decision Maker Bought-In
+Proposal
+High
+Contract Sent
+Negotiate
+High
+Closed Won
+Closed Won
+High
+Closed Lost
+Closed Lost
+High
+[Customer custom stage]
+Requires CEP resolution
+Low until resolved — occurs less frequently than in Salesforce implementations
+Table — HubSpot stage normalization (Tier 2 pattern library).
+Supported Modules
+Sales Hub (Professional/Enterprise tiers) — unlocks custom deal properties, multiple pipelines, and forecasting
+Marketing Hub — unlocks deeper campaign attribution and lead-source tracking
+Service Hub — unlocks Ticket object (Customer Success domain)
+Authentication
+OAuth 2.0 is the standard authentication method, with Private App tokens available as an alternative for simpler implementations. The Connector Engine requests the minimum scope required for Company, Deal, Contact, and Marketing Email read access.
+APIs and Data Extraction
+REST API (CRM API v3) — primary pattern, consistently documented across all standard and custom objects
+Property History API — used to extract Deal stage-change history for waterfall and velocity reasoning
+Batch endpoints — used for efficient bulk read of large object sets
+Event Support, Incremental Sync, and Historical Backfill
+Capability
+Support Level
+Notes
+Webhooks
+Fully supported — comprehensive
+Generally offers broad webhook event coverage, comparable to Stripe-class connectors in the Billing category.
+Incremental Sync
+Supported
+lastmodifieddate property on all standard objects.
+Historical Backfill
+Fully supported
+Batch API with cursor-based pagination; efficient for all data volumes encountered in SMPL's target customer segment.
+Known Customizations
+Custom deal properties for ARR or contract-term tracking — less common than the equivalent Salesforce pattern, but the implementation agent should still confirm during Pre-POC Discovery
+Multiple pipelines for different deal types (e.g., New Business vs. Expansion) — common in Sales Hub Professional/Enterprise implementations and requires per-pipeline stage resolution
+Transformation Guidance
+The Connector Engine treats HubSpot Deals with the same authoritative-for-pipeline, not-authoritative-for-revenue posture established for Salesforce — Closed Won status reflects sales intent and should be cross-validated against a Billing connector before being presented as confirmed ARR.
+Configuration Variants
+Variant
+Frequency
+Impact
+Multiple deal pipelines active
+Common (~30%, more common in Sales Hub Professional+)
+Each pipeline's stage set requires independent resolution; the implementation agent should inventory all active pipelines during discovery.
+Marketing Hub active alongside Sales Hub
+Very common (>60% — HubSpot's combined platform positioning)
+Improves Campaign and lead-source attribution materially beyond CRM-only data.
+Custom deal properties for commercial terms
+Occasional (~20%)
+Captured as extension fields pending CEP business-meaning resolution.
+Common Customer Variants
+This executive summary orients implementation teams and AI implementation agents to the most frequently encountered HubSpot customer configurations before reviewing detailed configuration guidance.
+Variant Tier
+Description
+Typical Implementation
+A single deal pipeline with mildly customized stage names, standard Company/Deal/Contact structure, and Marketing Hub active alongside Sales Hub. Stage resolution is fast given HubSpot's standardized default taxonomy.
+Common Variants
+Multiple deal pipelines for different deal types (e.g., New Business vs. Expansion); Sales Hub Professional or Enterprise tier with custom deal properties for commercial terms.
+Less Common Variants
+Service Hub active alongside Sales and Marketing Hub, contributing Customer Success-adjacent Ticket data; Operations Hub active with custom data sync workflows feeding canonical fields from external systems.
+Rare / Complex Variants
+Tier mismatches between Sales Hub and Marketing Hub subscriptions producing asymmetric capability availability; heavily customized deal property schemas built to approximate CPQ-style functionality HubSpot does not natively provide.
+Table — HubSpot Common Customer Variants.
+Common Failure Modes
+The following implementation issues are the most frequently encountered business and data-modeling problems when onboarding HubSpot.
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Closed Won treated as confirmed revenue
+Same risk as every CRM connector in this registry — produces overstated Bookings Forecast until cross-validated against Billing.
+Multiple-pipeline configurations overlooked during discovery
+If the implementation agent inventories only the default pipeline, deals in secondary pipelines (commonly used for renewals) are excluded from Pipeline Analytics entirely.
+Customer ownership ambiguity when Company records are merged or duplicated
+HubSpot's deduplication tooling can merge Company records mid-implementation, producing canonical Customer Account identity discontinuities if not accounted for.
+Sales Hub / Marketing Hub tier mismatch assumed rather than confirmed
+Assuming GTM Dashboard capability is available because Sales Hub is active, without confirming Marketing Hub tier, produces an inaccurate Capability Assessment.
+ARR represented inconsistently across custom deal properties
+Customers occasionally track ARR in a custom property that diverges from the standard Deal amount field — the implementation agent should confirm which field is authoritative.
+Inactive pipelines retained in the account from a prior sales process
+Stale pipelines no longer in active use, if not excluded during stage resolution, introduce noise into Pipeline Analytics and waste CEP discovery time.
+Table — HubSpot Common Failure Modes.
+Capability Unlocks — Capability Progression
+Each capability below reflects standalone status, expected confidence, what additional connectors would improve confidence, and the expected confidence range once those connectors are present, reflecting that confidence improves through complementary business systems rather than through a single deterministic calculation. Planning guidance, not contractual guarantee, and expected to be revised as SMPL implementation history grows.
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Pipeline Analytics
+Ready
+90%
+Billing (bookings validation)
+93–97%
+Pipeline Waterfall
+Ready
+87%
+Billing (stage-to-revenue validation)
+91–95%
+Opportunity Movement Analysis
+Ready
+85%
+Product Analytics
+89–93%
+Sales Forecasting
+Partial
+50% (Sales Hub Pro+) / 20% (lower tier)
+ERP, Billing, Marketing Automation
+82–86%
+Bookings Forecast
+Partial
+42%
+Billing (required for confirmation)
+86–90%
+Win Rate Analysis
+Ready
+91%
+Product Analytics, Customer Success
+92–96%
+Stage Conversion
+Ready
+85%
+Billing
+88–92%
+Sales Velocity
+Ready
+83%
+ERP
+86–90%
+Pipeline Coverage
+Ready
+86%
+ERP, Billing
+89–93%
+GTM Dashboards
+Ready
+68%
+Billing (spend-to-revenue ROI)
+85–89%
+Territory Reporting
+Unavailable
+—
+HRIS (limited native territory support caps improvement)
+41–45%
+Table — HubSpot capability progression.
+Recommended Companion Connectors
+HubSpot's Commercial Intelligence value grows substantially when paired with complementary business systems, even though its native Marketing Hub integration already covers more ground standalone than most CRM connectors in this registry.
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+Billing (Stripe, Chargebee, etc.)
+Converts HubSpot Closed Won amounts into validated, billing-confirmed bookings and ARR.
+Bookings Forecast, Renewal Forecasting
+ARR (validated variant), Subscription, Revenue Schedule
+Bookings Forecast moves from Partial toward Ready
+ERP (NetSuite, QuickBooks Online, etc.)
+Provides realized-revenue ground truth for forecast variance and revenue bridge analysis against HubSpot pipeline data.
+Forecast Variance, Revenue Bridge Analysis
+Revenue (recognized variant)
+Sales Forecasting confidence increases
+Customer Success (Gainsight, ChurnZero, etc.)
+Completes the composite Health Score with support and usage signal beyond what HubSpot Service Hub alone provides.
+Renewal Analytics
+Health Score (composite, multi-domain)
+Renewal Analytics moves from Partial toward Ready
+Product Analytics (Amplitude, Mixpanel, etc.)
+Enables expansion opportunity detection and feature-utilization-vs-renewal-risk reasoning beyond what CRM data alone establishes.
+Expansion Opportunity Detection
+Product Adoption signal contribution to Health Score
+Win Rate Analysis gains usage-correlated context
+HRIS (Rippling, BambooHR, etc.)
+Provides organizational context beyond HubSpot's limited native territory management.
+Sales Productivity reasoning
+Employee linkage to sales structure
+Limited incremental improvement given HubSpot's native territory ceiling
+Table — HubSpot recommended companion connectors.
+Connector Synergies
+HubSpot + ERP
+Pipeline-to-Revenue analysis: tracing pipeline conversion into ERP-confirmed recognized revenue
+Forecast variance: comparing HubSpot forecast submissions against ERP-realized revenue
+Revenue bridge analysis: decomposing revenue change using HubSpot Deal Type alongside ERP-confirmed revenue
+HubSpot + Billing
+ARR validation: confirming Closed Won Deal amounts match actual subscription ARR
+Bookings confirmation: surfacing the gap between sales-recorded and billing-confirmed bookings
+Renewal forecasting: combining HubSpot renewal Deal tracking with Billing subscription end-date data
+HubSpot + Product Analytics
+Product adoption analysis: correlating Deal stage progression with product usage for trial or land-and-expand accounts
+Expansion opportunity detection: flagging usage patterns suggesting expansion readiness ahead of manual Deal creation
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 36%
+SCBM Domain
+Coverage
+CRM / Pipeline
+90%
+Marketing
+55% — generally the highest standalone Marketing coverage among CRM-only connections in this registry, given native integration
+ARR / Billing
+18% (requires Billing cross-validation)
+Customer (identity + commercial context)
+62%
+General Ledger
+0%
+Revenue Recognition
+0%
+Headcount
+2%
+Customer Health (signal contribution only)
+15% — partial signal, not authoritative
+Product Analytics
+0%
+Table — HubSpot estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Deal (core fields)
+92%
+Direct mapping with high field-standard consistency across implementations.
+Deal Stage
+78% (standard stages) / requires CEP (custom stages)
+Materially higher baseline confidence than Salesforce given HubSpot's more standardized default stage taxonomy.
+Company (identity)
+88%
+Strong, consistent identity fields.
+Company (commercial fields — ARR, health)
+22%
+Requires Billing and Customer Success connectors, same pattern as Salesforce.
+Deal Stage History
+85%
+Reliable via Property History API across observed implementations.
+Campaign / Marketing Email
+70%
+Native integration produces materially higher confidence than CRM platforms requiring a separate Marketing connector.
+Table — HubSpot Data Confidence Profile.
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Low-Medium. Stage normalization burden is materially lower than Salesforce given HubSpot's more standardized default taxonomy.
+Manual Mapping Expectations
+Low-Medium. Core Deal/Company/Contact fields map cleanly with minimal customer-specific validation required.
+Customization Level (typical)
+Low-Medium. Less extensive than Salesforce; multiple-pipeline configurations are the primary complexity driver.
+Estimated Onboarding Effort
+Low relative to Salesforce; comparable to or faster than Dynamics 365 Sales.
+Expected Implementation Duration
+Planning estimate only: typically among the faster CRM implementations in this registry.
+Best Fit Customer
+Ideal Customer Profile
+Seed through Series B SaaS companies with relatively standardized sales processes
+Companies wanting native marketing attribution alongside CRM data without a separate Marketing Automation connector
+Organizations prioritizing implementation speed over deep customization flexibility
+Less Ideal Customer Profile
+Large enterprise sales organizations requiring complex territory management — HubSpot's native territory support is limited relative to Salesforce
+Companies with highly bespoke, multi-process sales motions requiring extensive Record-Type-equivalent customization
+Organizations already standardized on Salesforce for reasons beyond CRM functionality (e.g., broader platform ecosystem investment)
+Implementation Risks
+Common implementation mistake: assuming HubSpot's simpler data model means zero stage customization — multi-pipeline configurations, while less common than in Salesforce, still require per-pipeline CEP resolution and are easy to overlook if the implementation agent inventories only the default pipeline.
+Same Closed-Won-vs-confirmed-ARR risk as Salesforce: HubSpot Deal data reflects sales intent, not billing reality, and should always be cross-validated against a Billing connector before being presented as confirmed revenue.
+Marketing Hub / Sales Hub tier mismatches: a customer may have Sales Hub Professional but only Marketing Hub Starter (or vice versa), producing asymmetric capability unlocks that the implementation agent should confirm explicitly rather than assume from Sales Hub tier alone.
+Standalone Capability Summary
+Ready
+Pipeline Analytics
+Pipeline Waterfall
+Opportunity Movement Analysis
+Win Rate Analysis
+Stage Conversion
+Sales Velocity
+Pipeline Coverage
+GTM Dashboards
+Partial
+Sales Forecasting
+Bookings Forecast (requires Billing cross-validation)
+Executive Commercial Briefings
+Unavailable
+Territory Reporting
+Financial Statements
+Revenue Recognition
+Confirmed ARR / Bookings (without Billing connector)
+Workforce Planning
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting HubSpot alone delivers immediate Pipeline Analytics and — uniquely among the CRM connectors in this registry — Ready-status GTM Dashboards, given HubSpot's native marketing integration. Implementation is typically faster than Salesforce due to lower stage-customization burden. The same Closed-Won-vs-confirmed-ARR expectation applies as with every CRM connector: pipeline data is sales intent until validated against billing reality.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, HubSpot occupies a dual role — commercial system of record and, for many customers, marketing system of record as well, given its native Marketing Hub integration. Its contribution to Financial Intelligence spans both forward-looking pipeline visibility and top-of-funnel attribution, a combination most other CRM connectors in this registry require a second system to provide. Within the SCBM, HubSpot populates the Opportunity (Deal), Customer Account (Company), and Contact canonical objects, contributes Campaign data, and provides a partial signal to the canonical Health Score.
+Immediately after connection, HubSpot delivers board-relevant Pipeline Analytics, Win Rate Analysis, and — distinctively among this registry's CRM connectors — standalone GTM Dashboards. For SMPL's earlier-stage customers, this often means HubSpot alone provides more immediate executive-level commercial visibility than any other single CRM connector. The additional value unlocked through Billing and ERP pairing follows the same pattern established across every CRM connector: sales-recorded pipeline becomes validated bookings, and forecast accuracy can be measured against realized revenue.
+Connector Fingerprint
+Business Purpose
+HubSpot serves as the system of intent for organizations' sales process while also providing native marketing attribution — a combination that distinguishes it from CRM-only platforms in this registry and gives it standalone GTM Dashboard value that most companion connectors elsewhere are required to provide.
+Typical Customer
+Seed through Series B SaaS companies with relatively standardized sales processes, often choosing HubSpot specifically to avoid standing up a separate Marketing Automation connector alongside their CRM.
+Primary Strengths
+Standardized default stage taxonomy reduces CEP resolution burden relative to Salesforce
+Native Marketing Hub integration provides standalone GTM Dashboard support without a separate connector
+Comprehensive webhook coverage supports near-real-time canonical object updates
+Known Implementation Challenges
+Multiple-pipeline configurations, while less common than in Salesforce, still require per-pipeline CEP resolution
+Sales Hub / Marketing Hub tier mismatches can produce asymmetric capability unlocks that should be confirmed explicitly
+Implementation Characteristics
+Low-Medium typical complexity — among the faster CRM implementations in this registry, driven by HubSpot's more standardized default stage taxonomy. Implementation duration is generally shorter than Salesforce for comparable sales-process scope.
+Ideal Companion Systems
+Billing remains the highest-value pairing for confirmed bookings and ARR. Unlike most CRM connectors in this registry, HubSpot already covers meaningful GTM Dashboard ground standalone, so Marketing Automation is a lower-priority addition than it is for Salesforce or Dynamics 365 Sales. See Recommended Companion Connectors above.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery. No two customer implementations of this connector are guaranteed to produce identical confidence or coverage figures.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data. This connector's estimates will be revised as SMPL accumulates additional implementation experience; they are never derived from, or improved by, any individual customer's commercial data.
+3. Microsoft Dynamics 365 Sales
+Microsoft Dynamics 365 Sales is an independent CRM product from Microsoft Dynamics 365 Finance (documented in the ERP Registry), though both share the underlying Dataverse platform. It is most commonly encountered among SMPL's larger, Microsoft-stack-standardized enterprise customers, frequently alongside Dynamics 365 Finance.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_dynamics365_sales_v1
+vendor_name
+Microsoft Dynamics 365 Sales
+vendor_type
+CRM (Customer Relationship Management) — Enterprise Tier
+vendor_description
+Dynamics 365 Sales is Microsoft's cloud CRM for opportunity management, sales forecasting, and relationship intelligence, built on the Dataverse platform and integrated with the broader Microsoft 365 ecosystem.
+primary_value_proposition
+Connecting Dynamics 365 Sales enables Pipeline Analytics and Sales Forecasting for enterprise-tier customers, with particularly strong synergy for customers also running Dynamics 365 Finance — both products share the Dataverse data layer, simplifying cross-object identity resolution.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth; see Connector Maturity Model clarification
+current_specification_version
+0.2.0
+relationship_to_dynamics365_finance
+Independent product, independent connector specification. Shared Dataverse platform means customers running both products may have simplified identity resolution between Sales and Finance entities — documented as a compound-mapping opportunity, not assumed.
+Business Purpose
+Dynamics 365 Sales serves the system-of-intent role for organizations standardized on the Microsoft enterprise stack, with relationship-intelligence features (Relationship Assistant, predictive lead scoring) that differentiate it from the other CRM connectors in this registry, though SMPL does not yet have direct implementation experience validating these features' contribution to canonical mapping confidence.
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Account
+A business organization
+Customer Account (Entity)
+Direct — High for identity fields.
+Opportunity
+A tracked potential transaction
+Opportunity (Entity)
+Direct — High for core fields; Derived — Medium for stage mapping pending broader SMPL implementation validation.
+Contact
+An individual person
+Contact (Entity, Tier 2)
+Direct — High.
+Lead
+An unqualified prospect
+MQL (Movement, pre-conversion)
+Inferred — Medium.
+Opportunity Close (Won/Lost)
+The closure record for an Opportunity, with outcome and reason
+Contributes to ARR Movement derivation
+Direct — High for outcome; reason-code taxonomy requires CEP resolution.
+Forecast (Sales Forecasting feature)
+Period-level forecast rollup by territory/representative
+Forecast Line (Movement) — CRM-sourced variant
+Derived — Medium. Feature activation status must be confirmed during Pre-POC Discovery.
+Table — Dynamics 365 Sales primary business objects.
+Canonical Mapping — Stage Normalization
+Dynamics 365 Sales's default sales process stages (Qualify, Develop, Propose, Close) are fewer and broader than Salesforce's or HubSpot's default taxonomies, but the Business Process Flow framework underlying them is highly customizable — enterprise implementations frequently configure multiple distinct Business Process Flows for different deal types, each with its own stage set, similar in pattern to Salesforce Record Types.
+Standard Dynamics 365 Stage
+SCBM Canonical Stage
+Confidence
+Qualify
+SQL
+High
+Develop
+Opportunity
+High
+Propose
+Proposal
+High
+Close
+Negotiate
+Medium — "Close" spans both pre-decision negotiation and final closure depending on customer configuration
+Won
+Closed Won
+High
+Lost
+Closed Lost
+High
+[Custom Business Process Flow stage]
+Requires CEP resolution
+Low until resolved
+Table — Dynamics 365 Sales stage normalization (Tier 2 pattern library, early-stage based on limited SMPL implementation history).
+Supported Modules
+Sales Insights (AI-powered relationship intelligence and predictive scoring) — not yet validated for canonical mapping contribution in SMPL's implementation experience
+Forecasting feature — unlocks Forecast rollup data when activated
+LinkedIn Sales Navigator integration — contributes engagement signal, not yet mapped to a canonical target
+Authentication
+OAuth 2.0 via Azure Active Directory is the standard and required authentication method. The Connector Engine requests the minimum Dataverse table-level permissions required for Account, Opportunity, Contact, and Lead read access.
+APIs and Data Extraction
+Dataverse Web API (OData v4) — primary pattern, shared underlying API surface with Dynamics 365 Finance
+Dataverse change tracking — used for incremental sync where configured
+Event Support, Incremental Sync, and Historical Backfill
+Capability
+Support Level
+Notes
+Webhooks / Change Tracking
+Supported via Dataverse change tracking
+Requires explicit Power Platform configuration — not automatically active in every tenant; the implementation agent should confirm activation status during Pre-POC Discovery.
+Incremental Sync
+Supported
+OData $filter on modifiedon supported across standard entities.
+Historical Backfill
+Supported
+OData batch queries with pagination; standard pattern shared with the Dynamics 365 Finance connector.
+Known Customizations
+Multiple Business Process Flows for different deal types — the primary stage-taxonomy complexity driver for this connector, analogous to Salesforce Record Types
+Power Platform custom entities and custom fields layered on top of standard Opportunity/Account objects — common in enterprise deployments, consistent with the customization pattern documented for Dynamics 365 Finance in the ERP Registry
+Transformation Guidance
+The Connector Engine applies the same pipeline-is-intent-not-revenue posture established for Salesforce and HubSpot. For customers also running Dynamics 365 Finance, the implementation agent should evaluate whether shared Dataverse identity (e.g., a common Account table referenced by both products) can simplify cross-connector identity resolution — documented as a compound-mapping opportunity per CKR v0.3 Section 8.6.2, not yet a validated SMPL implementation pattern.
+Configuration Variants
+Variant
+Frequency
+Impact
+Multiple Business Process Flows active
+Common in enterprise deployments, frequency not yet precisely characterized given limited SMPL implementation history
+Each BPF's stage set requires independent CEP resolution.
+Shared Dataverse tenant with Dynamics 365 Finance
+Occurs whenever both products are deployed together
+Potential compound-mapping opportunity for identity resolution — flagged for future investigation, not yet a confirmed SMPL implementation pattern.
+Sales Insights / AI features active
+Unknown frequency — not yet observed in SMPL implementation history
+No confirmed canonical mapping contribution at this time.
+Common Customer Variants
+This executive summary orients implementation teams and AI implementation agents to the most frequently encountered Dynamics 365 Sales customer configurations, acknowledging that SMPL's limited current production implementation history means this characterization is based on architectural analysis more than accumulated pattern data.
+Variant Tier
+Description
+Typical Implementation
+A single Business Process Flow with the four default stages (Qualify, Develop, Propose, Close), standard Account/Opportunity/Contact structure, deployed within an organization already using Microsoft 365.
+Common Variants
+Multiple Business Process Flows for different deal types, structurally analogous to Salesforce Record Types; Sales Insights features active but not yet validated for canonical mapping contribution.
+Less Common Variants
+Shared Dataverse tenant with Dynamics 365 Finance, offering a documented but unvalidated identity-resolution synergy opportunity; Power Platform custom entities layered on top of standard Opportunity fields.
+Rare / Complex Variants
+Heavy Power Platform customization with business logic embedded outside the core Dataverse API surface, making certain data invisible to standard canonical extraction; multi-tenant Dataverse configurations spanning multiple Microsoft enterprise agreements.
+Table — Dynamics 365 Sales Common Customer Variants.
+Common Failure Modes
+The following implementation issues are the most frequently encountered business and data-modeling problems when onboarding Dynamics 365 Sales.
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Opportunity Won treated as confirmed revenue
+Same structural risk as every CRM connector in this registry.
+Non-standard Business Process Flow stages assumed to map predictably
+Unlike Salesforce or HubSpot, there is limited SMPL pattern history to draw on — the implementation agent should never assume a BPF stage maps the same way it did for a prior customer.
+Customer ownership ambiguity when shared Dataverse tenant exists with Dynamics 365 Finance
+Without explicit CEP confirmation of which product owns Customer Account identity, the same entity may be represented inconsistently across Sales and Finance canonical objects.
+Inactive Business Process Flows retained from a prior sales process
+Stale BPFs not in active use waste CEP discovery time and can introduce noise if included in stage resolution.
+Missing historical activity due to unconfirmed Dataverse change tracking activation
+Change tracking is not automatically active in every tenant — assuming it is active without confirmation can produce incomplete incremental sync.
+Tenant licensing tier assumed rather than confirmed
+API throttling, available features, and change tracking capability all vary by Microsoft licensing tier — confirm explicitly rather than assuming parity with a previously implemented tenant.
+Table — Dynamics 365 Sales Common Failure Modes.
+Capability Unlocks — Capability Progression
+Confidence figures below reflect the connector's current Validated maturity level and are expected to be revised upward as SMPL completes additional production implementations.
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Pipeline Analytics
+Partial
+60%
+ERP, Billing, additional SMPL implementation experience
+88–92%
+Pipeline Waterfall
+Partial
+55%
+ERP, Billing, additional SMPL implementation experience
+86–90%
+Opportunity Movement Analysis
+Partial
+52%
+Additional SMPL implementation experience
+84–88%
+Sales Forecasting
+Partial
+35% (feature active) / 0% (inactive)
+ERP, Billing, additional SMPL implementation experience
+78–82%
+Bookings Forecast
+Partial
+30%
+Billing (required), additional SMPL implementation experience
+81–85%
+Win Rate Analysis
+Ready
+78%
+Product Analytics, Customer Success
+86–90%
+Territory Reporting
+Partial
+40% (feature active)
+HRIS, additional SMPL implementation experience
+76–80%
+Table — Dynamics 365 Sales capability progression. Lower confidence ceilings throughout reflect Validated maturity status, not structural platform limitations.
+Recommended Companion Connectors
+Dynamics 365 Sales's Commercial Intelligence value grows as complementary systems are added, with particularly notable potential synergy for customers also running Dynamics 365 Finance.
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+Billing (Stripe, Chargebee, etc.)
+Converts Opportunity Won data into validated, billing-confirmed bookings and ARR.
+Bookings Forecast
+ARR (validated variant), Subscription
+Bookings Forecast moves from Partial toward Ready
+ERP — particularly Dynamics 365 Finance
+Provides realized-revenue ground truth; shared Dataverse platform with Dynamics 365 Finance offers a documented but not yet validated opportunity for simplified identity resolution.
+Forecast Variance, Revenue Bridge Analysis
+Revenue (recognized variant)
+Pipeline Analytics and Sales Forecasting confidence increase
+Customer Success
+Completes the composite Health Score signal set.
+Renewal Analytics
+Health Score (composite, multi-domain)
+Renewal Analytics moves toward Ready
+Product Analytics
+Enables expansion opportunity detection once paired.
+Expansion Opportunity Detection
+Product Adoption signal contribution to Health Score
+Win Rate Analysis gains usage-correlated context
+Marketing Automation
+Provides the GTM Dashboard support that Dynamics 365 Sales has no native equivalent for.
+GTM Dashboards
+Campaign, MQL-to-Opportunity attribution chain
+GTM Dashboards moves from Unavailable toward Partial
+Table — Dynamics 365 Sales recommended companion connectors.
+Connector Synergies
+Dynamics 365 Sales + Dynamics 365 Finance
+Pipeline-to-Revenue analysis with potentially simplified identity resolution given shared Dataverse identity — a documented hypothesis pending SMPL implementation validation
+Forecast variance and revenue bridge analysis, following the same pattern established for other CRM+ERP pairings once validated
+Dynamics 365 Sales + Billing
+ARR validation and bookings confirmation, following the same pattern established across every CRM connector in this registry
+Dynamics 365 Sales + Product Analytics
+Expansion opportunity detection and feature-utilization-vs-renewal-risk reasoning, once both connectors are present and validated together
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 28%
+SCBM Domain
+Coverage
+CRM / Pipeline
+70% — reflects Validated maturity level, not structural platform limitation
+Marketing
+5% — no native marketing integration
+ARR / Billing
+15% (requires Billing cross-validation)
+Customer (identity + commercial context)
+45%
+General Ledger
+0%
+Revenue Recognition
+0%
+Headcount
+2%
+Customer Health (signal contribution only)
+8% — partial signal, lower confidence given limited SMPL implementation history
+Product Analytics
+0%
+Table — Dynamics 365 Sales estimated SCBM coverage by domain. Lower confidence than Salesforce/HubSpot reflects Validated maturity level. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Opportunity (core fields)
+72%
+Direct mapping confirmed in initial SMPL implementation; broader validation pending.
+Opportunity Stage
+45% (standard BPF) / requires CEP (custom BPF)
+Lower confidence than Salesforce/HubSpot given fewer SMPL implementations to validate stage-mapping consistency.
+Account (identity)
+68%
+Reasonable confidence; cross-system matching with Dynamics 365 Finance (when both connected) not yet validated as a confidence-improving pattern.
+Account (commercial fields)
+15%
+Requires Billing and Customer Success connectors.
+Opportunity Close history
+65%
+Won/Lost outcome reliable; full stage-change history depth not yet as thoroughly validated as Salesforce OpportunityHistory or HubSpot Property History.
+Forecast
+30% (feature active) / 0% (inactive)
+Lowest-confidence forecast object in this registry, reflecting limited SMPL implementation history with this specific feature.
+Table — Dynamics 365 Sales Data Confidence Profile. Confidence levels reflect Validated maturity status throughout.
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Medium-High. Business Process Flow resolution is the primary discovery burden, structurally similar to Salesforce Record Type resolution.
+Manual Mapping Expectations
+Medium-High, elevated further by the connector's earlier maturity stage relative to Salesforce and HubSpot.
+Customization Level (typical)
+High, consistent with the Power Platform customization pattern documented for Dynamics 365 Finance.
+Estimated Onboarding Effort
+Medium-High, reflecting both BPF resolution and Validated maturity level.
+Expected Implementation Duration
+Planning estimate only: expect longer implementation duration than Salesforce or HubSpot until this connector progresses through additional maturity levels.
+Best Fit Customer
+Ideal Customer Profile
+Enterprise customers already standardized on the Microsoft stack, particularly those also running or evaluating Dynamics 365 Finance
+Organizations with existing Azure AD / Microsoft 365 identity infrastructure where integration friction is lower
+Less Ideal Customer Profile
+Customers prioritizing fast time-to-value — the combination of Validated maturity and BPF resolution overhead typically extends implementation timelines
+Organizations without existing Microsoft ecosystem investment — the integration advantages are less compelling without that context
+Companies requiring native marketing attribution from the CRM alone — Dynamics 365 Sales has no equivalent to HubSpot's integrated Marketing Hub
+Implementation Risks
+Common implementation mistake: assuming Business Process Flow stages map predictably across customers based on the four standard stage names — the underlying BPF customization ceiling is high and the implementation agent should always inventory active BPFs during Pre-POC Discovery rather than assuming the default.
+Maturity-related risk: given Validated status, the implementation agent should expect to encounter and document new patterns during early implementations of this connector, and should communicate Partial-confidence framing to customers more conservatively than for Salesforce or HubSpot.
+Dataverse tenant configuration variance: change tracking activation, table permissions, and API throttling policies all vary by tenant configuration and licensing tier — confirm explicitly during Pre-POC Discovery rather than assuming defaults.
+Standalone Capability Summary
+Ready
+Win Rate Analysis
+Partial
+Pipeline Analytics
+Pipeline Waterfall
+Opportunity Movement Analysis
+Sales Forecasting
+Bookings Forecast
+Territory Reporting
+Executive Commercial Briefings
+Unavailable
+GTM Dashboards
+Financial Statements
+Revenue Recognition
+Confirmed ARR / Bookings (without Billing connector)
+Workforce Planning
+Product Analytics
+Executive summary for Sales and Solutions Engineering: connecting Dynamics 365 Sales delivers reliable Win Rate Analysis immediately, with most other Pipeline Analytics capabilities currently positioned as Partial — an honest reflection of this connector's Validated maturity level rather than a structural platform limitation. Customers should be told explicitly that confidence will improve as SMPL completes additional production implementations. The most compelling near-term value proposition is expected for customers already running or evaluating Dynamics 365 Finance, where shared-platform synergy is a plausible (if not yet fully validated) advantage worth highlighting in the sales conversation.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Dynamics 365 Sales occupies the role of commercial system of record for organizations standardized on the Microsoft enterprise stack — frequently alongside Dynamics 365 Finance as the financial system of record for the same organization. Its contribution to Financial Intelligence is the same forward-looking pipeline visibility every CRM connector in this registry provides, with a distinctive (if not yet validated) opportunity for deeper cross-system identity resolution given the shared Dataverse platform. Within the SCBM, it populates the Opportunity, Customer Account, and Contact canonical objects, and contributes a partial Health Score signal, consistent with every other CRM connector in this registry.
+Immediately after connection, Dynamics 365 Sales delivers reliable Win Rate Analysis, with most other Pipeline Analytics capabilities currently positioned as Partial — an honest reflection of SMPL's earlier implementation maturity with this specific connector rather than a platform limitation. Confidence is expected to improve as SMPL completes additional production implementations. The additional value unlocked through Billing pairing is required, as with every CRM connector in this registry, to move from sales-recorded pipeline to confirmed bookings; the additional value uniquely available through Dynamics 365 Finance pairing — simplified identity resolution via shared Dataverse — represents this connector's most distinctive long-term opportunity for customers running both products.
+Connector Fingerprint
+Business Purpose
+Dynamics 365 Sales serves as the system of intent for organizations standardized on the Microsoft enterprise stack, with relationship-intelligence features that differentiate it from the other CRM connectors in this registry, though these features are not yet reflected in canonical mapping confidence given limited SMPL implementation history.
+Typical Customer
+Enterprise customers already standardized on Microsoft 365 / Azure AD identity infrastructure, particularly those running or evaluating Dynamics 365 Finance, where integration friction is generally lower than for organizations without that existing investment.
+Primary Strengths
+Reliable Won/Lost outcome data available immediately, independent of broader maturity status
+Potential shared-Dataverse synergy with Dynamics 365 Finance for customers running both products
+OData API standardization provides well-documented, broadly-tooled integration relative to vendor-proprietary query languages
+Known Implementation Challenges
+Business Process Flow stage resolution required for nearly every implementation, with limited SMPL pattern library to draw on at current maturity level
+Dataverse tenant configuration (change tracking activation, table permissions) varies by licensing tier and must be confirmed rather than assumed
+Implementation Characteristics
+Medium-High typical complexity — elevated by both Business Process Flow resolution and the connector's earlier maturity stage relative to Salesforce and HubSpot. Implementation duration is generally longer than the registry's more mature connectors until additional production implementations are completed.
+Ideal Companion Systems
+Dynamics 365 Finance is the most distinctive pairing opportunity for this connector, given shared Dataverse platform identity — though this synergy remains a documented hypothesis pending validation. Billing remains required for confirmed bookings regardless of which ERP is paired. See Recommended Companion Connectors above.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery. No two customer implementations of this connector are guaranteed to produce identical confidence or coverage figures.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data. This connector's estimates will be revised as SMPL accumulates additional implementation experience; they are never derived from, or improved by, any individual customer's commercial data.
+4. Pipedrive
+Pipedrive is a CRM built around a deliberately simple, pipeline-first data model — its entire product philosophy is organized around visual deal-stage management rather than broader platform extensibility. It is most commonly encountered among SMPL's smallest, simplest-sales-process customers.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_pipedrive_v1
+vendor_name
+Pipedrive
+vendor_type
+CRM — sales-pipeline-focused platform
+vendor_description
+Pipedrive is a cloud-based CRM purpose-built around visual pipeline management for small and early-stage sales teams, with a deliberately narrower object model than full-platform CRMs like Salesforce.
+primary_value_proposition
+Connecting Pipedrive enables fast, low-friction Pipeline Analytics for small sales teams with simple, single-process sales motions — the lowest implementation overhead of any CRM connector in this registry.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth; see Connector Maturity Model clarification
+current_specification_version
+0.2.0
+Business Purpose
+Pipedrive serves SMPL's smallest customers with the simplest sales processes, where Pipeline Analytics value can be delivered with minimal CEP resolution overhead given the platform's narrower, more opinionated object model.
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Organization
+A business entity
+Customer Account (Entity)
+Direct — High. Simple, consistent field structure.
+Deal
+A tracked potential transaction
+Opportunity (Entity)
+Direct — High for core fields; Normalized — High for stage mapping.
+Person
+An individual contact
+Contact (Entity, Tier 2)
+Direct — High.
+Deal Stage Change (Activity Log)
+Time-stamped record of stage transitions
+Contributes to ARR Movement derivation
+Direct — High via API stage-change events.
+Product
+A sellable item attached to a Deal
+Product (Entity, Tier 2) — shared canonical target with Billing Registry
+Direct — Medium. Less commonly used than in full-platform CRMs.
+Table — Pipedrive primary business objects.
+Canonical Mapping — Stage Normalization
+Pipedrive pipelines are entirely customer-defined from a blank slate — there is no vendor-default stage taxonomy equivalent to Salesforce's or HubSpot's standard stages. Every Pipedrive implementation requires CEP-driven stage resolution; there is no "standard stages, high confidence" baseline available the way there is for the other CRM connectors in this registry.
+Stage Pattern
+SCBM Canonical Stage
+Confidence
+[All Pipedrive stages are customer-defined]
+Requires CEP resolution for every implementation
+Low until resolved — this is the structural norm for Pipedrive, not an exception case
+Won (system status, not a stage)
+Closed Won
+High — Won/Lost are system-level statuses independent of customer-defined stages, providing a reliable outcome signal even before stage resolution is complete
+Lost (system status, not a stage)
+Closed Lost
+High — same reliability as Won
+Table — Pipedrive stage normalization pattern. Unlike Salesforce or HubSpot, there is no default taxonomy to fall back on — CEP resolution is universal, not exceptional.
+Supported Modules
+Pipedrive does not use an enterprise module-licensing model comparable to NetSuite or Salesforce — most functionality is included at the relevant subscription tier rather than separately licensed, simplifying the Configuration Variants picture relative to the other connectors in this registry
+LeadBooster (lead capture add-on) — contributes to Lead/MQL data when active
+Campaigns (email marketing add-on) — contributes basic Campaign data when active
+Authentication
+API token or OAuth 2.0, depending on integration type. The Connector Engine requests the minimum scope required for Organization, Deal, Person, and stage-change read access.
+APIs and Data Extraction
+REST API (v1, with v2 in progress as of this specification version) — primary pattern
+Webhooks — supported for real-time Deal and stage-change notifications
+Event Support, Incremental Sync, and Historical Backfill
+Capability
+Support Level
+Notes
+Webhooks
+Supported
+Reliable for core Deal and stage-change events.
+Incremental Sync
+Supported
+update_time field available on standard objects.
+Historical Backfill
+Fully supported
+Standard pagination; data volumes in SMPL's typical Pipedrive customer segment are modest, simplifying backfill design.
+Known Customizations
+Fully custom pipeline stage names — universal, not occasional, given Pipedrive's blank-slate pipeline design
+Multiple pipelines for different deal types — common even among small sales teams, since Pipedrive's simplicity encourages creating separate pipelines rather than complex single-pipeline branching logic
+Custom fields on Deal and Organization — used moderately; less extensive than Salesforce but more common than the platform's simplicity might suggest
+Transformation Guidance
+The Connector Engine cannot apply any default stage-mapping assumption for Pipedrive the way it can for Salesforce or HubSpot standard stages — every implementation requires the CEP to capture customer-specific stage-to-canonical-stage mapping before Pipeline Stage data can be presented with confidence. Won/Lost status, by contrast, is reliable immediately without CEP resolution.
+Configuration Variants
+Variant
+Frequency
+Impact
+Multiple pipelines
+Common (~40%, even among small teams)
+Each pipeline requires independent CEP stage resolution.
+LeadBooster active
+Occasional (~20%)
+Improves Lead/MQL data availability when present.
+Heavy custom field usage for deal terms
+Occasional (~15%)
+Captured as extension fields pending CEP business-meaning resolution.
+Common Customer Variants
+This executive summary orients implementation teams and AI implementation agents to the most frequently encountered Pipedrive customer configurations before reviewing detailed configuration guidance.
+Variant Tier
+Description
+Typical Implementation
+A single pipeline with fully customer-defined stage names (no vendor default exists), simple Organization/Deal/Person structure, and a small sales team.
+Common Variants
+A second pipeline maintained for renewals or partner deals, separate from the primary new-business pipeline; moderate use of custom Deal fields for commercial terms.
+Less Common Variants
+LeadBooster active for inbound lead capture; Campaigns add-on active for basic email marketing alongside the core Deal pipeline.
+Rare / Complex Variants
+Multiple pipelines representing genuinely distinct, complex sales motions despite Pipedrive's small-team market positioning — typically indicates a company that has outgrown Pipedrive's intended use case but has not yet migrated to a full-platform CRM.
+Table — Pipedrive Common Customer Variants.
+Common Failure Modes
+The following implementation issues are the most frequently encountered business and data-modeling problems when onboarding Pipedrive.
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: stage mapping can be inferred or defaulted
+Pipedrive has no vendor-default taxonomy — assuming any default produces systematically wrong Pipeline Stage data. CEP resolution is universal, not optional, for this connector.
+Incorrect business assumption: Won status treated as confirmed revenue
+Same structural risk as every CRM connector in this registry, though Pipedrive's lack of native forecasting makes the Billing dependency even more pronounced.
+Missing historical activity due to overlooked secondary pipeline
+Small teams frequently maintain a secondary pipeline (commonly for renewals) that is easy to miss if discovery focuses only on the default view.
+Custom object overuse for ARR or contract-term tracking
+Occasional but increases extension-field surface area requiring CEP business-meaning resolution beyond the standard Deal object.
+Customer ownership ambiguity when Organization records are duplicated
+Pipedrive's simpler deduplication tooling relative to Salesforce or HubSpot means duplicate Organization records are more likely to persist unnoticed.
+Table — Pipedrive Common Failure Modes.
+Capability Unlocks — Capability Progression
+Confidence figures reflect the universal CEP stage-resolution dependency described earlier in this connector's specification — most capabilities show a pre-resolution and post-resolution confidence range. Expected Confidence Range reflects that confidence improves through complementary business systems rather than through a single deterministic calculation.
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Pipeline Analytics
+Partial
+20% (pre-resolution) / 75% (post-resolution)
+Billing, additional SMPL implementation experience
+86–90%
+Pipeline Waterfall
+Partial
+18% / 70%
+Billing
+84–88%
+Opportunity Movement Analysis
+Partial
+20% / 72%
+Billing
+83–87%
+Win Rate Analysis
+Ready
+90%
+Product Analytics, Customer Success
+90–94%
+Stage Conversion
+Partial
+20% / 70%
+Billing
+82–86%
+Sales Velocity
+Partial
+20% / 68%
+ERP
+81–85%
+Pipeline Coverage
+Partial
+20% / 72%
+ERP, Billing
+83–87%
+Table — Pipedrive capability progression. Pre/post-resolution figures reflect the universal CEP stage-mapping requirement for this connector.
+Recommended Companion Connectors
+Pipedrive's narrower native object model means companion connectors provide a particularly meaningful intelligence uplift relative to a standalone connection.
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+Billing (Stripe, Chargebee, etc.)
+Converts Pipedrive Won deals into validated bookings; the primary path to forecast-equivalent intelligence given Pipedrive's lack of native forecast-category functionality.
+Bookings Forecast, forecast-equivalent reasoning
+ARR (validated variant), Subscription
+Pipeline Analytics and Stage Conversion move from Partial toward Ready
+ERP (QuickBooks Online, NetSuite, etc.)
+Provides realized-revenue ground truth for small-team revenue bridge analysis.
+Revenue Bridge Analysis
+Revenue (recognized variant)
+Sales Velocity confidence increases
+Customer Success
+Contributes signal toward the composite Health Score, partially offsetting Pipedrive's narrower native object model.
+Renewal-adjacent reasoning
+Health Score (composite, multi-domain)
+Limited but meaningful confidence contribution given Pipedrive's narrow base
+Product Analytics
+Relevant primarily for product-led-growth customers using Pipedrive alongside a self-serve product motion.
+Expansion-adjacent reasoning
+Product Adoption signal contribution to Health Score
+Win Rate Analysis gains usage-correlated context
+Table — Pipedrive recommended companion connectors.
+Connector Synergies
+Pipedrive + ERP
+Pipeline-to-Revenue analysis for small sales teams, providing realized-revenue context that Pipedrive's narrower object model cannot supply alone
+Pipedrive + Billing
+ARR validation and bookings confirmation — the primary path to unlocking Sales Forecasting-equivalent intelligence, since Pipedrive itself has no native forecast-category feature
+Pipedrive + Product Analytics
+Relevant for product-led-growth customers, correlating self-serve usage signals with Pipedrive deal outcomes
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 22%
+SCBM Domain
+Coverage
+CRM / Pipeline
+55% pre-CEP-resolution / 80% post-resolution
+Marketing
+8% (Campaigns add-on active) / 0% (inactive)
+ARR / Billing
+12% (requires Billing cross-validation)
+Customer (identity + commercial context)
+40%
+General Ledger
+0%
+Revenue Recognition
+0%
+Headcount
+0%
+Customer Health (signal contribution only)
+5% — minimal signal given narrower object model
+Product Analytics
+0%
+Table — Pipedrive estimated SCBM coverage by domain. The pre/post-resolution split for CRM/Pipeline reflects the universal CEP stage-resolution requirement. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Deal (core fields)
+85%
+Simple, consistent field structure produces high confidence for amount, owner, and dates.
+Deal Stage
+20% pre-CEP-resolution / 85% post-resolution
+No vendor-default taxonomy exists — confidence is structurally low until the CEP captures customer-specific stage mapping, then high once resolved.
+Deal Won/Lost status
+95%
+Reliable system-level status, independent of stage customization — generally the highest-confidence single field in the Pipedrive connector.
+Organization (identity)
+80%
+Simple, consistent identity fields.
+Organization (commercial fields)
+15%
+Requires Billing and Customer Success connectors.
+Deal stage-change history
+75% (post-resolution)
+Reliable event data once stage mapping is established.
+Table — Pipedrive Data Confidence Profile.
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Medium — concentrated entirely in stage resolution, since Pipedrive has no other significant customization surface to discover.
+Manual Mapping Expectations
+Low outside of stage resolution; the object model's simplicity means little else requires customer-specific validation.
+Customization Level (typical)
+Low-Medium — mostly confined to pipeline/stage structure and occasional custom fields.
+Estimated Onboarding Effort
+Low overall, despite the universal stage-resolution requirement, because that resolution step itself is typically fast given few stages and few pipelines per implementation.
+Expected Implementation Duration
+Planning estimate only: typically the fastest CRM implementation in this registry once stage resolution is complete, reflecting the platform's narrow object model.
+Best Fit Customer
+Ideal Customer Profile
+Very early-stage SaaS companies with a single, simple sales process and small sales teams
+Organizations prioritizing implementation speed and ease of use over deep customization or enterprise features
+Companies that have not yet outgrown a lightweight, visual pipeline-management tool
+Less Ideal Customer Profile
+Companies with complex, multi-segment, or multi-process sales motions — Pipedrive's simplicity becomes a limitation at this scale
+Organizations requiring native forecasting, territory management, or deep marketing integration — these are structurally unavailable or minimal in Pipedrive
+Customers expecting board-level Sales Forecasting or Territory Reporting from Pipedrive alone — these capabilities are Unavailable regardless of implementation effort
+Implementation Risks
+Common implementation mistake: assuming Pipedrive's simplicity means stage mapping can be inferred or defaulted — it cannot. Every implementation requires explicit CEP stage resolution; there is no fallback taxonomy as there is for Salesforce or HubSpot.
+Multiple-pipeline oversight: the implementation agent should always inventory all active pipelines during Pre-POC Discovery, not just the one most visible in the default view — small teams frequently maintain a secondary pipeline (e.g., for renewals or partner deals) that is easy to overlook.
+Same Closed-Won-vs-confirmed-ARR posture applies as with every CRM connector in this registry — Pipedrive's Won status reflects sales intent, not confirmed billing.
+Standalone Capability Summary
+Ready
+Win Rate Analysis
+Partial
+Pipeline Analytics (post-CEP stage resolution)
+Pipeline Waterfall (post-resolution)
+Opportunity Movement Analysis (post-resolution)
+Stage Conversion (post-resolution)
+Sales Velocity (post-resolution)
+Pipeline Coverage (post-resolution)
+Unavailable
+Sales Forecasting
+Bookings Forecast
+GTM Dashboards
+Territory Reporting
+Financial Statements
+Revenue Recognition
+Confirmed ARR / Bookings (without Billing connector)
+Workforce Planning
+Product Analytics
+Executive summary for Sales and Solutions Engineering: Pipedrive delivers reliable Win Rate Analysis immediately and strong Pipeline Analytics once the (typically fast) stage-resolution step is complete during onboarding. This is the right connector to position for small, early-stage sales teams seeking fast time-to-value rather than deep forecasting or territory sophistication — both of which are structurally unavailable from Pipedrive regardless of implementation effort, and should be set as an explicit, honest expectation during the sales conversation.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Pipedrive occupies the role of commercial system of record for small, early-stage sales teams managing a single, visual pipeline — a deliberately narrower role than the full-platform CRM connectors in this registry, by design rather than by limitation. Its contribution to Financial Intelligence is the same forward-looking pipeline visibility every CRM connector provides, scoped to the simpler sales motions typical of its customer base. Within the SCBM, it populates the Opportunity (Deal), Customer Account (Organization), and Contact (Person) canonical objects, and contributes a comparatively narrow signal to the canonical Health Score given its smaller native object model.
+Immediately after connection, Pipedrive delivers reliable Win Rate Analysis and, once the (typically fast) universal stage-resolution step is complete during onboarding, solid Pipeline Analytics for simple sales motions. Sales Forecasting and Territory Reporting are structurally unavailable from Pipedrive regardless of implementation effort — this is the clearest, most honest expectation to set with executive leadership evaluating this connector. The additional value unlocked through Billing pairing is unusually significant for this specific connector: because Pipedrive has no native forecast-category feature, Billing is effectively the only path to forecast-equivalent intelligence for Pipedrive customers.
+Connector Fingerprint
+Business Purpose
+Pipedrive serves as a lightweight, visual system of intent purpose-built for small sales teams managing a single, simple sales process — its deliberately narrow object model is a feature of its market positioning, not a limitation to be engineered around.
+Typical Customer
+Very early-stage SaaS companies with a single, simple sales process and small sales teams, often choosing Pipedrive specifically for its visual simplicity over the customization depth of a full-platform CRM.
+Primary Strengths
+Reliable Won/Lost status available immediately, independent of stage customization
+Narrow object model means little customization surface to discover beyond stage resolution
+Fastest typical onboarding once the universal stage-resolution step is complete
+Known Implementation Challenges
+Stage mapping cannot be inferred or defaulted — every implementation requires explicit CEP resolution
+Multiple pipelines, even among small teams, are easy to overlook if discovery focuses only on the default view
+Implementation Characteristics
+Low overall typical complexity, concentrated entirely in the universal stage-resolution step, which is typically fast given Pipedrive's narrow object model. This is generally the fastest CRM implementation in this registry once stage resolution is complete.
+Ideal Companion Systems
+Billing is the single most consequential pairing for this connector, since Pipedrive has no native forecast-category functionality of its own — Billing is effectively the only path to forecast-equivalent intelligence. See Recommended Companion Connectors above.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery. No two customer implementations of this connector are guaranteed to produce identical confidence or coverage figures.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data. This connector's estimates will be revised as SMPL accumulates additional implementation experience; they are never derived from, or improved by, any individual customer's commercial data.
+5. Zoho CRM
+Zoho CRM is part of the broader Zoho One business application suite, offering a mid-range combination of customization flexibility and implementation simplicity. It is most commonly encountered among SMPL's cost-conscious, internationally distributed, or Zoho-ecosystem-standardized customers.
+Connector Overview
+Field
+Value
+connector_id
+smpl_ckr_zoho_crm_v1
+vendor_name
+Zoho Corporation
+vendor_type
+CRM — part of the broader Zoho One application suite
+vendor_description
+Zoho CRM is a cloud-based CRM offering opportunity, lead, and contact management with moderate customization depth, commonly deployed alongside other Zoho One applications (Zoho Books, Zoho Desk, Zoho Campaigns) in an integrated suite.
+primary_value_proposition
+Connecting Zoho CRM enables Pipeline Analytics with moderate customization support, and offers a potential compound-mapping opportunity for customers running other Zoho One applications relevant to SMPL's other connector categories.
+connector_maturity_level
+Validated (Level 2) — reflects SMPL implementation depth; see Connector Maturity Model clarification
+current_specification_version
+0.2.0
+Business Purpose
+Zoho CRM serves SMPL's cost-conscious and internationally distributed customer segment, offering more customization flexibility than Pipedrive without the implementation overhead of Salesforce — a deliberate mid-market positioning reflected in its canonical mapping profile.
+Primary Business Objects
+Vendor Object
+Business Description
+SCBM Target
+Mapping Confidence
+Account
+A business organization
+Customer Account (Entity)
+Direct — High for identity fields.
+Deal
+A tracked potential transaction
+Opportunity (Entity)
+Direct — High for core fields; Normalized — Medium for stage mapping.
+Contact
+An individual person
+Contact (Entity, Tier 2)
+Direct — High.
+Lead
+An unqualified prospect
+MQL (Movement, pre-conversion)
+Inferred — Medium.
+Deal Stage History (via Audit Log)
+Time-stamped record of field changes including stage
+Contributes to ARR Movement derivation
+Derived — Medium. Available via Audit Log API but requires more extraction effort than Salesforce OpportunityHistory or HubSpot Property History.
+Campaign (Zoho Campaigns integration)
+Marketing campaign data, when Zoho Campaigns is connected within Zoho One
+Campaign (Entity)
+Direct — Medium when integration active; Not Available otherwise.
+Table — Zoho CRM primary business objects.
+Canonical Mapping — Stage Normalization
+Zoho CRM provides a standard default stage taxonomy that customers commonly customize, similar in pattern to Salesforce but with somewhat lower customization depth in SMPL's implementation experience to date.
+Standard Zoho Stage
+SCBM Canonical Stage
+Confidence
+Qualification
+SQL
+High
+Needs Analysis
+SQL
+High
+Value Proposition
+Opportunity
+High
+Proposal/Price Quote
+Proposal
+High
+Negotiation/Review
+Negotiate
+High
+Closed Won
+Closed Won
+High
+Closed Lost
+Closed Lost
+High
+[Customer custom stage]
+Requires CEP resolution
+Low until resolved
+Table — Zoho CRM stage normalization (Tier 2 pattern library).
+Supported Modules
+Zoho CRM Plus — bundles additional analytics and customer journey features; not yet validated for incremental canonical mapping confidence
+Zoho Campaigns integration — contributes Campaign data when connected within the broader Zoho One suite
+Zoho Books integration — relevant compound-mapping opportunity with the Billing Registry for customers running both; not yet a validated SMPL implementation pattern
+Authentication
+OAuth 2.0 is the standard authentication method. The Connector Engine requests the minimum scope required for Account, Deal, Contact, and Lead read access.
+APIs and Data Extraction
+REST API (v2/v3) — primary pattern
+Bulk Read API — used for historical backfill
+Audit Log API — used to extract field-change history including stage transitions
+Event Support, Incremental Sync, and Historical Backfill
+Capability
+Support Level
+Notes
+Webhooks
+Supported
+Reliable for core Deal lifecycle events.
+Incremental Sync
+Supported
+Modified_Time field available on standard objects.
+Historical Backfill
+Fully supported
+Bulk Read API handles standard SMPL customer data volumes without difficulty.
+Known Customizations
+Custom stage names — common, though somewhat less universal than in Salesforce implementations observed to date
+Custom modules (Zoho's equivalent of Salesforce custom objects) — used for industry-specific or company-specific tracking needs, captured as extension fields pending CEP resolution
+Multi-currency configuration — relevant for Zoho CRM's internationally distributed customer base; the implementation agent should confirm currency handling during Pre-POC Discovery
+Transformation Guidance
+The Connector Engine applies the same pipeline-is-intent-not-revenue posture established across every CRM connector in this registry. Stage extraction via the Audit Log API requires more processing than the purpose-built history objects in Salesforce or HubSpot, which the implementation agent should account for in extraction design, though this does not affect final data confidence once processed.
+Configuration Variants
+Variant
+Frequency
+Impact
+Custom stage taxonomy
+Common (~50%)
+Requires CEP resolution, moderate frequency relative to Salesforce's near-universal customization.
+Zoho One suite usage (multiple connected Zoho apps)
+Common among Zoho CRM customers given the suite's bundled pricing model
+Potential compound-mapping opportunity with Zoho Books (Billing Registry) and Zoho Campaigns (Marketing Registry) — flagged for future investigation.
+Multi-currency deals
+Occasional, more common in internationally distributed customer base
+Requires CEP confirmation of reporting currency handling.
+Common Customer Variants
+This executive summary orients implementation teams and AI implementation agents to the most frequently encountered Zoho CRM customer configurations before reviewing detailed configuration guidance.
+Variant Tier
+Description
+Typical Implementation
+A single sales pipeline with moderately customized stage names, standard Account/Deal/Contact structure, deployed as one application within a broader Zoho One suite.
+Common Variants
+Custom modules built for industry-specific or company-specific tracking needs; multi-currency deal configuration relevant to internationally distributed customer bases.
+Less Common Variants
+Zoho Books active alongside Zoho CRM within the same Zoho One suite, offering a not-yet-validated compound-mapping opportunity; Zoho Campaigns active for basic email marketing attribution.
+Rare / Complex Variants
+Extensive Zoho One suite usage spanning many connected applications, requiring the implementation agent to inventory data relevant to SMPL across multiple Zoho products rather than Zoho CRM alone.
+Table — Zoho CRM Common Customer Variants.
+Common Failure Modes
+The following implementation issues are the most frequently encountered business and data-modeling problems when onboarding Zoho CRM.
+Failure Mode
+Why It Affects Canonical Mapping or Capability Assessment
+Incorrect business assumption: Deal Closed Won treated as confirmed revenue
+Same structural risk as every CRM connector in this registry.
+Non-standard Deal stages assumed to match the documented default taxonomy
+Custom stage names occur moderately often — assuming the default taxonomy without CEP confirmation produces incorrect Stage Conversion data.
+Underestimated Audit Log extraction complexity
+Unlike Salesforce OpportunityHistory or HubSpot Property History, Zoho's stage-change history requires more processing to reconstruct — assuming parity with those connectors' extraction speed leads to implementation timeline surprises.
+Customer ownership ambiguity when relevant data spans multiple Zoho One applications
+Failing to inventory all active Zoho One applications during discovery can leave commercially relevant data (e.g., in Zoho Books) undiscovered.
+ARR represented inconsistently across custom modules
+Customers occasionally track ARR in a custom module rather than the standard Deal object — the implementation agent should confirm which is authoritative.
+Missing historical activity due to incomplete multi-currency configuration confirmation
+Reporting currency handling, if not explicitly confirmed during onboarding, can produce inconsistent ARR figures for internationally distributed customers.
+Table — Zoho CRM Common Failure Modes.
+Capability Unlocks — Capability Progression
+Confidence figures reflect Zoho CRM's current Validated maturity level and the Audit Log stage-extraction pattern described earlier in this connector's specification. Expected Confidence Range reflects that confidence improves through complementary business systems rather than through a single deterministic calculation.
+Capability
+Status
+Current Confidence
+Improves With
+Expected Confidence Range
+Pipeline Analytics
+Partial
+48%
+Billing, additional SMPL implementation experience
+84–88%
+Pipeline Waterfall
+Partial
+42%
+Billing, additional SMPL implementation experience
+81–85%
+Opportunity Movement Analysis
+Partial
+40%
+Billing, additional SMPL implementation experience
+80–84%
+Win Rate Analysis
+Ready
+82%
+Product Analytics, Customer Success
+88–92%
+Stage Conversion
+Partial
+45%
+Billing
+82–86%
+Sales Velocity
+Partial
+40%
+ERP
+79–83%
+Pipeline Coverage
+Partial
+46%
+ERP, Billing
+83–87%
+GTM Dashboards
+Partial
+30% (Zoho Campaigns active) / 0% (inactive)
+Marketing Automation (or Zoho Campaigns activation)
+71–75%
+Table — Zoho CRM capability progression.
+Recommended Companion Connectors
+Zoho CRM's Commercial Intelligence value grows with companion connectors, with a particularly distinctive opportunity for customers using other applications within the Zoho One suite.
+Companion Connector
+Why It Improves Implementation
+Business Capabilities Strengthened
+Canonical Concepts Completed
+Capability Assessment Scores Improved
+Billing (Stripe, Chargebee, Zoho Books)
+Converts Deal Won data into validated bookings; Zoho Books pairing additionally offers a not-yet-validated compound-mapping opportunity for customers within the Zoho One suite.
+Bookings Forecast
+ARR (validated variant), Subscription
+Bookings Forecast moves from Partial toward Ready
+ERP (NetSuite, QuickBooks Online, etc.)
+Provides realized-revenue ground truth for forecast and revenue bridge analysis.
+Forecast Variance, Revenue Bridge Analysis
+Revenue (recognized variant)
+Sales Forecasting confidence increases
+Customer Success
+Completes the composite Health Score signal set.
+Renewal Analytics
+Health Score (composite, multi-domain)
+Renewal Analytics moves toward Ready
+Product Analytics
+Enables expansion opportunity detection once paired.
+Expansion Opportunity Detection
+Product Adoption signal contribution to Health Score
+Win Rate Analysis gains usage-correlated context
+Marketing Automation (or Zoho Campaigns)
+Zoho Campaigns, when active within the customer's Zoho One suite, provides a native path to partial GTM Dashboard support without a separate connector.
+GTM Dashboards
+Campaign, MQL-to-Opportunity attribution chain
+GTM Dashboards confidence increases when Zoho Campaigns is active
+Table — Zoho CRM recommended companion connectors.
+Connector Synergies
+Zoho CRM + ERP
+Pipeline-to-Revenue analysis and forecast variance, following the same pattern established across this registry's other CRM connectors
+Zoho CRM + Billing (particularly Zoho Books)
+ARR validation and bookings confirmation; the Zoho Books pairing represents this registry's most distinctive same-vendor-suite synergy opportunity, pending future SMPL implementation validation
+Zoho CRM + Product Analytics
+Expansion opportunity detection, following the standard pattern once both connectors are present
+Estimated SCBM Coverage
+Overall SCBM Coverage   ≈ 26%
+SCBM Domain
+Coverage
+CRM / Pipeline
+62%
+Marketing
+20% (Zoho Campaigns active) / 0% (inactive)
+ARR / Billing
+14% (requires Billing cross-validation; potential Zoho Books compound mapping not yet validated)
+Customer (identity + commercial context)
+42%
+General Ledger
+0%
+Revenue Recognition
+0%
+Headcount
+1%
+Customer Health (signal contribution only)
+8% — partial signal
+Product Analytics
+0%
+Table — Zoho CRM estimated SCBM coverage by domain. Planning guidance, not a contractual commitment.
+Data Confidence Profile
+Business Object
+Confidence
+Why
+Deal (core fields)
+78%
+Direct mapping for amount, owner, close date; reasonably consistent across implementations.
+Deal Stage
+50% (standard stages) / requires CEP (custom stages)
+Moderate confidence — between Salesforce's lower baseline (more customization) and HubSpot's higher baseline (more standardization).
+Account (identity)
+75%
+Reasonably consistent identity fields.
+Account (commercial fields)
+18%
+Requires Billing and Customer Success connectors.
+Deal stage-change history
+55%
+Audit Log extraction is more processing-intensive and less thoroughly validated than purpose-built history objects in Salesforce/HubSpot.
+Campaign
+35% (Zoho Campaigns active) / 0% (inactive)
+Integration-dependent.
+Table — Zoho CRM Data Confidence Profile.
+Customer Implementation Effort
+Factor
+Typical Expectation
+Typical CEP Complexity
+Medium. Stage resolution required for most implementations; somewhat less complex than Salesforce given lower observed customization depth.
+Manual Mapping Expectations
+Medium. Audit Log stage extraction requires more implementation design effort than purpose-built history objects, though this is an engineering consideration more than a customer-facing discovery burden.
+Customization Level (typical)
+Medium. Custom modules and multi-currency configuration are the primary complexity drivers beyond stage resolution.
+Estimated Onboarding Effort
+Medium — between Pipedrive's low overhead and Salesforce's high overhead.
+Expected Implementation Duration
+Planning estimate only: typically comparable to or modestly longer than HubSpot, reflecting the Audit Log extraction pattern and Validated maturity level.
+Best Fit Customer
+Ideal Customer Profile
+Cost-conscious SaaS companies, particularly those already using other Zoho One applications
+Internationally distributed organizations benefiting from Zoho's broad multi-currency and localization support
+Companies wanting moderate customization flexibility without Salesforce-level implementation overhead
+Less Ideal Customer Profile
+Enterprise sales organizations requiring deep territory management or sophisticated forecast rollups
+Companies expecting Salesforce-equivalent customization depth — Zoho CRM's ceiling is real, even if higher than Pipedrive's
+Organizations prioritizing the fastest possible implementation — Pipedrive or HubSpot typically onboard faster for comparably simple sales processes
+Implementation Risks
+Common implementation mistake: underestimating Audit Log extraction complexity — unlike Salesforce OpportunityHistory or HubSpot Property History, Zoho's stage-change history requires more processing to reconstruct cleanly, and the implementation agent should budget accordingly rather than assuming parity with the registry's more mature CRM connectors.
+Zoho One suite ambiguity: customers using multiple Zoho applications may have data relevant to SMPL spread across Zoho CRM, Zoho Books, and Zoho Campaigns — the implementation agent should inventory all active Zoho One applications during Pre-POC Discovery, not assume Zoho CRM is the only relevant Zoho data source.
+Maturity-related risk: given Validated status, expect to encounter and document new configuration patterns during early implementations.
+Standalone Capability Summary
+Ready
+Win Rate Analysis
+Partial
+Pipeline Analytics
+Pipeline Waterfall
+Opportunity Movement Analysis
+Stage Conversion
+Sales Velocity
+Pipeline Coverage
+GTM Dashboards (integration-dependent)
+Executive Commercial Briefings
+Unavailable
+Sales Forecasting
+Bookings Forecast
+Territory Reporting
+Financial Statements
+Revenue Recognition
+Confirmed ARR / Bookings (without Billing connector)
+Workforce Planning
+Product Analytics
+Executive summary for Sales and Solutions Engineering: Zoho CRM delivers reliable Win Rate Analysis immediately and moderate-confidence Pipeline Analytics once stage resolution is complete. Its most distinctive opportunity is for customers already using other Zoho One applications, where compound-mapping synergy with Zoho Books (Billing) or Zoho Campaigns (Marketing) may improve overall SCBM coverage beyond what Zoho CRM alone provides — though this synergy is not yet a validated SMPL implementation pattern and should be positioned as a future opportunity, not a current guarantee, during the sales conversation.
+Executive Architecture Summary
+Within the customer's broader system ecosystem, Zoho CRM occupies the role of commercial system of record for cost-conscious and internationally distributed organizations, frequently as one component of a broader Zoho One application suite spanning finance, marketing, and commercial functions for the same business. Its contribution to Financial Intelligence is the same forward-looking pipeline visibility every CRM connector in this registry provides, with a distinctive same-vendor-suite synergy opportunity not present in any other connector in this registry. Within the SCBM, it populates the Opportunity (Deal), Customer Account, and Contact canonical objects, and contributes a partial Health Score signal.
+Immediately after connection, Zoho CRM delivers reliable Win Rate Analysis and moderate-confidence Pipeline Analytics once stage resolution is complete. The additional value unlocked when Zoho CRM is combined with complementary systems follows the standard CRM pattern — Billing for confirmed bookings, ERP for revenue ground truth — with one distinctive addition: for customers using other Zoho One applications, particularly Zoho Books, the potential for simplified cross-system mapping represents an efficiency opportunity unique to this connector, pending future SMPL implementation validation.
+Connector Fingerprint
+Business Purpose
+Zoho CRM serves as the system of intent for cost-conscious and internationally distributed organizations, occupying a deliberate mid-market position between Pipedrive's simplicity and Salesforce's extensibility.
+Typical Customer
+Cost-conscious SaaS companies, particularly those already using other Zoho One applications, and internationally distributed organizations that benefit from Zoho's broad multi-currency and localization support.
+Primary Strengths
+Moderate customization flexibility without Salesforce-level implementation overhead
+Strong multi-currency and localization support relevant to internationally distributed customers
+Potential compound-mapping synergy for customers using other Zoho One applications (Zoho Books, Zoho Campaigns)
+Known Implementation Challenges
+Audit Log-based stage extraction requires more processing design effort than purpose-built history objects in Salesforce or HubSpot
+Zoho One suite usage should be inventoried fully during discovery — relevant data may span multiple connected Zoho applications
+Implementation Characteristics
+Medium typical complexity — between Pipedrive's low overhead and Salesforce's high overhead, reflecting Zoho CRM's deliberate mid-market positioning. Implementation duration is generally comparable to or modestly longer than HubSpot.
+Ideal Companion Systems
+Zoho Books represents this registry's most distinctive same-vendor-suite synergy opportunity, pending future validation. Outside the Zoho One suite, Billing and ERP follow the same priority pattern established across this registry. See Recommended Companion Connectors above.
+Planning Guidance
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees.
+Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions resolved during Pre-POC Discovery. No two customer implementations of this connector are guaranteed to produce identical confidence or coverage figures.
+Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data. This connector's estimates will be revised as SMPL accumulates additional implementation experience; they are never derived from, or improved by, any individual customer's commercial data.
+CRM Connector Comparison Matrix
+A capability-first comparison across all five CRM connectors, spanning commercial intelligence capabilities, canonical mapping characteristics, and connector maturity. Consistent with the ERP Registry comparison matrix structure. See each connector's Estimated SCBM Coverage and Data Confidence Profile sections for object-level detail underlying this comparison.
+Commercial Capability Comparison
+Capability
+Salesforce
+HubSpot
+Dynamics 365 Sales
+Pipedrive
+Zoho CRM
+Pipeline Analytics
+Ready
+Ready
+Partial
+Partial
+Partial
+Pipeline Waterfall
+Ready
+Ready
+Partial
+Partial
+Partial
+Opportunity Movement Analysis
+Ready
+Ready
+Partial
+Partial
+Partial
+Sales Forecasting
+Partial
+Partial
+Partial
+Unavailable
+Unavailable
+Bookings Forecast
+Partial
+Partial
+Partial
+Unavailable
+Unavailable
+Win Rate Analysis
+Ready
+Ready
+Ready
+Ready
+Ready
+Stage Conversion
+Ready
+Ready
+Partial
+Partial
+Partial
+Sales Velocity
+Ready
+Ready
+Partial
+Partial
+Partial
+Pipeline Coverage
+Ready
+Ready
+Partial
+Partial
+Partial
+GTM Dashboards
+Partial
+Ready
+Unavailable
+Unavailable
+Partial
+Territory Reporting
+Partial
+Unavailable
+Partial
+Unavailable
+Unavailable
+Sales Productivity
+Partial
+Partial
+Partial
+Partial
+Partial
+Forecast Accuracy
+Partial
+Partial
+Partial
+Unavailable
+Unavailable
+Executive Commercial Briefings
+Partial
+Partial
+Partial
+Partial
+Partial
+Revenue Planning Inputs
+Partial
+Partial
+Partial
+Unavailable
+Unavailable
+Table CM.1 — Commercial Capability comparison. Status reflects standalone connection (no additional connectors paired) and current connector maturity level.
+Technical and Canonical Mapping Comparison
+Dimension
+Salesforce
+HubSpot
+Dynamics 365 Sales
+Pipedrive
+Zoho CRM
+API Maturity
+High — REST + Bulk API 2.0
+High — REST v3, strong webhooks
+Medium-High — OData, Dataverse
+Medium — REST v1/v2
+Medium-High — REST v2/v3
+Stage Taxonomy Default
+Standard but heavily customized in practice
+Standard, less frequently customized
+Standard (4 stages) but BPF-customizable
+None — fully customer-defined
+Standard, moderately customized
+Opportunity Flexibility
+Highest — Record Types, custom processes
+High — multiple pipelines
+High — Business Process Flows
+Low — single object model by design
+Medium — custom modules
+Reporting Depth (native)
+Highest
+High
+Medium
+Low
+Medium
+Custom Objects
+Extensive support
+Limited (custom properties only)
+Extensive (Power Platform)
+None
+Moderate (custom modules)
+Workflow Automation
+Extensive
+Strong (native + Operations Hub)
+Strong (Power Automate)
+Basic
+Moderate
+Territory Management
+Strong (Territory Mgmt 2.0)
+Limited
+Available, not yet SMPL-validated
+None
+Limited
+Partner Management
+Strong (PRM available)
+Limited
+Available via Power Platform
+None
+Limited
+Webhook Support
+Strong (CDC)
+Strongest in this registry
+Supported via Dataverse change tracking
+Supported
+Supported
+Historical Backfill
+Strong (Bulk API 2.0)
+Strong (Batch API)
+Supported (OData batch)
+Supported (standard pagination)
+Supported (Bulk Read API)
+Canonical Coverage (Tier 1 objects)
+High
+High
+Medium (maturity-limited)
+Medium (post stage-resolution)
+Medium
+Connector Confidence (current)
+Medium-High
+Medium-High
+Medium (Validated)
+Medium (Validated)
+Medium (Validated)
+Implementation Complexity
+High
+Low-Medium
+High
+Low
+Medium
+Table CM.2 — Technical and canonical mapping comparison.
+Maturity and Implementation Effort Comparison
+Dimension
+Salesforce
+HubSpot
+Dynamics 365 Sales
+Pipedrive
+Zoho CRM
+Connector Maturity Level (SMPL implementation, not vendor)
+Pilot Ready (3)
+Pilot Ready (3)
+Validated (2)
+Validated (2)
+Validated (2)
+Typical CEP Complexity
+High
+Low-Medium
+Medium-High
+Medium (concentrated)
+Medium
+Customization Level (typical)
+High
+Low-Medium
+High
+Low-Medium
+Medium
+Relative Implementation Duration
+Slower
+Faster
+Slower
+Fastest
+Medium
+SCBM Coverage from Connector Alone
+≈38%
+≈36%
+≈28%
+≈22%
+≈26%
+Table CM.3 — Maturity and implementation effort comparison. Maturity levels reflect SMPL's connector implementation depth, never vendor platform sophistication or market position.
+Cross-CRM Transformation Considerations
+The following transformation challenges recur across multiple CRM connectors in this registry. Each is documented once here rather than repeated in every connector specification, consistent with the pattern established in the ERP Registry.
+Pipeline Stage Normalization
+This is the single largest confidence variable across every CRM connector in this registry. Three patterns exist: vendor-provided default taxonomy that customers commonly customize (Salesforce, Zoho CRM), vendor-provided default taxonomy that customers less commonly customize (HubSpot), and no default taxonomy at all, with universal customer-defined stages (Pipedrive). The Connector Engine and CEP jointly resolve stage mapping during onboarding for every connector in this registry; only the starting confidence baseline differs.
+Opportunity/Deal Stage History Extraction
+Salesforce (OpportunityHistory) and HubSpot (Property History API) both provide purpose-built objects for stage-change history, producing high-confidence Pipeline Waterfall and Sales Velocity data with relatively low extraction complexity. Zoho CRM requires Audit Log extraction, which is more processing-intensive. Dynamics 365 Sales and Pipedrive both support stage-change events but with less SMPL implementation validation to date.
+Closed-Won as Sales Intent, Not Confirmed Revenue
+Every CRM connector in this registry carries the same fundamental caution: a Closed Won Opportunity or Deal reflects sales-recorded intent to close, not confirmed billing or revenue recognition. The Connector Engine never presents CRM-derived bookings data as confirmed ARR without cross-validation against a Billing connector. This is the single most important cross-cutting transformation principle in the CRM Registry, paralleling the Revenue Recognition module-dependency pattern that was the largest confidence variable in the ERP Registry.
+Customer Health Signal Aggregation
+Per the scope calibration established at the start of this registry, no CRM connector is documented as the authoritative source for Customer Health. Each connector contributes a partial signal — engagement frequency, opportunity activity on existing accounts, renewal-stage movement — to the canonical Health Score object, which the Customer Success domain owns and which also draws from Product Analytics, Billing, and Support connectors. The Capability Assessment Layer aggregates these signals; no individual CRM connector should claim Health Score readiness on its own.
+Multi-Pipeline and Multi-Process Configurations
+Salesforce (Record Types), HubSpot (multiple pipelines), Dynamics 365 Sales (Business Process Flows), Pipedrive (multiple pipelines), and Zoho CRM (potentially multiple layouts) all support more than one sales process within a single tenant. The implementation agent must inventory all active processes during Pre-POC Discovery — resolving only the default or most visible process and missing secondary ones (frequently used for renewals, partner deals, or a different product line) is among the most common implementation mistakes identified across this registry.
+Identity Resolution with ERP and Billing Connectors
+Every CRM connector in this registry requires identity resolution against paired ERP and Billing connectors — matching CRM Account/Company/Organization records to ERP Customer records and Billing Subscription records, typically via email domain or explicit customer-provided mapping. This follows the same identity resolution pattern established in the ERP Registry and is not repeated in full here; see CKR v0.3 Section 8.4 (S12) for the general identity resolution framework.
+Future CRM Registry Expansion
+The following CRM platforms are recommended for future registry expansion, prioritized by expected business value to SMPL based on target customer segment overlap and market presence, following the same prioritization approach used in the ERP Registry.
+Priority
+Platform
+Rationale
+Target Segment
+1
+Salesforce Sales Cloud — Industries/vertical editions
+Increasingly relevant as SMPL serves customers in regulated or vertical-specific industries using Salesforce vertical editions (Financial Services Cloud, Health Cloud) with different object models.
+Vertical SaaS customers
+2
+Close.io
+Growing presence among SMPL's smaller, sales-led-growth customer base as a Pipedrive alternative.
+Seed–Series A, sales-led growth
+3
+Freshsales (Freshworks)
+Common alternative to Zoho CRM and HubSpot in the cost-conscious mid-market segment.
+Series A–B, cost-sensitive
+4
+Copper CRM
+Google Workspace-native CRM occasionally encountered among customers standardized on Google's ecosystem rather than Microsoft's.
+Seed–Series A, Google Workspace customers
+5
+Salesloft / Outreach (sales engagement platforms)
+Not full CRMs, but frequently paired with a CRM and relevant to Sales Productivity and engagement-signal capabilities — worth evaluating as a complementary registry rather than a CRM replacement.
+Series A+, outbound-motion sales orgs
+Table F.1 — Future CRM registry expansion priorities, ranked by expected business value.
+Example Capability Assessment
+The following illustrates the customer-facing output a prospective customer receives immediately after the Capability Assessment Layer evaluates a newly connected CRM — in this example, a customer who has connected Salesforce alone, with no other systems yet connected. This is the format that the implementation agent, the CEP, and the CAL jointly produce during onboarding, and is shown here so that human consultants and AI implementation agents share an identical mental model of the expected output.
+SMPL Capability Assessment — Example Output (Salesforce connected, standalone)
+Capability
+Status
+Confidence
+Notes
+Executive Dashboards
+Unavailable
+—
+Requires ERP connection for GAAP-basis financial KPIs. Pipeline-only dashboards available via Pipeline Analytics below.
+Pipeline Analytics
+Ready
+88%
+Full opportunity and stage-history data available from Salesforce.
+Pipeline Waterfall
+Ready
+85%
+OpportunityHistory stage-change timestamps support waterfall construction directly.
+Win Rate Analysis
+Ready
+90%
+Closed Won/Lost outcomes are reliable and require no additional connectors.
+Bookings Forecast
+Partial
+45%
+Requires Billing connector for confirmed revenue validation.
+Renewal Analytics
+Partial
+38%
+Requires Billing connector and Customer Success connector for full confidence.
+Product Analytics
+Unavailable
+—
+Product telemetry not connected. Connect Amplitude, Mixpanel, or equivalent to enable.
+Cash Forecast
+Unavailable
+—
+Requires ERP and Billing connectors.
+Financial Statements
+Unavailable
+—
+Requires ERP connection.
+Workforce Planning
+Unavailable
+—
+Requires HRIS connection.
+Table — Example Capability Assessment output for a Salesforce-only connection. This is illustrative of the CAL's typical output format, not a guarantee for any specific customer implementation.
+This example illustrates three properties of the Capability Assessment Layer's output that the implementation agent should preserve in every customer-facing assessment:
+Capabilities that are genuinely Ready are stated plainly with a confidence figure — no hedging on what a single Salesforce connection can already deliver.
+Capabilities that are Partial state explicitly which additional connector(s) would move them toward Ready — never a vague "more data needed."
+Capabilities that are Unavailable name the specific connector category required — turning an apparent limitation into a clear next step for the customer or the sales conversation.
+CKR Standard Alignment
+This section establishes the permanent CKR registry standard — the complete section structure every future connector registry must contain — and verifies that the CRM Registry, as refined in this iteration, conforms to it. This standard, not the CRM Registry specifically, is the primary deliverable of this review.
+The Permanent CKR Standard — 22 Core Sections
+Every connector specification in every future CKR registry must contain the following 22 sections, in this order. This sequence reflects the natural implementation reasoning path: understand the category, understand the connector, map it to the canonical model, understand customer variation and failure modes, understand what it unlocks and how that grows, understand confidence and coverage, understand customer fit and risk, and close with executive and planning framing.
+#
+Section
+Purpose
+Scope
+1
+Category Overview
+Establishes universal knowledge about the connector category before any vendor-specific documentation.
+Category-level — written once per registry, not per connector
+2
+Business Purpose
+What business problem this specific connector solves and what role it plays in the customer's operations.
+Per connector
+3
+Universal Business Objects
+The canonical objects common across the category, with their SCBM targets.
+Category-level — written once per registry
+4
+Connector Overview
+Identity fields: connector_id, vendor_name, vendor_type, maturity level, specification version.
+Per connector
+5
+Canonical Mapping
+How vendor objects and fields map to SCBM canonical objects, including any category-specific normalization (e.g., stage taxonomy).
+Per connector
+6
+Transformation Guidance
+How the Connector Engine should treat this connector's data — its authoritative scope and its limits.
+Per connector
+7
+Configuration Variants
+Detailed, structured documentation of customer-configurable variations and their mapping impact.
+Per connector
+8
+Common Customer Variants
+Executive summary of the most frequent customer configurations, organized Typical / Common / Less Common / Rare-Complex.
+Per connector — NEW in v0.4
+9
+Common Failure Modes
+The business and implementation issues most commonly encountered during onboarding, and why each affects canonical mapping or Capability Assessment.
+Per connector — NEW in v0.4
+10
+Capability Unlocks
+Which SMPL capabilities this connector enables, at what status.
+Per connector
+11
+Capability Progression
+Current Confidence, Improves With, and Expected Confidence Range per capability.
+Per connector
+12
+Recommended Companion Connectors
+Business-reasoning case for each companion connector — why it improves implementation, what it strengthens, what it completes, what it improves.
+Per connector
+13
+Connector Synergies
+High-value connector combinations and the business outcomes — not technical integrations — they enable.
+Per connector
+14
+Data Confidence Profile
+Object-level confidence with explanation, distinguishing "data exists" from "SMPL can confidently reason over it."
+Per connector
+15
+Estimated SCBM Coverage
+Domain-level percentage estimate of canonical model coverage from this connector alone.
+Per connector
+16
+Best Fit Customer
+Ideal and less-ideal customer profiles for Sales and Solutions Engineering qualification.
+Per connector
+17
+Connector Maturity
+The connector's current maturity level per the Connector Maturity Model, reflecting SMPL's implementation depth — never vendor platform maturity.
+Per connector
+18
+Implementation Risks
+Specific, named risks with mitigation guidance.
+Per connector
+19
+Standalone Capability Summary
+Ready / Partial / Unavailable verdict per capability when this connector is the only one connected.
+Per connector
+20
+Connector Fingerprint
+Business Purpose, Typical Customer, Primary Strengths, Known Implementation Challenges, Implementation Characteristics, Ideal Companion Systems — the scannable executive summary.
+Per connector
+21
+Executive Architecture Summary
+Role in customer ecosystem, contribution to Financial Intelligence, SCBM relationship, immediate value, combined value — written for executive leadership.
+Per connector
+22
+Planning Guidance
+The standardized statement that all estimates are planning guidance, determined dynamically by the CAL and CEP, and that platform intelligence never improves through customer data.
+Per connector — standardized language, NEW in v0.4
+Table CKR.1 — The permanent 22-section CKR registry standard, established by this review.
+Sections That Are Category-Level, Not Per-Connector
+Two sections in the standard — Category Overview and Universal Business Objects — are written once per registry, establishing Tier 1 knowledge that every connector specification in that registry builds upon, rather than being repeated identically for each connector. This pattern, established in the ERP Registry and preserved here, prevents redundant restatement of category-universal concepts across five or more connector specifications.
+The Standardized Planning Guidance Statement
+Per the build brief's instruction, the following statement is now part of the permanent CKR standard and appears, in substantively identical form, as the closing section of every connector specification in every registry:
+This connector specification's confidence percentages, SCBM Coverage estimates, capability status estimates, implementation duration estimates, and maturity rating represent architectural planning guidance only — not contractual guarantees. Actual customer outcomes are determined dynamically by the Capability Assessment Layer, the Customer Environment Profile, the specific systems connected for a given customer, and customer-specific implementation decisions. Platform intelligence improves through architecture refinement, connector maturity, product development, implementation experience, and domain expertise — never through customer business data.
+What Was Deliberately Excluded From the CKR Standard
+Per Architecture Governance in the build brief, the following remain explicitly outside the CKR standard and are not introduced anywhere in this registry or any future registry:
+Pre-POC Discovery Checklists — operational workflow, not implementation knowledge
+Connector Readiness metrics, Engineering KPIs, Throughput metrics — internal engineering operations
+Operational dashboards, Jira workflows — tooling, not architecture
+Production implementation statistics — these will accumulate over time and inform future revisions to maturity levels and confidence estimates, but are not themselves a CKR section
+The CKR standard remains scoped to permanent implementation knowledge: what a connector is, what it maps to, how confident SMPL is in that mapping, what it unlocks, and how to plan around it. Operational execution of that knowledge is a separate, future concern.
+CRM Registry Conformance Check
+Every connector specification in this registry — Salesforce, HubSpot, Dynamics 365 Sales, Pipedrive, and Zoho CRM — now contains all 22 standard sections in the standard order. The two category-level sections (Category Overview, Universal Business Objects) are present once, before the first connector specification. This conformance was verified section-by-section across all five connectors as part of this review.
+Final Architecture Review — CKR Standard Readiness
+This review evaluates whether the CRM Registry, as finalized in v0.4, is suitable to serve as the reference implementation for every remaining connector category, and answers the four specific governance questions posed in the build brief. Per the brief's instruction, this review identifies only changes that would improve the permanent CKR standard — no CRM-specific enhancements are proposed here.
+Question 1: Are there any architectural inconsistencies between the ERP and CRM registries?
+One inconsistency exists and is identified here for correction at the standard level, not the CRM-registry level: the ERP Registry (v0.4, frozen) does not contain Common Customer Variants, Common Failure Modes, or the standardized Planning Guidance closing statement — all three are new in this CRM Registry iteration and did not exist when the ERP Registry was frozen.
+This is not a CRM-specific defect. It is the natural consequence of the CKR standard itself having matured through the CRM Registry's three iterations. The correct resolution is not to modify the CRM Registry further, but to schedule a future ERP Registry alignment pass that retrofits these three elements into the existing five ERP connector specifications, bringing the ERP Registry into full conformance with the now-finalized 22-section standard. This is recommended as the first work item after the CKR standard is formally adopted, before the Billing Registry begins — see Recommendation 1 below.
+Question 2: Does every addition introduced here improve the CKR standard itself rather than only CRM?
+Yes. Each of the three substantive additions in this iteration was evaluated against this exact test before inclusion:
+Common Customer Variants — the four-tier Typical/Common/Less Common/Rare-Complex structure is category-agnostic. It will apply identically to a Billing connector (typical: single product, standard billing cycle; rare: multi-entity consolidated billing with custom proration logic) or an HRIS connector (typical: single-entity payroll; rare: multi-country payroll with currency-split compensation) without modification to the section's structure.
+Common Failure Modes — the pattern of "business assumption that is likely wrong" + "why it affects canonical mapping or Capability Assessment" is the correct generalization for any connector category. The specific failure modes listed for Salesforce (Closed Won ≠ confirmed revenue) differ from what a Billing registry would list (e.g., trial subscriptions counted as ARR), but the section's purpose and structure transfer directly.
+Standardized Planning Guidance — this is by definition a cross-registry standard; the language was written to reference the CAL, CEP, and the data-isolation principle generically, with no CRM-specific terminology, so it can be reproduced verbatim in every future registry.
+No addition in this iteration references CRM-specific concepts (Opportunity, Pipeline Stage, Deal) in its structural definition — only in its worked examples. This was a deliberate test applied during construction: every new section's purpose statement was written first in category-agnostic language, then illustrated with CRM-specific examples.
+Question 3: Is the CRM Registry now suitable to serve as the reference implementation for all remaining connector categories?
+Yes, with the Question 1 caveat addressed as a forward-looking action rather than a blocking issue. The CRM Registry now demonstrates full conformance with all 22 standard sections, validated across five connectors with materially different maturity levels (Pilot Ready through Validated) and materially different object model complexity (Pipedrive's narrow model through Salesforce's extensive customization surface). This range of conditions is precisely what a reference implementation should be tested against — a standard that only works for one connector's level of complexity is not yet a standard.
+The category-level vs. per-connector section split (Category Overview and Universal Business Objects written once; the remaining 20 sections written per connector) is confirmed as the correct pattern by its successful application in both the ERP and CRM registries independently.
+Question 4: If Billing were started tomorrow using this structure, would any additional CKR sections be missing?
+No additional sections are identified as missing. The 22-section standard, as finalized in this review, is assessed as complete for the Billing Registry's anticipated needs:
+Canonical Mapping (section 5) accommodates Billing's primary normalization challenge (subscription status and ARR computation across vendors) the same way it accommodated CRM's stage normalization and ERP's Chart of Accounts normalization — the section is structurally generic, not CRM-specific, despite this registry's worked examples being CRM-specific.
+Common Customer Variants and Common Failure Modes, new in this iteration, are confirmed category-agnostic per Question 2 above and will apply directly to Billing.
+Recommended Companion Connectors and Connector Synergies will work directly for Billing — a Billing+CRM pairing and a Billing+ERP pairing are simply the inverse framing of the CRM+Billing and ERP+Billing pairings already documented extensively in this registry, requiring no structural change.
+One forward-looking note, not a missing section: Billing connectors (Stripe, Chargebee, Recurly, Zuora, Maxio) will likely require more granular sub-documentation within Canonical Mapping for usage-based and tiered pricing models than any CRM or ERP connector required — this is anticipated content depth, not a missing section, and should be handled within the existing Canonical Mapping section structure.
+Recommendation 1 — ERP Registry Alignment Pass
+Before beginning the Billing Registry, perform a focused alignment pass on the existing ERP Registry (currently frozen at v0.4) to add Common Customer Variants, Common Failure Modes, and the standardized Planning Guidance statement to all five ERP connector specifications. This is mechanical work — applying an established pattern to existing content — not a redesign, and should take a fraction of the effort the original ERP Registry construction required.
+Recommendation 2 — CKR Standard as a Standalone Governance Document
+The CKR Standard Alignment section in this document (the 22-section table and its supporting definitions) should be extracted into a standalone governance artifact — independent of any single registry — that every future registry author references directly, rather than being embedded within the CRM Registry specifically. This is a packaging recommendation, not a content change: the content is correct and complete as written here; its placement should eventually move to a permanent CKR governance location separate from any one category registry.
+Final Determination
+The CRM Registry is frozen as Version 1.0, and the 22-section CKR standard it now conforms to is ready to govern every remaining connector registry, beginning with Billing.
+This conclusion rests on the four governance questions posed in the build brief, each answered directly above: one identified inconsistency exists between the ERP and CRM registries, and it has a clear, scoped, non-blocking resolution (Recommendation 1). Every addition in this iteration was tested against and confirmed to improve the standard generically, not the CRM Registry specifically. The CRM Registry's conformance has been validated across a meaningfully diverse set of five connectors, which is the correct bar for calling something a reference implementation. And a direct review of Billing's anticipated documentation needs against the 22-section standard surfaces no missing sections.
+The CRM Registry, having served its dual purpose — both as a complete, production-ready connector registry in its own right, and as the proving ground for the permanent CKR standard — is ready to be frozen. Work should now proceed on two parallel tracks: the brief ERP alignment pass (Recommendation 1), and the start of the Billing Connector Knowledge Registry using the now-finalized 22-section standard.

@@ -1,0 +1,235 @@
+ABS-012
+MULTI-PATH IMPLEMENTATION ARCHITECTURE
+How Every Ingestion Path Converges on One Canonical Business Model
+Version 1.0
+Companion document to the SMPL Architecture Build Specification, SOF, and CEP
+SMPL.ai · AI Implementation Engineering
+July 2026 · CONFIDENTIAL — INTERNAL ARCHITECTURE DOCUMENT
+Every implementation path must converge into the same Canonical Business Model before entering the Financial Intelligence Platform.
+Implementation mechanisms are replaceable. Canonical Business Objects are not.
+Document Purpose and Scope
+SOF (ABS-010) and the CKR/IMS registries were built around an implicit assumption: that a customer connects source systems via API. That assumption is not wrong — Path B, described in Section 1, is real and remains the richest, highest-confidence path available. But it is not the only path production has ever run. Today's prototype CSV datasets and warehouse-loading scripts prove that customers without API access, or without appetite for a live connector during initial rollout, still need a way in.
+This document formalizes that second path as a first-class, permanent part of the architecture rather than a stopgap — and, critically, ensures it converges on exactly the same Canonical Business Model every API-sourced implementation already produces. It does not modify SOF, CEP, IMS, BIS-001, or any BIS/FIE document. Each of those receives a short cross-reference note (Section 12) once this document is accepted; none of them are redesigned here.
+Relationship to Prior Architecture
+This document sits at the same layer as SOF — Layer 4, Orchestration, per SOF's own stack description — but addresses a dimension SOF did not yet formalize: which mechanism populates Canonical, not merely which agents coordinate the process once it does. Everything below Canonical — Validation (BIS-004), Knowledge (BIS-005), Reporting (BIS-006), and the entire Financial Intelligence Engine (FIE-001 through FIE-003) — was deliberately built to depend only on Canonical Business Objects, never on connector implementation details. That design choice, made without this document in mind, is precisely what makes this document possible without touching any of them.
+Section 1 — The Three Implementation Paths
+SMPL supports three implementation paths per customer. A customer is not globally assigned one path — path selection happens per domain (Section 1.4), and a single customer routinely runs a different path for each of ERP, CRM, Billing, and HRIS simultaneously.
+1.1 Path A — CSV / Excel / File Upload
+Applies when a domain has no usable API access — no credentials, no admin permission to create an integration, or a source system with no API at all (common for smaller ERP/HRIS tools, or when IT policy blocks new integrations during initial rollout).
+Customer Export (CSV / Excel)         ↓Structural Validation  (Section 5.1)         ↓Human and/or AI-Assisted Mapping  (Section 5.2)         ↓Canonical Business Objects  (BIS-003)         ↓Validation (BIS-004) → Observation Engine (FIE-001) → Methodology (FIE-002)         → Calculation (FIE-003) → Memory (FIE-004) → Narrative (FIE-005)
+1.2 Path B — Connector-Native (API)
+Applies when a domain has confirmed, working API access. This is the path SOF and the IMS libraries were originally built around in full — Connector Proxy (BIS-001) authenticates and extracts, IMS agents transform to Canonical, and the remainder of the pipeline is identical to Path A from Canonical onward.
+ERP / CRM / Billing / HRIS API         ↓Connector Proxy (BIS-001)         ↓Canonical Business Objects  (BIS-003)         ↓Validation (BIS-004) → Observation Engine (FIE-001) → Methodology (FIE-002)         → Calculation (FIE-003) → Memory (FIE-004) → Narrative (FIE-005)
+1.3 Path C — Hybrid
+Applies at the customer level whenever different domains resolve to different paths — the common case, not the exception. A customer might have live Salesforce API access (CRM: Path B) while their HRIS export comes from a small provider with no API (HRIS: Path A). Both converge into the same Canonical instance for that customer; nothing downstream of Canonical is aware a hybrid was involved.
+Domain 1 (e.g. CRM) — Path B          Domain 2 (e.g. HRIS) — Path A         ↓                                      ↓         └──────────────→  Canonical Business Objects  ←──────────────┘                                     ↓                    Same downstream platform, unchanged
+1.4 Path Selection Is Per-Domain, Never Global
+CEP's per-domain access question (Section 3.2) determines path independently for each of ERP, CRM, Billing, and HRIS. There is no customer-level "Path A customer" or "Path B customer" designation anywhere in the data model — only a per-domain, per-customer record of which mechanism is currently populating that domain's Canonical objects, which is exactly what makes Section 8's graduation model a per-domain action rather than an all-or-nothing re-implementation.
+1.5 Future Ingestion Mechanisms
+CSV/Excel, API, and Hybrid are today's three paths, not an exhaustive list. SFTP drops, cloud storage drops (e.g. a customer's S3 or GCS bucket), database replication, Change Data Capture (CDC) streams, and event streams are all plausible future ingestion mechanisms — and every one of them is a fourth, fifth, or sixth mechanism, never a fifth domain. The domains remain exactly ERP, CRM, Billing, and HRIS regardless of how many mechanisms eventually exist for reaching them.
+Adding a new mechanism means adding a new adapter type to BIS-001's Connector Proxy (the same extension point Section 7 defines for the file-upload adapter) and, where the mechanism involves a meaningfully different mapping problem than Section 5's framework already covers, a new mapping/transformation profile alongside Section 6's four domain profiles. It never means touching BIS-003 or anything downstream of it. This is the same Canonical Convergence principle in Section 2 applied prospectively: a mechanism not yet invented is still bound by it, because the principle is a property of Canonical's position in the architecture, not a rule written about any specific mechanism.
+Section 2 — The Canonical Convergence Principle
+CSV is not a domain. CSV is an ingestion mechanism. The domains remain ERP, CRM, Billing, and HRIS.
+Every CKR registry, every IMS library, and every BIS/FIE document from BIS-003 forward was scoped around Canonical Business Objects — never around a specific ingestion mechanism. This was true before this document existed and required no change to make true: BIS-003 §1.1 defines Canonical as the single consistent language for the rest of the system; BIS-004 through FIE-003 each open their own Section 1 stating they read Canonical, or a service built directly on it, and nothing upstream of that. Path A's only job is to be a second, equally legitimate way of producing exactly what Path B already produces — the same canonical customer, opportunity, invoice, subscription, and employee objects, with the same structural shape, entering through BIS-003's existing write path.
+Downstream Service
+Awareness of Ingestion Path
+Canonical Platform (BIS-003)
+None — a canonical object carries source_system metadata (e.g. "Salesforce" or "CSV Upload — CRM Opportunity Export") but no path flag; write path is identical
+Validation Platform (BIS-004)
+None — validates canonical object structure and business rules regardless of origin
+Knowledge Platform (BIS-005)
+None — knowledge is organized by financial concept and business rule, never by ingestion mechanism
+Reporting Platform (BIS-006)
+None — reads Canonical/Validation/CAL output only
+Observation Engine (FIE-001)
+None — records Canonical-derived Observations; source_system on the Temporal Record (FIE-001 §7.1) is descriptive metadata, not a behavioral branch
+Methodology / Calculation Engine (FIE-002, FIE-003)
+None — operate entirely on Observations, Revisions, and methodology definitions
+Table ABS12-2.1 — No document from BIS-003 onward requires modification. This is the direct, structural consequence of Canonical Convergence, not a claim requiring separate verification per service.
+Section 3 — CEP Behavior by Path
+CEP's guiding principle — "if AI can discover it, do not ask the customer" — does not change. What changes is how much can actually be discovered, which differs sharply by path.
+3.1 New CEP Field Type: MAPPING-CONFIRMED
+Path A introduces a fifth field type alongside CEP's existing four (CUSTOMER INPUT, AUTO-DISCOVERED, SYSTEM-VERIFIED, AUTO-GENERATED): MAPPING-CONFIRMED — a column-to-canonical-field mapping that SMPL's AI proposes from the uploaded file's headers and sample rows, which the customer or implementation consultant confirms or corrects once before it is applied. This is not a new information category; it is Path A's structural substitute for what Path B accomplishes through live API schema introspection.
+3.2 The Per-Domain Access Question
+Every CEP now opens each domain section with one CUSTOMER INPUT question that did not previously exist explicitly: "Do you have (or can you obtain) API/admin access to connect this system directly, or would you prefer to provide file exports?" This single question is what feeds Section 1.4's per-domain path selection and, critically, is the specific control point Section 9's guardrail depends on — no downstream agent may infer API access is available; it must be confirmed here, per domain.
+3.3 What Path A Still Auto-Discovers
+Path A does not collapse CEP into a manual questionnaire. Once a file is uploaded, AI-assisted mapping (Section 5.2) still auto-proposes the mapping, still infers likely canonical targets from header names and sample data, and still auto-generates downstream CEP fields (currencies observed in the data, record type distributions, apparent subscription models) exactly as Path B's discovery would — the only difference is the confirmation step is explicit and human-in-the-loop rather than continuous background validation against a live schema.
+Section 4 — SOF Behavior by Path
+SOF's Agent Registry gains one new participant type: the CSV Mapping Agent, a fourth kind of Implementation Agent (alongside the existing connector-specific IMS agents) whose IMS-equivalent behavior is defined by Section 5's shared framework and Section 6's domain profiles rather than by a connector-specific playbook. SOF's coordination logic treats it exactly as it treats any other Implementation Agent — it runs when a domain resolves to Path A, produces the same class of output (populated Canonical objects merged into the customer's SCBM instance), and is subject to the same CAL assessment afterward.
+SOF Stage
+Path B (existing)
+Path A (this document)
+Discovery
+CEP auto-discovery via connected systems
+CEP per-domain access question (3.2) routes to Path A; file upload requested
+Agent dispatch
+Connector-specific IMS agent (e.g. NetSuite, Salesforce)
+CSV Mapping Agent, using the domain's CSV Mapping Profile (Section 6)
+Extraction / structural check
+Live API schema introspection
+Structural Validation against the file (Section 5.1)
+Canonical population
+IMS transformation logic → BIS-003
+Confirmed mapping → BIS-003 (identical write path)
+Capability assessment
+CAL, unchanged
+CAL, unchanged — CAL has no awareness of which path populated the objects it assesses
+Table ABS12-4.1 — SOF's decision framework and stage structure are unchanged; only the agent dispatched at the Implementation stage differs by path.
+4.1 Hybrid Coordination
+For a Path C customer, SOF dispatches a live IMS agent for one domain and a CSV Mapping Agent for another, in parallel, exactly as it already dispatches multiple connector-specific IMS agents concurrently for a multi-domain Path B customer. Both merge into the same SCBM instance through SOF's existing canonical integration logic (SOF §1, "Merging outputs from multiple implementation agents into a unified SCBM instance") — that logic was already written to handle multiple agents; it did not assume they would all be API-sourced.
+Section 5 — Shared CSV-to-Canonical Mapping Framework
+One framework, reused by all four domain profiles in Section 6 — thinner than API IMS by design, since it carries none of OAuth, pagination, rate limiting, or live schema introspection.
+5.1 Structural Validation
+File format check — CSV or Excel, valid encoding, parseable delimiter
+Header presence check — a header row exists and every column has a non-empty name
+Required-column check against the domain's CSV Mapping Profile (Section 6) — profile-defined required fields must be present under some header, not necessarily an exact name match
+Row-count and non-empty check — the file contains at least one data row
+Duplicate-header check — no two columns share an identical header
+Structural Validation runs before any mapping is proposed. A file failing structural validation is rejected with a specific, actionable reason (e.g. "required column for Invoice Amount not found — expected one of: Amount, Total, Invoice Total") rather than a generic parse error, consistent with BIS-004's existing rule that validation explains what failed and why, not just pass/fail.
+5.2 Human and/or AI-Assisted Mapping
+For a file passing structural validation, SMPL's AI proposes a column-to-canonical-field mapping using header-name similarity and sample-value pattern matching against the domain's CSV Mapping Profile. The proposed mapping is presented for MAPPING-CONFIRMED confirmation (Section 3.1) before any canonical write occurs. A confirmed mapping is versioned and reused automatically for subsequent uploads of the same file shape — the customer maps their export format once, not on every refresh.
+5.3 Confidence Treatment
+A canonical object populated via Path A carries the same three-dimensional confidence structure (Mapping, Data, Reasoning) as one populated via Path B — Path A does not get a separate, lesser confidence model. Mapping Confidence for a human-confirmed CSV mapping is set HIGH once confirmed (arguably more reliable than an AI's live inference, since a human explicitly verified it); it is set MEDIUM for an AI-proposed mapping still awaiting first confirmation, and is never used to populate a canonical object before confirmation. Data Confidence reflects the uploaded file's own data quality (completeness, apparent consistency) exactly as it would for API-sourced data, evaluated by the same Validation Platform rules.
+5.4 Canonical Write Path
+A confirmed, mapped CSV row writes to BIS-003 through the identical canonical-object write path an IMS agent uses — there is no separate "CSV canonical table." The only new component required is a lightweight file-upload adapter type registered in BIS-001's Connector Proxy alongside its existing API adapters (Section 7); everything past that point is unmodified.
+5.5 Mapping Profile Versioning
+A confirmed mapping is stored as a versioned artifact scoped to (customer_id, domain, file_shape_signature) — the same append-only versioning discipline used throughout the platform (BIS-004 validation rules, BIS-005 knowledge records, BIS-006 report_templates, FIE-002 methodologies). A new upload matching a known file_shape_signature reuses its confirmed mapping without re-prompting; a materially different file shape (new or renamed columns) triggers a new mapping proposal and a new MAPPING-CONFIRMED step, never a silent reinterpretation of the existing mapping.
+Section 6 — Domain-Specific CSV Mapping Profiles
+Each profile is intentionally thin: required fields, canonical targets, domain-specific validation notes, and typical export names customers actually produce. None of the API IMS libraries' connector-specific extraction, pagination, or auth concerns apply.
+6.1 ERP CSV Mapping Profile
+Field
+Detail
+Typical customer exports
+General Ledger detail, Trial Balance, Chart of Accounts export
+Required columns
+Account Code/Number, Account Name, Period/Date, Amount, Debit/Credit indicator (or signed amount)
+Canonical targets
+gl_account, journal_entry, chart_of_accounts_mapping (per BIS-003's canonical model)
+Domain-specific validation notes
+Debits and credits (or signed amounts) must balance to zero per journal entry batch — a structural check specific to ERP data, applied by Validation (BIS-004) after canonical population, not by this profile itself
+Table ABS12-6.1 — ERP CSV Mapping Profile.
+6.2 CRM CSV Mapping Profile
+Field
+Detail
+Typical customer exports
+Opportunity export, Pipeline export, Account/Contact export
+Required columns
+Opportunity Name/ID, Account Name, Stage, Amount, Close Date, Owner
+Canonical targets
+opportunity, account, customer (per BIS-003's canonical model)
+Domain-specific validation notes
+Stage values must map to a known forecast category (BIS-004/FIE-002 stage taxonomy) — an unrecognized stage value is flagged for mapping clarification rather than silently dropped
+Table ABS12-6.2 — CRM CSV Mapping Profile.
+6.3 Billing CSV Mapping Profile
+Field
+Detail
+Typical customer exports
+Invoice register, Subscription export, Customer billing export
+Required columns
+Invoice Number, Customer Name/ID, Invoice Date, Amount, Subscription/Plan (if applicable), Payment Status
+Canonical targets
+invoice, subscription, customer (per BIS-003's canonical model)
+Domain-specific validation notes
+Currency must be explicit or resolvable to a single customer-wide default — Billing is the domain most likely to carry multi-currency data in a single export, so this profile's mapping step must confirm a currency column exists or a single default applies before confirming the mapping
+Table ABS12-6.3 — Billing CSV Mapping Profile.
+6.4 HRIS CSV Mapping Profile
+Field
+Detail
+Typical customer exports
+Headcount report, Org roster, Compensation export
+Required columns
+Employee ID/Name, Department, Title, Status (active/terminated), Start Date, Compensation (if included)
+Canonical targets
+employee, department (per BIS-003's canonical model)
+Domain-specific validation notes
+Compensation fields, if present, are flagged for elevated access-control review at the mapping-confirmation step, consistent with the platform's existing sensitive-value redaction posture (BIS-006 §25)
+Table ABS12-6.4 — HRIS CSV Mapping Profile.
+Section 7 — BIS-001 Addition: File Upload Adapter
+BIS-001 is not redesigned here. The one addition it requires — flagged now, specified in full when BIS-001's own cross-reference note (Section 12) is written — is a file-upload adapter type registered alongside its existing API adapters: it accepts an uploaded file plus a confirmed mapping reference (Section 5.5) and produces the same class of extracted, pre-canonical output an API adapter produces, which the existing Canonical Platform write path consumes identically regardless of which adapter produced it.
+Section 8 — Graduation: CSV → Hybrid → Connector-Native
+Graduation is a per-domain action, never a customer-wide re-implementation. A customer running CRM on Path A can graduate CRM alone to Path B (e.g. connecting Salesforce) while HRIS remains on Path A — moving that one domain from Path A to Path B is what turns a Path A or Path C customer incrementally more Path B, never an all-or-nothing cutover.
+8.1 What Graduation Actually Does
+The domain's per-domain access question (Section 3.2) is re-answered in CEP once API access becomes available
+SOF dispatches the connector-specific IMS agent for that domain going forward, in place of the CSV Mapping Agent
+New canonical objects and updates are populated via BIS-001's API adapter from the graduation point forward
+Canonical objects already populated via Path A are not re-created — they remain exactly as they are, with their existing source_system metadata and confidence history intact, per FIE-001's confidence-immutability discipline
+8.2 Historical Continuity — and Its Honest Limit
+For a customer whose Path A implementation followed this document's architecture (Sections 5–6: file uploads populating genuine Canonical objects, not aggregate tables), graduation is seamless — canonical entity history simply continues under a new source_system from the graduation date forward, with no gap and no re-onboarding, because Observation Engine (FIE-001) history was already being built from real canonical objects the whole time.
+This does not apply retroactively to today's prototype warehouse tables. Data that was loaded directly into aggregate, pre-shaped tables such as actual_mrr_waterfall — never having passed through a canonical object layer — has no canonical entity history to continue. Graduating, or even properly onboarding onto Path A as this document defines it, such a customer means canonical history begins at that onboarding date, with an honestly documented discontinuity before it, not a reconstructed backfill. Section 10 addresses this directly.
+Section 9 — Administrative Guardrails Against Over-Prescription
+No implementation agent may prescribe an API-native connector agent for a domain unless Section 3.2's per-domain access question has been affirmatively answered YES for that domain, for that customer.
+This is the specific failure mode this document exists to prevent: an implementation agent defaulting to "set up the NetSuite connector" because a template or prior customer's configuration assumed API access, when this customer's CEP record shows no confirmed access for that domain. The guardrail is enforced structurally, not by instruction alone:
+SOF's agent dispatch logic reads Section 3.2's answer before selecting an Implementation Agent for a domain — a missing or NO answer routes to the CSV Mapping Agent by default, never to a connector-specific IMS agent
+A connector-specific IMS agent's dispatch is blocked with a specific, loggable reason ("no confirmed API access for this domain") rather than silently falling through to a default
+An Industry Template (FIE-002 §11) may recommend a path as a starting suggestion, but a template's recommendation never overrides Section 3.2's confirmed customer answer — templates suggest; CEP confirmation decides
+This same per-domain answer is what Section 8.1's graduation flow re-checks — graduation is only ever a re-answer of an existing question, never a new mechanism
+Section 10 — Production Reality: What the Existing Prototype Was, and Is Not
+The existing production CSV datasets, setup-prod-warehouse.ps1 / load-prod-warehouse.ps1 scripts, and exact-header aggregate tables (e.g. actual_mrr_waterfall) were built to prove the Financial Intelligence Platform's logic — reporting outputs, forecasting, scenarios, dashboards, and MD&A generation — end to end, quickly. They succeeded at that. They are a prototype implementation of the Financial Intelligence Platform's output layer, not the production architecture for Path A's ingestion layer, and should not be read as evidence that Path A was ever meant to bypass Canonical.
+As Path A is built to this document's architecture, the target state is explicit: uploaded CSVs populate canonical entity-level objects (Section 5–6), and aggregate tables such as actual_mrr_waterfall become derived outputs produced by Calculation Engine (FIE-003) and served through Reporting (BIS-006) — never primary storage. The existing warehouse scripts are retired as production infrastructure once a domain's Path A implementation is rebuilt against Canonical; they are not extended, and no new domain or customer should be onboarded directly against them going forward.
+Section 11 — Relationship to Downstream Platform (Unchanged Boundary)
+Document
+Impact of This Architecture
+BIS-003 — Canonical Platform
+None. Receives canonical writes from a new adapter type (Section 7); its own write path, structure, and confidence model are unchanged.
+BIS-004 — Validation Platform
+None. Validates canonical objects and business rules regardless of origin; ERP balance checks and CRM stage checks (Section 6) are ordinary BIS-004 rules, not new validation architecture.
+BIS-005 — Knowledge Platform
+None. Organized by financial concept and business rule; ingestion mechanism is not a knowledge dimension.
+BIS-006 — Reporting Platform
+None directly. Benefits from Section 10's migration — aggregate outputs it may eventually surface become genuine FIE-003 derivations rather than static prototype tables.
+FIE-001 — Observation Engine
+None. Source_system remains descriptive metadata on the Temporal Record, exactly as already specified; Path A vs. Path B is not a new field.
+FIE-002 — Methodology Engine
+None. Methodologies operate on Financial Concepts and Drivers, never on ingestion path.
+FIE-003 — Calculation Engine
+None. Executes methodologies against Observations and Revisions; has no awareness of, or dependency on, how those Observations were originally captured.
+Table ABS12-11.1 — This is the direct, verifiable payoff of the Canonical Convergence principle: eight prior documents, zero required changes.
+Section 12 — Cross-Reference Notes Needed in Existing Documents
+Document
+Cross-Reference Note Needed
+Trigger to Write It
+SOF (ABS-010)
+Register the CSV Mapping Agent as a fourth Implementation Agent type in the SOF Agent Registry (Section 1); add Table ABS12-4.1's per-stage behavior to SOF's own stage descriptions
+When SOF is next revised — no urgency, since this document is authoritative in the interim
+CEP (ABS-009)
+Add the MAPPING-CONFIRMED field type (Section 3.1) to CEP's field-type table; add the per-domain access question (Section 3.2) to each domain section's opening fields
+Before the first Path A or Path C customer is onboarded
+CKR / IMS Libraries (ERP, CRM, Billing, HRIS)
+Add a short pointer from each domain's CKR/IMS front matter to its corresponding CSV Mapping Profile (Section 6) here, so a reader of any one domain's registry finds both paths
+When each library is next revised
+BIS-001 — Connector Proxy Service
+Add the file-upload adapter type (Section 7) as a formal endpoint alongside its existing API adapters, including its own request/response/error-code treatment matching BIS-001's existing adapter documentation depth
+Before the file-upload adapter is engineered — this is the one item with real urgency, since Path A cannot be built without it
+Table ABS12-12.1 — None of these are required to accept this document; they are the follow-up work this document creates, each with its own trigger rather than a blanket deadline.
+Section 13 — Future Architecture Backlog
+Item
+Description
+Trigger to Reconsider
+ABS-013 — Canonical Identity & Entity Resolution
+A formal architecture for matching the same real-world customer, opportunity, invoice, subscription, employee, or account across ingestion paths and mechanisms without duplication — e.g. a customer graduating CRM from a CSV export to Salesforce, or a Path C customer whose Billing system independently references a customer already known through CRM. Not addressed by this document: Section 8's graduation model assumes continuity of the same canonical entity but does not itself specify the resolution logic that guarantees a graduated or hybrid-sourced record is recognized as the same entity rather than created as a duplicate.
+Before the first customer graduates a domain from Path A to Path B, or before a Path C customer's two concurrent paths reference an overlapping entity in production — whichever comes first
+Table ABS12-13.1 — Not a blocker for ABS-012 v1.0. Captured here so it is not rediscovered as a surprise the first time graduation or hybrid entity overlap actually happens.
+Architectural Readiness Assessment
+Dimension
+Score
+Assessment
+Canonical convergence discipline
+10 / 10
+Table ABS12-11.1 verifies, document by document, that zero changes are required from BIS-003 onward — the direct structural payoff of every downstream service having been built against Canonical rather than against connector implementation from the start.
+Guardrail enforceability
+10 / 10
+Section 9's guardrail is structural (SOF dispatch logic reads a specific, required CEP answer) rather than a documented convention an agent could drift away from; the failure mode motivating this entire document — over-prescribing an API connector — has a specific, named blocking mechanism.
+Honesty about existing production data
+10 / 10
+Section 10 does not claim the existing prototype gracefully becomes Path A. It states plainly that aggregate-table data has no canonical history to graduate from, and that onboarding such a customer onto real Path A means an honest discontinuity date, not a reconstructed backfill.
+CSV framework depth vs. speed tradeoff
+9 / 10
+The shared framework plus four lightweight profiles (Sections 5–6) delivers the requested speed without losing domain precision — required fields, canonical targets, and domain-specific validation notes are all present. One point withheld: profile-level guidance on multi-file exports (e.g. a CRM export split across Opportunities.csv and Accounts.csv requiring cross-file joins before mapping) is not yet addressed and is a reasonable near-term gap, not a structural one.
+Graduation model completeness
+9 / 10
+Per-domain graduation (Section 8.1) and the historical-continuity limit (Section 8.2) are both explicit. One point withheld: the mechanics of a mapping profile's file_shape_signature surviving a graduation event (so a later reversion or dual-running period, if ever needed, isn't blocked) are not yet specified — reasonable to resolve when BIS-001's file-upload adapter is actually engineered, per Table ABS12-12.1.
+Table ABS12-A.1 — Architectural Readiness Assessment. Aggregate: 48 / 50 (96%).
+Final Determination
+ABS-012 v1.0 is complete. It formalizes a second, permanent ingestion path into the same Canonical Business Model every prior architecture document already assumed, without modifying a single one of them.
+The most consequential sentence in this document is not an architectural decision at all — it is the confirmation, in Section 11, that eight prior documents required zero changes. That outcome was not engineered into this document; it was already true the moment BIS-003 was written to depend on Canonical rather than on any specific source. This document's job was narrower than it might have felt at the outset: not to redesign the platform for a second ingestion mechanism, but to notice that the platform never actually required the first one to be the only one, and to write that down explicitly enough that an implementation agent — and a customer without API access — can act on it.
+Section 10 is the second-most consequential part of this document, and the least comfortable one to write plainly: today's prototype does not get to become tomorrow's Path A by relabeling. The discipline this entire documentation series has followed — name the gap, don't quietly assume it away — applies here to a body of code that already exists and works, which is a harder thing to say than it is to say about an unbuilt future service. It is said the same way regardless.

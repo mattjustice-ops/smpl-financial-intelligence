@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.services.demo_csv.loader import LoadResult, load_demo_csv_core, load_entity_records, parse_csv
+from app.services.workspace.import_trace import enrich_ingest_result, resolve_csv_destination
 from app.services.workspace.pipeline_ledger import (
     batch_to_payload,
     create_ingest_batch,
@@ -82,6 +83,18 @@ def _finalize_batch(
     imported = res.rows_upserted if res.did_upsert else 0
     status = "complete" if res.did_upsert and not rejected else ("partial" if imported else "failed")
 
+    destination = resolve_csv_destination(batch.filename)
+    batch.entity_type = res.csv_kind
+    batch_metadata = {
+        "csv_kind": res.csv_kind,
+        "warnings": res.warnings,
+        "destination_kind": destination.get("destination_kind"),
+        "destination_table": destination.get("destination_table"),
+        "reporting_table": destination.get("reporting_table"),
+        "reporting_reads_this_table": destination.get("reporting_reads_this_table"),
+        "replace_all_org_rows": destination.get("replace_all_org_rows"),
+    }
+
     update_batch_counts(
         db,
         batch,
@@ -89,7 +102,7 @@ def _finalize_batch(
         rows_staged=rows_staged,
         rows_imported=imported,
         rows_rejected=rejected,
-        metadata={"csv_kind": res.csv_kind, "warnings": res.warnings},
+        metadata=batch_metadata,
         complete=True,
     )
 
@@ -134,14 +147,19 @@ def _finalize_batch(
         )
 
     db.commit()
-    return {
-        "batch": batch_to_payload(batch),
-        "csv_kind": res.csv_kind,
-        "entity_type": res.csv_kind,
-        "rows_upserted": imported,
-        "validation_errors": res.validation_errors,
-        "warnings": res.warnings,
-    }
+    return enrich_ingest_result(
+        db,
+        organization_id,
+        {
+            "batch": batch_to_payload(batch),
+            "csv_kind": res.csv_kind,
+            "entity_type": res.csv_kind,
+            "rows_upserted": imported,
+            "validation_errors": res.validation_errors,
+            "warnings": res.warnings,
+        },
+        filename=batch.filename,
+    )
 
 
 def ingest_csv_bytes(

@@ -1,0 +1,1068 @@
+ 
+SMPL AGENT RUNTIME ARCHITECTURE
+EIS-002  ·  Version 1.0
+How SMPL runs AI workers, tools, jobs, state, and recovery
+ 
+Operationalizes: EIS-001 Tool Registry  ·  ABS-011 Playbooks  ·  SOF (ABS-010)
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING DOCUMENT
+Section 0 — Engineering Context and Pre-Build Design Decisions
+EIS-002 defines the runtime that executes the SMPL platform. It translates the EIS-001 tool contracts into deployable workers, services, queues, state stores, and recovery mechanisms. Three design decisions in this document address execution risks identified during the tool registry and playbook specification phases.
+ 
+0.1 Design Decision 1 — IMS Pre-Fetch Strategy
+Problem identified: The IMS Content Service serves sections on-demand via get_ims_section. If a Connector Worker fetches IMS sections mid-extraction — between individual record transformations — retrieval latency accumulates in the implementation critical path. A SAP ACDOCA extraction with 500,000 records, pausing to fetch Section 4.2 (signed amount convention) mid-batch, adds unacceptable latency.
+Solution: IMS Pre-Fetch runs as the first step of every Connector Worker job, before any extraction begins. When the Connector Worker receives a job, it calls load_ims_spec with the execution_stage parameter for each stage it will execute (typically DISCOVER through POPULATE), receives the section index with estimated_token_count per section, fetches all sections relevant to that connector and stage set, and loads them into worker-local memory before the first extract_object_batch call. Retrieval is moved entirely out of the extraction critical path.
+Pre-fetch budget: Connector Workers are allocated a pre-fetch token budget of 32,000 tokens per job invocation. For connectors whose total IMS content exceeds this budget (SAP, Oracle Fusion), the pre-fetch prioritizes sections by execution_stage order and fetches remaining sections on demand between extraction batches — not between individual records. The pre-fetch manifest is stored as a job checkpoint so that recovery after failure does not re-fetch already-loaded sections.
+ 
+0.2 Design Decision 2 — Fan-Out / Fan-In Job Dependency Graph
+Problem identified: The SOF requires COORD-001 to advance to Stage 4 (Canonical Integration) only after all parallel Connector Worker jobs reach terminal status. Without a defined mechanism for knowing when all parallel children are complete, the Orchestrator Worker must poll each child job indefinitely — creating O(n) polling overhead that scales with connector count.
+Solution: The job queue uses an explicit dependency graph model. Every job has a parent_job_id and optional dependency_job_ids. The Orchestrator Worker creates a fan-out job group at Stage 3 dispatch — one parent job (the Stage 3 coordination job) with N child jobs (one per Connector Worker). The queue service tracks the parent job's completion gate: the parent moves from RUNNING to COMPLETE only when all child jobs reach terminal status (COMPLETE, COMPLETE_WITH_GAPS, or PARTIAL). Stage 4 is dispatched as a job with dependency_ids pointing to the Stage 3 parent job — it cannot dequeue until the dependency is satisfied.
+Partial completion handling: If a Connector Worker job reaches BLOCKED or ERROR with retry_exhausted, it is marked as TERMINAL_BLOCKED. The parent job's completion gate treats TERMINAL_BLOCKED as satisfying the child's gate condition — the Stage 4 job dispatches with the available canonical objects, and the TERMINAL_BLOCKED connector is flagged in the Session State for human resolution. This prevents a single blocked connector from holding up the entire implementation indefinitely.
+ 
+0.3 Design Decision 3 — Memory Tier Model
+Problem identified: The EIS-002 brief includes "implementation patterns," "resolved mappings," and "historical error resolutions" in the memory scope. Without a strict tier model, there is a governance risk: customer-specific implementation data could inadvertently flow into a shared pattern cache, violating customer data isolation.
+Solution: Memory is divided into three tiers with strict boundary enforcement at the Implementation Memory Service layer:
+Tier 1 — Customer-Scoped Memory: all data derived from a specific customer's implementation. Scoped strictly to that customer's session and canonical store. Never shared across customers. Examples: CEP decisions, resolved stage mappings, confirmed FTE methodology. Retained for the duration of the customer relationship; deleted on customer offboarding.
+Tier 2 — Anonymized Pattern Cache: connector-specific patterns derived from multiple implementations, with all customer-identifying data removed before storage. Examples: common stage name → canonical stage mappings (e.g., "Proposal" → Proposal with D-H confidence in 94% of Salesforce implementations), common account type edge cases, typical SAP ACDOCA filter patterns. Populated only through an explicit generalization pipeline that strips customer context before writing.
+Tier 3 — Engineering Knowledge Base: SMPL-authored patterns, IMS content, CKR data, and playbook specifications. Read-only at runtime. Updated only through architecture releases, not from customer data.
+Boundary enforcement: the Implementation Memory Service API enforces tier boundaries at write time. A write to Tier 2 requires an anonymization_certificate — a signed attestation that the generalizing pipeline has stripped customer-identifying data from the input. The API rejects Tier 2 writes without this certificate. Customer data never reaches Tier 2 or Tier 3 without explicit human-reviewed generalization.
+ 
+Section 1 — Worker Model
+The SMPL runtime deploys five worker types for MVP. Each worker is a long-running process that dequeues jobs, loads the relevant role playbook, calls tools through the Tool Gateway, and returns results to the job queue. Workers are stateless between jobs — all persistent state lives in the Session State Store, CEP Service, and Canonical Data Service.
+ 
+1.1 Worker Type Overview
+Worker
+Executes Playbooks
+Primary Responsibilities
+Scales By
+Orchestrator Worker
+APB-001 (COORD-001), APB-002 (COORD-002) — CEP embedded at MVP
+Session lifecycle; SOF stage management; job dispatch; fan-out/fan-in coordination; escalation; CEP question routing
+Number of concurrent implementation sessions
+Connector Worker
+APB-006 (ERP-DOMAIN), APB-007 (CRM-DOMAIN), APB-008 (BIL-DOMAIN), APB-009 (HRS-DOMAIN)
+IMS pre-fetch; connector authentication; data extraction; transformation; canonical object population; gate enforcement
+Number of concurrent connector jobs; most resource-intensive worker
+Canonical Worker
+APB-004 (COORD-004), APB-011 (EVAL-002)
+Cross-system identity resolution; system-of-authority assignment; cross-domain validation; validation suite execution
+Number of canonical objects requiring integration; typically 1 per session at Stage 4
+Capability Worker
+APB-010 (EVAL-001), APB-012 (EVAL-003)
+CAL execution; confidence scoring; readiness score calculation; next-connector recommendations
+CAL run frequency; typically fast per session
+Reporting Worker
+APB-005 (COORD-005)
+Capability summary generation; gap explanations; pending gate reports; Implementation Summary; Executive Summary
+Number of report generation requests; typically low-frequency
+Table EIS2-1.1 — Worker types and primary responsibilities. CEP (APB-002) is embedded in the Orchestrator Worker at MVP and split into a dedicated worker when CEP question volume justifies it.
+ 
+1.2 Orchestrator Worker — Specification
+The Orchestrator Worker is the runtime's SOF executor. It owns one implementation session end-to-end and runs continuously for the session's duration. At MVP, one Orchestrator Worker instance per active implementation session is the correct scaling model — sessions are infrequent enough that per-session isolation is both practical and desirable.
+ 
+Property
+Specification
+Process model
+Long-running async process; one per active session; terminates on session COMPLETE or ERROR_UNRECOVERABLE
+Memory footprint
+Low — Orchestrator holds session_state and CEP snapshot in memory; all durable state is in Session State Store; target < 256MB RSS per instance
+Playbooks loaded
+APB-001 and APB-002 loaded at process start; no dynamic playbook loading during session
+LLM usage
+Minimal — Orchestrator uses LLM only for: (a) parsing ambiguous human responses to CEP questions, (b) generating escalation summaries for human consultants. All SOF routing logic is deterministic and does not require LLM inference.
+Primary loop
+POLL session_state every 5 seconds → CHECK for stage transitions, new child job completions, CEP resolutions, ESCALATE conditions → DISPATCH or UPDATE as needed → SLEEP
+Failure behavior
+On Orchestrator Worker crash: Session State Store preserves all state; a new Orchestrator Worker instance loads the session_state checkpoint and resumes from the last completed stage. Recovery is automatic with no data loss if checkpoints are written correctly (see Section 5).
+CEP embedding
+COORD-002 logic runs in the same process as COORD-001 at MVP. The CEP Service is a separate data store; the Orchestrator Worker calls it via the Tool Gateway like any other service. Separation of concerns is maintained at the data layer; the process consolidation is an MVP deployment decision only.
+Table EIS2-1.2 — Orchestrator Worker specification.
+ 
+1.3 Connector Worker — Specification
+The Connector Worker is the most resource-intensive worker in the system. It handles data extraction, transformation, and canonical population for one connector domain per job. Multiple Connector Worker instances run in parallel during Stage 3.
+ 
+Property
+Specification
+Process model
+Job-scoped process; starts when a connector job is dequeued; terminates when job reaches terminal status. Multiple instances run in parallel — one per active connector domain job.
+Memory footprint
+Higher than other workers due to extraction batch buffering. Target < 1GB RSS per instance for standard connectors; < 2GB for high-volume ERP connectors (SAP, Oracle Fusion). Extraction batches are streamed to object storage, not held in memory.
+Playbooks loaded
+One domain playbook per job (APB-006, APB-007, APB-008, or APB-009). Connector-specific sub-agent behavior is encoded in the playbook and IMS sections — no sub-agent processes are spawned.
+LLM usage
+Moderate — LLM is used for: (a) executing transformation rules that cannot be expressed as pure functions (e.g., fuzzy stage name matching, custom field business meaning assessment), (b) parsing ambiguous API responses when IMS section does not cover the specific edge case, (c) generating PAUSE_FOR_CEP question text. All normalization, validation, and confidence calculation is deterministic and does not use LLM.
+IMS pre-fetch
+On job start: load_ims_spec → fetch all sections for this connector and execution stage set → store in worker-local cache keyed by section_id. See Section 0.1 for pre-fetch budget and overflow handling.
+Extraction streaming
+extract_object_batch returns an extraction_id, not records. Records are fetched in pages via get_extracted_records with record_limit=100 (configurable). This prevents large extraction batches from filling the worker's memory or context window.
+Gate enforcement
+Domain-specific gate logic (Subscription Normalization Gate, Stage Normalization Gate, Organizational Normalization Gate, ERP pre-extraction gates) is enforced by the worker before dispatching extraction jobs. Gate enforcement is deterministic — the worker reads the gate status from CEP via read_cep and either proceeds or emits a PAUSE_FOR_CEP response without calling LLM.
+Failure behavior
+On Connector Worker crash mid-extraction: the job is returned to the queue with retry_count incremented. The next worker instance resumes from the last written extraction checkpoint (page_cursor stored in job state). No re-extraction of already-processed batches.
+Table EIS2-1.3 — Connector Worker specification.
+ 
+1.4 Canonical, Capability, and Reporting Workers
+These workers are simpler than the Connector Worker — they process SMPL-internal data (canonical objects, confidence scores, CAL results) rather than external connector APIs. They are less resource-intensive and less failure-prone.
+ 
+Worker
+Process Model
+LLM Usage
+Failure Behavior
+Canonical Worker
+Job-scoped; one instance per Stage 4 job (one per implementation session). Typically completes in minutes, not hours.
+Low — identity resolution fuzzy matching uses a deterministic edit-distance algorithm (no LLM). LLM used only for generating ESCALATE notifications when system-of-authority conflicts require human explanation.
+On crash: resume from last canonical merge checkpoint (per object type). Objects already merged are not re-merged (idempotency of upsert_canonical_object).
+Capability Worker
+Job-scoped; fast (< 5 minutes per full CAL run). Runs at end of Stage 5 and after each incremental canonical update in production monitoring.
+None — all CAL logic is deterministic formula application (MIN confidence, optional uplift). No LLM required.
+On crash: full CAL re-run is safe and inexpensive. No checkpoint required — full re-computation from canonical store.
+Reporting Worker
+Job-scoped; one per report generation request. Fast for standard reports; slower for executive summaries with full narrative.
+Moderate — gap explanation templates are template-driven (no LLM). LLM is used for: executive summary narrative generation; pending gate status report prose; Implementation Summary narrative sections. All quantitative data comes from deterministic tools.
+On crash: reports are idempotent — re-generating produces the same output given the same canonical and CAL state. No checkpoint required.
+Table EIS2-1.4 — Canonical, Capability, and Reporting Worker specifications.
+ 
+Section 2 — Runtime Services
+The runtime services are the shared infrastructure that all workers depend on. At MVP, most services are thin wrappers over Postgres tables and Redis data structures. Service boundaries are designed so that each can be extracted into an independent deployment without changing the worker code that calls them — the Tool Gateway is the single abstraction layer workers call, not service APIs directly.
+ 
+2.1 Service Architecture Overview
+Service
+MVP Implementation
+Primary Store
+Called By
+Agent Orchestration Service
+Embedded in Orchestrator Worker at MVP; manages job dispatch and fan-in tracking
+Postgres: jobs, job_dependencies tables
+Orchestrator Worker; Tool Gateway (for dispatch_agent, get_agent_status)
+Tool Gateway
+FastAPI middleware layer that all worker tool calls pass through; enforces permissions, logs every call, routes to the correct service
+No primary store — pass-through; logs to Postgres via Logging Service
+All workers — no worker calls a service directly, only through Tool Gateway
+Connector Proxy Service
+FastAPI service; manages credential resolution, rate limit budgets per connector, and external API calls
+Redis: rate limit counters, token buckets; Postgres: credential references (encrypted)
+Connector Worker (via Tool Gateway for all connector-facing tools)
+IMS Content Service
+FastAPI service backed by a JSON document store; serves pre-indexed IMS content by key
+Postgres JSONB: ims_content_store table keyed by connector_id + section_id + subsection_id
+Connector Worker (via Tool Gateway for load_ims_spec, get_ims_section)
+Session State Store
+Postgres table: implementation_sessions; Redis for active session hot cache
+Postgres (durable), Redis (hot cache TTL 1 hour)
+Orchestrator Worker; all workers read their job inputs from here
+CEP Service
+Postgres tables: customer_environment_profiles, cep_fields, cep_pending_items
+Postgres
+Orchestrator Worker (CEP embedded at MVP); any worker can call read_cep via Tool Gateway
+Canonical Data Service
+Postgres tables: canonical_objects, canonical_provenance, system_of_authority, identity_graph
+Postgres
+Connector Worker (writes); Canonical Worker (merges); all workers (reads via Tool Gateway)
+CAL Service
+Postgres: capability_assessments, module_requirements (MCR); Python computation service
+Postgres
+Capability Worker
+Reporting Service
+Python service; reads from Canonical Data + CAL + Session State; generates structured outputs
+Postgres: generated_reports; Object Storage: PDFs and large reports
+Reporting Worker
+Logging / Observability Service
+Structured log sink; Postgres for implementation logs; external observability platform for metrics
+Postgres: implementation_logs, audit_events; Prometheus/Grafana or equivalent for metrics
+All workers — required on every tool call
+Credential Vault
+HashiCorp Vault (MVP) or equivalent managed secrets service; never Postgres
+Vault (isolated from application database)
+Connector Proxy Service only — no other service or worker accesses the vault
+Implementation Memory Service
+Postgres: tier1_customer_memory (customer-scoped), tier2_pattern_cache (anonymized), tier3_knowledge_base (read-only)
+Postgres
+All workers read Tier 2 and 3; only the Memory Generalization Pipeline writes Tier 2
+Table EIS2-2.1 — Runtime service architecture. At MVP, services are process-separated but deployed on the same host or within the same VPC. Service extraction to independent deployments follows standard decomposition patterns as load justifies it.
+ 
+2.2 Tool Gateway — Detail
+The Tool Gateway is the most critical single service in the runtime. Every tool call from every worker passes through it. It is the enforcement point for permissions, logging, rate limits, tool versioning, and PII redaction.
+ 
+Responsibility
+Implementation
+Permission enforcement
+On every inbound tool call: verify agent_id is in the tool's callable_by list (from EIS-001 tool registry). Reject with PERMISSION_ERROR if not. This is enforced at the gateway — workers cannot bypass by calling services directly.
+Tool version enforcement
+Tool registry includes the current version and sunset versions for each tool. Calls to sunset versions are rejected after the sunset date. Workers must specify tool_version in every call.
+Audit logging
+Every tool call → write to Logging Service before routing to the target service (request log). Every tool response → write to Logging Service after receiving the response (response log). Two log events per tool call minimum.
+PII redaction
+Input parameters are passed through redact_sensitive_fields at classification_level=LOG_SAFE before writing to logs. The original unredacted inputs are forwarded to the target service — redaction applies to logs only, not to execution.
+Rate limit budget injection
+For any tool in Category 3 or 4 (Connector Discovery and Data Extraction): the Tool Gateway queries the Connector Proxy Service for the current rate limit budget before routing the call. If budget = 0: return RATE_LIMIT_ERROR without calling the target service.
+Idempotency enforcement
+For IDEMPOTENT tools: check the idempotency cache (Redis, TTL 1 hour) for the idempotency_key. If found: return cached result immediately without calling the target service. If not found: call target service, cache result, return.
+Health checking
+Tool Gateway maintains a health status for each downstream service. If a service is unhealthy: return CONNECTOR_UNAVAILABLE or INTERNAL_ERROR immediately rather than timing out on the target call.
+Table EIS2-2.2 — Tool Gateway responsibilities. The gateway is the single enforcement point — no worker should have code that bypasses it.
+ 
+2.3 Connector Proxy Service — Detail
+The Connector Proxy Service is the only service that holds or resolves raw customer credentials. It manages every external API call to customer systems. No other service or worker ever sends network requests to customer systems directly.
+ 
+Responsibility
+Implementation
+Credential resolution
+Receives credential_reference_id from Tool Gateway; resolves to actual credential by calling Credential Vault. The resolved credential is used for the API call and immediately discarded — never stored in Connector Proxy memory beyond the single request lifetime.
+Read-only enforcement
+Before every external API call: verify the HTTP method is GET (or the equivalent read operation for the connector's API style). Any attempt to use POST, PUT, PATCH, or DELETE against a customer system causes an immediate PERMISSION_ERROR and is logged as a SECURITY_VIOLATION audit event.
+Rate limit management
+Per-connector rate limit budgets tracked in Redis token buckets. Token bucket parameters (refill rate, capacity) are set from the IMS registry (IMS Section 1 rate limit documentation per connector). Budget allocation per session is computed at job dispatch time (see Section 4, Parallelism).
+Response normalization
+Connector Proxy normalizes HTTP response formats to a standard envelope before returning to the calling worker: {status_code, headers, body, connector_id, latency_ms}. Workers never parse raw HTTP responses — they work with normalized envelopes.
+Sandbox/livemode enforcement
+For connectors with sandbox/livemode distinction (Stripe, Chargebee, NetSuite): Connector Proxy reads the session's connector_environment from CEP before every call. If environment=SANDBOX but the credential resolves to a production endpoint (or vice versa), the call is rejected with a SECURITY_VIOLATION audit event.
+Table EIS2-2.3 — Connector Proxy Service responsibilities.
+ 
+Section 3 — Job Queue and Message Model
+The job queue is the coordination spine of the runtime. All work in SMPL — connector implementations, canonical merges, CAL runs, report generation — is expressed as jobs. Workers are queue consumers: they dequeue jobs, execute them, and write results back. The fan-out/fan-in dependency model from Section 0.2 is implemented here.
+ 
+3.1 Job Schema
+Every job in the queue follows this schema. Missing required fields cause the Agent Orchestration Service to reject the job before it enters the queue.
+Field
+Type
+Required
+Description
+job_id
+UUID
+Required
+Globally unique job identifier; generated by the Agent Orchestration Service
+parent_job_id
+UUID | null
+Required
+The job that spawned this job; null for top-level session jobs. Used for fan-in tracking.
+dependency_job_ids
+UUID[]
+Required (empty list if none)
+Jobs that must reach terminal status before this job can be dequeued. Enforces fan-in: Stage 4 job lists all Stage 3 child job IDs here.
+session_id
+UUID
+Required
+The implementation session this job belongs to
+customer_id
+UUID
+Required
+SMPL internal customer identifier
+worker_type
+Enum
+Required
+ORCHESTRATOR | CONNECTOR | CANONICAL | CAPABILITY | REPORTING
+role_playbook_id
+String
+Required
+The ABS-011 playbook governing this job execution (e.g., "APB-006")
+task_type
+Enum
+Required
+See Table EIS2-3.2 for valid task types per worker
+task_payload
+JSONB
+Required
+Task-specific inputs. Must not contain raw credentials — credential_reference_ids only.
+allowed_tools
+String[]
+Required
+Exhaustive tool list; Tool Gateway enforces; job definition is the source of truth for allowed tools per job
+priority
+Enum
+Required
+HIGH | NORMAL | LOW. HIGH for BLOCKING CEP resolutions and escalation-triggered retries; NORMAL for standard connector jobs; LOW for background reporting
+timeout_policy
+JSONB
+Required
+{hard_timeout_seconds: int, soft_timeout_seconds: int, checkpoint_interval_seconds: int}
+retry_policy
+JSONB
+Required
+{max_retries: int, retry_on_errors: string[], backoff_strategy: EXPONENTIAL|LINEAR|NONE}
+idempotency_key
+UUID
+Required
+Stable key for this logical job. Same job submitted twice with the same idempotency_key returns the existing job.
+status
+Enum
+Required
+Current job status. Updated by the worker and the Agent Orchestration Service.
+output_artifact_refs
+JSONB
+Conditionally required
+References to outputs produced: {extraction_ids: [], canonical_ids: [], validation_report_id: UUID, cep_items_created: []}. Written by the worker on job completion.
+checkpoint_ref
+String | null
+Optional
+Object storage path to the most recent job checkpoint. Set by the worker; read on resume.
+created_at
+ISO 8601
+Required
+Written by Agent Orchestration Service
+dequeued_at
+ISO 8601 | null
+Conditional
+Written when a worker picks up the job
+completed_at
+ISO 8601 | null
+Conditional
+Written when job reaches terminal status
+Table EIS2-3.1 — Job schema. All jobs are stored in Postgres jobs table; the queue service (Redis or equivalent) stores only job_ids and priority for ordering.
+ 
+3.2 Task Types by Worker
+Worker
+Valid Task Types
+ORCHESTRATOR
+SESSION_INITIALIZE, STAGE_ADVANCE, CEP_ROUTE_QUESTION, CEP_APPLY_DEFAULT, ESCALATE_TO_HUMAN, SESSION_CLOSE
+CONNECTOR
+CONNECTOR_DISCOVER, ERP_IMPLEMENT_{connector_id}, CRM_IMPLEMENT_{connector_id}, BILLING_IMPLEMENT_{connector_id}, HRIS_IMPLEMENT_{connector_id}
+CANONICAL
+CANONICAL_INTEGRATE, IDENTITY_RESOLVE, SOA_ASSIGN, CROSS_DOMAIN_VALIDATE
+CAPABILITY
+CAL_ASSESS_FULL, CAL_ASSESS_INCREMENTAL, CONFIDENCE_SCORE, READINESS_SCORE_COMPUTE
+REPORTING
+GENERATE_CAPABILITY_SUMMARY, GENERATE_GAP_EXPLANATION, GENERATE_PENDING_GATE_REPORT, GENERATE_IMPLEMENTATION_SUMMARY, GENERATE_EXECUTIVE_SUMMARY, GENERATE_MODULE_ACTIVATION_PLAN
+Table EIS2-3.2 — Valid task types per worker type. Workers reject jobs with task_types not in their valid set.
+ 
+3.3 Fan-Out / Fan-In Pattern
+Stage 3 (Connector Implementation) is the primary fan-out point. The following is the exact job creation sequence for a four-connector implementation (NetSuite + Salesforce + Stripe + Workday):
+ 
+STAGE 3 FAN-OUT — Orchestrator Worker creates:
+  job_A (ORCHESTRATOR / STAGE_ADVANCE):     ← Stage 3 coordination job (parent)
+    job_id: UUID-A
+    parent_job_id: Stage_2_job_id
+    dependency_job_ids: []   ← no dependencies; starts when Stage 2 COMPLETE
+    status: RUNNING          ← Orchestrator sets RUNNING immediately on creation
+  job_B (CONNECTOR / ERP_IMPLEMENT_IMS-001): ← NetSuite job
+    parent_job_id: UUID-A
+    dependency_job_ids: []   ← no dependencies; all connector jobs start in parallel
+    status: QUEUED
+  job_C (CONNECTOR / CRM_IMPLEMENT_IMS-101): ← Salesforce job
+    parent_job_id: UUID-A
+    dependency_job_ids: []
+    status: QUEUED
+  job_D (CONNECTOR / BILLING_IMPLEMENT_IMS-201): ← Stripe job
+    parent_job_id: UUID-A
+    dependency_job_ids: []
+    status: QUEUED
+  job_E (CONNECTOR / HRIS_IMPLEMENT_IMS-301): ← Workday job
+    parent_job_id: UUID-A
+    dependency_job_ids: []
+    status: QUEUED
+  ──────────────────────────────────────────────
+  EXECUTION: jobs B, C, D, E run in parallel.
+  Agent Orchestration Service tracks: pending_children[UUID-A] = {B, C, D, E}
+  ──────────────────────────────────────────────
+STAGE 3 FAN-IN — when each child job reaches terminal status:
+  Agent Orchestration Service removes child from pending_children[UUID-A].
+  IF pending_children[UUID-A] is EMPTY (or all remaining are TERMINAL_BLOCKED):
+    SET job_A.status = COMPLETE
+    TRIGGER creation of Stage 4 job:
+  job_F (CANONICAL / CANONICAL_INTEGRATE):
+    parent_job_id: Stage_4_coordination_job_id
+    dependency_job_ids: [UUID-A]  ← depends on Stage 3 parent COMPLETE
+    status: QUEUED → auto-dequeues when UUID-A COMPLETE
+ 
+3.4 TERMINAL_BLOCKED Handling
+When a connector job reaches BLOCKED status and escalation has not resolved within the configured timeout, the Agent Orchestration Service marks it TERMINAL_BLOCKED. This allows the fan-in gate to satisfy without holding the entire implementation.
+Condition
+Timeout Before TERMINAL_BLOCKED
+Fan-In Behavior
+Customer Communication
+PAUSE_FOR_CEP (BLOCKING urgency)
+48 hours without CEP resolution → default applied if default exists; TERMINAL_BLOCKED if no default
+Child removed from pending_children; fan-in proceeds with reduced canonical objects from this connector
+Reporting Worker generates a pending gate status report noting the connector is excluded from current capability assessment due to unresolved gate
+ESCALATE condition
+72 hours without human resolution
+Same as above
+COORD-005 generates escalation status note in Implementation Summary
+ERROR with retry_exhausted
+Immediate (no timeout; retries already exhausted)
+Same as above
+Error surfaced in Stage 6 Customer Review with specific error_code and recommended remediation
+Table EIS2-3.3 — TERMINAL_BLOCKED handling. TERMINAL_BLOCKED connectors are re-activatable: once the blocking condition is resolved (credentials updated, CEP confirmed), the connector job can be re-queued and a partial canonical integration re-run can incorporate the new objects.
+ 
+Section 4 — State Management
+State in the SMPL runtime is layered. Each layer has a specific purpose, a specific store, and a specific owner. Workers are stateless between jobs — they read state at job start and write state at job completion. The runtime can reconstruct the current state from Postgres alone if Redis is lost.
+ 
+4.1 State Layers
+Layer
+Owner
+Store
+Contents
+TTL
+Session State
+Orchestrator Worker
+Postgres (durable) + Redis (hot cache)
+current_sof_stage, active_job_ids[], completed_stages[], blocked_jobs[], pending_cep_items[], gate_states{}, terminal_blocked_connectors[]
+Postgres: lifetime of session; Redis: 1 hour TTL refreshed on access
+Job State
+Agent Orchestration Service
+Postgres: jobs table
+All fields from Table EIS2-3.1; status transitions logged
+Postgres: retained 90 days post-completion
+Worker State
+Connector Proxy Service (rate limits) + Worker process (in-memory during job)
+Redis: rate_limit_buckets keyed by connector_id; Worker memory: current tool call state
+Rate limit token bucket per connector; active IMS pre-fetch cache; current extraction page_cursor
+Redis: refreshed continuously; Worker memory: job duration only
+Gate State
+CEP Service
+Postgres: cep_pending_items, gate_tracker
+gate_type, connector_id, pipeline_id, resolved_items, total_items, resolution_pct, pending_question_id, auto_resolve_at
+Lifetime of session; resolved gates retained for audit
+Customer State
+CEP Service + Canonical Data Service
+Postgres: customer_environment_profiles, canonical_objects, system_of_authority
+Full CEP, all canonical objects with provenance, SOA record, identity graph
+CEP: customer relationship lifetime; Canonical: customer relationship lifetime; deleted on offboarding
+Extraction Store
+Extraction Engine
+Object Storage (S3 or equivalent)
+Raw extracted records from connector; keyed by extraction_id
+24-hour TTL; auto-purged; re-extraction required if expired
+LLM Response Cache
+Tool Gateway
+Redis
+Cached LLM responses keyed by prompt_hash for deterministic prompts (stage normalization fuzzy matching, etc.)
+1 hour TTL; cache miss triggers new LLM call
+Table EIS2-4.1 — State layers. The Postgres database is the source of truth for all durable state. Redis is a performance cache only — the system is correct (though slower) without Redis.
+ 
+4.2 Session State Schema
+implementation_sessions table (Postgres):
+  session_id          UUID PRIMARY KEY
+  customer_id         UUID NOT NULL
+  initiated_by        UUID NOT NULL          -- user_id of Implementation Consultant
+  status              VARCHAR NOT NULL       -- from EIS-001 Table EIS-1.1
+  current_sof_stage   INTEGER NOT NULL       -- 1-7
+  cep_id              UUID NOT NULL          -- FK to customer_environment_profiles
+  active_job_ids      UUID[] NOT NULL        -- currently running jobs
+  completed_stages    INTEGER[] NOT NULL     -- SOF stages completed
+  blocked_jobs        JSONB NOT NULL         -- {job_id: blocking_reason}
+  pending_cep_items   UUID[] NOT NULL        -- cep_item_ids awaiting resolution
+  gate_states         JSONB NOT NULL         -- {connector_id: GateStateObject}
+  terminal_blocked    UUID[] NOT NULL        -- connector job IDs in TERMINAL_BLOCKED
+  readiness_score     DECIMAL(5,2)           -- updated after each CAL run
+  checkpoint_version  INTEGER NOT NULL       -- increments on each checkpoint write
+  last_checkpoint_at  TIMESTAMPTZ
+  created_at          TIMESTAMPTZ NOT NULL
+  updated_at          TIMESTAMPTZ NOT NULL
+  completed_at        TIMESTAMPTZ
+INDEXES:
+  idx_sessions_customer_id (customer_id)
+  idx_sessions_status (status) WHERE status NOT IN ('COMPLETE', 'CANCELLED')
+  idx_sessions_updated (updated_at DESC)
+ 
+Section 5 — Checkpointing
+Checkpoints allow the runtime to resume from a known-good state after worker failure without restarting a full implementation. Every major stage boundary produces a checkpoint. The rule: if an operation takes more than 2 minutes or produces data that would be expensive to re-generate, it checkpoints before completion.
+ 
+5.1 Checkpoint Events
+Event
+Checkpoint Owner
+What Is Written
+Resume Behavior
+Session creation
+Orchestrator Worker
+session_state snapshot to Postgres; checkpoint_version = 1
+New Orchestrator Worker loads session by session_id; continues from current_sof_stage
+Connector authentication
+Connector Worker
+auth_status per connector written to session_state; checkpoint_version++
+Skip re-authentication if auth_status = AUTHENTICATED in session_state
+IMS pre-fetch complete
+Connector Worker
+Pre-fetch manifest (section IDs loaded + token counts) written to job checkpoint_ref in object storage
+Load pre-fetch manifest; skip fetching already-loaded sections
+Extraction batch complete
+Connector Worker
+page_cursor written to job.task_payload; extraction_id written to job.output_artifact_refs
+Resume extraction from page_cursor; do not re-extract completed pages
+IMS gate completion
+Connector Worker
+gate_results written to session_state.gate_states
+Skip gate re-execution if all gate items already have PASS or PENDING_CEP status
+Canonical object population batch
+Connector Worker
+count of canonical objects written per object type to job checkpoint; latest canonical_id written
+Resume population from last written canonical object; upsert_canonical_object idempotency prevents duplicates
+Validation suite completion
+Canonical Worker or EVAL-002
+validation_report_id written to session_state; per-object validation status written to canonical store
+Skip re-validation of objects that already have validation_status set
+CAL run completion
+Capability Worker
+assessment_id written to session_state; module statuses written to CAL Service
+Skip re-assessment if assessment_id is current (canonical_store.updated_at <= assessment.generated_at)
+Report generation
+Reporting Worker
+generated_report record written to Reporting Service; report_id written to session_state
+Return existing report if canonical state has not changed since report generation
+Stage 6 human review completion
+Orchestrator Worker
+all resolved CEP items written; Module Activation Plan written to session_state; checkpoint_version++
+Resume from Stage 7 if Orchestrator crashes after Stage 6 completion signal
+Table EIS2-5.1 — Checkpoint events. Every checkpoint increments checkpoint_version in session_state, enabling monotonic ordering of checkpoints for conflict resolution.
+ 
+5.2 Checkpoint Recovery Protocol
+ON Orchestrator Worker restart (session_id known):
+  1. LOAD session_state from Postgres WHERE session_id = {id}
+  2. LOAD all active jobs WHERE session_id = {id} AND status IN (RUNNING, QUEUED)
+  3. FOR each RUNNING job:
+     IF job.worker_type = CONNECTOR AND job.checkpoint_ref IS NOT NULL:
+       Mark job as RESUMING; re-queue with existing page_cursor
+     IF job.worker_type = ORCHESTRATOR:
+       Resume Orchestrator loop from current_sof_stage
+     IF other worker types:
+       Re-queue job (idempotent operations; safe to restart)
+  4. FOR each QUEUED job:
+     Verify dependencies still satisfied; re-queue if so
+  5. RESUME normal Orchestrator loop
+ON Connector Worker restart (job_id known):
+  1. LOAD job from Postgres WHERE job_id = {id}
+  2. LOAD checkpoint from object storage at job.checkpoint_ref
+  3. RESTORE: page_cursor, pre-fetch manifest, canonical_population_progress
+  4. CONTINUE from last checkpoint:
+     IF checkpoint.phase = PRE_FETCH → skip to extraction
+     IF checkpoint.phase = EXTRACTION → resume from page_cursor
+     IF checkpoint.phase = TRANSFORMATION → resume from last canonical_id
+     IF checkpoint.phase = POPULATION → resume from last upserted canonical_id
+  5. COMPLETE job normally; write final checkpoint
+ 
+Section 6 — Concurrency and Parallelism
+Parallel execution is the primary implementation speed mechanism — multiple Connector Worker jobs running simultaneously is what compresses a multi-connector implementation from days to hours. This section specifies the concurrency model, dispatch ordering, and coordination constraints.
+ 
+6.1 Parallel Execution Model
+Scenario
+Parallelism
+Constraint
+Multiple connectors within the same session
+Full parallel — one Connector Worker job per connector domain, all running simultaneously
+Rate limit budgets managed by Connector Proxy; each job receives its budget slice
+Time-intensive connectors (Oracle Fusion, SAP, Zuora, Workday)
+Dispatch first, before simpler connectors
+These connectors have longer expected runtimes; starting them first reduces total wall-clock time
+Dynamics 365 Finance + Dynamics 365 Sales (shared Dataverse)
+Both dispatch simultaneously with shared_dataverse_possible flag
+Neither is blocked by the other; COORD-004 handles identity resolution in Stage 4 when both complete
+Multiple sessions for different customers
+Full parallel — sessions are independent; no shared state
+Each session has its own rate limit budget per connector; Connector Proxy enforces per-customer isolation
+Stage 4 (Canonical Integration) relative to Stage 3
+Sequential — Stage 4 starts only after all Stage 3 jobs reach terminal status (fan-in gate)
+A connector job in TERMINAL_BLOCKED satisfies the fan-in gate; CANONICAL integration proceeds with available objects
+Stage 5 evaluation jobs (CAL, Confidence, Validation)
+Parallel — EVAL-001, EVAL-002, EVAL-003 run simultaneously after Stage 4 completes
+All read from canonical store; no write conflicts; order of completion does not matter
+Table EIS2-6.1 — Parallel execution model.
+ 
+6.2 Rate Limit Budget Allocation
+ON Stage 3 dispatch (N connector jobs created for the same session):
+  FOR each connector C in connector_list:
+    max_rate = IMS_rate_limits[C.connector_id]  // from IMS Content Service
+    active_sessions_using_C = Connector_Proxy.count_active_sessions(C.connector_id)
+    // Platform-wide rate limit sharing across all customers
+    platform_budget = max_rate / MAX(1, active_sessions_using_C)
+    // Within-session budget (multiple domains on same connector is rare but possible)
+    within_session_jobs = connector_list.count(connector_id == C.connector_id)
+    session_budget = platform_budget / MAX(1, within_session_jobs)
+    WRITE to Redis: rate_bucket:{session_id}:{connector_id} = {
+      tokens: session_budget,
+      refill_rate: session_budget per minute,
+      last_refill: now()
+    }
+  Each extract_object_batch call:
+    1. Tool Gateway checks rate_bucket:{session_id}:{connector_id}
+    2. IF tokens >= 1: decrement; proceed with call
+    3. IF tokens < 1: return RATE_LIMIT_ERROR with retry_after_seconds
+       computed from refill_rate
+    4. Response includes remaining_budget_pct for worker self-regulation
+ 
+Section 7 — Retry and Failure Recovery
+Every error type in the EIS-001 taxonomy has a defined retry behavior. Workers do not implement ad hoc retry logic — they return the error to the Agent Orchestration Service, which applies the retry policy from the job definition. This centralizes retry behavior and prevents retry storms from distributed workers all retrying simultaneously.
+ 
+7.1 Retry Policy by Error Code
+Error Code
+Retry Eligible?
+Retry Strategy
+Max Retries
+Post-Retry-Exhaustion Behavior
+RATE_LIMIT_ERROR
+Yes
+Exponential backoff: 10s, 30s, 60s, 120s, 300s. Use retry_after_seconds from error response if provided.
+5 retries
+If retry_after_seconds > 300: re-queue with LOW priority for off-peak execution; surface to COORD-001 as scheduling recommendation
+CONNECTOR_UNAVAILABLE
+Yes
+Exponential backoff: 30s, 60s, 120s
+3 retries
+TERMINAL_BLOCKED; escalate to COORD-001; Implementation Consultant notified
+AUTH_ERROR
+No
+N/A
+0
+PAUSE_FOR_CEP with urgency=BLOCKING: "Connector {id} authentication failed. New credentials required." Await credential update before re-queueing.
+SCHEMA_CHANGED
+No
+N/A
+0
+ESCALATE: IMS Section spec may need updating. Block this connector job. Continue other connectors.
+INVALID_INPUT
+No
+N/A — caller must fix the input
+0
+INTERNAL_ERROR surfaced to SMPL Engineering (worker bug, not customer issue)
+VALIDATION_FAILED
+No
+N/A
+0
+Return validation_report to Orchestrator; reduce confidence scores; continue with flagged objects
+CEP_REQUIRED
+Yes — after CEP resolution
+Re-queue when CEP field is resolved
+Unlimited — re-queued until CEP resolves or session is closed
+N/A — CEP_REQUIRED is an expected pause, not a failure
+BLOCK_CONDITION
+No — requires human resolution
+N/A
+0
+ESCALATE to human consultant if > 48h without resolution; otherwise PAUSE
+DATA_QUALITY_THRESHOLD_EXCEEDED
+No — data investigation required
+N/A
+0
+PAUSE_FOR_CEP with urgency=BLOCKING: surface reject rate and affected capability to customer
+INTERNAL_ERROR
+Yes
+Linear backoff: 30s, 30s, 30s
+3 retries
+Page SMPL on-call engineering; TERMINAL_BLOCKED for the job; session continues with other jobs
+IDEMPOTENCY_CONFLICT
+No
+N/A
+0
+Return existing result; treat as success
+Table EIS2-7.1 — Retry policy by error code. The Agent Orchestration Service applies these policies; workers do not implement retry loops.
+ 
+7.2 Failed Job Resume Protocol
+WHEN a failed job is re-queued after error resolution:
+  1. VERIFY the error condition is resolved:
+     AUTH_ERROR: new credential_reference_id written to CEP
+     CEP_REQUIRED: cep_field is now HUMAN_CONFIRMED or DEFAULT_APPLIED
+     BLOCK_CONDITION: human resolution received and written to session_state
+  2. LOAD job checkpoint from job.checkpoint_ref (object storage)
+     IF checkpoint exists: resume from checkpoint phase
+     IF no checkpoint (early-stage failure): restart job from beginning
+     (idempotency of extraction and canonical writes prevents data duplication)
+  3. INCREMENT job.retry_count
+     IF retry_count > max_retries: TERMINAL_BLOCKED (do not re-queue)
+  4. RE-QUEUE with same job_id (idempotency key ensures no duplicate)
+     Priority: HIGH if the failure was blocking other jobs; NORMAL otherwise
+  5. UPDATE session_state: remove from blocked_jobs; add back to active_job_ids
+ 
+Section 8 — Human-in-the-Loop Runtime Behavior
+Human input enters the runtime through two paths: the Implementation Consultant interface (which can write to the CEP, submit escalation responses, and confirm Stage 6 review) and the customer portal (which can answer specific CEP questions surfaced by COORD-002). All human input flows through the CEP Service — it never directly modifies job state.
+ 
+8.1 CEP Question Lifecycle
+CEP QUESTION LIFECYCLE (runtime sequence):
+  1. Worker encounters a decision that cannot be auto-resolved.
+     Worker returns PAUSED_FOR_CEP status with pending_cep_items in response.
+  2. Orchestrator Worker receives PAUSED_FOR_CEP.
+     Calls create_cep_question via Tool Gateway → CEP Service.
+     Stores cep_item_id in session_state.pending_cep_items.
+     Updates job status to PAUSED_FOR_CEP.
+     Does NOT block other running jobs.
+  3. Notification Service (triggered by CEP Service on item creation):
+     BLOCKING urgency → immediate email + in-app notification to
+       Implementation Consultant.
+     NORMAL urgency → batched notification (max 4h delay).
+     LOW urgency → included in next daily digest.
+  4. Human responds via Implementation Consultant interface OR customer portal:
+     Response written to CEP Service via update_cep (source = HUMAN_CONFIRMED).
+     cep_item marked RESOLVED.
+     Notification Service fires: CEP_ITEM_RESOLVED event.
+  5. Orchestrator Worker receives CEP_ITEM_RESOLVED event (event-driven):
+     OR detects via periodic session_state poll (every 30s fallback).
+     Reads resolved value from CEP.
+     Calls notify_waiting_agent for the blocked job.
+     Re-queues blocked job with HIGH priority.
+     Removes cep_item_id from session_state.pending_cep_items.
+  6. IF no human response within:
+     BLOCKING with default_value: 48h → apply default; log DEFAULT_APPLIED.
+     BLOCKING without default_value: 48h → ESCALATE to human consultant.
+     NORMAL: 72h → apply default if available; flag for Stage 6 review.
+     LOW: 7 days → apply default; add to Stage 6 known_defaults list.
+ 
+8.2 Stage 6 Customer Review — Runtime Behavior
+STAGE 6 RUNTIME (Orchestrator Worker behavior):
+  1. Orchestrator detects all Stage 5 jobs COMPLETE.
+  2. Dispatches Reporting Worker: GENERATE_CUSTOMER_REVIEW_PACKET.
+  3. Updates session_state: current_sof_stage = 6, status = PAUSED_FOR_HUMAN.
+  4. Sends notification to Implementation Consultant:
+     "Implementation review packet ready. Customer review session required."
+  5. HALTS all further job dispatch until Stage 6 completion signal received.
+     (This is the only mandatory human gate that completely pauses the runtime.)
+  DURING Stage 6 session (what the Orchestrator still processes):
+  - Incoming CEP resolutions from Stage 6 review session → written to CEP
+  - New connector additions confirmed in Stage 6 → added to Stage 2 queue
+    (will execute as a phased addition after Stage 7)
+  STAGE 6 COMPLETION SIGNAL:
+  Implementation Consultant submits: {
+    session_id, confirmed_by: user_id,
+    module_activation_plan: [{module_id, activate: bool}],
+    deferred_cep_items: [{item_id, acknowledged_impact: string}],
+    new_connectors_deferred: [{connector_id, planned_phase: integer}]
+  }
+  Orchestrator receives signal → writes to session_state → advances to Stage 7.
+ 
+Section 9 — Memory and Knowledge Cache
+The SMPL runtime uses a three-tier memory model (from Design Decision 3 in Section 0.3). Customer data never flows into shared pattern caches without explicit anonymization. The memory system improves implementation speed over time — earlier implementations seed the Tier 2 pattern cache, which benefits later implementations on the same connectors.
+ 
+9.1 Memory Tier Implementation
+Tier
+Purpose
+Store
+Write Access
+Read Access
+Example Contents
+Tier 1 — Customer-Scoped
+All customer-specific implementation decisions; scoped to one customer
+Postgres: tier1_customer_memory; keyed by customer_id + session_id + key_type
+COORD-002 (CEP decisions), Connector Workers (resolved mappings for this customer)
+Only agents serving this customer_id
+Resolved stage mappings for this customer's Salesforce, confirmed FTE methodology, canonical_department_object designation
+Tier 2 — Anonymized Pattern Cache
+Connector-specific patterns generalized from multiple implementations
+Postgres: tier2_pattern_cache; keyed by connector_id + pattern_type
+Memory Generalization Pipeline only (requires anonymization_certificate)
+All workers (read-only at runtime)
+Stage name → canonical stage mappings by frequency, common SAP CoA account type distributions, typical Stripe multi-item subscription structures
+Tier 3 — Engineering Knowledge Base
+SMPL-authored content; IMS specs, CKR data, playbooks, normalization tables
+IMS Content Service, embedded in service deployments
+SMPL engineering releases only (not runtime-writable)
+All workers (read-only)
+Full IMS content, CKR connector registry, MCR module definitions, normalization enum tables
+Table EIS2-9.1 — Memory tier implementation. Tier 2 is the primary performance accelerator — reducing LLM calls for pattern matching as the system accumulates implementation history.
+ 
+9.2 Memory Generalization Pipeline
+The Memory Generalization Pipeline is a scheduled, human-reviewed process that promotes Tier 1 patterns to Tier 2. It is not a real-time operation — it runs after a minimum of 5 distinct customer implementations on the same connector before generalizing any pattern.
+ 
+GENERALIZATION PIPELINE (runs nightly for eligible patterns):
+  1. IDENTIFY candidate patterns from Tier 1:
+     SELECT key_type, pattern_value, frequency
+     FROM tier1_customer_memory
+     GROUP BY key_type, connector_id, pattern_value
+     HAVING count(DISTINCT customer_id) >= 5  ← minimum 5 distinct customers
+  2. ANONYMIZE:
+     Strip all customer_id references.
+     Remove company names, email domains, and any PII from pattern values.
+     Remove values that are statistically unique (appear in only 1 of N customers).
+     Compute frequency: count(customers where this pattern appeared) / total_customers.
+  3. GENERATE anonymization_certificate:
+     {pipeline_run_id, connector_id, pattern_type, customer_count, anonymization_checks_passed: []}
+     Signed by the pipeline service private key.
+  4. WRITE to Tier 2 (requires anonymization_certificate):
+     Implementation Memory Service verifies certificate signature before write.
+     If certificate is invalid → write rejected; alert SMPL engineering.
+  5. HUMAN REVIEW (weekly):
+     SMPL implementation team reviews new Tier 2 patterns.
+     Patterns that appear to contain customer-identifying information despite
+     anonymization → removed; pipeline rule updated.
+  WHAT NEVER GOES TO TIER 2:
+  - Customer-specific CEP decisions (fiscal calendar, FTE methodology)
+  - Stage mappings that are unique to one customer (non-generalizable)
+  - Any value with frequency < 10% across the 5+ implementations
+  - Compensation figures, ARR amounts, headcount numbers
+ 
+Section 10 — Deployment Model
+The MVP deployment model is designed for first-POC readiness — correct architecture, minimal operational overhead, no premature distributed systems complexity. The target is a deployment that can run 5–10 concurrent implementation sessions with one engineering team managing it. Future scaling paths are documented but not built until justified by load.
+ 
+10.1 MVP Stack
+Component
+Technology
+Rationale
+Application framework
+FastAPI (Python)
+Async-native, OpenAPI schema generation for tool contracts, strong typing with Pydantic, fast iteration speed for MVP
+Primary database
+Postgres 16
+Session state, CEP, canonical objects, logs, jobs, IMS content store, memory tiers; single store reduces operational complexity at MVP; JSONB for flexible schemas (job payloads, canonical fields)
+Job queue
+Redis Streams (MVP) / upgrade to SQS or equivalent when session count > 20
+Redis Streams provides ordered, persistent, consumer-group-aware queuing with exactly-once delivery semantics; simpler than Kafka for MVP; SQS upgrade path preserves the same job schema
+Object storage
+S3 or S3-compatible (MinIO for local dev)
+Extraction batches, job checkpoints, generated reports; object storage is correct for large, infrequently-accessed binary data
+LLM routing
+OpenAI API (primary) / Anthropic API (secondary / fallback)
+All LLM calls route through the Agent Runtime Service — workers do not call LLM APIs directly; the runtime service can switch providers without worker code changes
+Credential vault
+HashiCorp Vault (self-hosted) or AWS Secrets Manager
+Vault is isolated from the application database; no shared network path between Vault and the Postgres host
+Observability
+Structured JSON logging to stdout → log aggregator (Datadog, Grafana Loki, or equivalent); Prometheus metrics scrape for service health and job queue depth
+Structured logging from day one enables implementation analytics without schema migrations later
+Worker process manager
+Celery (Python) backed by Redis
+Celery workers are the Connector, Canonical, Capability, and Reporting Worker process pools; the Orchestrator Worker runs as a separate long-running process per session (not a Celery task)
+Table EIS2-10.1 — MVP technology stack. Every technology choice has a documented upgrade path; none requires architectural redesign to scale.
+ 
+10.2 MVP Service Topology
+MVP DEPLOYMENT (single host or small VPC — target: first 10 concurrent sessions):
+  ┌─────────────────────────────────────────────────────────────┐
+  │  SMPL Application Host(s)                                   │
+  │                                                             │
+  │  FastAPI Services:                                          │
+  │    ● Tool Gateway (port 8000)                               │
+  │    ● Agent Orchestration Service (port 8001)                │
+  │    ● Connector Proxy Service (port 8002)                    │
+  │    ● IMS Content Service (port 8003)                        │
+  │    ● CEP Service (port 8004)                                │
+  │    ● Canonical Data Service (port 8005)                     │
+  │    ● CAL Service (port 8006)                                │
+  │    ● Reporting Service (port 8007)                          │
+  │    ● Implementation Memory Service (port 8008)              │
+  │                                                             │
+  │  Celery Worker Pools:                                       │
+  │    ● connector_workers (concurrency=8, autoscale to 16)     │
+  │    ● canonical_workers (concurrency=4)                      │
+  │    ● capability_workers (concurrency=4)                     │
+  │    ● reporting_workers (concurrency=2)                      │
+  │                                                             │
+  │  Orchestrator processes (one per active session):           │
+  │    ● session_orchestrator_{session_id} (long-running)       │
+  └─────────────────────────────────────────────────────────────┘
+         │                    │                    │
+   ┌─────▼─────┐      ┌──────▼─────┐      ┌──────▼──────┐
+   │  Postgres  │      │   Redis    │      │  S3 / MinIO │
+   │  (primary  │      │  (queue +  │      │  (extraction│
+   │   store)   │      │   cache)   │      │   + reports)│
+   └────────────┘      └────────────┘      └─────────────┘
+         │
+   ┌─────▼─────┐
+   │  Vault    │
+   │(isolated  │
+   │ network)  │
+   └───────────┘
+ 
+10.3 Environment Configuration
+Environment Variable
+Purpose
+Secret?
+DATABASE_URL
+Postgres connection string
+Yes — stored in Vault; injected at runtime
+REDIS_URL
+Redis connection string
+Yes
+S3_BUCKET / S3_ENDPOINT
+Object storage configuration
+Yes (credentials); No (bucket name)
+VAULT_ADDR / VAULT_TOKEN
+HashiCorp Vault address and access token for the Connector Proxy Service
+Yes — Vault token has access only to the credential namespace, not application secrets
+OPENAI_API_KEY / ANTHROPIC_API_KEY
+LLM provider keys; held by Agent Runtime Service only
+Yes — no worker process holds an LLM key directly
+IMS_CONTENT_PATH
+Path to the IMS content store JSON files (seeded from the IMS library at deployment)
+No
+TOOL_GATEWAY_SECRET
+Shared secret between workers and Tool Gateway for request signing
+Yes
+LOG_LEVEL
+Structured log verbosity (INFO for production, DEBUG for development)
+No
+MAX_CONCURRENT_SESSIONS
+Orchestrator process limit; prevents resource exhaustion at MVP
+No — operational tuning parameter
+Table EIS2-10.2 — Environment configuration. All secrets are injected via Vault or an equivalent secrets manager at container/process startup; never hardcoded or in source control.
+ 
+10.4 Security Enforcement at the Infrastructure Layer
+The following security controls are implemented at the infrastructure layer — not just as policy statements. They are the runtime enforcement of the security requirements from EIS-001 and the SMPL security baseline.
+Control
+Infrastructure Enforcement
+Agents never receive raw credentials
+Vault is on an isolated network; only the Connector Proxy Service has a Vault access token; no other process can reach Vault even if compromised
+Customer system access is read-only
+Connector Proxy Service enforces HTTP method whitelist (GET only for customer-system calls); any POST/PUT/PATCH/DELETE attempt to an external URL triggers a security alert and is blocked
+Tool access is role-scoped
+Tool Gateway validates allowed_tools against the job's task definition before every call; the job definition is written by the Orchestrator Worker and is not modifiable by Connector Workers
+PII and financial data are not logged in plaintext
+Tool Gateway runs redact_sensitive_fields before every log write; the field classification registry covers all IMS-documented sensitive fields
+Customer data is isolated
+Postgres row-level security enforces customer_id isolation on canonical_objects, cep_fields, and implementation_sessions; cross-customer queries are impossible at the database layer even if the application layer has a bug
+Extraction store has 24h TTL
+S3 lifecycle policy enforces deletion of extraction objects after 24 hours; no manual intervention required
+Customer data is not used for model training
+LLM API calls from the Agent Runtime Service use session isolation (no training consent given); OpenAI and Anthropic are configured with training opt-out per the current API terms; the Implementation Memory Service write-level enforcement (Tier 2 requires anonymization_certificate) is the application-layer control
+Table EIS2-10.3 — Security enforcement at infrastructure layer. Policy-level requirements without enforcement at this layer are not security controls — they are policies.
+ 
+10.5 Future Scaling Path
+Scale Trigger
+Architectural Response
+> 20 concurrent sessions
+Orchestrator Worker: move from per-session process to event-driven Celery task; upgrade Redis Streams to SQS for durability; Postgres read replicas for session state reads
+> 100 Connector Worker jobs/hour
+Split Connector Worker by domain (ERP Connector Worker, CRM Connector Worker, etc.); enables domain-specific scaling without over-provisioning for slow-scaling domains
+IMS Content Service becomes hot path
+Pre-load full IMS content into Redis at worker startup; TTL 24h; cache invalidation on IMS content store updates
+Canonical Data Service write throughput
+Partition canonical_objects table by customer_id; connection pooling via PgBouncer; eventual migration to CockroachDB or Spanner for horizontal write scaling
+Implementation Memory Service Tier 2 reads become bottleneck
+Promote Tier 2 pattern cache to Redis with Postgres as the source of truth; Redis invalidation on new pattern writes
+Multiple geographic regions
+Canonical Data Service and CEP Service: Postgres with read replicas per region; canonical writes route to primary; Connector Proxy Service per-region to minimize latency to customer API endpoints
+Table EIS2-10.4 — Future scaling path. Each trigger is a concrete observation, not a traffic estimate — scale when the trigger is observed, not in anticipation.
+ 
+Section 11 — Complete Runtime Flow
+This section walks through the complete runtime execution of a four-connector customer onboarding (NetSuite + Salesforce + Stripe + Workday) from session creation to Financial Intelligence Ready. It is the integration test specification: if the runtime correctly executes every step in this flow, it correctly implements EIS-002.
+ 
+11.1 Stage 1 — Session Initialization
+01. Implementation Consultant creates credentials in Credential Vault via UI.
+    Vault assigns credential_reference_ids (one per connector).
+    UI writes credential_reference_ids to CEP via update_cep (source=HUMAN_CONFIRMED).
+02. Consultant creates implementation session via create_implementation_session.
+    Agent Orchestration Service: creates session record in Postgres.
+    CEP Service: creates empty CEP record linked to session.
+    Returns: session_id, cep_id.
+03. Agent Orchestration Service dispatches Orchestrator Worker:
+    Creates Stage 1 job: {task_type: SESSION_INITIALIZE, session_id}.
+    Orchestrator Worker dequeues and starts.
+04. Orchestrator Worker executes APB-001 Stage 1 logic:
+    Dispatches COORD-002 behavior (embedded): conducts Stage 1 discovery.
+    Asks: ERP? CRM? Billing? HRIS? Fiscal year? Currency?
+    Writes answers to CEP via update_cep (source=HUMAN_CONFIRMED).
+    CHECKPOINT: session_state written with initial CEP snapshot.
+05. Stage 1 COMPLETE → Orchestrator advances to Stage 2.
+ 
+11.2 Stage 2 — Connector Discovery
+06. Orchestrator creates 4 CONNECTOR_DISCOVER jobs (one per connector).
+    Dispatches all 4 simultaneously (parallel fan-out).
+07. Connector Workers dequeue and execute COORD-003 (Discovery) behavior:
+    Call authenticate_connector → Connector Proxy → Credential Vault.
+    Call detect_connector_environment → confirm Production for all 4.
+    Call discover_connector_modules → write to CEP.
+    CHECKPOINT per connector: auth_status + environment written.
+08. Special: Workday job flags: raas_coordination_needed=true.
+    Orchestrator surfaces PAUSE_FOR_CEP: "Workday RaaS coordination required.
+    Please have your Workday Admin confirm RaaS access."
+    OTHER 3 connectors continue; Workday waits for CEP resolution.
+09. CEP resolution arrives for Workday (e.g., 3 hours later).
+    Workday discovery job re-queues and completes.
+10. All 4 discovery jobs COMPLETE → fan-in gate satisfied.
+    Orchestrator: dispatch_list = [IMS-001, IMS-101, IMS-201, IMS-301].
+    Stage 2 COMPLETE → advance to Stage 3.
+ 
+11.3 Stage 3 — Connector Implementation (Parallel)
+11. Orchestrator creates Stage 3 parent job (fan-in parent).
+    Creates 4 child connector jobs:
+      job_B: CONNECTOR / ERP_IMPLEMENT_IMS-001 (NetSuite)
+      job_C: CONNECTOR / CRM_IMPLEMENT_IMS-101 (Salesforce)
+      job_D: CONNECTOR / BILLING_IMPLEMENT_IMS-201 (Stripe)
+      job_E: CONNECTOR / HRIS_IMPLEMENT_IMS-301 (Workday)
+12. All 4 Connector Workers dequeue simultaneously.
+    EACH executes IMS pre-fetch (Section 0.1):
+      load_ims_spec → plan sections → get_ims_section × N.
+      Worker-local cache populated before first extraction call.
+13. Stage 3 execution in parallel — representative events:
+    NetSuite (job_B):
+      run_ims_discovery_gate → PASS
+      extract_object_batch (Accounts, Transactions, Invoices) ...
+      normalize_field_value, normalize_currency, normalize_account_type ...
+      upsert_canonical_object (GL Accounts: 412, GL Transactions: 89,043) ...
+      run_validation_suite → health_score: 94
+      CHECKPOINT after every 10,000 records.
+      job_B COMPLETE.
+    Salesforce (job_C):
+      run_ims_discovery_gate → PASS
+      Record Type inventory → 3 active Record Types → 3 CEP questions created.
+      Orchestrator routes CEP questions to consultant.
+      job_C status: PAUSED_FOR_CEP (stage normalization pending).
+      OTHER JOBS CONTINUE UNAFFECTED.
+      [2 days later] CEP resolutions arrive for all 3 RecordTypes.
+      job_C resumes → extract Opportunities + OpportunityHistory ...
+      normalize_opportunity_stage (all stages now resolved) ...
+      upsert_canonical_object (Opportunities: 3,421) ...
+      job_C COMPLETE_WITH_GAPS (3 custom stages unresolvable, logged).
+    Stripe (job_D):
+      Subscription Normalization Gate: 3 CEP questions created.
+      IMMEDIATELY after gate questions dispatched:
+        Extract Customers, Products, Prices, Invoices, Payments → CANONICAL.
+        (Subscription data extracted; ARR Movement blocked until gate resolves.)
+      [1 day later] all 3 gate questions confirmed by Finance team.
+      Derive ARR from subscription.items[] × N subscriptions.
+      Derive ARR Movement events from /v1/events stream.
+      validate_arr_formula for each subscription → all PASS.
+      job_D COMPLETE.
+    Workday (job_E):
+      run_ims_discovery_gate → Supervisory Org gate: PENDING_CEP.
+      PAUSE_FOR_CEP (BLOCKING): "Is Supervisory Org = Cost Center?"
+      [4 hours later] CEP confirmed: cost_center_mapping_required=true.
+      Extract Workers, Supervisory Orgs, Positions, Business Process events.
+      Organizational Normalization Gate: FTE methodology confirmed.
+      Org hierarchy construction → no cycles detected.
+      upsert_canonical_object (Employees: 287, Departments: 34) ...
+      job_E COMPLETE.
+14. Fan-in: all 4 jobs reach terminal status.
+    Stage 3 parent job → COMPLETE.
+    Orchestrator: advance to Stage 4.
+ 
+11.4 Stages 4–7 — Integration, Assessment, Review, Activation
+15. Stage 4: Canonical Worker (job_F) dequeues.
+    Customer Account identity resolution:
+      NetSuite Customers (n=891) × Salesforce Accounts (n=1,204) × Stripe Customers (n=767)
+      Email exact match: 723 confirmed; fuzzy match: 41 PENDING_CEP; no match: 127.
+      Match rate: 81% → above 80% threshold → CONTINUE.
+    System-of-authority assigned per SOF Table 4.1.
+    Cross-domain validation (SOF Table 4.2):
+      CRM→Billing: 89% match rate (above 85% threshold) → CONTINUE.
+      Billing→ERP: 92% match rate (above 90% threshold) → CONTINUE.
+    job_F COMPLETE.
+16. Stage 5: EVAL-001, EVAL-002, EVAL-003 all dispatch simultaneously.
+    EVAL-002 (Validation): run_validation_suite across all connectors → report.
+    EVAL-003 (Confidence): calculate_object_confidence + capability confidence.
+    EVAL-001 (CAL): run_capability_assessment → module statuses + readiness_score.
+    All 3 jobs COMPLETE → Stage 5 COMPLETE.
+17. Reporting Worker generates customer review packet.
+    Includes: capability_summary, pending_gate_status (Salesforce 3 unresolved stages),
+    cross_domain_gaps (0 gaps above threshold), readiness_score: 76%.
+    Stage 6 notification sent to Implementation Consultant.
+18. Stage 6 Customer Review (human-mediated):
+    Customer confirms: module_activation_plan, defers Position Planning (Workday not
+    fully configured), acknowledges 3 unresolved Salesforce custom stages.
+    Completion signal received → Stage 7 begins.
+19. Stage 7: Reporting Worker generates final deliverables.
+    Orchestrator: activate READY modules.
+    Session: status = COMPLETE.
+    Production monitoring workflow initialized.
+    → Financial Intelligence Ready.
+ 
+11.5 Runtime Correctness Checklist
+The following conditions must all be true for the runtime to be considered correctly implemented. Engineers can use this as an integration test specification.
+Condition
+Verification Method
+No raw credentials flow through any worker process
+Audit log shows only credential_reference_ids in all log entries; grep for common key formats (sk_live, Bearer, api_key) in log store → zero results
+Parallel connector jobs do not share rate limit budget
+Two simultaneous Stripe extractions consume half the rate limit each; no RATE_LIMIT_ERROR when individual budget would be sufficient
+TERMINAL_BLOCKED connector does not block Stage 4
+Manually block one connector job; verify Stage 4 dispatches after timeout regardless
+IMS pre-fetch completes before first extraction call
+Log sequence per job: IMS_INDEX_LOADED → IMS_SECTION_LOADED × N → CONNECTOR_AUTHENTICATED → EXTRACTION_BATCH_COMPLETE (no EXTRACTION before IMS loads)
+ARR Movement not created until Subscription Normalization Gate resolves
+Create session with Stripe connector; verify no ARR Movement canonical objects exist until all 3 gate questions are answered in CEP
+Stage Normalization Gate 40% ceiling enforced
+Create Salesforce session; verify all Opportunity stage_canonical = null and confidence = 0.35 until stage mapping is confirmed
+Memory Tier 2 rejects write without anonymization_certificate
+Attempt direct write to tier2_pattern_cache without certificate via Implementation Memory Service API → 403 rejection + audit event
+Customer data isolated in Postgres
+Verify that Postgres RLS prevents a query with customer_A session credentials from accessing customer_B canonical_objects
+Checkpoint recovery restores correct extraction page_cursor
+Kill Connector Worker mid-extraction at page 5 of 20; verify resumed job continues from page 5, not page 1; final count matches full run
+PII not in logs
+Extract 100 random log entries from implementation_logs; verify no email addresses, company names, compensation figures, or SSN patterns present in output_summary fields
+Table EIS2-11.1 — Runtime correctness checklist. Each condition should have a corresponding automated integration test before the MVP is considered production-ready.
+ 

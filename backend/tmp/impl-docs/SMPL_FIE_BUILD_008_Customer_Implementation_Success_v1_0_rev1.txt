@@ -1,0 +1,249 @@
+FIE-BUILD-008
+CUSTOMER IMPLEMENTATION & SUCCESS
+Version 1.0
+How customers successfully implement, activate, adopt, govern, expand, and continuously realize value from SMPL.ai
+SMPL.ai · Platform Engineering & Customer Success
+July 2026 · CONFIDENTIAL — CUSTOMER IMPLEMENTATION HANDBOOK
+A successful implementation is not one where software is installed. It is one where the customer consistently trusts, understands, and acts on the financial intelligence the platform produces. Success is measured by customer outcomes, not completed tasks.
+Purpose and Authority
+FIE-BUILD-001 through FIE-BUILD-007 established how the platform is engineered, integrated, released, operated, scaled, and secured. This document establishes how a customer actually gets there — discovery, solution design, implementation, validation, activation, adoption, governance, and expansion. It owns customer delivery. It redesigns nothing: ABS, GPES, BIS, FIE, and BUILD-001 through BUILD-007 remain authoritative.
+Scope
+This Document Owns
+This Document Does Not Own
+Customer Discovery, Solution Design (Sections 4–5)
+Connector Architecture — ABS/BIS
+Implementation Planning, Data Readiness (Sections 6–7)
+Canonical Model — BIS-003
+Connector Deployment, CSV Onboarding, Hybrid Implementations (Section 8)
+Financial Intelligence — FIE-001 through FIE-005
+Validation Readiness, Customer Acceptance (Section 9)
+Production Operations — FIE-BUILD-005
+User Enablement, Training, Change Management (Section 11)
+Scalability — FIE-BUILD-006
+Production Activation (Section 10)
+Security — FIE-BUILD-007
+Success Metrics, Quarterly Business Reviews (Sections 13, 16)
+Expansion Planning, Customer Governance (Sections 13–14)
+Cross-references: ABS-012 (Multi-Path Implementation Architecture), GPES-001 (SaaS Golden Path), BIS-001 through BIS-006, FIE-001 through FIE-005, and FIE-BUILD-001 through FIE-BUILD-007. This document is the customer-facing delivery layer sitting on top of all of them — it translates what they already specify into what a customer actually experiences, it does not redefine any of it.
+Operational Philosophy
+Customers experience one implementation methodology regardless of whether their data arrives via live connector (Path B), CSV upload (Path A), or a mix of both (Path C) — the direct customer-facing consequence of ABS-012's Canonical Convergence principle. Implementation differences disappear the moment data reaches Canonical; everything from Section 8 onward is identical regardless of which path got a customer there.
+Section 1 — Customer Success Philosophy
+Customer outcomes — success is measured by whether the customer trusts and acts on the platform's output, not by whether a checklist was completed
+Evidence before trust — the platform's own defining principle (FIE-005), applied to the relationship: a customer is never asked to simply believe a number is right, they are shown why
+Implementation transparency — a customer always knows what stage they're in, what's blocking progress, and what happens next, per Section 2's lifecycle
+Long-term partnership — implementation does not end at go-live; Sections 12–14 exist because adoption, governance, and expansion are ongoing relationships, not a project close-out
+Continuous adoption — the goal is a customer using more of the platform more deeply over time (Section 12, the Customer Maturity Model below), not a static, one-time deployment
+Section 2 — Customer Lifecycle
+Prospect     ↓Discovery         (Section 4)     ↓Solution Design   (Section 5)     ↓Implementation    (Sections 6–8)     ↓Validation        (Section 9)     ↓Activation        (Section 10)     ↓Adoption          (Section 12)     ↓Optimization     ↓Expansion         (Section 14)     ↓Renewal
+This lifecycle is the customer-facing narrative of FIE-BUILD-001's engineering milestones and FIE-BUILD-003's Customer Activation flow — the same underlying work, described from the customer's vantage point rather than the engineer's.
+Section 3 — Implementation Paths
+Path A (CSV), Path B (Connector), and Path C (Hybrid) are defined in full by ABS-012 and are not redefined here. This section exists only to confirm that customer-facing implementation planning selects a path per ABS-012 §1.4's per-domain rule — never assumes one path for an entire customer — and that the guardrail against over-prescribing a connector when a customer lacks API access (ABS-012 §9) is a Discovery-stage (Section 4) responsibility, not an afterthought.
+Section 4 — Customer Discovery
+Business objectives — what the customer actually needs the platform to answer
+Financial concepts — which of the customer's metrics matter most (ARR, cash, GTM efficiency, and so on)
+Current reporting — what the customer does today, and where it breaks down
+Source systems — per domain, feeding ABS-012's per-domain access question directly
+Security — customer-specific requirements surfaced early, feeding FIE-BUILD-007's Section 11a/11b where relevant (data residency, subprocessor restrictions)
+Stakeholders — who approves what, feeding Section 13's governance model
+Timeline — realistic, set against Section 16's Implementation Duration KPI, not an arbitrary date
+Success criteria — defined before implementation begins, not retrofitted at the end
+This is the customer-facing counterpart to ABS-009's CEP discovery principle ("if AI can discover it, don't ask") — Discovery asks only what genuinely cannot be inferred from connected or uploaded data.
+Section 5 — Solution Design
+Operating Models — which Financial Operating Model composition (FIE-002 §1.7) fits this customer, starting from an Industry Template where one matches (FIE-002 §11)
+Modules — which platform capabilities are in scope for this implementation
+Industry templates — selected and customized per FIE-002 §12's override model, never modifying the template itself
+Connector strategy — Path A/B/C per domain, per Section 3
+Governance — which approval workflows (FIE-BUILD-007 §4) apply to this customer's elevated actions
+Implementation roadmap — the customer-specific sequencing of Section 2's lifecycle stages
+Section 6 — Implementation Readiness
+A pre-implementation gate — distinct from, and earlier than, FIE-BUILD-001's Customer Readiness (which is the trust sign-off gate at the end of the golden path, Section 9–below). This section asks whether the customer is ready to begin; FIE-BUILD-001's Customer Readiness asks whether the resulting output can be trusted.
+Required systems identified
+Connector availability confirmed, per domain
+CSV availability confirmed, where Path A applies
+Permissions in place for every required system
+Stakeholders identified, per Section 4
+Executive sponsor confirmed — implementations without one are a named risk in Section 17
+Timeline agreed
+Section 7 — Data Readiness
+Source quality — assessed before ingestion begins, not discovered after
+Validation — anticipated BIS-004 rule coverage for this customer's domains
+Historical coverage — how much history is available and required for a meaningful first Observation set (FIE-001)
+Required concepts — which Financial Concepts this customer's Solution Design (Section 5) actually needs data for
+Canonical readiness — confirmation that the customer's source data can actually populate the Canonical objects Section 5's Operating Model requires
+Section 8 — Implementation Execution
+This is FIE-BUILD-003 §7's Customer Activation pipeline, restated as the customer-facing execution sequence — the same steps, not a second implementation process:
+Connector setup or CSV upload   (per Section 3's selected path)     ↓Canonical validation             (BIS-003, BIS-004)     ↓Observation capture              (FIE-001)     ↓Methodology setup                (FIE-002, per Section 5's Solution Design)     ↓Calculation validation           (FIE-003)     ↓Narrative validation             (FIE-005)     ↓Reporting validation             (BIS-006)
+Section 9 — Customer Validation
+This is FIE-BUILD-003 §7's Customer Go-Live Validation checklist and FIE-BUILD-001's Customer Readiness criteria, combined into one customer-facing acceptance gate — not a third, competing checklist.
+Data accuracy confirmed against the customer's own expectations
+Methodology approved — the customer's finance team has reviewed and approved the specific Operating Model version in use
+Financial tie-outs completed, per FIE-005 §15
+Evidence verified — the customer has actually inspected a lineage trail, not just been told one exists
+Executive review completed against real output
+Operational Confidence (FIE-BUILD-005 §6) reviewed for this specific customer
+Customer signoff recorded — explicit and named, never inferred from silence
+Section 10 — Production Activation
+Go-live — per FIE-BUILD-004 §16's Customer Release Strategy staging
+Monitoring — the customer's own view into FIE-BUILD-003 §9 and FIE-BUILD-005 §5's Customer Health Dashboard
+Support — per FIE-BUILD-005 §17's customer communication model
+Hypercare — an elevated-attention window immediately post-go-live, distinct from steady-state support, with a defined end date rather than an indefinite tail
+Operational dashboards — the customer's own Executive Operations Dashboard view, per FIE-BUILD-005 §5
+Success review — a formal checkpoint closing out Hypercare and confirming the customer has moved to steady-state adoption (Section 12)
+Section 11 — Training and Enablement
+Finance — the primary users of Sections 8–10's output
+Executives — trained on interpretation and drill-down, not data entry
+Administrators — the customer's own delegated administration, per FIE-BUILD-007 §4
+Implementation team — internal, ensuring consistent delivery across customers
+Customer Success — internal, owning Sections 12–14 post-activation
+Power users — customer staff going deeper than the standard training track, often the seed of Section 14's expansion
+Section 12 — Customer Adoption
+Usage — actual login and feature-use frequency, not licenses purchased
+Trust — measured by whether the customer acts on platform output without re-verifying it manually elsewhere
+Feature adoption — breadth of platform capability actually in use
+Reporting adoption — whether board and executive materials now originate from the platform
+Executive engagement — whether leadership, not only finance staff, uses the platform directly
+Operational maturity — the customer's position on the Customer Maturity Model, below
+Section 13 — Customer Governance
+Quarterly Reviews — the recurring checkpoint tying together every item below
+Methodology governance — reviewing the customer's methodology version history, per FIE-002 §16
+Operating Model reviews — confirming the customer's frozen Operating Model versions still reflect how they run the business
+Security reviews — per FIE-BUILD-007 §9's governance cadence, customer-specific portion
+Performance reviews — per FIE-BUILD-006 §16's KPIs, customer-specific view
+Success planning — forward-looking, feeding Section 14's expansion pipeline
+Section 14 — Expansion
+Additional modules — capabilities beyond the original Solution Design (Section 5)
+Additional business units — expanding Canonical coverage within the same corporate entity
+Additional entities — genuinely new legal entities, closer in scope to a second implementation than an expansion
+Additional connectors — graduating a domain from Path A to Path B, per ABS-012 §8
+Advanced reasoning — deeper FIE-005 Narrative Policy and question-type adoption
+Forecasting — as FIE-002 Addendum A's Financial Governance capability matures
+Scenario modeling — FIE-003's SCENARIO Calculation Profile, per FIE-003 §12
+Section 15 — Customer Health
+This section does not define a new health model — it is the customer-specific view into models already fully specified elsewhere.
+Signal
+Source
+Health Score
+Composite, assembled from every row below
+Operational Confidence
+FIE-BUILD-005 §6, scoped to this customer
+Trust Integrity
+FIE-BUILD-007's Trust Integrity Principle, scoped to this customer
+Connector Health
+FIE-BUILD-003 §9's Connector Health domain, scoped to this customer
+Data Freshness
+FIE-BUILD-005 §6's Observation Freshness metric, scoped to this customer
+Adoption
+Section 12, above
+Executive Engagement
+Section 12, above
+Section 16 — Implementation KPIs
+KPI
+Measures
+Implementation Duration
+Discovery through Activation, per Section 2's lifecycle
+Validation Success Rate
+Section 9's checklist, first-pass completion
+Time to First Insight
+First real Financial Intelligence Object a customer sees, per FIE-003
+Time to First Executive Report
+First Narrative (FIE-005) an executive actually reads
+Time to Board Package
+First BIS-006-rendered board-ready output
+Customer Confidence
+Section 15's Health Score, tracked from first measurement
+Adoption
+Section 12
+Renewal
+Contract renewal rate, the ultimate lagging indicator of everything above
+Expansion
+Section 14's pipeline conversion
+Section 17 — Implementation Risks
+Risk
+Mitigation
+Missing data
+Section 7's Data Readiness gate, before Section 8 execution begins
+Weak sponsorship
+Section 6's executive sponsor confirmation, required before implementation starts
+Poor governance
+Section 13's Quarterly Review cadence, established at Solution Design (Section 5), not introduced after a problem appears
+Connector limitations
+ABS-012's per-domain path selection — a limitation is a reason to use Path A for that domain, not a reason to stall the whole implementation
+CSV quality
+Section 7's source quality assessment, and ABS-012's Structural Validation gate before any mapping is attempted
+Scope expansion (mid-implementation)
+Change managed explicitly against Section 5's original Solution Design, never silently absorbed
+Organizational resistance
+Section 11's training and enablement, targeted specifically at the resistant stakeholder group identified in Section 4
+Section 18 — Continuous Customer Success
+Feedback     ↓Governance          (Section 13)     ↓Platform Improvements     ↓New Capabilities     ↓Adoption            (Section 12)     ↓Expansion           (Section 14)
+The fifth continuous-improvement loop in the BUILD series, alongside FIE-BUILD-004 §19 (release), FIE-BUILD-005 §20 (operations), FIE-BUILD-006 §18 (performance), and FIE-BUILD-007 §18 (security) — all five feed the same engineering backlog, with this loop uniquely sourced from customer feedback rather than internal telemetry.
+Section 19 — Relationship to BUILD Series
+BUILD-007   Protect     ↓BUILD-008   Deliver          (this document)     ↓BUILD-000   ???
+ASSUMED  The brief for this document names “BUILD-000 — Engineering Handbook” as the next step. That numbering doesn't fit the existing sequence — FIE-BUILD-002 already owns Engineering Standards, and “000” as a prequel number strongly suggests a capstone overview instead, the same role FIE-000 plays for the FIE architecture layer. This document's best-guess interpretation, stated explicitly rather than silently assumed: BUILD-000 should be a BUILD Series Overview — summarizing FIE-BUILD-001 through 008 the way FIE-000 summarizes FIE-001 through 005 — not a ninth new standards document competing with FIE-BUILD-002. Confirm intent before that document is drafted.
+BUILD-008 operationalizes everything built before it — the customer is the point of every prior document's existence, and this is where that intent actually reaches one.
+Customer Trust Journey
+Imported        (data has arrived, nothing yet validated)     ↓Validated       (BIS-004 checks pass, per Section 9)     ↓Trusted         (customer signoff recorded, per Section 9)     ↓Operational     (steady-state adoption, per Section 12)     ↓Strategic       (executive engagement, per Section 12)     ↓Transformational (the platform has changed how the customer actually runs finance)
+Customers mature through these stages in order — a customer cannot be "Strategic" while still merely "Imported" for a given domain. This journey is the trust-specific lens on Section 2's broader lifecycle.
+Customer Maturity Model
+The third maturity model in this documentation series, alongside FIE-BUILD-003's Platform Maturity Model and FIE-BUILD-005's Operational Maturity Model — this one is scored per customer, not per platform deployment.
+Level
+Description
+1
+Connected — data flows in, nothing yet validated end to end
+2
+Validated — Section 9's checklist passed, customer signoff recorded
+3
+Operational — steady-state usage, per Section 12
+4
+Executive Intelligence — leadership uses the platform directly, per Section 12's Executive Engagement signal
+5
+Continuous Financial Intelligence — the customer has reached Section 14's expansion pipeline and treats the platform as core operating infrastructure, not a reporting tool
+Success Gates
+Before advancing a customer to the next lifecycle stage:
+Discovery Complete       (Section 4)     ↓Canonical Validated      (Section 8)     ↓Financial Validation     (Section 9)     ↓Operational Confidence   (Section 9, FIE-BUILD-005 §6)     ↓Executive Approval       (Section 9)     ↓Production               (Section 10)
+Every stage has objective exit criteria — a customer never advances on a target date alone if the gate above it hasn't actually been satisfied, the same fail-closed discipline this platform applies to its own technical execution, applied here to the customer relationship.
+Customer Decision Records
+Just as engineering has Engineering Decision Records (FIE-BUILD-002) and this series has since added Scalability Decision Records (FIE-BUILD-006) and Security Decision Records (FIE-BUILD-007), customers accumulate their own significant decisions worth preserving permanently:
+Operating Model selection
+Metric definitions
+Module activation
+Connector choices
+Restatement policy (FIE-002 Addendum A)
+Governance decisions
+This is the fourth Decision Record pattern in the series — all four share the same shape (problem, alternatives considered, decision, rationale, impact, owner, date), differing only in scope and filing location. Customer Decision Records are filed specifically into Organizational Financial Memory (FIE-004), as Decision Knowledge Objects — not a separate store, since a customer's own decision about their Operating Model is exactly the kind of organizational knowledge FIE-004 already exists to preserve.
+Customer Success Dashboard
+Element
+Source
+Executive Sponsor
+Section 6
+Implementation Progress
+Section 2's lifecycle position
+Connector Status
+Section 15
+Validation
+Section 9
+Operational Confidence
+FIE-BUILD-005 §6
+Trust Integrity
+FIE-BUILD-007's Trust Integrity Principle
+Module Adoption
+Section 12
+Health Score
+Section 15
+Renewal Readiness
+Section 16
+Expansion Readiness
+Section 14
+Table C.CSD.1 — Customer Success Dashboard. Every row cites a section or a prior document already defining it — this dashboard assembles existing signals into one customer-facing view, it does not introduce a new metric anywhere in this table.
+Principal Software Architect Review
+Reviewed for whether customer delivery preserves every trust guarantee established throughout the architecture, not only whether implementations complete on schedule.
+1. Are Any Customer Implementation Responsibilities Misplaced?
+No. This document deliberately restates, from the customer's vantage point, work already fully specified elsewhere — FIE-BUILD-003 §7's Customer Activation pipeline (Section 8), FIE-BUILD-003 §7's Customer Go-Live Validation and FIE-BUILD-001's Customer Readiness (Section 9), FIE-BUILD-005 §6's Operational Confidence and FIE-BUILD-007's Trust Integrity (Section 15). None of these is redefined; each is cited to its owning document and given a customer-facing narrative around it.
+2. Does Any Implementation Content Belong in ABS-012 or GPES?
+No — Section 3 explicitly defers to ABS-012 for Path A/B/C definition and declines to redefine it, the correct boundary
+GPES-001 remains the Path B reference trace (per FIE-BUILD-001 §9's clarification); this document's Section 2 lifecycle and Section 8 execution sequence are the customer-facing narrative wrapped around that trace, not a competing specification of it
+One item worth naming: the brief's cross-reference list mentions a “GPES-002” that does not otherwise appear in this documentation series — if that document exists, it should be cited specifically where relevant; if it does not yet exist, this reference should be corrected to GPES-001 the next time this document is revised
+3. Does BUILD-008 Preserve Every Trust Guarantee Established Throughout the Architecture?
+Yes, by direct inheritance rather than restatement. This document adds no new calculation, storage, or security mechanism of its own — every guarantee a customer experiences (determinism, evidence, lineage, confidence, immutability) is produced by FIE-001 through FIE-005 and protected by FIE-BUILD-005 through 007; this document's job is making sure the customer actually sees and trusts what those layers already guarantee, per Section 1's philosophy that evidence must come before trust in the relationship itself, not only in the platform's internals.
+4. Is BUILD-008 Ready to Become the Authoritative Customer Implementation & Success Handbook?
+Yes, with one open item named rather than silently resolved: Section 19's reference to "BUILD-000" should be confirmed before that document is drafted, per the ASSUMED note above. Every one of the nineteen required sections plus all five additional recommendations (Customer Trust Journey, Customer Maturity Model, Success Gates, Customer Decision Records, Customer Success Dashboard) are present, and every mechanism traces back to a specific guarantee already established in ABS/GPES/BIS/FIE or a prior BUILD document rather than inventing new customer-facing infrastructure. Recommend freezing FIE-BUILD-008 pending confirmation of the BUILD-000 naming question.

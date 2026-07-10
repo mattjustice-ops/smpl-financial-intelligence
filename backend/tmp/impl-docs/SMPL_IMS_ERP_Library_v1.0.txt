@@ -1,0 +1,2473 @@
+IMPLEMENTATION MAPPING SPECIFICATION LIBRARY
+ERP Implementation Library — IMS-001 through IMS-006
+ABS-005  ·  ERP Library v1.0
+NetSuite  ·  Sage Intacct  ·  QuickBooks Online
+Microsoft Dynamics 365 Finance  ·  Oracle Fusion ERP  ·  SAP S/4HANA
+SMPL.ai  ·  AI Implementation Engineering
+June 2026 · CONFIDENTIAL — INTERNAL IMPLEMENTATION DOCUMENT
+IMS-001 (NetSuite) is the reference implementation. IMS-002 through IMS-006 inherit its structure.
+ERP Implementation Library — Scope and Organization
+This document contains the complete ERP Implementation Mapping Specification library: six IMS specifications covering every Tier 1 ERP platform in the SMPL connector catalog. Each specification follows the identical ten-section structure established by IMS-001 (NetSuite), the permanent reference implementation.
+IMS-001 (NetSuite) precedes this library as the standalone reference document. It is summarized here for completeness but the authoritative version is the standalone IMS-001 document. IMS-002 through IMS-006 are the new specifications introduced in this build.
+IMS #
+Connector
+Maturity
+Primary Differentiator
+IMS-001
+NetSuite (reference, standalone document)
+Production Ready
+Transaction polymorphism; OneWorld multi-entity; SuiteQL bulk extraction; ARM revenue recognition
+IMS-002
+Sage Intacct
+Production Ready
+Multi-dimensional GL (8 custom dimensions); native multi-entity; Revenue Management module; lowest polymorphism burden in the registry
+IMS-003
+QuickBooks Online
+Production Ready
+Simplest schema in the registry; single-entity only; fastest implementation path; structural ceilings on multi-entity and revenue recognition
+IMS-004
+Microsoft Dynamics 365 Finance
+Pilot Ready
+Financial Dimensions framework (10 configurable dimensions); OData API standard; Power Platform extensibility; highest CEP resolution burden
+IMS-005
+Oracle Fusion ERP
+Validated
+Multi-ledger architecture (primary/secondary/reporting ledgers); highest revenue recognition sophistication; 5–10+ CoA segments; longest implementation timeline
+IMS-006
+SAP S/4HANA
+Validated
+Universal Journal (ACDOCA); Company Code / Controlling Area / Profit Center hierarchy; deepest enterprise financial controls; most complex extraction pattern in the library
+Table 0.1 — ERP IMS Library index. Maturity level reflects SMPL implementation depth, not vendor platform sophistication.
+Cross-ERP Implementation Principles
+These principles apply to every ERP IMS in this library and are stated once here rather than repeated across six specifications.
+SMPL is always read-only. No ERP IMS specifies write operations. Every extraction is governed by D-019 (read-only connectors) across the SKA.
+CEP governs all customer-specific decisions. Every IMS defers to the CEP for fiscal calendar, account type edge cases, consolidation policy, dimensional business meaning, and system-of-record disambiguation. The IMS provides the question; the CEP provides the customer-specific answer.
+Confidence scores are per-customer floors, not universal ceilings. The CKR provides the architectural planning ceiling; the IMS Section 7 computes the customer-specific floor based on actual data quality, module availability, and CEP resolution status.
+Revenue Recognition modules follow the same activation pattern across every ERP: high-confidence Revenue Schedule when the module is active; Derived-Low fallback from invoice service period fields when inactive. The ERP changes; the pattern does not.
+Multi-entity support follows the same canonical pattern: Legal Entity hierarchy, intercompany elimination, currency translation. The specific API surface differs by ERP; the canonical model does not.
+IMS-002 — Sage Intacct
+Sage Intacct is the most architecturally distinct ERP connector in this library — a cloud-native multi-dimensional GL with no Transaction polymorphism, native multi-entity structure, and a Revenue Management module that competes with NetSuite ARM for mid-market revenue recognition depth. Its implementation profile is simpler than NetSuite in most respects, while matching or exceeding it on multi-entity and dimensional confidence.
+✱ ARCHITECT NOTE: Key departure from NetSuite IMS: Intacct uses the REST API v3 with distinct, non-polymorphic object types (GLBATCH, ARINVOICE, APBILL, GLPAYMENT). There is no Transaction-type discrimination step analogous to NetSuite's Table 4.5 — each object type is unambiguously a specific canonical target. This simplifies Section 4 Transformation Rules and reduces the primary exception handling burden.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+Web Services credentials: sender_id + sender_password (Company credentials), OR OAuth 2.0 where the customer has enabled it. Web Services is the more common pattern for SMPL connectors.
+If credentials fail, request fresh credentials from the customer's Intacct Super Admin. Do not cache or retry stale credentials — Intacct enforces lockout after repeated failures.
+Session ID / Token
+Intacct REST v3 uses Bearer token obtained from POST /v3/company-users/session. Token lifetime is session-scoped; implement refresh logic before every extraction batch.
+Token expiry is silent in some API versions — implement proactive token refresh after 90% of expected session lifetime rather than waiting for a 401 error.
+Company ID
+Required as a header on every API request: X-Intacct-Company-ID
+If absent or incorrect, every API call fails. Confirm with customer during Pre-POC Discovery. Multi-entity customers have one Company ID for the top-level entity, not one per subsidiary.
+Table IMS-002.1.1 — Sage Intacct authentication discovery.
+1.2 Module Inventory
+Intacct modules are discovered by attempting to query module-specific objects. A 403 or empty response indicates the module is not licensed.
+Module
+Detection Pattern
+Canonical Impact if Active
+Revenue Management
+GET /v3/contracts/revreccustomer → 200 or list of entries
+Revenue Schedule canonical object populated with Direct-High confidence. Without module, Revenue Schedule falls to Derived-Medium from invoice service period fields.
+Multi-entity / Consolidations
+GET /v3/companies → returns list of entities (count > 1)
+Legal Entity hierarchy populated. Intercompany elimination flag available natively on GLBATCH entries.
+Projects
+GET /v3/projects → 200 or list
+Project canonical object reference available for project-level cost and revenue tracking.
+Contracts
+GET /v3/contracts → 200 or list
+Contract-level subscription-adjacent data available. NOT a substitute for a Billing connector for high-volume recurring billing.
+Fixed Assets
+GET /v3/assets → 200 or list
+Depreciation schedules available where fixed asset tracking is relevant.
+Multi-book accounting
+GET /v3/books → returns list (count > 1)
+Critical: CEP must designate which book is canonical. Multi-book without explicit CEP designation silently produces incorrect financials.
+Table IMS-002.1.2 — Sage Intacct module detection patterns.
+1.3 Custom Dimension Discovery
+This step is unique to Intacct among the ERP connectors in this library. Intacct allows customers to define up to 8 custom dimensions per transaction line in addition to the standard Department and Location dimensions. Every custom dimension must be inventoried and have its business meaning confirmed by the CEP before canonical mapping proceeds.
+DISCOVER custom dimensions:
+  GET /v3/customdimensions → returns list of active custom dimensions
+  For each dimension:
+    Record: dimension_name, dimension_label, is_active
+    ASK CEP: "What business concept does the dimension '{label}' represent?
+    Is it equivalent to Department, Location, Product, Project, or other?"
+    ├─ Recognized business concept → map to SCBM canonical field or Tier 2 extension
+    └─ Unknown → create Custom_Dimension_N canonical field
+        Mark as PENDING_CEP_RESOLUTION
+        Do NOT include in dimensional reasoning until resolved
+1.4 Discovery Completion Gate
+Gate Item
+Confirmed When
+Authentication verified
+Bearer token obtained successfully; Company ID confirmed
+Module inventory complete
+CEP.modules populated for Revenue Management, Multi-Entity, Projects, Contracts, Multi-book
+Custom dimensions inventoried
+All active custom dimensions listed; business meaning requested from CEP for each
+Multi-book designation
+If multi-book active, CEP.canonical_book confirmed before any GL extraction begins
+Entity inventory
+For multi-entity: complete list of entities in CEP.entity_inventory; consolidation ownership percentages noted
+Table IMS-002.1.4 — Sage Intacct discovery completion gate.
+Section 2 — Canonical Object Mapping
+Intacct's key architectural advantage in this section: no polymorphism. Every object type maps unambiguously to a single canonical target. The discrimination step required for NetSuite (Table 4.5) does not exist for Intacct — simplifying both implementation and exception handling.
+Intacct Object
+REST Endpoint
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+GLBATCH (Journal Entry header)
+GET /v3/glbatches
+GL Transaction (Movement)
+1:N (header:lines)
+D-H
+None
+GLENTRY (Journal Entry line)
+GET /v3/glentries
+GL Transaction Line
+N:1 (lines:header)
+D-H
+None
+Account
+GET /v3/accounts
+GL Account (Entity)
+1:1
+D-H
+None
+Department
+GET /v3/departments
+Department (Entity)
+1:1
+D-H
+None
+Location
+GET /v3/locations
+Department (Entity) — Location sub-type
+1:1
+D-H
+Treated as a secondary Department dimension unless CEP designates otherwise
+Entity (company)
+GET /v3/companies
+Legal Entity (Entity)
+1:1
+D-H
+Multi-entity module required; inferred single entity if not active
+ARINVOICE
+GET /v3/arinvoices
+Invoice (Movement)
+1:N (header:lines)
+D-H
+None
+ARLINE (invoice line)
+Embedded in ARINVOICE response
+Invoice Line
+N:1
+D-H
+None
+ARPYMT (AR Payment)
+GET /v3/arpayments
+Payment (Movement)
+1:1
+D-H
+None
+APBILL
+GET /v3/apbills
+AP Event (Movement)
+1:N
+D-H
+None
+APPYMT
+GET /v3/appayments
+AP Payment (Movement)
+1:1
+D-H
+None
+Revenue Recognition Schedule
+GET /v3/revreccustomer
+Revenue Schedule (Movement)
+1:N
+D-H
+Revenue Management module required; DR-M fallback from ARINVOICE service period fields
+Budget
+GET /v3/glbudgets
+Budget Line (Movement)
+1:N
+D-M
+Native budgeting module; most customers pair with external FP&A
+Custom Dimension N
+GET /v3/dimensions/{name}
+Extension field pending CEP resolution
+1:1
+D-H (after resolution) / Pending (before)
+Custom dimensions module — present by default for all Intacct customers
+Table IMS-002.2.1 — Sage Intacct canonical object map. No transaction type discrimination required — each Intacct object type maps unambiguously to its canonical target.
+Section 3 — Canonical Field Mapping (Key Objects)
+Field mapping follows the identical format established in IMS-001. Intacct-specific differences from NetSuite are noted. Full field-level detail for all objects is maintained in the implementation repository.
+3.1 GL Account
+Intacct Field
+SCBM Field
+Req/Opt
+Transform
+Validation
+Null Handling
+accountno
+gl_account.account_code
+REQ
+String trim
+Non-empty
+Reject
+title
+gl_account.account_name
+REQ
+String trim
+Non-empty
+Reject
+accounttype
+gl_account.account_type
+REQ
+Normalize — Intacct enum differs from NetSuite; see Table IMS-002.4.1
+Must resolve to SCBM enum
+Reject if unresolvable; FLAG_FOR_CEP if unknown type
+normalbalance
+gl_account.normal_balance
+OPT
+Direct — DEBIT/CREDIT
+DEBIT or CREDIT only
+Default based on account_type if null
+status
+gl_account.is_active
+REQ
+active → true; inactive → false
+Boolean
+Default to true
+parentkey
+gl_account.parent_account_id
+OPT
+FK to gl_account.account_code
+Parent must exist in mapped accounts
+Null permitted — top-level accounts have no parent
+Table IMS-002.3.1 — Sage Intacct GL Account field mapping.
+3.2 GLBATCH (Journal Entry Header)
+Intacct Field
+SCBM Field
+Req/Opt
+Transform
+Validation
+Null Handling
+recordno
+gl_transaction.source_id
+REQ
+None
+Globally unique within company file
+Reject
+journal
+gl_transaction.journal_type
+OPT
+String — record journal book designation
+Validate against CEP.canonical_book if multi-book active
+FLAG if journal does not match canonical book when multi-book is active
+datecreated.year/month/day
+gl_transaction.transaction_date
+REQ
+Reconstruct ISO 8601 from split year/month/day fields — Intacct's date format differs from NetSuite's trandate single field
+Must produce valid ISO 8601 date
+Reject if any date component is null
+reversedate
+gl_transaction.reversal_date
+OPT
+ISO 8601 construction from split fields
+If present, must be >= datecreated
+Null permitted — not all entries have a scheduled reversal
+description
+gl_transaction.memo
+OPT
+String trim, 500-char truncation
+None
+Null permitted
+currency
+gl_transaction.currency
+OPT
+ISO 4217 lookup
+Must exist in currency list if present
+Default to CEP.functional_currency if null
+state
+gl_transaction.is_posted
+REQ
+Posted → true; Pending → false; Draft → false
+One of Posted, Pending, Draft
+Reject if unrecognized state
+Table IMS-002.3.2 — GLBATCH field mapping. Note date format difference from NetSuite: Intacct stores date components separately (year, month, day) within a date object rather than as a single trandate string.
+Section 4 — Transformation Rules
+4.1 Intacct Account Type Normalization
+Intacct's accounttype values differ from NetSuite's acctType values. Same normalization pattern; different source vocabulary.
+Intacct accounttype
+SCBM account_type
+Notes
+balancesheet
+ASSET or LIABILITY or EQUITY — disambiguated by normalbalance
+Intacct uses a two-tier system: account type + normal balance. All balance sheet accounts require normalbalance to resolve to ASSET, LIABILITY, or EQUITY.
+incomestatement
+REVENUE, EXPENSE, or COGS — disambiguated by normalbalance
+Income statement accounts with credit-normal balance → REVENUE; debit-normal → EXPENSE or COGS
+revenue
+REVENUE
+More specific designation; use directly when present
+expense
+EXPENSE
+Use directly
+Statistical
+Extension field — not a SCBM canonical account type
+Statistical accounts (headcount, units) are captured as extension fields; do not treat as financial accounts
+Table IMS-002.4.1 — Intacct account type normalization. The two-tier accounttype + normalbalance pattern differs from NetSuite's single acctType field.
+4.2 Date Normalization
+Intacct REST API returns dates as structured objects with year, month, and day sub-fields rather than as ISO strings. The implementation agent must reconstruct the ISO 8601 date from components.
+Intacct date format: {year: "2024", month: "03", day: "15"}
+NORMALIZE Intacct date:
+  date_string = year + "-" + month.zfill(2) + "-" + day.zfill(2)
+  Validate: date_string parses to a valid calendar date
+  ├─ Valid → accept as ISO 8601 date
+  └─ Invalid → FLAG_FOR_CEP with specific field and record identifier
+4.3 Multi-Book Accounting — Book Designation Enforcement
+This transformation rule is unique to Intacct in this library and is the highest-severity implementation risk for multi-book customers. A customer running parallel GAAP/Tax/IFRS books will have transaction entries for each period across multiple books. Extracting without book filtering silently produces blended, incorrect canonical financials.
+IF CEP.multi_book = true:
+  REQUIRE: CEP.canonical_book is populated
+  ├─ canonical_book confirmed → filter all GLBATCH queries:
+  │   WHERE journal IN (CEP.canonical_book)
+  └─ canonical_book NOT confirmed → BLOCK extraction
+      LOG: "Multi-book accounting active. CEP must designate canonical
+      book before GL extraction can proceed."
+      DO NOT proceed with unfiltered extraction
+IF CEP.multi_book = false:
+  Extract all GLBATCH records without book filtering
+4.4 Custom Dimension Value Extraction
+When custom dimensions are present and have been CEP-resolved, their values are extracted from the dimensions sub-object on every GLENTRY and mapped to the corresponding canonical extension field.
+FOR each GLENTRY where custom dimensions are active:
+  entry.dimensions = {DIM1: "value_a", DIM2: "value_b", ...}
+  FOR each dimension in CEP.resolved_dimensions:
+    IF CEP.dimension_mapping[DIM_N].canonical_field EXISTS:
+      Map entry.dimensions[DIM_N] → canonical_field
+    ELSE:
+      Map to extension field: ext.dim_{DIM_N} = value
+      Mark as PENDING_CEP_RESOLUTION if not yet resolved
+4.5 Intercompany Transaction Flagging
+Intacct natively flags intercompany transactions on GLBATCH entries with the INTERCOMPANY field. This is structurally superior to NetSuite, which requires the implementation agent to infer intercompany status from subsidiary attribution. The flag is used directly for intercompany elimination logic in multi-entity consolidation.
+IF GLBATCH.intercompany = true:
+  Tag canonical GL Transaction: gl_transaction.is_intercompany = true
+  Add to intercompany elimination queue for consolidation processing
+  Flag will be used in Period Aggregate derivation to prevent double-counting
+IF GLBATCH.intercompany = false or null:
+  gl_transaction.is_intercompany = false
+  Include normally in all period aggregates
+Section 5 — Validation Rules
+Validation
+Logic
+Failure Code
+Confidence Impact
+Multi-book canon enforcement
+If multi_book active: reject any GLBATCH where journal ≠ CEP.canonical_book
+BLOCK — halt GL extraction until CEP resolved
+N/A — blocked
+Journal entry balance
+sum(GLENTRY.amount) = 0 for each GLBATCH (Intacct stores signed amounts, not debit/credit splits)
+FLAG — Intacct permits imbalanced entries in some configurations; log with GLBATCH.recordno
+−20% on affected GL Transaction
+Custom dimension resolution
+Any GLENTRY dimension value that references a dimension with PENDING_CEP_RESOLUTION status
+FLAG — data extracted but not canonically mapped until CEP resolves
+−10% per unresolved dimension on dimensional capability confidence
+Revenue Recognition module gating
+Revenue Schedule objects attempted when module not active → 403/empty response
+Accept gracefully: fall back to ARINVOICE service period derivation; set confidence = DR-M
+Revenue Schedule confidence set to DR-M (not N/A — fallback exists)
+ARINVOICE total vs line sum
+ARINVOICE.totalamount = sum(ARLINE.amount) within 0.01 tolerance
+FLAG
+−10%
+Table IMS-002.5.1 — Sage Intacct validation rules. Multi-book enforcement is the highest-severity validation unique to Intacct.
+Section 6 — Canonical Population
+Intacct's absence of transaction polymorphism simplifies the population sequence. There is no Transaction-type discrimination gate that holds up bulk extraction — each endpoint is queried independently and populates its corresponding canonical object directly.
+Step
+Canonical Object
+Unique to Intacct vs NetSuite
+1
+Currency
+Same as NetSuite
+2
+Accounting Period
+Same pattern; Intacct uses reportingperiod endpoint
+3a/3b
+GL Account (flat + hierarchy)
+Same pattern; accountno as natural key instead of numeric id
+4a/4b
+Legal Entity (flat + hierarchy)
+Multi-entity module required; simpler than NetSuite — no OneWorld configuration variance
+5a/5b
+Department (flat + hierarchy)
+Location dimension handled as a parallel Department hierarchy variant
+6
+Custom Dimension resolution (Intacct-specific gate)
+UNIQUE TO INTACCT: Custom dimensions must be inventoried and CEP-resolved before GLENTRY extraction proceeds. This step has no NetSuite equivalent.
+7
+Customer Account
+Same pattern
+8
+GL Transaction (GLBATCH + GLENTRY)
+SIMPLER than NetSuite: no type discrimination step; GLBATCH is always a Journal Entry
+9
+Invoice (ARINVOICE + ARLINE)
+SIMPLER: no polymorphism; ARINVOICE always maps to Invoice
+10
+Payment (ARPYMT)
+Same pattern
+11
+Revenue Schedule
+ARM equivalent; same conditional pattern — module active = D-H, inactive = DR-M fallback
+12
+Period Aggregates
+Same as NetSuite; intercompany flag drives elimination logic for multi-entity
+Table IMS-002.6.1 — Intacct canonical population sequence. Steps 1–5 and 7–12 follow the same logic as IMS-001; step 6 (Custom Dimension resolution gate) is unique to Intacct.
+Section 7 — Confidence Calculation
+Base confidence follows the same mapping-type scale established in IMS-001 Section 7.1. Intacct-specific adjustments:
+Factor
+Adjustment
+Trigger
+Custom dimension resolved via CEP
+Base → D-H (treat as confirmed field after resolution)
+CEP provides business meaning for a previously PENDING_RESOLUTION dimension
+Custom dimension unresolved
+−10% per unresolved dimension on any capability that depends on dimensional reasoning
+PENDING_CEP_RESOLUTION state at capability assessment time
+Multi-book canonical book confirmed
++5% on all GL-derived capabilities
+CEP designates the canonical book explicitly
+Multi-book extraction without canonical book
+BLOCK — confidence computation for GL-derived capabilities does not run
+Multi-book active but canonical_book not confirmed in CEP
+Revenue Management module active
++8% on Revenue-related objects
+Direct Revenue Schedule population enabled
+Field-level audit trail accessed for provenance
+No confidence adjustment — Intacct's audit trail is for validation support, not mapping enhancement
+Used during reconciliation and validation debugging
+Companion Billing connector present
++10% on Revenue-related capabilities
+Cross-validation of Intacct revenue data against Billing-sourced ARR
+Table IMS-002.7.1 — Intacct-specific confidence adjustments (supplementary to IMS-001 Table 7.2).
+Section 8 — Capability Activation
+Capability
+Status (standalone Intacct)
+Key Dependency
+Differentiator vs NetSuite
+Financial Statements
+READY
+GL Account, GLBATCH, Legal Entity
+Higher baseline confidence (~96%) vs NetSuite (~93%) due to absence of polymorphism and cleaner dimensional mapping
+Multi-Entity Consolidation
+READY (multi-entity module)
+Legal Entity, intercompany flag
+Native intercompany flag eliminates the inference step required in NetSuite
+Dimensional P&L (Department/Location)
+READY (standard dims) / PARTIAL (custom dims)
+Department, Location, resolved custom dimensions
+Up to 10 dimensions available; custom dimensions require CEP resolution before READY status
+Revenue Recognition Waterfall
+READY (module) / PARTIAL (no module)
+Revenue Schedule or ARINVOICE service period fallback
+Module confidence ~92% vs NetSuite ARM ~90% — slight Intacct advantage in mid-market revenue recognition depth
+Cash Forecasting
+READY
+GLBATCH (cash accounts), ARPYMT
+Native bank feed integration supports strong cash position
+Budget vs. Actual
+PARTIAL (native) / READY (external FP&A)
+Budget Line or external source
+Same pattern as NetSuite — most growth-stage customers pair with external FP&A
+Board Reporting
+PARTIAL
+Requires Billing + CRM companion connectors
+Same cross-domain dependency as NetSuite
+Bookings Validation
+UNAVAILABLE
+CRM connector required
+Same as NetSuite
+Table IMS-002.8.1 — Intacct capability activation. Financial Statements, Multi-Entity, and dimensional P&L are Intacct's highest-confidence standalone capability unlocks.
+Section 9 — Exception Handling
+Exception Category
+Detection Logic
+Fallback
+Confidence Impact
+Escalation?
+Multi-book extraction without canon designation
+multi_book=true in module inventory but CEP.canonical_book is null
+BLOCK — do not extract GLBATCH until canonical book is designated
+N/A — blocked
+Yes
+Custom dimension with unresolvable business meaning
+CEP cannot classify dimension purpose after two confirmation attempts
+Mark as permanent extension field; exclude from canonical dimensional reasoning
+−10% per dimension on dimensional capabilities
+No — log and continue
+Session concurrency limit hit
+API returns "Too many concurrent sessions" error for a specific entity
+Implement entity-level session queue; serialize entity extractions; increase retry wait to 30s + jitter
+None — extraction continues from checkpoint
+No
+Revenue Management 403 / empty on active module
+Module confirmed active in inventory but Revenue Management endpoint returns empty
+Re-check module activation; if confirmed, flag for SMPL engineering — may indicate partial module license
+Revenue Schedule confidence degraded to DR-M
+Yes if module is confirmed licensed
+Deleted records not surfaced in standard query
+GLBATCH status changes are not always surfaced in lastModified-filtered queries
+Run periodic audit of status changes using Intacct's comprehensive audit trail (structural advantage over some other ERPs in this library)
+None — audit trail is reliable
+No
+Table IMS-002.9.1 — Intacct exception catalog. Multi-book extraction without designation is the highest-severity Intacct-specific exception — it has no equivalent in any other ERP in this library.
+Section 10 — AI Implementation Workflow
+The Intacct workflow follows the same DISCOVER→ANALYZE→NORMALIZE→TRANSFORM→VALIDATE→POPULATE→SCORE→CAPABILITY ASSESSMENT→MODULE ACTIVATION→FINANCIAL INTELLIGENCE READY sequence established in IMS-001. Intacct-specific branch points:
+BRANCH 1 — Multi-book active?
+  YES → BLOCK extraction; require CEP.canonical_book before proceeding
+         (Highest-severity Intacct-specific branch — do not proceed without resolution)
+  NO → Continue normally
+BRANCH 2 — Custom dimensions present?
+  YES → Initiate CEP custom dimension resolution workflow (Section 1.3)
+         Proceed with extraction; mark unresolved dimensions PENDING
+  NO → Continue normally
+BRANCH 3 — Revenue Management module active?
+  YES → Extract Revenue Schedule from /v3/revreccustomer; confidence = D-H
+  NO → Fall back to ARINVOICE service period derivation; confidence = DR-M
+BRANCH 4 — Multi-entity active?
+  YES → Apply intercompany flag from GLBATCH for elimination logic
+         (simpler than NetSuite — flag is direct, no inference required)
+  NO → Single entity; skip consolidation logic
+IMPLEMENTATION SPEED ADVANTAGE vs NetSuite:
+  The absence of Transaction polymorphism eliminates the type discrimination
+  step and its associated exception handling. For standard configurations
+  (no multi-book, standard dimensions), Intacct typically reaches
+  canonical population faster than NetSuite with equivalent data volume.
+IMS-003 — QuickBooks Online
+QuickBooks Online is the simplest ERP implementation in this library — the least schema variability, the lowest CEP discovery burden, and the fastest path to Financial Statements readiness. Its implementation profile is bounded by two structural ceilings that no implementation effort can overcome: it is single-entity only, and it has no revenue recognition module. Both must be set as explicit customer expectations before implementation begins.
+✱ ARCHITECT NOTE: Key departure from NetSuite IMS: QBO's schema is largely rigid. The implementation agent's primary discovery tasks are confirming accounting basis (cash vs. accrual) and Class/Location dimension conventions — a fraction of the CEP burden required for NetSuite, Intacct, or Dynamics 365. The speed advantage is real; the ceilings are equally real.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+OAuth 2.0 (Authorization Code flow). Token refresh using refresh_token. QBO does not support API key authentication.
+If OAuth token is expired or refresh fails, initiate re-authorization with the customer's QuickBooks Admin. Refresh tokens expire after 100 days of inactivity.
+Realm ID (Company ID)
+Obtained during OAuth authorization. Present in the token response and in every API URL as part of the path segment (e.g., /v3/company/{realmId}/...)
+Confirm realm ID matches the production company, not a sandbox. QBO sandbox and production use different realm IDs.
+API environment
+Base URL: https://quickbooks.api.intuit.com for production; https://sandbox-quickbooks.api.intuit.com for sandbox
+Confirm base URL with customer during Pre-POC Discovery. Using sandbox base URL against production credentials produces 401 errors; the error message is not always informative.
+Table IMS-003.1.1 — QuickBooks Online authentication.
+1.2 Accounting Basis Detection
+QBO supports cash-basis and accrual-basis accounting. The API returns data in either basis depending on query parameters. This is the most consequential single CEP decision for a QBO implementation and must be resolved before any GL extraction begins.
+DETECT accounting basis:
+  Query Preferences API: GET /v3/company/{realmId}/preferences
+  response.AccountingInfoPrefs.BookCloseDate → indicator of active use
+  ASK CEP: "Does this company report on a cash basis or accrual basis?
+  This determines how all revenue and expense timing will be presented."
+  Record in CEP.accounting_basis (CASH or ACCRUAL)
+  IF ACCRUAL:
+    All API queries: accounting_method=Accrual parameter on relevant endpoints
+    Revenue and expense timing reflects service delivery, not payment receipt
+  IF CASH:
+    All API queries: accounting_method=Cash parameter
+    Revenue recognized when payment received; expense when payment made
+    NOTE: Cash basis canonical financials are explicitly labeled in SMPL output
+    to prevent interpretation as GAAP accrual-basis financials
+1.3 QBO-Specific: Single-Entity Confirmation
+Unlike every other ERP in this library, QBO requires no multi-entity detection step — the question is always answered before implementation begins. This simplifies discovery significantly.
+CONFIRM single-entity scope:
+  QBO is architecturally single-entity. No API query required.
+  Record in CEP: legal_entity_structure = SINGLE_ENTITY
+  IF customer mentions they need consolidated reporting across entities:
+  → FLAG immediately. QBO cannot provide this. Document explicitly:
+    "Multi-entity consolidation is structurally unavailable from QBO.
+    This customer will require a migration to NetSuite or Intacct for
+    consolidated Financial Intelligence."
+  → Do not attempt to build consolidation logic on top of QBO.
+1.4 QBO Version / Tier Detection
+QBO Tier
+Detection
+Implementation Impact
+QBO Simple Start / Essentials
+Preferences API returns limited feature flags
+Most restricted feature set — no Class tracking; limited custom field support
+QBO Plus
+Class and Location dimensions available
+Primary tier for SMPL's target QBO customer segment — Class and Location tracked
+QBO Advanced
+Additional custom fields; enhanced reporting
+Minor implementation enhancement; does not unlock multi-entity or revenue recognition
+Table IMS-003.1.2 — QBO tier detection. Tier affects dimensional reporting depth but not the structural ceilings on multi-entity or revenue recognition — those apply to all tiers.
+1.5 Discovery Completion Gate
+Gate Item
+Confirmed When
+Authentication verified
+OAuth token active; realm ID confirmed as production
+Accounting basis confirmed
+CEP.accounting_basis = CASH or ACCRUAL
+Single-entity scope acknowledged
+CEP.legal_entity_structure = SINGLE_ENTITY; multi-entity expectation explicitly addressed if raised
+QBO tier confirmed
+CEP.qbo_tier populated; Class/Location availability confirmed
+Class and Location business meaning
+If Class/Location active, CEP.class_meaning and CEP.location_meaning populated
+Table IMS-003.1.5 — QuickBooks Online discovery completion gate.
+Section 2 — Canonical Object Mapping
+QBO uses distinct, named object types with minimal polymorphism — simpler than NetSuite, comparable to Intacct. The key difference from other ERPs: Class and Location are flat dimensions, not hierarchical, and are not guaranteed to be used consistently across all transactions.
+QBO Object
+QBO Endpoint
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+Account
+GET /v3/company/{realmId}/query SELECT * FROM Account
+GL Account (Entity)
+1:1
+D-H
+None
+JournalEntry
+GET /v3/.../query SELECT * FROM JournalEntry
+GL Transaction (Movement)
+1:N (header:lines)
+D-H
+None
+Invoice
+GET /v3/.../query SELECT * FROM Invoice
+Invoice (Movement)
+1:N (header:lines)
+D-H
+None
+Payment
+GET /v3/.../query SELECT * FROM Payment
+Payment (Movement)
+1:1 to N:1 (payments can apply to multiple invoices)
+D-H
+None
+Bill
+GET /v3/.../query SELECT * FROM Bill
+AP Event (Movement)
+1:N
+D-H
+None
+BillPayment
+GET /v3/.../query SELECT * FROM BillPayment
+AP Payment (Movement)
+1:1
+D-H
+None
+CreditMemo
+GET /v3/.../query SELECT * FROM CreditMemo
+Credit Memo (Movement)
+1:1
+D-H
+None
+Company (Preferences)
+GET /v3/.../company/{realmId}/companyinfo/{realmId}
+Legal Entity (Entity) — single-entity only
+1:1
+D-H (single entity; N/A for multi-entity)
+Always; no module required
+Class (dimension)
+GET /v3/.../query SELECT * FROM Class
+Department (Entity) — Class sub-type
+1:1 to N:1
+D-H (after CEP resolution of business meaning)
+QBO Plus or Advanced tier
+Location (department)
+GET /v3/.../query SELECT * FROM Location
+Department (Entity) — Location sub-type
+1:1
+D-H (after CEP resolution)
+QBO Plus or Advanced tier
+Budget
+GET /v3/.../query SELECT * FROM Budget
+Budget Line (Movement)
+1:N
+D-M
+QBO native budget; most customers lack formal budgets — N/A if no budget entered
+Table IMS-003.2.1 — QuickBooks Online canonical object map.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 Account (GL Account)
+QBO enforces a more rigid Account.AccountType taxonomy than NetSuite, producing fewer normalization edge cases. This is a meaningful implementation speed advantage.
+QBO Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+Id
+gl_account.source_id
+REQ
+None
+QBO uses string IDs
+AcctNum
+gl_account.account_code
+OPT
+String trim
+Not all QBO accounts have a user-assigned number; source_id is the fallback natural key
+Name
+gl_account.account_name
+REQ
+String trim
+Non-empty
+AccountType
+gl_account.account_type
+REQ
+Direct normalization — see Table IMS-003.4.1
+QBO's enum is more rigid; fewer edge cases than NetSuite or Intacct
+Classification
+Supporting field for account_type resolution
+OPT
+Use alongside AccountType where AccountType alone is ambiguous
+Asset / Liability / Equity / Revenue / Expense
+Active
+gl_account.is_active
+REQ
+Boolean direct
+Inactive accounts preserved in canonical for historical period completeness
+ParentRef.value
+gl_account.parent_account_id
+OPT
+FK to gl_account.source_id
+Sub-account support is limited in QBO vs NetSuite hierarchy depth
+Table IMS-003.3.1 — QBO Account field mapping.
+Section 4 — Transformation Rules
+4.1 QBO Account Type Normalization
+QBO's AccountType values map more directly to SCBM account_type than NetSuite's, with fewer ambiguous cases.
+QBO AccountType + Classification
+SCBM account_type
+Confidence
+Bank
+ASSET
+D-H
+Other Current Asset
+ASSET
+D-H
+Fixed Asset
+ASSET
+D-H
+Other Asset
+ASSET
+D-H
+Accounts Receivable
+ASSET
+D-H
+Credit Card / Accounts Payable
+LIABILITY
+D-H
+Other Current Liability
+LIABILITY
+D-H
+Long Term Liability
+LIABILITY
+D-H
+Equity
+EQUITY
+D-H
+Income
+REVENUE
+D-H
+Other Income
+REVENUE — FLAG_FOR_CEP on non-operating income
+D-H → D-M after flag
+Cost of Goods Sold
+COGS
+D-H
+Expense
+EXPENSE
+D-H
+Other Expense
+EXPENSE — FLAG_FOR_CEP on non-operating expense
+D-H → D-M after flag
+Table IMS-003.4.1 — QBO account type normalization. Fewer edge cases than NetSuite; Other Income/Expense follow the same FLAG_FOR_CEP pattern.
+4.2 Accounting Basis Enforcement
+Every QBO query that returns financial data must include the accounting_method parameter matching CEP.accounting_basis. This is enforced at the query construction step, not post-extraction.
+FOR every QBO financial object query (Invoice, Bill, JournalEntry, etc.):
+  query_params.minorversion = 65  (current API version)
+  IF CEP.accounting_basis = ACCRUAL:
+    query_params.accounting_method = Accrual
+  IF CEP.accounting_basis = CASH:
+    query_params.accounting_method = Cash
+    TAG all canonical objects: gl_transaction.accounting_basis = CASH
+    These objects will be labeled in SMPL output as cash-basis
+4.3 QBO Change Data Capture (CDC) — Deleted Record Detection
+QBO's standard object endpoints do not return deleted records. Deleted records are only surfaced through the Change Data Capture endpoint. CDC must be queried on every incremental sync to detect logical deletions.
+INCREMENTAL SYNC deleted record detection:
+  GET /v3/company/{realmId}/cdc?entities=Invoice,Payment,JournalEntry,...
+       &changedSince={last_sync_timestamp}
+  FOR each deleted record in CDC response:
+    Locate canonical object with matching source_id
+    Update canonical: status = DELETED, deleted_at = CDC timestamp
+    Exclude from all active-state calculations
+    Preserve in historical record
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+Accounting basis consistency
+All extracted canonical objects must carry the same accounting_basis tag; mixed-basis extraction in the same canonical store is a data integrity error
+BLOCK — halt implementation if mixed-basis extraction detected
+N/A — blocked until resolved
+Single-entity structural check
+Legal Entity count in canonical store must remain 1; any attempt to create a second Legal Entity is an implementation error
+REJECT second entity — log and surface for investigation
+N/A
+Class/Location business meaning
+If Class or Location is used on transactions but CEP has not confirmed business meaning
+FLAG — dimensional data extracted but excluded from canonical dimensional reasoning
+−10% on dimensional capabilities until resolved
+Invoice total vs line sum
+Invoice.TotalAmt = sum(Line.Amount) within 0.01
+FLAG
+−10%
+Table IMS-003.5.1 — QBO validation rules.
+Section 6 — Canonical Population
+QBO is the simplest population sequence in this library. Single-entity structure eliminates Legal Entity hierarchy construction; absence of a revenue recognition module eliminates the conditional Revenue Schedule population step.
+Step
+Canonical Object
+QBO vs NetSuite/Intacct
+1
+Currency
+Same pattern
+2
+Accounting Period (fiscal calendar)
+Derived from CEP.fiscal_calendar — QBO does not expose an explicit period endpoint; the implementation agent constructs the period list from the CEP fiscal year definition
+3
+GL Account (flat + shallow hierarchy)
+Simpler hierarchy than NetSuite/Intacct — typically 2 levels deep maximum
+4
+Legal Entity
+SINGLE ENTITY ONLY — no hierarchy construction; single object from company info
+5
+Department (Class + Location)
+Flat — no hierarchy; business meaning CEP-resolved before use
+6
+Customer Account
+Same pattern; QBO Customer object
+7
+GL Transaction (JournalEntry)
+Same pattern; no polymorphism discrimination required
+8
+Invoice
+Same pattern; SKIP: no Revenue Schedule step (no module equivalent in QBO)
+9
+Payment
+Same pattern
+10
+Period Aggregates
+Same as NetSuite/Intacct; no intercompany elimination (single entity)
+Table IMS-003.6.1 — QBO canonical population sequence.
+Section 7 — Confidence Calculation
+QBO confidence scores start from higher base values for core financial objects (due to lower schema variability) but are structurally capped for dimensional and revenue capabilities.
+Object / Capability
+Base Confidence
+Structural Cap Reason (where applicable)
+GL Account
+D-H = 95%
+Higher than NetSuite/Intacct due to rigid AccountType taxonomy
+Journal Entry / Invoice / Payment
+D-H = 93%
+Clean object model; no polymorphism
+Legal Entity
+D-H = 100% (single-entity ceiling)
+Single entity — certainty is structural, not confidence-based
+Revenue Schedule
+DR-M = 35%
+STRUCTURAL CAP — no revenue recognition module exists in QBO. This ceiling does not improve with additional SMPL implementation experience or CEP resolution. Surface explicitly to customer.
+Class / Location (dimensional)
+D-H = 75% after CEP resolution
+Lower than Department in NetSuite/Intacct — QBO dimensional usage is more inconsistent
+Budget
+D-M = 50% (native) / 0% (no budget entered)
+Most QBO customers have not entered formal budgets — N/A is common
+Multi-Entity Consolidation
+0% — STRUCTURAL UNAVAILABILITY
+Not a confidence gap. QBO is single-entity. No implementation action can produce multi-entity capability.
+Table IMS-003.7.1 — QBO confidence calculation. Structural caps differ fundamentally from maturity-based confidence gaps — they cannot be resolved through additional implementation experience.
+Section 8 — Capability Activation
+Capability
+QBO Status
+Threshold
+Notes
+Financial Statements (single-entity)
+READY
+78%
+Fastest path to Ready in the ERP library — typical QBO standard implementation
+Cash Forecasting (single-entity)
+READY
+75%
+Native bank feed; Payment object provides strong cash position data
+Executive Dashboards
+READY
+72%
+Derives from Financial Statements readiness
+Dimensional P&L (Class / Location)
+PARTIAL → READY after CEP resolution
+70%
+Class/Location must have CEP-confirmed business meaning; usage consistency varies
+Revenue Recognition Waterfall
+PARTIAL — structural maximum
+35%
+No module; invoice-date recognition only. Cannot reach READY from QBO alone.
+Multi-Entity Consolidation
+UNAVAILABLE — structural
+N/A
+Must inform customer immediately if this is expected capability.
+Budget vs. Actual
+UNAVAILABLE (native) / READY (external FP&A)
+75%
+No native budget module; external source required
+Board Reporting
+PARTIAL
+60%
+Financial section READY (single-entity); ARR/GTM require companion connectors; multi-entity section always UNAVAILABLE
+Table IMS-003.8.1 — QBO capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Escalation?
+Customer expects multi-entity capability
+Customer states need for consolidated reporting after implementation begins
+STOP. Multi-entity is structurally unavailable in QBO. Flag immediately: "This capability requires NetSuite or Sage Intacct. We should discuss your roadmap before proceeding."
+YES — sales or solutions engineering conversation required before implementation continues
+Cash vs accrual mismatch
+CEP.accounting_basis = ACCRUAL but customer's internal reports use cash-basis (or vice versa)
+BLOCK until CEP resolves. Mixed-basis output is never presented without explicit customer confirmation.
+YES
+Class/Location used inconsistently across periods
+Some transactions have Class/Location; others of the same type do not
+FLAG — extract all; mark transactions missing Class/Location as DIMENSION_INCOMPLETE; surface report showing completeness rate by period
+No — log and surface; implementation continues
+OAuth refresh token expiry (100-day inactivity)
+API returns 401 Unauthorized on token refresh attempt
+Initiate re-authorization flow with customer; cannot proceed without active OAuth session
+No — standard re-auth process; customer action required
+QBO API rate limit (500 requests/minute)
+API returns 429 Too Many Requests
+Implement exponential backoff; reduce parallelism; for large historical backfills, use overnight scheduling to avoid business-hours rate pressure
+No
+Table IMS-003.9.1 — QBO exception handling.
+Section 10 — AI Implementation Workflow
+QBO is the shortest implementation workflow in this library. Structural simplicity reduces the number of branch points substantially.
+QUICKBOOKS ONLINE — IMPLEMENTATION WORKFLOW
+DISCOVER:
+  1. OAuth authentication and realm ID confirmation
+  2. Accounting basis detection → CEP.accounting_basis
+  3. QBO tier detection → CEP.qbo_tier
+  4. CONFIRM single-entity scope — no query required
+  5. Class/Location usage confirmation
+BRANCH 1 — Multi-entity expectation raised?
+  YES → STOP. Communicate structural unavailability.
+          Escalate to sales/solutions engineering before continuing.
+  NO → Continue
+ANALYZE:
+  Map all QBO objects to canonical targets (Table IMS-003.2.1)
+  No polymorphism discrimination required — QBO objects are unambiguous
+NORMALIZE:
+  Account type normalization (Table IMS-003.4.1)
+  Accounting basis enforcement on all queries (Section 4.2)
+TRANSFORM:
+  Single-entity Legal Entity construction
+  Class/Location flat dimension resolution
+  NO Revenue Schedule derivation — invoice-date recognition only
+VALIDATE:
+  Accounting basis consistency check (BLOCK if mixed)
+  Class/Location completeness rate by period
+POPULATE: Steps 1–10 from Table IMS-003.6.1
+SCORE:
+  Apply structural caps: Revenue = 35% ceiling, Multi-entity = 0%
+  These are not gaps to be resolved — surface explicitly in capability report
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+IMS-004 — Microsoft Dynamics 365 Finance
+Dynamics 365 Finance is the highest CEP-resolution-burden ERP in this library. Its Financial Dimensions framework — fully customer-defined, up to 10 dimensions per transaction — means the implementation agent cannot complete meaningful dimensional canonical mapping without customer input. Financial Statements reach READY status despite this; dimensional P&L remains PARTIAL until dimension resolution is complete.
+✱ ARCHITECT NOTE: Key departure from NetSuite IMS: OData v4 is the API standard (instead of SuiteQL), enabling strongly-typed, standards-compliant query construction. GeneralJournalEntry is the core object, but posting source variety in enterprise implementations requires transaction-source discrimination analogous to (but structurally different from) NetSuite's Transaction type discrimination. Financial Dimension resolution is the primary implementation complexity driver — it has no equivalent in any other ERP in this library.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+OAuth 2.0 with Microsoft Azure AD client credentials flow. Service principal (client ID + client secret) is the preferred pattern for SMPL connectors — does not require a user account or interactive login.
+If service principal is not pre-configured, provide the customer's Azure AD administrator with the required permissions list. Do not proceed with delegated user credentials in production.
+Azure AD tenant ID
+Required for all token requests. Format: {tenantId}.onmicrosoft.com or raw GUID.
+Confirm tenant ID matches the production Dynamics 365 environment, not a UAT or sandbox tenant.
+Dynamics 365 environment URL
+The base URL for OData queries: https://{environment}.operations.dynamics.com. The environment name (e.g., "prod", "contoso") must be confirmed with the customer.
+If the environment URL is incorrect, all OData queries return 404. Verify by requesting company info from the customer's Dynamics 365 admin.
+Rate limiting tier
+Dynamics 365 API throttling policies are Microsoft-licensing-tier-dependent. Confirm the customer's licensing tier and apply the appropriate request rate.
+Contact Microsoft documentation for the specific tier's limits. Do not assume standard documentation limits apply — enterprise tenants may have different thresholds.
+Table IMS-004.1.1 — Dynamics 365 Finance authentication.
+1.2 Financial Dimension Inventory — The Primary Discovery Step
+Financial Dimension inventory is the most consequential Pre-POC Discovery step for this connector. Without resolved dimension business meaning, the implementation agent cannot produce canonical Department-level P&L and all dimensional capabilities remain PARTIAL. This step must be completed before ANY canonical mapping for dimensional objects is attempted.
+INVENTORY Financial Dimensions:
+  GET /data/DimensionValues  (OData)
+  OR query: DimensionAttributeValueSets for dimension definitions
+  FOR each active Financial Dimension:
+    Record: dimension_name, dimension_label, dimension_count
+    ASK CEP: "Financial Dimension '{label}' has {count} active values.
+    What business concept does it represent?
+    Examples: Department, Product Line, Region, Project, Customer Segment"
+  IMPORTANT: Do NOT assume any dimension maps to "Department".
+  Every Dynamics 365 implementation defines dimensions differently.
+  Dimension 1 for Customer A may be Department;
+  Dimension 1 for Customer B may be Region.
+  There is NO cross-customer standardization.
+  RECORD in CEP.financial_dimensions:
+    [{dim_id: 1, label: "Department", canonical_target: "Department"},
+     {dim_id: 2, label: "CostCenter", canonical_target: "extension_cost_center"},
+     ...]
+  All unresolved dimensions → PENDING_CEP_RESOLUTION
+  Block dimensional capability activation until each is resolved
+1.3 Legal Entity Inventory
+Query
+Detection Logic
+CEP Impact
+GET /data/LegalEntities
+Returns all legal entities in the tenant; count > 1 indicates multi-entity
+Record entity list in CEP.entity_inventory; confirm which entities are in SMPL scope
+GET /data/LedgerParameters
+Returns consolidation rules per entity
+Confirm intercompany elimination approach — Dynamics 365 uses separate consolidation company entities rather than Intacct's native intercompany flag
+GET /data/MainAccountCategories
+Returns Chart of Accounts main categories; used for account type normalization
+Record categories for Table IMS-004.4.1 normalization
+Table IMS-004.1.2 — Dynamics 365 Finance legal entity and CoA inventory.
+1.4 Module Inventory
+Module
+Detection Pattern
+Canonical Impact
+Revenue Recognition
+GET /data/RevenueRecognitionSchedules → 200 or list
+Revenue Schedule D-H when active; DR-L fallback from Invoice service period lines
+Project Operations
+GET /data/Projects → 200 or list
+Project canonical reference available for project-level cost/revenue
+Budget
+GET /data/BudgetTransactionDetails → 200 or list
+Budget Line D-H when active
+Power Platform / Dataverse change tracking
+Confirm with customer's Azure admin whether change tracking is enabled on Finance entities
+Enables near-real-time incremental sync vs polling-only; affects sync architecture but not canonical mapping
+Table IMS-004.1.3 — Dynamics 365 Finance module inventory.
+Section 2 — Canonical Object Mapping
+Dynamics 365 Object
+OData Entity
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+MainAccount
+GET /data/MainAccounts
+GL Account (Entity)
+1:1
+D-H
+None
+GeneralJournalEntry
+GET /data/GeneralJournalEntries
+GL Transaction (Movement)
+1:N (header:lines)
+D-H (standard) / D-M (heavily customized)
+None
+GeneralJournalAccountEntry
+GET /data/GeneralJournalAccountEntries
+GL Transaction Line
+N:1
+D-H
+None
+LedgerJournalTrans (subledger)
+GET /data/LedgerJournalTrans
+GL Transaction — subledger posting supplement
+1:1 to GeneralJournalAccountEntry
+D-M
+Some transaction types require this supplementary query
+CustInvoiceJour (Customer Invoice)
+GET /data/CustInvoiceJournals
+Invoice (Movement)
+1:N
+D-H
+None
+CustTrans (Customer Transaction)
+GET /data/CustTransactions
+Payment (Movement)
+1:1
+D-H
+None
+VendInvoiceJour (Vendor Invoice)
+GET /data/VendInvoiceJournals
+AP Event (Movement)
+1:N
+D-H
+None
+LegalEntity
+GET /data/LegalEntities
+Legal Entity (Entity)
+1:1
+D-H
+None
+Department (resolved Financial Dimension)
+Derived from GeneralJournalAccountEntry.DefaultDimension
+Department (Entity)
+1:N (dimension:transactions)
+D-H (after CEP resolution) / Pending
+Financial Dimension business meaning must be CEP-resolved
+RevenueRecognitionSchedule
+GET /data/RevenueRecognitionSchedules
+Revenue Schedule (Movement)
+1:N
+D-H
+Revenue Recognition module required
+BudgetTransaction
+GET /data/BudgetTransactionDetails
+Budget Line (Movement)
+1:N
+D-H
+Budget module required
+Table IMS-004.2.1 — Dynamics 365 Finance canonical object map.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 MainAccount (GL Account)
+Dynamics 365 Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+MainAccountId
+gl_account.account_code
+REQ
+String trim
+Natural key for GL Account — numeric or alphanumeric depending on customer CoA convention
+Name
+gl_account.account_name
+REQ
+String trim
+Non-empty
+Type
+gl_account.account_type
+REQ
+Normalize — see Table IMS-004.4.1
+Dynamics 365 MainAccount.Type maps cleanly to SCBM account_type
+MainAccountCategory
+Supporting field for account_type confirmation
+OPT
+Use to validate Type normalization
+Category provides a second validation layer for account_type accuracy
+Active
+gl_account.is_active
+REQ
+Boolean direct
+Inactive accounts preserved in canonical for historical period completeness
+Blocked
+gl_account.is_active → override to false if Blocked=true
+OPT
+Override: if Blocked=true, set is_active=false regardless of Active status
+Blocked accounts should not appear in active chart-of-accounts views
+Table IMS-004.3.1 — Dynamics 365 MainAccount field mapping.
+3.2 GeneralJournalAccountEntry (GL Transaction Line)
+This is the most granular object in Dynamics 365's GL — the equivalent of NetSuite's TransactionLine or Intacct's GLENTRY. Financial Dimension values are embedded in the DefaultDimension foreign key, which requires a separate query to resolve.
+Dynamics 365 Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+JournalNumber
+gl_transaction.transaction_reference
+REQ
+String trim
+Links to GeneralJournalEntry header
+AccountingDate
+gl_transaction.transaction_date
+REQ
+ISO 8601 date (already in compatible format from OData)
+OData returns dates in ISO format — no date reconstruction required
+AccountDisplayValue
+gl_transaction_line.account_id
+REQ
+Normalize to MainAccountId format; strip dimension values from combined account string
+CRITICAL: Dynamics 365 account strings often include dimension values concatenated (e.g., "110100-001-002") — extract only the main account portion
+AmountMST
+gl_transaction_line.debit_amount or credit_amount (functional currency)
+REQ
+Determine sign: positive = debit, negative = credit in Dynamics 365 signed convention
+Dynamics 365 uses SIGNED amounts (positive debit, negative credit) — different from Intacct's signed convention and NetSuite's separate debit/credit fields
+TransactionCurrencyAmount
+gl_transaction_line.local_amount
+OPT
+Currency normalization
+Transaction-currency amount before functional-currency translation
+DefaultDimension
+Resolve via GET /data/DimensionAttributeValueSets({DefaultDimension})
+OPT→REQ after CEP resolution
+Separate query required to expand dimension values
+This separate resolution query is the primary performance bottleneck in Dynamics 365 extraction — batch resolution where possible
+PostingLayer
+gl_transaction.posting_layer
+OPT
+Record: Current, Operations, or Tax
+Multi-layer posting customers must designate which layer is canonical in CEP
+Table IMS-004.3.2 — GeneralJournalAccountEntry field mapping.
+Section 4 — Transformation Rules
+4.1 MainAccount Type Normalization
+Dynamics 365 MainAccount.Type
+SCBM account_type
+Notes
+Balance
+ASSET or LIABILITY or EQUITY
+Three-type disambiguation required from MainAccountCategory; use category as the definitive discriminator
+Profit and loss
+REVENUE or EXPENSE or COGS
+Use MainAccountCategory and signing to disambiguate
+Reporting
+Extension field — not a posting account
+Reporting accounts (subtotal/header accounts) are not posting accounts; capture as account hierarchy markers only
+Total
+Extension field — rolled-up summary account
+Same as Reporting — not a posting account
+Table IMS-004.4.1 — Dynamics 365 account type normalization.
+4.2 Financial Dimension Expansion — The Core Transformation Challenge
+Dynamics 365 stores dimension values as a DefaultDimension reference key on each transaction line, not as inline field values. Resolving this reference to actual dimension values requires a separate API call per unique DefaultDimension key. This is the primary performance bottleneck in Dynamics 365 extraction.
+FINANCIAL DIMENSION EXPANSION:
+  1. During GeneralJournalAccountEntry extraction, collect all unique
+     DefaultDimension keys across all lines
+  2. BATCH resolve: GET /data/DimensionAttributeValueSets
+     WHERE RecId IN ({unique_dimension_keys})
+     Use $batch OData requests to minimize API round trips
+     Cache resolved dimension sets in memory during extraction session
+  3. FOR each resolved dimension set:
+     FOR each dimension in CEP.financial_dimensions:
+       Extract dimension value for dim_id from the resolved set
+       Map to CEP.financial_dimensions[dim_id].canonical_target
+         ├─ canonical_target = "Department"
+         │   → gl_transaction_line.department_id
+         ├─ canonical_target = extension field
+         │   → gl_transaction_line.ext.{dim_label} = value
+         └─ canonical_target = PENDING_CEP_RESOLUTION
+             → do not map; tag line as DIMENSION_PENDING
+  4. Cache hit ratio optimization:
+     Maintain dimension set cache for full extraction session.
+     In typical enterprise implementations, unique dimension set count
+     is much smaller than total transaction line count.
+     Cache hit rate > 80% expected for most enterprise configurations.
+4.3 Signed Amount Convention
+Dynamics 365 stores transaction amounts with a signed convention (positive = debit, negative = credit) rather than separate debit/credit fields as in NetSuite or Intacct's alternative convention. This normalization step is mandatory.
+FOR each GeneralJournalAccountEntry.AmountMST:
+  IF AmountMST >= 0:
+    gl_transaction_line.debit_amount = AmountMST
+    gl_transaction_line.credit_amount = 0
+  IF AmountMST < 0:
+    gl_transaction_line.debit_amount = 0
+    gl_transaction_line.credit_amount = ABS(AmountMST)
+  Validate: for each GeneralJournalEntry,
+    sum(debit_amounts) = sum(credit_amounts) within 0.01 tolerance
+4.4 Account String Parsing — Dimension Value Extraction
+Dynamics 365 frequently returns combined account strings that include the main account AND dimension values concatenated with a separator (e.g., "110100-001-002" where 110100 is the main account and 001, 002 are dimension values). The main account must be extracted cleanly without the dimension portion.
+FOR each AccountDisplayValue:
+  separator = CEP.account_dimension_separator (typically "-" or "|")
+  main_account = AccountDisplayValue.split(separator)[0]
+  Validate: main_account matches a MainAccountId in the mapped GL Account set
+  ├─ Match found → use main_account as gl_transaction_line.account_id
+  └─ No match → FLAG_FOR_CEP — separator assumption may be wrong
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+Dimension business meaning gate
+No dimensional capability activates until CEP.financial_dimensions is fully resolved (no PENDING_CEP_RESOLUTION entries)
+PARTIAL — dimensional capabilities blocked; financial statement capabilities proceed
+−15% per unresolved dimension on all dimensional capabilities
+Posting layer consistency
+All GL transactions in canonical store must use the same posting layer (CEP.canonical_posting_layer)
+FLAG — mixed-layer extraction produces incorrect financial statements if a multi-layer customer doesn't designate the canonical layer
+BLOCK on multi-layer customers without designation
+GeneralJournalEntry balance
+sum(AmountMST per entry) = 0 within 0.01 tolerance (signed convention)
+FLAG
+−20%
+Account string parse validation
+Every extracted AccountDisplayValue must parse to a recognized MainAccountId after separator split
+FLAG for each unparseable account string; log count
+−5% per account on affected transactions's dimensional confidence
+Table IMS-004.5.1 — Dynamics 365 validation rules.
+Section 6 — Canonical Population
+The Financial Dimension resolution gate is unique to Dynamics 365 in this library. Unlike Intacct's Custom Dimension resolution (which is optional — custom dimensions can be resolved post-extraction), Dynamics 365's dimension resolution affects even standard objects like Department and must be resolved before dimensional canonical objects are populated.
+Step
+Canonical Object
+Dynamics 365 Specific
+1
+Currency
+Same pattern
+2
+Accounting Period
+Derived from LedgerFiscalCalendar entity
+3a
+MainAccount (GL Account — flat)
+Same pattern
+3b
+GL Account hierarchy
+MainAccountCategory-based hierarchy construction
+4
+Legal Entity
+From LegalEntities entity; enterprise customers may have 20–100+ entities requiring pagination-aware extraction
+5
+Financial Dimension resolution gate (UNIQUE)
+CEP.financial_dimensions must be fully resolved before Department canonical objects are created. BLOCK Department population until gate passes.
+6
+Department (from resolved Financial Dimension)
+Post-gate: create Department canonical objects from the customer's designated Department dimension values
+7
+Customer Account
+From Customers entity
+8a
+GL Transaction + Lines (GeneralJournalEntry + GeneralJournalAccountEntry)
+INCLUDE: AmountMST sign conversion (Section 4.3) + account string parsing (Section 4.4) + dimension expansion (Section 4.2)
+8b
+Dimension value expansion (batch resolution)
+Execute dimension resolution cache before any individual line mapping
+9
+Invoice (CustInvoiceJour)
+Same pattern
+10
+Payment (CustTrans)
+Same pattern
+11
+Revenue Schedule (conditional on module)
+Same conditional pattern as NetSuite ARM
+12
+Period Aggregates
+Same pattern; multi-entity uses entity-scoped aggregations
+Table IMS-004.6.1 — Dynamics 365 canonical population sequence.
+Section 7 — Confidence Calculation
+Object / Factor
+Base Confidence
+Adjustment
+GL Account (MainAccount)
+D-H = 90%
+Lower than NetSuite/Intacct due to MainAccountCategory ambiguity in some CoA designs
+GL Transaction (GeneralJournalEntry)
+D-M = 75%
+Enterprise customization variance; posting source variety
+Department (Financial Dimension, resolved)
+D-H = 85% (after resolution)
+Post-CEP resolution confidence is high; pre-resolution: 0%
+Department (unresolved)
+0%
+PENDING_CEP_RESOLUTION blocks all confidence
+Revenue Schedule (module active)
+D-H = 80%
+Slightly lower than Intacct Revenue Management due to Pilot Ready maturity
+Dimension resolution cache hit rate > 80%
+No adjustment
+Cache miss rate > 20%: −5% on all dimensional objects due to incomplete resolution
+Multi-layer posting without canon designation
+BLOCK GL capabilities
+CEP must designate posting layer before GL Transaction confidence is computed
+OData batch dimension resolution active
++5% on time-to-extraction efficiency
+Reduces extraction bottleneck; no direct confidence impact
+Table IMS-004.7.1 — Dynamics 365 confidence calculation.
+Section 8 — Capability Activation
+Capability
+Status
+Dynamics 365 Specific Notes
+Financial Statements
+READY
+CoA maps cleanly; financial statements do not depend on Financial Dimension resolution
+Dimensional P&L
+PARTIAL → READY
+PARTIAL until CEP.financial_dimensions fully resolved; unique extended discovery burden vs other ERP connectors
+Multi-Entity Consolidation
+READY
+Strong enterprise multi-entity support; consolidation company entity pattern differs from Intacct's native flag — Dynamics 365 uses a dedicated consolidation legal entity
+Revenue Recognition
+READY (module) / PARTIAL
+Same module-dependent pattern as NetSuite and Intacct
+Cash Forecasting
+READY
+Native cash and bank management module
+Budget vs. Actual
+PARTIAL (native) / READY (Power BI / external)
+Enterprise customers typically pair with dedicated planning tool
+Table IMS-004.8.1 — Dynamics 365 Finance capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Escalation?
+Financial Dimension business meaning cannot be resolved
+CEP cannot classify a dimension after two confirmation attempts with the customer's finance team
+Mark as permanent extension field; block dimensional capabilities that depend on it; document explicitly in implementation health report
+No — log and proceed with available dimensions; update SMPL Tier 2 pattern library
+Account string separator ambiguity
+AccountDisplayValue.split("-") does not produce a recognized MainAccountId
+FLAG_FOR_CEP: request the separator character used in this customer's chart of accounts configuration
+No — standard CEP question
+API throttling beyond documented limits
+OData query returns 429 despite following documented tier limits
+Reduce concurrency to 1 sequential request; implement 60s backoff; contact implementation log for escalation to SMPL engineering if throttling persists
+Possible — if throttling persists across retry cycles, customer's licensing tier may have been misidentified
+Consolidation legal entity detected with standard entities
+LegalEntities response includes entities with IsConsolidationEntity=true
+Tag consolidation entities in CEP; exclude from source-data extraction; use only for elimination logic
+No — standard multi-entity pattern in Dynamics 365
+Power Platform custom entity contains financial data
+During Pre-POC Discovery, customer discloses financial data stored in custom Dataverse entities outside core Finance module
+BLOCK mapping of those entities until SMPL engineering creates custom entity mapping rules; document as out-of-scope for this IMS version
+Yes — custom Dataverse entities require engineering assessment before canonical mapping
+Table IMS-004.9.1 — Dynamics 365 exception handling.
+Section 10 — AI Implementation Workflow
+DYNAMICS 365 FINANCE — IMPLEMENTATION WORKFLOW
+DISCOVER:
+  1. Azure AD authentication + environment URL confirmation
+  2. Rate limiting tier confirmation (licensing-tier-dependent)
+  3. FINANCIAL DIMENSION INVENTORY → CEP.financial_dimensions
+     (This is the most time-consuming discovery step — plan for it)
+  4. Legal entity inventory → CEP.entity_inventory
+  5. Module inventory (Revenue Recognition, Budget, Project Operations)
+  6. Posting layer designation if multi-layer active
+BRANCH 1 — Financial Dimensions unresolved after discovery?
+  YES → Partial block: proceed with Financial Statements;
+          BLOCK Dimensional P&L until resolution complete
+  NO → All capabilities proceed normally
+ANALYZE:
+  Map all entities to canonical targets (Table IMS-004.2.1)
+  Note: GeneralJournalAccountEntry requires two supplementary queries
+        (DefaultDimension expansion + LedgerJournalTrans for some types)
+NORMALIZE:
+  Account type normalization (Table IMS-004.4.1)
+  Signed amount convention (Section 4.3)
+  Account string parsing (Section 4.4)
+TRANSFORM:
+  Financial Dimension expansion batch resolution (Section 4.2)
+  Cache dimension sets to minimize OData round trips
+VALIDATE:
+  Dimension resolution gate (no PENDING_CEP_RESOLUTION)
+  Posting layer consistency
+  GeneralJournalEntry balance check
+POPULATE: Steps 1–12 from Table IMS-004.6.1
+  IMPORTANT: Step 5 (Dimension resolution gate) must pass before Step 6
+SCORE: Apply Dynamics 365 confidence adjustments (Table IMS-004.7.1)
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+IMS-005 — Oracle Fusion Cloud ERP
+Oracle Fusion is the most complex ERP implementation in this library by every relevant dimension: the most configurable chart-of-accounts segment structure (5–10+ segments), the most sophisticated revenue recognition engine (Revenue Management Cloud), and the most complex extraction architecture (primary/secondary/reporting ledger disambiguation). It is correctly positioned for SMPL's largest, most globally distributed customers — and the implementation agent must communicate this complexity honestly to customer teams before implementation begins.
+✱ ARCHITECT NOTE: Key departure from NetSuite IMS: Fusion's chart-of-accounts is a multi-segment structure where each segment is separately configurable and named — the equivalent of Dynamics 365's Financial Dimensions, but with an additional layer of ledger-role disambiguation that has no equivalent in any other ERP in this library. The ledger selection step is the implementation's highest-severity decision point and must be resolved before any GL extraction begins.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+OAuth 2.0 with Oracle Identity Cloud Service (IDCS) client credentials. Service account (client ID + client secret) preferred — avoids session-tied credential expiry.
+IDCS configuration is Oracle-tenant-specific. Request the customer's Oracle Cloud Administrator to create an IDCS Application for SMPL with appropriate scopes.
+Oracle Cloud tenant URL
+Format: https://{tenant_prefix}.fa.{datacenter}.oraclecloud.com. Varies by region and deployment.
+Confirm with customer's Oracle Cloud Administrator. Do not derive from documentation — Oracle tenants use customer-specific hostnames.
+REST API version
+Oracle Fusion REST API uses versioned paths: /fscmRestApi/resources/11.13.18.05/... The version segment changes with Fusion updates.
+Verify the active API version against the customer's current Fusion release. Pin to a specific version to prevent breaking changes from automatic Fusion quarterly updates.
+Table IMS-005.1.1 — Oracle Fusion authentication.
+1.2 Ledger Role Designation — The Highest-Severity Discovery Step
+Oracle Fusion allows each legal entity to have multiple ledgers simultaneously: a Primary Ledger (operational GAAP reporting), Secondary Ledgers (parallel GAAP/IFRS/Tax books), and Reporting Ledgers (currency translation only). Extracting without explicit ledger designation silently produces canonical financials that do not match the customer's expected GAAP-basis reporting. This step is always a BLOCK condition if unresolved.
+DISCOVER available ledgers:
+  GET /fscmRestApi/resources/.../ledgers
+  FOR each legal entity in scope:
+    Returns: [{ledgerName, ledgerType, functionalCurrency, legalEntityId}, ...]
+    LedgerType values: PRIMARY, SECONDARY, REPORTING
+  MANDATORY CEP QUESTION for each entity with multiple ledgers:
+    "Legal Entity '{entityName}' has {count} ledgers:
+     - {ledger1}: PRIMARY ({currency1})
+     - {ledger2}: SECONDARY ({currency2})
+    Which ledger should SMPL use as the canonical source of GAAP-basis
+    financial data for this entity?"
+  RECORD in CEP.canonical_ledgers:
+    {legal_entity_id → canonical_ledger_id}
+  IF any entity's canonical ledger is unresolved:
+    BLOCK GL extraction for that entity.
+    Allow other entities with resolved ledgers to proceed.
+1.3 Chart of Accounts Segment Inventory
+Fusion's chart of accounts has 5–10+ configurable segments, each independently named and meaningful. This inventory step must complete before any GL Account mapping begins.
+DISCOVER CoA segments:
+  GET /fscmRestApi/resources/.../chartOfAccounts
+  FOR each segment in the response:
+    Record: segment_name, segment_label, is_natural_account_segment
+  IDENTIFY the Natural Account Segment:
+    This is the segment that maps to SCBM gl_account.account_code.
+    It is typically labeled "Account" or "Natural Account".
+    Confirm with customer's Oracle Finance team if ambiguous.
+  FOR all other segments:
+    ASK CEP: "Segment '{label}': what business concept does it represent?
+    Examples: Department, Business Unit, Product, Region, Project"
+  RECORD in CEP.coa_segments:
+    [{segment_id, label, canonical_target}, ...]
+    Unresolved segments → PENDING_CEP_RESOLUTION
+  BLOCK dimensional capability activation until all segments are resolved.
+1.4 Module Inventory
+Module
+Detection Pattern
+Canonical Impact
+Revenue Management Cloud
+GET /fscmRestApi/resources/.../revenueContracts → 200 or list
+Revenue Schedule D-H — the most sophisticated revenue recognition capability in this library
+Project Financial Management
+GET /fscmRestApi/resources/.../projects → 200 or list
+Project canonical reference available
+BI Publisher / FBDI
+Confirm with customer's Oracle team whether BI Publisher reports exist for financial data
+Provides an alternative extraction path for large data volumes where REST API extraction is slower
+Oracle Audit Framework
+Confirm audit policy activation with Oracle Cloud Administrator
+Provenance validation capability; affects change detection reliability
+Table IMS-005.1.2 — Oracle Fusion module inventory.
+Section 2 — Canonical Object Mapping
+Fusion Object
+REST Resource Path
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+Ledger / LedgerCoA (natural account segment)
+GET /fscmRestApi/resources/.../generalLedgerAccounts
+GL Account (Entity)
+1:1
+DR-M (before segment resolution) / D-H (after)
+CoA segment inventory must resolve natural account segment first
+GeneralLedgerJournalEntries
+GET /fscmRestApi/resources/.../journals
+GL Transaction (Movement)
+1:N (header:lines)
+DR-M
+Ledger designation required; posting source discrimination recommended
+GeneralLedgerJournalEntryLines
+Embedded in journals response or separate GET
+GL Transaction Line
+N:1
+DR-M
+Same as header
+ArTransactions (Customer Invoice)
+GET /fscmRestApi/resources/.../receivablesInvoices
+Invoice (Movement)
+1:N
+D-H
+None
+ArReceipts (Customer Payment)
+GET /fscmRestApi/resources/.../receivablesReceipts
+Payment (Movement)
+1:1
+D-H
+None
+LegalEntity
+GET /fscmRestApi/resources/.../legalEntities
+Legal Entity (Entity)
+1:1
+D-H
+None
+Departments / resolved CoA segment
+Derived from resolved CoA segment values
+Department (Entity)
+1:N
+D-H (after resolution) / 0% (before)
+CoA Department segment must be CEP-resolved
+RevenueContracts
+GET /fscmRestApi/resources/.../revenueContracts
+Revenue Schedule (Movement)
+1:N
+D-H
+Revenue Management Cloud module required
+BudgetLines
+GET /fscmRestApi/resources/.../budgets
+Budget Line (Movement)
+1:N
+D-M
+Budget module required
+Table IMS-005.2.1 — Oracle Fusion canonical object map. DR-M for GL objects reflects CoA segment resolution overhead — confidence rises to D-H after resolution.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 GL Account (from resolved Natural Account Segment)
+Derivation Source
+SCBM Field
+Req/Opt
+Transform
+Notes
+Natural Account Segment value (CEP-identified)
+gl_account.account_code
+REQ
+Extract from combined CoA string — see Section 4.1
+The natural account portion only; non-natural segments are dimensional values
+GL Account description from master list
+gl_account.account_name
+REQ
+String trim
+Retrieved from chart of accounts master query, not from every transaction line
+Account type (from natural account properties)
+gl_account.account_type
+REQ
+Normalize — see Table IMS-005.4.1
+Fusion uses Account Type Classification field on the natural account definition
+Active flag
+gl_account.is_active
+REQ
+Boolean — Enabled = true
+Disabled accounts preserved for historical period completeness
+Table IMS-005.3.1 — Fusion GL Account field derivation.
+3.2 Journal Entry Line — CoA String Parsing
+Fusion returns account combinations as a structured string: "{segment1}.{segment2}.{segment3}..." where the delimiter and segment positions are determined by the CoA structure. The implementation agent must parse this string using the CEP.coa_segments configuration to extract each segment's value.
+Fusion Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+AccountedAmount
+gl_transaction_line.debit_amount / credit_amount
+REQ
+Signed convention similar to Dynamics 365: positive=debit, negative=credit
+Apply sign conversion from Section 4.2
+AccountingDate
+gl_transaction.transaction_date
+REQ
+ISO 8601 direct (Fusion uses ISO date format in REST responses)
+No date reconstruction needed
+AccountCombination (parsed → natural account)
+gl_transaction_line.account_id
+REQ
+Parse from AccountCombination string using CEP.coa_segments config — see Section 4.1
+Extract only the natural account portion; dimensional segments extracted separately
+AccountCombination (parsed → Department segment)
+gl_transaction_line.department_id
+OPT→REQ after resolution
+Extract Department-designated segment value from AccountCombination
+Available only after CEP.coa_segments designates which segment is Department
+JournalBatchName
+gl_transaction.journal_type
+OPT
+String — record source batch type
+Useful for distinguishing journal origins (manual vs system-generated)
+PeriodName
+gl_transaction.accounting_period_id
+REQ
+Map to accounting period from CEP.fiscal_calendar
+Fusion uses period name strings (e.g., "Jan-24") — map to SMPL period ID
+Table IMS-005.3.2 — Fusion Journal Entry line field mapping.
+Section 4 — Transformation Rules
+4.1 CoA String Parsing — Multi-Segment Extraction
+This transformation is unique to Oracle Fusion in this library. The AccountCombination field contains ALL segment values for a transaction line, concatenated with a customer-configured separator (typically "." or "-"). Parsing must use CEP.coa_segments to know which position maps to which canonical field.
+FOR each journal line AccountCombination string:
+  separator = CEP.coa_segment_separator (e.g., ".")
+  segments = AccountCombination.split(separator)
+  FOR each segment_definition in CEP.coa_segments:
+    value = segments[segment_definition.position - 1]
+    
+    IF segment_definition.is_natural_account:
+      → gl_transaction_line.account_id = value
+    ELIF segment_definition.canonical_target == "Department":
+      → gl_transaction_line.department_id = value
+    ELIF segment_definition.canonical_target is an extension field:
+      → gl_transaction_line.ext.{segment_definition.label} = value
+    ELIF segment_definition.canonical_target == PENDING:
+      → tag line as SEGMENT_PENDING; do not map this segment
+  VALIDATE: len(segments) == len(CEP.coa_segments)
+  └─ Mismatch → FLAG_FOR_CEP: CoA string format may have changed
+4.2 Signed Amount Convention
+Same as Dynamics 365 (Section 4.3 of IMS-004): AccountedAmount uses positive=debit, negative=credit. Apply identical sign conversion.
+4.3 Account Type Normalization
+Fusion Account Type Classification
+SCBM account_type
+Notes
+ASSET
+ASSET
+D-H — direct mapping
+LIABILITY
+LIABILITY
+D-H
+EQUITY
+EQUITY
+D-H
+REVENUE
+REVENUE
+D-H
+EXPENSE
+EXPENSE
+D-H
+OWNER'S EQUITY
+EQUITY
+Map to EQUITY; FLAG_FOR_CEP on distinction if material
+STATISTICAL
+Extension field — not canonical
+Statistical accounts excluded from financial statement derivation
+Table IMS-005.4.1 — Fusion account type normalization. Simpler than NetSuite or Dynamics 365 — Fusion's Account Type Classification values map directly to SCBM types.
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+Canonical ledger designation gate
+GL extraction blocked for any legal entity without CEP.canonical_ledgers designation
+BLOCK (per entity)
+N/A — blocked until resolved
+CoA segment inventory gate
+No canonical GL Account objects created until CEP.coa_segments is complete (all segments resolved, PENDING count = 0, OR explicitly waived for non-blocking segments)
+PARTIAL — Financial Statements proceed from transaction amounts; dimensional capabilities blocked
+−15% on dimensional capabilities per unresolved segment
+AccountCombination segment count
+len(segments) == len(CEP.coa_segments) for every parsed AccountCombination
+FLAG
+−10% on affected transactions
+Revenue contract completeness
+RevenueContract must reference at least one RevenueLine with a non-zero amount
+FLAG — log empty contracts; do not include in Revenue Schedule canonical
+−5%
+Journal entry balance
+sum(AccountedAmount per journal header) = 0 within 0.01
+FLAG
+−20%
+Table IMS-005.5.1 — Oracle Fusion validation rules.
+Section 6 — Canonical Population
+Step
+Canonical Object
+Fusion Specific
+1
+Currency
+Same pattern
+2
+Accounting Period
+From Fusion AccountingPeriod API; Fusion uses named periods (Jan-24, Feb-24, etc.)
+3
+Ledger designation gate
+UNIQUE: Resolve CEP.canonical_ledgers for all legal entities before ANY GL extraction. One BLOCK per unresolved entity.
+4
+CoA segment inventory gate
+UNIQUE: CEP.coa_segments must reach no PENDING entries before GL Account population proceeds.
+5a
+GL Account (natural account segment values)
+Extracted from Chart of Accounts master + natural account definitions; NOT from transaction lines
+5b
+GL Account hierarchy
+Segment hierarchy construction from CoA master — each segment has its own value hierarchy
+6
+Legal Entity
+From LegalEntities; include ledger role associations
+7
+Department (designated CoA segment)
+Post-gate: Department canonical objects from the CEP-designated segment's value list
+8
+Customer Account
+From Customers entity
+9a
+GL Transaction + Lines
+WITH: CoA string parsing + signed amount conversion + ledger filter (canonical ledger only)
+9b
+Dimensional extension fields
+From non-natural, non-Department segments for each transaction line
+10
+Invoice (ArTransactions)
+Same pattern; service period fields available for Revenue Management integration
+11
+Payment (ArReceipts)
+Same pattern
+12
+Revenue Schedule (RevenueContracts)
+Highest-sophistication revenue recognition in this library — extract when module confirmed active
+13
+Period Aggregates
+Same pattern; filter to canonical ledger only
+Table IMS-005.6.1 — Oracle Fusion canonical population sequence. Two gates (Steps 3 and 4) unique to Fusion; both are blocking conditions.
+Section 7 — Confidence Calculation
+Object / Factor
+Base Confidence
+Note
+GL Account (after CoA segment resolution)
+D-H = 90%
+Moderate base; enterprise CoA variability acknowledged
+GL Transaction (after ledger designation)
+DR-M = 75%
+Posting source variety; more variable than Intacct
+Department (after CoA segment resolution)
+D-H = 80%
+Lower base than NetSuite Department — segment resolution has fewer validations
+Revenue Schedule (Revenue Management Cloud active)
+D-H = 85%
+Highest Revenue Schedule confidence in the library — purpose-built for complex arrangements
+Ledger designation unresolved (entity-level BLOCK)
+0% on all GL capabilities for that entity
+BLOCK condition; no confidence computed until resolved
+CoA segment unresolved
+0% on dimensional capabilities; GL capabilities unaffected
+Partial block on dimensional; financial statements proceed
+Each resolved segment above minimum (3)
++3% on dimensional capability confidence, up to +15% cap
+More resolved segments = more complete dimensional picture
+Table IMS-005.7.1 — Oracle Fusion confidence calculation.
+Section 8 — Capability Activation
+Capability
+Fusion Status
+Notes
+Financial Statements
+PARTIAL (Validated maturity) → READY over time
+Strong functional capability; maturity-driven confidence framing; communicate honestly
+Revenue Recognition Waterfall
+READY (Revenue Management Cloud active)
+Highest-sophistication revenue recognition in the library — Fusion's primary differentiator
+Multi-Entity Consolidation
+READY (enterprise ledger structure)
+Multi-ledger architecture for global consolidation — more sophisticated than any other connector
+Dimensional P&L
+PARTIAL until CoA segments resolved
+Requires per-customer CEP resolution; most extensive resolution workflow in the library
+Cash Forecasting
+READY
+Native Oracle treasury and cash management
+Budget vs. Actual
+PARTIAL
+Enterprise typically pairs with Oracle EPM Cloud or dedicated FP&A
+Table IMS-005.8.1 — Oracle Fusion capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Escalation?
+Ledger role not designated before extraction begins
+CEP.canonical_ledgers has null entry for any in-scope legal entity
+BLOCK GL extraction for that entity; surface immediately as highest-priority resolution item
+Yes — immediate
+AccountCombination string format changed after segment inventory
+Parsed segment count ≠ CEP.coa_segments count for extracted transactions
+FLAG all affected transactions; request CEP update for new segment count — Fusion quarterly updates can alter CoA string format
+Yes — potential quarterly update impact
+Revenue Management Cloud returns empty when module confirmed active
+revenueContracts endpoint returns 200 but empty list despite confirmed module
+Confirm with customer whether Revenue contracts have been entered; may be a new deployment with no historical contracts
+No — operational question for customer
+BI Publisher extract format differs from REST API structure
+Customer provides BI Publisher extract files with column structure that does not match REST object fields
+Map from BI Publisher extract schema using customer-provided column dictionary; tag as BI_PUBLISHER_SOURCE in canonical metadata
+No — handled as an alternative extraction path variant
+Oracle quarterly update breaks pinned API version
+API version pinned in CEP becomes unavailable after Fusion quarterly update
+Pin to next available version; re-validate Section 3 field mappings against new version's schema changes
+Yes — re-validation effort required after each affected Fusion update
+Table IMS-005.9.1 — Oracle Fusion exception handling.
+Section 10 — AI Implementation Workflow
+ORACLE FUSION — IMPLEMENTATION WORKFLOW
+DISCOVER:
+  1. IDCS authentication + tenant URL confirmation
+  2. API version confirmation + pinning
+  3. LEDGER ROLE DESIGNATION (Section 1.2) — BLOCK if unresolved
+     "This step is the highest-priority discovery item for every Fusion
+      implementation. Do not proceed past it until resolved."
+  4. CoA SEGMENT INVENTORY (Section 1.3)
+     "This will require a dedicated session with the customer's
+      Oracle Finance team. Budget time accordingly."
+  5. Module inventory (Revenue Management Cloud, Projects, BI Publisher)
+BRANCH 1 — Any entity without canonical ledger designation?
+  YES → BLOCK that entity's GL extraction
+          Continue with resolved entities
+  ALL BLOCKED → HALT implementation for this customer
+                 Communicate timeline impact immediately
+BRANCH 2 — CoA segments fully resolved?
+  YES → All capabilities proceed normally
+  PARTIAL → Financial Statements proceed; dimensional capabilities BLOCKED
+  NONE resolved → Financial Statements proceed; surface immediately
+ANALYZE:
+  Map all REST resources to canonical targets (Table IMS-005.2.1)
+  Note: GL Account derivation requires CoA master query, not transaction lines
+NORMALIZE:
+  Account type normalization (Table IMS-005.4.1)
+  Signed amount conversion (Section 4.2)
+TRANSFORM:
+  CoA string parsing for each transaction line (Section 4.1)
+  Apply ledger filter: only canonical_ledger transactions extracted
+VALIDATE: Two gates (Table IMS-005.5.1)
+  Gate 1: Canonical ledger designated for all in-scope entities
+  Gate 2: CoA segment inventory complete (non-PENDING)
+POPULATE: Steps 1–13 from Table IMS-005.6.1
+SCORE: Apply Fusion confidence (Table IMS-005.7.1)
+  Communicate maturity-based framing for Financial Statements
+  Communicate Revenue Schedule confidence advantage (highest in library)
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+NOTE ON IMPLEMENTATION TIMELINE:
+  Fusion is the longest-timeline connector in this library.
+  Ledger designation and CoA segment resolution alone require 1–3
+  dedicated customer sessions with Oracle Finance team experts.
+  Communicate this upfront — not after delays are encountered.
+IMS-006 — SAP S/4HANA
+SAP S/4HANA is the most architecturally distinctive ERP in this library — its Universal Journal (ACDOCA table) consolidates what earlier SAP versions stored as separate ledgers into a single, highly normalized table with a richer key structure than any other ERP in this library. For SMPL, this is both the implementation's greatest structural advantage (one source of truth for all financial postings) and its primary complexity driver (ACDOCA's key structure requires careful filtering that has no equivalent in any other connector in this library).
+✱ ARCHITECT NOTE: Key departure from every other ERP in this library: SAP exposes data primarily through OData Services (SAP Gateway) and SAP Business Technology Platform (BTP) APIs — not a purpose-built analytics API like SuiteQL or a direct REST endpoint like Intacct. The ACDOCA Universal Journal table is the single most important source object in this specification. SAP's Company Code / Controlling Area / Profit Center organizational hierarchy differs structurally from every other ERP's organizational model and requires specific canonical mapping logic.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+OAuth 2.0 via SAP Business Technology Platform (BTP). SAP BTP acts as the OAuth authorization server even for S/4HANA Cloud implementations. Service user (technical user) with read-only authorizations is required.
+If BTP is not configured, SAP S/4HANA Private Cloud or on-premise deployments may use Basic Authentication or X.509 certificate. Confirm deployment model during Pre-POC Discovery.
+S/4HANA deployment model
+SAP S/4HANA Cloud (public cloud), S/4HANA Cloud Private Edition, or S/4HANA on-premise. Authentication method and API availability vary significantly by deployment model.
+Public Cloud: OData APIs fully available through BTP. Private Edition: OData partially available; on-premise extract via SAP Data Services or BI extraction may be required. Document deployment model in CEP as first discovery step.
+OData service URLs
+SAP S/4HANA exposes OData services at: /sap/opu/odata/sap/{service_name}/. Service names are module-specific (e.g., API_GL_ACCOUNT_MASTER_DATA_SRV for GL accounts).
+Request service URL list from the customer's SAP Basis team. Do not assume URL patterns — SAP S/4HANA service naming is not standardized across all installations.
+SAP authorization objects
+Read authorization (DISPLAY) required for: F_BKPF_BUK (Company Code), F_BKPF_BLA (Document Type), F_BKPF_GSB (Business Area), K_CSKS (Cost Center).
+Work with customer's SAP Security Administrator to confirm authorization objects are assigned. Missing authorizations produce incomplete extraction without clear error messages — always validate via test query before beginning production extraction.
+Table IMS-006.1.1 — SAP S/4HANA authentication and connectivity.
+1.2 Company Code / Controlling Area / Profit Center Inventory
+SAP's organizational structure differs fundamentally from every other ERP in this library. Understanding the relationship between Company Code, Controlling Area, and Profit Center is mandatory before any mapping begins.
+SAP ORGANIZATIONAL STRUCTURE (unique in this library):
+  Company Code (BUKRS):
+    ≈ Legal Entity in SMPL canonical model
+    Each Company Code has its own Chart of Accounts (SKA1 table)
+    Multiple Company Codes may share a Chart of Accounts
+    OR use different Charts of Accounts (chart of accounts code = KTOPL)
+  Controlling Area (KOKRS):
+    The management accounting organizational unit.
+    One Controlling Area can contain multiple Company Codes.
+    Cost Centers are assigned to Controlling Areas.
+  Profit Center (PRCTR):
+    The internal management reporting unit within a Controlling Area.
+    Profit Centers represent business segments, products, or regions.
+    ≈ Department in SMPL canonical model (after CEP designation)
+  QUERY to discover structure:
+    GET /sap/opu/odata/sap/API_COMPANYCODE_SRV/A_CompanyCode
+    GET /sap/opu/odata/sap/API_CONTROLLINGAREA_SRV/A_ControllingArea
+    GET /sap/opu/odata/sap/API_PROFIT_CENTER_SRV/A_ProfitCenter
+  RECORD in CEP:
+    company_codes: [{code, name, chart_of_accounts_code, currency}]
+    controlling_areas: [{area_code, company_codes_in_scope}]
+    profit_center_mapping: Company Code → Controlling Area → Profit Center
+  ASK CEP: "Which organizational level should SMPL use for
+  department-level P&L reporting?
+  Options: Profit Center (most granular) / Cost Center / Business Area"
+1.3 Universal Journal (ACDOCA) Scope Confirmation
+ACDOCA is the single most important discovery item for SAP S/4HANA. It is the Universal Journal that consolidates all financial postings in one table. Before extraction begins, the implementation agent must confirm the ACDOCA scope for this customer.
+CONFIRM ACDOCA access:
+  S/4HANA Cloud: ACDOCA accessible via OData API_JOURNALENTRYITEMBASIC_SRV
+  S/4HANA on-premise: May require direct table access via SAP BW extraction
+  or custom OData service — confirm with customer's SAP team.
+  QUERY test: GET /sap/opu/odata/sap/API_JOURNALENTRYITEMBASIC_SRV/
+    JournalEntryItem?$top=1&$filter=CompanyCode eq '{company_code}'
+  ├─ 200 with data → ACDOCA accessible via OData; proceed with standard flow
+  └─ 403 / empty → Flag for SAP team; may need alternative extraction approach
+  IMPORTANT KEY FIELDS for ACDOCA filtering (unique in this library):
+    Ledger (RLDNR): SAP uses named ledgers (0L = Leading Ledger)
+    Confirmation required from CEP: which ledger is the canonical GAAP ledger
+    In most S/4HANA implementations: 0L is the Leading GAAP Ledger
+    CEP must confirm before extraction begins
+1.4 Chart of Accounts Inventory
+Query
+Purpose
+CEP Action Required
+GET /API_GL_ACCOUNT_MASTER_DATA_SRV/A_GLAccountInChartOfAccounts($filter=ChartOfAccounts eq '{KTOPL}')
+Retrieve all GL accounts for the designated chart of accounts
+Confirm chart of accounts code (KTOPL) per Company Code; multiple CoAs in one SAP system require per-code mapping
+GET /API_GL_ACCOUNT_MASTER_DATA_SRV/A_GLAccountInChartOfAccounts - AccountGroup
+GL Account Group provides the account type classification equivalent
+Map AccountGroup to SCBM account_type using Table IMS-006.4.1
+Table IMS-006.1.3 — SAP Chart of Accounts discovery.
+Section 2 — Canonical Object Mapping
+SAP Object / Table
+API or Access Path
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+GLAccountInChartOfAccounts (SKA1)
+GET /API_GL_ACCOUNT_MASTER_DATA_SRV/...
+GL Account (Entity)
+1:1
+D-H
+CoA code confirmed in CEP
+JournalEntryItem (ACDOCA)
+GET /API_JOURNALENTRYITEMBASIC_SRV/JournalEntryItem
+GL Transaction Line
+N:1 (lines grouped by journal)
+D-H (after filtering) / DR-M (unfiltered)
+Ledger filter (0L or CEP-designated) required; without filter, all ledger variants returned
+JournalEntry header (BKPF)
+GET /API_JOURNALENTRY_SRV/JournalEntry
+GL Transaction (Movement)
+1:N
+D-H
+None — header provides document-level metadata
+CustomerInvoice (VBRK/VBRP)
+GET /API_BILLING_DOCUMENT_SRV/A_BillingDocument
+Invoice (Movement)
+1:N
+D-H
+Billing module activated
+CustomerPayment (BSAD)
+GET /API_CUSTOMERPAYMENT_SRV/...
+Payment (Movement)
+1:1
+D-H
+None
+CompanyCode
+GET /API_COMPANYCODE_SRV/A_CompanyCode
+Legal Entity (Entity)
+1:1
+D-H
+None
+ProfitCenter (CEPC) or CostCenter (CSKS)
+GET /API_PROFIT_CENTER_SRV/ or /API_COSTCENTER_SRV/
+Department (Entity)
+1:N
+D-H (after CEP designation)
+CEP must designate: Profit Center OR Cost Center as the Department equivalent
+RevenueRecognitionSchedule (if active)
+Custom OData service (S/4HANA-specific path)
+Revenue Schedule (Movement)
+1:N
+D-M (Validated maturity)
+SAP Revenue Accounting and Reporting (RAR) module required
+Table IMS-006.2.1 — SAP S/4HANA canonical object map.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 JournalEntryItem (ACDOCA — GL Transaction Line)
+ACDOCA is the most field-rich object in this library. Key fields for canonical mapping:
+SAP Field (ACDOCA)
+SCBM Field
+Req/Opt
+Transform
+Notes
+RLDNR (Ledger)
+Filter field — not mapped to canonical
+FILTER
+Must equal CEP.canonical_ledger (typically "0L")
+This is the most important filter in the entire extraction. Without it, all ledger variants are returned, producing doubled or blended financials.
+BELNR (Document Number)
+gl_transaction.source_id
+REQ
+String — use Company Code + Document Number + Fiscal Year as composite key (unique combination)
+BELNR alone is not globally unique across company codes or years
+BUDAT (Posting Date)
+gl_transaction.transaction_date
+REQ
+ISO 8601 date normalization
+SAP returns dates in YYYYMMDD format; convert to YYYY-MM-DD
+GJAHR (Fiscal Year)
+Part of composite natural key for GL Transaction
+REQ
+Use in composite key construction with BELNR + BUKRS
+SAP fiscal year does not always equal calendar year — CEP must confirm fiscal year definition
+RACCT (GL Account)
+gl_transaction_line.account_id
+REQ
+FK to GL Account natural key from SKA1
+RACCT stores the GL account number; cross-reference to chart of accounts master
+HSL (Amount in Company Code Currency)
+gl_transaction_line.debit_amount / credit_amount
+REQ
+Signed convention (positive=debit, negative=credit in SAP standard); validate sign against DRCRK (Debit/Credit Indicator)
+DRCRK field (H=credit, S=debit) provides independent validation of sign interpretation
+PRCTR (Profit Center)
+gl_transaction_line.department_id
+OPT→REQ after CEP designation
+FK to ProfitCenter or CostCenter depending on CEP designation
+Populate ONLY if CEP designates Profit Center as the Department equivalent
+KOSTL (Cost Center)
+gl_transaction_line.department_id (alternative)
+OPT→REQ after CEP designation
+FK to CostCenter if CostCenter designated as Department equivalent
+Alternative to PRCTR — CEP designates one or the other, never both for the same canonical field
+KOKRS (Controlling Area)
+Extension field — supporting context for Profit Center interpretation
+OPT
+Record for Controlling Area-level reporting context
+Not directly canonical; relevant for multi-controlling-area SAP systems
+Table IMS-006.3.1 — SAP ACDOCA field mapping. RLDNR ledger filter is the most critical field in this entire specification — always applied before any other extraction logic.
+Section 4 — Transformation Rules
+4.1 ACDOCA Ledger Filtering — Mandatory First Step
+This transformation has no equivalent in any other ERP in this library. SAP's Universal Journal stores all ledger variants (GAAP, tax, group reporting) in a single table, distinguished only by the RLDNR field. Extracting without this filter produces canonical financials that blend multiple accounting bases — the highest-severity data integrity risk in this library.
+EVERY JournalEntryItem query MUST include:
+  $filter=Ledger eq '{CEP.canonical_ledger}'
+  CEP.canonical_ledger default: "0L" (SAP Leading Ledger)
+  Confirm with customer's SAP Finance team before assuming 0L.
+  Some implementations use a custom leading ledger identifier.
+  DO NOT proceed without this filter.
+  Unfilterd ACDOCA extractions include all parallel ledger postings,
+  which produces understated or overstated canonical financials
+  depending on intercompany and parallel accounting configuration.
+4.2 SAP Date Format Normalization
+SAP returns dates in YYYYMMDD format from some API responses. Convert to ISO 8601 (YYYY-MM-DD) before canonical storage.
+IF date_string matches /^[0-9]{8}$/ (YYYYMMDD):
+  iso_date = date_string[0:4] + "-" + date_string[4:6] + "-" + date_string[6:8]
+ELIF date_string matches ISO 8601 already:
+  Accept as-is
+ELSE:
+  FLAG_FOR_CEP — unexpected date format
+4.3 Composite Natural Key Construction
+SAP document numbers (BELNR) are only unique within a combination of Company Code (BUKRS) + Fiscal Year (GJAHR). The canonical source_id must be a composite key.
+gl_transaction.source_id = BUKRS + "_" + GJAHR + "_" + BELNR
+Example: "1000_2024_0100012345"
+  Company Code: 1000
+  Fiscal Year: 2024
+  Document Number: 0100012345
+This composite key is stable and globally unique within a SAP system.
+Use it consistently across all GL Transaction and GL Transaction Line objects.
+4.4 SAP Account Type Normalization
+SAP Account Group (AccountGroup field in SKA1)
+SCBM account_type
+Notes
+SAP Standard Group starting with 1/2 (Asset)
+ASSET
+Most SAP CoA designs follow account number range conventions — verify range definition with customer's SAP Finance team
+SAP Standard Group starting with 3 (Liability)
+LIABILITY
+Confirm range convention
+SAP Standard Group starting with 5 (Equity / Capital)
+EQUITY
+Confirm range convention
+SAP Standard Group starting with 6/7 (Revenue / Income)
+REVENUE
+Confirm range convention — SAP's revenue account range varies by regional chart of accounts (e.g., GKR vs SKR04)
+SAP Standard Group starting with 4/8 (Cost / Expense)
+EXPENSE or COGS
+Distinguish COGS from OPEX using AccountGroup or reconciliation account indicator
+Table IMS-006.4.1 — SAP account type normalization. Account number range conventions vary by SAP standard chart of accounts (GKR, SKR04, CAUS, etc.) — always confirm with customer rather than assuming a universal convention.
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+ACDOCA ledger filter enforcement
+ALL JournalEntryItem queries must include Ledger filter. If any canonical GL Transaction object is found without the ledger filter having been applied, REJECT the entire batch and re-extract.
+BLOCK — critical data integrity control
+N/A — blocked until re-extracted with filter
+Composite key uniqueness
+Every gl_transaction.source_id (BUKRS_GJAHR_BELNR) must be unique in canonical store
+REJECT duplicates — log composite key collision for investigation
+N/A
+DRCRK sign validation
+DRCRK (H=Credit, S=Debit) must be consistent with HSL sign. If HSL > 0 and DRCRK = H (Credit), this is an inconsistency.
+FLAG — possible data quality issue in source SAP system
+−15%
+Journal entry balance
+SUM(HSL) per document = 0 within 0.01 tolerance (signed convention)
+FLAG
+−20%
+Profit Center / Cost Center designation
+If CEP has not designated which of Profit Center or Cost Center maps to Department, no Department canonical objects are created
+PARTIAL — Department canonical objects blocked
+−15% on dimensional capabilities
+Table IMS-006.5.1 — SAP S/4HANA validation rules.
+Section 6 — Canonical Population
+Step
+Canonical Object
+SAP Specific
+1
+Currency
+Same pattern; SAP uses ISO 4217 currency codes natively
+2
+Fiscal Year / Period
+From SAP FiscalYearVariant — SAP fiscal years can be non-calendar (e.g., Oct-Sep). CEP.fiscal_year_variant must be confirmed.
+3
+ACDOCA ledger designation gate
+UNIQUE: CEP.canonical_ledger must be confirmed before ANY GL Transaction extraction. BLOCK until resolved.
+4a
+GL Account (from SKA1 chart of accounts)
+From SKA1; company-code-specific + chart-of-accounts master data
+4b
+GL Account hierarchy
+From account group hierarchy in SAP chart of accounts definition
+5
+Company Code (Legal Entity)
+From API_COMPANYCODE_SRV; each company code is a separate legal entity
+6
+Profit Center or Cost Center (Department)
+From CEP-designated organizational object; either Profit Center or Cost Center — not both
+7
+Customer Account
+From Customer master (API_BUSINESS_PARTNER_SRV in S/4HANA)
+8a
+GL Transaction header (BKPF)
+From API_JOURNALENTRY_SRV; provides document-level metadata
+8b
+GL Transaction Lines (ACDOCA)
+WITH: ledger filter (mandatory) + composite key construction + signed amount conversion + date normalization
+9
+Invoice (Customer Billing Document)
+From API_BILLING_DOCUMENT_SRV; S/4HANA separates billing from general journal entries
+10
+Payment (Customer Payment)
+From Customer Payment API; cash application detail available
+11
+Revenue Schedule (SAP RAR, conditional)
+SAP Revenue Accounting and Reporting module — when active, among the most sophisticated in the library
+12
+Period Aggregates
+Same pattern; filter by company code and canonical ledger
+Table IMS-006.6.1 — SAP S/4HANA canonical population sequence.
+Section 7 — Confidence Calculation
+Object / Factor
+Base Confidence
+Note
+GL Account (after CoA resolution)
+D-H = 88%
+Slightly below NetSuite/Intacct due to chart-of-accounts variation across regional SAP standards
+GL Transaction Line (ACDOCA, ledger-filtered)
+D-H = 87%
+ACDOCA with proper ledger filter is highly reliable — the Universal Journal is a structural advantage
+ACDOCA without ledger filter
+0% — BLOCK
+Unfiltered extraction produces blended financials; zero confidence is appropriate
+Department (after Profit/Cost Center designation)
+D-H = 82%
+Reliable after CEP designation; lower than Intacct Department due to Validated maturity
+Revenue Schedule (SAP RAR active)
+D-M = 72%
+Validated maturity; SAP RAR is sophisticated but SMPL pattern library is still developing
+Each resolved fiscal year variant configuration
++3% on all period-dated canonical objects
+Non-calendar fiscal year correctly configured improves period-allocation accuracy
+Composite key collision
+−25% on all GL Transactions in the affected Company Code / Year
+Should not occur in well-maintained SAP systems; flag immediately if detected
+Table IMS-006.7.1 — SAP S/4HANA confidence calculation.
+Section 8 — Capability Activation
+Capability
+SAP Status
+Notes
+Financial Statements
+PARTIAL (Validated) → READY over time
+Financial data quality is excellent once ledger filter is applied; maturity framing required
+Multi-Entity Consolidation
+READY (Company Code structure)
+Company Code hierarchy maps cleanly to Legal Entity — one of SAP's structural strengths
+Dimensional P&L
+PARTIAL until Profit Center/Cost Center designated
+Same CEP-resolution dependency as Dynamics 365
+Revenue Recognition
+PARTIAL (SAP RAR active) → READY over time
+Most sophisticated native RAR when active; Validated maturity applies
+Cash Forecasting
+READY
+Native SAP cash and treasury management module
+Budget vs. Actual
+PARTIAL
+Enterprise customers typically use SAP BPC or dedicated FP&A — not SAP's native planning module
+Table IMS-006.8.1 — SAP S/4HANA capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Escalation?
+ACDOCA extraction without ledger filter (production risk)
+If any canonical GL Transaction objects lack the ledger filter metadata tag, this indicates a filter enforcement failure
+REJECT all affected objects; re-extract with enforced filter; this is the highest-severity exception in this specification
+YES — immediate re-extraction required
+Multiple Company Codes with different Charts of Accounts
+CoA inventory reveals KTOPL ≠ single value across all company codes
+Per-company-code account mapping required — the same account number may represent different accounts in different CoAs; log explicitly
+No — handled in account mapping; add per-company-code mapping tables
+Non-calendar fiscal year variant
+CEP.fiscal_year_variant reveals that fiscal year does not equal calendar year (e.g., April-March)
+Apply SAP fiscal year period mapping table to convert SAP period designations to calendar date ranges; derived fiscal periods must match CEP.fiscal_calendar
+No — standard CEP configuration; re-derive all period-dated aggregates
+SAP Private Cloud / on-premise deployment without OData
+API_JOURNALENTRYITEMBASIC_SRV returns 404 or 403 consistently
+Escalate to SAP Basis team; determine whether custom OData services exist or whether SAP BW / HANA views must be used as an extraction alternative
+YES — deployment model may require custom extraction design
+Composite key collision (BUKRS_GJAHR_BELNR not unique)
+Duplicate source_id values in canonical GL Transaction store
+REJECT duplicates; investigate root cause with SAP team — may indicate document renumbering or data migration artifact
+YES — data integrity issue in source SAP system
+Table IMS-006.9.1 — SAP S/4HANA exception handling.
+Section 10 — AI Implementation Workflow
+SAP S/4HANA — IMPLEMENTATION WORKFLOW
+PRE-DISCOVER (unique to SAP):
+  Confirm deployment model: Cloud / Private Edition / On-premise.
+  This determines authentication method and API availability.
+  DO NOT proceed until deployment model is confirmed.
+DISCOVER:
+  1. BTP authentication + OData service URL confirmation
+  2. ACDOCA access test (API_JOURNALENTRYITEMBASIC_SRV)
+     └─ If unavailable → escalate immediately; on-premise path required
+  3. LEDGER DESIGNATION (Section 1.3)
+     "ACDOCA without ledger filter produces blended, incorrect financials.
+     This is the highest-severity discovery item for SAP."
+  4. Company Code / Controlling Area / Profit Center inventory
+  5. Chart of Accounts inventory per Company Code
+  6. Fiscal year variant confirmation
+  7. Department organizational level designation (Profit Center or Cost Center)
+BRANCH 1 — ACDOCA accessible via OData?
+  YES → Proceed with standard SAP flow below
+  NO → BLOCK; escalate for deployment-model-specific extraction design
+BRANCH 2 — Canonical ledger designated?
+  YES → Apply as mandatory filter on all ACDOCA queries
+  NO → BLOCK GL extraction; only non-GL objects (Legal Entity, etc.) proceed
+BRANCH 3 — Department organizational level designated?
+  YES → Extract from CEP-designated object (Profit Center OR Cost Center)
+  NO → PARTIAL block on dimensional capabilities
+ANALYZE:
+  Map SAP objects to canonical targets (Table IMS-006.2.1)
+  ACDOCA is the primary GL object; BKPF provides document headers
+NORMALIZE:
+  Date format normalization (YYYYMMDD → ISO 8601) — Section 4.2
+  Composite key construction for GL Transactions — Section 4.3
+  Account type normalization (regional CoA awareness) — Section 4.4
+TRANSFORM:
+  ACDOCA ledger filter enforcement (Section 4.1) — MANDATORY FIRST STEP
+  Signed amount conversion + DRCRK validation
+VALIDATE: Table IMS-006.5.1
+  HIGHEST PRIORITY: ledger filter enforcement validation
+POPULATE: Steps 1–12 from Table IMS-006.6.1
+SCORE: Table IMS-006.7.1
+  Note: ACDOCA with correct ledger filter produces high D-H confidence.
+  Maturity-based framing applies at capability level, not object level.
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+NOTE ON SAP'S STRUCTURAL ADVANTAGE:
+  The Universal Journal (ACDOCA) is genuinely powerful — once the ledger
+  filter is correctly applied, it provides richer transaction-level detail
+  than any other ERP in this library in a single, normalized source.
+  The implementation complexity is front-loaded (discovery); the extraction
+  itself is more consistent than highly polymorphic ERPs like NetSuite.
+Cross-ERP Implementation Comparison Matrix
+This matrix is the primary reference for implementation agents and human consultants assessing which implementation approach applies to a given customer ERP. It summarizes the most consequential per-connector implementation characteristics across all six ERP connectors.
+Implementation Complexity Drivers
+Connector
+Primary Complexity Driver
+Secondary Complexity Driver
+Primary Speed Advantage
+NetSuite
+Transaction polymorphism (type discrimination)
+Custom fields and segments (high schema variability)
+Deepest SMPL pattern library — most common ERP in target customer base
+Sage Intacct
+Custom dimension business-meaning resolution
+Multi-book accounting canon designation
+No transaction polymorphism — cleanest object model in the library
+QuickBooks Online
+None — structural simplicity is the defining characteristic
+Cash vs. accrual confirmation
+Simplest schema; fastest time to Financial Statements in the library
+Dynamics 365 Finance
+Financial Dimension business-meaning resolution (up to 10 dimensions)
+Account string parsing + dimension expansion API calls
+OData standards-compliant API; well-tooled extraction patterns
+Oracle Fusion ERP
+Ledger role designation + CoA segment resolution (5–10+ segments)
+API version pinning across quarterly Fusion updates
+Revenue Management Cloud — highest-sophistication revenue recognition
+SAP S/4HANA
+ACDOCA ledger filter (must-apply before any GL extraction)
+Composite key construction + regional CoA variation
+Universal Journal (ACDOCA) — richest single GL source in the library
+Table X.1 — ERP implementation complexity drivers.
+Canonical Object Confidence Comparison
+Canonical Object
+NetSuite
+Intacct
+QBO
+Dynamics 365
+Oracle Fusion
+SAP S/4HANA
+GL Account
+D-H (90%)
+D-H (92%)
+D-H (95%)
+D-H (90%)
+DR-M→D-H (90%)
+D-H (88%)
+GL Transaction
+D-H (88%)
+D-H (90%)
+D-H (91%)
+D-M→D-H (75%)
+DR-M→D-H (80%)
+D-H (87%)
+Legal Entity
+D-H (95%)
+D-H (98%)
+D-H (100% — single)
+D-H (98%)
+D-H (95%)
+D-H (90%)
+Department
+D-H (85%)
+D-H (88%)
+D-H (70%)
+D-H (85% post-CEP)
+D-H (80% post-CEP)
+D-H (82% post-CEP)
+Invoice
+D-H (88%)
+D-H (90%)
+D-H (88%)
+D-H (85%)
+D-H (85%)
+D-H (82%)
+Revenue Schedule (module)
+D-H (90%)
+D-H (92%)
+DR-M (35% — structural)
+D-H (80%)
+D-H (85%)
+D-M (72%)
+Budget
+D-H (85% module)
+D-M (70% native)
+N/A (0% native)
+D-H (55% native)
+D-H (50% native)
+D-M (50% native)
+Table X.2 — Canonical object confidence by connector. Confidence values represent post-resolution targets; pre-resolution values are lower for dimension-dependent objects.
+Critical Pre-Extraction Gates by Connector
+These are the conditions that MUST be resolved before GL extraction begins. Each represents a BLOCK condition — proceeding without resolution produces silent data integrity issues, not detectable errors.
+Connector
+Mandatory Gate (BLOCK if unresolved)
+Risk if Bypassed
+NetSuite
+Environment type (sandbox vs. production)
+Test data contamination of production canonical store
+Sage Intacct
+Multi-book canon designation (if multi-book active)
+GAAP/Tax/IFRS financial postings blended into a single canonical financial statement
+QuickBooks Online
+Accounting basis (cash vs. accrual)
+Revenue and expense timing interpreted incorrectly; output labeled with wrong accounting basis
+Dynamics 365 Finance
+Financial Dimension resolution (all dimensions pending)
+Department canonical objects not created; dimensional P&L capabilities BLOCKED indefinitely
+Oracle Fusion ERP
+Canonical ledger designation per legal entity
+Primary + Secondary + Reporting ledger postings blended; financial statements do not match customer's GAAP-basis reports
+SAP S/4HANA
+ACDOCA ledger filter (RLDNR = canonical ledger)
+ALL ledger variants extracted simultaneously; financial statements are irreparably blended and cannot be trusted
+Table X.3 — Mandatory pre-extraction gates. Every gate produces a BLOCK condition if unresolved — not a degraded confidence score. Proceed only after explicit CEP confirmation.
+ERP IMS Library — Readiness Assessment
+Dimension
+Score
+Assessment
+Standard Conformance
+9 / 10
+All five new IMS specifications (IMS-002 through IMS-006) follow the identical ten-section structure established by IMS-001. Section-by-section consistency is complete — a human or AI agent reading Intacct Section 4 and SAP Section 4 encounters the same structural format and documentation philosophy with connector-specific content, consistent with the IMS standard's design intent.
+Connector Differentiation
+10 / 10
+Each connector documents genuine, implementation-consequential differences rather than templated content: QBO's structural ceiling on multi-entity, Intacct's multi-book gate, Dynamics 365's Financial Dimension expansion API call, Fusion's multi-ledger disambiguation, SAP's ACDOCA ledger filter. No two connectors's key implementation steps are the same — correctly reflecting their genuine architectural differences.
+AI Executability
+9 / 10
+Every rule produces a deterministic PASS, FLAG, REJECT, or BLOCK response. Pre-extraction gates are explicitly BLOCK conditions rather than degraded-confidence situations — preserving the distinction between "data with lower confidence" and "data that should not be extracted at all." Branching logic in Section 10 of each connector provides executable decision paths, not narrative summaries.
+Cross-ERP Consistency
+9 / 10
+The Cross-ERP Comparison Matrix (this section) gives a single reference point for understanding how connectors differ from each other — the final IMS deliverable that the individual connector sections build toward. The same canonical objects, the same confidence metrics, the same gate structure — enabling consistent reasoning across the entire ERP library.
+Human Implementation Utility
+9 / 10
+Section 10 of each connector (AI Implementation Workflow) serves both AI and human teams: the branching logic is explicit enough for deterministic agent execution while readable enough for a human consultant to follow in a discovery session. The "Note on Implementation Timeline" and similar advisory remarks are addressed to human readers specifically.
+Exception Coverage
+8 / 10
+The exception catalogs cover the most consequential non-standard situations for each connector. Two gaps acknowledged: SAP on-premise alternative extraction paths are referenced but not fully specified (flagged as requiring engineering assessment); Fusion quarterly update version management is documented as an exception but not as a maintenance process — both are deferred to a future IMS version as production experience accumulates.
+Table X.4 — ERP IMS Library readiness assessment. Aggregate: 54 / 60 (90%).
+Final Determination
+The ERP Implementation Mapping Specification library (IMS-001 through IMS-006) is complete. Implementation agents and human consultants have sufficient implementation knowledge to begin onboarding any Tier 1 ERP platform with minimal manual intervention. CRM IMS development may begin.
+The six specifications in this library demonstrate that the IMS standard established by NetSuite generalizes across ERP connectors with fundamentally different architectures: Intacct's multi-dimensional GL with no polymorphism; QBO's rigid single-entity schema; Dynamics 365's Financial Dimensions framework; Fusion's multi-ledger architecture; SAP's Universal Journal. Each required genuinely different implementation logic — the standard accommodated all five without structural modification.
+The cross-connector pattern that emerges from building five IMS specifications simultaneously, which would not have been visible from a single specification, is that every ERP in this library has exactly one pre-extraction gate that — if bypassed — produces silent, incorrect canonical financials rather than a detectable error. NetSuite: environment type. Intacct: multi-book canon. QBO: accounting basis. Dynamics 365: dimension resolution (partial block). Fusion: canonical ledger per entity. SAP: ACDOCA ledger filter. This pattern should become the first checkpoint in every future ERP implementation audit: "What is the mandatory pre-extraction gate for this connector, and has the CEP confirmed it?"

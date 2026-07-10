@@ -1,0 +1,267 @@
+FIE-BUILD-003
+PLATFORM INTEGRATION & DELIVERY GUIDE
+Version 1.0
+How eleven independently-specified services become one deployable, operable production platform
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — PLATFORM INTEGRATION HANDBOOK
+Platform Assembly Before Platform Scale. The platform must operate correctly for one customer before it is optimized for one thousand.
+Purpose and Authority
+FIE-BUILD-001 established WHAT gets built and in what order. FIE-BUILD-002 established HOW each engineer builds each service consistently. This document establishes HOW the assembled whole becomes one working, operable system — environments, infrastructure, startup order, integration testing, cutover, monitoring, failure recovery, disaster recovery, deployment, certification, and customer acceptance. It redesigns nothing: ABS, BIS, FIE, and both prior BUILD documents remain frozen and authoritative. Every recommendation here maps back to a specific section of one of them.
+Section 1 — Platform Assembly Strategy
+Foundation           (infrastructure: Postgres, Redis, queues, secrets, auth)     ↓Infrastructure       (deployed, health-checked, before any service starts)     ↓Core BIS Services    (BIS-001–006 — the Implementation Foundation)     ↓Financial Intelligence Engine   (FIE-001–005, in their own internal dependency order)     ↓Reporting            (BIS-006, wired to consume FIE-005 content)     ↓Deployment           (CI/CD pipeline, Section 12)     ↓Customer Activation  (Section 7 — the first real customer, end to end)
+Why this order: it is FIE-BUILD-001's own Build Order (§1) and Service Dependencies (§2), read as an assembly sequence rather than a development sequence. FIE-BUILD-001 answers which service to write code for first; this section answers which piece must be running before the next piece can be turned on at all. A service can be fully coded (per FIE-BUILD-002) and still be undeployable if the infrastructure and services below it in this stack aren't live yet — this is the distinction between 'built' and 'assembled.'
+Section 2 — Environment Strategy
+Environment
+Purpose
+Allowed Data
+Promotion / Rollback
+Development
+Local or shared dev; rapid iteration
+Fixture data only, per FIE-BUILD-002 §12
+No formal promotion gate; rollback is a git revert
+QA
+Automated test execution (Section 12's CI pipeline)
+Fixture and synthetic data only
+Promotes to Integration automatically on green CI
+Integration
+Cross-service integration and contract testing (Section 5)
+Fixture data matching real customer shapes, never real customer data
+Promotes to Staging on passing Golden Path (FIE-BUILD-001 §4) plus all Section 5 integrations
+Staging
+Production-like pre-release validation
+Anonymized or design-partner data with explicit consent only, per FIE-BUILD-002 §12
+Promotes to Production only after Section 13's certification checklist and human acceptance sign-off
+Production
+Live customer data
+Real customer data, full tenant isolation (FIE-BUILD-002 §10)
+Rollback per-customer feature flag (FIE-BUILD-001 §18) or full redeploy of prior version, per FIE-BUILD-002 §12
+Feature flags: every customer-visible behavior change is flagged in every environment above Development, per FIE-BUILD-002 §5/§12 — this is what makes per-customer cutover (Section 8) and per-customer rollback possible without an environment-specific code branch.
+Section 3 — Infrastructure Dependencies
+Component
+Required / Optional
+POC
+Production
+Postgres
+Required
+Single instance sufficient
+Partitioned per FIE-001 §25's guidance; read replicas as volume grows
+Redis (or equivalent cache)
+Optional at POC, Required at scale
+Not required — FIE-002's methodology resolution cache (FIE-002 §24) can run without it at low volume
+Required for FIE-002's read-through cache and any session/rate-limit state
+Celery / async workers (or equivalent)
+Required
+Single worker pool sufficient for the fixture/CSV loader and FIE-003's Graph Executor
+Scaled worker pools per job type, per FIE-BUILD-002 §9
+Object storage
+Required
+Needed for BIS-006 report artifacts (even JSON/HTML) and FIE-001 Cold-tier archives
+Required, with lifecycle policies matching FIE-001 §17's tiering
+Secrets manager
+Required
+Even a POC must never commit secrets, per FIE-BUILD-002 §10
+Required, least-privilege scoped per service
+Authentication / Tool Gateway
+Required
+Inlined per FIE-BUILD-002 §6's modular-monolith note
+Extracted per EIS-002 once services are actually split, per FIE-BUILD-001 §11
+Monitoring
+Required
+Minimum: per-service health endpoints (FIE-BUILD-002 §11)
+Full dashboard suite, per Section 9 below
+Logging
+Required
+Structured JSON, per FIE-BUILD-002 §11
+Centralized aggregation and retention policy
+Tracing
+Optional at POC, Required at Production
+Correlation IDs alone are sufficient for a single golden-path trace
+Full distributed tracing across all eleven services, per FIE-BUILD-002 §11
+Configuration management
+Required
+Environment-driven config, per FIE-BUILD-002 §5
+Configuration Hierarchy enforced, per FIE-BUILD-002's Configuration Hierarchy section
+Table C3.1 — Infrastructure dependencies. The POC column intentionally narrows several 'Required' items to their minimum viable form, consistent with FIE-BUILD-001 §3's MVP Scope.
+Section 4 — Service Startup Order
+BIS-003 Canonical Platform     (nothing above it can start meaningfully without it)     ↓BIS-004 Validation Platform     ↓BIS-002 Orchestration Service  (must be live before any job-dispatched service starts real work)     ↓FIE-001 Observation Engine     ↓FIE-002 Methodology Engine (+ Addendum A)     ↓FIE-003 Calculation Engine     ↓FIE-004 Organizational Memory Platform     ↓FIE-005 Financial Reasoning Platform     ↓BIS-006 Reporting Platform
+BIS-001 (Connector Proxy) and BIS-005 (Knowledge Platform) are not shown in the critical startup chain above — per FIE-BUILD-001 §3, BIS-001 may be satisfied by a fixture/CSV loader at POC, and BIS-005's minimum slice has no hard startup-order dependency on anything above it. Both must still be live before their respective consumers (BIS-003 for BIS-001; FIE-002/FIE-005 for BIS-005) attempt to call them.
+Check
+Behavior
+Health checks
+Every service's GET /v1/health (per its own API section) must return healthy before the next service in the chain is started
+Readiness
+Distinct from health, per FIE-BUILD-002 §11 — a service may be alive but not yet ready (e.g. still running migrations); the startup sequence waits on readiness, not just health
+Dependency validation
+Each service validates on startup that every service below it in this chain is reachable and healthy before accepting traffic — failing this check keeps the service in a not-ready state rather than accepting requests it cannot fulfill
+Failure behavior
+A failure to start in dependency order halts the chain at that point — later services are never started against a not-yet-healthy dependency, and the failure is surfaced immediately rather than discovered on first request
+Section 5 — Cross-Service Integration Tests
+Every integration below already has its own Integration Testing section in its owning specification — this section indexes them for platform-level test-suite assembly, it does not redefine any of them.
+Integration
+Inputs
+Outputs
+Expected Result / Reference
+Canonical → Observation
+Canonical objects (BIS-003)
+Temporal Records (FIE-001)
+Bi-temporal correctness, per FIE-001 §28
+Observation → Methodology
+Observations/Revisions (FIE-001)
+Resolved driver values (FIE-002)
+Correct as_of resolution, per FIE-002 §27
+Methodology → Calculation
+Resolved methodology/formula/driver versions (FIE-002)
+Financial Intelligence Objects (FIE-003)
+Determinism verified, per FIE-003 §29
+Calculation → Memory
+FIOs and their lineage (FIE-003)
+Knowledge Objects referencing them (FIE-004)
+No-duplication rule holds, per FIE-004 §32
+Calculation → Reasoning
+FIOs and Financial Evidence (FIE-003)
+Findings, Insights, Reasoning Packages (FIE-005)
+Explainability Adapter contract satisfied, per FIE-005 §31
+Reasoning → Reporting
+Verified Narrative Objects (FIE-005)
+Rendered artifacts (BIS-006)
+Reporting performs no calculation, per BIS-006 §30 (integration testing)
+Validation → everything
+Canonical objects
+validation_results consumed by every downstream service's confidence handling
+Every service correctly treats a validation failure as a confidence signal, never silently ignored
+Orchestration → everything
+Scheduled cadence or business event
+Job dispatch to every job-triggered service
+Every service accepts dispatch only from Orchestration, per FIE-BUILD-002's Dependency Direction Rules
+Table C5.1 — Cross-service integration index. Failure cases for each integration are the failure modes already documented in the consuming service's own Failure Recovery section — restated in Section 10 below at the platform level, not duplicated per-integration here.
+Section 6 — GPES Integration
+GPES-001 is the platform's acceptance test — the reference trace every milestone should be measurable against. Per FIE-BUILD-001 §9's own clarification, GPES-001 was written assuming Path B (live connector) onboarding; the subset of its fixtures exercising Canonical-and-below behavior is path-agnostic and applies to every milestone, while its full connector-specific conformance applies specifically at FIE-BUILD-001 Milestone 8.
+Every milestone in FIE-BUILD-001 §19 ends with: run the path-agnostic subset of GPES-001 against the current build
+Everything passes: the milestone's own exit criteria plus the relevant GPES-001 fixtures both succeed
+Platform progresses: only once both pass does the platform move to the next milestone — a milestone is not considered complete on its own exit criteria alone if the GPES-001 fixtures it should already satisfy are failing
+Milestone 8 is the point full GPES-001 connector-specific conformance is required end to end, not before
+Section 7 — Customer Activation
+New Customer     ↓Connector Setup (Path B) or CSV Setup (Path A) — per ABS-012's per-domain access question     ↓Canonical Population (BIS-003)     ↓Validation (BIS-004)     ↓Observation Capture (FIE-001)     ↓Methodology Selection (FIE-002 — Industry Template or custom)     ↓Operating Model Creation (FIE-002, frozen at composition)     ↓Calculation (FIE-003 — first real Financial Intelligence Objects)     ↓Reasoning (FIE-005 — first verified Narrative)     ↓Reporting (BIS-006 — rendered, customer-visible output)     ↓Customer Live
+This is FIE-BUILD-001 §4's golden path, restated as an operational runbook rather than an engineering demonstration sequence. 'Customer Live' is not reached until FIE-BUILD-001's Customer Readiness section is also satisfied — a technically complete pipeline run is necessary but not sufficient; the customer's own sign-off (Customer Readiness's explicit trust criteria) is the actual activation gate.
+Section 8 — Cutover Strategy
+Prototype Warehouse   (actual_mrr_waterfall-style tables, live today)     ↓Canonical             (BIS-003 becomes source of truth for this customer)     ↓FIE                   (FIE-001–005 produce this customer's Observations, Methodology, FIOs, Memory, Narratives)     ↓Reporting             (BIS-006 repointed to FIE-005/FIE-003 output for this customer)     ↓Customer              (sees FIE-derived output in place of the prototype)
+BLOCKED  This section expands FIE-BUILD-001 §18's cutover strategy operationally; it does not replace it. Reference: ABS-015 (Customer Migration / Prototype Retirement Standard) does not exist yet, per FIE-BUILD-001 §18.6 — the per-customer checklist below is this document's best current operational interpretation of what ABS-015 should formalize, not a substitute for it.
+Parallel runs: both the prototype and the FIE-derived pipeline produce output for the same customer and period simultaneously, for a defined window before cutover, per FIE-BUILD-001 §18.5
+Verification: any discrepancy between the two outputs blocks cutover until reconciled and explained — never silently resolved by preferring one source, per FIE-BUILD-001 §18.5
+Rollback: the per-customer feature flag (Section 2) reverts BIS-006 to reading the prototype table, reversible in either direction without a redeploy
+Acceptance: cutover for a given customer is complete only when Section 13's certification checklist and Section 14's customer acceptance questions both resolve affirmatively for that customer specifically, not for the platform in the abstract
+Section 9 — Operational Monitoring
+Health Domain
+What It Tracks
+Platform Health
+Aggregate health/readiness across all eleven services, per FIE-BUILD-002 §11
+Queue Health
+Depth, processing latency, dead-letter rate per job type, per FIE-BUILD-002 §7/§11
+Worker Health
+Async worker pool utilization and failure rate (FIE-003's Graph Executor, BIS-006's Artifact Rendering Worker)
+Connector Health
+BIS-001 adapter success/failure rate, per domain and per path (A/B/C)
+Calculation Health
+FIE-003 calculation_run success/PARTIAL/FAILED rate, cache hit ratio, per FIE-003 §22
+Reasoning Health
+FIE-005 Verification pass/fail rate, per FIE-005 §25
+Reporting Health
+BIS-006 report generation success/failure rate, per BIS-006 §24
+Customer Health
+Per-customer view composing all of the above, surfaced against Section 14's acceptance questions for that specific customer
+Alert priorities: platform-wide failure-rate spikes and any fail-closed Verification or Validation blocker are highest priority; individual slow-query or cache-miss anomalies are lower priority, per FIE-BUILD-002 §11's alert-fatigue guidance
+Dashboards: one platform-level rollup dashboard, plus each service's own dashboard set already specified in its owning document's Observability section
+Escalation: a Customer Health degradation for a live production customer escalates faster and to a different rotation than an internal Development/QA anomaly
+Section 10 — Failure Recovery
+Failure Domain
+Recovery Strategy
+Connector Failure (BIS-001)
+Retry per BIS-001's own retry strategy; a sustained failure surfaces as a blocked ingestion for that customer/domain, never a silent gap in Canonical
+Validation Failure (BIS-004)
+Surfaced as a confidence/blocker signal downstream, per Validation → everything (Section 5) — never silently bypassed
+Calculation Failure (FIE-003)
+Per FIE-003 §30 — PARTIAL or FAILED status, never a silently substituted result
+Reasoning Failure (FIE-005)
+Per FIE-005 §32 — fails closed, no Narrative published without passing Verification
+Reporting Failure (BIS-006)
+Per BIS-006 §32 — evidence unavailable or artifact write failure blocks that report, never a partial render presented as complete
+Worker Failure
+Job resumes from last successfully completed unit of work on restart, per each service's own async worker pattern (FIE-003 §30, BIS-006 §32)
+Queue Failure
+Dead-letter and alert per Section 9; no event is silently dropped
+Infrastructure Failure
+Per Section 11's disaster recovery procedures below
+Customer Failure (a specific customer's pipeline breaks while the platform is otherwise healthy)
+Isolated to that customer via tenant isolation (FIE-BUILD-002 §10) — a single customer's failure never cascades to another customer's pipeline
+Section 11 — Disaster Recovery
+Backups: automated, regular backups of every service's Postgres store, retained per the platform's data retention policy
+Restore: a documented, tested restore procedure per service, exercised on a schedule, not only when an actual disaster occurs
+Point-in-time recovery: available for every service's database, exploiting the platform's own append-only, versioned data model (FIE-BUILD-002 §8) — a PITR restore of an immutable, versioned store is inherently safer than restoring a mutable one, since there is no in-place edit history to lose partial context on
+Infrastructure loss: documented recovery runbook per infrastructure component (Section 3), with clear ownership per FIE-BUILD-002's Engineering Ownership Matrix (FIE-BUILD-001)
+Region failure: if the platform operates in multiple regions, documented failover procedure; if single-region at current scale, documented recovery time objective and communicated honestly as a current limitation, not silently assumed away
+Data corruption: because the platform is append-only and versioned everywhere (FIE-BUILD-002 §8), a corruption event's blast radius is bounded to the specific rows affected — recovery is restoring or replaying from the last known-good version, never reconstructing a mutable table's edit history
+Deployment failure: rollback per Section 2's per-environment rollback rules and FIE-BUILD-002 §12's rollback strategy
+Section 12 — Deployment Pipeline
+Developer     ↓Pull Request     ↓Review              (FIE-BUILD-002 §19's seven gates)     ↓CI                  (FIE-BUILD-002's CI/CD Quality Gates: Lint → Static Analysis → Unit Tests)     ↓Contract Tests      (the five platform-critical contracts, FIE-BUILD-001 §8, always included)     ↓Integration Tests   (Section 5 above)     ↓Golden Path         (FIE-BUILD-001 §4)     ↓Deploy QA     ↓Deploy Staging     ↓Acceptance          (human sign-off against Section 13's certification checklist)     ↓Deploy Production     ↓Production Verification   (per FIE-BUILD-002's Testing Pyramid, Layer 5)
+This is FIE-BUILD-002's CI/CD Quality Gates and Testing Pyramid, assembled into one platform-level pipeline rather than a per-service one — every service's individual pipeline run feeds into this sequence, and the Golden Path / Acceptance / Production Verification stages are platform-level checks no single service's own pipeline can satisfy alone.
+Section 13 — Platform Certification
+The honest answer to "can we call SMPL production ready" — not per-service completeness (FIE-BUILD-002 §13's Definition of Done), but whole-platform readiness.
+Canonical complete — BIS-003 operational across every domain the customer set requires
+Validation complete — BIS-004 rules cover every domain's structural and business-rule checks in scope
+Observation complete — FIE-001 bi-temporal capture and Snapshot completeness verified against real customer data
+Methodology complete — FIE-002 core and, where needed, Addendum A operational and tested
+Calculation complete — FIE-003 determinism and lineage verified per FIE-BUILD-002 Appendix A's FIE-003 additions
+Reasoning complete — FIE-005 Verification fail-closed behavior and Explainability Adapter contract verified
+Reporting complete — BIS-006 rendering the actual customer's Narratives and FIOs, computing nothing itself
+Security complete — per FIE-BUILD-002 §10, reviewed against Section 19's PR governance gates across every service in scope
+Monitoring complete — Section 9's full dashboard and alert suite live, not just individual service dashboards
+Performance complete — every in-scope service meets its own Performance Targets section, and the platform-level directional targets (FIE-BUILD-001) are tracked even where not yet fully met
+Customer trust complete — Section 14's acceptance questions resolve affirmatively for at least one real, live customer
+Certification is granted per customer cohort, not as a single platform-wide switch — a platform can be legitimately 'production ready' for a narrow Path A ARR use case (FIE-BUILD-001's golden path) well before it is production ready for full Path B, multi-domain, multi-methodology customers.
+Section 14 — Customer Acceptance
+Every production deployment answers these eight questions before it is considered complete. This restates, at the platform-integration level, FIE-BUILD-001's Product Acceptance Criteria and FIE-BUILD-002's Engineering Trust Checklist — the same underlying trust principle, checked once more at the point a real deployment actually reaches a real customer, not only during development.
+Can customers trust this? — Section 13's certification for their specific cohort has been granted
+Can customers verify this? — FIE-005's Verification passed, and the Explainability Adapter resolves for every value they can see
+Can customers explain this? — every published value answers FIE-BUILD-002 §17's nine Explainability questions
+Can customers reproduce this? — FIE-003's determinism guarantee holds for their Operating Model version
+Can customers reconcile this? — the Financial Tie-Out pattern (FIE-005 §15) resolves end to end for their data
+Can customers audit this? — every governed decision (methodology approval, restatement, promotion) is logged per FIE-BUILD-002 §10
+Can customers restate this? — where FIE-002 Addendum A applies, RESTATEMENT_COMPARISON (Addendum A §7) resolves correctly
+Can customers understand this? — their Narrative Policy (FIE-005 §18) produces output in language appropriate to their actual audience, not generic output
+Section 15 — Future Platform Expansion
+Future capabilities — Forecasting, Planning, Budget Collaboration, Scenario Modeling, Agent Workflows, Industry Packs, Benchmarking, ML — integrate through existing service contracts, exactly like every service this platform already has. None of them is a reason to bypass Canonical, Validation, or Orchestration; each is a new consumer of the same contracts FIE-005, BIS-006, and every other current consumer already uses.
+Future Capability
+Likely Integration Point
+Forecasting
+A new Calculation Intent within FIE-002/FIE-003, per FIE-002 §1.6's existing extensibility
+Planning
+A new Knowledge Object type or Reasoning question type within FIE-004/FIE-005, not a new service
+Budget Collaboration
+A new Financial Governance capability alongside FIE-002 Addendum A, once that pattern is established
+Scenario Modeling
+Already specified — FIE-003's SCENARIO Calculation Profile (FIE-003 §12), extended rather than rebuilt
+Agent Workflows
+New consumers of Reasoning Package and Explainability outputs, per FIE-005 §1.6's shared Explainability principle
+Industry Packs
+New Industry Templates within FIE-002 §11 — a data addition, not an architectural one
+Benchmarking
+A new, anonymized read path over existing FIOs/Knowledge Objects, gated by the same promotion governance FIE-004 §15 already requires
+ML
+A new consumer of Observation/FIO history for training data — reads Canonical-derived history, never a new write path into the deterministic core (FIE-BUILD-002's Deterministic Core principle)
+Table C15.1 — Every future capability's likely integration point is an existing contract, not a proposed new one. Where a genuinely new service turns out to be needed, it is scoped and reviewed the same way FIE-001 through FIE-005 were — against the same Section 1 Scope Decisions discipline every document in this series has used.
+New Principle: Platform Assembly Before Platform Scale
+Correctness before scale. Repeatability before optimization.
+This principle has been implicit throughout the BUILD series and is made explicit here because platform integration is where the temptation to violate it is strongest. It would be easy, once eleven services exist, to immediately optimize for one thousand customers — parallelize everything, cache aggressively, shard early. This document's own sequencing rejects that: FIE-BUILD-001's golden path proves the platform correct for one customer (Milestone 6) before FIE-BUILD-003's certification (Section 13) considers broader readiness, and Section 9's monitoring exists to prove repeatable correctness before Section 12's pipeline is trusted to deploy faster and more often.
+Concretely: a platform that handles one customer's ARR narrative correctly, reproducibly, and explainably is a stronger foundation than a platform that handles a thousand customers' narratives quickly but with an unresolved confidence-propagation edge case. Every optimization in this document — caching (Section 3), parallel execution (referenced from FIE-003), scaled worker pools (Section 3) — is sequenced after the correctness properties (determinism, immutability, explainability) they would otherwise be tempted to trade away.
+Final Engineering Review
+Reviewed as a Principal Software Architect responsible for the platform's actual production readiness, not just its component specifications.
+A Naming Note Before the Review Proper
+ASSUMED  FIE-BUILD-002's own BUILD Series Roadmap table names FIE-BUILD-003 as "CI/CD & Automated Governance." This document is FIE-BUILD-003 as actually commissioned — Platform Integration & Delivery Guide — which is not a conflict with anything frozen, but does leave that roadmap table's entry stale. Recommendation: the CI/CD & Automated Governance content becomes FIE-BUILD-004 (shifting FIE-BUILD-004 through 008 down by one), corrected the next time FIE-BUILD-002 is revised — not urgent enough to warrant reopening FIE-BUILD-002 on its own.
+1. Are There Remaining Implementation Blockers?
+No new blockers were introduced by this document. ABS-013 and ABS-015 remain the two hard blockers already tracked in FIE-BUILD-001 — this document's Section 8 explicitly treats ABS-015 as not-yet-existing rather than assuming its content, and Section 15's future-expansion guidance explicitly defers to ABS-013 wherever entity resolution across paths becomes relevant.
+2. Does Any Content Belong in BUILD-004 Instead?
+Detailed disaster recovery runbooks (Section 11 names the categories; step-by-step runbooks per infrastructure component are operational detail better suited to a dedicated Production Operations document — this maps directly to the FIE-BUILD-006 candidate already named in FIE-BUILD-002's roadmap)
+Formal platform certification sign-off process and audit trail (Section 13 names what must be true; the formal review/sign-off workflow itself is a governance process question, closer to the FIE-BUILD-007 Security & Compliance candidate)
+The renumbering noted above — CI/CD & Automated Governance content, if a dedicated document is still wanted, should become BUILD-004 rather than compete with this document's BUILD-003 slot
+3. Is BUILD-003 Ready to Become the Platform Integration Handbook?
+Yes. Every one of the fifteen required sections is present, every recommendation traces back to a specific section of frozen architecture or a prior BUILD document rather than inventing new authority, and the one naming inconsistency this document surfaced (FIE-BUILD-003's identity conflicting with FIE-BUILD-002's roadmap table) is named explicitly with a low-urgency fix recommendation rather than either ignored or used as an excuse to reopen a frozen document. Recommend freezing FIE-BUILD-003 and proceeding to FIE-BUILD-004, understood as covering CI/CD & Automated Governance per the renumbering above.

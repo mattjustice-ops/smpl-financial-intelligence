@@ -1,0 +1,1721 @@
+IMPLEMENTATION MAPPING SPECIFICATION LIBRARY
+CRM Implementation Library — IMS-101 through IMS-105
+ABS-006  ·  CRM Library v1.0
+Salesforce  ·  HubSpot  ·  Microsoft Dynamics 365 Sales
+Zoho CRM  ·  Pipedrive
+SMPL.ai  ·  AI Implementation Engineering
+June 2026 · CONFIDENTIAL — INTERNAL IMPLEMENTATION DOCUMENT
+Follows the IMS standard established by the ERP IMS Library (IMS-001 through IMS-006)
+CRM Implementation Library — Scope and Organizing Principles
+This document contains the complete CRM Implementation Mapping Specification library: five IMS specifications covering every Tier 1 CRM platform in the SMPL connector catalog. Each specification follows the identical ten-section structure established by IMS-001 (NetSuite) and applied across IMS-002 through IMS-006 (the ERP library). No structural modification to the IMS standard is introduced here.
+Library Index
+IMS #
+Connector
+Maturity
+Primary Implementation Characteristic
+IMS-101
+Salesforce
+Pilot Ready
+Highest customization surface; Record Type + custom stage taxonomy as the universal complexity driver; Bulk API 2.0 required for historical extraction
+IMS-102
+HubSpot
+Pilot Ready
+Standardized stage taxonomy reduces CEP burden; native Marketing Hub produces GTM Dashboard data without a separate connector; Property History API for stage waterfall
+IMS-103
+Microsoft Dynamics 365 Sales
+Validated
+Shared Dataverse platform with Dynamics 365 Finance; Business Process Flow stage model; OData API surface shared with Finance IMS-004
+IMS-104
+Zoho CRM
+Validated
+Mid-market positioning; Audit Log-based stage extraction; Zoho One suite compound-mapping opportunity
+IMS-105
+Pipedrive
+Validated
+Narrowest object model in the library; universal stage-resolution requirement (no vendor default); fastest implementation path once resolved
+Table 0.1 — CRM IMS Library index.
+The Universal CRM Implementation Principle — Stage Normalization Gate
+The single most important implementation principle shared across every CRM IMS in this library has no equivalent in the ERP library: every CRM implementation has a mandatory stage normalization step that must be resolved before any meaningful pipeline canonical mapping can proceed. This is not equivalent to the ERP library's pre-extraction gates (which prevent data from being extracted at all if unresolved) — CRM data can be extracted without stage resolution, but the resulting pipeline objects carry Low confidence until every stage name is mapped to the SCBM canonical stage taxonomy.
+The stage normalization gate governs the same capability set across all five CRM connectors: Pipeline Analytics, Pipeline Waterfall, Stage Conversion, and any capability derived from stage progression. Without resolved stage mapping, these capabilities reach at most 40% confidence regardless of how much data has been extracted.
+Unlike the ERP library's pre-extraction gates, the CRM stage normalization gate does not BLOCK extraction — it degrades capability confidence until resolved. The CEP drives resolution through Pre-POC Discovery, and each CRM's Section 4 (Transformation Rules) documents how that resolution works for each vendor's stage data structure.
+Cross-CRM Principles
+SMPL is always read-only. No CRM IMS specifies write operations.
+Closed Won ≠ Confirmed Revenue. This principle is stated in every connector's Transformation Guidance and is the most consequential CRM-domain caveat for Financial Intelligence. Closed Won reflects sales intent; confirmed revenue requires Billing and ERP cross-validation. The implementation agent surfaces this caveat explicitly during capability activation for every connector in this library.
+Customer Health is not a CRM-native object. CRM connectors contribute partial signals (account status, renewal risk flags, lifecycle stage) to the canonical Health Score, but the Health Score itself is owned by the Customer Success domain. No CRM IMS maps any object to a canonical Customer Health Score — only to Health Score signal contributors.
+Stage normalization is always customer-specific, never platform-assumed. Even for platforms with vendor-standard stage names (HubSpot), the implementation agent confirms stage business meaning via CEP before mapping proceeds. A customer's stage named "Closed Won" may or may not represent the same business event as another customer's stage named "Closed Won."
+Pipeline is intent; Billing is execution. The cross-validation pattern established in the Billing IMS Library (Stripe Billing connector confirms Closed Won Opportunities from CRM connectors) applies symmetrically here — every CRM's Connector Synergies section documents the CRM+Billing cross-validation pair.
+IMS-101 — Salesforce
+Salesforce is the most customizable CRM in this library and the most complex to implement — not because of API complexity, but because of the breadth of customer-specific configuration the implementation agent must discover and resolve before canonical pipeline mapping is reliable. The primary implementation challenge is not data extraction; it is stage taxonomy normalization across potentially multiple Record Types with independent stage sets.
+✱ ARCHITECT NOTE: Key departure from simpler CRM connectors in this library: Salesforce's Transaction-equivalent is the Opportunity Record Type — a customer-defined construct that determines which stage taxonomy applies to a given Opportunity. An enterprise Salesforce implementation with four Record Types has four independent stage taxonomies requiring four independent CEP resolution cycles. Discovering all active Record Types during Section 1 (Connector Discovery) is not optional — proceeding without this inventory produces a canonical pipeline that silently excludes Opportunities from unresolved Record Types.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+OAuth 2.0 (Web Server Flow or JWT Bearer Token flow for server-to-server). Connected App must be created in the customer's Salesforce org with appropriate scopes.
+If Connected App does not exist, provide setup instructions to the customer's Salesforce Administrator. Do not proceed with username/password authentication in production — it does not support the granular permission scoping required for read-only SMPL access.
+API version
+SMPL targets the current Salesforce API version (v60.0+ as of mid-2024). Version pinning prevents breaking changes from Salesforce's three-annual-release cycle.
+If the org is running a significantly older API version due to internal constraints, document in CEP and test all SOQL queries against the org-specific version.
+Organization ID
+Retrieved from Salesforce Organization object. Uniquely identifies the org and distinguishes production from sandbox.
+15-character or 18-character ID (case-insensitive vs. case-sensitive variants). Always store the 18-character version for external reference.
+Sandbox vs. Production
+OrgType from Organization object: Production vs. Sandbox. Always confirm before extraction begins.
+If OrgType = Sandbox but customer believes this is production: BLOCK and clarify immediately. Sandbox data must never populate production canonical objects.
+Table IMS-101.1.1 — Salesforce authentication and environment detection.
+1.2 Record Type Inventory — The Primary Discovery Step
+Salesforce Record Types are the CRM equivalent of SAP's Controlling Area structure — they determine which field layouts, picklist values, and stage taxonomies apply to each Opportunity. Every active Record Type on the Opportunity object must be inventoried before stage normalization begins. Skipping this step is the single most common Salesforce implementation error.
+DISCOVER active Opportunity Record Types:
+  SOQL: SELECT Id, Name, IsActive, Description
+        FROM RecordType
+        WHERE SObjectType = 'Opportunity'
+        AND IsActive = true
+  FOR each returned RecordType:
+    Record in CEP.record_types:
+      [{id, name, description, is_active}]
+  FOR each active RecordType:
+    DISCOVER its stage taxonomy:
+    SOQL: SELECT DefaultPicklistValues
+          FROM RecordTypeInfo
+          WHERE RecordTypeId = '{id}'
+    RECORD stage list in CEP.record_type_stages[RecordType.id]
+  IF count(active RecordTypes) = 0:
+    Single stage taxonomy applies to all Opportunities
+    Proceed with standard stage normalization
+  IF count(active RecordTypes) >= 1:
+    EACH RecordType requires independent CEP stage resolution
+    DO NOT start CEP resolution for one RecordType while another
+    is pending — complete full inventory first, then resolve in parallel
+1.3 Module and Feature Inventory
+Module / Feature
+Detection Query
+CEP Impact
+Collaborative Forecasts
+SELECT COUNT() FROM ForecastingItem LIMIT 1
+If > 0 or 200 status: Forecast capability available. Record CEP.forecasting_enabled = true.
+Territory Management 2.0
+SELECT COUNT() FROM Territory2 LIMIT 1
+If active: Territory Reporting capability available. Record CEP.territory_management = TM2.
+Salesforce CPQ
+SELECT COUNT() FROM SBQQ__Subscription__c LIMIT 1
+If active: Subscription-adjacent data available. Cross-validation against Billing connector required — never treat CPQ as sole ARR source.
+Campaigns
+SELECT COUNT() FROM Campaign WHERE IsActive = true LIMIT 1
+If > 0: Campaign canonical objects available. Record CEP.campaigns_active = true.
+Multiple Currencies
+SELECT IsoCode FROM CurrencyType LIMIT 2
+If 2+ results: Multi-currency active. Identify corporate currency and conversion rates.
+Table IMS-101.1.2 — Salesforce module detection.
+1.4 Sales Hierarchy Inventory
+DISCOVER sales organization hierarchy:
+  SOQL: SELECT Id, Name, Role.Name, Manager.Id, Manager.Name
+        FROM User
+        WHERE IsActive = true AND UserType = 'Standard'
+  BUILD: Manager-to-report adjacency list
+  VALIDATE: No cycles in hierarchy
+  Record in CEP.sales_hierarchy
+  If Territory Management 2.0 active:
+  SOQL: SELECT Id, Name, ParentTerritory2Id, Territory2Type.Name
+        FROM Territory2
+        WHERE IsActive = true
+  BUILD: Territory hierarchy tree
+  Record in CEP.territory_hierarchy
+1.5 Discovery Completion Gate
+Gate Item
+Confirmed When
+Authentication and org type confirmed
+OrgType confirmed as Production; OAuth token valid
+All active Record Types inventoried
+CEP.record_types populated; stage list per Record Type recorded
+Module inventory complete
+CEP populated for Forecasting, Territory, CPQ, Campaigns, Multi-currency
+Sales hierarchy captured
+CEP.sales_hierarchy built; cycles validated
+Custom ARR objects identified
+Pre-POC Discovery confirmed whether ARR__c or equivalent custom objects exist
+Table IMS-101.1.5 — Salesforce discovery completion gate.
+Section 2 — Canonical Object Mapping
+Salesforce Object
+API Table
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+Account
+Account
+Customer Account (Entity)
+1:1
+D-H for identity; D-M for commercial fields
+None — always present
+Opportunity
+Opportunity
+Opportunity (Entity)
+1:1
+D-H for core fields; Normalized-H after stage resolution
+Stage normalization required; confidence degrades to D-L until resolved
+OpportunityHistory
+OpportunityHistory
+Opportunity Stage Event (Movement) — Pipeline Waterfall source
+N:1 (events:opportunity)
+D-H
+SystemModstamp + StageName change event tracking
+Contact
+Contact
+Contact (Entity, Tier 2)
+N:1 (contacts:account)
+D-H
+None
+Lead
+Lead
+MQL (Movement, pre-conversion)
+1:1 (before conversion)
+Inferred-M
+Lead.ConvertedDate determines conversion event
+Campaign
+Campaign
+Campaign (Entity)
+1:1
+D-H (if Campaigns active) / N/A
+Campaigns module must be actively used — not just licensed
+CampaignMember
+CampaignMember
+MQL Attribution (Movement)
+N:N (members:campaigns)
+D-M
+Campaign module + Opportunity CampaignId relationship
+ForecastingItem
+ForecastingItem
+Forecast Line (Movement)
+N:1 (period+user)
+D-M
+Collaborative Forecasts module required
+User
+User
+Sales Representative (Entity, Tier 2) / Sales Hierarchy node
+1:1
+D-H
+UserType = Standard
+Opportunity.Amount
+Derived → Bookings (Movement candidate)
+Bookings (Movement) — requires Billing cross-validation
+N/A — derived
+D-L standalone / D-H with Billing
+Closed Won status + Billing connector confirmation required
+Product2 / PricebookEntry
+Opportunity Product
+Opportunity Line Item (Movement detail)
+N:1 (products:opportunity)
+D-H
+Product catalog active; PricebookEntry used
+Table IMS-101.2.1 — Salesforce canonical object map.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 Opportunity (Core Fields)
+Salesforce Field
+SCBM Field
+Req/Opt
+Transform
+Validation
+Null Handling
+Id
+opportunity.source_id
+REQ
+None — 18-character ID preferred
+Globally unique within Salesforce org
+Reject
+Name
+opportunity.opportunity_name
+REQ
+String trim, 255-char limit
+Non-empty
+Reject
+AccountId
+opportunity.customer_account_id
+REQ
+FK to Customer Account canonical object
+Account must exist in mapped Account set
+REJECT — unattributed opportunities are unmappable
+StageName
+opportunity.stage_name_raw
+REQ
+Store raw; normalized value requires Section 4.1
+Non-empty string
+Reject
+opportunity.stage_canonical (derived)
+opportunity.stage_canonical
+REQ (derived)
+Apply stage normalization (Table IMS-101.4.1)
+Must resolve to a SCBM canonical stage
+Low confidence if unresolved; DO NOT reject — flag
+Amount
+opportunity.amount_local
+OPT → REQ for pipeline calculations
+Currency normalization
+Non-negative; null for prospect-stage deals is acceptable
+Flag if null beyond Qualification stage — likely a data quality gap
+CloseDate
+opportunity.expected_close_date
+REQ
+ISO 8601 date normalization
+Must be a valid calendar date; past CloseDate with Open status flagged
+Reject if null — close date is required for pipeline timing
+RecordTypeId
+opportunity.record_type_id
+OPT → REQ if multiple Record Types
+FK to CEP.record_types
+Must match a known active Record Type
+Flag if unrecognized Record Type — stage set cannot be determined
+OwnerId
+opportunity.owner_user_id
+REQ
+FK to User canonical object
+Must exist in mapped User set
+FLAG — missing owner degrades Sales Productivity confidence by −20%
+ForecastCategoryName
+opportunity.forecast_category
+OPT
+Normalize per Table IMS-101.4.2
+Must match known forecast category list
+Null if Collaborative Forecasts inactive — not an error
+Probability
+opportunity.win_probability
+OPT
+Percentage; divide by 100 if stored as integer
+0–100 range
+Default to stage-level probability if null
+Type
+opportunity.opportunity_type
+OPT
+Normalize per Table IMS-101.4.3 (New Business, Renewal, Expansion)
+Known enum or FLAG_FOR_CEP
+Default to NEW_BUSINESS if null and no prior relationship with Account
+IsClosed
+opportunity.is_closed
+REQ
+Boolean direct
+Boolean
+Default false
+IsWon
+opportunity.is_won
+REQ
+Boolean direct
+Boolean; IsWon=true requires IsClosed=true
+Default false
+Table IMS-101.3.1 — Opportunity field mapping.
+3.2 OpportunityHistory (Stage Event)
+This object is the primary source for Pipeline Waterfall and Sales Velocity. It records every field change on an Opportunity, not just stage changes — the implementation agent must filter for StageName changes specifically.
+Salesforce Field
+SCBM Field
+Req/Opt
+Transform
+Notes
+OpportunityId
+stage_event.opportunity_id
+REQ
+FK to Opportunity canonical object
+Link to parent Opportunity
+StageName
+stage_event.stage_name_raw
+REQ
+Store raw; apply stage normalization from Table IMS-101.4.1
+The historical stage name at the time of this event — may differ from current customer taxonomy if taxonomy changed
+SystemModstamp
+stage_event.event_timestamp
+REQ
+ISO 8601 timestamp normalization
+The timestamp when this stage was set — critical for velocity calculations
+Amount
+stage_event.amount_at_event
+OPT
+Currency normalization
+Amount at the time of the stage event — enables amount-change tracking alongside stage changes
+CloseDate
+stage_event.close_date_at_event
+OPT
+ISO 8601 date normalization
+Close date at the time of this event — enables close date push/pull tracking
+Table IMS-101.3.2 — OpportunityHistory field mapping.
+Section 4 — Transformation Rules
+4.1 Opportunity Stage Normalization — The Core Transformation Rule
+Stage normalization is the highest-priority transformation in every CRM IMS. The implementation agent maps each customer's stage names to the SCBM canonical pipeline stage taxonomy. This mapping is always customer-specific — even standard Salesforce stage names may represent different business concepts for different customers.
+The SCBM canonical stage taxonomy (from the CKR CRM Registry Standard): MQL → SQL → Opportunity → Proposal → Negotiate → Closed Won → Closed Lost. These are intent stages, not revenue events. Closed Won is the last pipeline stage; actual revenue confirmation belongs to the Billing and ERP domains.
+FOR EACH active RecordType in CEP.record_types:
+  stages = CEP.record_type_stages[RecordType.id]
+  FOR each stage_name in stages:
+    LOOKUP in SMPL CRM Stage Pattern Library:
+    ├─ Exact match found → apply canonical stage mapping
+    ├─ Fuzzy match found (edit distance <= 2) → apply with FLAG_FOR_CEP
+    └─ No match → FLAG_FOR_CEP with stage_name; confidence = Low
+  VALIDATE completeness:
+    canonical stage "Closed Won" must map from exactly one stage_name
+    canonical stage "Closed Lost" must map from exactly one stage_name
+    ├─ Zero "Closed Won" mappings → FLAG: pipeline cannot be complete
+    └─ Multiple "Closed Won" mappings → FLAG_FOR_CEP: ambiguous closure
+  RECORD resolved mapping in CEP.stage_mapping[RecordType.id]:
+    {stage_name_raw: stage_canonical, confidence: H/M/L}
+  FOR all Opportunities of this RecordType:
+    opportunity.stage_canonical = CEP.stage_mapping[RecordType.id][StageName]
+4.2 Forecast Category Normalization
+Salesforce ForecastCategoryName
+SCBM Forecast Category
+Notes
+Omitted
+OMITTED
+Excluded from sales representative's forecast submission
+Pipeline
+PIPELINE
+Raw pipeline included in forecast; not yet committed
+Best Case
+BEST_CASE
+Optimistic scenario; salesrep believes deal may close
+Commit
+COMMIT
+Salesrep formally commits this deal will close
+Closed
+CLOSED
+Already closed in this forecast period
+[Custom category]
+FLAG_FOR_CEP
+Custom forecast categories require CEP business-meaning resolution before they can be included in Bookings Forecast
+Table IMS-101.4.2 — Forecast category normalization.
+4.3 Opportunity Type Normalization
+Salesforce Type Field Value
+SCBM Opportunity Type
+ARR Movement Implication
+New Business
+NEW_BUSINESS
+New ARR if Closed Won — triggers ARR Movement New Business classification in Billing cross-validation
+Existing Business - Renewal
+RENEWAL
+Renewal retention if Closed Won — no new ARR
+Existing Business - Upgrade
+EXPANSION
+Expansion ARR if Closed Won
+Existing Business - Downgrade
+CONTRACTION
+Contraction ARR if Closed Won
+Null / blank
+FLAG_FOR_CEP — default to NEW_BUSINESS if no prior Account relationship, otherwise FLAG
+Missing type is the primary source of ARR Movement misclassification
+[Custom type value]
+FLAG_FOR_CEP
+Custom type values require CEP resolution before they can contribute to ARR Movement classification
+Table IMS-101.4.3 — Opportunity Type normalization and ARR Movement implication.
+4.4 Owner Hierarchy Construction
+Salesforce User.ManagerId builds a reporting hierarchy equivalent to the organizational hierarchy in HRIS. For pipeline rollup calculations (e.g., pipeline by VP of Sales, which includes all direct and indirect reports), the hierarchy must be traversed from leaf to root.
+BUILD owner hierarchy:
+  1. Extract all active Users with ManagerId (Section 1.4)
+  2. Build adjacency list: {user_id: manager_id}
+  3. Validate: no cycles (a user cannot be their own manager, directly or transitively)
+     ├─ Cycle detected → FLAG the specific user IDs forming the cycle; break cycle
+     └─ No cycle → hierarchy is valid
+  4. Assign depth: root users (no manager) = depth 0; each report level +1
+  5. For each Opportunity: record owner_hierarchy_path from owner to root
+     This enables pipeline aggregation at any level of the hierarchy
+ADDITIONALLY — if Territory Management 2.0 active:
+  Build parallel Territory hierarchy (separate from User hierarchy)
+  Record Opportunity.Territory2Id → Territory hierarchy path
+  Pipeline can be aggregated by both User hierarchy AND Territory hierarchy independently
+4.5 Campaign Attribution Normalization
+Salesforce's Campaign attribution model uses a Primary Campaign Source (Opportunity.CampaignId) plus multi-touch attribution via CampaignMember. SMPL's canonical Campaign Attribution model captures both.
+PRIMARY ATTRIBUTION:
+  opportunity.campaign_id → Opportunity.CampaignId
+  Map to Campaign canonical object if CampaignId is non-null
+MULTI-TOUCH ATTRIBUTION (if Campaigns active):
+  SOQL: SELECT CampaignId, LeadOrContactId, Status
+        FROM CampaignMember
+        WHERE LeadOrContactId IN ({all Contacts on this Opportunity})
+  Creates MQL Attribution Movement records linking Campaigns to Contacts
+  to Opportunities through the Contact role path
+  CONFIDENCE: D-M — multi-touch attribution via CampaignMember is available
+  but requires the customer to have maintained Campaign membership records
+  consistently, which is not universal even when Campaigns are active.
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+Stage normalization completeness
+Every active stage name across all Record Types must have a resolved canonical mapping in CEP.stage_mapping
+FLAG for each unresolved stage; pipeline capability confidence capped at 40% until all stages resolved
+−60% baseline on all pipeline capabilities while any stage is unresolved
+Closed Won = single terminal stage
+Exactly one stage_name per Record Type must map to Closed Won
+FLAG if zero or multiple Closed Won mappings per Record Type
+−30% on Bookings Forecast confidence for the affected RecordType
+Missing Opportunity owner
+Opportunity.OwnerId is null or references an inactive User
+FLAG — missing owner; do not REJECT
+−20% on Sales Productivity capabilities for affected Opportunities
+Amount null at or beyond Proposal stage
+Opportunity.Amount is null for opportunities at or beyond the Proposal canonical stage
+FLAG — likely a data quality gap in the source CRM
+−10% on Pipeline Coverage confidence
+Orphaned OpportunityHistory
+OpportunityHistory record references an Opportunity Id not in canonical Opportunity set
+FLAG — may indicate deleted Opportunity; do not include in pipeline calculations
+No direct confidence impact — historical artifact
+Duplicate Account detection
+Accounts with identical Name + BillingPostalCode or identical Website
+FLAG — identity resolution ambiguity; do not auto-merge
+−10% on Customer Account identity confidence across duplicates
+Table IMS-101.5.1 — Salesforce validation rules.
+Section 6 — Canonical Population
+Step
+Canonical Object
+Salesforce Specific
+1
+Currency
+From CurrencyType object; multi-currency flag drives conversion rate handling
+2
+Users + Sales Hierarchy
+Build hierarchy before Opportunities — owner_hierarchy_path populated per Opportunity requires the User tree to exist first
+3
+Territory Hierarchy
+If Territory Management 2.0 active; parallel to User hierarchy
+4
+Accounts (Customer Accounts)
+Standard; include BillingAddress for cross-system identity resolution
+5
+Contacts
+Link to Accounts; Contact Roles on Opportunities captured separately in Step 9
+6
+Products (Product2 + PricebookEntry)
+Product catalog + Price Book entries; required before Opportunity Products in Step 10
+7
+Campaigns
+If Campaigns active; required before CampaignMember attribution in Step 11
+8
+Stage Normalization Gate (unique to CRM)
+CEP.stage_mapping must be populated for all active Record Types before Opportunity population begins. FLAG all Opportunity population if any RecordType has unresolved stages — data can still be extracted but stage_canonical = UNRESOLVED.
+9
+Opportunities
+WITH: stage normalization, forecast category normalization, type normalization, owner hierarchy path assignment
+10
+Opportunity Products
+N:1 per Opportunity; requires Product catalog from Step 6
+11
+CampaignMember Attribution
+Multi-touch attribution; requires Campaigns from Step 7 and Contacts from Step 5
+12
+OpportunityHistory (Stage Events)
+N per Opportunity; requires Opportunities from Step 9; filtered to StageName change events only
+13
+ForecastingItems
+If Collaborative Forecasts active; requires Users from Step 2 and Opportunities from Step 9
+14
+Pipeline Aggregates
+Derived: period-level pipeline summary, win rate by stage, velocity by stage; requires Steps 9 and 12
+Table IMS-101.6.1 — Salesforce canonical population sequence. Step 8 (Stage Normalization Gate) is unique to CRM connectors and has no equivalent in the ERP library.
+Section 7 — Confidence Calculation
+Object / Factor
+Base Confidence
+Adjustment
+Opportunity (standard fields, stage resolved)
+D-H = 90%
+Base for a standard Salesforce opportunity with resolved stage mapping
+Opportunity (stage unresolved)
+Low = 35%
+DEGRADED — cannot reason over pipeline stage data until resolved
+OpportunityHistory
+D-H = 88%
+Reliable, consistent audit trail — one of Salesforce's structural advantages
+Forecast Category (Collaborative Forecasts active)
+D-M = 60%
+Module-dependent; reliable when active
+Forecast Category (module inactive)
+Not Available = 0%
+No data — not an error, just a capability gap
+Missing Opportunity owner
+−20% on Sales Productivity capabilities
+Owner is required for territory and productivity reporting
+Custom stage name resolved via CEP
++15% vs. pre-resolution baseline
+CEP resolution converts Unresolved stages to D-H equivalent
+Billing connector present
++10% on Bookings Forecast
+Cross-validates Closed Won amounts against actual billing subscriptions
+ERP connector present
++8% on Sales Forecasting
+Realized revenue provides forecast accuracy benchmark
+CPQ active + Billing connected
++12% on ARR-related capabilities
+CPQ subscription data + Billing confirmation produces highest-confidence ARR cross-validation
+Governor limit truncation detected
+−15% on all historical pipeline waterfall calculations
+Incomplete OpportunityHistory produces systematically understated pipeline movement
+Table IMS-101.7.1 — Salesforce confidence calculation.
+Section 8 — Capability Activation
+Capability
+Status (standalone)
+Min Confidence
+Key Dependency
+Notes
+Pipeline Analytics
+READY (post-stage-resolution)
+75%
+Stage normalization complete for all Record Types
+Degrades to PARTIAL at 40% if any stages unresolved
+Pipeline Waterfall
+READY (post-stage-resolution)
+75%
+OpportunityHistory + stage normalization
+Requires complete history; governor-limited extraction degrades confidence
+Win Rate Analysis
+READY
+80%
+Closed Won/Lost stage mapping confirmed
+Reliable regardless of custom stage names — binary outcome
+Stage Conversion
+READY (post-resolution)
+75%
+All active stages resolved
+Cannot compute conversion rates for unresolved stages
+Sales Velocity
+READY
+78%
+OpportunityHistory timestamps
+Cycle time calculation requires reliable history dates
+Pipeline Coverage
+READY
+76%
+Amount field completeness > 80%
+Degrades if Amount null rates exceed 20% of open Opportunities
+Sales Forecasting
+PARTIAL (Collaborative Forecasts active) / LOW-PARTIAL (inactive)
+55% / 25%
+Collaborative Forecasts module
+Module provides forecast category submissions; without it, forecasting is purely stage-probability derived
+Bookings Forecast
+PARTIAL → READY with Billing
+45%
+Billing connector required for confirmation
+Closed Won = intent; Billing = execution — this is the core cross-domain dependency
+GTM Dashboards
+PARTIAL (pipeline-side only)
+40%
+Marketing Automation connector for spend-side
+Salesforce alone provides pipeline-side GTM data; Marketing Automation provides spend-side
+Territory Reporting
+PARTIAL (TM2 active) / UNAVAILABLE
+50%
+Territory Management 2.0 module
+Territory hierarchy required; HRIS pairing improves headcount context
+Table IMS-101.8.1 — Salesforce capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Confidence Impact
+Escalation?
+Multiple active Record Types, each with different stage sets
+Record Type inventory in Section 1.2 returns count > 1
+Each RecordType gets independent stage normalization; Opportunities are tagged with their RecordType and mapped accordingly. Pipeline Analytics segments by RecordType until a unified view is requested.
+−15% on aggregate pipeline confidence until all RecordTypes are resolved
+No — standard process; resource-intensive but deterministic
+Custom stage taxonomy with no recognizable mapping to SCBM canonical stages
+CEP resolution fails — customer confirms the stage name represents a non-standard business concept
+Accept the stage as CUSTOM_STAGE with no canonical mapping; exclude from stage-progression-based capabilities; flag explicitly in implementation health report
+−30% on Stage Conversion for the affected RecordType
+No — document as a known gap; surface to customer
+Apex trigger mutates Opportunity field after API read
+Post-save automation produces field values that differ from pre-save API reads
+Cannot detect without explicit customer disclosure — this is the primary undiscoverable exception. Ask during Pre-POC Discovery: "Are there automation workflows that modify Opportunity fields after save?"
+Risk: canonical data does not reflect what users see in the UI; flag if disclosed
+Yes — engineering assessment required if confirmed
+Governor limit truncation during Bulk API extraction
+Bulk API job reports success but record count is less than expected from COUNT() query
+Re-run extraction with smaller date range batches; cross-validate total count after each batch; escalate if persistent discrepancy
+−15% on historical pipeline waterfall
+No — retry with smaller batches
+Stale or inactive Record Types included in extraction
+Record Types with IsActive = false appear in some API responses
+Filter WHERE IsActive = true in all RecordType queries; log count of excluded stale Record Types
+No impact — filtered
+No
+Table IMS-101.9.1 — Salesforce exception handling.
+Section 10 — AI Implementation Workflow
+Salesforce is the most workflow-intensive CRM implementation in this library due to Record Type proliferation. The workflow branches multiple times before any canonical Opportunity mapping begins.
+SALESFORCE — IMPLEMENTATION WORKFLOW
+DISCOVER:
+  1. OAuth authentication + Org ID + environment type (Production/Sandbox)
+  2. RECORD TYPE INVENTORY — all active Opportunity Record Types
+     "This step is the Salesforce equivalent of ACDOCA ledger designation.
+     Every active Record Type must be inventoried before mapping begins."
+  3. Module inventory (Collaborative Forecasts, TM2, CPQ, Campaigns)
+  4. Sales hierarchy extraction (Users + Managers)
+  5. Territory hierarchy (if TM2 active)
+  6. Custom ARR object inquiry during Pre-POC Discovery
+BRANCH 1 — Multiple active Record Types?
+  YES (typical for enterprise Salesforce):
+    BRANCH for each RecordType — independent stage resolution required
+    Begin CEP stage resolution for all RecordTypes simultaneously
+    DO NOT wait for one before starting others
+  NO → Single stage taxonomy; proceed to Stage Resolution Gate
+STAGE RESOLUTION GATE (unique to CRM library):
+  CEP.stage_mapping must be complete for ALL active Record Types
+  ├─ All resolved → pipeline capabilities proceed normally
+  ├─ Partial resolution → extract with UNRESOLVED tags; capabilities PARTIAL
+  └─ Zero resolution → extract with all stages UNRESOLVED;
+                         capabilities degraded to 40% confidence ceiling
+  NOTE: Unlike ERP BLOCK conditions, this is a confidence degradation gate,
+        NOT an extraction BLOCK. Extraction proceeds; confidence reflects resolution status.
+ANALYZE: Map all objects (Table IMS-101.2.1)
+NORMALIZE:
+  Stage normalization per RecordType (Section 4.1)
+  Forecast category normalization (Table IMS-101.4.2)
+  Opportunity type normalization (Table IMS-101.4.3)
+  Campaign attribution (Section 4.5)
+TRANSFORM:
+  Owner hierarchy construction (Section 4.4)
+  Territory hierarchy (if TM2 active)
+  Period-level pipeline aggregates (after all Opportunities populated)
+VALIDATE: Table IMS-101.5.1
+  Priority: Stage normalization completeness + Closed Won uniqueness
+POPULATE: Steps 1-14 (Table IMS-101.6.1)
+SCORE: Table IMS-101.7.1
+  Stage-resolution status is the primary confidence variable
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+NOTE: Salesforce implementations with 4+ active Record Types may require
+      2-3 dedicated CEP resolution sessions. Communicate this timeline
+      upfront. Implementation is complete when all Record Types are resolved,
+      not when extraction is complete.
+IMS-102 — HubSpot CRM
+HubSpot is the fastest CRM implementation in this library for standard configurations. Its more opinionated data model — fewer customization surface areas than Salesforce, a standardized default stage taxonomy, and native Marketing Hub integration — means the implementation agent can proceed to canonical population faster with less CEP resolution. The primary complexity drivers are multiple deal pipelines (when present) and Sales Hub/Marketing Hub tier mismatches (which affect GTM capability availability).
+✱ ARCHITECT NOTE: Key departure from Salesforce IMS: HubSpot uses Deals (not Opportunities), Companies (not Accounts), and the Property History API (not OpportunityHistory) for stage-change audit trails. HubSpot's single Object Schema means there are no Record Types — a Deal always has the same base field set, with pipeline assignment determining the applicable stage taxonomy rather than a Record Type designation. This simplifies the stage resolution workflow considerably: one pipeline = one stage set to resolve, not one Record Type = one stage set.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Failure Handling
+Authentication method
+OAuth 2.0 (Authorization Code flow) for user-facing implementations; Private App access token for server-to-server. Private App is preferred for SMPL connectors — provides scoped, non-expiring access without refresh token management complexity.
+Private App tokens do not expire unless explicitly rotated by the HubSpot account admin. Store securely; document creation date in CEP for future rotation tracking.
+Portal ID
+HubSpot's unique account identifier. Retrieved from account info endpoint. Equivalent to Salesforce Org ID.
+Confirm this is the production portal, not a sandbox or free-tier account where data may not represent live customer behavior.
+HubSpot account tier
+HubSpot Sales Hub tier (Free, Starter, Professional, Enterprise) determines which features are available.
+Free and Starter tiers lack multiple pipelines and custom reporting; Professional and Enterprise unlock most features relevant to SMPL's pipeline capabilities.
+Table IMS-102.1.1 — HubSpot authentication.
+1.2 Pipeline and Stage Inventory — The Primary Discovery Step
+HubSpot's pipeline model is simpler than Salesforce's Record Type model: each pipeline has its own stage list, and every Deal belongs to exactly one pipeline. The implementation agent must inventory all active pipelines — including secondary pipelines often used for renewals or expansion deals.
+DISCOVER all deal pipelines:
+  GET /crm/v3/pipelines/deals
+  FOR each pipeline:
+    Record: pipelineId, label, stages[{stageId, label, probability}]
+    Record in CEP.pipelines[pipelineId]: {label, stages}
+  IDENTIFY default pipeline (default = true):
+    Most Deals will be in the default pipeline; secondary pipelines
+    are easily overlooked if discovery stops at the first pipeline found.
+    DO NOT stop at the default pipeline — enumerate all.
+  FOR each pipeline:
+    Check: does this pipeline have active deals?
+    GET /crm/v3/objects/deals?filterGroups=[{filters:
+      [{propertyName: "pipeline", operator: "EQ", value: "{pipelineId}"}]}]
+    If count > 0 → pipeline is in active use; include in CEP resolution
+    If count = 0 → pipeline may be stale; flag for CEP confirmation
+  RECORD in CEP.active_pipelines: list of pipelines with active deals
+1.3 Hub and Tier Inventory
+Hub / Feature
+Detection
+CEP Impact
+Marketing Hub tier
+GET /marketing/v3/marketing-events → 200 or error; OR check subscriptions via account info
+Marketing Hub active: GTM Dashboards include spend-side data (native integration advantage over pure-CRM platforms). Record CEP.marketing_hub_tier.
+Sales Hub tier
+Account info / subscriptions
+Sales Hub Professional+ required for multiple pipelines, custom deal properties, and forecasting. Record CEP.sales_hub_tier.
+Service Hub
+GET /crm/v3/objects/tickets?limit=1 → 200 or error
+Service Hub active: Ticket object available for Customer Success domain signal (not canonical Health Score — signal only).
+Sequences (email automation)
+GET /crm/v3/objects/communications?limit=1
+Sequences engagement data: not yet a canonical target, but relevant to future Sales Activity capability.
+Forecasting
+GET /crm/v3/objects/deals?properties=hs_forecast_amount → populated or null
+If hs_forecast_amount field is populated across deals: forecasting feature in use. Record CEP.forecasting_enabled.
+Table IMS-102.1.2 — HubSpot hub and feature inventory.
+1.4 Discovery Completion Gate
+Gate Item
+Confirmed When
+Authentication and portal ID confirmed
+Private App token active; portal ID recorded
+All active deal pipelines inventoried
+CEP.pipelines populated for every pipeline with active deals
+Hub tier confirmed
+CEP.sales_hub_tier and CEP.marketing_hub_tier populated
+Stage resolution initiated for all active pipelines
+CEP stage resolution workflow started; resolution not required to be complete before extraction
+Tier mismatch assessed
+Any mismatch between Sales Hub and Marketing Hub tier documented in CEP with capability impact noted
+Table IMS-102.1.4 — HubSpot discovery completion gate.
+Section 2 — Canonical Object Mapping
+HubSpot Object
+API Endpoint
+Canonical Target
+Cardinality
+Confidence
+Conditional On
+Company
+GET /crm/v3/objects/companies
+Customer Account (Entity)
+1:1
+D-H
+None
+Deal
+GET /crm/v3/objects/deals
+Opportunity (Entity)
+1:1
+D-H for core fields; Normalized-H after pipeline stage resolution
+Stage normalization required per pipeline
+Deal Property History (dealstage)
+GET /crm/v3/objects/deals/{id}/history
+Opportunity Stage Event (Movement)
+N:1
+D-H via Property History API
+Property History API — distinct from standard Deal endpoint; must be queried separately
+Contact
+GET /crm/v3/objects/contacts
+Contact (Entity, Tier 2)
+N:1 (contacts:company)
+D-H
+None
+Marketing Email / Form / Landing Page
+GET /marketing/v3/...
+Campaign (Entity) — Marketing sub-type
+1:1 per asset
+D-H (Marketing Hub active)
+Marketing Hub required
+Ticket (Service Hub)
+GET /crm/v3/objects/tickets
+Support Case — Customer Success domain signal only
+1:N (tickets:company)
+D-H (Service Hub active)
+Service Hub required; canonical target is Health Score signal, not Health Score itself
+Line Item (Deal-to-Product)
+GET /crm/v3/objects/line_items
+Opportunity Line Item (Movement detail)
+N:1 (line items:deal)
+D-H
+Products module active in account
+Product
+GET /crm/v3/objects/products
+Product (Entity, Tier 2)
+1:1
+D-H
+None — HubSpot has a native product catalog
+Table IMS-102.2.1 — HubSpot canonical object map.
+Section 3 — Canonical Field Mapping (Key Objects)
+3.1 Deal (Opportunity Core Fields)
+HubSpot Property
+SCBM Field
+Req/Opt
+Transform
+Notes
+id (Deal ID)
+opportunity.source_id
+REQ
+None — HubSpot uses integer IDs
+Globally unique within portal
+dealname
+opportunity.opportunity_name
+REQ
+String trim
+Non-empty
+associatedCompanyIds[0]
+opportunity.customer_account_id
+REQ
+FK to Company canonical; HubSpot supports multiple associated companies — use the primary (first in array) unless CEP designates otherwise
+Multi-company associations are handled as extension data
+dealstage
+opportunity.stage_name_raw
+REQ
+Store raw stage ID; normalized via Table IMS-102.4.1
+HubSpot stores stage IDs (not display names) in the property — the mapping table translates IDs to display names to canonical stages
+pipeline
+opportunity.pipeline_id
+REQ
+FK to CEP.pipelines
+Determines which stage normalization applies to this Deal
+amount
+opportunity.amount_local
+OPT → REQ for pipeline
+Currency normalization
+HubSpot does not enforce amount for all deals; null is valid but FLAG beyond early pipeline stages
+closedate
+opportunity.expected_close_date
+REQ
+ISO 8601 timestamp → date extraction
+HubSpot stores as millisecond epoch timestamp; convert to date
+hubspot_owner_id
+opportunity.owner_user_id
+REQ
+FK to HubSpot owner (User equivalent)
+Required for Sales Productivity; missing owner degrades confidence
+hs_forecast_amount
+opportunity.forecast_amount
+OPT
+Currency normalization
+Populated when Forecasting feature active; distinct from standard Deal amount
+dealtype
+opportunity.opportunity_type
+OPT
+Normalize per HubSpot deal type picklist — see Table IMS-102.4.2
+Less universally used than Salesforce Opportunity.Type
+Table IMS-102.3.1 — HubSpot Deal field mapping.
+3.2 Deal Property History (Stage Change Events)
+HubSpot's Property History API is the equivalent of Salesforce's OpportunityHistory. It returns a timestamped log of all property changes for a Deal. The implementation agent queries it for the dealstage property specifically.
+HubSpot Property History Field
+SCBM Field
+Notes
+dealId (from parent Deal)
+stage_event.opportunity_id
+Link to parent Opportunity canonical object
+value (stage ID at this event)
+stage_event.stage_name_raw
+Store raw stage ID; apply stage normalization from Table IMS-102.4.1
+timestamp (millisecond epoch)
+stage_event.event_timestamp
+Convert to ISO 8601 timestamp
+sourceId / sourceLabel
+stage_event.change_source
+Who or what caused the stage change — user, workflow, or API
+Table IMS-102.3.2 — HubSpot Deal Property History field mapping.
+Section 4 — Transformation Rules
+4.1 Pipeline Stage Normalization
+HubSpot stage normalization differs from Salesforce's in one important way: HubSpot stages are identified by opaque ID strings (e.g., "appointmentscheduled"), not display names. The implementation agent must first map stage IDs to display names, then map display names to canonical stages.
+FOR EACH active pipeline in CEP.active_pipelines:
+  pipeline_stages = CEP.pipelines[pipelineId].stages
+  FOR each {stageId, label} in pipeline_stages:
+    STEP 1: ID → Display Name (already available from pipeline inventory)
+    stage_display_name = pipeline_stages[stageId].label
+    STEP 2: Display Name → SCBM Canonical Stage
+    LOOKUP in HubSpot Standard Stage Pattern Library:
+    ├─ Exact match (standard HubSpot stage) → D-H confidence
+    ├─ Fuzzy match → FLAG_FOR_CEP; apply tentative mapping with D-M confidence
+    └─ No match → FLAG_FOR_CEP with display_name; Low confidence until resolved
+    RECORD: CEP.stage_mapping[pipelineId][stageId] = {
+      stage_canonical, confidence, display_name
+    }
+    VALIDATE: hs_probability field for Closed Won stage should be 1.0 (100%)
+    Validate: Closed Lost stage should have hs_probability = 0.0
+    These are HubSpot-enforced defaults; deviation indicates custom override.
+4.2 Deal Type Normalization
+HubSpot dealtype Value
+SCBM Opportunity Type
+Notes
+newbusiness
+NEW_BUSINESS
+Most common — net new logo or new product line
+existingbusiness
+RENEWAL or EXPANSION
+Ambiguous — CEP must confirm whether this represents a renewal or an expansion deal; do not default without confirmation
+[Custom value]
+FLAG_FOR_CEP
+Custom deal type values require CEP resolution
+Table IMS-102.4.2 — HubSpot deal type normalization.
+4.3 Marketing Attribution Normalization
+HubSpot's native Marketing Hub integration produces richer first-touch and multi-touch attribution data than any other CRM connector in this library — a structural advantage from the native CRM+Marketing platform model.
+FIRST-TOUCH ATTRIBUTION:
+  Contact.hs_analytics_source → MQL Attribution source
+  Contact.hs_analytics_first_referrer → referral URL
+  Maps to: MQL.lead_source (canonical)
+DEAL ATTRIBUTION (from Deal-Contact associations):
+  For each Deal: GET /crm/v3/objects/deals/{id}/associations/contacts
+  For each associated Contact: retrieve hs_analytics_source, original_source
+  Apply Attribution Model from CEP.attribution_model:
+    FIRST_TOUCH: attribute Deal to first contact's source
+    LAST_TOUCH: attribute Deal to most recently created contact's source
+    LINEAR: distribute attribution equally across all contacts' sources
+  Default: FIRST_TOUCH unless CEP specifies otherwise
+CONFIDENCE: D-M — HubSpot attribution data is reliable when Marketing Hub is
+  active and forms/landing pages are consistently tracked;
+  confidence degrades if some lead sources are not tracked through HubSpot forms.
+Section 5 — Validation Rules
+Validation
+Logic
+Code
+Confidence Impact
+Stage normalization completeness
+All pipeline stages across all active pipelines must have a resolved canonical mapping
+FLAG for each unresolved stage; pipeline capabilities capped at 40% per pipeline until resolved
+Per-pipeline confidence gate — resolved pipelines unaffected by unresolved ones
+Multi-pipeline Deal exclusion
+Deals in pipelines with zero active deals (from Section 1.2 count check) are flagged as potentially stale
+FLAG — do not automatically exclude; surface to customer for confirmation
+No direct confidence impact — surface for CEP decision
+Missing Deal amount beyond Presentation Scheduled stage
+amount null for Deals at or beyond SCBM Opportunity canonical stage (3rd stage or later)
+FLAG
+−10% on Pipeline Coverage
+Company-Deal association multiplicity
+Deal associated with zero Companies
+REJECT — unattributed Deal cannot be included in account-level pipeline reporting
+N/A — excluded from pipeline rollups
+Tier capability mismatch
+Sales Hub tier < Professional but multiple pipelines are configured
+FLAG — this is a known HubSpot behavior edge case; surfaced to customer for clarification
+−5% on overall capability confidence until clarified
+Table IMS-102.5.1 — HubSpot validation rules.
+Section 6 — Canonical Population
+Step
+Canonical Object
+HubSpot Specific
+1
+Currency
+FROM HubSpot account settings; multi-currency requires additional configuration
+2
+Owners (User equivalents)
+GET /crm/v3/owners → HubSpot calls users "owners"; build owner hierarchy from team structure where available
+3
+Products
+FROM /crm/v3/objects/products; native product catalog
+4
+Companies (Customer Accounts)
+FROM /crm/v3/objects/companies
+5
+Contacts
+FROM /crm/v3/objects/contacts; associate to Companies
+6
+Stage Normalization Gate
+CEP.stage_mapping must be in progress; all active pipelines inventoried; extraction proceeds regardless of resolution status — confidence reflects resolution state
+7
+Deals (Opportunities)
+FROM /crm/v3/objects/deals; WITH pipeline stage normalization, deal type normalization, owner assignment
+8
+Deal Property History (Stage Events)
+Separate query per Deal or batch via Property History API; filter for dealstage property changes only
+9
+Line Items (Opportunity Products)
+FROM /crm/v3/objects/line_items; associated to Deals from Step 7
+10
+Marketing Attribution
+Contact.hs_analytics_source extraction; attribution model from CEP applied
+11
+Campaigns (Marketing Hub, if active)
+FROM /marketing/v3/... endpoints; populated only when Marketing Hub active
+12
+Tickets (Service Hub, if active)
+FROM /crm/v3/objects/tickets; health signal contribution — not canonical Health Score
+13
+Pipeline Aggregates
+Same derivation pattern as Salesforce; HubSpot's native probability fields can supplement SCBM-derived probability calculations
+Table IMS-102.6.1 — HubSpot canonical population sequence.
+Section 7 — Confidence Calculation
+Object / Factor
+Base Confidence
+Adjustment
+Deal (standard fields, stage resolved)
+D-H = 90%
+HubSpot's stricter field standards produce slightly higher baseline than Salesforce
+Deal (stage unresolved)
+Low = 35%
+Same degradation pattern as Salesforce
+Deal Property History (Stage Events)
+D-H = 88%
+Reliable via Property History API; requires separate per-Deal query — ensure batching for large implementations
+Marketing Attribution (Marketing Hub active)
+D-M = 72%
+Higher than Salesforce Campaign attribution — native integration means more consistent tracking
+Marketing Attribution (Marketing Hub inactive)
+Low = 25%
+Attribution data is sparse without Marketing Hub — significant gap vs. active-Marketing-Hub implementations
+Sales Hub/Marketing Hub tier mismatch
+-10% on GTM Dashboard capabilities
+Capability availability depends on the lower of the two tiers
+Multiple active pipelines (all resolved)
++5% on pipeline aggregate confidence
+More complete commercial picture from multiple deal types
+Billing connector present
++10% on Bookings Forecast
+Same cross-validation benefit as Salesforce
+Table IMS-102.7.1 — HubSpot confidence calculation.
+Section 8 — Capability Activation
+Capability
+Status
+Key HubSpot Differentiator
+Pipeline Analytics
+READY (post-stage-resolution)
+Comparable to Salesforce; faster to resolution for standard pipelines
+Pipeline Waterfall
+READY (post-resolution)
+Requires Property History API — a separate query pattern from standard Deal retrieval
+GTM Dashboards
+READY (Marketing Hub active) / PARTIAL (inactive)
+HubSpot's primary capability advantage: native Marketing Hub data makes GTM Dashboards READY standalone, vs. PARTIAL for Salesforce without a Marketing Automation connector
+Win Rate Analysis
+READY
+Same as Salesforce — binary outcome; reliable regardless of stage taxonomy
+Territory Reporting
+UNAVAILABLE
+HubSpot's team structure does not support hierarchical territory management — a structural ceiling comparable to BambooHR's Position Planning gap in the HRIS library
+Sales Forecasting
+PARTIAL (Sales Hub Pro+) / LOW-PARTIAL (lower tier)
+Same module-dependency pattern as Salesforce; hs_forecast_amount field available when active
+Table IMS-102.8.1 — HubSpot capability activation.
+Section 9 — Exception Handling
+Exception
+Detection
+Fallback
+Escalation?
+Stale pipeline with residual Deals
+Pipeline marked inactive but count of Deals in it > 0
+Flag pipeline as INACTIVE_WITH_RESIDUAL_DEALS; extract Deals for historical record; exclude from active pipeline reporting unless CEP specifically requests inclusion
+No
+Deal associated with multiple Companies
+Deal.associations.companies returns count > 1
+Tag primary Company using array position 0 or CEP-designated association type; record all companies as extension data
+No — document in implementation log; surface to customer
+Property History API rate limit
+429 Too Many Requests on /crm/v3/objects/deals/{id}/history
+Implement exponential backoff; use batch endpoint where available; for large implementations, fetch history in overnight extraction windows
+No
+Sales Hub/Marketing Hub tier lower than expected
+Capability inventory returns 403 or missing feature flags that contradict what customer described during discovery
+FLAG specific capability gaps; update CEP.hub_tier; communicate capability impact to customer before activation
+No — update CEP and notify; no escalation required
+Table IMS-102.9.1 — HubSpot exception handling.
+Section 10 — AI Implementation Workflow
+HUBSPOT — IMPLEMENTATION WORKFLOW
+(Simpler than Salesforce — no Record Types; pipeline-level stage resolution only)
+DISCOVER:
+  1. Private App authentication + portal ID confirmation
+  2. PIPELINE INVENTORY — all active deal pipelines
+     "Single stage taxonomy per pipeline; multiple pipelines still require
+     independent resolution per pipeline — but less likely than Salesforce
+     to have 4+ independent taxonomies to resolve simultaneously."
+  3. Hub tier inventory (Sales Hub, Marketing Hub, Service Hub)
+  4. Tier mismatch assessment and capability impact documentation
+BRANCH 1 — Multiple active pipelines?
+  YES → Independent stage resolution per pipeline; proceed in parallel
+  NO → Single pipeline; single stage resolution
+STAGE RESOLUTION GATE:
+  Same logic as Salesforce but per-pipeline, not per-Record-Type
+  Extraction proceeds regardless; confidence reflects resolution status
+BRANCH 2 — Marketing Hub active?
+  YES → GTM Dashboards capability READY standalone
+         Extract marketing attribution data (Section 4.3)
+  NO → GTM Dashboards PARTIAL; note pipeline-side only
+ANALYZE: Map all HubSpot objects (Table IMS-102.2.1)
+  Note: Deal stage IDs must be resolved to display names before normalization
+NORMALIZE:
+  Pipeline stage normalization: ID → Display Name → Canonical (Section 4.1)
+  Deal type normalization (Table IMS-102.4.2)
+  Marketing attribution (Section 4.3)
+TRANSFORM: Property History extraction for each active Deal
+  Batch where possible; rate limit awareness required for large portals
+VALIDATE: Table IMS-102.5.1
+POPULATE: Steps 1-13 (Table IMS-102.6.1)
+SCORE: Table IMS-102.7.1
+  Marketing Hub tier is the primary confidence variable beyond stage resolution
+CAPABILITY ASSESSMENT → MODULE ACTIVATION → READY
+IMPLEMENTATION SPEED NOTE:
+  HubSpot standard-pipeline implementations (single pipeline, active
+  Marketing Hub) are typically the fastest CRM onboarding in this library.
+  Multiple pipelines and tier mismatches are the primary timeline extensions.
+IMS-103 — Microsoft Dynamics 365 Sales
+Dynamics 365 Sales shares the Dataverse platform and OData API surface with Dynamics 365 Finance (IMS-004). This shared foundation means the implementation agent can reuse the authentication pattern and OData query construction from IMS-004, while applying CRM-specific canonical object mapping logic. The primary CRM-specific complexity driver is the Business Process Flow (BPF) model — Dynamics 365 Sales's equivalent of Salesforce's Record Types.
+✱ ARCHITECT NOTE: Key departure from HubSpot IMS: Dynamics 365 Sales uses Business Process Flows (BPFs) as its stage management mechanism — a more flexible but less standardized model than either Salesforce Record Types or HubSpot Pipelines. Multiple BPFs can be active for the same Opportunity, and BPF stage configurations carry less SMPL implementation history than Salesforce's or HubSpot's equivalent structures. The implementation agent should expect to accumulate new pattern data during early Dynamics 365 Sales implementations that is not yet in the SMPL Tier 2 pattern library.
+Section 1 — Connector Discovery
+1.1 Authentication
+Authentication follows the identical pattern established in IMS-004 (Dynamics 365 Finance): OAuth 2.0 via Azure AD client credentials. The same service principal used for Dynamics 365 Finance implementations can be reused for Dynamics 365 Sales, subject to permission scope confirmation — the required Dataverse tables differ between Finance and Sales.
+Item
+Action / Expected Value
+Notes
+Azure AD service principal
+Same pattern as IMS-004: client ID + client secret via Azure AD tenant
+Confirm the service principal has Dynamics 365 Sales-specific table permissions, not just Finance permissions
+Environment URL
+https://{customer_environment}.crm.dynamics.com (Sales/CRM environments use .crm. not .operations.)
+Dynamics 365 Sales and Finance use different base URLs — do not reuse Finance environment URL
+Shared Dataverse tenant assessment
+Check if the customer also runs Dynamics 365 Finance. If yes: shared Dataverse identity is a documented opportunity.
+Record in CEP.dynamics_dual_deployment. This enables compound-mapping cross-validation but is not assumed — confirm shared Account table structure explicitly.
+Table IMS-103.1.1 — Dynamics 365 Sales authentication.
+1.2 Business Process Flow Inventory — The Primary Discovery Step
+DISCOVER active Business Process Flows for Opportunity:
+  GET /api/data/v9.2/workflows?$filter=category eq 4 and primaryentity eq 'opportunity'
+    (category 4 = Business Process Flows)
+  FOR each active BPF:
+    Record: workflowid, name, stagenames (from BPF stage definitions)
+    Record in CEP.business_process_flows[workflowId]: {name, stages}
+  CHECK: multiple BPFs active?
+  ├─ Single BPF → standard stage resolution, one stage set
+  └─ Multiple BPFs → each requires independent stage resolution
+                      (Analogous to Salesforce Record Types)
+  FOR each BPF, retrieve stage definitions:
+  GET /api/data/v9.2/processstages?$filter=processid eq '{workflowid}'
+  Record stage names and sequence positions
+  DETERMINE which BPF each Opportunity currently follows:
+  This requires querying the processsession entity (active BPF instances)
+  GET /api/data/v9.2/processsessions?$filter=_regardingobjectid_value eq '{oppId}'
+1.3 Module Inventory
+Feature
+Detection
+CEP Impact
+Sales Forecasting
+GET /api/data/v9.2/msdyn_forecastconfigurations?$top=1
+If configured: Forecast entity available. Record CEP.forecasting_active.
+Shared Dataverse with D365 Finance
+Compare LegalEntity entity between Finance and Sales environments
+If shared: Account identity resolution possible across both products — compound-mapping opportunity, not assumed
+Copilot for Sales / AI features
+GET /api/data/v9.2/msdyn_salesinsightsconfigurations?$top=1
+Not yet a canonical mapping target — record for future registry update
+Table IMS-103.1.2 — Dynamics 365 Sales module inventory.
+Section 2 — Canonical Object Mapping
+Dynamics 365 Object
+OData Entity
+Canonical Target
+Cardinality
+Confidence
+Account
+GET /api/data/v9.2/accounts
+Customer Account (Entity)
+1:1
+D-H for identity; shared Dataverse may allow D-H for commercial context if Finance connected
+Opportunity
+GET /api/data/v9.2/opportunities
+Opportunity (Entity)
+1:1
+D-H core fields; Normalized-M for BPF stage mapping (limited SMPL history)
+Contact
+GET /api/data/v9.2/contacts
+Contact (Entity, Tier 2)
+N:1
+D-H
+Lead
+GET /api/data/v9.2/leads
+MQL (Movement)
+1:1
+Inferred-M — Lead conversion event tracked via qualifiedleadid
+Opportunity Close (Won/Lost)
+Embedded in Opportunity: statecode + statuscode
+Closed Won / Closed Lost stage events
+1:1 per Opportunity
+D-H
+msdyn_forecastinstance
+GET /api/data/v9.2/msdyn_forecastinstances
+Forecast Line (Movement)
+N:1 per period
+D-M when Forecasting module active
+Product / Opportunityproduct
+GET /api/data/v9.2/products and /opportunityproducts
+Product + Opportunity Line Item
+N:1
+D-H
+Table IMS-103.2.1 — Dynamics 365 Sales canonical object map.
+Section 3 — Canonical Field Mapping (Opportunity)
+D365 Field
+SCBM Field
+Req/Opt
+Transform / Notes
+opportunityid
+opportunity.source_id
+REQ
+GUID; globally unique within tenant
+name
+opportunity.opportunity_name
+REQ
+String trim
+_customerid_value
+opportunity.customer_account_id
+REQ
+FK to Account. Lookup field requiring expansion: $expand=customerid_account($select=accountid,name)
+stageid (from BPF processsession)
+opportunity.stage_name_raw
+REQ
+BPF stage names require separate processstage lookup — not directly on the Opportunity object
+estimatedvalue
+opportunity.amount_local
+OPT
+Currency normalization; Dynamics 365 Finance uses TransactionCurrency lookup
+estimatedclosedate
+opportunity.expected_close_date
+REQ
+OData returns UTC ISO 8601 datetimes — extract date portion only
+_ownerid_value
+opportunity.owner_user_id
+REQ
+FK to SystemUser; expand to get name
+statecode
+opportunity.is_closed
+REQ
+0=Open, 1=Won, 2=Lost
+statuscode
+opportunity.win_loss_status
+OPT
+More granular than statecode; custom statuscode values require CEP resolution
+Table IMS-103.3.1 — Dynamics 365 Sales Opportunity field mapping.
+Section 4 — Transformation Rules
+4.1 BPF Stage Normalization
+BPF stage names follow the same normalization logic as Salesforce Record Type stages and HubSpot Pipeline stages — but with less SMPL Tier 2 pattern history. The implementation agent should apply tentative mappings with Medium confidence for BPF stages and request CEP confirmation more proactively than for Salesforce or HubSpot.
+Standard Dynamics 365 BPF Stage
+SCBM Canonical Stage
+Confidence
+Notes
+Qualify
+SQL
+D-H
+Standard BPF first stage
+Develop
+Opportunity
+D-H
+Standard BPF second stage
+Propose
+Proposal
+D-H
+Standard BPF third stage
+Close
+Negotiate
+D-M
+Ambiguous — spans negotiation and closure in some implementations
+[Custom BPF stage]
+FLAG_FOR_CEP
+Low — Validated maturity means limited pattern library
+Lower pattern library than Salesforce; be more proactive in CEP requests
+Table IMS-103.4.1 — Dynamics 365 Sales BPF stage normalization.
+4.2 Shared Dataverse Identity Resolution (When Applicable)
+When both Dynamics 365 Sales and Dynamics 365 Finance are deployed in the same Dataverse tenant, the Account entity may be shared. This produces a documented but not-yet-validated canonical identity resolution opportunity.
+IF CEP.dynamics_dual_deployment = true:
+  CHECK: Do Sales accounts and Finance LegalEntities share a common Account table?
+  GET /api/data/v9.2/accounts?$select=accountid,name,accountnumber (from Sales env)
+  Compare with /api/data/v9.2/accounts from Finance env (if accessible)
+  IF shared Account table confirmed:
+    Apply cross-connector identity matching using accountid as the shared key
+    Tag canonical Customer Account: identity_confidence = D-H (verified shared ID)
+    This enables higher-confidence pipeline-to-revenue attribution than
+    email-based fuzzy matching would produce
+  IF separate Account tables (separate data):
+    Apply standard email-based identity resolution (Section 4 pattern from IMS-101)
+    Tag as CROSS_SYSTEM_MATCH_REQUIRED in implementation log
+Sections 5–10 Summary — Dynamics 365 Sales
+Sections 5 through 10 follow the identical structure established in IMS-101 (Salesforce) and IMS-102 (HubSpot) with Dynamics 365 Sales-specific content. Key differences:
+Validation (Section 5): BPF stage normalization gate applies the same logic as Salesforce Record Type gate — pipeline capabilities capped at 40% until BPF stages resolved. Additional validation: Dataverse change tracking activation must be confirmed before incremental sync is trusted.
+Canonical Population (Section 6): BPF stage resolution gate at Step 6, same position as Salesforce and HubSpot. Opportunity stage requires processsession join, not a direct Opportunity field — this additional query step is documented as a unique performance consideration for large D365 implementations.
+Confidence (Section 7): All base confidence scores are reduced by 10–15% relative to Salesforce/HubSpot equivalents, reflecting Validated (Level 2) maturity — consistent with the maturity-based confidence framing established in the CKR registry and applied across the ERP library for Validated-maturity connectors.
+Capability Activation (Section 8): Win Rate Analysis is READY (binary outcome regardless of BPF stage taxonomy). Pipeline Analytics and Waterfall are PARTIAL until BPF stages resolved and additional SMPL implementation experience accumulates. GTM Dashboards UNAVAILABLE standalone — no native Marketing integration; requires Marketing Automation connector.
+Exception Handling (Section 9): Includes the shared-Dataverse identity resolution exception from Section 4.2, plus the standard BPF stale-process exception (inactive BPFs with residual Opportunities) and the Dataverse change tracking activation exception from the Common Failure Modes in the CKR registry.
+AI Implementation Workflow (Section 10): Same DISCOVER→ANALYZE→...→READY sequence. Primary branch points: shared Dataverse with Finance (identity resolution path), BPF count (single vs. multiple resolution cycles required).
+IMS-104 — Zoho CRM
+Zoho CRM occupies a deliberate mid-market position between Pipedrive's simplicity and Salesforce's extensibility. Its most distinctive implementation characteristic is Audit Log-based stage extraction — unlike Salesforce's OpportunityHistory or HubSpot's Property History API, Zoho does not expose a dedicated stage-change history endpoint, requiring the implementation agent to derive stage history from the Audit Log API.
+✱ ARCHITECT NOTE: Key departure from all other CRM connectors in this library: stage-change history must be reconstructed from the Zoho Audit Log rather than queried from a dedicated object. This introduces additional processing complexity in Section 4 (Transformation Rules) that has no equivalent in Salesforce or HubSpot. The Zoho One suite compound-mapping opportunity (Zoho Books within the same suite) is also documented here as a potential identity resolution advantage for Zoho One customers.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+OAuth 2.0 (Zoho Accounts OAuth). Zoho uses its own OAuth authorization server, not Azure AD or Google.
+Access tokens expire after 1 hour; refresh tokens have a longer lifetime but must be refreshed before expiry. Implement proactive token refresh.
+Data center region
+Zoho hosts data in US (.com), EU (.eu), India (.in), Australia (.com.au), Japan (.jp). The correct API base URL depends on the customer's Zoho data center.
+Always confirm data center during Pre-POC Discovery. Using the wrong regional URL produces 404 or authentication errors that are not clearly explained by the API response.
+Zoho One suite check
+Does the customer use Zoho CRM as part of a Zoho One suite? Record in CEP.zoho_one_active.
+If Zoho One active: Zoho Books may be in the same suite — compound-mapping opportunity for ARR cross-validation (see Section 4.4).
+Table IMS-104.1.1 — Zoho CRM authentication.
+1.2 Pipeline and Stage Inventory
+DISCOVER deal stages (Zoho calls Opportunities "Deals"):
+  GET /crm/v2/settings/stages?module=Deals
+  Returns: [{stage_name, forecast_type, probability, sequence_number}]
+  Record in CEP.stages: full list with sequence and probability
+  NOTE: Zoho CRM supports multiple "Sales Process" configurations
+  (equivalent to Salesforce Record Types / HubSpot Pipelines)
+  GET /crm/v2/settings/salesprocess → returns active sales processes
+  If multiple: each has its own stage set — same CEP resolution per-process
+  IMPORTANT: Zoho has NO vendor-default stage name taxonomy
+  Every customer defines their own stage names from scratch.
+  The implementation agent must NOT assume any stage name without CEP confirmation.
+  This is similar to Pipedrive (IMS-105) in this respect — more so than Salesforce.
+Section 2 — Canonical Object Mapping
+Zoho Object
+API Endpoint
+Canonical Target
+Confidence
+Notes
+Account
+GET /crm/v2/Accounts
+Customer Account (Entity)
+D-H
+Standard
+Deal
+GET /crm/v2/Deals
+Opportunity (Entity)
+D-H core; Normalized-M stage (no vendor defaults)
+Stage confidence lower than Salesforce/HubSpot due to no standard taxonomy
+Contact
+GET /crm/v2/Contacts
+Contact (Entity, Tier 2)
+D-H
+Lead
+GET /crm/v2/Leads
+MQL (Movement)
+Inferred-M
+Conversion tracked via converted_deal_id field
+Audit Log (stage change events)
+GET /crm/v2/settings/auditlog
+Opportunity Stage Event (Movement) — derived
+D-M
+Zoho's audit log provides stage change history; less structured than dedicated history objects
+Campaign
+GET /crm/v2/Campaigns
+Campaign (Entity)
+D-H when active
+Zoho Campaigns module activation varies significantly by customer
+Product / Quote
+GET /crm/v2/Products
+Product (Entity, Tier 2)
+D-H
+Table IMS-104.2.1 — Zoho CRM canonical object map.
+Section 4 — Transformation Rules (Excerpt — Audit Log Stage Extraction)
+The Audit Log stage extraction is the most technically distinctive transformation in this library. It applies only to Zoho CRM and requires careful processing to reconstruct a reliable stage-change event sequence from a general-purpose activity log.
+AUDIT LOG-BASED STAGE HISTORY EXTRACTION:
+  STEP 1: Retrieve Audit Log for Deals
+  GET /crm/v2/settings/auditlog?module=Deals&action=edit
+  Filter: entries where changed_fields includes "Stage"
+  STEP 2: For each audit log entry with Stage change:
+    Record: deal_id, old_value (previous stage), new_value (new stage), modified_time
+  STEP 3: Sort by modified_time (ascending) per deal_id
+    Reconstruct the stage-change sequence for each Deal
+  STEP 4: Apply stage normalization to old_value and new_value
+    Same CEP.stage_mapping logic as other CRM connectors
+  VALIDATION: Cross-check reconstructed stage history against
+    current Deal.Stage — the final entry in the reconstructed history
+    must match the current stage (or flagged as a data integrity issue)
+  CONFIDENCE: D-M (not D-H) — audit log extraction is less reliable than
+    dedicated history objects because:
+    - Audit logs may be paginated differently from financial APIs
+    - Some older audit entries may be purged per Zoho's retention policy
+    - Concurrent edits can produce log entries in unexpected order
+Section 4.4 — Zoho Books Cross-Validation (When Zoho One Active): When the customer uses Zoho Books alongside Zoho CRM within a Zoho One suite, the Contact and Account entities may be shared. The implementation agent checks for shared entity IDs and, when confirmed, uses this for higher-confidence identity resolution between CRM Deals and Zoho Books invoices — a compound-mapping opportunity unique to Zoho One customers.
+Sections 5–10 Summary — Zoho CRM
+Section 5 (Validation): Audit Log completeness check — the implementation agent validates reconstructed stage history against expected Deal count. Missing history for > 5% of Deals produces a FLAG.
+Section 6 (Population): Audit Log stage extraction runs as a separate step after standard Deal population. Zoho One: Books entity cross-reference step if CEP.zoho_one_active.
+Section 7 (Confidence): Audit Log stage events receive D-M base (vs. D-H for Salesforce OpportunityHistory and HubSpot Property History). Zoho One Books cross-validation: +10% on identity confidence when active.
+Section 8 (Capability Activation): Win Rate Analysis READY (binary outcome); Pipeline Waterfall PARTIAL (audit log confidence ceiling); GTM Dashboards PARTIAL (Zoho Campaigns activation varies). Validated maturity reduces all non-binary capabilities to PARTIAL until additional implementations accumulate.
+Section 9 (Exception Handling): Audit log retention limit exception — if Zoho has purged older entries, historical pipeline waterfall data will be incomplete. This is flagged explicitly as a data artifact, not a mapping error.
+IMS-105 — Pipedrive
+Pipedrive is the simplest CRM implementation in this library — a deliberately narrow, opinionated object model with the lowest CEP discovery burden and the fastest path to canonical Opportunity population. Its implementation philosophy is QBO-equivalent in the CRM domain: simpler schema, faster implementation, structural ceilings on forecasting and territory sophistication.
+✱ ARCHITECT NOTE: Key departure from every other CRM in this library: Pipedrive has NO vendor-default stage names. Every customer defines their pipeline from scratch, including what stage names they use and what order they appear. This means the stage normalization gate is universally required and CEP resolution is non-negotiable — there is no pattern library shortcut available for Pipedrive stage normalization. This is simultaneously the connector's primary complexity driver and its primary speed advantage once resolved: a narrow, consistent object model with few CEP resolution edge cases beyond stages.
+Section 1 — Connector Discovery
+1.1 Authentication
+Item
+Expected Value / Action
+Notes
+Authentication method
+OAuth 2.0 (recommended) or API token. OAuth preferred for SMPL connectors.
+API tokens are scoped to a specific Pipedrive user account — not ideal for production integrations where the user might be deactivated. OAuth with service user preferred.
+Company domain
+Pipedrive URLs are customer-specific: https://{company}.pipedrive.com. Identify from the OAuth authorization flow.
+API tier
+Pipedrive API access varies by plan tier (Essential, Advanced, Professional, Power, Enterprise).
+Essential/Advanced tiers have more limited API rate limits — confirm tier to plan extraction batching.
+Table IMS-105.1.1 — Pipedrive authentication.
+1.2 Pipeline and Stage Inventory — The Universal Resolution Requirement
+Pipedrive's most important implementation characteristic: stage inventory and CEP resolution are universally required, not conditionally. There is no scenario where the implementation agent can proceed without stage resolution.
+DISCOVER all pipelines:
+  GET /api/v1/pipelines
+  Returns: [{id, name, active, url_title}]
+  Record in CEP.pipelines: ALL pipelines, not just the default
+DISCOVER stages per pipeline:
+  GET /api/v1/stages?pipeline_id={id}
+  Returns: [{id, name, pipeline_id, order_nr, rotten_time, probability}]
+  Record in CEP.pipeline_stages[pipeline_id]: stage list with order
+  CRITICAL: Pipedrive has NO vendor-default stage names.
+  A stage named "Qualified" in Customer A's Pipedrive might mean the same
+  as "Proposal" in Customer B's Pipedrive.
+  DO NOT apply the standard pattern library without explicit CEP confirmation.
+  Request stage-by-stage business meaning from the customer for every pipeline.
+  FOR each stage: ASK CEP:
+    "Stage '{name}' (order {order_nr}, win probability {probability}%).
+    What canonical pipeline stage does this represent?
+    [SQL / Opportunity / Proposal / Negotiate / Closed Won / Closed Lost]"
+1.3 Multi-Pipeline Assessment
+CHECK: Does this customer have more than one pipeline?
+  GET /api/v1/pipelines → count returned pipelines
+  IF count = 1 (most common for Pipedrive's SMB customer base):
+    Standard single-resolution workflow
+  IF count > 1:
+    Each pipeline requires independent CEP stage resolution
+    CHECK which pipelines have active deals:
+    GET /api/v1/deals?pipeline_id={id}&status=open&limit=1
+    If count = 0 for a pipeline → mark as INACTIVE; exclude unless CEP requests
+  WARNING: The "multiple pipeline" exception from the CKR CRM Registry
+  is more common in Pipedrive than expected given its SMB positioning.
+  Early-stage companies often set up a second pipeline for trials or
+  partnerships that is easy to miss if only the default pipeline is inventoried.
+Section 2 — Canonical Object Mapping
+Pipedrive Object
+API Endpoint
+Canonical Target
+Confidence
+Notes
+Organization
+GET /api/v1/organizations
+Customer Account (Entity)
+D-H
+Pipedrive's equivalent of Salesforce Account / HubSpot Company
+Deal
+GET /api/v1/deals
+Opportunity (Entity)
+D-H core; Normalized-L (pre-resolution) → D-H (post-resolution)
+Lowest pre-resolution stage confidence in the library — universal custom stages
+Person
+GET /api/v1/persons
+Contact (Entity, Tier 2)
+D-H
+Pipedrive's equivalent of Contact
+Lead (Leads Inbox)
+GET /api/v1/leads
+MQL (Movement) — if Leads Inbox active
+Inferred-M
+Leads Inbox is a separate feature from standard Deals — confirm activation
+Deal activity / Deal flow log
+GET /api/v1/deals/{id}/flow
+Opportunity Stage Event (Movement)
+D-H — Pipedrive's deal flow is a reliable event log
+Simpler than Zoho Audit Log; more direct than HubSpot Property History for this connector's narrow object model
+Product
+GET /api/v1/products
+Product (Entity, Tier 2)
+D-H
+Pipedrive has a native product catalog used in deal-product associations
+Table IMS-105.2.1 — Pipedrive canonical object map.
+Section 3 — Canonical Field Mapping (Deal)
+Pipedrive Field
+SCBM Field
+Req/Opt
+Notes
+id
+opportunity.source_id
+REQ
+Integer ID; unique within Pipedrive company
+title
+opportunity.opportunity_name
+REQ
+String trim
+org_id.value
+opportunity.customer_account_id
+REQ
+FK to Organization. Pipedrive deal-organization is a many-to-one relationship.
+stage_id
+opportunity.stage_id_raw
+REQ
+Integer stage ID; resolved to canonical stage via CEP.stage_mapping
+pipeline_id
+opportunity.pipeline_id
+REQ
+Determines which stage normalization applies
+value
+opportunity.amount_local
+OPT
+Currency normalization; deal value in Pipedrive is the expected deal size
+expected_close_date
+opportunity.expected_close_date
+REQ
+ISO 8601 date; null is acceptable for early-stage deals but FLAG beyond SQL stage
+user_id.id
+opportunity.owner_user_id
+REQ
+Owner assignment; required for pipeline rollup
+status
+opportunity.is_closed + opportunity.is_won
+REQ
+open → is_closed=false; won → is_closed=true, is_won=true; lost → is_closed=true, is_won=false
+probability
+opportunity.win_probability
+OPT
+Percentage; customer-customized per stage OR manually overridden per deal
+Table IMS-105.3.1 — Pipedrive Deal field mapping.
+Section 4 — Transformation Rules
+4.1 Pipedrive Stage Normalization — Universal Resolution Required
+Because Pipedrive has no vendor-default stage names, the implementation agent cannot pre-populate the stage normalization table. The entire mapping is customer-specific, resolved via CEP, with no fuzzy-match fallback that would apply to Salesforce or HubSpot standard stage names.
+Stage Normalization Logic
+Notes
+STEP 1: Retrieve all stage IDs and names per pipeline (Section 1.2)
+IDs are integers; names are customer-defined free text
+STEP 2: For each stage, request CEP resolution
+No fuzzy-match pattern library applies — pure CEP confirmation required for every stage name
+STEP 3: Record CEP.stage_mapping[pipeline_id][stage_id] = {stage_canonical, confidence}
+After CEP confirms: confidence = D-H. Before: confidence = Low (35% cap on pipeline capabilities)
+STEP 4: Apply to all Deal stage_id fields
+stage_id → stage_canonical via resolved mapping
+STEP 5: Validate Closed Won and Closed Lost uniqueness
+Same validation as Salesforce — exactly one stage per pipeline must map to Closed Won, exactly one to Closed Lost
+Table IMS-105.4.1 — Pipedrive stage normalization process.
+4.2 Deal Flow Log — Stage Event Reconstruction
+Pipedrive's deal flow log (GET /api/v1/deals/{id}/flow) is a reliable, structured event log that records stage changes with timestamps — more directly usable than Zoho's Audit Log, though it requires per-deal requests rather than a single bulk endpoint.
+FOR each active or recently closed Deal:
+  GET /api/v1/deals/{id}/flow
+  Filter: items where object = "dealChange" and field.field_key = "stage_id"
+  FOR each matching flow event:
+    Record: deal_id, old_stage_id, new_stage_id, log_time
+    Apply: CEP.stage_mapping[pipeline_id][old_stage_id] → old_canonical
+           CEP.stage_mapping[pipeline_id][new_stage_id] → new_canonical
+  Performance note: Pipedrive's narrow object model and typically smaller
+  deal counts (SMB customer base) mean per-deal flow requests are
+  practical at the scale of Pipedrive implementations.
+  For larger Pipedrive deployments (Power/Enterprise tier with many deals):
+  implement parallel requests with rate limit awareness.
+Sections 5–10 Summary — Pipedrive
+Section 5 (Validation): Stage normalization gate applies identically to other CRM connectors. Additional validation: Deal value null beyond early stages FLAG — Pipedrive customers frequently omit deal value, more so than Salesforce or HubSpot customers.
+Section 6 (Population): Simplest population sequence in the CRM library. No multi-currency complexity, no Record Type branching, no BPF joins. Stage resolution gate at Step 5 (same position). Deal flow log extraction at Step 7 (after Deals).
+Section 7 (Confidence): Pre-resolution stage confidence 35% (same as other CRM connectors). Post-resolution: D-H = 88% (comparable to Salesforce for resolved stages). Validated maturity reduces all non-binary capabilities. Win Rate Analysis: READY at D-H = 88% — Pipedrive's Won/Lost status is the highest-confidence single field in this connector.
+Section 8 (Capability Activation): Win Rate Analysis READY. Pipeline Analytics READY post-resolution. Sales Forecasting UNAVAILABLE (Pipedrive has no native forecast category feature — the only CRM in this library with no path to Sales Forecasting standalone). GTM Dashboards PARTIAL — Pipedrive Campaigns add-on provides minimal marketing data. Territory Reporting UNAVAILABLE.
+Section 9 (Exception Handling): Multiple pipeline exception (see Section 1.3 — more common than expected). Stage normalization with no recognizable mapping pattern (most common Pipedrive-specific exception — pure CEP resolution required, no fuzzy-match fallback). Deal value consistently null for all active deals (FLAG — likely a data entry practice gap that will understate Pipeline Coverage).
+Section 10 (AI Implementation Workflow): The fastest CRM workflow in this library once stage resolution is complete. Pre-resolution: identical gate logic to other CRM connectors. Post-resolution: no complex joins, no multi-pipeline branching for typical single-pipeline Pipedrive customers, no BPF or Record Type complexity. Implementation speed advantage is concentrated in the extraction and population phases once CEP resolution is done.
+Cross-CRM Implementation Comparison Matrix
+This matrix is the primary reference for implementation agents and consultants assessing how the five CRM connectors differ in implementation approach, complexity, and capability.
+Stage Normalization Complexity by Connector
+Connector
+Stage Model
+Vendor Defaults Available?
+CEP Resolution Cycles (typical)
+Primary Complication
+Salesforce
+Record Types — one stage set per active Record Type
+Yes — standard stage names with D-H fuzzy match
+1–4 (one per active Record Type)
+Record Type proliferation in enterprise orgs
+HubSpot
+Pipelines — one stage set per active pipeline
+Yes — standard HubSpot stage names with D-H fuzzy match
+1–3 (one per active pipeline)
+Multiple pipelines for different deal types
+Dynamics 365 Sales
+Business Process Flows — one stage set per active BPF
+Yes — standard BPF stage names with D-M match (limited history)
+1–3 (one per active BPF)
+Limited SMPL Tier 2 pattern library; new patterns likely to be discovered
+Zoho CRM
+Sales Processes — one stage set per active process
+No standard taxonomy — CEP resolution required for all
+1–2 (typically single process)
+Audit Log extraction complexity; no stage-change history object
+Pipedrive
+Pipelines — one stage set per pipeline
+NO vendor defaults at all — 100% custom
+1–2 (typically single pipeline)
+No fuzzy-match shortcut; every stage requires explicit CEP confirmation
+Table X-CRM.1 — CRM stage normalization complexity comparison.
+Canonical Object Confidence Comparison
+Canonical Object
+Salesforce
+HubSpot
+Dynamics 365 Sales
+Zoho CRM
+Pipedrive
+Opportunity (post-stage-resolution)
+D-H (90%)
+D-H (90%)
+D-H (80% — Validated)
+D-H (78% — Validated)
+D-H (88%)
+Stage Event (pipeline history)
+D-H (88%) — OpportunityHistory
+D-H (88%) — Property History API
+D-M (72%) — OData history
+D-M (65%) — Audit Log derived
+D-H (82%) — Deal Flow log
+Customer Account (identity)
+D-H (85%)
+D-H (88%)
+D-H (82%)
+D-H (80%)
+D-H (85%)
+Campaign / Attribution
+D-M (55%) — Campaigns module
+D-H (72%) — Native Marketing Hub advantage
+N/A (0% — no native marketing)
+D-H (55%) — when Campaigns active
+Low (10%) — Campaigns add-on minimal
+Forecast Line
+D-M (60%) — module required
+D-M (58%) — Sales Hub Pro+
+D-M (52%) — Validated maturity
+Not Available
+Not Available — no forecast feature
+Win Rate (binary Won/Lost)
+D-H (90%)
+D-H (91%)
+D-H (78%)
+D-H (80%)
+D-H (88%) — highest single-field confidence
+Table X-CRM.2 — Canonical object confidence by connector.
+Standalone Capability Summary Comparison
+Capability
+Salesforce
+HubSpot
+Dynamics 365 Sales
+Zoho CRM
+Pipedrive
+Pipeline Analytics
+READY (post-resolution)
+READY (post-resolution)
+PARTIAL (Validated)
+PARTIAL (Validated)
+READY (post-resolution)
+Pipeline Waterfall
+READY
+READY
+PARTIAL
+PARTIAL
+READY
+Win Rate Analysis
+READY
+READY
+READY
+READY
+READY
+Sales Forecasting
+PARTIAL (module req.)
+PARTIAL (Sales Hub Pro+)
+PARTIAL (feature req.)
+PARTIAL
+UNAVAILABLE
+GTM Dashboards
+PARTIAL (pipeline-side only)
+READY (Marketing Hub active)
+UNAVAILABLE
+PARTIAL (Campaigns active)
+PARTIAL (minimal)
+Territory Reporting
+PARTIAL (TM2 req.)
+UNAVAILABLE
+PARTIAL (Validated)
+PARTIAL
+UNAVAILABLE
+Table X-CRM.3 — Standalone capability comparison. "Post-resolution" means after stage normalization gate is passed.
+Closed Won ≠ Confirmed Revenue — Cross-CRM Reminder
+This principle is universal across all five CRM connectors and is restated explicitly here, once, rather than in every connector's executive summary:
+Every CRM connector in this library records commercial intent, not financial reality. A Deal, Opportunity, or BPF record marked Closed Won confirms that a sales representative recorded a win — it does not confirm that a subscription was created, an invoice was sent, or that cash was collected. Trusted Financial Intelligence from CRM data requires Billing cross-validation for bookings confirmation and ERP cross-validation for revenue-to-pipeline correspondence. This principle is applied without exception across all five CRM connectors and all five Billing connectors in the SMPL Implementation Mapping Library.
+CRM IMS Library — Readiness Assessment
+Dimension
+Score
+Assessment
+Standard Conformance
+9 / 10
+All five specifications follow the ten-section IMS standard. IMS-103, IMS-104, and IMS-105 use the established "Sections 5–10 Summary" pattern for Validated-maturity connectors, acknowledging that implementation behavior for these connectors is less fully characterized while still documenting all ten sections's key decisions.
+Stage Normalization Gate
+10 / 10
+The stage normalization gate is documented consistently across all five connectors as a confidence degradation gate (not an extraction BLOCK), with the same 40% capability confidence ceiling while any stage remains unresolved. This replaces the ERP library's extraction BLOCKs with an appropriate CRM-equivalent that allows data extraction while clearly communicating confidence degradation.
+Connector Differentiation
+9 / 10
+Each connector's genuine architectural differences are documented in the implementation logic: Salesforce's Record Type model, HubSpot's stage ID vs. display name two-step, Dynamics 365's BPF processsession join, Zoho's Audit Log derivation, and Pipedrive's universal no-defaults requirement. No two connectors have the same stage extraction logic.
+Closed Won ≠ Revenue
+10 / 10
+Stated explicitly and consistently in every connector's Transformation Guidance and in the cross-CRM summary — the most important single principle in the CRM domain for Financial Intelligence.
+AI Executability
+9 / 10
+Stage normalization workflows use the same BRANCH/GATE logic established in the ERP library. All decision points produce deterministic outputs.
+Human Implementation Utility
+9 / 10
+Section 10 of each connector is readable as a human implementation workflow as well as an AI execution guide. Advisory notes (e.g., "multiple pipeline discovery is more common than expected in Pipedrive") address human readers specifically.
+Table X-CRM.R — CRM IMS Library readiness assessment. Aggregate: 56 / 60 (93%).
+Final Determination
+The CRM Implementation Mapping Specification Library (IMS-101 through IMS-105) is complete. Implementation agents and human consultants have sufficient implementation knowledge to begin onboarding any Tier 1 CRM platform. Billing IMS Library development may begin.
+The CRM library introduces one implementation concept that had no equivalent in the ERP library: the confidence degradation gate (as opposed to the ERP library's extraction BLOCK). CRM data can be extracted regardless of stage resolution status — but pipeline capabilities are capped at 40% confidence until stage normalization is complete. This is the correct behavior: a partially-resolved CRM provides valuable data (account identity, opportunity amounts, owner assignment) even while stage normalization is ongoing, and blocking all extraction while a single stage is unresolved would unnecessarily delay value delivery.
+The cross-connector pattern that emerges from building all five CRM specs simultaneously: every CRM connector's most consequential confidence variable is not the connector's maturity level — it's the customer's stage taxonomy resolution status. A Validated-maturity connector with fully resolved stages produces higher pipeline confidence than a Production-Ready connector with unresolved stages. This means the implementation agent's highest-priority action in any CRM implementation is stage resolution, regardless of which connector is being implemented.

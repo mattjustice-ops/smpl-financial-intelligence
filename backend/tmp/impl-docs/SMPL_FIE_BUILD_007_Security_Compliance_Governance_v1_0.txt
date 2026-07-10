@@ -1,0 +1,242 @@
+FIE-BUILD-007
+SECURITY, COMPLIANCE & GOVERNANCE
+Version 1.0
+How the platform protects customer data and financial integrity, and satisfies enterprise compliance, without weakening any trust guarantee established throughout ABS, BIS, FIE, and the BUILD series
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — SECURITY & GOVERNANCE HANDBOOK
+Security exists to preserve trust. The platform must never sacrifice transparency in pursuit of security — and security must never weaken evidence, lineage, or explainability.
+Purpose and Authority
+FIE-BUILD-001 established what gets built. FIE-BUILD-002 established engineering standards. FIE-BUILD-003 established platform integration. FIE-BUILD-004 established release engineering. FIE-BUILD-005 established production operations. FIE-BUILD-006 established performance and scalability. This document establishes how the platform protects customer data, preserves financial integrity, satisfies enterprise compliance, and governs every security-sensitive operation. It redesigns nothing: ABS, BIS, FIE, and BUILD-001 through BUILD-006 remain authoritative. This document extends them.
+Scope
+This Document Owns
+This Document Does Not Own
+Identity & Authentication, Authorization (Sections 3–4)
+Platform Architecture — ABS/BIS/FIE remain authoritative
+Secrets Management, Encryption, Key Management (Section 5)
+Deployment — FIE-BUILD-004
+Audit Logging, Compliance Programs (Sections 7–8)
+Production Operations — FIE-BUILD-005
+Governance, Risk Management (Sections 9, 17)
+Performance Engineering — FIE-BUILD-006
+Data Privacy, Security Monitoring (Section 11)
+Customer Implementations — the future FIE-BUILD-008
+Vulnerability Management, Security Incident Response (Sections 12–13)
+Regulatory Controls, Security Certification (Sections 8, 14)
+Governance Reviews (Section 9)
+Cross-references: FIE-BUILD-002 §10 (Engineering Security Standards), FIE-BUILD-003 §13 (Platform Certification), FIE-BUILD-004 §11 (Security Review), FIE-BUILD-005 §19 (Operational Governance), FIE-BUILD-006 §9 (Connector credential handling). This document is the depth behind every one of those sections' security-adjacent mentions — none of them is redefined here, all of them are extended.
+Operational Philosophy
+Security is not merely about preventing unauthorized access. Security preserves customer trust by ensuring:
+Every financial conclusion remains authentic
+Every calculation remains reproducible
+Every methodology remains governed
+Every evidence chain remains intact
+Every customer action remains attributable
+Every administrative action remains auditable
+The platform must never sacrifice transparency in pursuit of security. Likewise, security must never weaken evidence, lineage, or explainability — the same Trust Preservation discipline FIE-BUILD-006 established for performance, applied here to protection.
+Section 1 — Security Philosophy
+Zero Trust — no request is trusted by network location or prior authentication alone; every call is verified, per FIE-BUILD-002 §6's authentication standard
+Least Privilege — a service's credentials grant only what that service needs, per FIE-BUILD-002 §10
+Defense in Depth — no single control is the only thing standing between an attacker and customer data
+Evidence Before Trust — the platform's own defining principle (FIE-005), applied to security: a security claim is only as good as the evidence backing it
+Fail Closed — an ambiguous authorization or verification signal defaults to denial, per the fail-closed posture this platform applies everywhere else a tradeoff could tempt a shortcut
+Secure by Default — a new service or feature ships with the strictest applicable security posture; loosening it requires an explicit decision, never the reverse
+Immutable Auditability — the audit trail itself follows the platform's universal append-only discipline (FIE-BUILD-002 §8); no audit record is ever editable or deletable
+Governance over Convenience — a security exception is possible, but always through Section 9's governance process, never as a quiet workaround
+Section 2 — Security Architecture
+Identity     ↓Authentication          (Section 3)     ↓Authorization           (Section 4)     ↓Platform Services       (the eleven services, per FIE-BUILD-003 §4)     ↓Data Protection         (Section 5)     ↓Audit                   (Section 7)     ↓Compliance              (Section 8)
+Every request to any platform service passes through this chain before it can act on customer data — the chain is the same regardless of which of the eleven services is being called, per FIE-BUILD-002 §6's Tool Gateway routing pattern.
+Section 3 — Identity and Authentication
+Users — human operators, authenticated via SSO where the customer's organization supports it
+Service Accounts — one identity per service, scoped per FIE-BUILD-002 §10's least-privilege standard
+API Keys — for programmatic access, rotated per Section 5's key rotation policy
+OAuth — the credential model for live connector authentication, per ABS-012 Path B
+SSO — supported for customer-facing access where the customer's identity provider allows it
+MFA — required for any elevated-permission human account (Section 4's approval workflows, FIE-002 Addendum A's restatement approvers, BIS-005 promotion reviewers)
+Session Management — bounded session lifetime, with re-authentication required for elevated actions regardless of session validity
+Credential Rotation — scheduled, not only incident-triggered
+Section 4 — Authorization
+Role-Based Access Control (RBAC) — the primary model, matching the discipline-based roles already named throughout FIE-BUILD-001's Engineering Ownership Matrix and FIE-BUILD-003's Platform Ownership Matrix
+Attribute-Based Access Control (ABAC) — named as a future capability, not built at MVP; RBAC is sufficient for the customer and role granularity this platform currently requires
+Tenant Isolation — per FIE-BUILD-002 §10, enforced by customer_id on every table and every query, with no code path capable of a cross-tenant read
+Administrative Permissions — elevated roles (restatement approval, knowledge promotion, security configuration) require a permission scope distinct from ordinary operational access, per FIE-002 Addendum A §1.4 and BIS-005 §15's existing precedent
+Approval Workflows — multi-party approval for the platform's highest-stakes actions, extending the pattern FIE-002 Addendum A already established for restatement approval
+Delegated Administration — a customer's own administrator may manage their organization's user access without platform engineering involvement, scoped strictly to their own tenant
+Emergency Access — a documented break-glass procedure for incident response (Section 13), itself logged and reviewed after every use, never a standing bypass
+Section 5 — Data Protection
+Encryption at Rest — every service's storage, per the posture already stated in each owning spec's own Security section
+Encryption in Transit — TLS for every request, internal and external
+Field-Level Encryption — applied where a specific field's sensitivity warrants it beyond table-level encryption (e.g. compensation fields flagged in ABS-012's HRIS CSV Mapping Profile)
+Customer Isolation — per FIE-BUILD-002 §10, the same tenant isolation guarantee restated at the data-protection layer
+Key Rotation — scheduled rotation for encryption keys, independent of and in addition to Section 3's credential rotation
+Secrets Management — no secret committed to a repository, ever, per FIE-BUILD-002 §10; all secrets injected at deploy time through the platform's secret manager
+Secure Backups — per FIE-BUILD-005 §13, encrypted at rest identically to primary storage, never a lower-security copy of the same data
+Section 6 — Financial Integrity Protection
+Unique to this platform. Security controls exist to protect these specific financial artifacts — and must never alter their financial meaning in the process of protecting them.
+Protected Artifact
+What Security Must Never Do
+Observations (FIE-001)
+Alter a captured value, confidence, or timestamp while encrypting, masking, or access-controlling it
+Methodologies (FIE-002)
+Obscure which version was active for a given calculation, even from a security control's own audit perspective
+Calculation Runs (FIE-003)
+Introduce any non-determinism through security instrumentation (e.g. a logging call with side effects) inside FIE-003's execution path
+Evidence Packages (FIE-003 §1.7)
+Redact evidence in a way that breaks its resolvability for an authorized viewer, even while protecting it from unauthorized ones
+Narratives (FIE-005)
+Modify or suppress Narrative content as a side effect of an access-control decision — a customer either sees their own verified Narrative in full, or a clear, explicit access-denial, never a silently edited version
+Knowledge Objects (FIE-004)
+Weaken the no-duplication or evidence-chain-integrity rules while enforcing tenant isolation
+Operational Confidence (FIE-BUILD-005 §6)
+Distort the composite signal by selectively hiding a contributing metric from monitoring for security-configuration reasons
+Table S6.1 — Financial Integrity Protection. This is Section 10 of FIE-BUILD-006 restated for the security domain — the same guarantees, protected against a different category of threat (unauthorized access and tampering, rather than scale).
+Section 7 — Audit and Lineage Protection
+Protects: lineage, evidence, version history, methodology changes, administrative actions, calculation history, narrative history.
+Audit history is immutable. Never editable. Never deleted. This is not a new rule — it is the platform's universal append-only discipline (FIE-BUILD-002 §8), restated here as a security guarantee rather than only an engineering one: an attacker or a careless administrator with elevated access still cannot rewrite what actually happened, because no code path anywhere in the platform has an UPDATE or DELETE grant on these records, enforced at the schema layer, not only by policy.
+Section 8 — Compliance Programs
+SOC 2
+ISO 27001
+GDPR
+CCPA
+Future financial regulations, as applicable per customer jurisdiction
+Rather than tracking each framework's controls independently, this platform maintains one control mapping (Compliance Mapping, below) so a single implemented control can satisfy multiple frameworks' requirements at once, verified once and evidenced once.
+Section 9 — Governance
+Names security governance authority. It does not replace FIE-BUILD-001's Engineering Ownership Matrix, FIE-BUILD-003's Platform Ownership Matrix, FIE-BUILD-004's Release Governance, or FIE-BUILD-005's Operational Governance — where this table and any of those disagree, reconcile toward whichever was established first, the same rule this series has applied at every prior ownership-table overlap.
+Architecture Reviews — security implications of an architecture change, reviewed alongside FIE-BUILD-002 §19's Architecture review gate
+Security Reviews — per FIE-BUILD-004 §11, extended with this document's specific controls
+Risk Reviews — per Section 17
+Compliance Reviews — per Section 8's mapping
+Approval Chains — Section 4's multi-party approval workflows
+Change Governance — any security-configuration change follows FIE-BUILD-004's release governance, not a separate, undocumented path
+Exception Governance — a documented, time-boxed, reviewed process for any accepted security exception, never a silent, permanent one
+Section 10 — Connector Security
+References FIE-BUILD-006 §9 for connector scaling behavior — this section does not redefine it. This section owns:
+Credential protection — per Section 5's secrets management, applied specifically to connector credentials
+OAuth lifecycle — token refresh, expiration, and revocation for Path B live connectors, per ABS-012
+API key rotation — per Section 3
+Secret storage — connector credentials never logged, never committed, per FIE-BUILD-002 §10
+Tenant isolation — a connector credential for one customer is never reachable by another customer's requests, per FIE-BUILD-002 §10
+Connector permission governance — a connector requests only the scopes it actually needs from the source system, per least privilege
+This is the exact boundary FIE-BUILD-006's own Final Review named explicitly: performance engineering must never redefine security policy; security policy must not redefine scalability architecture. This section owns the security half of that boundary; FIE-BUILD-006 §9 owns the scaling half.
+Section 11 — Security Monitoring
+Signal
+Why It's Monitored
+Authentication Failures
+Sustained or patterned failures signal a credential-stuffing or brute-force attempt
+Privilege Escalation
+Any account attempting or receiving elevated permission outside Section 4's approval workflow
+Configuration Drift
+A security-relevant configuration diverging from its declared, version-controlled state
+Unexpected Methodology Changes
+A methodology version change outside a customer's normal governance pattern, cross-referencing FIE-BUILD-005 §6's Methodology Drift metric
+Evidence Tampering Detection
+Any attempted write to an immutable evidence or lineage record, which per Section 7 should be structurally impossible — a detected attempt indicates either an attack or a serious bug, both requiring immediate investigation
+Administrative Activity
+Every elevated action, logged and reviewed per Section 9
+Audit Integrity
+Continuous verification that the audit trail itself has not been tampered with
+Secrets Access
+Every read of a stored secret, logged and attributable
+Section 12 — Vulnerability Management
+Scanning — automated, continuous, across dependencies and infrastructure
+Dependency Reviews — every new or updated dependency reviewed before it enters the build, per FIE-BUILD-004 §4's Security Scan stage
+Patch Management — a defined SLA for applying security patches, tiered by severity
+Security Testing — a required layer alongside FIE-BUILD-002's Testing Pyramid, not a replacement for any of its five layers
+Penetration Testing — scheduled, third-party, at a defined cadence
+Remediation Workflow — every finding tracked to resolution with an owner and a deadline, the same discipline as Technical Debt (FIE-BUILD-001), Operational Debt (FIE-BUILD-005), and Performance Debt (FIE-BUILD-006)
+Section 13 — Security Incident Response
+Detection     ↓Classification          (severity, per an extension of FIE-BUILD-005 §9's incident severity model)     ↓Containment     ↓Investigation     ↓Recovery     ↓Customer Communication  (per FIE-BUILD-005 §17, security incidents held to the same transparency standard as any other)     ↓Root Cause     ↓Security Improvements   (feeds Section 18)
+This is FIE-BUILD-005 §8's incident lifecycle, specialized for security incidents — it does not introduce a second, competing incident process. A security incident is still an incident; Section 9's classification uses FIE-BUILD-005 §9's severity model, extended with security-specific classification criteria (e.g. data exposure scope) rather than a parallel scale.
+Section 14 — Security Certification
+Extends FIE-BUILD-003 §13's Platform Certification with the security-specific dimension it deferred to this document.
+Platform Certification — FIE-BUILD-003 §13's checklist, security items now specified in full here
+Compliance Reviews — per Section 8
+Audit Readiness — the platform can produce a complete, immutable audit trail for any request from an auditor or regulator, per Section 7
+Release Security Review — per FIE-BUILD-004 §11
+Risk Acceptance — any residual risk explicitly accepted, per Section 17, never left implicit
+Evidence Collection — the specific artifacts (logs, control mappings, test results) an auditor would require, assembled proactively rather than reconstructed under deadline
+Certification Workflow — mirrors FIE-BUILD-003 §13's per-cohort certification model: a customer cohort is security-certified independently, the same way it is platform-certified
+Section 15 — Governance Dashboards
+Dashboard
+Audience
+Security Dashboard
+Security Engineering
+Compliance Dashboard
+Compliance / Legal
+Audit Dashboard
+Security Engineering, external auditors on request
+Executive Risk Dashboard
+Leadership
+Certification Dashboard
+Cross-references FIE-BUILD-003 §13 and FIE-BUILD-006 §13 rather than duplicating either
+Section 16 — Security KPIs
+Authentication Success Rate
+Unauthorized Access Attempts
+Audit Coverage
+Policy Compliance
+Secrets Rotation Compliance
+Vulnerability Age (time open, tiered by severity)
+Risk Trend
+Compliance Status
+Financial Integrity Alerts (cross-referencing FIE-BUILD-005's Financial Integrity Monitoring)
+Section 17 — Risk Management
+Risk Identification — sourced from Sections 11–12's monitoring and scanning, and from Section 18's continuous review
+Risk Classification — severity and likelihood, feeding Section 16's Risk Trend KPI
+Risk Acceptance — a formal, documented decision when a risk is knowingly not immediately remediated, per Section 14
+Risk Mitigation — tracked to resolution the same way Section 12's vulnerability remediation is
+Risk Monitoring — ongoing, not a one-time assessment
+Risk Retirement — a formally closed risk, with the closure itself audited per Section 7
+Section 18 — Continuous Security Improvement
+Security Telemetry     (Sections 11, 16)     ↓Threat Review     ↓Risk Review            (Section 17)     ↓Architecture Review     ↓Engineering Backlog     ↓Platform Improvements
+The fourth continuous-improvement loop in the BUILD series, alongside FIE-BUILD-004 §19 (release), FIE-BUILD-005 §20 (operations), and FIE-BUILD-006 §18 (performance) — all four feed the same engineering backlog rather than competing prioritization processes.
+Section 19 — Relationship to BUILD Series
+BUILD-006   Scalability     ↓BUILD-007   Security         (this document)     ↓BUILD-008   Customer Implementation
+Security protects the platform that BUILD-006 scales. It never redefines how that platform scales, per Section 10's explicit boundary statement, and it never redefines what the platform is or how it operates, per this document's own Purpose and Authority.
+Financial Security
+Security explicitly protects, not merely infrastructure:
+Methodology governance
+Calculation integrity
+Evidence integrity
+Financial lineage
+Organizational Financial Memory
+Narrative authenticity
+This is Section 6 restated as a named principle — the reminder that this document's job is protecting a financial platform, not a generic web application that happens to touch financial data.
+Explainability Protection
+Security controls must never make customer outputs less explainable. Encryption, masking, and access controls may hide sensitive information, but they must preserve the ability to demonstrate, to an authorized viewer:
+Where data came from
+Which methodology produced it
+Why a conclusion was reached
+Which evidence supports it
+A security control that protects a value by making it unexplainable to the people who are supposed to be able to explain it has failed at its actual job, even if it succeeded at hiding data from an unauthorized viewer.
+Governance Gates
+Before approving any security-related architecture change:
+Does it improve security?
+Does it preserve determinism?
+Does it preserve lineage?
+Does it preserve explainability?
+Does it preserve evidence?
+Does it preserve Operational Confidence?
+Only if every answer is yes should the change proceed — the security-specific instance of the same Scalability Gates pattern FIE-BUILD-006 established, applied to a different category of change with the same non-negotiable trust guarantees underneath it.
+Compliance Mapping
+Rather than tracking SOC 2, ISO 27001, GDPR, and CCPA as independent programs, one control mapping lets a single implemented control satisfy multiple frameworks at once:
+SOC 2  requirement     ↓ISO 27001  equivalent requirement (where one exists)     ↓Internal Policy  (this document's own control)     ↓Implemented Control  (the actual mechanism — e.g. Section 5's encryption at rest)     ↓Verification Method  (how it's tested — e.g. Section 12's scanning)     ↓Evidence Source  (what an auditor is shown — e.g. Section 14's evidence collection)
+One implemented control, verified once, evidenced once, mapped to every framework it satisfies — rather than re-verifying and re-evidencing the same underlying mechanism separately per framework.
+Security Decision Records
+CONFIRMED  Named without the “SDR” abbreviation deliberately — FIE-BUILD-006 already uses “SDR” for Scalability Decision Records. Reusing the same three-letter abbreviation for a different record type, in an adjacent document, is exactly the kind of silent collision this documentation series has caught and corrected at every prior layer (BIS-006 vs. the interim Memory proposal; “Section 16” meaning different things in FIE-BUILD-001 vs. FIE-BUILD-002). This document's version is referred to in full — Security Decision Record — everywhere, with no shorthand, to avoid a second collision.
+A lightweight record, complementing rather than replacing FIE-BUILD-002's Engineering Decision Records and FIE-BUILD-006's Scalability Decision Records, documenting significant security choices:
+Authentication strategy changes
+Encryption policy updates
+RBAC model changes
+Secrets management changes
+Compliance exceptions
+Same shape as its two counterparts — problem, alternatives considered, decision, rationale, impact, referenced documents, owner, date — filed against this document rather than against ABS/BIS/FIE, since a security implementation choice is a decision within this document's own guarantees, not a divergence from architecture.
+Principal Software Architect Review
+Reviewed for whether security and governance preserve every trust guarantee established throughout the architecture, not only whether they satisfy compliance checklists.
+1. Are Any Security Responsibilities Misplaced?
+No. This document extends, rather than duplicates, FIE-BUILD-002 §10, FIE-BUILD-003 §13, FIE-BUILD-004 §11, FIE-BUILD-005 §19, and FIE-BUILD-006 §9 — each remains correct at its own level of detail; this document is the dedicated security depth all five deferred. Section 9's governance table is explicitly subordinate to the four prior ownership/governance tables, per this series' established reconciliation rule. Section 10 states its boundary against FIE-BUILD-006 §9 explicitly and symmetrically, matching the exact language FIE-BUILD-006's own Final Review used to describe that boundary.
+2. Does Any Content Belong in BUILD-008?
+Customer-facing security documentation and customer security questionnaire responses belong in the future FIE-BUILD-008 Customer Implementation & Success, not as an expansion of this internal-facing handbook
+Nothing else in this document's core security methodology is misplaced — security, compliance, and governance are a cohesive enough domain to hold together as one document, the same judgment FIE-BUILD-003 and FIE-BUILD-006 each made for their own domains
+3. Does the Document Preserve Every Trust Guarantee Established Throughout the Architecture?
+Yes, by explicit, checkable mechanism rather than by assertion. Section 6 names the specific financial artifacts security must protect without altering their meaning. Explainability Protection states plainly that a security control hiding data from an unauthorized viewer must not also hide it from an authorized one. Governance Gates makes determinism, lineage, explainability, evidence, and Operational Confidence a mandatory checklist before any security-motivated architecture change — the same enforcement pattern as FIE-BUILD-006's Scalability Gates, applied to a different category of change against the identical set of non-negotiable guarantees.
+4. Is BUILD-007 Ready to Become the Authoritative Security, Compliance & Governance Handbook?
+Yes. Every one of the nineteen required sections plus all five additional recommendations (Financial Security, Explainability Protection, Governance Gates, Compliance Mapping, Security Decision Records) are present, every mechanism traces back to a specific guarantee already established in ABS/BIS/FIE or a prior BUILD document, and the one naming collision this document surfaced against FIE-BUILD-006 ("SDR") is resolved explicitly rather than left for a future reader to discover as an ambiguous cross-reference. Recommend freezing FIE-BUILD-007 and proceeding to FIE-BUILD-008 (Customer Implementation & Success) per the authoritative roadmap.

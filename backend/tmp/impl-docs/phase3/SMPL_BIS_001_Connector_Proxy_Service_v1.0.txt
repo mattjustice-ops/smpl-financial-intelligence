@@ -1,0 +1,1101 @@
+ 
+BUILD IMPLEMENTATION SPECIFICATION
+BIS-001 · Connector Proxy Service
+Version 1.0
+ 
+The single secure interface between SMPL workers and external business systems
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Implements: SOF (ABS-010) · EIS-001 · EIS-002 · GPES-001
+Section 0 — Scope Decisions
+BIS-001 is the first Build Implementation Specification in the SMPL engineering library — a level of detail below the EIS documents, specific enough that an engineer can implement the service directly from this document without re-deriving design decisions from architecture. Three scope ambiguities in the prior documents are resolved explicitly here, because silently resolving them inside the build would create drift between this document and EIS-002.
+ 
+0.1 Scope Decision — Extraction Engine Consolidation
+EIS-002 Table EIS2-2.1 lists "Connector Proxy Service" and "Extraction Engine" as separate runtime services. This BIS's section list (Section 9, Extraction Engine; Section 10, Pagination Handling) places both inside the Connector Proxy Service build. Resolution: for MVP, the Extraction Engine is implemented as a co-located internal component within the same deployable as the Connector Proxy Service — not a separate network service. This is a build-time consolidation consistent with EIS-002 Section 10.5's explicit guidance not to over-decompose before scale requires it. The two remain logically distinct components (Section 4 documents them as separate internal components with a defined interface between them) so that a future split into independent services, if load ever justifies it, requires no interface redesign — only a deployment change.
+ 
+0.2 Scope Decision — Checkpoint Ownership Remains with the Caller
+EIS-002 Section 5.2 (Checkpoint Recovery Protocol) establishes that Connector Worker crash recovery resumes from a checkpoint stored in the Job record (Postgres) and object storage, not from state held inside a runtime service. This BIS's Section 13 ("Checkpoint Creation") does not make the Connector Proxy Service stateful. Instead, Section 13 specifies the checkpoint data contract: the exact fields every extraction response returns so that the calling Connector Worker (or the Job Service on its behalf) can persist a resumable checkpoint. The Connector Proxy Service holds no extraction progress state between calls — every extract_object_batch call is a complete, independent request carrying its own page_cursor input and returning its own next_page_cursor output. This preserves the stateless-service, stateful-job recovery model established in EIS-002 without modification.
+ 
+0.3 Scope Decision — Connector Adapter Pattern
+Twenty-one connectors, each with a distinct authentication method, pagination model, rate limit structure, and schema, cannot be implemented as inline conditional logic without becoming unmaintainable and untestable in isolation. This BIS specifies a ConnectorAdapter interface (Section 4.2): one adapter implementation per IMS connector (IMS-001 through IMS-305), each independently unit-testable, independently versioned, and registered in a data-driven Connector Registry (Section 20) so that connector-specific configuration — base URLs, auth type, rate limit parameters — can be updated without a code deployment. Business logic that differs meaningfully between connectors (pagination style, auth flow) lives in code, one file per connector; configuration that is just data (rate limit numbers, base URLs, API version strings) lives in the registry.
+ 
+Section 1 — Service Purpose
+The Connector Proxy Service is the only component in the SMPL platform that sends network requests to customer-connected external systems. Every other service and every AI worker reaches external systems exclusively through this service's API — never directly.
+ 
+This Service Is
+This Service Is Not
+The single point of authentication against customer-connected systems (NetSuite, Salesforce, Stripe, Workday, and the other 17 IMS connectors)
+A business logic engine — it does not apply IMS transformation rules, does not compute confidence scores, does not know what a canonical object is
+The only component with a path to the Credential Vault
+A data store — canonical objects, CEP state, and session state live in other services (Canonical Data Service, CEP Service, Session State Store)
+The enforcement point for read-only access to every customer system
+A queue or scheduler — it does not decide when extraction happens; it executes extraction requests it receives
+The enforcement point for per-connector rate limit budgets
+An AI agent — it contains no LLM calls; every operation is deterministic code
+The normalization layer that converts 21 different API response shapes into one consistent response envelope
+A public-facing API — it is reachable only from the Tool Gateway inside the SMPL network, never from the public internet or directly from AI workers
+Table BIS-1.1 — Service purpose boundary.
+ 
+1.1 Position in the Runtime
+  AI Worker (Connector Worker, Discovery Agent, etc.)
+         │
+         │  calls registered tools (EIS-001 Categories 3 and 4)
+         ▼
+  Tool Gateway (EIS-002 Section 2.2)
+         │  permission check, rate limit pre-check, idempotency check, logging
+         ▼
+  ══════════════════════════════════════
+  CONNECTOR PROXY SERVICE  (this document)
+  ══════════════════════════════════════
+         │
+         ▼
+  Credential Vault  ──────────────►  External Connector API
+  (resolve credential_reference_id)   (NetSuite, Salesforce, Stripe, ...)
+ 
+Section 2 — Responsibilities
+Responsibility
+Detail
+Traces To
+Credential resolution
+Resolve credential_reference_id to an actual usable credential for exactly one request, never persisting the resolved value beyond that request
+EIS-002 Section 2.3; EIS-001 Category 12
+Read-only enforcement
+Reject any outbound request that is not a read operation against a customer system, regardless of what the caller requests
+EIS-002 Section 2.3; SKA D-019
+Authentication execution
+Execute the connector-specific auth flow (OAuth2 client credentials, OAuth2 authorization code, API key, Basic Auth, or certificate-based) per IMS Section 1.1 of the target connector
+IMS Section 1.1, all 21 connectors
+Environment and module detection
+Execute the connector-specific discovery queries from IMS Section 1.2–1.5 and return normalized results
+IMS Section 1, all 21 connectors
+Extraction execution
+Execute paginated, batched extraction requests against the target connector, applying IMS-specified filters (livemode=true, canonical ledger, environment filters, etc.)
+IMS Section 2/3, all 21 connectors; EIS-001 Category 4
+Rate limit management
+Track and enforce per-connector, per-session rate limit budgets; self-report remaining budget to callers
+EIS-002 Section 6.2, Table EIS2-1.5
+Response normalization
+Convert every connector's raw HTTP response into the standard response envelope (Section 3) regardless of the source API's native shape
+This document, Section 3
+Schema drift detection
+Compare live API responses against the expected schema documented in each connector's IMS Section 3; emit SCHEMA_CHANGED when they diverge
+EIS-001 Table EIS-1.2 (SCHEMA_CHANGED); EIS-004 Section 3.4 (PENDING_REVALIDATION trigger)
+Sandbox/livemode enforcement
+Reject extraction if the connector environment does not match the session's declared environment_type
+EIS-002 Table EIS2-2.3
+Audit logging
+Emit a structured log and audit event for every credential resolution, every external call, and every security-relevant decision
+EIS-001 Table EIS-1.3; EIS-002 Section 1.4
+Table BIS-2.1 — Complete responsibility list with architectural traceability. Every responsibility here already exists in the frozen architecture; this document specifies how each is built.
+ 
+Section 3 — Public API Endpoints
+Eleven endpoints, callable exclusively by the Tool Gateway. Every endpoint returns the standard response envelope defined in Section 3.0. Endpoint paths use the connector_id path parameter matching the IMS connector IDs (IMS-001 through IMS-305).
+ 
+3.0 Standard Response Envelope
+Every endpoint response, success or failure, uses this envelope. This is the format the Connector Proxy Service normalizes all 21 connectors' native API responses into.
+{
+  "request_id": "UUID",
+  "connector_id": "string",
+  "status": "SUCCESS | ERROR",
+  "data": { ... } | null,
+  "error": {"error_code": "string (EIS-001 Table EIS-1.2)", "message": "string",
+            "retry_after_seconds": "integer | null"} | null,
+  "remaining_budget_pct": "integer 0-100",
+  "latency_ms": "integer",
+  "connector_api_version": "string"
+}
+ 
+3.1 POST /v1/connectors/{connector_id}/authenticate
+Field
+Specification
+Request
+{credential_reference_id: UUID, session_id: UUID}
+Response (data)
+{auth_status: AUTHENTICATED|AUTH_FAILED|AUTH_TIMEOUT, account_id: string, auth_method: string, auth_expires_at: ISO8601|null}
+Error Codes
+AUTH_ERROR (invalid credentials), CONNECTOR_UNAVAILABLE (target API down), RATE_LIMIT_ERROR (rare, on the auth endpoint itself)
+Idempotency
+IDEMPOTENT — cached result returned for 5 minutes for the same connector_id + credential_reference_id
+Retry Rules
+CONNECTOR_UNAVAILABLE: 3 retries, backoff 10s/30s/60s. AUTH_ERROR: no retry.
+Logging
+CONNECTOR_AUTHENTICATED or AUTH_FAILED event; credential_reference_id logged, never the resolved credential
+Metrics
+connector_proxy_auth_requests_total{connector_id, status}; connector_proxy_auth_latency_seconds{connector_id}
+Table BIS-3.1 — Authenticate endpoint.
+ 
+3.2 GET /v1/connectors/{connector_id}/environment
+Field
+Specification
+Request
+Query params: session_id (required)
+Response (data)
+{environment_type: PRODUCTION|SANDBOX|STAGING|UNKNOWN, livemode: bool|null, environment_indicators: object, confidence: HIGH|MEDIUM|LOW}
+Error Codes
+CONNECTOR_UNAVAILABLE, SCHEMA_CHANGED (environment indicator field structure unexpected)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — cached for the session duration unless explicitly re-checked
+Retry Rules
+CONNECTOR_UNAVAILABLE: retry with backoff per Table BIS-12.1
+Logging
+ENVIRONMENT_DETECTED event; SANDBOX_DETECTED alert emitted separately if environment_type=SANDBOX and confidence=HIGH
+Metrics
+connector_proxy_environment_checks_total{connector_id, environment_type}
+Table BIS-3.2 — Environment detection endpoint.
+ 
+3.3 GET /v1/connectors/{connector_id}/modules
+Field
+Specification
+Request
+Query params: session_id (required)
+Response (data)
+{modules: {module_name: {active: bool, detection_method: string, detection_result: string}}}
+Error Codes
+CONNECTOR_UNAVAILABLE, PERMISSION_ERROR (module-specific endpoint needs additional scope)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION
+Retry Rules
+CONNECTOR_UNAVAILABLE: retry with backoff. PERMISSION_ERROR: no retry — surfaced to caller for CEP routing.
+Logging
+MODULE_INVENTORY_COMPLETE event with module count and active count (not full module detail, to keep logs compact)
+Metrics
+connector_proxy_module_checks_total{connector_id}
+Table BIS-3.3 — Module discovery endpoint.
+ 
+3.4 GET /v1/connectors/{connector_id}/schema
+Field
+Specification
+Request
+Query params: session_id (required), object_type (optional — if omitted, returns full schema for all IMS-documented object types)
+Response (data)
+{object_types: {object_type: {fields: [{name, type, nullable}], custom_fields_detected: [], schema_hash: string}}, schema_diff_from_ims: [] — empty if no drift detected}
+Error Codes
+CONNECTOR_UNAVAILABLE, PERMISSION_ERROR
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — cached for 24 hours per connector (schema does not change within a session)
+Retry Rules
+CONNECTOR_UNAVAILABLE: retry with backoff
+Logging
+SCHEMA_DISCOVERED event; if schema_diff_from_ims is non-empty, SCHEMA_CHANGED_DETECTED event emitted separately (see Section 8.2)
+Metrics
+connector_proxy_schema_checks_total{connector_id}; connector_proxy_schema_drift_detected_total{connector_id, object_type}
+Table BIS-3.4 — Schema discovery endpoint. This is the origin point for every SCHEMA_CHANGED error in the platform — see Section 8.
+ 
+3.5 GET /v1/connectors/{connector_id}/objects/{object_type}/count
+Field
+Specification
+Request
+Query params: session_id (required), filters (optional — object-type-specific filter object, e.g. {trandate_gte: "2024-01-01"})
+Response (data)
+{estimated_count: integer, exact: bool — false for connectors whose API only provides estimates (e.g., Salesforce), sampled_at: ISO8601}
+Error Codes
+CONNECTOR_UNAVAILABLE, RATE_LIMIT_ERROR
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — cached for 1 hour
+Retry Rules
+RATE_LIMIT_ERROR: backoff per Table BIS-11.1. CONNECTOR_UNAVAILABLE: retry per Table BIS-12.1.
+Logging
+RECORD_COUNT_ESTIMATED event
+Metrics
+connector_proxy_count_requests_total{connector_id, object_type}
+Table BIS-3.5 — Record count estimation endpoint. Used by Connector Workers to plan parallelism for large extractions (per IMS-001 Section 1.6 volume-based parallelism triggers).
+ 
+3.6 POST /v1/connectors/{connector_id}/extract
+Field
+Specification
+Request
+{session_id: UUID, object_type: string, filters: object, page_cursor: string|null, page_size: integer (default 1000, max 5000), idempotency_key: UUID}
+Response (data)
+{records: [raw vendor objects], next_page_cursor: string|null, total_record_count_estimate: integer, extraction_batch_id: UUID}
+Error Codes
+RATE_LIMIT_ERROR, CONNECTOR_UNAVAILABLE, PERMISSION_ERROR, SCHEMA_CHANGED, AUTH_ERROR (token expired mid-extraction)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same idempotency_key returns cached result for 1 hour, per EIS-001 Table EIS-C4.1
+Retry Rules
+Full retry matrix in Section 12; RATE_LIMIT_ERROR and CONNECTOR_UNAVAILABLE are retry-eligible, SCHEMA_CHANGED and PERMISSION_ERROR are not
+Logging
+EXTRACTION_BATCH_COMPLETE event with record_count and extraction_batch_id (never record content)
+Metrics
+connector_proxy_extraction_batches_total{connector_id, object_type, status}; connector_proxy_extraction_records_total{connector_id, object_type}; connector_proxy_extraction_latency_seconds{connector_id}
+Table BIS-3.6 — Extraction endpoint. The highest-volume endpoint in the service; records are written to the internal temp store, not returned in full — see Section 9.
+ 
+3.7 GET /v1/connectors/{connector_id}/extract/{extraction_batch_id}/records
+Field
+Specification
+Request
+Path: extraction_batch_id. Query params: offset (default 0), limit (default 100, max 500)
+Response (data)
+{records: [raw vendor objects], total_count: integer, offset: integer, has_more: bool}
+Error Codes
+INVALID_INPUT (extraction_batch_id not found or expired — 24h TTL)
+Idempotency
+IDEMPOTENT
+Retry Rules
+N/A — read from internal temp store, not an external call; no retry needed for transient external failures
+Logging
+RECORDS_RETRIEVED event with count only
+Metrics
+connector_proxy_temp_store_reads_total{connector_id}
+Table BIS-3.7 — Temp store read endpoint. Exists to keep large extraction batches out of AI worker context windows — workers page through this endpoint rather than receiving the full batch in the extraction response.
+ 
+3.8 POST /v1/connectors/{connector_id}/incremental
+Field
+Specification
+Request
+{session_id: UUID, object_type: string, since_timestamp: ISO8601, include_deleted: bool (default true)}
+Response (data)
+{changed_records_extraction_id: UUID, modified_count: integer, deleted_count: integer, sync_checkpoint_timestamp: ISO8601}
+Error Codes
+CONNECTOR_UNAVAILABLE, SCHEMA_CHANGED, RATE_LIMIT_ERROR, INVALID_INPUT (since_timestamp in the future)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same since_timestamp returns same extraction_id
+Retry Rules
+Same as Section 3.6
+Logging
+INCREMENTAL_SYNC_COMPLETE event
+Metrics
+connector_proxy_incremental_syncs_total{connector_id, status}
+Table BIS-3.8 — Incremental sync endpoint. Uses each connector's IMS Section 3 (or connector-specific CDC/webhook mechanism) documented incremental sync pattern.
+ 
+3.9 GET /v1/connectors/{connector_id}/extract/{extraction_batch_id}/status
+Field
+Specification
+Request
+Path: extraction_batch_id
+Response (data)
+{status: QUEUED|RUNNING|COMPLETE|ERROR|CANCELLED, records_extracted_so_far: integer, started_at: ISO8601, completed_at: ISO8601|null}
+Error Codes
+INVALID_INPUT (extraction_batch_id not found)
+Idempotency
+IDEMPOTENT
+Retry Rules
+N/A
+Logging
+None — polling endpoint, not logged individually to avoid log volume; aggregate poll counts tracked in metrics only
+Metrics
+connector_proxy_status_polls_total{connector_id}
+Table BIS-3.9 — Extraction status endpoint.
+ 
+3.10 POST /v1/connectors/{connector_id}/extract/{extraction_batch_id}/cancel
+Field
+Specification
+Request
+Path: extraction_batch_id. Body: {reason: string}
+Response (data)
+{status: CANCELLED, records_extracted_before_cancel: integer}
+Error Codes
+INVALID_INPUT (extraction_batch_id not found or already terminal)
+Idempotency
+IDEMPOTENT — cancelling an already-cancelled batch returns the same result
+Retry Rules
+N/A
+Logging
+EXTRACTION_CANCELLED event with reason
+Metrics
+connector_proxy_extractions_cancelled_total{connector_id}
+Table BIS-3.10 — Extraction cancellation endpoint.
+ 
+3.11 GET /v1/health and GET /v1/connectors/{connector_id}/health
+Field
+Specification
+Request
+No parameters (service health); connector_id path param (connector-specific health)
+Response (data)
+Service health: {status: HEALTHY|DEGRADED|UNHEALTHY, dependencies: {vault: bool, redis: bool, postgres: bool}}. Connector health: {status: HEALTHY|DEGRADED|UNHEALTHY, last_successful_call_at: ISO8601, recent_error_rate_pct: decimal}
+Error Codes
+None — health endpoints do not error, they report status
+Idempotency
+IDEMPOTENT
+Retry Rules
+N/A
+Logging
+Not logged individually — used by orchestration and monitoring infrastructure at high frequency
+Metrics
+Backs the connector_proxy_health_status gauge consumed by get_connector_health (EIS-001 Category 13)
+Table BIS-3.11 — Health check endpoints. Called by the deployment orchestrator (liveness/readiness probes) and by EIS-001's get_workflow_health / get_connector_health tools.
+ 
+Section 4 — Internal Components
+The Connector Proxy Service is composed of seven internal components. Each is independently unit-testable (Section 21) with a defined interface to its neighbors. The Connector Adapter Registry (4.2) is the component that makes 21 heterogeneous connectors tractable to build and maintain.
+ 
+4.1 Component Architecture
+  ┌─────────────────────────────────────────────────────────┐
+  │              API Layer (Section 3 endpoints)             │
+  └───────┬─────────────────────────────────────────────┬───┘
+          │                                             │
+  ┌───────▼────────┐                          ┌─────────▼────────┐
+  │ Security /      │                          │ Extraction Batch  │
+  │ Audit Middleware│                          │ Coordinator       │
+  │ (Section 17)    │                          │ ("Extraction      │
+  └───────┬────────┘                          │  Engine" —        │
+          │                                    │  Section 0.1)     │
+  ┌───────▼────────┐                          └─────────┬────────┘
+  │ Credential      │                                    │
+  │ Resolver        │◄───────────────┐                   │
+  └───────┬────────┘                 │                   │
+          │                    ┌─────▼──────┐            │
+  ┌───────▼────────┐          │ Rate       │            │
+  │ Connector       │◄─────────┤ Limiter    │◄───────────┘
+  │ Adapter Registry│          └────────────┘
+  │ (Section 4.2)   │
+  └───────┬────────┘
+          │
+  ┌───────▼────────┐          ┌────────────┐
+  │ Pagination      │          │ Response   │
+  │ Normalizer      │─────────►│ Envelope   │
+  └───────┬────────┘          │ Builder    │
+          │                    └────────────┘
+  ┌───────▼────────┐
+  │ External        │
+  │ Connector API   │
+  └────────────────┘
+ 
+4.2 Connector Adapter Registry — The Core Extensibility Component
+One adapter class per IMS connector. Every adapter implements the same interface; connector-specific logic (auth flow, pagination style, filter construction) lives entirely inside the adapter, never in shared code.
+ 
+INTERFACE ConnectorAdapter {
+  connector_id: string          // e.g., "IMS-001"
+  auth_type: OAUTH2_CLIENT_CREDENTIALS | OAUTH2_AUTH_CODE | API_KEY |
+             BASIC_AUTH | CERTIFICATE
+  authenticate(credential): AuthResult
+  detectEnvironment(session): EnvironmentResult
+  discoverModules(session): ModuleInventoryResult
+  discoverSchema(session, object_type?): SchemaResult
+  buildExtractionRequest(object_type, filters, page_cursor): HttpRequest
+  parseExtractionResponse(httpResponse): {records, next_page_cursor}
+  buildIncrementalRequest(object_type, since_timestamp): HttpRequest
+  getRateLimitConfig(): {requests_per_minute, burst_capacity}
+}
+ 
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Performance Expectations
+connector_id (routes to the correct adapter); method-specific parameters per the interface above
+Method-specific results, always in the adapter's native shape before the Pagination Normalizer and Response Envelope Builder standardize it
+Credential Resolver (for authenticate); external Connector API (for all data methods); IMS Content Service (to load expected schema for drift comparison)
+Adapter not found for connector_id → INTERNAL_ERROR (indicates a registry configuration bug, not a runtime condition); adapter method throws → mapped to the nearest EIS-001 error code by the adapter's own error mapping table
+Adapter method dispatch: < 1ms. Actual external call latency is connector-dependent and tracked separately per connector_id.
+Table BIS-4.1 — Connector Adapter Registry component specification.
+ 
+Each of the 21 adapters is a separate, independently deployable code unit for testing purposes (though bundled into one service artifact for MVP deployment). Adapter code lives at a predictable path (e.g., adapters/ims_001_netsuite.py) mirroring the IMS document numbering, so an engineer updating IMS-001 Section 4 (Transformation Rules) knows exactly which adapter file to check for consistency.
+ 
+4.3 Credential Resolver
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Performance Expectations
+credential_reference_id, connector_id
+Resolved credential object, scoped to the lifetime of a single request; never returned to any caller outside this component
+HashiCorp Vault (or equivalent secrets manager)
+Vault unreachable → CONNECTOR_UNAVAILABLE (treated as a dependency outage, not an auth failure); credential_reference_id not found → AUTH_ERROR
+p99 < 200ms for credential resolution (Vault read)
+Table BIS-4.2 — Credential Resolver component specification.
+ 
+4.4 Rate Limiter
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Performance Expectations
+session_id, connector_id, requested_call_count (default 1)
+allow: bool, remaining_budget_pct: integer, retry_after_seconds: integer|null
+Redis (token bucket storage)
+Redis unreachable → fail open with a logged WARNING (allow the call but flag degraded rate-limit enforcement) rather than fail closed and halt all extraction — see Section 24 Failure Recovery for the rationale
+p99 < 10ms (single Redis round-trip)
+Table BIS-4.3 — Rate Limiter component specification. Full algorithm detail in Section 11.
+ 
+4.5 Pagination Normalizer
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Performance Expectations
+connector_id, raw adapter pagination metadata (cursor, offset, page token — connector-specific shape)
+Normalized {next_page_cursor: string|null, has_more: bool} regardless of the connector's native pagination style
+Connector Adapter (supplies the raw pagination metadata to normalize)
+Unrecognized pagination shape → SCHEMA_CHANGED (the adapter's pagination contract has drifted from what this component expects)
+< 1ms — pure data transformation, no I/O
+Table BIS-4.4 — Pagination Normalizer component specification. Full pagination model in Section 10.
+ 
+4.6 Extraction Batch Coordinator ("Extraction Engine")
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Performance Expectations
+session_id, connector_id, object_type, filters, page_cursor, page_size
+extraction_batch_id, records written to temp store (object storage), next_page_cursor
+Connector Adapter Registry (executes the actual request), Object Storage (temp store), Pagination Normalizer
+Object storage write failure → INTERNAL_ERROR with automatic retry (3x, linear backoff); partial batch on adapter error → return records received so far with a partial flag rather than discarding successfully retrieved records
+p95 < 3s per batch of 1,000 records for standard connectors; p95 < 8s for high-volume ERP connectors (SAP, Oracle Fusion) per their IMS-documented extraction characteristics
+Table BIS-4.5 — Extraction Batch Coordinator component specification. This is the internal component that Section 0.1 designates as the co-located "Extraction Engine."
+ 
+4.7 Response Envelope Builder
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Performance Expectations
+Raw adapter result (success or error) in connector-native shape
+Standard response envelope (Section 3.0) — identical shape regardless of source connector
+None — pure transformation
+Malformed adapter output → INTERNAL_ERROR (indicates an adapter bug); this component never silently passes through a non-conforming shape
+< 1ms — pure data transformation
+Table BIS-4.6 — Response Envelope Builder component specification.
+ 
+4.8 Security / Audit Middleware
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Performance Expectations
+Every inbound request and outbound response passes through this middleware
+Pass-through (success) or rejection (SECURITY_VIOLATION) before the request reaches any other component
+Logging Service (audit event emission), the method whitelist configuration (Section 17)
+A request that fails a security check is always rejected — this component has no fail-open mode, unlike the Rate Limiter
+< 2ms overhead per request
+Table BIS-4.7 — Security / Audit Middleware component specification. Full detail in Section 17.
+ 
+Section 5 — Authentication Flow
+Five authentication patterns cover all 21 IMS connectors. Each is implemented once, shared across every adapter that uses it — an adapter declares its auth_type and the Credential Resolver dispatches to the matching flow.
+ 
+Auth Type
+Connectors Using It
+Flow Summary
+OAUTH2_CLIENT_CREDENTIALS
+NetSuite (TBA variant), Sage Intacct, Dynamics 365 Finance/Sales, SAP S/4HANA (BTP), Zuora, Workday, UKG Pro (where configured)
+Resolve client_id + client_secret from Vault → POST to connector token endpoint → cache access_token with its expiry → attach as Bearer token to every subsequent request
+OAUTH2_AUTH_CODE
+Salesforce, HubSpot (user-facing variant), QuickBooks Online
+Resolve stored refresh_token from Vault → POST to connector refresh endpoint → cache new access_token + rotate stored refresh_token if the connector issues a new one → attach as Bearer token
+API_KEY
+Stripe, Chargebee, Recurly, Maxio, BambooHR, Pipedrive
+Resolve API key from Vault → attach per connector-specific convention (Bearer header for Stripe, Basic Auth username-only for Chargebee/BambooHR/Recurly, query param for others)
+BASIC_AUTH
+Zoho CRM (fallback), legacy NetSuite Username/Password path (discouraged, IMS-001 Section 1.1)
+Resolve username + password from Vault → Base64-encode → attach as Basic Auth header
+CERTIFICATE
+ADP Workforce Now
+Resolve client certificate + private key from Vault → establish mTLS connection → OAuth2 client credentials flow layered on top of the certificate-authenticated connection, per IMS-305 Section 1.1
+Table BIS-5.1 — Authentication flow by type.
+ 
+5.1 Token Caching and Refresh
+FOR every OAuth2-based connector (CLIENT_CREDENTIALS or AUTH_CODE):
+  ON first authenticate() call:
+    Resolve base credential from Vault.
+    Execute token exchange with connector token endpoint.
+    CACHE: {access_token, expires_at} in Redis, keyed by
+           "auth_token:{session_id}:{connector_id}"
+    TTL: expires_at minus a 5-minute safety margin.
+  ON every subsequent authenticated call:
+    CHECK Redis cache for a non-expired token.
+    IF found: use directly, skip token exchange.
+    IF not found or expired:
+      Re-resolve credential from Vault.
+      Execute token exchange again (refresh flow for AUTH_CODE type;
+      re-request for CLIENT_CREDENTIALS type).
+      Update cache.
+  Access tokens are NEVER returned to the calling AI worker or logged
+  in any form. They exist only within the Credential Resolver's
+  Redis cache and the outbound HTTP request to the external connector.
+ 
+Section 6 — Credential Management
+Lifecycle Stage
+Detail
+Creation
+Implementation Consultant (human, via UI) creates a credential in Vault through create_connector_credential_reference (EIS-001 Category 12). The Connector Proxy Service never creates credentials — it only resolves references that already exist.
+Storage
+Vault stores the raw credential encrypted at rest, in a namespace isolated per customer (path pattern: secret/customers/{customer_id}/connectors/{connector_id}). No cross-customer path traversal is possible — Vault ACLs enforce this at the policy layer, not just the application layer.
+Resolution
+Connector Proxy Service authenticates to Vault using a service identity with read-only access scoped to the specific customer namespace needed for the current request — never a namespace-wide or global Vault token.
+Scope enforcement
+Every credential reference carries a scope_restrictions field (EIS-001 Table EIS-C12.1); the Connector Proxy Service validates that scope includes READ_ONLY before using the credential for any request — a credential without this restriction is rejected with INVALID_INPUT, treated as a provisioning error.
+Rotation
+rotate_connector_credential_reference (EIS-001 Category 12) issues a new credential_reference_id pointing to updated Vault contents; the Connector Proxy Service invalidates any cached token for the old reference immediately upon rotation, forcing re-authentication on the next call.
+Revocation
+revoke_connector_access removes Vault access for a credential_reference_id; any subsequent resolution attempt returns AUTH_ERROR; cached tokens for the revoked reference are proactively purged from Redis, not just left to expire.
+Table BIS-6.1 — Credential lifecycle. The Connector Proxy Service participates in Resolution and the immediate cache effects of Rotation/Revocation; Creation lifecycle stages are owned by the Credential Vault Service and Implementation Consultant UI.
+ 
+Section 7 — Connector Discovery
+Discovery execution for the /environment, /modules, /schema, and /objects/{type}/count endpoints. Every discovery query executed here is drawn directly from the target connector's IMS Section 1 — this service does not invent discovery logic, it executes what each IMS already specifies.
+ 
+Discovery Type
+Example (NetSuite, IMS-001)
+Example (Stripe, IMS-201)
+Example (Rippling, IMS-302)
+Environment
+Account ID suffix check (_SB) per IMS-001 Section 1.3
+livemode field on GET /v1/account per IMS-201 Section 1.1
+Account type field via API per IMS-302 Section 1.1
+Modules
+SuiteQL queries against system tables per IMS-001 Table 1.5 (ARM, OneWorld, Budgeting, etc.)
+Price.recurring.usage_type sampling + subscription item count check per IMS-201 Section 1.2
+Payroll module probe via GET /api/v1/payruns per IMS-302 Section 1.2
+Schema / custom fields
+GET /rest/v1/metadata for custom field definitions
+N/A — Stripe has no customer-configurable schema extension in the same sense
+GET /api/v1/employees field introspection
+Record counts
+SuiteQL COUNT() query per IMS-001 Section 1.6 volume estimation
+GET /v1/subscriptions with has_more inspection on a minimal page
+GET /api/v1/employees?limit=1 with total-count header inspection
+Table BIS-7.1 — Discovery query examples across three representative connectors. The full set of discovery queries for all 21 connectors is implemented in each connector's adapter (Section 4.2), sourced directly from that connector's IMS Section 1.
+ 
+Section 8 — Schema Discovery
+Schema discovery is where the platform detects when a connector's live API has drifted from what its IMS document expects — the origin point for every SCHEMA_CHANGED error and every PENDING_REVALIDATION memory event.
+ 
+8.1 Schema Comparison Algorithm
+ON GET /v1/connectors/{connector_id}/schema:
+  1. LOAD expected_schema from IMS Content Service
+     (get_ims_section for the connector's Section 3 field maps)
+  2. EXECUTE a live schema probe via the connector adapter:
+     - For REST APIs with metadata endpoints: call the metadata endpoint
+     - For APIs without metadata endpoints: sample N recent records
+       of each object type and infer field presence and type
+  3. COMPARE live_schema against expected_schema:
+     FOR each field in expected_schema:
+       IF field missing from live_schema:
+         → schema_diff.append({field, change: "MISSING", severity: HIGH})
+       IF field type differs:
+         → schema_diff.append({field, change: "TYPE_CHANGED", severity: HIGH})
+     FOR each field in live_schema NOT in expected_schema:
+       → schema_diff.append({field, change: "NEW_FIELD", severity: LOW})
+       (new fields are not breaking — they become CCF candidates
+        per the IMS custom field pattern, not schema drift)
+  4. IF any HIGH severity diff found:
+     Return status=SUCCESS with schema_diff populated (not an error —
+     the schema WAS successfully discovered, it simply differs)
+     Emit SCHEMA_CHANGED_DETECTED event
+     → consumed by EIS-004 Section 3.4: triggers PENDING_REVALIDATION
+       for all Connector Memory records scoped to this connector_id
+  5. IF no HIGH severity diff: cache result for 24 hours
+ 
+This is the single mechanism that keeps the entire platform's IMS-derived knowledge current. A schema check here is the trigger that EIS-004's Memory Generalization Pipeline listens for — nothing else in the platform independently detects connector API drift.
+ 
+Section 9 — Extraction Engine
+The Extraction Batch Coordinator (Section 4.6), referred to as the Extraction Engine per the Section 0.1 scope decision, manages the temp store that decouples large extraction volumes from AI worker context windows.
+ 
+9.1 Temp Store Design
+Property
+Specification
+Storage backend
+Object storage (S3 or S3-compatible), per EIS-002 Section 10.1
+Key structure
+extractions/{session_id}/{connector_id}/{extraction_batch_id}/page_{n}.json
+TTL
+24 hours, enforced by object storage lifecycle policy — no manual cleanup required (matches EIS-002 Section 10.4 security control)
+Encryption
+Encrypted at rest using the object storage provider's server-side encryption; no plaintext extraction data persists outside the encrypted store
+Access pattern
+Write-once per page during extraction; read-many during the worker's paged consumption via GET /extract/{id}/records
+Consistency
+Read-after-write consistency required — the object storage provider must guarantee a page is immediately readable after the write call returns success
+Table BIS-9.1 — Temp store design.
+ 
+9.2 Extraction Batch Lifecycle
+POST /extract received
+   │
+   ▼
+Rate Limiter check ──── DENY ──► return RATE_LIMIT_ERROR immediately
+   │ ALLOW
+   ▼
+Connector Adapter builds and executes the request
+   │
+   ▼
+Adapter returns raw records + native pagination metadata
+   │
+   ▼
+Pagination Normalizer converts to {next_page_cursor, has_more}
+   │
+   ▼
+Extraction Batch Coordinator writes records to temp store
+   │  (one object storage write per page; if page_size=1000 and 5000
+   │   records requested, this produces 5 temp store objects across
+   │   5 separate POST /extract calls from the caller, NOT one call
+   │   that internally loops — the caller drives pagination)
+   ▼
+Response Envelope Builder returns {extraction_batch_id, next_page_cursor,
+                                    total_record_count_estimate}
+   │
+   ▼
+Caller (Connector Worker) persists next_page_cursor to its own job
+checkpoint (Section 13) and, if has_more=true, calls POST /extract again
+with page_cursor=next_page_cursor
+ 
+Section 10 — Pagination Handling
+Three distinct pagination styles across the 21 connectors, all normalized to the same {next_page_cursor, has_more} shape before leaving this service.
+ 
+Pagination Style
+Connectors
+Native Mechanism
+Normalization
+Cursor-based
+Stripe, Chargebee, Recurly, HubSpot, most modern REST APIs
+Native cursor string returned in response (e.g., Stripe's starting_after)
+next_page_cursor = native cursor string, passed through directly; has_more = native has_more boolean, passed through directly
+Offset-based
+NetSuite (SuiteQL OFFSET/LIMIT), Oracle Fusion, SAP OData ($skip/$top)
+Numeric offset + page size
+next_page_cursor = JSON-encoded {offset: N, page_size: M}; has_more = (records_returned == page_size) — inferred, since these APIs do not always return an explicit has_more flag
+Page-token / URL-based
+Salesforce (nextRecordsUrl), Dynamics 365 (@odata.nextLink)
+Full continuation URL returned by the API
+next_page_cursor = the full continuation URL, opaque to the caller; has_more = (continuation URL is present in the response)
+Table BIS-10.1 — Pagination normalization by style.
+ 
+The normalized page_cursor is always opaque to the caller — a Connector Worker never parses or constructs a cursor itself, it only stores whatever string this service returns and passes it back unchanged on the next call. This is what allows the same Connector Worker orchestration logic (EIS-002 Section 1.3) to work identically across all 21 connectors despite three different native pagination mechanisms underneath.
+ 
+Section 11 — Rate Limiting
+Implements the token bucket algorithm and budget allocation specified in EIS-002 Section 6.2 exactly — this section adds the concrete Redis operations and response header contract, it does not modify the algorithm.
+ 
+11.1 Token Bucket Implementation
+REDIS KEY: rate_bucket:{session_id}:{connector_id}
+REDIS TYPE: Hash — {tokens: float, refill_rate: float, last_refill: timestamp}
+ON every extraction or discovery call:
+  1. REFILL (lazy refill on read, not a background job):
+     elapsed_seconds = now() - last_refill
+     new_tokens = MIN(capacity, tokens + elapsed_seconds * (refill_rate/60))
+     UPDATE tokens = new_tokens, last_refill = now()
+  2. CHECK:
+     IF tokens >= 1:
+       DECREMENT tokens by 1 (atomic Redis HINCRBYFLOAT)
+       ALLOW the call
+       remaining_budget_pct = (tokens / capacity) * 100
+     ELSE:
+       DENY the call
+       retry_after_seconds = (1 - tokens) / (refill_rate/60)
+       return RATE_LIMIT_ERROR
+  3. RESPONSE HEADERS (in addition to the envelope body):
+     X-RateLimit-Remaining-Pct: {remaining_budget_pct}
+     X-RateLimit-Retry-After: {retry_after_seconds}  (only present on DENY)
+ 
+11.2 Budget Allocation on Session Start
+Reuses the EIS-002 Section 6.2 allocation formula exactly: platform_budget = connector_max_rate / active_sessions_using_connector; session_budget = platform_budget / within_session_concurrent_jobs_for_connector. The Connector Proxy Service reads connector_max_rate from the Connector Registry (Section 20), sourced from each connector's IMS Section 1 rate limit documentation.
+ 
+Section 12 — Retry Strategy
+Retry logic scoped to the errors this service can itself produce or encounter from external connectors. This is a subset of the full EIS-002 Table EIS2-7.1 matrix, restated with Connector-Proxy-specific implementation detail.
+ 
+Error Code
+Retry Eligible
+Backoff
+Max Attempts
+Implementation Detail
+RATE_LIMIT_ERROR
+Yes
+Exponential: 10s, 30s, 60s, 120s, 300s
+5
+Retry is executed by the CALLER (Connector Worker), not internally by this service — this service returns the error and retry_after_seconds immediately rather than blocking the request thread
+CONNECTOR_UNAVAILABLE
+Yes
+Exponential: 30s, 60s, 120s
+3
+Retried internally by this service for a single call, up to 3 attempts, before returning the error to the caller — unlike RATE_LIMIT_ERROR, a transient 503 is worth absorbing without involving the caller
+AUTH_ERROR
+No
+N/A
+0
+Never retried — stale or invalid credentials require a new credential_reference_id, which only a human or the CEP Agent can provide
+SCHEMA_CHANGED
+No
+N/A
+0
+Never retried — retrying against a divergent schema does not resolve divergence
+PERMISSION_ERROR
+No
+N/A
+0
+Never retried — requires a scope change to the credential
+INTERNAL_ERROR (this service's own dependency failures — Redis, Vault, object storage)
+Yes
+Linear: 30s, 30s, 30s
+3
+Retried internally; if all 3 fail, returned to caller as INTERNAL_ERROR for platform-level escalation, not connector-level
+Table BIS-12.1 — Connector Proxy Service retry strategy.
+ 
+Section 13 — Checkpoint Creation (Data Contract)
+Per the Section 0.2 scope decision, this service does not persist extraction checkpoints. This section specifies the data contract — exactly what every extraction response returns — so the calling Connector Worker can build a resumable checkpoint per EIS-002 Section 5.
+ 
+Field Returned
+Purpose for Caller Checkpointing
+extraction_batch_id
+The identifier the caller stores in its Job record's checkpoint_ref; used to resume reading from the temp store or to correlate logs
+next_page_cursor
+The exact value the caller must persist and pass back on the next call to resume from precisely this point — opaque, connector-agnostic (Section 10)
+total_record_count_estimate
+Allows the caller to compute and checkpoint progress percentage for its own status reporting, independent of this service
+connector_api_version
+Persisted alongside the checkpoint so that if a SCHEMA_CHANGED event occurs between the checkpoint being written and the job resuming, the caller can detect that the API version has changed since the checkpoint was taken
+Table BIS-13.1 — Checkpoint data contract. This service guarantees every field above is present and accurate on every extraction response — that guarantee is what makes the caller's checkpoint reliable, even though this service itself holds no state between calls.
+ 
+Section 14 — Error Handling
+Every external HTTP response is mapped to an EIS-001 Table EIS-1.2 error code at the Response Envelope Builder — callers never see a raw HTTP status code from a connector, only the standardized error taxonomy.
+ 
+External HTTP Status / Condition
+Mapped Error Code
+Notes
+401 Unauthorized
+AUTH_ERROR
+Also triggers a proactive token cache invalidation for this connector_id + session_id
+403 Forbidden
+PERMISSION_ERROR
+Distinguished from 401 — the credential is valid but lacks the needed scope
+404 Not Found (on a documented, expected endpoint)
+SCHEMA_CHANGED
+A 404 on an endpoint the IMS documents as existing indicates the API surface has changed, not a normal not-found condition
+429 Too Many Requests
+RATE_LIMIT_ERROR
+retry_after_seconds populated from the connector's Retry-After header if present, otherwise computed from the token bucket state
+500 / 502 / 503 / 504
+CONNECTOR_UNAVAILABLE
+Treated identically regardless of which 5xx — all indicate the target system is not currently able to serve the request
+Connection timeout (no response within configured timeout)
+CONNECTOR_UNAVAILABLE
+Timeout thresholds are connector-specific, configured in the Connector Registry (Section 20) based on each connector's typical latency profile
+Response body does not match expected schema
+SCHEMA_CHANGED
+Detected inline during parseExtractionResponse, not only during the dedicated schema discovery endpoint
+Any other unexpected exception inside this service
+INTERNAL_ERROR
+Never surfaces internal stack traces or implementation detail to the caller — the error message is generic; full detail goes to the internal log only
+Table BIS-14.1 — External error mapping. This table is the single source of truth for how this service translates connector-native failures into the platform-wide error taxonomy.
+ 
+Section 15 — Logging
+Every log event uses the EIS-001 Table EIS-1.3 field schema exactly. This section lists the event_type values specific to this service.
+ 
+event_type
+Emitted When
+Key Fields in input_summary / output_summary
+CONNECTOR_AUTHENTICATED
+Successful authentication
+account_id, auth_method — never the resolved credential
+AUTH_FAILED
+Authentication failure of any kind
+error_code, retry_count
+ENVIRONMENT_DETECTED
+Environment detection completes
+environment_type, confidence
+SANDBOX_DETECTED
+Environment detection returns SANDBOX with HIGH confidence
+Emitted as a distinct high-priority event in addition to ENVIRONMENT_DETECTED
+MODULE_INVENTORY_COMPLETE
+Module discovery completes
+module_count, active_module_count
+SCHEMA_DISCOVERED
+Schema discovery completes with no drift
+object_type_count
+SCHEMA_CHANGED_DETECTED
+Schema discovery or extraction parsing detects drift
+connector_id, affected_object_type, diff_severity — triggers EIS-004 PENDING_REVALIDATION
+EXTRACTION_BATCH_COMPLETE
+An extraction batch write to temp store succeeds
+record_count, extraction_batch_id — never record content
+EXTRACTION_CANCELLED
+A cancellation request is processed
+reason, records_extracted_before_cancel
+INCREMENTAL_SYNC_COMPLETE
+An incremental sync completes
+modified_count, deleted_count
+RATE_LIMIT_HIT
+A request is denied by the Rate Limiter
+connector_id, retry_after_seconds
+SECURITY_VIOLATION
+Security middleware rejects a request (non-GET to external system, credential pattern in logs, cross-customer access attempt)
+violation_type — always escalated to the audit event stream (EIS-001 Category 13), never just the standard log
+RECORDS_RETRIEVED
+A temp store read succeeds
+count only
+Table BIS-15.1 — Connector Proxy Service log event types.
+ 
+Section 16 — Metrics
+Prometheus-style metrics, all labeled by connector_id at minimum so per-connector dashboards and alerts are possible without a schema change.
+ 
+Metric Name
+Type
+Labels
+Purpose
+connector_proxy_requests_total
+Counter
+connector_id, endpoint, status
+Overall request volume and success rate per connector and endpoint
+connector_proxy_latency_seconds
+Histogram
+connector_id, endpoint
+Latency distribution for SLO tracking (Section 18)
+connector_proxy_auth_requests_total
+Counter
+connector_id, status
+Authentication success/failure rate
+connector_proxy_rate_limit_remaining_pct
+Gauge
+connector_id, session_id
+Real-time budget visibility for capacity planning
+connector_proxy_rate_limit_hits_total
+Counter
+connector_id
+How often rate limiting actually binds — informs whether allocated budgets are correctly sized
+connector_proxy_extraction_records_total
+Counter
+connector_id, object_type
+Extraction volume — feeds cost and capacity planning
+connector_proxy_schema_drift_detected_total
+Counter
+connector_id, object_type, severity
+Tracks schema stability per connector over time — a connector with frequent drift may need more defensive adapter code
+connector_proxy_errors_total
+Counter
+connector_id, error_code
+Error rate by taxonomy code — the primary alerting signal (Section 23)
+connector_proxy_dependency_health
+Gauge
+dependency (vault\|redis\|postgres\|object_storage)
+Backs the /v1/health endpoint's dependency reporting
+Table BIS-16.1 — Connector Proxy Service metrics.
+ 
+Section 17 — Security
+This section is the build-level implementation of the security enforcement already specified in EIS-002 Table EIS2-10.3 — restated here as concrete controls, not new policy.
+ 
+Control
+Implementation
+Network isolation
+This service is not reachable from the public internet or from any network segment outside the SMPL internal VPC. Only the Tool Gateway's service identity has network-level access (security group / firewall rule scoped to the Tool Gateway's subnet).
+Method whitelist enforcement
+Security / Audit Middleware (Section 4.8) maintains a hardcoded whitelist of {GET, POST} for the calls this service itself makes outward to connectors, and within POST calls, only to the specific extraction/discovery endpoints each adapter defines — never a generic "make any request" capability. Any adapter code attempting a PUT, PATCH, or DELETE against an external connector fails at the middleware layer with a SECURITY_VIOLATION, not just a code review catch.
+Credential isolation
+No credential value is ever present in a log line, metric label, error message returned to a caller, or stored in Redis/Postgres in plaintext. Only credential_reference_id (a Vault pointer) crosses any of these boundaries.
+Vault access scope
+The service identity used to reach Vault has read-only policy scoped to secret/customers/*/connectors/* — no write, no delete, no access to any non-connector-credential Vault path.
+Cross-customer isolation
+Every request carries session_id, which the Credential Resolver uses to derive the customer-scoped Vault path — there is no code path where a session_id from customer A can resolve a credential under customer B's namespace; this is enforced by path construction, not by a runtime check that could be bypassed.
+PII/credential pattern scanning
+Before any log write, output_summary is scanned against the same pattern set as EIS-002 Section 5 injection security scan (sk_live_*, Bearer *, password=, private key markers); a match blocks the log write and raises SECURITY_VIOLATION rather than silently logging redacted-but-recognizable content.
+Input validation
+Every endpoint validates request bodies against a JSON schema before any processing begins; malformed input is rejected with INVALID_INPUT before reaching any adapter or external call.
+Rate limit fail-open exception
+The one deliberate exception to "fail closed on any security-relevant failure" is the Rate Limiter's Redis-unavailable case (Table BIS-4.3) — an intentional, documented trade-off to avoid a Redis outage halting all customer implementations; this is a resource-protection control, not a data-access control, and the distinction is why it is allowed to fail open where nothing else is.
+Table BIS-17.1 — Security controls.
+ 
+Section 18 — Performance Targets
+Metric
+Target
+Notes
+Authentication call latency (p95)
+< 2 seconds
+Excludes Vault outages; includes the full OAuth/API-key resolution + first connector round-trip
+Extraction batch latency (p95, standard connectors)
+< 3 seconds per 1,000-record batch
+Applies to Stripe, HubSpot, Rippling, and comparable-complexity connectors
+Extraction batch latency (p95, high-volume ERP)
+< 8 seconds per 1,000-record batch
+Applies to SAP, Oracle Fusion, and other connectors with IMS-documented extraction complexity
+Rate Limiter decision latency (p99)
+< 10 milliseconds
+Single Redis round-trip; this must stay fast since it gates every extraction call
+Service availability
+99.9% monthly (excluding scheduled maintenance)
+Measured independent of connector availability — a connector outage is not a Connector Proxy Service availability incident
+Concurrent extraction jobs supported per instance
+50
+Before horizontal scaling (additional replicas) is required — see Section 19
+Temp store write latency (p95)
+< 500 milliseconds per page
+Object storage write; not on the critical path for the caller's response beyond this
+Table BIS-18.1 — Performance targets.
+ 
+Section 19 — Deployment Model
+Property
+Specification
+Runtime
+FastAPI (Python), per EIS-002 Section 10.1
+Deployment unit
+Single containerized service, horizontally scaled by replica count — not split by connector or by internal component at MVP (per Section 0.1 consolidation decision)
+Network exposure
+Internal-only; no public ingress; reachable exclusively from the Tool Gateway's network segment
+State
+Stateless application tier — every replica is interchangeable; all state lives in Redis (rate limits, token cache), Vault (credentials), and object storage (temp extraction store)
+Scaling trigger
+Horizontal autoscale on concurrent extraction job count (Section 18 target: 50 per instance) and on p95 latency degradation
+Resource profile (per replica, starting point)
+2 vCPU, 4GB RAM — Connector Proxy Service work is I/O-bound (waiting on external APIs), not CPU-bound; memory is dominated by in-flight request buffering, not persistent state
+Health checks
+Kubernetes (or equivalent) liveness probe: GET /v1/health, 10s interval. Readiness probe: same endpoint, gates traffic routing until Vault/Redis/Postgres dependencies report healthy.
+Deployment cadence
+Standard CI/CD pipeline; connector adapter changes and core service changes share the same deployment artifact at MVP (per Section 0.1) — a single adapter fix requires a full service redeploy until adapter plugin hot-loading is built (Section 25, backlog)
+Table BIS-19.1 — Deployment model.
+ 
+Section 20 — Configuration
+Connector-specific configuration is data, not code, so operational tuning (rate limits, timeouts, base URLs) doesn't require a deployment. Connector-specific logic (auth flow, pagination, filter construction) is code (Section 4.2), never configuration.
+ 
+20.1 Connector Registry Schema
+connector_registry table (Postgres) or equivalent config store:
+  connector_id           VARCHAR(16) PRIMARY KEY  -- "IMS-001" etc.
+  display_name           VARCHAR(64)              -- "NetSuite"
+  auth_type               VARCHAR(32)              -- from Table BIS-5.1
+  base_url_template       VARCHAR(256)             -- may include {account_id} etc.
+  api_version_pinned      VARCHAR(32)
+  rate_limit_per_minute   INTEGER
+  rate_limit_burst_capacity INTEGER
+  timeout_seconds         INTEGER                  -- connector-specific, per Table BIS-14.1
+  pagination_style        VARCHAR(32)              -- CURSOR | OFFSET | PAGE_TOKEN
+  adapter_module_path     VARCHAR(128)             -- "adapters.ims_001_netsuite"
+  active                  BOOLEAN                  -- allows disabling a connector
+                                                    -- platform-wide without a deploy
+ 
+20.2 Environment Variables
+Variable
+Purpose
+VAULT_ADDR / VAULT_SERVICE_TOKEN
+Vault connection for the Credential Resolver
+REDIS_URL
+Rate Limiter and token cache backing store
+OBJECT_STORAGE_BUCKET / ENDPOINT
+Temp store backing location
+CONNECTOR_REGISTRY_SOURCE
+Postgres connection string, or config file path for local development
+LOG_LEVEL
+INFO for production, DEBUG for development
+MAX_CONCURRENT_EXTRACTIONS_PER_INSTANCE
+Operational tuning parameter — default 50 per Table BIS-18.1
+Table BIS-20.1 — Environment configuration.
+ 
+Section 21 — Unit Testing
+Component
+Test Focus
+Example Test Cases
+Connector Adapter Registry
+Each adapter in isolation, with the external API mocked
+For each of 21 adapters: authenticate() returns correct AuthResult shape for both success and failure; buildExtractionRequest() produces the exact filter parameters an IMS Section 2/3 specifies (e.g., Stripe adapter always includes livemode=true)
+Credential Resolver
+Vault interaction, caching, scope validation
+Rejects a credential without READ_ONLY scope; correctly invalidates cache on rotation; treats Vault timeout as CONNECTOR_UNAVAILABLE not AUTH_ERROR
+Rate Limiter
+Token bucket math, fail-open behavior
+Token refill computes correctly across elapsed time; denies at exactly 0 remaining tokens; fails open (allows call, logs WARNING) when Redis is unreachable
+Pagination Normalizer
+Correct normalization per style
+Offset-style has_more inference is correct at exact page boundary (page_size records returned vs. fewer); cursor-style passes through unchanged; page-token style correctly detects absence of continuation URL
+Extraction Batch Coordinator
+Temp store writes, partial batch handling
+Partial batch (adapter returns fewer records than requested due to an upstream error mid-batch) still writes successfully-retrieved records rather than discarding them
+Response Envelope Builder
+Consistent envelope shape regardless of adapter output
+Every one of the 21 adapters' raw output produces an envelope matching the Section 3.0 schema exactly — a schema-validation test run against all 21 adapters' mocked responses
+Security / Audit Middleware
+Method whitelist, credential pattern scanning
+Any non-GET/POST attempt is blocked; a log write containing a recognizable credential pattern is blocked, not redacted-and-allowed
+Table BIS-21.1 — Unit test coverage by component.
+ 
+Section 22 — Integration Testing
+Integration tests run against mock external APIs (recorded fixture responses per connector, refreshed periodically against real sandbox accounts) rather than live customer systems.
+ 
+Scenario
+Verification
+Full authenticate → discover → extract → paginate sequence, one connector per auth type (5 scenarios covering Table BIS-5.1)
+End-to-end flow completes; every intermediate response matches the Section 3.0 envelope; final extracted record count matches the mock fixture
+Rate limit exhaustion mid-extraction
+extract_object_batch returns RATE_LIMIT_ERROR with correct retry_after_seconds once budget is exhausted; a subsequent call after the backoff period succeeds
+Connector outage recovery
+Mock returns 503 for 2 consecutive calls, then succeeds on the 3rd — verifies the internal 3-retry behavior from Table BIS-12.1 completes without surfacing the transient failures to the caller
+Schema drift detection
+Mock fixture modified to remove a documented field — verifies SCHEMA_CHANGED_DETECTED is emitted and the diff correctly identifies the missing field
+Checkpoint resume correctness
+Extraction interrupted after page 3 of 10 (simulated caller crash); a new call with the last-returned next_page_cursor resumes at page 4, not page 1 — verifies the stateless checkpoint contract from Section 13
+Cross-customer isolation
+Two concurrent sessions for different customer_ids attempting to resolve credentials — verifies no code path allows session A's requests to resolve session B's Vault path
+livemode/environment enforcement (Stripe-pattern connectors)
+Mock returns livemode=false; verifies extraction is blocked with the SANDBOX_DETECTED-equivalent handling, consistent with EIS-002 Table EIS2-2.3
+Temp store TTL expiration
+Attempt to read an extraction_batch_id older than 24 hours — verifies INVALID_INPUT with a clear "expired, re-extract" message, not a generic not-found
+Table BIS-22.1 — Integration test scenarios. This list extends the EIS-002 Table EIS2-11.1 runtime correctness checklist with Connector-Proxy-Service-specific scenarios; it does not replace that checklist.
+ 
+Section 23 — Observability
+Practice
+Implementation
+Distributed tracing
+Every request carries a request_id (generated at the Tool Gateway, propagated through this service and into the external connector call as a custom header where the connector API supports it); traces link Tool Gateway → Connector Proxy Service → external API call in one correlated view
+Dashboards
+Per-connector dashboard: request volume, error rate by error_code, latency p50/p95/p99, rate limit budget utilization — built from the Section 16 metrics; a platform-wide dashboard aggregates across all 21 connectors for on-call triage
+Alerting thresholds
+connector_proxy_errors_total rate > 5% over 5 minutes for any single connector_id → page on-call; connector_proxy_dependency_health = 0 for Vault or Redis > 1 minute → page on-call immediately (both are hard dependencies for correctness, not just performance)
+SECURITY_VIOLATION alerting
+Any SECURITY_VIOLATION event triggers immediate paging regardless of volume — a single occurrence warrants investigation, this is never treated as a rate-based alert
+Schema drift dashboard
+Tracks connector_proxy_schema_drift_detected_total over time per connector — surfaces which connectors are least API-stable, informing IMS maintenance priority
+Table BIS-23.1 — Observability practices.
+ 
+Section 24 — Failure Recovery
+Runbook-level recovery guidance for the dependencies this service relies on, and for individual connector outages.
+ 
+Failure
+Immediate Effect
+Recovery Behavior
+Vault unreachable
+All authenticate() and credential resolution calls fail with CONNECTOR_UNAVAILABLE; no new extraction can begin for any connector
+Fail closed — this is a hard dependency; no workaround. Existing cached tokens in Redis continue to serve already-authenticated sessions until their TTL expires, providing a brief grace window. Recovery is automatic once Vault is reachable again — no manual intervention needed in this service.
+Redis unreachable
+Rate Limiter fails open (Table BIS-4.3) — calls proceed without rate-limit enforcement, logged as WARNING; token cache misses force re-authentication on every call (increased latency and load on connector auth endpoints, but not a hard failure)
+Degraded but functional. Once Redis recovers, rate limit tracking resumes at full capacity (fresh token buckets) — there is no "catching up" on the gap; this is treated as an acceptable minor cost of the fail-open design.
+Object storage unreachable
+Extraction batch writes fail with INTERNAL_ERROR after 3 retries (Table BIS-12.1); discovery and authentication continue to function since they do not depend on the temp store
+Fail closed for extraction only. Once object storage recovers, extraction resumes normally — no data was lost because failed writes never partially succeeded (all-or-nothing per page).
+Single connector outage (e.g., NetSuite maintenance window)
+TERMINAL_BLOCKED for jobs targeting that connector, per EIS-002 Section 0.2; all other connectors and all other customers' sessions are entirely unaffected
+Automatic — the Connector Proxy Service's per-connector health tracking (Section 16) detects recovery via the next scheduled health probe or the next caller-initiated retry, whichever comes first; no cross-connector or cross-customer blast radius.
+This service itself crashes or is redeployed mid-request
+In-flight requests fail; the caller (Connector Worker) receives a connection error, mapped to CONNECTOR_UNAVAILABLE or a generic transport error
+Stateless design means any replacement replica can serve the next request identically — no session affinity required. The caller's own retry policy (EIS-002 Table EIS2-7.1) handles the transient failure; this service holds nothing that needs recovery on its own restart.
+Table BIS-24.1 — Failure recovery by dependency and failure type.
+ 
+Section 25 — Future Enhancements (Backlog Only)
+The following are explicitly out of scope for this build. They are documented so future engineering work has a clear starting point, not because they are planned for the current release.
+ 
+Enhancement
+Description
+Trigger to Reconsider
+Webhook-based incremental sync
+Replace polling-based extract_incremental_changes with connector-native webhooks where available (Stripe, HubSpot both support this), reducing latency and rate-limit consumption for near-real-time sync
+Production monitoring (EIS-002 Section 8.1) shows polling-based incremental sync consuming a disproportionate share of rate limit budget at scale
+Adapter hot-loading
+Allow a single connector adapter to be updated and deployed independently of the full service, removing the Section 19 constraint that adapter changes require a full redeploy
+Deployment frequency for adapter-only changes becomes a bottleneck — i.e., IMS updates are happening faster than the team wants to run full service deploys
+Third-party connector SDK
+A published adapter interface (Section 4.2) that allows external partners or customers to build adapters for connectors not in the 21-connector IMS library, without SMPL engineering building every adapter
+Customer demand for a long-tail connector not economically justified for SMPL to build in-house
+Per-customer rate limit overrides
+Allow a specific enterprise customer with a negotiated higher API rate limit from a connector vendor to receive a correspondingly higher budget allocation, rather than the platform-wide default
+An enterprise customer's vendor-negotiated rate limit is being under-utilized by the platform-wide allocation formula
+Circuit breaker pattern
+Add a circuit-breaker layer in front of the retry logic (Section 12) so a connector experiencing sustained failures is proactively short-circuited rather than every caller independently discovering the outage through failed retries
+Connector outage frequency or duration increases to the point where retry-storm load against a struggling connector becomes a concern
+Multi-region deployment
+Deploy Connector Proxy Service instances per geographic region to reduce latency to region-specific connector API endpoints and support data residency requirements
+SMPL onboards customers with data residency requirements, or connector latency from a single-region deployment becomes a measurable performance issue
+Table BIS-25.1 — Backlog. None of these are required for MVP; each has an explicit trigger condition rather than a target date, consistent with the EIS-002 Section 10.5 principle of scaling on observed need.
+ 
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+API completeness
+10 / 10
+All 11 endpoints fully specified with request, response, error codes, idempotency, retry rules, logging, and metrics — an engineer can implement any endpoint from its table alone.
+Component architecture clarity
+10 / 10
+Seven internal components with explicit interfaces; the Connector Adapter Registry pattern makes the 21-connector problem tractable without inline conditional sprawl.
+Architectural consistency with EIS-001/EIS-002
+10 / 10
+Every design decision in Section 0 explicitly reconciles this document with the prior frozen architecture rather than silently diverging from it — the Extraction Engine consolidation, checkpoint ownership, and adapter pattern are all traceable resolutions, not new invention.
+Testability
+9 / 10
+Unit and integration test scenarios cover every component and the highest-risk cross-cutting behaviors (checkpoint resume, cross-customer isolation, schema drift). One point withheld: adapter-specific test fixtures for all 21 connectors are referenced but not enumerated in full — that level of detail belongs in the adapter implementation tickets, not this specification.
+Operability
+10 / 10
+Logging, metrics, alerting thresholds, and failure recovery runbooks are concrete enough to build dashboards and on-call procedures directly from this document.
+Table BIS-FA.1 — Build readiness assessment. Aggregate: 49 / 50 (98%).
+ 
+BIS-001 is complete and ready for engineering to begin implementation. It is the first Build Implementation Specification in the SMPL engineering library and establishes the format — scope decisions stated up front, per-endpoint and per-component tables, explicit architectural traceability — that future BIS documents (Tool Gateway, Canonical Data Service, CAL Service, Reporting Service) should follow.
+ 
+The three scope decisions in Section 0 are the most consequential contribution of this document: they resolve real ambiguities between EIS-002's service inventory and this BIS's section list rather than leaving two documents in silent disagreement. An engineer reading only EIS-002 and an engineer reading only BIS-001 should arrive at the same mental model of where the Extraction Engine lives, who owns checkpoint state, and how new connectors get added — that consistency is what makes a Build Implementation Specification trustworthy as a standalone build reference.
+ 

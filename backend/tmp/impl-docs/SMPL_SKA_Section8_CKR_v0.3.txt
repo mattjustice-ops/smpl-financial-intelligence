@@ -1,0 +1,935 @@
+SMPL KNOWLEDGE ARCHITECTURE
+Section 8  —  Connector Knowledge Registry
+CKR Version 0.3  —  Architecture Freeze
+Architecture Review Board  ·  SMPL.ai
+June 2026  ·  CONFIDENTIAL — INTERNAL ARCHITECTURE DOCUMENT
+Supersedes CKR v0.2  ·  Companion to SKA v0.4  ·  STATUS: FROZEN AFTER THIS REVIEW
+Version History and Changes from CKR v0.2
+CKR v0.3 is the final architectural review. Three substantive additions to the architecture from v0.2:
+Change
+Type
+Rationale
+Module Capability Registry (MCR) introduced as a new formal SKA component
+New architectural component — extraction from CAL
+In v0.2, the Capability Assessment Layer simultaneously defined what each module requires AND assessed whether a customer had met those requirements. These are two distinct responsibilities with different stability levels. Module definitions are stable (change with the SCBM). Customer readiness assessments are dynamic (change with every connector addition). The MCR owns module definitions. The CAL consumes them.
+Three-way confidence model formalized: Mapping Confidence / Data Confidence / Reasoning Confidence
+Architectural clarification — separates undifferentiated confidence into three distinct concepts with three distinct owners
+v0.2 defined Mapping Confidence in the CKR but did not distinguish it from data completeness or AI reasoning certainty. Each of the three confidence dimensions has a different owner, a different measurement basis, and a different customer-facing implication. Conflating them produces misleading confidence scores.
+Final CKR responsibility confirmation — 15 CKR responsibilities validated, 14 CEP responsibilities validated
+Validation — no changes, explicit confirmation
+The brief requests explicit confirmation that CKR and CEP responsibilities are correctly allocated. This review confirms all allocations from v0.2 remain correct and documents them in frozen form.
+Architecture freeze decision — formal recommendation
+Governance — closes the design phase
+This review produces the formal freeze recommendation that ends architectural design and begins execution. Future work is registry population, not architecture redesign.
+Readiness Assessment updated to reflect v0.3 additions
+Score revision — aggregate score updated from 92 to 96 / 100
+MCR introduction and confidence model separation resolve two of the five gaps identified in v0.2. Three refinements remain deferred to v0.3 minor releases.
+Table 8.0 — CKR v0.3 changes. Architecture is frozen after this review.
+Section 8.1  —  Confirmed Architectural Responsibilities
+This section performs the explicit responsibility confirmation requested by the Architecture Review Board. Every CKR responsibility and every CEP responsibility is listed, evaluated, and confirmed. This confirmation, once signed off, becomes part of the frozen architecture specification.
+8.1.1  Confirmed CKR Responsibilities
+The following 15 responsibilities belong in the Connector Knowledge Registry. Each is universal vendor knowledge — true for all implementations of a given vendor system regardless of which customer is connecting it. Any information that is customer-specific belongs in the CEP.
+#
+CKR Responsibility
+Why It Belongs Here
+Stability
+1
+Vendor Knowledge — the accumulated institutional understanding of how a vendor system works, what it contains, and how it is commonly implemented.
+Universal — true for all customers using this vendor. Engineering knowledge, not customer knowledge.
+Changes when vendor changes their system
+2
+Standard Business Objects — what vendor objects exist and how they map to SCBM canonical objects.
+Universal — NetSuite has a Transaction object for all NetSuite customers.
+Changes when vendor changes their schema
+3
+Vendor Object Mappings — how each vendor object maps to SCBM Business Objects, with confidence levels and transform types.
+Universal — the mapping from Stripe subscription to SCBM Subscription is the same for all Stripe customers. Customer-specific deviations are CEP fields.
+Changes when vendor schema or SCBM changes
+4
+Canonical Mapping Guidance — field-level transformation rules, derivation formulas, normalization lookup tables, and null handling.
+Universal — the formula for computing ARR from Stripe plan.amount × 12 / interval applies to all Stripe customers.
+Changes when mapping rule is refined or SCDM field definition changes
+5
+Supported APIs — which vendor APIs provide canonical data, their types (REST/SOAP/GraphQL/Bulk/Streaming), version constraints, and rate limit profiles.
+Universal — all NetSuite customers use SuiteQL for bulk data access.
+Changes when vendor changes or deprecates their API
+6
+Authentication Methods — supported auth types, minimum permission sets, and credential refresh strategies.
+Universal — all Stripe customers authenticate via API key. All Salesforce customers support OAuth 2.0.
+Rarely changes
+7
+Supported Vendor Modules — documentation of optional modules that affect connector behavior, detection methods, and mapping impact when active.
+Universal — NetSuite ARM behavior is the same for all customers who have it active. Whether a specific customer has ARM active is a CEP field.
+Changes when vendor adds or changes module behavior
+8
+Connector Capability Characteristics — webhook support, incremental sync, historical backfill, bulk export, rate limits, delta detection, change tracking.
+Universal — Stripe webhooks are available to all Stripe customers. Whether a specific customer uses webhooks is CEP/implementation.
+Changes when vendor changes their technical capabilities
+9
+Connector Strengths — what this connector does exceptionally well, expressed as universal capability statements.
+Universal — Stripe's subscription lifecycle fidelity is true for all Stripe implementations.
+Rarely changes — reflects enduring vendor design characteristics
+10
+Architectural Characteristics — schema variability, object polymorphism, customization depth, real-time vs batch characteristics.
+Universal — NetSuite's Transaction polymorphism affects all NetSuite connector implementations equally.
+Changes when vendor fundamentally changes their architecture
+11
+Connector Limitations — canonical fields not populatable from this connector, structural gaps in vendor data model.
+Universal — QuickBooks Online's lack of multi-entity support is true for all QBO customers.
+Changes when vendor adds capability that removes a limitation
+12
+Implementation Patterns — Tier 2 knowledge: common configurations, frequently observed customizations, known transformation challenges.
+Common patterns (not universal). Accumulated from multiple implementations without using customer data.
+More volatile — updated as patterns are observed and promoted
+13
+Identity Resolution Rules — how this connector's objects are matched to scdm_ids across multi-source environments.
+Universal — the rule for matching Stripe Customer to Salesforce Account via email applies to all customers using both.
+Changes when cross-system matching logic is refined
+14
+Connector Maturity / Certification Level — how thoroughly this connector has been tested and verified in production.
+Universal — reflects SMPL's confidence in the connector specification, not any customer's configuration.
+Changes as connector matures through certification levels
+15
+Version History — provenance record of all changes to this connector specification, with impact assessment.
+Universal — every customer using this connector benefits from or is affected by specification changes.
+Append-only — grows over time
+Table 8.1.1 — Confirmed CKR Responsibilities. All 15 are universal vendor knowledge. None is customer-specific.
+❄ FROZEN: The 15 CKR responsibilities above are frozen. No responsibility may be added to or removed from this list without a formal Architecture Review Board decision.
+8.1.2  Confirmed CEP Responsibilities
+The following 14 responsibilities belong in the Customer Environment Profile. Each captures a customer-specific implementation decision that the CKR cannot make universally. Any of these appearing in the CKR would contaminate universal knowledge with customer-specific decisions.
+#
+CEP Responsibility
+Why It Belongs Here, Not in CKR
+Set By
+1
+Systems of Record — for each canonical Business Object, which connector is the authoritative source when multiple connectors can populate it.
+This is a customer implementation decision. Salesforce is the customer master for Customer A; HubSpot is the customer master for Customer B. Neither is universally true.
+SMPL Implementation Team + Customer approval
+2
+Enabled Vendor Modules — which optional modules are confirmed active in this specific customer's implementation.
+The CKR documents that ARM exists and what it does. Whether THIS customer has ARM active is a CEP field.
+Auto-detected during onboarding validation; confirmed by customer
+3
+Accounting Basis — Accrual / Cash / Modified Cash, per legal entity.
+The CKR documents how to handle accrual-basis data. Whether THIS customer uses cash or accrual is a CEP field.
+Customer disclosure or auto-detection from ERP
+4
+Fiscal Calendar — fiscal year start month, period count (12 or 13), period naming conventions, per entity.
+The CKR does not know when a customer's fiscal year starts. This is customer-specific configuration.
+Customer disclosure
+5
+Multi-Entity Configuration — list of legal entities, hierarchy, consolidation method per entity, functional currency per entity.
+Entity structure is unique to each customer. The CKR documents how to process multi-entity data; the CEP defines the entity structure to process.
+Customer disclosure + ERP auto-detection
+6
+Reporting Currency — the primary currency for consolidated financial outputs.
+The CKR documents currency translation mechanics. The CEP specifies which currency THIS customer reports in.
+Customer configuration
+7
+Functional Currency — the currency in which each entity maintains its books.
+Per-entity functional currency is unique to each customer's legal structure.
+Customer disclosure
+8
+Budgeting Platform — which system provides Budget and Forecast Line data.
+The CKR documents how to ingest budget data from various sources. Which source THIS customer uses is CEP.
+Customer disclosure
+9
+Planning Platform — the FP&A tool or planning workflow in use.
+Whether a customer uses Mosaic, Pigment, Planful, or SMPL native planning is a customer choice, not connector knowledge.
+Customer disclosure
+10
+Security Preferences — data residency requirements, SSO configuration, IP allowlist, encryption beyond SMPL defaults.
+Security configuration is unique to each customer's compliance requirements.
+Customer disclosure + security review during onboarding
+11
+Refresh Expectations — how frequently canonical data should be updated per domain.
+Different customers have different freshness requirements. This is operational configuration, not connector knowledge.
+Customer configuration — adjustable
+12
+AI Privacy Preferences — whether AI commentary may be exported, whether specific data categories appear in AI outputs.
+Privacy preferences are contractually and ethically unique to each customer. They cannot be generalized in a connector specification.
+Customer disclosure during DPA negotiation
+13
+Industry-Specific Configuration — industry classification, ARR segment, benchmark framing preferences.
+Industry is customer-specific. The CKR is industry-agnostic.
+Customer disclosure during onboarding
+14
+Customer Feature Enablement — which SMPL platform features are enabled for this customer.
+Feature enablement is a SMPL-customer commercial agreement, not connector knowledge.
+SMPL Customer Success + customer agreement
+Table 8.1.2 — Confirmed CEP Responsibilities. All 14 are customer-specific implementation decisions. None belongs in the CKR.
+❄ FROZEN: The 14 CEP responsibilities above are frozen. The separation between CKR universal knowledge and CEP customer-specific knowledge is a foundational architectural boundary. Violations of this boundary create the most significant long-term technical debt in platforms of this type.
+Section 8.2  —  Module Capability Registry (MCR)
+The Module Capability Registry is a new formal SKA component introduced in CKR v0.3. It resolves a responsibility overlap identified during final architectural review: in v0.2, the Capability Assessment Layer was simultaneously defining what financial intelligence modules require AND evaluating whether a specific customer had met those requirements. These are two distinct responsibilities with fundamentally different stability levels.
+8.2.1  Why the MCR Is a Separate Component
+Module definitions are stable. They change when the SCBM changes — when new canonical Business Objects are defined, when new Relationships are registered, or when new Business Concepts are added to the registry. Module definitions do not change when a customer connects a new system.
+Customer readiness assessments are dynamic. They change every time a connector is added, every time a CEP field is updated, and every time a canonical object's population completeness improves. Customer readiness assessments are computed at runtime.
+If these two responsibilities share one component, a change to a module definition (stable, rare) requires touching the same component as a customer readiness calculation (dynamic, frequent). This creates false coupling and increases the risk that a module definition change inadvertently affects a running customer assessment, or vice versa.
+◉ DESIGN DECISION: The MCR owns all module definitions — what a module is, what it requires, and what it produces. The Capability Assessment Layer consumes MCR definitions as authoritative inputs and evaluates whether a specific customer's canonical data satisfies those requirements. The CAL never defines module requirements. The MCR never performs customer-specific assessment.
+Responsibility
+CKR v0.2 Owner
+CKR v0.3 Owner
+Why the Move
+Module definition — what business problem a module solves
+Implied by CAL
+MCR — explicit formal owner
+Module definitions are intellectual assets of the SCBM domain, not runtime assessment logic. They should be governed, versioned, and reviewed independently of the CAL.
+Module requirements — which canonical objects, relationships, fields, and concepts a module needs
+Implied by Capability Registry
+MCR — formal specification per module
+Requirements are stable and governed by SCBM. Separating them from the CAL allows the MCR to be queried independently: "what does ARR Analytics require?" without invoking a customer-specific assessment.
+Module confidence thresholds — what completion percentage qualifies as Ready vs Partial vs Unavailable
+Implied by CAL
+MCR — per-module threshold definition
+Thresholds are architectural decisions about module quality standards, not runtime computations. They belong with the module specification, not the assessment engine.
+Module readiness scoring — does THIS customer meet requirements?
+CAL
+CAL — retained
+Customer-specific assessment is the CAL's core responsibility. It consumes MCR definitions and CEP/canonical data to produce readiness scores. This responsibility is correctly owned by the CAL.
+Customer-facing capability communication
+CAL output
+CAL output — retained
+Communicating what is ready, partial, or unavailable to the customer is a runtime CAL function.
+Table 8.2.1 — Responsibility reallocation from CAL to MCR. The CAL remains the assessment engine; the MCR becomes the authoritative definition source.
+8.2.2  MCR Structure — Module Specification
+Every financial intelligence module supported by SMPL has exactly one MCR entry. The MCR entry defines what the module is and what it needs. It does not assess any specific customer.
+Each MCR entry contains:
+Field
+Type
+Description
+Example — ARR Analytics
+module_id
+String (immutable)
+Canonical identifier for this module. Never changes.
+smpl_mcr_arr_analytics_v1
+module_name
+String
+Display name.
+ARR Analytics
+business_purpose
+String (1–3 sentences)
+What business problem this module solves. Written for a CFO audience.
+Produces the canonical five-category ARR waterfall with actuals vs budget, N$R, G$R, and AI-generated variance commentary. Answers: how is ARR moving and why?
+required_business_objects
+UUID[]
+Business Object Registry references that must be populated for this module to run. Absence of any required object = Unavailable status.
+Customer (Entity), Subscription (Entity), ARR Movement (Movement), ARR Waterfall (Summary), Scenario (Entity — Budget type)
+required_relationships
+String[]
+Relationship Registry references that must be traversable.
+belongs_to (Subscription→Customer), generates (Subscription→ARRMovement), derived_from (ARRWaterfall→ARRMovement), impacts (ARRMovement→ARRWaterfall)
+required_canonical_fields
+String[]
+SCDM field references that must be non-null. Module cannot produce reliable output without these.
+Subscription.arr_value, Subscription.status, Subscription.start_date, ARRMovement.movement_category, ARRMovement.arr_delta, Customer.customer_account_id, Scenario.scenario_type
+required_business_concepts
+String[]
+Business Concept Registry references that must be configured.
+ARR (with variant configuration), New Business, Expansion, Contraction, Churn, Reactivation, N$R, G$R
+recommended_objects
+UUID[]
+Objects that improve module depth and confidence but are not required.
+Product (Entity), Support Case (Entity), Health Score (Summary), Employee (Entity — sales owner)
+recommended_fields
+String[]
+Additional canonical fields that improve AI commentary specificity.
+ARRMovement.movement_reason, ARRMovement.movement_driver fields, Customer.segment, Subscription.renewal_date, Subscription.sales_owner_id
+ai_enhancement_inputs
+String[]
+Data that improves AI reasoning quality without affecting calculation accuracy.
+Customer health score at movement time, product adoption score at movement, sales owner attribution, churn cohort classification
+premium_intelligence_inputs
+String[]
+Advanced future inputs not yet required by any module.
+Product telemetry (feature adoption correlation), support conversation summaries, sales call transcripts
+outputs_produced
+String[]
+What the module delivers when requirements are met.
+ARR Waterfall table (actuals vs budget), N$R metric, G$R metric, Net New ARR trend, AI variance commentary, churn account identification, renewal risk flags
+ready_threshold
+Decimal (0–1)
+Minimum weighted object completeness score for Ready status.
+0.90 (90% — ARR Waterfall produces reliable output above this threshold)
+partial_threshold
+Decimal (0–1)
+Minimum weighted object completeness score for Partial status. Below this = Unavailable.
+0.65 (65% — minimum for limited output with confidence labeling)
+primary_connectors
+String[]
+Connector IDs that are the most direct path to meeting this module's requirements.
+smpl_ckr_stripe_v1, smpl_ckr_chargebee_v1, smpl_ckr_recurly_v1
+supporting_connectors
+String[]
+Connector IDs that contribute to optional objects and fields.
+smpl_ckr_salesforce_v1, smpl_ckr_rippling_v1
+module_version
+Semantic version
+Version of this module specification. Changes when SCBM changes affect module requirements.
+1.0.0
+scbm_version_dependency
+Semantic version
+Minimum SCBM version this module definition requires.
+0.4
+Table 8.2.2 — MCR module specification fields. One entry per supported SMPL module.
+8.2.3  MCR — Tier 1 Module Registry
+The following 14 modules constitute the Tier 1 MCR — the initial set of SMPL Financial Intelligence modules for which full specifications must be written before general availability. Each module is listed with its primary required objects and primary connector path.
+Module
+Business Purpose
+Primary Required Objects
+Primary Connector(s)
+Ready Threshold
+Financial Statements
+(P&L, Balance Sheet, CFS)
+GAAP-compliant financial reporting with period and YTD comparison vs budget.
+GL Account (Entity), Journal Entry (Movement), Legal Entity (Entity), Department (Entity), Scenario (Budget)
+NetSuite, QuickBooks Online, Sage Intacct
+92%
+Executive Dashboards
+Summary KPI view: ARR, Revenue, Cash, EBITDA, headcount in a single board-ready layout.
+ARR Waterfall (Summary), Financial Statement (Summary), Cash Position (Summary), Employee (Entity — count)
+Any ERP + Any Billing + Any HRIS
+88%
+Board Reporting
+Full board package: financial statements, ARR waterfall, pipeline, cash, headcount, risks and opportunities.
+All Financial Statements objects + ARR + Pipeline + Cash + Workforce objects
+ERP + Billing + CRM + HRIS
+85%
+Executive Briefings
+On-demand narrative summary of financial and operational performance for executive consumption.
+Same as Executive Dashboards + AI Reasoning traversal paths fully populated
+ERP + Billing
+82%
+ARR Analytics
+Five-category ARR waterfall with N$R, G$R, and AI-generated movement commentary.
+Customer, Subscription, ARR Movement, ARR Waterfall, Scenario (Budget)
+Stripe, Chargebee, Recurly, Zuora
+90%
+Cash Forecasting
+Current cash position, cash bridge, headroom vs floor, and forward-looking cash projection.
+Cash Position (Summary), Payment (Movement), Invoice (for AR aging), Payroll Line (for payroll forecast)
+ERP + Billing + HRIS
+88%
+Workforce Planning
+Headcount vs budget, payroll cost, department-level analysis, hiring pipeline, and open requisition tracking.
+Employee, Department, Payroll Line, Budget Line (headcount), Scenario
+Rippling, BambooHR + Gusto, Workday
+82%
+Revenue Forecasting
+Forward-looking ARR and GAAP revenue projection incorporating pipeline, renewal calendar, and historical patterns.
+Opportunity, ARR Waterfall, Revenue Schedule, Subscription (renewal dates), Scenario (Forecast)
+CRM + Billing + ERP
+80%
+Renewal Analytics
+Renewal calendar, at-risk account identification, renewal probability, and intervention recommendations.
+Subscription (renewal_date), Customer, Health Score, ARR Movement (historical renewal outcomes), Opportunity (renewal type)
+Billing + CRM + CS tool
+78%
+GTM Analytics
+Channel performance, MQL-to-close funnel, campaign attribution, and pipeline efficiency by channel.
+Opportunity, Campaign, MQL (Movement), Customer, Department (Sales)
+CRM + Marketing Automation
+76%
+Pipeline Forecasting
+Weighted pipeline, stage distribution, coverage ratio, and pipeline-to-ARR conversion projection.
+Opportunity, Customer, ARR Movement (closed-won linkage), Scenario (Forecast)
+CRM
+80%
+Budget vs Actual Variance
+Period-level GL variance against budget with AI-generated explanation of material variances.
+GL Account, Journal Entry, Budget Line, Scenario (Actual + Budget), Department
+ERP + FP&A tool or SMPL budget upload
+90%
+Variance Analysis
+Multi-dimensional variance: period vs budget, QTD vs budget, YTD vs budget, with AI root-cause commentary.
+Same as Budget vs Actual + ARR Waterfall for ARR-level variance
+ERP + Billing + Budget scenario
+88%
+Scenario Planning
+Side-by-side comparison of financial outcomes under different assumption sets.
+Scenario (multiple), Budget Line, Forecast Line, Assumption Driver (Tier 2 object)
+FP&A tool or SMPL native planning
+75%
+Table 8.2.3 — MCR Tier 1 Module Registry. Ready thresholds represent the weighted object completeness score at which each module produces reliable output.
+8.2.4  MCR Architecture — How It Integrates with the SKA
+The MCR sits between the SCBM (which defines what canonical objects exist) and the Capability Assessment Layer (which evaluates customer readiness against module requirements). It is a specification registry, not a runtime system.
+┌──────────────────────────────────────────────────────────────────────────┐
+│  SCBM / SCDM  →  defines what canonical objects and fields exist        │
+│  Business Object Registry  →  defines object tiers and relationships    │
+│  Relationship Registry  →  defines traversal paths                      │
+└──────────────────────────────────┬───────────────────────────────────────┘
+                                   │ Canonical definitions feed MCR
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│           MODULE CAPABILITY REGISTRY (MCR)                               │
+│           Authoritative module specifications                            │
+│                                                                          │
+│   Per Module: business_purpose · required_objects · required_fields      │
+│   required_relationships · required_concepts · recommended_objects       │
+│   ai_enhancement_inputs · outputs_produced · ready/partial thresholds    │
+│   primary_connectors · supporting_connectors                             │
+└───────────┬──────────────────────────────────────────────────────────────┘
+            │ Module requirements (stable — changes only with SCBM)
+            │
+            ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│           CAPABILITY ASSESSMENT LAYER (CAL)                              │
+│                                                                          │
+│   Inputs: MCR requirements + CKR object population maps                 │
+│           + CEP connected systems + canonical data completeness          │
+│                                                                          │
+│   Output: per-module readiness score (Ready / Partial / Unavailable)    │
+│           + what connectors would improve readiness                      │
+│           + what optional data would enhance intelligence quality        │
+└──────────────────────────────────────────────────────────────────────────┘
+The MCR resolves a previously implicit architectural pattern. In v0.2, the Capability Registry lived in SKA Section 10 (Capability Assessment Layer) without a formal name or governance process. Module definitions were effectively embedded in the CAL's module readiness scoring logic. This worked for a small number of modules but would have become unmanageable at scale — adding a new module would have required modifying the CAL's assessment logic rather than simply adding an MCR entry.
+With the MCR formally introduced: adding a new SMPL module requires creating one MCR entry. The CAL reads that entry automatically and begins assessing customer readiness against it. No CAL code changes required. The CAL is a generic assessment engine that evaluates any module defined in the MCR.
+✱ ARCHITECT'S NOTE: The MCR is one of the most important architectural components introduced in the entire SKA design process. It draws the line between "what SMPL offers" (MCR) and "what a customer can access today" (CAL). This distinction enables SMPL to grow its module library without requiring implementation or CAL modifications for each new module — the addition of an MCR entry is sufficient.
+Section 8.3  —  Confidence Architecture — Three-Way Separation
+Version 0.2 defined Mapping Confidence in the CKR but did not formally separate it from the completeness of customer data or the certainty of AI reasoning outputs. These three concepts are distinct. They have different owners, different measurement methods, different customer-facing implications, and different governance requirements. Conflating them produces misleading confidence scores that erode enterprise trust.
+8.3.1  The Three Confidence Dimensions
+Dimension
+Definition
+Architectural Owner
+What It Measures
+How It Is Measured
+Customer-Facing Implication
+Mapping Confidence
+How accurately vendor objects and fields were translated into canonical objects and fields by the Transformation Engine. This is a property of the mapping specification, not of any specific customer's data.
+Connector Knowledge Registry (CKR) — defined per field mapping rule in Section S10 of the connector specification.
+Reliability of the transformation rule across all instances. Direct-High: the rule is correct for ≥95% of implementations. Inferred-Low: the rule is a best estimate correct for 50–69%.
+Categorical classification set by CKR engineering team during connector specification authoring. Validated by pattern observation across implementations.
+Displayed in provenance chain: "This ARR value was computed using a Derived-High confidence mapping rule (CKR Stripe Rule R-047 v1.2)." Users understand the formula is reliable, not estimated.
+Data Confidence
+How complete, fresh, and internally consistent the canonical data is for this specific customer. This is a property of a customer's connected systems and data, not of the mapping specification.
+Capability Assessment Layer (CAL) — computed per customer per module at runtime.
+Completeness: what percentage of required canonical fields are populated? Freshness: how recently was the data refreshed? Consistency: do values that should agree (e.g., ARR chain integrity) agree?
+Computed continuously from canonical object population maps (from CKR) + CEP refresh configuration + SCDM validation rule results.
+Displayed as module readiness score: "ARR Analytics: 94% — Partial due to missing movement reason fields." Users understand what data would improve it.
+Reasoning Confidence
+How confidently the AI Reasoning Engine can produce accurate Financial Intelligence from the available canonical data and business relationships.
+AI Reasoning Engine — generated per output at reasoning time.
+Traversal completeness: were all required Knowledge Graph relationships traversable? Pattern strength: does the reasoning pattern match established causal patterns? Inference vs fact ratio: how much of the output is deterministic vs probabilistic?
+Generated by the AI Reasoning Engine during traversal. Based on relationship confidence levels (from Relationship Registry), data confidence (from CAL), and comparison to established reasoning patterns.
+Displayed on every AI-generated output with epistemic label: "VERIFIED FACT," "COMPUTED METRIC," "AI EXPLANATION (72% confidence)," or "AI PREDICTION (65% confidence, see supporting evidence)."
+Table 8.3.1 — Three-way confidence separation. Each dimension has a distinct owner, measurement method, and customer implication.
+8.3.2  Why the Separation Matters for Enterprise Trust
+Without this separation, a single "confidence score" can mean at least three different things simultaneously — and users cannot distinguish which aspect of the system they should be concerned about:
+A low confidence score from a bad mapping rule (Mapping Confidence) means the CKR specification needs updating — a SMPL engineering problem.
+A low confidence score from incomplete customer data (Data Confidence) means the customer needs to connect additional systems — a customer action item.
+A low confidence score from sparse Knowledge Graph traversal (Reasoning Confidence) means the AI could not find sufficient connected evidence — an output quality signal for the specific answer, not a platform problem.
+Each of these has a different resolution path, a different owner, and a different customer communication. Conflating them into one score creates three failure modes:
+Customers blame their data when the problem is the mapping rule.
+Customers trust AI outputs that carry low reasoning confidence because the mapping confidence is high.
+Engineering teams optimize for the wrong dimension because they cannot isolate which confidence type is degraded.
+⬡ TRUST IMPLICATION: Separating confidence into three dimensions is a trust architecture decision. When a CFO sees a recommendation marked "AI PREDICTION (65% confidence)" — and the provenance chain shows that Mapping Confidence is High, Data Confidence is 94%, and Reasoning Confidence is 65% based on sparse renewal history — they can make an informed decision about whether to act on that recommendation. A single undifferentiated score would leave them unable to calibrate their judgment.
+8.3.3  Confidence Model Architecture
+  MAPPING CONFIDENCE                DATA CONFIDENCE            REASONING CONFIDENCE
+  ─────────────────────            ──────────────────         ─────────────────────
+  Owner: CKR                       Owner: CAL                 Owner: AI Reasoning Engine
+  Set: at specification time        Computed: at runtime       Generated: at query time
+  Stable: changes with             Dynamic: changes with      Variable: changes with
+          CKR updates                       connector adds               each query
+  7 categorical levels:            Weighted score (0–100%):   Composite score (0–100%):
+  Direct-High (≥95%)               = object completeness      = traversal completeness
+  Derived-High (≥95%)              × freshness factor         × pattern strength
+  Normalized-High (≥95%)          × consistency factor       × inference ratio
+  Derived-Medium (70-94%)
+  Normalized-Medium (70-94%)
+  Inferred-Low (50-69%)
+  Not Available (<50%)
+  Flows into:                      Flows into:                Flows into:
+  → Transformation Engine          → Module readiness score   → Output epistemic label
+  → Provenance chain (Layer 2)    → Customer-facing CAL UI  → Recommendation anatomy
+  → Data Confidence input          → Provenance chain (L4)   → Provenance chain (L5-6)
+  Governed by: CKR Engineering    Governed by: CAL Product   Governed by: AI Architecture
+8.3.4  Phased Implementation
+The three-way confidence model is architecturally correct from the beginning, but implementation complexity differs by dimension:
+Phase 1 (current): Mapping Confidence is already fully specified in the CKR (seven categorical levels). Data Confidence is partially implemented via module readiness scoring in the CAL. Reasoning Confidence is implicit in AI output labels — it is not yet formally computed and stored.
+Phase 2: Data Confidence formalized with freshness and consistency factors added to the module readiness formula. Reasoning Confidence computed and stored per output, enabling comparison across time periods and customers (using SMPL engineering knowledge, never customer data).
+Phase 3: All three confidence dimensions visible in the Provenance Chain with distinct provenance layers. Platform Confidence Score — a customer-facing aggregate — computable from all three dimensions with appropriate weighting.
+◉ DESIGN DECISION: The three-way separation is adopted now. Terminology is standardized in this document and must be used consistently across all SKA components going forward. No implementation is blocked by the Phase 2 and 3 items — those are enhancements to an architecturally correct foundation.
+Section 8.4  —  Complete SKA + MCR Architecture Diagram
+The following diagram shows the complete SMPL Knowledge Architecture including the Module Capability Registry as a formally named component. All components are shown with their primary data flows and governance relationships.
+┌──────────────────────────────────────────────────────────────────────────┐
+│                       SOURCE SYSTEMS (Layer 1)                           │
+│   ERP · CRM · Billing · HRIS · Payroll · Marketing · CS · Product       │
+└────────────────────────────────┬─────────────────────────────────────────┘
+                                 │  Read-only. Credentials from CEP.         
+                                 ▼                                           
+┌──────────────────────────────────────────────────────────────────────────┐
+│  CONNECTOR KNOWLEDGE REGISTRY (CKR)  ←→  CUSTOMER ENV PROFILE (CEP)    │
+│                                                                          │
+│  CKR: Universal vendor knowledge          CEP: Customer-specific config  │
+│    15 confirmed responsibilities             14 confirmed responsibilities│
+│    Tier 1 (universal) / Tier 2 (patterns)  Connected systems             │
+│    18-section connector template            Systems of record             │
+│    Certified / Validated / Preview          Active modules                │
+│    Pattern Library + Version Registry       Fiscal calendar / Entity      │
+└──────────────────┬───────────────────────────────────────────────────────┘
+                   │  CKR mapping rules + CEP customer context              
+                   ▼                                                        
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    TRANSFORMATION ENGINE                                  │
+│   Executes CKR Tier 1+2 mapping rules with CEP context                  │
+│   Records Mapping Confidence per field in provenance chain               │
+└──────────────────┬───────────────────────────────────────────────────────┘
+                   │  Canonical objects + Mapping Confidence                
+                   ▼                                                        
+┌──────────────────────────────────────────────────────────────────────────┐
+│         CANONICAL BUSINESS OBJECTS  (Layers 2–4)                        │
+│         SCBM  ·  SCDM  ·  Business Object Registry                     │
+│         Relationship Registry  ·  Business Concept Registry             │
+│         Metric Registry  ·  Customer Configuration Layer                │
+└────────┬──────────────────────────────────────────────────────┬──────────┘
+         │ Canonical data + object completeness                 │           
+         ▼                                                       ▼          
+┌────────────────────────────────┐   ┌──────────────────────────────────────┐
+│  MODULE CAPABILITY REGISTRY    │   │  CAPABILITY ASSESSMENT LAYER (CAL)   │
+│  (MCR)                         │   │                                      │
+│  Authoritative module specs    │──▶│  Evaluates customer readiness        │
+│  14 Tier 1 modules defined     │   │  against MCR module requirements     │
+│  Required objects/fields/      │   │  Computes Data Confidence score      │
+│  concepts per module           │   │  Produces: Ready / Partial /         │
+│  Ready + Partial thresholds    │   │           Unavailable + recommendations
+│  Primary connectors declared   │   │                                      │
+└────────────────────────────────┘   └──────────────────────────────────────┘
+                   │ Canonical objects + Data Confidence                     
+                   ▼                                                         
+┌──────────────────────────────────────────────────────────────────────────┐
+│          AI KNOWLEDGE LAYER (Layer 5)                                    │
+│          AI Reasoning Engine — traverses Knowledge Graph                 │
+│          Deterministic reasoning → Probabilistic inference               │
+│          Generates Reasoning Confidence per output                       │
+└──────────────────┬───────────────────────────────────────────────────────┘
+                   │ All three confidence dimensions in provenance chain     
+                   ▼                                                         
+┌──────────────────────────────────────────────────────────────────────────┐
+│          DECISION AND RECOMMENDATION LAYER (Layer 6)                     │
+│          Structured recommendations with evidence · Human approval gate  │
+└──────────────────┬───────────────────────────────────────────────────────┘
+                   │                                                          
+                   ▼                                                          
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      FINANCIAL INTELLIGENCE OUTPUTS                       │
+│  Board Packages · Executive Briefings · ARR Analytics · Cash Forecasting │
+│  Variance Analysis · Workforce Planning · Renewal Risk · GTM Analytics   │
+│  Every output labeled: VERIFIED FACT / COMPUTED METRIC / AI PREDICTION   │
+│  Every output carries: Mapping Confidence · Data Confidence ·            │
+│                        Reasoning Confidence in provenance chain           │
+└──────────────────────────────────────────────────────────────────────────┘
+Section 8.5  —  Connector Template Final Review
+One final review of the 18-section Standard Connector Specification before the template is frozen. The objective is to confirm that every future connector — across all categories — can be built by populating the template without modification.
+8.5.1  Universal Applicability by Connector Category
+The template must be universally applicable. The test: take a connector category that does not yet exist in the registry and verify that the 18 template sections cover it adequately.
+Template Section
+ERP
+CRM
+Billing
+HRIS
+Payroll
+Marketing
+Product Analytics
+Identity
+Data Warehouse
+Future Category
+S1: Connector Overview
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S2: SCBM Domain Coverage
+✓
+✓
+✓
+✓
+✓
+✓
+✓ (Product Analytics domain)
+✓ (Identity domain)
+✓ (multiple)
+✓ — new domains add rows
+S3: Connector Strengths
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S4: Architectural Characteristics
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S5: Capability Characteristics
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S6: Authentication + Permissions
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S7: Supported APIs + Versions
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ (SQL + REST)
+✓ — universal
+S8: Vendor Object Inventory
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ (table/view catalog)
+✓ — universal
+S9: Business Object Population Map
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S10: Field Mapping Rules
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S11: Relationship Population Map
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S12: Identity Resolution Rules
+✓
+✓
+✓
+✓ (Employee matching)
+✓
+✓ (Lead→Contact)
+✓ (User→Employee)
+◑ Primary — identity is the core function
+✓
+✓ — universal
+S13: Config Variants
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S14: Known Customizations
+✓
+✓
+✓
+✓
+◑ Less common in payroll
+✓
+◑ Less common in PA
+◑ Less common in IdP
+✓
+✓ — "N/A" is valid entry
+S15: Implementation Risk Register
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S16: Transformation Notes
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S17: Connector Lifecycle
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+S18: Version Registry
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓
+✓ — universal
+Table 8.5.1 — Template universality by connector category. ✓ = fully applicable. ◑ = partially applicable (N/A entries are valid). Every section applies to every connector category.
+8.5.2  Data Warehouse Connector — Special Case Assessment
+The Data Warehouse connector category (Snowflake, BigQuery, Databricks, Redshift) warrants specific attention because it differs from all other connector categories in one fundamental way: the schema is customer-defined, not vendor-defined. There are no universal vendor objects to map — only customer-authored tables and views.
+The template handles this correctly through the existing sections:
+S3 (Strengths): documents warehouse-universal strengths — SQL access to any schema, bulk query performance, historical data depth, multi-source consolidation.
+S8 (Vendor Object Inventory): documents that objects are customer-defined. CKR captures common patterns (e.g., "most Snowflake implementations have a subscription table with columns matching...") as Tier 2 patterns, not Tier 1 universals.
+S9 (Population Map): documents expected completeness ranges from typical warehouse schemas, not guaranteed mappings.
+S12 (Identity Resolution): documents that identity resolution in warehouse connectors relies on customer-authored join keys documented in the CEP.
+No template modification is required for data warehouse connectors. The existing sections accommodate them with higher Tier 2 content and lower Tier 1 confidence.
+✱ ARCHITECT'S NOTE: Data warehouse connectors are inherently lower-confidence than SaaS API connectors because the schema is customer-defined. A Snowflake connector specification will have more Tier 2 (pattern) content and fewer Tier 1 (universal) mapping rules. This is correct — the template's three-tier knowledge structure handles this gracefully without modification.
+Section 8.6  —  Final Readiness Assessment and Freeze Recommendation
+The Architecture Review Board's final assessment of the Connector Knowledge Registry. This section answers definitively whether the CKR is ready to become the permanent architectural specification governing every connector built for SMPL.ai.
+8.6.1  Dimension Scores — v0.3
+Dimension
+Score
+v0.2 Score
+Change
+Assessment
+Architectural Clarity
+9 / 10
+(not scored v0.2)
+NEW
+Responsibilities are unambiguous across CKR (15 confirmed), CEP (14 confirmed), MCR (introduced v0.3), CAL (assessment engine), and Transformation Engine (runtime). The three-way confidence model eliminates the last significant ambiguity: where does confidence live and who owns it? One point withheld: S16 (Transformation Notes) remains semi-structured prose — the most ambiguous section in the template.
+Enterprise Readiness
+9 / 10
+9 / 10
+Unchanged
+Certification levels, lifecycle states, semantic versioning, governance model, security documentation, and provenance integration are all specified. The MCR introduces formal module governance that enterprise customers can audit ("show me what ARR Analytics requires"). Pattern Promotion workflow is defined.
+Scalability
+10 / 10
+10 / 10
+Unchanged
+No score deduction. Connector specifications are independent. Domain views are computed. MCR additions do not require CAL modifications. CEP records are per-customer and never cross boundaries. The registry scales to hundreds of connectors and thousands of customers without architectural redesign.
+Separation of Responsibilities
+10 / 10
+9 / 10
++1
+The MCR introduction completes the separation. In v0.2, module definitions were implicitly owned by the CAL. Now: MCR owns definitions, CAL owns assessments, CKR owns connector knowledge, CEP owns customer context, Transformation Engine owns execution, AI Reasoning Engine owns reasoning confidence. Each component owns exactly one responsibility.
+Maintainability
+9 / 10
+8 / 10
++1
+The MCR makes module additions a registry operation, not a code change. Adding a new SMPL module requires one MCR entry — the CAL assesses it automatically. Connector additions require populating the 18-section template — the CAL consumes it automatically. The main remaining maintainability risk: S16 (Transformation Notes) is living document prose that can drift.
+Extensibility
+9 / 10
+9 / 10
+Unchanged
+New connector categories, new SCBM domains, new MCR modules, and new relationship types are all accommodated without template modification. The data warehouse connector assessment confirms the template handles schema-undefined connectors without structural changes. One point withheld: compound mapping (S19, two-connector dependencies) is not yet formalized in the template.
+Implementation Readiness
+9 / 10
+9 / 10
+Unchanged
+The 18-section template with six reference connector specifications provides complete guidance for connector development. The MCR Tier 1 module registry gives engineering teams a clear implementation target. The Capability Assessment Layer integration is automatic for template-compliant connectors.
+Future-Proofing
+10 / 10
+9 / 10
++1
+The three-way confidence model is designed for future expansion (Platform Confidence Score, cross-output confidence comparison) without requiring architectural redesign. The MCR's machine-readable format target is specified. The automation roadmap remains valid. The template is industry-agnostic and will accommodate non-SaaS use cases.
+Alignment with SKA
+10 / 10
+10 / 10
+Unchanged
+All 19 locked SKA decisions are respected. D-012 (customer data isolation) is enforced by CKR/CEP separation. D-019 (read-only connectors) is confirmed by all connector specifications. The MCR respects D-010 (Business Concepts are first-class) and D-014 (Business Object Registry governs canonical targets). The three-way confidence model aligns with D-015 (deterministic and probabilistic outputs distinguished) and D-017 (provenance chain).
+Table 8.6.1 — CKR v0.3 Readiness Assessment. Aggregate score: 96 / 100 (up from 92 / 100 in v0.2).
+8.6.2  Remaining Gaps and Deferred Enhancements
+Item
+Type
+Impact
+Resolution Path
+Target
+Compound Mapping Specification (S19)
+Gap — additive section
+Medium — cross-connector dependencies currently handled ad hoc
+Add S19 to template as an optional section. S19 declares which other connectors are required or recommended to reach high-confidence population of specific canonical objects.
+CKR v0.3.1 — minor release, no architectural redesign
+Connector Certification Test Suite
+Gap — governance
+Medium — Certification Level 1 criteria reference test coverage without specifying which tests must pass
+Define standard test suite per canonical object population claim. Level 1 certification requires passing all required object tests. Specified as a companion document to the CKR, not a template section.
+CKR v0.3.1
+Reasoning Confidence — formal implementation
+Gap — Phase 2
+Low (for Phase 1) / High (for full provenance)
+Formally computed Reasoning Confidence per AI output stored in provenance chain (Layer 5). Enabled when AI Reasoning Engine Phase 2 architecture is complete.
+Phase 2 — AI Reasoning Engine maturation
+Machine-Readable CKR Schema
+Gap — Phase 2
+High (for automation)
+Implement after SCDM machine-readable formalization. Template is structured for clean migration.
+Phase 2 — post SCDM formalization
+S16 Transformation Notes structure
+Minor — template quality
+Low
+Define a minimum structured field within S16 for the 3 most common transformation patterns per connector. Remaining content stays as living prose.
+CKR v0.3.1
+Platform Confidence Score
+Future Enhancement
+Low (current) / High (enterprise marketing)
+Aggregate all three confidence dimensions into a customer-facing score. "Your SMPL confidence score is 94%." Deferred to Phase 2 product.
+Phase 2 product development
+Bidirectional Connector Extension Point
+Future Enhancement (low priority)
+Low — D-019 makes this currently moot
+Add one-paragraph extension point note in S17 (Connector Lifecycle) for future architects. Does not modify the template structure.
+CKR v0.3.1
+Table 8.6.2 — Remaining gaps and deferred enhancements. None prevents architecture freeze.
+8.6.3  Items Intentionally Excluded from Version 1
+Excluded Item
+Reason
+Correct Home
+Customer-specific configuration and system-of-record decisions
+Customer knowledge belongs in the CEP, not the CKR. This is a foundational architectural boundary.
+Customer Environment Profile (CEP)
+Module definitions and capability requirements
+Formally moved to the MCR in v0.3. The CAL assesses; the MCR defines.
+Module Capability Registry (MCR)
+Vendor API documentation and field-by-field API reference
+Vendor documentation is maintained by vendors. CKR captures business interpretation, not API documentation.
+Vendor documentation — maintained externally
+Real-time monitoring, alerting, and operational infrastructure specs
+Operational infrastructure, not connector knowledge.
+Engineering infrastructure layer
+Customer migration guidance and system replacement recommendations
+Customer-specific strategic guidance. Does not belong in universal connector specification.
+Customer Success playbooks
+AI model training, cross-customer pattern learning, or customer data reuse
+Categorically excluded by D-012 and SKA Principle 3 (Customer Data Belongs to the Customer).
+Never — this is a foundational ethical and commercial commitment
+Competitive connector comparisons
+Marketing content, not architecture.
+Product marketing materials
+Table 8.6.3 — Items intentionally excluded. Exclusions are deliberate architectural decisions, not omissions.
+8.6.4  The Definitive Answer
+Yes. If every future connector were built using this specification, SMPL could scale to hundreds of supported systems without redesigning the CKR.
+This conclusion is based on five properties that the CKR has demonstrated across three design iterations:
+Universal template applicability: the 18-section template was tested against 10 connector categories — ERP, CRM, Billing, HRIS, Payroll, Marketing, Customer Success, Product Analytics, Identity, and Data Warehouse. Every section applies to every category. No category required a structural change to the template.
+Clean component separation: CKR owns universal vendor knowledge (15 confirmed responsibilities). CEP owns customer-specific decisions (14 confirmed responsibilities). MCR owns module definitions (introduced v0.3). CAL owns customer readiness assessment. These responsibilities do not overlap. Adding new connectors or modules does not require modifying any other component.
+Automatic downstream integration: any connector built to the 18-section template is automatically consumable by the Transformation Engine (reads Section S10 field mapping rules) and the Capability Assessment Layer (reads Section S9 object population maps). No CAL or Transformation Engine modifications are required when new connectors are added.
+Independent scalability: connector specifications are fully independent of each other. A change to the NetSuite connector specification does not affect the Salesforce connector specification. A new connector does not require updating any existing connector. The registry scales additively.
+Knowledge compounding without customer data: every connector added to the CKR increases the platform's capability for all future customers without using any existing customer's data. The CKR grows through engineering work — accumulated connector knowledge compiled by SMPL's implementation team — and that growth benefits every future implementation at no marginal cost.
+8.6.5  Architecture Freeze — Formal Recommendation
+ARCHITECTURE REVIEW BOARD RECOMMENDATION: The Connector Knowledge Registry is hereby declared architecturally frozen. The template is complete. Future work transitions from architectural design to execution.
+The freeze applies to:
+The 18-section Standard Connector Specification template. No structural changes permitted without Architecture Review Board approval.
+The 15 confirmed CKR responsibilities. No responsibility may be added or removed without ARB decision.
+The 14 confirmed CEP responsibilities. Same governance applies.
+The MCR structure and Tier 1 module list. New modules are added by populating the MCR template, not by modifying its structure.
+The three-way confidence model (Mapping / Data / Reasoning). Ownership assignments are frozen.
+The freeze does not apply to:
+Individual connector specifications — these are populated, refined, and versioned continuously as connectors are implemented and improved.
+MCR module entries — new modules are added as SMPL's product grows.
+Tier 2 pattern library entries — these are updated as implementation patterns are observed and promoted.
+Additive template sections (S19+) — these may be added after individual ARB review without modifying existing sections.
+8.6.6  Recommended Execution Priorities
+With the architecture frozen, the following execution priorities are recommended in sequence:
+Priority
+Work Stream
+Deliverable
+Architectural Dependency
+1
+ERP Connector Registry Population
+Full 18-section specifications for NetSuite (v1.0 Certified) and QuickBooks Online (v1.0 Certified). Upgrade reference specs from illustrative examples to full production specifications.
+None — immediately executable
+2
+Billing Connector Registry Population
+Full specifications for Stripe (v1.0 Certified) and Chargebee (v1.0 Validated). Recurly to Validated.
+None — immediately executable
+3
+CRM Connector Registry Population
+Full specifications for Salesforce (v1.0 Certified) and HubSpot (v1.0 Certified). Stage normalization lookup tables completed for all standard stage names.
+None — immediately executable
+4
+HRIS Connector Registry Population
+Full specifications for Rippling (v1.0 Certified). BambooHR and Gusto to Validated.
+None — immediately executable
+5
+Module Capability Registry (MCR) — Tier 1 Completion
+Full MCR entries for all 14 Tier 1 modules. Each entry specifies all required objects, fields, concepts, relationships, thresholds, and primary connectors.
+Requires finalized Business Object Registry and Relationship Registry (currently in progress per SKA roadmap)
+6
+Business Object Registry Population
+Complete field-level SCDM specifications for all 25 Tier 1 and Tier 2 canonical objects identified in SKA Section 4.
+SCBM Section 4 governs — proceed in parallel with connector work
+7
+Relationship Registry Population
+Full specifications for all 14 canonical relationship types, including confidence levels and cross-connector traversal patterns.
+SCBM Section 5 governs — proceed in parallel
+8
+CKR v0.3.1 — Minor Additions
+S19 (Compound Mapping), Certification Test Suite companion document, Bidirectional extension point note in S17.
+No architectural redesign — additive only
+Table 8.6.4 — Recommended execution priorities post-freeze. Priorities 1–4 are immediately executable. Priority 5 requires Business Object and Relationship Registry progress.
+This is the correct transition point in the SMPL.ai architecture program. The architecture has been designed, reviewed, challenged, refined, and validated across three iterations of the CKR and four iterations of the SKA. The knowledge assets — the connector specifications, the module definitions, the canonical object specifications — are now the primary deliverable. Architecture is no longer the bottleneck.
+The platform that emerges from this execution will be capable of connecting customer systems Monday morning and delivering executive-ready Financial Intelligence Monday afternoon — because the architectural foundation that makes that possible has been built correctly.
+Architectural Risks
+◆ ARCHITECTURAL RISK: The three-way confidence model introduces three independently measurable confidence dimensions, but the customer experience of "confidence" remains a single score in most UI surfaces. The design of confidence aggregation — how Mapping Confidence, Data Confidence, and Reasoning Confidence combine into a user-facing label — must be resolved before Phase 2 confidence instrumentation is built. The wrong aggregation formula could mislead users in the same way that a single undifferentiated score would.
+Future Enhancements
+⟶ FUTURE ENHANCEMENT: Public SMPL Connector Standard: the 18-section CKR template, published as an open specification. Vendors who implement this standard produce data that SMPL can ingest without custom transformation work. This is the long-term ecosystem leverage strategy and the CKR's most significant potential compounding asset beyond the registry itself.
+⟶ FUTURE ENHANCEMENT: Automated connector certification testing: a test suite that validates connector specification compliance and production correctness. Level 1 certification becomes a passing test run, not a human review decision. Deferred to Phase 2 but architecturally enabled by the structured template.
+⟶ FUTURE ENHANCEMENT: Platform Confidence Score: a customer-facing single number that aggregates all three confidence dimensions, weighted by module importance. "Your SMPL confidence score is 94%." Deferred to Phase 2 product development.
+Decisions Deferred
+⊡ DECISION DEFERRED: Machine-readable CKR schema: deferred to Phase 2 pending SCDM formalization. All template sections are structured for clean migration to JSON Schema without architectural redesign.
+⊡ DECISION DEFERRED: Reasoning Confidence formal computation and storage: deferred to Phase 2 AI Reasoning Engine maturation. Architecture is correctly specified; implementation follows.

@@ -1,0 +1,793 @@
+FIE-BUILD-001
+FINANCIAL INTELLIGENCE ENGINE
+Implementation Plan
+Version 1.0
+Translating frozen architecture (BIS-001–006, ABS-009–012, FIE-000–005) into executable engineering work
+SMPL.ai · Platform Engineering
+July 2026 · CONFIDENTIAL — ENGINEERING PLANNING DOCUMENT
+This is a planning document, not an architecture document. Nothing here redesigns a frozen service. Where architecture and this plan appear to disagree, the architecture is correct and this plan is stale.
+Scope note: Phases 0–1 build the Implementation Foundation (BIS-001–006) this plan depends on but does not own architecturally. FIE-BUILD-001 owns the sequencing of Phases 2–6 (the Financial Intelligence Engine itself) and Phase 7 (cutover) — Phases 0–1 are included here because nothing in Phase 2 onward can be demonstrated without them.
+Scope and Ground Rules
+All architecture — GPES-001, ABS-009 through ABS-012, BIS-001 through BIS-006, FIE-000 through FIE-005, and FIE-002 Addendum A — is treated as frozen. This document sequences and derisks building it; it does not change what any of it says.
+Nothing in BIS-001 through BIS-006 or FIE-001 through FIE-005 is assumed to exist as running code today. Every service is planned from zero.
+The existing prototype layer (CSV warehouse tables such as actual_mrr_waterfall, workspace ingest, board/outlook dashboards) is real, live, and currently the only thing customers see. It is not the target architecture, per ABS-012 §10, and is retired only on the schedule in Section 18 — never assumed away before then.
+This roadmap is phase-based with exit criteria, not calendar-committed. Section 14 and Section 19 define what must be true to move to the next phase; converting that into calendar dates requires team size and velocity inputs this document does not have.
+Confidence Annotations Used Throughout (see Section 15 for full definitions)
+CONFIRMED  Verified directly against a frozen document.    ASSUMED  A reasonable planning assumption not yet verified.    BLOCKED  Depends on something that does not yet exist.
+Section 0 — Current State, Target State, and Migration
+Layer
+Current State
+Target State
+Migration Path
+CONFIRMED Architecture (GPES/ABS/BIS/FIE)
+Fully specified across 19 frozen documents
+Already the target — no further design work required
+N/A
+ASSUMED Implementation Foundation (BIS-001–006)
+Not yet built as running services
+Running microservices per their own specs
+Section 1 Build Order, Phase 0–1
+ASSUMED Financial Intelligence Engine (FIE-001–005)
+Not yet built as running services
+Running services per their own specs + Addendum A
+Section 1 Build Order, Phase 2–6
+CONFIRMED Prototype layer
+Live in production — CSV warehouse tables, workspace ingest, board/outlook dashboards
+Retired; aggregate tables become FIE-003-derived Reporting outputs, per ABS-012 §10
+Section 18 Production Cutover Strategy
+Table B0.1 — The prototype and the target architecture run in parallel, not in sequence. The prototype keeps serving live demos and dashboards throughout Phases 0–6; it is retired only once Section 18's cutover criteria are met, never before.
+Section 1 — Build Order
+Phase
+Primary Deliverable
+Status
+Phase 0
+Minimum BIS POC slice: Canonical (BIS-003) + Validation (BIS-004) + Orchestration (BIS-002) + a fixture/CSV loader standing in for full BIS-001
+ASSUMED fixture loader chosen over full BIS-001 for speed — see Section 3
+Phase 1
+BIS-001 file-upload adapter hardened (ABS-012 §7); Knowledge Platform (BIS-005) minimum slice
+ASSUMED full connector-API adapters deferred past POC
+Phase 2
+FIE-001 Observation Engine
+CONFIRMED depends only on Canonical (BIS-003), per FIE-001 §1.1
+Phase 3
+FIE-002 core Methodology Engine (Formula Registry, Driver Registry, one ARR methodology, one Financial Operating Model)
+CONFIRMED depends on FIE-001 drivers only for value resolution, per FIE-002 §1.1
+Phase 3b (parallel, optional)
+FIE-002 Addendum A — Financial Governance (retirement dates, restatement policies)
+ASSUMED not required for Milestone 3–6 — zero schema impact on FIE-003 means it can build fully in parallel or trail past POC without blocking anything, per Table B17.1
+Phase 4
+FIE-003 Calculation Engine
+CONFIRMED depends on FIE-001 + FIE-002, per FIE-003 §1.1–1.2
+Phase 5
+FIE-004 Organizational Memory
+CONFIRMED depends on FIE-001–003 as evidence sources, per FIE-004 §1.1–1.3
+Phase 6
+FIE-005 Financial Reasoning Platform + interim Explainability Adapter
+CONFIRMED depends on all four prior FIE services, per FIE-005 §1.1–1.4
+Phase 7
+BIS-006 Reporting integration + production cutover
+CONFIRMED BIS-006 already scoped to consume FIE-005 content, per FIE-000 §11
+Table B1.1 — Build order. Each phase's dependency is CONFIRMED directly against the owning service's own Section 1 — this plan invents no new dependency that isn't already stated in frozen architecture.
+Section 2 — Service Dependencies
+                 Fixture Loader / BIS-001 (file-upload adapter, ABS-012 §7)                              ↓                 BIS-002 Orchestration  (job dispatch, all phases)                              ↓                 BIS-003 Canonical Platform  ←── Canonical Convergence, ABS-012 §2                              ↓                 BIS-004 Validation Platform     BIS-005 Knowledge Platform (minimum slice)                              ↓                 FIE-001 Observation Engine                              ↓                 FIE-002 Methodology Engine  +  Addendum A (Financial Governance)                              ↓                 FIE-003 Calculation Engine                         ↓            ↓                 FIE-004 Memory   (parallel accumulation, not strictly sequential — FIE-000 §6)                              ↓                 FIE-005 Financial Reasoning  ←── interim Explainability Adapter (FIE-005 §1.11)                              ↓                 BIS-006 Reporting  →  dashboards, exports, board packages
+Figure B2.1 — This is FIE-000 §6's runtime diagram with the BIS layer's own internal build order made explicit underneath it.
+Section 3 — MVP Scope
+Service
+MVP Cut
+Deferred Past POC
+BIS-001
+ASSUMED fixture/CSV loader standing in for the full Connector Proxy; file-upload adapter only, per ABS-012 §7
+Live API connector adapters for ERP/CRM/Billing/HRIS
+BIS-002
+Basic job dispatch and stage sequencing sufficient to drive Phase 0–7
+Full multi-tenant scheduling, retry/backoff tuning
+BIS-003
+Full Canonical object model for one domain (Billing, per Section 4's golden path)
+All four domains simultaneously; SOA dispute resolution (BIS-003 §1.11)
+BIS-004
+Structural + one business-rule validation (e.g. invoice balance check)
+Full waterfall/reconciliation validation suite
+BIS-005
+Minimum registry slice — enough to store one metric definition
+Full governance workflow, promotion review UI
+FIE-001 through FIE-003
+Full, as specified — see Section 13, these cannot be mocked
+Nothing — the deterministic core is built to spec from the start
+FIE-004
+Decision Memory + Evidence Chains only
+Pattern Records, Recommendation Candidates, semantic retrieval (already deferred by FIE-004 §1.10)
+FIE-005
+One question type (VARIANCE_ANALYSIS) and one audience (FP&A)
+Full Question Understanding taxonomy, full Narrative Policy set
+BIS-006
+JSON/HTML content rendering only, per BIS-006 §7
+PDF/PPTX export (already deferred by BIS-006 §7)
+Table B3.1 — MVP scope. Every deferral listed here is either already a stated deferral in the owning document (BIS-006 §7, FIE-004 §1.10) or a planning-level cut being made now for the first time, marked ASSUMED.
+Section 4 — What to Build First for a Customer-Facing POC
+Recommendation: a single golden path, end to end, rather than broad shallow coverage of every domain. Concretely — one Financial Concept, one customer, one narrow question, proven all the way through:
+Billing CSV export  (ABS-012 §6.3 Billing CSV Mapping Profile)         ↓Canonical invoice + subscription + customer objects  (BIS-003)         ↓Validated  (BIS-004: currency + balance checks only)         ↓FIE-001 Observations  (ARR-relevant facts)         ↓FIE-002 ARR Methodology  (one Calculation Intent: OPERATIONAL)         ↓FIE-003 ARR Financial Intelligence Object         ↓FIE-004 one Decision Memory object referencing it         ↓FIE-005 one VARIANCE_ANALYSIS Reasoning Package + FP&A Narrative         ↓BIS-006 JSON/HTML rendering of the Narrative
+Figure B4.1 — 'Prove ARR end to end for one customer' is a smaller, faster, and more convincing POC than 'stand up every service at 20% depth.' This is the literal walking-skeleton this plan optimizes every phase around.
+4.1 Strategic Choice: Path A Over GPES-001 Path B for the POC
+This is a deliberate choice, worth stating explicitly rather than leaving implicit — GPES-001 was written as the reference trace for Path B (live, connector-native onboarding across four API-connected systems), and this plan chooses Path A (CSV) for Milestone 1–6 instead.
+Path
+Pros
+Cons
+Path A — CSV (this plan's choice for Milestones 1–6)
+Faster to a working demo; matches ABS-012's own architecture; exercises a real customer export pattern many customers will actually use
+Does not validate the connector stack (BIS-001 API adapters, live credential handling, CEP auto-discovery)
+Path B — GPES-001 live connectors
+Proves the full implementation-agent story GPES-001 was written to trace
+Substantially slower; requires BIS-001 API adapters and real customer credentials before any FIE service can be demonstrated
+Table B4.1 — Path A vs. Path B for POC purposes. Recommendation: keep Path A for Milestone 6. Do not delete GPES-001 from this plan or treat it as superseded — relabel it as Milestone 8 (Section 19), validated once connector adapters are ready, rather than a Milestone 1–6 requirement.
+Section 5 — Data Requirements
+Clarification on scope: "a non-trivial ARR waterfall" below refers to subscription period movement visible in the source CSV itself (a new subscription row, a changed amount, a cancellation) — not a BIS-004 waterfall reconciliation validation, which remains deferred per Section 3's MVP scope table. The POC needs enough raw movement in the export to produce an interesting FIE-003 ARR calculation; it does not need BIS-004's full reconciliation suite running against it.
+One customer's Billing CSV export (invoice register + subscription export), matching ABS-012 §6.3's required columns exactly
+At minimum two to three periods of data, to produce a non-trivial ARR waterfall (new business, at least one expansion or churn event)
+A confirmed CSV-to-Canonical mapping (ABS-012 §5.2), created once and reused for subsequent uploads of the same file shape
+One Financial Operating Model composed from a single ARR methodology version (FIE-002 §13) — no multi-methodology composition needed for POC
+Section 6 — API Dependencies
+Consumer
+Depends On
+Endpoint (cited, not respecified)
+FIE-001
+BIS-003 Canonical Platform
+Bulk-paginated canonical object read, per BIS-003 §1.7/BIS-004 §1.7 pattern
+FIE-002
+FIE-001 Observation Engine
+GET /v1/timeline/{financial_concept_id}, per FIE-001 §4.3
+FIE-003
+FIE-002 Methodology Engine
+GET /v1/methodologies/resolve, per FIE-002 §4.3
+FIE-003
+FIE-001 Observation Engine
+Snapshot and Revision reads, per FIE-001 §18
+FIE-004
+FIE-001 / FIE-002 / FIE-003
+Evidence references only — never a value copy, per FIE-004 §8
+FIE-005
+FIE-003 Financial Evidence
+GET /v1/evidence/{fio_id}, per FIE-003 §4.3
+FIE-005
+FIE-004 Knowledge Objects
+GET /v1/knowledge-objects/query, per FIE-004 §4.2
+BIS-006
+FIE-005 Narrative Objects
+Content retrieval only — BIS-006 renders, never generates, per FIE-005 §1.5
+Table B6.1 — Every dependency here is CONFIRMED against the endpoint already specified in the cited document. This table adds sequencing information; it adds no new API.
+Section 7 — Database Tables by Service
+Service
+Tables (see owning spec for full schema)
+BIS-003
+canonical objects per BIS-003's own schema (not restated here)
+BIS-004
+validation_results, per BIS-004 §7
+BIS-005
+knowledge records, per BIS-005 §7
+FIE-001
+temporal_records, financial_concepts, recording_policies, observation_events, snapshots, composite_snapshot_definitions, composite_snapshots, temporal_record_relationships — FIE-001 §7
+FIE-002
+methodologies, formula_registry, driver_registry, industry_templates, methodology_overrides, financial_operating_models, methodology_dependencies — FIE-002 §7 — plus restatement_policies, restatement_events, restatement_approvals — Addendum A §2
+FIE-003
+calculation_runs, execution_plans, financial_intelligence_objects, fio_lineage_refs — FIE-003 §7
+FIE-004
+knowledge_objects, evidence_chain_refs, knowledge_relationships, business_themes, promotion_requests — FIE-004 §7
+FIE-005
+reasoning_packages, financial_findings, business_insights, narrative_objects, narrative_policies — FIE-005 §7
+BIS-006
+report_templates, report_runs, report_sections, report_artifacts — BIS-006 §7
+Table B7.1 — Table names only, by design — full column definitions live in each service's own Section 7 and are deliberately not duplicated here, per this entire documentation set's reference-never-duplicate discipline.
+Section 8 — Critical Cross-Service Contracts
+A small number of contracts, if broken, break everything downstream of them. These deserve contract tests before any feature work begins on the consuming side.
+Contract
+Why It's Critical
+Canonical Convergence (BIS-003 write path)
+Every FIE service and ABS-012's three paths all assume this is the single point of entry — break it and every downstream document's zero-impact claim (ABS-012 §11) becomes false
+FIE-002 methodology resolution (as_of semantics)
+FIE-003's determinism guarantee and Addendum A's entire Restatement model depend on this resolving identically given the same inputs, every time
+FIE-003 Financial Evidence assembly
+FIE-005's Verification Engine and the Explainability Adapter both resolve through this; if it's wrong, Verification silently trusts bad lineage
+FIE-004's no-duplication rule (reference, never copy)
+The instant any service copies a value instead of referencing it, the platform's single-source-of-truth guarantee is gone and nobody will notice until two numbers disagree
+FIE-005's fail-closed Verification
+The one thing standing between an unresolved evidence gap and a published, customer-facing false claim
+Table B8.1 — Recommend a dedicated contract-test suite for these five specifically, run on every build, independent of each service's own unit tests.
+Section 9 — Testing Sequence
+ASSUMED  GPES-001 is the reference acceptance suite for Path B (live connector-native onboarding, per ABS-012 §1.2) — it was written assuming API-connected source systems. Section 4's golden path is Path A (CSV upload, per ABS-012 §1.1). Where a GPES-001 fixture assumes connector-specific behavior that doesn't apply to a CSV-sourced customer, that fixture is out of scope for Milestone 2–6 and is not a blocking gate. Do not hold Milestone 2 hostage to full GPES-001 conformance if the POC customer is CSV-only — use GPES-001 fixtures wherever they test Canonical-and-below behavior (which is path-agnostic, per ABS-012 §2), and defer connector-specific fixtures to the Milestone 8 Path B validation track (Section 19).
+1. Contract tests for Section 8's five critical contracts, run against fixture data, before any service-specific feature testing
+2. Per-service unit tests, as already specified in each document's own Unit Testing section (BIS-004 §29-equivalent, FIE-001 §27, FIE-002 §26, FIE-003 §28, FIE-004 §31, FIE-005 §30)
+3. GPES-001 reference fixtures run against the assembled Phase 0–1 BIS slice before any FIE service reads from it
+4. Per-service integration tests, as already specified in each document's own Integration Testing section
+5. One end-to-end golden-path test (Section 4's ARR walking skeleton) run after every phase completes, not only at the end — this is the single most valuable recurring test in the whole plan
+6. Full regression suite immediately before each Section 19 milestone review
+Section 10 — Demo Milestones
+Kept intentionally light here — full detail, including exit criteria and risks, lives in Section 19's seven milestones. This section exists only as a quick index.
+Demoable Moment
+See Milestone
+A CSV upload produces a real Canonical object
+Milestone 1
+The same object appears as a bi-temporal Observation, queryable by date
+Milestone 2
+An ARR methodology resolves and a Financial Operating Model composes
+Milestone 3
+A deterministic ARR Financial Intelligence Object is produced, with full lineage
+Milestone 4
+A Decision Knowledge Object referencing that FIO is created and retrievable
+Milestone 5 (parallel with 4)
+A verified, evidence-traced Narrative is generated and rendered
+Milestone 5–6
+A real customer sees their own ARR narrative, end to end
+Milestone 6
+The prototype warehouse is retired for that customer
+Milestone 7
+Table B10.1 — Demo index.
+Section 11 — Risks and Blockers
+Risk / Blocker
+Detail
+BLOCKED
+ABS-013 (Canonical Identity & Entity Resolution) does not exist yet. Not required for a single-customer, single-path POC, but required before any customer graduates a domain from CSV to API, or runs genuine Path C with overlapping entities, per ABS-012 §13.
+BLOCKED
+ABS-015, referenced in Section 18 as the eventual customer-migration/prototype-retirement standard, does not exist yet. This plan's Section 18 states what it should cover; it should be authored before Milestone 7 (Production Readiness) begins in earnest.
+ASSUMED
+The interim Explainability Adapter (FIE-005 §1.11) is sufficient for POC and Phase 6–7. A dedicated shared Explainability Platform (FIE-005 §33 backlog) is not required before customer-visible POC.
+ASSUMED
+Team size and velocity are unknown to this document — Section 14's phases have exit criteria, not calendar dates, for exactly this reason.
+ASSUMED
+A fixture/CSV loader can stand in for full BIS-001 Connector Proxy through Phase 0–6 without customer-visible impact, since the POC's golden path (Section 4) is CSV-sourced by design.
+CONFIRMED
+The prototype warehouse layer will remain the only thing some customers see until Milestone 7 — this is a real, live coexistence risk (two systems, two sets of numbers, for the same customer, during the transition) that Section 18's rollback strategy must account for explicitly.
+CONFIRMED
+FIE-002 Addendum A's Restatement Event workflow (elevated approval, cascade resolution) has full engineering specification but zero production runtime history — treat its first real execution as a supervised, not fully automated, event regardless of what the spec allows.
+BLOCKED
+MCR (Module Capability Registry) is not required for a narrow ARR-narrative POC — nothing in Milestones 1–6 depends on module-level activation status. It becomes required before module activation or board-level module entitlements, which sit at or after Milestone 7 — track it against that milestone, not earlier.
+ASSUMED
+CEP's MAPPING-CONFIRMED workflow (ABS-012 §3.1) is the production Path A ingest UX — a customer or consultant confirming an AI-proposed CSV-to-Canonical mapping. The POC's fixture/CSV loader (Section 3) bypasses this UX entirely, using a pre-confirmed mapping instead. This is fine for Milestone 1–6 but must be replaced with the real CEP workflow before any customer outside the design-partner group self-serves a CSV upload.
+ASSUMED
+No dedicated Tool Gateway service is assumed to exist yet. MVP may run as a modular monolith with Tool Gateway routing patterns (per EIS-001/EIS-002) inlined directly into each service's LLM-invoking components, rather than extracted as its own service. Extract it as a standalone Tool Gateway once services are actually split across independent deployments, per EIS-002's own architecture — inlining it now is not a violation of EIS-002, just a deferred extraction.
+Table B11.1 — Risks and blockers, tagged by confidence.
+Section 12 — What Can Be Mocked Temporarily
+Live ERP/CRM/Billing/HRIS API connectors — a fixture/CSV loader is sufficient through Phase 6, per Section 3
+BIS-005's full governance/promotion review UI — auto-approve is acceptable for POC-stage knowledge promotion, provided it's clearly labeled as a temporary bypass, not a permanent policy
+FIE-004 semantic retrieval — already deferred by FIE-004 §1.10; nothing to build for POC
+FIE-005's full Narrative Policy set — one or two audiences (FP&A, and optionally Board) cover POC needs; the rest can wait for Milestone 7
+BIS-006 PDF/PPTX export — already deferred by BIS-006 §7; JSON/HTML is sufficient to demo
+A dedicated shared Explainability Platform — the interim Adapter (FIE-005 §1.11) is not a mock, but it is explicitly an interim implementation of a contract a future service will fulfill differently
+Section 13 — What Cannot Be Mocked
+These are the properties that are prohibitively expensive to retrofit, per this documentation set's own repeated experience — every one of them was singled out in its owning document specifically because building it wrong the first time would be a schema migration, not a config change.
+Canonical Convergence itself (BIS-003) — every downstream zero-impact claim depends on this being real from day one, not simulated
+Immutability and append-only versioning, everywhere it's specified — FIE-001 Observations/Revisions, FIE-002 methodology versions, FIE-003 Financial Intelligence Objects, FIE-004 Knowledge Objects, FIE-005 Narratives. Retrofitting this after building an editable-in-place shortcut has, in this platform's own design history, repeatedly turned out to be the most expensive category of mistake to fix
+The three/four-dimensional confidence model — collapsing it to a single score 'for now' and trying to re-expand it later loses information that cannot be reconstructed after the fact
+FIE-002's Financial Operating Model freeze-on-creation — this is the entire reproducibility guarantee; a live-resolving stand-in would silently violate FIE-003's determinism guarantee
+FIE-005's fail-closed Verification — even in a POC, a Narrative that publishes without passing Verification defeats the platform's central 'radical transparency' premise before a single real customer sees it
+Section 14 — Phase-Based Roadmap
+Phase-based, with explicit exit criteria — not a calendar commitment, per this document's ground rules. Full acceptance detail for each phase's corresponding milestone is in Section 19.
+Phase
+Entry Criteria
+Exit Criteria
+0 — BIS POC Slice
+Fixture/CSV loader and BIS-002/003/004 scoped per Section 3
+One customer's Billing data lands as validated Canonical objects
+1 — Foundation Hardening
+Phase 0 exit criteria met
+BIS-001 file-upload adapter and BIS-005 minimum slice operational
+2 — Observation
+Phase 1 exit criteria met
+Milestone 1 + 2 exit criteria met (Section 19)
+3 — Methodology
+Phase 2 exit criteria met
+Milestone 3 exit criteria met
+4 — Calculation
+Phase 3 exit criteria met
+Milestone 4 exit criteria met
+5 — Memory + Reasoning
+Phase 4 exit criteria met
+Milestone 5 exit criteria met
+6 — Customer POC
+Phase 5 exit criteria met
+Milestone 6 exit criteria met
+7 — Production Cutover
+Phase 6 exit criteria met, Section 18 rollback plan approved
+Milestone 7 exit criteria met
+8 — Path B Validation (optional, parallel-able with 6–7)
+BIS-001 live connector adapters available for at least one domain
+Milestone 8 exit criteria met — not a gate on Phases 6–7
+Table B14.1 — Phase-based roadmap. Convert to calendar dates once team size and velocity are supplied.
+Section 15 — Confidence Annotation Legend
+Tag
+Meaning
+CONFIRMED
+Verified directly against a specific section of a frozen document — a citation exists and was checked.
+ASSUMED
+A reasonable planning judgment made in this document, not verified against frozen architecture because it is a planning decision (e.g. team scope, sequencing choice), not an architectural fact.
+BLOCKED
+Depends on a document, service, or decision that does not yet exist. Named explicitly so it is tracked, not silently worked around.
+Table B15.1 — Every tag used in this document maps to exactly one of these three meanings; none is used loosely.
+Section 16 — Engineering Acceptance Criteria
+Definition of Done per FIE service. Each references its own document for full test detail rather than restating it. Per Section 9's clarification: "GPES-001 reference fixtures reproduce expected results" below means the subset of GPES-001 fixtures that exercise Canonical-and-below behavior, which is path-agnostic — not full Path B connector-specific conformance, which is not required until Milestone 8.
+FIE-001 — Observation Engine
+Immutable Observations and Revisions — no UPDATE path exists on value, confidence, or date fields (FIE-001 §7.1)
+Bi-temporal support — business_effective_date and system_recorded_date independently queryable (FIE-001 §4.3)
+Domain and Composite Snapshot completeness correctly computed (FIE-001 §12–13)
+Three-dimensional confidence persisted and never retroactively rewritten (FIE-001 §15)
+All FIE-001 §27/28 unit and integration tests pass
+GPES-001 reference fixtures reproduce expected results
+Documentation (this plan's Section 7 references) matches actual schema
+FIE-002 — Methodology Engine
+Methodology lookup correctly keyed by (financial_concept, calculation_intent) (FIE-002 §1.6)
+Financial Operating Model composition is frozen and immutable at creation (FIE-002 §1.7)
+Driver Registry contains no confidence field; values resolve exclusively through FIE-001 (FIE-002 §1.10)
+Addendum A: retirement_date, restatement_policy, and cascade resolution operate correctly and produce zero impact when unused (Addendum A §13)
+All FIE-002 §26/27 unit and integration tests pass
+GPES-001 reference fixtures reproduce expected results
+Documentation matches actual schema
+FIE-003 — Financial Calculation Engine
+Determinism verified — identical inputs produce byte-identical Financial Intelligence Object values across repeated executions (FIE-003 §28)
+Every meaningful graph node produces its own independently addressable FIO (FIE-003 §8)
+Confidence propagation applies the minimum-across-inputs rule correctly (FIE-003 §1.8)
+Cache resolution keyed by (snapshot_ids, operating_model_version, calculation_intent) (FIE-003 §1.10)
+Scenario execution never writes to FIE-001 (FIE-003 §1.6)
+All FIE-003 §28/29 unit and integration tests pass
+GPES-001 reference fixtures reproduce expected results
+Documentation matches actual schema
+FIE-004 — Organizational Financial Memory Platform
+Knowledge Objects immutable and versioned; lifecycle_state independent of version (FIE-004 §1.9)
+No Decision or Forecast Memory object duplicates a value already owned by FIE-001/002/003 (FIE-004 §8)
+Evidence Chains are a typed, queryable reference table, not a JSON blob (FIE-004 §1.8)
+Promotion into BIS-005 requires explicit governance review and never happens automatically (FIE-004 §15)
+All FIE-004 §31/32 unit and integration tests pass
+GPES-001 reference fixtures reproduce expected results
+Documentation matches actual schema
+FIE-005 — Financial Reasoning Platform
+Financial Findings and Business Insights are independently addressable, versioned objects, not fields nested in Reasoning Packages (FIE-005 §1.8)
+Recommendation Candidates never persist locally — always created directly via FIE-004's own API (FIE-005 §1.9)
+Verification fails closed by default; publication is blocked on any failure without exception (FIE-005 §1.10)
+Four-dimensional confidence never collapsed into one score (FIE-005 §19)
+The Explainability Adapter satisfies its five-operation contract against live FIE-001/003/004/BIS-006 data (FIE-005 §15)
+All FIE-005 §30/31 unit and integration tests pass
+GPES-001 reference fixtures reproduce expected results
+Documentation matches actual schema
+Section 17 — Build Dependency Matrix
+Build Item
+Depends On
+Parallel Opportunities
+Critical Path
+Fixture/CSV Loader
+None
+Can be built alongside BIS-002/003 scaffolding
+Yes
+BIS-002 (minimum dispatch)
+None
+Parallel with BIS-003 schema work
+Yes
+BIS-003 Canonical Platform
+Fixture/CSV Loader (for test data)
+Parallel with BIS-004 rule authoring
+Yes
+BIS-004 Validation (minimum slice)
+BIS-003
+Parallel with BIS-005 minimum slice
+Yes
+BIS-005 (minimum slice)
+None (independent registry)
+Fully parallel with BIS-004
+No
+BIS-001 file-upload adapter (hardened)
+Fixture/CSV Loader proves the flow first
+Parallel with FIE-001 build once Phase 0 exits
+No — can trail Phase 2 without blocking it
+FIE-001 Observation Engine
+BIS-003 (Canonical)
+None — first FIE service, nothing to parallelize against yet
+Yes
+FIE-002 Methodology Engine (core)
+FIE-001 (drivers)
+Formula Registry and Driver Registry can be built in parallel with each other
+Yes
+FIE-002 Addendum A
+FIE-002 core
+Fully parallel with FIE-003 build — zero schema impact on FIE-003, per Addendum A §1.8
+No
+FIE-003 Calculation Engine
+FIE-001, FIE-002 core
+Execution Planner and Graph Executor can be built in parallel internally
+Yes
+FIE-004 Organizational Memory
+FIE-001, FIE-002, FIE-003 (as evidence sources)
+Fully parallel with FIE-005's early components (Question Understanding, Evidence Planning need no FIE-004 data yet)
+No — per FIE-000 §6, Memory accumulates alongside, not strictly after, Calculation
+FIE-005 Financial Reasoning
+FIE-001–004 (Explainability Adapter touches all four)
+Narrative Policy configuration can be authored in parallel with Reasoning Engine build
+Yes
+BIS-006 integration
+FIE-005 (Narrative Objects)
+Rendering templates can be designed in parallel with FIE-005's build
+Yes
+Production cutover (Section 18)
+BIS-006 integration, ABS-015 (once authored)
+Customer communication planning can proceed in parallel with final engineering hardening
+Yes
+Table B17.1 — Build dependency matrix. Critical-path items are the ones that, if delayed, delay every phase after them; non-critical-path items (BIS-005, Addendum A, BIS-001 hardening) can slip without stalling the golden path in Section 4.
+Section 18 — Production Cutover Strategy
+18.1 Retirement of Prototype Warehouse Tables
+Aggregate tables such as actual_mrr_waterfall are retired per customer, not platform-wide in one cutover event — a customer moves off the prototype only once their own data has been re-onboarded through Canonical (BIS-003) and their Milestone 6 POC has been validated end to end. Per ABS-012 §10, these tables become FIE-003-derived Reporting outputs going forward; the retirement is the point at which BIS-006 stops reading the prototype table and starts reading FIE-003 Financial Intelligence Objects for that customer.
+18.2 Canonical Becomes Production Source of Truth
+For each customer, Canonical (BIS-003) becomes authoritative the moment their onboarding completes Milestone 1's exit criteria. Historical prototype data does not retroactively become canonical — per ABS-012 §8.2's honest continuity limit, canonical history for that customer begins at onboarding, with a documented discontinuity before it. This is a business communication point, not only an engineering one — see 18.6.
+18.3 FIE-003 Produces Financial Intelligence Objects
+Once a customer's Financial Operating Model is composed (Milestone 3) and their first Calculation Run completes (Milestone 4), FIE-003 FIOs become the authoritative source for every metric the prototype previously served directly from actual_mrr_waterfall-style tables for that customer.
+18.4 Reporting Consumes FIE Outputs
+BIS-006 is repointed per customer from the prototype's direct table read to FIE-005 Narrative Objects and FIE-003 FIOs, per FIE-000 §11. This is a per-customer configuration change, not a platform-wide code branch — both paths can coexist in BIS-006 during the transition window.
+18.5 Rollback Strategy
+Per-customer feature flag controlling whether BIS-006 reads from the prototype table or from FIE-003/FIE-005 — cutover is reversible per customer, not all-or-nothing
+The prototype tables and their loading scripts are not deleted at cutover — they are marked deprecated and retained until a defined post-cutover confidence window elapses, per the platform's universal no-deletion posture
+Any discrepancy detected between the prototype's numbers and FIE-003's numbers during the parallel-run window blocks cutover for that customer until reconciled and explained — never silently resolved by preferring one source
+18.6 Dependency on ABS-015
+BLOCKED  ABS-015 does not exist yet. This plan recommends it be scoped as a dedicated Customer Migration / Prototype Retirement Standard, covering: the exact per-customer cutover checklist implied by 18.1–18.5, customer communication templates for the honest discontinuity point in 18.2, and the formal criteria for when a customer's deprecated prototype data may finally be archived. It should be authored before Milestone 7 work begins in earnest, not during it.
+18.7 Customer Migration Considerations
+Customers should be told plainly, before cutover, that canonical history starts at their onboarding date — this is ABS-012 §8.2's honest-discontinuity principle applied to customer communication, not just internal documentation
+A parallel-run period (both prototype and FIE-derived numbers visible) is recommended per customer before the prototype is fully deprecated for them, specifically to catch discrepancies per 18.5
+Customers with data only ever loaded into aggregate prototype tables (never canonical) require a full re-onboarding, not a lightweight migration, per ABS-012 §10's own findings
+Section 19 — Engineering Milestones
+Milestone 1 — Canonical Operational
+Deliverables
+BIS-002 minimum dispatch
+BIS-003 Canonical Platform for the Billing domain
+BIS-004 structural + one business-rule validation
+Fixture/CSV loader ingesting one customer's Billing export
+Exit Criteria
+A real customer's Billing CSV produces validated Canonical invoice, subscription, and customer objects
+Canonical Convergence contract test (Section 8) passes
+Demo Goals
+Upload a CSV, show the resulting Canonical objects and their validation status
+Risks
+Canonical schema decisions made here are expensive to change later — do not rush this milestone to hit a date
+Build Readiness Checklist
+☐ BIS-002 minimum dispatch complete
+☐ BIS-003 Canonical Platform (Billing domain) complete
+☐ BIS-004 structural + business-rule validation complete
+☐ Fixture/CSV loader operational
+☐ Canonical Convergence contract test passes
+☐ Path-agnostic GPES-001 fixtures pass (Section 9)
+☐ Demo approved
+Milestone 2 — Observation Operational
+Deliverables
+FIE-001 Observation Engine, full spec
+Domain Snapshot assembly for the Billing-derived ARR-relevant concepts
+Exit Criteria
+Bi-temporal queries return correct results against real Canonical data
+GPES-001 Observation fixtures pass
+Demo Goals
+Show 'what did we believe about ARR-relevant facts as of date X' against real data
+Risks
+Getting bi-temporal semantics wrong here propagates confidence and reproducibility problems into every later milestone
+Build Readiness Checklist
+☐ FIE-001 Observation Engine complete
+☐ Bi-temporal query behavior verified
+☐ Domain Snapshot assembly complete
+☐ Confidence persisted correctly and immutably
+☐ Path-agnostic GPES-001 fixtures pass
+☐ API contract tests pass
+☐ Demo approved
+Milestone 3 — Methodology Operational
+Deliverables
+FIE-002 core (one ARR methodology, one Calculation Intent)
+One Financial Operating Model composed and frozen
+Exit Criteria
+Methodology resolution returns the correct version for a given as_of date
+Operating Model composition is verified immutable
+Demo Goals
+Show the ARR methodology definition and its frozen Operating Model version
+Risks
+Addendum A is not required for this milestone — defer it in parallel per Table B17.1 unless restatement is needed for the POC
+Build Readiness Checklist
+☐ FIE-002 core complete (Formula Registry, Driver Registry)
+☐ One ARR methodology resolves correctly for a given as_of date
+☐ Financial Operating Model composed and verified immutable
+☐ Addendum A confirmed out of scope for this milestone (tracked separately as Phase 3b)
+☐ API contract tests pass
+☐ Demo approved
+Milestone 4 — Calculation Operational
+Deliverables
+FIE-003 Calculation Engine, full spec
+First real ARR Financial Intelligence Object with complete lineage
+Exit Criteria
+Determinism test passes — repeated execution against identical inputs produces identical results
+FIO lineage resolves correctly through fio_lineage_refs
+Demo Goals
+Show a real ARR number with its full evidence trail back to the original CSV rows
+Risks
+This is the platform's core trust guarantee — do not compromise determinism testing to hit this milestone faster
+Build Readiness Checklist
+☐ Graph Executor complete
+☐ Execution Planner complete
+☐ Deterministic execution verified
+☐ Lineage complete
+☐ Confidence propagation verified
+☐ GPES-001 fixtures pass
+☐ API contract tests pass
+☐ Demo approved
+Milestone 5 — Reasoning Operational
+Deliverables
+FIE-004 minimum slice (Decision Memory, Evidence Chains)
+FIE-005 minimum slice (VARIANCE_ANALYSIS, one audience) with interim Explainability Adapter
+Verification Engine enforcing fail-closed behavior
+Exit Criteria
+A verified Narrative Object is generated end to end and cannot be published if Verification fails
+At least one Decision Knowledge Object is created and correctly referenced by a Narrative
+Demo Goals
+Show a real, evidence-traced narrative answering a real variance question, with a live example of Verification blocking an intentionally broken input
+Risks
+Do not let Verification's fail-closed behavior be quietly disabled 'just for the demo' — that undermines the entire premise before a customer ever sees it
+Build Readiness Checklist
+☐ FIE-004 minimum slice complete (Decision Memory, Evidence Chains)
+☐ FIE-005 minimum slice complete (VARIANCE_ANALYSIS, one audience)
+☐ Interim Explainability Adapter operational against all four contract operations in scope
+☐ Verification fail-closed behavior demonstrated against a deliberately broken input
+☐ Four-dimensional confidence preserved through to the Narrative
+☐ API contract tests pass
+☐ Demo approved
+Milestone 6 — Customer-Visible POC
+Deliverables
+End-to-end golden path (Section 4) running against a real customer's real data
+BIS-006 JSON/HTML rendering of the resulting Narrative
+Exit Criteria
+A real customer stakeholder sees their own ARR narrative, generated from their own uploaded data, with a working evidence trail they can inspect
+Demo Goals
+Live walkthrough with an actual customer or design partner
+Risks
+This is the first point real customer data and real customer trust are on the line simultaneously — treat any Verification failure or confidence-model gap here as a stop-ship issue, not a follow-up item
+Build Readiness Checklist
+☐ End-to-end golden path verified against real customer data
+☐ BIS-006 JSON/HTML rendering operational
+☐ Evidence trail inspectable by a real user
+☐ Customer/design-partner walkthrough scheduled
+☐ Customer Readiness criteria reviewed (see Customer Readiness section)
+☐ Demo approved by product stakeholder
+Milestone 7 — Production Readiness
+Deliverables
+ABS-015 authored and approved (Section 18.6)
+Per-customer cutover feature flag implemented
+Full Narrative Policy set, full BIS-001 connector adapters as needed
+MCR (Module Capability Registry) scoped and available, if module-level activation/entitlements are part of this milestone's customer set
+Exit Criteria
+At least one customer fully cut over per Section 18's checklist, with the prototype successfully deprecated for them and no unreconciled discrepancy
+Demo Goals
+Show a fully cut-over customer, side by side with a customer still on the prototype, to demonstrate the rollback flag works both directions
+Risks
+Do not begin broad customer cutover before ABS-015 exists — Section 18.6 is a hard blocker, not a nice-to-have
+Build Readiness Checklist
+☐ ABS-015 authored and approved
+☐ Per-customer cutover feature flag implemented and tested
+☐ Full Narrative Policy set complete
+☐ BIS-001 connector adapters complete, as needed for the customer set
+☐ MCR scoped, if module activation is in scope
+☐ Rollback tested in both directions
+☐ Demo approved
+Milestone 8 — GPES-001 Path B Validation (Optional, Post-POC)
+Deliverables
+BIS-001 live API connector adapters for at least one domain (e.g. Salesforce for CRM)
+CEP auto-discovery flow exercised against a live-connected system, per GPES-001's own reference trace
+Exit Criteria
+A full GPES-001 reference trace reproduces its documented benchmark end to end against a live-connected customer
+Path C (hybrid) is exercised for at least one customer running one domain on Path A and one on Path B simultaneously
+Demo Goals
+Show the identical downstream FIE-001 through FIE-005 pipeline consuming Canonical data from a live connector instead of a CSV upload, with zero code difference above Canonical — the direct, demonstrable payoff of Canonical Convergence (ABS-012 §2)
+Risks
+Not required before Milestone 6 or Milestone 7 — this milestone exists to validate the connector story GPES-001 was written for, on its own timeline, not to block customer-facing Path A delivery. ABS-013 (Section 11) becomes relevant once this milestone exercises real Path C entity overlap
+Build Readiness Checklist
+☐ BIS-001 live API connector adapter complete for at least one domain
+☐ CEP auto-discovery exercised against a live-connected system
+☐ Full GPES-001 reference trace reproduced end to end
+☐ Path C exercised for at least one customer with overlapping entities
+☐ ABS-013 need reassessed based on actual overlap observed
+☐ Demo approved
+Customer Readiness
+The platform is not successful simply because the code works. A customer must also be operationally ready to trust and rely on it — this section is deliberately about trust, not engineering completion, and sits alongside Section 19's milestones rather than inside them.
+Data onboarding complete — the customer's source data has been fully mapped and validated through Canonical, per Milestone 1
+Financial Operating Model approved — the customer's finance team has reviewed and approved the specific methodology versions in production use, not just accepted a default
+Metric definitions approved — the customer agrees with how ARR, Bookings, and every other reported concept is defined for their business
+Executive review completed — a CFO or finance leader has reviewed real output, not a demo with sample data
+Variance review completed — at least one real variance narrative has been reviewed and confirmed accurate by the customer
+Board package validated — if applicable, a board-facing output has been reviewed by whoever actually presents to the board
+Reporting approved — the customer has confirmed the rendered output (Section 4's golden path) meets their presentation needs
+Customer training complete — the people who will use this day to day know how to inspect evidence, confidence, and lineage, not just read a narrative
+Customer signs off that outputs are trusted — an explicit, named sign-off, not an inferred one from silence
+None of these are engineering deliverables. All of them are prerequisites this plan treats as seriously as any Milestone 19 exit criterion — a technically complete Milestone 6 with no Customer Readiness sign-off is not yet a successful POC.
+Engineering Ownership Matrix
+By discipline, not by individual — intended only to assist staffing conversations, not to assign accountability beyond that.
+Platform Area
+Discipline
+Connector Platform (BIS-001)
+Implementation Engineering
+Canonical Platform (BIS-003)
+Backend Engineering
+Observation Engine (FIE-001)
+Backend Engineering
+Methodology Engine (FIE-002 + Addendum A)
+Finance Engineering
+Calculation Engine (FIE-003)
+Backend Engineering
+Memory Platform (FIE-004)
+Backend Engineering
+Reasoning Platform (FIE-005)
+AI Engineering
+Reporting Platform (BIS-006)
+Frontend Engineering
+Implementation (CEP, SOF, onboarding flows)
+Solutions Engineering
+Knowledge Platform (BIS-005)
+Implementation Engineering
+Table B21.1 — Engineering ownership by discipline.
+Complexity Assessment
+Planning guidance only — Low / Medium / High / Very High.
+Service
+Complexity
+Note
+BIS-001 (fixture/CSV loader)
+Low
+POC-scope only
+BIS-001 (live API connectors)
+High
+Deferred past POC, per Section 3
+BIS-002 (minimum dispatch)
+Medium
+BIS-003 Canonical Platform
+High
+Foundational — every downstream zero-impact claim depends on getting this right the first time
+BIS-004 Validation (minimum slice)
+Low
+Full reconciliation suite deferred, per Section 3
+BIS-005 Knowledge Platform (minimum slice)
+Low
+FIE-001 Observation Engine
+High
+Bi-temporal semantics and immutability discipline are unforgiving to get wrong, per Section 13
+FIE-002 Methodology Engine (core)
+High
+FIE-002 Addendum A
+Medium–High
+Governance workflow and cascade resolution add real complexity, isolated from FIE-003 impact
+FIE-003 Calculation Engine
+Very High
+Determinism guarantee, dependency graph execution, and caching are the hardest engineering in the platform
+FIE-004 Memory Platform
+Medium–High
+FIE-005 Reasoning Platform
+Very High
+LLM integration, fail-closed Verification, and the Explainability Adapter combine several hard problems at once
+BIS-006 Reporting integration (FIE content)
+Medium
+JSON/HTML only for POC, per Section 3
+Production cutover tooling
+Medium–High
+Per-customer rollback and reconciliation logic, per Section 18
+Table B22.1 — Complexity assessment. FIE-003 and FIE-005 are the two Very High items — plan staffing and schedule risk accordingly.
+AI Usage Matrix
+Stated explicitly to remove ambiguity about where AI participates in the platform. The deterministic execution path (FIE-001 through FIE-003) does not change based on anything in this section.
+Area
+AI Usage
+Connector / CEP mapping discovery
+Optional AI — proposes a CSV-to-Canonical mapping (ABS-012 §5.2); always human-confirmed before use
+Canonical Platform (BIS-003)
+No AI
+Validation Platform (BIS-004)
+No AI
+Observation Engine (FIE-001)
+No AI
+Methodology Engine (FIE-002)
+Optional AI assistance during implementation only (e.g. template selection guidance) — never in resolution or execution
+Calculation Engine (FIE-003)
+No AI — the platform's only fully deterministic-by-construction service, per FIE-003 §1.11
+Memory Platform (FIE-004)
+Retrieval only — no generation; Knowledge Objects it stores may originate from AI reasoning elsewhere (provenance = AI_GENERATED, per FIE-004 §1.11), but FIE-004 itself generates nothing
+Reasoning Platform (FIE-005)
+Primary AI layer — Financial Reasoning Engine and Narrative Generation, both bounded by fail-closed Verification
+Reporting Platform (BIS-006), for FIE content
+No AI generation — renders FIE-005 Narrative Objects as-is; BIS-006's own separate implementation-report narrative generation (BIS-006 §17) is unaffected and out of scope here
+Explainability Adapter (FIE-005 §1.11)
+No AI — deterministic resolution calls against FIE-001/003/004/BIS-006
+Table B23.1 — AI usage matrix. Exactly one service (FIE-005) is a primary AI layer; every other service is either fully deterministic or uses AI in an optional, human-confirmed, non-execution-path role.
+Performance Targets
+Directional engineering objectives, not guarantees — and not a replacement for the per-service p95 targets already specified in each document's own Performance Targets section (e.g. FIE-003 §27, FIE-005 §29). These are platform-level, end-to-end goals; the per-service specs remain the authoritative node-level SLAs.
+Capability
+Directional Target
+Canonical ingestion
+100k+ objects
+Observation capture
+1M observations/day
+Calculation
+< 3 seconds
+Narrative generation
+< 15 seconds
+Board package
+< 60 seconds
+Customer onboarding
+< 4 hours after mappings approved
+Table B24.1 — Performance targets. Directional; per-service specs govern in any conflict.
+Technical Debt Register
+Consolidated from items already identified elsewhere in this plan and its source documents — nothing here is a new item.
+Item
+Description
+Owner
+Risk
+Expected Resolution
+ABS-013
+Canonical Identity & Entity Resolution — not yet authored
+Architecture
+BLOCKED for Path C at scale
+Before first domain graduation or real Path C entity overlap (Section 11)
+ABS-015
+Customer Migration / Prototype Retirement Standard — not yet authored
+Architecture
+BLOCKED for Milestone 7
+Before Milestone 7 work begins in earnest (Section 18.6)
+CSV Adapter completion
+Fixture/CSV loader used for POC; full BIS-001 file-upload adapter hardening deferred
+Implementation Engineering
+ASSUMED
+Phase 1, per Section 1
+Connector certification
+Live API connectors (Salesforce, NetSuite, etc.) not yet built or certified
+Implementation Engineering
+ASSUMED
+Milestone 8, per Section 19
+Prototype warehouse retirement
+actual_mrr_waterfall-style tables remain live per customer until cutover
+Backend Engineering
+CONFIRMED
+Per-customer, per Section 18
+MCR (Module Capability Registry)
+Not required for POC; required for module activation/entitlements
+Architecture
+BLOCKED for module activation
+Milestone 7 or later, per Section 11
+Dedicated Explainability Platform
+Interim Adapter satisfies FIE-005's needs at MVP; shared service not yet extracted
+AI Engineering
+ASSUMED
+Per FIE-005 §33 trigger — a second consumer beyond FIE-005/BIS-006 emerges
+Tool Gateway extraction
+Inlined as modular-monolith pattern at MVP, per Section 11
+Backend Engineering
+ASSUMED
+Once services are actually split across independent deployments, per EIS-002
+Table B25.1 — Technical debt register. Every item here already appears elsewhere in this plan; this table exists only to consolidate them into one view.
+Where to Start
+Audience
+Start Here
+Engineering
+Milestone 1 deliverables (Section 19) + Phase 0 exit criteria (Section 14)
+Product / demo planning
+Section 4 golden path + Milestone 6 exit criteria (Section 19)
+Customer communications
+Section 18.2 and 18.7 (honest discontinuity)
+Parallel documentation work
+ABS-015 before Milestone 7; MCR before module activation (Milestone 7 or later); ABS-013 before Path C / Milestone 8
+Table B20.1 — Four different audiences, four different entry points into the same document. See the Technical Debt Register above for the consolidated view of every open architectural prerequisite referenced across these entry points.
+Product Acceptance Criteria
+This differs from Section 16's Engineering Acceptance Criteria in what it asks. Engineering asks: did the code do what the spec said? This asks: would a CFO actually trust this platform? Every Engineering Acceptance Criterion in this plan can pass while this section still fails — that gap is exactly what this section exists to catch before a customer finds it instead.
+Trust Question
+What Answers It
+Can users inspect underlying transactions?
+FIE-005's Explainability Adapter → Data Lineage (FIE-005 §15), resolving to FIE-001 Observations and their source Canonical objects
+Can users inspect methodology?
+FIE-002's resolved methodology and formula definitions, surfaced through Explainability's Calculation Lineage
+Can users inspect metric definitions?
+FIE-002 Financial Concepts and Driver Registry, referenced by any Finding or Narrative
+Can users inspect evidence?
+FIE-005's supporting_evidence_refs on every Finding and Insight (FIE-005 §11–12)
+Can users inspect confidence?
+The four-dimensional confidence model, never collapsed, surfaced end to end (FIE-005 §19)
+Can users inspect historical revisions?
+FIE-001's bi-temporal timeline (FIE-001 §4.3) and FIE-004's versioned Knowledge Objects
+Can users reproduce calculations?
+FIE-003's determinism guarantee (FIE-003 §1.11) and pinned Financial Operating Model versions (FIE-002 §1.7)
+Can users understand why a number changed?
+FIE-005's Financial Findings, and once Addendum A's Restatement Events exist, a direct comparison via RESTATEMENT_COMPARISON (Addendum A §7)
+Can users export results?
+BIS-006 rendering (JSON/HTML at POC, per Section 3; PDF/PPTX deferred)
+Can users confidently present the outputs to executives?
+Customer Readiness's Executive Review and Board Package Validated criteria, above — an engineering pass alone does not answer this question
+Table B26.1 — Product Acceptance Criteria. Every 'what answers it' column entry cites a real, already-built mechanism — if any row cannot be answered this concretely for a real customer, the platform is not yet ready for that customer regardless of Milestone or Engineering Acceptance status.
+Closing Note
+This plan sequences seven phases and seven milestones across nineteen sections, and every dependency claim in it traces to a specific section of a frozen document — nothing here was invented to make the roadmap look tidier than the architecture actually is. The two BLOCKED items (ABS-013, ABS-015) are named explicitly rather than quietly assumed away, because the alternative — discovering mid-build that a milestone depends on a document that was never written — is exactly the failure mode this entire documentation series has spent nineteen prior documents avoiding.
+If team size and velocity become known, Section 14's phases and Section 19's milestones convert directly into calendar dates without needing to be resequenced — the dependency structure is already complete; only the arithmetic is missing.

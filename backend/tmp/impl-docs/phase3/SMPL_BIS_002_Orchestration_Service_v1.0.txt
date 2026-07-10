@@ -1,0 +1,1344 @@
+ 
+BUILD IMPLEMENTATION SPECIFICATION
+BIS-002 · Orchestration Service
+Version 1.0
+ 
+The implementation control plane — session state, workflow progression, job dispatch, and human-in-the-loop routing
+ 
+SMPL.ai  ·  Platform Engineering
+June 2026  ·  CONFIDENTIAL — ENGINEERING BUILD DOCUMENT
+Implements: SOF · AI Role Playbooks · EIS-001 through EIS-004 · GPES-001
+Section 1 — Scope Decisions
+BIS-002 is the second Build Implementation Specification, following the same discipline as BIS-001: every scope ambiguity is resolved explicitly here rather than left for individual engineers to interpret differently. The first four decisions were specified in the build brief; this section restates them for completeness and adds four further resolutions needed to make the specification build-ready.
+ 
+1.1 Orchestration Service vs. Worker Execution
+The Orchestration Service dispatches jobs and tracks state — it never executes domain work directly. Connector implementation work is executed by Connector Workers (ERP/CRM/BIL/HRS-DOMAIN). Canonical merge work is executed by the Canonical Worker (COORD-004). CAL work is executed by the Capability Worker (EVAL-001/003). Reporting work is executed by the Reporting Worker (COORD-005). The Orchestration Service owns coordination, never execution — it has no code path that calls a connector API, transforms a field, or writes a canonical object.
+ 
+1.2 Session State Ownership
+The Orchestration Service is the system of record for implementation workflow state: session status, current SOF stage, current GPES state, active/completed/blocked jobs, terminal-blocked connectors, pending CEP item references, gate state references, checkpoint references, readiness score, and activation status. Other services read this state through registered tools (read_session_state, EIS-001 Category 1) — no other service maintains a competing copy of workflow state.
+ 
+1.3 Job Queue Ownership
+The Orchestration Service creates and persists job records in Postgres first — Postgres is the durable source of truth — then publishes runnable jobs to Redis Streams for asynchronous worker consumption. Workers consume from Redis Streams and report status back through Orchestration Service endpoints (PATCH job status), never by writing to Postgres directly. This preserves exactly one durable source of truth while allowing async, at-least-once job delivery.
+ 
+1.4 GPES State Machine as MVP Runtime Lifecycle
+GPES-001's ten-state execution state machine (DISCOVERY through CONTINUOUS_MONITORING) becomes the state the Orchestration Service actually enforces at runtime. The SOF's seven stages remain the architectural reference; Section 1.5 below specifies exactly how the two relate so this decision does not create drift between BIS-002 and the frozen SOF.
+ 
+1.5 New Resolution — GPES State Is Enforced; SOF Stage Is Derived
+implementation_sessions tracks both current_gpes_state and current_sof_stage. To avoid two independently-mutable fields drifting apart, exactly one is the enforced primitive: current_gpes_state. Every state transition rule (Section 7) validates and mutates current_gpes_state only. current_sof_stage is a computed, read-only rollup field, recalculated on every GPES state transition using the exact mapping already established in GPES-001 Table 0.1 — reproduced here as Table BIS2-1.1 for this document's self-sufficiency.
+ 
+GPES State
+SOF Stage (derived)
+DISCOVERY
+1 — Customer Discovery
+AUTHENTICATED, DISCOVERED
+2 — Connector Discovery
+IMS_RUNNING
+3 — Connector Implementation
+CANONICAL_POPULATION
+3 (population phase) → 4 — Canonical Integration
+VALIDATED
+3 (validation phase) — Validation Agent output feeds Stage 5
+CAPABILITY_ASSESSED
+5 — Capability Assessment
+CUSTOMER_REVIEW
+6 — Customer Review
+ACTIVATED, CONTINUOUS_MONITORING
+7 — Implementation Completion
+Table BIS2-1.1 — GPES-to-SOF derivation mapping, reproduced from GPES-001 Table 0.1. current_sof_stage is never written directly by any endpoint — it is always computed from current_gpes_state via this table.
+ 
+1.6 New Resolution — Job Layering: implementation_jobs vs. Connector Proxy extraction_batch_id
+BIS-001 defines extraction_batch_id as an identifier for one paginated extraction call inside a Connector Worker's execution. This document's implementation_jobs.job_id identifies a different, higher-level unit of work: an entire agent invocation (e.g., "run ERP-DOMAIN against IMS-001 for this session"), which may internally make dozens of Connector Proxy Service calls, each producing its own extraction_batch_id. The two identifiers are never interchangeable and never appear in the same field. A single implementation_job may reference many extraction_batch_ids in its output_artifact_refs, but an extraction_batch_id never has its own row in implementation_jobs.
+ 
+1.7 New Resolution — Worker Dispatch Uses One Redis Stream Per Worker Type
+The Worker Dispatch Coordinator (Section 5) publishes to five separate Redis Streams — stream:orchestrator (rare; used only for session-level system jobs), stream:connector_jobs, stream:canonical_jobs, stream:capability_jobs, stream:reporting_jobs — rather than one shared stream. Each worker type runs its own consumer group against its own stream. This allows independent scaling per worker type (EIS-002 Section 10.5 future scaling path: "split Connector Worker by domain") without a queue redesign — adding a domain-specific stream later is additive, not a breaking change to this architecture.
+ 
+1.8 New Resolution — fan_in_groups.condition Enum
+The condition field on fan_in_groups is data-driven per fan-in point, with three valid values: ALL_SUCCESS (every required job must reach a successful terminal status — COMPLETE or COMPLETE_WITH_GAPS; used sparingly, only where a partial result is unacceptable), ALL_TERMINAL (every required job must reach any terminal status including ERROR or CANCELLED, but not TERMINAL_BLOCKED, which does not count as terminal for this condition), and ALL_TERMINAL_ALLOW_BLOCKED (every required job must reach any terminal status, and TERMINAL_BLOCKED explicitly counts as satisfying). The Stage 3 (IMS_RUNNING) fan-in point defaults to ALL_TERMINAL_ALLOW_BLOCKED, per EIS-002 Section 0.2 and GPES-001's TERMINAL_BLOCKED handling (Table EIS2-3.3) — a blocked connector must not indefinitely hold up the other three. Other fan-in points (e.g., a future fan-in requiring confirmed financial data) may be configured to ALL_SUCCESS when partial results genuinely cannot be tolerated.
+ 
+Section 2 — Service Purpose
+The Orchestration Service is the only component in the SMPL platform that decides what happens next. Every other service either executes a specific piece of work it is dispatched, or stores data it is told to store — the Orchestration Service is where "what happens next" is decided and recorded.
+ 
+This Service Is
+This Service Is Not
+The system of record for every implementation session's workflow state — status, stage, jobs, gates, pending decisions
+A connector integration layer — it never calls an external API; that is BIS-001's Connector Proxy Service
+The job graph engine — it creates jobs, tracks dependencies, and evaluates fan-in conditions
+A canonical data store — it holds job and session metadata, never customer business data or canonical objects
+The human-in-the-loop router — every CEP question, escalation, and customer review gate passes through this service's human task tracking
+An AI reasoning engine — its own internal logic is deterministic state-machine evaluation, not LLM inference (though the jobs it dispatches may themselves invoke LLM-backed workers)
+The single enforcement point for the GPES-001 state machine — no other service can move a session from one state to another
+A reporting service — it triggers the Reporting Worker but does not generate customer-facing summaries itself
+Table BIS2-2.1 — Service purpose boundary.
+ 
+2.1 Position in the Runtime
+  Implementation Consultant UI / Customer Portal
+         │
+         ▼
+  ══════════════════════════════════════
+  ORCHESTRATION SERVICE  (this document)
+  ══════════════════════════════════════
+         │                    │
+         │ dispatches jobs    │ reads/writes via Tool Gateway
+         ▼                    ▼
+  Redis Streams          CEP Service, Canonical Data Service,
+  (5 per-worker-type     CAL Service, Logging Service
+   streams)
+         │
+         ▼
+  Connector / Canonical / Capability / Reporting Workers
+  (each in turn calls BIS-001 Connector Proxy Service,
+   IMS Content Service, Confidence Scoring Service, etc.)
+ 
+Section 3 — Responsibilities
+Responsibility
+Detail
+Traces To
+Session lifecycle management
+Create, read, update, pause, resume, and close implementation sessions
+SOF Stage 1–7; EIS-002 Section 4
+SOF/GPES stage enforcement
+Validate and execute only allowed state transitions (Section 7); reject invalid transitions deterministically
+GPES-001 Section 3 (Execution State Machine); Section 1.5 of this document
+Job graph creation and tracking
+Create implementation_jobs records with correct dependency_ids and fan_in_id; track status through the full job lifecycle
+EIS-002 Section 3 (Job Queue and Message Model)
+Worker dispatch
+Publish runnable jobs to the correct per-worker-type Redis Stream once dependencies are satisfied
+EIS-002 Section 6; Section 1.7 of this document
+Fan-out / fan-in coordination
+Evaluate fan_in_groups conditions on every child job status update; trigger dependent job creation when satisfied
+EIS-002 Section 0.2 (Design Decision 2); Section 1.8 of this document
+Human-in-the-loop routing
+Create human_tasks for every PAUSE_FOR_CEP, ESCALATE, and customer review gate; route to the correct actor (customer portal vs. Implementation Consultant)
+SOF Section 1.4/1.5; APB-002 (CEP Agent)
+Pause/resume behavior
+Suspend and resume session-level and job-level progress without data loss, including the mandatory Stage 6 (CUSTOMER_REVIEW) human gate
+SOF Section 2, Stage 6; EIS-002 Section 8.2
+Checkpoint reference management
+Store references to checkpoints (object storage paths, extraction_batch_ids) without owning checkpoint content
+EIS-002 Section 5; BIS-001 Section 13 (Checkpoint Data Contract)
+Activation coordination
+Accept a confirmed Module Activation Plan and trigger activation across the relevant workers
+SOF Stage 7; APB-005
+Continuous monitoring handoff
+Transition a completed session from onboarding orchestration to scheduled refresh orchestration
+EIS-002 Section 8.1
+Table BIS2-3.1 — Complete responsibility list with architectural traceability.
+ 
+Section 4 — Public API Endpoints
+Twenty-four endpoints across six groups, callable only by the Tool Gateway, registered workers, and approved internal platform services — never directly by an external client. Endpoints with real branching logic (session start, advance-stage, job creation, fan-in evaluation, human task resolution, activation) receive full detail tables. Simpler CRUD-style endpoints are grouped into compact summary tables.
+ 
+4.0 Standard Response Envelope
+{
+  "request_id": "UUID",
+  "session_id": "UUID | null",
+  "status": "SUCCESS | ERROR",
+  "data": { ... } | null,
+  "error": {"error_code": "string (EIS-001 Table EIS-1.2)", "message": "string",
+            "retry_after_seconds": "integer | null"} | null,
+  "latency_ms": "integer"
+}
+ 
+4.1 Session Endpoints (Full Detail)
+POST /v1/implementation-sessions
+Field
+Specification
+Request
+{customer_id: UUID, initiated_by: UUID, connector_inventory_initial: string[] (optional), idempotency_key: UUID}
+Response (data)
+{session_id: UUID, created_at: ISO8601, current_gpes_state: "DISCOVERY", current_sof_stage: 1, cep_id: UUID}
+Error Codes
+INVALID_INPUT (customer_id not found); IDEMPOTENCY_CONFLICT (active session exists for this customer within 30 days — returns the existing session_id, not an error to the caller)
+Idempotency
+IDEMPOTENT — same idempotency_key returns the existing session
+Retry Rules
+Safe to retry with the same idempotency_key at any time
+Logging
+SESSION_CREATED event with session_id, customer_id, initiated_by
+Metrics
+orchestration_sessions_total{status="created"}
+Table BIS2-4.1 — Create session.
+ 
+Endpoint
+Purpose
+Key Behavior
+GET /v1/implementation-sessions/{session_id}
+Read full session state
+Returns the complete implementation_sessions record; PERMISSION_ERROR if the caller's scope does not include this customer_id
+PATCH /v1/implementation-sessions/{session_id}
+Update mutable session fields (e.g., connector_inventory additions for phased rollout per GPES-001 Table SOF-9.1 phased activation scenario)
+Rejects any attempt to write current_gpes_state or current_sof_stage directly — those are mutated only through the SOF Stage Engine (Section 7), never via generic PATCH
+POST /v1/implementation-sessions/{session_id}/close
+Terminate a session (successful completion or abandonment)
+Requires current_gpes_state = CONTINUOUS_MONITORING for status=COMPLETE closure; any other state requires an explicit reason and closes as status=CANCELLED
+Table BIS2-4.2 — Session read/update/close endpoints (compact).
+ 
+4.2 Workflow Endpoints
+POST /v1/implementation-sessions/{session_id}/start
+Field
+Specification
+Request
+{} — no body required beyond the session_id path parameter
+Response (data)
+{current_gpes_state: "DISCOVERY", jobs_created: [job_id for the initial Stage 1 CEP discovery job]}
+Error Codes
+INVALID_INPUT (session not in a startable state — already started, or closed)
+Idempotency
+IDEMPOTENT — calling start on an already-started session returns the current state without creating duplicate jobs
+Retry Rules
+Safe to retry
+Logging
+SESSION_STARTED event
+Metrics
+orchestration_sessions_total{status="started"}
+Table BIS2-4.3 — Start session.
+ 
+POST /v1/implementation-sessions/{session_id}/advance-stage
+Field
+Specification
+Request
+{target_gpes_state: string, trigger: "FAN_IN_SATISFIED" | "SYSTEM_EVALUATION"}
+Response (data)
+{previous_gpes_state: string, current_gpes_state: string, current_sof_stage: integer (derived), jobs_created: [job_id]}
+Error Codes
+INVALID_INPUT (target_gpes_state is not a valid transition from the current state — see Section 7.2 State Transition Rules)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — calling advance-stage with a target_gpes_state that matches the current state is a no-op success, not an error
+Retry Rules
+Safe to retry
+Logging
+STATE_TRANSITIONED event with previous_state, next_state, and trigger
+Metrics
+orchestration_state_transition_total{from_state, to_state}
+Caller Restriction
+This endpoint is called internally by the SOF Stage Engine and Fan-In Evaluator (Section 10), never directly by an external worker or human interface — the CUSTOMER_REVIEW→ACTIVATED and ACTIVATED→CONTINUOUS_MONITORING transitions use the dedicated /activate and /transition-to-monitoring endpoints instead, because those carry business payload (the Module Activation Plan) that generic advance-stage does not accept.
+Table BIS2-4.4 — Advance stage.
+ 
+Endpoint
+Purpose
+Key Behavior
+POST /v1/implementation-sessions/{session_id}/pause
+Suspend all non-essential job dispatch for a session
+Existing RUNNING jobs are not killed — they complete naturally; new job dispatch from the Worker Dispatch Coordinator halts until resume
+POST /v1/implementation-sessions/{session_id}/resume
+Resume a paused session
+Re-evaluates all fan_in_groups and dispatches any jobs that became eligible while paused
+GET /v1/implementation-sessions/{session_id}/state
+Lightweight state read (current_gpes_state, current_sof_stage, active job count, pending human task count) without the full session record
+Optimized for high-frequency polling by dashboards — separate from the full GET above to keep polling cheap
+Table BIS2-4.5 — Pause/resume/state endpoints (compact).
+ 
+4.3 Job Endpoints
+POST /v1/implementation-sessions/{session_id}/jobs
+Field
+Specification
+Request
+{worker_type: string, role_playbook_id: string, prompt_id: string, task_type: string, task_payload: object, priority: HIGH\|NORMAL\|LOW, dependency_ids: UUID[], fan_in_id: UUID\|null, allowed_tools: string[], timeout_policy: object, retry_policy: object, idempotency_key: UUID}
+Response (data)
+{job_id: UUID, status: "QUEUED", estimated_dispatch_at: ISO8601}
+Error Codes
+INVALID_INPUT (worker_type not recognized; dependency_ids reference nonexistent jobs); PERMISSION_ERROR (role_playbook_id not permitted for this worker_type per the EIS-003 Table EIS3-3.1 tool permission matrix)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — same idempotency_key returns the existing job_id if still active
+Retry Rules
+Safe to retry
+Logging
+JOB_CREATED event with job_id, worker_type, dependency_ids
+Metrics
+orchestration_job_created_total{worker_type, task_type}
+Table BIS2-4.6 — Create job. This is the endpoint the Job Graph Engine (Section 8) calls internally when constructing a fan-out; it is not typically called ad hoc by a worker.
+ 
+PATCH /v1/implementation-sessions/{session_id}/jobs/{job_id}
+Field
+Specification
+Request
+{status: string, output_artifact_refs: object (optional), checkpoint_ref: string (optional), error: object (optional, required if status=ERROR)}
+Response (data)
+{job_id: UUID, status: string, fan_in_evaluation_triggered: bool}
+Error Codes
+INVALID_INPUT (status transition not valid — e.g., a job already in a terminal status cannot transition to RUNNING)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — the same status update applied twice has no additional effect
+Retry Rules
+Safe to retry — workers should retry this call on network failure since the job's actual work is not lost, only the status report
+Logging
+JOB_STATUS_UPDATED event with previous_status, new_status
+Metrics
+orchestration_job_duration_seconds{worker_type, task_type} (recorded on terminal status)
+Fan-In Trigger
+Every call to this endpoint that results in a terminal status automatically triggers Fan-In Evaluator (Section 10) re-evaluation for any fan_in_groups this job belongs to — the caller never separately requests fan-in evaluation for a status update.
+Table BIS2-4.7 — Update job status. The highest-frequency write endpoint in this service.
+ 
+Endpoint
+Purpose
+Key Behavior
+GET /v1/implementation-sessions/{session_id}/jobs/{job_id}
+Read a single job's full record
+Standard read; PERMISSION_ERROR on cross-session access attempts
+POST .../jobs/{job_id}/retry
+Manually re-queue a job (used after a BLOCKED or ERROR condition is resolved, e.g., new credentials provided)
+Increments retry_count; rejects if retry_count already exceeds the job's retry_policy.max_retries — that case requires an explicit override, not a bare retry call
+POST .../jobs/{job_id}/cancel
+Terminate a running or queued job
+Sets status=CANCELLED; triggers fan-in re-evaluation exactly as a terminal status update would
+Table BIS2-4.8 — Job read/retry/cancel endpoints (compact).
+ 
+4.4 Fan-In / Dependency Endpoints
+POST /v1/implementation-sessions/{session_id}/fan-in/{fan_in_id}/evaluate
+Field
+Specification
+Request
+{} — evaluation uses the fan_in_group's current stored state; no external input needed
+Response (data)
+{fan_in_id: UUID, status: "PENDING"\|"SATISFIED", satisfied_at: ISO8601\|null, terminal_job_ids: UUID[], jobs_still_pending: UUID[]}
+Error Codes
+INVALID_INPUT (fan_in_id not found)
+Idempotency
+IDEMPOTENT — evaluating an already-satisfied fan-in returns the same result without side effects
+Retry Rules
+Safe to retry
+Logging
+FAN_IN_SATISFIED event (only emitted on the transition to SATISFIED, not on every evaluation call)
+Metrics
+orchestration_fan_in_wait_seconds{fan_in_id} (recorded from created_at to satisfied_at when satisfied)
+Caller
+Called automatically by the Job Status Tracker after every terminal job status update (Table BIS2-4.7); also callable directly for diagnostic/manual re-evaluation
+Table BIS2-4.9 — Evaluate fan-in.
+ 
+Endpoint
+Purpose
+GET /v1/implementation-sessions/{session_id}/fan-in/{fan_in_id}
+Read a fan-in group's full record — required_job_ids, terminal_job_ids, condition, current status
+Table BIS2-4.10 — Read fan-in group (compact).
+ 
+4.5 Human Review / CEP Routing Endpoints
+PATCH /v1/implementation-sessions/{session_id}/human-tasks/{task_id}
+Field
+Specification
+Request
+{resolved_value: any, resolution_source: "HUMAN_CONSULTANT"\|"CUSTOMER"\|"DEFAULT_APPLIED"}
+Response (data)
+{human_task_id: UUID, status: "RESOLVED", jobs_unblocked: UUID[]}
+Error Codes
+INVALID_INPUT (task already resolved — this endpoint does not allow re-resolution; a correction requires a new CEP write through COORD-002, not a mutation of a resolved human_task record)
+Idempotency
+IDEMPOTENT — resolving an already-resolved task with the same value returns success without side effects; a different value is INVALID_INPUT, not a silent overwrite
+Retry Rules
+Safe to retry
+Logging
+HUMAN_TASK_RESOLVED event with resolution_source; never logs resolved_value if the underlying CEP field is sensitive (Section 17)
+Metrics
+orchestration_human_task_resolution_seconds{task_type, urgency} (recorded from created_at to resolved_at)
+Unblock Behavior
+Every job with this human_task_id (or the related_cep_item_id) in its dependency context is automatically re-queued to the appropriate Redis Stream — the caller does not separately trigger job resumption.
+Table BIS2-4.11 — Resolve human task.
+ 
+Endpoint
+Purpose
+Key Behavior
+POST /v1/implementation-sessions/{session_id}/human-tasks
+Create a new human task
+Called by the CEP Agent (create_cep_question) and by COORD-001 (ESCALATE conditions); rejects duplicate creation for the same related_cep_item_id if an unresolved task already exists
+GET /v1/implementation-sessions/{session_id}/human-tasks
+List human tasks, filterable by status and urgency
+Backs the Implementation Consultant's task queue view and the customer portal's pending-questions view
+Table BIS2-4.12 — Create/list human task endpoints (compact).
+ 
+4.6 Activation Endpoints
+POST /v1/implementation-sessions/{session_id}/activate
+Field
+Specification
+Request
+{activation_plan_id: UUID, confirmed_by: UUID, modules_to_activate: [{module_id: string, activate: bool}]}
+Response (data)
+{current_gpes_state: "ACTIVATED", modules_activated: string[], activation_job_id: UUID}
+Error Codes
+INVALID_INPUT (current_gpes_state is not CUSTOMER_REVIEW — activation is only valid from that state); BLOCK_CONDITION (activation_plan_id references an unconfirmed or stale plan)
+Idempotency
+IDEMPOTENT_WITHIN_SESSION — re-activating with the same activation_plan_id is a no-op success
+Retry Rules
+Safe to retry
+Logging
+MODULES_ACTIVATED event with the confirmed module list
+Metrics
+orchestration_readiness_score{session_id} recorded at time of activation as the final pre-activation value
+Table BIS2-4.13 — Activate. Explicitly gated on CUSTOMER_REVIEW state — the one state transition in this entire service that always requires a human-confirmed payload, never a system evaluation.
+ 
+Endpoint
+Purpose
+Key Behavior
+POST /v1/implementation-sessions/{session_id}/activation-plan
+Create the proposed Module Activation Plan for customer review
+Called by the Reporting Worker after Stage 5 (CAPABILITY_ASSESSED); the plan it creates is what the /activate endpoint later references by activation_plan_id
+POST /v1/implementation-sessions/{session_id}/transition-to-monitoring
+Transition ACTIVATED → CONTINUOUS_MONITORING
+Only valid from ACTIVATED; initializes the EIS-002 Section 8.1 Continuous Production Monitoring schedule for this session
+Table BIS2-4.14 — Activation plan / monitoring transition endpoints (compact).
+ 
+4.7 Health Endpoints
+Endpoint
+Purpose
+Key Behavior
+GET /v1/health
+Service-wide health
+{status: HEALTHY\|DEGRADED\|UNHEALTHY, dependencies: {postgres: bool, redis: bool}}
+GET /v1/implementation-sessions/{session_id}/health
+Session-specific health
+{status, stuck_in_state_since: ISO8601\|null, oldest_pending_human_task_age_hours: decimal, jobs_in_error_count: integer} — backs the Section 25 observability alerting for sessions stuck in one state too long
+Table BIS2-4.15 — Health endpoints (compact).
+ 
+4.8 Core Data Models
+Four Postgres tables underpin every endpoint above. Field lists match the build brief exactly, with types and constraints added.
+ 
+implementation_sessions:
+  session_id              UUID PRIMARY KEY
+  customer_id              UUID NOT NULL
+  status                   VARCHAR(32) NOT NULL  -- Section 14 status model
+  current_gpes_state       VARCHAR(32) NOT NULL  -- enforced primitive, Section 1.5
+  current_sof_stage        INTEGER NOT NULL      -- derived, never written directly
+  connector_inventory      JSONB NOT NULL
+  active_job_ids           UUID[] NOT NULL DEFAULT '{}'
+  completed_job_ids        UUID[] NOT NULL DEFAULT '{}'
+  blocked_job_ids          UUID[] NOT NULL DEFAULT '{}'
+  terminal_blocked_connectors  VARCHAR[] NOT NULL DEFAULT '{}'
+  pending_cep_item_ids     UUID[] NOT NULL DEFAULT '{}'
+  gate_state_refs          JSONB NOT NULL DEFAULT '{}'
+  checkpoint_refs          JSONB NOT NULL DEFAULT '{}'
+  readiness_score          DECIMAL(5,2)
+  activation_status        VARCHAR(32)
+  created_at                TIMESTAMPTZ NOT NULL
+  updated_at                TIMESTAMPTZ NOT NULL
+  completed_at              TIMESTAMPTZ
+implementation_jobs:
+  job_id                   UUID PRIMARY KEY
+  session_id                UUID NOT NULL REFERENCES implementation_sessions
+  customer_id                UUID NOT NULL
+  worker_type                VARCHAR(32) NOT NULL
+  role_playbook_id           VARCHAR(16) NOT NULL
+  prompt_id                  VARCHAR(64) NOT NULL
+  task_type                  VARCHAR(64) NOT NULL
+  status                     VARCHAR(32) NOT NULL  -- Section 14
+  priority                   VARCHAR(16) NOT NULL DEFAULT 'NORMAL'
+  dependency_ids              UUID[] NOT NULL DEFAULT '{}'
+  fan_in_id                   UUID REFERENCES fan_in_groups
+  input_artifact_refs         JSONB
+  output_artifact_refs        JSONB
+  checkpoint_ref               VARCHAR(256)   -- BIS-001 Section 13 data contract value
+  allowed_tools                VARCHAR[] NOT NULL
+  retry_policy                 JSONB NOT NULL
+  retry_count                  INTEGER NOT NULL DEFAULT 0
+  timeout_at                   TIMESTAMPTZ
+  created_at                    TIMESTAMPTZ NOT NULL
+  started_at                    TIMESTAMPTZ
+  completed_at                  TIMESTAMPTZ
+fan_in_groups:
+  fan_in_id                UUID PRIMARY KEY
+  session_id                 UUID NOT NULL REFERENCES implementation_sessions
+  required_job_ids            UUID[] NOT NULL
+  terminal_job_ids             UUID[] NOT NULL DEFAULT '{}'
+  terminal_success_ids         UUID[] NOT NULL DEFAULT '{}'
+  terminal_blocked_ids          UUID[] NOT NULL DEFAULT '{}'
+  condition                     VARCHAR(32) NOT NULL  -- Section 1.8 enum
+  status                        VARCHAR(16) NOT NULL  -- PENDING | SATISFIED
+  created_at                     TIMESTAMPTZ NOT NULL
+  satisfied_at                   TIMESTAMPTZ
+human_tasks:
+  human_task_id             UUID PRIMARY KEY
+  session_id                  UUID NOT NULL REFERENCES implementation_sessions
+  task_type                    VARCHAR(32) NOT NULL  -- Section 11
+  source_agent_id               VARCHAR(32) NOT NULL
+  related_connector_id           VARCHAR(16)
+  related_cep_item_id             UUID
+  urgency                         VARCHAR(16) NOT NULL  -- BLOCKING|NORMAL|LOW
+  status                          VARCHAR(16) NOT NULL  -- PENDING|RESOLVED
+  question_text                    TEXT NOT NULL
+  default_value                     JSONB
+  default_apply_after_hours          INTEGER
+  resolved_value                      JSONB
+  resolution_source                    VARCHAR(32)
+  created_at                            TIMESTAMPTZ NOT NULL
+  resolved_at                            TIMESTAMPTZ
+ 
+Section 5 — Internal Components
+Ten internal components, matching the build brief exactly. Each has a defined interface to its neighbors and is independently unit-testable (Section 23).
+ 
+  ┌────────────────────────────────────────────────────────┐
+  │                  API Layer (Section 4)                  │
+  └───────┬───────────────────────────────────────────┬────┘
+          │                                            │
+  ┌───────▼────────┐                          ┌────────▼───────┐
+  │ Session Manager │                          │ Human Task      │
+  │                 │                          │ Router          │
+  └───────┬────────┘                          └────────┬───────┘
+          │                                             │
+  ┌───────▼────────┐          ┌──────────────┐  ┌───────▼───────┐
+  │ SOF Stage       │◄─────────┤ Fan-In        │  │ Checkpoint     │
+  │ Engine          │          │ Evaluator     │  │ Reference Mgr  │
+  └───────┬────────┘          └──────▲───────┘  └───────────────┘
+          │                           │
+  ┌───────▼────────┐          ┌──────┴───────┐
+  │ Job Graph       │─────────►│ Job Status   │
+  │ Engine          │          │ Tracker      │
+  └───────┬────────┘          └──────────────┘
+          │
+  ┌───────▼────────┐          ┌──────────────┐  ┌───────────────┐
+  │ Worker Dispatch │─────────►│ Redis        │  │ Activation     │
+  │ Coordinator     │          │ Streams      │  │ Coordinator    │
+  └────────────────┘          └──────────────┘  └───────┬───────┘
+                                                          │
+                                                  ┌───────▼───────┐
+                                                  │ Monitoring     │
+                                                  │ Transition     │
+                                                  │ Coordinator    │
+                                                  └───────────────┘
+ 
+Component
+Inputs
+Outputs
+Dependencies
+Failure Modes
+Session Manager
+Session CRUD requests
+implementation_sessions record reads/writes
+Postgres
+Postgres unavailable → INTERNAL_ERROR, retried per Section 16
+SOF Stage Engine
+target_gpes_state, trigger source
+Validated transition or INVALID_INPUT rejection; current_sof_stage recomputed
+Section 1.5 mapping table (static, in-code)
+Invalid transition request → rejected deterministically, never partially applied
+Job Graph Engine
+Job specifications from a dispatching agent (e.g., Orchestrator Worker's Stage 3 fan-out plan)
+implementation_jobs records + fan_in_groups record when the job set has a shared gate
+Session Manager (to confirm session is in a job-creatable state)
+Malformed dependency graph (circular dependency_ids) → INVALID_INPUT at creation time, never allowed to persist
+Worker Dispatch Coordinator
+QUEUED jobs with satisfied dependencies
+Message published to the correct per-worker-type Redis Stream (Section 1.7)
+Redis
+Redis unavailable → job remains QUEUED in Postgres, dispatch retried on a fixed interval — no job is lost, only delayed
+Job Status Tracker
+PATCH job status calls from workers
+Updated implementation_jobs record; triggers Fan-In Evaluator on terminal status
+Postgres, Fan-In Evaluator
+Status update for a nonexistent job_id → INVALID_INPUT
+Fan-In Evaluator
+Job terminal status events
+fan_in_groups status update; triggers SOF Stage Engine when satisfied
+Job Status Tracker, SOF Stage Engine
+Evaluation against a fan_in_id with no required_job_ids → treated as immediately satisfied (edge case, but must not hang indefinitely)
+Human Task Router
+Task creation requests from any worker (via COORD-002 or COORD-001 relay)
+human_tasks record; notification trigger (Section 11)
+Session Manager
+Duplicate task creation for the same related_cep_item_id → returns the existing task_id rather than creating a duplicate
+Checkpoint Reference Manager
+checkpoint_ref values from job status updates
+Stored reference only — never checkpoint content itself
+Postgres
+N/A — this component holds no logic beyond storage; it cannot itself fail in a way distinct from Postgres availability
+Activation Coordinator
+Confirmed Module Activation Plan
+Triggers module activation across relevant workers; advances state to ACTIVATED
+SOF Stage Engine, Reporting Worker (for the plan itself)
+Activation attempted from a non-CUSTOMER_REVIEW state → INVALID_INPUT, never silently allowed
+Monitoring Transition Coordinator
+ACTIVATED state confirmation
+Initializes EIS-002 Section 8.1 scheduled refresh workflows for the session
+SOF Stage Engine
+N/A — this is a one-time, idempotent initialization; re-running it for an already-monitoring session is a no-op
+Table BIS2-5.1 — Internal component specifications.
+ 
+Section 6 — Session Lifecycle
+The session object's own life — distinct from the GPES state progression (Section 7), which happens within an active session. A session moves through exactly four lifecycle phases regardless of how far its GPES state has progressed.
+ 
+Lifecycle Phase
+Entered By
+Session.status Value
+Can Transition To
+Created
+POST /implementation-sessions
+CREATED
+RUNNING (via /start)
+Running
+POST .../start
+RUNNING
+PAUSED (via /pause), COMPLETE (via /close after CONTINUOUS_MONITORING reached), CANCELLED (via /close at any other point)
+Paused
+POST .../pause
+PAUSED
+RUNNING (via /resume)
+Terminal
+POST .../close
+COMPLETE or CANCELLED
+None — terminal lifecycle phases are permanent; a new implementation for the same customer requires a new session
+Table BIS2-6.1 — Session lifecycle phases. This is orthogonal to current_gpes_state — a session can be RUNNING while current_gpes_state is any of the ten GPES states, or PAUSED at any GPES state, including PAUSED specifically at CUSTOMER_REVIEW during the mandatory Stage 6 human gate.
+ 
+Section 7 — SOF Stage Engine
+The component that evaluates and enforces GPES state transitions. This section defines the allowed transition table and walks through the complete twenty-step reference workflow using GPES-001's NetSuite + HubSpot + Stripe + Rippling implementation as the concrete trace.
+ 
+7.1 State Transition Rules
+From State
+To State
+Trigger
+DISCOVERY
+AUTHENTICATED
+Fan-in: all connectors in connector_inventory reach AUTHENTICATED, AUTH_FAILED, or NOT_CONFIRMED (Table BIS2-1.1 Stage 2 fan-in, condition=ALL_TERMINAL_ALLOW_BLOCKED)
+AUTHENTICATED
+DISCOVERED
+Fan-in: all AUTHENTICATED connectors reach dispatch_ready=true
+DISCOVERED
+IMS_RUNNING
+System evaluation: dispatch_list is non-empty (at least 1 connector ready)
+IMS_RUNNING
+CANONICAL_POPULATION
+Fan-in: all dispatched connector jobs reach a terminal gate status (condition=ALL_TERMINAL_ALLOW_BLOCKED per Section 1.8)
+CANONICAL_POPULATION
+VALIDATED
+Fan-in: Canonical Integration job (COORD-004) reaches COMPLETE
+VALIDATED
+CAPABILITY_ASSESSED
+Fan-in: Validation Agent (EVAL-002) job reaches COMPLETE
+CAPABILITY_ASSESSED
+CUSTOMER_REVIEW
+Fan-in: CAL Agent (EVAL-001) and Confidence Scoring Agent (EVAL-003) jobs both reach COMPLETE, AND Reporting Worker's activation-plan job reaches COMPLETE
+CUSTOMER_REVIEW
+ACTIVATED
+Explicit human action: POST /activate with a confirmed activation_plan_id — never a system evaluation
+ACTIVATED
+CONTINUOUS_MONITORING
+Explicit action: POST /transition-to-monitoring, typically system-triggered immediately following activation, but exposed as a separate endpoint per Section 4.6
+Table BIS2-7.1 — Allowed state transitions. Any transition not in this table is rejected by the SOF Stage Engine with INVALID_INPUT — including any attempt to skip a state, such as DISCOVERY directly to IMS_RUNNING.
+ 
+7.2 Invalid Transition Handling
+ON advance-stage request with target_gpes_state not in Table BIS2-7.1
+for the session's current_gpes_state:
+  REJECT with INVALID_INPUT.
+  error.message = "Cannot transition from {current} to {target}.
+                   Valid next states: {allowed_targets}"
+  DO NOT mutate current_gpes_state.
+  DO NOT create any jobs.
+  LOG: STATE_TRANSITIONED is NOT emitted for a rejected transition —
+       only successful transitions produce this event. A separate
+       INVALID_TRANSITION_ATTEMPTED debug-level log is written for
+       engineering diagnosis, not surfaced as a customer-facing error.
+ 
+7.3 Complete Reference Workflow (Twenty Steps)
+This walkthrough uses GPES-001's reference implementation as the concrete trace — the same session referenced throughout that document.
+ 
+#
+Step
+Trigger
+Actions
+State Change
+1
+Create session
+Implementation Consultant submits POST /implementation-sessions
+Session Manager creates implementation_sessions row
+status=CREATED, current_gpes_state=DISCOVERY
+2
+Initialize CEP
+Automatic, immediately following session creation
+Session Manager calls CEP Service to create an empty CEP record linked to session_id
+No GPES state change — CEP initialization precedes /start
+3
+Start Stage 1 DISCOVERY
+POST /start
+Job Graph Engine creates one ORCHESTRATOR job for Stage 1 CEP discovery (kickoff conversation)
+status=RUNNING
+4
+Create connector authentication jobs
+Stage 1 job reports COMPLETE (CEP.connector_inventory populated)
+Job Graph Engine creates N CONNECTOR jobs (one per connector), all with dependency_ids=[] and a shared fan_in_id for Stage 2
+fan_in_groups row created, condition=ALL_TERMINAL_ALLOW_BLOCKED
+5
+Dispatch jobs in parallel
+Jobs reach QUEUED with satisfied dependencies (none, in this case)
+Worker Dispatch Coordinator publishes all N jobs to stream:connector_jobs simultaneously
+Jobs transition QUEUED → RUNNING as Connector Workers pick them up
+6
+Track authentication results
+Each Connector Worker calls PATCH job status as it completes authentication
+Job Status Tracker updates each job; Fan-In Evaluator re-checks the Stage 2 fan-in group after each update
+Jobs reach COMPLETE (or ERROR/TERMINAL_BLOCKED) individually, asynchronously
+7
+Advance to AUTHENTICATED
+Fan-In Evaluator finds all required_job_ids in a terminal state
+SOF Stage Engine executes DISCOVERY→AUTHENTICATED
+current_gpes_state=AUTHENTICATED
+8
+Dispatch connector discovery jobs
+Automatic, immediately following state advance
+Job Graph Engine creates discovery-phase jobs (environment + module inventory) for each AUTHENTICATED connector
+New fan_in_group for AUTHENTICATED→DISCOVERED
+9
+Dispatch IMS execution jobs
+DISCOVERED state reached (Step 7 pattern repeats)
+Job Graph Engine creates one CONNECTOR job per connector for full IMS Section 1–8 execution; shared fan_in_id for Stage 3
+current_gpes_state=IMS_RUNNING
+10
+Track gate states and CEP requirements
+Connector Workers encounter PAUSE_FOR_CEP conditions mid-execution (e.g., HubSpot stage mapping)
+Human Task Router creates human_tasks; affected jobs remain RUNNING but internally paused pending CEP (not a job status change — PAUSED_FOR_CEP is a job status per Section 14, distinct from session pause)
+Individual jobs: status=PAUSED_FOR_CEP
+11
+Continue non-blocked branches
+Concurrent with Step 10
+Worker Dispatch Coordinator has already dispatched all connector jobs in parallel (Step 5 pattern) — no additional action required; non-blocked connectors (e.g., NetSuite in the GPES-001 trace) simply continue running
+No state change — this step describes ongoing parallelism, not an event
+12
+Evaluate fan-in
+Each connector job reaches a terminal gate status (PASSED, PASSED_WITH_DEFERRAL, or TERMINAL_BLOCKED)
+Fan-In Evaluator checks Stage 3 fan_in_group after each terminal update
+Fan-in SATISFIED once all connectors terminal (per GPES-001, this occurred at the point Rippling's GL mapping was deferred)
+13
+Dispatch canonical integration
+IMS_RUNNING→CANONICAL_POPULATION transition
+Job Graph Engine creates one CANONICAL job (COORD-004) with dependency_ids=[all Stage 3 job_ids]
+current_gpes_state=CANONICAL_POPULATION
+14
+Dispatch validation
+Canonical job reports COMPLETE
+Job Graph Engine creates one CAPABILITY-worker-type job for EVAL-002 (Validation Agent)
+current_gpes_state=VALIDATED (upon this job's completion)
+15
+Dispatch CAL and confidence
+VALIDATED state reached
+Job Graph Engine creates two parallel CAPABILITY jobs (EVAL-001, EVAL-003) sharing a fan_in_id
+Both must reach COMPLETE to proceed
+16
+Dispatch reporting
+CAPABILITY_ASSESSED state reached
+Job Graph Engine creates one REPORTING job for the activation-plan generation
+current_gpes_state=CAPABILITY_ASSESSED
+17
+Pause for customer review
+Reporting job COMPLETE
+SOF Stage Engine executes CAPABILITY_ASSESSED→CUSTOMER_REVIEW; Session Manager sets session.status=PAUSED (Stage 6 mandatory human gate, per SOF Section 8.2)
+current_gpes_state=CUSTOMER_REVIEW; status=PAUSED
+18
+Receive activation approval
+Implementation Consultant submits POST /activate after the live review meeting
+Activation Coordinator validates the activation_plan_id and confirmed_by fields
+No state change yet — validation precedes the transition
+19
+Activate modules
+Activation Coordinator confirms validity
+SOF Stage Engine executes CUSTOMER_REVIEW→ACTIVATED; Activation Coordinator triggers module activation across relevant workers; session.status returns to RUNNING
+current_gpes_state=ACTIVATED
+20
+Transition to continuous monitoring
+POST /transition-to-monitoring (typically immediate following Step 19)
+Monitoring Transition Coordinator initializes EIS-002 Section 8.1 scheduled workflows; Session Manager may close the session as COMPLETE or leave it RUNNING indefinitely in monitoring mode depending on deployment configuration
+current_gpes_state=CONTINUOUS_MONITORING
+Table BIS2-7.2 — Complete twenty-step reference workflow, traced against GPES-001's reference implementation.
+ 
+Section 8 — Job Graph Engine
+Constructs the dependency graph for every fan-out point in Table BIS2-7.2. This component never dispatches jobs itself — it creates the graph; the Worker Dispatch Coordinator (Section 9) publishes to the queue once dependencies are satisfied.
+ 
+CREATE JOB GRAPH (called at every fan-out point in Table BIS2-7.2):
+  1. VALIDATE the requesting caller is authorized for this session
+     (session must be status=RUNNING, not PAUSED or CREATED)
+  2. FOR a fan-out with N children:
+     IF N > 1:
+       CREATE fan_in_groups row: {required_job_ids: [], condition: <per Section 1.8>}
+       fan_in_id = new row's ID
+     ELSE:
+       fan_in_id = null  (single job, no fan-in needed)
+  3. FOR each child job:
+     CREATE implementation_jobs row with:
+       dependency_ids = [parent job_ids this child requires, if any]
+       fan_in_id = the shared fan_in_id from step 2, if applicable
+     APPEND this job_id to fan_in_groups.required_job_ids
+  4. VALIDATE no circular dependency exists across the full graph
+     (topological sort check) — REJECT the entire graph creation
+     with INVALID_INPUT if a cycle is found; no partial graph is
+     ever persisted
+  5. RETURN all created job_ids and the fan_in_id (if created)
+     to the Worker Dispatch Coordinator for immediate dispatch
+     evaluation
+ 
+Section 9 — Worker Dispatch
+Publishes QUEUED jobs with satisfied dependencies to the correct Redis Stream, per the Section 1.7 one-stream-per-worker-type decision.
+ 
+Redis Stream
+Consumer Group
+Worker Type
+Message Payload
+stream:orchestrator
+orchestrator-workers
+ORCHESTRATOR
+{job_id, session_id, task_type, task_payload}
+stream:connector_jobs
+connector-workers
+CONNECTOR
+{job_id, session_id, connector_id, role_playbook_id, task_payload}
+stream:canonical_jobs
+canonical-workers
+CANONICAL
+{job_id, session_id, task_payload}
+stream:capability_jobs
+capability-workers
+CAPABILITY
+{job_id, session_id, task_payload}
+stream:reporting_jobs
+reporting-workers
+REPORTING
+{job_id, session_id, task_payload}
+Table BIS2-9.1 — Redis Stream assignment by worker type.
+ 
+ON job reaching QUEUED status with all dependency_ids in a terminal
+success status (or the job has no dependencies):
+  1. DETERMINE target stream from job.worker_type (Table BIS2-9.1)
+  2. XADD to the target stream with the message payload
+  3. UPDATE implementation_jobs.status = "RUNNING",
+            started_at = now()
+  4. LOG: JOB_DISPATCHED event
+  Message delivery is at-least-once (Redis Streams consumer group
+  semantics). Workers must treat job execution as idempotent at the
+  canonical-write level (upsert_canonical_object idempotency, per
+  EIS-001) to tolerate a duplicate dispatch safely.
+ 
+Section 10 — Fan-Out / Fan-In Coordination
+Rule
+Specification
+Connector jobs fan out after authentication
+Per Table BIS2-7.2 Step 4 — one job per connector, all with empty dependency_ids, dispatched simultaneously
+Connector implementation jobs run in parallel
+Per Step 9 — Stage 3 (IMS_RUNNING) fan-out follows the identical pattern
+Independent branches continue while others wait
+A job with a PAUSE_FOR_CEP condition (Step 10) does not block dispatch or progress of sibling jobs in the same fan-out — each job's dependency_ids reference only its true prerequisites, never its siblings
+Fan-in waits for terminal statuses, not necessarily successful statuses
+The Fan-In Evaluator (Section 5) checks terminal_job_ids, not terminal_success_ids, for satisfaction under ALL_TERMINAL and ALL_TERMINAL_ALLOW_BLOCKED conditions — a job that legitimately errors still allows the fan-in to proceed under those conditions
+TERMINAL_BLOCKED connectors satisfy fan-in if configured
+Governed by fan_in_groups.condition (Section 1.8); the Stage 3 fan-in defaults to ALLOW_BLOCKED
+Canonical integration can run partial merge when allowed
+If Stage 3 fan-in was satisfied with 1+ TERMINAL_BLOCKED connectors, the Canonical job (Step 13) receives only the successfully-populated connectors' canonical objects as input — this is a property of what data exists to merge, not special-cased logic in the Job Graph Engine itself
+Activation requires customer confirmation
+The CUSTOMER_REVIEW→ACTIVATED transition (Table BIS2-7.1) is the one transition never triggered by fan-in satisfaction — it is always POST /activate with a human-confirmed payload
+Table BIS2-10.1 — Fan-out/fan-in rules.
+ 
+Section 11 — Human-in-the-Loop Routing
+Task Type
+Created When
+Routed To
+Urgency Default
+CEP_BUSINESS_DEFINITION
+A worker encounters a gate question requiring a business decision (e.g., Stripe trial treatment, HubSpot stage mapping)
+Customer portal (self-service) or Implementation Consultant, per the CEP Agent's routing logic (APB-002)
+NORMAL, or BLOCKING if the question gates a pre-extraction requirement (e.g., ERP environment confirmation)
+SYSTEM_OF_AUTHORITY_DISPUTE
+Canonical Integration Agent detects two connectors both claiming authority for the same object type with no deterministic resolution rule
+Implementation Consultant only — never the customer portal, since this requires platform expertise to explain
+BLOCKING
+GATE_RESOLUTION
+Any IMS-documented gate question not otherwise categorized
+Customer portal or Implementation Consultant per the specific gate's IMS Section 1 guidance
+NORMAL or BLOCKING per the IMS gate's own classification
+CUSTOMER_REVIEW
+Session reaches CUSTOMER_REVIEW state
+Implementation Consultant (schedules and leads the live meeting)
+BLOCKING — this task type never times out to a default; it blocks until explicitly resolved
+ACTIVATION_APPROVAL
+Customer confirms readiness during the Stage 6 review meeting
+Recorded as the resolution of the CUSTOMER_REVIEW task, not a separate task type
+ESCALATION
+A BLOCK_CONDITION persists beyond its timeout (Section 15), or a technical condition requires engineering judgment (e.g., SCHEMA_CHANGED)
+Implementation Consultant, with SMPL engineering cc'd for SCHEMA_CHANGED-sourced escalations specifically
+BLOCKING
+Table BIS2-11.1 — Human-in-the-loop task types. Resolution of any task (Table BIS2-4.11) always updates session state and unblocks dependent jobs — there is no human task type whose resolution does not eventually affect job progress.
+ 
+Section 12 — Pause / Resume Behavior
+Scenario
+Pause Behavior
+Resume Behavior
+Explicit session pause (POST /pause)
+New job dispatch halts (Worker Dispatch Coordinator stops publishing to Redis Streams for this session); RUNNING jobs already dispatched complete naturally, their status updates still processed normally
+POST /resume immediately triggers Fan-In Evaluator re-check across all fan_in_groups and dispatches any jobs that became QUEUED-and-eligible while paused
+Mandatory Stage 6 human gate (CUSTOMER_REVIEW)
+Session automatically enters status=PAUSED as part of the CAPABILITY_ASSESSED→CUSTOMER_REVIEW transition (Table BIS2-7.2 Step 17) — this is not a separate explicit pause call, it is a side effect of the state transition itself
+POST /activate is what resumes the session (Table BIS2-7.2 Step 19), not a generic /resume call — the resume path for this specific pause is activation-specific because it always carries the Module Activation Plan payload
+Individual job pause for CEP (job.status=PAUSED_FOR_CEP)
+Job-level, not session-level — the job stops making progress but the session itself remains RUNNING and other jobs continue
+Human Task Router's task resolution (Table BIS2-4.11) automatically re-queues the specific paused job(s) tied to that human_task_id or related_cep_item_id
+Table BIS2-12.1 — Pause/resume scenarios. Session-level pause (explicit or Stage-6-automatic) and job-level pause (PAUSED_FOR_CEP) are independent mechanisms — a session can be RUNNING while individual jobs sit PAUSED_FOR_CEP, which is the normal state during Stage 3 (IMS_RUNNING) per the GPES-001 reference trace.
+ 
+Section 13 — Checkpoint Reference Management
+This service stores checkpoint references only — never checkpoint content. The distinction matters for both correctness and this service's own statelessness.
+ 
+What Is Stored
+What Is Not Stored
+checkpoint_ref on implementation_jobs — an opaque string pointing to where the actual checkpoint lives (an extraction_batch_id + next_page_cursor pair from BIS-001, or an object storage path for a canonical merge checkpoint)
+The actual extracted records, canonical objects, or any customer business data
+session.checkpoint_refs — a JSONB map from connector_id to that connector's most recent checkpoint_ref, for quick session-level recovery reference
+A duplicate copy of the checkpoint content — this service never re-fetches or caches what a checkpoint_ref points to; it only stores and returns the pointer
+Table BIS2-13.1 — Checkpoint reference scope.
+ 
+On Orchestration Service restart or failover (per EIS-002 Section 5.2's recovery protocol), the recovering instance loads session_state from Postgres, including every job's checkpoint_ref, and re-queues RUNNING jobs with their checkpoint_ref intact in the dispatch payload — the resuming Connector Worker uses that reference exactly as BIS-001 Section 13 specifies, without any special handling required on the Orchestration Service side beyond correctly persisting and forwarding the reference string.
+ 
+Section 14 — Status Model
+Applies to implementation_jobs.status. Session status (Section 6) is a separate, smaller enum (CREATED/RUNNING/PAUSED/COMPLETE/CANCELLED) — this table covers job-level status only.
+ 
+Status
+Used When
+QUEUED
+Job created, dependencies not yet all satisfied, or satisfied but not yet dispatched to Redis
+RUNNING
+Dispatched to a Redis Stream and picked up by a worker (or dispatched and awaiting pickup — this service does not distinguish "dispatched" from "actively executing," since only the worker itself knows the difference and it is not operationally significant to the Orchestration Service)
+COMPLETE
+Worker reports success with no gaps
+COMPLETE_WITH_GAPS
+Worker reports success with logged, non-blocking gaps (e.g., some optional fields null, some FLAGged validation records)
+PAUSED_FOR_CEP
+Worker reports a PAUSE_FOR_CEP condition; job-level pause, not session-level (Section 12)
+BLOCKED
+Worker reports a BLOCK_CONDITION not yet past its escalation timeout
+TERMINAL_BLOCKED
+BLOCKED condition has exceeded its timeout without resolution (per EIS-002 Section 0.2); satisfies fan-in under ALL_TERMINAL_ALLOW_BLOCKED
+ESCALATED
+A human task of type ESCALATION has been created for this job and is awaiting Implementation Consultant or engineering response
+ERROR
+Worker reports a technical failure with retries exhausted
+CANCELLED
+Explicitly cancelled via POST .../cancel, or session-level cancellation cascading to all active jobs
+Table BIS2-14.1 — Job status values. TERMINAL_BLOCKED, ERROR, CANCELLED, COMPLETE, and COMPLETE_WITH_GAPS are the five statuses the Fan-In Evaluator treats as "terminal" for ALL_TERMINAL and ALL_TERMINAL_ALLOW_BLOCKED conditions; QUEUED, RUNNING, PAUSED_FOR_CEP, BLOCKED, and ESCALATED are non-terminal.
+ 
+Section 15 — Error Handling
+The Orchestration Service does not generate most of these errors itself — it receives them from workers via job status updates and decides what to do next. This table specifies that decision for each EIS-001 error code.
+ 
+Error Code
+Orchestration Service Response
+AUTH_ERROR
+Job → status=BLOCKED; Human Task Router creates a BLOCKING human_task requesting new credentials; no auto-retry (matches BIS-001 Table BIS-12.1 — this service defers to the Connector Proxy Service's own no-retry decision for this code)
+PERMISSION_ERROR
+Job → status=BLOCKED; human_task created requesting a scope change; no auto-retry
+RATE_LIMIT_ERROR
+Job remains RUNNING; the Orchestration Service reschedules the specific failed sub-step (not the whole job) for retry after retry_after_seconds, using the job's own retry_policy backoff schedule — this does not change job.status at all, since rate limiting is an expected, self-resolving condition, not a failure state
+CONNECTOR_UNAVAILABLE
+If within the job's retry_policy.max_retries: job remains RUNNING, retried. If retries exhausted: job → status=TERMINAL_BLOCKED, and the connector is added to session.terminal_blocked_connectors — Fan-In Evaluator is triggered immediately so sibling jobs are not held up
+SCHEMA_CHANGED
+Job → status=ESCALATED (not BLOCKED — this requires engineering judgment, not a customer decision); human_task of type ESCALATION created, cc'd to engineering per Table BIS2-11.1
+INVALID_INPUT
+Returned synchronously to the calling endpoint, never as a job status — this indicates a malformed request to this service's own API, not a downstream job failure
+VALIDATION_FAILED
+Job → status=COMPLETE_WITH_GAPS if the validation failure is below the IMS Section 5.4 threshold; job proceeds normally with the validation_report attached to output_artifact_refs
+CEP_REQUIRED
+Job → status=PAUSED_FOR_CEP; Human Task Router creates the corresponding human_task if one does not already exist for this related_cep_item_id
+BLOCK_CONDITION
+Job → status=BLOCKED; human_task created with urgency per the specific IMS gate's classification; escalates to TERMINAL_BLOCKED automatically after the configured timeout (Section 16) if unresolved
+DATA_QUALITY_THRESHOLD_EXCEEDED
+Job → status=BLOCKED; human_task created presenting the threshold breach for customer decision (proceed with degraded confidence vs. investigate) — this is always a BLOCKING human decision, never auto-resolved
+INTERNAL_ERROR
+If from this service's own dependencies (Postgres, Redis): retried per Section 16, then paged to on-call if exhausted. If reported by a worker about its own internal failure: job → status=ERROR, retried per the job's retry_policy
+Table BIS2-15.1 — Error handling by EIS-001 error code.
+ 
+Section 16 — Retry Strategy
+Two distinct retry layers exist in this service, and they must not be confused: job-level retries (a worker's own retry of its downstream call, e.g., to Connector Proxy Service) and service-level retries (this service's own retry of its dispatch or persistence operations).
+ 
+Retry Layer
+Scope
+Backoff
+Escalation
+Job-level (worker's own retries)
+A Connector Worker retrying its own call to Connector Proxy Service per BIS-001 Table BIS-12.1 — the Orchestration Service is not involved in this retry loop at all; it only sees the final outcome via PATCH job status
+Owned entirely by BIS-001 and the calling worker
+If the worker exhausts its own retries, it reports the terminal error (e.g., CONNECTOR_UNAVAILABLE) once via PATCH job status — the Orchestration Service does not see individual retry attempts
+Service-level: dispatch retry
+This service's own retry of publishing a QUEUED job to Redis Streams
+Linear: 5s, 5s, 5s (3 attempts)
+After 3 failed dispatch attempts: job remains QUEUED in Postgres (durable — never lost) and is picked up by a periodic QUEUED-job sweep (every 60s) rather than escalating as a job failure — a dispatch failure is a platform issue, not a customer-facing implementation issue
+Service-level: Postgres/Redis operation retry
+Any internal read/write to this service's own dependencies
+Linear: 30s, 30s, 30s (3 attempts), matching BIS-001 Table BIS-12.1's INTERNAL_ERROR pattern for consistency across services
+Pages on-call after exhaustion
+Human task timeout escalation
+Not a technical retry, but follows the same escalation spirit — BLOCKING human_task unresolved past 48h (or the task-type-specific default from Table BIS2-11.1)
+N/A — time-based, not attempt-based
+Applies default_value if present (job resumes automatically); if no default, job → status=ESCALATED
+Table BIS2-16.1 — Retry strategy by layer.
+ 
+Section 17 — Logging
+Every log event includes the fields the build brief specifies, matching the EIS-001 Table EIS-1.3 base schema plus five orchestration-specific fields (previous_state, next_state, job_id, fan_in_id, human_task_id).
+ 
+event_type
+Emitted When
+Orchestration-Specific Fields Populated
+SESSION_CREATED
+New session created
+customer_id
+SESSION_STARTED
+POST /start succeeds
+—
+STATE_TRANSITIONED
+Any successful GPES state advance
+previous_state, next_state
+JOB_CREATED
+New implementation_jobs row created
+job_id, fan_in_id (if applicable)
+JOB_DISPATCHED
+Job published to a Redis Stream
+job_id
+JOB_STATUS_UPDATED
+Any PATCH to a job's status
+job_id, previous_state (job status), next_state (job status)
+FAN_IN_CREATED
+New fan_in_groups row created
+fan_in_id
+FAN_IN_SATISFIED
+A fan_in_groups condition is met
+fan_in_id
+HUMAN_TASK_CREATED
+New human_tasks row created
+human_task_id, job_id (if applicable)
+HUMAN_TASK_RESOLVED
+A human_tasks row transitions to RESOLVED
+human_task_id
+SESSION_PAUSED
+Session enters PAUSED, explicit or Stage-6-automatic
+—
+SESSION_RESUMED
+Session returns to RUNNING from PAUSED
+—
+ACTIVATION_PLAN_CREATED
+Reporting Worker's activation-plan job completes
+—
+MODULES_ACTIVATED
+POST /activate succeeds
+—
+SESSION_CLOSED
+POST /close
+—
+TRANSITIONED_TO_MONITORING
+POST /transition-to-monitoring succeeds
+—
+Table BIS2-17.1 — Log event types. Every event additionally includes request_id, session_id, customer_id, actor_type, actor_id, error_code (if applicable), and timestamp per the base EIS-001 schema.
+ 
+Section 18 — Metrics
+Metric Name
+Type
+Labels
+Purpose
+orchestration_sessions_total
+Counter
+status
+Session volume by lifecycle event
+orchestration_active_sessions
+Gauge
+current_gpes_state
+Real-time distribution of sessions across the ten GPES states — the primary "what is everyone doing right now" dashboard input
+orchestration_state_transition_total
+Counter
+from_state, to_state
+Transition frequency; unexpected patterns (e.g., many sessions stuck at the same transition) surface here first
+orchestration_job_created_total
+Counter
+worker_type, task_type
+Job volume by type
+orchestration_job_duration_seconds
+Histogram
+worker_type, task_type
+Job execution time distribution, recorded on terminal status
+orchestration_fan_in_wait_seconds
+Histogram
+fan_in_id context (bucketed by stage, not raw fan_in_id, to keep cardinality bounded)
+How long fan-in points actually wait — the primary signal for identifying which stage is the critical path (per GPES-001 Section 4/5)
+orchestration_human_task_count
+Gauge
+task_type, urgency, status
+Real-time pending human task load
+orchestration_human_task_resolution_seconds
+Histogram
+task_type, urgency
+How quickly humans actually respond — feeds the EIS-004 memory system's understanding of realistic CEP resolution timing
+orchestration_session_duration_seconds
+Histogram
+—
+Full session wall-clock time, the GPES-001 Table GPES-7.1-equivalent metric captured automatically in production, not just as a reference estimate
+orchestration_error_total
+Counter
+error_code
+Error rate by EIS-001 taxonomy code
+orchestration_terminal_blocked_connectors_total
+Counter
+connector_id
+Which connectors most often end up TERMINAL_BLOCKED — an operational signal for IMS or Connector Proxy Service quality issues
+orchestration_readiness_score
+Histogram
+—
+Distribution of Readiness Scores across all activated sessions — the production analog of GPES-001's single reference value
+Table BIS2-18.1 — Orchestration Service metrics.
+ 
+Section 19 — Security
+Control
+Implementation
+Internal-only service
+Not reachable from the public internet; callable only by the Tool Gateway and the five worker types via their internal service identities — matches BIS-001's network isolation model exactly
+Role-scoped endpoint access
+Each caller's service identity carries a scope; e.g., a Connector Worker's identity can PATCH job status for jobs where worker_type=CONNECTOR but cannot call POST /activate — enforced at the API layer before any business logic executes
+Customer isolation
+Every request is scoped by session_id, and every session_id maps to exactly one customer_id; Postgres row-level security (matching the pattern established in EIS-004 Section 8.1 for memory records) prevents any query from returning cross-customer implementation_jobs, human_tasks, or fan_in_groups rows even in the presence of an application-layer bug
+No raw credentials
+This service never receives, stores, or forwards credential_reference_id resolution — it only knows that a connector authentication job succeeded or failed, never how
+No direct customer system access
+This service has no network path to any external connector API — all such calls happen inside BIS-001, invoked by workers, never by this service
+No direct canonical data writes
+This service has no write access to the Canonical Data Service's tables — it dispatches jobs that perform canonical writes, but never performs one itself
+Auditable state changes
+Every session and job state mutation produces a STATE_TRANSITIONED or JOB_STATUS_UPDATED log event (Section 17) with previous_state and next_state — the full state history of any session is reconstructable from the log stream alone, independent of the current Postgres row
+Human task text sanitization
+question_text on every human_tasks row passes through the same redact_sensitive_fields check (EIS-001 Category 12) as any other customer-facing text before storage — a worker cannot accidentally embed a credential fragment or raw financial figure in a CEP question
+Table BIS2-19.1 — Security controls.
+ 
+Section 20 — Performance Targets
+Metric
+Target
+Notes
+Session creation (p95)
+< 200ms
+Postgres insert plus CEP Service initialization call
+Job dispatch (p95)
+< 100ms
+Redis XADD plus Postgres status update
+Job status update (p95)
+< 100ms
+The highest-frequency write in this service — must stay fast since every worker status report passes through it
+Fan-in evaluation (p95)
+< 250ms
+Includes the required_job_ids terminal-status check across potentially dozens of jobs for a large fan-out
+State transition (p95)
+< 100ms
+Table lookup plus Postgres update — no external calls in the critical path
+Human task creation (p95)
+< 200ms
+Includes the redact_sensitive_fields sanitization pass
+Concurrent active sessions (MVP target)
+50
+Matches EIS-002 Section 10.1's stated MVP target exactly — this service and the broader runtime scale together
+Concurrent jobs (MVP target)
+500
+Approximately 10 concurrent jobs per active session at the 50-session target, consistent with a typical 4–6 connector implementation's peak parallelism
+Table BIS2-20.1 — Performance targets.
+ 
+Section 21 — Deployment Model
+Property
+Specification
+Runtime
+FastAPI (Python), matching BIS-001 and EIS-002 Section 10.1
+Deployment unit
+Single containerized service, horizontally scaled by replica count — stateless API layer with all durable state in Postgres
+Network exposure
+Internal-only, matching BIS-001 Section 19
+State
+Stateless application tier; Postgres is the sole source of truth for session/job/fan-in/human-task state; Redis holds only the ephemeral stream messages (durable Postgres record exists before and independent of the Redis message)
+Scaling trigger
+Horizontal autoscale on concurrent active session count (Section 20 target: 50) and on job-status-update request rate
+Resource profile (per replica, starting point)
+2 vCPU, 4GB RAM — this service is I/O-bound (Postgres and Redis round-trips), not CPU-bound, matching BIS-001's profile rationale
+Health checks
+Liveness: GET /v1/health, 10s interval. Readiness: same endpoint, gates traffic until Postgres and Redis both report healthy.
+Deployment cadence
+Standard CI/CD; this service has no per-connector coupling (unlike BIS-001's adapter-per-connector model), so deployment frequency is driven by orchestration logic changes only, not connector library updates
+Table BIS2-21.1 — Deployment model.
+ 
+Section 22 — Configuration
+ 
+22.1 State Machine Configuration
+Table BIS2-7.1 (state transition rules) is loaded from a static, version-controlled configuration file at service startup — not a database table — because state transition rules are architecture, not operational data; changing them is a code-review-gated change, not an operational tuning action.
+ 
+state_transitions.yaml (loaded at startup, immutable at runtime):
+  DISCOVERY:
+    allowed_next: [AUTHENTICATED]
+    fan_in_condition: ALL_TERMINAL_ALLOW_BLOCKED
+  AUTHENTICATED:
+    allowed_next: [DISCOVERED]
+    fan_in_condition: ALL_TERMINAL_ALLOW_BLOCKED
+  # ... remaining eight states, matching Table BIS2-7.1 exactly
+  CUSTOMER_REVIEW:
+    allowed_next: [ACTIVATED]
+    fan_in_condition: null   # human-triggered only, no fan-in
+ 
+22.2 Environment Variables
+Variable
+Purpose
+DATABASE_URL
+Postgres connection string
+REDIS_URL
+Redis Streams connection
+STATE_TRANSITIONS_CONFIG_PATH
+Path to state_transitions.yaml
+HUMAN_TASK_DEFAULT_TIMEOUT_HOURS
+Default 48 for BLOCKING, 72 for NORMAL, per SOF Section 1.4 — overridable per task_type
+MAX_CONCURRENT_SESSIONS
+Operational tuning; default 50 per Table BIS2-20.1
+QUEUED_JOB_SWEEP_INTERVAL_SECONDS
+Default 60 — the periodic re-dispatch sweep referenced in Table BIS2-16.1
+LOG_LEVEL
+INFO for production, DEBUG for development
+Table BIS2-22.1 — Environment configuration.
+ 
+Section 23 — Unit Testing
+Component
+Test Focus
+Example Test Cases
+SOF Stage Engine
+Transition validation against Table BIS2-7.1
+Every valid transition in the table succeeds; every non-adjacent transition (e.g., DISCOVERY directly to CANONICAL_POPULATION) is rejected with INVALID_INPUT; current_sof_stage is correctly derived for all ten GPES states per Table BIS2-1.1
+Job Graph Engine
+Graph construction correctness
+A fan-out of N jobs correctly creates exactly one fan_in_groups row with all N job_ids in required_job_ids; a circular dependency_ids graph is rejected before any row is persisted
+Fan-In Evaluator
+Satisfaction logic per condition type
+ALL_SUCCESS is not satisfied by a set containing one ERROR job; ALL_TERMINAL is satisfied by a mix of COMPLETE and ERROR but not by one still-RUNNING job; ALL_TERMINAL_ALLOW_BLOCKED is satisfied even when one job is TERMINAL_BLOCKED
+Human Task Router
+Task creation and duplicate handling
+Two PAUSE_FOR_CEP conditions for the same related_cep_item_id produce one human_task, not two; resolving a task with a different value than a prior resolution attempt is rejected (Table BIS2-4.11)
+Retry policy evaluation
+Backoff calculation correctness
+Job-level, dispatch-level, and dependency-level retry schedules (Table BIS2-16.1) each compute correct next-attempt timing
+Pause/resume behavior
+State consistency across pause boundaries
+A job dispatched before a session pause continues to report status normally; no new job is dispatched between pause and resume even if its dependencies become satisfied during the pause window
+Invalid transition rejection
+Negative-path coverage
+Every one of the 9×9 minus 9 non-adjacent state pairs is explicitly tested as a rejection, not just spot-checked
+Duplicate dispatch prevention
+Idempotency under retry
+A job status update delivered twice (simulating Redis Streams at-least-once delivery) does not double-trigger fan-in evaluation side effects
+Table BIS2-23.1 — Unit test coverage by component.
+ 
+Section 24 — Integration Testing
+Integration tests run the full Table BIS2-7.2 twenty-step workflow against mocked worker responses (workers report status via the same PATCH endpoint a real worker would use, but with scripted outcomes) rather than live AI agents.
+ 
+Scenario
+Verification
+GPES-001 clean path (all 20 steps, no deviations)
+Session reaches CONTINUOUS_MONITORING; every state transition in Table BIS2-7.1 occurs in the exact order of Table BIS2-7.2; final readiness_score matches the mocked CAL output
+Connector auth failure
+One connector job reports AUTH_ERROR; verify the other connectors' jobs are dispatched and complete normally; verify the Stage 2 fan-in is satisfied once all connectors (including the failed one) reach a terminal status
+One connector TERMINAL_BLOCKED
+A connector job exhausts CONNECTOR_UNAVAILABLE retries; verify TERMINAL_BLOCKED status, verify it is added to session.terminal_blocked_connectors, verify Stage 3 fan-in still reaches SATISFIED under ALL_TERMINAL_ALLOW_BLOCKED
+Customer delayed CEP response
+A human_task remains PENDING past its default_apply_after_hours; verify the default is applied automatically and the dependent job is re-queued without further human action
+Schema drift escalation
+A mocked SCHEMA_CHANGED job status update; verify job → ESCALATED (not BLOCKED) and the human_task is created with the engineering cc per Table BIS2-11.1
+Validation threshold exceeded
+A mocked DATA_QUALITY_THRESHOLD_EXCEEDED update; verify job → BLOCKED and a BLOCKING human_task is created presenting the proceed-or-investigate choice
+Customer defers activation
+Session reaches CUSTOMER_REVIEW and remains PAUSED indefinitely (no /activate call for an extended period in the test); verify no automatic activation occurs and the session remains valid and resumable at any later point
+Activation success
+POST /activate with a valid activation_plan_id; verify CUSTOMER_REVIEW→ACTIVATED, verify MODULES_ACTIVATED log event, verify session.status returns to RUNNING
+Transition to monitoring
+POST /transition-to-monitoring following activation; verify ACTIVATED→CONTINUOUS_MONITORING and verify the Monitoring Transition Coordinator's initialization call is made exactly once
+Table BIS2-24.1 — Integration test scenarios, extending BIS-001's connector-level scenarios with orchestration-level ones — together the two test suites cover the full GPES-001 reference trace end-to-end.
+ 
+Section 25 — Observability
+ 
+25.1 Dashboards
+Active sessions by state — real-time distribution across the ten GPES states (backed by orchestration_active_sessions)
+Job duration by worker type — identifies which worker type is the typical bottleneck, directly comparable against the GPES-001 Table GPES-7.1 planning estimates
+Fan-in wait time by stage — the critical-path identification view, directly comparable against GPES-001 Section 5 (Parallel Execution Map)
+Human task aging — pending tasks bucketed by age, surfaced separately for BLOCKING vs. NORMAL vs. LOW urgency
+Error rate by error code — aggregate view across the full EIS-001 taxonomy
+Readiness score distribution — production analog of the GPES-001 reference value, tracked across all activated sessions over time
+Terminal blocked connector count — by connector_id, surfacing which connectors most often cannot complete without human intervention
+ 
+25.2 Alerts
+Alert
+Threshold
+Severity
+Session stuck in one state too long
+No STATE_TRANSITIONED event for a session in RUNNING status for > 4 hours during an active business day (excludes sessions legitimately PAUSED at CUSTOMER_REVIEW)
+Warning — Implementation Consultant notified
+Fan-in wait exceeds threshold
+Any fan_in_groups row PENDING for > 2 hours without at least one constituent job showing progress
+Warning
+Human task overdue
+A BLOCKING human_task PENDING past its default_apply_after_hours with no default_value configured (meaning it cannot self-resolve)
+Warning, escalating to Critical after an additional 24 hours
+Job retry exhaustion
+Any job reaching its retry_policy.max_retries and transitioning to ERROR or TERMINAL_BLOCKED
+Informational — logged for the terminal_blocked_connectors dashboard, not individually paged unless it affects > 20% of a session's jobs
+Elevated INTERNAL_ERROR rate
+orchestration_error_total{error_code="INTERNAL_ERROR"} rate > 1% over 5 minutes
+Critical — pages on-call immediately, since this indicates this service's own dependencies are degraded
+Activation failure
+Any POST /activate call returning an error for a session that reached CUSTOMER_REVIEW cleanly
+Critical — this is the final step before value delivery; any failure here gets immediate attention
+Table BIS2-25.1 — Alerting thresholds.
+ 
+Section 26 — Failure Recovery
+Failure
+Immediate Effect
+Recovery Behavior
+Postgres unreachable
+All endpoint calls fail with INTERNAL_ERROR — this is a hard dependency; session and job state cannot be read or written
+Fail closed, no workaround. Once Postgres recovers, this service resumes normally — it holds no application-layer state that could desync from Postgres during the outage, since it never caches durable state locally.
+Redis unreachable
+New job dispatch fails; jobs accumulate in QUEUED status in Postgres (durable, not lost); job status updates from already-running workers still succeed since PATCH job status writes to Postgres directly, not through Redis
+Degraded but data-safe. Once Redis recovers, the periodic QUEUED-job sweep (Section 16, every 60s) picks up and dispatches all accumulated jobs — no manual intervention needed.
+This service crashes or is redeployed mid-request
+In-flight requests fail; callers receive a connection error
+Stateless design (Section 21) means any replacement replica serves the next request identically. A worker mid-execution when this service becomes briefly unavailable simply retries its next PATCH job status call per its own retry policy once the service returns — no orchestration-level state is lost because nothing was held only in this service's memory.
+A worker crashes without reporting a terminal job status
+Job remains RUNNING indefinitely from this service's perspective
+A periodic stale-job sweep (checking timeout_at against implementation_jobs.status=RUNNING) identifies jobs that exceeded their timeout_policy.hard_timeout_seconds without a status update, and transitions them to ERROR — this is the mechanism that prevents a crashed worker from silently stalling a session forever.
+Redis Streams message delivered twice (at-least-once semantics)
+A worker could theoretically receive and begin processing the same job twice
+Workers are required to treat execution as idempotent at the canonical-write level (Section 9); this service additionally rejects a second PATCH job status call attempting to move an already-terminal job to RUNNING, preventing the second delivery from corrupting job state even if the worker itself did not fully protect against it.
+Table BIS2-26.1 — Failure recovery by dependency and failure type.
+ 
+Section 27 — Future Enhancements (Backlog Only)
+Enhancement
+Description
+Trigger to Reconsider
+Event-driven orchestration beyond onboarding
+Extend this service's state machine to drive the EIS-002 Section 8 Continuous Production Monitoring workflows natively, rather than that mode being a separate, lighter-weight scheduling mechanism
+CONTINUOUS_MONITORING sessions accumulate enough operational complexity (frequent schema drift, frequent re-validation needs) that ad hoc scheduling is no longer sufficient
+Monthly refresh workflow
+A formal GPES-state-machine-driven monthly re-assessment cycle, distinct from daily incremental sync
+Customer demand for scheduled formal re-readiness-scoring, not just continuous background sync
+Schema drift recovery workflow
+An automated state machine branch that handles PENDING_REVALIDATION (EIS-004 Section 3.4) without full human escalation for low-severity drift
+Schema drift frequency and severity data (Section 25 dashboard) shows a pattern of low-severity, safely-automatable drift resolutions
+Dynamic worker scaling
+This service directly signals the Connector/Canonical/Capability/Reporting worker pools to scale based on real-time queue depth, rather than relying on infrastructure-level autoscaling alone
+Queue depth metrics show autoscaling lag is materially affecting job dispatch latency
+SLA-aware prioritization
+Job priority (currently a static HIGH/NORMAL/LOW field) becomes dynamically computed based on customer contractual SLAs
+SMPL introduces differentiated implementation SLAs by customer tier
+Customer-facing live progress UI
+A read-optimized, real-time view of session state exposed directly to customers (beyond the human_tasks-driven portal interactions that already exist)
+Customer feedback indicates the current portal experience (task-driven, not continuously visible progress) is insufficient
+Implementation replay
+Ability to replay a completed session's full job graph and state transitions against updated IMS/prompt versions to validate consistency — an extension of the EIS-003 Table EIS3-6.1 Replay Test to the orchestration layer
+The Implementation Pattern Library (EIS-004 Section 1.2) matures to the point where replay-based regression testing becomes valuable
+Orchestration simulation mode
+A dry-run mode that constructs and validates a full job graph without dispatching any real jobs — useful for testing new connector combinations before they run against real customer data
+New connector combinations are added frequently enough that manual integration testing (Section 24) becomes a bottleneck
+Table BIS2-27.1 — Backlog. Matches BIS-001 Section 25's pattern: each item has an explicit trigger condition, not a target date.
+ 
+Build Readiness Assessment
+Dimension
+Score
+Assessment
+API completeness
+10 / 10
+All 24 endpoints specified; the 7 endpoints with real branching logic receive full request/response/error/idempotency/retry/logging/metrics tables, and the 17 simpler CRUD-style endpoints are captured in compact but complete summary tables — no endpoint from the build brief is missing.
+Data model completeness
+10 / 10
+All four Postgres schemas (implementation_sessions, implementation_jobs, fan_in_groups, human_tasks) are fully specified with types and constraints, matching every field the build brief requested.
+Consistency with BIS-001 and EIS-002
+10 / 10
+The GPES-to-SOF derivation (1.5), the job-layering distinction (1.6), and the checkpoint reference contract (13) all explicitly reconcile this document with the prior frozen specifications rather than introducing silent divergence.
+Workflow traceability
+10 / 10
+The twenty-step reference workflow (7.3) is traced against GPES-001's actual reference implementation, not a generic abstraction — an engineer can cross-reference this table against GPES-001's own stage tables and confirm they describe the same execution.
+Testability
+9 / 10
+Unit and integration test scenarios cover every component and the highest-risk cross-cutting behaviors (fan-in condition logic, pause/resume state consistency, duplicate dispatch handling). One point withheld: load/soak testing at the Section 20 performance targets (500 concurrent jobs) is referenced by the targets themselves but not specified as an explicit test scenario — that belongs in a dedicated performance test plan, not this build specification.
+Table BIS2-FA.1 — Build readiness assessment. Aggregate: 49 / 50 (98%).
+ 
+BIS-002 is complete and ready for engineering to begin implementation. Together, BIS-001 and BIS-002 specify the two services an engineering team needs to build first: the interface to the outside world (Connector Proxy Service) and the control plane that decides what happens next (Orchestration Service). Every other runtime service named in EIS-002 Table EIS2-2.1 — Canonical Data Service, CAL Service, Reporting Service, IMS Content Service — is a natural next BIS, each following the same scope-decisions-first discipline established across these two documents.
+ 
+The most consequential design decision in this document is Section 1.5 — making GPES state the enforced primitive and SOF stage a derived rollup. Without that explicit resolution, an engineer could reasonably have built either field as authoritative, and a future bug where the two fields disagree would have been genuinely difficult to diagnose, since both EIS-002 and GPES-001 reference "the current stage" without specifying which representation is the source of truth. That ambiguity is now closed.
+ 

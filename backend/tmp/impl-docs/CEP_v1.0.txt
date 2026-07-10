@@ -1,0 +1,335 @@
+ABS-009
+CUSTOMER ENVIRONMENT PROFILE
+Discovery & Implementation Framework
+Version 1.0
+Companion document to the SMPL Architecture Build Specification
+“If AI can discover it, do not ask the customer.”
+Table of Contents
+Purpose of This Document
+The foundational SMPL architecture — SKA, SCBM, SCDM, the CKR Standard, and the ERP, CRM, Billing, and HRIS Connector Knowledge Registries and IMS Libraries — is now frozen. Implementation execution is the next phase of work, and the Customer Environment Profile (CEP) is the primary document that carries a customer through it.
+The CEP is the bridge between customer discovery and Financial Intelligence. It captures only what SMPL cannot determine on its own, and it evolves continuously as implementation progresses — it is not a static intake form.
+Guiding Principle
+If AI can discover it, do not ask the customer.
+Design Commitments
+Completable by a customer in under 15 minutes on first pass.
+Free of technical questions wherever possible.
+Never asks for information already available through connected systems.
+Clearly distinguishes customer decisions from system configuration.
+Usable by both AI implementation agents and human implementation consultants.
+Continues evolving throughout implementation as new information becomes available.
+How to Read This Document
+Every field in the CEP is labeled with one of four types, so it is always clear who — or what — is responsible for populating it:
+Field Type
+What It Means
+CUSTOMER INPUT
+A business decision only the customer can make. Cannot be discovered automatically.
+AUTO-DISCOVERED
+Populated directly by SMPL AI from connected systems. Customer reviews only.
+SYSTEM-VERIFIED
+Customer provides an initial value; AI confirms or corrects it once systems are connected.
+AUTO-GENERATED
+Produced by SMPL by combining discovery results with customer decisions.
+Section 1 — Company Overview
+A lightweight snapshot of the business. This section is intentionally short — enough for SMPL to orient itself, nothing more.
+Field
+Type
+Notes / Purpose
+Company Name
+CUSTOMER INPUT
+Legal or preferred operating name.
+Industry
+CUSTOMER INPUT
+Used to tune benchmark and definition defaults.
+Business Model
+CUSTOMER INPUT
+e.g., SaaS subscription, usage-based, hybrid, services.
+Headquarters
+CUSTOMER INPUT
+Primary location of record.
+Operating Countries
+CUSTOMER INPUT
+All countries with active operations or entities.
+Primary Currency
+CUSTOMER INPUT
+Reporting currency for consolidated Financial Intelligence.
+Approximate Revenue Range
+CUSTOMER INPUT
+Order of magnitude only — used for scaling defaults, not precision.
+Approximate Employee Count
+CUSTOMER INPUT
+Order of magnitude only.
+Fiscal Year End
+CUSTOMER INPUT
+Anchors all period-based reporting.
+Section 2 — Connected Systems
+Identifies the major business systems in the customer's environment. Once a system is connected, SMPL verifies and enriches these details automatically — the customer only confirms what it cannot yet see.
+Captured for each system: ERP, CRM, Billing, HRIS, Payroll, Planning, Data Warehouse, Business Intelligence, and any other critical system.
+Field
+Type
+Notes / Purpose
+Vendor
+SYSTEM-VERIFIED
+Customer names the vendor; AI confirms via API on connection.
+Current Version
+SYSTEM-VERIFIED
+Only if known to the customer; otherwise left blank for AI to detect.
+Primary Business Owner
+CUSTOMER INPUT
+The person accountable for the system, not the technical admin.
+Implementation Contact
+CUSTOMER INPUT
+Point of contact for connector setup and access provisioning.
+No technical implementation questions (API scopes, authentication method, field mappings, etc.) are asked here — those are resolved automatically once a connection is established.
+Section 3 — Business Definitions
+These definitions cannot be discovered — they are decisions. Once captured, they become canonical for this customer's entire implementation and are applied consistently across every report and dashboard.
+Field
+Type
+Notes / Purpose
+Active Customer
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+ARR
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+MRR
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Churn
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Expansion
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Contraction
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Renewal
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Bookings
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Qualified Pipeline
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Active Employee
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Contractor
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+FTE
+CUSTOMER INPUT
+Customer-specific definition, or accept the SMPL standard default.
+Section 4 — System of Authority
+Rather than assuming which system owns a concept, the customer identifies the system of record for each. This directly populates the SCBM implementation profile.
+Field
+Type
+Notes / Purpose
+Customer
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Product
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Employee
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Department
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Cost Center
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Opportunity
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Subscription
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Invoice
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Revenue
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Headcount
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Compensation
+CUSTOMER INPUT
+Which connected system is authoritative for this concept?
+Section 5 — Business Policies
+Only policy decisions that materially impact Financial Intelligence are captured here — no more.
+Field
+Type
+Notes / Purpose
+Revenue Recognition Approach
+CUSTOMER INPUT
+Governs how revenue is recognized across periods.
+ARR Methodology
+CUSTOMER INPUT
+How annual recurring revenue is calculated.
+Usage-Based Billing
+CUSTOMER INPUT
+Whether usage-based components exist and how they're treated.
+Trial Handling
+CUSTOMER INPUT
+How trial accounts are classified in reporting.
+Renewal Treatment
+CUSTOMER INPUT
+How renewals are recognized vs. new bookings.
+Cancellation Policy
+CUSTOMER INPUT
+How cancellations affect churn and ARR calculations.
+Contractor Policy
+CUSTOMER INPUT
+Whether contractors are included in headcount metrics.
+Department Ownership
+CUSTOMER INPUT
+Rules for attributing cost/spend to departments.
+Cost Center Ownership
+CUSTOMER INPUT
+Rules for attributing cost/spend to cost centers.
+Multi-Entity Reporting
+CUSTOMER INPUT
+How multiple legal entities roll up (or don't) in reporting.
+Section 6 — Desired Modules
+The capabilities the customer wants to implement. This directly guides the Capability Assessment Layer in Section 8.
+Field
+Type
+Notes / Purpose
+Financial Reporting
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Board Reporting
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Executive Dashboards
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Cash Forecasting
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+ARR Reporting
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+MRR Reporting
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Pipeline Analytics
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Workforce Planning
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Scenario Planning
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Executive Commentary
+CUSTOMER INPUT
+Select to include in the implementation roadmap.
+Section 7 — AI Discovery Summary
+Populated automatically once systems are connected. The customer reviews this output for accuracy rather than entering it manually.
+Field
+Type
+Notes / Purpose
+Systems Detected
+AUTO-DISCOVERED
+All connected systems identified during discovery.
+Modules Detected
+AUTO-DISCOVERED
+Active modules/products within each connected system.
+API Connectivity
+AUTO-DISCOVERED
+Confirmed live connectivity and access scope per system.
+Business Objects Discovered
+AUTO-DISCOVERED
+Core objects available (accounts, invoices, employees, etc.).
+Custom Fields Detected
+AUTO-DISCOVERED
+Customer-specific fields that may carry business meaning.
+Currencies
+AUTO-DISCOVERED
+All currencies in use across connected systems.
+Subsidiaries
+AUTO-DISCOVERED
+Legal entity structure, if present.
+Departments
+AUTO-DISCOVERED
+Organizational department structure.
+Opportunity Stages
+AUTO-DISCOVERED
+CRM pipeline stage configuration.
+Subscription Models
+AUTO-DISCOVERED
+Billing structures in use (seat-based, usage, hybrid, etc.).
+Organizational Hierarchy
+AUTO-DISCOVERED
+Reporting structure from HRIS.
+Example output (for illustration only):
+Systems Detected: Salesforce (CRM), NetSuite (ERP), Rippling (HRIS), Stripe (Billing)  •  3 Subsidiaries  •  2 Currencies (USD, EUR)  •  6 Opportunity Stages  •  Hybrid Subscription Model
+Section 8 — Capability Assessment Summary
+For every desired module, SMPL documents current readiness against what has been discovered and decided so far.
+Field
+Type
+Notes / Purpose
+Capabilities Ready
+AUTO-GENERATED
+Fully supported by current connections and decisions.
+Capabilities Partial
+AUTO-GENERATED
+Supported with caveats or reduced confidence.
+Capabilities Unavailable
+AUTO-GENERATED
+Blocked pending a connector, decision, or data gap.
+For each capability, the summary documents:
+Current readiness (Ready / Partial / Unavailable)
+Confidence level
+Missing requirements, if any
+Recommended next steps
+Section 9 — Implementation Plan
+Generated automatically from Sections 7 and 8. This becomes the customer's implementation roadmap.
+Field
+Type
+Notes / Purpose
+Immediate Implementation
+AUTO-GENERATED
+Ready to build now with no blockers.
+Requires Customer Decision
+AUTO-GENERATED
+Blocked on an outstanding answer elsewhere in the CEP.
+Requires Additional Connector
+AUTO-GENERATED
+Blocked on a system not yet connected.
+Deferred Capability
+AUTO-GENERATED
+Explicitly postponed by customer choice.
+Future Enhancement
+AUTO-GENERATED
+Not currently supported by frozen architecture; tracked for roadmap.
+Appendix A — AI Discovery Rules
+Reinforced throughout the CEP: never ask the customer for information that can be determined automatically.
+AI Should Discover
+API versions
+Custom fields
+Object counts
+Pipelines
+Departments
+Currencies
+Subscription models
+Employee statuses
+Record types
+Product catalogs
+The Customer Should Only Answer
+Business definitions
+Business policies
+System ownership
+Reporting preferences
+Strategic priorities
+Appendix B — Customer Experience Principles
+The customer should feel that SMPL already understands their business. Discovery should feel conversational, not administrative.
+The customer spends their time confirming business decisions — not describing technical systems.
+The CEP behaves as a collaborative implementation document, not a lengthy questionnaire.
+Every question the customer sees should be one only they could answer.
+If AI can discover it, do not ask the customer.
