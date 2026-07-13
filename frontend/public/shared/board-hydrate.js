@@ -879,11 +879,104 @@
     });
   }
 
+  function ensureExportProgressPanel() {
+    var existing = document.getElementById("smplExportProgress");
+    if (existing) return existing;
+    var panel = document.createElement("div");
+    panel.id = "smplExportProgress";
+    panel.setAttribute("role", "status");
+    panel.style.cssText =
+      "position:fixed;right:20px;bottom:20px;z-index:99999;width:min(360px,calc(100vw - 32px));" +
+      "background:#0f172a;color:#e2e8f0;border:1px solid rgba(255,255,255,0.12);border-radius:12px;" +
+      "box-shadow:0 18px 40px rgba(0,0,0,0.35);padding:16px 16px 14px;font:13px/1.45 system-ui,sans-serif;";
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;">' +
+      '<div><div id="smplExportProgressTitle" style="font-weight:650;color:#fff;font-size:14px;">Preparing Executive Package</div>' +
+      '<div id="smplExportProgressMeta" style="color:#94a3b8;margin-top:4px;font-size:12px;">Starting…</div></div>' +
+      '<button type="button" id="smplExportProgressClose" style="background:transparent;border:0;color:#94a3b8;cursor:pointer;font-size:18px;line-height:1;" aria-label="Close">×</button></div>' +
+      '<ol id="smplExportProgressList" style="list-style:none;margin:0;padding:0;"></ol>';
+    document.body.appendChild(panel);
+    var closeBtn = document.getElementById("smplExportProgressClose");
+    if (closeBtn) {
+      closeBtn.onclick = function () {
+        panel.style.display = "none";
+      };
+    }
+    return panel;
+  }
+
+  function renderExportProgress(label, statusJson) {
+    var panel = ensureExportProgressPanel();
+    panel.style.display = "block";
+    var title = document.getElementById("smplExportProgressTitle");
+    var meta = document.getElementById("smplExportProgressMeta");
+    var list = document.getElementById("smplExportProgressList");
+    if (title) title.textContent = "Preparing " + label;
+    var msg = (statusJson && statusJson.message) || "Working…";
+    var eta = statusJson && statusJson.eta_seconds;
+    var etaLbl =
+      eta == null
+        ? ""
+        : eta <= 0
+          ? "Ready"
+          : "Estimated time remaining: ~" + Math.max(1, Math.round(eta / 60)) + " min";
+    if (meta) {
+      meta.textContent = etaLbl ? msg + " · " + etaLbl : msg;
+    }
+    var stages =
+      statusJson && Array.isArray(statusJson.progress) && statusJson.progress.length
+        ? statusJson.progress
+        : [
+            { id: "queued", label: "Export queued", done: true, current: false },
+            { id: "work", label: msg || "Working…", done: false, current: true },
+          ];
+    if (!list) return;
+    list.innerHTML = stages
+      .map(function (stage) {
+        var mark = stage.done ? "✓" : stage.current ? "●" : "○";
+        var color = stage.done ? "#4ade80" : stage.current ? "#fbbf24" : "#64748b";
+        return (
+          '<li style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">' +
+          '<span style="color:' +
+          color +
+          ';min-width:14px;">' +
+          mark +
+          "</span>" +
+          '<span style="color:' +
+          (stage.current || stage.done ? "#e2e8f0" : "#94a3b8") +
+          ';">' +
+          String(stage.label || "").replace(/</g, "&lt;") +
+          "</span></li>"
+        );
+      })
+      .join("");
+  }
+
+  function hideExportProgressSoon() {
+    setTimeout(function () {
+      var panel = document.getElementById("smplExportProgress");
+      if (panel) panel.style.display = "none";
+    }, 2500);
+  }
+
   async function pollAndDownloadExport(directBase, exportSpec, format, params) {
-    alert(
-      exportSpec.label +
-        " export started.\n\nGeneration can take 3–10 minutes. Your browser will download automatically when ready — keep this tab open.",
-    );
+    renderExportProgress(exportSpec.label, {
+      message: "Queued",
+      status: "queued",
+      progress: [
+        { id: "queued", label: "Export queued", done: false, current: true },
+        { id: "validated", label: "Validation complete", done: false, current: false },
+        { id: "intelligence", label: "Financial context ready", done: false, current: false },
+        {
+          id: "narrative",
+          label: format === "pptx" ? "Building PowerPoint" : "Building package",
+          done: false,
+          current: false,
+        },
+        { id: "complete", label: "Ready to download", done: false, current: false },
+      ],
+      eta_seconds: format === "pptx" ? 420 : 300,
+    });
     var jobPath =
       format === "pptx" ? "/api/v1/export/jobs/mda-deck" : "/api/v1/export/jobs/mda-package";
     var startUrl = boardLiveUrl(directBase, jobPath) + "?" + params.toString();
@@ -894,7 +987,13 @@
         120000,
       );
       if (!startRes.ok) {
-        alert(exportSpec.label + " export failed:\n" + (await boardApiErrorMessage(startRes)));
+        var startErr = await boardApiErrorMessage(startRes);
+        renderExportProgress(exportSpec.label, {
+          message: startErr,
+          status: "failed",
+          progress: [{ id: "failed", label: "Export failed", done: false, current: true }],
+        });
+        alert(exportSpec.label + " export failed:\n" + startErr);
         return "error";
       }
       var startJson = await startRes.json();
@@ -903,6 +1002,7 @@
         alert(exportSpec.label + " export failed: no job id returned from API.");
         return "error";
       }
+      renderExportProgress(exportSpec.label, startJson);
       var deadline = Date.now() + 600000;
       while (Date.now() < deadline) {
         await sleep(5000);
@@ -914,6 +1014,7 @@
         );
         if (!statusRes.ok) continue;
         var statusJson = await statusRes.json();
+        renderExportProgress(exportSpec.label, statusJson);
         if (statusJson.status === "failed") {
           alert(
             exportSpec.label +
@@ -928,6 +1029,7 @@
             exportSpec.label,
             true,
           );
+          hideExportProgressSoon();
           return "started";
         }
       }

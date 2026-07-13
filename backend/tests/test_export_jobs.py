@@ -91,3 +91,21 @@ def test_queue_depth_summary_shape() -> None:
     assert "failed" in summary
     assert "active_count" in summary
     assert "jobs" in summary
+
+
+def test_progress_stages_advance_with_message() -> None:
+    from app.services.reporting.export.export_jobs import ExportJob, job_status_payload
+
+    job = ExportJob(
+        job_id="progress-test",
+        kind="mda_deck",
+        status="running",
+        message="Generating MD&A deck (Prompt 5)…",
+    )
+    payload = job_status_payload(job)
+    assert "progress" in payload
+    assert payload["eta_seconds"] is not None
+    stages = payload["progress"]
+    assert stages[0]["done"] is True
+    assert stages[3]["current"] is True
+    assert stages[3]["label"] == "Building PowerPoint"

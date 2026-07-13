@@ -435,6 +435,65 @@ def complete_export_job(
         _db_update(job_id, **payload)
 
 
+def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
+    """Customer-facing checklist stages for export progress UI (Rev 4 §4A)."""
+    message = (job.message or "").lower()
+    status = job.status
+
+    stages = [
+        {"id": "queued", "label": "Export queued", "done": False, "current": False},
+        {"id": "validated", "label": "Validation complete", "done": False, "current": False},
+        {"id": "intelligence", "label": "Financial context ready", "done": False, "current": False},
+        {
+            "id": "narrative",
+            "label": "Building package" if job.kind == "mda_package" else "Building PowerPoint",
+            "done": False,
+            "current": False,
+        },
+        {"id": "complete", "label": "Ready to download", "done": False, "current": False},
+    ]
+
+    def mark(up_to: int) -> None:
+        for i, stage in enumerate(stages):
+            stage["done"] = i < up_to or (status == "complete" and i <= up_to)
+            stage["current"] = i == up_to and status not in ("complete", "failed")
+
+    if status == "complete" or "ready" in message:
+        for stage in stages:
+            stage["done"] = True
+            stage["current"] = False
+        return stages
+
+    if status == "queued" or message in ("", "queued") or message.startswith("queued"):
+        mark(0)
+    elif "collecting" in message or "starting" in message:
+        mark(1)
+    elif "three-statement" in message or "cash bridge" in message or "loading" in message:
+        mark(2)
+    elif "generating" in message or "prompt" in message or "building" in message:
+        mark(3)
+    else:
+        mark(1)
+
+    if status == "failed":
+        for stage in stages:
+            if stage["current"]:
+                stage["current"] = False
+                break
+
+    return stages
+
+
+def estimated_remaining_seconds(job: ExportJob) -> int | None:
+    if job.status in ("complete", "failed"):
+        return 0 if job.status == "complete" else None
+    elapsed = max(0, time.time() - job.created_at)
+    # Conservative close-week ETA: decks often 3–8 minutes
+    target = 420.0 if job.kind == "mda_deck" else 300.0
+    remaining = int(max(30, target - elapsed))
+    return remaining
+
+
 def job_status_payload(job: ExportJob) -> dict[str, Any]:
     return {
         "job_id": job.job_id,
@@ -447,6 +506,8 @@ def job_status_payload(job: ExportJob) -> dict[str, Any]:
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "durable": True,
+        "progress": progress_stages_for_job(job),
+        "eta_seconds": estimated_remaining_seconds(job),
     }
 
 
