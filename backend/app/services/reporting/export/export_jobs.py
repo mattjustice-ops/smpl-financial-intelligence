@@ -368,7 +368,14 @@ def submit_export_job(
         _jobs[job_id] = job
     _db_insert(job)
 
-    record_export_event("queued", kind=kind, organization_id=organization_id, job_id=job_id)
+    record_export_event(
+        "queued",
+        kind=kind,
+        organization_id=organization_id,
+        job_id=job_id,
+        as_of_period=job_meta.get("as_of_period"),
+        close_session_id=str(job_meta.get("close_session_id")) if job_meta.get("close_session_id") else None,
+    )
     _record_export_pipeline_safe(
         organization_id=organization_id,
         event_type="export_queued",
@@ -392,6 +399,8 @@ def submit_export_job(
                     organization_id=organization_id,
                     job_id=job_id,
                     duration_ms=duration_ms,
+                    as_of_period=job_meta.get("as_of_period"),
+                    close_session_id=str(job_meta.get("close_session_id")) if job_meta.get("close_session_id") else None,
                 )
                 complete_meta = dict(job_meta)
                 complete_meta["duration_ms"] = duration_ms
@@ -413,6 +422,8 @@ def submit_export_job(
                 job_id=job_id,
                 duration_ms=duration_ms,
                 error=f"{type(exc).__name__}: {exc}",
+                as_of_period=job_meta.get("as_of_period"),
+                close_session_id=str(job_meta.get("close_session_id")) if job_meta.get("close_session_id") else None,
             )
             fail_meta = dict(job_meta)
             fail_meta["duration_ms"] = duration_ms
@@ -466,14 +477,56 @@ def complete_export_job(
         _db_update(job_id, **payload)
 
 
+
+def update_export_job_metadata(job_id: str, **fields: Any) -> None:
+    """Merge metadata keys onto in-memory + durable job records."""
+    with _lock:
+        job = _jobs.get(job_id)
+        if job is not None:
+            meta = dict(job.metadata or {})
+            meta.update(fields)
+            job.metadata = meta
+            job.updated_at = time.time()
+            snapshot_meta = dict(meta)
+        else:
+            snapshot_meta = None
+    if snapshot_meta is not None:
+        _db_update(job_id, metadata_json=snapshot_meta)
+    else:
+        try:
+            from app.models.export_job import ExportJobRecord
+
+            db = _session()
+            try:
+                row = db.get(ExportJobRecord, uuid.UUID(job_id))
+                if row is None:
+                    return
+                meta = dict(row.metadata_json or {})
+                meta.update(fields)
+                row.metadata_json = meta
+                row.updated_at = _utcnow()
+                db.commit()
+            finally:
+                db.close()
+        except Exception:
+            logger.debug("Failed to update export job metadata %s", job_id, exc_info=True)
+
+
 def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
     """Customer-facing checklist stages for export progress UI (Rev 4 §4A)."""
     message = (job.message or "").lower()
     status = job.status
 
+    validation_label = "Validation complete"
+    meta = job.metadata or {}
+    passed = meta.get("validation_passed")
+    total = meta.get("validation_total")
+    if passed is not None and total:
+        validation_label = f"Validation complete ({passed}/{total} checks)"
+
     stages = [
         {"id": "queued", "label": "Export queued", "done": False, "current": False},
-        {"id": "validated", "label": "Validation complete", "done": False, "current": False},
+        {"id": "validated", "label": validation_label, "done": False, "current": False},
         {"id": "intelligence", "label": "Financial context ready", "done": False, "current": False},
         {
             "id": "narrative",

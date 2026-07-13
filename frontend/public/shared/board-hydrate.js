@@ -865,6 +865,13 @@
     var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
     var asOf = summary.as_of_period || boardActiveCloseMonth();
     var label = summary.trust_label || "Needs review";
+    var freezeBit = "";
+    if (summary.freeze_status) {
+      freezeBit =
+        summary.freeze_status === "COMPLETE"
+          ? " Freeze pack COMPLETE."
+          : " Freeze: " + summary.freeze_status + ".";
+    }
     var head =
       '<div class="trust-panel-head">' +
       label +
@@ -875,7 +882,9 @@
       " checks</div>" +
       '<div class="trust-panel-sub">Close data as of ' +
       asOf +
-      ". Warehouse tie-outs in plain language — expand any row for what it proves.</div>";
+      "." +
+      freezeBit +
+      " Verified requires validation pass/warning and a COMPLETE freeze pack.</div>";
 
     var checks = Array.isArray(summary.checks) ? summary.checks.slice() : [];
     checks.sort(function (a, b) {
@@ -1208,6 +1217,16 @@
       );
       if (!startRes.ok) {
         var startErr = await boardApiErrorMessage(startRes);
+        if (startRes.status === 429) {
+          renderExportFailed(exportSpec.label, startErr);
+          alert(
+            exportSpec.label +
+              " regenerate limit reached for this close period.\n\n" +
+              startErr +
+              "\n\nContact SMPL support if you need an exception.",
+          );
+          return "error";
+        }
         renderExportFailed(exportSpec.label, startErr);
         alert(exportSpec.label + " export failed:\n" + startErr);
         return "error";

@@ -118,6 +118,9 @@ def record_export_event(
     job_id: str,
     duration_ms: int | None = None,
     error: str | None = None,
+    as_of_period: str | None = None,
+    close_session_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     event_type = {
         "queued": "export_start",
@@ -125,15 +128,21 @@ def record_export_event(
         "complete": "export_complete",
         "failed": "export_failed",
     }.get(status, f"export_{status}")
-    metadata: dict[str, Any] = {"job_id": job_id, "kind": kind}
+    payload: dict[str, Any] = {"job_id": job_id, "kind": kind}
+    if as_of_period:
+        payload["as_of_period"] = as_of_period
+    if close_session_id:
+        payload["close_session_id"] = close_session_id
+    if metadata:
+        payload.update(metadata)
     if error:
-        metadata["error"] = error[:2000]
+        payload["error"] = error[:2000]
     record_usage_event(
         event_type=event_type,
         organization_id=organization_id,
         feature=kind,
         duration_ms=duration_ms,
-        metadata=metadata,
+        metadata=payload,
     )
 
 

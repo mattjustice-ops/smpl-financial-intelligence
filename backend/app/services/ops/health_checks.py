@@ -79,11 +79,15 @@ def run_platform_health_checks(db: Session, *, collect_storage: bool = True) -> 
         )
     )
     export_failures = int(failed_exports or 0)
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    fail_threshold = int(getattr(settings, "smpl_close_export_fail_alert_24h", 2) or 2)
     checks.append(
         _check(
             "export_failures_24h",
-            export_failures == 0,
-            detail=f"{export_failures} failed export(s) in last 24h",
+            export_failures < fail_threshold,
+            detail=f"{export_failures} failed export(s) in last 24h (alert at ≥{fail_threshold})",
         )
     )
 
@@ -94,11 +98,27 @@ def run_platform_health_checks(db: Session, *, collect_storage: bool = True) -> 
         if job.get("status") in ("running", "queued")
         and (job.get("running_seconds") or job.get("age_seconds") or 0) > 900
     ]
+    depth_threshold = int(getattr(settings, "smpl_close_queue_alert_depth", 4) or 4)
+    oldest_threshold = int(getattr(settings, "smpl_close_queue_alert_oldest_seconds", 600) or 600)
+    active_count = sum(1 for job in active_jobs if job.get("status") in ("queued", "running"))
+    oldest_wait = 0
+    for job in active_jobs:
+        if job.get("status") == "queued":
+            oldest_wait = max(oldest_wait, int(job.get("age_seconds") or 0))
+    queue_ok = (
+        len(stuck_jobs) == 0
+        and active_count < depth_threshold
+        and oldest_wait < oldest_threshold
+    )
     checks.append(
         _check(
             "export_job_queue",
-            len(stuck_jobs) == 0,
-            detail=f"{len(active_jobs)} active job(s), {len(stuck_jobs)} over 15 min",
+            queue_ok,
+            detail=(
+                f"{active_count} active (alert at ≥{depth_threshold}), "
+                f"{len(stuck_jobs)} over 15 min, oldest queued {oldest_wait}s "
+                f"(alert at ≥{oldest_threshold}s)"
+            ),
         )
     )
 

@@ -156,6 +156,11 @@ type PlatformHealthResponse = {
     created_at: string;
     metadata: Record<string, unknown> | null;
   }>;
+  deploy_freeze?: {
+    active: boolean;
+    note?: string;
+    until?: string | null;
+  };
 };
 
 function warehouseStatusLabel(status: WarehouseOrgHealth["status"]): string {
@@ -415,6 +420,19 @@ export function SmplOpsDashboard() {
       {error ? (
         <div className="mb-6 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
           {error}
+        </div>
+      ) : null}
+
+      {health?.deploy_freeze?.active ? (
+        <div className="mb-6 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          <p className="font-semibold text-amber-200">Close-week deploy freeze</p>
+          <p className="mt-1 text-amber-100/90">
+            {health.deploy_freeze.note ||
+              "Avoid non-critical production deploys during close week."}
+          </p>
+          {health.deploy_freeze.until ? (
+            <p className="mt-1 text-xs text-amber-200/70">Until: {health.deploy_freeze.until}</p>
+          ) : null}
         </div>
       ) : null}
 

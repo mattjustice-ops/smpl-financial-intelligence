@@ -129,7 +129,20 @@ def test_progress_stages_show_failure_retry() -> None:
     assert "try again" in stages[-1]["label"].lower()
 
 
-def test_mda_export_jobs_close_db_before_generation() -> None:
+def test_progress_stages_include_validation_check_counts() -> None:
+    from app.services.reporting.export.export_jobs import ExportJob, job_status_payload
+
+    job = ExportJob(
+        job_id="checks-test",
+        kind="mda_deck",
+        status="running",
+        message="Validation complete (9/12 checks)…",
+        metadata={"validation_passed": 9, "validation_total": 12},
+    )
+    stages = job_status_payload(job)["progress"]
+    assert stages[1]["label"] == "Validation complete (9/12 checks)"
+    assert stages[1]["done"] is True or stages[1]["current"] is True
+
     """Regression: Neon IdleInTransactionSessionTimeout when SessionLocal stays open through Claude."""
     import inspect
 

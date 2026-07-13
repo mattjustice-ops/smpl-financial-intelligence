@@ -50,6 +50,10 @@ class ExportValidationSummary(BaseModel):
     as_of_period: str | None = None
     trust_status: Literal["verified", "needs_review", "blocked"] | None = None
     trust_label: str | None = None
+    # Freeze linkage (§6c finish) — Verified only when freeze COMPLETE.
+    freeze_status: str | None = None
+    freeze_built_at: str | None = None
+    close_ready_phase1: bool | None = None
 
 
 class GlDetailRow(BaseModel):

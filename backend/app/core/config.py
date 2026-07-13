@@ -70,6 +70,37 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="SMPL_USAGE_LIMITS_ENABLED",
     )
+    # Prompt 5 MD&A deck soft cap per org × close period (YYYY-MM).
+    smpl_prompt5_deck_per_close: int = Field(
+        default=5,
+        validation_alias="SMPL_PROMPT5_DECK_PER_CLOSE",
+    )
+    # Close-week ops: deploy freeze banner + queue alert thresholds.
+    smpl_deploy_freeze: bool = Field(
+        default=False,
+        validation_alias="SMPL_DEPLOY_FREEZE",
+    )
+    smpl_deploy_freeze_note: str = Field(
+        default="Close-week deploy freeze is active — avoid non-critical production deploys.",
+        validation_alias="SMPL_DEPLOY_FREEZE_NOTE",
+    )
+    smpl_deploy_freeze_until: str | None = Field(
+        default=None,
+        validation_alias="SMPL_DEPLOY_FREEZE_UNTIL",
+        description="Optional ISO date or human note for when freeze lifts",
+    )
+    smpl_close_queue_alert_depth: int = Field(
+        default=4,
+        validation_alias="SMPL_CLOSE_QUEUE_ALERT_DEPTH",
+    )
+    smpl_close_queue_alert_oldest_seconds: int = Field(
+        default=600,
+        validation_alias="SMPL_CLOSE_QUEUE_ALERT_OLDEST_SECONDS",
+    )
+    smpl_close_export_fail_alert_24h: int = Field(
+        default=2,
+        validation_alias="SMPL_CLOSE_EXPORT_FAIL_ALERT_24H",
+    )
 
     @field_validator("openai_api_key", "anthropic_api_key", mode="before")
     @classmethod

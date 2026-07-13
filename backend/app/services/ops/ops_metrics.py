@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.organization import Organization
 from app.models.usage_event import UsageEvent
+from app.core.config import get_settings
 from app.services.ops.ops_period import format_calendar_month, parse_calendar_month, recent_calendar_months
 from app.services.ops.storage_snapshot import (
     maybe_collect_storage_snapshot,
@@ -274,7 +275,36 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
     alert_checks: list[dict[str, Any]] = []
     if latest_health_check and latest_health_check.metadata_json:
         alert_status = latest_health_check.metadata_json.get("status", "unknown")
-        alert_checks = latest_health_check.metadata_json.get("checks", [])
+        alert_checks = list(latest_health_check.metadata_json.get("checks", []) or [])
+
+    settings = get_settings()
+    fail_threshold = int(getattr(settings, "smpl_close_export_fail_alert_24h", 2) or 2)
+    depth_threshold = int(getattr(settings, "smpl_close_queue_alert_depth", 4) or 4)
+    oldest_threshold = int(getattr(settings, "smpl_close_queue_alert_oldest_seconds", 600) or 600)
+    export_failures_n = int(failed_exports_24h or 0)
+    oldest_queued = int(export_queue.get("oldest_queued_seconds") or 0)
+    active_count = int(export_queue.get("active_count") or 0)
+    live_checks = [
+        {
+            "name": "close_week_export_failures",
+            "ok": export_failures_n < fail_threshold,
+            "detail": f"{export_failures_n} failed export(s) in last 24h (alert at ≥{fail_threshold})",
+        },
+        {
+            "name": "close_week_queue_depth",
+            "ok": active_count < depth_threshold and oldest_queued < oldest_threshold,
+            "detail": (
+                f"{active_count} active jobs (alert at ≥{depth_threshold}), "
+                f"oldest queued {oldest_queued}s (alert at ≥{oldest_threshold}s)"
+            ),
+        },
+    ]
+    # Prefer live close-week signals on the dashboard even before a stored health check runs.
+    for live in live_checks:
+        alert_checks = [c for c in alert_checks if c.get("name") != live["name"]]
+        alert_checks.append(live)
+    if any(not c.get("ok") for c in live_checks):
+        alert_status = "degraded"
 
     warehouse = assess_all_customer_warehouses(db)
     warehouse_ok = bool(warehouse.get("ok"))
@@ -335,4 +365,9 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
             for event in recent_failures
         ],
         "checked_at_epoch": now,
+        "deploy_freeze": {
+            "active": bool(getattr(settings, "smpl_deploy_freeze", False)),
+            "note": getattr(settings, "smpl_deploy_freeze_note", "") or "",
+            "until": getattr(settings, "smpl_deploy_freeze_until", None),
+        },
     }

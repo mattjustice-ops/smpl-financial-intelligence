@@ -55,3 +55,29 @@ def test_apply_customer_validation_labels_enriches_summary() -> None:
     assert enriched.checks[0].customer_label
     assert "ARR" in (enriched.checks[0].customer_label or "")
     assert enriched.checks[1].customer_label
+
+
+def test_verified_requires_complete_freeze() -> None:
+    from app.services.reporting.export.validation_labels import apply_freeze_to_trust
+
+    base = ExportValidationSummary(
+        status="pass",
+        passed_count=2,
+        warning_count=0,
+        failed_count=0,
+        as_of_period="2026-06",
+        trust_status="verified",
+        trust_label="Verified",
+    )
+    without_freeze = apply_freeze_to_trust(base, freeze_status="missing")
+    assert without_freeze.trust_status == "needs_review"
+    assert without_freeze.close_ready_phase1 is False
+
+    with_freeze = apply_freeze_to_trust(base, freeze_status="COMPLETE", freeze_built_at="2026-07-13T12:00:00+00:00")
+    assert with_freeze.trust_status == "verified"
+    assert with_freeze.close_ready_phase1 is True
+    assert with_freeze.freeze_status == "COMPLETE"
+
+    stale = apply_freeze_to_trust(base, freeze_status="STALE")
+    assert stale.trust_status == "needs_review"
+    assert stale.close_ready_phase1 is False

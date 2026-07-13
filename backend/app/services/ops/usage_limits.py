@@ -25,6 +25,9 @@ DEFAULT_USAGE_LIMITS: dict[str, int | float] = {
     "llm_calls_monthly": 10,
 }
 
+# Soft regenerate cap for Prompt 5 (MD&A deck) per org × close period.
+DEFAULT_PROMPT5_DECK_PER_CLOSE = 5
+
 
 @dataclass(frozen=True)
 class MonthlyUsageTotals:
@@ -77,6 +80,67 @@ def monthly_usage_totals(db: Session, organization_id: uuid.UUID) -> MonthlyUsag
         llm_calls=int(ai_row[1] or 0),
         exports_complete=int(exports or 0),
     )
+
+
+def count_mda_deck_runs_for_close(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+) -> int:
+    """Count Prompt 5 deck starts for this org/period (durable usage ledger)."""
+    from app.services.reporting.period_utils import to_period
+
+    period = to_period(as_of_period)
+    rows = db.scalars(
+        select(UsageEvent).where(
+            UsageEvent.organization_id == organization_id,
+            UsageEvent.feature == "mda_deck",
+            UsageEvent.event_type == "export_start",
+        )
+    ).all()
+    count = 0
+    for row in rows:
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        if str(meta.get("as_of_period") or "") == period:
+            count += 1
+    return count
+
+
+def assert_prompt5_regen_cap(
+    db: Session,
+    org: Organization,
+    as_of_period: str,
+) -> None:
+    """Soft cap Prompt 5 deck regenerations for one close period (HTTP 429)."""
+    settings = get_settings()
+    if not getattr(settings, "smpl_usage_limits_enabled", True):
+        return
+    from app.services.reporting.period_utils import to_period
+
+    period = to_period(as_of_period)
+    limit = int(
+        getattr(settings, "smpl_prompt5_deck_per_close", DEFAULT_PROMPT5_DECK_PER_CLOSE)
+        or DEFAULT_PROMPT5_DECK_PER_CLOSE
+    )
+    if limit <= 0:
+        return
+    used = count_mda_deck_runs_for_close(db, org.id, period)
+    if used >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "prompt5_regen_cap_exceeded",
+                "metric": "prompt5_deck_per_close",
+                "plan": normalize_plan(org.plan),
+                "limit": limit,
+                "used": used,
+                "as_of_period": period,
+                "message": (
+                    f"MD&A deck regenerate limit reached for {period} "
+                    f"({used}/{limit}). Wait for the next close period or contact SMPL support."
+                ),
+            },
+        )
 
 
 def _usage_limit_error(

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.dashboard_routes import dashboard_params
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
-from app.services.ops.usage_limits import assert_within_usage_limits
+from app.services.ops.usage_limits import assert_prompt5_regen_cap, assert_within_usage_limits
 from app.core.config import get_settings
 from app.services.reporting.export.board_commentary_service import (
     SlideCommentary,
@@ -277,6 +277,28 @@ def export_validation_precheck(
     from app.services.reporting.export.validation_labels import apply_customer_validation_labels
 
     summary = apply_customer_validation_labels(summary, as_of_period=str(params["as_of_period"]))
+
+    try:
+        from app.models.close_context_blob import CloseContextBlob
+        from app.services.reporting.export.validation_labels import apply_freeze_to_trust
+        from sqlalchemy import select
+
+        period = str(params["as_of_period"])
+        blob = db.scalars(
+            select(CloseContextBlob).where(
+                CloseContextBlob.organization_id == organization_id,
+                CloseContextBlob.as_of_period == period,
+            )
+        ).first()
+        freeze_status = blob.status if blob else "missing"
+        freeze_built_at = blob.built_at.isoformat() if blob and blob.built_at else None
+        summary = apply_freeze_to_trust(
+            summary,
+            freeze_status=freeze_status,
+            freeze_built_at=freeze_built_at,
+        )
+    except Exception:
+        logger.debug("Freeze status enrichment for validation skipped", exc_info=True)
 
     try:
         from app.services.close_context.close_session_service import mark_validation_complete
@@ -581,6 +603,24 @@ def _run_mda_deck_job(
         )
         if include_validation and block_on_failure:
             _check_validation(bundle, True)
+        if bundle.validation is not None:
+            from app.services.reporting.export.export_jobs import update_export_job_metadata
+
+            total = (
+                (bundle.validation.passed_count or 0)
+                + (bundle.validation.warning_count or 0)
+                + (bundle.validation.failed_count or 0)
+            )
+            update_export_job_metadata(
+                job_id,
+                validation_passed=bundle.validation.passed_count or 0,
+                validation_total=total,
+                validation_status=bundle.validation.status,
+            )
+            update_export_job_message(
+                job_id,
+                f"Validation complete ({bundle.validation.passed_count or 0}/{total} checks)…",
+            )
         update_export_job_message(job_id, "Loading three-statement and cash bridge…")
         ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
     finally:
@@ -719,7 +759,7 @@ def start_mda_deck_job(
         submit_export_job,
     )
 
-    _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
+    org = _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
     bundle_params = _export_params(
         scenario,
@@ -736,6 +776,7 @@ def start_mda_deck_job(
         owner,
     )
     deck_period = as_of or bundle_params["as_of_period"]
+    assert_prompt5_regen_cap(db, org, deck_period)
     try:
         job = submit_export_job(
             "mda_deck",

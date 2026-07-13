@@ -141,6 +141,33 @@ def trust_status_for(status: str) -> tuple[TrustStatus, str]:
     return _STATUS_TO_TRUST.get(status, ("needs_review", "Needs review"))
 
 
+def apply_freeze_to_trust(
+    summary: ExportValidationSummary,
+    *,
+    freeze_status: str | None,
+    freeze_built_at: str | None = None,
+) -> ExportValidationSummary:
+    """Verified only when validation is pass/warning AND freeze blob is COMPLETE."""
+    close_ready = bool(
+        summary.status in ("pass", "warning") and freeze_status == "COMPLETE"
+    )
+    if summary.status == "fail":
+        trust_status, trust_label = "blocked", "Blocked"
+    elif close_ready:
+        trust_status, trust_label = "verified", "Verified"
+    else:
+        trust_status, trust_label = "needs_review", "Needs review"
+    return summary.model_copy(
+        update={
+            "freeze_status": freeze_status or "missing",
+            "freeze_built_at": freeze_built_at,
+            "close_ready_phase1": close_ready,
+            "trust_status": trust_status,
+            "trust_label": trust_label,
+        }
+    )
+
+
 def apply_customer_validation_labels(
     summary: ExportValidationSummary,
     *,
