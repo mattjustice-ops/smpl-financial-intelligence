@@ -278,6 +278,19 @@ def export_validation_precheck(
 
     summary = apply_customer_validation_labels(summary, as_of_period=str(params["as_of_period"]))
 
+    try:
+        from app.services.close_context.close_session_service import mark_validation_complete
+
+        mark_validation_complete(
+            db,
+            organization_id,
+            str(params["as_of_period"]),
+            validation_status=summary.status,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
     queued = schedule_auto_freeze_after_validation(
         db,
         organization_id,
@@ -660,6 +673,7 @@ def start_mda_package_job(
             filename=f"SMPL_MDA_Package_{period_label}.xlsx",
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             organization_id=organization_id,
+            as_of_period=bundle_params.get("as_of_period") or as_of,
         )
     except ExportJobConflictError as exc:
         raise HTTPException(
@@ -740,6 +754,7 @@ def start_mda_deck_job(
             filename=f"mda_deck_{deck_period}.pptx",
             content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             organization_id=organization_id,
+            as_of_period=bundle_params.get("as_of_period") or as_of,
         )
     except ExportJobConflictError as exc:
         raise HTTPException(

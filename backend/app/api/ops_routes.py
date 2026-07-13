@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -39,6 +41,42 @@ def get_platform_health(
 ) -> dict:
     payload = platform_health_summary(db)
     record_usage_event(event_type="platform_check", feature="ops_dashboard", db=db)
+    return payload
+
+
+@ops_router.get("/close-readiness")
+def get_close_readiness(
+    month: str = Query(..., description="Close period YYYY-MM"),
+    ensure_sessions: bool = Query(
+        False,
+        description="When true, create close_session rows for orgs that lack one",
+    ),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_internal_auth_key),
+) -> dict:
+    """Month-End Readiness Dashboard (§6) — one row per org for the close period."""
+    from app.services.close_context.close_session_service import list_close_readiness
+    from app.services.ops.ops_period import parse_calendar_month
+
+    try:
+        parse_calendar_month(month)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return list_close_readiness(db, as_of_period=month, ensure_sessions=ensure_sessions)
+
+
+@ops_router.get("/close-sessions/{session_id}")
+def get_close_session_detail(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_internal_auth_key),
+) -> dict:
+    """Support lineage lookup for a Close Session ID (§4E)."""
+    from app.services.close_context.close_session_service import close_session_lineage
+
+    payload = close_session_lineage(db, session_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Close session not found")
     return payload
 
 

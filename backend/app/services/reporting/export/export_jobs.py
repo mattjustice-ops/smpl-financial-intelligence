@@ -52,6 +52,7 @@ class ExportJob:
     content_type: str = ""
     content: bytes | None = None
     headers_extra: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -71,6 +72,7 @@ def _record_to_job(row: Any) -> ExportJob:
     created = row.created_at.timestamp() if row.created_at else time.time()
     updated = row.updated_at.timestamp() if row.updated_at else created
     headers = row.headers_extra if isinstance(row.headers_extra, dict) else {}
+    meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
     return ExportJob(
         job_id=str(row.id),
         kind=row.kind,  # type: ignore[arg-type]
@@ -81,6 +83,7 @@ def _record_to_job(row: Any) -> ExportJob:
         content_type=row.content_type or "",
         content=bytes(row.content) if row.content is not None else None,
         headers_extra={str(k): str(v) for k, v in headers.items()},
+        metadata={str(k): v for k, v in meta.items()},
         error=row.error,
         created_at=created,
         updated_at=updated,
@@ -105,6 +108,7 @@ def _db_insert(job: ExportJob) -> None:
                     content_type=job.content_type,
                     error=job.error,
                     headers_extra=job.headers_extra or None,
+                    metadata_json=job.metadata or None,
                     expires_at=expires,
                 )
             )
@@ -285,6 +289,7 @@ def _update(job_id: str, **fields: Any) -> ExportJob:
             content_type=job.content_type,
             content=job.content,
             headers_extra=dict(job.headers_extra),
+            metadata=dict(job.metadata),
             error=job.error,
             created_at=job.created_at,
             updated_at=job.updated_at,
@@ -318,6 +323,8 @@ def submit_export_job(
     filename: str,
     content_type: str,
     organization_id: uuid.UUID | None = None,
+    as_of_period: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> ExportJob:
     from app.services.ops.usage_tracking import record_export_event
 
@@ -330,6 +337,24 @@ def submit_export_job(
         if active:
             raise ExportJobConflictError(organization_id, active)
 
+    job_meta: dict[str, Any] = dict(metadata or {})
+    if as_of_period:
+        job_meta["as_of_period"] = as_of_period
+    if organization_id is not None and as_of_period:
+        try:
+            from app.db.session import SessionLocal
+            from app.services.close_context.close_session_service import get_or_create_close_session
+
+            db = SessionLocal()
+            try:
+                session = get_or_create_close_session(db, organization_id, as_of_period)
+                job_meta["close_session_id"] = str(session.id)
+                db.commit()
+            finally:
+                db.close()
+        except Exception:
+            logger.debug("Close session stamp on export submit skipped", exc_info=True)
+
     job_id = str(uuid.uuid4())
     job = ExportJob(
         job_id=job_id,
@@ -337,6 +362,7 @@ def submit_export_job(
         organization_id=organization_id,
         filename=filename,
         content_type=content_type,
+        metadata=job_meta,
     )
     with _lock:
         _jobs[job_id] = job
@@ -348,6 +374,7 @@ def submit_export_job(
         event_type="export_queued",
         export_kind=kind,
         job_id=job_id,
+        metadata=job_meta,
     )
 
     def _wrapped() -> None:
@@ -366,12 +393,14 @@ def submit_export_job(
                     job_id=job_id,
                     duration_ms=duration_ms,
                 )
+                complete_meta = dict(job_meta)
+                complete_meta["duration_ms"] = duration_ms
                 _record_export_pipeline_safe(
                     organization_id=organization_id,
                     event_type="export_complete",
                     export_kind=kind,
                     job_id=job_id,
-                    metadata={"duration_ms": duration_ms},
+                    metadata=complete_meta,
                 )
         except Exception as exc:
             logger.exception("Export job %s failed", job_id)
@@ -385,13 +414,15 @@ def submit_export_job(
                 duration_ms=duration_ms,
                 error=f"{type(exc).__name__}: {exc}",
             )
+            fail_meta = dict(job_meta)
+            fail_meta["duration_ms"] = duration_ms
             _record_export_pipeline_safe(
                 organization_id=organization_id,
                 event_type="export_failed",
                 export_kind=kind,
                 job_id=job_id,
                 error=f"{type(exc).__name__}: {exc}",
-                metadata={"duration_ms": duration_ms},
+                metadata=fail_meta,
             )
 
     _executor.submit(_wrapped)
@@ -515,6 +546,8 @@ def job_status_payload(job: ExportJob) -> dict[str, Any]:
         "filename": job.filename,
         "error": job.error,
         "organization_id": str(job.organization_id) if job.organization_id else None,
+        "close_session_id": job.metadata.get("close_session_id") if job.metadata else None,
+        "as_of_period": job.metadata.get("as_of_period") if job.metadata else None,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "durable": True,

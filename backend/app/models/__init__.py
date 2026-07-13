@@ -42,6 +42,7 @@ from app.models.user import OrganizationMember, User
 from app.models.forecast_version import ForecastVersion
 from app.models.organization import Organization
 from app.models.close_context_blob import CloseContextBlob
+from app.models.close_session import CloseSession
 from app.models.export_job import ExportJobRecord
 from app.models.pipeline import IngestBatch, PipelineEvent
 from app.models.quote_submission import QuoteSubmission
@@ -84,6 +85,7 @@ __all__ = [
     "GlActual",
     "HeadcountPlan",
     "CloseContextBlob",
+    "CloseSession",
     "ExportJobRecord",
     "IngestBatch",
     "Invoice",

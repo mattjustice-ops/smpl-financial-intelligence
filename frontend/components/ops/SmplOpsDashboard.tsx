@@ -8,7 +8,38 @@ import {
   type UsageLimitKey,
 } from "@/lib/entitlements/usage-limits";
 
-type TabId = "usage" | "health";
+type TabId = "usage" | "health" | "readiness";
+
+type CloseReadinessRow = {
+  organization_id: string;
+  organization_name: string | null;
+  plan: string | null;
+  as_of_period: string;
+  close_session_id: string | null;
+  close_session_status: string | null;
+  validation_status: string;
+  trust_label: string | null;
+  freeze_status: string;
+  queue_status: {
+    status: string;
+    active_count: number;
+    latest_kind: string | null;
+    latest_status: string | null;
+  };
+  operational_confidence: string;
+  close_ready_phase1: boolean;
+  customer_ladder: string;
+  as_of_timestamp: string | null;
+  last_successful_refresh: string | null;
+};
+
+type CloseReadinessResponse = {
+  as_of_period: string;
+  generated_at: string;
+  organizations_total: number;
+  organizations_ready: number;
+  organizations: CloseReadinessRow[];
+};
 
 type CustomerRow = {
   organization_id: string | null;
@@ -214,6 +245,7 @@ export function SmplOpsDashboard() {
   const [tab, setTab] = useState<TabId>("usage");
   const [usage, setUsage] = useState<CustomerUsageResponse | null>(null);
   const [health, setHealth] = useState<PlatformHealthResponse | null>(null);
+  const [readiness, setReadiness] = useState<CloseReadinessResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [periodMode, setPeriodMode] = useState<"month" | "rolling">("month");
@@ -264,9 +296,16 @@ export function SmplOpsDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [usageRes, healthRes] = await Promise.all([
+      const readinessMonth =
+        selectedMonth ||
+        `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}`;
+      const [usageRes, healthRes, readinessRes] = await Promise.all([
         fetch(`/api/ops/customer-usage?${usageQuery}`, { cache: "no-store" }),
         fetch("/api/ops/platform-health", { cache: "no-store" }),
+        fetch(
+          `/api/ops/close-readiness?month=${encodeURIComponent(readinessMonth)}`,
+          { cache: "no-store" },
+        ),
       ]);
       if (!usageRes.ok) {
         throw new Error(`Customer usage API returned ${usageRes.status}`);
@@ -276,12 +315,17 @@ export function SmplOpsDashboard() {
       }
       setUsage((await usageRes.json()) as CustomerUsageResponse);
       setHealth((await healthRes.json()) as PlatformHealthResponse);
+      if (readinessRes.ok) {
+        setReadiness((await readinessRes.json()) as CloseReadinessResponse);
+      } else {
+        setReadiness(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [usageQuery]);
+  }, [usageQuery, selectedMonth]);
 
   useEffect(() => {
     void load();
@@ -310,7 +354,7 @@ export function SmplOpsDashboard() {
             Internal · SMPL Ops
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white md:text-4xl">
-            Customer usage &amp; platform health
+            Customer usage, platform health &amp; close readiness
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
             AI spend, Neon storage footprint, and export volume by workspace — calendar months
@@ -350,6 +394,7 @@ export function SmplOpsDashboard() {
           [
             ["usage", "Customer usage"],
             ["health", "Platform health"],
+            ["readiness", "Close readiness"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -825,6 +870,139 @@ export function SmplOpsDashboard() {
               </ul>
             )}
           </div>
+        </section>
+      ) : null}
+
+      {tab === "readiness" ? (
+        <section className="space-y-6">
+          <div className="flex flex-wrap items-end gap-4 rounded-xl border border-white/10 bg-slate-900/40 p-4">
+            <label className="text-sm text-slate-400">
+              Close month
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="ml-2 rounded-md border border-white/15 bg-slate-950 px-2 py-1.5 text-white"
+              >
+                {monthOptions.map((month) => (
+                  <option key={month} value={month}>
+                    {formatMonthLabel(month)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {readiness ? (
+              <p className="text-sm text-slate-400">
+                {readiness.organizations_ready}/{readiness.organizations_total} Close Ready
+                (Phase 1) · as of {formatMonthLabel(readiness.as_of_period)}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-500">
+                Close readiness requires migration <code>close_001</code> on the API database.
+              </p>
+            )}
+          </div>
+
+          {readiness ? (
+            <div className="overflow-x-auto rounded-xl border border-white/10 bg-slate-900/40">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Organization</th>
+                    <th className="px-4 py-3 font-medium">Session</th>
+                    <th className="px-4 py-3 font-medium">Validation</th>
+                    <th className="px-4 py-3 font-medium">Freeze</th>
+                    <th className="px-4 py-3 font-medium">Queue</th>
+                    <th className="px-4 py-3 font-medium">Ready</th>
+                    <th className="px-4 py-3 font-medium">Ladder</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {readiness.organizations.map((row) => (
+                    <tr key={row.organization_id} className="text-slate-300">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-white">
+                          {row.organization_name || row.organization_id}
+                        </div>
+                        {row.plan ? (
+                          <div className="text-xs text-slate-500">{row.plan}</div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                        {row.close_session_id ? (
+                          <button
+                            type="button"
+                            className="hover:text-teal-300"
+                            title="Copy close session ID"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(row.close_session_id || "");
+                            }}
+                          >
+                            {row.close_session_id.slice(0, 8)}…
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                        {row.close_session_status ? (
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {row.close_session_status}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={
+                            row.validation_status === "pass"
+                              ? "text-teal-300"
+                              : row.validation_status === "warning"
+                                ? "text-amber-300"
+                                : row.validation_status === "fail"
+                                  ? "text-rose-300"
+                                  : "text-slate-500"
+                          }
+                        >
+                          {row.trust_label || row.validation_status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={
+                            row.freeze_status === "COMPLETE"
+                              ? "text-teal-300"
+                              : row.freeze_status === "STALE"
+                                ? "text-amber-300"
+                                : "text-slate-500"
+                          }
+                        >
+                          {row.freeze_status}
+                        </span>
+                        {row.as_of_timestamp ? (
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {new Date(row.as_of_timestamp).toLocaleString()}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">
+                        {row.queue_status.status}
+                        {row.queue_status.latest_kind
+                          ? ` · ${row.queue_status.latest_kind}`
+                          : ""}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={
+                            row.close_ready_phase1 ? "text-teal-300" : "text-slate-500"
+                          }
+                        >
+                          {row.close_ready_phase1 ? "Phase 1 ready" : "Not ready"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">{row.customer_ladder}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </main>

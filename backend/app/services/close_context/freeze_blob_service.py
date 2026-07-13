@@ -213,6 +213,16 @@ def build_and_store_freeze_blob(
         row.built_at = built_at
         row.updated_at = built_at
 
+    try:
+        from app.services.close_context.close_session_service import mark_freeze_complete
+
+        session = mark_freeze_complete(db, organization_id, period)
+        metadata = dict(metadata or {})
+        metadata["close_session_id"] = str(session.id)
+        row.metadata_json = metadata
+    except Exception:
+        logger.debug("Close session stamp on freeze skipped", exc_info=True)
+
     db.commit()
     db.refresh(row)
 
