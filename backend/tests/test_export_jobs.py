@@ -127,3 +127,21 @@ def test_progress_stages_show_failure_retry() -> None:
     assert stages[-1]["id"] == "failed"
     assert stages[-1]["failed"] is True
     assert "try again" in stages[-1]["label"].lower()
+
+
+def test_mda_export_jobs_close_db_before_generation() -> None:
+    """Regression: Neon IdleInTransactionSessionTimeout when SessionLocal stays open through Claude."""
+    import inspect
+
+    from app.api import export_routes
+
+    for fn_name, gen_marker in (
+        ("_run_mda_deck_job", "build_pptx_mda_deck("),
+        ("_run_mda_package_job", "build_mda_package_xlsx_bytes("),
+    ):
+        src = inspect.getsource(getattr(export_routes, fn_name))
+        close_at = src.find("db.close()")
+        gen_at = src.find(gen_marker)
+        assert close_at != -1, f"{fn_name} must close the DB session"
+        assert gen_at != -1, f"{fn_name} must call {gen_marker}"
+        assert close_at < gen_at, f"{fn_name} must close DB before {gen_marker}"

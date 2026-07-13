@@ -46,6 +46,10 @@ class ExportValidationSummary(BaseModel):
     failed_count: int = 0
     warning_count: int = 0
     passed_count: int = 0
+    # Board trust strip (§6c) — optional until apply_customer_validation_labels runs.
+    as_of_period: str | None = None
+    trust_status: Literal["verified", "needs_review", "blocked"] | None = None
+    trust_label: str | None = None
 
 
 class GlDetailRow(BaseModel):

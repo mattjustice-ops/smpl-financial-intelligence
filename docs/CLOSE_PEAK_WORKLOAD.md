@@ -390,6 +390,7 @@ Also name:
 | Should ship | Freeze blob v1: manual or on-validation-pass trigger; `COMPLETE`-only rule | Biggest latency/cost win; also Close Ready Phase 1 dependency (§4F) |
 | Should ship | Close Session (§4E) | High support/lineage value; no dependency on other Must Ship items |
 | Should ship | Month-End Readiness Dashboard v1 (§6) | Ops/CS/Support triage during first close week |
+| Should ship | **Numbers trust / validation transparency (§6c)** | Customers see which tie-outs passed so board numbers feel real, not opaque |
 | Can wait (Cohort B) | Full automated pre-close cron + night-before pre-warm | Valuable; not blocking first close if manual freeze works |
 | Can wait (Cohort B) | Separate ingest vs. export worker pools (§4G target topology) — unless §2's trigger fires first | Accepted near-term risk; fix on trigger, not on schedule |
 | Can wait (Cohort B) | Prompt 5 regenerate caps (product UI + enforcement) | Soft limits / ops policy OK for first close |
@@ -403,12 +404,36 @@ Also name:
 4. Close Session (§4E)
 5. Month-End Readiness Dashboard v1 (§6)
 6. Customer Progress Messaging UI (§4A)
-7. Queue isolation — triggered per §2's measurable thresholds if not already scheduled by Cohort B
-8. Prompt 5 regenerate caps
-9. Close-week ops — alerts + deploy freeze policy
-10. Close Ready Phase 2 (§4F) — once Class 2 exists
-11. Optional stagger — night-before blob build; white-glove export slots
-12. Later: indexes / incremental ingest; partitioning / cold archive; Month-End Operations Runbook (§7)
+7. **Numbers trust / validation transparency (§6c)** — board-facing check results + Close Ready badge
+8. Queue isolation — triggered per §2's measurable thresholds if not already scheduled by Cohort B
+9. Prompt 5 regenerate caps
+10. Close-week ops — alerts + deploy freeze policy
+11. Close Ready Phase 2 (§4F) — once Class 2 exists
+12. Optional stagger — night-before blob build; white-glove export slots
+13. Later: indexes / incremental ingest; partitioning / cold archive; Month-End Operations Runbook (§7)
+
+## 6c. Numbers trust / validation transparency (new)
+
+**Problem:** Customers generate decks and ask Copilot questions but often cannot see *why* a number is trustworthy. Export validation already runs tie-outs (cash bridge ↔ BS cash, closed-won ↔ MRR, deferred revenue, FS checks, etc.) via `GET /export/validation` and returns `ExportValidationSummary` (`pass` / `warning` / `fail` + per-check expected/actual/variance). That signal is mostly engineering-facing today.
+
+**Goal:** Make trust visible on the board without making customers learn our internal check names.
+
+| Audience | What they should see |
+|----------|----------------------|
+| CFO / FP&A on `/app/board` | Overall **Close data status**: Verified / Needs review / Blocked + as-of time |
+| Same, expandable | Human labels for each check (not raw `pipeline_waterfall_ties`) + pass/fail + variance |
+| Deck / Copilot | Same as-of + “N of M checks passed” chip so narrative and Q&A feel anchored |
+| Ops / CS (§6 dashboard) | Same summary, plus raw check ids for triage |
+
+**How to get there (recommended thin slice):**
+
+1. **Reuse existing API** — `ExportValidationSummary` already has the data; do not invent a second validation engine.
+2. **Plain-language catalog** — map `validation_name` → customer title + one-line “what this proves” (e.g. ending cash on the bridge matches cash on the balance sheet).
+3. **Board trust strip (v1)** — persistent badge on `/app/board`: status + passed/failed counts + as-of; click opens a short checklist panel.
+4. **Wire freeze + Progress Messaging** — after validation pass, trust strip flips to Verified when freeze is `COMPLETE`; export progress can show “Validation complete” as a real stage fed by this summary.
+5. **v2** — fold the same panel into Month-End Readiness Dashboard (§6) for Ops/CS; optional deck footer “Data verified as of … (12/12 checks)”.
+
+**Out of scope for v1:** inventing new math checks, blocking Copilot on warnings, or raw SQL exposure.
 
 ---
 
@@ -456,3 +481,4 @@ Rev 4 closes every remaining open decision from the Rev 3 review: Prompt 5 defau
 | 2026-07-12 | Rev 3: four workload classes; Close Session; Close Ready gate; queue isolation; expanded capacity certification + cost monitoring; enterprise data-scale tiers; Executive Experience Philosophy; §9 long-term alignment |
 | 2026-07-12 | Rev 4: stale-blob default resolved; Close Ready phased (Phase 1/2); queue topology staged (shared pool day-one, target topology later); data-scale tiers confirmed as planning-only; Month-End Readiness Dashboard + audience; Customer Progress Messaging; Close Readiness Visibility customer ladder; Operations Runbook forward pointer; lock checklist; Final Review Q&A |
 | 2026-07-12 | Canonical copy committed to `docs/CLOSE_PEAK_WORKLOAD.md`; Rev 1–3 moved to `docs/archive/` |
+| 2026-07-13 | Added §6c Numbers trust / validation transparency to Should Ship + workstream order |

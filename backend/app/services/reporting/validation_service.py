@@ -17,6 +17,9 @@ class ValidationCheck(BaseModel):
     actual_value: Decimal | None = None
     variance: Decimal | None = None
     source_tables_used: list[str] = Field(default_factory=list)
+    # Customer-facing labels (Close Peak §6c); filled by apply_customer_validation_labels.
+    customer_label: str | None = None
+    customer_detail: str | None = None
 
 
 def compare_values(

@@ -274,6 +274,10 @@ def export_validation_precheck(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Export validation failed: {exc}") from exc
 
+    from app.services.reporting.export.validation_labels import apply_customer_validation_labels
+
+    summary = apply_customer_validation_labels(summary, as_of_period=str(params["as_of_period"]))
+
     queued = schedule_auto_freeze_after_validation(
         db,
         organization_id,
@@ -484,6 +488,8 @@ def _run_mda_package_job(
     from app.services.reporting.export.export_jobs import complete_export_job, update_export_job_message
 
     tokens = set_usage_context(organization_id=organization_id, feature="mda_package")
+    # Load warehouse data, then close the DB session BEFORE Claude/xlsx work so Neon
+    # does not kill us with IdleInTransactionSessionTimeout during long generation.
     db = SessionLocal()
     try:
         get_organization_or_404(db, organization_id)
@@ -499,6 +505,10 @@ def _run_mda_package_job(
             _check_validation(bundle, True)
         update_export_job_message(job_id, "Loading three-statement and cash bridge…")
         ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+    finally:
+        db.close()
+
+    try:
         update_export_job_message(job_id, "Generating SMPL MD&A package (Prompt 2)…")
         content, package_source = build_mda_package_xlsx_bytes(
             bundle,
@@ -522,7 +532,6 @@ def _run_mda_package_job(
             },
         )
     finally:
-        db.close()
         reset_usage_context(tokens)
 
 
@@ -544,6 +553,8 @@ def _run_mda_deck_job(
     from app.services.reporting.export.export_jobs import complete_export_job, update_export_job_message
 
     tokens = set_usage_context(organization_id=organization_id, feature="mda_deck")
+    # Close DB before Prompt 5 / PPTX generation — long Claude calls must not sit in an
+    # open Neon transaction (IdleInTransactionSessionTimeout).
     db = SessionLocal()
     try:
         get_organization_or_404(db, organization_id)
@@ -559,6 +570,10 @@ def _run_mda_deck_job(
             _check_validation(bundle, True)
         update_export_job_message(job_id, "Loading three-statement and cash bridge…")
         ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+    finally:
+        db.close()
+
+    try:
         update_export_job_message(job_id, "Generating MD&A deck (Prompt 5)…")
         content, pptx_source = build_pptx_mda_deck(
             bundle,
@@ -585,7 +600,6 @@ def _run_mda_deck_job(
             },
         )
     finally:
-        db.close()
         reset_usage_context(tokens)
 
 

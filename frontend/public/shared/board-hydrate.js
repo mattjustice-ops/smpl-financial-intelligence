@@ -683,13 +683,29 @@
     var y = close.slice(0, 4);
     var m = parseInt(close.slice(5), 10) - 1;
     var closeLbl = (monthNames()[m] || "") + " " + y;
+    var trustBit =
+      '<div class="cp-source">Each answer shows its data-as-of timestamp (freeze pack when available, otherwise live).</div>';
+    var trust = global.SMPL_TRUST_SUMMARY;
+    if (trust && (trust.passed_count != null || trust.trust_label)) {
+      var total = (trust.passed_count || 0) + (trust.warning_count || 0) + (trust.failed_count || 0);
+      trustBit =
+        '<div class="cp-source">' +
+        (trust.trust_label || "Checks") +
+        " · " +
+        (trust.passed_count || 0) +
+        "/" +
+        total +
+        " checks · as of " +
+        (trust.as_of_period || close) +
+        ". Each answer also shows its data-as-of timestamp.</div>";
+    }
     bubble.innerHTML =
       '<div class="cp-section">Ready</div>I have warehouse data for <strong>' +
       org +
       "</strong> through <strong>" +
       closeLbl +
       "</strong> close. Ask about ARR, revenue, cash, headcount, GTM, or variance vs budget." +
-      '<div class="cp-source">Each answer shows its data-as-of timestamp (freeze pack when available, otherwise live).</div>';
+      trustBit;
   }
 
   function installLiveExec() {
@@ -813,11 +829,178 @@
           syncBoardFromOutlook(data);
           updateCopilotWelcome(data);
           smplBoardRefreshView();
+          void refreshTrustStrip();
         } catch (err) {
           console.error("[board-hydrate] post-hydrate refresh failed", err);
         }
       },
     });
+  }
+
+  function trustStatusClass(trustStatus) {
+    if (trustStatus === "verified") return "trust-verified";
+    if (trustStatus === "needs_review") return "trust-needs_review";
+    if (trustStatus === "blocked") return "trust-blocked";
+    return "";
+  }
+
+  function formatTrustVariance(v) {
+    if (v == null || v === "") return "";
+    var n = Number(v);
+    if (Number.isNaN(n)) return String(v);
+    if (Math.abs(n) < 0.005) return "";
+    var abs = Math.abs(n);
+    var body =
+      abs >= 1e6
+        ? "$" + (abs / 1e6).toFixed(2) + "M"
+        : abs >= 1e3
+          ? "$" + (abs / 1e3).toFixed(1) + "k"
+          : "$" + abs.toFixed(0);
+    return (n >= 0 ? "+" : "−") + body;
+  }
+
+  function renderTrustPanel(summary) {
+    var panel = document.getElementById("trustPanel");
+    if (!panel || !summary) return;
+    var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
+    var asOf = summary.as_of_period || boardActiveCloseMonth();
+    var label = summary.trust_label || "Needs review";
+    var head =
+      '<div class="trust-panel-head">' +
+      label +
+      " · " +
+      (summary.passed_count || 0) +
+      "/" +
+      total +
+      " checks</div>" +
+      '<div class="trust-panel-sub">Close data as of ' +
+      asOf +
+      ". Warehouse tie-outs in plain language — expand any row for what it proves.</div>";
+
+    var checks = Array.isArray(summary.checks) ? summary.checks.slice() : [];
+    checks.sort(function (a, b) {
+      var rank = { fail: 0, warning: 1, pass: 2 };
+      return (rank[a.status] != null ? rank[a.status] : 9) - (rank[b.status] != null ? rank[b.status] : 9);
+    });
+
+    var rows = checks
+      .map(function (c) {
+        var mark =
+          c.status === "pass" ? "✓" : c.status === "warning" ? "!" : c.status === "fail" ? "✕" : "·";
+        var title = (c.customer_label || c.validation_name || "Check").replace(/</g, "&lt;");
+        var detail = (c.customer_detail || "").replace(/</g, "&lt;");
+        var period = c.period ? " · " + String(c.period).replace(/</g, "&lt;") : "";
+        var variance = formatTrustVariance(c.variance);
+        return (
+          '<div class="trust-check">' +
+          '<span class="trust-check-mark ' +
+          (c.status || "") +
+          '">' +
+          mark +
+          "</span>" +
+          "<div><div class=\"trust-check-title\">" +
+          title +
+          period +
+          "</div>" +
+          (detail ? '<div class="trust-check-detail">' + detail + "</div>" : "") +
+          "</div>" +
+          '<span class="trust-check-var">' +
+          (variance || (c.status || "")).replace(/</g, "&lt;") +
+          "</span>" +
+          "</div>"
+        );
+      })
+      .join("");
+
+    panel.innerHTML = head + (rows || '<div class="trust-panel-sub">No checks returned.</div>');
+  }
+
+  function setTrustStripSummary(summary) {
+    var badge = document.getElementById("trustStrip");
+    if (!badge) return;
+    if (!summary) {
+      badge.textContent = "Checks unavailable";
+      badge.className = "trust-badge";
+      return;
+    }
+    var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
+    var label = summary.trust_label || "Needs review";
+    var asOf = summary.as_of_period || boardActiveCloseMonth();
+    badge.textContent = label + " · " + (summary.passed_count || 0) + "/" + total + " · as of " + asOf;
+    badge.className = "trust-badge " + trustStatusClass(summary.trust_status);
+    global.SMPL_TRUST_SUMMARY = summary;
+    renderTrustPanel(summary);
+    if (global.SMPL_OUTLOOK_PAYLOAD) {
+      updateCopilotWelcome(global.SMPL_OUTLOOK_PAYLOAD);
+    }
+  }
+
+  function installTrustStripUi() {
+    if (global._smplTrustStripInstalled) return;
+    global._smplTrustStripInstalled = true;
+    var badge = document.getElementById("trustStrip");
+    var panel = document.getElementById("trustPanel");
+    if (!badge || !panel) return;
+
+    badge.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var open = !panel.classList.contains("open");
+      panel.classList.toggle("open", open);
+      badge.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    document.addEventListener("click", function (ev) {
+      if (!panel.classList.contains("open")) return;
+      var wrap = badge.closest(".trust-strip-wrap");
+      if (wrap && wrap.contains(ev.target)) return;
+      panel.classList.remove("open");
+      badge.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  async function refreshTrustStrip() {
+    installTrustStripUi();
+    var badge = document.getElementById("trustStrip");
+    if (!badge) return;
+
+    var orgId = await boardResolveOrgId();
+    var closeMonth = boardActiveCloseMonth();
+    var year = closeMonth.slice(0, 4);
+    if (!orgId) {
+      badge.textContent = "Checks · no org";
+      badge.className = "trust-badge";
+      return;
+    }
+
+    badge.textContent = "Checking…";
+    badge.className = "trust-badge";
+
+    try {
+      var apiBase = await boardLiveApiBase();
+      var params = new URLSearchParams({
+        organization_id: orgId,
+        scenario: "Combined",
+        start_period: year + "-01",
+        end_period: year + "-12",
+        as_of_period: closeMonth,
+      });
+      var res = await boardFetchWithTimeout(
+        boardLiveUrl(apiBase, "/api/v1/export/validation") + "?" + params.toString(),
+        boardLiveFetchInit(apiBase, { method: "GET" }),
+        60000,
+      );
+      if (!res.ok) {
+        setTrustStripSummary(null);
+        badge.textContent = "Checks unavailable";
+        return;
+      }
+      var summary = await res.json();
+      setTrustStripSummary(summary);
+    } catch (err) {
+      console.warn("[board-hydrate] trust strip failed", err);
+      setTrustStripSummary(null);
+      badge.textContent = "Checks unavailable";
+    }
   }
 
   function boardExportApiBase() {
@@ -1189,6 +1372,7 @@
     boardJunMetrics: boardJunMetrics,
     refreshExecCommentaryFromLiveMetrics: refreshExecCommentaryFromLiveMetrics,
     openBoardExport: openLiveBoardExport,
+    refreshTrustStrip: refreshTrustStrip,
   };
 
   global.SMPL_ON_ORG_READY = function () {
@@ -1198,6 +1382,7 @@
   // Install live handlers as soon as this script parses (before window "load").
   installLiveAi();
   installCommentaryCacheRestore();
+  installTrustStripUi();
 
   global.addEventListener("load", function () {
     if (global.SMPLSkin) {
