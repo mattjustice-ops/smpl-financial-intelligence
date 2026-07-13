@@ -1,0 +1,542 @@
+===== LINE 301 role=assistant =====
+[REDACTED]
+
+===== LINE 302 role=assistant =====
+Your Prompt 5 run is the slow part — Claude generating the full PptxGenJS script (often 2–5+ minutes), then Node rendering. When it finishes you should see `Wrote ...\mda_deck_2026-06.pptx (..., source=claude_prompt5)` and a copy under `backend\tmp\deck-archive\2026-06\`.
+
+---
+
+## Scheduled context blob — future architecture
+
+What you described fits well. Today everything is **on-demand**: every Copilot question and every AI commentary call rebuilds the blob from live DB queries. That is always fresh but slow and repetitive.
+
+A **materialized context blob** would sit between the warehouse and Claude:
+
+```mermaid
+flowchart LR
+    subgraph sources [Data sources]
+        Cash[Cash / bridges]
+        GL[GL / P&L]
+        Opp[Opportunities / CRM]
+        Mkt[Marketing / funnel]
+    end
+
+    subgraph refresh [Refresh triggers]
+        ETL[ETL / table update webhook]
+        Cron[Scheduled jobs]
+        ME[Month-end close flag]
+    end
+
+    subgraph store [Blob store]
+        Live[Live blob - current month]
+        Snap[Weekly snapshots]
+        Close[Month-end frozen blob]
+    end
+
+    sources --> refresh
+    refresh --> store
+    store --> Copilot
+    store --> Commentary
+    store --> Prompt5
+```
+
+### Suggested tiers (matches your intent)
+
+| Tier | Data domain | Refresh cadence | Use |
+|------|-------------|-----------------|-----|
+| **Live** | Opportunity / pipeline drilldown | On query or short TTL (minutes) | Current deal-level context |
+| **Weekly snapshot** | Same opportunity set | Saved each week | “What changed since last week” deltas in commentary |
+| **Weekly** | Cash bridges, collections | After cash table updates | Copilot cash questions without full rebuild |
+| **Monthly** | GL, income statement, headcount | After GL close load | P&L / opex drivers |
+| **On update** | Any table in `data_sources` registry | Webhook or post-load hook | Partial blob refresh, not full recompute |
+| **Month-end freeze** | Full composite blob | Once close is certified | Board export, Prompt 5 deck, archived Copilot context |
+
+### What gets stored
+
+Per org + close period, something like:
+
+- `context_blob_live` — current composite text (or structured JSON sections)
+- `context_blob_sections` — keyed slices (`cash`, `gtm_funnel`, `ytd_cfs`, `pipeline_drilldown`, …) so you only rebuild what changed
+- `context_blob_snapshots` — `(org_id, period, snapshot_at, section, content_hash, blob_text)` for weekly opportunity (and optionally cash) diffs
+
+Refresh logic: compare `content_hash` or `max(updated_at)` per source table → rebuild only stale sections → merge into composite → optionally append “since last snapshot” diff block for opportunities.
+
+### What triggers refresh
+
+1. **Data load completes** (your existing warehouse/ETL path) — emit `blob.refresh` with `{org_id, period, sections: ["gl", "cash"]}`
+2. **Cron** — weekly opportunity snapshot; nightly validation that live blob isn’t older than source data
+3. **Month-end** — freeze `context_blob_close_{period}` immutable; Prompt 5 and board exports read frozen blob for reproducibility
+
+### Speed wins
+
+- Copilot: read prebuilt blob (~50ms) instead of 10–30s of bundle collection + assembly
+- `enrich_slide_with_ai` / Prompt 5: same blob or section-specific slices
+- Prompt 5 deck: attach `copilot_context_blob` from store instead of rebuilding payload from scratch each export
+
+---
+
+## Relationship to what you’re running now
+
+Prompt 5 still builds its JSON payload on the fly from `ReportingBundle` — it does **not** use a scheduled blob yet. Once the blob store exists, Prompt 5 would pull:
+
+- Structured sections (YTD CFS, funnel, drilldown) from blob sections
+- Narrative-rich tail from trimmed composite blob
+
+That is the natural next infrastructure step after you validate tonight’s deck output.
+
+When your export finishes, if slide 6 (CFS), slide 8 (funnel), or commentary feel thin, that is exactly the gap the scheduled blob + section enrichment closes — without changing the Prompt 5 rendering approach.
+
+If you want this captured as an implementation spec in the repo (schema + refresh hooks + API), say so and we can draft it against your existing `data_collector` and `copilot_context_blob` code.
+
+[REDACTED]
+
+===== LINE 304 role=assistant =====
+Good — that architecture gives you one shared context layer instead of rebuilding everything on every Copilot question, commentary call, and deck export.
+
+The practical sequence from here:
+
+1. **Validate tonight’s Prompt 5 deck** — layout, numbers, slides 6 and 8
+2. **Add the missing sections** to the live payload (YTD CFS, GTM funnel, trimmed copilot-style blob) so deck quality matches what Copilot already knows how to say
+3. **Materialize the blob store** — sectioned storage, refresh on data load, weekly opportunity snapshots, month-end freeze
+
+When you’re ready for step 3, we can draft it against your existing `copilot_context_blob` and `data_collector` code so Copilot, slide commentary, template export, and Prompt 5 all read from the same source.
+
+Share how the deck looks when your export finishes — that will tell us which sections to prioritize first in the blob.
+
+[REDACTED]
+
+===== LINE 1026 role=assistant =====
+[REDACTED]
+
+===== LINE 1027 role=assistant =====
+I think **gl-4 → gl-7 is the right call** for where you are now, especially with schema work coming.
+
+## Why this order makes sense
+
+**You don't need poc-1/2/3 to close gl-7.** The docs are explicit: first revenue can run on the **white-glove path** you already have — manual provision (`provision-prod-customer.ps1`) + direct data load (`GO_LIVE_POC_DIRECT_DATA_ACCESS.md`). Self-serve onboarding is for *scale*, not first customer.
+
+**Deferring POC/onboarding until after schema changes is smart.** Building upload + AI mapping on a schema you're about to change would mean rework. Your plan — schema that encodes data limitations and which services you can offer — is a better foundation for poc-1/2/3 later.
+
+**The product is demo-ready for paid pilots.** Auth, live warehouse, board, and both exports are validated on prod. That's enough to sell and deliver an enterprise pilot while you refine onboarding.
+
+---
+
+## How I'd sequence gl-4 and gl-7
+
+### gl-4 — Stripe live (1–2 days ops + smoke test)
+
+1. **Live catalog** — Create Starter/Professional products + prices in Stripe **live** mode (separate from test; see `STRIPE_BILLING.md`).
+2. **Vercel prod env** — `STRIPE_SECRET_KEY` (live), `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, price IDs, `STRIPE_WEBHOOK_SECRET`.
+3. **Webhook** — Register `https://www.smpl-ai.com/api/stripe/webhook` in Stripe Dashboard; confirm `BILLING_INTERNAL_API_KEY` matches Railway + Vercel.
+4. **Smoke test** — Real card or Stripe test in live with a small amount; confirm webhook → `billing_subscriptions` / org row updates.
+5. **Customer Portal** — Enabled so customers can manage billing post-signup.
+
+Your flow stays **sales-led** (demo → contract → Stripe checkout/invoice), which matches `/pricing` today.
+
+### gl-7 — First paying customer (parallel to your schema work)
+
+1. **Pick the customer** — Ideally someone whose data scope fits what you can load *now* (even if schema v2 improves the next one).
+2. **Provision** — Path B: new org via `provision-prod-customer.ps1`.
+3. **Contract + payment** — gl-4 checkout or invoice.
+4. **Data** — Path C white-glove load (you can align load format with incoming schema changes if timing allows).
+5. **Sign-off** — Their login → `/app/board` → exports; short validation call.
+
+**gl-7 closes when:** contract signed, payment received, customer live on prod with their org (not demo fallback).
+
+---
+
+## One caveat
+
+If your **first** customer's data model depends heavily on the schema update, you can still close gl-7 with:
+
+- **Payment + org + access** now, and  
+- **Data load** immediately after schema lands (within agreed pilot timeline).
+
+That still counts as first paying customer; just set expectations on the load date.
+
+---
+
+## Suggested focus until schema work lands
+
+| Priority | Item |
+|----------|------|
+| **Now** | gl-4 Stripe live + webhook smoke test |
+| **Next** | Identify first customer; provision org; contract |
+| **When schema is ready** | Load their warehouse + pilot sign-off (gl-7) |
+| **Later** | poc-1/2/3/5 on the new schema |
+
+When you're ready for gl-4, we can walk through live Stripe setup step-by-step (or run the existing scripts against live keys). For gl-7, having the prospect name, plan tier, and rough data scope is enough to draft a concrete checklist.
+
+[REDACTED]
+
+===== LINE 1072 role=assistant =====
+[REDACTED]
+
+===== LINE 1073 role=assistant =====
+Yes — and it’s a good idea to plan it **before** gl-7 scales, not after. You’re already running the expensive paths (Claude on exports, long Railway jobs, Neon warehouse queries), but today you mostly have **health checks and console monitoring** (gl-6), not **per-customer economics** or **unified ops visibility**.
+
+I’d treat this as **two related products** that can share one internal UI:
+
+---
+
+## 1. Customer AI usage & COGS (billing / unit economics)
+
+**What you want:** “Customer X used $Y of Claude + $Z of compute this month.”
+
+**Feasible today** because you already have:
+- `organization_id` on almost every path
+- Distinct workloads: Prompt 2 (MD&A package), Prompt 5 (deck), slide commentary, copilot
+- Async export jobs (good hook for duration + success/failure)
+- Stripe for **revenue** — this layer is **cost**
+
+**What you’d add (lightweight v1):**
+
+| Event | Capture |
+|-------|---------|
+| Every Claude call | `org_id`, feature (`mda_package`, `mda_deck`, `slide_commentary`), model, `input_tokens`, `output_tokens`, estimated `$`, latency |
+| Every export job | `org_id`, kind, duration, status, file size, `job_id` |
+| Warehouse-heavy routes | `org_id`, route, duration, row counts (optional) |
+
+Store in Neon tables like `usage_events` / `usage_daily_rollups` — same pattern as `billing_events`, but for **metering**, not payments.
+
+**UI options:**
+- **Internal only first** (`/app/admin/usage` or separate `/ops`) — you need this before customers do
+- **Customer-facing later** — “AI commentary usage this period” on `/account` (ties to plan limits)
+
+This pairs naturally with your upcoming **schema work**: you can tag customers by data scope *and* entitle them by AI/compute tier.
+
+---
+
+## 2. Platform health & capacity (SRE / “are we operating?”)
+
+**What you want:** outages, limits, ramps, “when is infra taxed?”
+
+**Also feasible**, but split **vendor observability** vs **product observability**:
+
+| Layer | Tooling | What you see |
+|-------|---------|--------------|
+| Vercel / Railway / Neon | Native dashboards + alerts | 502s, deploy failures, DB connections, CPU/memory |
+| App-level | Your own `ops_events` + smoke scripts | Export job backlog, p95 latency by route, Claude error rate |
+| Synthetic | Extend `smoke-test-stripe-prod.ps1`-style checks | Webhook down, board export stuck, auth broken |
+
+**Signals worth tracking from day one:**
+- Export job queue depth + failures (you just built async jobs — perfect metric)
+- Railway 502 rate on `/export/*` (you hit the 5‑min wall already)
+- Claude 429/5xx and token spikes per org
+- Neon query time on `collect_bundle` / board payload
+- Vercel function timeouts on proxies
+
+**Outages:** start with **Uptime checks** on `/health`, `/api/stripe/webhook`, `/api/smpl/board-config` + one signed-in smoke path. Pager optional until you have paying customers.
+
+---
+
+## Same UI or separate?
+
+**Recommendation: one internal “SMPL Ops” surface, two tabs.**
+
+```
+┌─────────────────────────────────────────┐
+│  SMPL Ops (internal, admin-only)        │
+├─────────────────┬───────────────────────┤
+│ Customer usage  │ Platform health       │
+│ · AI $ by org   │ · Outages / smoke     │
+│ · Exports/mo    │ · p95 latency         │
+│ · Top consumers │ · Job queue / 502s    │
+│ · vs plan tier  │ · Infra ramps (charts)│
+└─────────────────┴───────────────────────┘
+```
+
+- **Phase 1:** internal only, no customer visibility
+- **Phase 2:** customer usage summary on `/account` (usage limits, “approaching cap”)
+- **Phase 3:** automated alerts (Slack/email) when org exceeds threshold or export failure rate spikes
+
+Keeps `/app/board` focused on finance; ops doesn’t clutter the CFO product.
+
+---
+
+## Suggested phasing (practical for where you are)
+
+| Phase | Effort | Value |
+|-------|--------|-------|
+| **0 — Instrument** | 1–2 days | Log Claude `usage` from API responses into `usage_events`; log export job start/complete/fail with `org_id` |
+| **1 — Internal dashboard** | ~1 week | Simple `/ops` page: table by org (last 30d AI $, export count, errors) |
+| **2 — Alerts** | few days | Railway/Vercel native alerts + your smoke scripts on a schedule |
+| **3 — Customer limits** | after schema | Plan field: `ai_commentary_monthly_cap`; enforce before Prompt 2/5 runs |
+
+Don’t build a full Datadog clone — **emit events you own**, aggregate daily, use Railway/Neon/Vercel for infra graphs.
+
+---
+
+## Ties to your roadmap
+
+- **gl-7 (first paying customer):** internal usage dashboard lets you price pilots and see if someone is burning $50/mo of Claude on exports
+- **Schema/onboarding work:** `data_limitations` + `service_tier` can drive both **what they can load** and **how much AI they get**
+- **poc-4 gap (direct Railway exports):** ops dashboard would also surface “export without membership header” as a security/usage anomaly
+
+---
+
+## Bottom line
+
+**Yes — very doable, and worth doing.** Start with **event logging + internal ops UI**, not a separate platform. You already have the tenancy model (`organization_id`), the expensive workflows (Claude exports), and the job pattern (async exports). The missing piece is **persistent usage events and a rollup view** — not new infrastructure.
+
+If you want to move on this, a sensible first slice is: **“log every Claude call and export job with org_id + cost estimate”** and a minimal **`/ops/usage`** page. That’s enough to support gl-7 pricing and to spot when compute is getting taxed. I can spec that against your schema changes when you send them over.
+
+[REDACTED]
+
+===== LINE 1269 role=user =====
+<user_query>
+ONe caveat, the CSV Upload row-level error report, we'll also need that for customers using APIs. essnetially rows staged, rows exported, rows imported. We are trying to solve the same issue but for different customer types. Everything else, yes.
+</user_query>
+
+===== LINE 1270 role=assistant =====
+Yes — that’s the right caveat, and it actually makes the design cleaner. **One close ledger, multiple ingress paths.** CSV and API are different front doors into the same pipeline.
+
+## Unified model (CSV + API)
+
+Every row movement gets tagged with **how it arrived**, not treated as separate systems:
+
+| Dimension | Values |
+|-----------|--------|
+| `source` | `csv_upload` · `api` · `smpl_ops` (white-glove) |
+| `entity` | `mrr_waterfall` · `pipeline` · `gl_detail` · etc. |
+| `period` | `2026-06` |
+| `batch_id` | One upload job or one API batch |
+
+Same lifecycle for both:
+
+```
+staged → validated → imported → (optional) exported
+         ↘ errors at any step
+```
+
+### Event types (shared)
+
+| Event | CSV example | API example |
+|-------|-------------|-------------|
+| `batch_received` | File uploaded | `POST /ingest/batch` accepted |
+| `rows_staged` | 12,400 parsed | 12,400 in request body |
+| `rows_rejected` | 37 bad headers/types | 37 failed schema validation |
+| `rows_imported` | 12,363 → warehouse | 12,363 → warehouse |
+| `validation_run` | Close checks | Same checks |
+| `rows_exported` | MD&A / board export | Same exports |
+| `row_error` | Line 482: bad date | Record `ext_id=…`: missing period |
+
+Customers see the **same month-end sheet** whether they uploaded a file or pushed via API:
+
+```
+June 2026 close
+  API batches:     4 received · 48,200 staged · 48,163 imported · 37 rejected
+  CSV uploads:     2 files   ·  9,100 staged ·  9,100 imported · 0 rejected
+  Exports:         3 complete · 0 failed
+  Validation:      14 checks · 1 warning · 1 fail
+```
+
+## API-specific pieces (same ledger, extra metadata)
+
+For API customers you’ll want on each batch:
+
+- `idempotency_key` / `external_batch_id` (their system’s reference)
+- `api_version` + endpoint
+- Per-record `external_id` so errors map back to **their** CRM/ERP row
+- Async pattern: `202 Accepted` → poll `GET /ingest/batches/{id}` (same status shape as CSV upload job)
+
+Row-level errors return in a consistent shape for both paths:
+
+```json
+{
+  "batch_id": "…",
+  "source": "api",
+  "summary": { "staged": 500, "imported": 497, "rejected": 3 },
+  "errors": [
+    { "row": 482, "external_id": "opp-9912", "field": "close_date", "code": "invalid_period", "message": "…" }
+  ]
+}
+```
+
+CSV uses `row` (line #); API uses `external_id` when present — same error table in the UI.
+
+## What stays the same from the plan
+
+- `/app/workspace` with Usage, Data, Close ledger, Corrections, Support
+- Self-serve vs enterprise depth (same shell)
+- Continuity agent watching the **same events** regardless of source
+- Phase order — with **Phase 5 (Close ledger) explicitly source-agnostic from day one**
+
+## Build implication
+
+When we scaffold ingest, don’t build “CSV upload service” and “API service” separately. Build:
+
+1. **`IngestBatch`** — one table/job model  
+2. **`PipelineEvent`** — append-only ledger (your `data_pipeline_events`)  
+3. **Adapters** — `CsvIngestAdapter`, `ApiIngestAdapter` → both call the same `stage → validate → import` core  
+
+That way enterprise API customers and self-serve CSV customers get identical visibility, and SMPL Ops can filter by org + source when debugging month-end.
+
+When you’re ready to start building, Phase 4a + 5 should lead with the **batch + event schema** (CSV and API adapters second) so we don’t paint ourselves into a CSV-only corner.
+
+[REDACTED]
+
+===== LINE 1271 role=user =====
+<user_query>
+Alright, let's start moving through the checklist
+</user_query>
+
+===== LINE 1272 role=assistant =====
+Starting with the shared batch + pipeline-event foundation, then the customer workspace UI. Exploring the codebase structure first.
+
+[REDACTED]
+
+===== LINE 1294 role=assistant =====
+[REDACTED]
+
+===== LINE 1295 role=assistant =====
+**Phase 4 foundation is in place** — shared pipeline ledger for CSV and API, customer workspace UI, and export tracking.
+
+## What's built
+
+### Database (`workspace_001` migration)
+- **`ingest_batches`** — every CSV upload or API batch (source, status, staged/imported/rejected counts)
+- **`pipeline_events`** — append-only ledger (batch received, rows staged/imported/rejected, row errors, export queued/complete/failed)
+
+### Backend APIs
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/workspace/summary` | Usage, storage, close ledger |
+| `GET /api/v1/workspace/batches` | Import history |
+| `GET /api/v1/workspace/batches/{id}` | Batch detail + events |
+| `POST /api/v1/ingest/csv` | CSV upload with ledger |
+| `POST /api/v1/ingest/batches` | API ingest `{ entity_type, records[], external_batch_id?, idempotency_key? }` |
+
+CSV and API share the same validation/import path and the same row-level error reporting.
+
+### Customer UI
+**`/app/workspace`** (linked from the session banner) with three tabs:
+1. **Usage & storage** — AI spend, LLM calls, exports vs caps + warehouse footprint  
+2. **Data imports** — CSV upload + batch table (CSV + API batches)  
+3. **Close ledger** — ingest totals by source, export events, recent row errors  
+
+### Instrumentation
+- Export background jobs now write `export_queued` / `export_complete` / `export_failed` to the pipeline ledger
+
+---
+
+## Deploy
+
+**1. Run migration on Neon prod:**
+```powershell
+cd C:\Users\mattj\.cursor\projects\empty-window\saas-financial-intelligence
+.\scripts\run-alembic-migration.ps1 -Environment prod
+```
+Expect revision **`workspace_001`**.
+
+**2. Push + redeploy:**
+```powershell
+git add backend/alembic/versions/workspace_001_pipeline_ledger.py `
+  backend/app/models/pipeline.py backend/app/services/workspace/ `
+  backend/app/api/workspace_routes.py backend/app/api/ingest_routes.py `
+  backend/app/main.py backend/app/models/__init__.py `
+  backend/app/services/demo_csv/loader.py `
+  backend/app/services/reporting/export/export_jobs.py `
+  backend/tests/test_workspace_pipeline.py `
+  frontend/app/app/workspace/ frontend/app/api/workspace/ frontend/app/api/ingest/ `
+  frontend/components/workspace/ frontend/components/app/AppSessionBanner.tsx
+
+git push origin main
+.\scripts\redeploy-vercel-production.ps1 -SkipBuild
+```
+
+**3. Smoke test:** sign in → `/app/workspace` → upload a CSV → check Close ledger tab for staged/imported/rejected counts.
+
+---
+
+## Still on the checklist (next phases)
+
+- **Data corrections** — re-upload wizard + scoped overrides with audit trail  
+- **Validation runs** in ledger (pre-export / close checks as events)  
+- **Continuity agent** — auto-document failures from pipeline events  
+- **Slack support intake** — customer issue queue tied to the agent  
+- **AI schema mapper** for non-SMPL-header CSVs (self-serve onboarding)
+
+Want me to commit this, or move straight into Phase 5 (corrections + validation events in the ledger)?
+
+[REDACTED]
+
+===== LINE 1307 role=assistant =====
+Good — prod is responding now (`workspace:200`, `usage:200`). Here’s where to see everything and how to track it.
+
+## Customer-facing (what your users see)
+
+| Surface | URL | What to check |
+|---------|-----|----------------|
+| **Workspace** | https://www.smpl-ai.com/app/workspace | **Usage & storage** tab — AI $, LLM calls, exports vs caps; **Data imports** — upload CSV, batch table; **Close ledger** — staged/imported/rejected, row errors, export events |
+| **Board / dashboards** | https://www.smpl-ai.com/app/board | Data still loads after imports |
+| **Login** | https://www.smpl-ai.com/login | Sign in as demo org → session banner shows **Workspace** link |
+
+After a CSV upload: **Data imports** → batch row (staged / imported / rejected) → **Close ledger** for errors and export activity.
+
+---
+
+## Internal (SMPL team only)
+
+| Surface | URL | What to check |
+|---------|-----|----------------|
+| **SMPL Ops** | https://www.smpl-ai.com/app/ops | All orgs: AI spend, caps, storage, platform health, alerts |
+| **Go-live progress** | https://www.smpl-ai.com/progress | Milestone checklist (% complete). Source of truth: `frontend/lib/go-live-progress.ts` |
+
+Ops = fleet view. Workspace = single-customer view.
+
+---
+
+## Quick API smoke (from PowerShell)
+
+```powershell
+$org = "8571e520-0687-4516-bdee-379f37c58c1f"
+
+# Workspace summary (should be 200)
+curl.exe -s "https://sfi-api-production.up.railway.app/api/v1/workspace/summary?organization_id=$org" | ConvertFrom-Json | Select-Object organization_name, plan
+
+# Usage caps
+curl.exe -s "https://sfi-api-production.up.railway.app/api/v1/usage/monthly-status?organization_id=$org"
+
+# Full prod readiness (health + entitlements + ops)
+.\scripts\smoke-test-prod-readiness.ps1
+```
+
+---
+
+## Progress tracking (what’s done vs next)
+
+The **/progress** page is the living checklist, but it hasn’t been updated for the workspace phase yet. Rough map:
+
+| Phase | Status | Where you see it |
+|-------|--------|------------------|
+| **Ops 0–3** (instrumentation, dashboard, storage, limits) | Done | `/app/ops` |
+| **Workspace 4** (usage, CSV/API ingest, close ledger) | **Just shipped** | `/app/workspace` |
+| **POC onboarding** (AI mapper, full onboarding UI) | Not done | Still `done: false` on `/progress` under “POC customer onboarding” |
+| **Corrections + agent + Slack** | Not started | Future phases we outlined |
+
+If you want `/progress` to reflect workspace work, we can add items like:
+- `poc-1` → mark done (ingest API is `POST /api/v1/ingest/csv` + `/batches`)
+- New milestone items for close ledger, continuity agent, Slack intake
+
+---
+
+## Docs (runbooks)
+
+- **Monitoring / ops:** `docs/GO_LIVE_GL6_MONITORING.md`
+- **POC onboarding:** `docs/GO_LIVE_POC_ONBOARDING.md`
+- **Deploy:** `docs/GO_LIVE_PROD_DEPLOY.md`
+
+---
+
+## Suggested 2-minute check after deploy
+
+1. Incognito → login → **Workspace** (no amber fallback banner).
+2. **Usage & storage** — caps show **$10 / 10 / 10**.
+3. Upload a small test CSV on **Data imports** → row appears with counts.
+4. **Close ledger** — ingest totals update; row errors if the file had bad rows.
+5. **SMPL Ops** → same org shows matching usage.
+
+Want me to update `go-live-progress.ts` so `/progress` reflects workspace + pipeline ledger as complete?
+
+[REDACTED]

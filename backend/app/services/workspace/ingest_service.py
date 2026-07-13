@@ -179,6 +179,16 @@ def ingest_csv_bytes(
         filename=filename,
         metadata={"rows_staged_hint": rows_staged},
     )
+    try:
+        from app.services.close_context.freeze_blob_service import mark_blob_stale
+        from app.services.organizations import get_organization_or_404
+        from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
+
+        org = get_organization_or_404(db, organization_id)
+        as_of, _, _ = resolve_org_reporting_window(db, org)
+        mark_blob_stale(db, organization_id, as_of)
+    except Exception:
+        pass
     update_batch_counts(db, batch, status="staging", rows_staged=rows_staged)
     db.commit()
 

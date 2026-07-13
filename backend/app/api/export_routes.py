@@ -502,6 +502,8 @@ def _run_mda_package_job(
                 "X-MDA-Package-Source": package_source,
                 "X-MDA-Package-Engine": "claude_prompt2",
                 "X-MDA-AI-Commentary": "true" if include_ai_commentary else "false",
+                "X-As-Of-Period": bundle.as_of_period,
+                "X-Context-Source": "live",
             },
         )
     finally:
@@ -563,6 +565,8 @@ def _run_mda_deck_job(
                 "X-Board-PPTX-Source": pptx_source,
                 "X-Board-AI-Commentary": "true" if include_ai_commentary else "false",
                 "X-Board-Deck-Kind": "mda",
+                "X-As-Of-Period": bundle.as_of_period,
+                "X-Context-Source": "live",
             },
         )
     finally:
@@ -591,7 +595,11 @@ def start_mda_package_job(
     db: Session = Depends(get_db),
 ) -> dict:
     """Start background MD&A package job (avoids Railway 5-minute idle timeout)."""
-    from app.services.reporting.export.export_jobs import job_status_payload, submit_export_job
+    from app.services.reporting.export.export_jobs import (
+        ExportJobConflictError,
+        job_status_payload,
+        submit_export_job,
+    )
 
     _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
@@ -610,19 +618,29 @@ def start_mda_package_job(
         owner,
     )
     period_label = (as_of or bundle_params["as_of_period"]).replace("-", "_")
-    job = submit_export_job(
-        "mda_package",
-        lambda job_id: _run_mda_package_job(
-            job_id,
+    try:
+        job = submit_export_job(
+            "mda_package",
+            lambda job_id: _run_mda_package_job(
+                job_id,
+                organization_id=organization_id,
+                bundle_params=bundle_params,
+                include_ai_commentary=include_ai_commentary,
+                block_on_failure=block_on_failure,
+            ),
+            filename=f"SMPL_MDA_Package_{period_label}.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             organization_id=organization_id,
-            bundle_params=bundle_params,
-            include_ai_commentary=include_ai_commentary,
-            block_on_failure=block_on_failure,
-        ),
-        filename=f"SMPL_MDA_Package_{period_label}.xlsx",
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        organization_id=organization_id,
-    )
+        )
+    except ExportJobConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "active_job_id": exc.active_job_id,
+                "code": "export_job_conflict",
+            },
+        ) from exc
     return job_status_payload(job)
 
 
@@ -652,7 +670,11 @@ def start_mda_deck_job(
     db: Session = Depends(get_db),
 ) -> dict:
     """Start background MD&A deck job (avoids Railway 5-minute idle timeout)."""
-    from app.services.reporting.export.export_jobs import job_status_payload, submit_export_job
+    from app.services.reporting.export.export_jobs import (
+        ExportJobConflictError,
+        job_status_payload,
+        submit_export_job,
+    )
 
     _org_for_board_export(db, organization_id, include_ai_commentary=include_ai_commentary)
     as_of = reporting_period or as_of_period
@@ -671,24 +693,34 @@ def start_mda_deck_job(
         owner,
     )
     deck_period = as_of or bundle_params["as_of_period"]
-    job = submit_export_job(
-        "mda_deck",
-        lambda job_id: _run_mda_deck_job(
-            job_id,
+    try:
+        job = submit_export_job(
+            "mda_deck",
+            lambda job_id: _run_mda_deck_job(
+                job_id,
+                organization_id=organization_id,
+                bundle_params=bundle_params,
+                include_ai_commentary=include_ai_commentary,
+                include_commentary=include_commentary,
+                include_appendix=include_appendix,
+                include_validation=include_validation,
+                block_on_failure=block_on_failure,
+                scenario_mode=scenario_mode,
+                package_mode=package_mode,
+            ),
+            filename=f"mda_deck_{deck_period}.pptx",
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             organization_id=organization_id,
-            bundle_params=bundle_params,
-            include_ai_commentary=include_ai_commentary,
-            include_commentary=include_commentary,
-            include_appendix=include_appendix,
-            include_validation=include_validation,
-            block_on_failure=block_on_failure,
-            scenario_mode=scenario_mode,
-            package_mode=package_mode,
-        ),
-        filename=f"mda_deck_{deck_period}.pptx",
-        content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        organization_id=organization_id,
-    )
+        )
+    except ExportJobConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "active_job_id": exc.active_job_id,
+                "code": "export_job_conflict",
+            },
+        ) from exc
     return job_status_payload(job)
 
 

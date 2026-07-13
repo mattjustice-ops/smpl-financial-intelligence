@@ -95,6 +95,12 @@ type PlatformHealthResponse = {
   };
   export_jobs: {
     active_count: number;
+    queued?: number;
+    running?: number;
+    failed?: number;
+    complete?: number;
+    oldest_queued_seconds?: number | null;
+    durable?: boolean;
     jobs: Array<{
       job_id: string;
       kind: string;
@@ -104,6 +110,7 @@ type PlatformHealthResponse = {
       error: string | null;
       age_seconds: number;
       running_seconds: number | null;
+      durable?: boolean;
     }>;
   };
   last_24h: {
@@ -765,14 +772,22 @@ export function SmplOpsDashboard() {
           ) : null}
 
           <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-white">
-                Export jobs (in-memory, this API instance)
+                Export queue {health.export_jobs.durable ? "(durable)" : "(in-memory fallback)"}
               </h2>
               <span className="text-xs text-slate-500">
-                {health.export_jobs.active_count} active
+                {health.export_jobs.queued ?? 0} queued · {health.export_jobs.running ?? 0} running
+                {(health.export_jobs.failed ?? 0) > 0
+                  ? ` · ${health.export_jobs.failed} failed`
+                  : ""}
               </span>
             </div>
+            {health.export_jobs.oldest_queued_seconds != null ? (
+              <p className="mb-2 text-xs text-amber-300/90">
+                Oldest queued wait: {health.export_jobs.oldest_queued_seconds}s
+              </p>
+            ) : null}
             {health.export_jobs.jobs.length === 0 ? (
               <p className="text-sm text-slate-500">No export jobs in the last hour.</p>
             ) : (
@@ -784,6 +799,9 @@ export function SmplOpsDashboard() {
                     </span>
                     <span className="text-slate-300">{job.kind}</span>
                     <span className="text-slate-500">{job.message}</span>
+                    {job.error ? (
+                      <span className="w-full text-xs text-rose-300">{job.error}</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>

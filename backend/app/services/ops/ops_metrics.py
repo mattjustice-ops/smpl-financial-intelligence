@@ -19,7 +19,7 @@ from app.services.ops.storage_snapshot import (
 )
 from app.services.ops.usage_limits import DEFAULT_USAGE_LIMITS, limits_for_plan
 from app.services.ops.warehouse_health import assess_all_customer_warehouses
-from app.services.reporting.export.export_jobs import list_export_jobs_snapshot
+from app.services.reporting.export.export_jobs import queue_depth_summary
 
 
 def _usage_percent(used: float | int, cap: int | float | None) -> float | None:
@@ -216,7 +216,7 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
     now = time.time()
     since_24h = datetime.now(timezone.utc) - timedelta(hours=24)
 
-    active_jobs = list_export_jobs_snapshot()
+    export_queue = queue_depth_summary()
     storage = maybe_collect_storage_snapshot(db, force=False) or {}
     storage_history = storage_snapshot_history(db, days=90)
 
@@ -310,8 +310,14 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
             "checks": alert_checks,
         },
         "export_jobs": {
-            "active_count": len(active_jobs),
-            "jobs": active_jobs,
+            "active_count": export_queue["active_count"],
+            "queued": export_queue["queued"],
+            "running": export_queue["running"],
+            "failed": export_queue["failed"],
+            "complete": export_queue["complete"],
+            "oldest_queued_seconds": export_queue["oldest_queued_seconds"],
+            "durable": True,
+            "jobs": export_queue["jobs"],
         },
         "last_24h": {
             "llm_calls": int(llm_calls_24h or 0),

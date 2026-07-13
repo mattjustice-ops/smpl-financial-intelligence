@@ -41,6 +41,8 @@ from app.models.billing import (
 from app.models.user import OrganizationMember, User
 from app.models.forecast_version import ForecastVersion
 from app.models.organization import Organization
+from app.models.close_context_blob import CloseContextBlob
+from app.models.export_job import ExportJobRecord
 from app.models.pipeline import IngestBatch, PipelineEvent
 from app.models.quote_submission import QuoteSubmission
 from app.models.usage_event import UsageEvent
@@ -81,6 +83,8 @@ __all__ = [
     "ForecastWorkingCapitalMetrics",
     "GlActual",
     "HeadcountPlan",
+    "CloseContextBlob",
+    "ExportJobRecord",
     "IngestBatch",
     "Invoice",
     "MrrWaterfall",

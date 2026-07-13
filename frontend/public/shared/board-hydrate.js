@@ -633,11 +633,29 @@
             typeof global.formatCopilotReply === "function"
               ? global.formatCopilotReply(reply)
               : reply.replace(/</g, "&lt;");
+          var asOfMeta = "";
+          if (data.context_as_of || data.as_of_period) {
+            var src = data.context_source || "live";
+            var staleLbl = data.stale ? " · stale" : "";
+            var when = data.context_as_of
+              ? new Date(data.context_as_of).toLocaleString()
+              : "";
+            asOfMeta =
+              '<div class="cp-source">Data as of ' +
+              (when || data.as_of_period || "") +
+              " · close " +
+              (data.as_of_period || "") +
+              " · " +
+              src +
+              staleLbl +
+              "</div>";
+          }
           var thinkEl = document.getElementById(thinkId);
           if (thinkEl) {
             thinkEl.outerHTML =
               '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble">' +
               formatted +
+              asOfMeta +
               "</div></div>";
           }
         }
@@ -666,12 +684,12 @@
     var m = parseInt(close.slice(5), 10) - 1;
     var closeLbl = (monthNames()[m] || "") + " " + y;
     bubble.innerHTML =
-      '<div class="cp-section">Ready</div>I have live warehouse data for <strong>' +
+      '<div class="cp-section">Ready</div>I have warehouse data for <strong>' +
       org +
       "</strong> through <strong>" +
       closeLbl +
       "</strong> close. Ask about ARR, revenue, cash, headcount, GTM, or variance vs budget." +
-      '<div class="cp-source">Source: reconciled Neon warehouse via /api/v1/reporting/outlook</div>';
+      '<div class="cp-source">Each answer shows its data-as-of timestamp (freeze pack when available, otherwise live).</div>';
   }
 
   function installLiveExec() {
