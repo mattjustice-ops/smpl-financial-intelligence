@@ -908,33 +908,58 @@
   function renderExportProgress(label, statusJson) {
     var panel = ensureExportProgressPanel();
     panel.style.display = "block";
+    var failed = !!(statusJson && statusJson.status === "failed");
+    panel.style.borderColor = failed ? "rgba(248,113,113,0.55)" : "rgba(255,255,255,0.12)";
     var title = document.getElementById("smplExportProgressTitle");
     var meta = document.getElementById("smplExportProgressMeta");
     var list = document.getElementById("smplExportProgressList");
-    if (title) title.textContent = "Preparing " + label;
-    var msg = (statusJson && statusJson.message) || "Working…";
+    if (title) {
+      title.textContent = failed ? label + " failed" : "Preparing " + label;
+      title.style.color = failed ? "#fca5a5" : "#fff";
+    }
+    var msg = (statusJson && (statusJson.error || statusJson.message)) || "Working…";
     var eta = statusJson && statusJson.eta_seconds;
-    var etaLbl =
-      eta == null
-        ? ""
-        : eta <= 0
+    var etaLbl = "";
+    if (!failed && eta != null) {
+      etaLbl =
+        eta <= 0
           ? "Ready"
           : "Estimated time remaining: ~" + Math.max(1, Math.round(eta / 60)) + " min";
+    }
     if (meta) {
-      meta.textContent = etaLbl ? msg + " · " + etaLbl : msg;
+      meta.style.color = failed ? "#fca5a5" : "#94a3b8";
+      meta.textContent = failed
+        ? "Please try again. " + String(msg).replace(/\s+/g, " ").slice(0, 160)
+        : etaLbl
+          ? msg + " · " + etaLbl
+          : msg;
     }
     var stages =
       statusJson && Array.isArray(statusJson.progress) && statusJson.progress.length
         ? statusJson.progress
-        : [
-            { id: "queued", label: "Export queued", done: true, current: false },
-            { id: "work", label: msg || "Working…", done: false, current: true },
-          ];
+        : failed
+          ? [{ id: "failed", label: "Export failed — please try again", done: false, current: true, failed: true }]
+          : [
+              { id: "queued", label: "Export queued", done: true, current: false },
+              { id: "work", label: msg || "Working…", done: false, current: true },
+            ];
     if (!list) return;
     list.innerHTML = stages
       .map(function (stage) {
-        var mark = stage.done ? "✓" : stage.current ? "●" : "○";
-        var color = stage.done ? "#4ade80" : stage.current ? "#fbbf24" : "#64748b";
+        var isFailed = !!(stage.failed || stage.id === "failed" || (failed && stage.current));
+        var mark = isFailed ? "✕" : stage.done ? "✓" : stage.current ? "●" : "○";
+        var color = isFailed
+          ? "#f87171"
+          : stage.done
+            ? "#4ade80"
+            : stage.current
+              ? "#fbbf24"
+              : "#64748b";
+        var textColor = isFailed
+          ? "#fecaca"
+          : stage.current || stage.done
+            ? "#e2e8f0"
+            : "#94a3b8";
         return (
           '<li style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">' +
           '<span style="color:' +
@@ -943,13 +968,25 @@
           mark +
           "</span>" +
           '<span style="color:' +
-          (stage.current || stage.done ? "#e2e8f0" : "#94a3b8") +
+          textColor +
           ';">' +
           String(stage.label || "").replace(/</g, "&lt;") +
           "</span></li>"
         );
       })
       .join("");
+  }
+
+  function renderExportFailed(label, detail) {
+    renderExportProgress(label, {
+      status: "failed",
+      message: detail || "Export failed",
+      error: detail || "Export failed",
+      progress: [
+        { id: "failed", label: "Export failed — please try again", done: false, current: true, failed: true },
+      ],
+      eta_seconds: null,
+    });
   }
 
   function hideExportProgressSoon() {
@@ -988,17 +1025,14 @@
       );
       if (!startRes.ok) {
         var startErr = await boardApiErrorMessage(startRes);
-        renderExportProgress(exportSpec.label, {
-          message: startErr,
-          status: "failed",
-          progress: [{ id: "failed", label: "Export failed", done: false, current: true }],
-        });
+        renderExportFailed(exportSpec.label, startErr);
         alert(exportSpec.label + " export failed:\n" + startErr);
         return "error";
       }
       var startJson = await startRes.json();
       var jobId = startJson && startJson.job_id;
       if (!jobId) {
+        renderExportFailed(exportSpec.label, "No job id returned from API.");
         alert(exportSpec.label + " export failed: no job id returned from API.");
         return "error";
       }
@@ -1016,11 +1050,9 @@
         var statusJson = await statusRes.json();
         renderExportProgress(exportSpec.label, statusJson);
         if (statusJson.status === "failed") {
-          alert(
-            exportSpec.label +
-              " export failed:\n" +
-              (statusJson.error || statusJson.message || "Unknown error"),
-          );
+          var failDetail = statusJson.error || statusJson.message || "Unknown error";
+          // statusJson.progress already includes "Export failed — please try again"
+          alert(exportSpec.label + " export failed:\n" + failDetail + "\n\nPlease try again.");
           return "error";
         }
         if (statusJson.status === "complete") {
@@ -1033,13 +1065,19 @@
           return "started";
         }
       }
+      renderExportFailed(
+        exportSpec.label,
+        "Timed out after 10 minutes. Please try again.",
+      );
       alert(
         exportSpec.label +
-          " export timed out after 10 minutes. Check Railway logs and retry.",
+          " export timed out after 10 minutes.\n\nPlease try again.",
       );
       return "error";
     } catch (err) {
-      alert(exportSpec.label + " export failed:\n" + boardFetchErrorMessage(err, 600000));
+      var catchDetail = boardFetchErrorMessage(err, 600000);
+      renderExportFailed(exportSpec.label, catchDetail);
+      alert(exportSpec.label + " export failed:\n" + catchDetail + "\n\nPlease try again.");
       return "error";
     }
   }

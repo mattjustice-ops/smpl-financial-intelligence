@@ -458,28 +458,40 @@ def progress_stages_for_job(job: ExportJob) -> list[dict[str, Any]]:
             stage["done"] = i < up_to or (status == "complete" and i <= up_to)
             stage["current"] = i == up_to and status not in ("complete", "failed")
 
-    if status == "complete" or "ready" in message:
+    if status == "complete" or ("ready" in message and status != "failed"):
         for stage in stages:
             stage["done"] = True
             stage["current"] = False
         return stages
 
-    if status == "queued" or message in ("", "queued") or message.startswith("queued"):
-        mark(0)
-    elif "collecting" in message or "starting" in message:
-        mark(1)
+    # Infer how far we got from the last status message (including failures mid-flight).
+    if "generating" in message or "prompt" in message or "building" in message or "export failed" in message:
+        cursor = 3
     elif "three-statement" in message or "cash bridge" in message or "loading" in message:
-        mark(2)
-    elif "generating" in message or "prompt" in message or "building" in message:
-        mark(3)
+        cursor = 2
+    elif "collecting" in message or "starting" in message:
+        cursor = 1
+    elif status == "queued" or message in ("", "queued") or message.startswith("queued"):
+        cursor = 0
     else:
-        mark(1)
+        cursor = 1
+
+    mark(cursor)
 
     if status == "failed":
         for stage in stages:
-            if stage["current"]:
-                stage["current"] = False
-                break
+            stage["current"] = False
+        # Drop unfinished "Ready to download"; surface an explicit retry stage.
+        stages = [stage for stage in stages if stage["id"] != "complete" or stage["done"]]
+        stages.append(
+            {
+                "id": "failed",
+                "label": "Export failed — please try again",
+                "done": False,
+                "current": True,
+                "failed": True,
+            }
+        )
 
     return stages
 

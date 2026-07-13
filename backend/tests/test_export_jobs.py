@@ -109,3 +109,21 @@ def test_progress_stages_advance_with_message() -> None:
     assert stages[0]["done"] is True
     assert stages[3]["current"] is True
     assert stages[3]["label"] == "Building PowerPoint"
+
+
+def test_progress_stages_show_failure_retry() -> None:
+    from app.services.reporting.export.export_jobs import ExportJob, job_status_payload
+
+    job = ExportJob(
+        job_id="fail-test",
+        kind="mda_deck",
+        status="failed",
+        message="Export failed",
+        error="IdleInTransactionSessionTimeout",
+    )
+    payload = job_status_payload(job)
+    assert payload["eta_seconds"] is None
+    stages = payload["progress"]
+    assert stages[-1]["id"] == "failed"
+    assert stages[-1]["failed"] is True
+    assert "try again" in stages[-1]["label"].lower()
