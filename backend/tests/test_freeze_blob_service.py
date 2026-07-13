@@ -46,3 +46,27 @@ def test_get_servable_freeze_marks_stale() -> None:
     assert freeze.status == "STALE"
     assert freeze.context_text == "prior COMPLETE text"
     assert freeze.source == "freeze"
+
+
+def test_should_auto_freeze_for_validation() -> None:
+    from app.services.close_context.freeze_blob_service import should_auto_freeze_for_validation
+
+    assert should_auto_freeze_for_validation("pass") is True
+    assert should_auto_freeze_for_validation("warning") is True
+    assert should_auto_freeze_for_validation("fail") is False
+    assert should_auto_freeze_for_validation(None) is False
+
+
+def test_schedule_auto_freeze_skips_fail_without_thread() -> None:
+    from app.services.close_context.freeze_blob_service import schedule_auto_freeze_after_validation
+
+    db = MagicMock()
+    queued = schedule_auto_freeze_after_validation(
+        db,
+        __import__("uuid").uuid4(),
+        validation_status="fail",
+        as_of_period="2026-06",
+        start_period="2026-01",
+        end_period="2026-06",
+    )
+    assert queued is False

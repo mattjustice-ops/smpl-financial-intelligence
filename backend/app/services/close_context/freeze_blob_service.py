@@ -9,6 +9,7 @@ Rev 4 rules:
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -24,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 BlobStatus = Literal["COMPLETE", "STALE"]
 ContextSource = Literal["freeze", "live"]
+
+_AUTO_FREEZE_DEBOUNCE_SECONDS = 120
+_auto_freeze_lock = threading.Lock()
+_auto_freeze_inflight: set[str] = set()
 
 
 @dataclass
@@ -222,3 +227,123 @@ def build_and_store_freeze_blob(
         source="freeze",
         stale=False,
     )
+
+
+def _org_period_key(organization_id: uuid.UUID, as_of_period: str) -> str:
+    return f"{organization_id}:{to_period(as_of_period)}"
+
+
+def should_auto_freeze_for_validation(status: str | None) -> bool:
+    """Freeze after a clean pass; skip fail. Warnings still freeze (usable close pack)."""
+    return status in ("pass", "warning")
+
+
+def _recent_complete_exists(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+    *,
+    within_seconds: int = _AUTO_FREEZE_DEBOUNCE_SECONDS,
+) -> bool:
+    period = to_period(as_of_period)
+    row = db.scalars(
+        select(CloseContextBlob).where(
+            CloseContextBlob.organization_id == organization_id,
+            CloseContextBlob.as_of_period == period,
+            CloseContextBlob.status == "COMPLETE",
+        )
+    ).first()
+    if row is None or row.built_at is None:
+        return False
+    built = row.built_at
+    if built.tzinfo is None:
+        built = built.replace(tzinfo=timezone.utc)
+    age = (_utcnow() - built.astimezone(timezone.utc)).total_seconds()
+    return age < within_seconds
+
+
+def _run_auto_freeze_job(
+    organization_id: uuid.UUID,
+    *,
+    as_of_period: str,
+    start_period: str,
+    end_period: str,
+) -> None:
+    from app.db.session import SessionLocal
+    from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
+
+    key = _org_period_key(organization_id, as_of_period)
+    db = SessionLocal()
+    token = bind_as_of_period(as_of_period)
+    try:
+        build_and_store_freeze_blob(
+            db,
+            organization_id,
+            as_of_period=as_of_period,
+            start_period=start_period,
+            end_period=end_period,
+        )
+        logger.info(
+            "Auto-freeze COMPLETE for org=%s period=%s",
+            organization_id,
+            as_of_period,
+        )
+    except Exception:
+        logger.exception(
+            "Auto-freeze failed for org=%s period=%s (non-blocking)",
+            organization_id,
+            as_of_period,
+        )
+    finally:
+        reset_as_of_period(token)
+        db.close()
+        with _auto_freeze_lock:
+            _auto_freeze_inflight.discard(key)
+
+
+def schedule_auto_freeze_after_validation(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    validation_status: str | None,
+    as_of_period: str,
+    start_period: str,
+    end_period: str,
+) -> bool:
+    """Best-effort background freeze after validation pass/warning.
+
+    Returns True if a rebuild was scheduled. Never raises to the caller.
+    Debounces recent COMPLETE packs and prevents duplicate in-flight jobs
+    for the same (org, period).
+    """
+    try:
+        if not should_auto_freeze_for_validation(validation_status):
+            return False
+        period = to_period(as_of_period)
+        if _recent_complete_exists(db, organization_id, period):
+            logger.info(
+                "Auto-freeze skipped (debounce) org=%s period=%s",
+                organization_id,
+                period,
+            )
+            return False
+        key = _org_period_key(organization_id, period)
+        with _auto_freeze_lock:
+            if key in _auto_freeze_inflight:
+                return False
+            _auto_freeze_inflight.add(key)
+        threading.Thread(
+            target=_run_auto_freeze_job,
+            kwargs={
+                "organization_id": organization_id,
+                "as_of_period": period,
+                "start_period": start_period,
+                "end_period": end_period,
+            },
+            name=f"auto-freeze-{period}",
+            daemon=True,
+        ).start()
+        return True
+    except Exception:
+        logger.exception("Failed to schedule auto-freeze for org=%s", organization_id)
+        return False

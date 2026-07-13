@@ -236,6 +236,7 @@ def export_executive_commentary(
 
 @export_router.get("/validation", response_model=ExportValidationSummary)
 def export_validation_precheck(
+    response: Response,
     organization_id: uuid.UUID = Query(...),
     scenario: str = Query("Combined"),
     start_period: str = Query(...),
@@ -251,6 +252,8 @@ def export_validation_precheck(
     owner: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> ExportValidationSummary:
+    from app.services.close_context.freeze_blob_service import schedule_auto_freeze_after_validation
+
     get_organization_or_404(db, organization_id)
     params = _export_params(
         scenario,
@@ -267,9 +270,21 @@ def export_validation_precheck(
         owner,
     )
     try:
-        return run_export_validation(db, organization_id, **params)
+        summary = run_export_validation(db, organization_id, **params)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Export validation failed: {exc}") from exc
+
+    queued = schedule_auto_freeze_after_validation(
+        db,
+        organization_id,
+        validation_status=summary.status,
+        as_of_period=params["as_of_period"],
+        start_period=params["start_period"],
+        end_period=params["end_period"],
+    )
+    response.headers["X-Freeze-Queued"] = "true" if queued else "false"
+    response.headers["X-As-Of-Period"] = str(params["as_of_period"])
+    return summary
 
 
 @export_router.get("/preview", response_model=ReportingBundle)
