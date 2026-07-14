@@ -12,6 +12,7 @@ Product and domain documentation for the SaaS Financial Intelligence platform.
 | [Close_Process.md](./Close_Process.md) | Month-end close workflow, roles, sign-off |
 | [Reporting_Logic.md](./Reporting_Logic.md) | Report definitions, tie-outs, validation catalog |
 | [CLOSE_PEAK_WORKLOAD.md](./CLOSE_PEAK_WORKLOAD.md) | **Month-end peak concurrency strategy** — Prompt 5, Copilot, ingest (Rev 4); engineering backlog in §6a–6b |
+| [CUSTOMER_CLOSE_DATA_READINESS.md](./CUSTOMER_CLOSE_DATA_READINESS.md) | **Alignment brief** — customer load → Lock → freeze → decks; receipts, self-serve correct, Agents |
 
 ## Go-live & operations
 
