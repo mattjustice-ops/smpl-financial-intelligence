@@ -392,6 +392,15 @@ Also name:
 | Should ship | Month-End Readiness Dashboard v1 (§6) | Ops/CS/Support triage during first close week |
 | Should ship | **Numbers trust / validation transparency (§6c)** | Customers see which tie-outs passed so board numbers feel real, not opaque |
 | Can wait (Cohort B) | Full automated pre-close cron + night-before pre-warm | Valuable; not blocking first close if manual freeze works |
+
+**Ops note (implemented ahead of Cohort B cron):** night-before freeze rebuild is available now via `POST /api/v1/ops/prewarm-freeze` (internal key) or `backend/scripts/prewarm_freeze.py`. Example Railway cron:
+
+```bash
+curl -X POST "$SFI_PUBLIC_API_URL/api/v1/ops/prewarm-freeze" \
+  -H "X-Smpl-Internal-Key: $BILLING_INTERNAL_API_KEY"
+```
+
+Add `?dry_run=true` to list target orgs without rebuilding. Ops UI Close readiness tab can also dry-run / run prewarm. Prompt 5 hard-blocks with HTTP 409 `freeze_pack_required` when no COMPLETE/STALE pack exists (§4B); STALE still serves labeled.
 | Can wait (Cohort B) | Separate ingest vs. export worker pools (§4G target topology) — unless §2's trigger fires first | Accepted near-term risk; fix on trigger, not on schedule |
 | Can wait (Cohort B) | Prompt 5 regenerate caps (product UI + enforcement) | Soft limits / ops policy OK for first close |
 | Can wait (Cohort B) | Close Ready Phase 2 (§4F), close-week runbook polish, full alert suite | Phase 1 gate + basic on-call is the minimum |

@@ -70,3 +70,72 @@ def test_schedule_auto_freeze_skips_fail_without_thread() -> None:
         end_period="2026-06",
     )
     assert queued is False
+
+
+def test_prewarm_isolates_per_org_failures(monkeypatch) -> None:
+    """One failing org must not abort the batch."""
+    import uuid
+
+    from app.services.close_context import freeze_blob_service as fbs
+
+    org_ok = SimpleNamespace(id=uuid.uuid4(), name="OK Co", status="active", close_month="2026-06")
+    org_bad = SimpleNamespace(id=uuid.uuid4(), name="Bad Co", status="active", close_month="2026-06")
+
+    db = MagicMock()
+    db.scalars.return_value.all.return_value = [org_ok, org_bad]
+
+    def _window(_db, org):  # noqa: ANN001
+        return ("2026-06", "2026-01", "2026-06")
+
+    calls: list[uuid.UUID] = []
+
+    def _build(_db, organization_id, **kwargs):  # noqa: ANN001
+        calls.append(organization_id)
+        if organization_id == org_bad.id:
+            raise RuntimeError("warehouse down")
+        return FreezeContext(
+            organization_id=organization_id,
+            as_of_period="2026-06",
+            status="COMPLETE",
+            context_text="ok",
+            built_at=datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc),
+            validation_status="pass",
+        )
+
+    monkeypatch.setattr(
+        "app.services.reporting.org_reporting_settings.resolve_org_reporting_window",
+        _window,
+    )
+    monkeypatch.setattr(fbs, "build_and_store_freeze_blob", _build)
+
+    payload = fbs.prewarm_freeze_blobs(db, dry_run=False)
+    assert payload["total"] == 2
+    assert payload["succeeded"] == 1
+    assert payload["failed"] == 1
+    assert payload["ok"] is False
+    assert len(calls) == 2
+    assert {r["status"] for r in payload["results"]} == {"complete", "failed"}
+
+
+def test_prewarm_dry_run_does_not_build(monkeypatch) -> None:
+    import uuid
+
+    from app.services.close_context import freeze_blob_service as fbs
+
+    org = SimpleNamespace(id=uuid.uuid4(), name="Dry Co", status="active", close_month="2026-06")
+    db = MagicMock()
+    db.scalars.return_value.all.return_value = [org]
+
+    monkeypatch.setattr(
+        "app.services.reporting.org_reporting_settings.resolve_org_reporting_window",
+        lambda _db, _org: ("2026-06", "2026-01", "2026-06"),
+    )
+
+    def _boom(*_a, **_k):  # noqa: ANN001
+        raise AssertionError("build must not run in dry_run")
+
+    monkeypatch.setattr(fbs, "build_and_store_freeze_blob", _boom)
+    payload = fbs.prewarm_freeze_blobs(db, dry_run=True)
+    assert payload["succeeded"] == 1
+    assert payload["failed"] == 0
+    assert payload["results"][0]["status"] == "dry_run"

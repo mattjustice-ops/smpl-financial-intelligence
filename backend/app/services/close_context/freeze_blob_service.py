@@ -165,8 +165,18 @@ def build_and_store_freeze_blob(
         pass
 
     validation_status = None
+    validation_check_ids: list[str] = []
     if bundle.validation is not None:
         validation_status = getattr(bundle.validation, "status", None)
+        try:
+            checks = getattr(bundle.validation, "checks", None) or []
+            validation_check_ids = [
+                str(getattr(c, "validation_name", "") or "")
+                for c in checks
+                if getattr(c, "validation_name", None)
+            ]
+        except Exception:
+            validation_check_ids = []
 
     sections = {
         "kpis": True,
@@ -182,6 +192,7 @@ def build_and_store_freeze_blob(
         "end_period": end_period,
         "char_count": len(context_text),
         "organization_name": bundle.organization_name,
+        "validation_check_ids": validation_check_ids,
     }
 
     existing = db.scalars(
@@ -357,3 +368,83 @@ def schedule_auto_freeze_after_validation(
     except Exception:
         logger.exception("Failed to schedule auto-freeze for org=%s", organization_id)
         return False
+
+
+def prewarm_freeze_blobs(
+    db: Session,
+    *,
+    organization_id: uuid.UUID | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Night-before / ops freeze rebuild for active orgs with a close month.
+
+    Rebuilds COMPLETE packs so close morning is not cold. Per-org failures are
+    isolated — one bad org does not abort the batch.
+    """
+    from app.models.organization import Organization
+    from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
+
+    query = select(Organization).where(
+        Organization.status.in_(("active", "trialing", "past_due")),
+        Organization.close_month.is_not(None),
+    )
+    if organization_id is not None:
+        query = query.where(Organization.id == organization_id)
+    orgs = db.scalars(query.order_by(Organization.name)).all()
+
+    results: list[dict[str, Any]] = []
+    succeeded = 0
+    failed = 0
+    for org in orgs:
+        try:
+            as_of, start, end = resolve_org_reporting_window(db, org)
+            entry: dict[str, Any] = {
+                "organization_id": str(org.id),
+                "organization_name": org.name,
+                "as_of_period": as_of,
+                "start_period": start,
+                "end_period": end,
+            }
+            if dry_run:
+                entry["status"] = "dry_run"
+                results.append(entry)
+                succeeded += 1
+                continue
+            freeze = build_and_store_freeze_blob(
+                db,
+                org.id,
+                as_of_period=as_of,
+                start_period=start,
+                end_period=end,
+            )
+            entry["status"] = "complete"
+            entry["freeze_status"] = freeze.status
+            entry["built_at"] = freeze.context_as_of_iso
+            entry["validation_status"] = freeze.validation_status
+            results.append(entry)
+            succeeded += 1
+        except Exception as exc:
+            failed += 1
+            logger.exception("Prewarm freeze failed for org=%s", org.id)
+            results.append(
+                {
+                    "organization_id": str(org.id),
+                    "organization_name": org.name,
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    return {
+        "ok": failed == 0,
+        "dry_run": dry_run,
+        "total": len(orgs),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+        "generated_at": _utcnow().isoformat(),
+    }

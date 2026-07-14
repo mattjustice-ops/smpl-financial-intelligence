@@ -80,6 +80,40 @@ def get_close_session_detail(
     return payload
 
 
+@ops_router.post("/prewarm-freeze")
+def post_prewarm_freeze(
+    organization_id: uuid.UUID | None = Query(default=None),
+    dry_run: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_internal_auth_key),
+) -> dict:
+    """Night-before freeze rebuild for active orgs (Close Peak pre-warm).
+
+    Schedule via Railway / Task Scheduler, e.g.:
+    curl -X POST "$SFI_PUBLIC_API_URL/api/v1/ops/prewarm-freeze" \\
+      -H "X-Smpl-Internal-Key: $BILLING_INTERNAL_API_KEY"
+    """
+    from app.services.close_context.freeze_blob_service import prewarm_freeze_blobs
+
+    payload = prewarm_freeze_blobs(
+        db,
+        organization_id=organization_id,
+        dry_run=dry_run,
+    )
+    record_usage_event(
+        event_type="prewarm_freeze",
+        feature="ops_prewarm",
+        metadata={
+            "total": payload.get("total"),
+            "succeeded": payload.get("succeeded"),
+            "failed": payload.get("failed"),
+            "dry_run": dry_run,
+        },
+        db=db,
+    )
+    return payload
+
+
 @ops_router.post("/collect-storage-snapshot")
 def post_collect_storage_snapshot(
     force: bool = Query(default=False),

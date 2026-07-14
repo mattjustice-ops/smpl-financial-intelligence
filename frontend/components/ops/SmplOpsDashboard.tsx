@@ -19,6 +19,10 @@ type CloseReadinessRow = {
   close_session_status: string | null;
   validation_status: string;
   trust_label: string | null;
+  validation_check_ids?: string[];
+  prompt5_deck_runs_used?: number;
+  prompt5_deck_runs_limit?: number;
+  prompt5_deck_runs_remaining?: number | null;
   freeze_status: string;
   queue_status: {
     status: string;
@@ -251,6 +255,8 @@ export function SmplOpsDashboard() {
   const [usage, setUsage] = useState<CustomerUsageResponse | null>(null);
   const [health, setHealth] = useState<PlatformHealthResponse | null>(null);
   const [readiness, setReadiness] = useState<CloseReadinessResponse | null>(null);
+  const [prewarmBusy, setPrewarmBusy] = useState(false);
+  const [prewarmMsg, setPrewarmMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [periodMode, setPeriodMode] = useState<"month" | "rolling">("month");
@@ -348,6 +354,38 @@ export function SmplOpsDashboard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
+    }
+  };
+
+  const runPrewarm = async (dryRun: boolean) => {
+    setPrewarmBusy(true);
+    setPrewarmMsg(null);
+    setError(null);
+    try {
+      const qs = new URLSearchParams({ dry_run: dryRun ? "true" : "false" });
+      const res = await fetch(`/api/ops/prewarm-freeze?${qs}`, {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const detail = await res.text();
+        throw new Error(detail || `Prewarm API returned ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        total?: number;
+        succeeded?: number;
+        failed?: number;
+        dry_run?: boolean;
+      };
+      setPrewarmMsg(
+        `${data.dry_run ? "Dry run" : "Prewarm"}: ${data.succeeded ?? 0}/${data.total ?? 0} ok` +
+          (data.failed ? `, ${data.failed} failed` : ""),
+      );
+      if (!dryRun) await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPrewarmBusy(false);
     }
   };
 
@@ -918,6 +956,27 @@ export function SmplOpsDashboard() {
                 Close readiness requires migration <code>close_001</code> on the API database.
               </p>
             )}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={prewarmBusy}
+                onClick={() => void runPrewarm(true)}
+                className="rounded-md border border-white/15 bg-slate-950 px-3 py-1.5 text-xs text-slate-300 hover:border-teal-500/40 disabled:opacity-50"
+              >
+                Dry-run prewarm
+              </button>
+              <button
+                type="button"
+                disabled={prewarmBusy}
+                onClick={() => void runPrewarm(false)}
+                className="rounded-md border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 text-xs text-teal-200 hover:bg-teal-500/20 disabled:opacity-50"
+              >
+                {prewarmBusy ? "Prewarming…" : "Prewarm freezes"}
+              </button>
+            </div>
+            {prewarmMsg ? (
+              <p className="w-full text-xs text-teal-300/90">{prewarmMsg}</p>
+            ) : null}
           </div>
 
           {readiness ? (
@@ -928,7 +987,9 @@ export function SmplOpsDashboard() {
                     <th className="px-4 py-3 font-medium">Organization</th>
                     <th className="px-4 py-3 font-medium">Session</th>
                     <th className="px-4 py-3 font-medium">Validation</th>
+                    <th className="px-4 py-3 font-medium">Checks</th>
                     <th className="px-4 py-3 font-medium">Freeze</th>
+                    <th className="px-4 py-3 font-medium">P5 decks</th>
                     <th className="px-4 py-3 font-medium">Queue</th>
                     <th className="px-4 py-3 font-medium">Ready</th>
                     <th className="px-4 py-3 font-medium">Ladder</th>
@@ -981,6 +1042,20 @@ export function SmplOpsDashboard() {
                           {row.trust_label || row.validation_status}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-[11px] text-slate-500">
+                        {(row.validation_check_ids?.length ?? 0) > 0
+                          ? `${row.validation_check_ids!.length} ids`
+                          : "—"}
+                        {(row.validation_check_ids?.length ?? 0) > 0 ? (
+                          <div
+                            className="mt-1 max-w-[10rem] truncate font-mono text-[10px] text-slate-600"
+                            title={row.validation_check_ids!.join(", ")}
+                          >
+                            {row.validation_check_ids!.slice(0, 2).join(", ")}
+                            {(row.validation_check_ids!.length ?? 0) > 2 ? "…" : ""}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-3">
                         <span
                           className={
@@ -998,6 +1073,14 @@ export function SmplOpsDashboard() {
                             {new Date(row.as_of_timestamp).toLocaleString()}
                           </div>
                         ) : null}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                        {row.prompt5_deck_runs_remaining == null
+                          ? `${row.prompt5_deck_runs_used ?? 0} used`
+                          : `${row.prompt5_deck_runs_remaining} left`}
+                        <div className="mt-1 text-[11px] text-slate-600">
+                          {row.prompt5_deck_runs_used ?? 0}/{row.prompt5_deck_runs_limit ?? "—"}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-400">
                         {row.queue_status.status}

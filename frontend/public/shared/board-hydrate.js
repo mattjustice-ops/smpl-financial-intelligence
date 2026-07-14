@@ -1227,6 +1227,16 @@
           );
           return "error";
         }
+        if (startRes.status === 409 && /freeze/i.test(startErr)) {
+          renderExportFailed(exportSpec.label, startErr);
+          alert(
+            exportSpec.label +
+              " needs a close freeze pack first.\n\n" +
+              startErr +
+              "\n\nRun board validation (or ask Ops to prewarm freezes), then retry.",
+          );
+          return "error";
+        }
         renderExportFailed(exportSpec.label, startErr);
         alert(exportSpec.label + " export failed:\n" + startErr);
         return "error";

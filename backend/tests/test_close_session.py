@@ -80,6 +80,7 @@ def test_close_ready_phase1_requires_validation_and_complete_freeze() -> None:
         status="COMPLETE",
         validation_status="pass",
         built_at=datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc),
+        metadata_json={"validation_check_ids": ["cash_bridge_bs", "deferred_revenue"]},
     )
     db = MagicMock()
 
@@ -111,4 +112,8 @@ def test_close_ready_phase1_requires_validation_and_complete_freeze() -> None:
     assert readiness["trust_status"] == "verified"
     assert readiness["close_session_id"] == str(session_row.id)
     assert readiness["calculation_status"] == "not_applicable"
+    assert readiness["validation_check_ids"] == ["cash_bridge_bs", "deferred_revenue"]
+    assert readiness["prompt5_deck_runs_used"] == 0
+    assert readiness["prompt5_deck_runs_limit"] >= 1
+    assert readiness["prompt5_deck_runs_remaining"] == readiness["prompt5_deck_runs_limit"]
     assert session_row.status == "freeze_complete"

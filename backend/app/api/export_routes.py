@@ -82,6 +82,27 @@ def _org_for_board_export(
     return org
 
 
+def _require_servable_freeze_for_mda(db: Session, organization_id: uuid.UUID, as_of_period: str):
+    """§4B: allow COMPLETE or STALE; hard-block only when no pack exists."""
+    from app.services.close_context.freeze_blob_service import get_servable_freeze
+
+    freeze = get_servable_freeze(db, organization_id, as_of_period)
+    if freeze is None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "freeze_pack_required",
+                "as_of_period": as_of_period,
+                "message": (
+                    f"No COMPLETE/STALE close-context pack for {as_of_period}. "
+                    "Run validation (or ops prewarm-freeze) so the first freeze reaches COMPLETE, "
+                    "then regenerate the MD&A deck."
+                ),
+            },
+        )
+    return freeze
+
+
 def _load_board_export_enrichment(
     db: Session,
     organization_id: uuid.UUID,
@@ -627,6 +648,25 @@ def _run_mda_deck_job(
         db.close()
 
     try:
+        freeze_status = "unknown"
+        freeze_as_of = ""
+        freeze_stale = False
+        from app.db.session import SessionLocal as _SessionLocal
+        from app.services.close_context.freeze_blob_service import get_servable_freeze
+
+        _fdb = _SessionLocal()
+        try:
+            freeze = get_servable_freeze(_fdb, organization_id, bundle.as_of_period)
+            if freeze is None:
+                raise RuntimeError(
+                    f"Freeze pack disappeared for {bundle.as_of_period} before deck generation"
+                )
+            freeze_status = freeze.status
+            freeze_as_of = freeze.context_as_of_iso
+            freeze_stale = freeze.stale
+        finally:
+            _fdb.close()
+
         update_export_job_message(job_id, "Generating MD&A deck (Prompt 5)…")
         content, pptx_source = build_pptx_mda_deck(
             bundle,
@@ -649,7 +689,10 @@ def _run_mda_deck_job(
                 "X-Board-AI-Commentary": "true" if include_ai_commentary else "false",
                 "X-Board-Deck-Kind": "mda",
                 "X-As-Of-Period": bundle.as_of_period,
-                "X-Context-Source": "live",
+                "X-Context-Source": "freeze",
+                "X-Freeze-Status": freeze_status,
+                "X-Context-As-Of": freeze_as_of,
+                "X-Freeze-Stale": "true" if freeze_stale else "false",
             },
         )
     finally:
@@ -777,6 +820,7 @@ def start_mda_deck_job(
     )
     deck_period = as_of or bundle_params["as_of_period"]
     assert_prompt5_regen_cap(db, org, deck_period)
+    freeze = _require_servable_freeze_for_mda(db, organization_id, deck_period)
     try:
         job = submit_export_job(
             "mda_deck",
@@ -796,6 +840,11 @@ def start_mda_deck_job(
             content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             organization_id=organization_id,
             as_of_period=bundle_params.get("as_of_period") or as_of,
+            metadata={
+                "freeze_status": freeze.status,
+                "freeze_built_at": freeze.context_as_of_iso,
+                "freeze_stale": freeze.stale,
+            },
         )
     except ExportJobConflictError as exc:
         raise HTTPException(
@@ -1249,6 +1298,7 @@ def export_mda_deck(
         segment,
         owner,
     )
+    _require_servable_freeze_for_mda(db, organization_id, params["as_of_period"])
     try:
         bundle = collect_bundle(
             db,

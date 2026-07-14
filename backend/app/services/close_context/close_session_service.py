@@ -215,6 +215,35 @@ def build_org_close_readiness(
         "medium" if freeze_status in ("COMPLETE", "STALE") or validation_status else "low"
     )
 
+    meta = blob.metadata_json if blob and isinstance(getattr(blob, "metadata_json", None), dict) else {}
+    validation_check_ids = meta.get("validation_check_ids") if isinstance(meta.get("validation_check_ids"), list) else []
+
+    from app.core.config import get_settings
+    from app.services.ops.usage_limits import (
+        DEFAULT_PROMPT5_DECK_PER_CLOSE,
+        count_mda_deck_runs_for_close,
+    )
+
+    settings = get_settings()
+    deck_limit = int(
+        getattr(settings, "smpl_prompt5_deck_per_close", DEFAULT_PROMPT5_DECK_PER_CLOSE)
+        or DEFAULT_PROMPT5_DECK_PER_CLOSE
+    )
+    deck_used = 0
+    try:
+        deck_used = count_mda_deck_runs_for_close(db, organization_id, period)
+    except Exception:
+        logger.debug("Prompt 5 remaining count unavailable", exc_info=True)
+    deck_remaining = max(0, deck_limit - deck_used) if deck_limit > 0 else None
+
+    # Prefer freeze-aware trust for ops rows (Verified only when COMPLETE).
+    if validation_status == "fail":
+        trust_status, trust_label = "blocked", "Blocked"
+    elif close_ready_phase1:
+        trust_status, trust_label = "verified", "Verified"
+    elif validation_status:
+        trust_status, trust_label = "needs_review", "Needs review"
+
     return {
         "organization_id": str(organization_id),
         "organization_name": organization_name,
@@ -225,6 +254,10 @@ def build_org_close_readiness(
         "validation_status": validation_status or "unknown",
         "trust_status": trust_status,
         "trust_label": trust_label,
+        "validation_check_ids": validation_check_ids,
+        "prompt5_deck_runs_used": deck_used,
+        "prompt5_deck_runs_limit": deck_limit,
+        "prompt5_deck_runs_remaining": deck_remaining,
         "calculation_status": "not_applicable",
         "narrative_status": "not_applicable",
         "freeze_status": freeze_status,
