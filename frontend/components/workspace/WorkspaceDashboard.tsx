@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 
 import { AppSessionBanner } from "@/components/app/AppSessionBanner";
+import { CloseWorkflowPanel } from "@/components/workspace/CloseWorkflowPanel";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { DEFAULT_USAGE_LIMITS } from "@/lib/entitlements/usage-limits";
 
@@ -381,6 +382,7 @@ export function WorkspaceDashboard() {
 
       {tab === "data" && summary ? (
         <section className="space-y-6">
+          {organizationId ? <CloseWorkflowPanel organizationId={organizationId} /> : null}
           <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
             <h2 className="text-sm font-medium text-white">Upload CSV</h2>
             <p className="mt-1 text-xs text-slate-500">

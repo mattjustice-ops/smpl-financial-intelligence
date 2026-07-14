@@ -20,6 +20,10 @@ type CloseReadinessRow = {
   validation_status: string;
   trust_label: string | null;
   validation_check_ids?: string[];
+  workflow_state?: string | null;
+  current_lock_version?: number;
+  certified_close?: boolean;
+  certified_at?: string | null;
   prompt5_deck_runs_used?: number;
   prompt5_deck_runs_limit?: number;
   prompt5_deck_runs_remaining?: number | null;
@@ -986,6 +990,7 @@ export function SmplOpsDashboard() {
                   <tr>
                     <th className="px-4 py-3 font-medium">Organization</th>
                     <th className="px-4 py-3 font-medium">Session</th>
+                    <th className="px-4 py-3 font-medium">Workflow</th>
                     <th className="px-4 py-3 font-medium">Validation</th>
                     <th className="px-4 py-3 font-medium">Checks</th>
                     <th className="px-4 py-3 font-medium">Freeze</th>
@@ -1026,6 +1031,13 @@ export function SmplOpsDashboard() {
                             {row.close_session_status}
                           </div>
                         ) : null}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                        {row.workflow_state || "—"}
+                        <div className="mt-1 text-[11px] text-slate-600">
+                          Lock v{row.current_lock_version ?? 0}
+                          {row.certified_close ? " · certified" : ""}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span

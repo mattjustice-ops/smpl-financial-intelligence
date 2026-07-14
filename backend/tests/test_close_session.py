@@ -75,6 +75,9 @@ def test_close_ready_phase1_requires_validation_and_complete_freeze() -> None:
         organization_id=org_id,
         as_of_period="2026-06",
         status="open",
+        workflow_state="OPEN",
+        current_lock_version=0,
+        certified_at=None,
     )
     blob = SimpleNamespace(
         status="COMPLETE",

@@ -146,8 +146,36 @@ def _finalize_batch(
             metadata={"rows_imported": imported},
         )
 
+    # Customer Close Workflow — durable load receipt
+    try:
+        from app.services.close_context.close_workflow_service import record_load_receipt
+        from app.services.organizations import get_organization_or_404
+        from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
+
+        org = get_organization_or_404(db, organization_id)
+        as_of, _, _ = resolve_org_reporting_window(db, org)
+        period = batch.period or as_of
+        receipt = record_load_receipt(
+            db,
+            organization_id=organization_id,
+            as_of_period=period,
+            source=source,
+            status=status,
+            rows_staged=rows_staged,
+            rows_applied=imported,
+            rows_rejected=rejected,
+            entity_type=res.csv_kind,
+            ingest_batch_id=batch.id,
+            filename=batch.filename,
+            error_summary=res.validation_errors[:20] if res.validation_errors else None,
+        )
+    except Exception:
+        receipt = None
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception("Failed to record close load receipt for batch=%s", batch.id)
+
     db.commit()
-    return enrich_ingest_result(
+    result = enrich_ingest_result(
         db,
         organization_id,
         {
@@ -160,6 +188,15 @@ def _finalize_batch(
         },
         filename=batch.filename,
     )
+    if receipt is not None:
+        result["load_receipt_id"] = str(receipt.id)
+        result["load_receipt"] = {
+            "rows_staged": receipt.rows_staged,
+            "rows_applied": receipt.rows_applied,
+            "rows_rejected": receipt.rows_rejected,
+            "status": receipt.status,
+        }
+    return result
 
 
 def ingest_csv_bytes(

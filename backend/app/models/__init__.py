@@ -43,6 +43,7 @@ from app.models.forecast_version import ForecastVersion
 from app.models.organization import Organization
 from app.models.close_context_blob import CloseContextBlob
 from app.models.close_session import CloseSession
+from app.models.close_workflow import CloseLoadReceipt, CloseLockEvent
 from app.models.export_job import ExportJobRecord
 from app.models.pipeline import IngestBatch, PipelineEvent
 from app.models.quote_submission import QuoteSubmission
@@ -86,6 +87,8 @@ __all__ = [
     "HeadcountPlan",
     "CloseContextBlob",
     "CloseSession",
+    "CloseLoadReceipt",
+    "CloseLockEvent",
     "ExportJobRecord",
     "IngestBatch",
     "Invoice",

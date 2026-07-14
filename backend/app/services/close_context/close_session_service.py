@@ -269,10 +269,25 @@ def build_org_close_readiness(
         "as_of_timestamp": as_of_timestamp,
         "customer_ladder": (
             "Close Certified"
+            if close_ready_phase1 and getattr(session, "certified_at", None)
+            else "Ready for Executive Review"
             if close_ready_phase1
             else "Close Validation"
             if validation_status in ("pass", "warning", "fail")
             else "Preparing Close"
+        ),
+        "workflow_state": getattr(session, "workflow_state", None) if session else None,
+        "current_lock_version": getattr(session, "current_lock_version", 0) if session else 0,
+        "certified_at": (
+            session.certified_at.isoformat()
+            if session and getattr(session, "certified_at", None)
+            else None
+        ),
+        "certified_close": bool(
+            session
+            and getattr(session, "certified_at", None)
+            and freeze_status == "COMPLETE"
+            and int(getattr(session, "current_lock_version", 0) or 0) > 0
         ),
     }
 

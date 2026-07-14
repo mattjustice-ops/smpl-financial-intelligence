@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,7 @@ class CloseSession(Base):
 
     Status advances with existing signals (validation / freeze). Calculation and
     narrative stages remain reserved until Close Ready Phase 2 / Class 2.
+    Customer Close Workflow denorm: workflow_state + lock_version + certified_at.
     """
 
     __tablename__ = "close_sessions"
@@ -42,6 +43,15 @@ class CloseSession(Base):
     as_of_period: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
     # open | validation_complete | freeze_complete | archived
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", index=True)
+    # Customer Close Workflow state machine (see docs/CUSTOMER_CLOSE_WORKFLOW.md)
+    workflow_state: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="OPEN",
+        index=True,
+    )
+    current_lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    certified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
