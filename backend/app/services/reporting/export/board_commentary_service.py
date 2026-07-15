@@ -990,9 +990,9 @@ def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCo
     if not (settings.anthropic_api_key or settings.openai_api_key):
         return slides
     try:
-        client = build_commentary_llm_client()
+        client = build_commentary_llm_client(purpose="interactive")
         slide_keys = [k for k in NARRATIVE_SLIDE_ORDER if k in slides]
-        metrics_blob = copilot_context_blob(bundle)[:24000]
+        metrics_blob = copilot_context_blob(bundle)[:16000]
         key_list = ", ".join(slide_keys)
         prompt = (
             f"{strategic_context_for_prompt()}\n\n"

@@ -330,14 +330,18 @@ def build_prompt5_user_message(
             f"- {w}" for w in warnings
         ) + "\n\n"
 
+    from app.core.config import get_settings
     from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
 
-    # Full freeze pack (already sized at build) — do not second-truncate for quality.
+    # Fast-AI demos: keep drivers, but don't paste the entire 48k pack into Haiku.
+    # Quality path (SMPL_FAST_AI=false): full freeze, no secondary truncate.
+    freeze_max = 20000 if bool(getattr(get_settings(), "smpl_fast_ai", True)) else None
     freeze_block = format_freeze_prompt_block(
         context_text=freeze_context_text,
         context_as_of=freeze_context_as_of,
         status=freeze_status,
         stale=freeze_stale,
+        max_chars=freeze_max,
         number_guidance=(
             "Use this freeze for narrative tone, drivers, and period framing. "
             "Copy slide numbers from DATA PAYLOAD JSON verbatim — do not invent figures."
@@ -526,7 +530,7 @@ def build_claude_deck_pptx_bytes(
     freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
     """Prompt 5: Claude writes PptxGenJS script from bundle data; Node renders PPTX."""
-    client = build_commentary_llm_client()
+    client = build_commentary_llm_client(purpose="export")
     if not hasattr(client, "generate_text"):
         raise RuntimeError("Configured LLM client does not support raw text generation.")
 

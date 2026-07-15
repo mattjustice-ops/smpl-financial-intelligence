@@ -35,16 +35,19 @@ def build_prompt2_user_message(
     freeze_status: str | None = None,
     freeze_stale: bool = False,
 ) -> str:
+    from app.core.config import get_settings
     from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
 
     payload = build_mda_package_payload(
         bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data
     )
+    freeze_max = 20000 if bool(getattr(get_settings(), "smpl_fast_ai", True)) else None
     freeze_block = format_freeze_prompt_block(
         context_text=freeze_context_text,
         context_as_of=freeze_context_as_of,
         status=freeze_status,
         stale=freeze_stale,
+        max_chars=freeze_max,
         number_guidance=(
             "Use this freeze for narrative tone, operational drivers, and period framing. "
             "Dollar / percent figures must still come from DATA PAYLOAD JSON only — never invent."
@@ -120,7 +123,7 @@ def build_claude_mda_package_xlsx_bytes(
         _archive_artifacts(bundle.as_of_period, payload, commentary, xlsx_bytes)
         return xlsx_bytes, "metrics_only"
 
-    client = build_commentary_llm_client()
+    client = build_commentary_llm_client(purpose="export")
     user_message = build_prompt2_user_message(
         bundle,
         ts_data=ts_data,

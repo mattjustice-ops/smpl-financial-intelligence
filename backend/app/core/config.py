@@ -52,11 +52,11 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 60.0
 
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
-    # Heavy exports (Prompt 2 / Prompt 5) — quality-first, longer timeout OK.
+    # Used when SMPL_FAST_AI=false (quality-first close week).
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_temperature: float = 0.2
     anthropic_timeout_seconds: float = 300.0
-    # Interactive board AI (Copilot + slide regenerate) — must stay demo-fast.
+    # Demo / interactive speed path — Haiku for Copilot, regenerate, Prompt 2 & 5.
     anthropic_interactive_model: str = Field(
         default="claude-haiku-4-5",
         validation_alias="ANTHROPIC_INTERACTIVE_MODEL",
@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     anthropic_interactive_timeout_seconds: float = Field(
         default=45.0,
         validation_alias="ANTHROPIC_INTERACTIVE_TIMEOUT_SECONDS",
+    )
+    # Prompt 2 / Prompt 5 still need headroom for large JSON / PptxGenJS scripts.
+    anthropic_fast_export_timeout_seconds: float = Field(
+        default=120.0,
+        validation_alias="ANTHROPIC_FAST_EXPORT_TIMEOUT_SECONDS",
+    )
+    # Default ON so demos feel instant even if Railway still has Sonnet in ANTHROPIC_MODEL.
+    smpl_fast_ai: bool = Field(
+        default=True,
+        validation_alias="SMPL_FAST_AI",
+        description="Use Haiku for all board AI (Copilot, regenerate, Prompt 2/5).",
     )
 
     # Board MD&A deck — reference PPTX (SMPL Board Review Q2 2026 template).
