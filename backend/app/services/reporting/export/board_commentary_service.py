@@ -857,6 +857,11 @@ def enrich_slide_with_ai(
     bundle: ReportingBundle,
     slide_key: str,
     base: SlideCommentary,
+    *,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> SlideCommentary:
     """LLM Key Takeaways for a single board slide (on-demand regenerate)."""
     from app.services.reporting.export.board_api_prompts import (
@@ -877,7 +882,15 @@ def enrich_slide_with_ai(
         return base
 
     if slide_key not in BOARD_DECK_SLIDE_KEYS:
-        return _enrich_slide_with_ai_legacy(bundle, slide_key, base)
+        return _enrich_slide_with_ai_legacy(
+            bundle,
+            slide_key,
+            base,
+            freeze_context_text=freeze_context_text,
+            freeze_context_as_of=freeze_context_as_of,
+            freeze_status=freeze_status,
+            freeze_stale=freeze_stale,
+        )
 
     try:
         client = build_commentary_llm_client()
@@ -885,8 +898,15 @@ def enrich_slide_with_ai(
         max_bullets, max_words, max_chars = slide_prompt_limits(slide_key)
         raw = client.generate(
             system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
-            user_prompt=board_deck_single_slide_user_message(payload),
-            max_tokens=2048,
+            user_prompt=board_deck_single_slide_user_message(
+                payload,
+                freeze_context_text=freeze_context_text,
+                freeze_context_as_of=freeze_context_as_of,
+                freeze_status=freeze_status,
+                freeze_stale=freeze_stale,
+            ),
+            # Keep headroom for comprehensive bullets — do not starve quality for latency.
+            max_tokens=4096,
         )
         bullets = parse_board_deck_bullets_response(raw, slide_key)
         bullets = validate_and_trim_bullets(
@@ -907,19 +927,38 @@ def _enrich_slide_with_ai_legacy(
     bundle: ReportingBundle,
     slide_key: str,
     base: SlideCommentary,
+    *,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> SlideCommentary:
     """Fallback narrative paragraph for non-board-deck slide keys."""
+    from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
+
     try:
         client = build_commentary_llm_client()
-        metrics_blob = metrics_prompt_blob(bundle)
+        freeze_block = format_freeze_prompt_block(
+            context_text=freeze_context_text,
+            context_as_of=freeze_context_as_of,
+            status=freeze_status,
+            stale=freeze_stale,
+        )
+        # Prefer the full freeze pack when present; otherwise the live metrics blob.
+        metrics_blob = (
+            freeze_context_text.strip()
+            if freeze_context_text and freeze_context_text.strip()
+            else metrics_prompt_blob(bundle)
+        )
         slide_label = slide_key.replace("_", " ")
         prompt = (
             f"{strategic_context_for_prompt()}\n\n"
             f"{requirements_prompt_block('board_slide_commentary')}\n\n"
+            f"{freeze_block}"
             f"Board slide: {slide_label}.\n"
             f"Metrics:\n{metrics_blob}\n\n"
             'Respond with JSON only: {"narrative": "..."} — one paragraph, 4 sentences, board-ready.\n'
-            "Use live metrics above; do not copy example numbers."
+            "Use the metrics above; do not copy example numbers."
         )
         raw = client.generate(
             system_prompt=CFO_BOARD_NARRATIVE_SYSTEM,

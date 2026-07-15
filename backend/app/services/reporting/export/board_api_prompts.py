@@ -66,14 +66,40 @@ _SINGLE_SLIDE_INSTRUCTIONS = (
 )
 
 
-def board_deck_single_slide_user_message(payload: dict[str, Any]) -> str:
+def board_deck_single_slide_user_message(
+    payload: dict[str, Any],
+    *,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
+) -> str:
     """Serialize the dynamic user message for a single-slide API call."""
+    from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
+
+    freeze_block = format_freeze_prompt_block(
+        context_text=freeze_context_text,
+        context_as_of=freeze_context_as_of,
+        status=freeze_status,
+        stale=freeze_stale,
+        number_guidance=(
+            "Use this freeze for operational drivers and period framing. "
+            "Bullet numbers must come from the slide payload JSON only — never invent figures."
+        ),
+    )
     body = {
         "task": "board_slide_commentary",
         **payload,
         "instructions": _SINGLE_SLIDE_INSTRUCTIONS,
     }
-    return json.dumps(body, indent=2)
+    payload_json = json.dumps(body, indent=2)
+    if freeze_block:
+        return (
+            f"{freeze_block}"
+            "SLIDE PAYLOAD (JSON) — primary number source for Key Takeaways:\n"
+            f"{payload_json}"
+        )
+    return payload_json
 
 
 def parse_board_deck_bullets_response(raw: Any, slide_key: str) -> list[str]:

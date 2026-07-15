@@ -330,29 +330,19 @@ def build_prompt5_user_message(
             f"- {w}" for w in warnings
         ) + "\n\n"
 
-    freeze_block = ""
-    if freeze_context_text:
-        status = (freeze_status or ("STALE" if freeze_stale else "COMPLETE")).upper()
-        label = (
-            "STALE — last complete freeze (numbers below JSON still drive slide layout; "
-            "narrative/as-of must respect this freeze)"
-            if freeze_stale or status == "STALE"
-            else "COMPLETE close freeze pack"
-        )
-        as_of = freeze_context_as_of or "unknown"
-        # Cap freeze prose so the JSON layout payload remains the primary number source.
-        body = freeze_context_text.strip()
-        if len(body) > 24000:
-            body = body[:24000] + "\n…[freeze context truncated]"
-        freeze_block = (
-            "CLOSE FREEZE CONTEXT (authoritative labeled snapshot for commentary/as-of):\n"
-            f"Context source: freeze ({label})\n"
-            f"Freeze status: {status}\n"
-            f"Context as of: {as_of}\n"
-            "Use this freeze for narrative tone and period framing. "
-            "Copy slide numbers from DATA PAYLOAD JSON verbatim — do not invent figures.\n\n"
-            f"{body}\n\n"
-        )
+    from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
+
+    # Full freeze pack (already sized at build) — do not second-truncate for quality.
+    freeze_block = format_freeze_prompt_block(
+        context_text=freeze_context_text,
+        context_as_of=freeze_context_as_of,
+        status=freeze_status,
+        stale=freeze_stale,
+        number_guidance=(
+            "Use this freeze for narrative tone, drivers, and period framing. "
+            "Copy slide numbers from DATA PAYLOAD JSON verbatim — do not invent figures."
+        ),
+    )
 
     return (
         "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"

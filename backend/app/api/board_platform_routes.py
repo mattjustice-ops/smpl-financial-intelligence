@@ -114,10 +114,22 @@ def regenerate_slide_commentary(
     body: BoardCommentaryRequest,
     db: Session = Depends(get_db),
 ) -> BoardCommentaryResponse:
+    from app.services.close_context.freeze_blob_service import get_servable_freeze
+
     org = get_organization_or_404(db, organization_id, module="board_export")
     assert_within_usage_limits(db, org, require_ai=True)
     usage_tokens = set_usage_context(organization_id=organization_id, feature="board_commentary_regenerate")
     as_of, start_period, end_period = resolve_org_reporting_window(db, org)
+
+    freeze = get_servable_freeze(db, organization_id, as_of)
+    freeze_kwargs = {}
+    if freeze is not None:
+        freeze_kwargs = {
+            "freeze_context_text": freeze.context_text,
+            "freeze_context_as_of": freeze.context_as_of_iso,
+            "freeze_status": freeze.status,
+            "freeze_stale": freeze.stale,
+        }
 
     token = bind_as_of_period(as_of)
     try:
@@ -142,7 +154,7 @@ def regenerate_slide_commentary(
     if slide_key not in allowed:
         raise HTTPException(status_code=404, detail=f"Unknown slide key: {body.slide_key}")
     base = build_slide_commentary(bundle, slide_key)
-    slide = enrich_slide_with_ai(bundle, slide_key, base)
+    slide = enrich_slide_with_ai(bundle, slide_key, base, **freeze_kwargs)
     if slide.what_happened and not slide.recommended_actions and not slide.leadership_watch:
         narrative = slide.what_happened
     else:

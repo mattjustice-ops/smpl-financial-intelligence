@@ -30,15 +30,34 @@ def build_prompt2_user_message(
     *,
     ts_data: dict[str, Any] | None = None,
     cash_bridge_data: dict[str, Any] | None = None,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> str:
+    from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
+
     payload = build_mda_package_payload(
         bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data
+    )
+    freeze_block = format_freeze_prompt_block(
+        context_text=freeze_context_text,
+        context_as_of=freeze_context_as_of,
+        status=freeze_status,
+        stale=freeze_stale,
+        number_guidance=(
+            "Use this freeze for narrative tone, operational drivers, and period framing. "
+            "Dollar / percent figures must still come from DATA PAYLOAD JSON only — never invent."
+        ),
     )
     return (
         "Generate the complete MD&A variance commentary package for the close period below.\n"
         "Return a single JSON object keyed by sheet name. Each row_id must include the three "
         "commentary columns (or description/recommended_action for risks_and_opportunities).\n"
+        "Be comprehensive: cover each payload row with specific, board-ready commentary — "
+        "do not shorten into generic summaries.\n"
         "Use only metrics present in the payload — never invent dollars or percentages.\n\n"
+        f"{freeze_block}"
         f"DATA PAYLOAD (JSON):\n{json.dumps(payload, separators=(',', ':'))}"
     )
 
@@ -65,6 +84,10 @@ def build_claude_mda_package_xlsx_bytes(
     cash_bridge_data: dict[str, Any] | None = None,
     max_retries: int = 1,
     skip_claude: bool = False,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
     """Prompt 2: Claude commentary JSON + SMPL_MDA_Package template injection."""
     template = resolve_mda_package_template()
@@ -99,7 +122,13 @@ def build_claude_mda_package_xlsx_bytes(
 
     client = build_commentary_llm_client()
     user_message = build_prompt2_user_message(
-        bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data
+        bundle,
+        ts_data=ts_data,
+        cash_bridge_data=cash_bridge_data,
+        freeze_context_text=freeze_context_text,
+        freeze_context_as_of=freeze_context_as_of,
+        freeze_status=freeze_status,
+        freeze_stale=freeze_stale,
     )
 
     last_error = ""

@@ -71,6 +71,10 @@ def build_mda_package_xlsx_bytes(
     use_ai_commentary: bool = True,
     ts_data: dict | None = None,
     cash_bridge_data: dict | None = None,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
     """MD&A Excel package — Claude Prompt 2 commentary + SMPL template."""
     import os
@@ -87,6 +91,10 @@ def build_mda_package_xlsx_bytes(
         ts_data=ts_data,
         cash_bridge_data=cash_bridge_data,
         skip_claude=skip,
+        freeze_context_text=freeze_context_text,
+        freeze_context_as_of=freeze_context_as_of,
+        freeze_status=freeze_status,
+        freeze_stale=freeze_stale,
     )
 
 

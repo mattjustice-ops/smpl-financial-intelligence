@@ -499,6 +499,19 @@ def export_mda_package(
         ) from exc
     _check_validation(bundle, block_on_failure)
     ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+    freeze_kwargs: dict = {}
+    context_source = "live"
+    from app.services.close_context.freeze_blob_service import get_servable_freeze
+
+    freeze = get_servable_freeze(db, organization_id, bundle.as_of_period)
+    if freeze is not None:
+        context_source = "freeze"
+        freeze_kwargs = {
+            "freeze_context_text": freeze.context_text,
+            "freeze_context_as_of": freeze.context_as_of_iso,
+            "freeze_status": freeze.status,
+            "freeze_stale": freeze.stale,
+        }
     try:
         content, package_source = build_mda_package_xlsx_bytes(
             bundle,
@@ -506,6 +519,7 @@ def export_mda_package(
             use_ai_commentary=include_ai_commentary,
             ts_data=ts_data,
             cash_bridge_data=cash_bridge_data,
+            **freeze_kwargs,
         )
     except Exception as exc:
         logger.exception("MD&A package export failed")
@@ -526,6 +540,8 @@ def export_mda_package(
             "X-MDA-Package-Source": package_source,
             "X-MDA-Package-Engine": "claude_prompt2",
             "X-MDA-AI-Commentary": "true" if include_ai_commentary else "false",
+            "X-As-Of-Period": bundle.as_of_period,
+            "X-Context-Source": context_source,
         },
     )
 
@@ -561,6 +577,19 @@ def _run_mda_package_job(
             _check_validation(bundle, True)
         update_export_job_message(job_id, "Loading three-statement and cash bridge…")
         ts_data, cash_bridge_data = _load_board_export_enrichment(db, organization_id, bundle)
+        freeze_kwargs: dict = {}
+        context_source = "live"
+        from app.services.close_context.freeze_blob_service import get_servable_freeze
+
+        freeze = get_servable_freeze(db, organization_id, bundle.as_of_period)
+        if freeze is not None:
+            context_source = "freeze"
+            freeze_kwargs = {
+                "freeze_context_text": freeze.context_text,
+                "freeze_context_as_of": freeze.context_as_of_iso,
+                "freeze_status": freeze.status,
+                "freeze_stale": freeze.stale,
+            }
     finally:
         db.close()
 
@@ -572,6 +601,7 @@ def _run_mda_package_job(
             use_ai_commentary=include_ai_commentary,
             ts_data=ts_data,
             cash_bridge_data=cash_bridge_data,
+            **freeze_kwargs,
         )
         period_label = bundle.as_of_period.replace("-", "_")
         complete_export_job(
@@ -584,7 +614,7 @@ def _run_mda_package_job(
                 "X-MDA-Package-Engine": "claude_prompt2",
                 "X-MDA-AI-Commentary": "true" if include_ai_commentary else "false",
                 "X-As-Of-Period": bundle.as_of_period,
-                "X-Context-Source": "live",
+                "X-Context-Source": context_source,
             },
         )
     finally:
