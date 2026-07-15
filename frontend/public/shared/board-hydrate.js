@@ -462,8 +462,9 @@
   }
 
   function shouldFallbackToDemo(status) {
-    // Auth / org mismatch → embedded demo. API/LLM outages surface explicit errors instead.
-    return status === 401 || status === 403 || status === 409;
+    // Soft fallback for validation 409 only. Usage-limit / entitlement 403s must show
+    // the real API message (not a misleading "Claude unavailable" demo string).
+    return status === 401 || status === 409;
   }
 
   function cacheAllStaticCommentary() {

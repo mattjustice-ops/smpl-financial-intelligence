@@ -181,6 +181,10 @@ def assert_within_usage_limits(
     settings = get_settings()
     if not getattr(settings, "smpl_usage_limits_enabled", True):
         return
+    # Demo/fast path: do not hard-block Copilot / regenerate / board AI on the
+    # tiny default monthly LLM caps (10 calls) — those were demo-stoppers.
+    if bool(getattr(settings, "smpl_fast_ai", True)) and require_ai and not require_export:
+        return
 
     limits = limits_for_plan(org.plan)
     usage = monthly_usage_totals(db, org.id)
