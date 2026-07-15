@@ -125,6 +125,10 @@ def build_pptx_mda_deck(
     package_mode: str = "full_board",
     ts_data: dict | None = None,
     cash_bridge_data: dict | None = None,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
     from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
 
@@ -137,4 +141,8 @@ def build_pptx_mda_deck(
         package_mode=package_mode,  # type: ignore[arg-type]
         ts_data=ts_data,
         cash_bridge_data=cash_bridge_data,
+        freeze_context_text=freeze_context_text,
+        freeze_context_as_of=freeze_context_as_of,
+        freeze_status=freeze_status,
+        freeze_stale=freeze_stale,
     )

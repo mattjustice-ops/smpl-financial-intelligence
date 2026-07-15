@@ -315,6 +315,11 @@ def build_prompt5_user_message(
     bundle: ReportingBundle,
     ts_data: dict[str, Any] | None = None,
     cash_bridge_data: dict[str, Any] | None = None,
+    *,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> str:
     payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
     pc = payload["period_context"]
@@ -324,12 +329,38 @@ def build_prompt5_user_message(
         warn_block = "PAYLOAD WARNINGS (omit empty sections, do not invent data):\n" + "\n".join(
             f"- {w}" for w in warnings
         ) + "\n\n"
+
+    freeze_block = ""
+    if freeze_context_text:
+        status = (freeze_status or ("STALE" if freeze_stale else "COMPLETE")).upper()
+        label = (
+            "STALE — last complete freeze (numbers below JSON still drive slide layout; "
+            "narrative/as-of must respect this freeze)"
+            if freeze_stale or status == "STALE"
+            else "COMPLETE close freeze pack"
+        )
+        as_of = freeze_context_as_of or "unknown"
+        # Cap freeze prose so the JSON layout payload remains the primary number source.
+        body = freeze_context_text.strip()
+        if len(body) > 24000:
+            body = body[:24000] + "\n…[freeze context truncated]"
+        freeze_block = (
+            "CLOSE FREEZE CONTEXT (authoritative labeled snapshot for commentary/as-of):\n"
+            f"Context source: freeze ({label})\n"
+            f"Freeze status: {status}\n"
+            f"Context as of: {as_of}\n"
+            "Use this freeze for narrative tone and period framing. "
+            "Copy slide numbers from DATA PAYLOAD JSON verbatim — do not invent figures.\n\n"
+            f"{body}\n\n"
+        )
+
     return (
         "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"
         "Follow the per-slide layout assignments in the system prompt exactly.\n"
         "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers verbatim.\n\n"
+        f"{freeze_block}"
         f"PERIOD CONTEXT\n"
         f"Close period: {pc['close_period_label']}\n"
         f"Quarter: {pc['quarter']}\n"
@@ -499,13 +530,25 @@ def build_claude_deck_pptx_bytes(
     ts_data: dict[str, Any] | None = None,
     cash_bridge_data: dict[str, Any] | None = None,
     max_retries: int = 2,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
     """Prompt 5: Claude writes PptxGenJS script from bundle data; Node renders PPTX."""
     client = build_commentary_llm_client()
     if not hasattr(client, "generate_text"):
         raise RuntimeError("Configured LLM client does not support raw text generation.")
 
-    user_message = build_prompt5_user_message(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
+    user_message = build_prompt5_user_message(
+        bundle,
+        ts_data=ts_data,
+        cash_bridge_data=cash_bridge_data,
+        freeze_context_text=freeze_context_text,
+        freeze_context_as_of=freeze_context_as_of,
+        freeze_status=freeze_status,
+        freeze_stale=freeze_stale,
+    )
     system_prompt = PROMPT5_SYSTEM
 
     last_error = ""

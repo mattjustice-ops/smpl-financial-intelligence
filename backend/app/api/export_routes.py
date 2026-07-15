@@ -651,6 +651,7 @@ def _run_mda_deck_job(
         freeze_status = "unknown"
         freeze_as_of = ""
         freeze_stale = False
+        freeze_context_text: str | None = None
         from app.db.session import SessionLocal as _SessionLocal
         from app.services.close_context.freeze_blob_service import get_servable_freeze
 
@@ -664,6 +665,7 @@ def _run_mda_deck_job(
             freeze_status = freeze.status
             freeze_as_of = freeze.context_as_of_iso
             freeze_stale = freeze.stale
+            freeze_context_text = freeze.context_text
         finally:
             _fdb.close()
 
@@ -677,6 +679,10 @@ def _run_mda_deck_job(
             package_mode=package_mode,
             ts_data=ts_data,
             cash_bridge_data=cash_bridge_data,
+            freeze_context_text=freeze_context_text,
+            freeze_context_as_of=freeze_as_of,
+            freeze_status=freeze_status,
+            freeze_stale=freeze_stale,
         )
         complete_export_job(
             job_id,
@@ -1000,6 +1006,10 @@ def _board_pptx_response(
     deck_kind: str = "board",
     ts_data: dict | None = None,
     cash_bridge_data: dict | None = None,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> Response:
     try:
         if deck_kind == "mda":
@@ -1012,6 +1022,10 @@ def _board_pptx_response(
                 package_mode=package_mode,
                 ts_data=ts_data,
                 cash_bridge_data=cash_bridge_data,
+                freeze_context_text=freeze_context_text,
+                freeze_context_as_of=freeze_context_as_of,
+                freeze_status=freeze_status,
+                freeze_stale=freeze_stale,
             )
             filename = f"mda_deck_{bundle.as_of_period}.pptx"
         else:
@@ -1298,7 +1312,7 @@ def export_mda_deck(
         segment,
         owner,
     )
-    _require_servable_freeze_for_mda(db, organization_id, params["as_of_period"])
+    freeze = _require_servable_freeze_for_mda(db, organization_id, params["as_of_period"])
     try:
         bundle = collect_bundle(
             db,
@@ -1325,4 +1339,8 @@ def export_mda_deck(
         deck_kind="mda",
         ts_data=ts_data,
         cash_bridge_data=cash_bridge_data,
+        freeze_context_text=freeze.context_text,
+        freeze_context_as_of=freeze.context_as_of_iso,
+        freeze_status=freeze.status,
+        freeze_stale=freeze.stale,
     )
