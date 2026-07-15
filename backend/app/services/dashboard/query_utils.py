@@ -51,7 +51,34 @@ def str_any(row: dict[str, Any], *keys: str) -> str | None:
 
 
 def table_exists(db: Session, table_name: str) -> bool:
+    bind = db.get_bind()
+    if bind.dialect.name == "sqlite":
+        return (
+            db.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"),
+                {"name": table_name},
+            ).scalar()
+            is not None
+        )
     return db.execute(text("select to_regclass(:name)"), {"name": f"public.{table_name}"}).scalar() is not None
+
+
+def _table_columns(db: Session, table_name: str) -> set[str]:
+    bind = db.get_bind()
+    if bind.dialect.name == "sqlite":
+        rows = db.execute(text(f'PRAGMA table_info("{table_name}")')).mappings().all()
+        return {str(r["name"]) for r in rows}
+    rows = db.execute(
+        text(
+            """
+            select column_name
+            from information_schema.columns
+            where table_schema = 'public' and table_name = :table_name
+            """
+        ),
+        {"table_name": table_name},
+    ).scalars()
+    return {str(name) for name in rows}
 
 
 def preferred_table(db: Session, scenario_name: str, suffix: str, fallback: str | None = None) -> str | None:
@@ -65,12 +92,94 @@ def preferred_table(db: Session, scenario_name: str, suffix: str, fallback: str 
     return None
 
 
+def _forecast_version_predicates(
+    db: Session,
+    table_name: str,
+    organization_id: uuid.UUID,
+    columns: set[str],
+) -> tuple[list[str], dict[str, Any]]:
+    """Build WHERE fragments so reporting never mixes forecast versions."""
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+    if "forecast_version_id" not in columns:
+        return clauses, params
+
+    from app.services.forecast_version_service import resolve_reporting_forecast_version_id
+
+    version_id = resolve_reporting_forecast_version_id(db, organization_id)
+    if version_id is not None:
+        params["forecast_version_id"] = str(version_id)
+        # Prefer rows stamped with the reporting version. Unstamped legacy rows are
+        # only used when that version has not been written into the table yet.
+        clauses.append(
+            f"""(
+                cast(forecast_version_id as text) = :forecast_version_id
+                or (
+                    (forecast_version_id is null or cast(forecast_version_id as text) = '')
+                    and not exists (
+                        select 1 from "{table_name}" _fv
+                        where _fv.organization_id = :organization_id
+                          and cast(_fv.forecast_version_id as text) = :forecast_version_id
+                    )
+                )
+            )"""
+        )
+        return clauses, params
+
+    # No final version in registry — still pin to the newest version id present
+    # in this table (by forecast_versions.promoted_at / created_at).
+    newest = db.execute(
+        text(
+            f"""
+            select cast(fv.id as text) as version_id
+            from forecast_versions fv
+            where fv.organization_id = :organization_id
+              and cast(fv.id as text) in (
+                  select distinct cast(forecast_version_id as text)
+                  from "{table_name}"
+                  where organization_id = :organization_id
+                    and forecast_version_id is not null
+                    and cast(forecast_version_id as text) <> ''
+              )
+            order by
+              case when fv.promoted_at is null then 1 else 0 end,
+              fv.promoted_at desc,
+              fv.created_at desc
+            limit 1
+            """
+        ),
+        {"organization_id": str(organization_id)},
+    ).scalar()
+    if newest:
+        params["forecast_version_id"] = str(newest)
+        clauses.append("cast(forecast_version_id as text) = :forecast_version_id")
+    return clauses, params
+
+
 def fetch_table_rows(db: Session, table_name: str, organization_id: uuid.UUID) -> list[dict[str, Any]]:
     if not table_exists(db, table_name):
         return []
+    params: dict[str, Any] = {"organization_id": str(organization_id)}
+    clauses = ["organization_id = :organization_id"]
+
+    if table_name.lower().startswith("forecast_"):
+        columns = _table_columns(db, table_name)
+        version_clauses, version_params = _forecast_version_predicates(
+            db, table_name, organization_id, columns
+        )
+        clauses.extend(version_clauses)
+        params.update(version_params)
+        # Actual-labeled rows in forecast_* tables double Combined MRR/ARR math.
+        if "version" in columns:
+            clauses.append(
+                "(version is null or trim(cast(version as text)) = '' "
+                "or lower(trim(cast(version as text))) = 'forecast')"
+            )
+
+    where_sql = " and ".join(clauses)
     rows = db.execute(
-        text(f'select * from "{table_name}" where organization_id = :organization_id'),
-        {"organization_id": str(organization_id)},
+        text(f'select * from "{table_name}" where {where_sql}'),
+        params,
     ).mappings()
     return [dict(row) for row in rows]
 

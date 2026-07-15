@@ -1010,12 +1010,17 @@ def promote_forecast_tables(
         if table_name not in PROMOTABLE_FORECAST_TABLES:
             continue
         rows: list[dict[str, str]] = []
-        for idx, raw in enumerate(raw_rows, start=1):
+        for raw in raw_rows:
             row = {str(k): "" if v is None else str(v) for k, v in raw.items()}
+            scenario = (row.get("version") or "Forecast").strip()
+            # Warehouse forecast_* tables must not keep Actual history — that doubles
+            # Combined reporting when MRR aggregators sum all rows in the table.
+            if scenario.lower() == "actual":
+                continue
             row.setdefault("organization_id", org_key)
-            row.setdefault("forecast_version_id", version_key)
+            row["forecast_version_id"] = version_key
             row.setdefault("as_of_period", as_of_period)
-            row.setdefault("version", row.get("version") or "Forecast")
+            row["version"] = "Forecast"
             rows.append(row)
         if rows:
             loaded[table_name] = load_physical_table_rows(

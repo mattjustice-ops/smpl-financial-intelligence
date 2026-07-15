@@ -59,12 +59,39 @@ def get_forecast_version(db: Session, organization_id: uuid.UUID, version_id: uu
 
 
 def get_active_forecast_version(db: Session, org: Organization) -> ForecastVersion | None:
-    if org.active_forecast_version_id is None:
+    """Return the org's active final forecast, else the most recently promoted final."""
+    if org.active_forecast_version_id is not None:
+        version = db.get(ForecastVersion, org.active_forecast_version_id)
+        if (
+            version is not None
+            and version.organization_id == org.id
+            and version.status == "final"
+        ):
+            return version
+    return db.scalars(
+        select(ForecastVersion)
+        .where(
+            ForecastVersion.organization_id == org.id,
+            ForecastVersion.status == "final",
+        )
+        .order_by(
+            ForecastVersion.promoted_at.desc().nulls_last(),
+            ForecastVersion.created_at.desc(),
+        )
+        .limit(1)
+    ).first()
+
+
+def resolve_reporting_forecast_version_id(
+    db: Session,
+    organization_id: uuid.UUID,
+) -> uuid.UUID | None:
+    """Forecast version UUID reporting should use (active / most recent final)."""
+    org = db.get(Organization, organization_id)
+    if org is None:
         return None
-    version = db.get(ForecastVersion, org.active_forecast_version_id)
-    if version is None or version.status != "final":
-        return None
-    return version
+    active = get_active_forecast_version(db, org)
+    return active.id if active else None
 
 
 def save_forecast_draft(

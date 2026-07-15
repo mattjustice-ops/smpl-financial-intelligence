@@ -62,17 +62,10 @@ def fetch_table_rows(
     table_name: str,
     organization_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
-    if not table_exists(session, table_name):
-        return []
-    org_key: str | uuid.UUID = organization_id
-    bind = session.get_bind()
-    if bind.dialect.name == "sqlite":
-        org_key = str(organization_id)
-    rows = session.execute(
-        text(f'select * from "{table_name}" where organization_id = :organization_id'),
-        {"organization_id": org_key},
-    ).mappings()
-    return [dict(r) for r in rows]
+    # Shared with reporting/dashboard so forecast_* reads always pin to one version.
+    from app.services.dashboard.query_utils import fetch_table_rows as shared_fetch
+
+    return shared_fetch(session, table_name, organization_id)
 
 
 def fetch_period_rows(
