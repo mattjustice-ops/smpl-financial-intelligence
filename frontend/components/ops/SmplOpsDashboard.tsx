@@ -164,6 +164,29 @@ type PlatformHealthResponse = {
     created_at: string;
     metadata: Record<string, unknown> | null;
   }>;
+  close_workflow?: {
+    ok: boolean;
+    summary: {
+      issues_error: number;
+      issues_warning: number;
+      ready_to_lock: number;
+      certified: number;
+      stuck_freezing: number;
+      stuck_locked: number;
+    };
+    issues: Array<{
+      organization_id: string;
+      organization_name: string | null;
+      as_of_period: string;
+      workflow_state: string;
+      lock_version: number;
+      severity: string;
+      code: string;
+      message: string;
+      runbook: string;
+      updated_at: string | null;
+    }>;
+  };
   deploy_freeze?: {
     active: boolean;
     note?: string;
@@ -856,6 +879,72 @@ export function SmplOpsDashboard() {
               )}
             </div>
           </div>
+
+          {health.close_workflow ? (
+            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-white">Close workflow (Ops)</h2>
+                <span
+                  className={`text-xs font-medium ${
+                    health.close_workflow.ok ? "text-teal-300" : "text-rose-300"
+                  }`}
+                >
+                  {health.close_workflow.ok ? "Clear" : "Needs attention"}
+                </span>
+              </div>
+              <p className="mb-3 text-xs text-slate-500">
+                Stuck FREEZING / Lock-without-cert, stalled loads, and Ready-to-Lock counts for
+                close week. Runbook hints are for on-call — not customer-facing.
+              </p>
+              <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ["Errors", health.close_workflow.summary.issues_error],
+                  ["Warnings", health.close_workflow.summary.issues_warning],
+                  ["Ready to Lock", health.close_workflow.summary.ready_to_lock],
+                  ["Certified", health.close_workflow.summary.certified],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2"
+                  >
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-1 text-lg font-semibold tabular-nums text-white">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {health.close_workflow.issues.length === 0 ? (
+                <p className="text-sm text-slate-500">No stuck close-workflow issues.</p>
+              ) : (
+                <ul className="divide-y divide-white/5 text-sm">
+                  {health.close_workflow.issues.map((issue) => (
+                    <li key={`${issue.organization_id}-${issue.code}-${issue.as_of_period}`} className="py-3">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span
+                          className={
+                            issue.severity === "error"
+                              ? "text-rose-300"
+                              : issue.severity === "warning"
+                                ? "text-amber-300"
+                                : "text-slate-400"
+                          }
+                        >
+                          {issue.severity}
+                        </span>
+                        <span className="font-medium text-white">
+                          {issue.organization_name || issue.organization_id}
+                        </span>
+                        <span className="font-mono text-xs text-slate-500">
+                          {issue.as_of_period} · {issue.workflow_state} · Lock v{issue.lock_version}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-slate-300">{issue.message}</p>
+                      <p className="mt-1 text-xs text-slate-500">Runbook: {issue.runbook}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
 
           {health.alerts.checks.length > 0 ? (
             <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">

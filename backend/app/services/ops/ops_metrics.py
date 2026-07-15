@@ -309,10 +309,19 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
     warehouse = assess_all_customer_warehouses(db)
     warehouse_ok = bool(warehouse.get("ok"))
 
+    from app.services.ops.close_workflow_alerts import assess_close_workflow_alerts
+
+    close_workflow = assess_close_workflow_alerts(db)
+    for live in close_workflow.get("checks") or []:
+        alert_checks = [c for c in alert_checks if c.get("name") != live["name"]]
+        alert_checks.append(live)
+    if not close_workflow.get("ok"):
+        alert_status = "degraded"
+
     effective_status = "ok"
     if not db_ok or not warehouse_ok:
         effective_status = "degraded"
-    elif alert_status == "degraded":
+    elif alert_status == "degraded" or not close_workflow.get("ok"):
         effective_status = "degraded"
     elif alert_status == "unknown" and not alert_checks:
         effective_status = "unknown"
@@ -370,4 +379,5 @@ def platform_health_summary(db: Session) -> dict[str, Any]:
             "note": getattr(settings, "smpl_deploy_freeze_note", "") or "",
             "until": getattr(settings, "smpl_deploy_freeze_until", None),
         },
+        "close_workflow": close_workflow,
     }
