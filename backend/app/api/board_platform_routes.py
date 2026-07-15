@@ -207,7 +207,10 @@ def board_copilot(
         context_source = "freeze"
         stale = freeze.stale
         context_built_at = freeze.built_at
-        metrics_blob = freeze.context_text
+        # Interactive Copilot uses Haiku — keep freeze drivers, but cap so answers stay demo-fast.
+        metrics_blob = freeze.context_text or ""
+        if len(metrics_blob) > 16000:
+            metrics_blob = metrics_blob[:16000] + "\n…[freeze context truncated for interactive Copilot]"
         if focus_period != as_of:
             metrics_blob = (
                 f"Copilot focus month: {focus_period} (frozen close pack is {as_of}). "
@@ -270,7 +273,7 @@ def board_copilot(
     freshness_label = "stale freeze" if stale else ("freeze pack" if context_source == "freeze" else "live warehouse")
 
     try:
-        client = build_commentary_llm_client()
+        client = build_commentary_llm_client(purpose="interactive")
         raw = client.generate(
             system_prompt=(
                 "You are SMPL Copilot for a B2B SaaS board platform. "

@@ -52,9 +52,19 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 60.0
 
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
+    # Heavy exports (Prompt 2 / Prompt 5) — quality-first, longer timeout OK.
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_temperature: float = 0.2
     anthropic_timeout_seconds: float = 300.0
+    # Interactive board AI (Copilot + slide regenerate) — must stay demo-fast.
+    anthropic_interactive_model: str = Field(
+        default="claude-haiku-4-5",
+        validation_alias="ANTHROPIC_INTERACTIVE_MODEL",
+    )
+    anthropic_interactive_timeout_seconds: float = Field(
+        default=45.0,
+        validation_alias="ANTHROPIC_INTERACTIVE_TIMEOUT_SECONDS",
+    )
 
     # Board MD&A deck — reference PPTX (SMPL Board Review Q2 2026 template).
     board_pptx_template: str | None = Field(
@@ -111,7 +121,7 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("anthropic_model", mode="before")
+    @field_validator("anthropic_model", "anthropic_interactive_model", mode="before")
     @classmethod
     def _normalize_anthropic_model(cls, value: object) -> str:
         if value is None:

@@ -893,20 +893,24 @@ def enrich_slide_with_ai(
         )
 
     try:
-        client = build_commentary_llm_client()
+        client = build_commentary_llm_client(purpose="interactive")
         payload = build_single_slide_payload(bundle, slide_key)
         max_bullets, max_words, max_chars = slide_prompt_limits(slide_key)
+        # Interactive path: Haiku + keep slide payload full; soft-cap freeze prose so
+        # regenerate cannot burn the old 300s Sonnet timeout with a 48k pack.
+        interactive_freeze = freeze_context_text
+        if interactive_freeze and len(interactive_freeze) > 16000:
+            interactive_freeze = interactive_freeze[:16000] + "\n…[freeze context truncated for interactive regenerate]"
         raw = client.generate(
             system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
             user_prompt=board_deck_single_slide_user_message(
                 payload,
-                freeze_context_text=freeze_context_text,
+                freeze_context_text=interactive_freeze,
                 freeze_context_as_of=freeze_context_as_of,
                 freeze_status=freeze_status,
                 freeze_stale=freeze_stale,
             ),
-            # Keep headroom for comprehensive bullets — do not starve quality for latency.
-            max_tokens=4096,
+            max_tokens=2048,
         )
         bullets = parse_board_deck_bullets_response(raw, slide_key)
         bullets = validate_and_trim_bullets(
@@ -937,17 +941,20 @@ def _enrich_slide_with_ai_legacy(
     from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
 
     try:
-        client = build_commentary_llm_client()
+        client = build_commentary_llm_client(purpose="interactive")
+        interactive_freeze = freeze_context_text
+        if interactive_freeze and len(interactive_freeze) > 16000:
+            interactive_freeze = interactive_freeze[:16000] + "\n…[freeze context truncated for interactive regenerate]"
         freeze_block = format_freeze_prompt_block(
-            context_text=freeze_context_text,
+            context_text=interactive_freeze,
             context_as_of=freeze_context_as_of,
             status=freeze_status,
             stale=freeze_stale,
         )
-        # Prefer the full freeze pack when present; otherwise the live metrics blob.
+        # Prefer freeze pack when present; otherwise the live metrics blob.
         metrics_blob = (
-            freeze_context_text.strip()
-            if freeze_context_text and freeze_context_text.strip()
+            interactive_freeze.strip()
+            if interactive_freeze and interactive_freeze.strip()
             else metrics_prompt_blob(bundle)
         )
         slide_label = slide_key.replace("_", " ")
