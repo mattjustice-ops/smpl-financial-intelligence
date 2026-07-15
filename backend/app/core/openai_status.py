@@ -80,6 +80,10 @@ def openai_ping_payload() -> dict[str, str | bool]:
         "ai_configured": ai_ok,
         "llm_provider": provider,
         "llm_model": llm_model,
+        "smpl_fast_ai": bool(getattr(settings, "smpl_fast_ai", True)),
+        "anthropic_interactive_model": normalize_anthropic_model(
+            getattr(settings, "anthropic_interactive_model", "claude-haiku-4-5")
+        ),
         "anthropic_configured": anthropic_ok,
         "anthropic_model": normalize_anthropic_model(settings.anthropic_model),
         "openai_configured": openai_ok,
