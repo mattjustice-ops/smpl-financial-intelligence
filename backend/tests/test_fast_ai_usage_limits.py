@@ -1,4 +1,4 @@
-"""Usage limits must not block interactive AI during SMPL_FAST_AI demos."""
+"""Usage limits must not block board AI/exports during SMPL_FAST_AI demos."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.services.ops.usage_limits import assert_within_usage_limits
+from app.services.ops.usage_limits import assert_prompt5_regen_cap, assert_within_usage_limits
 
 
-def test_fast_ai_skips_ai_usage_caps(monkeypatch) -> None:
+def test_fast_ai_skips_ai_and_export_usage_caps(monkeypatch) -> None:
     from app.core.config import get_settings
 
     monkeypatch.setenv("SMPL_FAST_AI", "true")
@@ -17,7 +17,8 @@ def test_fast_ai_skips_ai_usage_caps(monkeypatch) -> None:
     get_settings.cache_clear()
     try:
         org = SimpleNamespace(id=uuid.uuid4(), plan="growth")
-        # Would normally trip if called with require_ai against 10 llm calls.
         assert_within_usage_limits(MagicMock(), org, require_ai=True)
+        assert_within_usage_limits(MagicMock(), org, require_export=True, require_ai=True)
+        assert_prompt5_regen_cap(MagicMock(), org, "2026-06")
     finally:
         get_settings.cache_clear()

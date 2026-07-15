@@ -115,6 +115,9 @@ def assert_prompt5_regen_cap(
     settings = get_settings()
     if not getattr(settings, "smpl_usage_limits_enabled", True):
         return
+    # Demo/fast path: do not block MD&A deck starts on soft regenerate caps.
+    if bool(getattr(settings, "smpl_fast_ai", True)):
+        return
     from app.services.reporting.period_utils import to_period
 
     period = to_period(as_of_period)
@@ -181,9 +184,9 @@ def assert_within_usage_limits(
     settings = get_settings()
     if not getattr(settings, "smpl_usage_limits_enabled", True):
         return
-    # Demo/fast path: do not hard-block Copilot / regenerate / board AI on the
-    # tiny default monthly LLM caps (10 calls) — those were demo-stoppers.
-    if bool(getattr(settings, "smpl_fast_ai", True)) and require_ai and not require_export:
+    # Demo/fast path: do not hard-block Copilot, regenerate, OR MD&A exports on
+    # the tiny default monthly caps (10 LLM calls / 10 exports) — those stopped demos.
+    if bool(getattr(settings, "smpl_fast_ai", True)):
         return
 
     limits = limits_for_plan(org.plan)
