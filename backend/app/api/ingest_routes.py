@@ -21,6 +21,11 @@ class ApiIngestBatchRequest(BaseModel):
     records: list[dict[str, Any]] = Field(default_factory=list)
     external_batch_id: str | None = None
     idempotency_key: str | None = None
+    source_system: str | None = Field(
+        default=None,
+        max_length=128,
+        description="Customer system label, e.g. Salesforce, NetSuite, Stripe",
+    )
 
 
 @ingest_router.post("/csv")
@@ -61,6 +66,7 @@ def ingest_api_batch(
         records=body.records,
         external_batch_id=body.external_batch_id,
         idempotency_key=body.idempotency_key,
+        source_system=body.source_system,
     )
     if result.get("header_error"):
         raise HTTPException(status_code=400, detail=result["header_error"])

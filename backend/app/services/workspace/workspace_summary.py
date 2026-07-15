@@ -12,7 +12,9 @@ from app.models.organization import Organization
 from app.services.ops.ops_period import recent_calendar_months
 from app.services.ops.storage_snapshot import maybe_collect_storage_snapshot
 from app.services.ops.usage_limits import DEFAULT_USAGE_LIMITS, monthly_usage_status_payload
+from app.services.workspace.load_domains import build_load_domain_status
 from app.services.workspace.pipeline_ledger import close_ledger_summary
+from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
 
 
 def workspace_summary(
@@ -26,6 +28,8 @@ def workspace_summary(
     storage = maybe_collect_storage_snapshot(db, force=False) or {}
     org_footprint = (storage.get("org_footprint") or {}).get(str(org.id)) or {}
     ledger = close_ledger_summary(db, organization_id=org.id, month=month, days=days)
+    as_of, _, _ = resolve_org_reporting_window(db, org)
+    load_domains = build_load_domain_status(db, org.id, as_of_period=as_of)
 
     return {
         "organization_id": str(org.id),
@@ -41,4 +45,5 @@ def workspace_summary(
             "captured_at": storage.get("captured_at"),
         },
         "close_ledger": ledger,
+        "load_domains": load_domains,
     }

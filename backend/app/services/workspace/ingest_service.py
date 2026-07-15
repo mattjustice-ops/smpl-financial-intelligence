@@ -155,6 +155,13 @@ def _finalize_batch(
         org = get_organization_or_404(db, organization_id)
         as_of, _, _ = resolve_org_reporting_window(db, org)
         period = batch.period or as_of
+        batch_meta = batch.metadata_json if isinstance(batch.metadata_json, dict) else {}
+        receipt_summary: dict[str, Any] | list[Any] | None = None
+        if res.validation_errors or batch_meta.get("source_system"):
+            receipt_summary = {
+                "source_system": batch_meta.get("source_system"),
+                "row_errors": (res.validation_errors or [])[:20],
+            }
         receipt = record_load_receipt(
             db,
             organization_id=organization_id,
@@ -167,7 +174,7 @@ def _finalize_batch(
             entity_type=res.csv_kind,
             ingest_batch_id=batch.id,
             filename=batch.filename,
-            error_summary=res.validation_errors[:20] if res.validation_errors else None,
+            error_summary=receipt_summary,
         )
     except Exception:
         receipt = None
@@ -246,6 +253,7 @@ def ingest_api_records(
     records: list[dict[str, Any]],
     external_batch_id: str | None = None,
     idempotency_key: str | None = None,
+    source_system: str | None = None,
 ) -> dict[str, Any]:
     if idempotency_key:
         existing = find_batch_by_idempotency(
@@ -256,6 +264,16 @@ def ingest_api_records(
         if existing:
             return {"batch": batch_to_payload(existing), "deduplicated": True}
 
+    as_of_period: str | None = None
+    try:
+        from app.services.organizations import get_organization_or_404
+        from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
+
+        org = get_organization_or_404(db, organization_id)
+        as_of_period, _, _ = resolve_org_reporting_window(db, org)
+    except Exception:
+        pass
+
     batch = create_ingest_batch(
         db,
         organization_id=organization_id,
@@ -263,18 +281,29 @@ def ingest_api_records(
         entity_type=entity_type,
         external_batch_id=external_batch_id,
         idempotency_key=idempotency_key,
-        metadata={"record_count": len(records)},
+        period=as_of_period,
+        metadata={
+            "record_count": len(records),
+            "source_system": (source_system or "").strip() or None,
+            "push_channel": "api",
+        },
     )
-    try:
-        from app.services.close_context.freeze_blob_service import mark_blob_stale
-        from app.services.organizations import get_organization_or_404
-        from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
+    if as_of_period:
+        try:
+            from app.models.close_context_blob import CloseContextBlob
+            from sqlalchemy import select as sa_select
 
-        org = get_organization_or_404(db, organization_id)
-        as_of, _, _ = resolve_org_reporting_window(db, org)
-        mark_blob_stale(db, organization_id, as_of)
-    except Exception:
-        pass
+            blob = db.scalars(
+                sa_select(CloseContextBlob).where(
+                    CloseContextBlob.organization_id == organization_id,
+                    CloseContextBlob.as_of_period == as_of_period,
+                    CloseContextBlob.status == "COMPLETE",
+                )
+            ).first()
+            if blob is not None:
+                blob.status = "STALE"
+        except Exception:
+            pass
     rows_staged = len(records)
     update_batch_counts(db, batch, status="staging", rows_staged=rows_staged)
     db.commit()

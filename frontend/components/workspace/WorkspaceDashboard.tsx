@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 
 import { AppSessionBanner } from "@/components/app/AppSessionBanner";
+import { ApiPushPanel } from "@/components/workspace/ApiPushPanel";
 import { CloseWorkflowPanel } from "@/components/workspace/CloseWorkflowPanel";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { DEFAULT_USAGE_LIMITS } from "@/lib/entitlements/usage-limits";
@@ -104,6 +105,27 @@ type WorkspaceSummary = {
     }>;
   };
   available_months: string[];
+  load_domains?: {
+    as_of_period: string;
+    domains: Array<{
+      id: string;
+      label: string;
+      description: string;
+      entity_types: string[];
+      typical_systems: string[];
+      status: string;
+      source_system: string | null;
+      last_source: string | null;
+      last_entity_type: string | null;
+      last_status: string | null;
+      last_at: string | null;
+      rows_imported: number;
+      rows_rejected: number;
+      api_batches: number;
+      csv_batches: number;
+    }>;
+    supported_entity_types: string[];
+  };
 };
 
 function formatUsd(value: number): string {
@@ -383,28 +405,102 @@ export function WorkspaceDashboard() {
       {tab === "data" && summary ? (
         <section className="space-y-6">
           {organizationId ? <CloseWorkflowPanel organizationId={organizationId} /> : null}
+
           <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
-            <h2 className="text-sm font-medium text-white">Upload CSV</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Use exact SMPL template names (e.g. <code className="text-slate-400">Actual_MRR_Waterfall.csv</code>).
-              Renamed files land in a separate table that reporting does not read.
+            <h2 className="text-sm font-medium text-white">Load data into SMPL</h2>
+            <p className="mt-1 max-w-3xl text-xs text-slate-500">
+              Two supported paths for the same close period. Both produce load receipts
+              (staged → applied / rejected) and feed Ready to Lock. Use CSV for templates
+              and one-off fixes; use System API when your finance stack pushes data to us.
             </p>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                className="text-sm text-slate-300"
-              />
-              <button
-                type="button"
-                disabled={!uploadFile || uploadBusy}
-                onClick={() => void onUpload()}
-                className="rounded-lg border border-teal-400/30 bg-teal-400/10 px-3 py-2 text-sm text-teal-200 hover:bg-teal-400/20 disabled:opacity-50"
-              >
-                {uploadBusy ? "Uploading…" : "Upload & import"}
-              </button>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-teal-400">
+                Path A · File
+              </p>
+              <h3 className="mt-2 text-sm font-medium text-white">Upload CSV</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Use exact SMPL template names (e.g.{" "}
+                <code className="text-slate-400">Actual_MRR_Waterfall.csv</code>). Renamed
+                files land in a separate table that reporting does not read.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                  className="text-sm text-slate-300"
+                />
+                <button
+                  type="button"
+                  disabled={!uploadFile || uploadBusy}
+                  onClick={() => void onUpload()}
+                  className="rounded-lg border border-teal-400/30 bg-teal-400/10 px-3 py-2 text-sm text-teal-200 hover:bg-teal-400/20 disabled:opacity-50"
+                >
+                  {uploadBusy ? "Uploading…" : "Upload & import"}
+                </button>
+              </div>
+              {summary.close_ledger.ingest_by_source.csv_upload ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  This period:{" "}
+                  {formatInt(summary.close_ledger.ingest_by_source.csv_upload.batches)}{" "}
+                  CSV batch
+                  {summary.close_ledger.ingest_by_source.csv_upload.batches === 1 ? "" : "es"} ·{" "}
+                  {formatInt(summary.close_ledger.ingest_by_source.csv_upload.rows_imported)}{" "}
+                  imported
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-slate-600">No CSV batches yet this period.</p>
+              )}
             </div>
+
+            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-teal-400">
+                Path B · System
+              </p>
+              <h3 className="mt-2 text-sm font-medium text-white">Load from your systems (API)</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                You decide when to push ERP / CRM / billing / HRIS data. Use{" "}
+                <strong className="font-medium text-slate-300">Push data</strong> below, or have
+                middleware call the ingest API. Same staged → applied / rejected receipts as CSV.
+              </p>
+              {summary.close_ledger.ingest_by_source.api ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  This period:{" "}
+                  {formatInt(summary.close_ledger.ingest_by_source.api.batches)} API batch
+                  {summary.close_ledger.ingest_by_source.api.batches === 1 ? "" : "es"} ·{" "}
+                  {formatInt(summary.close_ledger.ingest_by_source.api.rows_imported)} imported
+                  {summary.close_ledger.ingest_by_source.api.rows_rejected
+                    ? ` · ${formatInt(summary.close_ledger.ingest_by_source.api.rows_rejected)} rejected`
+                    : ""}
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-slate-600">
+                  No API pushes yet this period — use Push data below when you are ready.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {organizationId ? (
+            <ApiPushPanel
+              organizationId={organizationId}
+              loadDomains={summary.load_domains}
+              onPushed={async () => {
+                await load();
+                await loadDataTrace();
+              }}
+            />
+          ) : null}
+
+          <div>
+            <h2 className="mb-2 text-sm font-medium text-white">Recent loads</h2>
+            <p className="mb-3 text-xs text-slate-500">
+              CSV uploads and API batches for this workspace — same staged / imported / rejected
+              checks either way.
+            </p>
           </div>
 
           {dataTrace ? (

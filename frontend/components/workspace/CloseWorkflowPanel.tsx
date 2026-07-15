@@ -25,6 +25,7 @@ type CloseWorkflowPayload = {
   load_receipts?: Array<{
     id: string;
     entity_type: string | null;
+    source?: string;
     status: string;
     rows_staged: number;
     rows_applied: number;
@@ -181,6 +182,13 @@ export function CloseWorkflowPanel({ organizationId }: { organizationId: string 
             {data!.load_receipts!.slice(0, 5).map((r) => (
               <li key={r.id} className="flex flex-wrap gap-x-3 py-1.5">
                 <span className="text-slate-300">{r.entity_type || "unknown"}</span>
+                <span className="uppercase tracking-wide text-slate-600">
+                  {r.source === "api"
+                    ? "API"
+                    : r.source === "csv_upload"
+                      ? "CSV"
+                      : r.source || ""}
+                </span>
                 <span>
                   {r.rows_staged} staged → {r.rows_applied} applied
                   {r.rows_rejected ? ` · ${r.rows_rejected} rejected` : ""}
