@@ -860,9 +860,28 @@
     return (n >= 0 ? "+" : "−") + body;
   }
 
+  function renderTrustPanelMessage(title, detail) {
+    var panel = document.getElementById("trustPanel");
+    if (!panel) return;
+    panel.innerHTML =
+      '<div class="trust-panel-head">' +
+      String(title || "Checks").replace(/</g, "&lt;") +
+      "</div>" +
+      '<div class="trust-panel-sub">' +
+      String(detail || "").replace(/</g, "&lt;") +
+      "</div>";
+  }
+
   function renderTrustPanel(summary) {
     var panel = document.getElementById("trustPanel");
-    if (!panel || !summary) return;
+    if (!panel) return;
+    if (!summary) {
+      renderTrustPanelMessage(
+        "Checks unavailable",
+        "Close validation has not returned yet. Re-open the board or click the badge again after a few seconds.",
+      );
+      return;
+    }
     var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
     var asOf = summary.as_of_period || boardActiveCloseMonth();
     var label = summary.trust_label || "Needs review";
@@ -931,6 +950,10 @@
     if (!summary) {
       badge.textContent = "Checks unavailable";
       badge.className = "trust-badge";
+      renderTrustPanelMessage(
+        "Checks unavailable",
+        "Close validation has not returned a checklist yet. Try again in a moment.",
+      );
       return;
     }
     var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
@@ -979,11 +1002,19 @@
     if (!orgId) {
       badge.textContent = "Checks · no org";
       badge.className = "trust-badge";
+      renderTrustPanelMessage(
+        "Checks · no org",
+        "Sign in and open /app/board with an organization selected to run close validation.",
+      );
       return;
     }
 
-    badge.textContent = "Checking…";
+    badge.textContent = "Running checks…";
     badge.className = "trust-badge";
+    renderTrustPanelMessage(
+      "Running checks…",
+      "Validating warehouse tie-outs for " + closeMonth + " close. This usually finishes in a few seconds.",
+    );
 
     try {
       var apiBase = await boardLiveApiBase();
@@ -997,11 +1028,16 @@
       var res = await boardFetchWithTimeout(
         boardLiveUrl(apiBase, "/api/v1/export/validation") + "?" + params.toString(),
         boardLiveFetchInit(apiBase, { method: "GET" }),
-        60000,
+        120000,
       );
       if (!res.ok) {
+        var errText = await boardApiErrorMessage(res);
         setTrustStripSummary(null);
         badge.textContent = "Checks unavailable";
+        renderTrustPanelMessage(
+          "Checks unavailable",
+          errText || "Validation request failed (" + res.status + ").",
+        );
         return;
       }
       var summary = await res.json();
@@ -1010,6 +1046,10 @@
       console.warn("[board-hydrate] trust strip failed", err);
       setTrustStripSummary(null);
       badge.textContent = "Checks unavailable";
+      renderTrustPanelMessage(
+        "Checks unavailable",
+        boardFetchErrorMessage(err, 120000),
+      );
     }
   }
 

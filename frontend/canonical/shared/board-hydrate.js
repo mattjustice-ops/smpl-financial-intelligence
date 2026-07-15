@@ -634,11 +634,29 @@
             typeof global.formatCopilotReply === "function"
               ? global.formatCopilotReply(reply)
               : reply.replace(/</g, "&lt;");
+          var asOfMeta = "";
+          if (data.context_as_of || data.as_of_period) {
+            var src = data.context_source || "live";
+            var staleLbl = data.stale ? " · stale" : "";
+            var when = data.context_as_of
+              ? new Date(data.context_as_of).toLocaleString()
+              : "";
+            asOfMeta =
+              '<div class="cp-source">Data as of ' +
+              (when || data.as_of_period || "") +
+              " · close " +
+              (data.as_of_period || "") +
+              " · " +
+              src +
+              staleLbl +
+              "</div>";
+          }
           var thinkEl = document.getElementById(thinkId);
           if (thinkEl) {
             thinkEl.outerHTML =
               '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble">' +
               formatted +
+              asOfMeta +
               "</div></div>";
           }
         }
@@ -666,13 +684,29 @@
     var y = close.slice(0, 4);
     var m = parseInt(close.slice(5), 10) - 1;
     var closeLbl = (monthNames()[m] || "") + " " + y;
+    var trustBit =
+      '<div class="cp-source">Each answer shows its data-as-of timestamp (freeze pack when available, otherwise live).</div>';
+    var trust = global.SMPL_TRUST_SUMMARY;
+    if (trust && (trust.passed_count != null || trust.trust_label)) {
+      var total = (trust.passed_count || 0) + (trust.warning_count || 0) + (trust.failed_count || 0);
+      trustBit =
+        '<div class="cp-source">' +
+        (trust.trust_label || "Checks") +
+        " · " +
+        (trust.passed_count || 0) +
+        "/" +
+        total +
+        " checks · as of " +
+        (trust.as_of_period || close) +
+        ". Each answer also shows its data-as-of timestamp.</div>";
+    }
     bubble.innerHTML =
-      '<div class="cp-section">Ready</div>I have live warehouse data for <strong>' +
+      '<div class="cp-section">Ready</div>I have warehouse data for <strong>' +
       org +
       "</strong> through <strong>" +
       closeLbl +
       "</strong> close. Ask about ARR, revenue, cash, headcount, GTM, or variance vs budget." +
-      '<div class="cp-source">Source: reconciled Neon warehouse via /api/v1/reporting/outlook</div>';
+      trustBit;
   }
 
   function installLiveExec() {
@@ -796,11 +830,227 @@
           syncBoardFromOutlook(data);
           updateCopilotWelcome(data);
           smplBoardRefreshView();
+          void refreshTrustStrip();
         } catch (err) {
           console.error("[board-hydrate] post-hydrate refresh failed", err);
         }
       },
     });
+  }
+
+  function trustStatusClass(trustStatus) {
+    if (trustStatus === "verified") return "trust-verified";
+    if (trustStatus === "needs_review") return "trust-needs_review";
+    if (trustStatus === "blocked") return "trust-blocked";
+    return "";
+  }
+
+  function formatTrustVariance(v) {
+    if (v == null || v === "") return "";
+    var n = Number(v);
+    if (Number.isNaN(n)) return String(v);
+    if (Math.abs(n) < 0.005) return "";
+    var abs = Math.abs(n);
+    var body =
+      abs >= 1e6
+        ? "$" + (abs / 1e6).toFixed(2) + "M"
+        : abs >= 1e3
+          ? "$" + (abs / 1e3).toFixed(1) + "k"
+          : "$" + abs.toFixed(0);
+    return (n >= 0 ? "+" : "−") + body;
+  }
+
+  function renderTrustPanelMessage(title, detail) {
+    var panel = document.getElementById("trustPanel");
+    if (!panel) return;
+    panel.innerHTML =
+      '<div class="trust-panel-head">' +
+      String(title || "Checks").replace(/</g, "&lt;") +
+      "</div>" +
+      '<div class="trust-panel-sub">' +
+      String(detail || "").replace(/</g, "&lt;") +
+      "</div>";
+  }
+
+  function renderTrustPanel(summary) {
+    var panel = document.getElementById("trustPanel");
+    if (!panel) return;
+    if (!summary) {
+      renderTrustPanelMessage(
+        "Checks unavailable",
+        "Close validation has not returned yet. Re-open the board or click the badge again after a few seconds.",
+      );
+      return;
+    }
+    var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
+    var asOf = summary.as_of_period || boardActiveCloseMonth();
+    var label = summary.trust_label || "Needs review";
+    var freezeBit = "";
+    if (summary.freeze_status) {
+      freezeBit =
+        summary.freeze_status === "COMPLETE"
+          ? " Freeze pack COMPLETE."
+          : " Freeze: " + summary.freeze_status + ".";
+    }
+    var head =
+      '<div class="trust-panel-head">' +
+      label +
+      " · " +
+      (summary.passed_count || 0) +
+      "/" +
+      total +
+      " checks</div>" +
+      '<div class="trust-panel-sub">Close data as of ' +
+      asOf +
+      "." +
+      freezeBit +
+      " Verified requires validation pass/warning and a COMPLETE freeze pack.</div>";
+
+    var checks = Array.isArray(summary.checks) ? summary.checks.slice() : [];
+    checks.sort(function (a, b) {
+      var rank = { fail: 0, warning: 1, pass: 2 };
+      return (rank[a.status] != null ? rank[a.status] : 9) - (rank[b.status] != null ? rank[b.status] : 9);
+    });
+
+    var rows = checks
+      .map(function (c) {
+        var mark =
+          c.status === "pass" ? "✓" : c.status === "warning" ? "!" : c.status === "fail" ? "✕" : "·";
+        var title = (c.customer_label || c.validation_name || "Check").replace(/</g, "&lt;");
+        var detail = (c.customer_detail || "").replace(/</g, "&lt;");
+        var period = c.period ? " · " + String(c.period).replace(/</g, "&lt;") : "";
+        var variance = formatTrustVariance(c.variance);
+        return (
+          '<div class="trust-check">' +
+          '<span class="trust-check-mark ' +
+          (c.status || "") +
+          '">' +
+          mark +
+          "</span>" +
+          "<div><div class=\"trust-check-title\">" +
+          title +
+          period +
+          "</div>" +
+          (detail ? '<div class="trust-check-detail">' + detail + "</div>" : "") +
+          "</div>" +
+          '<span class="trust-check-var">' +
+          (variance || (c.status || "")).replace(/</g, "&lt;") +
+          "</span>" +
+          "</div>"
+        );
+      })
+      .join("");
+
+    panel.innerHTML = head + (rows || '<div class="trust-panel-sub">No checks returned.</div>');
+  }
+
+  function setTrustStripSummary(summary) {
+    var badge = document.getElementById("trustStrip");
+    if (!badge) return;
+    if (!summary) {
+      badge.textContent = "Checks unavailable";
+      badge.className = "trust-badge";
+      renderTrustPanelMessage(
+        "Checks unavailable",
+        "Close validation has not returned a checklist yet. Try again in a moment.",
+      );
+      return;
+    }
+    var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
+    var label = summary.trust_label || "Needs review";
+    var asOf = summary.as_of_period || boardActiveCloseMonth();
+    badge.textContent = label + " · " + (summary.passed_count || 0) + "/" + total + " · as of " + asOf;
+    badge.className = "trust-badge " + trustStatusClass(summary.trust_status);
+    global.SMPL_TRUST_SUMMARY = summary;
+    renderTrustPanel(summary);
+    if (global.SMPL_OUTLOOK_PAYLOAD) {
+      updateCopilotWelcome(global.SMPL_OUTLOOK_PAYLOAD);
+    }
+  }
+
+  function installTrustStripUi() {
+    if (global._smplTrustStripInstalled) return;
+    global._smplTrustStripInstalled = true;
+    var badge = document.getElementById("trustStrip");
+    var panel = document.getElementById("trustPanel");
+    if (!badge || !panel) return;
+
+    badge.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      var open = !panel.classList.contains("open");
+      panel.classList.toggle("open", open);
+      badge.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    document.addEventListener("click", function (ev) {
+      if (!panel.classList.contains("open")) return;
+      var wrap = badge.closest(".trust-strip-wrap");
+      if (wrap && wrap.contains(ev.target)) return;
+      panel.classList.remove("open");
+      badge.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  async function refreshTrustStrip() {
+    installTrustStripUi();
+    var badge = document.getElementById("trustStrip");
+    if (!badge) return;
+
+    var orgId = await boardResolveOrgId();
+    var closeMonth = boardActiveCloseMonth();
+    var year = closeMonth.slice(0, 4);
+    if (!orgId) {
+      badge.textContent = "Checks · no org";
+      badge.className = "trust-badge";
+      renderTrustPanelMessage(
+        "Checks · no org",
+        "Sign in and open /app/board with an organization selected to run close validation.",
+      );
+      return;
+    }
+
+    badge.textContent = "Running checks…";
+    badge.className = "trust-badge";
+    renderTrustPanelMessage(
+      "Running checks…",
+      "Validating warehouse tie-outs for " + closeMonth + " close. This usually finishes in a few seconds.",
+    );
+
+    try {
+      var apiBase = await boardLiveApiBase();
+      var params = new URLSearchParams({
+        organization_id: orgId,
+        scenario: "Combined",
+        start_period: year + "-01",
+        end_period: year + "-12",
+        as_of_period: closeMonth,
+      });
+      var res = await boardFetchWithTimeout(
+        boardLiveUrl(apiBase, "/api/v1/export/validation") + "?" + params.toString(),
+        boardLiveFetchInit(apiBase, { method: "GET" }),
+        120000,
+      );
+      if (!res.ok) {
+        var errText = await boardApiErrorMessage(res);
+        setTrustStripSummary(null);
+        badge.textContent = "Checks unavailable";
+        renderTrustPanelMessage(
+          "Checks unavailable",
+          errText || "Validation request failed (" + res.status + ").",
+        );
+        return;
+      }
+      var summary = await res.json();
+      setTrustStripSummary(summary);
+    } catch (err) {
+      console.warn("[board-hydrate] trust strip failed", err);
+      setTrustStripSummary(null);
+      badge.textContent = "Checks unavailable";
+      renderTrustPanelMessage(
+        "Checks unavailable",
+        boardFetchErrorMessage(err, 120000),
+      );
+    }
   }
 
   function boardExportApiBase() {
@@ -862,11 +1112,141 @@
     });
   }
 
+  function ensureExportProgressPanel() {
+    var existing = document.getElementById("smplExportProgress");
+    if (existing) return existing;
+    var panel = document.createElement("div");
+    panel.id = "smplExportProgress";
+    panel.setAttribute("role", "status");
+    panel.style.cssText =
+      "position:fixed;right:20px;bottom:20px;z-index:99999;width:min(360px,calc(100vw - 32px));" +
+      "background:#0f172a;color:#e2e8f0;border:1px solid rgba(255,255,255,0.12);border-radius:12px;" +
+      "box-shadow:0 18px 40px rgba(0,0,0,0.35);padding:16px 16px 14px;font:13px/1.45 system-ui,sans-serif;";
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px;">' +
+      '<div><div id="smplExportProgressTitle" style="font-weight:650;color:#fff;font-size:14px;">Preparing Executive Package</div>' +
+      '<div id="smplExportProgressMeta" style="color:#94a3b8;margin-top:4px;font-size:12px;">Starting…</div></div>' +
+      '<button type="button" id="smplExportProgressClose" style="background:transparent;border:0;color:#94a3b8;cursor:pointer;font-size:18px;line-height:1;" aria-label="Close">×</button></div>' +
+      '<ol id="smplExportProgressList" style="list-style:none;margin:0;padding:0;"></ol>';
+    document.body.appendChild(panel);
+    var closeBtn = document.getElementById("smplExportProgressClose");
+    if (closeBtn) {
+      closeBtn.onclick = function () {
+        panel.style.display = "none";
+      };
+    }
+    return panel;
+  }
+
+  function renderExportProgress(label, statusJson) {
+    var panel = ensureExportProgressPanel();
+    panel.style.display = "block";
+    var failed = !!(statusJson && statusJson.status === "failed");
+    panel.style.borderColor = failed ? "rgba(248,113,113,0.55)" : "rgba(255,255,255,0.12)";
+    var title = document.getElementById("smplExportProgressTitle");
+    var meta = document.getElementById("smplExportProgressMeta");
+    var list = document.getElementById("smplExportProgressList");
+    if (title) {
+      title.textContent = failed ? label + " failed" : "Preparing " + label;
+      title.style.color = failed ? "#fca5a5" : "#fff";
+    }
+    var msg = (statusJson && (statusJson.error || statusJson.message)) || "Working…";
+    var eta = statusJson && statusJson.eta_seconds;
+    var etaLbl = "";
+    if (!failed && eta != null) {
+      etaLbl =
+        eta <= 0
+          ? "Ready"
+          : "Estimated time remaining: ~" + Math.max(1, Math.round(eta / 60)) + " min";
+    }
+    if (meta) {
+      meta.style.color = failed ? "#fca5a5" : "#94a3b8";
+      meta.textContent = failed
+        ? "Please try again. " + String(msg).replace(/\s+/g, " ").slice(0, 160)
+        : etaLbl
+          ? msg + " · " + etaLbl
+          : msg;
+    }
+    var stages =
+      statusJson && Array.isArray(statusJson.progress) && statusJson.progress.length
+        ? statusJson.progress
+        : failed
+          ? [{ id: "failed", label: "Export failed — please try again", done: false, current: true, failed: true }]
+          : [
+              { id: "queued", label: "Export queued", done: true, current: false },
+              { id: "work", label: msg || "Working…", done: false, current: true },
+            ];
+    if (!list) return;
+    list.innerHTML = stages
+      .map(function (stage) {
+        var isFailed = !!(stage.failed || stage.id === "failed" || (failed && stage.current));
+        var mark = isFailed ? "✕" : stage.done ? "✓" : stage.current ? "●" : "○";
+        var color = isFailed
+          ? "#f87171"
+          : stage.done
+            ? "#4ade80"
+            : stage.current
+              ? "#fbbf24"
+              : "#64748b";
+        var textColor = isFailed
+          ? "#fecaca"
+          : stage.current || stage.done
+            ? "#e2e8f0"
+            : "#94a3b8";
+        return (
+          '<li style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">' +
+          '<span style="color:' +
+          color +
+          ';min-width:14px;">' +
+          mark +
+          "</span>" +
+          '<span style="color:' +
+          textColor +
+          ';">' +
+          String(stage.label || "").replace(/</g, "&lt;") +
+          "</span></li>"
+        );
+      })
+      .join("");
+  }
+
+  function renderExportFailed(label, detail) {
+    renderExportProgress(label, {
+      status: "failed",
+      message: detail || "Export failed",
+      error: detail || "Export failed",
+      progress: [
+        { id: "failed", label: "Export failed — please try again", done: false, current: true, failed: true },
+      ],
+      eta_seconds: null,
+    });
+  }
+
+  function hideExportProgressSoon() {
+    setTimeout(function () {
+      var panel = document.getElementById("smplExportProgress");
+      if (panel) panel.style.display = "none";
+    }, 2500);
+  }
+
   async function pollAndDownloadExport(directBase, exportSpec, format, params) {
-    alert(
-      exportSpec.label +
-        " export started.\n\nGeneration can take 3–10 minutes. Your browser will download automatically when ready — keep this tab open.",
-    );
+    renderExportProgress(exportSpec.label, {
+      message: "Queued",
+      status: "queued",
+      progress: [
+        { id: "queued", label: "Export queued", done: false, current: true },
+        { id: "validated", label: "Validation complete", done: false, current: false },
+        { id: "intelligence", label: "Financial context ready", done: false, current: false },
+        {
+          id: "narrative",
+          label: format === "pptx" ? "Building PowerPoint" : "Building package",
+          done: false,
+          current: false,
+        },
+        { id: "complete", label: "Ready to download", done: false, current: false },
+      ],
+      eta_seconds: format === "pptx" ? 420 : 300,
+    });
     var jobPath =
       format === "pptx" ? "/api/v1/export/jobs/mda-deck" : "/api/v1/export/jobs/mda-package";
     var startUrl = boardLiveUrl(directBase, jobPath) + "?" + params.toString();
@@ -877,15 +1257,39 @@
         120000,
       );
       if (!startRes.ok) {
-        alert(exportSpec.label + " export failed:\n" + (await boardApiErrorMessage(startRes)));
+        var startErr = await boardApiErrorMessage(startRes);
+        if (startRes.status === 429) {
+          renderExportFailed(exportSpec.label, startErr);
+          alert(
+            exportSpec.label +
+              " regenerate limit reached for this close period.\n\n" +
+              startErr +
+              "\n\nContact SMPL support if you need an exception.",
+          );
+          return "error";
+        }
+        if (startRes.status === 409 && /freeze/i.test(startErr)) {
+          renderExportFailed(exportSpec.label, startErr);
+          alert(
+            exportSpec.label +
+              " needs a close freeze pack first.\n\n" +
+              startErr +
+              "\n\nRun board validation (or ask Ops to prewarm freezes), then retry.",
+          );
+          return "error";
+        }
+        renderExportFailed(exportSpec.label, startErr);
+        alert(exportSpec.label + " export failed:\n" + startErr);
         return "error";
       }
       var startJson = await startRes.json();
       var jobId = startJson && startJson.job_id;
       if (!jobId) {
+        renderExportFailed(exportSpec.label, "No job id returned from API.");
         alert(exportSpec.label + " export failed: no job id returned from API.");
         return "error";
       }
+      renderExportProgress(exportSpec.label, startJson);
       var deadline = Date.now() + 600000;
       while (Date.now() < deadline) {
         await sleep(5000);
@@ -897,12 +1301,11 @@
         );
         if (!statusRes.ok) continue;
         var statusJson = await statusRes.json();
+        renderExportProgress(exportSpec.label, statusJson);
         if (statusJson.status === "failed") {
-          alert(
-            exportSpec.label +
-              " export failed:\n" +
-              (statusJson.error || statusJson.message || "Unknown error"),
-          );
+          var failDetail = statusJson.error || statusJson.message || "Unknown error";
+          // statusJson.progress already includes "Export failed — please try again"
+          alert(exportSpec.label + " export failed:\n" + failDetail + "\n\nPlease try again.");
           return "error";
         }
         if (statusJson.status === "complete") {
@@ -911,16 +1314,23 @@
             exportSpec.label,
             true,
           );
+          hideExportProgressSoon();
           return "started";
         }
       }
+      renderExportFailed(
+        exportSpec.label,
+        "Timed out after 10 minutes. Please try again.",
+      );
       alert(
         exportSpec.label +
-          " export timed out after 10 minutes. Check Railway logs and retry.",
+          " export timed out after 10 minutes.\n\nPlease try again.",
       );
       return "error";
     } catch (err) {
-      alert(exportSpec.label + " export failed:\n" + boardFetchErrorMessage(err, 600000));
+      var catchDetail = boardFetchErrorMessage(err, 600000);
+      renderExportFailed(exportSpec.label, catchDetail);
+      alert(exportSpec.label + " export failed:\n" + catchDetail + "\n\nPlease try again.");
       return "error";
     }
   }
@@ -1032,6 +1442,7 @@
     boardJunMetrics: boardJunMetrics,
     refreshExecCommentaryFromLiveMetrics: refreshExecCommentaryFromLiveMetrics,
     openBoardExport: openLiveBoardExport,
+    refreshTrustStrip: refreshTrustStrip,
   };
 
   global.SMPL_ON_ORG_READY = function () {
@@ -1041,6 +1452,7 @@
   // Install live handlers as soon as this script parses (before window "load").
   installLiveAi();
   installCommentaryCacheRestore();
+  installTrustStripUi();
 
   global.addEventListener("load", function () {
     if (global.SMPLSkin) {

@@ -78,7 +78,33 @@ def run_export_validation(
     organization_id: uuid.UUID,
     **params,
 ) -> ExportValidationSummary:
-    bundle = collect_bundle(db, organization_id, include_ai_commentary=False, **params)
+    """Board trust + export pre-check.
+
+    Uses the lightweight board-platform collector (exec + waterfalls + statements)
+    so the trust strip can finish in seconds. Full GL/drilldown/AI collect is
+    unnecessary for validation summaries.
+    """
+    from app.services.reporting.export.data_collector import collect_board_platform_bundle
+
+    scenario = str(params.get("scenario") or "Combined")
+    start_period = str(params["start_period"])
+    end_period = str(params["end_period"])
+    as_of_period = params.get("as_of_period")
+    filters = {
+        k: params[k]
+        for k in ("waterfall_type", "marketing_channel", "region", "segment", "owner")
+        if params.get(k) not in (None, "")
+    }
+    bundle = collect_board_platform_bundle(
+        db,
+        organization_id,
+        scenario=scenario,
+        start_period=start_period,
+        end_period=end_period,
+        as_of_period=as_of_period,
+        include_validation=True,
+        **filters,
+    )
     return bundle.validation
 
 
