@@ -998,7 +998,6 @@
 
     var orgId = await boardResolveOrgId();
     var closeMonth = boardActiveCloseMonth();
-    var year = closeMonth.slice(0, 4);
     if (!orgId) {
       badge.textContent = "Checks · no org";
       badge.className = "trust-badge";
@@ -1018,17 +1017,20 @@
 
     try {
       var apiBase = await boardLiveApiBase();
+      // Single close-month window + prefer_cache so the strip finishes inside
+      // the API/proxy request budget and reopens with a populated checklist.
       var params = new URLSearchParams({
         organization_id: orgId,
         scenario: "Combined",
-        start_period: year + "-01",
-        end_period: year + "-12",
+        start_period: closeMonth,
+        end_period: closeMonth,
         as_of_period: closeMonth,
+        prefer_cache: "true",
       });
       var res = await boardFetchWithTimeout(
         boardLiveUrl(apiBase, "/api/v1/export/validation") + "?" + params.toString(),
         boardLiveFetchInit(apiBase, { method: "GET" }),
-        120000,
+        90000,
       );
       if (!res.ok) {
         var errText = await boardApiErrorMessage(res);
@@ -1048,7 +1050,7 @@
       badge.textContent = "Checks unavailable";
       renderTrustPanelMessage(
         "Checks unavailable",
-        boardFetchErrorMessage(err, 120000),
+        boardFetchErrorMessage(err, 90000),
       );
     }
   }

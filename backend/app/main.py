@@ -50,6 +50,7 @@ DEMO_CSV_BUILD_ID = "gl-warehouse-v3"
 PLAN_ENTITLEMENTS_BUILD = "gl-3-v1"
 # Visible proof that Haiku / SMPL_FAST_AI board path is live (bump when AI runtime changes).
 AI_FAST_BUILD_ID = "board-ai-haiku-fast-v1"
+TRUST_VALIDATION_BUILD_ID = "trust-month-v1"
 _MAIN_FILE = Path(__file__).resolve()
 
 app = FastAPI(
@@ -454,6 +455,7 @@ def health(response: Response) -> dict[str, str | bool]:
         "management_pl": _management_pl_mounted(),
         "workforce": _workforce_mounted(),
         "ai_fast_build": AI_FAST_BUILD_ID,
+        "trust_validation_build": TRUST_VALIDATION_BUILD_ID,
         "smpl_fast_ai": bool(getattr(settings_live, "smpl_fast_ai", True)),
         "anthropic_interactive_model": getattr(
             settings_live, "anthropic_interactive_model", "claude-haiku-4-5"

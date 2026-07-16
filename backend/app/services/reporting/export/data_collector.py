@@ -333,6 +333,81 @@ def collect_reporting_bundle(
     return bundle
 
 
+def collect_trust_validation_bundle(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    scenario: str,
+    as_of_period: str,
+    **dashboard_filters,
+) -> ReportingBundle:
+    """Single-month trust-strip validation — no opportunity drilldowns, no year-long scan.
+
+    Reuses waterfall rows for cross-source checks so we do not double-fetch.
+    """
+    from app.services.dashboard.query_utils import commentary_prompts
+    from app.services.dashboard.schemas import ExecutiveFlowResponse
+    from app.services.dashboard.waterfall_service import waterfall_response
+    from app.services.marketing.service import performance_summary
+
+    org = get_organization_or_404(db, organization_id)
+    as_of = to_period(as_of_period)
+    params = {
+        "scenario": scenario,
+        "start_period": as_of,
+        "end_period": as_of,
+        "as_of_period": as_of,
+        **{
+            k: v
+            for k, v in dashboard_filters.items()
+            if v not in (None, "") and k not in ("start_period", "end_period", "as_of_period", "scenario")
+        },
+    }
+    marketing = performance_summary(db, organization_id, **params)
+    waterfalls = {
+        name: waterfall_response(db, organization_id, waterfall_name=name, **params)
+        for name in ("pipeline", "arr", "deferred_revenue", "cash_flow")
+    }
+    validation = [*marketing.validation]
+    for waterfall in waterfalls.values():
+        validation.extend(waterfall.validation)
+
+    executive = ExecutiveFlowResponse(
+        organization_id=str(organization_id),
+        scenario=scenario,
+        start_period=as_of,
+        end_period=as_of,
+        as_of_period=as_of,
+        marketing_summary=marketing.model_dump(mode="json"),
+        waterfalls=waterfalls,
+        opportunities={},
+        validation=validation,
+        commentary_prompts=commentary_prompts(),
+    )
+    comparison_waterfalls = {name: list(wf.rows) for name, wf in waterfalls.items()}
+    comparison_financial = collect_comparison_financial_statements(
+        db,
+        organization_id,
+        start_period=as_of,
+        end_period=as_of,
+    )
+    bundle = ReportingBundle(
+        organization_id=str(organization_id),
+        organization_name=getattr(org, "name", None),
+        scenario=scenario,
+        start_period=as_of,
+        end_period=as_of,
+        as_of_period=as_of,
+        period_label=_period_label(as_of),
+        executive_flow=executive,
+        financial_statements=comparison_financial,
+        comparison_waterfalls=comparison_waterfalls,
+        comparison_financial_statements=comparison_financial,
+    )
+    bundle.validation = run_export_validation_bundle(bundle)
+    return bundle
+
+
 def collect_board_platform_bundle(
     db: Session,
     organization_id: uuid.UUID,

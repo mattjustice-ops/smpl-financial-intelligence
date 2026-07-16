@@ -271,6 +271,10 @@ def export_validation_precheck(
     region: str | None = Query(None),
     segment: str | None = Query(None),
     owner: str | None = Query(None),
+    prefer_cache: bool = Query(
+        True,
+        description="Return cached trust summary when available (trust strip)",
+    ),
     db: Session = Depends(get_db),
 ) -> ExportValidationSummary:
     from app.services.close_context.freeze_blob_service import schedule_auto_freeze_after_validation
@@ -290,6 +294,50 @@ def export_validation_precheck(
         segment,
         owner,
     )
+    as_of = str(params["as_of_period"])
+    response.headers["X-Trust-Validation-Build"] = "trust-month-v1"
+    response.headers["X-As-Of-Period"] = as_of
+
+    if prefer_cache:
+        try:
+            from app.models.close_context_blob import CloseContextBlob
+            from app.services.reporting.export.schemas import ExportValidationSummary as _Summary
+            from app.services.reporting.export.validation_labels import apply_freeze_to_trust
+            from sqlalchemy import select
+
+            blob = db.scalars(
+                select(CloseContextBlob).where(
+                    CloseContextBlob.organization_id == organization_id,
+                    CloseContextBlob.as_of_period == as_of,
+                )
+            ).first()
+            meta = blob.metadata_json if blob and isinstance(blob.metadata_json, dict) else {}
+            cached = meta.get("validation_summary") if isinstance(meta, dict) else None
+            if isinstance(cached, dict) and cached.get("checks") is not None:
+                summary = _Summary.model_validate(cached)
+                freeze_status = blob.status if blob else "missing"
+                freeze_built_at = blob.built_at.isoformat() if blob and blob.built_at else None
+                summary = apply_freeze_to_trust(
+                    summary,
+                    freeze_status=freeze_status,
+                    freeze_built_at=freeze_built_at,
+                )
+                queued = False
+                if freeze_status != "COMPLETE" and summary.status in ("pass", "warning"):
+                    queued = schedule_auto_freeze_after_validation(
+                        db,
+                        organization_id,
+                        validation_status=summary.status,
+                        as_of_period=as_of,
+                        start_period=as_of,
+                        end_period=as_of,
+                    )
+                response.headers["X-Trust-Cache"] = "hit"
+                response.headers["X-Freeze-Queued"] = "true" if queued else "false"
+                return summary
+        except Exception:
+            logger.debug("Cached trust validation unavailable", exc_info=True)
+
     try:
         summary = run_export_validation(db, organization_id, **params)
     except Exception as exc:
@@ -297,18 +345,17 @@ def export_validation_precheck(
 
     from app.services.reporting.export.validation_labels import apply_customer_validation_labels
 
-    summary = apply_customer_validation_labels(summary, as_of_period=str(params["as_of_period"]))
+    summary = apply_customer_validation_labels(summary, as_of_period=as_of)
 
     try:
         from app.models.close_context_blob import CloseContextBlob
         from app.services.reporting.export.validation_labels import apply_freeze_to_trust
         from sqlalchemy import select
 
-        period = str(params["as_of_period"])
         blob = db.scalars(
             select(CloseContextBlob).where(
                 CloseContextBlob.organization_id == organization_id,
-                CloseContextBlob.as_of_period == period,
+                CloseContextBlob.as_of_period == as_of,
             )
         ).first()
         freeze_status = blob.status if blob else "missing"
@@ -318,8 +365,28 @@ def export_validation_precheck(
             freeze_status=freeze_status,
             freeze_built_at=freeze_built_at,
         )
+
+        # Persist labeled summary so the trust strip can hydrate instantly next load.
+        payload = summary.model_dump(mode="json")
+        if blob is not None:
+            meta = dict(blob.metadata_json) if isinstance(blob.metadata_json, dict) else {}
+            meta["validation_summary"] = payload
+            meta["validation_check_ids"] = [
+                str(c.get("validation_name") or "")
+                for c in (payload.get("checks") or [])
+                if c.get("validation_name")
+            ]
+            blob.metadata_json = meta
+            if hasattr(blob, "validation_status"):
+                blob.validation_status = summary.status
+            db.add(blob)
+            db.commit()
     except Exception:
         logger.debug("Freeze status enrichment for validation skipped", exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
     try:
         from app.services.close_context.close_session_service import mark_validation_complete
@@ -327,7 +394,7 @@ def export_validation_precheck(
         mark_validation_complete(
             db,
             organization_id,
-            str(params["as_of_period"]),
+            as_of,
             validation_status=summary.status,
         )
         db.commit()
@@ -339,11 +406,11 @@ def export_validation_precheck(
         organization_id,
         validation_status=summary.status,
         as_of_period=params["as_of_period"],
-        start_period=params["start_period"],
-        end_period=params["end_period"],
+        start_period=as_of,
+        end_period=as_of,
     )
     response.headers["X-Freeze-Queued"] = "true" if queued else "false"
-    response.headers["X-As-Of-Period"] = str(params["as_of_period"])
+    response.headers["X-Trust-Cache"] = "miss"
     return summary
 
 
