@@ -275,10 +275,18 @@
     if (!err) return "Request failed.";
     if (err === "board-request-timeout" || err.name === "AbortError") {
       var secs = Math.round((timeoutMs || 295000) / 1000);
+      if (timeoutMs != null && timeoutMs <= 130000) {
+        return (
+          "Request timed out after " +
+          secs +
+          "s. Commentary should finish under 2 minutes — hard refresh and retry. " +
+          "If this keeps happening, the freeze pack may be missing and the live warehouse path is too slow."
+        );
+      }
       return (
         "Request timed out after " +
         secs +
-        "s. Claude exports can take several minutes — confirm Railway API is healthy and ANTHROPIC_API_KEY is set, then retry."
+        "s. Long exports can take several minutes — confirm Railway API is healthy and ANTHROPIC_API_KEY is set, then retry."
       );
     }
     if (err.message === "Failed to fetch" || (err.message && err.message.indexOf("NetworkError") >= 0)) {

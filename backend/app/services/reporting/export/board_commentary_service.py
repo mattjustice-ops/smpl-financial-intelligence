@@ -896,13 +896,14 @@ def enrich_slide_with_ai(
         client = build_commentary_llm_client(purpose="interactive")
         payload = build_single_slide_payload(bundle, slide_key)
         max_bullets, max_words, max_chars = slide_prompt_limits(slide_key)
-        # Interactive path: Haiku + keep slide payload full; soft-cap freeze prose so
-        # regenerate cannot burn the old 300s Sonnet timeout with a 48k pack.
+        # Quality-preserving speed: slide JSON owns numbers; freeze owns drivers.
+        # Soft-cap interactive freeze so Haiku finishes under the 120s budget.
         interactive_freeze = freeze_context_text
-        if interactive_freeze and len(interactive_freeze) > 48000:
+        if interactive_freeze and len(interactive_freeze) > 24000:
             interactive_freeze = (
-                interactive_freeze[:48000]
-                + "\n...[freeze context soft-capped at 48k for regenerate]"
+                interactive_freeze[:24000]
+                + "\n...[freeze drivers soft-capped at 24k for interactive regenerate; "
+                "slide payload JSON remains the number source]"
             )
         raw = client.generate(
             system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
@@ -946,10 +947,10 @@ def _enrich_slide_with_ai_legacy(
     try:
         client = build_commentary_llm_client(purpose="interactive")
         interactive_freeze = freeze_context_text
-        if interactive_freeze and len(interactive_freeze) > 48000:
+        if interactive_freeze and len(interactive_freeze) > 24000:
             interactive_freeze = (
-                interactive_freeze[:48000]
-                + "\n...[freeze context soft-capped at 48k for regenerate]"
+                interactive_freeze[:24000]
+                + "\n...[freeze drivers soft-capped at 24k for interactive regenerate]"
             )
         freeze_block = format_freeze_prompt_block(
             context_text=interactive_freeze,

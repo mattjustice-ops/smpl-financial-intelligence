@@ -122,7 +122,7 @@ def regenerate_slide_commentary(
     org = get_organization_or_404(db, organization_id, module="board_export")
     assert_within_usage_limits(db, org, require_ai=True)
     usage_tokens = set_usage_context(organization_id=organization_id, feature="board_commentary_regenerate")
-    as_of, start_period, end_period = resolve_org_reporting_window(db, org)
+    as_of, _start_period, _end_period = resolve_org_reporting_window(db, org)
 
     freeze = get_servable_freeze(db, organization_id, as_of)
     freeze_kwargs = {}
@@ -134,14 +134,17 @@ def regenerate_slide_commentary(
             "freeze_stale": freeze.stale,
         }
 
+    # Interactive regenerate must finish under ~2 minutes. Numbers come from the
+    # slide payload JSON; freeze prose supplies drivers. Collect close-month only
+    # so warehouse work does not dominate Claude time.
     token = bind_as_of_period(as_of)
     try:
         bundle = collect_board_platform_bundle(
             db,
             organization_id,
             scenario="Combined",
-            start_period=start_period,
-            end_period=end_period,
+            start_period=as_of,
+            end_period=as_of,
             as_of_period=as_of,
             include_validation=False,
         )
@@ -210,10 +213,10 @@ def board_copilot(
         context_source = "freeze"
         stale = freeze.stale
         context_built_at = freeze.built_at
-        # Quality-first: pass nearly the full freeze pack to Copilot (Haiku still).
+        # Quality-first for Q&A: prefer freeze, soft-cap so interactive stays under 2 minutes.
         metrics_blob = freeze.context_text or ""
-        if len(metrics_blob) > 48000:
-            metrics_blob = metrics_blob[:48000] + "\n…[freeze context soft-capped at 48k for Copilot]"
+        if len(metrics_blob) > 32000:
+            metrics_blob = metrics_blob[:32000] + "\n…[freeze context soft-capped at 32k for Copilot]"
         if focus_period != as_of:
             metrics_blob = (
                 f"Copilot focus month: {focus_period} (frozen close pack is {as_of}). "
