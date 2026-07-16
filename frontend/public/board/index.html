@@ -46,40 +46,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .logo { font-family: var(--font); font-size: 16px; font-weight: 600; letter-spacing: -0.4px; color: var(--text); }
 .logo span { font-weight: 300; }
 .period-badge { font-family: var(--mono); font-size: 11px; color: var(--text2); background: var(--bg2); padding: 4px 12px; border-radius: 20px; border: 0.5px solid var(--border); }
-.trust-strip-wrap { position: relative; }
-.trust-badge { font-family: var(--mono); font-size: 11px; color: var(--text2); background: var(--bg2); padding: 4px 12px; border-radius: 20px; border: 0.5px solid var(--border); cursor: pointer; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.trust-badge:hover { color: var(--text); border-color: var(--text3); }
-.trust-badge.trust-verified { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, var(--border)); }
-.trust-badge.trust-needs_review { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, var(--border)); }
-.trust-badge.trust-blocked { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
-.trust-panel { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: min(420px, calc(100vw - 32px)); max-height: 360px; overflow: auto; background: var(--bg); border: 0.5px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 12px 14px; z-index: 120; }
-.trust-panel.open { display: block; }
-.trust-panel-head { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-.trust-panel-sub { font-size: 11px; color: var(--text3); margin-bottom: 10px; }
-.trust-check { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: start; padding: 7px 0; border-top: 0.5px solid var(--border); font-size: 11.5px; }
-.trust-check:first-of-type { border-top: none; }
-.trust-check-mark { font-family: var(--mono); font-size: 11px; line-height: 1.4; }
-.trust-check-mark.pass { color: var(--teal); }
-.trust-check-mark.warning { color: var(--amber); }
-.trust-check-mark.fail { color: var(--red); }
-.trust-check-title { color: var(--text); font-weight: 500; }
-.trust-check-detail { color: var(--text3); margin-top: 2px; line-height: 1.35; }
-.trust-check-var { font-family: var(--mono); font-size: 10px; color: var(--text3); white-space: nowrap; }
-.validation-slide .validation-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin: 4px 0 14px; flex-wrap:wrap; }
-.validation-slide .validation-callout { background: color-mix(in srgb, var(--amber) 12%, var(--bg2)); border: 0.5px solid color-mix(in srgb, var(--amber) 35%, var(--border)); border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.45; color: var(--text2); margin-bottom: 14px; }
-.validation-slide .validation-callout code { font-family: var(--mono); font-size: 11px; color: var(--text); }
-.validation-slide .validation-table-card { overflow:auto; max-height: none; }
-.validation-table { width:100%; border-collapse: collapse; font-size: 12px; }
-.validation-table th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.04em; color: var(--text3); padding: 8px 10px; border-bottom: 0.5px solid var(--border); position: sticky; top: 0; background: var(--bg2); }
-.validation-table td { padding: 10px; border-bottom: 0.5px solid var(--border); vertical-align: top; color: var(--text2); }
-.validation-table td.mono { font-family: var(--mono); font-size: 11px; white-space: nowrap; color: var(--text); }
-.validation-table tr.fail td { background: color-mix(in srgb, var(--red) 6%, transparent); }
-.validation-table tr.warning td { background: color-mix(in srgb, var(--amber) 6%, transparent); }
-.validation-sources { font-family: var(--mono); font-size: 10px; color: var(--text3); max-width: 180px; word-break: break-word; }
-.validation-internal { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 4px; }
-.validation-empty { color: var(--text3); font-size: 12px; padding: 18px 4px; }
-.validation-footnote { margin-top: 12px; font-size: 11px; color: var(--text3); line-height: 1.4; }
-.validation-actions { margin-top: 12px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .ai-global-btn { font-size: 11px; padding: 5px 12px; border: 0.5px solid var(--border); border-radius: 20px; background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 5px; transition: all .15s; font-family: var(--font); }
 .ai-global-btn:hover { background: var(--bg2); color: var(--text); }
@@ -286,9 +252,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· We make finance simple</span></div>
   <div class="topbar-right">
     <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
-    <div class="trust-strip-wrap">
-      <button type="button" class="trust-badge" id="trustStrip" title="Open Validation &amp; Tie-outs">Checks…</button>
-    </div>
     <span class="period-badge" id="periodBadge"></span>
     <button class="ai-global-btn" onclick="openMdaDeck()">✦ MD&A Deck ↗</button>
     <button class="ai-global-btn" onclick="openVarianceCommentary()">✦ Variance Commentary ↗</button>
@@ -313,7 +276,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   <button class="nav-btn" onclick="show('revenue',this)">Revenue &amp; ARR</button>
   <button class="nav-btn" onclick="show('cash',this)">Cash Forecast</button>
   <button class="nav-btn" onclick="show('threestmt',this)">3 &#8209; Statement</button>
-  <button class="nav-btn" data-tab="validation" onclick="show('validation',this)">Validation</button>
   <button class="nav-btn" onclick="show('pl',this)">Management P&amp;L</button>
   <button class="nav-btn" onclick="show('gtm',this)">GTM / Marketing</button>
   <button class="nav-btn" onclick="show('sales',this)">Sales</button>
@@ -583,25 +545,10 @@ function show(name, btn) {
   else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.substr(0,3)))b.classList.add('active');});
   const area = document.getElementById('slideArea');
   area.innerHTML = '';
-  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,validation:renderValidation,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot};
+  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot};
   if(renders[name]) renders[name](area);
-  if (name === 'pl' || name === 'threestmt' || name === 'validation') return;
+  if (name === 'pl' || name === 'threestmt') return;
   scheduleChartBuild(name, 50);
-}
-
-function renderValidation(area) {
-  if (window.SMPLBoardLive && typeof window.SMPLBoardLive.mountValidationSlide === 'function') {
-    window.SMPLBoardLive.mountValidationSlide(area, 'all');
-    if (!window.SMPL_TRUST_SUMMARY && typeof window.SMPLBoardLive.refreshTrustStrip === 'function') {
-      void window.SMPLBoardLive.refreshTrustStrip({ force: false });
-    }
-    return;
-  }
-  if (typeof window.renderValidation === 'function' && window.renderValidation !== renderValidation) {
-    window.renderValidation(area);
-    return;
-  }
-  area.innerHTML = '<div class="slide"><div class="slide-title">Validation &amp; Tie-outs</div><div class="slide-sub">Loading validation module…</div></div>';
 }
 
 // ─── EXEC ──────────────────────────────────────────────────────────────────
