@@ -476,9 +476,15 @@ def collect_copilot_bundle(
     end_period: str,
     as_of_period: str | None = None,
     focus_period: str | None = None,
+    lightweight: bool = True,
     **dashboard_filters,
 ) -> ReportingBundle:
-    """Fast bundle for interactive Copilot — skips export validation, MD&A build, and heavy drilldowns."""
+    """Interactive Copilot metrics.
+
+    Default lightweight=True skips GL/headcount/drilldown/marketing so live
+    fallback stays demo-fast when no freeze pack exists. Heavy extras remain
+    available for offline / batch callers with lightweight=False.
+    """
     start = to_period(start_period)
     end = to_period(end_period)
     as_of = to_period(as_of_period or end_period)
@@ -494,6 +500,8 @@ def collect_copilot_bundle(
         include_validation=False,
         **dashboard_filters,
     )
+    if lightweight:
+        return bundle
 
     bundle.marketing_comparison = collect_marketing_comparison(
         db,

@@ -512,7 +512,7 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ slide_key: apiSlideKey }),
             }),
-            295000,
+            60000,
           );
           if (res.ok) {
             var data = await res.json();
@@ -535,7 +535,7 @@
           lastApiStatus = res.status;
         } catch (err) {
           if (orgId) {
-            txt.textContent = "Commentary request failed: " + boardFetchErrorMessage(err, 295000);
+            txt.textContent = "Commentary request failed: " + boardFetchErrorMessage(err, 60000);
             return;
           }
         }
@@ -615,7 +615,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ question: q }),
           }),
-          295000,
+          60000,
         );
         if (!res.ok) {
           var errText = await boardApiErrorMessage(res);
@@ -665,7 +665,7 @@
         if (failEl) {
           failEl.outerHTML =
             '<div class="cp-msg assistant"><div class="cp-avatar">S</div><div class="cp-bubble" style="color:var(--red)">' +
-            boardFetchErrorMessage(err, 295000).replace(/</g, "&lt;") +
+            boardFetchErrorMessage(err, 60000).replace(/</g, "&lt;") +
             "</div></div>";
         }
       }

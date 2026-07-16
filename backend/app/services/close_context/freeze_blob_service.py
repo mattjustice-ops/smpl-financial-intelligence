@@ -127,6 +127,8 @@ def build_and_store_freeze_blob(
 
     period = to_period(as_of_period)
 
+    # Prefer interactive-speed collect for freeze packs so MD&A/Copilot aren't
+    # blocked for minutes on GL/drilldown. Ops can re-prewarm for richer packs.
     bundle = collect_copilot_bundle(
         db,
         organization_id,
@@ -135,6 +137,7 @@ def build_and_store_freeze_blob(
         end_period=end_period,
         as_of_period=period,
         focus_period=period,
+        lightweight=True,
     )
     cash_bridge_table = build_cash_bridge_data(
         db,

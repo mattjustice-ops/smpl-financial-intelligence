@@ -49,7 +49,7 @@ WORKFORCE_BUILD_ID = "workforce-legacy-headcount-v6"
 DEMO_CSV_BUILD_ID = "gl-warehouse-v3"
 PLAN_ENTITLEMENTS_BUILD = "gl-3-v1"
 # Visible proof that Haiku / SMPL_FAST_AI board path is live (bump when AI runtime changes).
-AI_FAST_BUILD_ID = "board-ai-haiku-fast-v1"
+AI_FAST_BUILD_ID = "board-ai-haiku-fast-v2"
 TRUST_VALIDATION_BUILD_ID = "trust-tab-lineage-v1"
 _MAIN_FILE = Path(__file__).resolve()
 

@@ -83,25 +83,56 @@ def _org_for_board_export(
 
 
 def _require_servable_freeze_for_mda(db: Session, organization_id: uuid.UUID, as_of_period: str):
-    """§4B: allow COMPLETE or STALE; hard-block only when no pack exists."""
-    from app.services.close_context.freeze_blob_service import get_servable_freeze
+    """§4B: allow COMPLETE or STALE; hard-block only when no pack exists.
 
-    freeze = get_servable_freeze(db, organization_id, as_of_period)
-    if freeze is None:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "freeze_pack_required",
-                "as_of_period": as_of_period,
-                "message": (
-                    f"No COMPLETE/STALE close-context pack for {as_of_period}. "
-                    "Run validation (or ops prewarm-freeze) so the first freeze reaches COMPLETE, "
-                    "then regenerate the MD&A deck."
-                ),
-            },
-        )
-    return freeze
+    Under SMPL_FAST_AI, auto-build a COMPLETE pack once so demos are not dead-ended
+    when validation/prewarm never ran.
+    """
+    from app.core.config import get_settings
+    from app.services.close_context.freeze_blob_service import (
+        build_and_store_freeze_blob,
+        get_servable_freeze,
+    )
+    from app.services.reporting.period_utils import to_period
 
+    period = to_period(as_of_period)
+    freeze = get_servable_freeze(db, organization_id, period)
+    if freeze is not None:
+        return freeze
+
+    settings = get_settings()
+    if bool(getattr(settings, "smpl_fast_ai", True)):
+        try:
+            freeze = build_and_store_freeze_blob(
+                db,
+                organization_id,
+                as_of_period=period,
+                start_period=period,
+                end_period=period,
+            )
+            if freeze is not None and get_servable_freeze(db, organization_id, period) is not None:
+                return freeze
+        except Exception as exc:
+            logger.warning(
+                "FAST_AI auto-freeze for MD&A failed org=%s period=%s: %s",
+                organization_id,
+                period,
+                exc,
+                exc_info=True,
+            )
+
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "freeze_pack_required",
+            "as_of_period": period,
+            "message": (
+                f"No COMPLETE/STALE close-context pack for {period}. "
+                "Run validation (or ops prewarm-freeze) so the first freeze reaches COMPLETE, "
+                "then regenerate the MD&A deck."
+            ),
+        },
+    )
 
 def _load_board_export_enrichment(
     db: Session,

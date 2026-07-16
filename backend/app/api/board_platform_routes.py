@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,6 +27,8 @@ from app.services.reporting.export.data_collector import collect_board_platform_
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
 from app.services.reporting.three_statement_payload import build_cash_bridge_data, build_ts_data
 from app.services.reporting.validation_gate import raise_if_validation_blocked
+
+logger = logging.getLogger(__name__)
 
 board_platform_router = APIRouter(prefix="/board-platform", tags=["board-platform"])
 
@@ -228,6 +231,7 @@ def board_copilot(
                 end_period=end_period,
                 as_of_period=as_of,
                 focus_period=focus_period,
+                lightweight=True,
             )
         except Exception as exc:
             reset_usage_context(usage_tokens)
@@ -258,6 +262,20 @@ def board_copilot(
             focus_period=focus_period,
             max_chars=24000,
         )
+        # Seed a freeze pack in the background so the next Copilot / MD&A call is fast.
+        try:
+            from app.services.close_context.freeze_blob_service import schedule_auto_freeze_after_validation
+
+            schedule_auto_freeze_after_validation(
+                db,
+                organization_id,
+                validation_status="pass",
+                as_of_period=as_of,
+                start_period=start_period,
+                end_period=end_period,
+            )
+        except Exception:
+            logger.debug("Copilot background freeze schedule skipped", exc_info=True)
         try:
             exec_json = bundle.executive_flow.model_dump(mode="json")
             kpis = exec_json.get("kpis")
