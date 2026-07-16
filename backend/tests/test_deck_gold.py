@@ -51,9 +51,23 @@ def test_resolve_reference_script_falls_back_to_archive(tmp_path, monkeypatch):
     (arch_dir / "generate_deck_2026-06.js").write_text("z" * 2000, encoding="utf-8")
     monkeypatch.setattr(mod, "GOLD_DIR", tmp_path / "gold")
     monkeypatch.setattr(mod, "ARCHIVE_DIR", tmp_path)
+    monkeypatch.setattr(mod, "BUNDLED_REFERENCE_SCRIPT", tmp_path / "missing.js")
     path, kind = mod.resolve_reference_script(period)
     assert kind == "archive"
     assert path.name == "generate_deck_2026-06.js"
+
+
+def test_resolve_reference_script_falls_back_to_bundled(tmp_path, monkeypatch):
+    import app.services.reporting.export.deck_gold as mod
+
+    bundled = tmp_path / "generate_deck_reference.js"
+    bundled.write_text("b" * 2000, encoding="utf-8")
+    monkeypatch.setattr(mod, "GOLD_DIR", tmp_path / "gold")
+    monkeypatch.setattr(mod, "ARCHIVE_DIR", tmp_path / "archive")
+    monkeypatch.setattr(mod, "BUNDLED_REFERENCE_SCRIPT", bundled)
+    path, kind = mod.resolve_reference_script("2026-06")
+    assert kind == "bundled"
+    assert path == bundled
 
 
 def test_extract_layout_fingerprint_from_v3_reference():

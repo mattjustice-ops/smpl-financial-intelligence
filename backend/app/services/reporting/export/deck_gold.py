@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 ARCHIVE_DIR = _BACKEND_ROOT / "tmp" / "deck-archive"
 GOLD_DIR = ARCHIVE_DIR / "gold"
+# Shipped with the API image so Railway has a known-good adapt fallback without tmp/.
+BUNDLED_REFERENCE_SCRIPT = (
+    _BACKEND_ROOT / "scripts" / "deck-gen" / "reference" / "generate_deck_reference.js"
+)
 
 
 def gold_period_dir(period: str) -> Path:
@@ -48,10 +52,12 @@ def resolve_gold_script(period: str) -> Path | None:
 
 
 def resolve_reference_script(period: str) -> tuple[Path | None, str]:
-    """Gold script first, then latest archived script for the period (Option 1 bootstrap)."""
+    """Gold → bundled repo reference → period archive (Option 1 bootstrap)."""
     gold = resolve_gold_script(period)
     if gold:
         return gold, "gold"
+    if _valid_script(BUNDLED_REFERENCE_SCRIPT):
+        return BUNDLED_REFERENCE_SCRIPT, "bundled"
     archive = archive_script_path(period)
     if _valid_script(archive):
         return archive, "archive"

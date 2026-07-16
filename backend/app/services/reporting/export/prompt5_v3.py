@@ -108,6 +108,9 @@ OUTPUT
 const pptxgen = require("pptxgenjs"); const pptx = new pptxgen();
 pptx.layout = "LAYOUT_WIDE";
 Use pptx.ShapeType / pptx.ChartType on pptx instance. Dividers: pptx.ShapeType.rect h=0.03.
+Valid JavaScript only — never emit prose, layout notes, or spaced identifiers as code.
+Never redeclare the same const/let name (e.g. bridgeY once, or reassign; not const bridgeY twice).
+Identifiers are camelCase with no spaces (bridgeY, not "bridge Y").
 End with pptx.writeFile({ fileName: "OUTPUT.pptx" });
 Return raw Node.js only — no markdown fences.
 """

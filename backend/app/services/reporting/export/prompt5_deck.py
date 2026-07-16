@@ -320,8 +320,10 @@ def build_prompt5_user_message(
     freeze_context_as_of: str | None = None,
     freeze_status: str | None = None,
     freeze_stale: bool = False,
+    payload: dict[str, Any] | None = None,
 ) -> str:
-    payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
+    if payload is None:
+        payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
     pc = payload["period_context"]
     warnings = payload.get("payload_warnings") or []
     warn_block = ""
@@ -388,8 +390,44 @@ def _detect_pptx_instance_var(script: str) -> str:
     return match.group(1) if match else "pptx"
 
 
+def _fix_spaced_identifiers(script: str) -> str:
+    """Merge accidental spaces in declarations: `const bridge Y =` → `const bridgeY =`."""
+    return re.sub(
+        r"\b(const|let|var)\s+([A-Za-z_][\w]*)\s+([A-Za-z_][\w]*)\s*=",
+        r"\1 \2\3 =",
+        script,
+    )
+
+
+def _rewrite_redeclared_bindings(script: str) -> str:
+    """Convert duplicate const/let/var of the same name into reassignment.
+
+    Claude often redeclares layout vars (e.g. `const bridgeY`) across slides,
+    which is a SyntaxError for const/let in the same scope.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in script.splitlines():
+        match = re.match(r"^(\s*)(const|let|var)\s+([A-Za-z_]\w*)\s*=", line)
+        if match:
+            name = match.group(3)
+            if name in seen:
+                line = re.sub(
+                    r"^(\s*)(const|let|var)\s+([A-Za-z_]\w*)\s*=",
+                    rf"\1{name} =",
+                    line,
+                    count=1,
+                )
+            else:
+                seen.add(name)
+        out.append(line)
+    return "\n".join(out)
+
+
 def _sanitize_pptxgen_script(script: str) -> str:
     """Fix common Claude PptxGenJS API mistakes before Node execution."""
+    script = _fix_spaced_identifiers(script)
+    script = _rewrite_redeclared_bindings(script)
     inst = _detect_pptx_instance_var(script)
     # ShapeType / ChartType live on the presentation instance, not the constructor.
     for ctor in ("pptxgen", "PptxGenJS", "PptxGenjs"):
@@ -416,6 +454,33 @@ def _prepare_script(script: str, output_path: Path) -> str:
     return script
 
 
+def _excerpt_for_fix(text: str, *, limit: int = 24000) -> str:
+    if len(text) <= limit:
+        return text
+    half = limit // 2
+    return text[:half] + "\n\n/* ... middle omitted ... */\n\n" + text[-half:]
+
+
+def _build_fix_prompt(*, last_error: str, failed_script: str, payload_json: str) -> str:
+    return (
+        "The previous PptxGenJS Node.js script failed. Fix it and return a complete "
+        "executable script for all 11 slides.\n\n"
+        f"ERROR:\n{last_error}\n\n"
+        "HARD RULES:\n"
+        "- Valid JavaScript only — no prose, no markdown, no layout notes as code.\n"
+        "- Never redeclare the same const/let name (use unique names per slide or reassign).\n"
+        "- Identifiers must be camelCase with no spaces (bridgeY not 'bridge Y').\n"
+        "- Use pptx.ShapeType / pptx.ChartType on the pptx instance, never pptxgen.ShapeType.\n"
+        "- Charts: only slides 2, 6, 9 via addChart; slide 3 waterfall uses ShapeType.rect bars only.\n"
+        "- Chart data must be numeric arrays; labels must be string arrays.\n"
+        "- End with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n"
+        "- Copy numbers from DATA PAYLOAD verbatim.\n\n"
+        f"FAILED SCRIPT:\n{_excerpt_for_fix(failed_script)}\n\n"
+        f"DATA PAYLOAD (JSON):\n{_excerpt_for_fix(payload_json, limit=20000)}\n\n"
+        "Return only the corrected raw JavaScript."
+    )
+
+
 def _ensure_deck_gen_runtime() -> None:
     node_modules = DECK_GEN_DIR / "node_modules" / "pptxgenjs"
     if node_modules.exists():
@@ -431,8 +496,25 @@ def _ensure_deck_gen_runtime() -> None:
     )
 
 
+def _check_node_syntax(script_path: Path) -> None:
+    """Fail fast on SyntaxError before pptxgenjs runtime work."""
+    result = subprocess.run(
+        ["node", "--check", str(script_path)],
+        cwd=DECK_GEN_DIR,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Node deck script syntax error: "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+
+
 def _run_node_script(script_path: Path, output_path: Path) -> None:
     _ensure_deck_gen_runtime()
+    _check_node_syntax(script_path)
     env = os.environ.copy()
     env["NODE_PATH"] = str(DECK_GEN_DIR / "node_modules")
     result = subprocess.run(
@@ -516,6 +598,64 @@ def _archive_artifacts(period: str, script: str, pptx_bytes: bytes) -> None:
         logger.warning("Could not archive deck artifacts: %s", exc)
 
 
+def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, str]:
+    """Prepare, syntax-check, run Node, archive on success. Returns (bytes, prepared_script)."""
+    with tempfile.TemporaryDirectory(prefix="smpl-deck-") as tmp:
+        tmp_dir = Path(tmp)
+        output_path = tmp_dir / f"mda_deck_{period}.pptx"
+        script_path = tmp_dir / "generate_deck.js"
+        prepared = _prepare_script(script_text, output_path)
+        script_path.write_text(prepared, encoding="utf-8")
+        _run_node_script(script_path, output_path)
+        pptx_bytes = output_path.read_bytes()
+        _archive_artifacts(period, prepared, pptx_bytes)
+        return pptx_bytes, prepared
+
+
+def _try_adapt_from_reference(
+    client: Any,
+    *,
+    period: str,
+    payload_json: str,
+) -> tuple[bytes, str] | None:
+    """Last-resort: adapt a known-good reference script to the current payload."""
+    from app.services.reporting.export.deck_gold import resolve_reference_script
+    from app.services.reporting.export.prompt5_adapt import PROMPT5_ADAPT_SYSTEM
+
+    ref_path, kind = resolve_reference_script(period)
+    if ref_path is None:
+        return None
+    try:
+        ref_script = ref_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Could not read reference deck script %s: %s", ref_path, exc)
+        return None
+    if len(ref_script) < 1000:
+        return None
+
+    logger.warning(
+        "Prompt 5 falling back to %s reference adapt (%s)",
+        kind or "bundled",
+        ref_path,
+    )
+    adapt_prompt = (
+        f"Adapt the reference PptxGenJS script for close period {period}.\n"
+        "Preserve layout/helpers; replace data values from the payload.\n"
+        "Return complete raw JavaScript ending with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n\n"
+        f"REFERENCE SCRIPT:\n{_excerpt_for_fix(ref_script, limit=40000)}\n\n"
+        f"DATA PAYLOAD (JSON):\n{_excerpt_for_fix(payload_json, limit=20000)}\n"
+    )
+    script_text = _generate_deck_script_text(
+        client, adapt_prompt, system_prompt=PROMPT5_ADAPT_SYSTEM
+    )
+    if not _script_is_complete(script_text):
+        raise RuntimeError(
+            f"Adapt fallback incomplete ({len(script_text)} chars, no pptx.writeFile)"
+        )
+    pptx_bytes, _ = _render_prepared_script(script_text, period=period)
+    return pptx_bytes, f"claude_adapt_{kind or 'bundled'}"
+
+
 def build_claude_deck_pptx_bytes(
     bundle: ReportingBundle,
     *,
@@ -532,6 +672,8 @@ def build_claude_deck_pptx_bytes(
     if not hasattr(client, "generate_text"):
         raise RuntimeError("Configured LLM client does not support raw text generation.")
 
+    payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
+    payload_json = json.dumps(payload, separators=(",", ":"))
     user_message = build_prompt5_user_message(
         bundle,
         ts_data=ts_data,
@@ -540,6 +682,7 @@ def build_claude_deck_pptx_bytes(
         freeze_context_as_of=freeze_context_as_of,
         freeze_status=freeze_status,
         freeze_stale=freeze_stale,
+        payload=payload,
     )
     system_prompt = PROMPT5_SYSTEM
 
@@ -549,16 +692,18 @@ def build_claude_deck_pptx_bytes(
     for attempt in range(max_retries + 1):
         try:
             if attempt == 0:
-                script_text = _generate_deck_script_text(client, user_message, system_prompt=system_prompt)
-            else:
-                fix_prompt = (
-                    f"The script failed Node execution:\n{last_error}\n\n"
-                    "Return a corrected complete Node.js PptxGenJS script for all 11 slides. "
-                    "Use pptx.ShapeType (not pptxgen.ShapeType). "
-                    "End with pptx.writeFile({ fileName: 'OUTPUT.pptx' }). "
-                    "Return only raw JavaScript."
+                script_text = _generate_deck_script_text(
+                    client, user_message, system_prompt=system_prompt
                 )
-                script_text = _generate_deck_script_text(client, fix_prompt, system_prompt=system_prompt)
+            else:
+                fix_prompt = _build_fix_prompt(
+                    last_error=last_error,
+                    failed_script=script_text or "",
+                    payload_json=payload_json,
+                )
+                script_text = _generate_deck_script_text(
+                    client, fix_prompt, system_prompt=system_prompt
+                )
 
             if not _script_is_complete(script_text):
                 failed = _archive_failed_script(
@@ -573,16 +718,10 @@ def build_claude_deck_pptx_bytes(
                 logger.error(last_error)
                 continue
 
-            with tempfile.TemporaryDirectory(prefix="smpl-deck-") as tmp:
-                tmp_dir = Path(tmp)
-                output_path = tmp_dir / f"mda_deck_{bundle.as_of_period}.pptx"
-                script_path = tmp_dir / "generate_deck.js"
-                prepared = _prepare_script(script_text, output_path)
-                script_path.write_text(prepared, encoding="utf-8")
-                _run_node_script(script_path, output_path)
-                pptx_bytes = output_path.read_bytes()
-                _archive_artifacts(bundle.as_of_period, prepared, pptx_bytes)
-                return pptx_bytes, "claude_prompt5"
+            pptx_bytes, _ = _render_prepared_script(
+                script_text, period=bundle.as_of_period
+            )
+            return pptx_bytes, "claude_prompt5"
         except RuntimeError as exc:
             last_error = str(exc)
             logger.warning("Prompt 5 deck attempt %s failed: %s", attempt + 1, last_error)
@@ -592,11 +731,18 @@ def build_claude_deck_pptx_bytes(
                     script_text,
                     f"failed_attempt_{attempt + 1}",
                 )
-            if attempt >= max_retries:
-                raise RuntimeError(
-                    f"Claude deck generation failed after {max_retries + 1} attempts. Last error: {last_error}"
-                ) from exc
+
+    # Last resort: adapt a known-good reference script (gold / bundled / archive).
+    try:
+        adapted = _try_adapt_from_reference(
+            client, period=bundle.as_of_period, payload_json=payload_json
+        )
+        if adapted is not None:
+            return adapted
+    except RuntimeError as adapt_exc:
+        last_error = f"{last_error}; adapt fallback also failed: {adapt_exc}"
+        logger.warning("Prompt 5 adapt fallback failed: %s", adapt_exc)
 
     raise RuntimeError(
-        f"Claude deck generation failed after retries. Last error: {last_error or 'unknown'}"
+        f"Claude deck generation failed after {max_retries + 1} attempts. Last error: {last_error or 'unknown'}"
     )
