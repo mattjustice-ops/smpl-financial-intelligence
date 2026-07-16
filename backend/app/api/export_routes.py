@@ -295,7 +295,7 @@ def export_validation_precheck(
         owner,
     )
     as_of = str(params["as_of_period"])
-    response.headers["X-Trust-Validation-Build"] = "trust-month-v1"
+    response.headers["X-Trust-Validation-Build"] = "trust-tab-lineage-v1"
     response.headers["X-As-Of-Period"] = as_of
 
     if prefer_cache:

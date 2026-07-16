@@ -860,88 +860,235 @@
     return (n >= 0 ? "+" : "−") + body;
   }
 
-  function renderTrustPanelMessage(title, detail) {
-    var panel = document.getElementById("trustPanel");
-    if (!panel) return;
-    panel.innerHTML =
-      '<div class="trust-panel-head">' +
-      String(title || "Checks").replace(/</g, "&lt;") +
-      "</div>" +
-      '<div class="trust-panel-sub">' +
-      String(detail || "").replace(/</g, "&lt;") +
-      "</div>";
+  function formatTrustMoney(v) {
+    if (v == null || v === "") return "—";
+    var n = Number(v);
+    if (Number.isNaN(n)) return String(v);
+    var sign = n < 0 ? "-" : "";
+    var abs = Math.abs(n);
+    if (abs >= 1e6) return sign + "$" + (abs / 1e6).toFixed(2) + "M";
+    if (abs >= 1e3) return sign + "$" + (abs / 1e3).toFixed(1) + "k";
+    return sign + "$" + abs.toFixed(0);
   }
 
-  function renderTrustPanel(summary) {
-    var panel = document.getElementById("trustPanel");
-    if (!panel) return;
-    if (!summary) {
-      renderTrustPanelMessage(
-        "Checks unavailable",
-        "Close validation has not returned yet. Re-open the board or click the badge again after a few seconds.",
-      );
+  function escTrust(s) {
+    return String(s == null ? "" : s).replace(/</g, "&lt;");
+  }
+
+  function openValidationTab() {
+    var btn = document.querySelector('.nav-btn[data-tab="validation"]');
+    if (typeof global.show === "function") {
+      global.show("validation", btn || null);
       return;
     }
-    var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
-    var asOf = summary.as_of_period || boardActiveCloseMonth();
-    var label = summary.trust_label || "Needs review";
-    var freezeBit = "";
-    if (summary.freeze_status) {
-      freezeBit =
-        summary.freeze_status === "COMPLETE"
-          ? " Freeze pack COMPLETE."
-          : " Freeze: " + summary.freeze_status + ".";
-    }
-    var head =
-      '<div class="trust-panel-head">' +
-      label +
-      " · " +
-      (summary.passed_count || 0) +
-      "/" +
-      total +
-      " checks</div>" +
-      '<div class="trust-panel-sub">Close data as of ' +
-      asOf +
-      "." +
-      freezeBit +
-      " Verified requires validation pass/warning and a COMPLETE freeze pack.</div>";
+    if (btn) btn.click();
+  }
 
-    var checks = Array.isArray(summary.checks) ? summary.checks.slice() : [];
+  function sortedTrustChecks(summary) {
+    var checks = Array.isArray(summary && summary.checks) ? summary.checks.slice() : [];
     checks.sort(function (a, b) {
       var rank = { fail: 0, warning: 1, pass: 2 };
       return (rank[a.status] != null ? rank[a.status] : 9) - (rank[b.status] != null ? rank[b.status] : 9);
+    });
+    return checks;
+  }
+
+  function cashSourceCalloutHtml(summary) {
+    var checks = sortedTrustChecks(summary);
+    var bridge = checks.find(function (c) {
+      return c.validation_name === "cash_bridge_ties" && c.status === "fail";
+    });
+    var bridgeVsBs = checks.find(function (c) {
+      return c.validation_name === "cash_bridge_ending_cash_ties_balance_sheet_cash" && c.status === "fail";
+    });
+    var cfsVsBs = checks.find(function (c) {
+      return c.validation_name === "cash_flow_ending_cash_equals_balance_sheet_cash";
+    });
+    if (!bridge && !bridgeVsBs) return "";
+    var bits = [
+      "<strong>Cash source note.</strong> The Cash Forecast card’s ~$502k figure is usually ",
+      "<em>net change in cash</em> from the cash flow statement / operational bridge — not the ",
+      "bridge rollforward variance. ",
+    ];
+    if (bridge) {
+      bits.push(
+        "“Cash bridge rollforward” compares the sum of lines on <code>actual_cash_flow_bridge</code> (",
+        escTrust(formatTrustMoney(bridge.expected_value)),
+        ") to that table’s <code>ending_cash</code> column (",
+        escTrust(formatTrustMoney(bridge.actual_value)),
+        "). Variance ",
+        escTrust(formatTrustVariance(bridge.variance) || formatTrustMoney(bridge.variance)),
+        ". ",
+      );
+    }
+    if (cfsVsBs && cfsVsBs.status === "pass") {
+      bits.push(
+        "Cash flow statement ending cash already ties to balance sheet Cash (",
+        escTrust(formatTrustMoney(cfsVsBs.expected_value)),
+        "). ",
+      );
+    }
+    if (bridgeVsBs) {
+      bits.push(
+        "A separate check compares bridge <code>ending_cash</code> (",
+        escTrust(formatTrustMoney(bridgeVsBs.actual_value)),
+        ") to balance sheet Cash (",
+        escTrust(formatTrustMoney(bridgeVsBs.expected_value)),
+        ").",
+      );
+    }
+    return '<div class="validation-callout">' + bits.join("") + "</div>";
+  }
+
+  function renderValidationSlideHtml(summary, filter) {
+    filter = filter || "all";
+    if (!summary) {
+      return (
+        '<div class="slide validation-slide">' +
+        '<div class="slide-title">Validation &amp; Tie-outs</div>' +
+        '<div class="slide-sub">Warehouse checks for the active close month</div>' +
+        '<div class="validation-empty">Checks have not returned yet. Use <strong>Re-run checks</strong> or wait for board hydrate to finish.</div>' +
+        '<div class="validation-actions"><button type="button" class="ai-btn" id="validationRerunBtn">✦ Re-run checks</button></div>' +
+        "</div>"
+      );
+    }
+    var total =
+      (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
+    var asOf = summary.as_of_period || boardActiveCloseMonth();
+    var label = summary.trust_label || "Needs review";
+    var freeze = summary.freeze_status || "missing";
+    var checks = sortedTrustChecks(summary).filter(function (c) {
+      if (filter === "fail") return c.status === "fail";
+      if (filter === "warning") return c.status === "warning" || c.status === "fail";
+      return true;
     });
 
     var rows = checks
       .map(function (c) {
         var mark =
           c.status === "pass" ? "✓" : c.status === "warning" ? "!" : c.status === "fail" ? "✕" : "·";
-        var title = (c.customer_label || c.validation_name || "Check").replace(/</g, "&lt;");
-        var detail = (c.customer_detail || "").replace(/</g, "&lt;");
-        var period = c.period ? " · " + String(c.period).replace(/</g, "&lt;") : "";
-        var variance = formatTrustVariance(c.variance);
+        var sources = Array.isArray(c.source_tables_used) ? c.source_tables_used.join(", ") : "";
         return (
-          '<div class="trust-check">' +
-          '<span class="trust-check-mark ' +
-          (c.status || "") +
+          '<tr class="validation-row ' +
+          escTrust(c.status || "") +
+          '">' +
+          '<td class="validation-status"><span class="trust-check-mark ' +
+          escTrust(c.status || "") +
           '">' +
           mark +
-          "</span>" +
-          "<div><div class=\"trust-check-title\">" +
-          title +
-          period +
+          "</span> " +
+          escTrust(c.status || "") +
+          "</td>" +
+          "<td><div class=\"trust-check-title\">" +
+          escTrust(c.customer_label || c.validation_name || "Check") +
+          '</div><div class="trust-check-detail">' +
+          escTrust(c.customer_detail || "") +
           "</div>" +
-          (detail ? '<div class="trust-check-detail">' + detail + "</div>" : "") +
-          "</div>" +
-          '<span class="trust-check-var">' +
-          (variance || (c.status || "")).replace(/</g, "&lt;") +
-          "</span>" +
-          "</div>"
+          '<div class="validation-internal">' +
+          escTrust(c.validation_name || "") +
+          "</div></td>" +
+          "<td>" +
+          escTrust(c.period || asOf) +
+          "</td>" +
+          "<td>" +
+          escTrust(c.scenario || "") +
+          "</td>" +
+          '<td class="mono">' +
+          escTrust(formatTrustMoney(c.expected_value)) +
+          "</td>" +
+          '<td class="mono">' +
+          escTrust(formatTrustMoney(c.actual_value)) +
+          "</td>" +
+          '<td class="mono">' +
+          escTrust(formatTrustVariance(c.variance) || formatTrustMoney(c.variance)) +
+          "</td>" +
+          '<td class="validation-sources">' +
+          escTrust(sources || "—") +
+          "</td>" +
+          "</tr>"
         );
       })
       .join("");
 
-    panel.innerHTML = head + (rows || '<div class="trust-panel-sub">No checks returned.</div>');
+    function filterBtn(id, text) {
+      var on = filter === id ? " on" : "";
+      return (
+        '<button type="button" class="snav-btn' +
+        on +
+        '" data-validation-filter="' +
+        id +
+        '">' +
+        text +
+        "</button>"
+      );
+    }
+
+    return (
+      '<div class="slide validation-slide">' +
+      '<div class="slide-title">Validation &amp; Tie-outs</div>' +
+      '<div class="slide-sub">Full close checklist with expected vs actual and warehouse sources · as of ' +
+      escTrust(asOf) +
+      "</div>" +
+      '<div class="kpi-strip kpi-strip-4">' +
+      '<div class="kpi"><div class="kpi-lbl">Trust</div><div class="kpi-val" style="font-size:18px">' +
+      escTrust(label) +
+      "</div><div class="kpi-delta neu">Freeze: " +
+      escTrust(freeze) +
+      "</div></div>" +
+      '<div class="kpi"><div class="kpi-lbl">Passed</div><div class="kpi-val">' +
+      (summary.passed_count || 0) +
+      '</div><div class="kpi-delta pos">of ' +
+      total +
+      "</div></div>" +
+      '<div class="kpi"><div class="kpi-lbl">Warnings</div><div class="kpi-val">' +
+      (summary.warning_count || 0) +
+      '</div><div class="kpi-delta neu">review</div></div>' +
+      '<div class="kpi"><div class="kpi-lbl">Failed</div><div class="kpi-val">' +
+      (summary.failed_count || 0) +
+      '</div><div class="kpi-delta neg">tie-outs</div></div>' +
+      "</div>" +
+      cashSourceCalloutHtml(summary) +
+      '<div class="validation-toolbar">' +
+      '<div class="subnav">' +
+      filterBtn("all", "All checks") +
+      filterBtn("warning", "Issues") +
+      filterBtn("fail", "Failures only") +
+      "</div>" +
+      '<button type="button" class="ai-btn" id="validationRerunBtn">✦ Re-run checks</button>' +
+      "</div>" +
+      '<div class="card validation-table-card">' +
+      '<table class="validation-table"><thead><tr>' +
+      "<th>Status</th><th>Check</th><th>Period</th><th>Scenario</th>" +
+      "<th>Expected</th><th>Actual</th><th>Variance</th><th>Sources</th>" +
+      "</tr></thead><tbody>" +
+      (rows ||
+        '<tr><td colspan="8" class="validation-empty">No checks in this filter.</td></tr>') +
+      "</tbody></table></div>" +
+      '<div class="validation-footnote">Verified requires pass/warning checks and a COMPLETE freeze pack. ' +
+      "Amounts are warehouse values for the selected close month — not demo slide copy.</div>" +
+      "</div>"
+    );
+  }
+
+  function mountValidationSlide(area, filter) {
+    if (!area) return;
+    var summary = global.SMPL_TRUST_SUMMARY || null;
+    area.innerHTML = renderValidationSlideHtml(summary, filter || "all");
+    var rerun = area.querySelector("#validationRerunBtn");
+    if (rerun) {
+      rerun.addEventListener("click", function () {
+        rerun.disabled = true;
+        rerun.textContent = "Running…";
+        void refreshTrustStrip({ force: true }).finally(function () {
+          mountValidationSlide(area, filter || "all");
+        });
+      });
+    }
+    area.querySelectorAll("[data-validation-filter]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        mountValidationSlide(area, btn.getAttribute("data-validation-filter") || "all");
+      });
+    });
   }
 
   function setTrustStripSummary(summary) {
@@ -950,10 +1097,7 @@
     if (!summary) {
       badge.textContent = "Checks unavailable";
       badge.className = "trust-badge";
-      renderTrustPanelMessage(
-        "Checks unavailable",
-        "Close validation has not returned a checklist yet. Try again in a moment.",
-      );
+      badge.title = "Open Validation tab for details";
       return;
     }
     var total = (summary.passed_count || 0) + (summary.warning_count || 0) + (summary.failed_count || 0);
@@ -961,8 +1105,12 @@
     var asOf = summary.as_of_period || boardActiveCloseMonth();
     badge.textContent = label + " · " + (summary.passed_count || 0) + "/" + total + " · as of " + asOf;
     badge.className = "trust-badge " + trustStatusClass(summary.trust_status);
+    badge.title = "Open Validation & Tie-outs";
     global.SMPL_TRUST_SUMMARY = summary;
-    renderTrustPanel(summary);
+    var slide = document.querySelector(".validation-slide");
+    if (slide && slide.closest("#slideArea")) {
+      mountValidationSlide(document.getElementById("slideArea"), "all");
+    }
     if (global.SMPL_OUTLOOK_PAYLOAD) {
       updateCopilotWelcome(global.SMPL_OUTLOOK_PAYLOAD);
     }
@@ -972,28 +1120,19 @@
     if (global._smplTrustStripInstalled) return;
     global._smplTrustStripInstalled = true;
     var badge = document.getElementById("trustStrip");
-    var panel = document.getElementById("trustPanel");
-    if (!badge || !panel) return;
-
+    if (!badge) return;
+    badge.setAttribute("aria-controls", "slideArea");
     badge.addEventListener("click", function (ev) {
+      ev.preventDefault();
       ev.stopPropagation();
-      var open = !panel.classList.contains("open");
-      panel.classList.toggle("open", open);
-      badge.setAttribute("aria-expanded", open ? "true" : "false");
-    });
-
-    document.addEventListener("click", function (ev) {
-      if (!panel.classList.contains("open")) return;
-      var wrap = badge.closest(".trust-strip-wrap");
-      if (wrap && wrap.contains(ev.target)) return;
-      panel.classList.remove("open");
-      badge.setAttribute("aria-expanded", "false");
+      openValidationTab();
     });
   }
 
-  async function refreshTrustStrip() {
+  async function refreshTrustStrip(opts) {
     installTrustStripUi();
     var badge = document.getElementById("trustStrip");
+    var force = !!(opts && opts.force);
     if (!badge) return;
 
     var orgId = await boardResolveOrgId();
@@ -1001,31 +1140,22 @@
     if (!orgId) {
       badge.textContent = "Checks · no org";
       badge.className = "trust-badge";
-      renderTrustPanelMessage(
-        "Checks · no org",
-        "Sign in and open /app/board with an organization selected to run close validation.",
-      );
       return;
     }
 
     badge.textContent = "Running checks…";
     badge.className = "trust-badge";
-    renderTrustPanelMessage(
-      "Running checks…",
-      "Validating warehouse tie-outs for " + closeMonth + " close. This usually finishes in a few seconds.",
-    );
 
     try {
       var apiBase = await boardLiveApiBase();
-      // Single close-month window + prefer_cache so the strip finishes inside
-      // the API/proxy request budget and reopens with a populated checklist.
       var params = new URLSearchParams({
         organization_id: orgId,
         scenario: "Combined",
         start_period: closeMonth,
         end_period: closeMonth,
         as_of_period: closeMonth,
-        prefer_cache: "true",
+        // Prefer live lineage (expected/actual/sources) over a stale cached summary.
+        prefer_cache: "false",
       });
       var res = await boardFetchWithTimeout(
         boardLiveUrl(apiBase, "/api/v1/export/validation") + "?" + params.toString(),
@@ -1034,12 +1164,10 @@
       );
       if (!res.ok) {
         var errText = await boardApiErrorMessage(res);
+        console.warn("[board-hydrate] trust strip failed", errText);
         setTrustStripSummary(null);
         badge.textContent = "Checks unavailable";
-        renderTrustPanelMessage(
-          "Checks unavailable",
-          errText || "Validation request failed (" + res.status + ").",
-        );
+        badge.title = errText || "Validation failed";
         return;
       }
       var summary = await res.json();
@@ -1048,10 +1176,7 @@
       console.warn("[board-hydrate] trust strip failed", err);
       setTrustStripSummary(null);
       badge.textContent = "Checks unavailable";
-      renderTrustPanelMessage(
-        "Checks unavailable",
-        boardFetchErrorMessage(err, 90000),
-      );
+      badge.title = boardFetchErrorMessage(err, 90000);
     }
   }
 
@@ -1445,6 +1570,8 @@
     refreshExecCommentaryFromLiveMetrics: refreshExecCommentaryFromLiveMetrics,
     openBoardExport: openLiveBoardExport,
     refreshTrustStrip: refreshTrustStrip,
+    mountValidationSlide: mountValidationSlide,
+    openValidationTab: openValidationTab,
   };
 
   global.SMPL_ON_ORG_READY = function () {

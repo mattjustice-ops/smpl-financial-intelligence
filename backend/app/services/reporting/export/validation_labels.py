@@ -36,12 +36,12 @@ VALIDATION_LABEL_CATALOG: dict[str, tuple[str, str]] = {
         "Marketing closed-won ARR matches opportunity closed-won ARR.",
     ),
     "cash_bridge_ties": (
-        "Cash bridge ties",
-        "Beginning cash plus cash movements equals ending cash.",
+        "Cash bridge rollforward",
+        "Inside actual_cash_flow_bridge only: beginning_cash + collections + outflows + financing must equal the ending_cash column. This is not the CFS net change in cash.",
     ),
     "cash_bridge_ending_cash_ties_balance_sheet_cash": (
-        "Ending cash matches the balance sheet",
-        "Cash bridge ending cash matches cash on the balance sheet.",
+        "Bridge ending cash vs balance sheet Cash",
+        "Compares cash_flow_bridge.ending_cash to balance_sheet.Cash. The cash flow statement can still tie to the balance sheet even when the bridge ending_cash column does not.",
     ),
     "deferred_revenue_waterfall_ties": (
         "Deferred revenue rollforward ties",
@@ -127,6 +127,30 @@ _STATUS_TO_TRUST: dict[str, tuple[TrustStatus, str]] = {
     "fail": ("blocked", "Blocked"),
 }
 
+# (expected side label, actual side label) for Validation tab lineage
+CHECK_COMPARISON_SIDES: dict[str, tuple[str, str]] = {
+    "cash_bridge_ties": (
+        "Sum of bridge lines (beginning + collections + outflows + financing)",
+        "ending_cash column on cash_flow_bridge",
+    ),
+    "cash_bridge_ending_cash_ties_balance_sheet_cash": (
+        "balance_sheet Cash",
+        "cash_flow_bridge ending_cash",
+    ),
+    "cash_flow_ending_cash_equals_balance_sheet_cash": (
+        "balance_sheet Cash",
+        "cash_flow_statement Ending Cash Balance",
+    ),
+    "cash_flow_ending_cash_rolls": (
+        "beginning cash + net change (cash flow statement)",
+        "Ending Cash Balance (cash flow statement)",
+    ),
+    "closed_won_arr_ties_mrr_new_business_arr": (
+        "ARR waterfall new business / new_arr",
+        "Pipeline waterfall closed_won",
+    ),
+}
+
 
 def customer_label_for(validation_name: str) -> tuple[str, str]:
     """Return (title, detail). Falls back to a readable title from the snake_case name."""
@@ -135,6 +159,22 @@ def customer_label_for(validation_name: str) -> tuple[str, str]:
         return keyed
     title = validation_name.replace("_", " ").strip().capitalize() or "Validation check"
     return title, "Internal warehouse check."
+
+
+def _fmt_money(value) -> str:
+    if value is None:
+        return "—"
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    sign = "-" if n < 0 else ""
+    abs_n = abs(n)
+    if abs_n >= 1_000_000:
+        return f"{sign}${abs_n / 1_000_000:,.2f}M"
+    if abs_n >= 1_000:
+        return f"{sign}${abs_n / 1_000:,.1f}k"
+    return f"{sign}${abs_n:,.0f}"
 
 
 def trust_status_for(status: str) -> tuple[TrustStatus, str]:
@@ -177,11 +217,26 @@ def apply_customer_validation_labels(
     labeled: list[ValidationCheck] = []
     for check in summary.checks:
         title, detail = customer_label_for(check.validation_name)
+        sides = CHECK_COMPARISON_SIDES.get(check.validation_name)
+        parts = [detail]
+        if sides and (check.expected_value is not None or check.actual_value is not None):
+            parts.append(
+                f"Expected ({sides[0]}): {_fmt_money(check.expected_value)}. "
+                f"Actual ({sides[1]}): {_fmt_money(check.actual_value)}. "
+                f"Variance: {_fmt_money(check.variance)}."
+            )
+        elif check.expected_value is not None or check.actual_value is not None:
+            parts.append(
+                f"Expected {_fmt_money(check.expected_value)} vs actual {_fmt_money(check.actual_value)} "
+                f"(Δ {_fmt_money(check.variance)})."
+            )
+        if check.source_tables_used:
+            parts.append("Sources: " + ", ".join(check.source_tables_used) + ".")
         labeled.append(
             check.model_copy(
                 update={
                     "customer_label": title,
-                    "customer_detail": detail,
+                    "customer_detail": " ".join(parts),
                 }
             )
         )
