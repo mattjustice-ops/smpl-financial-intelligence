@@ -14,9 +14,9 @@ LlmPurpose = Literal["export", "interactive"]
 def build_commentary_llm_client(*, purpose: LlmPurpose = "export") -> CommentaryLLMClient:
     """Return an LLM client.
 
-    With SMPL_FAST_AI (default True for demos): all surfaces use Haiku.
-    - interactive: Copilot / slide regenerate (short timeout)
-    - export: Prompt 2 / Prompt 5 (Haiku + longer timeout for big scripts)
+    Quality-first defaults under SMPL_FAST_AI (Haiku for latency):
+    - interactive: Copilot / regenerate — 120s headroom for comprehensive answers
+    - export: Prompt 2 / Prompt 5 — Haiku + longer timeout; full freeze context
 
     Set SMPL_FAST_AI=false to restore Sonnet on export paths.
     """
@@ -27,7 +27,7 @@ def build_commentary_llm_client(*, purpose: LlmPurpose = "export") -> Commentary
         if fast or purpose == "interactive":
             model = settings.anthropic_interactive_model
             if purpose == "export":
-                timeout = float(getattr(settings, "anthropic_fast_export_timeout_seconds", 120.0))
+                timeout = float(getattr(settings, "anthropic_fast_export_timeout_seconds", 180.0))
             else:
                 timeout = settings.anthropic_interactive_timeout_seconds
         else:

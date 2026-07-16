@@ -330,12 +330,10 @@ def build_prompt5_user_message(
             f"- {w}" for w in warnings
         ) + "\n\n"
 
-    from app.core.config import get_settings
     from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
 
-    # Fast-AI demos: keep drivers, but don't paste the entire 48k pack into Haiku.
-    # Quality path (SMPL_FAST_AI=false): full freeze, no secondary truncate.
-    freeze_max = 20000 if bool(getattr(get_settings(), "smpl_fast_ai", True)) else None
+    # Quality-first: never truncate freeze prose for Prompt 5 — slide numbers still from JSON.
+    freeze_max = None
     freeze_block = format_freeze_prompt_block(
         context_text=freeze_context_text,
         context_as_of=freeze_context_as_of,

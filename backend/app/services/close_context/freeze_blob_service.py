@@ -137,7 +137,7 @@ def build_and_store_freeze_blob(
         end_period=end_period,
         as_of_period=period,
         focus_period=period,
-        lightweight=True,
+        lightweight=False,
     )
     cash_bridge_table = build_cash_bridge_data(
         db,

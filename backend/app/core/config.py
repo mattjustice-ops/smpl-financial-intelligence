@@ -56,25 +56,26 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_temperature: float = 0.2
     anthropic_timeout_seconds: float = 300.0
-    # Demo / interactive speed path — Haiku for Copilot, regenerate, Prompt 2 & 5.
+    # Interactive board AI — Haiku for latency, but allow full commentary headroom.
     anthropic_interactive_model: str = Field(
         default="claude-haiku-4-5",
         validation_alias="ANTHROPIC_INTERACTIVE_MODEL",
     )
     anthropic_interactive_timeout_seconds: float = Field(
-        default=45.0,
+        default=120.0,
         validation_alias="ANTHROPIC_INTERACTIVE_TIMEOUT_SECONDS",
     )
-    # Prompt 2 / Prompt 5 still need headroom for large JSON / PptxGenJS scripts.
+    # Prompt 2 / Prompt 5 need headroom for comprehensive freeze + deck scripts.
     anthropic_fast_export_timeout_seconds: float = Field(
-        default=120.0,
+        default=180.0,
         validation_alias="ANTHROPIC_FAST_EXPORT_TIMEOUT_SECONDS",
     )
-    # Default ON so demos feel instant even if Railway still has Sonnet in ANTHROPIC_MODEL.
+    # Default ON: Haiku for board AI. Quality comes from full freeze context + timeouts,
+    # not from truncating narrative inputs.
     smpl_fast_ai: bool = Field(
         default=True,
         validation_alias="SMPL_FAST_AI",
-        description="Use Haiku for all board AI (Copilot, regenerate, Prompt 2/5).",
+        description="Use Haiku for board AI; keep full freeze context (quality-first).",
     )
 
     # Board MD&A deck — reference PPTX (SMPL Board Review Q2 2026 template).

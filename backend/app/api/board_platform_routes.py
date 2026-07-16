@@ -210,10 +210,10 @@ def board_copilot(
         context_source = "freeze"
         stale = freeze.stale
         context_built_at = freeze.built_at
-        # Interactive Copilot uses Haiku — keep freeze drivers, but cap so answers stay demo-fast.
+        # Quality-first: pass nearly the full freeze pack to Copilot (Haiku still).
         metrics_blob = freeze.context_text or ""
-        if len(metrics_blob) > 16000:
-            metrics_blob = metrics_blob[:16000] + "\n…[freeze context truncated for interactive Copilot]"
+        if len(metrics_blob) > 48000:
+            metrics_blob = metrics_blob[:48000] + "\n…[freeze context soft-capped at 48k for Copilot]"
         if focus_period != as_of:
             metrics_blob = (
                 f"Copilot focus month: {focus_period} (frozen close pack is {as_of}). "
@@ -255,12 +255,12 @@ def board_copilot(
             start_period=start_period,
             end_period=end_period,
         )
-        metrics_blob = copilot_context_blob(
+            metrics_blob = copilot_context_blob(
             bundle,
             cash_bridge_table=cash_bridge_table,
             ts_data=ts_data,
             focus_period=focus_period,
-            max_chars=24000,
+            max_chars=48000,
         )
         # Seed a freeze pack in the background so the next Copilot / MD&A call is fast.
         try:

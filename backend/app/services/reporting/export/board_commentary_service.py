@@ -899,8 +899,9 @@ def enrich_slide_with_ai(
         # Interactive path: Haiku + keep slide payload full; soft-cap freeze prose so
         # regenerate cannot burn the old 300s Sonnet timeout with a 48k pack.
         interactive_freeze = freeze_context_text
-        if interactive_freeze and len(interactive_freeze) > 16000:
-            interactive_freeze = interactive_freeze[:16000] + "\n…[freeze context truncated for interactive regenerate]"
+        if interactive_freeze and len(interactive_freeze) > 48000:
+            interactive_freeze = interactive_freeze[:48000] + "
+...[freeze context soft-capped at 48k for regenerate]"
         raw = client.generate(
             system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
             user_prompt=board_deck_single_slide_user_message(
@@ -943,8 +944,9 @@ def _enrich_slide_with_ai_legacy(
     try:
         client = build_commentary_llm_client(purpose="interactive")
         interactive_freeze = freeze_context_text
-        if interactive_freeze and len(interactive_freeze) > 16000:
-            interactive_freeze = interactive_freeze[:16000] + "\n…[freeze context truncated for interactive regenerate]"
+        if interactive_freeze and len(interactive_freeze) > 48000:
+            interactive_freeze = interactive_freeze[:48000] + "
+...[freeze context soft-capped at 48k for regenerate]"
         freeze_block = format_freeze_prompt_block(
             context_text=interactive_freeze,
             context_as_of=freeze_context_as_of,
@@ -992,7 +994,7 @@ def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCo
     try:
         client = build_commentary_llm_client(purpose="interactive")
         slide_keys = [k for k in NARRATIVE_SLIDE_ORDER if k in slides]
-        metrics_blob = copilot_context_blob(bundle)[:16000]
+        metrics_blob = copilot_context_blob(bundle)[:48000]
         key_list = ", ".join(slide_keys)
         prompt = (
             f"{strategic_context_for_prompt()}\n\n"

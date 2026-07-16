@@ -35,13 +35,13 @@ def build_prompt2_user_message(
     freeze_status: str | None = None,
     freeze_stale: bool = False,
 ) -> str:
-    from app.core.config import get_settings
     from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
 
     payload = build_mda_package_payload(
         bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data
     )
-    freeze_max = 20000 if bool(getattr(get_settings(), "smpl_fast_ai", True)) else None
+    # Quality-first: never truncate freeze prose for Prompt 2 — numbers still come from JSON.
+    freeze_max = None
     freeze_block = format_freeze_prompt_block(
         context_text=freeze_context_text,
         context_as_of=freeze_context_as_of,
