@@ -255,7 +255,7 @@ def board_copilot(
             start_period=start_period,
             end_period=end_period,
         )
-            metrics_blob = copilot_context_blob(
+        metrics_blob = copilot_context_blob(
             bundle,
             cash_bridge_table=cash_bridge_table,
             ts_data=ts_data,
