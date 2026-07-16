@@ -900,8 +900,10 @@ def enrich_slide_with_ai(
         # regenerate cannot burn the old 300s Sonnet timeout with a 48k pack.
         interactive_freeze = freeze_context_text
         if interactive_freeze and len(interactive_freeze) > 48000:
-            interactive_freeze = interactive_freeze[:48000] + "
-...[freeze context soft-capped at 48k for regenerate]"
+            interactive_freeze = (
+                interactive_freeze[:48000]
+                + "\n...[freeze context soft-capped at 48k for regenerate]"
+            )
         raw = client.generate(
             system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
             user_prompt=board_deck_single_slide_user_message(
@@ -945,8 +947,10 @@ def _enrich_slide_with_ai_legacy(
         client = build_commentary_llm_client(purpose="interactive")
         interactive_freeze = freeze_context_text
         if interactive_freeze and len(interactive_freeze) > 48000:
-            interactive_freeze = interactive_freeze[:48000] + "
-...[freeze context soft-capped at 48k for regenerate]"
+            interactive_freeze = (
+                interactive_freeze[:48000]
+                + "\n...[freeze context soft-capped at 48k for regenerate]"
+            )
         freeze_block = format_freeze_prompt_block(
             context_text=interactive_freeze,
             context_as_of=freeze_context_as_of,
