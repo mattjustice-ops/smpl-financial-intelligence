@@ -585,7 +585,7 @@ def estimated_remaining_seconds(job: ExportJob) -> int | None:
         return 0 if job.status == "complete" else None
     elapsed = max(0, time.time() - job.created_at)
     # Conservative close-week ETA: decks often 3–8 minutes
-    target = 420.0 if job.kind == "mda_deck" else 300.0
+    target = 480.0 if job.kind == "mda_deck" else 300.0
     remaining = int(max(30, target - elapsed))
     return remaining
 

@@ -113,7 +113,7 @@ def build_mda_deck_pptx_bytes(
     freeze_status: str | None = None,
     freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
-    """MD&A deck — Claude Prompt 5 full fresh build (PptxGenJS via Node)."""
+    """MD&A deck — adapt known-good PptxGenJS reference first; fresh Prompt 5 if needed."""
     _ = (include_commentary, include_validation_appendix, use_ai_commentary, scenario_mode, package_mode)
     from app.services.reporting.export.prompt5_deck import build_claude_deck_pptx_bytes
 

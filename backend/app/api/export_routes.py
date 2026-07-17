@@ -797,7 +797,7 @@ def _run_mda_deck_job(
         finally:
             _fdb.close()
 
-        update_export_job_message(job_id, "Generating MD&A deck (Prompt 5)…")
+        update_export_job_message(job_id, "Generating MD&A deck (adapt reference)…")
         content, pptx_source = build_pptx_mda_deck(
             bundle,
             include_commentary=include_commentary,

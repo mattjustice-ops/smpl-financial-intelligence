@@ -400,24 +400,43 @@ def _fix_spaced_identifiers(script: str) -> str:
 
 
 def _rewrite_redeclared_bindings(script: str) -> str:
-    """Convert duplicate const/let/var of the same name into reassignment.
+    """Fix duplicate const/let bindings Claude emits across slides.
 
-    Claude often redeclares layout vars (e.g. `const bridgeY`) across slides,
-    which is a SyntaxError for const/let in the same scope.
+    Redeclaring `const bridgeY` is a SyntaxError. Naively rewriting the second
+    line to `bridgeY =` still throws at runtime if the first binding stayed
+    `const` ("Assignment to constant variable"). Promote the first decl to
+    `let`, then turn later decls into assignments.
     """
+    decl_counts: dict[str, int] = {}
+    for line in script.splitlines():
+        match = re.match(r"^(\s*)(const|let|var)\s+([A-Za-z_]\w*)\s*=", line)
+        if match:
+            name = match.group(3)
+            decl_counts[name] = decl_counts.get(name, 0) + 1
+    redeclared = {name for name, count in decl_counts.items() if count > 1}
+
     seen: set[str] = set()
     out: list[str] = []
     for line in script.splitlines():
         match = re.match(r"^(\s*)(const|let|var)\s+([A-Za-z_]\w*)\s*=", line)
         if match:
             name = match.group(3)
-            if name in seen:
-                line = re.sub(
-                    r"^(\s*)(const|let|var)\s+([A-Za-z_]\w*)\s*=",
-                    rf"\1{name} =",
-                    line,
-                    count=1,
-                )
+            if name in redeclared:
+                if name in seen:
+                    line = re.sub(
+                        r"^(\s*)(const|let|var)\s+([A-Za-z_]\w*)\s*=",
+                        rf"\1{name} =",
+                        line,
+                        count=1,
+                    )
+                else:
+                    line = re.sub(
+                        r"^(\s*)(const|let|var)\s+",
+                        r"\1let ",
+                        line,
+                        count=1,
+                    )
+                    seen.add(name)
             else:
                 seen.add(name)
         out.append(line)
@@ -633,8 +652,8 @@ def _try_adapt_from_reference(
     if len(ref_script) < 1000:
         return None
 
-    logger.warning(
-        "Prompt 5 falling back to %s reference adapt (%s)",
+    logger.info(
+        "Prompt 5 adapting %s reference script (%s)",
         kind or "bundled",
         ref_path,
     )
@@ -661,19 +680,33 @@ def build_claude_deck_pptx_bytes(
     *,
     ts_data: dict[str, Any] | None = None,
     cash_bridge_data: dict[str, Any] | None = None,
-    max_retries: int = 2,
+    max_retries: int = 1,
     freeze_context_text: str | None = None,
     freeze_context_as_of: str | None = None,
     freeze_status: str | None = None,
     freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
-    """Prompt 5: Claude writes PptxGenJS script from bundle data; Node renders PPTX."""
+    """Prompt 5: adapt known-good layout first; fresh Claude script only if needed."""
     client = build_commentary_llm_client(purpose="export")
     if not hasattr(client, "generate_text"):
         raise RuntimeError("Configured LLM client does not support raw text generation.")
 
     payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
     payload_json = json.dumps(payload, separators=(",", ":"))
+    last_error = ""
+
+    # Adapt-first: one Claude call against a shipped reference script is faster and
+    # more reliable than 3 fresh layout regenerations (which blow the 10–15 min UI budget).
+    try:
+        adapted = _try_adapt_from_reference(
+            client, period=bundle.as_of_period, payload_json=payload_json
+        )
+        if adapted is not None:
+            return adapted
+    except RuntimeError as adapt_exc:
+        last_error = str(adapt_exc)
+        logger.warning("Prompt 5 adapt-first failed: %s", adapt_exc)
+
     user_message = build_prompt5_user_message(
         bundle,
         ts_data=ts_data,
@@ -685,8 +718,6 @@ def build_claude_deck_pptx_bytes(
         payload=payload,
     )
     system_prompt = PROMPT5_SYSTEM
-
-    last_error = ""
     script_text = ""
 
     for attempt in range(max_retries + 1):
@@ -732,17 +763,7 @@ def build_claude_deck_pptx_bytes(
                     f"failed_attempt_{attempt + 1}",
                 )
 
-    # Last resort: adapt a known-good reference script (gold / bundled / archive).
-    try:
-        adapted = _try_adapt_from_reference(
-            client, period=bundle.as_of_period, payload_json=payload_json
-        )
-        if adapted is not None:
-            return adapted
-    except RuntimeError as adapt_exc:
-        last_error = f"{last_error}; adapt fallback also failed: {adapt_exc}"
-        logger.warning("Prompt 5 adapt fallback failed: %s", adapt_exc)
-
     raise RuntimeError(
-        f"Claude deck generation failed after {max_retries + 1} attempts. Last error: {last_error or 'unknown'}"
+        f"Claude deck generation failed after adapt + {max_retries + 1} fresh attempts. "
+        f"Last error: {last_error or 'unknown'}"
     )

@@ -25,9 +25,22 @@ const margins = { top: 0.35 };
 const bridgeY = margins.top;
 const bridgeY = 1.2;
 """
-    out = _sanitize_pptxgen_script(script)
-    assert out.count("const bridgeY") == 1
-    assert "\nbridgeY = 1.2;" in out.replace("\r\n", "\n")
+    out = _sanitize_pptxgen_script(script).replace("\r\n", "\n")
+    assert "const bridgeY" not in out
+    assert "let bridgeY =" in out
+    assert "\nbridgeY = 1.2;" in out
+
+
+def test_sanitize_promotes_const_before_reassign():
+    """Matches prod failure: Assignment to constant variable after sanitize."""
+    script = """
+const kpiW = 2.0;
+const kpiW = rightCashW / 2 - 0.05;
+"""
+    out = _sanitize_pptxgen_script(script).replace("\r\n", "\n")
+    assert "let kpiW = 2.0;" in out
+    assert "kpiW = rightCashW / 2 - 0.05;" in out
+    assert "const kpiW" not in out
 
 
 def test_sanitize_merges_spaced_identifiers():

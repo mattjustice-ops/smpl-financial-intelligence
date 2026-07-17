@@ -66,8 +66,9 @@ class Settings(BaseSettings):
         validation_alias="ANTHROPIC_INTERACTIVE_TIMEOUT_SECONDS",
     )
     # Prompt 2 / Prompt 5 need headroom for comprehensive freeze + deck scripts.
+    # Adapt-first Prompt 5 ships a large reference script; 240s avoids mid-adapt cuts.
     anthropic_fast_export_timeout_seconds: float = Field(
-        default=180.0,
+        default=240.0,
         validation_alias="ANTHROPIC_FAST_EXPORT_TIMEOUT_SECONDS",
     )
     # Default ON: Haiku for board AI. Quality comes from full freeze context + timeouts,

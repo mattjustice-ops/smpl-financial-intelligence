@@ -1037,7 +1037,7 @@
         },
         { id: "complete", label: "Ready to download", done: false, current: false },
       ],
-      eta_seconds: format === "pptx" ? 420 : 300,
+      eta_seconds: format === "pptx" ? 480 : 300,
     });
     var jobPath =
       format === "pptx" ? "/api/v1/export/jobs/mda-deck" : "/api/v1/export/jobs/mda-package";
@@ -1082,7 +1082,7 @@
         return "error";
       }
       renderExportProgress(exportSpec.label, startJson);
-      var deadline = Date.now() + 600000;
+      var deadline = Date.now() + 900000;
       while (Date.now() < deadline) {
         await sleep(5000);
         var statusUrl = boardLiveUrl(directBase, "/api/v1/export/jobs/" + jobId);
@@ -1112,15 +1112,15 @@
       }
       renderExportFailed(
         exportSpec.label,
-        "Timed out after 10 minutes. Please try again.",
+        "Timed out after 15 minutes. Please try again.",
       );
       alert(
         exportSpec.label +
-          " export timed out after 10 minutes.\n\nPlease try again.",
+          " export timed out after 15 minutes.\n\nPlease try again.",
       );
       return "error";
     } catch (err) {
-      var catchDetail = boardFetchErrorMessage(err, 600000);
+      var catchDetail = boardFetchErrorMessage(err, 900000);
       renderExportFailed(exportSpec.label, catchDetail);
       alert(exportSpec.label + " export failed:\n" + catchDetail + "\n\nPlease try again.");
       return "error";
@@ -1186,7 +1186,7 @@
       package_mode: "full_board",
     });
 
-    var exportTimeoutMs = 600000;
+    var exportTimeoutMs = 900000;
 
     try {
       var directBase = await boardExportApiBase();
