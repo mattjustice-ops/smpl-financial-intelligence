@@ -1,4 +1,4 @@
-/** Canonical marketing site URL (use www — apex may still point at Squarespace). */
+/** Canonical marketing site URL (www). Apex redirects to www on Vercel. */
 export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") ||
   "https://www.smpl-ai.com"

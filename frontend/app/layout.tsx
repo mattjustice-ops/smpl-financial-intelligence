@@ -13,12 +13,15 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   icons: {
+    // Root /favicon.ico is also in /public for Google + legacy browsers.
     icon: [
+      { url: "/favicon.ico", sizes: "any" },
       { url: "/brand/favicon-48.png", type: "image/png", sizes: "48x48" },
+      { url: "/brand/favicon-96.png", type: "image/png", sizes: "96x96" },
       { url: "/brand/smpl-logo.png", type: "image/png", sizes: "512x512" },
     ],
-    shortcut: "/brand/favicon-48.png",
-    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "192x192" }],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
   openGraph: {
     type: "website",
@@ -27,13 +30,20 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     title: SITE_NAME,
     description: SITE_DESCRIPTION,
-    images: [{ url: siteLogoUrl("/brand/smpl-logo.png"), width: 512, height: 512, alt: SITE_NAME }],
+    images: [
+      {
+        url: siteLogoUrl("/brand/og-image.png"),
+        width: 1200,
+        height: 630,
+        alt: SITE_NAME,
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: SITE_NAME,
     description: SITE_DESCRIPTION,
-    images: [siteLogoUrl("/brand/smpl-logo.png")],
+    images: [siteLogoUrl("/brand/og-image.png")],
   },
   alternates: {
     canonical: SITE_URL,
