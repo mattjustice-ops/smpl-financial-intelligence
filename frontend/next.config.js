@@ -12,6 +12,14 @@ const isLocalBackend = /127\.0\.0\.1|localhost/i.test(backendUrl);
 // API URL is not configured yet (otherwise rewrites point at localhost).
 const nextConfig = {
   reactStrictMode: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "cdn.sanity.io",
+      },
+    ],
+  },
   async rewrites() {
     if (process.env.VERCEL && isLocalBackend) {
       console.warn(

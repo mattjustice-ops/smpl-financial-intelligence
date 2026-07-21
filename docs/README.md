@@ -23,6 +23,7 @@ Product and domain documentation for the SaaS Financial Intelligence platform.
 | [ENVIRONMENTS.md](./ENVIRONMENTS.md) | Staging vs production |
 | [GO_LIVE_GL6_MONITORING.md](./GO_LIVE_GL6_MONITORING.md) | Production monitoring |
 | [CUSTOMER_ACCESS.md](./CUSTOMER_ACCESS.md) | Customer access patterns |
+| [SANITY_BLOG_SETUP.md](./SANITY_BLOG_SETUP.md) | Sanity CMS: blog + glossary, `/studio`, seed, Vercel env |
 
 See also `GO_LIVE_GL*.md` and `GO_LIVE_STEP*.md` for provisioning, Stripe, Resend, and staging steps.
 

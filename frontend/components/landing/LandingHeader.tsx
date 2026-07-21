@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, LogIn, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CalendarClock, ChevronDown, LogIn, Sparkles } from "lucide-react";
 
 import { BOOK_DEMO_URL, SAMPLE_DASHBOARD_URL } from "./constants";
 
@@ -13,10 +14,35 @@ const SECTION_NAV = [
   { hash: "copilot", label: "AI Copilot" },
 ] as const;
 
+const RESOURCES_LINKS = [
+  { href: "/blog", label: "Blog", description: "Close, board packages, commentary" },
+  { href: "/glossary", label: "Glossary", description: "SaaS FP&A definitions" },
+] as const;
+
 const navLinkClass =
   "text-sm text-slate-400 transition hover:text-white whitespace-nowrap";
 
 export function LandingHeader() {
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const resourcesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      if (!resourcesRef.current?.contains(event.target as Node)) {
+        setResourcesOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setResourcesOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-[96rem] items-center justify-between gap-4 px-5 py-3 sm:px-8 sm:py-4 lg:px-10">
@@ -44,6 +70,42 @@ export function LandingHeader() {
             <Link href="/pricing" className={navLinkClass}>
               Pricing
             </Link>
+            <div className="relative" ref={resourcesRef}>
+              <button
+                type="button"
+                className={`${navLinkClass} inline-flex items-center gap-1`}
+                aria-expanded={resourcesOpen}
+                aria-haspopup="menu"
+                onClick={() => setResourcesOpen((open) => !open)}
+              >
+                Resources
+                <ChevronDown
+                  size={14}
+                  className={`transition ${resourcesOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {resourcesOpen ? (
+                <div
+                  role="menu"
+                  className="absolute left-0 top-full z-50 mt-2 min-w-[14rem] overflow-hidden rounded-xl border border-white/10 bg-slate-950/95 py-1 shadow-xl shadow-black/40 backdrop-blur-xl"
+                >
+                  {RESOURCES_LINKS.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      role="menuitem"
+                      className="block px-4 py-2.5 transition hover:bg-white/5"
+                      onClick={() => setResourcesOpen(false)}
+                    >
+                      <span className="block text-sm text-white">{item.label}</span>
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        {item.description}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </nav>
         </div>
 
@@ -92,6 +154,12 @@ export function LandingHeader() {
         ))}
         <Link href="/pricing" className={`${navLinkClass} text-xs`}>
           Pricing
+        </Link>
+        <Link href="/blog" className={`${navLinkClass} text-xs`}>
+          Blog
+        </Link>
+        <Link href="/glossary" className={`${navLinkClass} text-xs`}>
+          Glossary
         </Link>
       </div>
 
