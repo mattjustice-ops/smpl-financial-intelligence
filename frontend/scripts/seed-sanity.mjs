@@ -108,8 +108,34 @@ const legacyDottedIds = [
   "glossary.gaap-revenue",
 ];
 
+/** Retired cornerstone posts (hyphenated + drafts) — replace with new blog set. */
+const retiredPostIds = [
+  "post-board-numbers-need-evidence",
+  "post-saas-close-load-validate-lock-freeze",
+  "post-ai-commentary-finance-will-sign",
+  "drafts.post-board-numbers-need-evidence",
+  "drafts.post-saas-close-load-validate-lock-freeze",
+  "drafts.post-ai-commentary-finance-will-sign",
+  "drafts.post.board-numbers-need-evidence",
+  "drafts.post.saas-close-load-validate-lock-freeze",
+  "drafts.post.ai-commentary-finance-will-sign",
+];
+
+const retiredSlugs = [
+  "board-numbers-need-evidence",
+  "saas-close-load-validate-lock-freeze",
+  "ai-commentary-finance-will-sign",
+];
+
 async function main() {
   console.log(`Seeding ${docs.length} documents → ${projectId}/${dataset}`);
+
+  // Also delete any Studio-created posts that still use retired slugs.
+  const retiredBySlug = await client.fetch(
+    `*[_type == "post" && slug.current in $slugs]._id`,
+    { slugs: retiredSlugs },
+  );
+
   const tx = client.transaction();
   for (const doc of docs) {
     if (doc._id.includes(".")) {
@@ -119,12 +145,14 @@ async function main() {
     }
     tx.createOrReplace(doc);
   }
-  for (const id of legacyDottedIds) {
+  for (const id of [...legacyDottedIds, ...retiredPostIds, ...retiredBySlug]) {
     tx.delete(id);
   }
   await tx.commit();
   console.log("Done. Publish is automatic for createOrReplace (published docs).");
-  console.log("Deleted legacy dotted IDs (if present) so public CDN reads work.");
+  console.log(
+    `Deleted legacy dotted IDs + retired posts (known ids + ${retiredBySlug.length} by slug).`,
+  );
   console.log("Visit /blog and /glossary (or /studio to edit).");
 }
 
