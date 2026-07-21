@@ -1267,7 +1267,7 @@
         "what systems do you connect",
         "which systems"
       ],
-      "answer": "We ingest from the systems finance already uses: ERP/GL such as NetSuite, Rillet, or QuickBooks; CRM such as Salesforce or HubSpot; billing such as Stripe or Maxio; HRIS such as Rippling or Workday; plus treasury extracts as needed. Ingest is via versioned CSV or white-glove load — for example Snowflake share, object storage, or SFTP — normalized into our canonical model for reporting.",
+      "answer": "We ingest from the systems finance already uses: ERP/GL such as NetSuite, Rillet, or QuickBooks; CRM such as Salesforce or HubSpot; billing such as Stripe or Maxio; HRIS such as Rippling or Workday; plus treasury extracts as needed. Today that is via versioned CSV or white-glove load — for example Snowflake share, object storage, or SFTP — normalized into our canonical model for reporting. Scheduled native connectors into that same model are on the roadmap; we do not claim they are generally available today.",
       "confidence": "verified",
       "audiences": [
         "it",
@@ -1276,7 +1276,7 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "IT Technical Diagram, Data Sources; Technical Whitepaper, Canonical Data Model"
+      "source": "IT Technical Diagram, Data Sources; Architecture Master ingestion today vs future; Technical Whitepaper, Canonical Data Model"
     },
     {
       "id": "environments-prod-sandbox",
@@ -1303,6 +1303,573 @@
       ],
       "tone": "external_safe",
       "source": "IT Technical Diagram, Environments; SOC 2 Readiness Reference v2"
+    },
+    {
+      "id": "platform-features-overview",
+      "title": "Platform features overview",
+      "topics": [
+        "what features are included",
+        "what does the platform do",
+        "product capabilities",
+        "what's in the product",
+        "feature list"
+      ],
+      "keywords": [
+        "capabilities",
+        "feature list",
+        "features included",
+        "product capabilities",
+        "what features",
+        "what features are included",
+        "what's in the product",
+        "what does the platform include"
+      ],
+      "answer": "SMPL is a SaaS financial intelligence layer — not a BI dashboard and not an ERP. In the product you get executive dashboards, ARR/MRR waterfalls, the three financial statements with tie-outs, Actual vs Budget vs Forecast scenarios, pipeline and GTM views, board PowerPoint and MD&A-style Excel packages, and AI-assisted executive commentary grounded in the same numbers. Higher plans unlock Management P&L, workforce, and cash forecast modules. We sit above your GL, CRM, billing, and HR systems and do not post back to them.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master; Reporting Logic report catalog; GO_LIVE_GL3 plan entitlements; CFO Operating System UX"
+    },
+    {
+      "id": "arr-mrr-reporting",
+      "title": "ARR / MRR waterfall reporting",
+      "topics": [
+        "do you do ARR",
+        "MRR waterfall",
+        "ARR reporting",
+        "new expansion churn",
+        "revenue retention NRR"
+      ],
+      "keywords": [
+        "arr reporting",
+        "arr waterfall",
+        "do you do arr",
+        "do you support arr",
+        "mrr",
+        "mrr waterfall",
+        "nrr",
+        "grr",
+        "new expansion churn",
+        "reactivation"
+      ],
+      "answer": "Yes — ARR and MRR are first-class. You get a roll-forward waterfall: beginning, new, expansion, contraction, churn, reactivation where modeled, and ending — with drilldown to the underlying movements. Retention concepts like NRR and GRR are part of the SaaS finance model, not bolt-on spreadsheet formulas. How you define ARR is configured for your org rather than forced into a generic template.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Reporting Logic MRR/ARR; Technical Whitepaper native SaaS primitives; company context §3"
+    },
+    {
+      "id": "three-financial-statements",
+      "title": "Three financial statements",
+      "topics": [
+        "do you produce financial statements",
+        "income statement balance sheet cash flow",
+        "three statements",
+        "P&L and balance sheet",
+        "do the statements tie"
+      ],
+      "keywords": [
+        "balance sheet",
+        "cash flow statement",
+        "do the statements tie",
+        "financial statements",
+        "income statement",
+        "p&l",
+        "three statements",
+        "three financial statements"
+      ],
+      "answer": "Yes — income statement (P&L), balance sheet, and cash flow statement are core outputs, with validation so key tie-outs are checked as part of reporting — for example balance sheet balances and cash bridge to balance-sheet cash. Statement lines and waterfalls share one logic path with the dashboards and Excel packages, so you are not maintaining a separate export model.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Reporting Logic financial statements + validation; Architecture Master"
+    },
+    {
+      "id": "scenarios-actual-budget-forecast",
+      "title": "Actual / Budget / Forecast scenarios",
+      "topics": [
+        "do you support budget and forecast",
+        "actual vs budget vs forecast",
+        "scenario planning",
+        "combined actual forecast",
+        "can we compare to plan"
+      ],
+      "keywords": [
+        "actual budget forecast",
+        "actual vs budget",
+        "actual vs forecast",
+        "budget vs forecast",
+        "can we compare to plan",
+        "combined scenario",
+        "scenario planning",
+        "scenarios",
+        "variance to budget"
+      ],
+      "answer": "Reporting is scenario-aware: Actual for closed periods, Budget for plan, Forecast for the rolling outlook, and a Combined view that uses Actual through the close month and Forecast thereafter. Close packages show variance columns — Actual vs Budget and Actual vs Forecast — so FP&A can review the same structure leadership already uses, not a one-scenario snapshot.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master scenario model; Reporting Logic Combined + period column layout"
+    },
+    {
+      "id": "customize-reporting-per-customer",
+      "title": "Customize reporting per customer",
+      "topics": [
+        "can you customize our reports",
+        "can each customer have different reports",
+        "custom reporting",
+        "tailored board package",
+        "is reporting one-size-fits-all"
+      ],
+      "keywords": [
+        "can each customer have different reports",
+        "can you customize our reports",
+        "custom reporting",
+        "customize reports",
+        "customize our reports",
+        "different reports per customer",
+        "is reporting one size",
+        "tailored board",
+        "tailored reporting"
+      ],
+      "answer": "Yes — each customer organization has its own reporting configuration. Chart-of-accounts mapping, ARR and metric definitions, statement layouts, and which scenarios feed board and MD&A packages are set for that org. Two customers do not share one forced template; they share the same engine with different methodology configuration. Deep layout work happens at implementation, not as an ad-hoc drag-and-drop chart builder for every viewer.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper methodology-as-config; Architecture Master multi-tenancy; Reporting Architecture config rolls outputs"
+    },
+    {
+      "id": "methodology-coa-config",
+      "title": "Chart of accounts and methodology config",
+      "topics": [
+        "do you support our chart of accounts",
+        "can you map our GL accounts",
+        "methodology as configuration",
+        "our ARR definition",
+        "do you force your COA"
+      ],
+      "keywords": [
+        "chart of accounts",
+        "coa mapping",
+        "do you force your coa",
+        "do you support our arr definition",
+        "gl account mapping",
+        "map our accounts",
+        "map our gl",
+        "methodology as config",
+        "methodology configuration",
+        "our arr definition",
+        "our chart of accounts"
+      ],
+      "answer": "Methodology is configuration the engine executes — not hardcoded one-size-fits-all logic. How you define ARR, structure management EBITDA, and map your chart of accounts into reporting lines is encoded for your organization. The engine is the same for every customer; your configuration is yours. That is how we preserve the definitions leadership already trusts instead of forcing a generic COA template.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper, Financial Intelligence Engine — methodology is configuration"
+    },
+    {
+      "id": "plan-modules-included",
+      "title": "Plan modules at a high level",
+      "topics": [
+        "what's included in Starter",
+        "Professional vs Enterprise features",
+        "which modules are included",
+        "plan entitlements",
+        "do we get Management P&L"
+      ],
+      "keywords": [
+        "enterprise features",
+        "modules included",
+        "plan entitlements",
+        "professional vs enterprise",
+        "starter plan includes",
+        "what is included in starter",
+        "what's included in starter",
+        "which modules",
+        "do we get management p&l",
+        "workforce module",
+        "cash forecast module"
+      ],
+      "answer": "At a high level without quoting price: Starter includes Executive Summary, ARR, Revenue, GTM, Pipeline, Risks & Validation, board export, and AI commentary. Professional adds Management P&L, Workforce, and Cash Forecast. Enterprise builds on Professional with deeper forecast packaging and enterprise commercial options — SSO and onboarding differences are discussed in sales. Exact packaging for your deal is confirmed in the order form; we do not invent dollar amounts on the call.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "ceo",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "GO_LIVE_GL3_PLAN_ENTITLEMENTS; frontend plan-modules.ts; STRIPE_BILLING (no public dollar amounts)"
+    },
+    {
+      "id": "per-org-tenant-environment",
+      "title": "Per-organization tenant and configuration",
+      "topics": [
+        "does each customer get their own environment",
+        "multi-tenant",
+        "dedicated tenant",
+        "is our data separate",
+        "per company instance"
+      ],
+      "keywords": [
+        "dedicated environment",
+        "dedicated tenant",
+        "does each customer get their own",
+        "each customer own environment",
+        "is our data separate",
+        "multi tenant",
+        "multi-tenant",
+        "per company",
+        "per org",
+        "per-organization",
+        "own instance"
+      ],
+      "answer": "Each customer is provisioned as its own organization tenant — separate membership, seat limits, plan entitlements, warehouse data keyed by organization, and reporting methodology configuration. You are not sharing dashboards or numbers with another company. The commercial product is multi-tenant SaaS isolation by organization, not a claim of a fully dedicated private cloud for every customer unless that is explicitly contracted.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master multi-tenancy; CUSTOMER_ACCESS provisioning; tenant-isolation KB"
+    },
+    {
+      "id": "connectors-today-vs-roadmap",
+      "title": "Connectors today vs roadmap",
+      "topics": [
+        "do you have native connectors",
+        "Salesforce connector",
+        "NetSuite integration live",
+        "API connectors",
+        "when do connectors ship"
+      ],
+      "keywords": [
+        "api connectors",
+        "connectors roadmap",
+        "do you have native connectors",
+        "native connectors",
+        "netsuite connector",
+        "salesforce connector",
+        "scheduled sync",
+        "when do connectors ship"
+      ],
+      "answer": "Honestly: production ingest today is versioned CSV and white-glove read-only loads into the canonical warehouse — not a claim that every Salesforce, NetSuite, or Stripe connector is generally available as a self-serve native sync. Native connectors that land in the same warehouse schema are the documented roadmap. We will not oversell connector GA; we will scope your data path for the POC and implementation.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master ingestion today vs future connectors; GO_LIVE POC direct data access"
+    },
+    {
+      "id": "board-deck-and-mda",
+      "title": "Board deck and MD&A packages",
+      "topics": [
+        "do you generate a board deck",
+        "MD&A export",
+        "PowerPoint board package",
+        "executive reporting package",
+        "close package Excel"
+      ],
+      "keywords": [
+        "board deck",
+        "board package",
+        "board powerpoint",
+        "close package",
+        "do you generate a board deck",
+        "executive reporting",
+        "mda",
+        "md&a",
+        "m&a package",
+        "management discussion",
+        "pptx export"
+      ],
+      "answer": "Yes — after a period is ready for executive reporting, you can export a board PowerPoint and MD&A-style Excel / management-review packages from the same reporting layer as the live dashboards. The intent is a CFO-ready narrative package — ARR, pipeline, revenue, cash, financials — not a BI screenshot dump. AI can draft commentary bullets; it does not invent the underlying figures.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "ceo",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Reporting Logic board vs close package; BOARD_DECK_HANDOFF; REPORTING_ARCHITECTURE surfaces; Architecture Master AI layer"
+    },
+    {
+      "id": "ai-commentary-capabilities",
+      "title": "AI commentary / Copilot",
+      "topics": [
+        "do you have a Copilot",
+        "AI commentary",
+        "does AI write the board narrative",
+        "variance commentary",
+        "executive commentary"
+      ],
+      "keywords": [
+        "ai commentary",
+        "ai narrative",
+        "copilot",
+        "does ai write",
+        "executive commentary",
+        "finance copilot",
+        "variance commentary",
+        "write the board narrative"
+      ],
+      "answer": "AI is used for narrative assistance — variance commentary and executive summary drafting grounded in metrics the engine already calculated. It elaborates evidenced drivers; it does not compute ledger numbers or invent explanations when the data does not support them. Think evidence-backed FP&A commentary, not a chatbot that invents a story. Plan entitlements include AI commentary on the packaged tiers we ship.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master AI layer; Reporting Logic variance commentary; company context §4; GO_LIVE_GL3 ai commentary"
+    },
+    {
+      "id": "finance-executive-views",
+      "title": "Finance vs executive views",
+      "topics": [
+        "can the board see a simpler view",
+        "finance vs executive access",
+        "different views by role",
+        "GL drilldown for finance",
+        "summary for CEO"
+      ],
+      "keywords": [
+        "board see simpler",
+        "different views by role",
+        "executive view",
+        "finance vs executive",
+        "finance view",
+        "gl drilldown",
+        "summary for ceo",
+        "who sees detail"
+      ],
+      "answer": "Access is oriented for finance depth versus executive summary: finance can work with fuller drill-down into accounts and movements, while executives and board-oriented views emphasize explained summary packages. Org membership and plan entitlements gate what a signed-in user reaches inside the tenant. We describe that role orientation honestly — we do not claim a fully mature enterprise RBAC matrix with dozens of custom permission flags unless that is in your contracted scope.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "ceo",
+        "it",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper Governance access; rbac-access KB; Architecture Master roadmap note on RBAC"
+    },
+    {
+      "id": "what-platform-does-not-do",
+      "title": "What SMPL does not do",
+      "topics": [
+        "what don't you do",
+        "are you a general ledger",
+        "do you post journals",
+        "do you replace payroll",
+        "ERP replacement"
+      ],
+      "keywords": [
+        "are you a general ledger",
+        "do you post journals",
+        "do you replace payroll",
+        "erp replacement",
+        "invoice generation",
+        "journal entries",
+        "not an erp",
+        "tax provision",
+        "what don't you do",
+        "what you don't do"
+      ],
+      "answer": "We do not replace your ERP or general ledger, we do not post journals or write back to source systems, and we do not run payroll, AP, procurement, invoice generation, or tax provision. Those stay in the systems of record. SMPL reports, reconciles, explains, and packages executive output from the outcomes those systems produce.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "it",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master not-in-scope; Reporting Logic what this platform does NOT compute"
+    },
+    {
+      "id": "customization-at-implementation",
+      "title": "What is configured at implementation",
+      "topics": [
+        "what gets configured in onboarding",
+        "customization limits",
+        "can we change anything later",
+        "implementation configuration",
+        "how much can we customize"
+      ],
+      "keywords": [
+        "can we change anything later",
+        "configured at implementation",
+        "customization limits",
+        "how much can we customize",
+        "implementation configuration",
+        "onboarding configuration",
+        "what gets configured",
+        "what is configured"
+      ],
+      "answer": "At implementation we typically configure source data paths, chart-of-accounts and metric mapping, ARR and scenario methodology, which reports and board/MD&A packages you use, seat invites, and plan modules. Ongoing close is load → validate → finalize the period → generate executive packages — not rebuilding the model from scratch each month. Ad-hoc redesign of every chart by every user is not the product; durable methodology configuration for your org is. Timeline is designed around roughly four to six weeks once scope and data access are agreed.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper implementation; onboarding-paths KB; Close / reporting architecture (customer-safe wording)"
+    },
+    {
+      "id": "management-pl-and-drilldown",
+      "title": "Management P&L and drilldown",
+      "topics": [
+        "do you have a management P&L",
+        "can I drill into GL accounts",
+        "management profit and loss",
+        "actual vs budget on P&L"
+      ],
+      "keywords": [
+        "can i drill into gl",
+        "drill into accounts",
+        "drilldown",
+        "management p&l",
+        "management pl",
+        "management profit and loss",
+        "p&l drilldown"
+      ],
+      "answer": "Management P&L with drilldown into the accounts behind a line — Actual vs Budget vs Forecast — is a core Professional-and-above capability. Starter focuses on executive, ARR, revenue, GTM, and pipeline surfaces; Management P&L is the natural expand module when FP&A wants statement-level operating review inside the app.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Company context §3; GO_LIVE_GL3 management-pl entitlement; CFO Operating System section map"
+    },
+    {
+      "id": "dashboards-exports-same-logic",
+      "title": "Dashboards and exports share one logic",
+      "topics": [
+        "is the board deck the same as the dashboard",
+        "one source of truth for exports",
+        "do Excel and UI match",
+        "duplicate models"
+      ],
+      "keywords": [
+        "dashboard and export",
+        "do excel and ui match",
+        "duplicate models",
+        "one logic path",
+        "one source of truth",
+        "same numbers in export",
+        "ui and powerpoint"
+      ],
+      "answer": "Dashboards and Excel/PowerPoint exports read the same service layer — one logic path, not a separate spreadsheet model maintained for the board deck. That is how we keep executive packages and the live app from drifting apart after close.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Reporting Logic principles; Architecture Master API-first reporting"
+    },
+    {
+      "id": "gtm-pipeline-cash-modules",
+      "title": "GTM, pipeline, and cash views",
+      "topics": [
+        "do you cover pipeline",
+        "GTM marketing efficiency",
+        "cash forecast",
+        "RevOps reporting",
+        "marketing CAC"
+      ],
+      "keywords": [
+        "cash forecast",
+        "gtm",
+        "marketing efficiency",
+        "pipeline reporting",
+        "pipeline waterfall",
+        "revops",
+        "do you cover pipeline",
+        "cac",
+        "channel efficiency"
+      ],
+      "answer": "Beyond core statements and ARR: Pipeline waterfall and opportunity views, GTM/marketing efficiency by channel, and — on Professional and above — cash forecast that respects SaaS billing timing rather than smoothing everything into GAAP revenue. Those modules sit in the same executive operating shell so finance and GTM are not living in disconnected tools.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Reporting Logic waterfalls + marketing; company context §3; GO_LIVE_GL3 cash module"
+    },
+    {
+      "id": "dna-native-connectors-live",
+      "title": "Native connectors generally available (deflect)",
+      "topics": [
+        "is the Salesforce connector live today",
+        "NetSuite native sync GA",
+        "self-serve connector marketplace",
+        "plug and play integrations live"
+      ],
+      "keywords": [
+        "connector marketplace",
+        "is the salesforce connector live",
+        "native sync ga",
+        "netsuite native sync",
+        "plug and play integrations",
+        "self-serve connectors live"
+      ],
+      "answer": "DEFLECT: do not claim self-serve native connectors are generally available. Say: \"Today we land customers via versioned CSV or white-glove read-only loads into the same canonical model native connectors will use. I won't claim every named connector is GA — let's scope the data path that fits your IT and timeline.\"",
+      "confidence": "do-not-answer",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master — connectors future; honesty vs whitepaper aspirational connector language",
+      "deflect_script": "Today we land customers via versioned CSV or white-glove read-only loads into the same canonical model native connectors will use. I won't claim every named connector is GA — let's scope the data path that fits your IT and timeline."
     }
   ]
 }

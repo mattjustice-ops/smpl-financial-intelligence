@@ -84,6 +84,22 @@ Governance / freeze / lock detail lives in `governance-workflow-internal` (`inte
 
 Still DNA (do not invent): TAM/SAM/SOM, pricing/ACV, funding, named design-partner counts, issued SOC 2 report/certificate.
 
+### Platform features & customization topics covered (KB v2+)
+
+| Theme | Example entry ids |
+|---|---|
+| Feature overview / what’s included | `platform-features-overview`, `plan-modules-included` |
+| ARR/MRR, statements, scenarios | `arr-mrr-reporting`, `three-financial-statements`, `scenarios-actual-budget-forecast` |
+| Customization / CoA / per-customer reports | `customize-reporting-per-customer`, `methodology-coa-config`, `customization-at-implementation` |
+| Per-org tenant (not inventing private cloud) | `per-org-tenant-environment` |
+| Data path honesty (CSV / white-glove vs connectors) | `data-sources-ingest`, `connectors-today-vs-roadmap`, `dna-native-connectors-live` |
+| Board / MD&A / AI commentary (no freeze jargon) | `board-deck-and-mda`, `ai-commentary-capabilities` |
+| Finance vs executive views | `finance-executive-views` (depth limited — don’t invent RBAC) |
+| Boundaries | `what-platform-does-not-do`, `does-not-replace-erp`, `no-gl-writeback` |
+| GTM / pipeline / cash / Mgmt P&L | `gtm-pipeline-cash-modules`, `management-pl-and-drilldown`, `dashboards-exports-same-logic` |
+
+Avoid freeze/lock / Prompt 5 jargon in `external_safe` answers when talking close and board packages.
+
 ## Retrieval & rephrase
 
 - Keyword scoring over title, topics, keywords, answer (no embeddings), with light synonym expansion (e.g. `soc2` ↔ compliance/encryption phrasings).

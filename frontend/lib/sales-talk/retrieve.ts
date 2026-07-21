@@ -50,6 +50,15 @@ const SYNONYM_EXPAND: Record<string, string[]> = {
   residency: ["stored", "where"],
   hosted: ["hosting", "saas"],
   hosting: ["hosted", "saas"],
+  customize: ["custom", "tailored", "configuration"],
+  custom: ["customize", "tailored"],
+  features: ["capabilities", "modules", "included"],
+  mda: ["mda", "board", "commentary"],
+  "md&a": ["mda", "board"],
+  connector: ["connectors", "integration", "sync"],
+  connectors: ["connector", "integration", "sync"],
+  arr: ["mrr", "waterfall"],
+  mrr: ["arr", "waterfall"],
 };
 
 export function tokenize(text: string): string[] {
