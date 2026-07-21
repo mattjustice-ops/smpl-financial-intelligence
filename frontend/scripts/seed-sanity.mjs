@@ -121,20 +121,34 @@ const retiredPostIds = [
   "drafts.post.ai-commentary-finance-will-sign",
 ];
 
-const retiredSlugs = [
+/** Retired glossary terms (IP / product-specific names). */
+const retiredGlossaryIds = [
+  "glossary-freeze-pack",
+  "glossary-combined-scenario",
+  "drafts.glossary-freeze-pack",
+  "drafts.glossary-combined-scenario",
+];
+
+const retiredPostSlugs = [
   "board-numbers-need-evidence",
   "saas-close-load-validate-lock-freeze",
   "ai-commentary-finance-will-sign",
 ];
 
+const retiredGlossarySlugs = ["freeze-pack", "combined-scenario"];
+
 async function main() {
   console.log(`Seeding ${docs.length} documents → ${projectId}/${dataset}`);
 
-  // Also delete any Studio-created posts that still use retired slugs.
-  const retiredBySlug = await client.fetch(
-    `*[_type == "post" && slug.current in $slugs]._id`,
-    { slugs: retiredSlugs },
-  );
+  // Also delete any Studio-created docs that still use retired slugs.
+  const [retiredPostsBySlug, retiredGlossaryBySlug] = await Promise.all([
+    client.fetch(`*[_type == "post" && slug.current in $slugs]._id`, {
+      slugs: retiredPostSlugs,
+    }),
+    client.fetch(`*[_type == "glossaryTerm" && slug.current in $slugs]._id`, {
+      slugs: retiredGlossarySlugs,
+    }),
+  ]);
 
   const tx = client.transaction();
   for (const doc of docs) {
@@ -145,13 +159,19 @@ async function main() {
     }
     tx.createOrReplace(doc);
   }
-  for (const id of [...legacyDottedIds, ...retiredPostIds, ...retiredBySlug]) {
+  for (const id of [
+    ...legacyDottedIds,
+    ...retiredPostIds,
+    ...retiredGlossaryIds,
+    ...retiredPostsBySlug,
+    ...retiredGlossaryBySlug,
+  ]) {
     tx.delete(id);
   }
   await tx.commit();
   console.log("Done. Publish is automatic for createOrReplace (published docs).");
   console.log(
-    `Deleted legacy dotted IDs + retired posts (known ids + ${retiredBySlug.length} by slug).`,
+    `Deleted legacy dotted IDs + retired posts/glossary (known ids + ${retiredPostsBySlug.length} posts / ${retiredGlossaryBySlug.length} glossary by slug).`,
   );
   console.log("Visit /blog and /glossary (or /studio to edit).");
 }

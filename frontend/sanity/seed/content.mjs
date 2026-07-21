@@ -662,33 +662,34 @@ export const glossaryTerms = [
     ),
   },
   {
+    _id: "glossary-fpa",
+    term: "FP&A",
+    slug: "fpa",
+    shortDefinition:
+      "Financial Planning & Analysis — the finance function that plans, forecasts, and explains performance so leaders can decide with confidence.",
+    body: blocks(
+      "FP&A connects operating metrics (ARR, pipeline, headcount) with financial statements and cash so the company can plan, close, and report from one coherent model.",
+      "SMPL is SaaS FP&A and financial intelligence for finance teams: unify ARR, board reporting, and the operating model so every board number is traceable to its source.",
+    ),
+  },
+  {
     _id: "glossary-mda",
     term: "MD&A",
     slug: "mda",
     shortDefinition:
       "Management’s Discussion & Analysis — narrative explaining results, drivers, and outlook.",
     body: blocks(
-      "MD&A should cite locked metrics and known variances. AI can draft structure; finance owns the signed narrative.",
+      "MD&A should cite finalized period metrics and known variances. AI can draft structure; finance owns the signed narrative.",
     ),
   },
   {
-    _id: "glossary-freeze-pack",
-    term: "Freeze pack",
-    slug: "freeze-pack",
+    _id: "glossary-rolling-forecast",
+    term: "Rolling forecast",
+    slug: "rolling-forecast",
     shortDefinition:
-      "The board/reporting package locked against a certified close period so numbers stop drifting.",
+      "A continuously updated outlook that blends year-to-date actuals with forward plan assumptions.",
     body: blocks(
-      "After freeze, changes require reopen. Freeze packs prevent silent edits between draft decks and the meeting the board actually sees.",
-    ),
-  },
-  {
-    _id: "glossary-combined-scenario",
-    term: "Combined scenario",
-    slug: "combined-scenario",
-    shortDefinition:
-      "A forecast view that blends actuals to date with forward assumptions into one continuous outlook.",
-    body: blocks(
-      "Combined scenarios help boards see year-to-date actuals plus remaining plan without switching workbooks. Document which levers drive the forward slice.",
+      "Rolling forecasts help boards see actuals to date plus the remaining year without switching workbooks. Document which drivers change the forward slice each cycle.",
     ),
   },
   {
@@ -708,7 +709,7 @@ export const glossaryTerms = [
     shortDefinition:
       "Open opportunities weighted or unweighted toward future bookings and ARR.",
     body: blocks(
-      "Pipeline informs outlook but should not silently rewrite locked ARR. Keep pipeline attribution separate from certified close metrics.",
+      "Pipeline informs outlook but should not silently rewrite closed ARR. Keep pipeline attribution separate from certified period metrics.",
     ),
   },
   {
@@ -775,7 +776,7 @@ export const glossaryTerms = [
     slug: "runway",
     shortDefinition: "Months of cash remaining at the current net burn rate.",
     body: blocks(
-      "Runway should use a clear burn definition (operating vs total cash). Scenario runway belongs next to Combined scenario outlooks.",
+      "Runway should use a clear burn definition (operating vs total cash). Present scenario runway next to the rolling forecast so boards see cash and growth outlook together.",
     ),
   },
   {

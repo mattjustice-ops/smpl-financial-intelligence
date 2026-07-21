@@ -9,7 +9,7 @@ import { SITE_NAME, sitePageUrl } from "@/lib/site";
 
 const title = `Glossary | ${SITE_NAME}`;
 const description =
-  "SaaS FP&A glossary: ARR, NRR, deferred revenue, waterfall, close, MD&A, freeze pack, and more.";
+  "SaaS FP&A glossary: ARR, NRR, deferred revenue, waterfall, close, MD&A, FP&A, and more.";
 const url = sitePageUrl("/glossary");
 
 export const metadata: Metadata = {
