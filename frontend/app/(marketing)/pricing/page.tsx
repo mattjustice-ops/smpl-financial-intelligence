@@ -1,5 +1,21 @@
+import type { Metadata } from "next";
+
 import { PricingPlanCard } from "@/components/billing/PricingPlanCard";
 import { PRICING_TIER_ORDER } from "@/lib/billing/plans";
+import { sitePageUrl } from "@/lib/site";
+
+const title = "SMPL.ai Pricing | SaaS FP&A Plans";
+const description =
+  "Compare SMPL.ai plans for SaaS FP&A, ARR reporting, close packages, and board decks. Starter, Professional, and Enterprise.";
+const url = sitePageUrl("/pricing");
+
+export const metadata: Metadata = {
+  title: { absolute: title },
+  description,
+  alternates: { canonical: url },
+  openGraph: { title, description, url },
+  twitter: { title, description },
+};
 
 export default function PricingPage() {
   return (

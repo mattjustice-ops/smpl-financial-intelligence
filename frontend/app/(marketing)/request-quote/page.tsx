@@ -2,10 +2,19 @@ import type { Metadata } from "next";
 
 import { RequestQuoteForm } from "@/components/request-quote/RequestQuoteForm";
 
+import { sitePageUrl } from "@/lib/site";
+
+const title = "Request a Quote | SMPL.ai Pricing & Packaging";
+const description =
+  "Tell us your finance stack and goals. We'll recommend the right SMPL.ai package for SaaS FP&A, reporting, and board readiness.";
+const url = sitePageUrl("/request-quote");
+
 export const metadata: Metadata = {
-  title: "Request a quote · SMPL.ai",
-  description:
-    "A few quick questions about your stack and goals. SMPL will suggest the right package and coordinate a follow-up on your schedule.",
+  title: { absolute: title },
+  description,
+  alternates: { canonical: url },
+  openGraph: { title, description, url },
+  twitter: { title, description },
 };
 
 export default function RequestQuotePage({

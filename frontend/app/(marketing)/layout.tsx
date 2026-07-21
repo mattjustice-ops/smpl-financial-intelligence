@@ -1,12 +1,27 @@
 import type { Metadata } from "next";
 
 import { LandingHeader } from "@/components/landing/LandingHeader";
+import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/site";
 import "./landing.css";
 
+/** Defaults for marketing routes; homepage inherits these. Child pages override. */
 export const metadata: Metadata = {
-  title: "SMPL.ai · AI operating system for SaaS finance teams",
-  description:
-    "SMPL connects pipeline, ARR, revenue, cash, headcount, and financial statements into one intelligent operating model — governed, board-ready, and built for executive decisions.",
+  title: {
+    absolute: SITE_TITLE,
+  },
+  description: SITE_DESCRIPTION,
+  alternates: {
+    canonical: SITE_URL,
+  },
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+  },
+  twitter: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {

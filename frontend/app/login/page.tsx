@@ -1,11 +1,26 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { LoginForm } from "@/components/auth/LoginForm";
 import { LandingHeader } from "@/components/landing/LandingHeader";
 import { isRealEmailConfigured } from "@/lib/auth/email-config";
+import { sitePageUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
+
+const title = "Sign in | SMPL.ai";
+const description = "Sign in to your SMPL.ai workspace.";
+const url = sitePageUrl("/login");
+
+export const metadata: Metadata = {
+  title: { absolute: title },
+  description,
+  alternates: { canonical: url },
+  robots: { index: false, follow: true },
+  openGraph: { title, description, url },
+  twitter: { title, description },
+};
 
 export default function LoginPage() {
   const emailConfigured = isRealEmailConfigured();
