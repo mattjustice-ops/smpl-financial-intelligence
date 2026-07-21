@@ -1,6 +1,6 @@
 {
   "_comment": "SMPL Sales Talk Track KB. verified=pre-approved wording/numbers; directional=positioning paraphrase OK; do-not-answer=deflect. tone external_safe is default for customer-facing; internal_deep for internal/deep technical. audiences filter retrieval.",
-  "version": 1,
+  "version": 2,
   "default_deflect_script": "Good question — I want to give you an exact figure rather than guess, so let me follow up right after this.",
   "entries": [
     {
@@ -456,30 +456,32 @@
     },
     {
       "id": "implementation-security",
-      "title": "Implementation and security",
+      "title": "Implementation timeline",
       "topics": [
         "how long is implementation",
-        "security",
-        "is it hosted",
-        "how do we deploy",
-        "data security"
+        "implementation timeline",
+        "how long to go live",
+        "onboarding timeline",
+        "four to six weeks"
       ],
       "keywords": [
-        "data security",
-        "how do we deploy",
+        "4-6 weeks",
+        "four to six weeks",
         "how long is implementation",
-        "is it hosted",
-        "security"
+        "how long to go live",
+        "implementation timeline",
+        "onboarding timeline"
       ],
-      "answer": "Implementation integrates with your existing systems, typically over four to six weeks, delivered as a secure browser-based application — nothing to install, no infrastructure to manage. Data is encrypted in transit and at rest, with role-based access control from full GL-level access for finance down to summary, explained views for the board.",
+      "answer": "Implementation is designed to run about four to six weeks per customer. We integrate with the systems you already use — accounting/GL, CRM, HRIS, and billing — and deliver a secure browser-based application: nothing to install and no infrastructure for your team to manage.",
       "confidence": "verified",
       "audiences": [
         "it",
         "cfo",
-        "engineer"
+        "engineer",
+        "general"
       ],
       "tone": "external_safe",
-      "source": "Executive Summary, Where we are + Technical Whitepaper, Implementation"
+      "source": "Technical Whitepaper, Typical Implementation Requirements"
     },
     {
       "id": "team",
@@ -612,6 +614,695 @@
       "tone": "external_safe",
       "source": "Investor Overview — design-partner count intentionally left as a placeholder",
       "deflect_script": "We're onboarding a select group of design partners now — I can share specifics once they've approved being named."
+    },
+    {
+      "id": "security-trust-overview",
+      "title": "How customers can trust our security",
+      "topics": [
+        "how do we trust your security",
+        "can we trust your security",
+        "security posture",
+        "why should we trust you with our data",
+        "security measures"
+      ],
+      "keywords": [
+        "can we trust your security",
+        "how do we trust your security",
+        "security measures",
+        "security posture",
+        "trust your security",
+        "why should we trust you with our data"
+      ],
+      "answer": "Trust starts with architecture, not a slogan. SMPL is a browser-based SaaS that reads and reconciles your finance systems — it does not post back to your GL or ERP. Data is encrypted in transit with TLS and at rest in managed Postgres. Tenants are isolated by organization ID on every warehouse path. Access today is invite-based magic-link login with role-based views, from finance drill-down to summary board views. AI keys stay on the API; narrative is drafted from engine outputs, not invented ledger numbers. We are pursuing SOC 2 Type I with Security, Availability, and Confidentiality in scope — we do not claim a completed SOC 2 report today. Happy to walk IT through the architecture diagram, DPA, and questionnaire answers.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram + SOC 2 Readiness Reference v2 + Technical Whitepaper"
+    },
+    {
+      "id": "encryption-transit-rest",
+      "title": "Encryption in transit and at rest",
+      "topics": [
+        "is data encrypted",
+        "encryption at rest",
+        "encryption in transit",
+        "TLS",
+        "how is data encrypted"
+      ],
+      "keywords": [
+        "encrypted",
+        "encryption",
+        "encryption at rest",
+        "encryption in transit",
+        "how is data encrypted",
+        "is data encrypted",
+        "tls",
+        "https"
+      ],
+      "answer": "Yes. Traffic to the application and API is protected with HTTPS/TLS in transit. Customer warehouse data is stored in managed Postgres with encryption at rest provided by the database platform. That is the baseline we document for IT questionnaires and security reviews.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, Security Posture; SOC 2 Readiness Reference v2"
+    },
+    {
+      "id": "tenant-isolation",
+      "title": "Multi-tenant isolation",
+      "topics": [
+        "tenant isolation",
+        "multi-tenant",
+        "can another customer see our data",
+        "organization_id",
+        "data isolation"
+      ],
+      "keywords": [
+        "can another customer see our data",
+        "cross-tenant",
+        "data isolation",
+        "multi-tenant",
+        "organization id",
+        "organization_id",
+        "tenant isolation"
+      ],
+      "answer": "The warehouse and API are multi-tenant by design. Customer data is scoped by organization ID, and API queries require that tenant context — Org A cannot read Org B's warehouse. That isolation model is what we document for security reviews and SOC 2 readiness evidence.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram; Architecture Master, Multi-tenancy; SOC 2 Readiness Reference v2"
+    },
+    {
+      "id": "no-gl-writeback",
+      "title": "No GL / ERP write-back",
+      "topics": [
+        "do you write back to our ERP",
+        "do you post to the GL",
+        "write-back",
+        "will you change our books",
+        "read-only"
+      ],
+      "keywords": [
+        "do you post to the gl",
+        "do you write back to our erp",
+        "erp write",
+        "gl write-back",
+        "no write-back",
+        "read only",
+        "read-only",
+        "will you change our books",
+        "write-back",
+        "writeback"
+      ],
+      "answer": "No. SMPL reads and reconciles source systems — accounting/GL, CRM, billing, HRIS — and does not post journals or write back into your ERP or general ledger. Your systems of record stay systems of record; we are the intelligence layer above them.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram; Architecture Master; GO_LIVE_POC_DIRECT_DATA_ACCESS"
+    },
+    {
+      "id": "hosting-architecture",
+      "title": "Hosting and deployment model",
+      "topics": [
+        "where is it hosted",
+        "is it SaaS",
+        "do we install anything",
+        "deployment model",
+        "cloud hosted"
+      ],
+      "keywords": [
+        "browser based",
+        "cloud hosted",
+        "deployment model",
+        "do we install anything",
+        "hosted",
+        "is it hosted",
+        "is it saas",
+        "nothing to install",
+        "where is it hosted"
+      ],
+      "answer": "SMPL is a secure browser-based SaaS application — no customer-installed client and no infrastructure for your team to manage. End users access dashboards and exports through a modern browser. The standard deployment separates the web app, API services, and multi-tenant Postgres warehouse, with production and sandbox environments. We can share the IT technical diagram under NDA for architecture review.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram; Technical Whitepaper, Delivery"
+    },
+    {
+      "id": "subprocessors-named",
+      "title": "Named subprocessors (sales-internal)",
+      "topics": [
+        "subprocessors",
+        "who are your vendors",
+        "Vercel Railway Neon",
+        "third-party processors",
+        "vendor list"
+      ],
+      "keywords": [
+        "anthropic",
+        "neon",
+        "railway",
+        "resend",
+        "stripe",
+        "subprocessor",
+        "subprocessors",
+        "third-party processors",
+        "vendor list",
+        "vercel",
+        "who hosts your stack"
+      ],
+      "answer": "Sales-internal named stack (confirm before customer-facing disclosure packs): frontend on Vercel (Next.js), API on Railway (FastAPI), warehouse/auth data on Neon Postgres, magic-link email via Resend, AI narrative via Anthropic Claude with OpenAI as fallback, billing via Stripe. Prefer the abstracted architecture language externally unless the prospect has the current subprocessors list / DPA exhibit. Update this list whenever vendors change.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer"
+      ],
+      "tone": "internal_deep",
+      "source": "IT Technical Diagram; SOC 2 Readiness Reference v2 §7–8"
+    },
+    {
+      "id": "where-data-stored",
+      "title": "Where customer data is stored",
+      "topics": [
+        "where is data stored",
+        "data residency",
+        "where does our data live",
+        "database location",
+        "cloud region"
+      ],
+      "keywords": [
+        "cloud region",
+        "data residency",
+        "database location",
+        "where does our data live",
+        "where is data stored",
+        "where is our data",
+        "where is the data stored"
+      ],
+      "answer": "Customer financial warehouse data lives in our managed multi-tenant Postgres database, accessed only through the application and API with tenant scoping. The web app and API run on managed cloud hosts — not on customer laptops or on-prem servers. Exact region and the named vendor list are covered in the subprocessors / DPA materials we share for IT review; we do not invent residency guarantees that are not in those documents.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram; SOC 2 Readiness Reference v2, system boundary"
+    },
+    {
+      "id": "auth-magic-link",
+      "title": "Authentication today (magic link)",
+      "topics": [
+        "how do users log in",
+        "authentication",
+        "magic link",
+        "passwordless",
+        "how does auth work"
+      ],
+      "keywords": [
+        "auth",
+        "authentication",
+        "how do users log in",
+        "how does auth work",
+        "login",
+        "magic link",
+        "magic-link",
+        "passwordless",
+        "sign in"
+      ],
+      "answer": "Users sign in with an email magic link — Auth.js passwordless login delivered by email — then a JWT session with organization membership and plan entitlements. Access is invite-based: we provision the organization and invite seats; users are not inventing their own unmanaged accounts into a tenant. Seat limits apply per plan.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, Authentication; CUSTOMER_ACCESS.md"
+    },
+    {
+      "id": "sso-roadmap",
+      "title": "SSO roadmap (honest)",
+      "topics": [
+        "do you support SSO",
+        "SAML",
+        "OIDC",
+        "Okta",
+        "enterprise SSO"
+      ],
+      "keywords": [
+        "do you have sso",
+        "do you support sso",
+        "enterprise sso",
+        "oidc",
+        "okta",
+        "saml",
+        "single sign-on",
+        "sso",
+        "sso roadmap"
+      ],
+      "answer": "Today authentication is email magic-link with org membership. Enterprise SSO — SAML/OIDC — is on the roadmap as an option for buyers that need it; we do not claim SSO is generally available today. For design partners we can discuss timeline honestly against your IdP requirements rather than overpromise.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, Authentication; SOC 2 Readiness Reference v2 (SSO backlog)"
+    },
+    {
+      "id": "soc2-status",
+      "title": "SOC 2 status (pursuing)",
+      "topics": [
+        "are you SOC 2",
+        "SOC2",
+        "SOC 2 certified",
+        "compliance status",
+        "do you have a SOC report"
+      ],
+      "keywords": [
+        "are you soc 2",
+        "are you soc2",
+        "compliance",
+        "do you have soc 2",
+        "soc 2",
+        "soc 2 certified",
+        "soc report",
+        "soc2",
+        "soc2 certified",
+        "type i",
+        "type ii"
+      ],
+      "answer": "We are pursuing SOC 2 — readiness work is in progress — and we do not claim a completed SOC 2 certification or issued report today. Target path is Type I first, covering Security, Availability, and Confidentiality; Type II follows after an observation window. Until a report is issued, the honest language is 'pursuing' or 'in progress,' and we unblock IT with architecture, encryption, tenant isolation, no GL write-back, auth model, AI handling, DPA, and questionnaire answers.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "SOC 2 Readiness Reference v2 §6 — never claim certified early"
+    },
+    {
+      "id": "soc2-scope-internal",
+      "title": "SOC 2 scope path (sales-internal)",
+      "topics": [
+        "SOC 2 Type I scope",
+        "which trust criteria",
+        "Processing Integrity",
+        "Availability Confidentiality"
+      ],
+      "keywords": [
+        "availability",
+        "confidentiality",
+        "processing integrity",
+        "soc 2 scope",
+        "trust services criteria",
+        "type i first"
+      ],
+      "answer": "Internal: default Type I scope is Security + Availability + Confidentiality. Processing Integrity is deferred by default — do not market PI as third-party proof that ARR math or the engine is 'certified correct.' Privacy criterion skipped for now. Prefer sales unblockers (DPA, subprocessors, security one-pager, architecture) while controls and evidence mature. Never imply an issued report before it exists.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer"
+      ],
+      "tone": "internal_deep",
+      "source": "SOC 2 Readiness Reference v2 §§1, 6"
+    },
+    {
+      "id": "dna-soc2-report",
+      "title": "SOC 2 report / certificate on hand (deflect)",
+      "topics": [
+        "show me your SOC 2 report",
+        "send the SOC 2 Type II report",
+        "SOC 2 certificate number",
+        "attach your SOC report"
+      ],
+      "keywords": [
+        "attach your soc report",
+        "certificate number",
+        "send the soc 2 report",
+        "send your soc 2",
+        "show me your soc 2 report",
+        "soc 2 certificate number",
+        "soc 2 type ii report pdf"
+      ],
+      "answer": "DEFLECT: no issued SOC 2 report to share yet. Say: \"We're actively pursuing SOC 2 Type I — Security, Availability, and Confidentiality — and I won't claim a completed report before it's issued. I can share our current security posture, architecture, and questionnaire answers now, and the report under NDA when we have it.\"",
+      "confidence": "do-not-answer",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "SOC 2 Readiness Reference v2 — honesty until report issued",
+      "deflect_script": "We're actively pursuing SOC 2 Type I — Security, Availability, and Confidentiality — and I won't claim a completed report before it's issued. I can share our current security posture, architecture, and questionnaire answers now, and the report under NDA when we have it."
+    },
+    {
+      "id": "ai-data-handling",
+      "title": "AI / LLM data handling",
+      "topics": [
+        "what data goes to the AI",
+        "does AI see our ledger",
+        "LLM data handling",
+        "does Claude train on our data",
+        "AI privacy"
+      ],
+      "keywords": [
+        "ai privacy",
+        "ai sees our data",
+        "claude",
+        "does ai see our ledger",
+        "llm",
+        "llm data",
+        "openai",
+        "what data goes to the ai",
+        "what does the ai see"
+      ],
+      "answer": "AI is used for narrative assistance — variance commentary and executive summary drafting — not to invent ledger numbers. Commentary is grounded in Financial Intelligence Engine outputs and governed report context. We minimize sending sensitive raw PII in prompts and prefer aggregated metrics. Treat the LLM provider as a subprocessor when prompts include customer-derived context; contractual training/retention posture follows the vendor terms we document for IT.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, AI Narrative; SOC 2 Readiness Reference v2 §7.1; Architecture Master AI layer"
+    },
+    {
+      "id": "ai-keys-server-side",
+      "title": "AI keys stay on the API",
+      "topics": [
+        "where are AI API keys",
+        "are keys in the browser",
+        "Anthropic key handling",
+        "client-side secrets"
+      ],
+      "keywords": [
+        "ai api keys",
+        "ai keys",
+        "anthropic key",
+        "are keys in the browser",
+        "client-side secrets",
+        "keys on the api",
+        "llm keys",
+        "where are ai keys"
+      ],
+      "answer": "Anthropic is the primary narrative model with OpenAI as fallback. API keys reside on the server-side API only — not in static board HTML and not in the browser. That keeps model credentials out of client bundles and exported artifacts.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "engineer",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, AI Narrative; SOC 2 Readiness Reference v2 §7.1"
+    },
+    {
+      "id": "white-glove-readonly",
+      "title": "White-glove / direct data access",
+      "topics": [
+        "white-glove",
+        "how do you get our data",
+        "direct data access",
+        "Snowflake share",
+        "do we have to upload files"
+      ],
+      "keywords": [
+        "direct data access",
+        "do we have to upload",
+        "how do you get our data",
+        "sftp",
+        "snowflake share",
+        "white glove",
+        "white-glove",
+        "whiteglove"
+      ],
+      "answer": "For security-conscious and enterprise POCs we support a white-glove path: you grant read-only access — for example a Snowflake share, object-storage export, SFTP drop, or ERP export — and SMPL ops loads your tenant warehouse. No self-serve upload is required on that path. Access is documented, scoped, and revoked after the engagement or on request. We still do not write back to your GL or ERP.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "GO_LIVE_POC_DIRECT_DATA_ACCESS; IT Technical Diagram, Data Sources; SOC 2 §7.2"
+    },
+    {
+      "id": "onboarding-paths",
+      "title": "White-glove vs self-serve onboarding",
+      "topics": [
+        "how does onboarding work",
+        "self-serve vs white-glove",
+        "implementation approach",
+        "POC data path"
+      ],
+      "keywords": [
+        "how does onboarding work",
+        "implementation approach",
+        "onboarding",
+        "poc data",
+        "self serve",
+        "self-serve",
+        "white-glove vs self-serve"
+      ],
+      "answer": "Two paths. White-glove direct access is available today for mid-market and enterprise POCs: read-only shares or exports, SMPL loads the warehouse, customer signs in with a magic link. Self-serve CSV upload and mapping is the scale path and continues to mature — first customers do not have to wait on self-serve. Typical implementation runs about four to six weeks once scope and data access are agreed.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "GO_LIVE_POC_DIRECT_DATA_ACCESS; GO_LIVE_POC_ONBOARDING; Technical Whitepaper timeline"
+    },
+    {
+      "id": "rbac-access",
+      "title": "Role-based access",
+      "topics": [
+        "role-based access",
+        "who can see what",
+        "board viewer access",
+        "RBAC",
+        "access control"
+      ],
+      "keywords": [
+        "access control",
+        "board viewer",
+        "rbac",
+        "role based",
+        "role-based access",
+        "who can see what"
+      ],
+      "answer": "Access is role-based: finance can work at full GL-level drill-down, while executives and board viewers get summary-level, explained views. Org membership and plan entitlements gate what a signed-in user can reach inside the tenant.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper, Governance; IT Technical Diagram"
+    },
+    {
+      "id": "secrets-cors",
+      "title": "Secrets and API hardening",
+      "topics": [
+        "how do you handle secrets",
+        "CORS",
+        "API keys security",
+        "internal API keys"
+      ],
+      "keywords": [
+        "api hardening",
+        "cors",
+        "cors allowlist",
+        "how do you handle secrets",
+        "internal keys",
+        "secrets",
+        "secrets management"
+      ],
+      "answer": "Production secrets live in environment/secret stores — not in git. The API uses a CORS allowlist, and internal keys protect billing/session sync paths between the app and API. AI provider keys stay on the API only. That is the hardening posture we describe for IT questionnaires.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "engineer",
+        "cfo"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, Security Posture; SOC 2 Readiness Reference v2 §4.3"
+    },
+    {
+      "id": "it-questionnaire-overview",
+      "title": "IT / security questionnaire answers",
+      "topics": [
+        "security questionnaire",
+        "IT due diligence",
+        "vendor security review",
+        "infosec questionnaire",
+        "what do we need for IT"
+      ],
+      "keywords": [
+        "due diligence",
+        "infosec questionnaire",
+        "it due diligence",
+        "it questionnaire",
+        "security questionnaire",
+        "vendor security review",
+        "what do we need for it"
+      ],
+      "answer": "For a typical IT questionnaire we cover: browser SaaS with no on-prem install; TLS in transit and encryption at rest; multi-tenant isolation by organization ID; invite-based magic-link auth with SSO on the roadmap; no GL/ERP write-back; white-glove read-only ingest available; AI keys server-side and narrative grounded in engine outputs; SOC 2 pursuing Type I (Security, Availability, Confidentiality) — not claiming certified yet. We can share the IT technical diagram, DPA, and subprocessors list to complete the pack.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "SOC 2 Readiness Reference v2 sales unblockers; IT Technical Diagram"
+    },
+    {
+      "id": "does-not-replace-erp",
+      "title": "Does not replace ERP / GL",
+      "topics": [
+        "do you replace NetSuite",
+        "are you an ERP",
+        "system of record",
+        "do we still need QuickBooks"
+      ],
+      "keywords": [
+        "are you an erp",
+        "do we still need our gl",
+        "do you replace netsuite",
+        "do you replace quickbooks",
+        "replace erp",
+        "system of record"
+      ],
+      "answer": "We are not an ERP and we are not the general-ledger system of record. SMPL sits above accounting, CRM, billing, and HR systems — reading and reconciling them into financial intelligence, reporting, and board-ready packages. You keep your books where they are today.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Architecture Master; IT Technical Diagram footer"
+    },
+    {
+      "id": "talk-track-privacy",
+      "title": "Sales Talk Track tool privacy",
+      "topics": [
+        "is this call being recorded",
+        "is the talk track storing audio",
+        "privacy of this assistant",
+        "are you recording us",
+        "Web Speech privacy"
+      ],
+      "keywords": [
+        "are you recording",
+        "call recording",
+        "is this being recorded",
+        "is this call being recorded",
+        "talk track privacy",
+        "web speech",
+        "storing audio"
+      ],
+      "answer": "If someone asks about this meeting aide itself: it does not persist audio to disk. The rolling transcript stays in-memory in the browser tab for the session. Browser Web Speech may send audio to the vendor speech service — commonly Google in Chrome — so treat sensitive calls accordingly and disclose that an AI assistant is running for notes and reference.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "general",
+        "investor"
+      ],
+      "tone": "external_safe",
+      "source": "docs/SALES_TALK_TRACK.md, Privacy & STT caveat"
+    },
+    {
+      "id": "data-sources-ingest",
+      "title": "Data sources and ingest",
+      "topics": [
+        "what systems do you connect to",
+        "data sources",
+        "how do you ingest data",
+        "NetSuite Salesforce Stripe"
+      ],
+      "keywords": [
+        "billing data",
+        "crm data",
+        "csv upload",
+        "data sources",
+        "how do you ingest",
+        "hris",
+        "netsuite",
+        "salesforce",
+        "what systems do you connect",
+        "which systems"
+      ],
+      "answer": "We ingest from the systems finance already uses: ERP/GL such as NetSuite, Rillet, or QuickBooks; CRM such as Salesforce or HubSpot; billing such as Stripe or Maxio; HRIS such as Rippling or Workday; plus treasury extracts as needed. Ingest is via versioned CSV or white-glove load — for example Snowflake share, object storage, or SFTP — normalized into our canonical model for reporting.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, Data Sources; Technical Whitepaper, Canonical Data Model"
+    },
+    {
+      "id": "environments-prod-sandbox",
+      "title": "Production and sandbox environments",
+      "topics": [
+        "do you have a sandbox",
+        "staging environment",
+        "prod vs sandbox",
+        "test environment"
+      ],
+      "keywords": [
+        "do you have a sandbox",
+        "prod vs sandbox",
+        "production and sandbox",
+        "staging",
+        "test environment"
+      ],
+      "answer": "Yes — we separate production and sandbox/staging environments for the app, API, and database so customer production data is not mixed with preview or staging work. That separation is part of how we describe change management and go-live hygiene to IT.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "engineer",
+        "cfo"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram, Environments; SOC 2 Readiness Reference v2"
     }
   ]
 }

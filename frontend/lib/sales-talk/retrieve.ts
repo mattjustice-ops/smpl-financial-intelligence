@@ -35,13 +35,48 @@ const STOP = new Set([
   "be",
 ]);
 
+/** Expand common sales/IT phrasings so KB keywords hit more reliably. */
+const SYNONYM_EXPAND: Record<string, string[]> = {
+  soc2: ["soc", "2", "compliance"],
+  soc: ["soc2", "compliance"],
+  encrypted: ["encryption", "tls"],
+  encryption: ["encrypted", "tls"],
+  tls: ["https", "encryption"],
+  https: ["tls", "encryption"],
+  sso: ["saml", "oidc", "single"],
+  writeback: ["write-back", "erp"],
+  subprocessors: ["vendors", "hosting"],
+  subprocessor: ["vendors", "hosting"],
+  residency: ["stored", "where"],
+  hosted: ["hosting", "saas"],
+  hosting: ["hosted", "saas"],
+};
+
 export function tokenize(text: string): string[] {
-  return text
+  const base = text
     .toLowerCase()
+    .replace(/soc\s*2/g, " soc2 ")
+    .replace(/write[\s-]?back/g, " writeback ")
     .replace(/[^a-z0-9$%\-\s]/g, " ")
     .split(/\s+/)
     .map((t) => t.trim())
     .filter((t) => t.length > 1 && !STOP.has(t));
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const token of base) {
+    if (!seen.has(token)) {
+      seen.add(token);
+      out.push(token);
+    }
+    for (const extra of SYNONYM_EXPAND[token] ?? []) {
+      if (!seen.has(extra) && !STOP.has(extra)) {
+        seen.add(extra);
+        out.push(extra);
+      }
+    }
+  }
+  return out;
 }
 
 function fieldScore(queryTokens: string[], field: string, weight: number): number {

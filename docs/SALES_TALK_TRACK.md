@@ -16,7 +16,7 @@ Also linked from **Ops** → “Sales Talk Track”.
 ## How to use in a live call
 
 1. Open Chrome on desktop (best Web Speech support).
-2. Go to `/app/sales-talk`, pick **Audience mode** (CFO, Investor, etc.).
+2. Go to `/app/sales-talk`, pick **Audience mode** (CFO, Investor, IT, etc.).
 3. Click **Start listening** and allow the microphone.
 4. **Disclose** to the room that an AI assistant is running for notes/reference.
 5. When a prospect asks something question-like, a card appears:
@@ -44,7 +44,7 @@ Each entry:
 |---|---|
 | `id` | Stable id (shown on cards) |
 | `title` | Card title |
-| `topics` / `keywords` | Retrieval matching |
+| `topics` / `keywords` | Retrieval matching (add phrasings prospects actually say) |
 | `answer` | Sayable text (source of truth) |
 | `confidence` | `verified` \| `directional` \| `do-not-answer` |
 | `audiences` | Optional: `cfo` \| `it` \| `fpa` \| `ceo` \| `engineer` \| `investor` \| `general` |
@@ -52,18 +52,41 @@ Each entry:
 | `deflect_script` | For `do-not-answer` entries |
 | `source` | Provenance note |
 
-Governance / freeze / lock detail lives in `governance-workflow-internal` (`internal_deep`). Customer-facing close language is `governance-workflow` (`external_safe`).
+Governance / freeze / lock detail lives in `governance-workflow-internal` (`internal_deep`). Customer-facing close language is `governance-workflow` (`external_safe`). Prefer `it`, `cfo`, and `general` on security/implementation entries.
 
-### Adding an entry
+### Adding an entry (reminder)
 
-1. Append an object to `entries` with the fields above.
-2. Prefer `external_safe` for anything said to customers/investors.
-3. Use `do-not-answer` + `deflect_script` until a number is locked.
-4. Redeploy / refresh — no code change required for new entries.
+1. Append an object to `entries` in `frontend/content/sales-kb/knowledge_base.json` with the fields above.
+2. Prefer `external_safe` for anything said to customers/investors; use `internal_deep` only for sales-internal depth (e.g. named subprocessors, SOC 2 scope path).
+3. Use `do-not-answer` + `deflect_script` until a number or claim is locked (TAM, pricing, funding, partner logos, issued SOC 2 report).
+4. **Do not invent certifications** — SOC 2 language must stay “pursuing / in progress” until a report is issued (`docs/SMPL_SOC2_Readiness_Reference_v2.md`).
+5. Seed `topics` and `keywords` with real prospect phrasings (“how do we trust your security”, “where is data stored”, “SOC2”, “encryption”).
+6. Avoid freeze/lock ladder jargon in `external_safe` answers.
+7. Redeploy / refresh — no code change required for new entries (retrieval synonym tweaks live in `frontend/lib/sales-talk/retrieve.ts` if needed).
+
+### Security & trust topics covered (KB v2+)
+
+| Theme | Example entry ids |
+|---|---|
+| Trust / security posture | `security-trust-overview`, `it-questionnaire-overview` |
+| Encryption (TLS + at rest) | `encryption-transit-rest` |
+| Tenant isolation | `tenant-isolation` |
+| No GL / ERP write-back | `no-gl-writeback`, `does-not-replace-erp` |
+| Hosting / SaaS model | `hosting-architecture`, `environments-prod-sandbox` |
+| Where data is stored | `where-data-stored` |
+| Named subprocessors (internal) | `subprocessors-named` (Vercel, Railway, Neon, Resend, Anthropic, Stripe) |
+| Auth today + SSO honesty | `auth-magic-link`, `sso-roadmap` |
+| SOC 2 honesty | `soc2-status`, `soc2-scope-internal`, `dna-soc2-report` |
+| AI data handling / keys | `ai-data-handling`, `ai-keys-server-side` |
+| Implementation / onboarding | `implementation-security`, `onboarding-paths`, `white-glove-readonly`, `data-sources-ingest` |
+| RBAC / secrets | `rbac-access`, `secrets-cors` |
+| Talk-track tool privacy | `talk-track-privacy` |
+
+Still DNA (do not invent): TAM/SAM/SOM, pricing/ACV, funding, named design-partner counts, issued SOC 2 report/certificate.
 
 ## Retrieval & rephrase
 
-- Keyword scoring over title, topics, keywords, answer (no embeddings).
+- Keyword scoring over title, topics, keywords, answer (no embeddings), with light synonym expansion (e.g. `soc2` ↔ compliance/encryption phrasings).
 - Filters by audience when set; prefers `external_safe` unless **Include internal deep** is on.
 - Below threshold → **No prepared answer** (fail closed).
 - Optional Anthropic rephrase (`ANTHROPIC_API_KEY` on the Next server): rewrites matched KB text for the audience only — **must not add facts**. No key / failure → raw KB text.
