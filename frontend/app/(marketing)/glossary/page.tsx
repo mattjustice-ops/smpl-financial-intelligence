@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ResourcesEmptyState } from "@/components/sanity/ResourcesEmptyState";
-import { isSanityConfigured, sanityFetch } from "@/lib/sanity/client";
+import { sanityFetch } from "@/lib/sanity/client";
 import { glossaryListQuery } from "@/lib/sanity/queries";
 import type { SanityGlossaryListItem } from "@/lib/sanity/types";
 import { SITE_NAME, sitePageUrl } from "@/lib/site";
@@ -40,7 +40,6 @@ export default async function GlossaryIndexPage() {
     {},
     [],
   );
-  const configured = isSanityConfigured();
   const groups = groupByLetter(terms);
 
   return (
@@ -57,15 +56,11 @@ export default async function GlossaryIndexPage() {
         </p>
       </div>
 
-      {!configured || terms.length === 0 ? (
+      {terms.length === 0 ? (
         <div className="mt-12">
           <ResourcesEmptyState
-            title={configured ? "No glossary terms yet" : "Glossary coming soon"}
-            description={
-              configured
-                ? "Add glossary terms in Sanity Studio (or run the seed script) to populate this page."
-                : "Sanity is not configured in this environment. Set NEXT_PUBLIC_SANITY_PROJECT_ID to enable the glossary."
-            }
+            title="Glossary coming soon"
+            description="Definitions for SaaS finance, close, and board reporting are on the way. Book a demo if you'd like a walkthrough now."
           />
         </div>
       ) : (

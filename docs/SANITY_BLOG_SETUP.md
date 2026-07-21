@@ -2,6 +2,8 @@
 
 SMPL.ai Resources (Blog + Glossary) are powered by Sanity CMS and rendered with the marketing site’s slate/teal UI. Studio is embedded at `/studio` in the Next.js app (one Vercel deploy).
 
+**Editors only:** `/studio` is intentionally not linked from public blog/glossary pages. Bookmark the URL (local or production) — public empty states say “coming soon” and link to `/book-demo` only.
+
 **Project (current):** `sda23ulo` · **Dataset:** `production`
 
 ## 1. Account & project
@@ -123,11 +125,11 @@ Internal CTA: each cornerstone post already links to `/book-demo` / `/request-qu
 | `/blog/[slug]` | Post detail |
 | `/glossary` | A–Z glossary |
 | `/glossary/[slug]` | Term detail |
-| `/studio` | Embedded Sanity Studio |
+| `/studio` | Embedded Sanity Studio (editors; not advertised on public pages) |
 
 Titles use the house `|` separator via `frontend/lib/site.ts` (`SITE_NAME` = SMPL.ai). Prefer `seoTitle` / `seoDescription` on posts when set.
 
-If `NEXT_PUBLIC_SANITY_PROJECT_ID` is missing, `/blog` and `/glossary` render empty states (no build failure).
+If `NEXT_PUBLIC_SANITY_PROJECT_ID` is missing or content is empty, `/blog` and `/glossary` render customer-friendly empty states with a Book a demo CTA (no Studio link; no build failure).
 
 ## 8. Verify build
 

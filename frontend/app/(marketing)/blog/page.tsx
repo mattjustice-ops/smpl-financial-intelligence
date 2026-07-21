@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ResourcesEmptyState } from "@/components/sanity/ResourcesEmptyState";
-import { isSanityConfigured, sanityFetch } from "@/lib/sanity/client";
+import { sanityFetch } from "@/lib/sanity/client";
 import { postsListQuery } from "@/lib/sanity/queries";
 import type { SanityPostListItem } from "@/lib/sanity/types";
 import { SITE_NAME, sitePageUrl } from "@/lib/site";
@@ -37,7 +37,6 @@ function formatDate(value?: string | null) {
 
 export default async function BlogIndexPage() {
   const posts = await sanityFetch<SanityPostListItem[]>(postsListQuery, {}, []);
-  const configured = isSanityConfigured();
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">
@@ -54,20 +53,11 @@ export default async function BlogIndexPage() {
         </p>
       </div>
 
-      {!configured || posts.length === 0 ? (
+      {posts.length === 0 ? (
         <div className="mt-12">
           <ResourcesEmptyState
-            title={configured ? "No posts published yet" : "Blog content coming soon"}
-            description={
-              configured
-                ? "Create and publish posts in Sanity Studio to populate this page."
-                : "Sanity is not configured in this environment. Set NEXT_PUBLIC_SANITY_PROJECT_ID to enable the blog."
-            }
-            hint={
-              configured
-                ? "Seed starter content with npm run seed:sanity (requires SANITY_API_WRITE_TOKEN)."
-                : undefined
-            }
+            title="Articles coming soon"
+            description="We're publishing insights for SaaS finance teams. Book a demo in the meantime — or check back shortly."
           />
         </div>
       ) : (
