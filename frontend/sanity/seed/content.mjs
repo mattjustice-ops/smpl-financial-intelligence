@@ -30,7 +30,7 @@ function h2(text) {
 }
 
 export const author = {
-  _id: "author.smpl-team",
+  _id: "author-smpl-team",
   _type: "author",
   name: "SMPL.ai Team",
   role: "Product & FP&A",
@@ -38,19 +38,19 @@ export const author = {
 
 export const categories = [
   {
-    _id: "category.board-reporting",
+    _id: "category-board-reporting",
     _type: "category",
     title: "Board reporting",
     slug: { _type: "slug", current: "board-reporting" },
   },
   {
-    _id: "category.close",
+    _id: "category-close",
     _type: "category",
     title: "Close",
     slug: { _type: "slug", current: "close" },
   },
   {
-    _id: "category.ai-commentary",
+    _id: "category-ai-commentary",
     _type: "category",
     title: "AI commentary",
     slug: { _type: "slug", current: "ai-commentary" },
@@ -59,15 +59,15 @@ export const categories = [
 
 export const posts = [
   {
-    _id: "post.board-numbers-need-evidence",
+    _id: "post-board-numbers-need-evidence",
     _type: "post",
     title: "Why board numbers need evidence, not another dashboard",
     slug: { _type: "slug", current: "board-numbers-need-evidence" },
     excerpt:
       "Boards do not need more charts. They need every ARR, cash, and P&L figure tied to a source and a close decision.",
     publishedAt: "2026-07-01T12:00:00.000Z",
-    author: { _type: "reference", _ref: "author.smpl-team" },
-    categories: [{ _type: "reference", _ref: "category.board-reporting" }],
+    author: { _type: "reference", _ref: "author-smpl-team" },
+    categories: [{ _type: "reference", _ref: "category-board-reporting" }],
     seoTitle: "Board Numbers Need Evidence, Not Another Dashboard | SMPL.ai",
     seoDescription:
       "Why SaaS board packages fail when dashboards replace governed close evidence — and how to fix the trust gap.",
@@ -89,15 +89,15 @@ export const posts = [
     ],
   },
   {
-    _id: "post.saas-close-load-validate-lock-freeze",
+    _id: "post-saas-close-load-validate-lock-freeze",
     _type: "post",
     title: "SaaS close: Load → Validate → Lock → Freeze",
     slug: { _type: "slug", current: "saas-close-load-validate-lock-freeze" },
     excerpt:
       "A practical close operating model for SaaS finance: ingest sources, validate tie-outs, lock the period, then freeze the board pack.",
     publishedAt: "2026-07-08T12:00:00.000Z",
-    author: { _type: "reference", _ref: "author.smpl-team" },
-    categories: [{ _type: "reference", _ref: "category.close" }],
+    author: { _type: "reference", _ref: "author-smpl-team" },
+    categories: [{ _type: "reference", _ref: "category-close" }],
     seoTitle: "SaaS Close: Load → Validate → Lock → Freeze | SMPL.ai",
     seoDescription:
       "How SaaS FP&A teams run a governed month-end close from source load through freeze pack — without another spreadsheet scramble.",
@@ -125,15 +125,15 @@ export const posts = [
     ],
   },
   {
-    _id: "post.ai-commentary-finance-will-sign",
+    _id: "post-ai-commentary-finance-will-sign",
     _type: "post",
     title: "AI commentary that finance will actually sign",
     slug: { _type: "slug", current: "ai-commentary-finance-will-sign" },
     excerpt:
       "Finance will not sign chatbot prose. They will sign commentary that cites locked metrics, variance drivers, and evidence.",
     publishedAt: "2026-07-15T12:00:00.000Z",
-    author: { _type: "reference", _ref: "author.smpl-team" },
-    categories: [{ _type: "reference", _ref: "category.ai-commentary" }],
+    author: { _type: "reference", _ref: "author-smpl-team" },
+    categories: [{ _type: "reference", _ref: "category-ai-commentary" }],
     seoTitle: "AI Commentary That Finance Will Actually Sign | SMPL.ai",
     seoDescription:
       "How to use AI for MD&A and board narrative without inventing numbers — cite locked close metrics and keep humans in the sign-off loop.",
@@ -156,7 +156,7 @@ export const posts = [
 
 export const glossaryTerms = [
   {
-    _id: "glossary.arr",
+    _id: "glossary-arr",
     term: "ARR",
     slug: "arr",
     shortDefinition:
@@ -166,7 +166,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.mrr",
+    _id: "glossary-mrr",
     term: "MRR",
     slug: "mrr",
     shortDefinition: "Monthly Recurring Revenue — the monthly view of subscription recurring value.",
@@ -175,7 +175,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.nrr",
+    _id: "glossary-nrr",
     term: "NRR",
     slug: "nrr",
     shortDefinition:
@@ -185,7 +185,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.grr",
+    _id: "glossary-grr",
     term: "GRR",
     slug: "grr",
     shortDefinition:
@@ -195,7 +195,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.deferred-revenue",
+    _id: "glossary-deferred-revenue",
     term: "Deferred revenue",
     slug: "deferred-revenue",
     shortDefinition:
@@ -205,7 +205,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.waterfall",
+    _id: "glossary-waterfall",
     term: "Waterfall",
     slug: "waterfall",
     shortDefinition:
@@ -215,7 +215,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.close",
+    _id: "glossary-close",
     term: "Close",
     slug: "close",
     shortDefinition:
@@ -225,7 +225,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.mda",
+    _id: "glossary-mda",
     term: "MD&A",
     slug: "mda",
     shortDefinition:
@@ -235,7 +235,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.freeze-pack",
+    _id: "glossary-freeze-pack",
     term: "Freeze pack",
     slug: "freeze-pack",
     shortDefinition:
@@ -245,7 +245,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.combined-scenario",
+    _id: "glossary-combined-scenario",
     term: "Combined scenario",
     slug: "combined-scenario",
     shortDefinition:
@@ -255,7 +255,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.bookings",
+    _id: "glossary-bookings",
     term: "Bookings",
     slug: "bookings",
     shortDefinition:
@@ -265,7 +265,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.pipeline",
+    _id: "glossary-pipeline",
     term: "Pipeline",
     slug: "pipeline",
     shortDefinition:
@@ -275,7 +275,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.churn",
+    _id: "glossary-churn",
     term: "Churn",
     slug: "churn",
     shortDefinition:
@@ -285,7 +285,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.expansion",
+    _id: "glossary-expansion",
     term: "Expansion",
     slug: "expansion",
     shortDefinition:
@@ -295,7 +295,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.contraction",
+    _id: "glossary-contraction",
     term: "Contraction",
     slug: "contraction",
     shortDefinition:
@@ -305,7 +305,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.cac",
+    _id: "glossary-cac",
     term: "CAC",
     slug: "cac",
     shortDefinition: "Customer Acquisition Cost — sales and marketing spend to acquire a customer.",
@@ -314,7 +314,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.ltv",
+    _id: "glossary-ltv",
     term: "LTV",
     slug: "ltv",
     shortDefinition: "Lifetime Value — expected gross profit from a customer relationship.",
@@ -323,7 +323,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.burn-multiple",
+    _id: "glossary-burn-multiple",
     term: "Burn multiple",
     slug: "burn-multiple",
     shortDefinition:
@@ -333,7 +333,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.runway",
+    _id: "glossary-runway",
     term: "Runway",
     slug: "runway",
     shortDefinition: "Months of cash remaining at the current net burn rate.",
@@ -342,7 +342,7 @@ export const glossaryTerms = [
     ),
   },
   {
-    _id: "glossary.gaap-revenue",
+    _id: "glossary-gaap-revenue",
     term: "GAAP revenue",
     slug: "gaap-revenue",
     shortDefinition:

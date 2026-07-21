@@ -73,14 +73,58 @@ const client = createClient({
 
 const docs = [author, ...categories, ...posts, ...glossaryTerms];
 
+/**
+ * Legacy dotted IDs fall outside Sanity's default public ACL grant
+ * `_id in path("*")` (`.` is a path separator), so anonymous CDN reads
+ * omit them with reason "permission". Delete after reseeding hyphenated IDs.
+ */
+const legacyDottedIds = [
+  "author.smpl-team",
+  "category.board-reporting",
+  "category.close",
+  "category.ai-commentary",
+  "post.board-numbers-need-evidence",
+  "post.saas-close-load-validate-lock-freeze",
+  "post.ai-commentary-finance-will-sign",
+  "glossary.arr",
+  "glossary.mrr",
+  "glossary.nrr",
+  "glossary.grr",
+  "glossary.deferred-revenue",
+  "glossary.waterfall",
+  "glossary.close",
+  "glossary.mda",
+  "glossary.freeze-pack",
+  "glossary.combined-scenario",
+  "glossary.bookings",
+  "glossary.pipeline",
+  "glossary.churn",
+  "glossary.expansion",
+  "glossary.contraction",
+  "glossary.cac",
+  "glossary.ltv",
+  "glossary.burn-multiple",
+  "glossary.runway",
+  "glossary.gaap-revenue",
+];
+
 async function main() {
   console.log(`Seeding ${docs.length} documents → ${projectId}/${dataset}`);
   const tx = client.transaction();
   for (const doc of docs) {
+    if (doc._id.includes(".")) {
+      throw new Error(
+        `Seed doc ${doc._id} uses '.' — public ACL only grants path("*"). Use hyphens.`,
+      );
+    }
     tx.createOrReplace(doc);
+  }
+  for (const id of legacyDottedIds) {
+    tx.delete(id);
   }
   await tx.commit();
   console.log("Done. Publish is automatic for createOrReplace (published docs).");
+  console.log("Deleted legacy dotted IDs (if present) so public CDN reads work.");
   console.log("Visit /blog and /glossary (or /studio to edit).");
 }
 

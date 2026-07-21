@@ -23,8 +23,10 @@ If you create a *new* project later, replace `NEXT_PUBLIC_SANITY_PROJECT_ID` eve
 NEXT_PUBLIC_SANITY_PROJECT_ID=sda23ulo
 NEXT_PUBLIC_SANITY_DATASET=production
 
-# Optional — draft/private reads
-# SANITY_API_READ_TOKEN=
+# Server-only Viewer (preferred) or Editor token for published reads.
+# Required when anonymous API responses omit documents with reason "permission"
+# (common even when Manage shows dataset aclMode=public). Never NEXT_PUBLIC_*.
+SANITY_API_READ_TOKEN=
 
 # Seed script only (Editor+ token). Never commit. Never NEXT_PUBLIC_*.
 # SANITY_API_WRITE_TOKEN=
@@ -43,11 +45,11 @@ In the Vercel project → Settings → Environment Variables, set for Production
 |------|-------|--------|
 | `NEXT_PUBLIC_SANITY_PROJECT_ID` | `sda23ulo` | Public |
 | `NEXT_PUBLIC_SANITY_DATASET` | `production` | Public |
+| `SANITY_API_READ_TOKEN` | Viewer token | **Required** for `/blog` + `/glossary` server fetches |
 | `SANITY_REVALIDATE_SECRET` | (random secret) | Server-only; match Sanity webhook header |
-| `SANITY_API_READ_TOKEN` | (optional) | Only if you enable draft mode later |
 | `SANITY_API_WRITE_TOKEN` | — | **Do not** put write tokens on Vercel unless you run seed in CI |
 
-Redeploy after adding env vars.
+Redeploy after adding env vars (especially `SANITY_API_READ_TOKEN` — without it, pages render the empty state even when Studio has published content).
 
 ## 3. Deploy schema & open Studio
 
@@ -95,6 +97,8 @@ Starter bodies live in `frontend/sanity/seed/content.mjs`:
    ```
 
 4. Visit `/blog` and `/glossary`. Edit further in `/studio`.
+
+**Important — document `_id`s must not contain `.`:** Sanity’s default public ACL grants anonymous read on `_id in path("*")`. A `.` is a path separator, so IDs like `post.my-slug` are omitted with `reason: "permission"` on the public CDN even when the dataset is `aclMode: public`. This seed uses hyphenated IDs (`post-my-slug`). Studio-created docs typically get random IDs without dots and are fine.
 
 Without a write token, create the same documents manually in Studio using the seed file as copy.
 

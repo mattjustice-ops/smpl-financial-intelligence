@@ -6,6 +6,13 @@ export const dataset =
   process.env.NEXT_PUBLIC_SANITY_DATASET?.trim() || "production";
 export const apiVersion = "2025-01-01";
 
+/**
+ * Server-only Viewer (or Editor) token. Required when the Sanity dataset is
+ * private — unauthenticated CDN/API queries return empty results.
+ * Never expose as NEXT_PUBLIC_*.
+ */
+const readToken = process.env.SANITY_API_READ_TOKEN?.trim() || "";
+
 /** True when a project ID is configured (public marketing fetches can run). */
 export function isSanityConfigured(): boolean {
   return Boolean(projectId);
@@ -17,6 +24,8 @@ export const sanityClient = createClient({
   apiVersion,
   useCdn: true,
   perspective: "published",
+  // Token enables reads against private datasets from Server Components.
+  ...(readToken ? { token: readToken } : {}),
   stega: { enabled: false },
 });
 
