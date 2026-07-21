@@ -1,0 +1,617 @@
+{
+  "_comment": "SMPL Sales Talk Track KB. verified=pre-approved wording/numbers; directional=positioning paraphrase OK; do-not-answer=deflect. tone external_safe is default for customer-facing; internal_deep for internal/deep technical. audiences filter retrieval.",
+  "version": 1,
+  "default_deflect_script": "Good question — I want to give you an exact figure rather than guess, so let me follow up right after this.",
+  "entries": [
+    {
+      "id": "what-is-smpl",
+      "title": "What SMPL is",
+      "topics": [
+        "what is SMPL",
+        "what does SMPL do",
+        "what are you building",
+        "elevator pitch"
+      ],
+      "keywords": [
+        "elevator pitch",
+        "what are you building",
+        "what does smpl do",
+        "what is smpl"
+      ],
+      "answer": "SMPL.ai is a Financial Intelligence platform built specifically for SaaS companies. It works alongside the accounting system, CRM, HR, and billing platforms a finance team already uses, and automates the work of collecting, reconciling, analyzing, and explaining financial data — delivering executive-ready reporting in minutes after close, with the evidence behind every number.",
+      "confidence": "verified",
+      "audiences": [
+        "general",
+        "ceo",
+        "cfo",
+        "investor"
+      ],
+      "tone": "external_safe",
+      "source": "Executive Summary, 'What SMPL.ai is'"
+    },
+    {
+      "id": "not-a-dashboard",
+      "title": "Not a dashboard / BI tool",
+      "topics": [
+        "is this a dashboard",
+        "how is this different from BI",
+        "isn't this just a BI tool",
+        "Tableau",
+        "Looker"
+      ],
+      "keywords": [
+        "how is this different from bi",
+        "is this a dashboard",
+        "isn't this just a bi tool",
+        "looker",
+        "tableau"
+      ],
+      "answer": "It isn't a dashboard and it isn't a system of record. It's the decision-support layer that sits above the systems of record — the layer every SaaS finance team currently rebuilds by hand in spreadsheets every month. A BI tool lets you drill from a summary toward more granular numbers within one system; our lineage runs all the way to the original source record, whichever system it came from.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "engineer"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview + Technical Whitepaper, canonical data model"
+    },
+    {
+      "id": "differentiator-three-principles",
+      "title": "What makes SMPL different",
+      "topics": [
+        "what makes you different",
+        "why you",
+        "differentiation",
+        "moat",
+        "defensibility"
+      ],
+      "keywords": [
+        "defensibility",
+        "differentiation",
+        "moat",
+        "what makes you different",
+        "why you"
+      ],
+      "answer": "Three things, by design and not as features bolted on: consistent results — the same inputs always produce the same outputs; transparent by design — every conclusion traces to underlying evidence and uncertainty is flagged, not hidden; and institutional knowledge — we preserve how your organization defines and measures its business and reproduce any report exactly as it was originally delivered.",
+      "confidence": "verified",
+      "audiences": [
+        "investor",
+        "ceo",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Executive Summary, 'What makes SMPL.ai different'"
+    },
+    {
+      "id": "adapts-to-you",
+      "title": "Adapts to your process",
+      "topics": [
+        "do we have to change our process",
+        "implementation burden",
+        "do you force a template",
+        "how do you handle our ARR definition"
+      ],
+      "keywords": [
+        "do we have to change our process",
+        "do you force a template",
+        "how do you handle our arr definition",
+        "implementation burden"
+      ],
+      "answer": "SMPL adapts to your finance organization instead of asking you to adapt to the software. You keep your definition of ARR, your forecasting methodology, and the board metrics your leadership already understands — the platform learns them once and automates them. Methodology is configuration the engine executes, not hardcoded logic, so the engine is the same for every customer but your configuration is yours.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper, Financial Intelligence Engine"
+    },
+    {
+      "id": "determinism",
+      "title": "Deterministic calculations",
+      "topics": [
+        "determinism",
+        "same answer every time",
+        "how do you guarantee accuracy",
+        "reproducibility",
+        "restatement"
+      ],
+      "keywords": [
+        "determinism",
+        "how do you guarantee accuracy",
+        "reproducibility",
+        "restatement",
+        "same answer every time"
+      ],
+      "answer": "Every calculation is deterministic: given the same inputs and methodology configuration, the engine returns the identical output on every run. The mechanism is versioning, not caching — each calculation runs against a specific timestamped snapshot. A report generated in March, reproduced today, reads exactly as it did in March, even if the underlying data was later corrected. Both the old and new views are correct; they answer 'what did we know then' versus 'what do we know now.'",
+      "confidence": "verified",
+      "audiences": [
+        "engineer",
+        "it",
+        "cfo",
+        "investor"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper, Deterministic Calculations"
+    },
+    {
+      "id": "evidence-explainability",
+      "title": "Evidence and explainability",
+      "topics": [
+        "how do you explain variances",
+        "evidence",
+        "traceability",
+        "can you back up the numbers",
+        "audit"
+      ],
+      "keywords": [
+        "audit",
+        "can you back up the numbers",
+        "evidence",
+        "how do you explain variances",
+        "traceability"
+      ],
+      "answer": "Every number traces to the specific source records that produced it — an invoice, an opportunity, a GL entry — not just an intermediate total. Explanations are generated the same way: a statement like 'expansion ARR beat forecast by $420K, driven by three enterprise upsells that closed early' comes from those three actual opportunity records, not a template. If the data doesn't support a specific explanation, the platform says so rather than inventing a plausible-sounding one.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "engineer"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper, Explainability and Evidence"
+    },
+    {
+      "id": "confidence-signal",
+      "title": "Confidence signals on numbers",
+      "topics": [
+        "what if data is incomplete",
+        "confidence signal",
+        "how do you handle uncertainty",
+        "bad data"
+      ],
+      "keywords": [
+        "bad data",
+        "confidence signal",
+        "how do you handle uncertainty",
+        "what if data is incomplete"
+      ],
+      "answer": "Every number and explanation carries an explicit confidence signal. A value from complete, well-structured data reads high-confidence; a value derived by inference — say, ARR estimated from invoice history rather than an explicit contract record — reads visibly lower, with a note on what would resolve it. Confidence is never collapsed into false certainty in either direction.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "engineer"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper, Explainability and Evidence"
+    },
+    {
+      "id": "governance-workflow",
+      "title": "Period close governance",
+      "topics": [
+        "governance",
+        "how does close work",
+        "lock and freeze",
+        "how do you handle corrections",
+        "period close"
+      ],
+      "keywords": [
+        "close",
+        "governance",
+        "corrections",
+        "period",
+        "audit trail",
+        "history"
+      ],
+      "answer": "Each reporting period moves through an explicit close workflow. Once a period is finalized, corrections do not rewrite history — they are recorded as new dated entries that supersede the previous ones. That way you can always answer what the numbers were when leadership made a decision, versus what they are after a correction.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "it",
+        "fpa"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper, Governance"
+    },
+    {
+      "id": "governance-workflow-internal",
+      "title": "Period close governance (internal deep)",
+      "topics": [
+        "governance",
+        "how does close work",
+        "lock and freeze",
+        "how do you handle corrections",
+        "period close",
+        "lock",
+        "freeze",
+        "load validate lock freeze"
+      ],
+      "keywords": [
+        "lock",
+        "freeze",
+        "validate",
+        "load",
+        "snapshot",
+        "workflow ladder"
+      ],
+      "answer": "Each reporting period moves through an explicit workflow: load, validate, lock, freeze, report. Once frozen, a period doesn't reopen — a correction is recorded as a new dated entry linked to the one it supersedes, producing a new snapshot going forward while the original stays intact. That's what makes 'what did we know, and when did we know it' an answerable question rather than an aspiration.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "engineer",
+        "cfo"
+      ],
+      "tone": "internal_deep",
+      "source": "Technical Whitepaper, Governance (internal)"
+    },
+    {
+      "id": "compete-cube",
+      "title": "vs Cube",
+      "topics": [
+        "Cube",
+        "how do you compare to Cube",
+        "Cube already does this",
+        "competitor Cube"
+      ],
+      "keywords": [
+        "competitor cube",
+        "cube",
+        "cube already does this",
+        "how do you compare to cube"
+      ],
+      "answer": "Cube serves a similar buyer, and its AI messaging now sounds like ours on paper. The difference is architectural: Cube's core product is a bi-directional Excel and Sheets sync — the finance team still builds and maintains the model in spreadsheets, and Cube's AI makes that faster. That architecture can't guarantee deterministic calculations or board decks that reproduce exactly after a restatement. Cube makes a team faster at the work; we do the work and hand the team a defensible result to review.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "investor"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview, Competitive Landscape"
+    },
+    {
+      "id": "compete-quickbooks",
+      "title": "vs QuickBooks / incumbents",
+      "topics": [
+        "QuickBooks",
+        "incumbent accounting AI",
+        "NetSuite AI",
+        "won't the incumbents add this",
+        "why won't QuickBooks crush you"
+      ],
+      "keywords": [
+        "incumbent accounting ai",
+        "netsuite ai",
+        "quickbooks",
+        "why won't quickbooks crush you",
+        "won't the incumbents add this"
+      ],
+      "answer": "Incumbent accounting platforms are shipping AI variance analysis and commentary, and they'll keep closing surface-level feature gaps. Our durable advantage isn't a feature checklist — it's a data architecture built natively for SaaS metrics like ARR waterfalls, NRR and GRR, and quota ramp curves, with determinism and evidence attached by design, not general-ledger AI bolted on after the fact.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "investor",
+        "ceo"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview, Competitive Landscape"
+    },
+    {
+      "id": "compete-rillet",
+      "title": "vs Rillet",
+      "topics": [
+        "Rillet",
+        "how do you compare to Rillet",
+        "isn't Rillet a competitor"
+      ],
+      "keywords": [
+        "how do you compare to rillet",
+        "isn't rillet a competitor",
+        "rillet"
+      ],
+      "answer": "Rillet isn't a competitor — it replaces the system of record, while we supply the intelligence layer that sits above it and any other general ledger. We actually see a natural, complementary partnership opportunity there and are pursuing it.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "investor",
+        "it"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview, Competitive Landscape"
+    },
+    {
+      "id": "target-market",
+      "title": "Target market / ICP",
+      "topics": [
+        "who is your customer",
+        "target market",
+        "ICP",
+        "who do you sell to",
+        "beachhead"
+      ],
+      "keywords": [
+        "beachhead",
+        "icp",
+        "target market",
+        "who do you sell to",
+        "who is your customer"
+      ],
+      "answer": "High-growth SaaS companies in roughly the $5 million to $50 million ARR range — the band where finance complexity first outpaces finance headcount, where companies first build a real FP&A function and first outgrow QuickBooks and spreadsheets at the same time. There are more than 27,000 SaaS companies in the US alone.",
+      "confidence": "verified",
+      "audiences": [
+        "investor",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview, Market opportunity"
+    },
+    {
+      "id": "market-growth",
+      "title": "Market growth",
+      "topics": [
+        "market size direction",
+        "is the market growing",
+        "FP&A market",
+        "category tailwind"
+      ],
+      "keywords": [
+        "category tailwind",
+        "fp&a market",
+        "is the market growing",
+        "market size direction"
+      ],
+      "answer": "Estimates of the FP&A software market range from roughly $5 to $9 billion today, and nearly all of them agree on the direction: double-digit growth driven by the shift from spreadsheet-based planning to AI-native platforms. MGI Research puts cloud FP&A at nearly $8.5 billion in 2026, growing 28 percent year over year.",
+      "confidence": "verified",
+      "audiences": [
+        "investor",
+        "ceo"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview, Market opportunity"
+    },
+    {
+      "id": "business-impact",
+      "title": "Business impact / ROI",
+      "topics": [
+        "what's the ROI",
+        "why would a customer buy",
+        "value proposition",
+        "how much time do you save",
+        "business impact"
+      ],
+      "keywords": [
+        "business impact",
+        "how much time do you save",
+        "value proposition",
+        "what's the roi",
+        "why would a customer buy"
+      ],
+      "answer": "Four things. Speed — reporting that takes weeks after close is done in minutes once data is loaded. Effort — a single ARR reporting package can consume 40 to 80 hours of finance time today, and we automate most of it. Confidence — every deliverable ships with the data behind it, reviewed before it's shared. Alignment — finance, leadership, and the board work from one trusted view instead of reconciling spreadsheets.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "ceo",
+        "fpa"
+      ],
+      "tone": "external_safe",
+      "source": "Executive Summary, Business impact"
+    },
+    {
+      "id": "business-model",
+      "title": "Business model",
+      "topics": [
+        "how do you make money",
+        "business model",
+        "land and expand",
+        "go to market"
+      ],
+      "keywords": [
+        "business model",
+        "go to market",
+        "how do you make money",
+        "land and expand"
+      ],
+      "answer": "A subscription platform sold directly to finance leadership, with a land-and-expand motion: customers start with core financial reporting and close automation, then expand into GTM efficiency, workforce modeling, and scenario planning as trust builds. Go-to-market runs through direct outreach to CFOs and VPs of Finance, plus partnerships with modern accounting platforms and advisory firms that reach the same buyer warmer than cold outbound.",
+      "confidence": "verified",
+      "audiences": [
+        "investor",
+        "ceo"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview, Business model"
+    },
+    {
+      "id": "where-we-are",
+      "title": "Where we are / traction",
+      "topics": [
+        "what stage are you at",
+        "are you live",
+        "do you have customers",
+        "traction",
+        "where are you now"
+      ],
+      "keywords": [
+        "are you live",
+        "do you have customers",
+        "traction",
+        "what stage are you at",
+        "where are you now"
+      ],
+      "answer": "Platform design is complete — every data connection, calculation, and control is fully specified — and we can demonstrate it today on realistic SaaS data. We're not yet live with paying customers, which is exactly why we're bringing in a small number of design partners first, to validate against real data and shape the roadmap ahead of general availability.",
+      "confidence": "verified",
+      "audiences": [
+        "investor",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Executive Summary / Investor Overview, Where we are"
+    },
+    {
+      "id": "implementation-security",
+      "title": "Implementation and security",
+      "topics": [
+        "how long is implementation",
+        "security",
+        "is it hosted",
+        "how do we deploy",
+        "data security"
+      ],
+      "keywords": [
+        "data security",
+        "how do we deploy",
+        "how long is implementation",
+        "is it hosted",
+        "security"
+      ],
+      "answer": "Implementation integrates with your existing systems, typically over four to six weeks, delivered as a secure browser-based application — nothing to install, no infrastructure to manage. Data is encrypted in transit and at rest, with role-based access control from full GL-level access for finance down to summary, explained views for the board.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer"
+      ],
+      "tone": "external_safe",
+      "source": "Executive Summary, Where we are + Technical Whitepaper, Implementation"
+    },
+    {
+      "id": "team",
+      "title": "Team / founder",
+      "topics": [
+        "who is the team",
+        "founder background",
+        "why are you the one to build this"
+      ],
+      "keywords": [
+        "founder background",
+        "who is the team",
+        "why are you the one to build this"
+      ],
+      "answer": "It's being built by a founder who has run the SaaS finance function directly — forecasting, opex management, management reporting, go-to-market reporting — alongside the data architecture and systems integration work underneath it. That combination is uncommon, and it's why the core architecture was designed by someone who's personally hit every failure mode of the spreadsheet-and-disconnected-systems status quo.",
+      "confidence": "directional",
+      "audiences": [
+        "investor",
+        "ceo"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview, Team"
+    },
+    {
+      "id": "dna-tam",
+      "title": "TAM / SAM / SOM (deflect)",
+      "topics": [
+        "what is your TAM",
+        "SAM",
+        "SOM",
+        "total addressable market number",
+        "how big is the opportunity in dollars"
+      ],
+      "keywords": [
+        "how big is the opportunity in dollars",
+        "sam",
+        "som",
+        "total addressable market number",
+        "what is your tam"
+      ],
+      "answer": "DEFLECT: bottoms-up TAM/SAM/SOM isn't finalized. Say: \"The category is a multi-billion-dollar FP&A market growing double digits, and our beachhead is the 27,000-plus US SaaS companies in the $5–50M ARR band — I'd rather give you the precise bottoms-up figure than a rough one, so let me follow up with the model.\"",
+      "confidence": "do-not-answer",
+      "audiences": [
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview — TAM figure intentionally left as a placeholder",
+      "deflect_script": "The category is a multi-billion-dollar FP&A market growing double digits, and our beachhead is the 27,000-plus US SaaS companies in the $5–50M ARR band — I'd rather give you the precise bottoms-up figure than a rough one, so let me follow up with the model."
+    },
+    {
+      "id": "dna-pricing",
+      "title": "Pricing / ACV (deflect)",
+      "topics": [
+        "what's your pricing",
+        "ACV",
+        "how much do you charge",
+        "price point",
+        "contract value"
+      ],
+      "keywords": [
+        "acv",
+        "contract value",
+        "how much do you charge",
+        "price point",
+        "what's your pricing"
+      ],
+      "answer": "DEFLECT: pricing tiers and target ACV aren't finalized for external distribution. Say: \"We're finalizing pricing now and I don't want to quote you a number that moves — I'll walk you through the structure as soon as it's locked.\"",
+      "confidence": "do-not-answer",
+      "audiences": [
+        "cfo",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview / Executive Summary — pricing intentionally left as a placeholder",
+      "deflect_script": "We're finalizing pricing now and I don't want to quote you a number that moves — I'll walk you through the structure as soon as it's locked."
+    },
+    {
+      "id": "dna-funding",
+      "title": "Funding / runway (deflect)",
+      "topics": [
+        "how much have you raised",
+        "funding to date",
+        "are you raising",
+        "round size",
+        "valuation",
+        "runway"
+      ],
+      "keywords": [
+        "are you raising",
+        "funding to date",
+        "how much have you raised",
+        "round size",
+        "runway",
+        "valuation"
+      ],
+      "answer": "DEFLECT: funding details aren't set in this material. Say: \"Happy to talk specifics on the raise offline — let me share the current round details directly rather than off the cuff.\"",
+      "confidence": "do-not-answer",
+      "audiences": [
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview — funding intentionally left as a placeholder",
+      "deflect_script": "Happy to talk specifics on the raise offline — let me share the current round details directly rather than off the cuff."
+    },
+    {
+      "id": "dna-partner-count",
+      "title": "Design partners (deflect)",
+      "topics": [
+        "how many design partners",
+        "which customers",
+        "named logos",
+        "who are your design partners"
+      ],
+      "keywords": [
+        "how many design partners",
+        "named logos",
+        "which customers",
+        "who are your design partners"
+      ],
+      "answer": "DEFLECT: design-partner count and logos aren't approved for external sharing yet. Say: \"We're onboarding a select group of design partners now — I can share specifics once they've approved being named.\"",
+      "confidence": "do-not-answer",
+      "audiences": [
+        "investor",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Investor Overview — design-partner count intentionally left as a placeholder",
+      "deflect_script": "We're onboarding a select group of design partners now — I can share specifics once they've approved being named."
+    }
+  ]
+}
