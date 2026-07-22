@@ -345,9 +345,12 @@ def build_all_slide_metrics(bundle: ReportingBundle) -> dict[str, Any]:
     for slide_key, builder in _METRIC_BUILDERS.items():
         if slide_key not in _SLIDE_SPECS:
             continue
+        spec = _SLIDE_SPECS[slide_key]
         out[slide_key] = {
-            "slide_title": _SLIDE_SPECS[slide_key]["slide_title"],
-            "max_bullets": _SLIDE_SPECS[slide_key]["max_bullets"],
+            "slide_title": spec["slide_title"],
+            "max_bullets": spec["max_bullets"],
+            "max_words_per_bullet": spec["max_words_per_bullet"],
+            "max_chars_per_bullet": spec["max_chars_per_bullet"],
             "metrics": builder(bundle, m, as_of),
         }
     return out

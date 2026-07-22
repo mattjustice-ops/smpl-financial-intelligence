@@ -61,7 +61,9 @@ A sentence that does not contain a number is probably not earning its place.
 _SINGLE_SLIDE_INSTRUCTIONS = (
     "Generate Key Takeaways bullet points for this slide only. "
     'Return JSON only: {"bullets": ["• ...", ...]}. '
-    "Strictly enforce max_bullets and max_words_per_bullet. "
+    "Enforce max_bullets, max_words_per_bullet, and max_chars_per_bullet. "
+    "Write complete sentences within those limits — never end a bullet with an "
+    "ellipsis (…) or mid-clause truncation. "
     "Do not include slide titles or headers — only the bullet array."
 )
 
@@ -166,6 +168,23 @@ def _clip_bullet_body(body: str, max_chars: int) -> str:
     return clipped + "…"
 
 
+def _trim_bullet_to_word_budget(body: str, max_words: int) -> str:
+    """Trim on word count, preferring a complete sentence over a mid-clause cut."""
+    words = body.split()
+    if len(words) <= max_words:
+        return body
+    kept = words[:max_words]
+    joined = " ".join(kept)
+    for sep in (". ", "; ", "! ", "? "):
+        idx = joined.rfind(sep)
+        if idx >= 24:
+            return joined[: idx + 1].strip()
+    if joined.endswith((".", ";", "!", "?")) and len(joined) >= 24:
+        return joined
+    # Last resort: whole-word cut with ellipsis (mirrors char clipping).
+    return joined.rstrip(".,;:") + "…"
+
+
 def validate_and_trim_bullets(
     bullets: list[str],
     *,
@@ -175,8 +194,8 @@ def validate_and_trim_bullets(
 ) -> list[str]:
     """Enforce bullet count, word, and character limits.
 
-    Character clipping prefers sentence boundaries so board commentary does not
-    end mid-clause with an ellipsis whenever a complete sentence fits the cap.
+    Word and character clipping both prefer sentence boundaries so board
+    commentary does not end mid-clause whenever a complete sentence fits.
     """
     trimmed: list[str] = []
     for bullet in bullets[:max_bullets]:
@@ -185,21 +204,12 @@ def validate_and_trim_bullets(
             continue
         if not text.startswith("•"):
             text = f"• {text.lstrip('-• ')}"
-        words = text.lstrip("•").strip().split()
-        if len(words) > max_words_per_bullet:
-            # Prefer ending on a sentence within the word budget when possible.
-            kept = words[:max_words_per_bullet]
-            joined = " ".join(kept)
-            for sep in (". ", "; ", "! ", "? "):
-                idx = joined.rfind(sep)
-                if idx >= 24:
-                    joined = joined[: idx + 1].strip()
-                    break
-            text = "• " + joined
-        if max_chars_per_bullet is not None and len(text) > max_chars_per_bullet:
-            body = text.lstrip("•").strip()
-            text = "• " + _clip_bullet_body(body, max_chars_per_bullet - 2)
-        trimmed.append(text)
+        body = text.lstrip("•").strip()
+        body = _trim_bullet_to_word_budget(body, max_words_per_bullet)
+        if max_chars_per_bullet is not None:
+            # Reserve two chars for the "• " prefix when checking the full bullet.
+            body = _clip_bullet_body(body, max_chars_per_bullet - 2)
+        trimmed.append("• " + body)
     return trimmed
 
 

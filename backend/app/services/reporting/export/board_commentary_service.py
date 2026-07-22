@@ -895,11 +895,13 @@ def enrich_slide_with_ai(
     try:
         client = build_commentary_llm_client(purpose="interactive")
         payload = build_single_slide_payload(bundle, slide_key)
-        # Board regenerate / PPTX AI inject: allow complete sentences. PPTX still
+        # Board regenerate / PPTX AI inject: interactive floors apply to EVERY
+        # BOARD_DECK_SLIDE_KEYS entry (not only gaap_revenue). PPTX still
         # shape-fits separately; do not hard-clip mid-clause for the HTML board.
         max_bullets, max_words, max_chars = interactive_slide_prompt_limits(slide_key)
         slide_obj = payload.get("slide")
         if isinstance(slide_obj, dict):
+            slide_obj["max_bullets"] = max_bullets
             slide_obj["max_words_per_bullet"] = max_words
             slide_obj["max_chars_per_bullet"] = max_chars
         # Quality-preserving speed: slide JSON owns numbers; freeze owns drivers.

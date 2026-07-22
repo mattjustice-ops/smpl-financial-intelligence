@@ -67,7 +67,9 @@ def test_build_executive_slide_payload_shape() -> None:
 def test_board_deck_slide_keys_match_platform_aliases() -> None:
     from app.api.board_platform_routes import BOARD_SLIDE_KEY_ALIASES
 
-    assert set(BOARD_SLIDE_KEY_ALIASES.values()) <= BOARD_DECK_SLIDE_KEYS
+    # headcount uses the legacy paragraph path (not Prompt-1 bullet specs).
+    deck_aliases = {v for v in BOARD_SLIDE_KEY_ALIASES.values() if v != "headcount"}
+    assert deck_aliases <= BOARD_DECK_SLIDE_KEYS
 
 
 def test_parse_bullets_response_shapes() -> None:
@@ -93,11 +95,15 @@ def _word_count(text: str) -> int:
     return len(text.lstrip("•").split())
 
 
+_LEGACY_TINY_WORD_CAPS = {6, 15, 16, 18, 20, 22, 24, 28}
+_LEGACY_TINY_CHAR_CAPS = {38, 85, 90, 100, 115, 135, 160, 165, 200}
+
+
 def test_gaap_revenue_limits_allow_full_board_sentence() -> None:
     """Regression: old 85-char cap clipped Revenue Narrative mid-sentence with …"""
     _, max_words, max_chars = interactive_slide_prompt_limits("gaap_revenue")
-    assert max_words >= 50
-    assert max_chars >= 360
+    assert max_words >= 60
+    assert max_chars >= 480
 
     bullet = (
         "• Revenue $7.35M vs $7.72M budget (−$370K, −4.8%); "
@@ -112,6 +118,37 @@ def test_gaap_revenue_limits_allow_full_board_sentence() -> None:
     )
     assert out == [bullet]
     assert "…" not in out[0]
+
+
+def test_all_board_deck_interactive_limits_floor_full_sentences() -> None:
+    """Every narrative slide key must use the interactive floor — not legacy 15/85 stubs."""
+    sample_bullet = (
+        "• Net new ARR $2.655M vs $2.185M budget (+$0.47M); churn favorable at $0.115M "
+        "vs $0.50M as Commit renewals closed at 95% and H2 forecast tracks above plan."
+    )
+    assert len(sample_bullet) > 85
+    assert _word_count(sample_bullet) > 15
+
+    for slide_key in sorted(BOARD_DECK_SLIDE_KEYS):
+        max_bullets, max_words, max_chars = interactive_slide_prompt_limits(slide_key)
+        deck_bullets, deck_words, deck_chars = slide_prompt_limits(slide_key)
+
+        assert max_bullets == deck_bullets
+        assert max_words >= 60, f"{slide_key}: interactive words {max_words}"
+        assert max_chars >= 480, f"{slide_key}: interactive chars {max_chars}"
+        assert deck_words not in _LEGACY_TINY_WORD_CAPS, f"{slide_key}: deck words still tiny ({deck_words})"
+        assert deck_chars not in _LEGACY_TINY_CHAR_CAPS, f"{slide_key}: deck chars still tiny ({deck_chars})"
+        assert deck_words >= 60, f"{slide_key}: deck words {deck_words}"
+        assert deck_chars >= 480, f"{slide_key}: deck chars {deck_chars}"
+
+        out = validate_and_trim_bullets(
+            [sample_bullet],
+            max_bullets=max_bullets,
+            max_words_per_bullet=max_words,
+            max_chars_per_bullet=max_chars,
+        )
+        assert out == [sample_bullet], f"{slide_key}: unexpectedly trimmed board sentence"
+        assert "…" not in out[0]
 
 
 def test_validate_and_trim_prefers_sentence_boundary() -> None:
@@ -130,11 +167,14 @@ def test_validate_and_trim_prefers_sentence_boundary() -> None:
 
 
 def test_interactive_limits_floor_above_deck_specs() -> None:
-    deck = slide_prompt_limits("gaap_revenue")
-    interactive = interactive_slide_prompt_limits("gaap_revenue")
-    assert interactive[0] == deck[0]
-    assert interactive[1] >= deck[1]
-    assert interactive[2] >= deck[2]
+    for slide_key in ("gaap_revenue", "arr_waterfall", "gtm_performance", "cash_forecast", "risks_opportunities"):
+        deck = slide_prompt_limits(slide_key)
+        interactive = interactive_slide_prompt_limits(slide_key)
+        assert interactive[0] == deck[0]
+        assert interactive[1] >= deck[1]
+        assert interactive[2] >= deck[2]
+        assert interactive[1] >= 60
+        assert interactive[2] >= 480
 
 
 def test_format_key_takeaway_bullets() -> None:

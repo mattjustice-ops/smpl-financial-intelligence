@@ -34,83 +34,86 @@ BOARD_DECK_SLIDE_KEYS = frozenset(
 
 # Limits must fit complete board sentences (actual / budget / variance / implication).
 # PPTX template export still fits text to shape boxes separately; do not pre-mangle
-# interactive regenerate output with ultra-short deck stubs.
+# AI commentary with ultra-short deck stubs (legacy 15-word / 85-char caps).
+_DEFAULT_MAX_WORDS_PER_BULLET = 60
+_DEFAULT_MAX_CHARS_PER_BULLET = 480
+
 _SLIDE_SPECS: dict[str, dict[str, Any]] = {
     "executive_summary": {
         "slide_number": 2,
         "slide_title": "Executive Summary",
         "max_bullets": 5,
-        "max_words_per_bullet": 45,
-        "max_chars_per_bullet": 320,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "arr_waterfall": {
         "slide_number": 3,
         "slide_title": "ARR Analysis",
         "max_bullets": 2,
-        "max_words_per_bullet": 45,
-        "max_chars_per_bullet": 320,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "gaap_revenue": {
         "slide_number": 4,
         "slide_title": "P&L Review",
         "max_bullets": 5,
-        "max_words_per_bullet": 50,
-        "max_chars_per_bullet": 360,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "cash_forecast": {
         "slide_number": 5,
         "slide_title": "Cash & Liquidity",
         "max_bullets": 4,
-        "max_words_per_bullet": 45,
-        "max_chars_per_bullet": 320,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "cash_flow_statement": {
         "slide_number": 6,
         "slide_title": "Cash Flow Statement",
         "max_bullets": 4,
-        "max_words_per_bullet": 45,
-        "max_chars_per_bullet": 320,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "gtm_performance": {
         "slide_number": 7,
         "slide_title": "GTM & Marketing",
         "max_bullets": 11,
-        "max_words_per_bullet": 28,
-        "max_chars_per_bullet": 200,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "gtm_funnel": {
         "slide_number": 8,
         "slide_title": "Funnel Analysis",
         "max_bullets": 4,
-        "max_words_per_bullet": 45,
-        "max_chars_per_bullet": 320,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "risks_opportunities": {
         "slide_number": 9,
         "slide_title": "Risks & Opportunities",
         "max_bullets": 4,
-        "max_words_per_bullet": 50,
-        "max_chars_per_bullet": 360,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "financial_outlook": {
         "slide_number": 10,
         "slide_title": "Financial Outlook",
         "max_bullets": 4,
-        "max_words_per_bullet": 50,
-        "max_chars_per_bullet": 360,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "board_actions": {
         "slide_number": 11,
         "slide_title": "Board Actions",
         "max_bullets": 4,
-        "max_words_per_bullet": 55,
-        "max_chars_per_bullet": 400,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
 }
 
-# Interactive board regenerate can show fuller bullets than dense PPTX stubs.
-_INTERACTIVE_MIN_WORDS_PER_BULLET = 60
-_INTERACTIVE_MIN_CHARS_PER_BULLET = 480
+# Interactive board regenerate floor — never below full-sentence board narrative length.
+_INTERACTIVE_MIN_WORDS_PER_BULLET = _DEFAULT_MAX_WORDS_PER_BULLET
+_INTERACTIVE_MIN_CHARS_PER_BULLET = _DEFAULT_MAX_CHARS_PER_BULLET
 
 
 def fmt_deck_money(value: Decimal | None) -> str:
@@ -445,12 +448,15 @@ def slide_prompt_limits(slide_key: str) -> tuple[int, int, int]:
     return (
         int(spec["max_bullets"]),
         int(spec["max_words_per_bullet"]),
-        int(spec.get("max_chars_per_bullet", 120)),
+        int(spec.get("max_chars_per_bullet", _DEFAULT_MAX_CHARS_PER_BULLET)),
     )
 
 
 def interactive_slide_prompt_limits(slide_key: str) -> tuple[int, int, int]:
-    """Limits for board UI regenerate — full sentences, not PPTX stub length."""
+    """Limits for board UI / AI regenerate — full sentences, not PPTX stub length.
+
+    Applies to every key in ``_SLIDE_SPECS`` / ``BOARD_DECK_SLIDE_KEYS``.
+    """
     max_bullets, max_words, max_chars = slide_prompt_limits(slide_key)
     return (
         max_bullets,
