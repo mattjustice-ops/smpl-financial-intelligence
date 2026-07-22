@@ -2,7 +2,9 @@
 
 Who can touch production systems or customer data, and why. Complete Week 1; review quarterly thereafter (dated sign-off = audit evidence).
 
-Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md)
+Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard: [PROGRESS.md](./PROGRESS.md)
+
+**[!]** People rows and MFA evidence require Matt / ops — template only until filled.
 
 **Rules of thumb:** unique accounts (no shared logins); MFA on admin; least privilege; revoke same day on offboarding.
 

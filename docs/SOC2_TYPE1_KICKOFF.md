@@ -2,11 +2,19 @@
 
 Founder-executable plan to start **SOC 2 Type I** readiness. Not legal or audit advice. Do **not** claim SOC 2 certified until an independent CPA firm issues a report.
 
+**Living scoreboard (what’s checked off / what’s open):** [soc2/PROGRESS.md](./soc2/PROGRESS.md)
+
 **Source of truth (scope + criteria):** [SMPL_SOC2_Readiness_Reference_v2.md](./SMPL_SOC2_Readiness_Reference_v2.md)
 
 **Working artifacts:** [docs/soc2/](./soc2/)
 
-**Locked scope (until decision log changes it):** Security + Availability + Confidentiality. Processing Integrity deferred. Privacy skipped for now.
+**Locked scope (until decision log changes it):** Security + Availability + Confidentiality. Processing Integrity deferred. Privacy skipped for now. Proposed defaults are in [soc2/00_decision_log.md](./soc2/00_decision_log.md) for Matt to confirm.
+
+---
+
+## How we know we’re Type I “done”
+
+**Definition of done:** an independent CPA firm issues a SOC 2 Type I report covering Security + Availability + Confidentiality, and that report is in hand. Until then this program is **readiness + evidence only** — not compliance. Track progress on [soc2/PROGRESS.md](./soc2/PROGRESS.md).
 
 ---
 
@@ -28,7 +36,7 @@ Until a report exists, prefer the security one-pager + DPA + subprocessors list 
 
 | # | Action | Owner | Done when |
 |---|--------|-------|-----------|
-| 1 | Fill [00_decision_log.md](./soc2/00_decision_log.md): freeze Sec+Avail+Conf; PI deferred | Executive sponsor | Table dated and signed |
+| 1 | Fill [00_decision_log.md](./soc2/00_decision_log.md): freeze Sec+Avail+Conf; PI deferred | Executive sponsor | Table dated and signed (**proposed defaults drafted — confirm**) |
 | 2 | Name people in decision log / readiness §3 (sponsor, security, engineering, ops/CS) — one person can wear multiple hats | Executive sponsor | Names filled |
 | 3 | Choose compliance platform **or** explicitly defer 1–2 weeks: Vanta / Drata / Secureframe (or other). Do **not** buy until you own MFA + access inventory | Security owner | Choice or “wait until ____” in decision log |
 | 4 | MFA on every admin account: GitHub, Vercel, Railway, Neon, email/Google Workspace (or IdP), Sanity, Stripe | Security owner | Screenshots or platform evidence |
@@ -39,20 +47,20 @@ Until a report exists, prefer the security one-pager + DPA + subprocessors list 
 
 | # | Action | Owner | Done when |
 |---|--------|-------|-----------|
-| 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | Drafts in repo or shared drive; status → Draft |
+| 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | Drafts in [soc2/policies/](./soc2/policies/) (**P01–P05 stubs exist — still need approval**) |
 | 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | Shareable under NDA |
 | 9 | If platform chosen: create account, connect GitHub + Vercel/Railway/Neon as available; treat auto gap list as backlog | Security owner | Integrations connected |
 | 10 | Protect `main`: required PR review; document deploy path (Vercel frontend, Railway API) | Engineering owner | Branch rules + short deploy note |
 | 11 | Schedule backup **restore test** on Neon (or document who runs it in Week 3) | Engineering owner | Date on calendar or completed |
 | 12 | Pick audit-firm shortlist (platform partner network OK); set **target Type I month** in decision log | Executive sponsor | Target date filled |
 
-Use the checkbox list: [05_week1_checklist.md](./soc2/05_week1_checklist.md).
+Use the checkbox list: [05_week1_checklist.md](./soc2/05_week1_checklist.md). Prefer updating statuses on [PROGRESS.md](./soc2/PROGRESS.md) as the single scoreboard.
 
 ---
 
 ## Decision log template
 
-Copy into [00_decision_log.md](./soc2/00_decision_log.md) (already seeded). Minimum fields:
+Copy into [00_decision_log.md](./soc2/00_decision_log.md) (already seeded with **proposed** defaults). Minimum fields:
 
 | Decision | Choice | Date | Owner |
 |----------|--------|------|-------|
@@ -70,17 +78,17 @@ Copy into [00_decision_log.md](./soc2/00_decision_log.md) (already seeded). Mini
 
 Priority order — full list in [04_policy_index.md](./soc2/04_policy_index.md):
 
-1. Information Security Policy (umbrella)
-2. Acceptable Use
-3. Access Control (incl. MFA, offboarding same-day)
-4. Incident Response
-5. Change Management / SDLC
+1. Information Security Policy (umbrella) — **DRAFT stub:** [soc2/policies/P01_information_security_policy.md](./soc2/policies/P01_information_security_policy.md)
+2. Acceptable Use — **DRAFT stub:** [soc2/policies/P02_acceptable_use_policy.md](./soc2/policies/P02_acceptable_use_policy.md)
+3. Access Control (incl. MFA, offboarding same-day) — **DRAFT stub:** [soc2/policies/P03_access_control_policy.md](./soc2/policies/P03_access_control_policy.md)
+4. Incident Response — **DRAFT stub:** [soc2/policies/P04_incident_response_plan.md](./soc2/policies/P04_incident_response_plan.md)
+5. Change Management / SDLC — **DRAFT stub:** [soc2/policies/P05_change_management_policy.md](./soc2/policies/P05_change_management_policy.md)
 6. Data Classification & Confidentiality Handling
 7. Vendor / Subprocessor Management
 8. Business Continuity / Backup & Recovery
 9. AI / LLM Data Handling (Anthropic prompts; keys on API only)
 
-Templates from the compliance platform are fine; customize for SMPL (multi-tenant financial warehouse, white-glove loads, no GL write-back).
+Templates from the compliance platform are fine later; customize for SMPL (multi-tenant financial warehouse, white-glove loads, no GL write-back).
 
 ---
 
@@ -112,4 +120,4 @@ From readiness v2 — book the audit only when controls are **live**, not merely
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Kickoff |
 | Status | Internal working draft |
-| Related | [SMPL_SOC2_Readiness_Reference_v2.md](./SMPL_SOC2_Readiness_Reference_v2.md), [docs/soc2/](./soc2/) |
+| Related | [soc2/PROGRESS.md](./soc2/PROGRESS.md), [SMPL_SOC2_Readiness_Reference_v2.md](./SMPL_SOC2_Readiness_Reference_v2.md), [docs/soc2/](./soc2/) |
