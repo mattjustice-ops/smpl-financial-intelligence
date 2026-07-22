@@ -1,8 +1,64 @@
 # SOC 2 Type I — Progress scoreboard
 
-**Living checklist.** Update statuses as work completes. Parent plan: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scope: [../SMPL_SOC2_Readiness_Reference_v2.md](../SMPL_SOC2_Readiness_Reference_v2.md)
+**Living checklist.** Update statuses as work completes. Parent plan: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scope: [../SMPL_SOC2_Readiness_Reference_v2.md](../SMPL_SOC2_Readiness_Reference_v2.md) · Decision log: [00_decision_log.md](./00_decision_log.md)
 
 **Public progress UI:** [https://www.smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) (marketing route `/compliance`)
+
+**Scope locked (2026-07-22):** Security + Availability + Confidentiality **IN**; Processing Integrity + Privacy **DEFERRED**. All roles: **Matt Justice**. See [00_decision_log.md](./00_decision_log.md).
+
+---
+
+## Remaining checklist + target timeline
+
+> **Read this first.** Solo-founder calendar — realistic, not fantasy. Windows are **targets**, not commitments. Owner of every open item: **Matt Justice**.
+>
+> **Type I is “compliant” / “done” only when an independent CPA Type I report is in hand.** Completing rows below is readiness, not certification.
+
+### Target calendar (solo founder)
+
+| Window | Target (not commitment) | Focus |
+|--------|-------------------------|--------|
+| **Week 1 (now)** | ~2026-07-22 → 2026-07-29 | MFA on all admin accounts; confirm no shared prod passwords; protect `main` + required PR review if not done |
+| **Week 2** | ~2026-07-29 → 2026-08-05 | Approve DRAFT policies P01–P12 (or core set); platform decision (explicit Vanta wait date **or** signup) |
+| **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
+| **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM subprocessor write-up finalized; security one-pager published for sales |
+| **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
+| **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
+
+**Next guided item for Matt:** MFA on every admin cloud account (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity, Resend, Anthropic).
+
+### Remaining `[!]` and `[ ]` items
+
+| Status | Item | Owner | Target window | Notes |
+|--------|------|-------|---------------|-------|
+| `[!]` | MFA — GitHub org admins | Matt | Week 1 | Evidence: screenshot or platform |
+| `[!]` | MFA — Vercel | Matt | Week 1 | |
+| `[!]` | MFA — Railway | Matt | Week 1 | |
+| `[!]` | MFA — Neon | Matt | Week 1 | |
+| `[!]` | MFA — corporate email / IdP | Matt | Week 1 | |
+| `[!]` | MFA — Stripe | Matt | Week 1 | |
+| `[!]` | MFA — Sanity (if admin) | Matt | Week 1 | |
+| `[!]` | MFA — Resend / Anthropic consoles | Matt | Week 1 | |
+| `[!]` | Confirm no shared prod passwords | Matt | Week 1 | |
+| `[!]` | Protect `main` + required PR review | Matt | Week 1 | Confirm in GitHub settings |
+| `[!]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | Draft ≠ approved |
+| `[!]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | Do not stall MFA; no auto-signup |
+| `[!]` | Confirm boundary matches production | Matt | Week 2–3 | Resolve TBDs in boundary doc |
+| `[!]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | |
+| `[ ]` | First quarterly-style access review sign-off | Matt | Week 3–4 | After MFA verified + inventory stable |
+| `[ ]` | Neon backup **restore test** evidence | Matt | Week 3–4 | Required before Type I |
+| `[ ]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | Plan draft exists; exercise + notes |
+| `[ ]` | Vendor SOC / ISO reports folder (under NDA) — collection started | Matt | Week 3–4 | Vercel, Railway, Neon, Stripe, Anthropic, Resend, … |
+| `[!]` | Customer DPA — legal review / ship | Matt | Week 3–4 | Start legal path; ship when ready |
+| `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | |
+| `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | Test plan + results |
+| `[ ]` | AI/LLM data-handling / Anthropic subprocessor write-up | Matt | Month 2 | Align with P15 |
+| `[ ]` | Security one-pager **published** for sales | Matt | Month 2 | Draft exists; publish / share under NDA |
+| `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Even approximate; mark TARGET |
+| `[!]` | Audit firm shortlist / engagement | Matt | Month 3–4 | Independent CPA — **TARGET** fieldwork |
+| `[!]` | Engage CPA; schedule Type I fieldwork | Matt | Month 3–4 | **TARGET**, not commitment |
+| `[ ]` | **Type I report issued** | Matt + CPA | When report in hand | **Only then** Type I is “done” / shareable as Type I |
+| `[ ]` | Type II observation (3–12 months) + Type II report | Matt + CPA | After Type I | Keep controls operating |
 
 ---
 
@@ -55,7 +111,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 
 | Phase | Status | Exit criteria |
 |-------|--------|---------------|
-| 1. Kickoff | [~] In progress | Scope frozen in decision log; owners named; scoreboard + artifacts started — **owners + scope set; platform/target month still open** |
+| 1. Kickoff | [~] In progress | Scope **APPROVED** + owners named; scoreboard live — **platform / target month / CPA still open** |
 | 2. Controls live | [ ] Open | Policies approved; MFA + access inventory; change/deploy path; IR; restore test; vendor evidence; tenant isolation evidence |
 | 3. Type I audit | [ ] Open | CPA firm engaged; fieldwork complete; **Type I report issued** |
 | 4. Type II observation | [ ] Open | Controls operate cleanly over window; Type II report issued |
@@ -83,14 +139,14 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Readiness reference (scope + criteria) | [../SMPL_SOC2_Readiness_Reference_v2.md](../SMPL_SOC2_Readiness_Reference_v2.md) |
 | `[x]` | Working folder `docs/soc2/` seeded | Decision log, boundary, subprocessors, access template, policy index, week1 checklist |
 | `[x]` | This scoreboard created | You are here |
-| `[x]` | Decision log — scope + owners recorded | [00_decision_log.md](./00_decision_log.md) — Sec+Avail+Conf; PI deferred; all owners Matt Justice (2026-07-22). Formal signature block optional. |
-| `[x]` | Freeze Type I criteria: Sec + Avail + Conf; PI deferred; Privacy skip | Confirmed in decision log 2026-07-22 |
+| `[x]` | Decision log — scope + owners **APPROVED** | [00_decision_log.md](./00_decision_log.md) — Sec+Avail+Conf **IN**; PI + Privacy **DEFERRED**; all owners Matt Justice (**2026-07-22 APPROVED**) |
+| `[x]` | Freeze Type I criteria: Sec + Avail + Conf; PI deferred; Privacy skip | **APPROVED** 2026-07-22 |
 | `[x]` | Name executive sponsor | Matt Justice |
 | `[x]` | Name security owner | Matt Justice |
 | `[x]` | Name engineering owner | Matt Justice (all roles for now) |
 | `[x]` | Name ops / CS privileged-access owner | Matt Justice (all roles for now) |
-| `[!]` | Compliance platform choice **or** explicit “wait until ____” | **TBD — Matt to decide.** Do **not** buy until MFA + access inventory started; **do not sign up for Vanta in this wave** |
-| `[!]` | Target Type I month | Even approximate YYYY-MM |
+| `[!]` | Compliance platform choice **or** explicit “wait until ____” | **TBD — Matt to decide** (Week 2 target). Do **not** buy until MFA started; **do not sign up for Vanta in this wave** |
+| `[!]` | Target Type I month | Even approximate YYYY-MM — **TARGET**, not commitment |
 | `[!]` | Audit firm shortlist / engagement | Independent CPA; platform partner network OK later |
 
 ### B. System boundary & vendors (documentation)
@@ -104,13 +160,13 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[!]` | Confirm regions / unused vendors; mark OpenAI if live | Matt |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) | Collect Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc. |
 | `[!]` | Customer DPA — legal review / ship | Sales unblocker; counsel as needed |
-| `[x]` | Security one-pager (draft) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) — honest “pursuing SOC 2”; not certified |
+| `[x]` | Security one-pager (draft) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) — honest “pursuing SOC 2”; not certified. Publish for sales = Month 2 |
 
 ### C. Access hardening (Matt / ops)
 
 | Status | Item | Notes |
 |--------|------|-------|
-| `[!]` | MFA — GitHub org admins | Evidence: screenshot or platform |
+| `[!]` | MFA — GitHub org admins | Evidence: screenshot or platform — **Week 1 / do next** |
 | `[!]` | MFA — Vercel | |
 | `[!]` | MFA — Railway | |
 | `[!]` | MFA — Neon | |
@@ -119,8 +175,8 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[!]` | MFA — Sanity (if admin) | |
 | `[!]` | MFA — Resend / Anthropic consoles | |
 | `[~]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt listed on all known systems; **MFA verified unchecked** |
-| `[!]` | Confirm no shared prod passwords | |
-| `[ ]` | First quarterly-style access review sign-off | After MFA verified + inventory stable |
+| `[!]` | Confirm no shared prod passwords | Week 1 |
+| `[ ]` | First quarterly-style access review sign-off | After MFA verified + inventory stable — Week 3–4 |
 
 ### D. Policies
 
@@ -129,18 +185,18 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Policy index | [04_policy_index.md](./04_policy_index.md) |
 | `[x]` | Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt | [policies/](./policies/) P01–P05 — **DRAFT / not approved** |
 | `[~]` | Remaining core policies (P06–P17) | P06, P08, P09, P11, P12 drafted; P07/P10/P13–P17 still open |
-| `[!]` | Leadership approve core policies | Draft ≠ approved; auditor wants approved docs — **Matt must approve** |
+| `[!]` | Leadership approve core policies | Draft ≠ approved; auditor wants approved docs — **Matt must approve** (Week 2) |
 
 ### E. Engineering hygiene
 
 | Status | Item | Notes |
 |--------|------|-------|
-| `[ ]` / `[!]` | Protect `main` + required PR review | Confirm in GitHub settings |
+| `[ ]` / `[!]` | Protect `main` + required PR review | Confirm in GitHub settings — Week 1 |
 | `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; MFA/branch protection still `[!]` |
-| `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm |
-| `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I — P12 drafted |
-| `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results |
-| `[ ]` | AI/LLM data-handling write-up aligned with P15 | Keys on API; narrative from engine outputs |
+| `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2 |
+| `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I — Week 3–4 |
+| `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2 |
+| `[ ]` | AI/LLM data-handling write-up aligned with P15 | Month 2 |
 
 ### F. Pre–Type I readiness bar (from readiness v2)
 
@@ -162,7 +218,7 @@ Book the auditor only when these are **live**, not merely drafted:
 
 | Status | Item |
 |--------|------|
-| `[!]` | Engage CPA firm; schedule fieldwork |
+| `[!]` | Engage CPA firm; schedule fieldwork | **TARGET** Month 3–4 |
 | `[ ]` | Type I report issued → **this is when Type I is “done”** |
 | `[ ]` | Keep controls operating; start Type II observation clock |
 | `[ ]` | Type II report issued |
@@ -173,24 +229,25 @@ Book the auditor only when these are **live**, not merely drafted:
 
 Not compliance. No MFA claimed. No Vanta signup. Not certified.
 
-1. Decision log: scope Sec+Avail+Conf confirmed; PI deferred; **all owners = Matt Justice**; platform TBD
-2. P01–P05 expanded; P06 / P08 / P09 / P11 / P12 drafted
-3. Customer-facing [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) (honest pursuing language)
-4. [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — GitHub → Vercel/Railway
-5. Access inventory rows filled (owner Matt); MFA columns still `[!]`
-6. Scoreboard + `/compliance` data synced
+1. Decision log: scope Sec+Avail+Conf **APPROVED** by Matt; PI + Privacy deferred; **all owners = Matt Justice**; platform TBD
+2. Remaining checklist + solo-founder target timeline published (this section)
+3. P01–P05 expanded; P06 / P08 / P09 / P11 / P12 drafted
+4. Customer-facing [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) (honest pursuing language)
+5. [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — GitHub → Vercel/Railway
+6. Access inventory rows filled (owner Matt); MFA columns still `[!]`
+7. Scoreboard + `/compliance` data synced
 
 ---
 
 ## Top `[!]` for Matt (do next)
 
-1. **[!]** MFA on every admin cloud account (GitHub, Vercel, Railway, Neon, email, Stripe, Sanity, Resend, Anthropic) — mark inventory when verified
-2. **[!]** Approve core policies (P01–P06, P08–P09, P11–P12 at minimum) — draft ≠ approved
-3. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log — do not stall MFA; do not auto-sign up here
-4. **[!]** Customer DPA — legal review / ship
-5. **[!]** Target Type I month + audit-firm shortlist
-6. **[!]** Confirm no shared prod passwords; protect `main` + required PR review
-7. **[!]** Confirm corporate email on access inventory rows; resolve boundary TBDs / vendor regions
+1. **[!]** MFA on every admin cloud account (GitHub, Vercel, Railway, Neon, email, Stripe, Sanity, Resend, Anthropic) — mark inventory when verified ← **start here**
+2. **[!]** Confirm no shared prod passwords; protect `main` + required PR review
+3. **[!]** Approve core policies (P01–P12 at minimum) — draft ≠ approved
+4. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log — do not stall MFA
+5. **[!]** Customer DPA — legal review / ship
+6. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
+7. **[!]** Resolve boundary TBDs / vendor regions
 
 ---
 

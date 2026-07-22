@@ -40,6 +40,22 @@ export type ComplianceSection = {
   items: ComplianceChecklistItem[];
 };
 
+export type ComplianceTimelineWindow = {
+  id: string;
+  window: string;
+  approxDates: string;
+  focus: string;
+};
+
+export type ComplianceRemainingItem = {
+  id: string;
+  label: string;
+  status: ComplianceStatus;
+  owner: string;
+  targetWindow: string;
+  notes?: string;
+};
+
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
   lastUpdated: "2026-07-22",
@@ -47,15 +63,272 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Matt: MFA on all admin cloud accounts, approve DRAFT policies, pick Vanta/wait date, DPA legal",
+    "Matt: MFA on all admin cloud accounts (Week 1) — then no shared passwords + protect main",
+  scopeLocked:
+    "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
   definitionOfDone:
     "An independent CPA firm has issued a SOC 2 Type I report covering Security + Availability + Confidentiality, and that report is in hand (typically shared with customers under NDA).",
   salesLanguage:
     'Say “SOC 2 readiness in progress” or “we are pursuing SOC 2.” Never say “we are SOC 2 certified” until a report exists.',
+  timelineNote:
+    "Solo-founder calendar — realistic targets, not commitments. Type I is “compliant” only when the CPA report is in hand.",
   dataFile: "frontend/lib/compliance/progress.ts",
   markdownScoreboard: "docs/soc2/PROGRESS.md",
 } as const;
+
+/** Target calendar mirrored from docs/soc2/PROGRESS.md */
+export const complianceTimeline: ComplianceTimelineWindow[] = [
+  {
+    id: "week-1",
+    window: "Week 1 (now)",
+    approxDates: "~2026-07-22 → 2026-07-29",
+    focus:
+      "MFA on all admin accounts; confirm no shared prod passwords; protect main + required PR review if not done",
+  },
+  {
+    id: "week-2",
+    window: "Week 2",
+    approxDates: "~2026-07-29 → 2026-08-05",
+    focus:
+      "Approve DRAFT policies P01–P12 (or core set); platform decision (Vanta wait date or signup)",
+  },
+  {
+    id: "week-3-4",
+    window: "Week 3–4",
+    approxDates: "~2026-08-05 → 2026-08-19",
+    focus:
+      "Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC collection started; DPA legal path",
+  },
+  {
+    id: "month-2",
+    window: "Month 2",
+    approxDates: "~2026-08-19 → 2026-09-19",
+    focus:
+      "Controls habitually running; secrets spot-check; tenant isolation evidence; AI/LLM write-up finalized; security one-pager published for sales",
+  },
+  {
+    id: "month-3-4",
+    window: "Month 3–4",
+    approxDates: "~2026-09-19 → 2026-11-19",
+    focus: "Engage CPA / Type I fieldwork TARGET (adjustable — not a commitment)",
+  },
+  {
+    id: "after-type-i",
+    window: "After Type I",
+    approxDates: "Report in hand + 3–12 months",
+    focus: "Type II observation window, then Type II report",
+  },
+];
+
+/** Open [!] and [ ] items with owner + target window (PROGRESS.md remaining table). */
+export const complianceRemainingItems: ComplianceRemainingItem[] = [
+  {
+    id: "rem-mfa-github",
+    label: "MFA — GitHub org admins",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+    notes: "Evidence: screenshot or platform — do next",
+  },
+  {
+    id: "rem-mfa-vercel",
+    label: "MFA — Vercel",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-mfa-railway",
+    label: "MFA — Railway",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-mfa-neon",
+    label: "MFA — Neon",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-mfa-email",
+    label: "MFA — corporate email / IdP",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-mfa-stripe",
+    label: "MFA — Stripe",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-mfa-sanity",
+    label: "MFA — Sanity (if admin)",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-mfa-resend-anthropic",
+    label: "MFA — Resend / Anthropic consoles",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-no-shared-passwords",
+    label: "Confirm no shared prod passwords",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+  },
+  {
+    id: "rem-protect-main",
+    label: "Protect main + required PR review",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 1",
+    notes: "Confirm in GitHub settings",
+  },
+  {
+    id: "rem-approve-policies",
+    label: "Leadership approve core policies (P01–P12 / core set)",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 2",
+    notes: "Draft ≠ approved",
+  },
+  {
+    id: "rem-platform",
+    label: 'Compliance platform choice or “wait until ____”',
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 2",
+    notes: "Do not stall MFA; no auto-signup",
+  },
+  {
+    id: "rem-boundary",
+    label: "Confirm boundary matches production",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 2–3",
+  },
+  {
+    id: "rem-vendor-regions",
+    label: "Confirm vendor regions / unused vendors; OpenAI if live",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 2–3",
+  },
+  {
+    id: "rem-access-review",
+    label: "First quarterly-style access review sign-off",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Week 3–4",
+    notes: "After MFA verified + inventory stable",
+  },
+  {
+    id: "rem-restore-test",
+    label: "Neon backup restore test evidence",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Week 3–4",
+  },
+  {
+    id: "rem-ir-tabletop",
+    label: "IR tabletop notes (operable IR)",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Week 3–4",
+  },
+  {
+    id: "rem-vendor-soc",
+    label: "Vendor SOC / ISO reports — collection started",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Week 3–4",
+  },
+  {
+    id: "rem-dpa",
+    label: "Customer DPA — legal review / ship",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Week 3–4",
+  },
+  {
+    id: "rem-secrets",
+    label: "Secrets only in env stores (spot-check)",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Month 2",
+  },
+  {
+    id: "rem-tenant-isolation",
+    label: "Tenant isolation evidence (Org A ≠ Org B)",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Month 2",
+  },
+  {
+    id: "rem-ai-writeup",
+    label: "AI/LLM / Anthropic subprocessor write-up",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Month 2",
+  },
+  {
+    id: "rem-one-pager-publish",
+    label: "Security one-pager published for sales",
+    status: "open",
+    owner: "Matt",
+    targetWindow: "Month 2",
+    notes: "Draft exists",
+  },
+  {
+    id: "rem-type-i-month",
+    label: "Target Type I month (YYYY-MM)",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Month 2–3",
+    notes: "TARGET, not commitment",
+  },
+  {
+    id: "rem-audit-firm",
+    label: "Audit firm shortlist / engagement",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Month 3–4",
+    notes: "Independent CPA — TARGET fieldwork",
+  },
+  {
+    id: "rem-engage-cpa",
+    label: "Engage CPA; schedule Type I fieldwork",
+    status: "needs_owner",
+    owner: "Matt",
+    targetWindow: "Month 3–4",
+    notes: "TARGET, not commitment",
+  },
+  {
+    id: "rem-type-i-report",
+    label: "Type I report issued → only then Type I is “done”",
+    status: "open",
+    owner: "Matt + CPA",
+    targetWindow: "When report in hand",
+  },
+  {
+    id: "rem-type-ii",
+    label: "Type II observation (3–12 months) + Type II report",
+    status: "open",
+    owner: "Matt + CPA",
+    targetWindow: "After Type I",
+  },
+];
 
 export const compliancePhases: CompliancePhase[] = [
   {
@@ -63,7 +336,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Kickoff",
     status: "in_progress",
     exitCriteria:
-      "Scope frozen in decision log; owners named; scoreboard + artifacts started — owners + scope set; platform/target month still open",
+      "Scope APPROVED + owners named; scoreboard live — platform / target month / CPA still open",
   },
   {
     id: "controls-live",
@@ -119,15 +392,16 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "kg-5",
-        label: "Decision log — scope + owners recorded",
+        label: "Decision log — scope + owners APPROVED",
         status: "done",
-        notes: "Sec+Avail+Conf; PI deferred; all owners Matt Justice (2026-07-22)",
+        notes:
+          "Sec+Avail+Conf IN; PI + Privacy DEFERRED; all owners Matt Justice (2026-07-22 APPROVED)",
       },
       {
         id: "kg-6",
         label: "Freeze Type I criteria: Sec + Avail + Conf; PI deferred; Privacy skip",
         status: "done",
-        notes: "Confirmed in decision log 2026-07-22",
+        notes: "APPROVED in decision log 2026-07-22",
       },
       {
         id: "kg-7",
@@ -157,13 +431,13 @@ export const complianceSections: ComplianceSection[] = [
         id: "kg-11",
         label: 'Compliance platform choice or explicit “wait until ____”',
         status: "needs_owner",
-        notes: "TBD — Matt to decide. Do not auto-sign up for Vanta",
+        notes: "TBD — Matt to decide (Week 2). Do not auto-sign up for Vanta",
       },
       {
         id: "kg-12",
         label: "Target Type I month",
         status: "needs_owner",
-        notes: "Even approximate YYYY-MM",
+        notes: "Even approximate YYYY-MM — TARGET, not commitment",
       },
       {
         id: "kg-13",
@@ -219,7 +493,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "bv-8",
         label: "Security one-pager",
         status: "done",
-        notes: "docs/soc2/SECURITY_ONE_PAGER.md — pursuing SOC 2; not certified",
+        notes: "docs/soc2/SECURITY_ONE_PAGER.md — draft done; publish for sales = Month 2",
       },
     ],
   },
@@ -228,14 +502,34 @@ export const complianceSections: ComplianceSection[] = [
     name: "C. Access hardening",
     summary: "MFA everywhere admins live, plus a living access inventory.",
     items: [
-      { id: "ah-1", label: "MFA — GitHub org admins", status: "needs_owner" },
-      { id: "ah-2", label: "MFA — Vercel", status: "needs_owner" },
-      { id: "ah-3", label: "MFA — Railway", status: "needs_owner" },
-      { id: "ah-4", label: "MFA — Neon", status: "needs_owner" },
-      { id: "ah-5", label: "MFA — corporate email / IdP", status: "needs_owner" },
-      { id: "ah-6", label: "MFA — Stripe", status: "needs_owner" },
-      { id: "ah-7", label: "MFA — Sanity (if admin)", status: "needs_owner" },
-      { id: "ah-8", label: "MFA — Resend / Anthropic consoles", status: "needs_owner" },
+      {
+        id: "ah-1",
+        label: "MFA — GitHub org admins",
+        status: "needs_owner",
+        notes: "Week 1 — do next",
+      },
+      { id: "ah-2", label: "MFA — Vercel", status: "needs_owner", notes: "Week 1" },
+      { id: "ah-3", label: "MFA — Railway", status: "needs_owner", notes: "Week 1" },
+      { id: "ah-4", label: "MFA — Neon", status: "needs_owner", notes: "Week 1" },
+      {
+        id: "ah-5",
+        label: "MFA — corporate email / IdP",
+        status: "needs_owner",
+        notes: "Week 1",
+      },
+      { id: "ah-6", label: "MFA — Stripe", status: "needs_owner", notes: "Week 1" },
+      {
+        id: "ah-7",
+        label: "MFA — Sanity (if admin)",
+        status: "needs_owner",
+        notes: "Week 1",
+      },
+      {
+        id: "ah-8",
+        label: "MFA — Resend / Anthropic consoles",
+        status: "needs_owner",
+        notes: "Week 1",
+      },
       {
         id: "ah-9",
         label: "Access inventory — people + roles filled",
@@ -246,12 +540,13 @@ export const complianceSections: ComplianceSection[] = [
         id: "ah-10",
         label: "Confirm no shared prod passwords",
         status: "needs_owner",
+        notes: "Week 1",
       },
       {
         id: "ah-11",
         label: "First quarterly-style access review sign-off",
         status: "open",
-        notes: "After MFA verified + inventory stable",
+        notes: "After MFA verified + inventory stable — Week 3–4",
       },
     ],
   },
@@ -277,7 +572,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "pol-4",
         label: "Leadership approve core policies",
         status: "needs_owner",
-        notes: "Draft ≠ approved; Matt must approve",
+        notes: "Draft ≠ approved; Matt must approve — Week 2",
       },
     ],
   },
@@ -290,7 +585,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "eng-1",
         label: "Protect main + required PR review",
         status: "needs_owner",
-        notes: "Confirm in GitHub settings",
+        notes: "Confirm in GitHub settings — Week 1",
       },
       {
         id: "eng-2",
@@ -302,22 +597,25 @@ export const complianceSections: ComplianceSection[] = [
         id: "eng-3",
         label: "Secrets only in env stores (not git)",
         status: "open",
+        notes: "Month 2",
       },
       {
         id: "eng-4",
         label: "Calendar or complete Neon backup restore test",
         status: "open",
-        notes: "Evidence required before Type I — P12 drafted",
+        notes: "Evidence required before Type I — Week 3–4",
       },
       {
         id: "eng-5",
         label: "Tenant isolation evidence (Org A ≠ Org B)",
         status: "open",
+        notes: "Month 2",
       },
       {
         id: "eng-6",
         label: "AI/LLM data-handling write-up aligned with P15",
         status: "open",
+        notes: "Month 2",
       },
     ],
   },
@@ -373,6 +671,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "t12-1",
         label: "Engage CPA firm; schedule fieldwork",
         status: "needs_owner",
+        notes: "TARGET Month 3–4",
       },
       {
         id: "t12-2",
@@ -406,8 +705,7 @@ export function sectionStats(section: ComplianceSection) {
   const inProgress = section.items.filter((item) => item.status === "in_progress").length;
   const needsOwner = section.items.filter((item) => item.status === "needs_owner").length;
   const open = section.items.filter((item) => item.status === "open").length;
-  const percent =
-    total === 0 ? 0 : Math.round((done / total) * 100);
+  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
   return { done, inProgress, needsOwner, open, total, percent };
 }
 

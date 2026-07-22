@@ -1,7 +1,9 @@
 import {
   compliancePhases,
   complianceProgressMeta,
+  complianceRemainingItems,
   complianceSections,
+  complianceTimeline,
   overallCounts,
   overallPercent,
   sectionStats,
@@ -120,6 +122,11 @@ export function ComplianceProgressDashboard() {
             Current focus: {complianceProgressMeta.currentFocus}
           </p>
         ) : null}
+        {complianceProgressMeta.scopeLocked ? (
+          <p className="mt-3 text-sm leading-relaxed text-slate-400">
+            {complianceProgressMeta.scopeLocked}
+          </p>
+        ) : null}
       </div>
 
       <section className="mb-8 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-6 md:p-8">
@@ -130,6 +137,81 @@ export function ComplianceProgressDashboard() {
           {complianceProgressMeta.definitionOfDone}
         </p>
         <p className="mt-3 text-sm text-slate-500">{complianceProgressMeta.salesLanguage}</p>
+      </section>
+
+      <section className="mb-10 rounded-2xl border border-amber-400/20 bg-gradient-to-br from-slate-900 to-slate-950 p-6 md:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Remaining &amp; targets</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              {complianceProgressMeta.timelineNote}
+            </p>
+          </div>
+          <p className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-100">
+            Not certified
+          </p>
+        </div>
+
+        <h3 className="mt-6 text-xs font-semibold uppercase tracking-widest text-slate-500">
+          Target calendar
+        </h3>
+        <ol className="mt-3 space-y-3">
+          {complianceTimeline.map((row) => (
+            <li
+              key={row.id}
+              className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-semibold text-white">{row.window}</p>
+                <p className="text-xs text-slate-500">{row.approxDates}</p>
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-400">{row.focus}</p>
+            </li>
+          ))}
+        </ol>
+
+        <h3 className="mt-8 text-xs font-semibold uppercase tracking-widest text-slate-500">
+          Remaining checklist
+        </h3>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+                <th className="py-2 pr-3 font-semibold">Status</th>
+                <th className="py-2 pr-3 font-semibold">Item</th>
+                <th className="py-2 pr-3 font-semibold">Owner</th>
+                <th className="py-2 pr-3 font-semibold">Target</th>
+              </tr>
+            </thead>
+            <tbody>
+              {complianceRemainingItems.map((item) => (
+                <tr key={item.id} className="border-b border-white/5 align-top">
+                  <td className="py-2.5 pr-3">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusPillClass(item.status)}`}
+                    >
+                      <span
+                        className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border text-[8px] font-bold ${statusCircleClass(item.status)}`}
+                        aria-hidden
+                      >
+                        {statusMark(item.status)}
+                      </span>
+                      {statusLabel(item.status)}
+                    </span>
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    <span className="text-slate-200">{item.label}</span>
+                    {item.notes ? (
+                      <span className="mt-0.5 block text-xs text-slate-500">{item.notes}</span>
+                    ) : null}
+                  </td>
+                  <td className="py-2.5 pr-3 text-slate-400">{item.owner}</td>
+                  <td className="py-2.5 pr-3 text-slate-300">{item.targetWindow}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="mb-10 rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-950 p-6 md:p-8">

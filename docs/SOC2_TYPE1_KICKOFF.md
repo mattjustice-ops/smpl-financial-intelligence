@@ -4,13 +4,15 @@ Founder-executable plan to start **SOC 2 Type I** readiness. Not legal or audit 
 
 **Living scoreboard (what’s checked off / what’s open):** [soc2/PROGRESS.md](./soc2/PROGRESS.md)
 
+**Remaining checklist + target timeline (solo-founder calendar):** [soc2/PROGRESS.md § Remaining checklist + target timeline](./soc2/PROGRESS.md#remaining-checklist--target-timeline) — also on `/compliance` under **Remaining & targets**.
+
 **Public progress page:** [https://www.smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) — statuses are edited in `frontend/lib/compliance/progress.ts` (keep in sync with [soc2/PROGRESS.md](./soc2/PROGRESS.md); see that file’s “How to update” section).
 
 **Source of truth (scope + criteria):** [SMPL_SOC2_Readiness_Reference_v2.md](./SMPL_SOC2_Readiness_Reference_v2.md)
 
 **Working artifacts:** [docs/soc2/](./soc2/)
 
-**Locked scope (until decision log changes it):** Security + Availability + Confidentiality. Processing Integrity deferred. Privacy skipped for now. Proposed defaults are in [soc2/00_decision_log.md](./soc2/00_decision_log.md) for Matt to confirm.
+**Scope locked (APPROVED 2026-07-22 by Matt Justice):** Security + Availability + Confidentiality **IN**. Processing Integrity + Privacy **DEFERRED**. All named owners: Matt Justice. See [soc2/00_decision_log.md](./soc2/00_decision_log.md).
 
 ---
 
@@ -38,8 +40,8 @@ Until a report exists, prefer the security one-pager + DPA + subprocessors list 
 
 | # | Action | Owner | Done when |
 |---|--------|-------|-----------|
-| 1 | Fill [00_decision_log.md](./soc2/00_decision_log.md): freeze Sec+Avail+Conf; PI deferred | Executive sponsor | Table dated and signed (**proposed defaults drafted — confirm**) |
-| 2 | Name people in decision log / readiness §3 (sponsor, security, engineering, ops/CS) — one person can wear multiple hats | Executive sponsor | Names filled |
+| 1 | Fill [00_decision_log.md](./soc2/00_decision_log.md): freeze Sec+Avail+Conf; PI deferred | Executive sponsor | **Done — APPROVED 2026-07-22** |
+| 2 | Name people in decision log / readiness §3 (sponsor, security, engineering, ops/CS) — one person can wear multiple hats | Executive sponsor | **Done — all roles Matt Justice** |
 | 3 | Choose compliance platform **or** explicitly defer 1–2 weeks: Vanta / Drata / Secureframe (or other). Do **not** buy until you own MFA + access inventory | Security owner | Choice or “wait until ____” in decision log |
 | 4 | MFA on every admin account: GitHub, Vercel, Railway, Neon, email/Google Workspace (or IdP), Sanity, Stripe | Security owner | Screenshots or platform evidence |
 | 5 | Start [03_access_inventory_template.md](./soc2/03_access_inventory_template.md) — who has prod / billing / DB | Security owner | First pass complete |
