@@ -2,6 +2,29 @@
 
 **Living checklist.** Update statuses as work completes. Parent plan: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scope: [../SMPL_SOC2_Readiness_Reference_v2.md](../SMPL_SOC2_Readiness_Reference_v2.md)
 
+**Public progress UI:** [https://www.smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) (marketing route `/compliance`)
+
+---
+
+## How to update the public `/compliance` page
+
+This markdown file is the **working scoreboard** for the team. The live site reads statuses from a TypeScript module that mirrors the phases/items below:
+
+| Layer | Path |
+|-------|------|
+| Internal checklist (you are here) | `docs/soc2/PROGRESS.md` |
+| Public page data | `frontend/lib/compliance/progress.ts` |
+| UI | `frontend/components/compliance/ComplianceProgressDashboard.tsx` |
+
+**When a status changes:**
+
+1. Update the mark in this file (`[x]` / `[~]` / `[ ]` / `[!]`).
+2. Update the matching item in `frontend/lib/compliance/progress.ts` (`done` / `in_progress` / `open` / `needs_owner`).
+3. Bump `lastUpdated` (YYYY-MM-DD) in that TS module.
+4. Deploy the frontend (Vercel) so [smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) reflects the change.
+
+Do **not** mark Type I complete on the public page until a CPA report is in hand.
+
 ---
 
 ## Critical honesty (read first)

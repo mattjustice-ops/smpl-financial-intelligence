@@ -35,7 +35,9 @@ Internal readiness only — do not claim SOC 2 certified until a CPA firm issues
 |----------|-------------|
 | [SOC2_TYPE1_KICKOFF.md](./SOC2_TYPE1_KICKOFF.md) | Founder-executable Type I kickoff (Week 1–2, sales language, next moves) |
 | [SMPL_SOC2_Readiness_Reference_v2.md](./SMPL_SOC2_Readiness_Reference_v2.md) | Scope, criteria, gap map, evidence bar (source of truth) |
+| [soc2/PROGRESS.md](./soc2/PROGRESS.md) | Living Type I scoreboard + how to update public `/compliance` |
 | [soc2/](./soc2/) | Fillable artifacts: decision log, system boundary, subprocessors, access inventory, policy index, Week 1 checklist |
+| Public UI | [smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) — honest readiness checklist (not certification) |
 
 ## Implementation notes
 

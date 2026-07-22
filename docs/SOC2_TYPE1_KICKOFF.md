@@ -4,6 +4,8 @@ Founder-executable plan to start **SOC 2 Type I** readiness. Not legal or audit 
 
 **Living scoreboard (what’s checked off / what’s open):** [soc2/PROGRESS.md](./soc2/PROGRESS.md)
 
+**Public progress page:** [https://www.smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) — statuses are edited in `frontend/lib/compliance/progress.ts` (keep in sync with [soc2/PROGRESS.md](./soc2/PROGRESS.md); see that file’s “How to update” section).
+
 **Source of truth (scope + criteria):** [SMPL_SOC2_Readiness_Reference_v2.md](./SMPL_SOC2_Readiness_Reference_v2.md)
 
 **Working artifacts:** [docs/soc2/](./soc2/)
