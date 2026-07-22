@@ -27,6 +27,16 @@ Product and domain documentation for the SaaS Financial Intelligence platform.
 
 See also `GO_LIVE_GL*.md` and `GO_LIVE_STEP*.md` for provisioning, Stripe, Resend, and staging steps.
 
+## Security & compliance (SOC 2)
+
+Internal readiness only — do not claim SOC 2 certified until a CPA firm issues a report.
+
+| Document | Description |
+|----------|-------------|
+| [SOC2_TYPE1_KICKOFF.md](./SOC2_TYPE1_KICKOFF.md) | Founder-executable Type I kickoff (Week 1–2, sales language, next moves) |
+| [SMPL_SOC2_Readiness_Reference_v2.md](./SMPL_SOC2_Readiness_Reference_v2.md) | Scope, criteria, gap map, evidence bar (source of truth) |
+| [soc2/](./soc2/) | Fillable artifacts: decision log, system boundary, subprocessors, access inventory, policy index, Week 1 checklist |
+
 ## Implementation notes
 
 API and export specifics live under `backend/docs/`, e.g. [REPORTING_EXPORT.md](../backend/docs/REPORTING_EXPORT.md).
