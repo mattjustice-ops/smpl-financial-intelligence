@@ -69,25 +69,21 @@
       "title": "What makes SMPL different",
       "topics": [
         "what makes you different",
+        "what makes smpl different",
         "why you",
-        "differentiation",
-        "moat",
-        "defensibility",
-        "competitive advantage",
-        "architecture as a moat"
+        "how are you different",
+        "differentiation"
       ],
       "keywords": [
-        "moat",
-        "competitive advantage",
-        "defensibility",
-        "hard to copy",
         "differentiator",
         "differentiation",
-        "architecture as a moat",
-        "architecture-as-moat",
         "what makes you different",
+        "what makes smpl different",
+        "how are you different",
         "why you",
-        "what is your moat"
+        "consistent results",
+        "transparent by design",
+        "institutional knowledge"
       ],
       "answer": "Three things, by design and not as features bolted on: consistent results — the same inputs always produce the same outputs; transparent by design — every conclusion traces to underlying evidence and uncertainty is flagged, not hidden; and institutional knowledge — we preserve how your organization defines and measures its business and reproduce any report exactly as it was originally delivered.",
       "confidence": "verified",
@@ -99,6 +95,44 @@
       ],
       "tone": "external_safe",
       "source": "Executive Summary, 'What makes SMPL.ai different'"
+    },
+    {
+      "id": "architecture-as-moat",
+      "title": "What is your moat",
+      "topics": [
+        "what is your moat",
+        "architecture as a moat",
+        "why is architecture your moat",
+        "competitive moat",
+        "competitive advantage",
+        "defensibility",
+        "hard to copy",
+        "is ai your advantage"
+      ],
+      "keywords": [
+        "moat",
+        "what is your moat",
+        "architecture as a moat",
+        "architecture-as-moat",
+        "competitive moat",
+        "competitive advantage",
+        "defensibility",
+        "hard to copy",
+        "difficult to copy",
+        "is ai your advantage",
+        "architecture over ai",
+        "governed financial intelligence"
+      ],
+      "answer": "Our moat is the financial intelligence architecture — not AI alone. Individual AI features can be copied; a governed architecture that runs deterministic calculations first, preserves institutional memory of how each customer defines their business, and consistently produces trusted, explainable outputs is much harder to replicate. The durable advantage is architecture, methodology, and explainability together — governed financial intelligence, not a model feature.",
+      "confidence": "verified",
+      "audiences": [
+        "investor",
+        "ceo",
+        "cfo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB §6 'What is your moat?' / 'Is AI your advantage?' / 'What makes SMPL difficult to copy?'; §3 'Why is architecture your moat?'"
     },
     {
       "id": "adapts-to-you",

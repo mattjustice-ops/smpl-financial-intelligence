@@ -46,16 +46,24 @@ for (const row of topIds(moatQuery)) {
   console.log(`  ${row.score.toFixed(3)}  ${row.id}`);
 }
 
-assertTop(moatQuery, "differentiator-three-principles", "moat");
+assertTop(moatQuery, "architecture-as-moat", "moat");
 assert(
   retrieveSalesAnswers(moatQuery, kb.entries, { limit: 3 }).every(
     (m) => m.entry.id !== "implementation-security",
   ),
   "moat query must not surface implementation-security",
 );
+assert(
+  retrieveSalesAnswers(moatQuery, kb.entries, { limit: 3 })[0].entry.id !==
+    "differentiator-three-principles",
+  "moat query must not win with differentiator-three-principles",
+);
 
-assertTop("architecture as a moat", "differentiator-three-principles");
-assertTop("what is your competitive advantage?", "differentiator-three-principles");
+assertTop("architecture as a moat", "architecture-as-moat");
+assertTop("what is your competitive advantage?", "architecture-as-moat");
+assertTop("competitive moat", "architecture-as-moat");
+assertTop("what makes you different?", "differentiator-three-principles");
+assertTop("how are you different?", "differentiator-three-principles");
 assertTop("how long is implementation?", "implementation-security");
 
 const implEntry = kb.entries.find((e) => e.id === "implementation-security");
@@ -65,8 +73,22 @@ assert(
   "implementation-security must not contain 'moat'",
 );
 
+const moatEntry = kb.entries.find((e) => e.id === "architecture-as-moat");
+assert(moatEntry, "architecture-as-moat entry missing");
+for (const kw of ["moat", "competitive advantage", "defensibility", "hard to copy", "architecture as a moat"]) {
+  assert(
+    (moatEntry.keywords ?? []).some((k) => k.toLowerCase().includes(kw)),
+    `architecture-as-moat missing keyword: ${kw}`,
+  );
+}
+
 const diffEntry = kb.entries.find((e) => e.id === "differentiator-three-principles");
-for (const kw of ["moat", "competitive advantage", "defensibility", "hard to copy"]) {
+assert(diffEntry, "differentiator-three-principles entry missing");
+assert(
+  !(diffEntry.keywords ?? []).some((k) => k.toLowerCase() === "moat"),
+  "differentiator must not keyword bare 'moat'",
+);
+for (const kw of ["what makes you different", "differentiator", "differentiation"]) {
   assert(
     (diffEntry.keywords ?? []).some((k) => k.toLowerCase().includes(kw)),
     `differentiator missing keyword: ${kw}`,
