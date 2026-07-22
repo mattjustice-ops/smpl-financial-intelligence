@@ -135,6 +135,37 @@ def _word_count(text: str) -> int:
     return len(re.findall(r"\b\w+\b", text))
 
 
+def _clip_bullet_body(body: str, max_chars: int) -> str:
+    """Prefer a complete sentence; else last whole word. Ellipsis only as last resort."""
+    body = body.strip()
+    if max_chars <= 0:
+        return ""
+    if len(body) <= max_chars:
+        return body
+    if max_chars <= 2:
+        return body[:max_chars]
+
+    # Room for optional ellipsis when we cannot land on a clean sentence end.
+    budget = max_chars - 1
+    clipped = body[:budget].rstrip()
+
+    # Prefer any complete sentence that is long enough to stand alone as a bullet.
+    min_sentence = max(16, int(budget * 0.25))
+    for sep in (". ", "; ", "! ", "? "):
+        idx = clipped.rfind(sep)
+        if idx >= min_sentence:
+            return clipped[: idx + 1].strip()
+
+    if clipped.endswith((".", ";", "!", "?")) and len(clipped) >= min_sentence:
+        return clipped
+
+    if " " in clipped:
+        clipped = clipped.rsplit(" ", 1)[0].rstrip(".,;:")
+    else:
+        clipped = clipped.rstrip(".,;:")
+    return clipped + "…"
+
+
 def validate_and_trim_bullets(
     bullets: list[str],
     *,
@@ -142,7 +173,11 @@ def validate_and_trim_bullets(
     max_words_per_bullet: int,
     max_chars_per_bullet: int | None = None,
 ) -> list[str]:
-    """Enforce bullet count, word, and character limits."""
+    """Enforce bullet count, word, and character limits.
+
+    Character clipping prefers sentence boundaries so board commentary does not
+    end mid-clause with an ellipsis whenever a complete sentence fits the cap.
+    """
     trimmed: list[str] = []
     for bullet in bullets[:max_bullets]:
         text = bullet.strip()
@@ -152,16 +187,18 @@ def validate_and_trim_bullets(
             text = f"• {text.lstrip('-• ')}"
         words = text.lstrip("•").strip().split()
         if len(words) > max_words_per_bullet:
-            text = "• " + " ".join(words[:max_words_per_bullet])
+            # Prefer ending on a sentence within the word budget when possible.
+            kept = words[:max_words_per_bullet]
+            joined = " ".join(kept)
+            for sep in (". ", "; ", "! ", "? "):
+                idx = joined.rfind(sep)
+                if idx >= 24:
+                    joined = joined[: idx + 1].strip()
+                    break
+            text = "• " + joined
         if max_chars_per_bullet is not None and len(text) > max_chars_per_bullet:
             body = text.lstrip("•").strip()
-            if max_chars_per_bullet <= 2:
-                text = "• " + body[: max_chars_per_bullet - 2]
-            else:
-                clipped = body[: max_chars_per_bullet - 3].rstrip()
-                if " " in clipped:
-                    clipped = clipped.rsplit(" ", 1)[0]
-                text = "• " + clipped.rstrip(".,;:") + "…"
+            text = "• " + _clip_bullet_body(body, max_chars_per_bullet - 2)
         trimmed.append(text)
     return trimmed
 

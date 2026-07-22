@@ -32,78 +32,85 @@ BOARD_DECK_SLIDE_KEYS = frozenset(
     }
 )
 
+# Limits must fit complete board sentences (actual / budget / variance / implication).
+# PPTX template export still fits text to shape boxes separately; do not pre-mangle
+# interactive regenerate output with ultra-short deck stubs.
 _SLIDE_SPECS: dict[str, dict[str, Any]] = {
     "executive_summary": {
         "slide_number": 2,
         "slide_title": "Executive Summary",
         "max_bullets": 5,
-        "max_words_per_bullet": 18,
-        "max_chars_per_bullet": 100,
+        "max_words_per_bullet": 45,
+        "max_chars_per_bullet": 320,
     },
     "arr_waterfall": {
         "slide_number": 3,
         "slide_title": "ARR Analysis",
         "max_bullets": 2,
-        "max_words_per_bullet": 16,
-        "max_chars_per_bullet": 90,
+        "max_words_per_bullet": 45,
+        "max_chars_per_bullet": 320,
     },
     "gaap_revenue": {
         "slide_number": 4,
         "slide_title": "P&L Review",
         "max_bullets": 5,
-        "max_words_per_bullet": 15,
-        "max_chars_per_bullet": 85,
+        "max_words_per_bullet": 50,
+        "max_chars_per_bullet": 360,
     },
     "cash_forecast": {
         "slide_number": 5,
         "slide_title": "Cash & Liquidity",
         "max_bullets": 4,
-        "max_words_per_bullet": 16,
-        "max_chars_per_bullet": 90,
+        "max_words_per_bullet": 45,
+        "max_chars_per_bullet": 320,
     },
     "cash_flow_statement": {
         "slide_number": 6,
         "slide_title": "Cash Flow Statement",
         "max_bullets": 4,
-        "max_words_per_bullet": 16,
-        "max_chars_per_bullet": 90,
+        "max_words_per_bullet": 45,
+        "max_chars_per_bullet": 320,
     },
     "gtm_performance": {
         "slide_number": 7,
         "slide_title": "GTM & Marketing",
         "max_bullets": 11,
-        "max_words_per_bullet": 6,
-        "max_chars_per_bullet": 38,
+        "max_words_per_bullet": 28,
+        "max_chars_per_bullet": 200,
     },
     "gtm_funnel": {
         "slide_number": 8,
         "slide_title": "Funnel Analysis",
         "max_bullets": 4,
-        "max_words_per_bullet": 18,
-        "max_chars_per_bullet": 115,
+        "max_words_per_bullet": 45,
+        "max_chars_per_bullet": 320,
     },
     "risks_opportunities": {
         "slide_number": 9,
         "slide_title": "Risks & Opportunities",
         "max_bullets": 4,
-        "max_words_per_bullet": 20,
-        "max_chars_per_bullet": 135,
+        "max_words_per_bullet": 50,
+        "max_chars_per_bullet": 360,
     },
     "financial_outlook": {
         "slide_number": 10,
         "slide_title": "Financial Outlook",
         "max_bullets": 4,
-        "max_words_per_bullet": 22,
-        "max_chars_per_bullet": 160,
+        "max_words_per_bullet": 50,
+        "max_chars_per_bullet": 360,
     },
     "board_actions": {
         "slide_number": 11,
         "slide_title": "Board Actions",
         "max_bullets": 4,
-        "max_words_per_bullet": 24,
-        "max_chars_per_bullet": 165,
+        "max_words_per_bullet": 55,
+        "max_chars_per_bullet": 400,
     },
 }
+
+# Interactive board regenerate can show fuller bullets than dense PPTX stubs.
+_INTERACTIVE_MIN_WORDS_PER_BULLET = 60
+_INTERACTIVE_MIN_CHARS_PER_BULLET = 480
 
 
 def fmt_deck_money(value: Decimal | None) -> str:
@@ -439,4 +446,14 @@ def slide_prompt_limits(slide_key: str) -> tuple[int, int, int]:
         int(spec["max_bullets"]),
         int(spec["max_words_per_bullet"]),
         int(spec.get("max_chars_per_bullet", 120)),
+    )
+
+
+def interactive_slide_prompt_limits(slide_key: str) -> tuple[int, int, int]:
+    """Limits for board UI regenerate — full sentences, not PPTX stub length."""
+    max_bullets, max_words, max_chars = slide_prompt_limits(slide_key)
+    return (
+        max_bullets,
+        max(max_words, _INTERACTIVE_MIN_WORDS_PER_BULLET),
+        max(max_chars, _INTERACTIVE_MIN_CHARS_PER_BULLET),
     )

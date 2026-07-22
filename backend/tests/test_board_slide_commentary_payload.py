@@ -13,6 +13,8 @@ from app.services.reporting.export.board_slide_commentary_payload import (
     build_single_slide_payload,
     fmt_deck_money,
     fmt_deck_var,
+    interactive_slide_prompt_limits,
+    slide_prompt_limits,
 )
 from app.services.reporting.export.schemas import ReportingBundle, ExportValidationSummary
 
@@ -89,6 +91,50 @@ def test_validate_and_trim_bullets_enforces_limits() -> None:
 
 def _word_count(text: str) -> int:
     return len(text.lstrip("•").split())
+
+
+def test_gaap_revenue_limits_allow_full_board_sentence() -> None:
+    """Regression: old 85-char cap clipped Revenue Narrative mid-sentence with …"""
+    _, max_words, max_chars = interactive_slide_prompt_limits("gaap_revenue")
+    assert max_words >= 50
+    assert max_chars >= 360
+
+    bullet = (
+        "• Revenue $7.35M vs $7.72M budget (−$370K, −4.8%); "
+        "EBITDA beat at $661.5K vs $480.0K budget as opex timing normalized."
+    )
+    assert len(bullet) > 85  # would have been truncated under the old cap
+    out = validate_and_trim_bullets(
+        [bullet],
+        max_bullets=5,
+        max_words_per_bullet=max_words,
+        max_chars_per_bullet=max_chars,
+    )
+    assert out == [bullet]
+    assert "…" not in out[0]
+
+
+def test_validate_and_trim_prefers_sentence_boundary() -> None:
+    bullet = (
+        "• Revenue beat budget by $60K. Gross margin expanded 220bps on hosting efficiency "
+        "and Q3 opex is expected to normalize toward plan."
+    )
+    out = validate_and_trim_bullets(
+        [bullet],
+        max_bullets=1,
+        max_words_per_bullet=80,
+        max_chars_per_bullet=70,
+    )
+    assert out[0] == "• Revenue beat budget by $60K."
+    assert "…" not in out[0]
+
+
+def test_interactive_limits_floor_above_deck_specs() -> None:
+    deck = slide_prompt_limits("gaap_revenue")
+    interactive = interactive_slide_prompt_limits("gaap_revenue")
+    assert interactive[0] == deck[0]
+    assert interactive[1] >= deck[1]
+    assert interactive[2] >= deck[2]
 
 
 def test_format_key_takeaway_bullets() -> None:
