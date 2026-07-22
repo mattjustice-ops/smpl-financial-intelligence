@@ -2,9 +2,12 @@
  * Starter content for Sanity seed (blog posts + ~20 glossary terms).
  * Imported by scripts/seed-sanity.mjs — edit here, then re-run seed.
  *
- * Blog posts: ARR waterfall vs GAAP, board ARR/cash/P&L, AI variance commentary.
+ * Blog posts: ARR waterfall vs GAAP, board ARR/cash/P&L, AI variance commentary,
+ * CFO trust in numbers, spreadsheet reconciliation costs.
  * Old IP-heavy cornerstone posts intentionally removed from this seed.
  */
+
+import { extraCategories, extraPosts } from "./extra-posts.mjs";
 
 let keySeq = 0;
 function key(prefix = "k") {
@@ -144,6 +147,7 @@ export const categories = [
     title: "AI in FP&A",
     slug: { _type: "slug", current: "ai-in-fpa" },
   },
+  ...extraCategories,
   // Kept so existing Studio refs / glossary context don't break; unused by new posts.
   {
     _id: "category-board-reporting",
@@ -589,6 +593,7 @@ export const posts = [
       ),
     ],
   },
+  ...extraPosts,
 ];
 
 export const glossaryTerms = [
