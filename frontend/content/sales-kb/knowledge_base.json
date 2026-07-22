@@ -718,18 +718,30 @@
         "implementation timeline",
         "how long to go live",
         "onboarding timeline",
-        "four to six weeks"
+        "four to six weeks",
+        "one week implementation"
       ],
       "keywords": [
         "4-6 weeks",
         "four to six weeks",
+        "how long",
         "how long is implementation",
         "how long to go live",
+        "implementation time",
         "implementation timeline",
-        "onboarding timeline"
+        "one week",
+        "onboarding timeline",
+        "time to value"
       ],
-      "answer": "Implementation is designed to run about four to six weeks per customer. We integrate with the systems you already use — accounting/GL, CRM, HRIS, and billing — and deliver a secure browser-based application: nothing to install and no infrastructure for your team to manage.",
-      "confidence": "verified",
+      "answer": "Same deliverables either way — dashboards, ARR, statements, board/MD&A, commentary, methodology config, and validation. For early customers, about one week is realistic when access is ready and we apply existing templates and playbooks (configuration and proof, not inventing the system). Four to six weeks is what the calendar can look like when discovery is heavy: first-time source mapping, waiting on legal/IT/exports, messy data, or multiple validation loops. North star is hours-to-a-day as more source systems are documented and productized. Elapsed time is driven by template-vs-one-off work plus how fast the customer unblocks access. Browser SaaS — nothing to install.",
+      "answer_bullets": [
+        "Same deliverables either way: dashboards, ARR, statements, board/MD&A, commentary, methodology config, and validation",
+        "~1 week for early customers when access is ready and we apply existing templates/playbooks — configuration and proof, not inventing the system",
+        "4–6 weeks is what the calendar can look like when discovery is heavy: first-time source mapping, waiting on legal/IT/exports, messy data, multiple validation loops",
+        "North star: hours-to-a-day as more source systems are documented and productized",
+        "Elapsed time is driven by template-vs-one-off work plus how fast the customer unblocks access"
+      ],
+      "confidence": "directional",
       "audiences": [
         "it",
         "cfo",
@@ -737,7 +749,7 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "Technical Whitepaper, Typical Implementation Requirements"
+      "source": "Technical Whitepaper implementation; founder framing on template speed vs discovery-heavy calendars"
     },
     {
       "id": "team",
@@ -910,7 +922,14 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "IT Technical Diagram + SOC 2 Readiness Reference v2 + Technical Whitepaper"
+      "source": "IT Technical Diagram + SOC 2 Readiness Reference v2 + Technical Whitepaper",
+      "answer_bullets": [
+        "Browser SaaS that reads and reconciles finance systems — does not post back to your GL or ERP",
+        "Encrypted in transit (TLS) and at rest in managed Postgres; tenants isolated by organization ID",
+        "Invite-based magic-link login with role-based views; AI keys stay on the API; narrative from engine outputs",
+        "Pursuing SOC 2 Type I (Security, Availability, Confidentiality) — not claiming a completed SOC 2 report today",
+        "For IT: architecture diagram, DPA, subprocessors, and questionnaire answers"
+      ]
     },
     {
       "id": "encryption-transit-rest",
@@ -1505,15 +1524,21 @@
         "self-serve",
         "white-glove vs self-serve"
       ],
-      "answer": "Two paths. White-glove direct access is available today for mid-market and enterprise POCs: read-only shares or exports, SMPL loads the warehouse, customer signs in with a magic link. Self-serve CSV upload and mapping is the scale path and continues to mature — first customers do not have to wait on self-serve. Typical implementation runs about four to six weeks once scope and data access are agreed.",
-      "confidence": "verified",
+      "answer": "Two paths. White-glove direct access is available today for mid-market and enterprise POCs: read-only shares or exports, SMPL loads the warehouse, customer signs in with a magic link. Self-serve CSV upload and mapping is the scale path and continues to mature — first customers do not have to wait on self-serve. Timeline is the same deliverables either way; early customers can land in about a week when access is ready and templates apply, while discovery-heavy calendars (legal/IT waits, first-time mapping, messy data) often stretch toward four to six weeks.",
+      "answer_bullets": [
+        "White-glove direct access today for mid-market/enterprise POCs: read-only shares or exports, SMPL loads the warehouse, magic-link sign-in",
+        "Self-serve CSV upload/mapping is the scale path and still maturing — first customers do not have to wait on it",
+        "Same deliverables either path: dashboards, ARR, statements, board/MD&A, commentary, methodology config, validation",
+        "~1 week when access is ready and we apply existing templates/playbooks; 4–6 weeks when discovery/legal/IT/export waits dominate"
+      ],
+      "confidence": "directional",
       "audiences": [
         "it",
         "cfo",
         "general"
       ],
       "tone": "external_safe",
-      "source": "GO_LIVE_POC_DIRECT_DATA_ACCESS; GO_LIVE_POC_ONBOARDING; Technical Whitepaper timeline"
+      "source": "GO_LIVE_POC_DIRECT_DATA_ACCESS; GO_LIVE_POC_ONBOARDING; founder timeline framing"
     },
     {
       "id": "rbac-access",
@@ -1747,7 +1772,14 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "Architecture Master; Reporting Logic report catalog; GO_LIVE_GL3 plan entitlements; CFO Operating System UX"
+      "source": "Architecture Master; Reporting Logic report catalog; GO_LIVE_GL3 plan entitlements; CFO Operating System UX",
+      "answer_bullets": [
+        "SaaS financial intelligence layer — not a BI dashboard and not an ERP",
+        "Executive dashboards, ARR/MRR waterfalls, three statements with tie-outs, Actual vs Budget vs Forecast, pipeline/GTM views",
+        "Board PowerPoint and MD&A-style Excel packages; AI-assisted commentary grounded in the same numbers",
+        "Higher plans unlock Management P&L, workforce, and cash forecast modules",
+        "Sits above GL, CRM, billing, and HR — does not post back"
+      ]
     },
     {
       "id": "seo-marketing-site",
@@ -2107,7 +2139,13 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "Architecture Master AI layer; Reporting Logic variance commentary; company context §4; GO_LIVE_GL3 ai commentary"
+      "source": "Architecture Master AI layer; Reporting Logic variance commentary; company context §4; GO_LIVE_GL3 ai commentary",
+      "answer_bullets": [
+        "AI for narrative assistance: variance commentary and executive summary drafting grounded in engine-calculated metrics",
+        "Elaborates evidenced drivers — does not compute ledger numbers or invent unsupported explanations",
+        "Evidence-backed FP&A commentary, not a chatbot that invents a story",
+        "Verification is structural: grounded in engine outputs, humans in the loop for board packages, unsupported claims declined"
+      ]
     },
     {
       "id": "finance-executive-views",
@@ -2194,8 +2232,14 @@
         "what gets configured",
         "what is configured"
       ],
-      "answer": "At implementation we typically configure source data paths, chart-of-accounts and metric mapping, ARR and scenario methodology, which reports and board/MD&A packages you use, seat invites, and plan modules. Ongoing close is load → validate → finalize the period → generate executive packages — not rebuilding the model from scratch each month. Ad-hoc redesign of every chart by every user is not the product; durable methodology configuration for your org is. Timeline is designed around roughly four to six weeks once scope and data access are agreed.",
-      "confidence": "verified",
+      "answer": "At implementation we typically configure source data paths, chart-of-accounts and metric mapping, ARR and scenario methodology, which reports and board/MD&A packages you use, seat invites, and plan modules. Ongoing close is load → validate → finalize the period → generate executive packages — not rebuilding the model from scratch each month. Ad-hoc redesign of every chart by every user is not the product; durable methodology configuration for your org is. Calendar time depends on template-vs-one-off work and how fast access is unblocked — about a week when templates apply and access is ready; longer when discovery is heavy.",
+      "answer_bullets": [
+        "Configure at implementation: source paths, CoA/metric mapping, ARR and scenario methodology, reports and board/MD&A packages, seats, plan modules",
+        "Ongoing close is load → validate → finalize → executive packages — not rebuilding the model each month",
+        "Not ad-hoc redesign of every chart by every user; durable methodology config for your org",
+        "Calendar time follows template-vs-one-off work and customer unblocking speed (~1 week when templates/access are ready; longer when discovery-heavy)"
+      ],
+      "confidence": "directional",
       "audiences": [
         "cfo",
         "fpa",
@@ -2203,7 +2247,7 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "Technical Whitepaper implementation; onboarding-paths KB; Close / reporting architecture (customer-safe wording)"
+      "source": "Technical Whitepaper implementation; onboarding-paths KB; founder timeline framing"
     },
     {
       "id": "management-pl-and-drilldown",
@@ -2356,7 +2400,12 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "Meeting Copilot KB §6 why customers buy; business-impact + differentiator positioning"
+      "source": "Meeting Copilot KB §6 why customers buy; business-impact + differentiator positioning",
+      "answer_bullets": [
+        "Use SMPL when finance still assembles the operating picture by hand — reconciling ERP, CRM, billing, and spreadsheets into ARR, statements, scenarios, and board packages",
+        "We sit above the systems you already own, apply your methodology as configuration, and produce explainable executive outputs with evidence behind the numbers",
+        "Not another dashboard — trusted financial intelligence so leadership decides from one governed view instead of reconciling versions"
+      ]
     },
     {
       "id": "build-vs-buy",
@@ -2396,7 +2445,13 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "Meeting Copilot KB §5 why not build internally; §6 why can't companies build"
+      "source": "Meeting Copilot KB §5 why not build internally; §6 why can't companies build",
+      "answer_bullets": [
+        "You can start a DIY stack (warehouse + BI + spreadsheets), but the hard part is not the first dashboard",
+        "Hard part: keeping SaaS methodology, restatements, evidence, and board-ready packages correct as systems and definitions change",
+        "Internal builds become an ongoing product your finance and data teams maintain",
+        "SMPL is the governed intelligence layer purpose-built for that job — decisions instead of rebuilding the reporting engine every quarter"
+      ]
     },
     {
       "id": "compete-pigment",
@@ -2558,16 +2613,27 @@
         "how soon do we get value"
       ],
       "keywords": [
+        "4-6 weeks",
+        "how long",
         "how long until value",
+        "how soon do we see value",
+        "how soon until value",
+        "implementation time",
+        "one week",
         "time to value",
         "time-to-value",
         "when do we see value",
-        "how soon do we see value",
-        "how soon until value",
         "when will we get value"
       ],
-      "answer": "Implementation is designed around roughly four to six weeks once scope and data access are agreed — white-glove read-only loads or versioned CSV into the canonical model, then methodology mapping and first executive packages. Value shows up when the first trusted close package and live dashboards replace the manual spreadsheet assemble step. Exact timing depends on data readiness and stakeholder availability, not on building custom software for each report.",
-      "confidence": "verified",
+      "answer": "Value shows up when the first trusted close package and live dashboards replace the manual spreadsheet assemble step — same deliverables either way (dashboards, ARR, statements, board/MD&A, commentary, methodology config, validation). Early customers can reach that in about a week when access is ready and we apply existing templates/playbooks. Four to six weeks is a common calendar when discovery is heavy: first-time source mapping, legal/IT/export waits, messy data, multiple validation loops. North star is hours-to-a-day as more sources are productized. Timing is configuration and proof plus customer unblocking speed — not building custom software per report.",
+      "answer_bullets": [
+        "Value = first trusted close package and live dashboards replacing the spreadsheet assemble step",
+        "Same deliverables either way: dashboards, ARR, statements, board/MD&A, commentary, methodology config, validation",
+        "~1 week for early customers when access is ready and templates/playbooks apply",
+        "4–6 weeks when discovery-heavy: first-time mapping, legal/IT/export waits, messy data, multiple validation loops",
+        "North star: hours-to-a-day as more source systems are documented/productized"
+      ],
+      "confidence": "directional",
       "audiences": [
         "cfo",
         "fpa",
@@ -2575,7 +2641,7 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "implementation-security timeline; onboarding-paths; Meeting Copilot implementation"
+      "source": "implementation-security timeline; onboarding-paths; founder framing on template speed vs discovery calendars"
     },
     {
       "id": "data-quality-bad-data",

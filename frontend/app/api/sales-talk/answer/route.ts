@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { requireSmplOpsAdmin } from "@/lib/auth/require-ops-admin";
 import { pickDeflectScript } from "@/lib/sales-talk/deflect";
 import { loadSalesKb } from "@/lib/sales-talk/kb";
-import { rephraseKbAnswer } from "@/lib/sales-talk/rephrase";
+import { parseAnswerBullets, rephraseKbAnswer } from "@/lib/sales-talk/rephrase";
 import { retrieveWithOptionalRouter } from "@/lib/sales-talk/router";
 import type {
   SalesAudience,
@@ -33,6 +33,13 @@ function parseAudience(value: unknown): SalesAudience | null {
   if (typeof value !== "string" || !value.trim()) return null;
   const normalized = value.trim().toLowerCase() as SalesAudience;
   return AUDIENCES.has(normalized) ? normalized : null;
+}
+
+function kbBullets(entry: { answer_bullets?: string[]; answer: string }): string[] | null {
+  if (Array.isArray(entry.answer_bullets) && entry.answer_bullets.length > 0) {
+    return entry.answer_bullets.map((b) => b.trim()).filter(Boolean);
+  }
+  return parseAnswerBullets(entry.answer);
 }
 
 export async function POST(request: Request) {
@@ -78,6 +85,7 @@ export async function POST(request: Request) {
       entryId: null,
       title: null,
       answer: null,
+      answerBullets: null,
       confidence: null,
       source: null,
       tone: null,
@@ -99,6 +107,7 @@ export async function POST(request: Request) {
       entryId: entry.id,
       title: entry.title,
       answer: null,
+      answerBullets: null,
       confidence: entry.confidence,
       source: entry.source,
       tone: entry.tone ?? "external_safe",
@@ -117,12 +126,15 @@ export async function POST(request: Request) {
   }
 
   let answerText = entry.answer;
+  let answerBullets = kbBullets(entry);
   let rephrased = false;
   if (wantRephrase) {
     const rewritten = await rephraseKbAnswer({ question, entry, audience });
     if (rewritten) {
       answerText = rewritten;
       rephrased = true;
+      const parsed = parseAnswerBullets(rewritten);
+      answerBullets = parsed ?? answerBullets;
     }
   }
 
@@ -132,6 +144,7 @@ export async function POST(request: Request) {
     entryId: entry.id,
     title: entry.title,
     answer: answerText,
+    answerBullets,
     confidence: entry.confidence,
     source: entry.source,
     tone: entry.tone ?? "external_safe",

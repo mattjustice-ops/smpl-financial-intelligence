@@ -72,6 +72,9 @@ assertTop("competitive moat", "architecture-as-moat");
 assertTop("what makes you different?", "differentiator-three-principles");
 assertTop("how are you different?", "differentiator-three-principles");
 assertTop("how long is implementation?", "implementation-security");
+assertTop("how long does implementation take?", "implementation-security");
+assertTop("one week implementation", "implementation-security");
+assertTop("4-6 weeks", "implementation-security");
 
 const implEntry = kb.entries.find((e) => e.id === "implementation-security");
 assert(implEntry, "implementation-security entry missing");
@@ -79,6 +82,51 @@ assert(
   !JSON.stringify(implEntry).toLowerCase().includes("moat"),
   "implementation-security must not contain 'moat'",
 );
+for (const kw of [
+  "how long",
+  "implementation time",
+  "time to value",
+  "4-6 weeks",
+  "one week",
+]) {
+  assert(
+    (implEntry.keywords ?? []).some((k) => k.toLowerCase().includes(kw)),
+    `implementation-security missing keyword: ${kw}`,
+  );
+}
+assert(
+  Array.isArray(implEntry.answer_bullets) && implEntry.answer_bullets.length >= 4,
+  "implementation-security must have answer_bullets",
+);
+assert(
+  /~?1 week|one week/i.test(implEntry.answer_bullets.join(" ")),
+  "implementation-security bullets must mention ~1 week",
+);
+assert(
+  /4.?6 weeks/i.test(implEntry.answer_bullets.join(" ")),
+  "implementation-security bullets must mention 4–6 weeks as discovery-heavy calendar",
+);
+assert(
+  /hours-to-a-day|hours to a day/i.test(implEntry.answer_bullets.join(" ")),
+  "implementation-security bullets must mention hours-to-a-day north star",
+);
+assert(
+  !/^implementation is designed to run about four to six weeks/i.test(implEntry.answer),
+  "implementation-security must not claim flat 4–6 weeks as the only designed timeline",
+);
+
+const ttvEntry = kb.entries.find((e) => e.id === "time-to-value");
+assert(ttvEntry, "time-to-value entry missing");
+assert(
+  Array.isArray(ttvEntry.answer_bullets) && ttvEntry.answer_bullets.length >= 4,
+  "time-to-value must have answer_bullets",
+);
+for (const kw of ["how long", "one week", "4-6 weeks", "time to value"]) {
+  assert(
+    (ttvEntry.keywords ?? []).some((k) => k.toLowerCase().includes(kw)),
+    `time-to-value missing keyword: ${kw}`,
+  );
+}
 
 const moatEntry = kb.entries.find((e) => e.id === "architecture-as-moat");
 assert(moatEntry, "architecture-as-moat entry missing");

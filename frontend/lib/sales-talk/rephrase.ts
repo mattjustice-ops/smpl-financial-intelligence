@@ -23,6 +23,19 @@ function audienceLabel(audience: SalesAudience | null): string {
   }
 }
 
+export function parseAnswerBullets(text: string | null | undefined): string[] | null {
+  if (!text?.trim()) return null;
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const bullets = lines
+    .filter((line) => /^[-•*]\s+/.test(line))
+    .map((line) => line.replace(/^[-•*]\s+/, "").trim())
+    .filter(Boolean);
+  return bullets.length >= 2 ? bullets : null;
+}
+
 /**
  * Rephrase a matched KB answer for the audience. Fail closed: returns null on any issue.
  * MUST NOT add facts, numbers, or claims absent from the KB text.
@@ -35,15 +48,23 @@ export async function rephraseKbAnswer(params: {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) return null;
 
+  const hasBullets =
+    Array.isArray(params.entry.answer_bullets) && params.entry.answer_bullets.length > 0;
+  const sourceText = hasBullets
+    ? params.entry.answer_bullets!.map((b) => `- ${b}`).join("\n")
+    : params.entry.answer;
+
   const system = [
     "You rephrase vetted sales talk-track answers for live meetings.",
     "Rules (non-negotiable):",
     "1. Use ONLY the provided KB answer text. Do not add facts, numbers, names, dates, or claims.",
     "2. Do not invent ROI, pricing, TAM, customer counts, or funding details.",
-    "3. Keep 2–4 short sentences, sayable out loud. No preamble like 'Great question.'",
+    hasBullets
+      ? "3. Return markdown bullets only: one `- ` line per point, roughly the same count as the source. No preamble."
+      : "3. Keep 2–4 short sentences, sayable out loud. No preamble like 'Great question.'",
     "4. If the KB answer is a DEFLECT instruction, keep the deflection intent; do not invent a number.",
     "5. If you cannot rephrase without adding information, return the KB answer unchanged.",
-    "Return plain text only — no JSON, no markdown.",
+    "Return plain text only — no JSON.",
   ].join("\n");
 
   const user = [
@@ -52,7 +73,7 @@ export async function rephraseKbAnswer(params: {
     `KB entry id: ${params.entry.id}`,
     `Confidence: ${params.entry.confidence}`,
     "KB answer (source of truth):",
-    params.entry.answer,
+    sourceText,
   ].join("\n\n");
 
   try {
@@ -65,7 +86,7 @@ export async function rephraseKbAnswer(params: {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 320,
+        max_tokens: 420,
         temperature: 0,
         system,
         messages: [{ role: "user", content: user }],

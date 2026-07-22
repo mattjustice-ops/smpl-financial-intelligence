@@ -17,6 +17,8 @@ export type SalesKbEntry = {
   topics: string[];
   keywords?: string[];
   answer: string;
+  /** Prefer in UI when present; sayable bullet points for live meetings. */
+  answer_bullets?: string[];
   confidence: SalesConfidence;
   audiences?: SalesAudience[];
   tone?: SalesTone;
@@ -41,6 +43,8 @@ export type SalesTalkAnswerResponse = {
   entryId: string | null;
   title: string | null;
   answer: string | null;
+  /** Prefer over paragraph when present (from KB or parsed rephrase). */
+  answerBullets: string[] | null;
   confidence: SalesConfidence | null;
   source: string | null;
   tone: SalesTone | null;

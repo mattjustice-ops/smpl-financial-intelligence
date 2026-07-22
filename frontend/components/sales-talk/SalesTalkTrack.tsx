@@ -56,6 +56,26 @@ const DEBOUNCE_MS = 20_000;
 const DEFAULT_DEFLECT =
   "Good question — I want to confirm the precise product behavior and follow up right after this rather than guess.";
 
+/** Prefer API bullets; else parse markdown-ish `- ` / `•` lines from the answer text. */
+function resolveAnswerBullets(
+  answer: string | null | undefined,
+  answerBullets: string[] | null | undefined,
+): string[] | null {
+  if (Array.isArray(answerBullets) && answerBullets.length > 0) {
+    return answerBullets.map((b) => b.trim()).filter(Boolean);
+  }
+  if (!answer?.trim()) return null;
+  const lines = answer
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const bullets = lines
+    .filter((line) => /^[-•*]\s+/.test(line))
+    .map((line) => line.replace(/^[-•*]\s+/, "").trim())
+    .filter(Boolean);
+  return bullets.length >= 2 ? bullets : null;
+}
+
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   if (typeof window === "undefined") return null;
   const w = window as Window & {
@@ -320,7 +340,7 @@ export function SalesTalkTrack() {
   const listening = listeningState === "listening";
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10 md:py-12">
+    <main className="mx-auto max-w-7xl px-4 py-10 md:px-6 md:py-12">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-teal-400">
@@ -329,7 +349,7 @@ export function SalesTalkTrack() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white md:text-4xl">
             Live meeting aide
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-400">
             Mic listens → detects a prospect question → surfaces a vetted KB answer (or a deflect
             card). Never invents numbers. Not the in-product finance Copilot.
           </p>
@@ -462,7 +482,7 @@ export function SalesTalkTrack() {
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.4fr)]">
         {/* Transcript */}
         <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <div className="mb-3 flex items-center justify-between">
@@ -532,6 +552,7 @@ export function SalesTalkTrack() {
             );
             const isDeflect =
               card.status === "deflect" || card.status === "no_prepared_answer";
+            const bullets = resolveAnswerBullets(card.answer, card.answerBullets);
             return (
               <article
                 key={card.id}
@@ -568,9 +589,17 @@ export function SalesTalkTrack() {
                     <h3 className="text-lg font-semibold text-white">
                       {card.title ?? "Answer"}
                     </h3>
-                    <p className="mt-2 text-base leading-relaxed text-slate-100">
-                      {card.answer}
-                    </p>
+                    {bullets ? (
+                      <ul className="mt-3 list-disc space-y-2 pl-5 text-base leading-relaxed text-slate-100">
+                        {bullets.map((line, idx) => (
+                          <li key={`${card.id}-b-${idx}`}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-base leading-relaxed text-slate-100">
+                        {card.answer}
+                      </p>
+                    )}
                     <p className="mt-3 text-xs text-slate-500">
                       Source · {card.entryId}
                       {card.source ? ` · ${card.source}` : ""}
