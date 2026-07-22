@@ -27,6 +27,18 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
+function assertTop(question, expectedId, label = question) {
+  const matches = retrieveSalesAnswers(question, kb.entries, { limit: 3 });
+  assert(matches.length >= 1, `${label}: expected a match`);
+  assert(
+    matches[0].entry.id === expectedId,
+    `${label}: expected ${expectedId}, got ${matches[0].entry.id} (top: ${topIds(question)
+      .map((r) => r.id)
+      .join(", ")})`,
+  );
+  return matches;
+}
+
 const moatQuery = "what is your moat?";
 console.log("tokens:", tokenize(moatQuery));
 console.log("top matches for", JSON.stringify(moatQuery));
@@ -34,40 +46,17 @@ for (const row of topIds(moatQuery)) {
   console.log(`  ${row.score.toFixed(3)}  ${row.id}`);
 }
 
-const moatMatches = retrieveSalesAnswers(moatQuery, kb.entries, { limit: 3 });
-assert(moatMatches.length >= 1, "moat query should match at least one entry");
+assertTop(moatQuery, "differentiator-three-principles", "moat");
 assert(
-  moatMatches[0].entry.id === "differentiator-three-principles",
-  `expected differentiator-three-principles, got ${moatMatches[0].entry.id}`,
-);
-assert(
-  moatMatches.every((m) => m.entry.id !== "implementation-security"),
+  retrieveSalesAnswers(moatQuery, kb.entries, { limit: 3 }).every(
+    (m) => m.entry.id !== "implementation-security",
+  ),
   "moat query must not surface implementation-security",
 );
 
-const archMatches = retrieveSalesAnswers("architecture as a moat", kb.entries, {
-  limit: 3,
-});
-assert(
-  archMatches[0]?.entry.id === "differentiator-three-principles",
-  `architecture-as-moat expected differentiator, got ${archMatches[0]?.entry.id}`,
-);
-
-const advMatches = retrieveSalesAnswers("what is your competitive advantage?", kb.entries, {
-  limit: 3,
-});
-assert(
-  advMatches[0]?.entry.id === "differentiator-three-principles",
-  `competitive advantage expected differentiator, got ${advMatches[0]?.entry.id}`,
-);
-
-const implMatches = retrieveSalesAnswers("how long is implementation?", kb.entries, {
-  limit: 3,
-});
-assert(
-  implMatches[0]?.entry.id === "implementation-security",
-  `implementation query expected implementation-security, got ${implMatches[0]?.entry.id}`,
-);
+assertTop("architecture as a moat", "differentiator-three-principles");
+assertTop("what is your competitive advantage?", "differentiator-three-principles");
+assertTop("how long is implementation?", "implementation-security");
 
 const implEntry = kb.entries.find((e) => e.id === "implementation-security");
 assert(implEntry, "implementation-security entry missing");
@@ -83,5 +72,29 @@ for (const kw of ["moat", "competitive advantage", "defensibility", "hard to cop
     `differentiator missing keyword: ${kw}`,
   );
 }
+
+// Security / AI / compete / SEO regressions from user testing
+assertTop("how do you handle AI security", "ai-data-handling");
+assertTop("AI security", "ai-data-handling");
+assertTop("is our data secure", "security-trust-overview");
+assertTop("data security", "security-trust-overview");
+assertTop("why you vs Power BI", "compete-power-bi");
+assertTop("why not just use ChatGPT", "compete-chatgpt");
+assertTop("SEO tags", "seo-marketing-site");
+assertTop("what SEO tags do you use", "seo-marketing-site");
+assertTop("why not Tableau", "compete-tableau");
+assertTop("why not Snowflake", "compete-snowflake");
+assertTop("why not just use Excel", "compete-excel");
+
+const aiEntry = kb.entries.find((e) => e.id === "ai-data-handling");
+assert(
+  (aiEntry.keywords ?? []).some((k) => k.toLowerCase() === "ai security"),
+  "ai-data-handling must keyword 'ai security'",
+);
+const trustEntry = kb.entries.find((e) => e.id === "security-trust-overview");
+assert(
+  (trustEntry.keywords ?? []).some((k) => k.toLowerCase() === "data security"),
+  "security-trust-overview must keyword 'data security'",
+);
 
 console.log("\nOK — retrieval assertions passed.");

@@ -113,6 +113,8 @@ const SYNONYM_EXPAND: Record<string, string[]> = {
   differentiator: ["moat", "differentiation", "defensibility"],
   differentiation: ["moat", "differentiator", "defensibility"],
   defensibility: ["moat", "differentiator"],
+  chatgpt: ["llm"],
+  powerbi: ["bi"],
 };
 
 /**
@@ -133,6 +135,26 @@ const KEY_PHRASE_GROUPS: string[][] = [
     "what makes you different",
     "what makes smpl different",
   ],
+  [
+    "ai security",
+    "llm security",
+    "how do you handle ai security",
+    "ai data security",
+    "prompt security",
+  ],
+  [
+    "data security",
+    "is our data secure",
+    "is data secure",
+    "how is our data secured",
+    "secure our data",
+  ],
+  ["power bi", "powerbi", "why not power bi", "why you vs power bi", "vs power bi"],
+  ["chatgpt", "chat gpt", "why not chatgpt", "why not just use chatgpt", "just use chatgpt"],
+  ["tableau", "why not tableau", "why you vs tableau", "vs tableau"],
+  ["snowflake", "why not snowflake", "why you vs snowflake", "vs snowflake"],
+  ["why not excel", "why not just use excel", "just use excel", "replace excel"],
+  ["seo tags", "meta tags", "open graph", "search console", "site seo", "marketing seo"],
   ["soc2", "soc 2", "soc-2"],
   ["implementation timeline", "how long is implementation", "four to six weeks", "4-6 weeks"],
   ["writeback", "write-back", "write back"],
@@ -144,6 +166,8 @@ export function tokenize(text: string): string[] {
     .toLowerCase()
     .replace(/soc\s*2/g, " soc2 ")
     .replace(/write[\s-]?back/g, " writeback ")
+    .replace(/power\s*bi/g, " powerbi ")
+    .replace(/chat\s*gpt/g, " chatgpt ")
     .replace(/[^a-z0-9$%\-\s]/g, " ")
     .split(/\s+/)
     .map((t) => t.trim())
@@ -218,8 +242,12 @@ function keyPhraseBoost(question: string, entry: SalesKbEntry): number {
   const q = question
     .toLowerCase()
     .replace(/soc\s*2/g, "soc2")
-    .replace(/write[\s-]?back/g, "writeback");
-  const structured = structuredText(entry);
+    .replace(/write[\s-]?back/g, "writeback")
+    .replace(/power\s*bi/g, "power bi")
+    .replace(/chat\s*gpt/g, "chatgpt");
+  const structured = structuredText(entry)
+    .replace(/power\s*bi/g, "power bi")
+    .replace(/chat\s*gpt/g, "chatgpt");
   let boost = 0;
 
   for (const phrases of KEY_PHRASE_GROUPS) {

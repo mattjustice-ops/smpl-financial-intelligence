@@ -1,6 +1,6 @@
 {
   "_comment": "SMPL Sales Talk Track KB. verified=pre-approved wording/numbers; directional=positioning paraphrase OK; do-not-answer=deflect. tone external_safe is default for customer-facing; internal_deep for internal/deep technical. audiences filter retrieval.",
-  "version": 2,
+  "version": 3,
   "default_deflect_script": "Good question — I want to give you an exact figure rather than guess, so let me follow up right after this.",
   "entries": [
     {
@@ -10,15 +10,19 @@
         "what is SMPL",
         "what does SMPL do",
         "what are you building",
-        "elevator pitch"
+        "elevator pitch",
+        "product overview"
       ],
       "keywords": [
         "elevator pitch",
         "what are you building",
         "what does smpl do",
-        "what is smpl"
+        "what is smpl",
+        "product overview",
+        "products and services",
+        "what products do you offer"
       ],
-      "answer": "SMPL.ai is a Financial Intelligence platform built specifically for SaaS companies. It works alongside the accounting system, CRM, HR, and billing platforms a finance team already uses, and automates the work of collecting, reconciling, analyzing, and explaining financial data — delivering executive-ready reporting in minutes after close, with the evidence behind every number.",
+      "answer": "SMPL.ai is a Financial Intelligence platform built specifically for SaaS companies. We connect the systems finance already uses — accounting, CRM, HR, billing — standardize the data, calculate company-specific metrics, and generate executive reporting, forecasting, and AI-supported analysis with evidence behind every number. We sit above your systems of record; we do not replace your ERP.",
       "confidence": "verified",
       "audiences": [
         "general",
@@ -37,14 +41,17 @@
         "how is this different from BI",
         "isn't this just a BI tool",
         "Tableau",
-        "Looker"
+        "Looker",
+        "Power BI"
       ],
       "keywords": [
         "how is this different from bi",
         "is this a dashboard",
         "isn't this just a bi tool",
         "looker",
-        "tableau"
+        "tableau",
+        "power bi",
+        "bi tool"
       ],
       "answer": "It isn't a dashboard and it isn't a system of record. It's the decision-support layer that sits above the systems of record — the layer every SaaS finance team currently rebuilds by hand in spreadsheets every month. A BI tool lets you drill from a summary toward more granular numbers within one system; our lineage runs all the way to the original source record, whichever system it came from.",
       "confidence": "verified",
@@ -265,15 +272,19 @@
         "Cube",
         "how do you compare to Cube",
         "Cube already does this",
-        "competitor Cube"
+        "competitor Cube",
+        "why you vs Cube"
       ],
       "keywords": [
         "competitor cube",
         "cube",
         "cube already does this",
-        "how do you compare to cube"
+        "how do you compare to cube",
+        "why you vs cube",
+        "vs cube",
+        "competitive objection cube"
       ],
-      "answer": "Cube serves a similar buyer, and its AI messaging now sounds like ours on paper. The difference is architectural: Cube's core product is a bi-directional Excel and Sheets sync — the finance team still builds and maintains the model in spreadsheets, and Cube's AI makes that faster. That architecture can't guarantee deterministic calculations or board decks that reproduce exactly after a restatement. Cube makes a team faster at the work; we do the work and hand the team a defensible result to review.",
+      "answer": "Cube serves a similar buyer, and its AI messaging can sound like ours on paper. The difference is architectural: Cube centers on bi-directional Excel and Sheets sync — finance still builds and maintains the model in spreadsheets, and AI makes that faster. That architecture cannot guarantee deterministic calculations or board decks that reproduce exactly after a restatement the way our Financial Intelligence Engine does. We compete on governed SaaS financial intelligence — consistent results, evidence, and institutional methodology — not on making spreadsheet models smarter.",
       "confidence": "verified",
       "audiences": [
         "cfo",
@@ -282,6 +293,157 @@
       ],
       "tone": "external_safe",
       "source": "Investor Overview, Competitive Landscape"
+    },
+    {
+      "id": "compete-power-bi",
+      "title": "vs Power BI",
+      "topics": [
+        "Power BI",
+        "why not Power BI",
+        "why you vs Power BI",
+        "vs Power BI",
+        "Microsoft Power BI"
+      ],
+      "keywords": [
+        "power bi",
+        "powerbi",
+        "why not power bi",
+        "why you vs power bi",
+        "vs power bi",
+        "microsoft power bi",
+        "competitive objection power bi"
+      ],
+      "answer": "Power BI is excellent at visualizing data you already trust. SMPL is the governed financial intelligence layer that produces those trusted SaaS numbers — ARR waterfalls, tie-outs, board packages — with deterministic calculations and evidence before any chart. Put simply: Power BI shows the picture; we produce the finance-grade outputs BI tools consume. Many customers still use Power BI or Excel for ad hoc views on top of SMPL.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB competitive rewrite; Investor Overview positioning"
+    },
+    {
+      "id": "compete-tableau",
+      "title": "vs Tableau",
+      "topics": [
+        "Tableau",
+        "why not Tableau",
+        "why you vs Tableau",
+        "vs Tableau"
+      ],
+      "keywords": [
+        "tableau",
+        "why not tableau",
+        "why you vs tableau",
+        "vs tableau",
+        "competitive objection tableau"
+      ],
+      "answer": "Tableau presents information beautifully. SMPL produces trusted financial outputs for SaaS finance — standardized metrics, evidence-backed variance, and board-ready packages — then explains them. Visualization tools assume the numbers are already correct; we are the layer that makes SaaS financial numbers correct, consistent, and explainable across systems.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB competitive rewrite"
+    },
+    {
+      "id": "compete-snowflake",
+      "title": "vs Snowflake",
+      "topics": [
+        "Snowflake",
+        "why not Snowflake",
+        "why you vs Snowflake",
+        "vs Snowflake",
+        "do we need a warehouse"
+      ],
+      "keywords": [
+        "snowflake",
+        "why not snowflake",
+        "why you vs snowflake",
+        "vs snowflake",
+        "data warehouse",
+        "competitive objection snowflake"
+      ],
+      "answer": "Snowflake stores and serves data. SMPL turns operational and finance data into governed financial intelligence — SaaS metrics, statements, scenarios, and AI commentary grounded in engine outputs. A warehouse is optional for us: we can work with shares or exports when useful, but the product is the intelligence layer, not another place to park tables. Customers with Snowflake still need the finance methodology and explainability SMPL provides.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB competitive rewrite"
+    },
+    {
+      "id": "compete-chatgpt",
+      "title": "vs ChatGPT / general AI",
+      "topics": [
+        "ChatGPT",
+        "why not just use ChatGPT",
+        "why not ChatGPT",
+        "just use ChatGPT",
+        "general AI"
+      ],
+      "keywords": [
+        "chatgpt",
+        "chat gpt",
+        "why not chatgpt",
+        "why not just use chatgpt",
+        "just use chatgpt",
+        "general ai",
+        "openai chatgpt",
+        "competitive objection chatgpt"
+      ],
+      "answer": "ChatGPT is a general assistant without your governed financial context. SMPL calculates trusted SaaS metrics first with a deterministic engine, then uses AI only to explain those validated results with evidence. Paste a P&L into ChatGPT and you get fluent prose that can still be wrong on ARR, NRR, or restatements. We keep AI after the numbers — and never as the system of record or a GL writer.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "ceo",
+        "fpa",
+        "it",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB competitive rewrite"
+    },
+    {
+      "id": "compete-excel",
+      "title": "vs Excel as the reporting engine",
+      "topics": [
+        "Excel",
+        "why not Excel",
+        "why not just use Excel",
+        "replace Excel",
+        "spreadsheet reporting"
+      ],
+      "keywords": [
+        "excel",
+        "why not excel",
+        "why not just use excel",
+        "just use excel",
+        "spreadsheets",
+        "replace excel",
+        "competitive objection excel"
+      ],
+      "answer": "Excel remains great for ad hoc analysis — we are not trying to ban spreadsheets. What Excel should not be is the enterprise reporting engine that recreates ARR bridges, board packs, and restatements by hand every month. SMPL automates that repetitive, error-prone layer with deterministic calculations and institutional methodology, while finance still uses Excel where judgment and exploration matter.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB competitive rewrite"
     },
     {
       "id": "compete-quickbooks",
@@ -625,8 +787,13 @@
     },
     {
       "id": "security-trust-overview",
-      "title": "How customers can trust our security",
+      "title": "Data security and how customers can trust us",
       "topics": [
+        "data security",
+        "is our data secure",
+        "how is our data secured",
+        "cybersecurity",
+        "information security",
         "how do we trust your security",
         "can we trust your security",
         "security posture",
@@ -634,14 +801,21 @@
         "security measures"
       ],
       "keywords": [
+        "data security",
+        "is our data secure",
+        "is data secure",
+        "how is our data secured",
+        "cybersecurity",
+        "information security",
         "can we trust your security",
         "how do we trust your security",
         "security measures",
         "security posture",
         "trust your security",
-        "why should we trust you with our data"
+        "why should we trust you with our data",
+        "secure our data"
       ],
-      "answer": "Trust starts with architecture, not a slogan. SMPL is a browser-based SaaS that reads and reconciles your finance systems — it does not post back to your GL or ERP. Data is encrypted in transit with TLS and at rest in managed Postgres. Tenants are isolated by organization ID on every warehouse path. Access today is invite-based magic-link login with role-based views, from finance drill-down to summary board views. AI keys stay on the API; narrative is drafted from engine outputs, not invented ledger numbers. We are pursuing SOC 2 Type I with Security, Availability, and Confidentiality in scope — we do not claim a completed SOC 2 report today. Happy to walk IT through the architecture diagram, DPA, and questionnaire answers.",
+      "answer": "On data security: architecture first. SMPL is browser SaaS that reads and reconciles your finance systems — it does not post back to your GL or ERP. Data is encrypted in transit with TLS and at rest in managed Postgres. Tenants are isolated by organization ID on every warehouse path, so Org A cannot read Org B. Access is invite-based magic-link login with role-based views. AI keys stay on the API; narrative is drafted from engine outputs, not invented numbers. We are pursuing SOC 2 Type I (Security, Availability, Confidentiality) — we do not claim a completed SOC 2 report today. For IT we share the architecture diagram, DPA, subprocessors, and questionnaire answers.",
       "confidence": "verified",
       "audiences": [
         "it",
@@ -659,7 +833,8 @@
         "encryption at rest",
         "encryption in transit",
         "TLS",
-        "how is data encrypted"
+        "how is data encrypted",
+        "data security encryption"
       ],
       "keywords": [
         "encrypted",
@@ -669,7 +844,10 @@
         "how is data encrypted",
         "is data encrypted",
         "tls",
-        "https"
+        "https",
+        "data security",
+        "cybersecurity",
+        "information security"
       ],
       "answer": "Yes. Traffic to the application and API is protected with HTTPS/TLS in transit. Customer warehouse data is stored in managed Postgres with encryption at rest provided by the database platform. That is the baseline we document for IT questionnaires and security reviews.",
       "confidence": "verified",
@@ -690,7 +868,8 @@
         "multi-tenant",
         "can another customer see our data",
         "organization_id",
-        "data isolation"
+        "data isolation",
+        "data security isolation"
       ],
       "keywords": [
         "can another customer see our data",
@@ -699,7 +878,10 @@
         "multi-tenant",
         "organization id",
         "organization_id",
-        "tenant isolation"
+        "tenant isolation",
+        "data security",
+        "cybersecurity",
+        "information security"
       ],
       "answer": "The warehouse and API are multi-tenant by design. Customer data is scoped by organization ID, and API queries require that tenant context — Org A cannot read Org B's warehouse. That isolation model is what we document for security reviews and SOC 2 readiness evidence.",
       "confidence": "verified",
@@ -732,7 +914,9 @@
         "read-only",
         "will you change our books",
         "write-back",
-        "writeback"
+        "writeback",
+        "ai cannot modify",
+        "can ai modify our data"
       ],
       "answer": "No. SMPL reads and reconciles source systems — accounting/GL, CRM, billing, HRIS — and does not post journals or write back into your ERP or general ledger. Your systems of record stay systems of record; we are the intelligence layer above them.",
       "confidence": "verified",
@@ -911,7 +1095,8 @@
         "SOC2",
         "SOC 2 certified",
         "compliance status",
-        "do you have a SOC report"
+        "do you have a SOC report",
+        "information security compliance"
       ],
       "keywords": [
         "are you soc 2",
@@ -924,7 +1109,10 @@
         "soc2",
         "soc2 certified",
         "type i",
-        "type ii"
+        "type ii",
+        "data security",
+        "cybersecurity",
+        "information security"
       ],
       "answer": "We are pursuing SOC 2 — readiness work is in progress — and we do not claim a completed SOC 2 certification or issued report today. Target path is Type I first, covering Security, Availability, and Confidentiality; Type II follows after an observation window. Until a report is issued, the honest language is 'pursuing' or 'in progress,' and we unblock IT with architecture, encryption, tenant isolation, no GL write-back, auth model, AI handling, DPA, and questionnaire answers.",
       "confidence": "verified",
@@ -994,26 +1182,40 @@
     },
     {
       "id": "ai-data-handling",
-      "title": "AI / LLM data handling",
+      "title": "AI security and LLM data handling",
       "topics": [
+        "AI security",
+        "how do you handle AI security",
+        "LLM security",
+        "do you train on our data",
         "what data goes to the AI",
         "does AI see our ledger",
-        "LLM data handling",
-        "does Claude train on our data",
-        "AI privacy"
+        "AI privacy",
+        "prompt security"
       ],
       "keywords": [
+        "ai security",
+        "how do you handle ai security",
+        "llm security",
+        "ai data security",
+        "do you train on our data",
+        "train on our data",
+        "training data",
+        "prompts",
+        "prompt security",
         "ai privacy",
         "ai sees our data",
-        "claude",
         "does ai see our ledger",
+        "what data goes to the ai",
+        "what does the ai see",
+        "claude",
+        "openai",
         "llm",
         "llm data",
-        "openai",
-        "what data goes to the ai",
-        "what does the ai see"
+        "cybersecurity",
+        "information security"
       ],
-      "answer": "AI is used for narrative assistance — variance commentary and executive summary drafting — not to invent ledger numbers. Commentary is grounded in Financial Intelligence Engine outputs and governed report context. We minimize sending sensitive raw PII in prompts and prefer aggregated metrics. Treat the LLM provider as a subprocessor when prompts include customer-derived context; contractual training/retention posture follows the vendor terms we document for IT.",
+      "answer": "On AI security: we use AI for narrative assistance — variance commentary and executive summaries — not to invent ledger numbers. Deterministic engine outputs and governed report context come first; prompts send the minimum needed, usually aggregated metrics rather than raw PII. Customer data is not used to train foundation models — the LLM vendor is a subprocessor under our DPA terms. Model API keys stay server-side on the API, never in the browser or board HTML. AI cannot write back to your GL or ERP; it only drafts explanations. Tenant isolation still applies — another customer cannot see your context. Happy to walk IT through AI handling, keys, and subprocessors on the questionnaire.",
       "confidence": "verified",
       "audiences": [
         "it",
@@ -1022,7 +1224,7 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "IT Technical Diagram, AI Narrative; SOC 2 Readiness Reference v2 §7.1; Architecture Master AI layer"
+      "source": "IT Technical Diagram; SOC 2 Readiness Reference; Meeting Copilot KB security rewrite"
     },
     {
       "id": "ai-keys-server-side",
@@ -1031,17 +1233,20 @@
         "where are AI API keys",
         "are keys in the browser",
         "Anthropic key handling",
-        "client-side secrets"
+        "client-side secrets",
+        "AI security keys"
       ],
       "keywords": [
         "ai api keys",
         "ai keys",
+        "ai security",
         "anthropic key",
         "are keys in the browser",
         "client-side secrets",
         "keys on the api",
         "llm keys",
-        "where are ai keys"
+        "where are ai keys",
+        "server-side keys"
       ],
       "answer": "Anthropic is the primary narrative model with OpenAI as fallback. API keys reside on the server-side API only — not in static board HTML and not in the browser. That keeps model credentials out of client bundles and exported artifacts.",
       "confidence": "verified",
@@ -1320,7 +1525,8 @@
         "what does the platform do",
         "product capabilities",
         "what's in the product",
-        "feature list"
+        "feature list",
+        "products and services"
       ],
       "keywords": [
         "capabilities",
@@ -1330,7 +1536,9 @@
         "what features",
         "what features are included",
         "what's in the product",
-        "what does the platform include"
+        "what does the platform include",
+        "products and services",
+        "product overview"
       ],
       "answer": "SMPL is a SaaS financial intelligence layer — not a BI dashboard and not an ERP. In the product you get executive dashboards, ARR/MRR waterfalls, the three financial statements with tie-outs, Actual vs Budget vs Forecast scenarios, pipeline and GTM views, board PowerPoint and MD&A-style Excel packages, and AI-assisted executive commentary grounded in the same numbers. Higher plans unlock Management P&L, workforce, and cash forecast modules. We sit above your GL, CRM, billing, and HR systems and do not post back to them.",
       "confidence": "verified",
@@ -1342,6 +1550,37 @@
       ],
       "tone": "external_safe",
       "source": "Architecture Master; Reporting Logic report catalog; GO_LIVE_GL3 plan entitlements; CFO Operating System UX"
+    },
+    {
+      "id": "seo-marketing-site",
+      "title": "SEO / meta tags (marketing site)",
+      "topics": [
+        "SEO tags",
+        "meta tags",
+        "Open Graph",
+        "site SEO",
+        "Search Console"
+      ],
+      "keywords": [
+        "seo",
+        "seo tags",
+        "meta tags",
+        "open graph",
+        "og tags",
+        "search console",
+        "site seo",
+        "marketing seo",
+        "what seo tags"
+      ],
+      "answer": "SEO and meta tags are a marketing-site concern, not a product feature in customer meetings. Title, description, Open Graph, and structured data live on smpl-ai.com pages and are monitored in Google Search Console — they are not something configured inside the SMPL app for a prospect tenant. If someone is asking about discoverability of our public site, point them to the live marketing pages; if they mean product analytics SEO, that is out of scope for a finance intelligence demo.",
+      "confidence": "verified",
+      "audiences": [
+        "general",
+        "ceo",
+        "cfo"
+      ],
+      "tone": "external_safe",
+      "source": "Marketing site / Search Console note for Sales Talk Track"
     },
     {
       "id": "arr-mrr-reporting",
