@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { requireSmplOpsAdmin } from "@/lib/auth/require-ops-admin";
-import { defaultDeflectScript, loadSalesKb } from "@/lib/sales-talk/kb";
+import { pickDeflectScript } from "@/lib/sales-talk/deflect";
+import { loadSalesKb } from "@/lib/sales-talk/kb";
 import { rephraseKbAnswer } from "@/lib/sales-talk/rephrase";
 import { retrieveSalesAnswers } from "@/lib/sales-talk/retrieve";
 import type {
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
   const wantRephrase = body.rephrase !== false;
 
   const kb = loadSalesKb();
-  const deflectScript = kb.default_deflect_script ?? defaultDeflectScript();
+  const deflectScript = pickDeflectScript(question);
   const matches = retrieveSalesAnswers(question, kb.entries, {
     audience,
     includeInternalDeep,
@@ -98,7 +99,8 @@ export async function POST(request: Request) {
       confidence: entry.confidence,
       source: entry.source,
       tone: entry.tone ?? "external_safe",
-      deflectScript: entry.deflect_script?.trim() || deflectScript,
+      // Prefer entry script; else context-aware (figure language only for pricing/TAM/funding DNA)
+      deflectScript: entry.deflect_script?.trim() || pickDeflectScript(question),
       score: top.score,
       rephrased: false,
       matches: matches.map((m) => ({

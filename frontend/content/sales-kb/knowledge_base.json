@@ -1,7 +1,7 @@
 {
   "_comment": "SMPL Sales Talk Track KB. verified=pre-approved wording/numbers; directional=positioning paraphrase OK; do-not-answer=deflect. tone external_safe is default for customer-facing; internal_deep for internal/deep technical. audiences filter retrieval.",
-  "version": 3,
-  "default_deflect_script": "Good question — I want to give you an exact figure rather than guess, so let me follow up right after this.",
+  "version": 4,
+  "default_deflect_script": "Good question — I want to confirm the precise product behavior and follow up right after this rather than guess.",
   "entries": [
     {
       "id": "what-is-smpl",
@@ -448,6 +448,43 @@
       ],
       "tone": "external_safe",
       "source": "Meeting Copilot KB competitive rewrite"
+    },
+    {
+      "id": "compete-mosaic",
+      "title": "vs Mosaic (FP&A)",
+      "topics": [
+        "Mosaic",
+        "mosaic.fm",
+        "why not Mosaic",
+        "how do you compare to Mosaic",
+        "vs Mosaic",
+        "competitor Mosaic"
+      ],
+      "keywords": [
+        "mosaic",
+        "mosaic.fm",
+        "mosiac",
+        "mozaic",
+        "mosiac.fm",
+        "why not mosaic",
+        "why you vs mosaic",
+        "vs mosaic",
+        "how do you compare to mosaic",
+        "competitor mosaic",
+        "competitive objection mosaic",
+        "bob finance",
+        "hibob mosaic"
+      ],
+      "answer": "Mosaic was a mid-market SaaS FP&A platform — SaaS metrics, planning, and reporting with ERP/CRM/HRIS integrations — and is now part of HiBob as Bob Finance rather than a standalone FP&A product. If someone is comparing us to Mosaic's old positioning, we compete on governed financial intelligence for SaaS: deterministic calculations, evidence behind numbers, and board-ready packages that sit above systems of record. We are not an HCM suite add-on; we are purpose-built for SaaS finance intelligence. Fair to evaluate Bob Finance if they are already deep in HiBob — different buying center and architecture.",
+      "confidence": "directional",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Public Mosaic/HiBob positioning; Investor Overview competitive framing"
     },
     {
       "id": "compete-excel",
@@ -996,6 +1033,40 @@
       "source": "IT Technical Diagram; Technical Whitepaper, Delivery"
     },
     {
+      "id": "system-architecture",
+      "title": "System architecture overview",
+      "topics": [
+        "system architecture",
+        "architecture overview",
+        "how is it built",
+        "tech stack",
+        "tell me about your system architecture",
+        "what is your architecture"
+      ],
+      "keywords": [
+        "system architecture",
+        "architecture overview",
+        "how is it built",
+        "tech stack",
+        "tell me about your system architecture",
+        "what is your architecture",
+        "application architecture",
+        "platform architecture",
+        "how does the stack work"
+      ],
+      "answer": "SMPL is a browser-based SaaS app: Next.js on Vercel for the frontend, a FastAPI API on Railway, and Neon Postgres as a multi-tenant warehouse. We sit above your systems of record — we do not replace the ERP or GL. The financial engine runs deterministic calculations first; AI is used afterward for narrative over those grounded numbers. Happy to share the IT technical diagram under NDA for a deeper review.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "engineer",
+        "cfo",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram; Architecture Master; hosting model"
+    },
+    {
       "id": "subprocessors-named",
       "title": "Named subprocessors (sales-internal)",
       "topics": [
@@ -1216,40 +1287,22 @@
     },
     {
       "id": "ai-data-handling",
-      "title": "AI security and LLM data handling",
+      "title": "AI data handling (overview)",
       "topics": [
-        "AI security",
-        "how do you handle AI security",
-        "LLM security",
-        "do you train on our data",
         "what data goes to the AI",
         "does AI see our ledger",
-        "AI privacy",
-        "prompt security"
+        "what does the AI see",
+        "LLM data handling"
       ],
       "keywords": [
-        "ai security",
-        "how do you handle ai security",
-        "llm security",
-        "ai data security",
-        "do you train on our data",
-        "train on our data",
-        "training data",
-        "prompts",
-        "prompt security",
-        "ai privacy",
-        "ai sees our data",
-        "does ai see our ledger",
         "what data goes to the ai",
         "what does the ai see",
-        "claude",
-        "openai",
-        "llm",
+        "does ai see our ledger",
         "llm data",
-        "cybersecurity",
-        "information security"
+        "ai data handling",
+        "prompts to the model"
       ],
-      "answer": "On AI security: we use AI for narrative assistance — variance commentary and executive summaries — not to invent ledger numbers. Deterministic engine outputs and governed report context come first; prompts send the minimum needed, usually aggregated metrics rather than raw PII. Customer data is not used to train foundation models — the LLM vendor is a subprocessor under our DPA terms. Model API keys stay server-side on the API, never in the browser or board HTML. AI cannot write back to your GL or ERP; it only drafts explanations. Tenant isolation still applies — another customer cannot see your context. Happy to walk IT through AI handling, keys, and subprocessors on the questionnaire.",
+      "answer": "For narrative AI we send the minimum needed — usually aggregated metrics and governed report context, not raw PII dumps. Deterministic engine outputs come first; the model drafts explanations over those numbers. For AI security controls, training, and hallucination safeguards, ask those specifically — we have focused answers for each.",
       "confidence": "verified",
       "audiences": [
         "it",
@@ -1258,7 +1311,104 @@
         "general"
       ],
       "tone": "external_safe",
-      "source": "IT Technical Diagram; SOC 2 Readiness Reference; Meeting Copilot KB security rewrite"
+      "source": "IT Technical Diagram; SOC 2 Readiness Reference; Meeting Copilot KB (split from kitchen-sink card)"
+    },
+    {
+      "id": "ai-security",
+      "title": "AI security controls",
+      "topics": [
+        "AI security",
+        "how do you handle AI security",
+        "what are you doing for AI security",
+        "LLM security",
+        "AI data security",
+        "prompt security"
+      ],
+      "keywords": [
+        "ai security",
+        "what are you doing for ai security",
+        "how do you handle ai security",
+        "llm security",
+        "ai data security",
+        "prompt security",
+        "ai cybersecurity",
+        "securing ai"
+      ],
+      "answer": "On AI security specifically: model API keys stay server-side on the API — never in the browser or board HTML. Prompts send the minimum needed, usually aggregated metrics rather than raw PII. AI cannot write back to your GL or ERP; it only drafts explanations over engine outputs. Tenant isolation still applies — another customer cannot see your context. The LLM vendor is a subprocessor under our DPA terms. Happy to walk IT through keys, prompts, isolation, and the DPA on the questionnaire.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "IT Technical Diagram; SOC 2 Readiness Reference; Meeting Copilot KB"
+    },
+    {
+      "id": "ai-training",
+      "title": "Do you train AI on our data",
+      "topics": [
+        "do you train on our data",
+        "do you train AI on our data",
+        "is our data used for training",
+        "training data",
+        "customer data training"
+      ],
+      "keywords": [
+        "do you train on our data",
+        "do you train ai on our data",
+        "train on our data",
+        "train ai on our data",
+        "training data",
+        "is our data used for training",
+        "train foundation models"
+      ],
+      "answer": "No — we do not use customer data to train foundation models. Customer content used for narrative assistance is processed under our vendor terms and DPA; the LLM provider is a subprocessor, not a training corpus for SMPL.",
+      "confidence": "verified",
+      "audiences": [
+        "it",
+        "cfo",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "SOC 2 Readiness Reference; vendor DPA / subprocessor posture"
+    },
+    {
+      "id": "ai-hallucinations",
+      "title": "AI hallucinations / how we prevent them",
+      "topics": [
+        "can AI hallucinate",
+        "how do you prevent hallucinations",
+        "AI inventing numbers",
+        "hallucination risk",
+        "does AI make things up"
+      ],
+      "keywords": [
+        "hallucinate",
+        "hallucination",
+        "hallucinations",
+        "can ai hallucinate",
+        "how do you prevent hallucinations",
+        "prevent hallucinations",
+        "ai inventing",
+        "does ai make things up",
+        "ai made up",
+        "fabricate"
+      ],
+      "answer": "Yes — generative AI can invent narrative if left unconstrained. We prevent that by grounding commentary in numbers the deterministic engine already calculated, keeping humans in the review loop for board-facing packages, and never letting AI invent ledger figures. Where the data does not support a claim, we fail closed rather than fabricate an explanation.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "engineer",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Technical Whitepaper; Meeting Copilot KB; evidence/determinism principles"
     },
     {
       "id": "ai-keys-server-side",
@@ -1267,13 +1417,11 @@
         "where are AI API keys",
         "are keys in the browser",
         "Anthropic key handling",
-        "client-side secrets",
-        "AI security keys"
+        "client-side secrets"
       ],
       "keywords": [
         "ai api keys",
         "ai keys",
-        "ai security",
         "anthropic key",
         "are keys in the browser",
         "client-side secrets",

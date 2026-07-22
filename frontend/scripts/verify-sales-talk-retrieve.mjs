@@ -96,8 +96,18 @@ for (const kw of ["what makes you different", "differentiator", "differentiation
 }
 
 // Security / AI / compete / SEO regressions from user testing
-assertTop("how do you handle AI security", "ai-data-handling");
-assertTop("AI security", "ai-data-handling");
+assertTop("how do you handle AI security", "ai-security");
+assertTop("AI security", "ai-security");
+assertTop("what are you doing for AI security?", "ai-security");
+assertTop("do you train AI on our data", "ai-training");
+assertTop("do you train on our data", "ai-training");
+assertTop("can AI hallucinate", "ai-hallucinations");
+assertTop("how do you prevent hallucinations", "ai-hallucinations");
+assertTop("Tell me about your system architecture", "system-architecture");
+assertTop("what is your system architecture", "system-architecture");
+assertTop("tech stack", "system-architecture");
+assertTop("why not mosaic", "compete-mosaic");
+assertTop("why not mosiac", "compete-mosaic");
 assertTop("is our data secure", "security-trust-overview");
 assertTop("data security", "security-trust-overview");
 assertTop("why you vs Power BI", "compete-power-bi");
@@ -108,15 +118,53 @@ assertTop("why not Tableau", "compete-tableau");
 assertTop("why not Snowflake", "compete-snowflake");
 assertTop("why not just use Excel", "compete-excel");
 
-const aiEntry = kb.entries.find((e) => e.id === "ai-data-handling");
+const aiSecurity = kb.entries.find((e) => e.id === "ai-security");
+assert(aiSecurity, "ai-security entry missing");
 assert(
-  (aiEntry.keywords ?? []).some((k) => k.toLowerCase() === "ai security"),
-  "ai-data-handling must keyword 'ai security'",
+  (aiSecurity.keywords ?? []).some((k) => k.toLowerCase() === "ai security"),
+  "ai-security must keyword 'ai security'",
+);
+const aiTraining = kb.entries.find((e) => e.id === "ai-training");
+assert(aiTraining, "ai-training entry missing");
+assert(
+  /do not use customer data to train/i.test(aiTraining.answer),
+  "ai-training must clearly say we do not train on customer data",
+);
+const aiHalluc = kb.entries.find((e) => e.id === "ai-hallucinations");
+assert(aiHalluc, "ai-hallucinations entry missing");
+const sysArch = kb.entries.find((e) => e.id === "system-architecture");
+assert(sysArch, "system-architecture entry missing");
+assert(
+  !/freeze|lock ladder/i.test(sysArch.answer),
+  "system-architecture must not use freeze/lock jargon",
+);
+const mosaic = kb.entries.find((e) => e.id === "compete-mosaic");
+assert(mosaic, "compete-mosaic entry missing");
+
+const aiData = kb.entries.find((e) => e.id === "ai-data-handling");
+assert(aiData, "ai-data-handling entry missing");
+assert(
+  !(aiData.keywords ?? []).some((k) => k.toLowerCase() === "ai security"),
+  "ai-data-handling must not keyword bare 'ai security' (focused card wins)",
 );
 const trustEntry = kb.entries.find((e) => e.id === "security-trust-overview");
 assert(
   (trustEntry.keywords ?? []).some((k) => k.toLowerCase() === "data security"),
   "security-trust-overview must keyword 'data security'",
+);
+
+// Moat must not win system-architecture asks
+assert(
+  retrieveSalesAnswers("Tell me about your system architecture", kb.entries, {
+    limit: 3,
+  })[0].entry.id !== "architecture-as-moat",
+  "system architecture must not win with architecture-as-moat",
+);
+assert(
+  retrieveSalesAnswers("Tell me about your system architecture", kb.entries, {
+    limit: 3,
+  })[0].entry.id !== "does-not-replace-erp",
+  "system architecture must not win with does-not-replace-erp",
 );
 
 console.log("\nOK — retrieval assertions passed.");

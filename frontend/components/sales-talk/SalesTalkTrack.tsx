@@ -54,7 +54,7 @@ const AUDIENCE_OPTIONS: Array<{ id: SalesAudience; label: string }> = [
 
 const DEBOUNCE_MS = 20_000;
 const DEFAULT_DEFLECT =
-  "Good question — I want to give you an exact figure rather than guess, so let me follow up right after this.";
+  "Good question — I want to confirm the precise product behavior and follow up right after this rather than guess.";
 
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   if (typeof window === "undefined") return null;

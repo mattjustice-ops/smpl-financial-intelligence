@@ -77,7 +77,9 @@ Governance / freeze / lock detail lives in `governance-workflow-internal` (`inte
 | Named subprocessors (internal) | `subprocessors-named` (Vercel, Railway, Neon, Resend, Anthropic, Stripe) |
 | Auth today + SSO honesty | `auth-magic-link`, `sso-roadmap` |
 | SOC 2 honesty | `soc2-status`, `soc2-scope-internal`, `dna-soc2-report` |
-| AI data handling / keys | `ai-data-handling`, `ai-keys-server-side` |
+| AI security / training / hallucinations | `ai-security`, `ai-training`, `ai-hallucinations` (overview: `ai-data-handling`; keys: `ai-keys-server-side`) |
+| System architecture / stack | `system-architecture`, `hosting-architecture` |
+| vs Mosaic (FP&A) | `compete-mosaic` |
 | Implementation / onboarding | `implementation-security`, `onboarding-paths`, `white-glove-readonly`, `data-sources-ingest` |
 | RBAC / secrets | `rbac-access`, `secrets-cors` |
 | Talk-track tool privacy | `talk-track-privacy` |
@@ -100,12 +102,26 @@ Still DNA (do not invent): TAM/SAM/SOM, pricing/ACV, funding, named design-partn
 
 Avoid freeze/lock / Prompt 5 jargon in `external_safe` answers when talking close and board packages.
 
+## What we need to answer tough questions
+
+Kitchen-sink cards hurt retrieval: one bloated entry matching half the vocabulary will beat the focused answer. To stay sharp in live calls we need:
+
+1. **An explicit sayable answer** for each recurring question (short card, one job).
+2. **Keywords that match how people ask** — not how we title the topic internally.
+3. **Founder lock on confidence** — `verified` only when Matt (or designee) has locked the wording; otherwise `directional` or `do-not-answer` + deflect.
+4. **Transcripts → new cards** — every miss or wrong-card in a real call becomes a focused entry (or a keyword fix), not a paragraph bolted onto an existing mega-card.
+
+Deflect language is context-aware: product/behavior questions use “confirm the precise product behavior…”, not “exact figure”. Figure language is reserved for pricing / TAM / funding DNA.
+
 ## Retrieval & rephrase
 
 - Keyword scoring over title, topics, keywords, answer (no embeddings), with light synonym expansion (e.g. `soc2` ↔ compliance/encryption phrasings).
+- High-signal key-phrase boosts (AI security, train on data, hallucinat*, system architecture, mosaic, moat, compete vs BI, etc.) so focused cards win over bag-of-words noise.
 - Filters by audience when set; prefers `external_safe` unless **Include internal deep** is on.
-- Below threshold → **No prepared answer** (fail closed).
+- Below threshold → **No prepared answer** (fail closed) with context-aware deflect.
 - Optional Anthropic rephrase (`ANTHROPIC_API_KEY` on the Next server): rewrites matched KB text for the audience only — **must not add facts**. No key / failure → raw KB text.
+
+Regression check: `node --experimental-strip-types frontend/scripts/verify-sales-talk-retrieve.mjs` (from `frontend/`).
 
 API: `POST /api/sales-talk/answer` (Ops-admin auth).
 
