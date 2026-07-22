@@ -79,8 +79,10 @@ Governance / freeze / lock detail lives in `governance-workflow-internal` (`inte
 | SOC 2 honesty | `soc2-status`, `soc2-scope-internal`, `dna-soc2-report` |
 | AI security / training / hallucinations | `ai-security`, `ai-training`, `ai-hallucinations` (overview: `ai-data-handling`; keys: `ai-keys-server-side`) |
 | System architecture / stack | `system-architecture`, `hosting-architecture` |
-| vs Mosaic (FP&A) | `compete-mosaic` |
-| Implementation / onboarding | `implementation-security`, `onboarding-paths`, `white-glove-readonly`, `data-sources-ingest` |
+| Why use SMPL / value prop | `why-us` |
+| Build vs buy / DIY | `build-vs-buy` |
+| vs Mosaic / Cube / Rillet / Pigment / Anaplan | `compete-mosaic`, `compete-cube`, `compete-rillet`, `compete-pigment`, `compete-anaplan` |
+| Implementation / onboarding / after go-live | `implementation-security`, `onboarding-paths`, `after-implementation`, `time-to-value`, `white-glove-readonly`, `data-sources-ingest` |
 | RBAC / secrets | `rbac-access`, `secrets-cors` |
 | Talk-track tool privacy | `talk-track-privacy` |
 
@@ -91,13 +93,13 @@ Still DNA (do not invent): TAM/SAM/SOM, pricing/ACV, funding, named design-partn
 | Theme | Example entry ids |
 |---|---|
 | Feature overview / what’s included | `platform-features-overview`, `plan-modules-included` |
-| ARR/MRR, statements, scenarios | `arr-mrr-reporting`, `three-financial-statements`, `scenarios-actual-budget-forecast` |
-| Customization / CoA / per-customer reports | `customize-reporting-per-customer`, `methodology-coa-config`, `customization-at-implementation` |
+| ARR/MRR, NRR/GRR, statements, scenarios / forecasts | `arr-mrr-reporting`, `nrr-grr-calculation`, `three-financial-statements`, `scenarios-actual-budget-forecast`, `forecast-assumptions` |
+| Customization / CoA / metrics / methodology | `customize-metrics-methodology`, `customize-reporting-per-customer`, `methodology-coa-config`, `customization-at-implementation`, `custom-objects` |
 | Per-org tenant (not inventing private cloud) | `per-org-tenant-environment` |
-| Data path honesty (CSV / white-glove vs connectors) | `data-sources-ingest`, `connectors-today-vs-roadmap`, `dna-native-connectors-live` |
-| Board / MD&A / AI commentary (no freeze jargon) | `board-deck-and-mda`, `ai-commentary-capabilities` |
+| Data path honesty (CSV / white-glove vs connectors) | `data-sources-ingest`, `connectors-today-vs-roadmap`, `dna-native-connectors-live`, `netsuite-schema-change`, `own-warehouse`, `import-validation`, `data-quality-bad-data` |
+| Board / MD&A / AI commentary (no freeze jargon) | `board-deck-and-mda`, `ai-commentary-capabilities`, `ai-executive-qa`, `ai-accuracy`, `board-auditor-trust`, `calculation-traceability`, `export-capabilities` |
 | Finance vs executive views | `finance-executive-views` (depth limited — don’t invent RBAC) |
-| Boundaries | `what-platform-does-not-do`, `does-not-replace-erp`, `no-gl-writeback` |
+| Boundaries | `what-platform-does-not-do`, `does-not-replace-erp`, `replace-boundaries`, `no-gl-writeback` |
 | GTM / pipeline / cash / Mgmt P&L | `gtm-pipeline-cash-modules`, `management-pl-and-drilldown`, `dashboards-exports-same-logic` |
 
 Avoid freeze/lock / Prompt 5 jargon in `external_safe` answers when talking close and board packages.
@@ -115,13 +117,18 @@ Deflect language is context-aware: product/behavior questions use “confirm the
 
 ## Retrieval & rephrase
 
-- Keyword scoring over title, topics, keywords, answer (no embeddings), with light synonym expansion (e.g. `soc2` ↔ compliance/encryption phrasings).
-- High-signal key-phrase boosts (AI security, train on data, hallucinat*, system architecture, mosaic, moat, compete vs BI, etc.) so focused cards win over bag-of-words noise.
-- Filters by audience when set; prefers `external_safe` unless **Include internal deep** is on.
-- Below threshold → **No prepared answer** (fail closed) with context-aware deflect.
-- Optional Anthropic rephrase (`ANTHROPIC_API_KEY` on the Next server): rewrites matched KB text for the audience only — **must not add facts**. No key / failure → raw KB text.
+Retrieval is intentionally **not** pure bag-of-words:
 
-Regression check: `node --experimental-strip-types frontend/scripts/verify-sales-talk-retrieve.mjs` (from `frontend/`).
+1. **Synonym expansion** — light token aliases (e.g. `soc2` ↔ compliance, `nrr` ↔ retention, `diy` ↔ build/ourselves).
+2. **Key-phrase boosts** — if the question contains a high-signal phrase (moat, why us, build vs buy, AI security, hallucinat*, system architecture, compete names, etc.), entries that carry that phrase are boosted and unrelated cards are mildly penalized.
+3. **Intent → entry map** — regex/intent rules boost preferred entry IDs for common paraphrases (`why use SMPL` / `why your company` → `why-us`; `build it ourselves` / `should we build` → `build-vs-buy`; Pigment/Anaplan/Cube/… → compete cards). This is the MVP layer that makes paraphrases reliable without embeddings.
+4. **Optional retrieve router** — when `ANTHROPIC_API_KEY` is set on the Next server, Claude may pick **top 1–3 entry IDs only from the keyword shortlist (top 8)** using titles/topics — it never invents answers or IDs outside the list. No key, parse failure, or abstain → fall back to keyword best match. Low top score or abstain with no strong keyword hit → **deflect** (fail closed).
+5. Filters by audience when set; prefers `external_safe` unless **Include internal deep** is on.
+6. Below score threshold → **No prepared answer** with context-aware deflect (product-behavior language by default; “exact figure” only for pricing/TAM/funding DNA).
+
+Optional Anthropic **rephrase** (same API key): rewrites an already-matched KB answer for the audience only — **must not add facts**. No key / failure → raw KB text. Rephrase does not choose which card wins; the router/keyword path does.
+
+Regression check: `node --experimental-strip-types scripts/verify-sales-talk-retrieve.mjs` (from `frontend/`). Covers laundry-list questions plus paraphrases (`why use SMPL`, `why your company`, `why build it ourselves`, `should we build`, `what is your moat`).
 
 API: `POST /api/sales-talk/answer` (Ops-admin auth).
 

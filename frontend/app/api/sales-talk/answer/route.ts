@@ -4,7 +4,7 @@ import { requireSmplOpsAdmin } from "@/lib/auth/require-ops-admin";
 import { pickDeflectScript } from "@/lib/sales-talk/deflect";
 import { loadSalesKb } from "@/lib/sales-talk/kb";
 import { rephraseKbAnswer } from "@/lib/sales-talk/rephrase";
-import { retrieveSalesAnswers } from "@/lib/sales-talk/retrieve";
+import { retrieveWithOptionalRouter } from "@/lib/sales-talk/router";
 import type {
   SalesAudience,
   SalesTalkAnswerResponse,
@@ -62,7 +62,10 @@ export async function POST(request: Request) {
 
   const kb = loadSalesKb();
   const deflectScript = pickDeflectScript(question);
-  const matches = retrieveSalesAnswers(question, kb.entries, {
+  // Keyword shortlist (+ optional Claude ID router). Fail closed → deflect.
+  const { matches } = await retrieveWithOptionalRouter({
+    question,
+    entries: kb.entries,
     audience,
     includeInternalDeep,
     limit: 3,

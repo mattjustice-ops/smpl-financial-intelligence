@@ -1,6 +1,6 @@
 {
   "_comment": "SMPL Sales Talk Track KB. verified=pre-approved wording/numbers; directional=positioning paraphrase OK; do-not-answer=deflect. tone external_safe is default for customer-facing; internal_deep for internal/deep technical. audiences filter retrieval.",
-  "version": 4,
+  "version": 5,
   "default_deflect_script": "Good question — I want to confirm the precise product behavior and follow up right after this rather than guess.",
   "entries": [
     {
@@ -80,7 +80,6 @@
         "what makes you different",
         "what makes smpl different",
         "how are you different",
-        "why you",
         "consistent results",
         "transparent by design",
         "institutional knowledge"
@@ -222,15 +221,20 @@
         "what if data is incomplete",
         "confidence signal",
         "how do you handle uncertainty",
-        "bad data"
+        "bad data",
+        "what happens if confidence is low"
       ],
       "keywords": [
         "bad data",
         "confidence signal",
         "how do you handle uncertainty",
-        "what if data is incomplete"
+        "what if data is incomplete",
+        "what happens if confidence is low",
+        "confidence is low",
+        "low confidence",
+        "if confidence is low"
       ],
-      "answer": "Every number and explanation carries an explicit confidence signal. A value from complete, well-structured data reads high-confidence; a value derived by inference — say, ARR estimated from invoice history rather than an explicit contract record — reads visibly lower, with a note on what would resolve it. Confidence is never collapsed into false certainty in either direction.",
+      "answer": "Every number and explanation carries an explicit confidence signal. A value from complete, well-structured data reads high-confidence; a value derived by inference — say, ARR estimated from invoice history rather than an explicit contract record — reads visibly lower, with a note on what would resolve it. Confidence is never collapsed into false certainty in either direction. When confidence is low, the UI flags it and explanations stay conservative — we show what is known and what would raise confidence, rather than collapsing uncertainty into a fake-precise number.",
       "confidence": "verified",
       "audiences": [
         "cfo",
@@ -307,7 +311,8 @@
         "how do you compare to Cube",
         "Cube already does this",
         "competitor Cube",
-        "why you vs Cube"
+        "why you vs Cube",
+        "why not Cube"
       ],
       "keywords": [
         "competitor cube",
@@ -316,9 +321,12 @@
         "how do you compare to cube",
         "why you vs cube",
         "vs cube",
-        "competitive objection cube"
+        "competitive objection cube",
+        "why not cube",
+        "why cube",
+        "cube competitor"
       ],
-      "answer": "Cube serves a similar buyer, and its AI messaging can sound like ours on paper. The difference is architectural: Cube centers on bi-directional Excel and Sheets sync — finance still builds and maintains the model in spreadsheets, and AI makes that faster. That architecture cannot guarantee deterministic calculations or board decks that reproduce exactly after a restatement the way our Financial Intelligence Engine does. We compete on governed SaaS financial intelligence — consistent results, evidence, and institutional methodology — not on making spreadsheet models smarter.",
+      "answer": "Cube serves a similar buyer, and its AI messaging can sound like ours on paper. The difference is architectural: Cube centers on bi-directional Excel and Sheets sync — finance still builds and maintains the model in spreadsheets, and AI makes that faster. That architecture cannot guarantee deterministic calculations or board decks that reproduce exactly after a restatement the way our Financial Intelligence Engine does. We compete on governed SaaS financial intelligence — consistent results, evidence, and institutional methodology — not on making spreadsheet models smarter. If the objection is simply “why not Cube,” answer on architecture: spreadsheet-centric bi-directional sync versus a governed calculation engine with reproducible board outputs.",
       "confidence": "verified",
       "audiences": [
         "cfo",
@@ -549,14 +557,21 @@
       "topics": [
         "Rillet",
         "how do you compare to Rillet",
-        "isn't Rillet a competitor"
+        "isn't Rillet a competitor",
+        "why not Rillet",
+        "vs Rillet"
       ],
       "keywords": [
         "how do you compare to rillet",
         "isn't rillet a competitor",
-        "rillet"
+        "rillet",
+        "why not rillet",
+        "why you vs rillet",
+        "vs rillet",
+        "competitor rillet",
+        "is rillet a competitor"
       ],
-      "answer": "Rillet isn't a competitor — it replaces the system of record, while we supply the intelligence layer that sits above it and any other general ledger. We actually see a natural, complementary partnership opportunity there and are pursuing it.",
+      "answer": "Rillet is not a head-to-head competitor in the usual sense — it replaces or modernizes the system of record / GL path, while SMPL is the financial intelligence layer that sits above Rillet or any other general ledger. We see a natural complementary partnership: they own books; we own governed SaaS metrics, evidence, and executive packages on top. If someone frames “why not Rillet,” clarify category first — ERP/GL versus intelligence — then show how we work together rather than rip-and-replace.",
       "confidence": "verified",
       "audiences": [
         "cfo",
@@ -729,13 +744,14 @@
       "title": "Team / founder",
       "topics": [
         "who is the team",
-        "founder background",
-        "why are you the one to build this"
+        "founder background"
       ],
       "keywords": [
         "founder background",
         "who is the team",
-        "why are you the one to build this"
+        "who is the founder",
+        "founder team",
+        "who built smpl"
       ],
       "answer": "It's being built by a founder who has run the SaaS finance function directly — forecasting, opex management, management reporting, go-to-market reporting — alongside the data architecture and systems integration work underneath it. That combination is uncommon, and it's why the core architecture was designed by someone who's personally hit every failure mode of the spreadsheet-and-disconnected-systems status quo.",
       "confidence": "directional",
@@ -1966,7 +1982,7 @@
         "multi-tenant",
         "dedicated tenant",
         "is our data separate",
-        "per company instance"
+        "per-organization instance"
       ],
       "keywords": [
         "dedicated environment",
@@ -1976,7 +1992,7 @@
         "is our data separate",
         "multi tenant",
         "multi-tenant",
-        "per company",
+        "per-company tenant",
         "per org",
         "per-organization",
         "own instance"
@@ -2064,7 +2080,9 @@
         "AI commentary",
         "does AI write the board narrative",
         "variance commentary",
-        "executive commentary"
+        "executive commentary",
+        "how does AI generate commentary",
+        "how is commentary verified"
       ],
       "keywords": [
         "ai commentary",
@@ -2074,9 +2092,13 @@
         "executive commentary",
         "finance copilot",
         "variance commentary",
-        "write the board narrative"
+        "write the board narrative",
+        "how does ai generate commentary",
+        "commentary verified",
+        "how is commentary verified",
+        "ai generate commentary"
       ],
-      "answer": "AI is used for narrative assistance — variance commentary and executive summary drafting grounded in metrics the engine already calculated. It elaborates evidenced drivers; it does not compute ledger numbers or invent explanations when the data does not support them. Think evidence-backed FP&A commentary, not a chatbot that invents a story. Plan entitlements include AI commentary on the packaged tiers we ship.",
+      "answer": "AI is used for narrative assistance — variance commentary and executive summary drafting grounded in metrics the engine already calculated. It elaborates evidenced drivers; it does not compute ledger numbers or invent explanations when the data does not support them. Think evidence-backed FP&A commentary, not a chatbot that invents a story. Plan entitlements include AI commentary on the packaged tiers we ship. Verification is structural: commentary is grounded in engine outputs, humans stay in the loop for board-facing packages, and unsupported claims are declined rather than polished.",
       "confidence": "verified",
       "audiences": [
         "cfo",
@@ -2299,6 +2321,619 @@
       "tone": "external_safe",
       "source": "Architecture Master — connectors future; honesty vs whitepaper aspirational connector language",
       "deflect_script": "Today we land customers via versioned CSV or white-glove read-only loads into the same canonical model native connectors will use. I won't claim every named connector is GA — let's scope the data path that fits your IT and timeline."
+    },
+    {
+      "id": "why-us",
+      "title": "Why use SMPL / why your company",
+      "topics": [
+        "why would we use your company",
+        "why use SMPL",
+        "why your company",
+        "why choose you",
+        "why should we buy",
+        "value proposition"
+      ],
+      "keywords": [
+        "why would we use your company",
+        "why use smpl",
+        "why use your company",
+        "why your company",
+        "why choose smpl",
+        "why choose you",
+        "why should we use",
+        "why would we choose",
+        "why buy smpl",
+        "value proposition",
+        "why us",
+        "why work with you"
+      ],
+      "answer": "You use SMPL when finance is still assembling the operating picture by hand — reconciling ERP, CRM, billing, and spreadsheets into ARR, statements, scenarios, and board packages every month. We sit above the systems you already own, apply your methodology as configuration, and produce explainable executive outputs with evidence behind the numbers. The point is not another dashboard; it is trusted financial intelligence so leadership decides from one governed view instead of reconciling versions.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB §6 why customers buy; business-impact + differentiator positioning"
+    },
+    {
+      "id": "build-vs-buy",
+      "title": "Why not build this ourselves",
+      "topics": [
+        "why not build internally",
+        "should we build",
+        "build vs buy",
+        "why build it ourselves",
+        "DIY financial intelligence"
+      ],
+      "keywords": [
+        "why not build",
+        "why dont we just build",
+        "why don't we just build",
+        "build ourselves",
+        "build it ourselves",
+        "build this ourselves",
+        "build our own",
+        "build internally",
+        "should we build",
+        "build vs buy",
+        "build versus buy",
+        "diy",
+        "why can't we build",
+        "why cant companies build"
+      ],
+      "answer": "You can start a DIY stack — warehouse plus BI plus spreadsheet models — but the hard part is not the first dashboard. It is keeping SaaS methodology, restatements, evidence, and board-ready packages correct as systems and definitions change. Internal builds become an ongoing product your finance and data teams have to maintain. SMPL is the governed intelligence layer purpose-built for that job, so your team spends time on decisions rather than rebuilding the reporting engine every quarter.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "it",
+        "engineer",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB §5 why not build internally; §6 why can't companies build"
+    },
+    {
+      "id": "compete-pigment",
+      "title": "vs Pigment",
+      "topics": [
+        "Pigment",
+        "why not Pigment",
+        "how do you compare to Pigment",
+        "vs Pigment",
+        "competitor Pigment"
+      ],
+      "keywords": [
+        "pigment",
+        "why not pigment",
+        "why you vs pigment",
+        "vs pigment",
+        "how do you compare to pigment",
+        "competitor pigment",
+        "competitive objection pigment"
+      ],
+      "answer": "Pigment is a modern planning and FP&A platform — strong at collaborative plans, scenarios, and modeling. SMPL is not trying to replace your planning tool. We are the governed financial intelligence layer above ERP, CRM, and billing: deterministic SaaS metrics, evidence-backed explanations, and executive packages that reproduce. Many customers keep planning where it is and use SMPL for trusted operating and board reporting across systems — not another place to rebuild the plan model.",
+      "confidence": "directional",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB §5 modern FP&A complements; competitive positioning"
+    },
+    {
+      "id": "compete-anaplan",
+      "title": "vs Anaplan",
+      "topics": [
+        "Anaplan",
+        "why not Anaplan",
+        "how do you compare to Anaplan",
+        "vs Anaplan",
+        "competitor Anaplan"
+      ],
+      "keywords": [
+        "anaplan",
+        "why not anaplan",
+        "why you vs anaplan",
+        "vs anaplan",
+        "how do you compare to anaplan",
+        "competitor anaplan",
+        "competitive objection anaplan"
+      ],
+      "answer": "Anaplan is enterprise connected planning — large model workspaces for forecasting and operational plans. SMPL complements that world rather than claiming to be Anaplan. We focus on SaaS financial intelligence: ARR waterfalls, reconciled statements, evidence lineage, and board-ready narrative grounded in calculated metrics. If you already run Anaplan for planning, the question is usually whether finance still rebuilds the cross-system truth and board pack elsewhere — that is the gap we close.",
+      "confidence": "directional",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB §5 modern FP&A complements; competitive positioning"
+    },
+    {
+      "id": "ai-accuracy",
+      "title": "How accurate is the AI",
+      "topics": [
+        "how accurate is AI",
+        "AI accuracy",
+        "can we trust AI numbers",
+        "is the AI accurate"
+      ],
+      "keywords": [
+        "how accurate is ai",
+        "ai accuracy",
+        "is the ai accurate",
+        "can we trust ai numbers",
+        "how accurate are the numbers",
+        "ai accurate"
+      ],
+      "answer": "Numbers come from the deterministic calculation engine first — same inputs and methodology produce the same outputs. AI drafts narrative over those calculated metrics; it does not invent ledger figures. Accuracy of the story depends on data completeness and your configured methodology, which is why we surface confidence signals and evidence rather than fluent guesses. If the data cannot support a claim, the platform should say so instead of sounding certain.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "it",
+        "engineer",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot KB hallucinations + determinism; company context §4"
+    },
+    {
+      "id": "after-implementation",
+      "title": "What happens after implementation",
+      "topics": [
+        "what happens after implementation",
+        "post implementation",
+        "once we are live",
+        "ongoing close after go-live"
+      ],
+      "keywords": [
+        "what happens after implementation",
+        "after implementation",
+        "post implementation",
+        "once live",
+        "once we are live",
+        "after go live",
+        "ongoing after onboarding"
+      ],
+      "answer": "After go-live the rhythm is operational, not a rebuild: load period data (CSV or white-glove path), validate, finalize the period, and generate executive dashboards plus board/MD&A packages from the same logic. Methodology and mappings stay configured for your org; you refine them when the business changes rather than reinventing reports monthly. Support and roadmap continue — we do not hand you a one-off model and disappear.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "customization-at-implementation close loop; onboarding-paths; honesty on CSV/white-glove"
+    },
+    {
+      "id": "customize-metrics-methodology",
+      "title": "Customize metrics / ARR / methodology",
+      "topics": [
+        "can I customize metrics",
+        "define ARR differently",
+        "change methodology",
+        "customer-specific definitions"
+      ],
+      "keywords": [
+        "customize metrics",
+        "define arr differently",
+        "change methodology",
+        "can i customize metrics",
+        "our arr definition",
+        "customer-specific metrics",
+        "custom methodology",
+        "different arr definition"
+      ],
+      "answer": "Yes — metric and methodology definitions are configuration for your organization, not a forced one-size-fits-all template. How you define ARR, map the chart of accounts, and structure management views is encoded for your tenant so two customers can differ while sharing the same engine. We configure that during implementation and can adjust as your business evolves; the product is durable methodology, not ad-hoc redesign of every chart by every user each month.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "methodology-coa-config; adapts-to-you; Meeting Copilot customize metrics"
+    },
+    {
+      "id": "time-to-value",
+      "title": "How long until value",
+      "topics": [
+        "how long until value",
+        "time to value",
+        "when do we see value",
+        "how soon do we get value"
+      ],
+      "keywords": [
+        "how long until value",
+        "time to value",
+        "time-to-value",
+        "when do we see value",
+        "how soon do we see value",
+        "how soon until value",
+        "when will we get value"
+      ],
+      "answer": "Implementation is designed around roughly four to six weeks once scope and data access are agreed — white-glove read-only loads or versioned CSV into the canonical model, then methodology mapping and first executive packages. Value shows up when the first trusted close package and live dashboards replace the manual spreadsheet assemble step. Exact timing depends on data readiness and stakeholder availability, not on building custom software for each report.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "implementation-security timeline; onboarding-paths; Meeting Copilot implementation"
+    },
+    {
+      "id": "data-quality-bad-data",
+      "title": "What if my data is bad",
+      "topics": [
+        "what if my data is bad",
+        "dirty data",
+        "messy source data",
+        "incomplete data"
+      ],
+      "keywords": [
+        "what if my data is bad",
+        "bad data",
+        "dirty data",
+        "messy data",
+        "incomplete data",
+        "data quality",
+        "source data is wrong"
+      ],
+      "answer": "Bad or incomplete source data is normal in SaaS finance — we do not pretend otherwise. The platform surfaces confidence signals when a number is inferred or thin, and ties reported values back to source evidence so gaps are visible instead of hidden in a polished chart. Implementation focuses on validating business rules and mappings; ongoing loads include validation before you finalize a period. We help you see and fix data issues; we do not silently invent clean history.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "it",
+        "engineer",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "confidence-signal; import-validation; Meeting Copilot accuracy posture"
+    },
+    {
+      "id": "netsuite-schema-change",
+      "title": "What if NetSuite changes",
+      "topics": [
+        "what happens if NetSuite changes",
+        "ERP schema change",
+        "source system updates"
+      ],
+      "keywords": [
+        "what happens if netsuite changes",
+        "if netsuite changes",
+        "netsuite changes",
+        "erp schema change",
+        "source system changes",
+        "when netsuite updates"
+      ],
+      "answer": "Source systems evolve — new accounts, custom fields, subsidiaries. Because methodology and mappings are configuration for your org, we update the mapping layer when NetSuite (or another ERP) changes rather than rewriting the product. Today ingest is versioned CSV or white-glove read-only loads into the same canonical model; when field layouts change, we adjust the load contract and re-validate before the next close. We do not claim magic zero-touch sync for every NetSuite schema change.",
+      "confidence": "directional",
+      "audiences": [
+        "cfo",
+        "it",
+        "fpa",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "data-sources-ingest honesty; connectors roadmap; methodology as config"
+    },
+    {
+      "id": "custom-objects",
+      "title": "Custom objects support",
+      "topics": [
+        "can you support custom objects",
+        "Salesforce custom objects",
+        "custom CRM fields"
+      ],
+      "keywords": [
+        "custom objects",
+        "custom object",
+        "support custom objects",
+        "salesforce custom objects",
+        "custom crm objects"
+      ],
+      "answer": "Yes for the fields and objects that matter to your SaaS finance model — we map the source entities you need into the canonical warehouse during implementation rather than requiring a vanilla CRM schema. That usually covers custom Salesforce objects or fields used for bookings, renewals, or segments. Scope is the objects required for trusted metrics and reporting, landed via CSV or white-glove extract today — not an unlimited arbitrary-object marketplace claim.",
+      "confidence": "directional",
+      "audiences": [
+        "cfo",
+        "it",
+        "fpa",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "data-sources-ingest; methodology config; honesty on CSV/white-glove"
+    },
+    {
+      "id": "export-capabilities",
+      "title": "Can I export everything",
+      "topics": [
+        "can I export everything",
+        "export all data",
+        "download reports"
+      ],
+      "keywords": [
+        "can i export everything",
+        "export everything",
+        "can we export",
+        "export all",
+        "download everything",
+        "can i export",
+        "export data"
+      ],
+      "answer": "You can export the executive and finance packages the product is built around — including board PowerPoint and MD&A-style Excel from the same logic as live dashboards — so UI and files do not drift. Drill-down and statement views are available in-product for finance. We do not promise a raw dump of every warehouse table as a self-serve bulk export of “everything”; if you need a specific extract for audit or migration, we scope that honestly rather than overselling a universal download button.",
+      "confidence": "directional",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "it",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "board-deck-and-mda; dashboards-exports-same-logic; honesty boundary"
+    },
+    {
+      "id": "replace-boundaries",
+      "title": "Do you replace Excel / FP&A / NetSuite",
+      "topics": [
+        "do you replace Excel",
+        "do you replace FP&A",
+        "do you replace NetSuite",
+        "are you an ERP replacement"
+      ],
+      "keywords": [
+        "do you replace excel",
+        "do you replace fp&a",
+        "do you replace fpa",
+        "do you replace netsuite",
+        "replace excel",
+        "replace netsuite",
+        "replace erp",
+        "replace fp&a",
+        "excel / fp&a / netsuite"
+      ],
+      "answer": "No on the systems of record and no on replacing your FP&A team. NetSuite (or your GL) stays the ledger; Excel stays useful for ad hoc analysis; FP&A still owns judgment, assumptions, and the story. SMPL automates the repetitive reconciliation and executive packaging layer those teams currently rebuild by hand. We complement ERP and planning tools — we do not rip out NetSuite or claim to be a full FP&A headcount substitute.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "it",
+        "engineer",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "does-not-replace-erp; compete-excel; Meeting Copilot replace questions"
+    },
+    {
+      "id": "own-warehouse",
+      "title": "Can I use my own warehouse",
+      "topics": [
+        "can I use my own warehouse",
+        "do we need a data warehouse",
+        "bring our own warehouse"
+      ],
+      "keywords": [
+        "can i use my own warehouse",
+        "my own warehouse",
+        "our own warehouse",
+        "use our warehouse",
+        "bring our own warehouse",
+        "do we need a data warehouse",
+        "do we need a warehouse",
+        "byow",
+        "existing warehouse"
+      ],
+      "answer": "A customer data warehouse is optional, not required. Existing warehouses are supported when useful — we can work from shares or exports — but SMPL is the financial intelligence layer, not another place you must park every table. Many customers start with versioned CSV or white-glove read-only loads into our model. If you already run Snowflake or similar, you still need governed SaaS methodology and explainability on top; the warehouse alone does not replace that.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "it",
+        "engineer",
+        "fpa",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot do we need a warehouse; compete-snowflake"
+    },
+    {
+      "id": "nrr-grr-calculation",
+      "title": "How NRR and GRR are calculated",
+      "topics": [
+        "how do you calculate NRR",
+        "how do you calculate GRR",
+        "net dollar retention",
+        "gross revenue retention"
+      ],
+      "keywords": [
+        "how do you calculate nrr",
+        "how do you calculate grr",
+        "calculate nrr",
+        "calculate grr",
+        "nrr / grr",
+        "nrr and grr",
+        "net dollar retention",
+        "gross revenue retention",
+        "nrr",
+        "grr"
+      ],
+      "answer": "NRR and GRR are native SaaS retention metrics on the ARR waterfall — not bolt-on spreadsheet formulas. They are derived from beginning ARR and the period movements (expansion, contraction, churn, and related components per your configured methodology). Exact definitions follow your org’s ARR rules configured at implementation, with drilldown to the underlying movements. We do not invent a one-off retention math that disagrees with your waterfall.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "arr-mrr-reporting; company context NRR/GRR; board ARR waterfall notes"
+    },
+    {
+      "id": "forecast-assumptions",
+      "title": "How forecasts and assumptions work",
+      "topics": [
+        "how do you build forecasts",
+        "forecast assumptions configurable",
+        "can finance override assumptions"
+      ],
+      "keywords": [
+        "how do you build forecasts",
+        "build forecasts",
+        "forecast assumptions",
+        "assumptions configurable",
+        "override assumptions",
+        "how does forecasting work",
+        "driver-based forecast"
+      ],
+      "answer": "Forecasts combine historical performance with operational drivers and finance-owned assumptions inside Actual / Budget / Forecast scenarios — including Combined views that use Actual through close and Forecast thereafter. Finance remains in control: assumptions are configurable and overridable rather than locked inside a black-box model. Variance columns then compare Actual vs Budget and Actual vs Forecast so FP&A reviews the same structure leadership uses.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "Meeting Copilot forecasting; scenarios-actual-budget-forecast"
+    },
+    {
+      "id": "board-auditor-trust",
+      "title": "Can the board and auditors trust the numbers",
+      "topics": [
+        "can the board trust the numbers",
+        "can auditors trust the numbers",
+        "board and auditor trust"
+      ],
+      "keywords": [
+        "can the board trust",
+        "can auditors trust",
+        "board trust the numbers",
+        "auditors trust the numbers",
+        "trust the numbers",
+        "board / auditors trust"
+      ],
+      "answer": "Trust comes from determinism, evidence, and honesty about uncertainty — not from a polished slide. The same inputs and methodology reproduce the same outputs; reported numbers tie back toward source records; confidence signals flag thin or inferred values instead of presenting them as certain. Board packages and live dashboards share one logic path. We are pursuing SOC 2 and stay transparent about certification status — we do not claim an issued SOC 2 report today.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "it",
+        "engineer",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "evidence-explainability; determinism; soc2-status honesty"
+    },
+    {
+      "id": "calculation-traceability",
+      "title": "How do I trace every calculation",
+      "topics": [
+        "how do I trace every calculation",
+        "calculation lineage",
+        "traceability of numbers"
+      ],
+      "keywords": [
+        "trace every calculation",
+        "how do i trace every calculation",
+        "trace calculations",
+        "trace the numbers",
+        "calculation lineage",
+        "lineage",
+        "traceability"
+      ],
+      "answer": "Every reported number is designed to trace to the source records that produced it — invoice, opportunity, GL entry — not only an intermediate total. Explanations are generated the same way: specific drivers tied to evidence, or an explicit statement that the data does not support a sharper claim. Combined with deterministic recalculation against a period snapshot, that is how you audit “why this number” without a separate shadow spreadsheet.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "it",
+        "engineer",
+        "investor",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "evidence-explainability; determinism; company context no black boxes"
+    },
+    {
+      "id": "import-validation",
+      "title": "How imports are validated",
+      "topics": [
+        "how do you validate imports",
+        "detect bad data on load",
+        "import validation"
+      ],
+      "keywords": [
+        "validate imports",
+        "how do you validate imports",
+        "detect bad data",
+        "import validation",
+        "data validation",
+        "validate data loads",
+        "how do you validate data"
+      ],
+      "answer": "Loads go through validation before a period is finalized — schema and mapping checks on the versioned CSV or white-glove extract, plus business-rule validation against your configured methodology. Issues surface as data-quality and confidence problems rather than silently flowing into board numbers. Finance still owns the finalize step: we help detect and explain bad or incomplete data; we do not auto-approve a broken load into an executive package.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "it",
+        "engineer",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "close validate step (customer-safe); confidence-signal; data-sources-ingest"
+    },
+    {
+      "id": "ai-executive-qa",
+      "title": "AI variance and executive questions",
+      "topics": [
+        "can AI explain variance",
+        "answer executive questions",
+        "AI for executive Q&A"
+      ],
+      "keywords": [
+        "can ai explain variance",
+        "explain variance",
+        "answer executive questions",
+        "executive questions",
+        "ai explain variance",
+        "variance explanation"
+      ],
+      "answer": "Yes within governed scope: AI elaborates variance commentary and can help answer executive questions using metrics the engine already calculated and the evidence behind them. It is evidence-backed FP&A assistance — not a chatbot that invents a story when drivers are unclear. If confidence is low or evidence is missing, it should say so rather than fill the gap with fluent prose.",
+      "confidence": "verified",
+      "audiences": [
+        "cfo",
+        "fpa",
+        "ceo",
+        "general"
+      ],
+      "tone": "external_safe",
+      "source": "ai-commentary-capabilities; evidence-explainability; Meeting Copilot explain metric changes"
     }
   ]
 }
