@@ -2,16 +2,18 @@
 
 > **STATUS: DRAFT — NOT APPROVED**  
 > Template for SOC 2 Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance.
+> Not legal advice. Not evidence of SOC 2 compliance.  
+> **[!]** MFA enablement and verification require Matt operating each console — not claimed complete in this draft.
 
 | Field | Value |
 |-------|--------|
 | Policy ID | P03 |
-| Owner | Security owner |
+| Owner | Matt Justice (Security owner) |
 | Applies to | All systems that store or process customer data or production secrets |
 | Related criteria | Security (CC6); Confidentiality |
-| Version | 0.1-draft |
+| Version | 0.2-draft |
 | Effective date | _TBD on approval_ |
+| Last expanded | 2026-07-22 |
 
 ---
 
@@ -21,42 +23,66 @@ Ensure only authorized individuals access SMPL production systems and customer d
 
 ## 2. Systems in scope
 
-At minimum (see inventory template): GitHub, Vercel, Railway, Neon, Sanity, Stripe, Resend, Anthropic console, corporate email/IdP, Ops/privileged DB paths, compliance platform when chosen. Product auth: Auth.js magic link + org membership (`organization_id` multi-tenant model).
+At minimum (see [../03_access_inventory_template.md](../03_access_inventory_template.md)):
+
+| System | Typical privileged use |
+|--------|------------------------|
+| GitHub | Org/repo admin, merge to `main`, secrets config |
+| Vercel | Frontend deploy, env vars |
+| Railway | API deploy, env vars, service logs |
+| Neon | Postgres admin, branches, connection strings |
+| Sanity | CMS project admin (if customer-named content) |
+| Stripe | Billing admin |
+| Resend | Email sending / domain |
+| Anthropic | API keys / console |
+| Corporate email / IdP | Identity, magic-link delivery |
+| Ops / white-glove tooling | Tenant loads, privileged support |
+| Direct DB / break-glass | Emergency data access |
+| Domain DNS / registrar | smpl-ai.com and related |
+
+Product auth: Auth.js **magic link** + org membership (`organization_id` multi-tenant model). Customer SSO is backlog and not a Type I blocker if scoped honestly.
 
 ## 3. Requirements
 
 1. **Unique accounts** — no shared logins for systems touching customer data.
-2. **MFA** — enforced on admin/cloud accounts (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, etc.).
+2. **MFA** — enforced on admin/cloud accounts listed above. **[! Matt must enable and verify;** do not mark MFA complete until done.]
 3. **Least privilege** — grant only what the role requires; prefer read-only for white-glove where possible.
-4. **Inventory** — maintain [../03_access_inventory_template.md](../03_access_inventory_template.md); who has access, why, MFA status.
+4. **Inventory** — maintain the access inventory; who has access, why, MFA status (MFA column remains unchecked until Matt verifies).
 5. **Joiner / mover / leaver** — grant on approval; revoke **same day** on offboarding or role change that removes need.
 6. **Periodic review** — at least quarterly; dated sign-off is audit evidence.
-7. **Secrets** — production secrets only in provider env/secret stores; not in git.
-8. **Privileged / white-glove** — named operators; documented justification; revoke after POC/ticket/offboarding.
+7. **Secrets** — production secrets only in provider env/secret stores (Vercel, Railway); not in git.
+8. **Privileged / white-glove** — named operators (currently Matt Justice); documented justification; revoke after POC/ticket/offboarding.
 
 ## 4. Customer (end-user) access
 
-- Org-scoped access via product auth; customer SSO is backlog and not a Type I blocker if scoped honestly.
-- Tenant isolation: Org A must not read Org B data (engineering evidence required).
+- Org-scoped access via product auth; invites/seats control who joins an org.
+- Tenant isolation: Org A must not read Org B data (engineering evidence required before Type I — test plan + results).
+- Passwordless magic link: treat email compromise as account risk; MFA on corporate email/IdP is critical.
 
 ## 5. Encryption (document reliance)
 
-- In transit: TLS on edge/API.
-- At rest: managed Postgres (Neon) and provider defaults — document configuration + provider controls.
+- **In transit:** TLS on edge/API (Vercel, Railway).
+- **At rest:** managed Postgres (Neon) and provider defaults — document configuration + provider controls; collect vendor reports under NDA when available.
+- Card data: handled by Stripe; SMPL does not store full PAN.
 
 ## 6. Evidence artifacts
 
 | Control | Example evidence |
 |---------|------------------|
-| MFA | Console screenshots or compliance-platform status |
-| Inventory / review | Dated spreadsheet + reviewer sign-off |
+| MFA | Console screenshots or compliance-platform status — **[! Matt]** |
+| Inventory / review | Dated inventory + reviewer sign-off |
 | Offboarding | Completed revoke checklist |
+| Tenant isolation | Test results Org A ≠ Org B |
 
-## 7. Approval
+## 7. Current ownership note
+
+As of 2026-07-22, Matt Justice holds executive, security, engineering, and ops/CS privileged-access ownership. Access inventory rows list Matt as account owner pending MFA verification.
+
+## 8. Approval
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed_ | |
+| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
 
 ---
 

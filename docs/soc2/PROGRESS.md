@@ -55,7 +55,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 
 | Phase | Status | Exit criteria |
 |-------|--------|---------------|
-| 1. Kickoff | [~] In progress | Scope frozen in decision log; owners named; scoreboard + artifacts started |
+| 1. Kickoff | [~] In progress | Scope frozen in decision log; owners named; scoreboard + artifacts started — **owners + scope set; platform/target month still open** |
 | 2. Controls live | [ ] Open | Policies approved; MFA + access inventory; change/deploy path; IR; restore test; vendor evidence; tenant isolation evidence |
 | 3. Type I audit | [ ] Open | CPA firm engaged; fieldwork complete; **Type I report issued** |
 | 4. Type II observation | [ ] Open | Controls operate cleanly over window; Type II report issued |
@@ -83,13 +83,13 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Readiness reference (scope + criteria) | [../SMPL_SOC2_Readiness_Reference_v2.md](../SMPL_SOC2_Readiness_Reference_v2.md) |
 | `[x]` | Working folder `docs/soc2/` seeded | Decision log, boundary, subprocessors, access template, policy index, week1 checklist |
 | `[x]` | This scoreboard created | You are here |
-| `[~]` | Decision log — proposed defaults drafted | [00_decision_log.md](./00_decision_log.md) — **Matt must confirm/sign** |
-| `[!]` | Freeze Type I criteria: Sec + Avail + Conf; PI deferred; Privacy skip | Proposed in decision log; confirm date + owner |
-| `[!]` | Name executive sponsor | Proposed: Matt Justice — confirm |
-| `[!]` | Name security owner | Proposed: Matt Justice — confirm |
-| `[!]` | Name engineering owner | TBD — Matt names |
-| `[!]` | Name ops / CS privileged-access owner | TBD — Matt names (may be same person) |
-| `[!]` | Compliance platform choice **or** explicit “wait until ____” | Do **not** buy until MFA + access inventory started; **do not sign up for Vanta in this kickoff** |
+| `[x]` | Decision log — scope + owners recorded | [00_decision_log.md](./00_decision_log.md) — Sec+Avail+Conf; PI deferred; all owners Matt Justice (2026-07-22). Formal signature block optional. |
+| `[x]` | Freeze Type I criteria: Sec + Avail + Conf; PI deferred; Privacy skip | Confirmed in decision log 2026-07-22 |
+| `[x]` | Name executive sponsor | Matt Justice |
+| `[x]` | Name security owner | Matt Justice |
+| `[x]` | Name engineering owner | Matt Justice (all roles for now) |
+| `[x]` | Name ops / CS privileged-access owner | Matt Justice (all roles for now) |
+| `[!]` | Compliance platform choice **or** explicit “wait until ____” | **TBD — Matt to decide.** Do **not** buy until MFA + access inventory started; **do not sign up for Vanta in this wave** |
 | `[!]` | Target Type I month | Even approximate YYYY-MM |
 | `[!]` | Audit firm shortlist / engagement | Independent CPA; platform partner network OK later |
 
@@ -99,12 +99,12 @@ Type II comes later: after Type I, controls operate over an observation window (
 |--------|------|-------|
 | `[x]` | System boundary draft from known stack | [01_system_boundary.md](./01_system_boundary.md) — Vercel, Railway, Neon, Auth.js, Resend, Anthropic, Stripe, GitHub, Sanity |
 | `[~]` | Boundary TBDs assigned | Sanity in/out, staging projects, hostnames, OpenAI fallback, privileged ops list |
-| `[!]` | Confirm boundary matches production | Engineering / Matt — resolve TBDs |
+| `[!]` | Confirm boundary matches production | Matt — resolve TBDs |
 | `[x]` | Subprocessors named list draft | [02_subprocessors.md](./02_subprocessors.md) |
-| `[!]` | Confirm regions / unused vendors; mark OpenAI if live | Matt / eng |
+| `[!]` | Confirm regions / unused vendors; mark OpenAI if live | Matt |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) | Collect Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc. |
 | `[!]` | Customer DPA — legal review / ship | Sales unblocker; counsel as needed |
-| `[ ]` | Security one-pager | Encryption, tenant isolation, no GL write-back, auth, AI keys on API |
+| `[x]` | Security one-pager (draft) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) — honest “pursuing SOC 2”; not certified |
 
 ### C. Access hardening (Matt / ops)
 
@@ -118,27 +118,27 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[!]` | MFA — Stripe | |
 | `[!]` | MFA — Sanity (if admin) | |
 | `[!]` | MFA — Resend / Anthropic consoles | |
-| `[!]` | Access inventory — people + roles filled | Template ready: [03_access_inventory_template.md](./03_access_inventory_template.md) |
+| `[~]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt listed on all known systems; **MFA verified unchecked** |
 | `[!]` | Confirm no shared prod passwords | |
-| `[ ]` | First quarterly-style access review sign-off | After inventory exists |
+| `[ ]` | First quarterly-style access review sign-off | After MFA verified + inventory stable |
 
 ### D. Policies
 
 | Status | Item | Notes |
 |--------|------|-------|
 | `[x]` | Policy index | [04_policy_index.md](./04_policy_index.md) |
-| `[x]` | Draft stubs: ISP, Acceptable Use, Access Control, IR, Change Mgmt | [policies/](./policies/) — **DRAFT / not approved** |
-| `[~]` | Remaining core policies (P06–P17) | Not started or later |
-| `[!]` | Leadership approve core policies | Draft ≠ approved; auditor wants approved docs |
+| `[x]` | Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt | [policies/](./policies/) P01–P05 — **DRAFT / not approved** |
+| `[~]` | Remaining core policies (P06–P17) | P06, P08, P09, P11, P12 drafted; P07/P10/P13–P17 still open |
+| `[!]` | Leadership approve core policies | Draft ≠ approved; auditor wants approved docs — **Matt must approve** |
 
 ### E. Engineering hygiene
 
 | Status | Item | Notes |
 |--------|------|-------|
 | `[ ]` / `[!]` | Protect `main` + required PR review | Confirm in GitHub settings |
-| `[ ]` | Document deploy path (Vercel FE, Railway API) + who can promote | |
+| `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; MFA/branch protection still `[!]` |
 | `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm |
-| `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I |
+| `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I — P12 drafted |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results |
 | `[ ]` | AI/LLM data-handling write-up aligned with P15 | Keys on API; narrative from engine outputs |
 
@@ -151,10 +151,10 @@ Book the auditor only when these are **live**, not merely drafted:
 | `[ ]` | MFA on admin/cloud accounts |
 | `[ ]` | Written policies **approved** by leadership |
 | `[ ]` | Access inventory + first review artifact |
-| `[ ]` | Documented change/deploy path + PR review on `main` |
-| `[ ]` | Incident response plan (approved + operable) |
+| `[~]` | Documented change/deploy path + PR review on `main` | Path documented; PR protection still `[!]` |
+| `[ ]` | Incident response plan (approved + operable) | Draft exists; not approved |
 | `[ ]` | Backup restore test evidence |
-| `[ ]` | Subprocessor inventory + vendor reports collected |
+| `[ ]` | Subprocessor inventory + vendor reports collected | Inventory draft; reports not collected |
 | `[ ]` | Tenant isolation evidence |
 | `[ ]` | AI/subprocessor write-up for Anthropic |
 
@@ -169,26 +169,28 @@ Book the auditor only when these are **live**, not merely drafted:
 
 ---
 
-## What we checked off from repo knowledge (this kickoff)
+## What we checked off this wave (2026-07-22) — documentation only
 
-Documentation and scaffolding only — **not** compliance:
+Not compliance. No MFA claimed. No Vanta signup. Not certified.
 
-1. Scoreboard + honest definition of done
-2. System boundary draft (known production stack)
-3. Subprocessors draft (named vendors)
-4. Decision log proposed defaults for Matt to confirm
-5. Policy index + five DRAFT policy stubs
-6. Week 1 checklist linked; documentation items marked where drafts exist
+1. Decision log: scope Sec+Avail+Conf confirmed; PI deferred; **all owners = Matt Justice**; platform TBD
+2. P01–P05 expanded; P06 / P08 / P09 / P11 / P12 drafted
+3. Customer-facing [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) (honest pursuing language)
+4. [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — GitHub → Vercel/Railway
+5. Access inventory rows filled (owner Matt); MFA columns still `[!]`
+6. Scoreboard + `/compliance` data synced
 
 ---
 
 ## Top `[!]` for Matt (do next)
 
-1. Confirm decision log (Sec+Avail+Conf, PI deferred, owners — propose Matt Justice as security / sponsor)
-2. MFA on every admin cloud account (GitHub, Vercel, Railway, Neon, email, Stripe, …)
-3. Fill access inventory with real people
-4. Platform: write “wait until ____” **or** choose later — do not stall MFA; do not auto-sign up for Vanta here
-5. DPA legal path + audit-firm shortlist / target Type I month
+1. **[!]** MFA on every admin cloud account (GitHub, Vercel, Railway, Neon, email, Stripe, Sanity, Resend, Anthropic) — mark inventory when verified
+2. **[!]** Approve core policies (P01–P06, P08–P09, P11–P12 at minimum) — draft ≠ approved
+3. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log — do not stall MFA; do not auto-sign up here
+4. **[!]** Customer DPA — legal review / ship
+5. **[!]** Target Type I month + audit-firm shortlist
+6. **[!]** Confirm no shared prod passwords; protect `main` + required PR review
+7. **[!]** Confirm corporate email on access inventory rows; resolve boundary TBDs / vendor regions
 
 ---
 

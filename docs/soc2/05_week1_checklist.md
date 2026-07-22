@@ -11,11 +11,11 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 ## Decisions & ownership
 
 - [x] Read [SMPL_SOC2_Readiness_Reference_v2.md](../SMPL_SOC2_Readiness_Reference_v2.md) (§1 scope, §6 sales language) — kickoff artifacts align with it
-- [~] Fill [00_decision_log.md](./00_decision_log.md): Sec + Avail + Conf; PI deferred — **proposed defaults drafted; [!] Matt confirm/sign**
-- [!] Name executive sponsor — proposed Matt Justice
-- [!] Name security owner — proposed Matt Justice
-- [!] Name engineering owner
-- [!] Name ops / CS privileged-access owner (may be same person)
+- [x] Fill [00_decision_log.md](./00_decision_log.md): Sec + Avail + Conf; PI deferred — **confirmed 2026-07-22**; all owners Matt Justice
+- [x] Name executive sponsor — Matt Justice
+- [x] Name security owner — Matt Justice
+- [x] Name engineering owner — Matt Justice
+- [x] Name ops / CS privileged-access owner — Matt Justice
 - [!] Choose platform path: create Vanta/Drata/Secureframe account **or** write “wait until ____” in decision log (do not stall MFA either way; **do not auto-sign up for Vanta in this kickoff**)
 - [!] Set target Type I month (even if approximate)
 
@@ -31,7 +31,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [!] MFA on Stripe
 - [!] MFA on Sanity (if admin access exists)
 - [!] MFA on Resend / Anthropic consoles
-- [!] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — template ready; people rows need Matt
+- [~] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt on all known systems; **MFA verified unchecked**
 - [!] Confirm no shared passwords for prod systems
 
 ---
@@ -43,6 +43,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] Draft [02_subprocessors.md](./02_subprocessors.md) named list
 - [!] Review subprocessors; mark any unused vendors / confirm OpenAI
 - [ ] Start folder for vendor SOC reports (under NDA) — Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc.
+- [x] Security one-pager draft — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md)
 
 ---
 
@@ -50,24 +51,25 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 
 - [!] Branch protection on `main` + required PR review
 - [ ] Confirm secrets are not in git; production secrets only in Vercel/Railway (etc.)
-- [!] Note who can deploy frontend (Vercel) vs API (Railway)
+- [x] Document deploy path + who can deploy — [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) (Matt); MFA still `[!]`
 - [!] Calendar a Neon backup restore test
 
 ---
 
 ## Policies & sales unblockers (start drafting)
 
-- [x] Open [04_policy_index.md](./04_policy_index.md); P01–P05 stubbed as **Draft** in [policies/](./policies/)
+- [x] Open [04_policy_index.md](./04_policy_index.md); P01–P05 expanded; P06/P08/P09/P11/P12 drafted as **Draft** in [policies/](./policies/)
 - [!] Kick off customer DPA (counsel or template) — legal review
-- [ ] Kick off security one-pager (encryption, tenant isolation, no GL write-back, auth model, AI keys on API)
-- [x] Align external language with “pursuing” only — documented in kickoff + PROGRESS
+- [x] Security one-pager drafted (encryption, tenant isolation, no GL write-back, auth model, AI keys on API)
+- [!] **Approve** core policy drafts — Matt
+- [x] Align external language with “pursuing” only — documented in kickoff + PROGRESS + one-pager
 
 ---
 
 ## End of Week 1 — definition of done
 
-- [!] Decision log has owners + scope + platform choice or explicit wait — **confirm proposed defaults**
+- [~] Decision log has owners + scope — **done**; platform choice or explicit wait — **[!]** Matt
 - [!] MFA on admin cloud accounts
-- [!] Access inventory first pass exists
+- [~] Access inventory first pass exists (owners filled; MFA pending)
 - [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs)
-- [x] At least four policy drafts started (five stubs: P01–P05) — still need approval
+- [x] Core policy drafts started (P01–P06, P08–P09, P11–P12) — still need approval

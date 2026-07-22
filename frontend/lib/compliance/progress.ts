@@ -47,7 +47,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Confirm decision log + MFA on admin cloud accounts (GitHub, Vercel, Railway, Neon, email, Stripe)",
+    "Matt: MFA on all admin cloud accounts, approve DRAFT policies, pick Vanta/wait date, DPA legal",
   /** What “done” means for Type I — shown prominently on the page. */
   definitionOfDone:
     "An independent CPA firm has issued a SOC 2 Type I report covering Security + Availability + Confidentiality, and that report is in hand (typically shared with customers under NDA).",
@@ -63,7 +63,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Kickoff",
     status: "in_progress",
     exitCriteria:
-      "Scope frozen in decision log; owners named; scoreboard + artifacts started",
+      "Scope frozen in decision log; owners named; scoreboard + artifacts started — owners + scope set; platform/target month still open",
   },
   {
     id: "controls-live",
@@ -119,45 +119,45 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "kg-5",
-        label: "Decision log — proposed defaults drafted",
-        status: "in_progress",
-        notes: "Matt must confirm/sign",
+        label: "Decision log — scope + owners recorded",
+        status: "done",
+        notes: "Sec+Avail+Conf; PI deferred; all owners Matt Justice (2026-07-22)",
       },
       {
         id: "kg-6",
         label: "Freeze Type I criteria: Sec + Avail + Conf; PI deferred; Privacy skip",
-        status: "needs_owner",
-        notes: "Proposed in decision log; confirm date + owner",
+        status: "done",
+        notes: "Confirmed in decision log 2026-07-22",
       },
       {
         id: "kg-7",
         label: "Name executive sponsor",
-        status: "needs_owner",
-        notes: "Proposed: Matt Justice — confirm",
+        status: "done",
+        notes: "Matt Justice",
       },
       {
         id: "kg-8",
         label: "Name security owner",
-        status: "needs_owner",
-        notes: "Proposed: Matt Justice — confirm",
+        status: "done",
+        notes: "Matt Justice",
       },
       {
         id: "kg-9",
         label: "Name engineering owner",
-        status: "needs_owner",
-        notes: "TBD — Matt names",
+        status: "done",
+        notes: "Matt Justice (all roles for now)",
       },
       {
         id: "kg-10",
         label: "Name ops / CS privileged-access owner",
-        status: "needs_owner",
-        notes: "TBD — Matt names (may be same person)",
+        status: "done",
+        notes: "Matt Justice (all roles for now)",
       },
       {
         id: "kg-11",
         label: 'Compliance platform choice or explicit “wait until ____”',
         status: "needs_owner",
-        notes: "Do not buy until MFA + access inventory started",
+        notes: "TBD — Matt to decide. Do not auto-sign up for Vanta",
       },
       {
         id: "kg-12",
@@ -218,8 +218,8 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bv-8",
         label: "Security one-pager",
-        status: "open",
-        notes: "Encryption, tenant isolation, no GL write-back, auth, AI keys on API",
+        status: "done",
+        notes: "docs/soc2/SECURITY_ONE_PAGER.md — pursuing SOC 2; not certified",
       },
     ],
   },
@@ -239,8 +239,8 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "ah-9",
         label: "Access inventory — people + roles filled",
-        status: "needs_owner",
-        notes: "Template: docs/soc2/03_access_inventory_template.md",
+        status: "in_progress",
+        notes: "Matt on all known systems; MFA verified unchecked — needs Matt",
       },
       {
         id: "ah-10",
@@ -251,7 +251,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "ah-11",
         label: "First quarterly-style access review sign-off",
         status: "open",
-        notes: "After inventory exists",
+        notes: "After MFA verified + inventory stable",
       },
     ],
   },
@@ -263,21 +263,21 @@ export const complianceSections: ComplianceSection[] = [
       { id: "pol-1", label: "Policy index", status: "done" },
       {
         id: "pol-2",
-        label: "Draft stubs: ISP, Acceptable Use, Access Control, IR, Change Mgmt",
+        label: "Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt",
         status: "done",
-        notes: "DRAFT / not approved",
+        notes: "P01–P05 DRAFT / not approved",
       },
       {
         id: "pol-3",
         label: "Remaining core policies (P06–P17)",
         status: "in_progress",
-        notes: "Not started or later",
+        notes: "P06, P08, P09, P11, P12 drafted; P07/P10/P13–P17 open",
       },
       {
         id: "pol-4",
         label: "Leadership approve core policies",
         status: "needs_owner",
-        notes: "Draft ≠ approved; auditor wants approved docs",
+        notes: "Draft ≠ approved; Matt must approve",
       },
     ],
   },
@@ -295,7 +295,8 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-2",
         label: "Document deploy path (Vercel FE, Railway API) + who can promote",
-        status: "open",
+        status: "done",
+        notes: "docs/soc2/CHANGE_MANAGEMENT.md",
       },
       {
         id: "eng-3",
@@ -306,7 +307,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "eng-4",
         label: "Calendar or complete Neon backup restore test",
         status: "open",
-        notes: "Evidence required before Type I",
+        notes: "Evidence required before Type I — P12 drafted",
       },
       {
         id: "eng-5",
@@ -339,18 +340,21 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-4",
         label: "Documented change/deploy path + PR review on main",
-        status: "open",
+        status: "in_progress",
+        notes: "Path documented; PR protection still needs Matt",
       },
       {
         id: "bar-5",
         label: "Incident response plan (approved + operable)",
         status: "open",
+        notes: "Draft exists; not approved",
       },
       { id: "bar-6", label: "Backup restore test evidence", status: "open" },
       {
         id: "bar-7",
         label: "Subprocessor inventory + vendor reports collected",
         status: "open",
+        notes: "Inventory draft; reports not collected",
       },
       { id: "bar-8", label: "Tenant isolation evidence", status: "open" },
       {

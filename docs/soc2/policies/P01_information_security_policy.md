@@ -2,69 +2,87 @@
 
 > **STATUS: DRAFT — NOT APPROVED**  
 > Template for SOC 2 Type I readiness. Do not treat as company policy until executive sponsor approves and records the date in [../04_policy_index.md](../04_policy_index.md).  
-> Not legal advice. Not evidence of SOC 2 compliance.
+> Not legal advice. Not evidence of SOC 2 compliance. SMPL is **not** SOC 2 certified.
 
 | Field | Value |
 |-------|--------|
 | Policy ID | P01 |
-| Owner | Security owner (proposed: Matt Justice — TBD confirm) |
+| Owner | Matt Justice (Security owner / Executive sponsor) |
 | Applies to | All personnel and contractors with access to SMPL systems or customer data |
-| Related criteria | Security (governance / CC1–CC2 themes) |
-| Version | 0.1-draft |
+| Related criteria | Security (governance / CC1–CC2 themes); Availability; Confidentiality |
+| Version | 0.2-draft |
 | Effective date | _TBD on approval_ |
+| Last expanded | 2026-07-22 |
 
 ---
 
 ## 1. Purpose
 
-Protect the confidentiality, integrity, and availability of SMPL systems and customer data in line with our business as a B2B SaaS financial intelligence platform.
+Protect the confidentiality, integrity, and availability of SMPL systems and customer data in line with our business as a B2B SaaS financial intelligence platform (FP&A / ARR / close / board export).
 
 ## 2. Scope
 
-Applies to production systems in the SOC 2 system boundary (see [../01_system_boundary.md](../01_system_boundary.md)): customer app, API, datastore, auth, billing, email, LLM API usage, source control/CI, and privileged ops paths that can touch tenant data.
+Applies to production systems in the SOC 2 system boundary (see [../01_system_boundary.md](../01_system_boundary.md)):
+
+- Customer web app (Vercel / Next.js)
+- API services (Railway / FastAPI)
+- Datastore (Neon / Postgres)
+- Authentication (Auth.js magic link + org membership)
+- Billing (Stripe), transactional email (Resend), LLM API usage (Anthropic; keys on API only)
+- Source control / CI (GitHub) and deploy paths to production
+- Privileged ops paths that can touch tenant data (ops console, white-glove loads, break-glass DB)
 
 ## 3. Roles
 
-| Role | Responsibility |
-|------|----------------|
-| Executive sponsor | Approves this policy; accepts residual risk |
-| Security owner | Maintains this policy; coordinates access reviews, IR, vendor risk |
-| Engineering owner | Implements technical controls (change, logging, env separation) |
-| All personnel | Follow acceptable use; report security issues promptly |
+| Role | Name (current) | Responsibility |
+|------|----------------|----------------|
+| Executive sponsor | Matt Justice | Approves this policy; accepts residual risk; external security language |
+| Security owner | Matt Justice | Maintains this policy; access reviews, IR, vendor risk |
+| Engineering owner | Matt Justice | Implements technical controls (change, logging, env separation) |
+| Ops / CS privileged access | Matt Justice | Tenant support access; white-glove data loads |
+| All personnel | — | Follow acceptable use; report security issues promptly |
 
 ## 4. Principles
 
 1. **Least privilege** — access only as needed for the role.
 2. **Defense in depth** — layered controls (auth, encryption, review, monitoring).
-3. **Customer data stewardship** — financial warehouse data is confidential; no GL/ERP write-back.
+3. **Customer data stewardship** — financial warehouse data is confidential; SMPL does **not** write back to customer GL/ERP.
 4. **Evidence over intent** — controls must be operable and leave audit artifacts.
-5. **Honest external language** — do not claim SOC 2 until a CPA firm issues a report.
+5. **Honest external language** — say “pursuing SOC 2” / “SOC 2 readiness in progress.” Never claim SOC 2 certified until a CPA firm issues a report.
 
 ## 5. Control themes (summary)
 
 Detailed procedures live in sibling policies. This policy requires that SMPL maintain:
 
-- Access control with MFA on admin/cloud accounts ([P03](./P03_access_control_policy.md))
-- Change management for production code ([P05](./P05_change_management_policy.md))
-- Incident response ([P04](./P04_incident_response_plan.md))
-- Acceptable use ([P02](./P02_acceptable_use_policy.md))
-- Vendor / subprocessor awareness ([../02_subprocessors.md](../02_subprocessors.md))
-- Backup and recovery practices (Availability)
-- Confidentiality handling for customer financial data
+| Theme | Policy / artifact |
+|-------|-------------------|
+| Acceptable use | [P02](./P02_acceptable_use_policy.md) |
+| Access control + MFA on admin/cloud | [P03](./P03_access_control_policy.md), [../03_access_inventory_template.md](../03_access_inventory_template.md) |
+| Incident response | [P04](./P04_incident_response_plan.md) |
+| Change management / SDLC | [P05](./P05_change_management_policy.md), [../CHANGE_MANAGEMENT.md](../CHANGE_MANAGEMENT.md) |
+| Data classification & handling | [P06](./P06_data_classification_and_handling.md) |
+| Retention & deletion | [P08](./P08_retention_and_deletion.md) |
+| Vendor / subprocessor management | [P09](./P09_vendor_subprocessor_management.md), [../02_subprocessors.md](../02_subprocessors.md) |
+| Business continuity / DR | [P11](./P11_business_continuity_disaster_recovery.md) |
+| Backup & restore | [P12](./P12_backup_and_restore.md) |
 
-## 6. Reporting
+## 6. Risk acceptance
 
-Personnel report suspected security incidents or policy violations to the security owner immediately (see IR plan).
+Material residual risks (e.g. deferred Processing Integrity, Privacy skip, single-person ownership concentration) are accepted by the executive sponsor until roles are split or scope is expanded with an auditor.
 
-## 7. Review
+## 7. Reporting
+
+Personnel report suspected security incidents or policy violations to the security owner immediately (see IR plan). Primary contact: **Matt Justice**.
+
+## 8. Review
 
 Review at least annually, or after material stack/org change. Approvals recorded in the policy index.
 
-## 8. Approval
+## 9. Approval
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed_ | |
+| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
 
 ---
 
