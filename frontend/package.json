@@ -17,6 +17,7 @@
     "verify:platform": "npm run verify:board && npm run verify:outlook && npm run verify:pipeline-arr",
     "verify:pipeline-arr": "node scripts/verify-pipeline-arr.mjs",
     "validate:csv-pack": "node scripts/validate-csv-pack.mjs",
+    "verify:sales-talk": "node --experimental-strip-types scripts/verify-sales-talk-retrieve.mjs",
     "generate:brand-icons": "node scripts/generate-brand-icons.mjs",
     "prebuild": "node scripts/copy-board-exports.mjs && node scripts/extract-demo-seed.mjs && node scripts/verify-board-platform.mjs && node scripts/verify-outlook-alignment.mjs",
     "dev:3000": "next dev -p 3000",

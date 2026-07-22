@@ -33,11 +33,61 @@ const STOP = new Set([
   "that",
   "it",
   "be",
+  // Generic glue that otherwise substring-matches almost every English sentence
+  "as",
+  "at",
+  "by",
+  "from",
+  "into",
+  "about",
+  "than",
+  "then",
+  "also",
+  "just",
+  "any",
+  "all",
+  "not",
+  "no",
+  "if",
+  "so",
+  "up",
+  "out",
+  "off",
+  "per",
+  "via",
+  "me",
+  "my",
+  "their",
+  "them",
+  "they",
+  "have",
+  "has",
+  "had",
+  "will",
+  "would",
+  "could",
+  "should",
+  "been",
+  "being",
+  "am",
+  "same",
+  "very",
+  "more",
+  "most",
+  "some",
+  "such",
+  "over",
+  "under",
+  "between",
+  "there",
+  "here",
+  "which",
+  "where",
 ]);
 
 /** Expand common sales/IT phrasings so KB keywords hit more reliably. */
 const SYNONYM_EXPAND: Record<string, string[]> = {
-  soc2: ["soc", "2", "compliance"],
+  soc2: ["soc", "compliance"],
   soc: ["soc2", "compliance"],
   encrypted: ["encryption", "tls"],
   encryption: ["encrypted", "tls"],
@@ -59,7 +109,35 @@ const SYNONYM_EXPAND: Record<string, string[]> = {
   connectors: ["connector", "integration", "sync"],
   arr: ["mrr", "waterfall"],
   mrr: ["arr", "waterfall"],
+  moat: ["defensibility", "differentiator", "differentiation"],
+  differentiator: ["moat", "differentiation", "defensibility"],
+  differentiation: ["moat", "differentiator", "defensibility"],
+  defensibility: ["moat", "differentiator"],
 };
+
+/**
+ * High-signal phrases: if the query contains one, entries that also carry it
+ * in title/topics/keywords get a large boost; others get a mild penalty so
+ * weak bag-of-words matches cannot win.
+ */
+const KEY_PHRASE_GROUPS: string[][] = [
+  [
+    "moat",
+    "competitive advantage",
+    "hard to copy",
+    "defensibility",
+    "differentiator",
+    "differentiation",
+    "architecture as a moat",
+    "architecture-as-moat",
+    "what makes you different",
+    "what makes smpl different",
+  ],
+  ["soc2", "soc 2", "soc-2"],
+  ["implementation timeline", "how long is implementation", "four to six weeks", "4-6 weeks"],
+  ["writeback", "write-back", "write back"],
+  ["subprocessors", "sub-processors", "sub processors"],
+];
 
 export function tokenize(text: string): string[] {
   const base = text
@@ -79,7 +157,7 @@ export function tokenize(text: string): string[] {
       out.push(token);
     }
     for (const extra of SYNONYM_EXPAND[token] ?? []) {
-      if (!seen.has(extra) && !STOP.has(extra)) {
+      if (!seen.has(extra) && !STOP.has(extra) && extra.length > 1) {
         seen.add(extra);
         out.push(extra);
       }
@@ -88,18 +166,30 @@ export function tokenize(text: string): string[] {
   return out;
 }
 
+function wholeWordMatch(hay: string, token: string): boolean {
+  return new RegExp(`(?:^|\\b)${escapeRegExp(token)}(?:\\b|$)`).test(hay);
+}
+
 function fieldScore(queryTokens: string[], field: string, weight: number): number {
   if (!field) return 0;
   const hay = field.toLowerCase();
   let score = 0;
   for (const token of queryTokens) {
-    if (hay.includes(token)) {
-      score += weight;
-      // Extra boost for whole-word-ish hits
-      if (new RegExp(`(?:^|\\b)${escapeRegExp(token)}(?:\\b|$)`).test(hay)) {
-        score += weight * 0.35;
-      }
+    const whole = wholeWordMatch(hay, token);
+    // Short tokens (len <= 3) are substring-pollution magnets ("as" in "database").
+    // Only count whole-word hits, and at reduced weight.
+    if (token.length <= 3) {
+      if (whole) score += weight * 0.35;
+      continue;
     }
+    if (!hay.includes(token)) continue;
+    // Substring hit without a word boundary is weak — discount heavily
+    if (!whole) {
+      score += weight * 0.15;
+      continue;
+    }
+    score += weight;
+    score += weight * 0.35;
   }
   // Phrase boost: multi-word query substring
   const phrase = queryTokens.join(" ");
@@ -111,6 +201,54 @@ function fieldScore(queryTokens: string[], field: string, weight: number): numbe
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function structuredText(entry: SalesKbEntry): string {
+  return [
+    entry.title,
+    ...(entry.topics ?? []),
+    ...(entry.keywords ?? []),
+    entry.id.replace(/-/g, " "),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function keyPhraseBoost(question: string, entry: SalesKbEntry): number {
+  const q = question
+    .toLowerCase()
+    .replace(/soc\s*2/g, "soc2")
+    .replace(/write[\s-]?back/g, "writeback");
+  const structured = structuredText(entry);
+  let boost = 0;
+
+  for (const phrases of KEY_PHRASE_GROUPS) {
+    const qHit = phrases.some((p) => q.includes(p));
+    if (!qHit) continue;
+    const eHit = phrases.some((p) => structured.includes(p));
+    if (eHit) {
+      boost += 14;
+    } else {
+      // Query asked something specific; this entry does not carry that signal
+      boost -= 3;
+    }
+  }
+  return boost;
+}
+
+/** Exact keyword / topic phrase hits (beyond bag-of-words tokens). */
+function phraseFieldBoost(question: string, entry: SalesKbEntry): number {
+  const q = question.toLowerCase();
+  let boost = 0;
+  const phrases = [...(entry.keywords ?? []), ...(entry.topics ?? [])];
+  for (const phrase of phrases) {
+    const p = phrase.toLowerCase().trim();
+    if (p.length < 4) continue;
+    if (q.includes(p)) {
+      boost += p.split(/\s+/).length >= 2 ? 6 : 3.5;
+    }
+  }
+  return boost;
 }
 
 function audienceAllows(entry: SalesKbEntry, audience: SalesAudience | null): boolean {
@@ -129,16 +267,26 @@ export function scoreEntry(question: string, entry: SalesKbEntry): number {
   const tokens = tokenize(question);
   if (tokens.length === 0) return 0;
 
-  let score = 0;
-  score += fieldScore(tokens, entry.title, 3.2);
-  score += fieldScore(tokens, (entry.topics ?? []).join(" "), 2.8);
-  score += fieldScore(tokens, (entry.keywords ?? []).join(" "), 2.4);
-  score += fieldScore(tokens, entry.answer, 0.45);
-  score += fieldScore(tokens, entry.id.replace(/-/g, " "), 1.2);
+  let structured =
+    fieldScore(tokens, entry.title, 3.2) +
+    fieldScore(tokens, (entry.topics ?? []).join(" "), 2.8) +
+    fieldScore(tokens, (entry.keywords ?? []).join(" "), 2.4) +
+    fieldScore(tokens, entry.id.replace(/-/g, " "), 1.2);
+
+  // Answer body is supporting evidence only — never enough alone to win
+  const answerScore = fieldScore(tokens, entry.answer, 0.2);
+  const keyBoost = keyPhraseBoost(question, entry);
+
+  let score = structured + answerScore + keyBoost + phraseFieldBoost(question, entry);
 
   // Prefer external_safe slightly when both would match
   if ((entry.tone ?? "external_safe") === "external_safe") {
     score += 0.15;
+  }
+
+  // If nothing hit title/topics/keywords/id, collapse weak answer-only matches
+  if (structured < 0.5 && keyBoost <= 0) {
+    score *= 0.25;
   }
 
   // Normalize lightly by query length so short queries aren't drowned
@@ -160,7 +308,8 @@ export function retrieveSalesAnswers(
   const audience = options.audience ?? null;
   const includeInternalDeep = options.includeInternalDeep ?? false;
   const limit = options.limit ?? 3;
-  const minScore = options.minScore ?? 1.35;
+  // Raised slightly so weak bag-of-words noise deflects instead of wrong-carding
+  const minScore = options.minScore ?? 2.1;
 
   const scored: SalesTalkMatch[] = [];
   for (const entry of entries) {
