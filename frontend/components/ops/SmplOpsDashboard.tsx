@@ -457,7 +457,7 @@ export function SmplOpsDashboard() {
             Sales Talk Track
           </Link>
           <Link
-            href="/compliance"
+            href="/app/compliance"
             className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
           >
             SOC 2 readiness

@@ -17,11 +17,6 @@ const SECTION_NAV = [
 const RESOURCES_LINKS = [
   { href: "/blog", label: "Blog", description: "Close, board packages, commentary" },
   { href: "/glossary", label: "Glossary", description: "SaaS FP&A definitions" },
-  {
-    href: "/compliance",
-    label: "SOC 2 readiness",
-    description: "Not certified — progress checklist",
-  },
 ] as const;
 
 const navLinkClass =
@@ -165,9 +160,6 @@ export function LandingHeader() {
         </Link>
         <Link href="/glossary" className={`${navLinkClass} text-xs`}>
           Glossary
-        </Link>
-        <Link href="/compliance" className={`${navLinkClass} text-xs`}>
-          SOC 2 readiness
         </Link>
       </div>
 

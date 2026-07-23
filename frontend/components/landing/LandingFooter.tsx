@@ -14,9 +14,6 @@ export function LandingFooter() {
           <Link href="/app" className="transition hover:text-white">
             Platform
           </Link>
-          <Link href="/compliance" className="transition hover:text-white">
-            SOC 2 readiness
-          </Link>
           <a href="#trust" className="transition hover:text-white">
             Trust layer
           </a>

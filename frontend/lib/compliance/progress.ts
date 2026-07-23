@@ -1,5 +1,5 @@
 /**
- * Public SOC 2 readiness scoreboard for /compliance.
+ * Internal SOC 2 readiness scoreboard for /app/compliance (ops-admin only).
  *
  * Source of truth for *work*: docs/soc2/PROGRESS.md
  * Source of truth for *this page*: this file — keep them in sync when statuses change.
