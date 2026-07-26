@@ -18,14 +18,14 @@
 
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
-| **Week 1 (now)** | ~2026-07-22 → 2026-07-29 | MFA mostly done (2026-07-26); finish Anthropic + DNS/ops MFA; protect `main` + required PR review |
+| **Week 1 (now)** | ~2026-07-22 → 2026-07-29 | Cloud console MFA done (incl. Anthropic via Google IdP); finish DNS/ops MFA if separate; protect `main` + required PR review |
 | **Week 2** | ~2026-07-29 → 2026-08-05 | Approve DRAFT policies P01–P12 (or core set); platform decision (explicit Vanta wait date **or** signup) |
 | **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM subprocessor write-up finalized; security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Enable MFA on Anthropic console (last Week 1 cloud console); then protect `main` + required PR review; then Week 2 policy approval / platform decision.
+**Next guided item for Matt:** Protect `main` + required PR review; confirm DNS/ops/break-glass MFA if credentials are separate from IdP; then Week 2 policy approval / platform decision.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -39,7 +39,7 @@
 | `[x]` | MFA — Stripe | Matt | Week 1 | Done 2026-07-26 |
 | `[x]` | MFA — Sanity (if admin) | Matt | Week 1 | Done 2026-07-26 — IdP MFA via Google login (not Sanity-native toggle) |
 | `[x]` | MFA — Resend | Matt | Week 1 | Done 2026-07-26 |
-| `[!]` | MFA — Anthropic console | Matt | Week 1 | Still open — not confirmed this session |
+| `[x]` | MFA — Anthropic console | Matt | Week 1 | Done 2026-07-26 — IdP MFA via Google login (not Anthropic-native TOTP) |
 | `[!]` | MFA — DNS / domain admin (if separate login) | Matt | Week 1 | Not confirmed this session |
 | `[x]` | Confirm no shared prod passwords | Matt | Week 1 | Confirmed 2026-07-26 — no shared prod passwords |
 | `[!]` | Protect `main` + required PR review | Matt | Week 1 | Confirm in GitHub settings |
@@ -176,9 +176,9 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | MFA — Stripe | Done 2026-07-26 |
 | `[x]` | MFA — Sanity (if admin) | Done 2026-07-26 — IdP MFA via Google login (provider-level, not Sanity-native) |
 | `[x]` | MFA — Resend | Done 2026-07-26 |
-| `[!]` | MFA — Anthropic console | Still open — enable + mark inventory |
+| `[x]` | MFA — Anthropic console | Done 2026-07-26 — IdP MFA via Google login (not Anthropic-native TOTP) |
 | `[!]` | MFA — DNS / domain admin (if separate) | Not confirmed 2026-07-26 |
-| `[~]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — most MFA rows verified 2026-07-26; Anthropic + DNS/ops still open |
+| `[~]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — cloud console MFA verified 2026-07-26; DNS/ops/break-glass still open if separate |
 | `[x]` | Confirm no shared prod passwords | Confirmed 2026-07-26 |
 | `[ ]` | First quarterly-style access review sign-off | After remaining MFA + inventory stable — Week 3–4 |
 
@@ -208,7 +208,7 @@ Book the auditor only when these are **live**, not merely drafted:
 
 | Status | Control area |
 |--------|----------------|
-| `[~]` | MFA on admin/cloud accounts | Most consoles done 2026-07-26; Anthropic (+ DNS if separate) still open |
+| `[~]` | MFA on admin/cloud accounts | Cloud consoles done 2026-07-26 (Anthropic via Google IdP); DNS/ops if separate still open |
 | `[ ]` | Written policies **approved** by leadership |
 | `[ ]` | Access inventory + first review artifact |
 | `[~]` | Documented change/deploy path + PR review on `main` | Path documented; PR protection still `[!]` |
@@ -247,15 +247,16 @@ Not SOC 2 certified. Readiness evidence only.
 
 1. MFA enabled: GitHub, Vercel, Railway, Neon, corporate email/IdP, Stripe, Resend
 2. Sanity: MFA via Google IdP login (provider-level; not a Sanity-native MFA toggle)
-3. Confirmed: **no shared prod passwords**
-4. Still open: Anthropic console MFA; DNS/domain admin MFA if login is separate from IdP; ops/break-glass rows if distinct credentials
+3. Anthropic: MFA via Google IdP login (same pattern; not Anthropic-native TOTP)
+4. Confirmed: **no shared prod passwords**
+5. Still open: DNS/domain admin MFA if login is separate from IdP; ops/break-glass rows if distinct credentials
 
 ---
 
 ## Top `[!]` for Matt (do next)
 
-1. **[!]** MFA on Anthropic console (+ DNS/domain admin if separate from IdP) — mark inventory when verified ← **start here**
-2. **[!]** Protect `main` + required PR review in GitHub
+1. **[!]** Protect `main` + required PR review in GitHub ← **start here**
+2. **[!]** MFA on DNS/domain admin (+ ops/break-glass if separate from IdP) — mark inventory when verified
 3. **[!]** Approve core policies (P01–P12 at minimum) — draft ≠ approved
 4. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log
 5. **[!]** Customer DPA — legal review / ship

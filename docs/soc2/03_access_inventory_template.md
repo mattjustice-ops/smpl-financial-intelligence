@@ -5,8 +5,8 @@ Who can touch production systems or customer data, and why. Complete Week 1; rev
 Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard: [PROGRESS.md](./PROGRESS.md)
 
 **Status (2026-07-26):** Known systems inventoried with **owner = Matt Justice** for all rows.  
-MFA verified for primary cloud consoles (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend).  
-**[!]** Anthropic console MFA still open; DNS/ops/break-glass rows still need confirmation if credentials are separate from IdP.  
+MFA verified for primary cloud consoles (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend, Anthropic via Google IdP).  
+**[!]** DNS/ops/break-glass rows still need confirmation if credentials are separate from IdP.  
 Do **not** invent MFA completion.
 
 **Rules of thumb:** unique accounts (no shared logins); MFA on admin; least privilege; revoke same day on offboarding.
@@ -33,7 +33,7 @@ Do **not** invent MFA completion.
 | Matt Justice | _[!]_ | Sanity (project) | Project admin | Y | **Y** — 2026-07-26 (IdP MFA via Google login; not Sanity-native toggle) | Marketing CMS / studio | 2026-07-26 |
 | Matt Justice | _[!]_ | Stripe (account) | Account admin | Y | **Y** — 2026-07-26 | Billing / subscriptions | 2026-07-26 |
 | Matt Justice | _[!]_ | Resend (account) | Account admin | Y | **Y** — 2026-07-26 | Transactional email / magic links | 2026-07-26 |
-| Matt Justice | _[!]_ | Anthropic (console / API keys) | Account / key owner | Y | **[!]** N — needs Matt | LLM API for commentary (keys on Railway) | 2026-07-22 |
+| Matt Justice | _[!]_ | Anthropic (console / API keys) | Account / key owner | Y | **Y** — 2026-07-26 (IdP MFA via Google login; not Anthropic-native TOTP) | LLM API for commentary (keys on Railway) | 2026-07-26 |
 | Matt Justice | _[!]_ | Corporate email / IdP (Google / Microsoft / other) | Admin / primary mailbox | Y | **Y** — 2026-07-26 | Identity + magic-link delivery | 2026-07-26 |
 | Matt Justice | _[!]_ | Compliance platform (when chosen) | Admin (future) | N/A yet | N/A | Platform TBD — Matt to decide | 2026-07-22 |
 | Matt Justice | _[!]_ | Ops console / white-glove tooling | Privileged operator | Y | **[!]** N — confirm if separate credentials | Tenant support & POC data loads | 2026-07-22 |
@@ -53,7 +53,7 @@ Add rows as needed when additional people receive access. Duplicate systems for 
 - [x] Sanity — owner row filled (MFA **Y** 2026-07-26 via Google IdP)
 - [x] Stripe — owner row filled (MFA **Y** 2026-07-26)
 - [x] Resend — owner row filled (MFA **Y** 2026-07-26)
-- [x] Anthropic — owner row filled (MFA **[!]** )
+- [x] Anthropic — owner row filled (MFA **Y** 2026-07-26 via Google IdP)
 - [x] Email / IdP — owner row filled (MFA **Y** 2026-07-26)
 - [x] DNS / domain admin — owner row filled (MFA **[!]** )
 - [x] Ops / privileged tenant access — owner row filled (MFA **[!]** confirm)
@@ -81,6 +81,6 @@ Add rows as needed when additional people receive access. Duplicate systems for 
 
 | Review period | Reviewer | Date | Result (OK / changes made) | Notes |
 |---------------|----------|------|----------------------------|-------|
-| YYYY-QX | Matt Justice | | | First review after remaining MFA (Anthropic / DNS) verified |
+| YYYY-QX | Matt Justice | | | First review after remaining MFA (DNS / ops if separate) verified |
 
 Attach exports or links to evidence folder (do not commit secrets or customer dumps to git).

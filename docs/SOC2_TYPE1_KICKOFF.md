@@ -43,7 +43,7 @@ Until a report exists, prefer the security one-pager + DPA + subprocessors list 
 | 1 | Fill [00_decision_log.md](./soc2/00_decision_log.md): freeze Sec+Avail+Conf; PI deferred | Executive sponsor | **Done — APPROVED 2026-07-22** |
 | 2 | Name people in decision log / readiness §3 (sponsor, security, engineering, ops/CS) — one person can wear multiple hats | Executive sponsor | **Done — all roles Matt Justice** |
 | 3 | Choose compliance platform **or** explicitly defer 1–2 weeks: Vanta / Drata / Secureframe (or other). Do **not** buy until you own MFA + access inventory | Security owner | Choice or “wait until ____” in decision log |
-| 4 | MFA on every admin account: GitHub, Vercel, Railway, Neon, email/Google Workspace (or IdP), Sanity, Stripe, Resend, Anthropic | Security owner | **Mostly done 2026-07-26** (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend; no shared prod passwords). **Still open:** Anthropic console MFA (+ DNS/domain if separate login) |
+| 4 | MFA on every admin account: GitHub, Vercel, Railway, Neon, email/Google Workspace (or IdP), Sanity, Stripe, Resend, Anthropic | Security owner | **Cloud consoles done 2026-07-26** (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend, Anthropic via Google IdP — not Anthropic-native TOTP; no shared prod passwords). **Still open:** DNS/domain admin (+ ops/break-glass if separate login) |
 | 5 | Start [03_access_inventory_template.md](./soc2/03_access_inventory_template.md) — who has prod / billing / DB | Security owner | First pass complete — update MFA columns as verified |
 | 6 | Confirm [01_system_boundary.md](./soc2/01_system_boundary.md) + [02_subprocessors.md](./soc2/02_subprocessors.md) match production | Engineering owner | TBDs resolved or marked with owner |
 
@@ -106,7 +106,7 @@ At minimum: GitHub, Vercel, Railway, Neon, Sanity, Stripe, Resend, Anthropic con
 
 From readiness v2 — book the audit only when controls are **live**, not merely drafted:
 
-- MFA on admin/cloud accounts (**[~]** mostly live 2026-07-26; finish Anthropic + any separate DNS login)
+- MFA on admin/cloud accounts (**[~]** cloud consoles live 2026-07-26 incl. Anthropic via Google IdP; finish any separate DNS/ops login)
 - Written policies approved by leadership
 - Access inventory + first quarterly-style review artifact
 - Documented change/deploy path + PR review on `main`

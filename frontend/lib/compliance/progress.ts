@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Matt: finish Anthropic MFA (+ DNS if separate), then protect main + PR review; Week 2 = approve policies + platform decision",
+    "Matt: protect main + PR review; confirm DNS/ops MFA if separate from IdP; Week 2 = approve policies + platform decision",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -84,7 +84,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 1 (now)",
     approxDates: "~2026-07-22 → 2026-07-29",
     focus:
-      "MFA mostly done 2026-07-26; finish Anthropic + DNS/ops MFA; protect main + required PR review",
+      "Cloud console MFA done 2026-07-26 (Anthropic via Google IdP); finish DNS/ops if separate; protect main + required PR review",
   },
   {
     id: "week-2",
@@ -190,10 +190,10 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-mfa-anthropic",
     label: "MFA — Anthropic console",
-    status: "needs_owner",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 1",
-    notes: "Still open — not confirmed 2026-07-26",
+    notes: "Done 2026-07-26 — IdP MFA via Google login (not Anthropic-native TOTP)",
   },
   {
     id: "rem-mfa-dns",
@@ -217,7 +217,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Week 1",
-    notes: "Confirm in GitHub settings — do next after Anthropic MFA",
+    notes: "Confirm in GitHub settings — next Week 1 item",
   },
   {
     id: "rem-approve-policies",
@@ -577,8 +577,8 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "ah-8b",
         label: "MFA — Anthropic console",
-        status: "needs_owner",
-        notes: "Still open — Week 1",
+        status: "done",
+        notes: "Done 2026-07-26 — IdP MFA via Google login (not Anthropic-native TOTP)",
       },
       {
         id: "ah-8c",
@@ -590,7 +590,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "ah-9",
         label: "Access inventory — people + roles filled",
         status: "in_progress",
-        notes: "Most MFA verified 2026-07-26; Anthropic + DNS/ops still open",
+        notes: "Cloud console MFA verified 2026-07-26; DNS/ops/break-glass still open if separate",
       },
       {
         id: "ah-10",
@@ -685,7 +685,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "bar-1",
         label: "MFA on admin/cloud accounts",
         status: "in_progress",
-        notes: "Most consoles done 2026-07-26; Anthropic (+ DNS if separate) still open",
+        notes: "Cloud consoles done 2026-07-26 (Anthropic via Google IdP); DNS/ops if separate still open",
       },
       {
         id: "bar-2",
