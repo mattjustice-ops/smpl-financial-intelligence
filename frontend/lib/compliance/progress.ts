@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Matt: protect main + PR review; confirm DNS/ops MFA if separate from IdP; Week 2 = approve policies + platform decision",
+    "Matt: protect main + PR review; confirm ops/break-glass MFA if separate from IdP; Week 2 = approve policies + platform decision",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -84,7 +84,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 1 (now)",
     approxDates: "~2026-07-22 → 2026-07-29",
     focus:
-      "Cloud console MFA done 2026-07-26 (Anthropic via Google IdP); finish DNS/ops if separate; protect main + required PR review",
+      "Cloud + DNS (Squarespace) MFA done 2026-07-26; confirm ops/break-glass if separate; protect main + required PR review",
   },
   {
     id: "week-2",
@@ -197,11 +197,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-mfa-dns",
-    label: "MFA — DNS / domain admin (if separate login)",
-    status: "needs_owner",
+    label: "MFA — DNS / domain admin (Squarespace)",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 1",
-    notes: "Not confirmed this session",
+    notes: "Done 2026-07-26 — Squarespace MFA for smpl-ai.com",
   },
   {
     id: "rem-no-shared-passwords",
@@ -255,7 +255,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Week 3–4",
-    notes: "After MFA verified + inventory stable",
+    notes: "After ops/break-glass MFA (if separate) + inventory stable",
   },
   {
     id: "rem-restore-test",
@@ -582,15 +582,15 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "ah-8c",
-        label: "MFA — DNS / domain admin (if separate)",
-        status: "needs_owner",
-        notes: "Not confirmed 2026-07-26",
+        label: "MFA — DNS / domain admin (Squarespace)",
+        status: "done",
+        notes: "Done 2026-07-26 — Squarespace MFA for smpl-ai.com",
       },
       {
         id: "ah-9",
         label: "Access inventory — people + roles filled",
         status: "in_progress",
-        notes: "Cloud console MFA verified 2026-07-26; DNS/ops/break-glass still open if separate",
+        notes: "Cloud + DNS MFA verified 2026-07-26; ops/break-glass still open if separate",
       },
       {
         id: "ah-10",
@@ -602,7 +602,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "ah-11",
         label: "First quarterly-style access review sign-off",
         status: "open",
-        notes: "After remaining MFA + inventory stable — Week 3–4",
+        notes: "After ops/break-glass MFA confirmed (if separate) + inventory stable — Week 3–4",
       },
     ],
   },
@@ -685,7 +685,8 @@ export const complianceSections: ComplianceSection[] = [
         id: "bar-1",
         label: "MFA on admin/cloud accounts",
         status: "in_progress",
-        notes: "Cloud consoles done 2026-07-26 (Anthropic via Google IdP); DNS/ops if separate still open",
+        notes:
+          "Cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass if separate still open",
       },
       {
         id: "bar-2",

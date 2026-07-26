@@ -32,8 +32,8 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] MFA on Sanity (if admin access exists) — **2026-07-26** (IdP MFA via Google login; not Sanity-native)
 - [x] MFA on Resend — **2026-07-26**
 - [x] MFA on Anthropic console — **2026-07-26** (IdP MFA via Google login; not Anthropic-native TOTP)
-- [!] MFA on DNS / domain admin (if separate from IdP) — not confirmed
-- [~] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt on all known systems; cloud console MFA verified 2026-07-26; DNS/ops still open if separate
+- [x] MFA on DNS / domain admin (Squarespace for smpl-ai.com) — **2026-07-26**
+- [~] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt on all known systems; cloud + DNS MFA verified 2026-07-26; ops/break-glass still open if separate
 - [x] Confirm no shared passwords for prod systems — **2026-07-26**
 
 ---
@@ -71,7 +71,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 ## End of Week 1 — definition of done
 
 - [~] Decision log has owners + scope — **done**; platform choice or explicit wait — **[!]** Matt
-- [~] MFA on admin cloud accounts — cloud consoles done 2026-07-26 (Anthropic via Google IdP); DNS if separate still open
-- [~] Access inventory first pass exists (owners filled; cloud console MFA verified; DNS/ops pending if separate)
+- [~] MFA on admin cloud accounts — cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass if separate still open
+- [~] Access inventory first pass exists (owners filled; cloud + DNS MFA verified; ops/break-glass pending if separate)
 - [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs)
 - [x] Core policy drafts started (P01–P06, P08–P09, P11–P12) — still need approval
