@@ -35,7 +35,7 @@ Do not use production customer data in personal sandboxes without authorization 
 
 1. Develop in a branch under **GitHub** version control.
 2. Open a pull request; address review feedback.
-3. **Required peer review** before merge to `main` (branch protection — _[! Matt: confirm in GitHub settings]_).
+3. **Required PR before merge** to `main` (GitHub branch ruleset — **confirmed 2026-07-26**; solo-friendly, approvals may be 0).
 4. Deploy (see [../CHANGE_MANAGEMENT.md](../CHANGE_MANAGEMENT.md)):
    - Frontend → **Vercel** (typically from `main` / approved pipeline)
    - API → **Railway** (typically from `main` / approved pipeline)

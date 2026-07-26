@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Matt: protect main + PR review; confirm ops/break-glass MFA if separate from IdP; Week 2 = approve policies + platform decision",
+    "Week 1 complete 2026-07-26. Week 2: approve core policies + platform decision (or wait-until date)",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -81,14 +81,14 @@ export const complianceProgressMeta = {
 export const complianceTimeline: ComplianceTimelineWindow[] = [
   {
     id: "week-1",
-    window: "Week 1 (now)",
+    window: "Week 1",
     approxDates: "~2026-07-22 → 2026-07-29",
     focus:
-      "Cloud + DNS (Squarespace) MFA done 2026-07-26; confirm ops/break-glass if separate; protect main + required PR review",
+      "COMPLETE 2026-07-26 — MFA + inventory; protect main + required PR (GitHub ruleset); break-glass = Neon/Railway MFA",
   },
   {
     id: "week-2",
-    window: "Week 2",
+    window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
       "Approve DRAFT policies P01–P12 (or core set); platform decision (Vanta wait date or signup)",
@@ -214,10 +214,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-protect-main",
     label: "Protect main + required PR review",
-    status: "needs_owner",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 1",
-    notes: "Confirm in GitHub settings — next Week 1 item",
+    notes:
+      "Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0)",
   },
   {
     id: "rem-approve-policies",
@@ -225,7 +226,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Week 2",
-    notes: "Draft ≠ approved",
+    notes: "Draft ≠ approved — Week 2 start here",
   },
   {
     id: "rem-platform",
@@ -255,7 +256,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Week 3–4",
-    notes: "After ops/break-glass MFA (if separate) + inventory stable",
+    notes: "After inventory stable — Week 1 inventory complete",
   },
   {
     id: "rem-restore-test",
@@ -589,8 +590,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "ah-9",
         label: "Access inventory — people + roles filled",
-        status: "in_progress",
-        notes: "Cloud + DNS MFA verified 2026-07-26; ops/break-glass still open if separate",
+        status: "done",
+        notes:
+          "First pass complete 2026-07-26; ops/break-glass = same MFA as Neon/Railway (solo; no separate login)",
       },
       {
         id: "ah-10",
@@ -602,7 +604,7 @@ export const complianceSections: ComplianceSection[] = [
         id: "ah-11",
         label: "First quarterly-style access review sign-off",
         status: "open",
-        notes: "After ops/break-glass MFA confirmed (if separate) + inventory stable — Week 3–4",
+        notes: "After inventory stable — Week 3–4",
       },
     ],
   },
@@ -640,15 +642,16 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-1",
         label: "Protect main + required PR review",
-        status: "needs_owner",
-        notes: "Confirm in GitHub settings — Week 1",
+        status: "done",
+        notes:
+          "Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0)",
       },
       {
         id: "eng-2",
         label: "Document deploy path (Vercel FE, Railway API) + who can promote",
         status: "done",
         notes:
-          "docs/soc2/CHANGE_MANAGEMENT.md — GitHub/Vercel/Railway MFA done 2026-07-26; branch protection still open",
+          "docs/soc2/CHANGE_MANAGEMENT.md — MFA + branch protection live 2026-07-26",
       },
       {
         id: "eng-3",
@@ -684,9 +687,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-1",
         label: "MFA on admin/cloud accounts",
-        status: "in_progress",
+        status: "done",
         notes:
-          "Cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass if separate still open",
+          "Cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass = Neon/Railway MFA",
       },
       {
         id: "bar-2",
@@ -696,13 +699,14 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-3",
         label: "Access inventory + first review artifact",
-        status: "open",
+        status: "in_progress",
+        notes: "Inventory first pass done; quarterly sign-off still open (Week 3–4)",
       },
       {
         id: "bar-4",
         label: "Documented change/deploy path + PR review on main",
-        status: "in_progress",
-        notes: "Path documented; PR protection still needs Matt",
+        status: "done",
+        notes: "Path documented; GitHub ruleset protecting main live 2026-07-26",
       },
       {
         id: "bar-5",

@@ -3,9 +3,9 @@
 **Status:** Working description of the **actual** production path (readiness documentation).  
 **Policy:** [policies/P05_change_management_policy.md](./policies/P05_change_management_policy.md) (DRAFT — not approved).  
 **Owner:** Matt Justice (Engineering owner)  
-**Last updated:** 2026-07-22
+**Last updated:** 2026-07-26
 
-This is **not** a claim that branch protection, MFA, or peer review are fully enforced — those need Matt confirmation in GitHub/provider consoles.
+Branch protection on `main` and MFA on GitHub/Vercel/Railway are **confirmed live** (2026-07-26). This document is readiness evidence — **not** a claim of SOC 2 certification.
 
 ---
 
@@ -33,7 +33,7 @@ Feature branch → Pull request on GitHub → Review → Merge to main
 
 1. **Develop** on a feature branch in GitHub.
 2. **Open a PR** against `main`. Address review comments.
-3. **Merge** to `main` (target control: required PR review + branch protection — **[!]** confirm in GitHub).
+3. **Merge** to `main` (control live: GitHub branch ruleset — required PR before merge; solo-friendly, approvals may be 0 — **confirmed 2026-07-26**).
 4. **Frontend:** Vercel project (root directory `frontend`) builds and deploys production.
 5. **API:** Railway service (root directory `backend`) builds and deploys production.
 6. **Verify:** API `/health`, magic-link login, critical `/app` routes; board/export paths if touched.
@@ -47,7 +47,7 @@ Related ops docs (implementation detail): `docs/DEPLOYMENT.md`, `docs/GO_LIVE_PR
 
 | Action | Who (current) | Notes |
 |--------|---------------|-------|
-| Merge to `main` | Matt Justice (+ any future reviewers) | Branch protection settings **[!]** |
+| Merge to `main` | Matt Justice (+ any future reviewers) | Branch ruleset: required PR before merge — **Y** 2026-07-26 |
 | Deploy / promote Vercel production | Matt Justice | Team admin; MFA **Y** 2026-07-26 |
 | Deploy / promote Railway production | Matt Justice | Project access; MFA **Y** 2026-07-26 |
 | Change production env vars / secrets | Matt Justice | Vercel + Railway consoles only |
@@ -92,14 +92,14 @@ Allowed to restore service or contain an incident ([P04](./policies/P04_incident
 |----------|--------|
 | PR + approval history | GitHub |
 | Deploy history | Vercel + Railway dashboards |
-| Branch protection settings | GitHub screenshot/export — **[!]** |
+| Branch protection / ruleset settings | GitHub — ruleset protecting `main` with required PR — **confirmed 2026-07-26** |
 | This document + approved P05 | `docs/soc2/` |
 
 ---
 
 ## Open confirmations for Matt
 
-- [!] GitHub: protect `main`, required PR review, dismiss stale approvals as desired
+- [x] GitHub: protect `main`, required PR before merge — done 2026-07-26 (solo-friendly; approvals may be 0)
 - [x] MFA on GitHub, Vercel, Railway — done 2026-07-26
 - [!] Confirm exact production project/service names and whether staging is separate
 - [!] Dependabot (or equivalent) enabled

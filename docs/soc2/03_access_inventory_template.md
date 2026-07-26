@@ -6,7 +6,7 @@ Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard: [PRO
 
 **Status (2026-07-26):** Known systems inventoried with **owner = Matt Justice** for all rows.  
 MFA verified for primary cloud consoles (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend, Anthropic via Google IdP) and Domain DNS / Squarespace (smpl-ai.com).  
-**[!]** Ops/break-glass rows still need confirmation if credentials are separate from IdP.  
+**Ops/break-glass:** Solo founder — **no separate break-glass login**. Privileged DB/ops access is via MFA’d **Neon** and **Railway** consoles already covered above (same-as-Neon/Railway).  
 Do **not** invent MFA completion.
 
 **Rules of thumb:** unique accounts (no shared logins); MFA on admin; least privilege; revoke same day on offboarding.
@@ -36,8 +36,8 @@ Do **not** invent MFA completion.
 | Matt Justice | _[!]_ | Anthropic (console / API keys) | Account / key owner | Y | **Y** — 2026-07-26 (IdP MFA via Google login; not Anthropic-native TOTP) | LLM API for commentary (keys on Railway) | 2026-07-26 |
 | Matt Justice | _[!]_ | Corporate email / IdP (Google / Microsoft / other) | Admin / primary mailbox | Y | **Y** — 2026-07-26 | Identity + magic-link delivery | 2026-07-26 |
 | Matt Justice | _[!]_ | Compliance platform (when chosen) | Admin (future) | N/A yet | N/A | Platform TBD — Matt to decide | 2026-07-22 |
-| Matt Justice | _[!]_ | Ops console / white-glove tooling | Privileged operator | Y | **[!]** N — confirm if separate credentials | Tenant support & POC data loads | 2026-07-22 |
-| Matt Justice | _[!]_ | Direct DB / break-glass | Privileged DB access | Y | **[!]** N — confirm if separate credentials | Emergency / migration access | 2026-07-22 |
+| Matt Justice | _[!]_ | Ops console / white-glove tooling | Privileged operator | Y | **Y** — 2026-07-26 (same MFA as Neon/Railway; no separate login) | Tenant support & POC data loads | 2026-07-26 |
+| Matt Justice | _[!]_ | Direct DB / break-glass | Privileged DB access | Y | **Y / N/A separate** — 2026-07-26 (same MFA as Neon/Railway consoles; solo; no distinct break-glass creds) | Emergency / migration access | 2026-07-26 |
 | Matt Justice | _[!]_ | Domain DNS / Squarespace / registrar | Domain admin | Y | **Y** — 2026-07-26 (Squarespace MFA confirmed) | smpl-ai.com DNS / domain | 2026-07-26 |
 
 Add rows as needed when additional people receive access. Duplicate systems for staging if separate from prod.
@@ -56,7 +56,7 @@ Add rows as needed when additional people receive access. Duplicate systems for 
 - [x] Anthropic — owner row filled (MFA **Y** 2026-07-26 via Google IdP)
 - [x] Email / IdP — owner row filled (MFA **Y** 2026-07-26)
 - [x] DNS / domain admin — owner row filled (MFA **Y** 2026-07-26 — Squarespace)
-- [x] Ops / privileged tenant access — owner row filled (MFA **[!]** confirm)
+- [x] Ops / privileged tenant access — owner row filled (MFA **Y** via Neon/Railway — no separate break-glass)
 - [ ] Compliance platform (when live) — N/A until Matt chooses platform
 
 ---
@@ -81,6 +81,6 @@ Add rows as needed when additional people receive access. Duplicate systems for 
 
 | Review period | Reviewer | Date | Result (OK / changes made) | Notes |
 |---------------|----------|------|----------------------------|-------|
-| YYYY-QX | Matt Justice | | | First review after remaining MFA (ops/break-glass if separate) verified |
+| YYYY-QX | Matt Justice | | | First review after Week 1 inventory stable (MFA verified; break-glass = Neon/Railway) |
 
 Attach exports or links to evidence folder (do not commit secrets or customer dumps to git).

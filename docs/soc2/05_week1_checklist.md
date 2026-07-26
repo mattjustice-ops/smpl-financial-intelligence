@@ -6,6 +6,8 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 
 **Legend:** `[x]` done · `[ ]` open · `[~]` in progress · `[!]` needs Matt
 
+**Week 1 status:** **COMPLETE 2026-07-26** (readiness only — not SOC 2 certified). Platform choice, policy approval, boundary TBDs, DPA, and restore-test calendar roll into **Week 2+** per [PROGRESS.md](./PROGRESS.md).
+
 ---
 
 ## Decisions & ownership
@@ -16,8 +18,8 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] Name security owner — Matt Justice
 - [x] Name engineering owner — Matt Justice
 - [x] Name ops / CS privileged-access owner — Matt Justice
-- [!] Choose platform path: create Vanta/Drata/Secureframe account **or** write “wait until ____” in decision log (do not stall MFA either way; **do not auto-sign up for Vanta in this kickoff**)
-- [!] Set target Type I month (even if approximate)
+- [!] Choose platform path: create Vanta/Drata/Secureframe account **or** write “wait until ____” in decision log — **Week 2** (do not stall MFA; **do not auto-sign up for Vanta**)
+- [!] Set target Type I month (even if approximate) — **Week 2+ / Month 2–3** target window
 
 ---
 
@@ -33,7 +35,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] MFA on Resend — **2026-07-26**
 - [x] MFA on Anthropic console — **2026-07-26** (IdP MFA via Google login; not Anthropic-native TOTP)
 - [x] MFA on DNS / domain admin (Squarespace for smpl-ai.com) — **2026-07-26**
-- [~] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt on all known systems; cloud + DNS MFA verified 2026-07-26; ops/break-glass still open if separate
+- [x] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt on all known systems; cloud + DNS MFA verified; ops/break-glass = same MFA as Neon/Railway (solo; no separate login) — **2026-07-26**
 - [x] Confirm no shared passwords for prod systems — **2026-07-26**
 
 ---
@@ -41,37 +43,40 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 ## Boundary & vendors
 
 - [x] Draft [01_system_boundary.md](./01_system_boundary.md) from known stack
-- [!] Review boundary; resolve or assign TBDs
+- [!] Review boundary; resolve or assign TBDs — **Week 2–3**
 - [x] Draft [02_subprocessors.md](./02_subprocessors.md) named list
-- [!] Review subprocessors; mark any unused vendors / confirm OpenAI
-- [ ] Start folder for vendor SOC reports (under NDA) — Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc.
+- [!] Review subprocessors; mark any unused vendors / confirm OpenAI — **Week 2–3**
+- [ ] Start folder for vendor SOC reports (under NDA) — Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc. — **Week 3–4**
 - [x] Security one-pager draft — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md)
 
 ---
 
 ## Engineering hygiene (start Week 1, finish into Week 2)
 
-- [!] Branch protection on `main` + required PR review
-- [ ] Confirm secrets are not in git; production secrets only in Vercel/Railway (etc.)
-- [x] Document deploy path + who can deploy — [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) (Matt); GitHub/Vercel/Railway MFA done 2026-07-26; branch protection still `[!]`
-- [!] Calendar a Neon backup restore test
+- [x] Branch protection on `main` + required PR review — **2026-07-26** (GitHub branch ruleset; solo-friendly; approvals may be 0)
+- [ ] Confirm secrets are not in git; production secrets only in Vercel/Railway (etc.) — **Month 2** spot-check
+- [x] Document deploy path + who can deploy — [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) (Matt); MFA + branch protection live 2026-07-26
+- [!] Calendar a Neon backup restore test — **Week 2 / Week 3–4**
 
 ---
 
 ## Policies & sales unblockers (start drafting)
 
 - [x] Open [04_policy_index.md](./04_policy_index.md); P01–P05 expanded; P06/P08/P09/P11/P12 drafted as **Draft** in [policies/](./policies/)
-- [!] Kick off customer DPA (counsel or template) — legal review
+- [!] Kick off customer DPA (counsel or template) — legal review — **Week 3–4**
 - [x] Security one-pager drafted (encryption, tenant isolation, no GL write-back, auth model, AI keys on API)
-- [!] **Approve** core policy drafts — Matt
+- [!] **Approve** core policy drafts — Matt — **Week 2**
 - [x] Align external language with “pursuing” only — documented in kickoff + PROGRESS + one-pager
 
 ---
 
 ## End of Week 1 — definition of done
 
-- [~] Decision log has owners + scope — **done**; platform choice or explicit wait — **[!]** Matt
-- [~] MFA on admin cloud accounts — cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass if separate still open
-- [~] Access inventory first pass exists (owners filled; cloud + DNS MFA verified; ops/break-glass pending if separate)
-- [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs)
-- [x] Core policy drafts started (P01–P06, P08–P09, P11–P12) — still need approval
+- [x] Decision log has owners + scope — **done**; platform choice or explicit wait — **[!]** Week 2
+- [x] MFA on admin cloud accounts — cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass = Neon/Railway MFA (solo; no separate login)
+- [x] Access inventory first pass exists (owners filled; MFA columns verified; break-glass noted as same-as-Neon/Railway)
+- [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs in Week 2–3)
+- [x] Core policy drafts started (P01–P06, P08–P09, P11–P12) — still need approval (Week 2)
+- [x] Protect `main` + required PR review — GitHub ruleset live 2026-07-26
+
+**Week 1 COMPLETE 2026-07-26.** Not SOC 2 certified — readiness tracking only.

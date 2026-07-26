@@ -36,25 +36,28 @@ Until a report exists, prefer the security one-pager + DPA + subprocessors list 
 
 ## Week 1–2 actions
 
-### Week 1 — Decide, name owners, harden access
+### Week 1 — Decide, name owners, harden access — **COMPLETE 2026-07-26**
+
+Readiness only — **not** SOC 2 certified.
 
 | # | Action | Owner | Done when |
 |---|--------|-------|-----------|
 | 1 | Fill [00_decision_log.md](./soc2/00_decision_log.md): freeze Sec+Avail+Conf; PI deferred | Executive sponsor | **Done — APPROVED 2026-07-22** |
 | 2 | Name people in decision log / readiness §3 (sponsor, security, engineering, ops/CS) — one person can wear multiple hats | Executive sponsor | **Done — all roles Matt Justice** |
-| 3 | Choose compliance platform **or** explicitly defer 1–2 weeks: Vanta / Drata / Secureframe (or other). Do **not** buy until you own MFA + access inventory | Security owner | Choice or “wait until ____” in decision log |
-| 4 | MFA on every admin account: GitHub, Vercel, Railway, Neon, email/Google Workspace (or IdP), Sanity, Stripe, Resend, Anthropic, Domain DNS / Squarespace | Security owner | **Cloud + DNS done 2026-07-26** (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend, Anthropic via Google IdP — not Anthropic-native TOTP; Squarespace MFA for smpl-ai.com; no shared prod passwords). **Still open:** ops/break-glass if separate login |
-| 5 | Start [03_access_inventory_template.md](./soc2/03_access_inventory_template.md) — who has prod / billing / DB | Security owner | First pass complete — update MFA columns as verified |
-| 6 | Confirm [01_system_boundary.md](./soc2/01_system_boundary.md) + [02_subprocessors.md](./soc2/02_subprocessors.md) match production | Engineering owner | TBDs resolved or marked with owner |
+| 3 | Choose compliance platform **or** explicitly defer 1–2 weeks: Vanta / Drata / Secureframe (or other). Do **not** buy until you own MFA + access inventory | Security owner | **Rolled to Week 2** — choice or “wait until ____” in decision log |
+| 4 | MFA on every admin account: GitHub, Vercel, Railway, Neon, email/Google Workspace (or IdP), Sanity, Stripe, Resend, Anthropic, Domain DNS / Squarespace | Security owner | **Done 2026-07-26** (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend, Anthropic via Google IdP — not Anthropic-native TOTP; Squarespace MFA for smpl-ai.com; no shared prod passwords). Ops/break-glass = same MFA as Neon/Railway (solo; no separate login) |
+| 5 | Start [03_access_inventory_template.md](./soc2/03_access_inventory_template.md) — who has prod / billing / DB | Security owner | **Done — first pass complete 2026-07-26** |
+| 6 | Confirm [01_system_boundary.md](./soc2/01_system_boundary.md) + [02_subprocessors.md](./soc2/02_subprocessors.md) match production | Engineering owner | Drafts exist; TBDs → **Week 2–3** |
+| 10 | Protect `main`: required PR before merge; document deploy path (Vercel frontend, Railway API) | Engineering owner | **Done 2026-07-26** — GitHub branch ruleset (solo-friendly; approvals may be 0) + [CHANGE_MANAGEMENT.md](./soc2/CHANGE_MANAGEMENT.md) |
 
-### Week 2 — Policies draft + sales unblockers + platform connect
+### Week 2 — Policies + platform decision + sales unblockers ← **now**
 
 | # | Action | Owner | Done when |
 |---|--------|-------|-----------|
-| 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | Drafts in [soc2/policies/](./soc2/policies/) (**P01–P05 stubs exist — still need approval**) |
-| 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | Shareable under NDA |
+| 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | Drafts in [soc2/policies/](./soc2/policies/) (**P01–P05+ exist — still need Matt approval**) |
+| 3b | **Approve** core policies + choose platform **or** write “wait until ____” | Security / Executive | Approved docs + decision log platform row |
+| 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | One-pager + subprocessors drafted; DPA still open |
 | 9 | If platform chosen: create account, connect GitHub + Vercel/Railway/Neon as available; treat auto gap list as backlog | Security owner | Integrations connected |
-| 10 | Protect `main`: required PR review; document deploy path (Vercel frontend, Railway API) | Engineering owner | Branch rules + short deploy note |
 | 11 | Schedule backup **restore test** on Neon (or document who runs it in Week 3) | Engineering owner | Date on calendar or completed |
 | 12 | Pick audit-firm shortlist (platform partner network OK); set **target Type I month** in decision log | Executive sponsor | Target date filled |
 
@@ -106,10 +109,11 @@ At minimum: GitHub, Vercel, Railway, Neon, Sanity, Stripe, Resend, Anthropic con
 
 From readiness v2 — book the audit only when controls are **live**, not merely drafted:
 
-- MFA on admin/cloud accounts (**[~]** cloud + DNS/Squarespace live 2026-07-26 incl. Anthropic via Google IdP; finish any separate ops/break-glass login)
+- MFA on admin/cloud accounts (**[x]** cloud + DNS/Squarespace live 2026-07-26 incl. Anthropic via Google IdP; ops/break-glass = Neon/Railway MFA)
 - Written policies approved by leadership
-- Access inventory + first quarterly-style review artifact
-- Documented change/deploy path + PR review on `main`
+- Access inventory + first quarterly-style review artifact (inventory first pass done; quarterly sign-off still open)
+- Documented change/deploy path + PR review on `main` (**[x]** path + GitHub ruleset live 2026-07-26)
+
 - Incident response plan
 - Backup restore test evidence
 - Subprocessor inventory + vendor SOC reports collected under NDA where available

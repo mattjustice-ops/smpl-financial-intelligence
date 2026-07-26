@@ -18,14 +18,14 @@
 
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
-| **Week 1 (now)** | ~2026-07-22 → 2026-07-29 | Cloud + DNS (Squarespace) MFA done; confirm ops/break-glass MFA if separate; protect `main` + required PR review |
-| **Week 2** | ~2026-07-29 → 2026-08-05 | Approve DRAFT policies P01–P12 (or core set); platform decision (explicit Vanta wait date **or** signup) |
+| **Week 1** | ~2026-07-22 → 2026-07-29 | **COMPLETE 2026-07-26** — MFA on admin consoles; access inventory first pass; protect `main` + required PR (GitHub ruleset; solo-friendly, approvals may be 0); break-glass = Neon/Railway MFA (no separate login) |
+| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | Approve DRAFT policies P01–P12 (or core set); platform decision (explicit Vanta wait date **or** signup) |
 | **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM subprocessor write-up finalized; security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Protect `main` + required PR review; confirm ops/break-glass MFA if credentials are separate from IdP; then Week 2 policy approval / platform decision.
+**Next guided item for Matt:** Week 2 — approve core policies (P01–P12 / core set) **and** choose compliance platform **or** write “wait until ____” in the decision log.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -42,8 +42,8 @@
 | `[x]` | MFA — Anthropic console | Matt | Week 1 | Done 2026-07-26 — IdP MFA via Google login (not Anthropic-native TOTP) |
 | `[x]` | MFA — DNS / domain admin (Squarespace) | Matt | Week 1 | Done 2026-07-26 — Squarespace MFA for smpl-ai.com |
 | `[x]` | Confirm no shared prod passwords | Matt | Week 1 | Confirmed 2026-07-26 — no shared prod passwords |
-| `[!]` | Protect `main` + required PR review | Matt | Week 1 | Confirm in GitHub settings |
-| `[!]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | Draft ≠ approved |
+| `[x]` | Protect `main` + required PR review | Matt | Week 1 | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
+| `[!]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | Draft ≠ approved ← **start here** |
 | `[!]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | Do not stall MFA; no auto-signup |
 | `[!]` | Confirm boundary matches production | Matt | Week 2–3 | Resolve TBDs in boundary doc |
 | `[!]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | |
@@ -178,9 +178,9 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | MFA — Resend | Done 2026-07-26 |
 | `[x]` | MFA — Anthropic console | Done 2026-07-26 — IdP MFA via Google login (not Anthropic-native TOTP) |
 | `[x]` | MFA — DNS / domain admin (Squarespace) | Done 2026-07-26 — Squarespace MFA for smpl-ai.com |
-| `[~]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — cloud + DNS MFA verified 2026-07-26; ops/break-glass still open if separate |
+| `[x]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — first pass complete 2026-07-26; ops/break-glass = same MFA as Neon/Railway (solo; no separate login) |
 | `[x]` | Confirm no shared prod passwords | Confirmed 2026-07-26 |
-| `[ ]` | First quarterly-style access review sign-off | After remaining MFA + inventory stable — Week 3–4 |
+| `[ ]` | First quarterly-style access review sign-off | After inventory stable — Week 3–4 |
 
 ### D. Policies
 
@@ -195,8 +195,8 @@ Type II comes later: after Type I, controls operate over an observation window (
 
 | Status | Item | Notes |
 |--------|------|-------|
-| `[ ]` / `[!]` | Protect `main` + required PR review | Confirm in GitHub settings — Week 1 |
-| `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; GitHub/Vercel/Railway MFA done 2026-07-26; branch protection still `[!]` |
+| `[x]` | Protect `main` + required PR review | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
+| `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; GitHub/Vercel/Railway MFA done; branch protection live 2026-07-26 |
 | `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2 |
 | `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I — Week 3–4 |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2 |
@@ -208,10 +208,10 @@ Book the auditor only when these are **live**, not merely drafted:
 
 | Status | Control area |
 |--------|----------------|
-| `[~]` | MFA on admin/cloud accounts | Cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass if separate still open |
+| `[x]` | MFA on admin/cloud accounts | Cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass covered by Neon/Railway MFA (solo; no separate login) |
 | `[ ]` | Written policies **approved** by leadership |
-| `[ ]` | Access inventory + first review artifact |
-| `[~]` | Documented change/deploy path + PR review on `main` | Path documented; PR protection still `[!]` |
+| `[~]` | Access inventory + first review artifact | Inventory first pass done; quarterly sign-off still open (Week 3–4) |
+| `[x]` | Documented change/deploy path + PR review on `main` | Path documented; GitHub ruleset protecting `main` live 2026-07-26 |
 | `[ ]` | Incident response plan (approved + operable) | Draft exists; not approved |
 | `[ ]` | Backup restore test evidence |
 | `[ ]` | Subprocessor inventory + vendor reports collected | Inventory draft; reports not collected |
@@ -249,19 +249,19 @@ Not SOC 2 certified. Readiness evidence only.
 2. Sanity: MFA via Google IdP login (provider-level; not a Sanity-native MFA toggle)
 3. Anthropic: MFA via Google IdP login (same pattern; not Anthropic-native TOTP)
 4. Confirmed: **no shared prod passwords**
-5. Still open: ops/break-glass rows if distinct credentials; protect `main` + required PR review
+5. Ops/break-glass: **N/A as separate login** — solo founder; privileged DB/ops access is via MFA’d Neon/Railway consoles already inventoried
+6. GitHub branch ruleset: protect `main` + required PR before merge (solo-friendly; approvals may be 0)
+7. **Week 1 marked COMPLETE** (readiness only — not SOC 2 certified)
 
 ---
 
 ## Top `[!]` for Matt (do next)
 
-1. **[!]** Protect `main` + required PR review in GitHub ← **start here**
-2. **[!]** Confirm ops/break-glass MFA if credentials are separate from IdP — mark inventory when verified
-3. **[!]** Approve core policies (P01–P12 at minimum) — draft ≠ approved
-4. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log
-5. **[!]** Customer DPA — legal review / ship
-6. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
-7. **[!]** Resolve boundary TBDs / vendor regions
+1. **[!]** Approve core policies (P01–P12 at minimum) — draft ≠ approved ← **Week 2 start here**
+2. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log
+3. **[!]** Customer DPA — legal review / ship
+4. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
+5. **[!]** Resolve boundary TBDs / vendor regions
 
 ---
 
