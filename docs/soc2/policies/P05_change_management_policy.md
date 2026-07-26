@@ -13,7 +13,7 @@
 | Related criteria | Security (CC8) |
 | Version | 0.2-draft |
 | Effective date | _TBD on approval_ |
-| Last expanded | 2026-07-22 |
+| Last expanded | 2026-07-26 |
 
 ---
 
@@ -45,8 +45,8 @@ Do not use production customer data in personal sandboxes without authorization 
 
 | Surface | Who can deploy / promote | Notes |
 |---------|--------------------------|-------|
-| Vercel (frontend) | Matt Justice | MFA verification still **[!]** |
-| Railway (API) | Matt Justice | MFA verification still **[!]** |
+| Vercel (frontend) | Matt Justice | MFA verified 2026-07-26 |
+| Railway (API) | Matt Justice | MFA verified 2026-07-26 |
 | Neon schema / migrations | Matt Justice | Prefer reviewed migration PRs / Alembic via controlled process |
 | Env / secrets changes | Matt Justice | Document material secret rotations |
 

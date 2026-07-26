@@ -3,7 +3,7 @@
 > **STATUS: DRAFT — NOT APPROVED**  
 > Template for SOC 2 Type I readiness. Not company policy until approved.  
 > Not legal advice. Not evidence of SOC 2 compliance.  
-> **[!]** MFA enablement and verification require Matt operating each console — not claimed complete in this draft.
+> **[~]** MFA mostly enabled 2026-07-26 (see inventory). Anthropic console (+ DNS/ops if separate credentials) still open. Policy remains **DRAFT — NOT APPROVED**.
 
 | Field | Value |
 |-------|--------|
@@ -13,7 +13,7 @@
 | Related criteria | Security (CC6); Confidentiality |
 | Version | 0.2-draft |
 | Effective date | _TBD on approval_ |
-| Last expanded | 2026-07-22 |
+| Last expanded | 2026-07-26 |
 
 ---
 
@@ -44,10 +44,10 @@ Product auth: Auth.js **magic link** + org membership (`organization_id` multi-t
 
 ## 3. Requirements
 
-1. **Unique accounts** — no shared logins for systems touching customer data.
-2. **MFA** — enforced on admin/cloud accounts listed above. **[! Matt must enable and verify;** do not mark MFA complete until done.]
+1. **Unique accounts** — no shared logins for systems touching customer data. **Confirmed 2026-07-26:** no shared prod passwords.
+2. **MFA** — enforced on admin/cloud accounts listed above. **[~]** Primary consoles verified 2026-07-26 (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend). **[!]** Anthropic console still open; confirm DNS/ops/break-glass if separate logins.
 3. **Least privilege** — grant only what the role requires; prefer read-only for white-glove where possible.
-4. **Inventory** — maintain the access inventory; who has access, why, MFA status (MFA column remains unchecked until Matt verifies).
+4. **Inventory** — maintain the access inventory; who has access, why, MFA status (keep MFA column current as Matt verifies remaining rows).
 5. **Joiner / mover / leaver** — grant on approval; revoke **same day** on offboarding or role change that removes need.
 6. **Periodic review** — at least quarterly; dated sign-off is audit evidence.
 7. **Secrets** — production secrets only in provider env/secret stores (Vercel, Railway); not in git.
@@ -69,14 +69,14 @@ Product auth: Auth.js **magic link** + org membership (`organization_id` multi-t
 
 | Control | Example evidence |
 |---------|------------------|
-| MFA | Console screenshots or compliance-platform status — **[! Matt]** |
+| MFA | Console screenshots or compliance-platform status — most consoles done 2026-07-26; Anthropic still **[!]** |
 | Inventory / review | Dated inventory + reviewer sign-off |
 | Offboarding | Completed revoke checklist |
 | Tenant isolation | Test results Org A ≠ Org B |
 
 ## 7. Current ownership note
 
-As of 2026-07-22, Matt Justice holds executive, security, engineering, and ops/CS privileged-access ownership. Access inventory rows list Matt as account owner pending MFA verification.
+As of 2026-07-26, Matt Justice holds executive, security, engineering, and ops/CS privileged-access ownership. Access inventory lists Matt as account owner; MFA verified on primary cloud consoles; Anthropic (+ DNS/ops if separate) still pending.
 
 ## 8. Approval
 

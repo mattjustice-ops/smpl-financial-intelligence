@@ -18,28 +18,30 @@
 
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
-| **Week 1 (now)** | ~2026-07-22 → 2026-07-29 | MFA on all admin accounts; confirm no shared prod passwords; protect `main` + required PR review if not done |
+| **Week 1 (now)** | ~2026-07-22 → 2026-07-29 | MFA mostly done (2026-07-26); finish Anthropic + DNS/ops MFA; protect `main` + required PR review |
 | **Week 2** | ~2026-07-29 → 2026-08-05 | Approve DRAFT policies P01–P12 (or core set); platform decision (explicit Vanta wait date **or** signup) |
 | **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM subprocessor write-up finalized; security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** MFA on every admin cloud account (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity, Resend, Anthropic).
+**Next guided item for Matt:** Enable MFA on Anthropic console (last Week 1 cloud console); then protect `main` + required PR review; then Week 2 policy approval / platform decision.
 
 ### Remaining `[!]` and `[ ]` items
 
 | Status | Item | Owner | Target window | Notes |
 |--------|------|-------|---------------|-------|
-| `[!]` | MFA — GitHub org admins | Matt | Week 1 | Evidence: screenshot or platform |
-| `[!]` | MFA — Vercel | Matt | Week 1 | |
-| `[!]` | MFA — Railway | Matt | Week 1 | |
-| `[!]` | MFA — Neon | Matt | Week 1 | |
-| `[!]` | MFA — corporate email / IdP | Matt | Week 1 | |
-| `[!]` | MFA — Stripe | Matt | Week 1 | |
-| `[!]` | MFA — Sanity (if admin) | Matt | Week 1 | |
-| `[!]` | MFA — Resend / Anthropic consoles | Matt | Week 1 | |
-| `[!]` | Confirm no shared prod passwords | Matt | Week 1 | |
+| `[x]` | MFA — GitHub org admins | Matt | Week 1 | Done 2026-07-26 |
+| `[x]` | MFA — Vercel | Matt | Week 1 | Done 2026-07-26 |
+| `[x]` | MFA — Railway | Matt | Week 1 | Done 2026-07-26 |
+| `[x]` | MFA — Neon | Matt | Week 1 | Done 2026-07-26 |
+| `[x]` | MFA — corporate email / IdP | Matt | Week 1 | Done 2026-07-26 |
+| `[x]` | MFA — Stripe | Matt | Week 1 | Done 2026-07-26 |
+| `[x]` | MFA — Sanity (if admin) | Matt | Week 1 | Done 2026-07-26 — IdP MFA via Google login (not Sanity-native toggle) |
+| `[x]` | MFA — Resend | Matt | Week 1 | Done 2026-07-26 |
+| `[!]` | MFA — Anthropic console | Matt | Week 1 | Still open — not confirmed this session |
+| `[!]` | MFA — DNS / domain admin (if separate login) | Matt | Week 1 | Not confirmed this session |
+| `[x]` | Confirm no shared prod passwords | Matt | Week 1 | Confirmed 2026-07-26 — no shared prod passwords |
 | `[!]` | Protect `main` + required PR review | Matt | Week 1 | Confirm in GitHub settings |
 | `[!]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | Draft ≠ approved |
 | `[!]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | Do not stall MFA; no auto-signup |
@@ -166,17 +168,19 @@ Type II comes later: after Type I, controls operate over an observation window (
 
 | Status | Item | Notes |
 |--------|------|-------|
-| `[!]` | MFA — GitHub org admins | Evidence: screenshot or platform — **Week 1 / do next** |
-| `[!]` | MFA — Vercel | |
-| `[!]` | MFA — Railway | |
-| `[!]` | MFA — Neon | |
-| `[!]` | MFA — corporate email / IdP | |
-| `[!]` | MFA — Stripe | |
-| `[!]` | MFA — Sanity (if admin) | |
-| `[!]` | MFA — Resend / Anthropic consoles | |
-| `[~]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt listed on all known systems; **MFA verified unchecked** |
-| `[!]` | Confirm no shared prod passwords | Week 1 |
-| `[ ]` | First quarterly-style access review sign-off | After MFA verified + inventory stable — Week 3–4 |
+| `[x]` | MFA — GitHub org admins | Done 2026-07-26 |
+| `[x]` | MFA — Vercel | Done 2026-07-26 |
+| `[x]` | MFA — Railway | Done 2026-07-26 |
+| `[x]` | MFA — Neon | Done 2026-07-26 |
+| `[x]` | MFA — corporate email / IdP | Done 2026-07-26 |
+| `[x]` | MFA — Stripe | Done 2026-07-26 |
+| `[x]` | MFA — Sanity (if admin) | Done 2026-07-26 — IdP MFA via Google login (provider-level, not Sanity-native) |
+| `[x]` | MFA — Resend | Done 2026-07-26 |
+| `[!]` | MFA — Anthropic console | Still open — enable + mark inventory |
+| `[!]` | MFA — DNS / domain admin (if separate) | Not confirmed 2026-07-26 |
+| `[~]` | Access inventory — people + roles filled | [03_access_inventory_template.md](./03_access_inventory_template.md) — most MFA rows verified 2026-07-26; Anthropic + DNS/ops still open |
+| `[x]` | Confirm no shared prod passwords | Confirmed 2026-07-26 |
+| `[ ]` | First quarterly-style access review sign-off | After remaining MFA + inventory stable — Week 3–4 |
 
 ### D. Policies
 
@@ -192,7 +196,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | Status | Item | Notes |
 |--------|------|-------|
 | `[ ]` / `[!]` | Protect `main` + required PR review | Confirm in GitHub settings — Week 1 |
-| `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; MFA/branch protection still `[!]` |
+| `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; GitHub/Vercel/Railway MFA done 2026-07-26; branch protection still `[!]` |
 | `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2 |
 | `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I — Week 3–4 |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2 |
@@ -204,7 +208,7 @@ Book the auditor only when these are **live**, not merely drafted:
 
 | Status | Control area |
 |--------|----------------|
-| `[ ]` | MFA on admin/cloud accounts |
+| `[~]` | MFA on admin/cloud accounts | Most consoles done 2026-07-26; Anthropic (+ DNS if separate) still open |
 | `[ ]` | Written policies **approved** by leadership |
 | `[ ]` | Access inventory + first review artifact |
 | `[~]` | Documented change/deploy path + PR review on `main` | Path documented; PR protection still `[!]` |
@@ -227,24 +231,33 @@ Book the auditor only when these are **live**, not merely drafted:
 
 ## What we checked off this wave (2026-07-22) — documentation only
 
-Not compliance. No MFA claimed. No Vanta signup. Not certified.
+Not compliance. No Vanta signup. Not certified.
 
 1. Decision log: scope Sec+Avail+Conf **APPROVED** by Matt; PI + Privacy deferred; **all owners = Matt Justice**; platform TBD
 2. Remaining checklist + solo-founder target timeline published (this section)
 3. P01–P05 expanded; P06 / P08 / P09 / P11 / P12 drafted
 4. Customer-facing [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) (honest pursuing language)
 5. [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — GitHub → Vercel/Railway
-6. Access inventory rows filled (owner Matt); MFA columns still `[!]`
+6. Access inventory rows filled (owner Matt)
 7. Scoreboard + `/compliance` data synced
+
+## What we checked off 2026-07-26 — access hygiene (Matt)
+
+Not SOC 2 certified. Readiness evidence only.
+
+1. MFA enabled: GitHub, Vercel, Railway, Neon, corporate email/IdP, Stripe, Resend
+2. Sanity: MFA via Google IdP login (provider-level; not a Sanity-native MFA toggle)
+3. Confirmed: **no shared prod passwords**
+4. Still open: Anthropic console MFA; DNS/domain admin MFA if login is separate from IdP; ops/break-glass rows if distinct credentials
 
 ---
 
 ## Top `[!]` for Matt (do next)
 
-1. **[!]** MFA on every admin cloud account (GitHub, Vercel, Railway, Neon, email, Stripe, Sanity, Resend, Anthropic) — mark inventory when verified ← **start here**
-2. **[!]** Confirm no shared prod passwords; protect `main` + required PR review
+1. **[!]** MFA on Anthropic console (+ DNS/domain admin if separate from IdP) — mark inventory when verified ← **start here**
+2. **[!]** Protect `main` + required PR review in GitHub
 3. **[!]** Approve core policies (P01–P12 at minimum) — draft ≠ approved
-4. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log — do not stall MFA
+4. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log
 5. **[!]** Customer DPA — legal review / ship
 6. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
 7. **[!]** Resolve boundary TBDs / vendor regions
@@ -263,5 +276,5 @@ Not compliance. No MFA claimed. No Vanta signup. Not certified.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-22 |
+| Last updated | 2026-07-26 |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

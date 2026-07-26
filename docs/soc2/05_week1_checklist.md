@@ -23,16 +23,18 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 
 ## Access hardening (do this before or while buying a platform)
 
-- [!] MFA on GitHub org admins / owners
-- [!] MFA on Vercel team
-- [!] MFA on Railway
-- [!] MFA on Neon
-- [!] MFA on corporate email / IdP
-- [!] MFA on Stripe
-- [!] MFA on Sanity (if admin access exists)
-- [!] MFA on Resend / Anthropic consoles
-- [~] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt on all known systems; **MFA verified unchecked**
-- [!] Confirm no shared passwords for prod systems
+- [x] MFA on GitHub org admins / owners — **2026-07-26**
+- [x] MFA on Vercel team — **2026-07-26**
+- [x] MFA on Railway — **2026-07-26**
+- [x] MFA on Neon — **2026-07-26**
+- [x] MFA on corporate email / IdP — **2026-07-26**
+- [x] MFA on Stripe — **2026-07-26**
+- [x] MFA on Sanity (if admin access exists) — **2026-07-26** (IdP MFA via Google login; not Sanity-native)
+- [x] MFA on Resend — **2026-07-26**
+- [!] MFA on Anthropic console — still open
+- [!] MFA on DNS / domain admin (if separate from IdP) — not confirmed
+- [~] First pass of [03_access_inventory_template.md](./03_access_inventory_template.md) — Matt on all known systems; most MFA verified 2026-07-26; Anthropic + DNS/ops still open
+- [x] Confirm no shared passwords for prod systems — **2026-07-26**
 
 ---
 
@@ -51,7 +53,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 
 - [!] Branch protection on `main` + required PR review
 - [ ] Confirm secrets are not in git; production secrets only in Vercel/Railway (etc.)
-- [x] Document deploy path + who can deploy — [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) (Matt); MFA still `[!]`
+- [x] Document deploy path + who can deploy — [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) (Matt); GitHub/Vercel/Railway MFA done 2026-07-26; branch protection still `[!]`
 - [!] Calendar a Neon backup restore test
 
 ---
@@ -69,7 +71,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 ## End of Week 1 — definition of done
 
 - [~] Decision log has owners + scope — **done**; platform choice or explicit wait — **[!]** Matt
-- [!] MFA on admin cloud accounts
-- [~] Access inventory first pass exists (owners filled; MFA pending)
+- [~] MFA on admin cloud accounts — most done 2026-07-26; Anthropic (+ DNS if separate) still open
+- [~] Access inventory first pass exists (owners filled; most MFA verified; Anthropic/DNS pending)
 - [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs)
 - [x] Core policy drafts started (P01–P06, P08–P09, P11–P12) — still need approval

@@ -48,8 +48,8 @@ Related ops docs (implementation detail): `docs/DEPLOYMENT.md`, `docs/GO_LIVE_PR
 | Action | Who (current) | Notes |
 |--------|---------------|-------|
 | Merge to `main` | Matt Justice (+ any future reviewers) | Branch protection settings **[!]** |
-| Deploy / promote Vercel production | Matt Justice | Team admin; MFA **[!]** |
-| Deploy / promote Railway production | Matt Justice | Project access; MFA **[!]** |
+| Deploy / promote Vercel production | Matt Justice | Team admin; MFA **Y** 2026-07-26 |
+| Deploy / promote Railway production | Matt Justice | Project access; MFA **Y** 2026-07-26 |
 | Change production env vars / secrets | Matt Justice | Vercel + Railway consoles only |
 | Neon schema / warehouse load | Matt Justice | Prefer reviewed migrations; load scripts documented |
 
@@ -100,7 +100,7 @@ Allowed to restore service or contain an incident ([P04](./policies/P04_incident
 ## Open confirmations for Matt
 
 - [!] GitHub: protect `main`, required PR review, dismiss stale approvals as desired
-- [!] MFA on GitHub, Vercel, Railway
+- [x] MFA on GitHub, Vercel, Railway — done 2026-07-26
 - [!] Confirm exact production project/service names and whether staging is separate
 - [!] Dependabot (or equivalent) enabled
 
