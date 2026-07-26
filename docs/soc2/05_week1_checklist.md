@@ -62,10 +62,10 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 
 ## Policies & sales unblockers (start drafting)
 
-- [x] Open [04_policy_index.md](./04_policy_index.md); P01–P05 expanded; P06/P08/P09/P11/P12 drafted as **Draft** in [policies/](./policies/)
+- [x] Open [04_policy_index.md](./04_policy_index.md); **P01–P12 drafts ready for approval** in [policies/](./policies/) (P07 + P10 added 2026-07-26)
 - [!] Kick off customer DPA (counsel or template) — legal review — **Week 3–4**
 - [x] Security one-pager drafted (encryption, tenant isolation, no GL write-back, auth model, AI keys on API)
-- [!] **Approve** core policy drafts — Matt — **Week 2**
+- [!] **Approve** core policy drafts (P01–P12) — Matt — **Week 2** (drafts ready; not approved yet)
 - [x] Align external language with “pursuing” only — documented in kickoff + PROGRESS + one-pager
 
 ---
@@ -76,7 +76,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] MFA on admin cloud accounts — cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass = Neon/Railway MFA (solo; no separate login)
 - [x] Access inventory first pass exists (owners filled; MFA columns verified; break-glass noted as same-as-Neon/Railway)
 - [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs in Week 2–3)
-- [x] Core policy drafts started (P01–P06, P08–P09, P11–P12) — still need approval (Week 2)
+- [x] Core policy drafts P01–P12 ready for approval — still need Matt approval (Week 2)
 - [x] Protect `main` + required PR review — GitHub ruleset live 2026-07-26
 
 **Week 1 COMPLETE 2026-07-26.** Not SOC 2 certified — readiness tracking only.

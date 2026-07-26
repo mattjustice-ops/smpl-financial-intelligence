@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. Week 2: approve core policies + platform decision (or wait-until date)",
+    "Week 1 complete 2026-07-26. Week 2: P01–P12 drafts ready for approval — Matt approve + platform decision (or wait-until date)",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,7 +91,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "Approve DRAFT policies P01–P12 (or core set); platform decision (Vanta wait date or signup)",
+      "P01–P12 drafts ready for approval — Matt approve; platform decision (Vanta wait date or signup)",
   },
   {
     id: "week-3-4",
@@ -226,7 +226,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Week 2",
-    notes: "Draft ≠ approved — Week 2 start here",
+    notes:
+      "P01–P12 drafts ready for approval (not approved) — sign Approval tables or reply approve",
   },
   {
     id: "rem-platform",
@@ -611,26 +612,29 @@ export const complianceSections: ComplianceSection[] = [
   {
     id: "policies",
     name: "D. Policies",
-    summary: "Written controls — drafts exist; leadership approval still required.",
+    summary:
+      "P01–P12 drafts ready for approval; leadership approval still required (not approved).",
     items: [
       { id: "pol-1", label: "Policy index", status: "done" },
       {
         id: "pol-2",
         label: "Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt",
         status: "done",
-        notes: "P01–P05 DRAFT / not approved",
+        notes: "P01–P05 DRAFT / ready for approval (not approved)",
       },
       {
         id: "pol-3",
-        label: "Remaining core policies (P06–P17)",
-        status: "in_progress",
-        notes: "P06, P08, P09, P11, P12 drafted; P07/P10/P13–P17 open",
+        label: "Core policies P01–P12 drafted (approval-ready)",
+        status: "done",
+        notes:
+          "P06–P12 expanded; P07 + P10 created 2026-07-26 — all DRAFT / ready for approval; P13–P17 open",
       },
       {
         id: "pol-4",
         label: "Leadership approve core policies",
         status: "needs_owner",
-        notes: "Draft ≠ approved; Matt must approve — Week 2",
+        notes:
+          "Drafts ready ≠ approved; Matt must approve — Week 2 (sign Approval tables)",
       },
     ],
   },
