@@ -29,7 +29,7 @@
 
 | ID | Policy | Status |
 |----|--------|--------|
-| **P15** | AI / LLM Data Handling | **Draft next** — referenced from P02/P06/P10; not a Type I blocker for P01–P12 approval |
+| **P15** | AI / LLM Data Handling | **Draft — ready for approval** ([P15_ai_llm_data_handling.md](./P15_ai_llm_data_handling.md)) — **not approved**; Matt sign-off next |
 | P13 | Vulnerability Management | Not started |
 | P14 | Logging & Monitoring | Not started |
 | P16 | White-glove / Privileged Support Access | Not started |

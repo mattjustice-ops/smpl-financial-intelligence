@@ -42,7 +42,7 @@ Conditional vendors (OpenAI fallback, APM, analytics) are added only if live in 
 2. Prefer vendors with SOC 2 / ISO reports; collect under NDA when available (store **outside** git).
 3. Update subprocessors list and customer-facing notice path (DPA exhibit / security pack) **before** or promptly after go-live.
 4. Security owner (Matt Justice) approves material new processors.
-5. For AI vendors: confirm keys stay on API only; prompt data categories documented ([P06](./P06_data_classification_and_handling.md)).
+5. For AI vendors: confirm keys stay on API only; prompt data categories documented ([P06](./P06_data_classification_and_handling.md)); follow [P15](./P15_ai_llm_data_handling.md) (draft — ready for approval).
 
 ## 4. Ongoing review
 

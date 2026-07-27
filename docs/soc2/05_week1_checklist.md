@@ -18,7 +18,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] Name security owner — Matt Justice
 - [x] Name engineering owner — Matt Justice
 - [x] Name ops / CS privileged-access owner — Matt Justice
-- [!] Choose platform path: create Vanta/Drata/Secureframe account **or** write “wait until ____” in decision log — **Week 2** (do not stall MFA; **do not auto-sign up for Vanta**)
+- [x] Choose platform path: create Vanta/Drata/Secureframe account **or** write “wait until ____” in decision log — **Deferred DIY 2026-07-27** (docs/soc2 + `/app/compliance`; revisit on enterprise GRC requirement **or** CPA Type I engagement)
 - [!] Set target Type I month (even if approximate) — **Week 2+ / Month 2–3** target window
 
 ---
@@ -67,13 +67,13 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] Security one-pager drafted (encryption, tenant isolation, no GL write-back, auth model, AI keys on API)
 - [x] **Approve** core policy drafts (P01–P12) — Matt — **Approved 2026-07-27** (approval ≠ SOC 2 certified)
 - [x] Align external language with “pursuing” only — documented in kickoff + PROGRESS + one-pager
-- [!] **P15 draft next** — AI / LLM Data Handling (prioritized; not a blocker for P01–P12)
+- [~] **P15** AI / LLM Data Handling — draft ready for approval ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)); **not approved**
 
 ---
 
 ## End of Week 1 — definition of done
 
-- [x] Decision log has owners + scope — **done**; platform choice or explicit wait — **[!]** Week 2
+- [x] Decision log has owners + scope — **done**; platform deferred DIY — **done** 2026-07-27
 - [x] MFA on admin cloud accounts — cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass = Neon/Railway MFA (solo; no separate login)
 - [x] Access inventory first pass exists (owners filled; MFA columns verified; break-glass noted as same-as-Neon/Railway)
 - [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs in Week 2–3)

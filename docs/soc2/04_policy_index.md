@@ -28,7 +28,7 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | P12 | Backup & Restore (incl. restore test) | Availability | Matt Justice | **Approved** | 2026-07-27 | [policies/P12_backup_and_restore.md](./policies/P12_backup_and_restore.md) |
 | P13 | Vulnerability Management | Security (CC7) | Matt Justice | Not started | | |
 | P14 | Logging & Monitoring | Security; Availability | Matt Justice | Not started | | |
-| P15 | AI / LLM Data Handling | Security; Confidentiality | Matt Justice | **Draft next** (prioritized) | | Stub not required yet — track in [PROGRESS.md](./PROGRESS.md) |
+| P15 | AI / LLM Data Handling | Security; Confidentiality | Matt Justice | **Draft — ready for approval** | | [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) — **not approved** |
 | P16 | White-glove / Privileged Support Access | Confidentiality; Security | Matt Justice | Not started | | |
 | P17 | Security Awareness Training | Security (people) | Matt Justice | Not started | | |
 
@@ -71,3 +71,4 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | 2026-07-22 | P01–P05 expanded; P06, P08, P09, P11, P12 drafted; owners → Matt Justice |
 | 2026-07-26 | P07 + P10 created; P06/P08/P09/P11/P12 expanded to approval-ready drafts; P01–P12 marked **Draft — ready for approval** (not approved) |
 | 2026-07-27 | Matt review fixes (immutability vs retention; R15 Railway job interrupt; R16 consolidated DPA; P15 draft-next); **P01–P12 Approved** by Matt Justice. Reminder: approval ≠ SOC 2 certified. |
+| 2026-07-27 | **P15** AI/LLM draft created (ready for approval, not approved); platform deferred DIY logged in decision log. |

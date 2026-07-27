@@ -4,7 +4,7 @@ Fill as decisions are made. Do not claim certification until a CPA firm issues a
 
 Parent plan: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard: [PROGRESS.md](./PROGRESS.md) · Scope detail: [../SMPL_SOC2_Readiness_Reference_v2.md](../SMPL_SOC2_Readiness_Reference_v2.md)
 
-**Scope status:** **APPROVED** by Matt Justice on **2026-07-22**. Trust Services Criteria and named owners below are frozen. Platform choice, audit firm, and Type I fieldwork month remain open for Matt.
+**Scope status:** **APPROVED** by Matt Justice on **2026-07-22**. Trust Services Criteria and named owners below are frozen. Audit firm and Type I fieldwork month remain open for Matt.
 
 **Remaining work + calendar:** [PROGRESS.md — Remaining checklist + target timeline](./PROGRESS.md#remaining-checklist--target-timeline)
 
@@ -18,7 +18,7 @@ Parent plan: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard:
 | Type I Trust Services Criteria | **Security + Availability + Confidentiality** | 2026-07-22 | Matt Justice | **APPROVED** — frozen for Type I |
 | Processing Integrity | **Deferred** | 2026-07-22 | Matt Justice | **APPROVED deferral** — revisit only with auditor + counsel; not “certified ARR math” |
 | Privacy | **Deferred / skip for now** | 2026-07-22 | Matt Justice | **APPROVED deferral** — revisit if consumer/employee PII at scale or contract requires |
-| Compliance automation platform | **TBD** | | **[!]** Matt Justice | **Matt to decide** (Vanta / Drata / Secureframe / other) **or** write an explicit “wait until YYYY-MM-DD.” Do **not** sign up until MFA + access inventory are underway. No auto-signup in this kickoff. |
+| Compliance automation platform | **Deferred — DIY for now** (no Vanta / Drata / Secureframe purchase) | 2026-07-27 | Matt Justice | **DECIDED** — continue with existing [docs/soc2/](./) + `/app/compliance` scoreboard. Revisit purchase when **either** trigger fires (whichever comes first): (1) first paying enterprise that **requires** a formal GRC/compliance platform, **or** (2) CPA engagement for Type I. Document both triggers; do not auto-signup. |
 | Audit firm (CPA) | TBD | | **[!]** Matt Justice | Independent CPA; platform partner network OK later |
 | Target Type I fieldwork / report month | YYYY-MM | | **[!]** Matt Justice | Book only when controls are live — see PROGRESS timeline (**TARGET**, not commitment) |
 
@@ -42,9 +42,9 @@ One person may hold multiple roles; still write the names so accountability is c
 | Field | Value |
 |-------|--------|
 | Confirmed by | **Matt Justice** |
-| Date | **2026-07-22** |
+| Date | **2026-07-22** (scope/owners); platform deferral **2026-07-27** |
 | Status | **APPROVED** — Type I scope (Security + Availability + Confidentiality); Processing Integrity deferred; Privacy deferred; all named owners = Matt Justice |
-| Exceptions / still open | Compliance platform TBD; audit firm TBD; Type I fieldwork month TBD (TARGET on scoreboard) |
+| Exceptions / still open | Compliance platform **deferred DIY** (triggers documented 2026-07-27); audit firm TBD; Type I fieldwork month TBD (TARGET on scoreboard) |
 
 ---
 
@@ -56,3 +56,4 @@ One person may hold multiple roles; still write the names so accountability is c
 | 2026-07-22 | Proposed defaults: Sec+Avail+Conf; PI deferred; Privacy skip; platform TBD/wait; security/sponsor Matt Justice TBD confirm | Agent (readiness kickoff) |
 | 2026-07-22 | Confirmed scope Sec+Avail+Conf; PI deferred; Privacy skip; all named owners → Matt Justice; platform left TBD (Matt to decide) | Agent (compliance checklist wave) |
 | 2026-07-22 | **Scope frozen APPROVED** by Matt Justice; owners all Matt; platform/CPA/target month still open | Agent (Matt-approved scope lock) |
+| 2026-07-27 | **Platform deferred DIY** — no Vanta/Drata/etc. now; use docs/soc2 + `/app/compliance`; revisit on first paying enterprise requiring formal GRC platform **or** CPA Type I engagement (whichever first) | Matt Justice (decision); Agent (log) |

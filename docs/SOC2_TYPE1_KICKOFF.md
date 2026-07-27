@@ -44,7 +44,7 @@ Readiness only — **not** SOC 2 certified.
 |---|--------|-------|-----------|
 | 1 | Fill [00_decision_log.md](./soc2/00_decision_log.md): freeze Sec+Avail+Conf; PI deferred | Executive sponsor | **Done — APPROVED 2026-07-22** |
 | 2 | Name people in decision log / readiness §3 (sponsor, security, engineering, ops/CS) — one person can wear multiple hats | Executive sponsor | **Done — all roles Matt Justice** |
-| 3 | Choose compliance platform **or** explicitly defer 1–2 weeks: Vanta / Drata / Secureframe (or other). Do **not** buy until you own MFA + access inventory | Security owner | **Rolled to Week 2** — choice or “wait until ____” in decision log |
+| 3 | Choose compliance platform **or** explicitly defer: Vanta / Drata / Secureframe (or other). Do **not** buy until you own MFA + access inventory | Security owner | **Done 2026-07-27 — Deferred DIY** — docs/soc2 + `/app/compliance`; revisit on enterprise GRC requirement **or** CPA Type I engagement ([soc2/00_decision_log.md](./soc2/00_decision_log.md)) |
 | 4 | MFA on every admin account: GitHub, Vercel, Railway, Neon, email/Google Workspace (or IdP), Sanity, Stripe, Resend, Anthropic, Domain DNS / Squarespace | Security owner | **Done 2026-07-26** (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend, Anthropic via Google IdP — not Anthropic-native TOTP; Squarespace MFA for smpl-ai.com; no shared prod passwords). Ops/break-glass = same MFA as Neon/Railway (solo; no separate login) |
 | 5 | Start [03_access_inventory_template.md](./soc2/03_access_inventory_template.md) — who has prod / billing / DB | Security owner | **Done — first pass complete 2026-07-26** |
 | 6 | Confirm [01_system_boundary.md](./soc2/01_system_boundary.md) + [02_subprocessors.md](./soc2/02_subprocessors.md) match production | Engineering owner | Drafts exist; TBDs → **Week 2–3** |
@@ -55,7 +55,7 @@ Readiness only — **not** SOC 2 certified.
 | # | Action | Owner | Done when |
 |---|--------|-------|-----------|
 | 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | **Done** — P01–P12 **Approved 2026-07-27** by Matt Justice ([soc2/policies/](./soc2/policies/)). Approval ≠ SOC 2 certified |
-| 3b | **Approve** core policies + choose platform **or** write “wait until ____” | Security / Executive | Policies **Approved** 2026-07-27; platform decision still open |
+| 3b | **Approve** core policies + choose platform **or** write “wait until ____” | Security / Executive | Policies **Approved** 2026-07-27; platform **deferred DIY** 2026-07-27 |
 | 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | One-pager + subprocessors drafted; **Customer DPA/MSA = single legal workstream** still open (P10 R16) |
 | 9 | If platform chosen: create account, connect GitHub + Vercel/Railway/Neon as available; treat auto gap list as backlog | Security owner | Integrations connected |
 | 11 | Schedule backup **restore test** on Neon (or document who runs it in Week 3) | Engineering owner | Date on calendar or completed |
@@ -98,11 +98,11 @@ Priority order — full list in [04_policy_index.md](./soc2/04_policy_index.md):
 11. Business Continuity / DR — **Approved 2026-07-27:** [soc2/policies/P11_business_continuity_disaster_recovery.md](./soc2/policies/P11_business_continuity_disaster_recovery.md)
 12. Backup & Restore — **Approved 2026-07-27:** [soc2/policies/P12_backup_and_restore.md](./soc2/policies/P12_backup_and_restore.md)
 
-**Next policy draft (prioritized):** P15 AI / LLM Data Handling — see [soc2/PROGRESS.md](./soc2/PROGRESS.md).
+**Next policy action:** **Approve P15** AI / LLM Data Handling draft — [soc2/policies/P15_ai_llm_data_handling.md](./soc2/policies/P15_ai_llm_data_handling.md) (draft ready; **not** auto-approved).
 
-Still open later: AI / LLM Data Handling (**P15**), plus P13–P14, P16–P17.
+Still open later: P15 approval, plus P13–P14, P16–P17.
 
-Templates from the compliance platform are fine later; customize for SMPL (multi-tenant financial warehouse, white-glove loads, no GL write-back).
+Compliance platform templates are fine later if/when a GRC tool is purchased; customize for SMPL (multi-tenant financial warehouse, white-glove loads, no GL write-back).
 
 ---
 
