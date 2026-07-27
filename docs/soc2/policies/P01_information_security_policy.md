@@ -10,9 +10,9 @@
 | Owner | Matt Justice (Security owner / Executive sponsor) |
 | Applies to | All personnel and contractors with access to SMPL systems or customer data |
 | Related criteria | Security (governance / CC1–CC2 themes); Availability; Confidentiality |
-| Version | 0.2-draft |
+| Version | 0.3-draft |
 | Effective date | _TBD on approval_ |
-| Last expanded | 2026-07-22 |
+| Last expanded | 2026-07-26 |
 
 ---
 
@@ -61,8 +61,10 @@ Detailed procedures live in sibling policies. This policy requires that SMPL mai
 | Incident response | [P04](./P04_incident_response_plan.md) |
 | Change management / SDLC | [P05](./P05_change_management_policy.md), [../CHANGE_MANAGEMENT.md](../CHANGE_MANAGEMENT.md) |
 | Data classification & handling | [P06](./P06_data_classification_and_handling.md) |
+| Customer data / confidentiality procedures | [P07](./P07_customer_data_confidentiality_procedures.md) |
 | Retention & deletion | [P08](./P08_retention_and_deletion.md) |
 | Vendor / subprocessor management | [P09](./P09_vendor_subprocessor_management.md), [../02_subprocessors.md](../02_subprocessors.md) |
+| Risk assessment | [P10](./P10_risk_assessment.md) |
 | Business continuity / DR | [P11](./P11_business_continuity_disaster_recovery.md) |
 | Backup & restore | [P12](./P12_backup_and_restore.md) |
 

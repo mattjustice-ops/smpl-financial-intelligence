@@ -1,8 +1,8 @@
 # Backup & Restore Policy
 
 > **STATUS: DRAFT — NOT APPROVED**  
-> High-priority stub for Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance.  
+> Template for SOC 2 Type I readiness. Not company policy until approved.  
+> Not legal advice. Not evidence of SOC 2 compliance. SMPL is **not** SOC 2 certified.  
 > **A restore test has not been claimed complete** — calendar and execute before Type I fieldwork.
 
 | Field | Value |
@@ -11,15 +11,15 @@
 | Owner | Matt Justice (Engineering / Security owner) |
 | Applies to | Production Postgres (Neon) and critical config restore capability |
 | Related criteria | Availability |
-| Version | 0.1-draft |
+| Version | 0.2-draft |
 | Effective date | _TBD on approval_ |
-| Created | 2026-07-22 |
+| Last expanded | 2026-07-26 |
 
 ---
 
 ## 1. Purpose
 
-Ensure customer and auth data can be restored from backup after loss, corruption, or destructive error.
+Ensure customer and auth data can be restored from backup after loss, corruption, or destructive error — implementable with Neon managed backups / PITR and GitHub + env secret stores.
 
 ## 2. What is backed up
 
@@ -36,13 +36,14 @@ Ensure customer and auth data can be restored from backup after loss, corruption
 
 1. Identify target point-in-time / backup snapshot.
 2. Prefer restore to a **non-prod branch/project** first for validation.
-3. Validate row counts / smoke queries for a sample org.
-4. Promote or cut over only with exec/eng approval (Matt).
+3. Validate row counts / smoke queries for a sample org (and that Org A ≠ Org B still holds).
+4. Promote or cut over only with exec/eng approval (Matt Justice).
 5. Record: date, who, backup ID, result, time to restore.
+6. If restore is part of an incident, link notes to [P04](./P04_incident_response_plan.md).
 
 ## 4. Restore test requirement
 
-Before Type I fieldwork:
+Before Type I fieldwork (target: Week 3–4 per [../PROGRESS.md](../PROGRESS.md)):
 
 - [ ] Calendar a Neon restore test
 - [ ] Execute restore to non-prod (or documented safe procedure)
@@ -53,12 +54,19 @@ Before Type I fieldwork:
 |-----------|--------|--------|-------------------|----------|
 | | Matt Justice | _Not yet run_ | | |
 
-## 5. Related
+Approving this **policy** is not the same as completing the restore test. Both are required before booking Type I.
+
+## 5. Retention interaction
+
+Customer deletion requests may lag in backups until the backup window expires — disclose honestly ([P08](./P08_retention_and_deletion.md)).
+
+## 6. Related
 
 - Continuity context: [P11](./P11_business_continuity_disaster_recovery.md)
 - Incidents needing restore: [P04](./P04_incident_response_plan.md)
+- Risk: [P10](./P10_risk_assessment.md) R06
 
-## 6. Approval
+## 7. Approval
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|

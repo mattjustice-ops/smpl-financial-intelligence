@@ -19,13 +19,13 @@
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
 | **Week 1** | ~2026-07-22 → 2026-07-29 | **COMPLETE 2026-07-26** — MFA on admin consoles; access inventory first pass; protect `main` + required PR (GitHub ruleset; solo-friendly, approvals may be 0); break-glass = Neon/Railway MFA (no separate login) |
-| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | Approve DRAFT policies P01–P12 (or core set); platform decision (explicit Vanta wait date **or** signup) |
+| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 drafts ready for approval** — Matt approve (sign each Approval table or reply approve); platform decision (explicit Vanta wait date **or** signup) |
 | **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM subprocessor write-up finalized; security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Week 2 — approve core policies (P01–P12 / core set) **and** choose compliance platform **or** write “wait until ____” in the decision log.
+**Next guided item for Matt:** Week 2 — **approve** core policies P01–P12 (drafts are ready — sign Approval tables / update [04_policy_index.md](./04_policy_index.md)) **and** choose compliance platform **or** write “wait until ____” in the decision log.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -43,7 +43,7 @@
 | `[x]` | MFA — DNS / domain admin (Squarespace) | Matt | Week 1 | Done 2026-07-26 — Squarespace MFA for smpl-ai.com |
 | `[x]` | Confirm no shared prod passwords | Matt | Week 1 | Confirmed 2026-07-26 — no shared prod passwords |
 | `[x]` | Protect `main` + required PR review | Matt | Week 1 | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
-| `[!]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | Draft ≠ approved ← **start here** |
+| `[!]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | **Drafts ready for approval** — not approved yet ← **start here** |
 | `[!]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | Do not stall MFA; no auto-signup |
 | `[!]` | Confirm boundary matches production | Matt | Week 2–3 | Resolve TBDs in boundary doc |
 | `[!]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | |
@@ -187,9 +187,9 @@ Type II comes later: after Type I, controls operate over an observation window (
 | Status | Item | Notes |
 |--------|------|-------|
 | `[x]` | Policy index | [04_policy_index.md](./04_policy_index.md) |
-| `[x]` | Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt | [policies/](./policies/) P01–P05 — **DRAFT / not approved** |
-| `[~]` | Remaining core policies (P06–P17) | P06, P08, P09, P11, P12 drafted; P07/P10/P13–P17 still open |
-| `[!]` | Leadership approve core policies | Draft ≠ approved; auditor wants approved docs — **Matt must approve** (Week 2) |
+| `[x]` | Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt | [policies/](./policies/) P01–P05 — **DRAFT / ready for approval** (not approved) |
+| `[x]` | Core policies P01–P12 drafted (approval-ready) | P06–P12 expanded; **P07 + P10 created** 2026-07-26 — all **DRAFT / ready for approval**; P13–P17 still open |
+| `[!]` | Leadership approve core policies | Drafts ready ≠ approved; auditor wants approved docs — **Matt must approve** (Week 2) |
 
 ### E. Engineering hygiene
 
@@ -257,11 +257,22 @@ Not SOC 2 certified. Readiness evidence only.
 
 ## Top `[!]` for Matt (do next)
 
-1. **[!]** Approve core policies (P01–P12 at minimum) — draft ≠ approved ← **Week 2 start here**
+1. **[!]** Approve core policies (P01–P12) — drafts are **ready for approval**; sign each Approval table (or reply `approve P01–P12`) ← **Week 2 start here**
 2. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log
 3. **[!]** Customer DPA — legal review / ship
 4. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
 5. **[!]** Resolve boundary TBDs / vendor regions
+
+---
+
+## What we checked off 2026-07-26 — P01–P12 drafts ready for approval
+
+Not approved. Not SOC 2 certified. Readiness documentation only.
+
+1. Created **P07** (Customer Data / Confidentiality Procedures) and **P10** (Risk Assessment + initial register)
+2. Expanded P06, P08, P09, P11, P12 to approval-ready drafts (same structure as P01–P05)
+3. P01 control-theme table now links P07/P10; policy index + policies README updated
+4. Scoreboard + `/compliance` data: drafts **ready for approval**; leadership approval remains **[!]**
 
 ---
 
