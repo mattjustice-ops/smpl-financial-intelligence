@@ -54,9 +54,9 @@ Readiness only — **not** SOC 2 certified.
 
 | # | Action | Owner | Done when |
 |---|--------|-------|-----------|
-| 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | **P01–P12 drafts ready for approval** in [soc2/policies/](./soc2/policies/) — still need Matt approval (Week 2) |
-| 3b | **Approve** core policies + choose platform **or** write “wait until ____” | Security / Executive | Approved docs + decision log platform row |
-| 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | One-pager + subprocessors drafted; DPA still open |
+| 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | **Done** — P01–P12 **Approved 2026-07-27** by Matt Justice ([soc2/policies/](./soc2/policies/)). Approval ≠ SOC 2 certified |
+| 3b | **Approve** core policies + choose platform **or** write “wait until ____” | Security / Executive | Policies **Approved** 2026-07-27; platform decision still open |
+| 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | One-pager + subprocessors drafted; **Customer DPA/MSA = single legal workstream** still open (P10 R16) |
 | 9 | If platform chosen: create account, connect GitHub + Vercel/Railway/Neon as available; treat auto gap list as backlog | Security owner | Integrations connected |
 | 11 | Schedule backup **restore test** on Neon (or document who runs it in Week 3) | Engineering owner | Date on calendar or completed |
 | 12 | Pick audit-firm shortlist (platform partner network OK); set **target Type I month** in decision log | Executive sponsor | Target date filled |
@@ -85,18 +85,20 @@ Copy into [00_decision_log.md](./soc2/00_decision_log.md) (already seeded with *
 
 Priority order — full list in [04_policy_index.md](./soc2/04_policy_index.md):
 
-1. Information Security Policy (umbrella) — **DRAFT ready for approval:** [soc2/policies/P01_information_security_policy.md](./soc2/policies/P01_information_security_policy.md)
-2. Acceptable Use — **DRAFT ready for approval:** [soc2/policies/P02_acceptable_use_policy.md](./soc2/policies/P02_acceptable_use_policy.md)
-3. Access Control (incl. MFA, offboarding same-day) — **DRAFT ready for approval:** [soc2/policies/P03_access_control_policy.md](./soc2/policies/P03_access_control_policy.md)
-4. Incident Response — **DRAFT ready for approval:** [soc2/policies/P04_incident_response_plan.md](./soc2/policies/P04_incident_response_plan.md)
-5. Change Management / SDLC — **DRAFT ready for approval:** [soc2/policies/P05_change_management_policy.md](./soc2/policies/P05_change_management_policy.md)
-6. Data Classification & Handling — **DRAFT ready for approval:** [soc2/policies/P06_data_classification_and_handling.md](./soc2/policies/P06_data_classification_and_handling.md)
-7. Customer Data / Confidentiality Procedures — **DRAFT ready for approval:** [soc2/policies/P07_customer_data_confidentiality_procedures.md](./soc2/policies/P07_customer_data_confidentiality_procedures.md)
-8. Retention & Deletion — **DRAFT ready for approval:** [soc2/policies/P08_retention_and_deletion.md](./soc2/policies/P08_retention_and_deletion.md)
-9. Vendor / Subprocessor Management — **DRAFT ready for approval:** [soc2/policies/P09_vendor_subprocessor_management.md](./soc2/policies/P09_vendor_subprocessor_management.md)
-10. Risk Assessment — **DRAFT ready for approval:** [soc2/policies/P10_risk_assessment.md](./soc2/policies/P10_risk_assessment.md)
-11. Business Continuity / DR — **DRAFT ready for approval:** [soc2/policies/P11_business_continuity_disaster_recovery.md](./soc2/policies/P11_business_continuity_disaster_recovery.md)
-12. Backup & Restore — **DRAFT ready for approval:** [soc2/policies/P12_backup_and_restore.md](./soc2/policies/P12_backup_and_restore.md)
+1. Information Security Policy (umbrella) — **Approved 2026-07-27:** [soc2/policies/P01_information_security_policy.md](./soc2/policies/P01_information_security_policy.md)
+2. Acceptable Use — **Approved 2026-07-27:** [soc2/policies/P02_acceptable_use_policy.md](./soc2/policies/P02_acceptable_use_policy.md)
+3. Access Control (incl. MFA, offboarding same-day) — **Approved 2026-07-27:** [soc2/policies/P03_access_control_policy.md](./soc2/policies/P03_access_control_policy.md)
+4. Incident Response — **Approved 2026-07-27:** [soc2/policies/P04_incident_response_plan.md](./soc2/policies/P04_incident_response_plan.md)
+5. Change Management / SDLC — **Approved 2026-07-27:** [soc2/policies/P05_change_management_policy.md](./soc2/policies/P05_change_management_policy.md)
+6. Data Classification & Handling — **Approved 2026-07-27:** [soc2/policies/P06_data_classification_and_handling.md](./soc2/policies/P06_data_classification_and_handling.md)
+7. Customer Data / Confidentiality Procedures — **Approved 2026-07-27:** [soc2/policies/P07_customer_data_confidentiality_procedures.md](./soc2/policies/P07_customer_data_confidentiality_procedures.md)
+8. Retention & Deletion — **Approved 2026-07-27:** [soc2/policies/P08_retention_and_deletion.md](./soc2/policies/P08_retention_and_deletion.md)
+9. Vendor / Subprocessor Management — **Approved 2026-07-27:** [soc2/policies/P09_vendor_subprocessor_management.md](./soc2/policies/P09_vendor_subprocessor_management.md)
+10. Risk Assessment — **Approved 2026-07-27:** [soc2/policies/P10_risk_assessment.md](./soc2/policies/P10_risk_assessment.md)
+11. Business Continuity / DR — **Approved 2026-07-27:** [soc2/policies/P11_business_continuity_disaster_recovery.md](./soc2/policies/P11_business_continuity_disaster_recovery.md)
+12. Backup & Restore — **Approved 2026-07-27:** [soc2/policies/P12_backup_and_restore.md](./soc2/policies/P12_backup_and_restore.md)
+
+**Next policy draft (prioritized):** P15 AI / LLM Data Handling — see [soc2/PROGRESS.md](./soc2/PROGRESS.md).
 
 Still open later: AI / LLM Data Handling (**P15**), plus P13–P14, P16–P17.
 
@@ -115,7 +117,7 @@ At minimum: GitHub, Vercel, Railway, Neon, Sanity, Stripe, Resend, Anthropic con
 From readiness v2 — book the audit only when controls are **live**, not merely drafted:
 
 - MFA on admin/cloud accounts (**[x]** cloud + DNS/Squarespace live 2026-07-26 incl. Anthropic via Google IdP; ops/break-glass = Neon/Railway MFA)
-- Written policies approved by leadership
+- Written policies approved by leadership — **done 2026-07-27** (approval ≠ SOC 2 certified)
 - Access inventory + first quarterly-style review artifact (inventory first pass done; quarterly sign-off still open)
 - Documented change/deploy path + PR review on `main` (**[x]** path + GitHub ruleset live 2026-07-26)
 

@@ -1,9 +1,7 @@
 # Customer Data / Confidentiality Procedures
 
-> **STATUS: DRAFT — NOT APPROVED**  
-> Template for SOC 2 Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance. SMPL is **not** SOC 2 certified.  
-> Trust Services **Privacy** and **Processing Integrity** are **out of Type I scope** (deferred) — this policy covers Confidentiality procedures for customer financial and auth data.
+> **STATUS: APPROVED** — Effective 2026-07-27. Approved by Matt Justice (executive sponsor).  
+> Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.
 
 | Field | Value |
 |-------|--------|
@@ -11,8 +9,8 @@
 | Owner | Matt Justice (Security / Ops owner) |
 | Applies to | All personnel and systems that ingest, store, process, export, or support customer data |
 | Related criteria | Confidentiality; Security |
-| Version | 0.1-draft |
-| Effective date | _TBD on approval_ |
+| Version | 1.0 |
+| Effective date | 2026-07-27 |
 | Created | 2026-07-26 |
 
 ---
@@ -99,7 +97,7 @@ Detail for a dedicated privileged-access policy lives in future **P16**; until t
 
 - **Privacy** (Trust Services): deferred for Type I — do not imply a Privacy report.
 - **Processing Integrity**: deferred — do not imply auditor attestation of ARR/FP&A methodology.
-- Contractual privacy/DPA language is a separate **[!]** legal item; this procedure does not invent DPA terms.
+- Contractual privacy / DPA language is **not** defined here — tracked as one consolidated legal workstream ([../PROGRESS.md](../PROGRESS.md); [P10](./P10_risk_assessment.md) R16). This procedure does not invent DPA terms.
 
 ## 12. Evidence artifacts
 
@@ -114,8 +112,8 @@ Detail for a dedicated privileged-access policy lives in future **P16**; until t
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
+| Executive sponsor | Matt Justice | 2026-07-27 |
 
 ---
 
-_End of DRAFT P07_
+_End of APPROVED P07_

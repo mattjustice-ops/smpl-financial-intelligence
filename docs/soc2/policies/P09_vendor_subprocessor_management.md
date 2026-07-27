@@ -1,9 +1,7 @@
 # Vendor / Subprocessor Management Policy
 
-> **STATUS: DRAFT — NOT APPROVED**  
-> Template for SOC 2 Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance. SMPL is **not** SOC 2 certified.  
-> Do not claim vendor certifications SMPL has not verified via report under NDA.
+> **STATUS: APPROVED** — Effective 2026-07-27. Approved by Matt Justice (executive sponsor).  
+> Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.
 
 | Field | Value |
 |-------|--------|
@@ -11,8 +9,8 @@
 | Owner | Matt Justice (Security owner) |
 | Applies to | Vendors that process or store customer data or production infrastructure |
 | Related criteria | Security (CC9); Confidentiality |
-| Version | 0.2-draft |
-| Effective date | _TBD on approval_ |
+| Version | 1.0 |
+| Effective date | 2026-07-27 |
 | Last expanded | 2026-07-26 |
 
 ---
@@ -55,7 +53,7 @@ Conditional vendors (OpenAI fallback, APM, analytics) are added only if live in 
 
 ## 5. Customer commitments
 
-- Customer DPA / MSA language for subprocessors is a **[!]** legal item — do not invent signed DPA terms in this draft.
+- Customer DPA / MSA subprocessor language is part of the consolidated **Customer DPA / MSA** legal workstream ([../PROGRESS.md](../PROGRESS.md); [P10](./P10_risk_assessment.md) R16) — do not invent signed DPA terms in this policy.
 - Sales language: list known processors honestly; never claim SMPL is SOC 2 certified; do not overstate vendor certifications without a collected report.
 
 ## 6. Explicitly not subprocessors (typical)
@@ -77,8 +75,8 @@ Conditional vendors (OpenAI fallback, APM, analytics) are added only if live in 
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
+| Executive sponsor | Matt Justice | 2026-07-27 |
 
 ---
 
-_End of DRAFT P09_
+_End of APPROVED P09_

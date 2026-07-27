@@ -1,9 +1,7 @@
 # Retention & Deletion Policy
 
-> **STATUS: DRAFT — NOT APPROVED**  
-> Template for SOC 2 Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance. SMPL is **not** SOC 2 certified.  
-> Retention periods below are **working defaults** pending counsel / Matt approval and DPA language.
+> **STATUS: APPROVED** — Effective 2026-07-27. Approved by Matt Justice (executive sponsor).  
+> Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.
 
 | Field | Value |
 |-------|--------|
@@ -11,15 +9,19 @@
 | Owner | Matt Justice (Security owner) |
 | Applies to | Customer and operational data held by SMPL |
 | Related criteria | Confidentiality |
-| Version | 0.2-draft |
-| Effective date | _TBD on approval_ |
-| Last expanded | 2026-07-26 |
+| Version | 1.0 |
+| Effective date | 2026-07-27 |
+| Last updated | 2026-07-27 |
 
 ---
 
 ## 1. Purpose
 
 Define how long SMPL retains data and how deletion / offboarding works when customers leave or request removal — implementable for a solo-founder SaaS using Neon, Auth.js, and managed providers.
+
+**Immutability vs retention (not in conflict):** During an active customer relationship, warehouse / financial facts are not silently rewritten — corrections are handled as explicit new loads or documented adjustments, not quiet overwrites. That **immutability / integrity** axis is separate from **retention and deletion** after a customer leaves or requests removal. Auditors and customers should not read retention windows as permission to mutate history in place, nor read immutability as a promise to keep data forever after offboarding.
+
+Retention periods below remain **working defaults** until contractual language is locked in the consolidated Customer DPA / MSA legal workstream ([../PROGRESS.md](../PROGRESS.md); [P10](./P10_risk_assessment.md) R16).
 
 ## 2. Scope
 
@@ -30,9 +32,9 @@ Define how long SMPL retains data and how deletion / offboarding works when cust
 - Security / IR / access-review artifacts
 - Marketing CMS (Sanity) if customer-named content exists
 
-**Privacy** Trust Services criteria are deferred for Type I; contractual privacy obligations still belong in the customer DPA/MSA (**[!]** legal).
+**Privacy** Trust Services criteria are deferred for Type I; contractual privacy / DPA obligations are tracked as **one** legal workstream — see §3 note and [P10](./P10_risk_assessment.md) R16 (not separate open flags in each policy).
 
-## 3. Working retention defaults (DRAFT — confirm with counsel)
+## 3. Working retention defaults (confirm with counsel)
 
 | Data category | Working retention | Notes |
 |---------------|-------------------|-------|
@@ -45,7 +47,7 @@ Define how long SMPL retains data and how deletion / offboarding works when cust
 | Security / IR records | ≥ 1 year or longer if investigation open | Timeline notes, access reviews |
 | Marketing CMS (Sanity) | While published / needed | Boundary TBD if customer-named |
 
-**[!]** Matt + counsel: lock contractual retention language in DPA / MSA before promising customers specific windows.
+Contractual retention windows: see consolidated **Customer DPA / MSA** action item in [../PROGRESS.md](../PROGRESS.md) and risk **R16** in [P10](./P10_risk_assessment.md) — do not invent signed terms here.
 
 ## 4. Customer offboarding / deletion request
 
@@ -78,8 +80,8 @@ Suspend deletion if litigation or regulatory hold applies — executive sponsor 
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
+| Executive sponsor | Matt Justice | 2026-07-27 |
 
 ---
 
-_End of DRAFT P08_
+_End of APPROVED P08_
