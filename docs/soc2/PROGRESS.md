@@ -48,7 +48,7 @@
 | `[!]` | Confirm boundary matches production | Matt | Week 2–3 | Resolve TBDs in boundary doc |
 | `[!]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | |
 | `[ ]` | First quarterly-style access review sign-off | Matt | Week 3–4 | After MFA verified + inventory stable |
-| `[ ]` | Neon backup **restore test** evidence | Matt | Week 3–4 | Required before Type I |
+| `[~]` | Neon backup **restore test** evidence | Matt | Week 3–4 | Runbook ready 2026-07-27; **blocked** on Console PITR branch / `NEON_API_KEY` — [runbooks/neon-restore-test.md](./runbooks/neon-restore-test.md) |
 | `[ ]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | Plan draft exists; exercise + notes |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) — collection started | Matt | Week 3–4 | Vercel, Railway, Neon, Stripe, Anthropic, Resend, … |
 | `[!]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | ← **start here**; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
@@ -199,7 +199,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Protect `main` + required PR review | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
 | `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; GitHub/Vercel/Railway MFA done; branch protection live 2026-07-26 |
 | `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2 |
-| `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I — Week 3–4 |
+| `[~]` | Calendar or complete Neon backup **restore test** | Runbook + calendar 2026-07-27; execution blocked pending throwaway branch — Week 3–4 |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2 |
 | `[~]` | **P15** draft + AI/LLM / Anthropic write-up | Draft ready 2026-07-27 — awaiting Matt approval |
 
@@ -214,7 +214,7 @@ Book the auditor only when these are **live**, not merely drafted:
 | `[~]` | Access inventory + first review artifact | Inventory first pass done; quarterly sign-off still open (Week 3–4) |
 | `[x]` | Documented change/deploy path + PR review on `main` | Path documented; GitHub ruleset protecting `main` live 2026-07-26 |
 | `[~]` | Incident response plan (approved + operable) | **Approved** 2026-07-27; tabletop **not scheduled** — still open |
-| `[ ]` | Backup restore test evidence | **Not run** as of 2026-07-27 |
+| `[~]` | Backup restore test evidence | Attempt 2026-07-27 **blocked** (no API key); [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[ ]` | Subprocessor inventory + vendor reports collected | Inventory draft; reports not collected |
 | `[ ]` | Tenant isolation evidence |
 | `[~]` | **P15** draft + AI/subprocessor write-up for Anthropic | Draft ready — not approved |
@@ -262,7 +262,7 @@ Not SOC 2 certified. Readiness evidence only.
 2. **[~]** **Approve P15** — AI / LLM Data Handling draft ready ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)); not auto-approved
 3. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
 4. **[!]** Resolve boundary TBDs / vendor regions
-5. Open evidence (keep honest): restore test **not run** (P12); IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05)
+5. Open evidence (keep honest): restore test **blocked** pending throwaway PITR branch / `NEON_API_KEY` (P12 runbook ready); IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05)
 6. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
 
 ---
@@ -292,6 +292,15 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 1. **Compliance platform deferred DIY** — Matt decided not to buy Vanta/Drata/etc. now; continue with [docs/soc2/](./) + `/app/compliance`. Revisit when **either**: first paying enterprise requires a formal GRC/compliance platform, **or** CPA engagement for Type I (whichever first). Logged in [00_decision_log.md](./00_decision_log.md)
 2. **P15** AI / LLM Data Handling drafted (approval-ready, **not approved**) — [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)
 3. Policy index, P02/P06/P10 cross-refs, scoreboard + `/compliance` data synced
+
+## What we checked off 2026-07-27 — Neon restore test runbook (execution blocked)
+
+**Not SOC 2 certified.** Runbook ≠ completed restore evidence.
+
+1. Clarified scope: Neon already provides PITR/backups; test is throwaway-branch validation only — never change Railway `DATABASE_URL`
+2. Added [runbooks/neon-restore-test.md](./runbooks/neon-restore-test.md) (Console clicks + API `parent_timestamp` PITR path + validation SQL)
+3. Evidence stub [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) — **Blocked** (no `NEON_API_KEY`)
+4. P12 calendar checkbox + sign-off row updated; P10 R06 notes; scoreboard → in progress / blocked
 
 ---
 

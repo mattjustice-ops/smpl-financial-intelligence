@@ -43,16 +43,18 @@ Ensure customer and auth data can be restored from backup after loss, corruption
 
 Before Type I fieldwork (target: Week 3–4 per [../PROGRESS.md](../PROGRESS.md)):
 
-- [ ] Calendar a Neon restore test
-- [ ] Execute restore to non-prod (or documented safe procedure)
-- [ ] Capture evidence (screenshots, notes, timing)
+- [x] Calendar a Neon restore test — runbook [../runbooks/neon-restore-test.md](../runbooks/neon-restore-test.md) (2026-07-27)
+- [ ] Execute restore to **throwaway** Neon branch (prefer PITR / “Past data”; never change Railway `DATABASE_URL`)
+- [ ] Capture evidence (sanitized counts, notes, timing)
 - [ ] Sign off in review log below
 
 | Test date | Tester | Result | Evidence location | Sign-off |
 |-----------|--------|--------|-------------------|----------|
-| | Matt Justice | _Not yet run_ | | |
+| 2026-07-27 | Cursor agent / Matt Justice | **Blocked** — no `NEON_API_KEY`; Console PITR branch not yet created | [../evidence/neon-restore-test-2026-07-27.md](../evidence/neon-restore-test-2026-07-27.md) · [../runbooks/neon-restore-test.md](../runbooks/neon-restore-test.md) | _Pending pass_ |
 
 Approving this **policy** is not the same as completing the restore test. Both are required before booking Type I.
+
+**Clarification:** Neon already provides PITR/backups. The restore test proves we can restore to a throwaway branch and validate — it does not invent new backup product features.
 
 ## 5. Retention interaction
 

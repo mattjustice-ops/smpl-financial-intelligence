@@ -35,3 +35,7 @@ commit-local-wip.log
 .wip-restore-backup/
 
 .env*
+
+# SOC 2 evidence scratch (secrets / connection strings — never commit)
+docs/soc2/evidence/*.local.md
+docs/soc2/evidence/**/*.local.md

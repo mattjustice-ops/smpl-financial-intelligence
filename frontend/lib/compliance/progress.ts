@@ -263,9 +263,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-restore-test",
     label: "Neon backup restore test evidence",
-    status: "open",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 3–4",
+    notes:
+      "Runbook ready 2026-07-27; blocked on Console PITR branch or NEON_API_KEY — docs/soc2/runbooks/neon-restore-test.md",
   },
   {
     id: "rem-ir-tabletop",
@@ -373,7 +375,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test / vendor reports / tenant isolation still open",
+      "Policies approved 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test blocked pending PITR branch; vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -679,8 +681,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-4",
         label: "Calendar or complete Neon backup restore test",
-        status: "open",
-        notes: "Evidence required before Type I — Week 3–4",
+        status: "in_progress",
+        notes:
+          "Runbook + calendar 2026-07-27; execution blocked pending throwaway PITR branch — Week 3–4",
       },
       {
         id: "eng-5",
@@ -735,8 +738,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-6",
         label: "Backup restore test evidence",
-        status: "open",
-        notes: "Not run as of 2026-07-27",
+        status: "in_progress",
+        notes:
+          "Attempt 2026-07-27 blocked (no API key); docs/soc2/evidence/neon-restore-test-2026-07-27.md",
       },
       {
         id: "bar-7",
