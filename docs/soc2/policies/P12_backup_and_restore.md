@@ -44,13 +44,13 @@ Ensure customer and auth data can be restored from backup after loss, corruption
 Before Type I fieldwork (target: Week 3–4 per [../PROGRESS.md](../PROGRESS.md)):
 
 - [x] Calendar a Neon restore test — runbook [../runbooks/neon-restore-test.md](../runbooks/neon-restore-test.md) (2026-07-27)
-- [ ] Execute restore to **throwaway** Neon branch (prefer PITR / “Past data”; never change Railway `DATABASE_URL`)
-- [ ] Capture evidence (sanitized counts, notes, timing)
-- [ ] Sign off in review log below
+- [x] Execute restore to **throwaway** Neon branch (prefer PITR / “Past data”; never change Railway `DATABASE_URL`)
+- [x] Capture evidence (sanitized counts, notes, timing)
+- [x] Sign off in review log below
 
 | Test date | Tester | Result | Evidence location | Sign-off |
 |-----------|--------|--------|-------------------|----------|
-| 2026-07-27 | Cursor agent / Matt Justice | **Blocked** — no `NEON_API_KEY`; Console PITR branch not yet created | [../evidence/neon-restore-test-2026-07-27.md](../evidence/neon-restore-test-2026-07-27.md) · [../runbooks/neon-restore-test.md](../runbooks/neon-restore-test.md) | _Pending pass_ |
+| 2026-07-27 | Cursor agent / Matt Justice | **Pass** — PITR child branch `restore-test-2026-07-27` (`parent_timestamp` resolved `2026-07-27T19:38:21Z`); Railway `DATABASE_URL` unchanged | [../evidence/neon-restore-test-2026-07-27.md](../evidence/neon-restore-test-2026-07-27.md) · [../runbooks/neon-restore-test.md](../runbooks/neon-restore-test.md) | Matt Justice / agent — Pass 2026-07-27 |
 
 Approving this **policy** is not the same as completing the restore test. Both are required before booking Type I.
 

@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Platform deferred DIY 2026-07-27. P15 draft ready for approval (not approved). Next: DPA legal path; approve P15. Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 draft ready (not approved). Next: DPA legal path; approve P15. Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -98,7 +98,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 3–4",
     approxDates: "~2026-08-05 → 2026-08-19",
     focus:
-      "Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC collection started; DPA legal path",
+      "Access review #1 signed; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA legal path",
   },
   {
     id: "month-2",
@@ -263,11 +263,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-restore-test",
     label: "Neon backup restore test evidence",
-    status: "in_progress",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Runbook ready 2026-07-27; blocked on Console PITR branch or NEON_API_KEY — docs/soc2/runbooks/neon-restore-test.md",
+      "Pass 2026-07-27 — PITR throwaway restore-test-2026-07-27; Railway URL unchanged — docs/soc2/evidence/neon-restore-test-2026-07-27.md",
   },
   {
     id: "rem-ir-tabletop",
@@ -375,7 +375,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test blocked pending PITR branch; vendor reports / tenant isolation still open",
+      "Policies approved 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -681,9 +681,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-4",
         label: "Calendar or complete Neon backup restore test",
-        status: "in_progress",
+        status: "done",
         notes:
-          "Runbook + calendar 2026-07-27; execution blocked pending throwaway PITR branch — Week 3–4",
+          "Pass 2026-07-27 — PITR throwaway validated; docs/soc2/evidence/neon-restore-test-2026-07-27.md",
       },
       {
         id: "eng-5",
@@ -738,9 +738,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-6",
         label: "Backup restore test evidence",
-        status: "in_progress",
+        status: "done",
         notes:
-          "Attempt 2026-07-27 blocked (no API key); docs/soc2/evidence/neon-restore-test-2026-07-27.md",
+          "Pass 2026-07-27 — PITR throwaway; docs/soc2/evidence/neon-restore-test-2026-07-27.md",
       },
       {
         id: "bar-7",
