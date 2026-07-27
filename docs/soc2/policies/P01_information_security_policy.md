@@ -1,8 +1,7 @@
 # Information Security Policy
 
-> **STATUS: DRAFT — NOT APPROVED**  
-> Template for SOC 2 Type I readiness. Do not treat as company policy until executive sponsor approves and records the date in [../04_policy_index.md](../04_policy_index.md).  
-> Not legal advice. Not evidence of SOC 2 compliance. SMPL is **not** SOC 2 certified.
+> **STATUS: APPROVED** — Effective 2026-07-27. Approved by Matt Justice (executive sponsor).  
+> Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.
 
 | Field | Value |
 |-------|--------|
@@ -10,8 +9,8 @@
 | Owner | Matt Justice (Security owner / Executive sponsor) |
 | Applies to | All personnel and contractors with access to SMPL systems or customer data |
 | Related criteria | Security (governance / CC1–CC2 themes); Availability; Confidentiality |
-| Version | 0.3-draft |
-| Effective date | _TBD on approval_ |
+| Version | 1.0 |
+| Effective date | 2026-07-27 |
 | Last expanded | 2026-07-26 |
 
 ---
@@ -46,7 +45,7 @@ Applies to production systems in the SOC 2 system boundary (see [../01_system_bo
 
 1. **Least privilege** — access only as needed for the role.
 2. **Defense in depth** — layered controls (auth, encryption, review, monitoring).
-3. **Customer data stewardship** — financial warehouse data is confidential; SMPL does **not** write back to customer GL/ERP.
+3. **Customer data stewardship** — financial warehouse data is confidential; SMPL does **not** write back to customer GL/ERP. Active-relationship immutability (nothing silently rewritten) is a different axis from retention/deletion after offboarding — see [P08](./P08_retention_and_deletion.md).
 4. **Evidence over intent** — controls must be operable and leave audit artifacts.
 5. **Honest external language** — say “pursuing SOC 2” / “SOC 2 readiness in progress.” Never claim SOC 2 certified until a CPA firm issues a report.
 
@@ -84,8 +83,8 @@ Review at least annually, or after material stack/org change. Approvals recorded
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
+| Executive sponsor | Matt Justice | 2026-07-27 |
 
 ---
 
-_End of DRAFT P01_
+_End of APPROVED P01_

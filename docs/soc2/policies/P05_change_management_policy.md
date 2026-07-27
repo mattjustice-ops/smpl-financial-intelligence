@@ -1,9 +1,7 @@
 # Change Management / Secure SDLC Policy
 
-> **STATUS: DRAFT — NOT APPROVED**  
-> Template for SOC 2 Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance.  
-> Operational detail of the deploy path: [../CHANGE_MANAGEMENT.md](../CHANGE_MANAGEMENT.md).
+> **STATUS: APPROVED** — Effective 2026-07-27. Approved by Matt Justice (executive sponsor).  
+> Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.
 
 | Field | Value |
 |-------|--------|
@@ -11,8 +9,8 @@
 | Owner | Matt Justice (Engineering owner) |
 | Applies to | Production code and infrastructure changes for the SMPL financial intelligence platform |
 | Related criteria | Security (CC8) |
-| Version | 0.2-draft |
-| Effective date | _TBD on approval_ |
+| Version | 1.0 |
+| Effective date | 2026-07-27 |
 | Last expanded | 2026-07-26 |
 
 ---
@@ -74,9 +72,9 @@ Do not use production customer data in personal sandboxes without authorization 
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
+| Executive sponsor | Matt Justice | 2026-07-27 |
 | Engineering owner | _DRAFT — not signed — Matt Justice must approve_ | |
 
 ---
 
-_End of DRAFT P05_
+_End of APPROVED P05_

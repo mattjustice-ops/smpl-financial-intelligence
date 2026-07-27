@@ -1,9 +1,7 @@
 # Access Control Policy
 
-> **STATUS: DRAFT — NOT APPROVED**  
-> Template for SOC 2 Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance.  
-> **[x]** MFA on cloud consoles enabled 2026-07-26 (see inventory; Anthropic via Google IdP; DNS/Squarespace). Ops/break-glass = Neon/Railway MFA. Policy remains **DRAFT — NOT APPROVED**.
+> **STATUS: APPROVED** — Effective 2026-07-27. Approved by Matt Justice (executive sponsor).  
+> Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.
 
 | Field | Value |
 |-------|--------|
@@ -11,8 +9,8 @@
 | Owner | Matt Justice (Security owner) |
 | Applies to | All systems that store or process customer data or production secrets |
 | Related criteria | Security (CC6); Confidentiality |
-| Version | 0.2-draft |
-| Effective date | _TBD on approval_ |
+| Version | 1.0 |
+| Effective date | 2026-07-27 |
 | Last expanded | 2026-07-26 |
 
 ---
@@ -82,8 +80,8 @@ As of 2026-07-26, Matt Justice holds executive, security, engineering, and ops/C
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
+| Executive sponsor | Matt Justice | 2026-07-27 |
 
 ---
 
-_End of DRAFT P03_
+_End of APPROVED P03_

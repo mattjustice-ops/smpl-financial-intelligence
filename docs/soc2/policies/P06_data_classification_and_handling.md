@@ -1,8 +1,7 @@
 # Data Classification & Handling Policy
 
-> **STATUS: DRAFT — NOT APPROVED**  
-> Template for SOC 2 Type I readiness. Not company policy until approved.  
-> Not legal advice. Not evidence of SOC 2 compliance. SMPL is **not** SOC 2 certified.
+> **STATUS: APPROVED** — Effective 2026-07-27. Approved by Matt Justice (executive sponsor).  
+> Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.
 
 | Field | Value |
 |-------|--------|
@@ -10,8 +9,8 @@
 | Owner | Matt Justice (Security owner) |
 | Applies to | All personnel handling SMPL or customer data |
 | Related criteria | Confidentiality; Security |
-| Version | 0.2-draft |
-| Effective date | _TBD on approval_ |
+| Version | 1.0 |
+| Effective date | 2026-07-27 |
 | Last expanded | 2026-07-26 |
 
 ---
@@ -54,7 +53,7 @@ Applies to data in or flowing through the production system boundary ([../01_sys
 - Anthropic API keys on Railway (API) only — never in browser, Vercel client env, or static exports.
 - AI output is not the system of record for numbers.
 - Do not paste production Confidential data into consumer AI tools unless explicitly approved ([P02](./P02_acceptable_use_policy.md)).
-- Align with future **P15** when drafted.
+- Align with **P15** (AI / LLM Data Handling) when drafted — **draft next**, prioritized; see [../PROGRESS.md](../PROGRESS.md).
 
 ## 7. Handling rules
 
@@ -77,8 +76,8 @@ Applies to data in or flowing through the production system boundary ([../01_sys
 
 | Approver | Signature / name | Date |
 |----------|------------------|------|
-| Executive sponsor | _DRAFT — not signed — Matt Justice must approve_ | |
+| Executive sponsor | Matt Justice | 2026-07-27 |
 
 ---
 
-_End of DRAFT P06_
+_End of APPROVED P06_

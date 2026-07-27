@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-26",
+  lastUpdated: "2026-07-27",
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. Week 2: P01–P12 drafts ready for approval — Matt approve + platform decision (or wait-until date)",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27 (Matt Justice) — approval ≠ SOC 2 certified. Week 2 next: platform decision; DPA legal path; P15 draft next",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,7 +91,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 drafts ready for approval — Matt approve; platform decision (Vanta wait date or signup)",
+      "P01–P12 Approved 2026-07-27 — platform decision (Vanta wait date or signup); DPA legal path; P15 draft next",
   },
   {
     id: "week-3-4",
@@ -223,11 +223,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-approve-policies",
     label: "Leadership approve core policies (P01–P12 / core set)",
-    status: "needs_owner",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 2",
     notes:
-      "P01–P12 drafts ready for approval (not approved) — sign Approval tables or reply approve",
+      "Approved 2026-07-27 by Matt Justice — approval ≠ SOC 2 certified; open evidence remains",
   },
   {
     id: "rem-platform",
@@ -282,10 +282,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-dpa",
-    label: "Customer DPA — legal review / ship",
+    label: "Customer DPA / MSA — single legal workstream (privacy, retention, subprocessors)",
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Week 3–4",
+    notes: "Canonical item — also P10 R16; P07/P08/P09 cross-ref only",
   },
   {
     id: "rem-secrets",
@@ -303,10 +304,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-ai-writeup",
-    label: "AI/LLM / Anthropic subprocessor write-up",
-    status: "open",
+    label: "P15 draft next — AI/LLM Data Handling + Anthropic write-up",
+    status: "needs_owner",
     owner: "Matt",
-    targetWindow: "Month 2",
+    targetWindow: "Month 2 (draft sooner OK)",
+    notes: "Prioritized next policy draft; referenced from P02/P06/P10",
   },
   {
     id: "rem-one-pager-publish",
@@ -367,9 +369,9 @@ export const compliancePhases: CompliancePhase[] = [
   {
     id: "controls-live",
     name: "Controls live",
-    status: "open",
+    status: "in_progress",
     exitCriteria:
-      "Policies approved; MFA + access inventory; change/deploy path; IR; restore test; vendor evidence; tenant isolation evidence",
+      "Policies approved 2026-07-27; MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test / vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -512,8 +514,9 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "bv-7",
-        label: "Customer DPA — legal review / ship",
+        label: "Customer DPA / MSA — single legal workstream",
         status: "needs_owner",
+        notes: "Also P10 R16 — covers privacy/retention/subprocessors formerly flagged in P07–P09",
       },
       {
         id: "bv-8",
@@ -613,28 +616,34 @@ export const complianceSections: ComplianceSection[] = [
     id: "policies",
     name: "D. Policies",
     summary:
-      "P01–P12 drafts ready for approval; leadership approval still required (not approved).",
+      "P01–P12 Approved 2026-07-27 by Matt Justice. Approval ≠ SOC 2 certified. P15 draft next.",
     items: [
       { id: "pol-1", label: "Policy index", status: "done" },
       {
         id: "pol-2",
         label: "Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt",
         status: "done",
-        notes: "P01–P05 DRAFT / ready for approval (not approved)",
+        notes: "P01–P05 approved 2026-07-27",
       },
       {
         id: "pol-3",
         label: "Core policies P01–P12 drafted (approval-ready)",
         status: "done",
         notes:
-          "P06–P12 expanded; P07 + P10 created 2026-07-26 — all DRAFT / ready for approval; P13–P17 open",
+          "P06–P12 expanded; P07 + P10 created 2026-07-26; all Approved 2026-07-27",
       },
       {
         id: "pol-4",
         label: "Leadership approve core policies",
-        status: "needs_owner",
+        status: "done",
         notes:
-          "Drafts ready ≠ approved; Matt must approve — Week 2 (sign Approval tables)",
+          "Approved 2026-07-27 by Matt Justice — approval ≠ SOC 2 certified",
+      },
+      {
+        id: "pol-5",
+        label: "P15 draft next (AI / LLM Data Handling)",
+        status: "needs_owner",
+        notes: "Prioritized; not a blocker for P01–P12 approval",
       },
     ],
   },
@@ -677,9 +686,9 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "eng-6",
-        label: "AI/LLM data-handling write-up aligned with P15",
-        status: "open",
-        notes: "Month 2",
+        label: "P15 draft next + AI/LLM / Anthropic write-up",
+        status: "needs_owner",
+        notes: "Prioritized next policy draft — Month 2 (sooner OK)",
       },
     ],
   },
@@ -698,7 +707,8 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-2",
         label: "Written policies approved by leadership",
-        status: "open",
+        status: "done",
+        notes: "P01–P12 Approved 2026-07-27; approval ≠ certified",
       },
       {
         id: "bar-3",
@@ -715,10 +725,15 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-5",
         label: "Incident response plan (approved + operable)",
-        status: "open",
-        notes: "Draft exists; not approved",
+        status: "in_progress",
+        notes: "Approved 2026-07-27; tabletop not scheduled — still open",
       },
-      { id: "bar-6", label: "Backup restore test evidence", status: "open" },
+      {
+        id: "bar-6",
+        label: "Backup restore test evidence",
+        status: "open",
+        notes: "Not run as of 2026-07-27",
+      },
       {
         id: "bar-7",
         label: "Subprocessor inventory + vendor reports collected",
@@ -728,8 +743,8 @@ export const complianceSections: ComplianceSection[] = [
       { id: "bar-8", label: "Tenant isolation evidence", status: "open" },
       {
         id: "bar-9",
-        label: "AI/subprocessor write-up for Anthropic",
-        status: "open",
+        label: "P15 draft next + AI/subprocessor write-up for Anthropic",
+        status: "needs_owner",
       },
     ],
   },
