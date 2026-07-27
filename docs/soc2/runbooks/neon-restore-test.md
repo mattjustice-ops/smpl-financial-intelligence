@@ -135,22 +135,31 @@ Prefer delete the throwaway branch via API/Console after evidence is written. If
 
 ## Run log
 
-### Attempt 2026-07-27 — blocked (no Neon API key)
+### Attempt 2026-07-27 (earlier) — blocked (no Neon API key)
 
 | Field | Value |
 |-------|--------|
 | Started (UTC) | 2026-07-27 ~22:41 UTC (agent session local 15:41 PDT) |
 | Operator | Cursor agent (on behalf of Matt Justice) |
-| `NEON_API_KEY` | **Not found** in `backend/.env`, frontend env locals, process env, or neonctl config |
-| Prod connection files | Present locally (hosts only noted; secrets not printed) — **not used** for restore |
-| Branch created? | **No** |
-| Restore kind | **N/A** — pending Matt Console PITR branch **or** `NEON_API_KEY` + project id |
-| Validation | **Not run** |
-| Result | **Blocked** — awaiting restore-branch connection string (throwaway) or API key |
-| Production `DATABASE_URL` / Railway | **Unchanged** |
-| Evidence | [../evidence/neon-restore-test-2026-07-27.md](../evidence/neon-restore-test-2026-07-27.md) |
+| Result | **Blocked** — no API key / Console branch yet |
+| Evidence stub | [../evidence/neon-restore-test-2026-07-27.md](../evidence/neon-restore-test-2026-07-27.md) (superseded by pass below) |
 
-**Next step for Matt:** follow Console clicks above; paste the **restore-test** connection string (not prod). Optionally also provide `NEON_API_KEY` + project id for automated create/delete next time.
+### Attempt 2026-07-27 (retry) — Pass (neonctl OAuth + PITR branch)
+
+| Field | Value |
+|-------|--------|
+| Started (UTC) | 2026-07-27 ~23:28 UTC (agent session local ~16:28 PDT) |
+| Operator | Cursor agent (on behalf of Matt Justice) |
+| Auth | `npx neonctl auth` — browser OAuth; Matt approved promptly |
+| Project | `smpl-auth-prod` / `hidden-scene-76708131` |
+| Branch created? | **Yes** — `restore-test-2026-07-27` (`br-damp-poetry-aq87hjrl`) |
+| Restore kind | **PITR child branch** — requested `--parent 2026-07-27T22:00:00Z`; Neon resolved `parent_timestamp=2026-07-27T19:38:21Z`, `parent_lsn=0/FEAEC88`, `init_source=parent-data` |
+| Throwaway host (no secrets) | `ep-quiet-bird-aqicczkz.c-8.us-east-1.aws.neon.tech` |
+| Validation | **Pass** — core + warehouse tables present; Demo Co org present; sanitized counts filed |
+| Result | **Pass** |
+| Production `DATABASE_URL` / Railway | **Unchanged** |
+| Cleanup | Branch left named for Matt to delete when convenient |
+| Evidence | [../evidence/neon-restore-test-2026-07-27.md](../evidence/neon-restore-test-2026-07-27.md) |
 
 ---
 
