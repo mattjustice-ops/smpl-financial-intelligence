@@ -4,10 +4,12 @@ import { PortableText, type PortableTextComponents } from "@portabletext/react";
 import type { PortableTextBlock } from "@portabletext/types";
 import Image from "next/image";
 import Link from "next/link";
+import { useMemo } from "react";
 
 import { urlForImage } from "@/lib/sanity/image";
+import { portableHeadingIdByKey } from "@/lib/sanity/headings";
 
-const components: PortableTextComponents = {
+const baseComponents: PortableTextComponents = {
   block: {
     h2: ({ children }) => (
       <h2 className="mt-10 scroll-mt-24 text-2xl font-semibold tracking-tight text-white">
@@ -99,11 +101,59 @@ const components: PortableTextComponents = {
   },
 };
 
+function componentsWithHeadingAnchors(
+  idByKey: Map<string, string>,
+): PortableTextComponents {
+  return {
+    ...baseComponents,
+    block: {
+      normal: ({ children }) => (
+        <p className="mt-4 text-base leading-relaxed text-slate-300">{children}</p>
+      ),
+      blockquote: ({ children }) => (
+        <blockquote className="mt-6 border-l-2 border-teal-400/60 pl-4 text-slate-300 italic">
+          {children}
+        </blockquote>
+      ),
+      h2: ({ children, value }) => {
+        const id = value?._key ? idByKey.get(value._key) : undefined;
+        return (
+          <h2
+            id={id}
+            className="mt-10 scroll-mt-24 text-2xl font-semibold tracking-tight text-white"
+          >
+            {children}
+          </h2>
+        );
+      },
+      h3: ({ children, value }) => {
+        const id = value?._key ? idByKey.get(value._key) : undefined;
+        return (
+          <h3
+            id={id}
+            className="mt-8 scroll-mt-24 text-xl font-semibold tracking-tight text-white"
+          >
+            {children}
+          </h3>
+        );
+      },
+    },
+  };
+}
+
 export function PortableBody({
   value,
+  headingAnchors = false,
 }: {
   value?: PortableTextBlock[] | null;
+  /** When true, h2/h3 get stable slug ids for TOC / deep links. Opt-in so glossary stays unchanged. */
+  headingAnchors?: boolean;
 }) {
+  const components = useMemo(() => {
+    if (!headingAnchors || !value?.length) return baseComponents;
+    return componentsWithHeadingAnchors(portableHeadingIdByKey(value));
+  }, [headingAnchors, value]);
+
   if (!value?.length) return null;
   return (
     <div className="portable-body max-w-none">
