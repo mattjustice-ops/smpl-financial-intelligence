@@ -45,11 +45,8 @@ export function BlogTableOfContents({ headings }: BlogTableOfContentsProps) {
         </nav>
       </details>
 
-      {/* Desktop: sticky sidebar */}
-      <nav
-        aria-label="Table of contents"
-        className="hidden lg:block lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
-      >
+      {/* Desktop: left sidebar (stickiness applied by parent grid cell) */}
+      <nav aria-label="Table of contents" className="hidden lg:block">
         <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
           On this page
         </p>
