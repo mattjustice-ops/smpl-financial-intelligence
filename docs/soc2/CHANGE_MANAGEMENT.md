@@ -72,7 +72,7 @@ Claude / Anthropic keys: **Railway only** — never in browser or static board H
 
 - Schema: Alembic / migration PRs preferred; apply with production `DATABASE_URL` under controlled process.
 - Warehouse loads / white-glove POC data: privileged ops path owned by Matt; treat as Confidential ([P06](./policies/P06_data_classification_and_handling.md)).
-- Backup / restore: [P12](./policies/P12_backup_and_restore.md) — restore test not yet evidenced.
+- Backup / restore: [P12](./policies/P12_backup_and_restore.md) — runbook [runbooks/neon-restore-test.md](./runbooks/neon-restore-test.md); restore test execution **blocked** 2026-07-27 (awaiting throwaway PITR branch / API key).
 
 ---
 
