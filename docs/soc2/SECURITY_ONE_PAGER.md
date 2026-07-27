@@ -2,7 +2,7 @@
 
 **Audience:** Customers and prospects (security questionnaires, early diligence).  
 **Status:** Draft for internal use / share under NDA as needed.  
-**Last updated:** 2026-07-22  
+**Last updated:** 2026-07-27  
 **Owner:** Matt Justice
 
 > **Honest framing:** SMPL is **pursuing SOC 2 Type I** (Security + Availability + Confidentiality). We are **not** SOC 2 certified and do **not** claim “SOC 2 compliant” until an independent CPA firm issues a report.
@@ -21,8 +21,8 @@ SMPL.ai is a B2B SaaS financial intelligence platform (FP&A / ARR / close / boar
 |-------|----------------|
 | SOC 2 | **Readiness in progress** toward Type I (Security + Availability + Confidentiality). Processing Integrity deferred. Privacy not in first engagement. |
 | Certification | **None yet** — no CPA report issued |
-| Policies | Internal DRAFT policies exist; leadership approval in progress |
-| Compliance platform | Not selected yet (e.g. Vanta/Drata) — decision pending |
+| Policies | P01–P12 approved internally (2026-07-27); P15 AI/LLM draft in review. Approving policies ≠ SOC 2 certified |
+| Compliance platform | Deferred DIY for now (internal docs + scoreboard); revisit if enterprise requires a formal GRC tool or at CPA Type I engagement |
 
 ---
 

@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27 (Matt Justice) — approval ≠ SOC 2 certified. Week 2 next: platform decision; DPA legal path; P15 draft next",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Platform deferred DIY 2026-07-27. P15 draft ready for approval (not approved). Next: DPA legal path; approve P15. Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,7 +91,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved 2026-07-27 — platform decision (Vanta wait date or signup); DPA legal path; P15 draft next",
+      "P01–P12 Approved; platform deferred DIY 2026-07-27; P15 draft ready (not approved); DPA legal path next",
   },
   {
     id: "week-3-4",
@@ -232,10 +232,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-platform",
     label: 'Compliance platform choice or “wait until ____”',
-    status: "needs_owner",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 2",
-    notes: "MFA largely done; no auto-signup",
+    notes:
+      "Deferred DIY 2026-07-27 — docs/soc2 + /app/compliance; revisit on enterprise GRC requirement or CPA Type I engagement (whichever first)",
   },
   {
     id: "rem-boundary",
@@ -286,7 +287,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Week 3–4",
-    notes: "Canonical item — also P10 R16; P07/P08/P09 cross-ref only",
+    notes: "← start here — also P10 R16; P07/P08/P09 cross-ref only",
   },
   {
     id: "rem-secrets",
@@ -304,11 +305,12 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-ai-writeup",
-    label: "P15 draft next — AI/LLM Data Handling + Anthropic write-up",
-    status: "needs_owner",
+    label: "P15 AI/LLM Data Handling — draft ready for approval",
+    status: "in_progress",
     owner: "Matt",
-    targetWindow: "Month 2 (draft sooner OK)",
-    notes: "Prioritized next policy draft; referenced from P02/P06/P10",
+    targetWindow: "Week 2",
+    notes:
+      "Draft 2026-07-27 — not approved; Matt review/sign-off next (docs/soc2/policies/P15_ai_llm_data_handling.md)",
   },
   {
     id: "rem-one-pager-publish",
@@ -364,14 +366,14 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Kickoff",
     status: "in_progress",
     exitCriteria:
-      "Scope APPROVED + owners named; scoreboard live — platform / target month / CPA still open",
+      "Scope APPROVED + owners named; platform deferred DIY; scoreboard live — target month / CPA still open",
   },
   {
     id: "controls-live",
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved 2026-07-27; MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test / vendor reports / tenant isolation still open",
+      "Policies approved 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test / vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -458,8 +460,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "kg-11",
         label: 'Compliance platform choice or explicit “wait until ____”',
-        status: "needs_owner",
-        notes: "TBD — Matt to decide (Week 2). Do not auto-sign up for Vanta",
+        status: "done",
+        notes:
+          "Deferred DIY 2026-07-27 — docs/soc2 + /app/compliance; revisit on enterprise GRC req or CPA Type I engagement",
       },
       {
         id: "kg-12",
@@ -616,7 +619,7 @@ export const complianceSections: ComplianceSection[] = [
     id: "policies",
     name: "D. Policies",
     summary:
-      "P01–P12 Approved 2026-07-27 by Matt Justice. Approval ≠ SOC 2 certified. P15 draft next.",
+      "P01–P12 Approved 2026-07-27 by Matt Justice. Approval ≠ SOC 2 certified. P15 draft ready for approval (not approved).",
     items: [
       { id: "pol-1", label: "Policy index", status: "done" },
       {
@@ -641,9 +644,10 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "pol-5",
-        label: "P15 draft next (AI / LLM Data Handling)",
-        status: "needs_owner",
-        notes: "Prioritized; not a blocker for P01–P12 approval",
+        label: "P15 AI / LLM Data Handling — draft ready for approval",
+        status: "in_progress",
+        notes:
+          "Draft 2026-07-27 — not approved; Matt sign-off next",
       },
     ],
   },
@@ -686,9 +690,9 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "eng-6",
-        label: "P15 draft next + AI/LLM / Anthropic write-up",
-        status: "needs_owner",
-        notes: "Prioritized next policy draft — Month 2 (sooner OK)",
+        label: "P15 draft + AI/LLM / Anthropic write-up",
+        status: "in_progress",
+        notes: "Draft ready 2026-07-27 — awaiting Matt approval",
       },
     ],
   },
@@ -743,8 +747,9 @@ export const complianceSections: ComplianceSection[] = [
       { id: "bar-8", label: "Tenant isolation evidence", status: "open" },
       {
         id: "bar-9",
-        label: "P15 draft next + AI/subprocessor write-up for Anthropic",
-        status: "needs_owner",
+        label: "P15 draft + AI/subprocessor write-up for Anthropic",
+        status: "in_progress",
+        notes: "Draft ready — not approved",
       },
     ],
   },

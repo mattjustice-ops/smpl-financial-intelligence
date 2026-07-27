@@ -19,13 +19,13 @@
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
 | **Week 1** | ~2026-07-22 → 2026-07-29 | **COMPLETE 2026-07-26** — MFA on admin consoles; access inventory first pass; protect `main` + required PR (GitHub ruleset; solo-friendly, approvals may be 0); break-glass = Neon/Railway MFA (no separate login) |
-| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27** (Matt Justice) — approval ≠ SOC 2 certified; open evidence remains. Next: platform decision (explicit Vanta wait date **or** signup); DPA legal path; P15 draft next |
+| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 draft** ready for approval (not approved). Next: DPA legal path; Matt approve P15; boundary/vendor TBDs. Approval ≠ SOC 2 certified |
 | **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; backup restore test evidence; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM subprocessor write-up finalized; security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Week 2 — policies **Approved**. Choose compliance platform **or** write “wait until ____” in the decision log; start consolidated **Customer DPA / MSA** legal path ([P10](./policies/P10_risk_assessment.md) R16); prioritize **P15** AI/LLM draft next. Reminder: approving ≠ SOC 2 certified.
+**Next guided item for Matt:** Start consolidated **Customer DPA / MSA** legal path ([P10](./policies/P10_risk_assessment.md) R16); **approve P15** draft ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)); resolve boundary/vendor TBDs. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -44,17 +44,17 @@
 | `[x]` | Confirm no shared prod passwords | Matt | Week 1 | Confirmed 2026-07-26 — no shared prod passwords |
 | `[x]` | Protect `main` + required PR review | Matt | Week 1 | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
 | `[x]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | **Approved 2026-07-27** by Matt Justice — approval ≠ SOC 2 certified |
-| `[!]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | ← **start here**; no auto-signup |
+| `[x]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | **Deferred DIY 2026-07-27** — docs/soc2 + `/app/compliance`; revisit on enterprise GRC requirement **or** CPA Type I engagement (whichever first) |
 | `[!]` | Confirm boundary matches production | Matt | Week 2–3 | Resolve TBDs in boundary doc |
 | `[!]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | |
 | `[ ]` | First quarterly-style access review sign-off | Matt | Week 3–4 | After MFA verified + inventory stable |
 | `[ ]` | Neon backup **restore test** evidence | Matt | Week 3–4 | Required before Type I |
 | `[ ]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | Plan draft exists; exercise + notes |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) — collection started | Matt | Week 3–4 | Vercel, Railway, Neon, Stripe, Anthropic, Resend, … |
-| `[!]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | Canonical item — also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
+| `[!]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | ← **start here**; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | Test plan + results |
-| `[!]` | **P15 draft next** — AI/LLM Data Handling + Anthropic write-up | Matt | Month 2 (draft sooner OK) | Prioritized next policy draft; referenced from P02/P06/P10 |
+| `[~]` | **P15** AI/LLM Data Handling — draft ready for approval | Matt | Week 2 | [P15 draft](./policies/P15_ai_llm_data_handling.md) 2026-07-27 — **not approved**; Matt review/sign-off next |
 | `[ ]` | Security one-pager **published** for sales | Matt | Month 2 | Draft exists; publish / share under NDA |
 | `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Even approximate; mark TARGET |
 | `[!]` | Audit firm shortlist / engagement | Matt | Month 3–4 | Independent CPA — **TARGET** fieldwork |
@@ -93,7 +93,7 @@ SMPL is **not** “SOC 2 compliant” and is **not** “SOC 2 certified” until
 |-------------------|------------------------|
 | Readiness: design controls, write policies, gather evidence | Claiming compliance or certification |
 | Preparing for a Type I engagement | Issuing or “passing” an audit ourselves |
-| Tracking gaps so Matt can engage an auditor | Signing up for Vanta/Drata unless Matt decides |
+| Tracking gaps so Matt can engage an auditor | Buying Vanta/Drata now (deferred DIY until enterprise GRC req or CPA engagement) |
 
 **Sales language until a report exists:** “We are pursuing SOC 2” / “SOC 2 readiness in progress.” Never “we are SOC 2 certified.”
 
@@ -113,8 +113,8 @@ Type II comes later: after Type I, controls operate over an observation window (
 
 | Phase | Status | Exit criteria |
 |-------|--------|---------------|
-| 1. Kickoff | [~] In progress | Scope **APPROVED** + owners named; scoreboard live — **platform / target month / CPA still open** |
-| 2. Controls live | [~] In progress | Policies **approved** 2026-07-27; MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test / vendor reports / tenant isolation still open |
+| 1. Kickoff | [~] In progress | Scope **APPROVED** + owners named; platform **deferred DIY**; **target month / CPA still open** |
+| 2. Controls live | [~] In progress | Policies **approved** 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test / vendor reports / tenant isolation still open |
 | 3. Type I audit | [ ] Open | CPA firm engaged; fieldwork complete; **Type I report issued** |
 | 4. Type II observation | [ ] Open | Controls operate cleanly over window; Type II report issued |
 
@@ -147,7 +147,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Name security owner | Matt Justice |
 | `[x]` | Name engineering owner | Matt Justice (all roles for now) |
 | `[x]` | Name ops / CS privileged-access owner | Matt Justice (all roles for now) |
-| `[!]` | Compliance platform choice **or** explicit “wait until ____” | **TBD — Matt to decide** (Week 2 target). Do **not** buy until MFA started; **do not sign up for Vanta in this wave** |
+| `[x]` | Compliance platform choice **or** explicit “wait until ____” | **Deferred DIY 2026-07-27** — [00_decision_log.md](./00_decision_log.md). Use docs/soc2 + `/app/compliance`. Triggers (whichever first): paying enterprise requires formal GRC platform **or** CPA Type I engagement |
 | `[!]` | Target Type I month | Even approximate YYYY-MM — **TARGET**, not commitment |
 | `[!]` | Audit firm shortlist / engagement | Independent CPA; platform partner network OK later |
 
@@ -190,7 +190,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt | [policies/](./policies/) P01–P05 |
 | `[x]` | Core policies P01–P12 drafted (approval-ready) | P06–P12 expanded; P07 + P10 created 2026-07-26 |
 | `[x]` | Leadership approve core policies | **Approved 2026-07-27** by Matt Justice — [04_policy_index.md](./04_policy_index.md). Approval ≠ SOC 2 certified; evidence items remain |
-| `[!]` | **P15 draft next** (AI / LLM Data Handling) | Prioritized; not a blocker for P01–P12 approval |
+| `[~]` | **P15** AI / LLM Data Handling — draft ready for approval | [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) — **not approved**; Matt sign-off next |
 
 ### E. Engineering hygiene
 
@@ -201,7 +201,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2 |
 | `[ ]` | Calendar or complete Neon backup **restore test** | Evidence required before Type I — Week 3–4 |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2 |
-| `[!]` | **P15 draft next** + AI/LLM / Anthropic write-up | Prioritized next policy draft — Month 2 (sooner OK) |
+| `[~]` | **P15** draft + AI/LLM / Anthropic write-up | Draft ready 2026-07-27 — awaiting Matt approval |
 
 ### F. Pre–Type I readiness bar (from readiness v2)
 
@@ -217,7 +217,7 @@ Book the auditor only when these are **live**, not merely drafted:
 | `[ ]` | Backup restore test evidence | **Not run** as of 2026-07-27 |
 | `[ ]` | Subprocessor inventory + vendor reports collected | Inventory draft; reports not collected |
 | `[ ]` | Tenant isolation evidence |
-| `[!]` | **P15 draft next** + AI/subprocessor write-up for Anthropic |
+| `[~]` | **P15** draft + AI/subprocessor write-up for Anthropic | Draft ready — not approved |
 
 ### G. Type I → Type II
 
@@ -234,7 +234,7 @@ Book the auditor only when these are **live**, not merely drafted:
 
 Not compliance. No Vanta signup. Not certified.
 
-1. Decision log: scope Sec+Avail+Conf **APPROVED** by Matt; PI + Privacy deferred; **all owners = Matt Justice**; platform TBD
+1. Decision log: scope Sec+Avail+Conf **APPROVED** by Matt; PI + Privacy deferred; **all owners = Matt Justice**; platform later deferred DIY (2026-07-27)
 2. Remaining checklist + solo-founder target timeline published (this section)
 3. P01–P05 expanded; P06 / P08 / P09 / P11 / P12 drafted
 4. Customer-facing [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) (honest pursuing language)
@@ -258,12 +258,12 @@ Not SOC 2 certified. Readiness evidence only.
 
 ## Top `[!]` for Matt (do next)
 
-1. **[!]** Platform: choose Vanta/Drata/etc. **or** write “wait until ____” in decision log ← **Week 2 start here**
-2. **[!]** Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) — P10 R16
-3. **[!]** **P15 draft next** — AI / LLM Data Handling (prioritized; not Type I blocker for approved P01–P12)
-4. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
-5. **[!]** Resolve boundary TBDs / vendor regions
-6. Open evidence (keep honest): restore test **not run** (P12); IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05)
+1. **[!]** Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) — P10 R16 ← **start here**
+2. **[~]** **Approve P15** — AI / LLM Data Handling draft ready ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)); not auto-approved
+3. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
+4. **[!]** Resolve boundary TBDs / vendor regions
+5. Open evidence (keep honest): restore test **not run** (P12); IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05)
+6. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
 
 ---
 
@@ -284,6 +284,14 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 2. **P01–P12 Approved** 2026-07-27 by Matt Justice — approval tables + [04_policy_index.md](./04_policy_index.md)
 3. Incomplete flags left honest: restore test not run; IR tabletop not scheduled; staging / Dependabot not confirmed (P05)
 4. Scoreboard + `/compliance` data synced
+
+## What we checked off 2026-07-27 — Platform deferral + P15 draft
+
+**Not SOC 2 certified.** Drafting P15 ≠ approved policy ≠ CPA Type I report.
+
+1. **Compliance platform deferred DIY** — Matt decided not to buy Vanta/Drata/etc. now; continue with [docs/soc2/](./) + `/app/compliance`. Revisit when **either**: first paying enterprise requires a formal GRC/compliance platform, **or** CPA engagement for Type I (whichever first). Logged in [00_decision_log.md](./00_decision_log.md)
+2. **P15** AI / LLM Data Handling drafted (approval-ready, **not approved**) — [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)
+3. Policy index, P02/P06/P10 cross-refs, scoreboard + `/compliance` data synced
 
 ---
 

@@ -66,6 +66,7 @@ Detailed procedures live in sibling policies. This policy requires that SMPL mai
 | Risk assessment | [P10](./P10_risk_assessment.md) |
 | Business continuity / DR | [P11](./P11_business_continuity_disaster_recovery.md) |
 | Backup & restore | [P12](./P12_backup_and_restore.md) |
+| AI / LLM data handling | [P15](./P15_ai_llm_data_handling.md) (draft — ready for approval; not yet approved) |
 
 ## 6. Risk acceptance
 

@@ -72,7 +72,7 @@ Establish how SMPL identifies, evaluates, treats, and accepts risks that could a
 | R06 | Backup unusable / untested restore | 2 | 3 | 6 | Neon backups + **restore test before Type I** (test **not run** as of 2026-07-27) | Medium until test done | Matt | Mitigate (open) |
 | R07 | Unauthorized privileged / white-glove access | 2 | 3 | 6 | Named operators; inventory; revoke after POC; least privilege | Medium | Matt | Mitigate |
 | R08 | Subprocessor breach or weak vendor controls | 2 | 2 | 4 | Inventory ([../02_subprocessors.md](../02_subprocessors.md)); collect SOC/ISO under NDA; annual review ([P09](./P09_vendor_subprocessor_management.md)) | Medium | Matt | Mitigate (reports open) |
-| R09 | LLM prompt leakage of Confidential metrics | 2 | 2 | 4 | Keys on API only; minimize raw PII; no consumer AI paste ([P02](./P02_acceptable_use_policy.md)); full policy = **P15 draft next** | Low–Medium | Matt | Mitigate |
+| R09 | LLM prompt leakage of Confidential metrics | 2 | 2 | 4 | Keys on API only; minimize raw PII; no consumer AI paste ([P02](./P02_acceptable_use_policy.md)); full policy = [P15](./P15_ai_llm_data_handling.md) (**Draft — ready for approval**, not yet approved) | Low–Medium | Matt | Mitigate |
 | R10 | Magic-link / email compromise → account takeover | 2 | 2 | 4 | MFA on corporate email/IdP; org invites control; treat email as auth factor | Medium | Matt | Mitigate |
 | R11 | Unreviewed production change | 2 | 2 | 4 | Required PR to `main`; documented deploy path ([P05](./P05_change_management_policy.md)) | Low–Medium | Matt | Mitigate (ruleset live) |
 | R12 | Accidental GL/ERP write-back or connector misuse | 1 | 3 | 3 | Product constraint: read-only; prohibit workarounds ([P07](./P07_customer_data_confidentiality_procedures.md)) | Low | Matt | Mitigate / avoid |
@@ -102,7 +102,7 @@ The executive sponsor explicitly accepts for Type I readiness planning:
 | Continuity / backup | [P11](./P11_business_continuity_disaster_recovery.md), [P12](./P12_backup_and_restore.md) |
 | Export job availability | R15 — ThreadPoolExecutor + durable Postgres metadata |
 | Customer DPA / MSA (legal) | R16 — single workstream; [../PROGRESS.md](../PROGRESS.md) |
-| AI / LLM handling | **P15 — draft next** (prioritized; not yet written) |
+| AI / LLM handling | [P15](./P15_ai_llm_data_handling.md) — **Draft — ready for approval** (not yet approved) |
 
 ## 9. Evidence
 
