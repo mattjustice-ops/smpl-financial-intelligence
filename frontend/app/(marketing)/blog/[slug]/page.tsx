@@ -86,9 +86,12 @@ export default async function BlogPostPage({ params }: PageProps) {
   const headings = extractPortableHeadings(post.body);
   const hasToc = headings.length > 0;
 
+  // Desktop: left TOC (14rem) + gap-12 (3rem); keep title/share/article column aligned.
+  const articleOffsetClass = hasToc ? "max-w-3xl lg:ml-[calc(14rem+3rem)]" : "max-w-3xl";
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-16">
-      <div className="max-w-3xl">
+      <div className={articleOffsetClass}>
         <Link
           href="/blog"
           className="text-sm text-slate-400 transition hover:text-teal-300"
@@ -127,7 +130,9 @@ export default async function BlogPostPage({ params }: PageProps) {
       </div>
 
       {imageUrl ? (
-        <div className="mt-8 max-w-3xl overflow-hidden rounded-2xl border border-white/10">
+        <div
+          className={`mt-8 overflow-hidden rounded-2xl border border-white/10 ${articleOffsetClass}`}
+        >
           <Image
             src={imageUrl}
             alt={post.mainImage?.alt || post.title}
@@ -142,22 +147,24 @@ export default async function BlogPostPage({ params }: PageProps) {
       <div
         className={
           hasToc
-            ? "mt-10 lg:grid lg:grid-cols-[minmax(0,42rem)_14rem] lg:items-start lg:justify-between lg:gap-12"
+            ? "mt-10 lg:grid lg:grid-cols-[14rem_minmax(0,42rem)] lg:gap-12"
             : "mt-10 max-w-3xl"
         }
       >
         {hasToc ? (
-          <div className="order-1 lg:order-2">
+          <div className="lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
             <BlogTableOfContents headings={headings} />
           </div>
         ) : null}
 
-        <article className={hasToc ? "order-2 max-w-3xl lg:order-1" : undefined}>
+        <article className={hasToc ? "max-w-3xl" : undefined}>
           <PortableBody value={post.body} headingAnchors />
         </article>
       </div>
 
-      <aside className="mt-14 max-w-3xl rounded-2xl border border-teal-400/20 bg-teal-400/5 px-6 py-6">
+      <aside
+        className={`mt-14 rounded-2xl border border-teal-400/20 bg-teal-400/5 px-6 py-6 ${articleOffsetClass}`}
+      >
         <p className="text-sm font-medium text-teal-200">See it in your close</p>
         <p className="mt-2 text-slate-300">
           Walk through Load → Validate → Lock → Freeze with your own numbers.
