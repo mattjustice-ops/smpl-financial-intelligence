@@ -3,8 +3,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BlogShareControls } from "@/components/blog/BlogShareControls";
+import { BlogTableOfContents } from "@/components/blog/BlogTableOfContents";
 import { PortableBody } from "@/components/sanity/PortableBody";
 import { isSanityConfigured, sanityFetch } from "@/lib/sanity/client";
+import { extractPortableHeadings } from "@/lib/sanity/headings";
 import { urlForImage } from "@/lib/sanity/image";
 import { postBySlugQuery, postSlugsQuery } from "@/lib/sanity/queries";
 import type { SanityPost } from "@/lib/sanity/types";
@@ -79,41 +82,52 @@ export default async function BlogPostPage({ params }: PageProps) {
 
   const date = formatDate(post.publishedAt);
   const imageUrl = urlForImage(post.mainImage)?.width(1400).height(788).url();
+  const pageUrl = sitePageUrl(`/blog/${post.slug}`);
+  const headings = extractPortableHeadings(post.body);
+  const hasToc = headings.length > 0;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <Link
-        href="/blog"
-        className="text-sm text-slate-400 transition hover:text-teal-300"
-      >
-        ← Blog
-      </Link>
+    <main className="mx-auto max-w-6xl px-6 py-16">
+      <div className="max-w-3xl">
+        <Link
+          href="/blog"
+          className="text-sm text-slate-400 transition hover:text-teal-300"
+        >
+          ← Blog
+        </Link>
 
-      <header className="mt-6">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-          {date ? <time dateTime={post.publishedAt || undefined}>{date}</time> : null}
-          {post.categories?.map((cat) => (
-            <span key={cat.slug} className="text-teal-300/80">
-              {cat.title}
-            </span>
-          ))}
+        <header className="mt-6">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+            {date ? (
+              <time dateTime={post.publishedAt || undefined}>{date}</time>
+            ) : null}
+            {post.categories?.map((cat) => (
+              <span key={cat.slug} className="text-teal-300/80">
+                {cat.title}
+              </span>
+            ))}
+          </div>
+          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white md:text-5xl">
+            {post.title}
+          </h1>
+          {post.excerpt ? (
+            <p className="mt-4 text-lg text-slate-400">{post.excerpt}</p>
+          ) : null}
+          {post.author?.name ? (
+            <p className="mt-4 text-sm text-slate-500">
+              {post.author.name}
+              {post.author.role ? ` · ${post.author.role}` : ""}
+            </p>
+          ) : null}
+        </header>
+
+        <div className="mt-6">
+          <BlogShareControls title={post.title} url={pageUrl} />
         </div>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white md:text-5xl">
-          {post.title}
-        </h1>
-        {post.excerpt ? (
-          <p className="mt-4 text-lg text-slate-400">{post.excerpt}</p>
-        ) : null}
-        {post.author?.name ? (
-          <p className="mt-4 text-sm text-slate-500">
-            {post.author.name}
-            {post.author.role ? ` · ${post.author.role}` : ""}
-          </p>
-        ) : null}
-      </header>
+      </div>
 
       {imageUrl ? (
-        <div className="mt-8 overflow-hidden rounded-2xl border border-white/10">
+        <div className="mt-8 max-w-3xl overflow-hidden rounded-2xl border border-white/10">
           <Image
             src={imageUrl}
             alt={post.mainImage?.alt || post.title}
@@ -125,11 +139,25 @@ export default async function BlogPostPage({ params }: PageProps) {
         </div>
       ) : null}
 
-      <article className="mt-10">
-        <PortableBody value={post.body} />
-      </article>
+      <div
+        className={
+          hasToc
+            ? "mt-10 lg:grid lg:grid-cols-[minmax(0,42rem)_14rem] lg:items-start lg:justify-between lg:gap-12"
+            : "mt-10 max-w-3xl"
+        }
+      >
+        {hasToc ? (
+          <div className="order-1 lg:order-2">
+            <BlogTableOfContents headings={headings} />
+          </div>
+        ) : null}
 
-      <aside className="mt-14 rounded-2xl border border-teal-400/20 bg-teal-400/5 px-6 py-6">
+        <article className={hasToc ? "order-2 max-w-3xl lg:order-1" : undefined}>
+          <PortableBody value={post.body} headingAnchors />
+        </article>
+      </div>
+
+      <aside className="mt-14 max-w-3xl rounded-2xl border border-teal-400/20 bg-teal-400/5 px-6 py-6">
         <p className="text-sm font-medium text-teal-200">See it in your close</p>
         <p className="mt-2 text-slate-300">
           Walk through Load → Validate → Lock → Freeze with your own numbers.
