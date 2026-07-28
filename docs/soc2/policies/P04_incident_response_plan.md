@@ -42,13 +42,14 @@ Examples (not exhaustive):
 - Accidental cross-tenant data exposure
 - Subprocessor breach that may affect SMPL customers
 - Exposure of secrets in git, logs, or public channels
+- AI-generated commentary or narrative reaching a customer with a claim that does not resolve to verified engine/warehouse evidence (see P15 §4.7)
 
 ## 4. Severity (working model)
 
 | Severity | Example | Response target (draft) |
 |----------|---------|-------------------------|
 | Sev1 | Confirmed breach of customer data; total prod outage | Immediate; eng + exec engaged |
-| Sev2 | Likely compromise; major degradation | Same business day |
+| Sev2 | Likely compromise; major degradation; or a hallucinated/incorrect AI-generated financial claim delivered to a customer | Same business day |
 | Sev3 | Limited impact; contained quickly | Next business day triage |
 | Sev4 | Suspicious event; no confirmed impact | Track and investigate |
 
@@ -69,6 +70,7 @@ Examples (not exhaustive):
 | Suspected cross-tenant leak | Disable affected feature/path; snapshot evidence; notify exec; assess customer impact |
 | Provider outage (Vercel/Railway/Neon) | Check status pages; communicate; failover only if pre-documented |
 | Secret in git | Rotate immediately; purge history if needed; treat as Sev2+ |
+| AI hallucination reaching customer | Identify affected output(s) and customer(s); issue corrected output; document root cause (grounding gap vs. review-step miss); assess whether commentary should be paused pending fix |
 
 ## 6. Evidence to keep
 

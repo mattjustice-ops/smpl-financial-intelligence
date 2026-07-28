@@ -98,9 +98,9 @@ Priority order — full list in [04_policy_index.md](./soc2/04_policy_index.md):
 11. Business Continuity / DR — **Approved 2026-07-27:** [soc2/policies/P11_business_continuity_disaster_recovery.md](./soc2/policies/P11_business_continuity_disaster_recovery.md)
 12. Backup & Restore — **Approved 2026-07-27:** [soc2/policies/P12_backup_and_restore.md](./soc2/policies/P12_backup_and_restore.md)
 
-**Next policy action:** **Approve P15** AI / LLM Data Handling draft — [soc2/policies/P15_ai_llm_data_handling.md](./soc2/policies/P15_ai_llm_data_handling.md) (draft ready; **not** auto-approved).
+**Next policy action:** P13–P14, P16–P17 as needed. **P15** AI / LLM Data Handling — **Approved 2026-07-28:** [soc2/policies/P15_ai_llm_data_handling.md](./soc2/policies/P15_ai_llm_data_handling.md).
 
-Still open later: P15 approval, plus P13–P14, P16–P17.
+Still open later: P13–P14, P16–P17.
 
 Compliance platform templates are fine later if/when a GRC tool is purchased; customize for SMPL (multi-tenant financial warehouse, white-glove loads, no GL write-back).
 

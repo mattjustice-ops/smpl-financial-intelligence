@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-27",
+  lastUpdated: "2026-07-28",
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 draft ready (not approved). Next: DPA legal path; approve P15. Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. Next: DPA legal path. Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,7 +91,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved; platform deferred DIY 2026-07-27; P15 draft ready (not approved); DPA legal path next",
+      "P01–P12 Approved; platform deferred DIY 2026-07-27; P15 Approved 2026-07-28; DPA legal path next",
   },
   {
     id: "week-3-4",
@@ -105,7 +105,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Month 2",
     approxDates: "~2026-08-19 → 2026-09-19",
     focus:
-      "Controls habitually running; secrets spot-check; tenant isolation evidence; AI/LLM write-up finalized; security one-pager published for sales",
+      "Controls habitually running; secrets spot-check; tenant isolation evidence; AI/LLM write-up (P15 Approved 2026-07-28); security one-pager published for sales",
   },
   {
     id: "month-3-4",
@@ -307,12 +307,12 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-ai-writeup",
-    label: "P15 AI/LLM Data Handling — draft ready for approval",
-    status: "in_progress",
+    label: "P15 AI/LLM Data Handling — Approved",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 2",
     notes:
-      "Draft 2026-07-27 — not approved; Matt review/sign-off next (docs/soc2/policies/P15_ai_llm_data_handling.md)",
+      "Approved 2026-07-28 by Matt Justice (docs/soc2/policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified",
   },
   {
     id: "rem-one-pager-publish",
@@ -375,7 +375,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
+      "Policies approved (P01–P12 2026-07-27; P15 2026-07-28); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -621,7 +621,7 @@ export const complianceSections: ComplianceSection[] = [
     id: "policies",
     name: "D. Policies",
     summary:
-      "P01–P12 Approved 2026-07-27 by Matt Justice. Approval ≠ SOC 2 certified. P15 draft ready for approval (not approved).",
+      "P01–P12 Approved 2026-07-27 by Matt Justice. P15 Approved 2026-07-28. Approval ≠ SOC 2 certified.",
     items: [
       { id: "pol-1", label: "Policy index", status: "done" },
       {
@@ -646,10 +646,10 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "pol-5",
-        label: "P15 AI / LLM Data Handling — draft ready for approval",
-        status: "in_progress",
+        label: "P15 AI / LLM Data Handling — Approved",
+        status: "done",
         notes:
-          "Draft 2026-07-27 — not approved; Matt sign-off next",
+          "Approved 2026-07-28 by Matt Justice — approval ≠ SOC 2 certified",
       },
     ],
   },
@@ -693,9 +693,9 @@ export const complianceSections: ComplianceSection[] = [
       },
       {
         id: "eng-6",
-        label: "P15 draft + AI/LLM / Anthropic write-up",
-        status: "in_progress",
-        notes: "Draft ready 2026-07-27 — awaiting Matt approval",
+        label: "P15 + AI/LLM / Anthropic write-up",
+        status: "done",
+        notes: "Approved 2026-07-28 by Matt Justice",
       },
     ],
   },
@@ -751,9 +751,9 @@ export const complianceSections: ComplianceSection[] = [
       { id: "bar-8", label: "Tenant isolation evidence", status: "open" },
       {
         id: "bar-9",
-        label: "P15 draft + AI/subprocessor write-up for Anthropic",
-        status: "in_progress",
-        notes: "Draft ready — not approved",
+        label: "P15 + AI/subprocessor write-up for Anthropic",
+        status: "done",
+        notes: "Approved 2026-07-28 by Matt Justice",
       },
     ],
   },

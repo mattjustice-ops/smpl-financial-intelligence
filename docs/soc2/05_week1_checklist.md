@@ -67,7 +67,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] Security one-pager drafted (encryption, tenant isolation, no GL write-back, auth model, AI keys on API)
 - [x] **Approve** core policy drafts (P01–P12) — Matt — **Approved 2026-07-27** (approval ≠ SOC 2 certified)
 - [x] Align external language with “pursuing” only — documented in kickoff + PROGRESS + one-pager
-- [~] **P15** AI / LLM Data Handling — draft ready for approval ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)); **not approved**
+- [x] **P15** AI / LLM Data Handling — **Approved 2026-07-28** ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md))
 
 ---
 

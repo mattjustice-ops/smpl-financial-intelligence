@@ -21,7 +21,7 @@ SMPL.ai is a B2B SaaS financial intelligence platform (FP&A / ARR / close / boar
 |-------|----------------|
 | SOC 2 | **Readiness in progress** toward Type I (Security + Availability + Confidentiality). Processing Integrity deferred. Privacy not in first engagement. |
 | Certification | **None yet** — no CPA report issued |
-| Policies | P01–P12 approved internally (2026-07-27); P15 AI/LLM draft in review. Approving policies ≠ SOC 2 certified |
+| Policies | P01–P12 approved internally (2026-07-27); P15 AI/LLM approved (2026-07-28). Approving policies ≠ SOC 2 certified |
 | Compliance platform | Deferred DIY for now (internal docs + scoreboard); revisit if enterprise requires a formal GRC tool or at CPA Type I engagement |
 
 ---

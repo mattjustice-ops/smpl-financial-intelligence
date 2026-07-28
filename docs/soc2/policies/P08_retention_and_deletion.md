@@ -43,6 +43,7 @@ Retention periods below remain **working defaults** until contractual language i
 | White-glove staging files | Delete after successful load or POC close (target ≤ 30 days) | Local/ops copies — do not keep indefinitely |
 | Backups | Per Neon / provider backup window | Restore tests under [P12](./P12_backup_and_restore.md); honest lag after deletion |
 | Application / deploy logs | Provider defaults (Vercel, Railway) | Avoid logging secrets or full Confidential dumps |
+| AI prompt / debug logs (Confidential) | ≤ 30 days, then delete or truncate of Confidential content | Debug/troubleshooting only; not the system of record for numbers; see P15 §5 |
 | Billing records | Per Stripe + legal/tax needs | Stripe is system of record for payments |
 | Security / IR records | ≥ 1 year or longer if investigation open | Timeline notes, access reviews |
 | Marketing CMS (Sanity) | While published / needed | Boundary TBD if customer-named |
