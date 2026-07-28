@@ -20,6 +20,38 @@ const nextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      // Next/Vercel can serve `/` at `/index` (x-matched-path: /) — collapse to the
+      // www homepage so Google does not treat it as a duplicate URL.
+      { source: "/index", destination: "/", permanent: true },
+      { source: "/index.html", destination: "/", permanent: true },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/board/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
+        source: "/board-sample",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }],
+      },
+      {
+        source: "/board-sample/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }],
+      },
+      {
+        source: "/forecast-engine/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
+        source: "/studio/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+    ];
+  },
   async rewrites() {
     if (process.env.VERCEL && isLocalBackend) {
       console.warn(

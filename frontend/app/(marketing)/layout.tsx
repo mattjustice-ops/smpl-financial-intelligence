@@ -1,27 +1,20 @@
 import type { Metadata } from "next";
 
 import { LandingHeader } from "@/components/landing/LandingHeader";
-import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_TITLE } from "@/lib/site";
 import "./landing.css";
 
-/** Defaults for marketing routes; homepage inherits these. Child pages override. */
+/**
+ * Shared marketing chrome + soft defaults.
+ * Do not set alternates.canonical here — every indexable route must declare its
+ * own absolute canonical (homepage included via page.tsx). A layout-level
+ * homepage canonical made child URLs look like duplicates of `/`.
+ */
 export const metadata: Metadata = {
   title: {
     absolute: SITE_TITLE,
   },
   description: SITE_DESCRIPTION,
-  alternates: {
-    canonical: SITE_URL,
-  },
-  openGraph: {
-    title: SITE_TITLE,
-    description: SITE_DESCRIPTION,
-    url: SITE_URL,
-  },
-  twitter: {
-    title: SITE_TITLE,
-    description: SITE_DESCRIPTION,
-  },
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {

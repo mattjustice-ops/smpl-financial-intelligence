@@ -30,7 +30,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     null,
   );
   if (!post) {
-    return { title: { absolute: `Post not found | ${SITE_NAME}` } };
+    return {
+      title: { absolute: `Post not found | ${SITE_NAME}` },
+      robots: { index: false, follow: false },
+    };
   }
   const title = post.seoTitle?.trim() || `${post.title} | ${SITE_NAME}`;
   const description =

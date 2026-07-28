@@ -29,7 +29,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     null,
   );
   if (!term) {
-    return { title: { absolute: `Term not found | ${SITE_NAME}` } };
+    return {
+      title: { absolute: `Term not found | ${SITE_NAME}` },
+      robots: { index: false, follow: false },
+    };
   }
   const title = `${term.term} | Glossary | ${SITE_NAME}`;
   const description = term.shortDefinition;
