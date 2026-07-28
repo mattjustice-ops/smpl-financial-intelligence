@@ -57,3 +57,4 @@ One person may hold multiple roles; still write the names so accountability is c
 | 2026-07-22 | Confirmed scope Sec+Avail+Conf; PI deferred; Privacy skip; all named owners → Matt Justice; platform left TBD (Matt to decide) | Agent (compliance checklist wave) |
 | 2026-07-22 | **Scope frozen APPROVED** by Matt Justice; owners all Matt; platform/CPA/target month still open | Agent (Matt-approved scope lock) |
 | 2026-07-27 | **Platform deferred DIY** — no Vanta/Drata/etc. now; use docs/soc2 + `/app/compliance`; revisit on first paying enterprise requiring formal GRC platform **or** CPA Type I engagement (whichever first) | Matt Justice (decision); Agent (log) |
+| 2026-07-28 | **DPA/MSA outline drafted** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) for counsel review. P10 R16 remains **open** (outline ≠ signed DPA). Not legal advice; not SOC 2 certified. | Agent (Week 2 #1); Matt next: counsel |

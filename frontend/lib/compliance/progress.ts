@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. Next: DPA legal path. Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. DPA/MSA outline drafted (awaiting counsel; R16 open). Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,14 +91,14 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved; platform deferred DIY 2026-07-27; P15 Approved 2026-07-28; DPA legal path next",
+      "P01–P12 Approved; platform deferred DIY 2026-07-27; P15 Approved 2026-07-28; DPA/MSA outline drafted (awaiting counsel)",
   },
   {
     id: "week-3-4",
     window: "Week 3–4",
     approxDates: "~2026-08-05 → 2026-08-19",
     focus:
-      "Access review #1 signed; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA legal path",
+      "Access review #1 signed; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA outline → counsel redline",
   },
   {
     id: "month-2",
@@ -286,10 +286,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-dpa",
     label: "Customer DPA / MSA — single legal workstream (privacy, retention, subprocessors)",
-    status: "needs_owner",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 3–4",
-    notes: "← start here — also P10 R16; P07/P08/P09 cross-ref only",
+    notes:
+      "Outline drafted 2026-07-28 (docs/soc2/legal/DPA_MSA_OUTLINE.md); awaiting counsel — R16 not closed; P07/P08/P09 cross-ref only",
   },
   {
     id: "rem-secrets",
@@ -520,8 +521,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bv-7",
         label: "Customer DPA / MSA — single legal workstream",
-        status: "needs_owner",
-        notes: "Also P10 R16 — covers privacy/retention/subprocessors formerly flagged in P07–P09",
+        status: "in_progress",
+        notes:
+          "Outline drafted 2026-07-28 (docs/soc2/legal/DPA_MSA_OUTLINE.md); awaiting counsel — P10 R16 not closed",
       },
       {
         id: "bv-8",

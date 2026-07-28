@@ -19,13 +19,13 @@
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
 | **Week 1** | ~2026-07-22 → 2026-07-29 | **COMPLETE 2026-07-26** — MFA on admin consoles; access inventory first pass; protect `main` + required PR (GitHub ruleset; solo-friendly, approvals may be 0); break-glass = Neon/Railway MFA (no separate login) |
-| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 Approved 2026-07-28**. Next: DPA legal path; boundary/vendor TBDs. Approval ≠ SOC 2 certified |
-| **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; **backup restore test Pass 2026-07-27**; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
+| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 Approved 2026-07-28**; **DPA/MSA outline drafted** (awaiting counsel). Boundary/vendor TBDs still open. Approval ≠ SOC 2 certified |
+| **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; **backup restore test Pass 2026-07-27**; IR tabletop notes; vendor SOC report collection started; DPA outline → counsel redline / customer-ready draft |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM write-up (**P15 Approved 2026-07-28**); security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Start consolidated **Customer DPA / MSA** legal path ([P10](./policies/P10_risk_assessment.md) R16); resolve boundary/vendor TBDs. **P15 Approved** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
+**Next guided item for Matt:** Send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel for redline (R16 still open — outline ≠ signed DPA); resolve boundary/vendor TBDs. **P15 Approved** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -51,7 +51,7 @@
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[ ]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | Plan draft exists; exercise + notes |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) — collection started | Matt | Week 3–4 | Vercel, Railway, Neon, Stripe, Anthropic, Resend, … |
-| `[!]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | ← **start here**; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
+| `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Outline drafted 2026-07-28** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel. R16 **not** closed; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | Test plan + results |
 | `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** by Matt Justice — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
@@ -161,7 +161,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Subprocessors named list draft | [02_subprocessors.md](./02_subprocessors.md) |
 | `[!]` | Confirm regions / unused vendors; mark OpenAI if live | Matt |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) | Collect Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc. |
-| `[!]` | Customer DPA / MSA — **single legal workstream** | Sales unblocker; counsel as needed — also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
+| `[~]` | Customer DPA / MSA — **single legal workstream** | **Outline drafted** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel. R16 open until customer-ready / signed path. Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
 | `[x]` | Security one-pager (draft) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) — honest “pursuing SOC 2”; not certified. Publish for sales = Month 2 |
 
 ### C. Access hardening (Matt / ops)
@@ -258,7 +258,7 @@ Not SOC 2 certified. Readiness evidence only.
 
 ## Top `[!]` for Matt (do next)
 
-1. **[!]** Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) — P10 R16 ← **start here**
+1. **[~]** Customer DPA / MSA — outline drafted ([legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md)); send to counsel — P10 R16 **still open**
 2. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
 3. **[!]** Resolve boundary TBDs / vendor regions
 4. Open evidence (keep honest): IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05). Restore test **Pass** 2026-07-27 (P12). **P15 Approved** 2026-07-28
@@ -319,6 +319,15 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 2. Companion: P04 incident type + Sev2 + containment row for AI hallucination reaching a customer; P08 retention row for AI prompt/debug logs
 3. **P15 Approved** 2026-07-28 by Matt Justice — approval table + [04_policy_index.md](./04_policy_index.md)
 4. Cross-refs (P01/P02/P06/P09/P10), scoreboard + `/compliance` data synced
+
+## What we checked off 2026-07-28 — Customer DPA / MSA outline (R16 started)
+
+**Not SOC 2 certified.** Outline ≠ signed DPA ≠ legal advice. R16 remains open until counsel-ready / customer-offerable agreement.
+
+1. Drafted counsel-ready outline — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) (parties/roles, processing, subprocessors, TOMs, breach, retention/immutability distinction, AI no-training, MSA pointers, exhibits)
+2. Pulled from P07/P08/P09/P15, subprocessors list, security one-pager, Trust & Security positioning; no invented certifications
+3. Scoreboard + `/compliance` data: DPA workstream → **in progress** (awaiting counsel); R16 **not** closed
+4. Decision log note + P10 R16 treatment note updated
 
 ---
 

@@ -64,6 +64,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 
 - [x] Open [04_policy_index.md](./04_policy_index.md); **P01–P12 Approved 2026-07-27** by Matt Justice in [policies/](./policies/)
 - [!] Kick off Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) — counsel — **Week 3–4** (also P10 R16)
+  - **[~]** Outline drafted 2026-07-28 — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel (R16 not closed)
 - [x] Security one-pager drafted (encryption, tenant isolation, no GL write-back, auth model, AI keys on API)
 - [x] **Approve** core policy drafts (P01–P12) — Matt — **Approved 2026-07-27** (approval ≠ SOC 2 certified)
 - [x] Align external language with “pursuing” only — documented in kickoff + PROGRESS + one-pager
