@@ -74,15 +74,15 @@ Vendors that process or store customer-related data in delivering the service ty
 |--------|------|
 | Vercel | Host customer-facing application |
 | Railway | Host API / application services |
-| Neon | Managed Postgres datastore |
+| Neon | Managed Postgres datastore (AWS us-east-1) |
 | Resend | Transactional email (e.g. magic links) |
 | Anthropic | LLM API for commentary features |
 | Stripe | Billing / subscriptions |
 | GitHub | Source control and CI (code; not customer warehouse dumps) |
-| Sanity | Marketing CMS (blog/glossary); Type I boundary in/out pending confirmation |
-| Squarespace | Domain DNS for smpl-ai.com (not the application host) |
 
-A fuller internal list lives in `docs/soc2/02_subprocessors.md`. Regions and unused vendors are confirmed as part of readiness. Customer DPA / legal exhibit is a separate legal workstream.
+**Not on product Customer Data exhibit:** Sanity (marketing CMS only); HubSpot (sales CRM only); Squarespace (DNS-only for smpl-ai.com). OpenAI and APM/analytics are **not** live in production.
+
+A fuller internal list lives in `docs/soc2/02_subprocessors.md`. Neon region confirmed; other vendor regions remain TBD. Customer DPA / legal exhibit is a separate legal workstream.
 
 ---
 

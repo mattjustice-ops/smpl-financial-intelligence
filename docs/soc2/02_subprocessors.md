@@ -6,54 +6,53 @@ Collect each vendor’s SOC 2 / ISO report under NDA where available. Review cad
 
 Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Boundary: [01_system_boundary.md](./01_system_boundary.md) · Scoreboard: [PROGRESS.md](./PROGRESS.md)
 
-**Status (2026-07-28):** Named list aligned to **known-good production** stack. Regions left **TBD** unless confirmed from evidence/console. Do **not** publish externally until Matt answers Q1–Q10 in the boundary doc. **Not** SOC 2 certified.
+**Status (2026-07-28):** Named Customer Data list locked from Matt Q1–Q10. **Neon = AWS us-east-1**; **other vendor regions remain TBD** (do not invent). Sanity / HubSpot / OpenAI / APM **not** on product Customer Data exhibit. **Not** SOC 2 certified.
 
 ---
 
-## Active / expected subprocessors (production)
+## Active Customer Data subprocessors (production product DPA exhibit)
 
 | Vendor | Purpose | Data typically involved | Region / notes | Vendor report collected? |
 |--------|---------|-------------------------|----------------|--------------------------|
 | **Vercel** | Host customer-facing Next.js app / edge (`www.smpl-ai.com`, project `smpl-financial-intelligence`) | Session cookies, app traffic, env-held secrets | **TBD** — confirm plan / deployment region in Vercel console | [ ] |
 | **Railway** | Host FastAPI (`sfi-api-production`) | API traffic, app logs, env-held secrets (incl. LLM keys) | **TBD** — confirm service region in Railway console | [ ] |
-| **Neon** | Managed Postgres (`smpl-auth-prod` / branch `production`) | Customer financial facts, auth/org data | **AWS us-east-1** — from restore evidence endpoint hostname (`*.us-east-1.aws.neon.tech`); Matt confirm Q5 | [ ] |
+| **Neon** | Managed Postgres (`smpl-auth-prod` / branch `production`) | Customer financial facts, auth/org data | **AWS us-east-1** — confirmed Matt Q5 (2026-07-28); restore evidence `*.us-east-1.aws.neon.tech` | [ ] |
 | **Resend** | Transactional email (magic links, notifications) | Email addresses, message content | **TBD** | [ ] |
 | **Anthropic** | LLM API for AI narrative / commentary | Prompt context derived from engine outputs (may include customer metrics) | Keys on Railway only; not in browser. Processing region **TBD** | [ ] |
 | **Stripe** | Billing / subscriptions | Billing contact, payment metadata (card data via Stripe) | **TBD** | [ ] |
 | **GitHub** | Source control, CI (may hold secrets config, not customer warehouse) | Code, CI logs; avoid customer dumps in repos | **TBD** / provider multi-region | [ ] |
-| **Sanity** | CMS (blog / glossary / studio) — project `sda23ulo`, dataset `production` | Marketing content; confirm if any customer-named content | Region **TBD**. **Boundary TBD — Matt Q1** (keep on list until NO) | [ ] |
 
 **Auth.js** is application software running on Vercel — not a separate subprocessor vendor.
 
+Matt Q10 **NO** (2026-07-28): no other production vendors process Customer Data beyond this known stack.
+
 ---
 
-## Infrastructure (usually not “Customer Data” subprocessors)
+## Infrastructure / marketing (not Customer Data subprocessors for product DPA)
 
 | Vendor | Purpose | Status |
 |--------|---------|--------|
-| **Squarespace** | DNS / domain admin for `smpl-ai.com` | Confirmed MFA’d; expect **DNS-only** (Matt Q8). Omit from DPA Customer Data exhibit if YES DNS-only; still inventoriable for access |
+| **Squarespace** | DNS / domain admin for `smpl-ai.com` | **DNS-only** (Matt Q8 **YES** 2026-07-28). Omit from DPA Customer Data exhibit; still inventoriable for access |
+| **Sanity** | Marketing CMS (blog / glossary / studio) — project `sda23ulo`, dataset `production` | **Outside Type I product boundary** (Matt Q1 **NO**). Marketing/website vendor only — not Customer Data subprocessor for product DPA. Region **TBD** if ever listed for questionnaires |
+| **HubSpot** | SMPL sales CRM / request-quote (prospect data) | **Sales CRM only** (Matt Q7 **NO**) — not on customer product DPA exhibit; may appear on security questionnaires as org tool |
 
 ---
 
-## Conditional / confirm before publishing externally
-
-| Vendor | Purpose | Status |
-|--------|---------|--------|
-| **OpenAI** (or other LLM) | Code supports fallback if key set; production deploy docs use **Anthropic** | **TBD — Matt Q2**. Add only if live on production Railway |
-| **HubSpot** | SMPL sales CRM / request-quote sync (prospect data) | **TBD — Matt Q7**. Often org tool; may appear on questionnaires |
-| Google Workspace / Microsoft 365 | Corporate email / IdP | Org tool; often listed in security questionnaire |
-| Error / APM tooling | e.g. Sentry — if enabled with request context | **TBD — Matt Q6** |
-| Product analytics | If capturing user PII | **TBD — Matt Q6 / Q10** |
-| Staging hosts (`sfi-api-staging`, Vercel Preview, other Neon projects) | Non-prod | **TBD — Matt Q3**. Not the Type I production system; document if they hold Customer Data |
-
----
-
-## Explicitly unused / do not list (until evidence of use)
+## Explicitly unused / do not list on product DPA
 
 | Party | Why |
 |-------|-----|
-| OpenAI | **Do not list on external DPA** until Matt confirms live in production (Q2) |
-| Invented “US-only” claims for Vercel/Railway/etc. | Regions **TBD** — do not promise geography without console confirmation |
+| **OpenAI** | **Not live** on production Railway (Matt Q2 **NO** 2026-07-28). Code-only fallback — omit from external Customer Data list until live |
+| **Error / APM / product analytics** (e.g. Sentry, PostHog) | **None** live in prod app with request/user context (Matt Q6 **NO**) |
+| Invented “US-only” claims for Vercel/Railway/etc. | Regions **TBD** except Neon us-east-1 — do not promise geography without console confirmation |
+
+---
+
+## Non-prod (not Type I production system)
+
+| Environment | Status |
+|-------------|--------|
+| Staging / Preview (`sfi-api-staging`, Vercel Preview, related non-prod) | **Exists**; holds **no Customer Data** (Matt Q3 2026-07-28). Out of Type I production system; still under change/access policy |
 
 ---
 
@@ -66,18 +65,18 @@ Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Boundary: [01_sy
 
 ---
 
-## Matt region confirmation checklist (fill — leave TBD if unknown)
+## Region confirmation checklist
 
 | Vendor | Confirmed region / note | Confirmed by / date |
 |--------|-------------------------|---------------------|
-| Neon | AWS us-east-1 (evidence 2026-07-27) — pending Matt Q5 | |
+| Neon | **AWS us-east-1** | Matt Q5 **YES** 2026-07-28 (evidence 2026-07-27) |
 | Vercel | **TBD** | |
 | Railway | **TBD** | |
 | Resend | **TBD** | |
 | Anthropic | **TBD** | |
 | Stripe | **TBD** | |
-| Sanity | **TBD** | |
 | GitHub | **TBD** / multi-region OK | |
+| Sanity (marketing only) | **TBD** — not on product DPA | Matt Q1 **NO** (boundary) |
 
 ---
 
@@ -87,3 +86,4 @@ Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Boundary: [01_sy
 |------|--------|-------|
 | 2026-07-22 | Initial named list from SMPL stack; regions marked for Matt confirm | Kickoff |
 | 2026-07-28 | Aligned to production hosts; Neon us-east-1 from restore evidence; OpenAI/HubSpot/APM/staging conditional; no invented regions | Agent (Week 2 vendors) |
+| 2026-07-28 | **Matt Q1–Q10 locked** — Sanity/HubSpot off product DPA; OpenAI/APM unused; staging exists (no Customer Data); Neon us-east-1 confirmed; other regions remain TBD | Matt Justice (answers); Agent (docs) |

@@ -32,9 +32,9 @@ Maintain [../02_subprocessors.md](../02_subprocessors.md). Current named process
 | Anthropic | LLM commentary API |
 | Stripe | Billing |
 | GitHub | Source control / CI |
-| Sanity | CMS (boundary TBD if customer-named) |
+| Sanity | Marketing CMS only — **outside** product Customer Data DPA (Matt Q1 2026-07-28) |
 
-Conditional vendors (OpenAI fallback, APM, analytics) are added only if live in production.
+Conditional vendors (OpenAI fallback, APM, analytics) are added only if live in production. As of **2026-07-28**: OpenAI **not** live; no APM/analytics with user context in prod (Matt Q2/Q6).
 
 ## 3. Onboarding a new subprocessor
 
@@ -49,7 +49,7 @@ Conditional vendors (OpenAI fallback, APM, analytics) are added only if live in 
 - At least **annually** for material processors, or on material change (region, product use, breach news).
 - Track “vendor report collected?” in the subprocessors table.
 - Remove unused vendors from the active list when confirmed unused.
-- **[!]** Confirm regions / unused vendors / whether OpenAI is live (Week 2–3 checklist).
+- **[x]** Unused vendors / OpenAI / Neon region confirmed 2026-07-28 (Matt Q1–Q10). **Other vendor regions remain TBD** — do not invent.
 
 ## 5. Customer commitments
 

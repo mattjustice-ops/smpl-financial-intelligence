@@ -121,16 +121,15 @@ Source of truth for diligence: [02_subprocessors.md](../02_subprocessors.md). **
 |--------|-----------------------------------|
 | **Vercel** | Host customer-facing web application |
 | **Railway** | Host API / application services |
-| **Neon** | Managed Postgres (warehouse + auth/org data) |
+| **Neon** | Managed Postgres (warehouse + auth/org data) — AWS us-east-1 |
 | **Resend** | Transactional email (e.g. magic links, notifications) |
 | **Anthropic** | LLM API for AI narrative / commentary |
 | **Stripe** | Billing / subscriptions |
 | **GitHub** | Source control and CI (code/CI; not customer warehouse dumps) |
-| **Sanity** | Marketing CMS (blog/glossary); confirm before treating as Customer Data processor |
 
-**Conditional (add only if live in production):** OpenAI or other LLM fallback; error/APM tooling with request context; product analytics capturing user PII.
+**Not Customer Data subprocessors for product DPA (Matt 2026-07-28):** Sanity (marketing CMS); HubSpot (sales CRM); Squarespace (DNS-only); OpenAI (not live); APM/analytics (none in prod).
 
-**Explicitly not subprocessors (typical):** Customer’s ERP/CRM; recipients of Customer-controlled exports.
+**Do not invent regions** for Vercel/Railway/Resend/Stripe/Anthropic/GitHub — leave TBD until console-confirmed. See [01_system_boundary.md](../01_system_boundary.md) (Q1–Q10 locked) and [02_subprocessors.md](../02_subprocessors.md).
 
 ### D.2 Change notification (counsel to set periods)
 
@@ -210,7 +209,7 @@ Upon Customer’s written request after offboarding deletion is complete, SMPL p
 
 ## H. International transfers
 
-**Known posture:** US-oriented B2B SaaS; production stack includes Vercel (`www.smpl-ai.com`), Railway (`sfi-api-production`), Neon (`smpl-auth-prod`), Stripe, Resend, Anthropic, Sanity, GitHub. Neon evidence points to **AWS us-east-1**; **other hosting regions remain TBD** in the subprocessors inventory — confirm before promising “US-only.” See [01_system_boundary.md](../01_system_boundary.md) Matt Q1–Q10.
+**Known posture:** US-oriented B2B SaaS; production Customer Data stack includes Vercel (`www.smpl-ai.com`), Railway (`sfi-api-production`), Neon (`smpl-auth-prod`), Stripe, Resend, Anthropic, GitHub. Neon confirmed **AWS us-east-1** (Matt Q5 2026-07-28); **other hosting regions remain TBD** — confirm before promising “US-only.” Sanity/HubSpot are not product Customer Data subprocessors. See [01_system_boundary.md](../01_system_boundary.md) (Q1–Q10 locked) and [02_subprocessors.md](../02_subprocessors.md).
 
 **Counsel guidance requested:**
 
@@ -240,7 +239,7 @@ Align to [P15](../policies/P15_ai_llm_data_handling.md) and Trust & Security pos
 | Commitment (draft theme) | Honest boundary |
 |--------------------------|-----------------|
 | **No foundation-model training on Customer Data by SMPL** | SMPL does not use Customer content to train foundation models |
-| LLM provider is a **subprocessor** | Today: **Anthropic**; OpenAI only if live |
+| LLM provider is a **subprocessor** | Today: **Anthropic** only (OpenAI **not** live on prod Railway as of 2026-07-28) |
 | **Governed / minimum necessary context** | Prefer aggregated metrics and governed report context; exclude unnecessary raw PII by default |
 | **Not system of record** | Numbers from engine/warehouse; narrative may vary in wording |
 | **No ERP/GL write-back via AI** | AI must not post journals or mutate customer source systems |
@@ -297,8 +296,8 @@ These are **not** fully outlined here; flag for MSA counsel draft:
 | # | Item | Owner |
 |---|------|-------|
 | 1 | Confirm legal entity name / signatory block | Matt + counsel |
-| 2 | Confirm hosting regions for Vercel / Railway / Neon (Neon us-east-1 pending Q5) | Matt — [01_system_boundary.md](../01_system_boundary.md) Q5/Q9 |
-| 3 | Confirm whether OpenAI (or other LLM) is live | Matt |
+| 2 | Confirm hosting regions for Vercel / Railway / Resend / Stripe / Anthropic / GitHub (**Neon AWS us-east-1 locked**; others TBD) | Matt — [02_subprocessors.md](../02_subprocessors.md) |
+| 3 | ~~Confirm whether OpenAI is live~~ — **NO** (2026-07-28); re-open only if key added to prod Railway | Matt (closed) |
 | 4 | Finalize offboarding deletion window (30 vs 90 vs other) | Counsel + Matt |
 | 5 | Subprocessor notice period + objection mechanics | Counsel |
 | 6 | Breach notification timing language | Counsel (align P04) |
