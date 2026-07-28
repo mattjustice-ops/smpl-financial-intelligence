@@ -43,9 +43,9 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 ## Boundary & vendors
 
 - [x] Draft [01_system_boundary.md](./01_system_boundary.md) from known stack
-- [!] Review boundary; resolve or assign TBDs — **Week 2–3**
+- [~] Review boundary; resolve or assign TBDs — **pack updated 2026-07-28**; Matt **Q1–Q10** still open (Week 2–3)
 - [x] Draft [02_subprocessors.md](./02_subprocessors.md) named list
-- [!] Review subprocessors; mark any unused vendors / confirm OpenAI — **Week 2–3**
+- [~] Review subprocessors; mark any unused vendors / confirm OpenAI — Neon us-east-1 noted; other regions TBD; Matt Q2/Q5/Q9 (Week 2–3)
 - [ ] Start folder for vendor SOC reports (under NDA) — Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc. — **Week 3–4**
 - [x] Security one-pager draft — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md)
 

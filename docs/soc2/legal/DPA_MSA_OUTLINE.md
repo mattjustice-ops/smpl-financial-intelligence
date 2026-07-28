@@ -115,7 +115,7 @@ Customer remains responsible for: accuracy of data provided; lawful basis / noti
 
 ### D.1 Current named subprocessors (from living inventory)
 
-Source of truth for diligence: [02_subprocessors.md](../02_subprocessors.md). **Regions marked TBD — confirm before external publish.**
+Source of truth for diligence: [02_subprocessors.md](../02_subprocessors.md). **Most regions marked TBD — confirm before external publish.** Neon production noted as **AWS us-east-1** from restore evidence pending Matt confirmation (boundary Q5).
 
 | Vendor | Purpose (customer-facing summary) |
 |--------|-----------------------------------|
@@ -210,7 +210,7 @@ Upon Customer’s written request after offboarding deletion is complete, SMPL p
 
 ## H. International transfers
 
-**Known posture:** US-oriented B2B SaaS; production stack includes Vercel, Railway, Neon, Stripe, Resend, Anthropic, Sanity, GitHub. **Exact hosting regions are TBD** in the subprocessors inventory — confirm before promising “US-only.”
+**Known posture:** US-oriented B2B SaaS; production stack includes Vercel (`www.smpl-ai.com`), Railway (`sfi-api-production`), Neon (`smpl-auth-prod`), Stripe, Resend, Anthropic, Sanity, GitHub. Neon evidence points to **AWS us-east-1**; **other hosting regions remain TBD** in the subprocessors inventory — confirm before promising “US-only.” See [01_system_boundary.md](../01_system_boundary.md) Matt Q1–Q10.
 
 **Counsel guidance requested:**
 
@@ -297,7 +297,7 @@ These are **not** fully outlined here; flag for MSA counsel draft:
 | # | Item | Owner |
 |---|------|-------|
 | 1 | Confirm legal entity name / signatory block | Matt + counsel |
-| 2 | Confirm hosting regions for Vercel / Railway / Neon | Matt |
+| 2 | Confirm hosting regions for Vercel / Railway / Neon (Neon us-east-1 pending Q5) | Matt — [01_system_boundary.md](../01_system_boundary.md) Q5/Q9 |
 | 3 | Confirm whether OpenAI (or other LLM) is live | Matt |
 | 4 | Finalize offboarding deletion window (30 vs 90 vs other) | Counsel + Matt |
 | 5 | Subprocessor notice period + objection mechanics | Counsel |

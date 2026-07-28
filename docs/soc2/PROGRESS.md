@@ -19,13 +19,13 @@
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
 | **Week 1** | ~2026-07-22 → 2026-07-29 | **COMPLETE 2026-07-26** — MFA on admin consoles; access inventory first pass; protect `main` + required PR (GitHub ruleset; solo-friendly, approvals may be 0); break-glass = Neon/Railway MFA (no separate login) |
-| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 Approved 2026-07-28**; **DPA/MSA outline drafted** (awaiting counsel). Boundary/vendor TBDs still open. Approval ≠ SOC 2 certified |
+| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 Approved 2026-07-28**; **DPA/MSA outline drafted** (awaiting counsel). Boundary/vendor pack updated 2026-07-28 — Matt Q1–Q10 still open. Approval ≠ SOC 2 certified |
 | **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; **backup restore test Pass 2026-07-27**; IR tabletop notes; vendor SOC report collection started; DPA outline → counsel redline / customer-ready draft |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM write-up (**P15 Approved 2026-07-28**); security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel for redline (R16 still open — outline ≠ signed DPA); resolve boundary/vendor TBDs. **P15 Approved** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
+**Next guided item for Matt:** Answer **Q1–Q10** in [01_system_boundary.md](./01_system_boundary.md) (production boundary + vendor regions / unused vendors). In parallel: send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel (R16 still open — outline ≠ signed DPA). **P15 Approved** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -45,8 +45,8 @@
 | `[x]` | Protect `main` + required PR review | Matt | Week 1 | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
 | `[x]` | Leadership approve core policies (P01–P12 / core set) | Matt | Week 2 | **Approved 2026-07-27** by Matt Justice — approval ≠ SOC 2 certified |
 | `[x]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | **Deferred DIY 2026-07-27** — docs/soc2 + `/app/compliance`; revisit on enterprise GRC requirement **or** CPA Type I engagement (whichever first) |
-| `[!]` | Confirm boundary matches production | Matt | Week 2–3 | Resolve TBDs in boundary doc |
-| `[!]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | |
+| `[~]` | Confirm boundary matches production | Matt | Week 2–3 | Known-good prod boundary documented 2026-07-28 — [01_system_boundary.md](./01_system_boundary.md); Matt Q1–Q10 still required |
+| `[~]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | Neon **us-east-1** from evidence; other regions TBD — [02_subprocessors.md](./02_subprocessors.md); Matt Q2/Q5/Q9 |
 | `[ ]` | First quarterly-style access review sign-off | Matt | Week 3–4 | After MFA verified + inventory stable |
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[ ]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | Plan draft exists; exercise + notes |
@@ -155,11 +155,11 @@ Type II comes later: after Type I, controls operate over an observation window (
 
 | Status | Item | Notes |
 |--------|------|-------|
-| `[x]` | System boundary draft from known stack | [01_system_boundary.md](./01_system_boundary.md) — Vercel, Railway, Neon, Auth.js, Resend, Anthropic, Stripe, GitHub, Sanity |
-| `[~]` | Boundary TBDs assigned | Sanity in/out, staging projects, hostnames, OpenAI fallback, privileged ops list |
-| `[!]` | Confirm boundary matches production | Matt — resolve TBDs |
-| `[x]` | Subprocessors named list draft | [02_subprocessors.md](./02_subprocessors.md) |
-| `[!]` | Confirm regions / unused vendors; mark OpenAI if live | Matt |
+| `[x]` | System boundary draft from known stack | [01_system_boundary.md](./01_system_boundary.md) — Vercel, Railway, Neon, Auth.js, Resend, Anthropic, Stripe, GitHub, Sanity; prod hosts named |
+| `[~]` | Boundary TBDs assigned | Pack updated 2026-07-28: hostnames + Neon project known; Sanity/OpenAI/staging/regions → Matt Q1–Q10 |
+| `[~]` | Confirm boundary matches production | Matt — answer Q1–Q10 in boundary doc (not closed until human confirm) |
+| `[x]` | Subprocessors named list draft | [02_subprocessors.md](./02_subprocessors.md) — Neon us-east-1 noted; other regions TBD |
+| `[~]` | Confirm regions / unused vendors; mark OpenAI if live | Matt — Q2/Q5/Q6/Q9/Q10 |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) | Collect Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc. |
 | `[~]` | Customer DPA / MSA — **single legal workstream** | **Outline drafted** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel. R16 open until customer-ready / signed path. Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
 | `[x]` | Security one-pager (draft) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) — honest “pursuing SOC 2”; not certified. Publish for sales = Month 2 |
@@ -258,9 +258,9 @@ Not SOC 2 certified. Readiness evidence only.
 
 ## Top `[!]` for Matt (do next)
 
-1. **[~]** Customer DPA / MSA — outline drafted ([legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md)); send to counsel — P10 R16 **still open**
-2. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
-3. **[!]** Resolve boundary TBDs / vendor regions
+1. **[~]** Answer boundary/vendor **Q1–Q10** — [01_system_boundary.md](./01_system_boundary.md) (closes Week 2–3 boundary + regions items)
+2. **[~]** Customer DPA / MSA — outline drafted ([legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md)); send to counsel — P10 R16 **still open**
+3. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
 4. Open evidence (keep honest): IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05). Restore test **Pass** 2026-07-27 (P12). **P15 Approved** 2026-07-28
 5. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
 
@@ -329,6 +329,14 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 3. Scoreboard + `/compliance` data: DPA workstream → **in progress** (awaiting counsel); R16 **not** closed
 4. Decision log note + P10 R16 treatment note updated
 
+## What we checked off 2026-07-28 — Production boundary + vendor confirmation pack
+
+**Not SOC 2 certified.** Documenting the boundary ≠ Matt confirmation ≠ CPA Type I report.
+
+1. Updated [01_system_boundary.md](./01_system_boundary.md): Type I system = **production**; named hosts (`www.smpl-ai.com`, Vercel project, `sfi-api-production`, Neon `smpl-auth-prod`); Squarespace DNS; Matt **Q1–Q10** YES/NO/TBD pack
+2. Updated [02_subprocessors.md](./02_subprocessors.md): Neon **AWS us-east-1** from restore evidence; other vendor regions left **TBD**; OpenAI/HubSpot/APM/staging conditional; unused OpenAI not listed externally until confirmed live
+3. Scoreboard + `/compliance` data: boundary/vendor items → **in progress** (awaiting Matt answers) — not marked done
+
 ---
 
 ## How you’ll know Type I is complete
@@ -343,5 +351,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-27 |
+| Last updated | 2026-07-28 |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

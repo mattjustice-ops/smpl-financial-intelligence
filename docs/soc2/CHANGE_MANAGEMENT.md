@@ -18,7 +18,7 @@ Branch protection on `main` and MFA on GitHub/Vercel/Railway are **confirmed liv
 | Datastore | **Neon** (Postgres) | Migrations / load scripts; not “deployed” like app code |
 | Source of truth for code | **GitHub** | Branches + pull requests → `main` |
 
-Production domains in use include `smpl-ai.com` and the Vercel project hostname (e.g. `smpl-financial-intelligence.vercel.app`). API example hostname pattern: Railway service such as `sfi-api-production` (`*.up.railway.app`).
+Production domains in use include **`https://www.smpl-ai.com`** (canonical; apex redirects), `https://smpl-ai.com`, and the Vercel project hostname `https://smpl-financial-intelligence.vercel.app`. API production: **`https://sfi-api-production.up.railway.app`** (`sfi-api-production`). Neon production project: **`smpl-auth-prod`** / branch **`production`**. See [01_system_boundary.md](./01_system_boundary.md).
 
 ---
 
@@ -101,7 +101,8 @@ Allowed to restore service or contain an incident ([P04](./policies/P04_incident
 
 - [x] GitHub: protect `main`, required PR before merge — done 2026-07-26 (solo-friendly; approvals may be 0)
 - [x] MFA on GitHub, Vercel, Railway — done 2026-07-26
-- [!] Confirm exact production project/service names and whether staging is separate
+- [~] Exact production project/service names documented — 2026-07-28 ([01_system_boundary.md](./01_system_boundary.md)); Matt confirm Q4
+- [!] Staging separate? — Matt Q3 in boundary pack
 - [!] Dependabot (or equivalent) enabled
 
 ---
