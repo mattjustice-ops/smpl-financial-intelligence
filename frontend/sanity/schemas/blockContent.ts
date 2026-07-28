@@ -55,5 +55,6 @@ export const blockContent = defineType({
         },
       ],
     }),
+    defineArrayMember({ type: "comparisonTable" }),
   ],
 });

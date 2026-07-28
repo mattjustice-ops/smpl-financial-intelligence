@@ -24,7 +24,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed:sanity": "node scripts/seed-sanity.mjs"
+    "seed:sanity": "node scripts/seed-sanity.mjs",
+    "publish:finance-os-posts": "node scripts/publish-finance-os-posts.mjs"
   },
   "dependencies": {
     "@portabletext/react": "^3.2.4",
