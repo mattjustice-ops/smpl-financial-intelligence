@@ -107,6 +107,7 @@ Customer remains responsible for: accuracy of data provided; lawful basis / noti
 - Flow-down equivalent obligations to subprocessors ([P09](../policies/P09_vendor_subprocessor_management.md)).
 - Upon termination / offboarding: delete or return per §G (align [P08](../policies/P08_retention_and_deletion.md)).
 - No sale of personal information; no use of Customer Data for SMPL’s unrelated advertising (counsel: CPRA “Service Provider” / “business purpose” language as appropriate for US customers).
+- If SMPL receives a request directly from an individual data subject (rather than through Customer) regarding their personal data, SMPL redirects the individual to Customer and/or promptly forwards the request to Customer, and does not respond substantively except as required by law.
 
 ---
 
@@ -201,6 +202,10 @@ From [P08](../policies/P08_retention_and_deletion.md):
 
 **Legal hold:** Deletion may be suspended for litigation/regulatory hold per executive decision ([P08](../policies/P08_retention_and_deletion.md) §5).
 
+### G.3 Written confirmation of deletion
+
+Upon Customer’s written request after offboarding deletion is complete, SMPL provides written confirmation that Customer Data has been deleted or anonymized per the windows in §G.2 (including honest disclosure that provider backups may lag until expiry).
+
 ---
 
 ## H. International transfers
@@ -224,6 +229,7 @@ Outline preferences for counsel (avoid enterprise audit tourism):
 - **Until a CPA report exists:** do not promise “SOC 2 report available”; offer current diligence pack instead.
 - On-site / penetration-test rights: either omit or tightly condition (notice, scope, cost, no disruption, annual frequency) — sized for solo-founder ops.
 - Assistance with DPIA / customer assessments: commercially reasonable, reimbursable if extraordinary.
+- **Post-incident distinction:** the “reasonable, limited” posture above applies to routine annual diligence. Following a confirmed Security Incident affecting Customer Data, Customer may request additional relevant information reasonably necessary to assess impact and its own notification obligations, per §F.
 
 ---
 
@@ -240,6 +246,7 @@ Align to [P15](../policies/P15_ai_llm_data_handling.md) and Trust & Security pos
 | **No ERP/GL write-back via AI** | AI must not post journals or mutate customer source systems |
 | **Tenant isolation** | Org-scoped prompts; no cross-tenant context |
 | **Optional disable** | Do **not** contract a customer-facing “AI kill switch” until the product control exists; directional roadmap OK |
+| **AI-generated content errors** | If AI-generated commentary contains a claim not supported by engine/warehouse evidence, SMPL corrects the output and follows internal incident handling per P04. MSA §K.8 sets any contractual remedy/disclaimer language — this outline does not itself create a warranty. |
 
 Counsel: ensure Anthropic (and any LLM) vendor terms are consistent with “no training” claims SMPL makes to customers.
 
@@ -256,8 +263,8 @@ These are **not** fully outlined here; flag for MSA counsel draft:
 5. **Customer responsibilities** — credentials, lawful data, export review before board distribution.
 6. **Confidentiality** (mutual business confidential info) — distinct from DPA personal-data processing.
 7. **IP** — SMPL owns Service/IP; Customer owns Customer Data; feedback license.
-8. **Warranties / disclaimer** — no guarantee of specific financial outcomes; AI narrative disclaimer.
-9. **Indemnities & liability caps** — counsel to set; small-SaaS-appropriate.
+8. **Warranties / disclaimer** — no guarantee of specific financial outcomes; AI narrative disclaimer; correction process for AI-generated errors aligned with internal incident handling (P04).
+9. **Indemnities & liability caps** — counsel to set; small-SaaS-appropriate. Confirm whether liability arising from a confirmed data breach / Security Incident is subject to the same cap as general commercial liability, or carved out separately (a common customer negotiation point).
 10. **Governing law / venue** — likely US state of SMPL entity (counsel confirms).
 11. **Publicity** — logo use optional.
 12. **Insurance** — only if actually carried; do not invent.
@@ -299,6 +306,7 @@ These are **not** fully outlined here; flag for MSA counsel draft:
 | 8 | Publish path for customer-facing subprocessors list | Matt + counsel |
 | 9 | Consistency check: Anthropic DPA / training terms vs customer promises | Counsel |
 | 10 | First redline → customer-ready PDF/Doc for Order Form attachment | Counsel |
+| 11 | Decide whether data breach liability is capped separately from general commercial liability | Counsel + Matt |
 
 ---
 
