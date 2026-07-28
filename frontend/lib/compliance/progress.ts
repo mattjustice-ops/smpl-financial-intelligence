@@ -58,7 +58,7 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-28",
+  lastUpdated: "2026-07-28", // IR tabletop pack ready; exercise awaiting Matt run
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
@@ -276,9 +276,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-ir-tabletop",
     label: "IR tabletop notes (operable IR)",
-    status: "open",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 3–4",
+    notes:
+      "Pack ready 2026-07-28 — docs/soc2/runbooks/ir-tabletop.md + evidence/ir-tabletop-TEMPLATE.md; awaiting Matt run — do not mark done until dated notes filed",
   },
   {
     id: "rem-vendor-soc",
@@ -380,7 +382,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved (P01–P12 2026-07-27; P15 2026-07-28); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
+      "Policies approved (P01–P12 2026-07-27; P15 2026-07-28); MFA + access inventory; change/deploy path; IR approved (tabletop pack ready, awaiting run); restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -745,7 +747,8 @@ export const complianceSections: ComplianceSection[] = [
         id: "bar-5",
         label: "Incident response plan (approved + operable)",
         status: "in_progress",
-        notes: "Approved 2026-07-27; tabletop not scheduled — still open",
+        notes:
+          "Approved 2026-07-27; tabletop pack ready (runbooks/ir-tabletop.md) — awaiting Matt run / dated notes",
       },
       {
         id: "bar-6",
