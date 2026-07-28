@@ -56,7 +56,7 @@ Readiness only — **not** SOC 2 certified.
 |---|--------|-------|-----------|
 | 7 | Draft core policies from [04_policy_index.md](./soc2/04_policy_index.md) (start with ISP, Acceptable Use, Access Control, Incident Response) | Security owner | **Done** — P01–P12 **Approved 2026-07-27** by Matt Justice ([soc2/policies/](./soc2/policies/)). Approval ≠ SOC 2 certified |
 | 3b | **Approve** core policies + choose platform **or** write “wait until ____” | Security / Executive | Policies **Approved** 2026-07-27; platform **deferred DIY** 2026-07-27 |
-| 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | One-pager + subprocessors drafted; **Customer DPA/MSA = single legal workstream** still open (P10 R16) |
+| 8 | Ship sales unblockers in parallel: DPA, security one-pager, named subprocessors list | Executive / counsel as needed | One-pager + subprocessors drafted; **DPA/MSA outline** [soc2/legal/DPA_MSA_OUTLINE.md](./soc2/legal/DPA_MSA_OUTLINE.md) drafted 2026-07-28 — awaiting counsel (P10 R16 still open) |
 | 9 | If platform chosen: create account, connect GitHub + Vercel/Railway/Neon as available; treat auto gap list as backlog | Security owner | Integrations connected |
 | 11 | Schedule backup **restore test** on Neon (or document who runs it in Week 3) | Engineering owner | Date on calendar or completed |
 | 12 | Pick audit-firm shortlist (platform partner network OK); set **target Type I month** in decision log | Executive sponsor | Target date filled |
