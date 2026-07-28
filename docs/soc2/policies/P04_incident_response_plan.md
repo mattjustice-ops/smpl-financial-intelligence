@@ -81,7 +81,9 @@ Examples (not exhaustive):
 
 ## 7. Tabletop
 
-Run a lightweight tabletop at least annually (or before Type I fieldwork). Record date and attendees. **[!]** Schedule before auditor fieldwork.
+Run a lightweight tabletop at least annually (or before Type I fieldwork). Record date and attendees.
+
+**Solo-founder pack:** [../runbooks/ir-tabletop.md](../runbooks/ir-tabletop.md) (~45–60 min; credential leak + AI hallucination scenarios). File notes from [../evidence/ir-tabletop-TEMPLATE.md](../evidence/ir-tabletop-TEMPLATE.md). Tabletop ≠ real incident; completing dated notes = operable-IR evidence. **[!]** Run before auditor fieldwork — pack ready; exercise not yet completed.
 
 ## 8. Approval
 
