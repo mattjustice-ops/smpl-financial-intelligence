@@ -8,6 +8,7 @@
  */
 
 import { extraCategories, extraPosts } from "./extra-posts.mjs";
+import { financeOsPosts } from "./finance-os-posts.mjs";
 
 let keySeq = 0;
 function key(prefix = "k") {
@@ -594,6 +595,7 @@ export const posts = [
     ],
   },
   ...extraPosts,
+  ...financeOsPosts,
 ];
 
 export const glossaryTerms = [

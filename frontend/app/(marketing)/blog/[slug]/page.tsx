@@ -88,12 +88,26 @@ export default async function BlogPostPage({ params }: PageProps) {
   const pageUrl = sitePageUrl(`/blog/${post.slug}`);
   const headings = extractPortableHeadings(post.body);
   const hasToc = headings.length > 0;
+  const hasComparisonTable = Boolean(
+    post.body?.some(
+      (block) =>
+        typeof block === "object" &&
+        block !== null &&
+        "_type" in block &&
+        (block as { _type?: string })._type === "comparisonTable",
+    ),
+  );
+  const articleMaxClass = hasComparisonTable ? "max-w-5xl" : "max-w-3xl";
 
   // Desktop: left TOC (14rem) + gap-12 (3rem); keep title/share/article column aligned.
-  const articleOffsetClass = hasToc ? "max-w-3xl lg:ml-[calc(14rem+3rem)]" : "max-w-3xl";
+  const articleOffsetClass = hasToc
+    ? `${articleMaxClass} lg:ml-[calc(14rem+3rem)]`
+    : articleMaxClass;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-16">
+    <main
+      className={`mx-auto px-6 py-16 ${hasComparisonTable ? "max-w-7xl" : "max-w-6xl"}`}
+    >
       <div className={articleOffsetClass}>
         <Link
           href="/blog"
@@ -150,8 +164,10 @@ export default async function BlogPostPage({ params }: PageProps) {
       <div
         className={
           hasToc
-            ? "mt-10 lg:grid lg:grid-cols-[14rem_minmax(0,42rem)] lg:gap-12"
-            : "mt-10 max-w-3xl"
+            ? hasComparisonTable
+              ? "mt-10 lg:grid lg:grid-cols-[14rem_minmax(0,56rem)] lg:gap-12"
+              : "mt-10 lg:grid lg:grid-cols-[14rem_minmax(0,42rem)] lg:gap-12"
+            : `mt-10 ${articleMaxClass}`
         }
       >
         {hasToc ? (
@@ -160,7 +176,7 @@ export default async function BlogPostPage({ params }: PageProps) {
           </div>
         ) : null}
 
-        <article className={hasToc ? "max-w-3xl" : undefined}>
+        <article className={hasToc ? articleMaxClass : undefined}>
           <PortableBody value={post.body} headingAnchors />
         </article>
       </div>

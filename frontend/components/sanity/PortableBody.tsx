@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
 
+import { CapabilityComparisonTable } from "@/components/blog/CapabilityComparisonTable";
 import { urlForImage } from "@/lib/sanity/image";
 import { portableHeadingIdByKey } from "@/lib/sanity/headings";
 
@@ -98,6 +99,14 @@ const baseComponents: PortableTextComponents = {
         </figure>
       );
     },
+    comparisonTable: ({ value }) => (
+      <CapabilityComparisonTable
+        caption={value?.caption}
+        columns={value?.columns}
+        rows={value?.rows}
+        showLegend={value?.showLegend}
+      />
+    ),
   },
 };
 
