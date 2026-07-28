@@ -79,7 +79,7 @@ Out of scope (covered elsewhere):
 ## 6. Anthropic and other LLM subprocessors
 
 - **Primary:** Anthropic — LLM API for narrative / commentary (see [../02_subprocessors.md](../02_subprocessors.md)).
-- **Conditional:** OpenAI or other LLM fallbacks — add to the subprocessors list only if live in production; same key-placement and minimum-context rules apply.
+- **Conditional:** OpenAI or other LLM fallbacks — **not live** on production Railway as of 2026-07-28 (Matt Q2). Add to the subprocessors list only if a key is later enabled in production; same key-placement and minimum-context rules apply.
 - Onboard and review under [P09](./P09_vendor_subprocessor_management.md); collect vendor SOC/ISO reports under NDA when available.
 - Customer-facing subprocessor disclosure follows the consolidated **Customer DPA / MSA** legal workstream ([P10](./P10_risk_assessment.md) R16) — this policy does not invent signed DPA terms.
 

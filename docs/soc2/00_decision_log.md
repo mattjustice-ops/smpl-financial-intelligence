@@ -42,9 +42,28 @@ One person may hold multiple roles; still write the names so accountability is c
 | Field | Value |
 |-------|--------|
 | Confirmed by | **Matt Justice** |
-| Date | **2026-07-22** (scope/owners); platform deferral **2026-07-27** |
-| Status | **APPROVED** — Type I scope (Security + Availability + Confidentiality); Processing Integrity deferred; Privacy deferred; all named owners = Matt Justice |
-| Exceptions / still open | Compliance platform **deferred DIY** (triggers documented 2026-07-27); audit firm TBD; Type I fieldwork month TBD (TARGET on scoreboard) |
+| Date | **2026-07-22** (scope/owners); platform deferral **2026-07-27**; boundary/vendors Q1–Q10 **2026-07-28** |
+| Status | **APPROVED** — Type I scope (Security + Availability + Confidentiality); Processing Integrity deferred; Privacy deferred; all named owners = Matt Justice; production boundary/vendors locked (other regions TBD) |
+| Exceptions / still open | Compliance platform **deferred DIY** (triggers documented 2026-07-27); audit firm TBD; Type I fieldwork month TBD (TARGET on scoreboard); other vendor **regions** TBD (Neon us-east-1 locked) |
+
+---
+
+## Production boundary & vendors (Matt Q1–Q10)
+
+| Decision | Choice | Date | Owner | Notes |
+|----------|--------|------|-------|-------|
+| Sanity in Type I / product DPA Customer Data exhibit | **NO** — marketing CMS only | 2026-07-28 | Matt Justice | Outside product boundary; may note as marketing/website vendor |
+| OpenAI live on prod Railway | **NO** | 2026-07-28 | Matt Justice | Omit from external Customer Data list |
+| Staging / preview | **Exists; no Customer Data** | 2026-07-28 | Matt Justice | Out of Type I production system |
+| Production hostnames accurate | **YES** | 2026-07-28 | Matt Justice | www.smpl-ai.com, Vercel project, sfi-api-production, Neon smpl-auth-prod |
+| Neon region | **AWS us-east-1** | 2026-07-28 | Matt Justice | Matches restore evidence |
+| APM / analytics with user context in prod | **NO** | 2026-07-28 | Matt Justice | None |
+| HubSpot on product DPA exhibit | **NO** — sales CRM only | 2026-07-28 | Matt Justice | Not Customer Data subprocessor for product |
+| Squarespace | **DNS-only** | 2026-07-28 | Matt Justice | |
+| Other vendor regions (Vercel, Railway, Resend, Stripe, Anthropic, GitHub, …) | **TBD** | 2026-07-28 | Matt Justice | Do not invent; Neon only confirmed |
+| Other prod Customer Data vendors beyond known stack | **NO** | 2026-07-28 | Matt Justice | |
+
+Detail: [01_system_boundary.md](./01_system_boundary.md) · [02_subprocessors.md](./02_subprocessors.md)
 
 ---
 
@@ -59,3 +78,4 @@ One person may hold multiple roles; still write the names so accountability is c
 | 2026-07-27 | **Platform deferred DIY** — no Vanta/Drata/etc. now; use docs/soc2 + `/app/compliance`; revisit on first paying enterprise requiring formal GRC platform **or** CPA Type I engagement (whichever first) | Matt Justice (decision); Agent (log) |
 | 2026-07-28 | **DPA/MSA outline drafted** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) for counsel review. P10 R16 remains **open** (outline ≠ signed DPA). Not legal advice; not SOC 2 certified. | Agent (Week 2 #1); Matt next: counsel |
 | 2026-07-28 | **Production boundary + vendor pack** — [01_system_boundary.md](./01_system_boundary.md) / [02_subprocessors.md](./02_subprocessors.md) updated from deploy reality (www.smpl-ai.com, Railway `sfi-api-production`, Neon `smpl-auth-prod` us-east-1 evidence). Matt Q1–Q10 still open; no invented regions; not SOC 2 certified. | Agent (Week 2 boundary/vendors) |
+| 2026-07-28 | **Boundary/vendor Q1–Q10 LOCKED** — Sanity/HubSpot out of product DPA; OpenAI/APM unused; staging exists (no Customer Data); hostnames + Neon us-east-1 YES; other regions TBD; no other Customer Data vendors. Checklist items closed; not SOC 2 certified. | Matt Justice (answers); Agent (docs) |

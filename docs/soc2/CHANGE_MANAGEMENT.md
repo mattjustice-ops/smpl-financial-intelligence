@@ -101,8 +101,8 @@ Allowed to restore service or contain an incident ([P04](./policies/P04_incident
 
 - [x] GitHub: protect `main`, required PR before merge — done 2026-07-26 (solo-friendly; approvals may be 0)
 - [x] MFA on GitHub, Vercel, Railway — done 2026-07-26
-- [~] Exact production project/service names documented — 2026-07-28 ([01_system_boundary.md](./01_system_boundary.md)); Matt confirm Q4
-- [!] Staging separate? — Matt Q3 in boundary pack
+- [x] Exact production project/service names documented — confirmed Matt Q4 **YES** 2026-07-28 ([01_system_boundary.md](./01_system_boundary.md))
+- [x] Staging separate? — **Exists; no Customer Data** (Matt Q3 2026-07-28); out of Type I production system
 - [!] Dependabot (or equivalent) enabled
 
 ---

@@ -6,7 +6,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 
 **Legend:** `[x]` done · `[ ]` open · `[~]` in progress · `[!]` needs Matt
 
-**Week 1 status:** **COMPLETE 2026-07-26** (readiness only — not SOC 2 certified). Platform choice, policy approval, boundary TBDs, DPA, and restore-test calendar roll into **Week 2+** per [PROGRESS.md](./PROGRESS.md).
+**Week 1 status:** **COMPLETE 2026-07-26** (readiness only — not SOC 2 certified). Platform choice, policy approval, DPA, and restore-test calendar roll into **Week 2+** per [PROGRESS.md](./PROGRESS.md). Boundary/vendor Q1–Q10 **locked 2026-07-28**.
 
 ---
 
@@ -43,9 +43,9 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 ## Boundary & vendors
 
 - [x] Draft [01_system_boundary.md](./01_system_boundary.md) from known stack
-- [~] Review boundary; resolve or assign TBDs — **pack updated 2026-07-28**; Matt **Q1–Q10** still open (Week 2–3)
+- [x] Review boundary; resolve or assign TBDs — **Q1–Q10 locked 2026-07-28** (other vendor regions remain TBD)
 - [x] Draft [02_subprocessors.md](./02_subprocessors.md) named list
-- [~] Review subprocessors; mark any unused vendors / confirm OpenAI — Neon us-east-1 noted; other regions TBD; Matt Q2/Q5/Q9 (Week 2–3)
+- [x] Review subprocessors; mark any unused vendors / confirm OpenAI — **Locked 2026-07-28**: OpenAI/APM unused; Sanity/HubSpot off product DPA; Neon us-east-1; other regions TBD
 - [ ] Start folder for vendor SOC reports (under NDA) — Vercel, Railway, Neon, Stripe, Anthropic, Resend, etc. — **Week 3–4**
 - [x] Security one-pager draft — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md)
 
@@ -77,7 +77,7 @@ Immediate founder/ops work. Check boxes as you go. Details: [../SOC2_TYPE1_KICKO
 - [x] Decision log has owners + scope — **done**; platform deferred DIY — **done** 2026-07-27
 - [x] MFA on admin cloud accounts — cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass = Neon/Railway MFA (solo; no separate login)
 - [x] Access inventory first pass exists (owners filled; MFA columns verified; break-glass noted as same-as-Neon/Railway)
-- [x] Subprocessors list ready to attach to questionnaires (draft; confirm TBDs in Week 2–3)
+- [x] Subprocessors list ready to attach to questionnaires (product DPA list locked 2026-07-28; other vendor regions TBD; vendor reports still open)
 - [x] Core policies P01–P12 **Approved 2026-07-27** by Matt Justice (approval ≠ SOC 2 certified; evidence items remain)
 - [x] Protect `main` + required PR review — GitHub ruleset live 2026-07-26
 

@@ -24,7 +24,7 @@ Establish how SMPL identifies, evaluates, treats, and accepts risks that could a
 
 ## 2. Scope
 
-- Production stack: Vercel, Railway, Neon, Auth.js, Resend, Stripe, GitHub, Anthropic, Sanity (boundary TBD), privileged ops paths.
+- Production stack (Customer Data): Vercel, Railway, Neon, Auth.js, Resend, Stripe, GitHub, Anthropic; privileged ops paths. Sanity = marketing only (outside product DPA). OpenAI not live.
 - People/process: solo-founder concentration, access, change, vendors, incidents, backups.
 - Customer data paths: CSV / white-glove loads; future read-only connectors (no GL write-back).
 

@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor pack updated 2026-07-28 — Matt Q1–Q10 open. Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,7 +91,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved; platform deferred DIY; P15 Approved; DPA/MSA outline (awaiting counsel); boundary/vendor pack updated — Matt Q1–Q10 open",
+      "P01–P12 Approved; platform deferred DIY; P15 Approved; DPA/MSA outline (awaiting counsel); boundary/vendor Q1–Q10 locked (other regions TBD)",
   },
   {
     id: "week-3-4",
@@ -241,20 +241,20 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-boundary",
     label: "Confirm boundary matches production",
-    status: "in_progress",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 2–3",
     notes:
-      "Known-good prod boundary documented 2026-07-28 — docs/soc2/01_system_boundary.md; Matt Q1–Q10 still required",
+      "Locked 2026-07-28 — Matt Q1–Q10 answered; docs/soc2/01_system_boundary.md",
   },
   {
     id: "rem-vendor-regions",
     label: "Confirm vendor regions / unused vendors; OpenAI if live",
-    status: "in_progress",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 2–3",
     notes:
-      "Neon us-east-1 from restore evidence; other regions TBD — docs/soc2/02_subprocessors.md; Matt Q2/Q5/Q9",
+      "Locked 2026-07-28 — OpenAI/APM unused; Sanity/HubSpot off product DPA; Neon us-east-1; other vendor regions TBD — docs/soc2/02_subprocessors.md",
   },
   {
     id: "rem-access-review",
@@ -495,31 +495,33 @@ export const complianceSections: ComplianceSection[] = [
         label: "System boundary draft from known stack",
         status: "done",
         notes:
-          "Vercel, Railway, Neon, Auth.js, Resend, Anthropic, Stripe, GitHub, Sanity; prod hosts named 2026-07-28",
+          "Vercel, Railway, Neon, Auth.js, Resend, Anthropic, Stripe, GitHub; Sanity out of Type I (marketing); prod hosts named 2026-07-28",
       },
       {
         id: "bv-2",
         label: "Boundary TBDs assigned",
-        status: "in_progress",
-        notes: "Pack updated 2026-07-28; Sanity/OpenAI/staging/regions → Matt Q1–Q10",
+        status: "done",
+        notes:
+          "Q1–Q10 locked 2026-07-28; remaining honest TBD = other vendor regions only",
       },
       {
         id: "bv-3",
         label: "Confirm boundary matches production",
-        status: "in_progress",
-        notes: "Awaiting Matt Q1–Q10 in docs/soc2/01_system_boundary.md",
+        status: "done",
+        notes: "Locked 2026-07-28 by Matt Justice — docs/soc2/01_system_boundary.md",
       },
       {
         id: "bv-4",
         label: "Subprocessors named list draft",
         status: "done",
-        notes: "Neon us-east-1 noted; other regions TBD",
+        notes: "Product DPA list; Neon us-east-1; other regions TBD",
       },
       {
         id: "bv-5",
         label: "Confirm regions / unused vendors; mark OpenAI if live",
-        status: "in_progress",
-        notes: "Matt Q2/Q5/Q6/Q9/Q10",
+        status: "done",
+        notes:
+          "Locked 2026-07-28 — OpenAI NO; Neon us-east-1; other regions TBD",
       },
       {
         id: "bv-6",
@@ -755,8 +757,8 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-7",
         label: "Subprocessor inventory + vendor reports collected",
-        status: "open",
-        notes: "Inventory draft; reports not collected",
+        status: "in_progress",
+        notes: "Inventory locked 2026-07-28 (product DPA list); reports not collected",
       },
       { id: "bar-8", label: "Tenant isolation evidence", status: "open" },
       {
