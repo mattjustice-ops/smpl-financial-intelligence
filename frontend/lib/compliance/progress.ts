@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. DPA/MSA outline drafted (awaiting counsel; R16 open). Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor pack updated 2026-07-28 — Matt Q1–Q10 open. Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,7 +91,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved; platform deferred DIY 2026-07-27; P15 Approved 2026-07-28; DPA/MSA outline drafted (awaiting counsel)",
+      "P01–P12 Approved; platform deferred DIY; P15 Approved; DPA/MSA outline (awaiting counsel); boundary/vendor pack updated — Matt Q1–Q10 open",
   },
   {
     id: "week-3-4",
@@ -241,16 +241,20 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-boundary",
     label: "Confirm boundary matches production",
-    status: "needs_owner",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 2–3",
+    notes:
+      "Known-good prod boundary documented 2026-07-28 — docs/soc2/01_system_boundary.md; Matt Q1–Q10 still required",
   },
   {
     id: "rem-vendor-regions",
     label: "Confirm vendor regions / unused vendors; OpenAI if live",
-    status: "needs_owner",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 2–3",
+    notes:
+      "Neon us-east-1 from restore evidence; other regions TBD — docs/soc2/02_subprocessors.md; Matt Q2/Q5/Q9",
   },
   {
     id: "rem-access-review",
@@ -490,28 +494,32 @@ export const complianceSections: ComplianceSection[] = [
         id: "bv-1",
         label: "System boundary draft from known stack",
         status: "done",
-        notes: "Vercel, Railway, Neon, Auth.js, Resend, Anthropic, Stripe, GitHub, Sanity",
+        notes:
+          "Vercel, Railway, Neon, Auth.js, Resend, Anthropic, Stripe, GitHub, Sanity; prod hosts named 2026-07-28",
       },
       {
         id: "bv-2",
         label: "Boundary TBDs assigned",
         status: "in_progress",
-        notes: "Sanity in/out, staging, hostnames, OpenAI fallback, privileged ops",
+        notes: "Pack updated 2026-07-28; Sanity/OpenAI/staging/regions → Matt Q1–Q10",
       },
       {
         id: "bv-3",
         label: "Confirm boundary matches production",
-        status: "needs_owner",
+        status: "in_progress",
+        notes: "Awaiting Matt Q1–Q10 in docs/soc2/01_system_boundary.md",
       },
       {
         id: "bv-4",
         label: "Subprocessors named list draft",
         status: "done",
+        notes: "Neon us-east-1 noted; other regions TBD",
       },
       {
         id: "bv-5",
         label: "Confirm regions / unused vendors; mark OpenAI if live",
-        status: "needs_owner",
+        status: "in_progress",
+        notes: "Matt Q2/Q5/Q6/Q9/Q10",
       },
       {
         id: "bv-6",

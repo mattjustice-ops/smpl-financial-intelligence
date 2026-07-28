@@ -2,7 +2,7 @@
 
 **Audience:** Customers and prospects (security questionnaires, early diligence).  
 **Status:** Draft for internal use / share under NDA as needed.  
-**Last updated:** 2026-07-27  
+**Last updated:** 2026-07-28  
 **Owner:** Matt Justice
 
 > **Honest framing:** SMPL is **pursuing SOC 2 Type I** (Security + Availability + Confidentiality). We are **not** SOC 2 certified and do **not** claim “SOC 2 compliant” until an independent CPA firm issues a report.
@@ -53,7 +53,7 @@ SMPL.ai is a B2B SaaS financial intelligence platform (FP&A / ARR / close / boar
 | Secrets | Production secrets in host env/secret stores — not in application source |
 | Card payments | **Stripe**; SMPL does not store full payment card numbers |
 
-Production stack (named for diligence): **Vercel** (web), **Railway** (API), **Neon** (Postgres), **GitHub** (source/CI). See subprocessors below.
+Production stack (named for diligence): **Vercel** (web — `www.smpl-ai.com`), **Railway** (API — `sfi-api-production`), **Neon** (Postgres — `smpl-auth-prod`), **GitHub** (source/CI). See subprocessors below. Exact hosting regions for most vendors are confirmed during readiness (Neon production noted as AWS us-east-1 pending final Matt confirmation).
 
 ---
 
@@ -79,7 +79,8 @@ Vendors that process or store customer-related data in delivering the service ty
 | Anthropic | LLM API for commentary features |
 | Stripe | Billing / subscriptions |
 | GitHub | Source control and CI (code; not customer warehouse dumps) |
-| Sanity | Marketing CMS (blog/glossary); confirm if customer-named content applies |
+| Sanity | Marketing CMS (blog/glossary); Type I boundary in/out pending confirmation |
+| Squarespace | Domain DNS for smpl-ai.com (not the application host) |
 
 A fuller internal list lives in `docs/soc2/02_subprocessors.md`. Regions and unused vendors are confirmed as part of readiness. Customer DPA / legal exhibit is a separate legal workstream.
 
