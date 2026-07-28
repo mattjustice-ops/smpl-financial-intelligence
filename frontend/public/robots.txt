@@ -1,4 +1,19 @@
+# https://www.smpl-ai.com/robots.txt
 User-agent: *
 Allow: /
+
+# Auth / app surfaces
+Disallow: /app/
+Disallow: /account/
+Disallow: /login
+Disallow: /studio
+Disallow: /forecast-engine
+Disallow: /billing/
+
+# Demo / internal HTML that must not compete with marketing pages
+Disallow: /board/
+Disallow: /board-sample
+Disallow: /progress
+Disallow: /compliance
 
 Sitemap: https://www.smpl-ai.com/sitemap.xml

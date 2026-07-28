@@ -1,7 +1,11 @@
-import { GoLiveProgressDashboard } from "@/components/progress/GoLiveProgressDashboard";
+import type { Metadata } from "next";
 
-export const metadata = {
-  title: "SMPL · Go-live progress",
+import { GoLiveProgressDashboard } from "@/components/progress/GoLiveProgressDashboard";
+import { sitePageUrl } from "@/lib/site";
+
+export const metadata: Metadata = {
+  title: { absolute: "SMPL · Go-live progress" },
+  alternates: { canonical: sitePageUrl("/progress") },
   robots: { index: false, follow: false },
 };
 
