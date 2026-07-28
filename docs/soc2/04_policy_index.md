@@ -6,7 +6,7 @@ Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard: [PRO
 
 Platform templates (Vanta/Drata/etc.) are acceptable starting points later; customize for SMPL (multi-tenant finance data, white-glove loads, Anthropic prompts, no GL write-back).
 
-**Approved ≠ SOC 2 certified.** P01–P12 are approved company policy as of 2026-07-27; open evidence items (restore test, IR tabletop, vendor reports, DPA, etc.) remain. SMPL is **not** SOC 2 certified until an independent CPA Type I report is in hand.
+**Approved ≠ SOC 2 certified.** P01–P12 are approved company policy as of 2026-07-27; **P15** approved 2026-07-28. Open evidence items (IR tabletop, vendor reports, DPA, etc.) remain. SMPL is **not** SOC 2 certified until an independent CPA Type I report is in hand.
 
 ---
 
@@ -28,7 +28,7 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | P12 | Backup & Restore (incl. restore test) | Availability | Matt Justice | **Approved** | 2026-07-27 | [policies/P12_backup_and_restore.md](./policies/P12_backup_and_restore.md) |
 | P13 | Vulnerability Management | Security (CC7) | Matt Justice | Not started | | |
 | P14 | Logging & Monitoring | Security; Availability | Matt Justice | Not started | | |
-| P15 | AI / LLM Data Handling | Security; Confidentiality | Matt Justice | **Draft — ready for approval** | | [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) — **not approved** |
+| P15 | AI / LLM Data Handling | Security; Confidentiality | Matt Justice | **Approved** | 2026-07-28 | [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) |
 | P16 | White-glove / Privileged Support Access | Confidentiality; Security | Matt Justice | Not started | | |
 | P17 | Security Awareness Training | Security (people) | Matt Justice | Not started | | |
 
@@ -61,6 +61,7 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | P10 | Matt Justice | 2026-07-27 | 1.0 |
 | P11 | Matt Justice | 2026-07-27 | 1.0 |
 | P12 | Matt Justice | 2026-07-27 | 1.0 |
+| P15 | Matt Justice | 2026-07-28 | 1.0 |
 
 ---
 
@@ -72,3 +73,4 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | 2026-07-26 | P07 + P10 created; P06/P08/P09/P11/P12 expanded to approval-ready drafts; P01–P12 marked **Draft — ready for approval** (not approved) |
 | 2026-07-27 | Matt review fixes (immutability vs retention; R15 Railway job interrupt; R16 consolidated DPA; P15 draft-next); **P01–P12 Approved** by Matt Justice. Reminder: approval ≠ SOC 2 certified. |
 | 2026-07-27 | **P15** AI/LLM draft created (ready for approval, not approved); platform deferred DIY logged in decision log. |
+| 2026-07-28 | **P15 Approved** by Matt Justice (redline: hallucination §4.7, logging/retention 30 days, P04/P08 companion edits). Approval ≠ SOC 2 certified. |

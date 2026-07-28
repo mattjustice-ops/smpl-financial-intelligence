@@ -53,7 +53,7 @@ Applies to data in or flowing through the production system boundary ([../01_sys
 - Anthropic API keys on Railway (API) only — never in browser, Vercel client env, or static exports.
 - AI output is not the system of record for numbers.
 - Do not paste production Confidential data into consumer AI tools unless explicitly approved ([P02](./P02_acceptable_use_policy.md)).
-- Align with **[P15](./P15_ai_llm_data_handling.md)** (AI / LLM Data Handling) — **Draft — ready for approval** (not yet approved).
+- Align with **[P15](./P15_ai_llm_data_handling.md)** (AI / LLM Data Handling) — **Approved** 2026-07-28.
 
 ## 7. Handling rules
 

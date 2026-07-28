@@ -1,8 +1,8 @@
 # Policy drafts (SOC 2 Type I readiness)
 
-**P01–P12 are APPROVED** as of **2026-07-27** by Matt Justice (executive sponsor). See [../04_policy_index.md](../04_policy_index.md).
+**P01–P12 are APPROVED** as of **2026-07-27**; **P15** as of **2026-07-28** by Matt Justice (executive sponsor). See [../04_policy_index.md](../04_policy_index.md).
 
-**Approving policies ≠ SOC 2 certified.** Open evidence items remain (restore test, IR tabletop, vendor reports, Customer DPA, etc.). Do not present SMPL as SOC 2 certified until a CPA Type I report is in hand.
+**Approving policies ≠ SOC 2 certified.** Open evidence items remain (IR tabletop, vendor reports, Customer DPA, etc.). Do not present SMPL as SOC 2 certified until a CPA Type I report is in hand.
 
 ## How approval was recorded
 
@@ -24,12 +24,12 @@
 | P10 | [P10_risk_assessment.md](./P10_risk_assessment.md) | **Approved** 2026-07-27 |
 | P11 | [P11_business_continuity_disaster_recovery.md](./P11_business_continuity_disaster_recovery.md) | **Approved** 2026-07-27 |
 | P12 | [P12_backup_and_restore.md](./P12_backup_and_restore.md) | **Approved** 2026-07-27 |
+| P15 | [P15_ai_llm_data_handling.md](./P15_ai_llm_data_handling.md) | **Approved** 2026-07-28 |
 
 ### Next drafts (prioritized)
 
 | ID | Policy | Status |
 |----|--------|--------|
-| **P15** | AI / LLM Data Handling | **Draft — ready for approval** ([P15_ai_llm_data_handling.md](./P15_ai_llm_data_handling.md)) — **not approved**; Matt sign-off next |
 | P13 | Vulnerability Management | Not started |
 | P14 | Logging & Monitoring | Not started |
 | P16 | White-glove / Privileged Support Access | Not started |

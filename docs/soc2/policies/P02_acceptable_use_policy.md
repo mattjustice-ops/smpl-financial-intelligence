@@ -43,7 +43,7 @@ Set expectations for responsible use of SMPL systems, accounts, and customer dat
 - Anthropic (and any other LLM) API keys stay on the backend only — not in browser, Vercel client env, or static exports.
 - AI commentary is not the system of record for numbers; engine/warehouse outputs are.
 - Do not paste production customer data into consumer AI products (ChatGPT web, etc.) unless explicitly approved for that use case.
-- Full AI/LLM posture: [P15](./P15_ai_llm_data_handling.md) (**Draft — ready for approval**, not yet approved).
+- Full AI/LLM posture: [P15](./P15_ai_llm_data_handling.md) (**Approved** 2026-07-28).
 
 ## 5. Devices & endpoints
 

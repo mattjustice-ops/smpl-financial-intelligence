@@ -19,13 +19,13 @@
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
 | **Week 1** | ~2026-07-22 → 2026-07-29 | **COMPLETE 2026-07-26** — MFA on admin consoles; access inventory first pass; protect `main` + required PR (GitHub ruleset; solo-friendly, approvals may be 0); break-glass = Neon/Railway MFA (no separate login) |
-| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 draft** ready for approval (not approved). Next: DPA legal path; Matt approve P15; boundary/vendor TBDs. Approval ≠ SOC 2 certified |
+| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 Approved 2026-07-28**. Next: DPA legal path; boundary/vendor TBDs. Approval ≠ SOC 2 certified |
 | **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 signed; **backup restore test Pass 2026-07-27**; IR tabletop notes; vendor SOC report collection started; DPA draft → legal path |
-| **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM subprocessor write-up finalized; security one-pager published for sales |
+| **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM write-up (**P15 Approved 2026-07-28**); security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Start consolidated **Customer DPA / MSA** legal path ([P10](./policies/P10_risk_assessment.md) R16); **approve P15** draft ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)); resolve boundary/vendor TBDs. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
+**Next guided item for Matt:** Start consolidated **Customer DPA / MSA** legal path ([P10](./policies/P10_risk_assessment.md) R16); resolve boundary/vendor TBDs. **P15 Approved** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -54,7 +54,7 @@
 | `[!]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | ← **start here**; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | Test plan + results |
-| `[~]` | **P15** AI/LLM Data Handling — draft ready for approval | Matt | Week 2 | [P15 draft](./policies/P15_ai_llm_data_handling.md) 2026-07-27 — **not approved**; Matt review/sign-off next |
+| `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** by Matt Justice — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
 | `[ ]` | Security one-pager **published** for sales | Matt | Month 2 | Draft exists; publish / share under NDA |
 | `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Even approximate; mark TARGET |
 | `[!]` | Audit firm shortlist / engagement | Matt | Month 3–4 | Independent CPA — **TARGET** fieldwork |
@@ -114,7 +114,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | Phase | Status | Exit criteria |
 |-------|--------|---------------|
 | 1. Kickoff | [~] In progress | Scope **APPROVED** + owners named; platform **deferred DIY**; **target month / CPA still open** |
-| 2. Controls live | [~] In progress | Policies **approved** 2026-07-27; P15 draft ready (not approved); MFA + access inventory; change/deploy path; IR approved (tabletop open); restore test / vendor reports / tenant isolation still open |
+| 2. Controls live | [~] In progress | Policies **approved** (P01–P12 2026-07-27; P15 2026-07-28); MFA + access inventory; change/deploy path; IR approved (tabletop open); vendor reports / tenant isolation still open |
 | 3. Type I audit | [ ] Open | CPA firm engaged; fieldwork complete; **Type I report issued** |
 | 4. Type II observation | [ ] Open | Controls operate cleanly over window; Type II report issued |
 
@@ -190,7 +190,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Draft stubs expanded: ISP, Acceptable Use, Access Control, IR, Change Mgmt | [policies/](./policies/) P01–P05 |
 | `[x]` | Core policies P01–P12 drafted (approval-ready) | P06–P12 expanded; P07 + P10 created 2026-07-26 |
 | `[x]` | Leadership approve core policies | **Approved 2026-07-27** by Matt Justice — [04_policy_index.md](./04_policy_index.md). Approval ≠ SOC 2 certified; evidence items remain |
-| `[~]` | **P15** AI / LLM Data Handling — draft ready for approval | [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) — **not approved**; Matt sign-off next |
+| `[x]` | **P15** AI / LLM Data Handling — Approved | **Approved 2026-07-28** by Matt Justice — [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
 
 ### E. Engineering hygiene
 
@@ -201,7 +201,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2 |
 | `[x]` | Calendar or complete Neon backup **restore test** | **Pass 2026-07-27** — PITR throwaway validated; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2 |
-| `[~]` | **P15** draft + AI/LLM / Anthropic write-up | Draft ready 2026-07-27 — awaiting Matt approval |
+| `[x]` | **P15** + AI/LLM / Anthropic write-up | **Approved 2026-07-28** — [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) |
 
 ### F. Pre–Type I readiness bar (from readiness v2)
 
@@ -210,14 +210,14 @@ Book the auditor only when these are **live**, not merely drafted:
 | Status | Control area |
 |--------|----------------|
 | `[x]` | MFA on admin/cloud accounts | Cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass covered by Neon/Railway MFA (solo; no separate login) |
-| `[x]` | Written policies **approved** by leadership | P01–P12 Approved 2026-07-27; approval ≠ certified |
+| `[x]` | Written policies **approved** by leadership | P01–P12 Approved 2026-07-27; **P15 Approved 2026-07-28**; approval ≠ certified |
 | `[~]` | Access inventory + first review artifact | Inventory first pass done; quarterly sign-off still open (Week 3–4) |
 | `[x]` | Documented change/deploy path + PR review on `main` | Path documented; GitHub ruleset protecting `main` live 2026-07-26 |
 | `[~]` | Incident response plan (approved + operable) | **Approved** 2026-07-27; tabletop **not scheduled** — still open |
 | `[x]` | Backup restore test evidence | **Pass 2026-07-27** — PITR throwaway; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[ ]` | Subprocessor inventory + vendor reports collected | Inventory draft; reports not collected |
 | `[ ]` | Tenant isolation evidence |
-| `[~]` | **P15** draft + AI/subprocessor write-up for Anthropic | Draft ready — not approved |
+| `[x]` | **P15** + AI/subprocessor write-up for Anthropic | **Approved 2026-07-28** |
 
 ### G. Type I → Type II
 
@@ -259,11 +259,10 @@ Not SOC 2 certified. Readiness evidence only.
 ## Top `[!]` for Matt (do next)
 
 1. **[!]** Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) — P10 R16 ← **start here**
-2. **[~]** **Approve P15** — AI / LLM Data Handling draft ready ([policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)); not auto-approved
-3. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
-4. **[!]** Resolve boundary TBDs / vendor regions
-5. Open evidence (keep honest): IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05). Restore test **Pass** 2026-07-27 (P12)
-6. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
+2. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
+3. **[!]** Resolve boundary TBDs / vendor regions
+4. Open evidence (keep honest): IR tabletop **not scheduled** (P04); staging / Dependabot **not confirmed** (P05). Restore test **Pass** 2026-07-27 (P12). **P15 Approved** 2026-07-28
+5. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
 
 ---
 
@@ -311,6 +310,15 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 3. Validated SQL on throwaway host only — core + warehouse tables; Demo Co present; sanitized counts filed
 4. Railway / Vercel production URLs **unchanged**; branch left named for Matt to delete
 5. Evidence + P12 sign-off + P10 R06 + scoreboard / `/compliance` data synced to **Pass**
+
+## What we checked off 2026-07-28 — P15 Approved (redline + companion edits)
+
+**Not SOC 2 certified.** Approving P15 ≠ CPA Type I report.
+
+1. Applied Matt redline: expanded hallucination / "don't know" §4.7; Confidential AI prompt/debug log retention ≤ 30 days (§5)
+2. Companion: P04 incident type + Sev2 + containment row for AI hallucination reaching a customer; P08 retention row for AI prompt/debug logs
+3. **P15 Approved** 2026-07-28 by Matt Justice — approval table + [04_policy_index.md](./04_policy_index.md)
+4. Cross-refs (P01/P02/P06/P09/P10), scoreboard + `/compliance` data synced
 
 ---
 
