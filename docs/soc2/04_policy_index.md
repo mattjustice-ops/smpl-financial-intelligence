@@ -28,7 +28,7 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | P12 | Backup & Restore (incl. restore test) | Availability | Matt Justice | **Approved** | 2026-07-27 | [policies/P12_backup_and_restore.md](./policies/P12_backup_and_restore.md) |
 | P13 | Vulnerability Management | Security (CC7) | Matt Justice | Not started | | |
 | P14 | Logging & Monitoring | Security; Availability | Matt Justice | Not started | | |
-| P15 | AI / LLM Data Handling | Security; Confidentiality | Matt Justice | **Approved** | 2026-07-28 | [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) |
+| P15 | AI / LLM Data Handling | Security; Confidentiality | Matt Justice | **Approved** (v1.1 draft amendment pending Allow) | 2026-07-28 | [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) |
 | P16 | White-glove / Privileged Support Access | Confidentiality; Security | Matt Justice | Not started | | |
 | P17 | Security Awareness Training | Security (people) | Matt Justice | Not started | | |
 
@@ -61,7 +61,7 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | P10 | Matt Justice | 2026-07-27 | 1.0 |
 | P11 | Matt Justice | 2026-07-27 | 1.0 |
 | P12 | Matt Justice | 2026-07-27 | 1.0 |
-| P15 | Matt Justice | 2026-07-28 | 1.0 |
+| P15 | Matt Justice | 2026-07-28 | 1.0 (1.1 draft pending Allow) |
 
 ---
 
@@ -74,3 +74,4 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | 2026-07-27 | Matt review fixes (immutability vs retention; R15 Railway job interrupt; R16 consolidated DPA; P15 draft-next); **P01–P12 Approved** by Matt Justice. Reminder: approval ≠ SOC 2 certified. |
 | 2026-07-27 | **P15** AI/LLM draft created (ready for approval, not approved); platform deferred DIY logged in decision log. |
 | 2026-07-28 | **P15 Approved** by Matt Justice (redline: hallucination §4.7, logging/retention 30 days, P04/P08 companion edits). Approval ≠ SOC 2 certified. |
+| 2026-07-28 | **P15 v1.1 draft amendment** (machine-primary grounding / fail-closed / freeze-ID binding; human review not primary) + IR Scenario B / P04 companion — **pending Matt Allow**. Do not treat as Allowed until confirmed. |

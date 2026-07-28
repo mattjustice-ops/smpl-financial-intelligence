@@ -35,7 +35,7 @@ Exercise the approved Incident Response Plan ([P04](../policies/P04_incident_res
 | 0–5 | Setup | Open P04 + this runbook. Copy evidence template to `docs/soc2/evidence/ir-tabletop-YYYY-MM-DD.md`. Note start time (UTC). Remind yourself: **tabletop ≠ real incident**. |
 | 5–25 | Scenario A | Leaked API / credential exposure — full IR step-through (below). Capture decisions in the evidence file as you go. |
 | 25–45 | Scenario B | AI hallucination / unsupported claim reached a customer (P15 §4.7 → P04 Sev2) — same step-through. |
-| 45–55 | Cross-cut | Compare findings across A and B. List follow-ups (runbook gaps, tooling, review gates). |
+| 45–55 | Cross-cut | Compare findings across A and B. List follow-ups (runbook gaps, tooling, fail-closed grounding / freeze-ID binding). |
 | 55–60 | Sign-off | Fill sign-off table. Mark PROGRESS / `/compliance` **only after** notes are filed (this pack alone does not close the item). |
 
 If short on time: run **one** scenario fully (≥30 min) and note the other as deferred — still file evidence with that honesty.
@@ -87,7 +87,7 @@ Work each inject through P04 §5. For every phase, write **what you would do**, 
 
 ### 4. Eradicate
 
-- Root cause: misconfig, missing review gate, leaked key, grounding gap, etc.
+- Root cause: misconfig, leaked key, grounding/validation **fail-open**, freeze-ID binding gap, etc. (For Scenario B: do **not** frame root cause as “skipped human review.”)
 - Fix path: ticket / PR / policy update — name it even if fictional for the exercise.
 
 ### 5. Recover
@@ -143,9 +143,13 @@ Work each inject through P04 §5. For every phase, write **what you would do**, 
 
 ## Scenario B — AI hallucination / unsupported claim reached a customer
 
-### Inject (fictional)
+> **Product posture (must follow in this exercise):** Primary controls are backend security/engineering — automated evidence binding, fail-closed grounding, freeze-ID binding. Do **not** treat “human review before send” or “customer should have re-validated” as root cause or primary control. Hypothetical only — no live actions.
 
-> A customer emails: their board package includes AI-generated commentary stating MRR grew 18% QoQ due to “expansion in EMEA enterprise.” The warehouse / engine freeze for that period shows ~4% QoQ and no EMEA expansion driver. The package was already sent to their board.
+### Inject (fictional / hypothetical)
+
+> A customer emails: their board package (or in-product customer-visible analysis) includes AI-generated commentary claiming MRR grew **+18% QoQ**, driven by **“expansion in EMEA enterprise.”** The warehouse / engine **freeze** for that period supports only **~4% QoQ** and has **no EMEA expansion driver**. The package was already delivered externally.
+>
+> **Root-cause framing for this exercise (required):** Backend grounding / claim-validation **failed open** (bug or misconfiguration) — unsupported numeric claim and wrong-context driver packaging were emitted despite the freeze. This is **not** “we skipped human review before send.” A large variance between commentary and engine (e.g. 14–18% vs ~4%) would be devastating to trust; users will misuse UI — the system must force the right path.
 
 ### Align to P04 + P15
 
@@ -153,24 +157,26 @@ Work each inject through P04 §5. For every phase, write **what you would do**, 
 |-------|-----------------------------------------------|
 | Incident type | AI-generated commentary reaching a customer with a claim that does not resolve to verified engine/warehouse evidence (P04 §3; P15 §4.7) |
 | Default severity | **Sev2** (P04 §4) |
-| Containment row | Identify affected output(s)/customer(s); issue corrected output; document root cause (grounding gap vs review-step miss); assess pausing commentary pending fix |
+| Containment row | Stop shipping bad commentary via **technical controls**; identify freeze ID / package / org / period; issue corrected output; document root cause as grounding/validation **fail-open** (not human-review miss) |
+| Root cause (exercise) | Automated grounding/validation **failed open** — bug/misconfig |
 
 ### Step prompts
 
-1. **Detect** — Customer report vs internal review catch — note intake channel.
-2. **Classify** — Why Sev2 (not Sev3)? Material incorrect financial claim delivered externally.
-3. **Contain** — Identify package version / org / period; issue corrected commentary; pause board-facing AI commentary for that path if needed (honest: only claim product controls that exist — P15 §6.1).
-4. **Eradicate** — Grounding gap vs human-review miss (P15 §4.7 requires review gate for board packages until automated check replaces it). Fix: prompt/tooling, checklist, or product gate.
-5. **Recover** — Resend corrected package; confirm engine numbers match; re-enable commentary only after gate confirmed.
-6. **Notify** — Customer correction (required for exercise narrative); any broader notice? Exec approval recorded.
-7. **Lessons** — Update review checklist; optional PR to harden grounding; no fake “kill switch” claims.
+1. **Detect** — Customer report of variance (+18% / EMEA vs freeze ~4% / no EMEA). Note intake channel. Do not treat “customer should have caught it” as the control failure.
+2. **Classify** — Why Sev2 (not Sev3)? Material incorrect financial claim and wrong-context packaging delivered externally. Large commentary-vs-engine variance is trust-critical.
+3. **Contain** — Stop further bad commentary with **real technical controls**: feature flag if one exists, disable narrative generation path, and/or hotfix that fails closed. Identify freeze ID / package version / org / period. Issue corrected customer output bound to freeze evidence. Honesty: only claim product controls that exist (P15 §6.1) — no fake customer kill-switch claims.
+4. **Eradicate** — Fix the validation gate so unsupported claims **cannot** be emitted; bind packages to freeze ID; structural verification of claims vs engine; fail closed to don't-know / omit. Do **not** “eradicate” by adding human review before send as the primary control.
+5. **Recover** — Deliver corrected package/output; confirm commentary figures and drivers match the freeze; re-enable the narrative path only after the fail-closed gate is verified.
+6. **Notify** — Customer correction (required for exercise narrative); any broader notice? Exec approval recorded. No live customer email in this tabletop.
+7. **Lessons** — Align with machine-primary controls: automated evidence binding, fail-closed grounding, freeze-ID binding. Humans = IR, exception handling, periodic control testing — not day-to-day re-validation of every output. Users misuse UI; system forces the right path.
 
 ### Evidence to “imagine” keeping
 
-- Affected output id / period (sanitized — no customer PII in git evidence)
+- Affected output id / freeze ID / period (sanitized — no customer PII in git evidence)
+- Technical containment action (flag / path disable / hotfix) — planned only in tabletop
 - Correction sent (describe; don’t paste customer email)
-- Root-cause: grounding vs review miss
-- Follow-up ticket / policy note
+- Root-cause: grounding/validation **fail-open** (bug/misconfig) — not human-review miss
+- Follow-up ticket / PR to harden fail-closed gate + freeze-ID binding
 
 ---
 

@@ -9,9 +9,9 @@
 | Owner | Matt Justice (Security owner) |
 | Applies to | Suspected or confirmed security / availability incidents affecting SMPL or customer data |
 | Related criteria | Security; Availability |
-| Version | 1.0 |
+| Version | 1.0 (companion note 2026-07-28) |
 | Effective date | 2026-07-27 |
-| Last expanded | 2026-07-22 |
+| Last expanded | 2026-07-28 (AI containment: machine-primary; pending P15 v1.1 Allow) |
 
 ---
 
@@ -70,7 +70,7 @@ Examples (not exhaustive):
 | Suspected cross-tenant leak | Disable affected feature/path; snapshot evidence; notify exec; assess customer impact |
 | Provider outage (Vercel/Railway/Neon) | Check status pages; communicate; failover only if pre-documented |
 | Secret in git | Rotate immediately; purge history if needed; treat as Sev2+ |
-| AI hallucination reaching customer | Identify affected output(s) and customer(s); issue corrected output; document root cause (grounding gap vs. review-step miss); assess whether commentary should be paused pending fix |
+| AI hallucination reaching customer | Identify affected output(s), freeze ID(s), and customer(s); **stop shipping** further bad commentary via technical controls (feature flag if present / disable narrative path / hotfix — fail closed); issue corrected output bound to freeze evidence; document root cause as grounding/validation **fail-open** or freeze-binding defect — **not** “skipped human review”; humans handle IR / exceptions / periodic testing (see P15 §4.7) |
 
 ## 6. Evidence to keep
 
