@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-28", // Dependabot + secret scanning confirmed; IR tabletop complete; P15 v1.1 Approved
+  lastUpdated: "2026-07-29", // Access review 2026-Q3 signed OK/Allow
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next Week 3–4: access review #1. Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next: DPA counsel + vendor SOC collection. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -98,7 +98,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 3–4",
     approxDates: "~2026-08-05 → 2026-08-19",
     focus:
-      "Access review #1 signed; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA outline → counsel redline",
+      "Access review #1 signed 2026-07-29; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA outline → counsel redline",
   },
   {
     id: "month-2",
@@ -268,10 +268,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-access-review",
     label: "First quarterly-style access review sign-off",
-    status: "open",
+    status: "done",
     owner: "Matt",
     targetWindow: "Week 3–4",
-    notes: "After inventory stable — Week 1 inventory complete",
+    notes:
+      "Signed 2026-07-29 — OK/Allow; Matt Justice (security owner + exec sponsor); corporate email mattjustice@smpl-ai.com; items 1–12 OK — docs/soc2/evidence/access-review-2026-Q3.md; readiness only — not SOC 2 certified",
   },
   {
     id: "rem-restore-test",
@@ -391,7 +392,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; vendor reports / tenant isolation / access review still open",
+      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; access review signed 2026-07-29; vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -635,8 +636,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "ah-11",
         label: "First quarterly-style access review sign-off",
-        status: "open",
-        notes: "After inventory stable — Week 3–4",
+        status: "done",
+        notes:
+          "Signed 2026-07-29 — OK/Allow; docs/soc2/evidence/access-review-2026-Q3.md; readiness only — not SOC 2 certified",
       },
     ],
   },
@@ -750,8 +752,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-3",
         label: "Access inventory + first review artifact",
-        status: "in_progress",
-        notes: "Inventory first pass done; quarterly sign-off still open (Week 3–4)",
+        status: "done",
+        notes:
+          "Inventory first pass done; Q3 review signed 2026-07-29 — docs/soc2/evidence/access-review-2026-Q3.md; readiness only — not SOC 2 certified",
       },
       {
         id: "bar-4",
