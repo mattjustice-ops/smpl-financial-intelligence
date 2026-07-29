@@ -3,7 +3,8 @@
 ### Zero-tolerance policy: every number displayed must trace to a warehouse row
 
 > **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels.  
-> **Part 6 adaptation:** Day-to-day primary controls are **automated fail-closed gates** (not human sign-off before every send). Human checklist items → **IR / exceptions / periodic control testing**. Linked from [P15](../policies/P15_ai_llm_data_handling.md) §4.8.
+> **Part 6 adaptation:** Day-to-day primary controls are **automated fail-closed gates** (not human sign-off before every send). Human checklist items → **IR / exceptions / periodic control testing**. Linked from [P15](../policies/P15_ai_llm_data_handling.md) §4.8.  
+> **Customer statement construction:** For production GL → P&L / BS / CF builds (not demo seed), follow [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md).
 
 ---
 
@@ -112,7 +113,8 @@ CP_DATA = {
       is_final: true
     },
     ending_cash: {
-      // TWO sources — must match within $1000
+      // TWO sources — bank soft check (~$1000 timing) is NOT statement “rounding”
+      // Closed-actuals CFS / BS cash identities still fail-closed at $1.00 (TOL_ACTUALS)
       primary: {
         table:  'bank_account_balances',
         column: 'ending_balance',
@@ -125,7 +127,7 @@ CP_DATA = {
         period: '2026-06',
         value:  70612122
       },
-      reconciliation_gap: 122,   // < $1000 = acceptable
+      reconciliation_gap: 122,   // bank_timing_soft — flag if > $1000; not “rounding”
       value_used: 70612000       // bank balance is source of truth
     },
     nrr: {
@@ -424,7 +426,10 @@ def verify_warehouse(source, period, org_id, db_conn, displayed):
     displayed_num  = parse_display_value(displayed)  # "$86.1M" → 86100000
     warehouse_num  = float(warehouse_raw)
     diff           = abs(displayed_num - warehouse_num)
-    tolerance      = max(1000, abs(warehouse_num) * 0.001)  # $1K or 0.1%
+    # Display / UI soft check only (million-scale presentation). Do NOT use this
+    # as closed-actuals statement tolerance — statement identities use TOL_ACTUALS=$1.00
+    # (|Δ|≤$0.01 = rounding label; >$1 = significant_miss / FAIL).
+    tolerance      = max(1000, abs(warehouse_num) * 0.001)  # display_precision soft band
 
     return {
         'status':          'PASS' if diff <= tolerance else 'FAIL',
@@ -435,6 +440,7 @@ def verify_warehouse(source, period, org_id, db_conn, displayed):
         'displayed_parsed':displayed_num,
         'diff':            diff,
         'tolerance':       tolerance,
+        'tolerance_kind':  'display_precision',  # not statement rounding
         'query':           f"SELECT {column} FROM {table} WHERE org='{org_id}' AND period='{period}'"
     }
 ```
@@ -579,7 +585,7 @@ def generate_and_verify_commentary(cp_data, close_month, org_id):
             + "\n".join(f"  '{n}'" for n in verification['unverifiable'])
         )
 
-    # Block if any number doesn't match (beyond rounding)
+    # Block if any number doesn't match (beyond statement TOL_ACTUALS / display soft rules)
     bad = [n for n in verification['numbers_found']
            if not n['match'] and n['diff'] > 10000]
     if bad:
@@ -655,7 +661,8 @@ function extractNumbers(text) {
 }
 
 function findInSources(value, sources) {
-  // Check if value (with 1% tolerance) appears in any source
+  // Commentary soft match vs evidence — NOT closed-actuals statement tolerance.
+  // Statement identities / FE↔Board actuals: TOL_ACTUALS = $1.00 (fail-closed).
   const TOLERANCE = Math.max(1000, Math.abs(value) * 0.01);
   return Object.values(sources).some(s => {
     const sv = s.value || s.computed_value || s.value_used;
@@ -680,9 +687,9 @@ SECTION 1 — DATA INTEGRITY
 [ ] 1.  Tie-out report generated (tieout_report_{org}_{month}.html)
 [ ] 2.  Tie-out report shows 0 FAIL items
 [ ] 3.  Tie-out warnings reviewed and documented
-[ ] 4.  Cash reconciliation gap < $1,000 (bank vs CFS)
-[ ] 5.  ARR chain verified: every month's ending = next month's beginning
-[ ] 6.  Cash chain verified: every month's ending = next month's beginning
+[ ] 4.  Cash reconciliation gap < $1,000 (bank vs CFS) — bank_timing_soft; not “rounding.” Statement CFS identities still ≤ $1.00
+[ ] 5.  ARR chain verified: every month's ending = next month's beginning (TOL_ACTUALS $1.00; |Δ|≤$0.01 may label rounding)
+[ ] 6.  Cash chain verified: every month's ending = next month's beginning (TOL_ACTUALS $1.00 — multi-$k gaps = significant_miss)
 
 SECTION 2 — KEY METRICS SPOT CHECK
 Verify these 5 numbers directly in the warehouse before approving:
@@ -820,7 +827,8 @@ JOIN cash_flow_statement b
   )
 WHERE a.organization_id = '{org_id}'
 ORDER BY a.period;
--- Expected: chain_gap ≈ 0 for all rows (≤ $100 rounding)
+-- Expected: chain_gap ≈ 0 for all rows (TOL_ACTUALS ≤ $1.00; |Δ|≤$0.01 = rounding label only)
+-- Multi-hundred / multi-thousand gaps = significant_miss / data_mismatch — NOT rounding
 
 -- 7. Verify commentary numbers (run after commentary generation)
 -- Paste any number from AI commentary and verify it exists in warehouse
@@ -835,6 +843,7 @@ UNION ALL
 SELECT 'cash_flow_statement', period, ending_cash
 FROM cash_flow_statement WHERE organization_id='{org_id}' AND period='{close_month}'
   AND ABS(ending_cash - {stated_value}) < 10000;
+-- Soft commentary probe only. Closed-actuals statement fail-closed remains $1.00.
 -- If this returns 0 rows: the stated number has no warehouse source — investigate
 ```
 

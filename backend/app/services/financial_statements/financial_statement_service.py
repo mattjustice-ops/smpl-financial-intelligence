@@ -22,7 +22,7 @@ from app.services.financial_statements.financial_statement_mapper import (
 from app.services.reporting.period_utils import period_to_date, scenario_periods, to_period
 
 MONEY = Decimal("0.01")
-TOLERANCE = Decimal("1.00")
+TOLERANCE = Decimal("1.00")  # Closed actuals fail-closed: |Δ|>$1 = fail. Do not loosen.
 
 
 class NormalizedStatementLine(BaseModel):

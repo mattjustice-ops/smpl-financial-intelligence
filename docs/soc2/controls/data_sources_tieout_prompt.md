@@ -2,7 +2,8 @@
 ### Cursor Prompt: Align Board Platform + Forecast Engine to Warehouse Schema
 ### Priority: Customer demo ready by Monday
 
-> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Tie-out / `runTieOut()` publish-block rules are **required control design** for board/customer-facing packages (P15 §4.8). Do not claim full Rule Sets A–F are live unless code evidence shows they are.
+> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Tie-out / `runTieOut()` publish-block rules are **required control design** for board/customer-facing packages (P15 §4.8). Do not claim full Rule Sets A–F are live unless code evidence shows they are.  
+> **Customer GL → statements:** Construction methodology (RE_BASE, openings, three-rollup, dept-299) is [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md) — does not change demo Board/FE seed behavior.
 
 ---
 
@@ -167,7 +168,8 @@ COLL     [Jan–Jun]: cash_flow_statement.cash_collections / 1e6
 ```
 **Critical:** `CASH_ACT` values must come from `bank_account_balances` as the
 authoritative source, reconciled against `cash_flow_statement.ending_cash`.
-If they differ by > $1000, flag `reconciliation_gap` and use bank balance.
+If they differ by > $1000, flag `reconciliation_gap` (`bank_timing_soft`) and use bank balance.
+Do **not** call that soft gap “rounding.” Closed-actuals CFS / statement identities still fail-closed at `$1.00` (see Part 3 severity preface).
 
 #### Monthly Collections chart (`cashColl`)
 ```
@@ -796,41 +798,63 @@ r.bs.total_assets             total_le                        derive (= total_as
 
 ## Part 3 — Complete Tie-Out Rules
 
+### Severity & tolerance preface (closed actuals vs soft checks)
+
+**Closed actuals / statement identity / FE↔Board actuals cross-tie** use Matt’s bar (product fail-closed already at `$1.00` — do not loosen):
+
+| |Δ| | Label | Gate |
+|---|---|---|
+| `0` | `exact` | Pass |
+| `≤ $0.01` | `rounding` | Pass (cents only) |
+| `$0.01 < \|Δ\| ≤ $1.00` | `investigate` | Weird — investigate; product hard-fail is **> $1** |
+| `> $1.00` | `significant_miss` / `data_mismatch` | **FAIL** — not rounding. Multi-thousand = significant miss |
+
+See [reconcile_financial_statements.md](./reconcile_financial_statements.md) for June 2026 FE↔Board deltas labeled honestly.
+
+**Soft checks (do not call these “rounding” for statement actuals):**
+
+| Check type | Typical band | Label |
+|---|---|---|
+| Bank balance vs CFS ending cash | Soft flag ~`$1,000` timing | `bank_timing_soft` / `reconciliation_gap` |
+| Million-scale **display** arrays (`/ 1e6`) | Display precision ~`$0.001M` | `display_precision` — not statement rounding |
+
+Default `TOL_ACTUALS = 1.00` for closed-actuals statement rules below. Older `$100` / `$1K` “rounding” wording for actuals identities is **retired**.
+
 ### Rule Set A — ARR Tie-Outs (Must hold at every close)
 
 **A1 — ARR chain integrity (month-over-month):**
 ```
 For every period N and N+1:
   arr_waterfall.ending_arr[N] == arr_waterfall.beginning_arr[N+1]
-  tolerance: $0 (exact, no rounding allowed)
+  tolerance: $0 (exact)
 ```
 
 **A2 — ARR waterfall components sum to net new:**
 ```
 new_business_arr + expansion_arr + reactivation_arr
 + contraction_arr + churn_arr == net_new_arr
-tolerance: $100 (rounding)
+tolerance: $1.00 (closed actuals — TOL_ACTUALS; |Δ|≤$0.01 = rounding label only)
 Where contraction_arr and churn_arr are NEGATIVE values
 ```
 
 **A3 — ARR ending ties from beginning:**
 ```
 beginning_arr + net_new_arr == ending_arr
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 **A4 — Board Platform WF_TABLE ties to warehouse:**
 ```
 WF_TABLE['Beginning'][MONTH_IDX] == arr_waterfall.beginning_arr[period] / 1 (raw $)
 WF_TABLE['Ending'][MONTH_IDX]    == arr_waterfall.ending_arr[period] / 1
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS for closed actuals)
 ```
 
 **A5 — Forecast Engine SRC.actuals ties to warehouse:**
 ```
 SRC.actuals[period].arr_eop == arr_waterfall.ending_arr[period]
 SRC.actuals[period].arr_nn  == arr_waterfall.net_new_arr[period]
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 **A6 — Forecast BOP chain (first FC period):**
@@ -838,7 +862,7 @@ tolerance: $100
 SRC.actuals[CLOSE_MONTH].arr_eop
   == computePeriod(FC_P[0]).arr.arr_bop
   == TS_DATA.Forecast.is[FC_P[0]] derived BOP
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 ---
@@ -849,15 +873,16 @@ tolerance: $100
 ```
 For every period N and N+1:
   cash_flow_statement.ending_cash[N] == cash_flow_statement.beginning_cash[N+1]
-  tolerance: $100
+  tolerance: $1.00 (TOL_ACTUALS — not $100 “rounding”)
 ```
 
-**B2 — Cash vs bank reconciliation:**
+**B2 — Cash vs bank reconciliation (soft check — bank timing, not statement rounding):**
 ```
 cash_flow_statement.ending_cash[CLOSE_MONTH]
   == bank_account_balances.ending_balance[last day of CLOSE_MONTH]
-  tolerance: $1000 (timing differences allowed, flagged if exceeded)
+  soft flag: $1000 (bank_timing_soft — timing differences allowed, flagged if exceeded)
   IF gap > $1000: store in cash_flow_statement.reconciliation_gap, use bank_balance as truth
+  Do NOT label bank gaps as “rounding.” Statement CFS identity still uses TOL_ACTUALS = $1.00.
 ```
 
 **B3 — Forecast Engine seed ties to actual:**
@@ -866,21 +891,22 @@ SRC.actuals[CLOSE_MONTH].ending_cash
   == compute() seed value `cash`
   == computePeriod(FC_P[0]).cfs.beg_cash
   == TS_DATA.Forecast.cfs[FC_P[0]].beginning_cash
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 Any gap here BREAKS all downstream cash metrics. Block publish if fails.
 ```
 
-**B4 — Board Platform CASH_ACT ties to warehouse:**
+**B4 — Board Platform CASH_ACT ties to warehouse (display precision):**
 ```
 CASH_ACT[MONTH_IDX] == cash_flow_statement.ending_cash[period] / 1e6
-tolerance: $0.001M ($1K)
+tolerance: $0.001M display_precision (≈ $1K on million-scale UI only — not “rounding” for statement actuals)
+Underlying statement / FE↔Board cash still fail-closed at $1.00.
 ```
 
-**B5 — CFO tie-out:**
+**B5 — CFO identity (closed actuals):**
 ```
 cash_flow_statement.net_cash_from_operating_activities[period]
   == (net_income + da + sbc + chg_ar + chg_dr + chg_ap + chg_prepaids)
-tolerance: $1000
+tolerance: $1.00 (TOL_ACTUALS — multi-thousand gaps are significant_miss, not rounding)
 ```
 
 ---
@@ -890,23 +916,24 @@ tolerance: $1000
 **C1 — Gross profit identity:**
 ```
 income_statement.gross_profit == revenue - cost_of_revenue
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 **C2 — EBITDA identity:**
 ```
 income_statement.ebitda == gross_profit - sales_and_marketing
                           - research_and_development - general_and_administrative
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
-**C3 — Board Platform arrays tie to warehouse:**
+**C3 — Board Platform arrays tie to warehouse (display precision):**
 ```
 REV_ACT[MONTH_IDX]    == income_statement.revenue[period] / 1e6
 GP_ACT[MONTH_IDX]     == income_statement.gross_profit[period] / 1e6
 EBITDA_ACT[MONTH_IDX] == income_statement.ebitda[period] / 1e6
 SM_ACT[MONTH_IDX]     == income_statement.sales_and_marketing[period] / 1e6
-tolerance: $0.001M
+tolerance: $0.001M display_precision (UI million scale only)
+Closed-actuals dollar identities still use TOL_ACTUALS = $1.00.
 ```
 
 **C4 — Forecast Engine IS ties to Board Platform:**
@@ -916,14 +943,14 @@ For each forecast period P:
   computePeriod(P).is.gross_profit == TS_DATA.Forecast.is[P].gross_profit
   computePeriod(P).is.ebitda      == TS_DATA.Forecast.is[P].ebitda
   computePeriod(P).is.net_income  == TS_DATA.Forecast.is[P].net_income
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS; closed actuals cross-platform same bar)
 ```
 
 **C5 — Revenue computation check:**
 ```
 Forecast Engine: is.revenue = arr.arr_eop / 12
 Board Platform:  TS_DATA.Forecast.is[P].revenue must equal same
-tolerance: $100 (rounding of arr/12)
+tolerance: $1.00 (TOL_ACTUALS — arr/12 cent noise ≤$0.01 may label rounding; >$1 = significant_miss)
 ```
 
 ---
@@ -966,7 +993,7 @@ tolerance: 0 (exact)
 SD.monthly[period].quota     == SUM(quota_assignments.quota_amount) WHERE period
 SD.monthly[period].attained  == SUM(quota_assignments.attainment_amount) WHERE period
 SD.monthly[period].reps      == COUNT(quota_assignments) WHERE period
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS for money; counts exact)
 ```
 
 **E2 — Pipeline ties:**
@@ -974,7 +1001,7 @@ tolerance: $100
 SD.pipeline[period].ending   == SUM(opportunities.arr_value WHERE stage=open AND as_of period_end)
 SD.pipeline[period].created  == SUM(opportunities.arr_value WHERE created_date in period)
 SD.pipeline[period].won      == SUM(opportunities.arr_value WHERE stage='closed_won' AND close_date in period)
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 **E3 — Rep-level ties:**
@@ -982,7 +1009,7 @@ tolerance: $100
 For each rep i:
 SD.reps[i].ytd_q == SUM(quota_assignments.quota_amount WHERE employee=rep AND period<=CLOSE_MONTH)
 SD.reps[i].ytd_a == SUM(quota_assignments.attainment_amount WHERE same)
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 ---
@@ -991,39 +1018,41 @@ tolerance: $100
 
 These rules ensure both platforms show the same numbers for forecast periods.
 **Any failure here = the two platforms are out of sync = block publish.**
+Closed **actuals** cross-ties use the same `$1.00` fail-closed bar — see [reconcile_financial_statements.md](./reconcile_financial_statements.md) for known demo `data_mismatch` inventory (do not reseed unless asked).
 
 **F1 — ARR cross-tie:**
 ```
 computePeriod(P).arr.arr_eop == TS_DATA.Forecast.arr_eop (if stored) OR
 computePeriod(P).arr.arr_eop / 1e6 == WF_TABLE['Ending'][MONTH_IDX]
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS on dollar side; display million-scale uses display_precision)
 ```
 
 **F2 — Revenue cross-tie:**
 ```
 For each forecast period P:
 computePeriod(P).is.revenue == TS_DATA.Forecast.is[P].revenue
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 **F3 — EBITDA cross-tie:**
 ```
 computePeriod(P).is.ebitda == TS_DATA.Forecast.is[P].ebitda
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
 **F4 — Cash cross-tie (most critical):**
 ```
 computePeriod(P).cfs.end_cash == TS_DATA.Forecast.cfs[P].ending_cash
 computePeriod(P).cfs.beg_cash == TS_DATA.Forecast.cfs[P].beginning_cash
-tolerance: $100
+tolerance: $1.00 (TOL_ACTUALS)
 ```
 
-**F5 — Payroll cross-tie:**
+**F5 — Payroll cross-tie (soft / lever mismatch — not statement rounding):**
 ```
 SUM(active req costs) from SRC.open_reqs in period
   == WF_PAYROLL[MONTH_IDX] increase vs prior period (approx)
-tolerance: $1000 (loose — payroll is lever-driven in engine, plan-driven in board)
+tolerance: $1000 soft (payroll is lever-driven in engine, plan-driven in board)
+Label: investigate / data_mismatch if exceeded — do not call “rounding.”
 ```
 
 ---
@@ -1034,10 +1063,13 @@ This function runs automatically after every data load and every publish.
 Returns `{ passed: boolean, failures: string[] }`.
 **Publish is BLOCKED if `passed === false`.**
 
+Closed-actuals / statement identities use `TOL_ACTUALS = 1.00` (product fail-closed). Soft bank/display checks are separate — see Part 3 preface.
+
 ```javascript
 function runTieOut(srcActuals, tsData, engineResults, closeMonth) {
-  const TOL  = 100;    // $100 default tolerance
+  const TOL_ACTUALS = 1.00; // closed actuals — fail if |Δ| > $1 (Matt bar)
   const TOL_EXACT = 0; // for integer counts
+  // Soft checks (not “rounding”): bank timing ~$1000; display /1e6 ~$0.001M
   const fails = [];
   const FCp   = Object.keys(tsData.Forecast.is || {}).sort();
   const ACTp  = Object.keys(srcActuals).sort();
@@ -1047,9 +1079,9 @@ function runTieOut(srcActuals, tsData, engineResults, closeMonth) {
     const aw = srcActuals[p];
     // A2: components sum
     const comp_nn = aw.arr_nb + aw.arr_exp + aw.arr_react + aw.arr_cont + aw.arr_churn;
-    chk('A2', p, 'arr net_new components', comp_nn, aw.arr_nn, fails, TOL);
+    chk('A2', p, 'arr net_new components', comp_nn, aw.arr_nn, fails, TOL_ACTUALS);
     // A3: ending = beginning + net_new
-    chk('A3', p, 'arr ending=bop+nn', aw.arr_bop + aw.arr_nn, aw.arr_eop, fails, TOL);
+    chk('A3', p, 'arr ending=bop+nn', aw.arr_bop + aw.arr_nn, aw.arr_eop, fails, TOL_ACTUALS);
   });
 
   // A6: forecast BOP chain
@@ -1057,7 +1089,7 @@ function runTieOut(srcActuals, tsData, engineResults, closeMonth) {
     const firstFC = FCp[0];
     const actEnd  = srcActuals[closeMonth]?.arr_eop;
     const fcBOP   = engineResults?.[firstFC]?.arr?.arr_bop;
-    chk('A6', firstFC, 'forecast arr_bop == actual arr_eop', actEnd, fcBOP, fails, TOL);
+    chk('A6', firstFC, 'forecast arr_bop == actual arr_eop', actEnd, fcBOP, fails, TOL_ACTUALS);
   }
 
   // ── Rule B: Cash ─────────────────────────────────────────────────────
@@ -1067,8 +1099,8 @@ function runTieOut(srcActuals, tsData, engineResults, closeMonth) {
     const actEndCash = srcActuals[closeMonth]?.ending_cash;
     const fcBegCash  = tsData.Forecast.cfs?.[firstFC]?.beginning_cash;
     const engBegCash = engineResults?.[firstFC]?.cfs?.beg_cash;
-    chk('B3a', firstFC, 'TS_DATA forecast beg_cash == actual ending', actEndCash, fcBegCash, fails, TOL);
-    chk('B3b', firstFC, 'Engine forecast beg_cash == actual ending', actEndCash, engBegCash, fails, TOL);
+    chk('B3a', firstFC, 'TS_DATA forecast beg_cash == actual ending', actEndCash, fcBegCash, fails, TOL_ACTUALS);
+    chk('B3b', firstFC, 'Engine forecast beg_cash == actual ending', actEndCash, engBegCash, fails, TOL_ACTUALS);
   }
 
   // ── Rule C: IS ───────────────────────────────────────────────────────
@@ -1076,9 +1108,9 @@ function runTieOut(srcActuals, tsData, engineResults, closeMonth) {
     const is = tsData.Actual?.is?.[p];
     if (!is) { fails.push(`C: TS_DATA.Actual.is missing period ${p}`); return; }
     const s  = srcActuals[p];
-    chk('C3a', p, 'REV_ACT', s.revenue, is.revenue, fails, TOL);
-    chk('C3b', p, 'GP_ACT',  s.gross_profit, is.gross_profit, fails, TOL);
-    chk('C3c', p, 'EBITDA',  s.ebitda, is.ebitda, fails, TOL);
+    chk('C3a', p, 'REV_ACT', s.revenue, is.revenue, fails, TOL_ACTUALS);
+    chk('C3b', p, 'GP_ACT',  s.gross_profit, is.gross_profit, fails, TOL_ACTUALS);
+    chk('C3c', p, 'EBITDA',  s.ebitda, is.ebitda, fails, TOL_ACTUALS);
   });
 
   // ── Rule F: Cross-tie engine ↔ board ────────────────────────────────
@@ -1086,10 +1118,10 @@ function runTieOut(srcActuals, tsData, engineResults, closeMonth) {
     const eng = engineResults?.[p];
     const ts  = { is: tsData.Forecast.is?.[p], cfs: tsData.Forecast.cfs?.[p] };
     if (!eng || !ts.is) { fails.push(`F: missing data for ${p}`); return; }
-    chk('F2', p, 'revenue',       eng.is.revenue,      ts.is.revenue,           fails, TOL);
-    chk('F3', p, 'ebitda',        eng.is.ebitda,        ts.is.ebitda,            fails, TOL);
-    chk('F4a',p, 'beg_cash',      eng.cfs.beg_cash,     ts.cfs?.beginning_cash,  fails, TOL);
-    chk('F4b',p, 'end_cash',      eng.cfs.end_cash,     ts.cfs?.ending_cash,     fails, TOL);
+    chk('F2', p, 'revenue',       eng.is.revenue,      ts.is.revenue,           fails, TOL_ACTUALS);
+    chk('F3', p, 'ebitda',        eng.is.ebitda,        ts.is.ebitda,            fails, TOL_ACTUALS);
+    chk('F4a',p, 'beg_cash',      eng.cfs.beg_cash,     ts.cfs?.beginning_cash,  fails, TOL_ACTUALS);
+    chk('F4b',p, 'end_cash',      eng.cfs.end_cash,     ts.cfs?.ending_cash,     fails, TOL_ACTUALS);
   });
 
   const passed = fails.length === 0;

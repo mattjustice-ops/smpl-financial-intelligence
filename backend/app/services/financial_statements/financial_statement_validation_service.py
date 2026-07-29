@@ -11,7 +11,7 @@ from app.services.financial_statements.financial_statement_service import (
     q,
 )
 
-TOLERANCE = Decimal("1.00")
+TOLERANCE = Decimal("1.00")  # Closed actuals fail-closed: |Δ|>$1 = fail (significant_miss). |Δ|≤$0.01 = rounding label only.
 
 
 def _index(stmt: NormalizedStatementResponse) -> dict[tuple[str, date, str], Decimal]:
