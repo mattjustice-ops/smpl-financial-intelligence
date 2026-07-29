@@ -1,10 +1,12 @@
 # SMPL.ai — Security one-pager
 
 **Audience:** Customers and prospects (security questionnaires, early diligence).  
-**Status:** Ready to share under NDA (sales publish checklist still open — Month 2).  
+**Status:** **Published for sales under NDA** (2026-07-29) — not a public marketing page; not SOC 2 certified.  
 **Last updated:** 2026-07-29  
 **Owner:** Matt Justice  
-**Canonical path:** `docs/soc2/SECURITY_ONE_PAGER.md` · Publish steps: [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md)
+**Canonical path:** `docs/soc2/SECURITY_ONE_PAGER.md`  
+**NDA PDF export:** `docs/soc2/SMPL_Security_One_Pager_2026-07.pdf`  
+**Publish record:** [evidence/security-one-pager-published-2026-07-29.md](./evidence/security-one-pager-published-2026-07-29.md) · Checklist: [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md)
 
 > **Honest framing:** SMPL is **pursuing SOC 2 Type I** (Security + Availability + Confidentiality). We are **not** SOC 2 certified and do **not** claim “SOC 2 compliant” until an independent CPA firm issues a report. Public progress (not certification): [smpl-ai.com/compliance](https://www.smpl-ai.com/compliance).
 
@@ -32,8 +34,7 @@ SMPL.ai is a B2B SaaS financial intelligence platform (FP&A / ARR / close / boar
 - **Multi-tenant** application model keyed by organization (`organization_id`).
 - Customer users access only their organization’s data via authenticated sessions and membership checks.
 - Privileged support / white-glove data loads are limited to named operators and are not a substitute for customer admin access.
-
-*Formal Org A ≠ Org B isolation test evidence is part of our Month 2 readiness workstream — available under NDA when complete.*
+- Org A ≠ Org B isolation testing completed as readiness evidence (2026-07-29). Detailed test notes are available **under NDA** on request — not a claim of SOC 2 certification.
 
 ---
 
@@ -115,13 +116,26 @@ We maintain an approved incident response plan covering detection, containment, 
 
 - That SMPL is “SOC 2 certified” or “SOC 2 compliant” before a CPA report exists.
 - That Processing Integrity (e.g. audited ARR math) is in scope for the first Type I.
-- That vendor SOC/ISO report collection or formal Org A ≠ Org B isolation evidence is complete until those artifacts exist and are shareable under NDA.
+- That vendor SOC/ISO report collection is complete until those artifacts exist and are shareable under NDA.
 
 ---
 
 ## Contact
 
 Security / compliance questions: **Matt Justice** (executive sponsor & security owner).
+
+---
+
+## How sales finds and shares this
+
+| Artifact | Location |
+|----------|----------|
+| Canonical markdown | `docs/soc2/SECURITY_ONE_PAGER.md` |
+| NDA PDF export | `docs/soc2/SMPL_Security_One_Pager_2026-07.pdf` |
+| Publish evidence | `docs/soc2/evidence/security-one-pager-published-2026-07-29.md` |
+| Public progress only | [smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) — scoreboard, **not** this one-pager and **not** certification |
+
+**Share under NDA** (email attachment, data room, or sales KB). Do **not** invent a public `/security` marketing page unless product decides to. Linking `/compliance` is OK as readiness progress only.
 
 ---
 

@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // Month 2 secrets+tenant Pass (Matt chat); DPA counsel pack awaiting send; vendor SOC scaffold; access review signed
+  lastUpdated: "2026-07-29", // Security one-pager published for sales under NDA; Month 2 secrets+tenant Pass; DPA counsel pack awaiting send; vendor SOC scaffold
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: send DPA pack + vendor Trust Center requests + security one-pager publish. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). Security one-pager published for sales under NDA 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md + SMPL_Security_One_Pager_2026-07.pdf). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: send DPA pack + vendor Trust Center requests. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -340,11 +340,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-one-pager-publish",
     label: "Security one-pager published for sales",
-    status: "open",
+    status: "done",
     owner: "Matt",
     targetWindow: "Month 2",
     notes:
-      "Near-publish draft 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md); publish checklist docs/soc2/runbooks/security-one-pager-publish.md — still open until NDA share",
+      "Published for sales under NDA 2026-07-29 — docs/soc2/SECURITY_ONE_PAGER.md + docs/soc2/SMPL_Security_One_Pager_2026-07.pdf; evidence docs/soc2/evidence/security-one-pager-published-2026-07-29.md; no public /security page; readiness ≠ certified",
   },
   {
     id: "rem-type-i-month",
@@ -561,7 +561,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Security one-pager",
         status: "done",
         notes:
-          "docs/soc2/SECURITY_ONE_PAGER.md — near-publish polish 2026-07-29; publish for sales still Month 2 open — runbooks/security-one-pager-publish.md",
+          "Published for sales under NDA 2026-07-29 — docs/soc2/SECURITY_ONE_PAGER.md + SMPL_Security_One_Pager_2026-07.pdf; evidence/security-one-pager-published-2026-07-29.md",
       },
     ],
   },
