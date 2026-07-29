@@ -19,13 +19,13 @@
 | Window | Target (not commitment) | Focus |
 |--------|-------------------------|--------|
 | **Week 1** | ~2026-07-22 → 2026-07-29 | **COMPLETE 2026-07-26** — MFA on admin consoles; access inventory first pass; protect `main` + required PR (GitHub ruleset; solo-friendly, approvals may be 0); break-glass = Neon/Railway MFA (no separate login) |
-| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 Approved v1.1 2026-07-28**; **DPA/MSA outline drafted** (awaiting counsel). **Boundary/vendor Q1–Q10 locked 2026-07-28** (other vendor regions TBD). Approval ≠ SOC 2 certified |
-| **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 **signed 2026-07-29** (OK/Allow); **backup restore test Pass 2026-07-27**; IR tabletop notes; vendor SOC report collection started; DPA outline → counsel redline / customer-ready draft |
+| **Week 2 (now)** | ~2026-07-29 → 2026-08-05 | **P01–P12 Approved 2026-07-27**; platform **deferred DIY** 2026-07-27; **P15 Approved v1.1 2026-07-28**; **DPA/MSA counsel send package ready** (awaiting Matt send). **Boundary/vendor Q1–Q10 locked 2026-07-28** (other vendor regions TBD). Approval ≠ SOC 2 certified |
+| **Week 3–4** | ~2026-08-05 → 2026-08-19 | Access review #1 **signed 2026-07-29** (OK/Allow); **backup restore test Pass 2026-07-27**; IR tabletop notes; vendor SOC report collection started; DPA counsel redline / customer-ready draft (after Matt sends pack) |
 | **Month 2** | ~2026-08-19 → 2026-09-19 | Controls habitually running; secrets spot-check; tenant isolation test evidence; AI/LLM write-up (**P15 Approved 2026-07-28**); security one-pager published for sales |
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** (1) Execute **Month 2 prep pack** (items still `[ ]`): [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md), [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md), [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md). (2) Execute **vendor SOC / ISO portal requests** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) + [REQUEST_TEMPLATES.md](./evidence/vendor-soc/REQUEST_TEMPLATES.md) (**scaffold ready 2026-07-29; no reports received**). (3) Send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel (R16 still open). **Access review #1 signed 2026-07-29** ([evidence/access-review-2026-Q3.md](./evidence/access-review-2026-Q3.md)) — OK/Allow; corporate email mattjustice@smpl-ai.com. Reminder: readiness ≠ SOC 2 certified; Month 2 rows stay open until executed/published.
+**Next guided item for Matt:** (1) Send counsel pack — paste [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md); attach [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) + [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) (+ subprocessors / boundary / one-pager / P15). **R16 still open** (package ready ≠ email sent ≠ signed DPA). (2) Execute **vendor SOC / ISO portal requests** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) + [REQUEST_TEMPLATES.md](./evidence/vendor-soc/REQUEST_TEMPLATES.md) (**scaffold ready 2026-07-29; no reports received**). (3) Execute **Month 2 prep pack** (items still `[ ]`): [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md), [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md), [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md). **Access review #1 signed 2026-07-29** ([evidence/access-review-2026-Q3.md](./evidence/access-review-2026-Q3.md)) — OK/Allow; corporate email mattjustice@smpl-ai.com. Reminder: readiness ≠ SOC 2 certified; Month 2 rows stay open until executed/published.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -52,7 +52,7 @@
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[x]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Complete 2026-07-28** — Scenarios A + B; async/chat-facilitated — [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md); readiness evidence only — not SOC 2 certified |
 | `[~]` | Vendor SOC / ISO reports folder (under NDA) — collection **in progress** | Matt | Week 3–4 | **Scaffold ready 2026-07-29** — [evidence/vendor-soc/](./evidence/vendor-soc/) (TRACKER + Trust Center links + request templates). **No reports received.** PDFs outside git / gitignored. |
-| `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Outline drafted 2026-07-28** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel. R16 **not** closed; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
+| `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Counsel send package ready 2026-07-29** — [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) + [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) + outline; **awaiting Matt send** (not emailed by agent). R16 **not** closed; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | **Prep ready 2026-07-29** — [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md) + [evidence/secrets-env-store-spotcheck-TEMPLATE.md](./evidence/secrets-env-store-spotcheck-TEMPLATE.md); still open until Matt runs |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | **Prep ready 2026-07-29** — [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md) + [evidence/tenant-isolation-TEMPLATE.md](./evidence/tenant-isolation-TEMPLATE.md); Org A = SMPL Demo Co `8571e520-…`; still open until Matt runs |
 | `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** v1.1 (machine-primary grounding) — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
@@ -162,7 +162,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Subprocessors named list draft | [02_subprocessors.md](./02_subprocessors.md) — product DPA list; Neon us-east-1; other regions TBD |
 | `[x]` | Confirm regions / unused vendors; mark OpenAI if live | **Locked 2026-07-28** — OpenAI **NO**; Neon us-east-1; other regions **TBD** |
 | `[~]` | Vendor SOC / ISO reports folder (under NDA) | **Scaffold ready 2026-07-29** — [evidence/vendor-soc/](./evidence/vendor-soc/); Trust Centers linked; **no reports received** — execute requests next |
-| `[~]` | Customer DPA / MSA — **single legal workstream** | **Outline drafted** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel. R16 open until customer-ready / signed path. Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
+| `[~]` | Customer DPA / MSA — **single legal workstream** | **Counsel send package ready** — [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) + [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) + outline; awaiting **Matt send**. R16 open until customer-ready / signed path. Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
 | `[x]` | Security one-pager (draft) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) — honest “pursuing SOC 2”; not certified. Near-publish polish 2026-07-29; **publish** for sales still Month 2 open — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md) |
 
 ### C. Access hardening (Matt / ops)
@@ -260,7 +260,7 @@ Not SOC 2 certified. Readiness evidence only.
 
 ## Top `[!]` for Matt (do next)
 
-1. **[~]** Customer DPA / MSA — outline drafted ([legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md)); **send to counsel** — P10 R16 **still open**
+1. **[~]** Customer DPA / MSA — counsel send package ready ([legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md); paste [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md); outline [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md)); **Matt must send** — P10 R16 **still open** (not closed by packaging)
 2. **[~]** Vendor SOC / ISO — **execute portal requests** ([evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md); templates in [REQUEST_TEMPLATES.md](./evidence/vendor-soc/REQUEST_TEMPLATES.md)). Scaffold ready; **no reports received**
 3. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
 4. Open evidence (keep honest): Staging **exists, no Customer Data** (Q3 locked). Other vendor **regions TBD**. Access review **signed 2026-07-29**. Restore test **Pass** 2026-07-27 (P12). **IR tabletop complete** 2026-07-28 (P04). **Dependabot + secret scanning confirmed** 2026-07-28 (P05). **P15 Approved v1.1** 2026-07-28
@@ -330,6 +330,15 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 2. Pulled from P07/P08/P09/P15, subprocessors list, security one-pager, Trust & Security positioning; no invented certifications
 3. Scoreboard + `/compliance` data: DPA workstream → **in progress** (awaiting counsel); R16 **not** closed
 4. Decision log note + P10 R16 treatment note updated
+
+## What we packaged 2026-07-29 — DPA/MSA counsel send package (R16 still open)
+
+**Not SOC 2 certified.** Send package ≠ email sent ≠ counsel engaged ≠ signed DPA. Agents do **not** email counsel — Matt must send.
+
+1. Added [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) — attach list, product/data flows, subprocessors, P15 fail-closed AI posture, Sanity/HubSpot outside product DPA, Neon us-east-1, open questions
+2. Added [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) — paste-ready short email for Matt
+3. Updated outline status pointer; scoreboard + `/compliance` data: still **[~] in progress** — awaiting **Matt send**; R16 **not** closed
+4. Decision log + P10 R16 treatment note refreshed
 
 ## What we checked off 2026-07-28 — Production boundary + vendor confirmation pack
 
@@ -431,5 +440,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-29 (Month 2 prep pack ready — secrets/tenant/one-pager items still open; vendor SOC collection scaffold ready — reports not received; access review 2026-Q3 signed) |
+| Last updated | 2026-07-29 (Month 2 prep pack ready — secrets/tenant/one-pager items still open; DPA/MSA counsel send package ready — awaiting Matt send; R16 open; vendor SOC collection scaffold ready — reports not received; access review 2026-Q3 signed) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

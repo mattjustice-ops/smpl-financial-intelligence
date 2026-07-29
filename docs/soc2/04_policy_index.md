@@ -38,7 +38,7 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 
 | Artifact | Status | Location |
 |----------|--------|----------|
-| Customer DPA / MSA (**single legal workstream**) | Not started — **[!]** counsel + Matt; also [P10](./policies/P10_risk_assessment.md) R16 | Covers privacy, retention windows, subprocessors (was previously flagged separately in P07/P08/P09) |
+| Customer DPA / MSA (**single legal workstream**) | Counsel send package ready — awaiting **Matt send**; [P10](./policies/P10_risk_assessment.md) R16 **open** | [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md); [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md); [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) — privacy, retention, subprocessors |
 | Security one-pager | **Draft** (honest “pursuing SOC 2”) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) |
 | Change / deploy path (ops) | **Draft** | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) |
 | Public or NDA subprocessors list | Draft (named) | [02_subprocessors.md](./02_subprocessors.md) |
