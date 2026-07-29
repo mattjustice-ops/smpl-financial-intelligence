@@ -9,6 +9,7 @@
 | [data_integrity_framework.md](./data_integrity_framework.md) | Provenance (`_sources`), Claude runtime rules, build-time `data-source` tags, automated tie-out report, commentary second-pass verification, close review checklist |
 | [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md) | Per-visual warehouse mapping + Rule Sets A–F + `runTieOut()` publish block |
 | [reconcile_financial_statements.md](./reconcile_financial_statements.md) | FE ↔ Board closed-actuals diff + severity bands (`rounding` / `investigate` / `significant_miss`) — honest demo `data_mismatch` inventory |
+| [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md) | **Customer / production** CF + RE construction methodology (`RE_BASE`, openings, three-rollup, dept-299). Does **not** change SMPL Demo Co / Board / FE demo behavior |
 
 **Policy linkage:** [P15 AI / LLM Data Handling](../policies/P15_ai_llm_data_handling.md) §4.7 / §5 encodes these as required control design (machine-primary, fail-closed). IR Scenario B in [ir-tabletop.md](../runbooks/ir-tabletop.md) cites them as how prevention is *expected* to work.
 
@@ -56,6 +57,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-29 | Added financial_dashboard_cf_re_logic.md — customer/production GL→statements methodology; demo/lab surfaces explicitly carved out |
 | 2026-07-29 | Added reconcile_financial_statements.md; closed-actuals severity bar ($0.01 rounding / ≤$1 investigate / >$1 significant_miss); tie-out prompt + framework language tightened so $100/$1K are not called “rounding” for statement actuals |
 | 2026-07-28 | Copied normative framework + tie-out prompt from Matt Downloads; README states adaptation of Part 6 and honest implemented-vs-target labels |
 

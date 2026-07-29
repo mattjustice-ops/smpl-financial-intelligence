@@ -2,7 +2,8 @@
 ### Cursor Prompt: Align Board Platform + Forecast Engine to Warehouse Schema
 ### Priority: Customer demo ready by Monday
 
-> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Tie-out / `runTieOut()` publish-block rules are **required control design** for board/customer-facing packages (P15 §4.8). Do not claim full Rule Sets A–F are live unless code evidence shows they are.
+> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Tie-out / `runTieOut()` publish-block rules are **required control design** for board/customer-facing packages (P15 §4.8). Do not claim full Rule Sets A–F are live unless code evidence shows they are.  
+> **Customer GL → statements:** Construction methodology (RE_BASE, openings, three-rollup, dept-299) is [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md) — does not change demo Board/FE seed behavior.
 
 ---
 

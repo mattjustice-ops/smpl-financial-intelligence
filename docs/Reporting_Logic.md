@@ -134,6 +134,8 @@ Tolerance: default **$1.00** (`validation_service.compare_values`). Status `fail
 
 FE↔Board demo seed gaps: [soc2/controls/reconcile_financial_statements.md](./soc2/controls/reconcile_financial_statements.md). Bank timing soft checks (~$1k) are separate from statement tie-out.
 
+**Customer / production GL construction** (RE rolling from `RE_BASE`, opening TB offsets, three-rollup P&L/BS/SCF queries, dept-299 non-cash): [soc2/controls/financial_dashboard_cf_re_logic.md](./soc2/controls/financial_dashboard_cf_re_logic.md). That doc does **not** rewrite demo Board/FE formulas; it is the onboarding and Q&A source for customer builds.
+
 Implemented in export validation: `closed_won_arr_ties_mrr_new_business`.
 
 ### Opportunity drilldown

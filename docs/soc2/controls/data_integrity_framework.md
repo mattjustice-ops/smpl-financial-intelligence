@@ -3,7 +3,8 @@
 ### Zero-tolerance policy: every number displayed must trace to a warehouse row
 
 > **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels.  
-> **Part 6 adaptation:** Day-to-day primary controls are **automated fail-closed gates** (not human sign-off before every send). Human checklist items → **IR / exceptions / periodic control testing**. Linked from [P15](../policies/P15_ai_llm_data_handling.md) §4.8.
+> **Part 6 adaptation:** Day-to-day primary controls are **automated fail-closed gates** (not human sign-off before every send). Human checklist items → **IR / exceptions / periodic control testing**. Linked from [P15](../policies/P15_ai_llm_data_handling.md) §4.8.  
+> **Customer statement construction:** For production GL → P&L / BS / CF builds (not demo seed), follow [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md).
 
 ---
 

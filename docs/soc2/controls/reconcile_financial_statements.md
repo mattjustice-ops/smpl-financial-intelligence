@@ -2,7 +2,8 @@
 
 > **Normative investigation / control prompt** under `docs/soc2/controls/`.  
 > **Not SOC 2 certification.** Shipping status: demo seed divergence is a known `data_mismatch` until both platforms read one warehouse actuals table.  
-> Related: [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md), [data_integrity_framework.md](./data_integrity_framework.md), [README.md](./README.md).
+> Related: [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md), [data_integrity_framework.md](./data_integrity_framework.md), [README.md](./README.md).  
+> Customer / production CF+RE construction (not this demo inventory): [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md).
 
 ## Severity bands for closed actuals (Matt bar)
 
