@@ -14,3 +14,4 @@ Use `*.local.md` for scratch notes containing secrets (gitignored).
 | [access-review-2026-Q3.md](./access-review-2026-Q3.md) | First quarterly-style access review — **COMPLETE / signed 2026-07-29** (Matt Justice; OK/Allow; readiness only — not certified) |
 | [secrets-env-store-spotcheck-TEMPLATE.md](./secrets-env-store-spotcheck-TEMPLATE.md) | **Month 2 WIP** — copy → `secrets-env-store-spotcheck-YYYY-MM-DD.md` after [../runbooks/secrets-env-store-spotcheck.md](../runbooks/secrets-env-store-spotcheck.md) |
 | [tenant-isolation-TEMPLATE.md](./tenant-isolation-TEMPLATE.md) | **Month 2 WIP** — copy → `tenant-isolation-YYYY-MM-DD.md` after [../runbooks/tenant-isolation-test.md](../runbooks/tenant-isolation-test.md) |
+| [vendor-soc/](./vendor-soc/) | Vendor SOC / ISO collection scaffold — tracker + request templates; **PDFs outside git / gitignored** — collection **in progress**, not complete |
