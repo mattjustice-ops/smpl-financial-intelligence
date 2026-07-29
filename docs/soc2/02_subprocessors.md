@@ -4,6 +4,8 @@ Vendors that process or store customer data (or auth-related personal data) in t
 
 Collect each vendor’s SOC 2 / ISO report under NDA where available. Review cadence: at least annually for material processors, or on material change ([P09](./policies/P09_vendor_subprocessor_management.md)).
 
+**Collection scaffold (2026-07-29):** Tracker + Trust Center links + request templates — [evidence/vendor-soc/](./evidence/vendor-soc/). **No reports marked received yet.** Store NDA PDFs outside git (see that README).
+
 Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Boundary: [01_system_boundary.md](./01_system_boundary.md) · Scoreboard: [PROGRESS.md](./PROGRESS.md)
 
 **Status (2026-07-28):** Named Customer Data list locked from Matt Q1–Q10. **Neon = AWS us-east-1**; **other vendor regions remain TBD** (do not invent). Sanity / HubSpot / OpenAI / APM **not** on product Customer Data exhibit. **Not** SOC 2 certified.
@@ -86,4 +88,4 @@ Matt Q10 **NO** (2026-07-28): no other production vendors process Customer Data 
 |------|--------|-------|
 | 2026-07-22 | Initial named list from SMPL stack; regions marked for Matt confirm | Kickoff |
 | 2026-07-28 | Aligned to production hosts; Neon us-east-1 from restore evidence; OpenAI/HubSpot/APM/staging conditional; no invented regions | Agent (Week 2 vendors) |
-| 2026-07-28 | **Matt Q1–Q10 locked** — Sanity/HubSpot off product DPA; OpenAI/APM unused; staging exists (no Customer Data); Neon us-east-1 confirmed; other regions remain TBD | Matt Justice (answers); Agent (docs) |
+| 2026-07-29 | Vendor SOC collection scaffold — evidence/vendor-soc tracker + Trust Center links; reports still open | Agent (Week 3–4 readiness) |

@@ -39,3 +39,8 @@ commit-local-wip.log
 # SOC 2 evidence scratch (secrets / connection strings — never commit)
 docs/soc2/evidence/*.local.md
 docs/soc2/evidence/**/*.local.md
+
+# Vendor SOC / ISO PDFs (NDA) — tracker stays in git; binaries stay private
+docs/soc2/evidence/vendor-soc/**/*.pdf
+docs/soc2/evidence/vendor-soc/private/*
+!docs/soc2/evidence/vendor-soc/private/.gitkeep
