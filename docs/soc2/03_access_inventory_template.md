@@ -4,10 +4,14 @@ Who can touch production systems or customer data, and why. Complete Week 1; rev
 
 Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard: [PROGRESS.md](./PROGRESS.md)
 
-**Status (2026-07-26):** Known systems inventoried with **owner = Matt Justice** for all rows.  
+**Status (2026-07-26 first pass):** Known systems inventoried with **owner = Matt Justice** for all rows.  
 MFA verified for primary cloud consoles (GitHub, Vercel, Railway, Neon, email/IdP, Stripe, Sanity via Google IdP, Resend, Anthropic via Google IdP) and Domain DNS / Squarespace (smpl-ai.com).  
 **Ops/break-glass:** Solo founder — **no separate break-glass login**. Privileged DB/ops access is via MFA’d **Neon** and **Railway** consoles already covered above (same-as-Neon/Railway).  
 Do **not** invent MFA completion.
+
+**2026-Q3 access review (opened 2026-07-29):** WIP evidence at [evidence/access-review-2026-Q3.md](./evidence/access-review-2026-Q3.md).  
+**Last reviewed** dates below remain **2026-07-26** until Matt completes console verification + sign-off. Sign-off row prepared; Result empty until Matt replies.  
+**[!]** Corporate email still blank on all rows — Matt must confirm.
 
 **Rules of thumb:** unique accounts (no shared logins); MFA on admin; least privilege; revoke same day on offboarding.
 
@@ -81,6 +85,6 @@ Add rows as needed when additional people receive access. Duplicate systems for 
 
 | Review period | Reviewer | Date | Result (OK / changes made) | Notes |
 |---------------|----------|------|----------------------------|-------|
-| YYYY-QX | Matt Justice | | | First review after Week 1 inventory stable (MFA verified; break-glass = Neon/Railway) |
+| 2026-Q3 | Matt Justice | _pending_ | _pending_ | First quarterly-style review after Week 1 inventory. WIP opened 2026-07-29 — [evidence/access-review-2026-Q3.md](./evidence/access-review-2026-Q3.md). **Not signed** until Matt console-verifies. |
 
 Attach exports or links to evidence folder (do not commit secrets or customer dumps to git).

@@ -63,7 +63,7 @@ export const complianceProgressMeta = {
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next Week 3–4: access review #1. Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Access review #1 WIP 2026-07-29 (awaiting Matt console OK). Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -268,10 +268,11 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-access-review",
     label: "First quarterly-style access review sign-off",
-    status: "open",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 3–4",
-    notes: "After inventory stable — Week 1 inventory complete",
+    notes:
+      "WIP 2026-07-29 — docs/soc2/evidence/access-review-2026-Q3.md; awaiting Matt console verification + sign-off (not done)",
   },
   {
     id: "rem-restore-test",
@@ -391,7 +392,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; vendor reports / tenant isolation / access review still open",
+      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; access review WIP 2026-07-29; vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -635,8 +636,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "ah-11",
         label: "First quarterly-style access review sign-off",
-        status: "open",
-        notes: "After inventory stable — Week 3–4",
+        status: "in_progress",
+        notes:
+          "WIP 2026-07-29 — docs/soc2/evidence/access-review-2026-Q3.md; awaiting Matt console OK",
       },
     ],
   },
@@ -751,7 +753,8 @@ export const complianceSections: ComplianceSection[] = [
         id: "bar-3",
         label: "Access inventory + first review artifact",
         status: "in_progress",
-        notes: "Inventory first pass done; quarterly sign-off still open (Week 3–4)",
+        notes:
+          "Inventory first pass done; Q3 review WIP 2026-07-29 — docs/soc2/evidence/access-review-2026-Q3.md; sign-off still open",
       },
       {
         id: "bar-4",
