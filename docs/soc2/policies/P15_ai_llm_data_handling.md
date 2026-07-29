@@ -1,7 +1,6 @@
 # AI / LLM Data Handling Policy
 
-> **STATUS: APPROVED** — Effective 2026-07-28 (v1.0). Approved by Matt Justice (executive sponsor).  
-> **Amendment DRAFT v1.1 (2026-07-28)** — pending Matt Justice Allow on this redline (and IR Scenario B alignment). Not yet effective until Allow.  
+> **STATUS: APPROVED** — Effective 2026-07-28 (v1.1). Approved by Matt Justice (executive sponsor).  
 > Not legal advice. Not evidence of SOC 2 certification. Approving policies ≠ SOC 2 certified; open evidence items remain. SMPL is **not** SOC 2 certified until a CPA Type I report is in hand.  
 > **Normative design targets:** [../controls/data_integrity_framework.md](../controls/data_integrity_framework.md), [../controls/data_sources_tieout_prompt.md](../controls/data_sources_tieout_prompt.md) — see [../controls/README.md](../controls/README.md) for implemented vs roadmap labels. Do not claim all framework layers are shipping in prod unless evidence shows they are.
 
@@ -11,9 +10,9 @@
 | Owner | Matt Justice (Security owner / Engineering owner) |
 | Applies to | Product AI/LLM features, personnel using sanctioned or unsanctioned AI tools with SMPL or customer data, and LLM subprocessors |
 | Related criteria | Security; Confidentiality |
-| Version | 1.0 (approved); **1.1 draft amendment pending Allow** |
-| Effective date | 2026-07-28 (v1.0) |
-| Last expanded | 2026-07-28 (v1.1 draft: machine-primary + integrity framework alignment) |
+| Version | 1.1 |
+| Effective date | 2026-07-28 |
+| Last expanded | 2026-07-28 (v1.1: machine-primary + integrity framework alignment) |
 
 ---
 
@@ -171,16 +170,16 @@ Review at least annually, or when LLM vendor, prompt architecture, or product AI
 | Approver | Signature / name | Date | Notes |
 |----------|------------------|------|-------|
 | Executive sponsor | Matt Justice | 2026-07-28 | Approved v1.0 |
-| Executive sponsor | _pending Allow_ | — | v1.1 draft amendment (machine-primary + integrity framework alignment) — **do not treat as Allowed until Matt confirms** |
+| Executive sponsor | Matt Justice | 2026-07-28 | Approved v1.1 (machine-primary + integrity framework alignment) |
 
 ### Changelog
 
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0 | 2026-07-28 | Initial Approved policy (hallucination §4.7, logging/retention 30 days) |
-| 1.1 draft | 2026-07-28 | Redline: primary controls = automated evidence binding, fail-closed grounding, freeze-ID binding, structural claim verification; human review before send is **not** primary; humans = IR / exceptions / periodic testing. Pending Matt Allow. |
-| 1.1 draft (rev) | 2026-07-28 | Align to [../controls/](../controls/README.md): `_sources`/provenance; Claude only states evidence values; fail-closed don't-know; freeze-ID binding; automated tie-out/second-pass as deploy/release gates (design target); large commentary-vs-engine variance = unacceptable control failure; honest partial-vs-roadmap labels. Pending Matt Allow. |
+| 1.1 | 2026-07-28 | Redline: primary controls = automated evidence binding, fail-closed grounding, freeze-ID binding, structural claim verification; human review before send is **not** primary; humans = IR / exceptions / periodic testing. Approved by Matt Justice. |
+| 1.1 (rev) | 2026-07-28 | Align to [../controls/](../controls/README.md): `_sources`/provenance; Claude only states evidence values; fail-closed don't-know; freeze-ID binding; automated tie-out/second-pass as deploy/release gates (design target); large commentary-vs-engine variance = unacceptable control failure; honest partial-vs-roadmap labels. Approved by Matt Justice. |
 
 ---
 
-_End of P15 (v1.0 Approved; v1.1 draft amendment pending Allow)_
+_End of P15 (v1.1 Approved 2026-07-28)_

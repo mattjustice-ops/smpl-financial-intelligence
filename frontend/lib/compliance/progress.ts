@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-28", // IR tabletop pack ready; exercise awaiting Matt run
+  lastUpdated: "2026-07-28", // P15 v1.1 Approved; Scenario B Allowed; IR tabletop run still pending
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,7 +91,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved; platform deferred DIY; P15 Approved; DPA/MSA outline (awaiting counsel); boundary/vendor Q1–Q10 locked (other regions TBD)",
+      "P01–P12 Approved; platform deferred DIY; P15 Approved v1.1; DPA/MSA outline (awaiting counsel); boundary/vendor Q1–Q10 locked (other regions TBD)",
   },
   {
     id: "week-3-4",
@@ -105,7 +105,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Month 2",
     approxDates: "~2026-08-19 → 2026-09-19",
     focus:
-      "Controls habitually running; secrets spot-check; tenant isolation evidence; AI/LLM write-up (P15 Approved 2026-07-28); security one-pager published for sales",
+      "Controls habitually running; secrets spot-check; tenant isolation evidence; AI/LLM write-up (P15 Approved v1.1 2026-07-28); security one-pager published for sales",
   },
   {
     id: "month-3-4",
@@ -280,7 +280,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Pack ready 2026-07-28 — docs/soc2/runbooks/ir-tabletop.md + evidence/ir-tabletop-TEMPLATE.md; awaiting Matt run — do not mark done until dated notes filed",
+      "Pack ready 2026-07-28 — Scenario B Allowed + P15 v1.1 Approved; full 45–60 min run still pending — docs/soc2/runbooks/ir-tabletop.md",
   },
   {
     id: "rem-vendor-soc",
@@ -319,7 +319,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     owner: "Matt",
     targetWindow: "Week 2",
     notes:
-      "Approved 2026-07-28 by Matt Justice (docs/soc2/policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified",
+      "Approved v1.1 2026-07-28 by Matt Justice (docs/soc2/policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified",
   },
   {
     id: "rem-one-pager-publish",
@@ -382,7 +382,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved (P01–P12 2026-07-27; P15 2026-07-28); MFA + access inventory; change/deploy path; IR approved (tabletop pack ready, awaiting run); restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
+      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path; IR approved (tabletop pack ready, Scenario B Allowed, full run pending); restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
   },
   {
     id: "type-i-audit",
@@ -635,7 +635,7 @@ export const complianceSections: ComplianceSection[] = [
     id: "policies",
     name: "D. Policies",
     summary:
-      "P01–P12 Approved 2026-07-27 by Matt Justice. P15 Approved 2026-07-28. Approval ≠ SOC 2 certified.",
+      "P01–P12 Approved 2026-07-27 by Matt Justice. P15 Approved v1.1 2026-07-28. Approval ≠ SOC 2 certified.",
     items: [
       { id: "pol-1", label: "Policy index", status: "done" },
       {
@@ -748,7 +748,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Incident response plan (approved + operable)",
         status: "in_progress",
         notes:
-          "Approved 2026-07-27; tabletop pack ready (runbooks/ir-tabletop.md) — awaiting Matt run / dated notes",
+          "Approved 2026-07-27; tabletop pack ready; Scenario B Allowed 2026-07-28 — full exercise run pending (runbooks/ir-tabletop.md)",
       },
       {
         id: "bar-6",

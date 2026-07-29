@@ -143,6 +143,8 @@ Work each inject through P04 §5. For every phase, write **what you would do**, 
 
 ## Scenario B — AI hallucination / unsupported claim reached a customer
 
+> **Scenario B rewrite Allowed 2026-07-28** by Matt Justice (chat). Allow unblocks finalizing notes; the full tabletop exercise still needs to be run per this runbook.
+>
 > **Product posture (must follow in this exercise):** Primary controls are backend / automated **fail-closed** — provenance / `_sources`, structural claim verify, freeze-ID binding, tie-out / second-pass gates (P15 §4.7–§4.8; [../controls/README.md](../controls/README.md)). Do **not** treat “human review before send” or “customer should have re-validated” as root cause or primary control. Hypothetical only — no live actions.
 >
 > **How prevention is expected to work** (cite these; residual scenario = gates failed open):

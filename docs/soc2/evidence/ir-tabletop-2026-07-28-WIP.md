@@ -2,22 +2,23 @@
 
 > **Tabletop ≠ real incident.**  
 > **STATUS: WIP — NOT COMPLETE.** Do not mark PROGRESS IR tabletop `[x]` from this file.  
-> Scenario B rewritten for Matt Allow (machine-primary gates + integrity framework / tie-out design targets).  
-> Complete dated notes for **both** scenarios only after Matt Allows Scenario B (and preferably P15 v1.1 redline).  
-> Sanitized only — no secrets, no customer emails. **Not** SOC 2 certification. **No forged approvals.**
+> Scenario B rewrite **Allowed 2026-07-28** by Matt Justice (chat); P15 v1.1 **Approved 2026-07-28**.  
+> Allow unblocks finalizing notes — the **45–60 min tabletop exercise still needs to be run** and both scenarios filled with dated evidence.  
+> Sanitized only — no secrets, no customer emails. **Not** SOC 2 certification.
 
-## Status: WIP / AWAITING MATT ALLOW ON SCENARIO B
+## Status: WIP — SCENARIO B ALLOWED; FULL RUN PENDING
 
 | Field | Value |
 |-------|--------|
-| Date of exercise | 2026-07-28 (pack / redline day — full run not closed) |
-| Start–end (UTC) | _pending full run after Allow_ |
+| Date of exercise | 2026-07-28 (pack / redline day — **full run not closed**) |
+| Start–end (UTC) | _pending full 45–60 min run_ |
 | Facilitator | Matt Justice |
 | Attendees | Matt Justice (solo) |
-| Related policy | [P04](../policies/P04_incident_response_plan.md); [P15](../policies/P15_ai_llm_data_handling.md) v1.1 draft |
+| Related policy | [P04](../policies/P04_incident_response_plan.md); [P15](../policies/P15_ai_llm_data_handling.md) v1.1 Approved |
 | Design targets | [../controls/README.md](../controls/README.md) |
 | Runbook | [../runbooks/ir-tabletop.md](../runbooks/ir-tabletop.md) |
-| Scenarios run | ☐ A (credential leak) ☐ B (AI hallucination → customer) — B awaiting **Allow** on rewrite |
+| Scenario B rewrite | **Allowed 2026-07-28** by Matt Justice (chat) — controls-aligned prevent path |
+| Scenarios run | ☐ A (credential leak) ☐ B (AI hallucination → customer) — **exercise not yet run** |
 | Real production actions taken? | **No** — tabletop / docs only |
 | Pass / complete? | ☐ Notes complete — **not yet** |
 
@@ -39,9 +40,9 @@
 
 ## Scenario B — AI hallucination / unsupported claim reached a customer
 
-> **Awaiting Matt Allow** on the rewritten Scenario B in chat / runbook before treating exercise notes as final.
+> **Allowed 2026-07-28** by Matt Justice on the rewritten Scenario B (runbook + this evidence). Exercise notes below are **working expected answers** — not signed evidence until the full tabletop run is completed.
 
-### Inject (summary for Allow)
+### Inject (summary)
 
 Customer-visible AI commentary: **+18% QoQ** MRR + **EMEA enterprise expansion** driver; freeze supports **~4%** and **no EMEA driver**. Package already delivered.
 
@@ -58,7 +59,7 @@ Customer-visible AI commentary: **+18% QoQ** MRR + **EMEA enterprise expansion**
 
 **Residual scenario:** gates **failed open** (bug/misconfig) — not “skipped human review.” Large commentary-vs-engine variance = unacceptable control failure (P15).
 
-| Phase | Working expected answers (pre-Allow draft — not signed evidence) |
+| Phase | Working expected answers (finalize after full run) |
 |-------|--------|
 | Detect / report | Customer reports commentary **+18% QoQ** + EMEA expansion driver vs freeze **~4%** / no EMEA |
 | Classify (severity) | **Sev2** (P04 §4 / P15 §4.7–§4.8) |
@@ -72,16 +73,16 @@ Customer-visible AI commentary: **+18% QoQ** MRR + **EMEA enterprise expansion**
 
 ## Cross-cut findings
 
-- WIP: align IR root-cause language with P15 v1.1 + controls README (pending Allow).
+- IR root-cause language aligned with P15 v1.1 + controls README (Allowed 2026-07-28).
 - Honesty: full framework layers are **required design / roadmap** where not yet shipping; partial freeze/tie-out paths exist — do not overclaim.
 
 ## Follow-ups
 
 | # | Action | Owner | Due | Done? |
 |---|--------|-------|-----|-------|
-| 1 | Matt Allow rewritten Scenario B | Matt Justice | | ☐ |
-| 2 | Matt Allow / skim P15 v1.1 PR redline (+ controls docs) | Matt Justice | | ☐ |
-| 3 | Complete evidence for A + B after Allow; then mark PROGRESS `[x]` | Matt Justice | | ☐ |
+| 1 | Matt Allow rewritten Scenario B | Matt Justice | 2026-07-28 | ☑ Allowed (chat) |
+| 2 | Matt Allow / skim P15 v1.1 redline (+ controls docs) | Matt Justice | 2026-07-28 | ☑ Approved v1.1 |
+| 3 | Complete evidence for A + B after full run; then mark PROGRESS `[x]` | Matt Justice | | ☐ |
 
 ---
 
@@ -89,7 +90,7 @@ Customer-visible AI commentary: **+18% QoQ** MRR + **EMEA enterprise expansion**
 
 | Role | Name | Date | Signature / note |
 |------|------|------|------------------|
-| Facilitator | Matt Justice | | **WIP — not complete; no Allow forged** |
-| Security owner | Matt Justice | | Tabletop **not** complete |
+| Facilitator | Matt Justice | | **WIP — full tabletop not complete** |
+| Security owner | Matt Justice | | Scenario B rewrite Allowed 2026-07-28; exercise run pending |
 
 Related: [P04](../policies/P04_incident_response_plan.md) · [P15](../policies/P15_ai_llm_data_handling.md) · [controls](../controls/README.md) · [runbook](../runbooks/ir-tabletop.md) · [PROGRESS](../PROGRESS.md)
