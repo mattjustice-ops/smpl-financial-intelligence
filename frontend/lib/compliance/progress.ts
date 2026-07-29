@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // Access review 2026-Q3 signed OK/Allow
+  lastUpdated: "2026-07-29", // Month 2 prep pack ready (items still open); access review signed
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next: DPA counsel + vendor SOC collection. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 prep pack ready 2026-07-29 (secrets/tenant/one-pager runbooks — checklist items still open). DPA/MSA outline drafted (awaiting counsel). Next: execute Month 2 checklists + DPA counsel + vendor SOC collection. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -314,6 +314,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Month 2",
+    notes:
+      "Prep ready 2026-07-29 — docs/soc2/runbooks/secrets-env-store-spotcheck.md + evidence template; still open until Matt runs",
   },
   {
     id: "rem-tenant-isolation",
@@ -321,6 +323,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Month 2",
+    notes:
+      "Prep ready 2026-07-29 — docs/soc2/runbooks/tenant-isolation-test.md; Org A = SMPL Demo Co 8571e520-…; still open until Matt runs",
   },
   {
     id: "rem-ai-writeup",
@@ -337,7 +341,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Month 2",
-    notes: "Draft exists",
+    notes:
+      "Near-publish draft 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md); publish checklist docs/soc2/runbooks/security-one-pager-publish.md — still open until NDA share",
   },
   {
     id: "rem-type-i-month",
