@@ -68,7 +68,7 @@ Conditional vendors (OpenAI fallback, APM, analytics) are added only if live in 
 | Artifact | Location |
 |----------|----------|
 | Named list | [../02_subprocessors.md](../02_subprocessors.md) |
-| Vendor reports | Local/NDA folder (not in git) — **[!]** collect before Type I |
+| Vendor reports | Tracker: [../evidence/vendor-soc/TRACKER.md](../evidence/vendor-soc/TRACKER.md); PDFs in local/NDA store (not in git) — **[~]** scaffold ready 2026-07-29; collect before Type I |
 | Approvals | This policy approval + decision notes |
 
 ## 8. Approval

@@ -12,3 +12,4 @@ Use `*.local.md` for scratch notes containing secrets (gitignored).
 | [neon-restore-test-2026-07-27.md](./neon-restore-test-2026-07-27.md) | Neon PITR restore fire drill (Pass) |
 | [dependabot-enabled-2026-07-28.md](./dependabot-enabled-2026-07-28.md) | Dependabot config (PR #19) + GitHub Code security toggles confirmed 2026-07-28 |
 | [access-review-2026-Q3.md](./access-review-2026-Q3.md) | First quarterly-style access review — **COMPLETE / signed 2026-07-29** (Matt Justice; OK/Allow; readiness only — not certified) |
+| [vendor-soc/](./vendor-soc/) | Vendor SOC / ISO collection scaffold — tracker + request templates; **PDFs outside git / gitignored** — collection **in progress**, not complete |

@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // DPA counsel send package ready (awaiting Matt send); access review signed
+  lastUpdated: "2026-07-29", // DPA counsel send package ready (awaiting Matt send); vendor SOC scaffold ready (no reports); access review signed
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next: Matt send DPA pack to counsel + vendor SOC collection. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (docs/soc2/evidence/vendor-soc/; no reports received). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next: Matt send DPA pack to counsel + execute vendor Trust Center requests. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -294,10 +294,12 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-vendor-soc",
-    label: "Vendor SOC / ISO reports — collection started",
-    status: "open",
+    label: "Vendor SOC / ISO reports — collection in progress (scaffold ready)",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 3–4",
+    notes:
+      "Scaffold ready 2026-07-29 — docs/soc2/evidence/vendor-soc/ (TRACKER + Trust Centers + request templates). No reports received. PDFs outside git.",
   },
   {
     id: "rem-dpa",
@@ -314,6 +316,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Month 2",
+    notes:
+      "Prep ready 2026-07-29 — docs/soc2/runbooks/secrets-env-store-spotcheck.md + evidence template; still open until Matt runs",
   },
   {
     id: "rem-tenant-isolation",
@@ -321,6 +325,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Month 2",
+    notes:
+      "Prep ready 2026-07-29 — docs/soc2/runbooks/tenant-isolation-test.md; Org A = SMPL Demo Co 8571e520-…; still open until Matt runs",
   },
   {
     id: "rem-ai-writeup",
@@ -337,7 +343,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "open",
     owner: "Matt",
     targetWindow: "Month 2",
-    notes: "Draft exists",
+    notes:
+      "Near-publish draft 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md); publish checklist docs/soc2/runbooks/security-one-pager-publish.md — still open until NDA share",
   },
   {
     id: "rem-type-i-month",
@@ -538,7 +545,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bv-6",
         label: "Vendor SOC / ISO reports folder (under NDA)",
-        status: "open",
+        status: "in_progress",
+        notes:
+          "Scaffold ready 2026-07-29 — docs/soc2/evidence/vendor-soc/; Trust Centers linked; no reports received",
       },
       {
         id: "bv-7",
@@ -781,7 +790,8 @@ export const complianceSections: ComplianceSection[] = [
         id: "bar-7",
         label: "Subprocessor inventory + vendor reports collected",
         status: "in_progress",
-        notes: "Inventory locked 2026-07-28 (product DPA list); reports not collected",
+        notes:
+          "Inventory locked 2026-07-28; collection scaffold ready 2026-07-29 (docs/soc2/evidence/vendor-soc/); reports not received/reviewed",
       },
       { id: "bar-8", label: "Tenant isolation evidence", status: "open" },
       {
