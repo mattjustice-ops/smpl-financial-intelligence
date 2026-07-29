@@ -124,6 +124,16 @@ pipeline.closed_won(P) ≈ mrr_waterfall.new_arr(P)
 
 Tolerance: default **$1.00** (`validation_service.compare_values`). Status `fail` if outside tolerance.
 
+**Closed actuals severity labels** (do not call multi-thousand gaps “rounding”):
+
+| |Δ| | Label |
+|---|---|
+| `≤ $0.01` | `rounding` (cents) |
+| `$0.01 < \|Δ\| ≤ $1.00` | `investigate` |
+| `> $1.00` | `significant_miss` / `data_mismatch` — product **fail** |
+
+FE↔Board demo seed gaps: [soc2/controls/reconcile_financial_statements.md](./soc2/controls/reconcile_financial_statements.md). Bank timing soft checks (~$1k) are separate from statement tie-out.
+
 Implemented in export validation: `closed_won_arr_ties_mrr_new_business`.
 
 ### Opportunity drilldown
@@ -256,6 +266,8 @@ Service: `period_column_layout.py`, `comparison_pivot.py`.
 ---
 
 ## Validation catalog (starter)
+
+Financial statement / closed-actuals identity checks use **`TOLERANCE = $1.00`** fail-closed (`financial_statement_validation_service`, `financial_statement_service`). `|Δ| ≤ $0.01` may be presented as rounding; `|Δ| > $1` is a significant miss — never “rounding.” See [soc2/controls/reconcile_financial_statements.md](./soc2/controls/reconcile_financial_statements.md).
 
 | `validation_name` | Severity | Rule |
 |-------------------|----------|------|
