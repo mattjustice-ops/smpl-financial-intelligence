@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // Access review 2026-Q3 signed OK/Allow
+  lastUpdated: "2026-07-29", // DPA counsel send package ready (awaiting Matt send); access review signed
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next: DPA counsel + vendor SOC collection. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next: Matt send DPA pack to counsel + vendor SOC collection. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,14 +91,14 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved; platform deferred DIY; P15 Approved v1.1; DPA/MSA outline (awaiting counsel); boundary/vendor Q1–Q10 locked (other regions TBD)",
+      "P01–P12 Approved; platform deferred DIY; P15 Approved v1.1; DPA/MSA counsel send package ready (awaiting Matt send); boundary/vendor Q1–Q10 locked (other regions TBD)",
   },
   {
     id: "week-3-4",
     window: "Week 3–4",
     approxDates: "~2026-08-05 → 2026-08-19",
     focus:
-      "Access review #1 signed 2026-07-29; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA outline → counsel redline",
+      "Access review #1 signed 2026-07-29; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA counsel redline after Matt sends pack",
   },
   {
     id: "month-2",
@@ -306,7 +306,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Outline drafted 2026-07-28 (docs/soc2/legal/DPA_MSA_OUTLINE.md); awaiting counsel — R16 not closed; P07/P08/P09 cross-ref only",
+      "Counsel send package ready 2026-07-29 (docs/soc2/legal/COUNSEL_SEND_PACKAGE.md + DRAFT_EMAIL_TO_COUNSEL.md); awaiting Matt send — R16 not closed; P07/P08/P09 cross-ref only",
   },
   {
     id: "rem-secrets",
@@ -545,7 +545,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Customer DPA / MSA — single legal workstream",
         status: "in_progress",
         notes:
-          "Outline drafted 2026-07-28 (docs/soc2/legal/DPA_MSA_OUTLINE.md); awaiting counsel — P10 R16 not closed",
+          "Counsel send package ready 2026-07-29 (docs/soc2/legal/COUNSEL_SEND_PACKAGE.md); awaiting Matt send — P10 R16 not closed",
       },
       {
         id: "bv-8",
