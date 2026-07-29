@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // Month 2 secrets+tenant partial evidence; DPA counsel pack awaiting send; vendor SOC scaffold; access review signed
+  lastUpdated: "2026-07-29", // Month 2 secrets+tenant Pass (Matt chat); DPA counsel pack awaiting send; vendor SOC scaffold; access review signed
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Partial 2026-07-29 (git Pass; consoles pending Matt). Tenant isolation Partial 2026-07-29 (unit/SQL/unauth; authenticated T1/T2 pending). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: Matt finish secrets consoles + isolation T1/T2 + send DPA pack + vendor Trust Center requests. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: send DPA pack + vendor Trust Center requests + security one-pager publish. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -105,7 +105,7 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Month 2",
     approxDates: "~2026-08-19 → 2026-09-19",
     focus:
-      "Controls habitually running; secrets spot-check; tenant isolation evidence; AI/LLM write-up (P15 Approved v1.1 2026-07-28); security one-pager published for sales",
+      "Controls habitually running; secrets spot-check Pass 2026-07-29; tenant isolation Pass 2026-07-29; AI/LLM write-up (P15 Approved v1.1 2026-07-28); security one-pager published for sales",
   },
   {
     id: "month-3-4",
@@ -313,20 +313,20 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-secrets",
     label: "Secrets only in env stores (spot-check)",
-    status: "in_progress",
+    status: "done",
     owner: "Matt",
     targetWindow: "Month 2",
     notes:
-      "Partial 2026-07-29 — git hygiene Pass; Vercel/Railway/Neon consoles awaiting Matt — docs/soc2/evidence/secrets-env-store-spotcheck-2026-07-29.md",
+      "Pass 2026-07-29 — git + Vercel/Railway/Neon consoles; Matt confirmed console checks + Org-B-only T1/T2 2026-07-29 via chat — docs/soc2/evidence/secrets-env-store-spotcheck-2026-07-29.md; readiness only — not SOC 2 certified",
   },
   {
     id: "rem-tenant-isolation",
     label: "Tenant isolation evidence (Org A ≠ Org B)",
-    status: "in_progress",
+    status: "done",
     owner: "Matt",
     targetWindow: "Month 2",
     notes:
-      "Partial 2026-07-29 — unit 403 + unauth 401 + SQL; Org B = Customer Corp cfa7c116-…; authenticated T1/T2 pending (corporate email in both orgs) — docs/soc2/evidence/tenant-isolation-2026-07-29.md",
+      "Pass 2026-07-29 — unit/SQL/unauth + Matt confirmed Org-B-only authenticated T1/T2 via chat — docs/soc2/evidence/tenant-isolation-2026-07-29.md; readiness only — not SOC 2 certified",
   },
   {
     id: "rem-ai-writeup",
@@ -399,7 +399,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; access review signed 2026-07-29; secrets/tenant isolation Partial 2026-07-29; vendor reports still open",
+      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; access review signed 2026-07-29; secrets + tenant isolation Pass 2026-07-29; vendor reports still open",
   },
   {
     id: "type-i-audit",
@@ -717,9 +717,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-3",
         label: "Secrets only in env stores (not git)",
-        status: "in_progress",
+        status: "done",
         notes:
-          "Partial 2026-07-29 — git Pass; consoles pending — docs/soc2/evidence/secrets-env-store-spotcheck-2026-07-29.md",
+          "Pass 2026-07-29 — git + consoles; Matt confirmed via chat — docs/soc2/evidence/secrets-env-store-spotcheck-2026-07-29.md; readiness only — not SOC 2 certified",
       },
       {
         id: "eng-4",
@@ -731,9 +731,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-5",
         label: "Tenant isolation evidence (Org A ≠ Org B)",
-        status: "in_progress",
+        status: "done",
         notes:
-          "Partial 2026-07-29 — unit/SQL/unauth; T1/T2 Matt — docs/soc2/evidence/tenant-isolation-2026-07-29.md",
+          "Pass 2026-07-29 — unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat — docs/soc2/evidence/tenant-isolation-2026-07-29.md; readiness only — not SOC 2 certified",
       },
       {
         id: "eng-6",
@@ -799,9 +799,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "bar-8",
         label: "Tenant isolation evidence",
-        status: "in_progress",
+        status: "done",
         notes:
-          "Partial 2026-07-29 — docs/soc2/evidence/tenant-isolation-2026-07-29.md; authenticated Path A/B pending",
+          "Pass 2026-07-29 — docs/soc2/evidence/tenant-isolation-2026-07-29.md; Matt confirmed Org-B-only T1/T2 via chat; readiness only — not SOC 2 certified",
       },
       {
         id: "bar-9",
