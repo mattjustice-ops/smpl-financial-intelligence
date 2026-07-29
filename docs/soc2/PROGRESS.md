@@ -49,12 +49,12 @@
 | `[x]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | **Locked 2026-07-28** — OpenAI/APM unused; Sanity/HubSpot off product DPA; Neon **us-east-1**; **other vendor regions TBD** — [02_subprocessors.md](./02_subprocessors.md) |
 | `[ ]` | First quarterly-style access review sign-off | Matt | Week 3–4 | After MFA verified + inventory stable |
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
-| `[~]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Pack ready 2026-07-28** — [runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md) + [evidence/ir-tabletop-TEMPLATE.md](./evidence/ir-tabletop-TEMPLATE.md); **awaiting Matt run** — do not mark `[x]` until dated notes filed |
+| `[~]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Pack ready 2026-07-28**; Scenario B rewrite + P15 v1.1 draft pending Matt Allow — [evidence/ir-tabletop-2026-07-28-WIP.md](./evidence/ir-tabletop-2026-07-28-WIP.md); **do not mark `[x]`** until dated complete notes filed after Allow + full run |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) — collection started | Matt | Week 3–4 | Vercel, Railway, Neon, Stripe, Anthropic, Resend, … |
 | `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Outline drafted 2026-07-28** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel. R16 **not** closed; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | Test plan + results |
-| `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** by Matt Justice — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
+| `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** v1.0; **v1.1 draft amendment pending Allow** (machine-primary grounding) — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
 | `[ ]` | Security one-pager **published** for sales | Matt | Month 2 | Draft exists; publish / share under NDA |
 | `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Even approximate; mark TARGET |
 | `[!]` | Audit firm shortlist / engagement | Matt | Month 3–4 | Independent CPA — **TARGET** fieldwork |
@@ -354,6 +354,16 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 2. Added blank evidence template — [evidence/ir-tabletop-TEMPLATE.md](./evidence/ir-tabletop-TEMPLATE.md) (copy → `ir-tabletop-YYYY-MM-DD.md` when run)
 3. P04 §7 points at runbook; scoreboard IR item → **[~] pack ready / awaiting run** (not complete)
 
+## What we drafted 2026-07-28 — P15 v1.1 + Scenario B (pending Matt Allow)
+
+**Not SOC 2 certified.** Draft amendment ≠ Allowed. Do **not** forge Matt Allow. Do **not** mark IR tabletop complete.
+
+1. **P15 v1.1 draft** — machine-primary grounding (evidence binding, fail-closed, freeze-ID); human review before send not primary — [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)
+2. **IR Scenario B rewrite** — root cause = grounding/validation fail-open; +18% / EMEA vs freeze ~4% — [runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md)
+3. P04 containment companion + WIP evidence — [evidence/ir-tabletop-2026-07-28-WIP.md](./evidence/ir-tabletop-2026-07-28-WIP.md)
+4. **Normative controls pack** — [controls/](./controls/README.md) (`data_integrity_framework.md`, `data_sources_tieout_prompt.md`); Part 6 human sign-off adapted → periodic testing; honest implemented-vs-roadmap labels
+5. **P15 §4.8 + Scenario B eradicate/prevent** — cite `_sources`, evidence-only Claude, freeze-ID, tie-out/second-pass as gates; residual = gates failed open; large commentary-vs-engine variance = unacceptable control failure
+
 ---
 
 ## How you’ll know Type I is complete
@@ -368,5 +378,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-28 (IR tabletop pack) |
+| Last updated | 2026-07-28 (P15 v1.1 + controls docs + Scenario B pending Allow) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |
