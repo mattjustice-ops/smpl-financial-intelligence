@@ -1,0 +1,7 @@
+# Private vendor reports (gitignored)
+
+Place NDA-bound SOC / ISO PDFs here **only if** you choose in-repo private storage.
+
+Prefer storing outside the git tree (see [README.md](../README.md)).
+
+This folder is intentionally empty in git.
