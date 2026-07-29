@@ -1,0 +1,23 @@
+# Dependabot — SMPL financial intelligence (P05 / CHANGE_MANAGEMENT.md)
+# Enables scheduled dependency update PRs once GitHub Dependabot is enabled on the repo.
+# Matt must also toggle: Dependabot alerts, Dependabot security updates, secret scanning (see PR body).
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
