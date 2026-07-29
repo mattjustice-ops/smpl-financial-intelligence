@@ -93,7 +93,7 @@ Customer-visible AI commentary: **+18% QoQ** MRR + **EMEA enterprise expansion**
 | # | Action | Owner | Due | Done? |
 |---|--------|-------|-----|-------|
 | 1 | Confirm GitHub Dependabot / secret scanning enabled on SMPL repo (P05) | Matt Justice | Month 2 | ☑ **2026-07-28** — PR #19 + 4 Code security toggles — [dependabot-enabled-2026-07-28.md](./dependabot-enabled-2026-07-28.md) |
-| 2 | First quarterly-style access review sign-off | Matt Justice | Week 3–4 | ☐ |
+| 2 | First quarterly-style access review sign-off | Matt Justice | Week 3–4 | ☑ **2026-07-29** — OK/Allow; [access-review-2026-Q3.md](./access-review-2026-Q3.md) |
 | 3 | Vendor SOC / ISO report collection started (Vercel, Railway, Neon, Stripe, Anthropic, Resend, …) | Matt Justice | Week 3–4 | ☐ |
 | 4 | Customer DPA / MSA — outline → counsel redline | Matt Justice | Week 3–4 | ☐ (outline drafted) |
 | 5 | Engineering: harden fail-closed gates per [controls/README.md](../controls/README.md) — `_sources`, structural claim verify, second-pass emit block | Matt Justice | Month 2+ | ☐ |
