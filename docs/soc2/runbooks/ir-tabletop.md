@@ -143,7 +143,7 @@ Work each inject through P04 §5. For every phase, write **what you would do**, 
 
 ## Scenario B — AI hallucination / unsupported claim reached a customer
 
-> **Scenario B rewrite Allowed 2026-07-28** by Matt Justice (chat). Allow unblocks finalizing notes; the full tabletop exercise still needs to be run per this runbook.
+> **Scenario B rewrite Allowed 2026-07-28** by Matt Justice (chat). Tabletop **completed 2026-07-28** — evidence: [../evidence/ir-tabletop-2026-07-28.md](../evidence/ir-tabletop-2026-07-28.md).
 >
 > **Product posture (must follow in this exercise):** Primary controls are backend / automated **fail-closed** — provenance / `_sources`, structural claim verify, freeze-ID binding, tie-out / second-pass gates (P15 §4.7–§4.8; [../controls/README.md](../controls/README.md)). Do **not** treat “human review before send” or “customer should have re-validated” as root cause or primary control. Hypothetical only — no live actions.
 >
@@ -268,7 +268,7 @@ Completing and filing this table **is** the evidence artifact for “IR tabletop
 |------------------|------------------------------|
 | IR plan can be walked by the solo founder | SMPL is SOC 2 certified |
 | Scenarios cover secret leak + AI Sev2 path | A real incident was handled |
-| Notes template ready for auditor evidence | The exercise was completed (until Matt runs it) |
+| Notes template ready for auditor evidence | A future exercise was completed (2026-07-28 evidence on file) |
 
 **Not SOC 2 certified.** Pursuing / readiness only until a CPA Type I report is in hand.
 

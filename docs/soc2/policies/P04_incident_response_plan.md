@@ -83,7 +83,7 @@ Examples (not exhaustive):
 
 Run a lightweight tabletop at least annually (or before Type I fieldwork). Record date and attendees.
 
-**Solo-founder pack:** [../runbooks/ir-tabletop.md](../runbooks/ir-tabletop.md) (~45–60 min; credential leak + AI hallucination scenarios). File notes from [../evidence/ir-tabletop-TEMPLATE.md](../evidence/ir-tabletop-TEMPLATE.md). Tabletop ≠ real incident; completing dated notes = operable-IR evidence. **[!]** Run before auditor fieldwork — pack ready; exercise not yet completed.
+**Solo-founder pack:** [../runbooks/ir-tabletop.md](../runbooks/ir-tabletop.md) (~45–60 min; credential leak + AI hallucination scenarios). File notes from [../evidence/ir-tabletop-TEMPLATE.md](../evidence/ir-tabletop-TEMPLATE.md). Tabletop ≠ real incident; completing dated notes = operable-IR evidence. **Completed 2026-07-28** — [../evidence/ir-tabletop-2026-07-28.md](../evidence/ir-tabletop-2026-07-28.md). Next annual tabletop ~2027-07 or before Type I fieldwork if sooner.
 
 ## 8. Approval
 

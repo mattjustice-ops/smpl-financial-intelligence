@@ -6,7 +6,7 @@ Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Scoreboard: [PRO
 
 Platform templates (Vanta/Drata/etc.) are acceptable starting points later; customize for SMPL (multi-tenant finance data, white-glove loads, Anthropic prompts, no GL write-back).
 
-**Approved ≠ SOC 2 certified.** P01–P12 are approved company policy as of 2026-07-27; **P15** approved 2026-07-28. Open evidence items (IR tabletop, vendor reports, DPA, etc.) remain. SMPL is **not** SOC 2 certified until an independent CPA Type I report is in hand.
+**Approved ≠ SOC 2 certified.** P01–P12 are approved company policy as of 2026-07-27; **P15** approved 2026-07-28; **IR tabletop complete** 2026-07-28. Open evidence items (vendor reports, DPA, access review, etc.) remain. SMPL is **not** SOC 2 certified until an independent CPA Type I report is in hand.
 
 ---
 

@@ -25,7 +25,7 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel (R16 still open — outline ≠ signed DPA). Boundary/vendor Q1–Q10 **locked** 2026-07-28 — other vendor **regions** remain TBD (Neon us-east-1 only). In parallel: **run IR tabletop** ([runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md) — pack ready, Scenario B Allowed, **full exercise still pending**); start vendor SOC report collection. **P15 Approved v1.1** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
+**Next guided item for Matt:** Send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel (R16 still open — outline ≠ signed DPA). Boundary/vendor Q1–Q10 **locked** 2026-07-28 — other vendor **regions** remain TBD (Neon us-east-1 only). In parallel: start vendor SOC report collection; first quarterly access review. **IR tabletop complete 2026-07-28** ([evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md)). **P15 Approved v1.1** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -49,7 +49,7 @@
 | `[x]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | **Locked 2026-07-28** — OpenAI/APM unused; Sanity/HubSpot off product DPA; Neon **us-east-1**; **other vendor regions TBD** — [02_subprocessors.md](./02_subprocessors.md) |
 | `[ ]` | First quarterly-style access review sign-off | Matt | Week 3–4 | After MFA verified + inventory stable |
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
-| `[~]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Pack ready 2026-07-28**; Scenario B **Allowed** + P15 v1.1 **Approved 2026-07-28** — [evidence/ir-tabletop-2026-07-28-WIP.md](./evidence/ir-tabletop-2026-07-28-WIP.md); **do not mark `[x]`** until full 45–60 min run + dated complete notes for both scenarios |
+| `[x]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Complete 2026-07-28** — Scenarios A + B; async/chat-facilitated — [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md); readiness evidence only — not SOC 2 certified |
 | `[ ]` | Vendor SOC / ISO reports folder (under NDA) — collection started | Matt | Week 3–4 | Vercel, Railway, Neon, Stripe, Anthropic, Resend, … |
 | `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Outline drafted 2026-07-28** — [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md); awaiting counsel. R16 **not** closed; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | |
@@ -114,7 +114,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | Phase | Status | Exit criteria |
 |-------|--------|---------------|
 | 1. Kickoff | [~] In progress | Scope **APPROVED** + owners named; platform **deferred DIY**; **target month / CPA still open** |
-| 2. Controls live | [~] In progress | Policies **approved** (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path; IR approved (tabletop pack ready, Scenario B Allowed, **full run pending**); vendor reports / tenant isolation still open |
+| 2. Controls live | [~] In progress | Policies **approved** (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path; IR approved + **tabletop complete 2026-07-28**; vendor reports / tenant isolation still open |
 | 3. Type I audit | [ ] Open | CPA firm engaged; fieldwork complete; **Type I report issued** |
 | 4. Type II observation | [ ] Open | Controls operate cleanly over window; Type II report issued |
 
@@ -213,7 +213,7 @@ Book the auditor only when these are **live**, not merely drafted:
 | `[x]` | Written policies **approved** by leadership | P01–P12 Approved 2026-07-27; **P15 Approved 2026-07-28**; approval ≠ certified |
 | `[~]` | Access inventory + first review artifact | Inventory first pass done; quarterly sign-off still open (Week 3–4) |
 | `[x]` | Documented change/deploy path + PR review on `main` | Path documented; GitHub ruleset protecting `main` live 2026-07-26 |
-| `[~]` | Incident response plan (approved + operable) | **Approved** 2026-07-27; tabletop **pack ready** ([runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md)); Scenario B **Allowed 2026-07-28** — **full exercise run pending** / dated notes |
+| `[x]` | Incident response plan (approved + operable) | **Approved** 2026-07-27; tabletop **complete 2026-07-28** ([runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md); [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md)) |
 | `[x]` | Backup restore test evidence | **Pass 2026-07-27** — PITR throwaway; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[~]` | Subprocessor inventory + vendor reports collected | Inventory **locked** 2026-07-28 (product DPA list); vendor reports **not** collected |
 | `[ ]` | Tenant isolation evidence |
@@ -260,7 +260,7 @@ Not SOC 2 certified. Readiness evidence only.
 
 1. **[~]** Customer DPA / MSA — outline drafted ([legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md)); send to counsel — P10 R16 **still open**
 2. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
-3. Open evidence (keep honest): IR tabletop **pack ready; Scenario B Allowed; full run pending** (P04 — [runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md)); Dependabot **not confirmed** (P05). Staging **exists, no Customer Data** (Q3 locked). Other vendor **regions TBD**. Restore test **Pass** 2026-07-27 (P12). **P15 Approved v1.1** 2026-07-28
+3. Open evidence (keep honest): Dependabot **not confirmed** (P05). Staging **exists, no Customer Data** (Q3 locked). Other vendor **regions TBD**. Restore test **Pass** 2026-07-27 (P12). **IR tabletop complete** 2026-07-28 (P04). **P15 Approved v1.1** 2026-07-28
 4. Start vendor SOC / ISO report collection (inventory locked; reports open)
 5. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
 
@@ -346,6 +346,16 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 3. Closed scoreboard items: confirm boundary matches production; confirm unused vendors / OpenAI / Neon region (other regions stay TBD in subprocessors table)
 4. Scoreboard + `/compliance` data synced
 
+## What we checked off 2026-07-28 — IR tabletop complete
+
+**Not SOC 2 certified.** Tabletop evidence = operable-IR readiness only — not CPA Type I report.
+
+1. Completed async/chat-facilitated tabletop (~55 min) — Scenarios A (credential leak, Sev2+) + B (AI hallucination → customer, Sev2)
+2. Filed dated evidence — [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md) (removed WIP file)
+3. Scenario B root cause = grounding/validation gate **fail-open** (not human-review skip); residual risk documented honestly per [controls/](./controls/README.md)
+4. P04 §7 + runbook updated; scoreboard IR item → **[x]**; `/compliance` synced
+5. Includes P15 v1.1 + Scenario B **Allow** from branch `soc2/p15-v11-scenario-b-allow` (merged via this PR if not yet on main)
+
 ## What we checked off 2026-07-28 — IR tabletop pack (awaiting run)
 
 **Not SOC 2 certified.** Runbook ≠ completed tabletop evidence. Do **not** mark IR tabletop `[x]` until Matt runs the exercise and files dated notes.
@@ -388,5 +398,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-28 (P15 v1.1 Approved + Scenario B Allowed; IR tabletop run still pending) |
+| Last updated | 2026-07-28 (IR tabletop complete; P15 v1.1 Approved + Scenario B Allowed) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |
