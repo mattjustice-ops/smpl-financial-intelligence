@@ -3,7 +3,7 @@ uvicorn[standard]==0.32.1
 sqlalchemy==2.0.45
 alembic==1.14.0
 psycopg[binary]==3.2.13
-pydantic-settings==2.6.1
+pydantic-settings==2.14.2
 email-validator==2.2.0
 python-multipart==0.0.17
 python-dateutil==2.9.0.post0
