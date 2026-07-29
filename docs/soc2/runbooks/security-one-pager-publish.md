@@ -1,40 +1,50 @@
 # Security one-pager — publish checklist (Month 2)
 
 > **Readiness only — not SOC 2 certified.**  
-> Source draft: [../SECURITY_ONE_PAGER.md](../SECURITY_ONE_PAGER.md).  
-> This checklist does **not** mark the scoreboard item complete until Matt publishes / shares.
+> Source: [../SECURITY_ONE_PAGER.md](../SECURITY_ONE_PAGER.md).  
+> Evidence: [../evidence/security-one-pager-published-2026-07-29.md](../evidence/security-one-pager-published-2026-07-29.md).
 
-## Where it should live for sales
+## Where sales finds it
 
-| Channel | Recommendation |
-|---------|----------------|
-| **Canonical source (now)** | `docs/soc2/SECURITY_ONE_PAGER.md` — share PDF/export or markdown **under NDA** |
-| **Public marketing site** | **No dedicated `/security` page exists** today. Do **not** invent a new public page unless product decides to. Prefer NDA share + questionnaire answers. |
-| **Related public page** | [https://www.smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) — Type I **progress** scoreboard only; not a substitute for the one-pager and **must not** claim certification |
+| Channel | Location |
+|---------|----------|
+| **Canonical source** | `docs/soc2/SECURITY_ONE_PAGER.md` — share under **NDA** |
+| **NDA PDF export** | `docs/soc2/SMPL_Security_One_Pager_2026-07.pdf` |
+| **Publish evidence** | `docs/soc2/evidence/security-one-pager-published-2026-07-29.md` |
+| **Public marketing site** | **No** dedicated `/security` page. Do **not** invent one unless product decides to. Prefer NDA share + questionnaire answers. |
+| **Related public page** | [https://www.smpl-ai.com/compliance](https://www.smpl-ai.com/compliance) — Type I **progress** scoreboard only; **not** a substitute for the one-pager and **must not** claim certification |
 | **App-internal** | `/app/compliance` mirrors the scoreboard for the team |
 
 ## Pre-publish checks
 
 | # | Check | Done? |
 |---|--------|-------|
-| 1 | Opens with honest “pursuing SOC 2 / not certified” framing | ☐ |
-| 2 | No “SOC 2 compliant” / “certified” language | ☐ |
-| 3 | Stack names match [01_system_boundary.md](../01_system_boundary.md) | ☐ |
-| 4 | Subprocessors summary matches [02_subprocessors.md](../02_subprocessors.md) (no invented vendors) | ☐ |
-| 5 | Isolation language: design yes; evidence “ask under NDA” until test Pass | ☐ |
-| 6 | AI / Anthropic: keys server-side; not system of record for numbers | ☐ |
-| 7 | Export / PDF filename e.g. `SMPL_Security_One_Pager_YYYY-MM.pdf` — store outside git or in sales vault | ☐ |
-| 8 | Sales told: share under NDA; link `/compliance` only as progress, not certification | ☐ |
+| 1 | Opens with honest “pursuing SOC 2 / not certified” framing | ☑ 2026-07-29 |
+| 2 | No “SOC 2 compliant” / “certified” language | ☑ 2026-07-29 |
+| 3 | Stack names match [01_system_boundary.md](../01_system_boundary.md) | ☑ 2026-07-29 |
+| 4 | Subprocessors summary matches [02_subprocessors.md](../02_subprocessors.md) (no invented vendors) | ☑ 2026-07-29 |
+| 5 | Isolation language: design yes; readiness Pass evidence shareable under NDA (not certification) | ☑ 2026-07-29 (aligned to tenant isolation Pass) |
+| 6 | AI / Anthropic: keys server-side; not system of record for numbers | ☑ 2026-07-29 |
+| 7 | Export / PDF filename `SMPL_Security_One_Pager_2026-07.pdf` in `docs/soc2/` | ☑ 2026-07-29 |
+| 8 | Sales guidance: share under NDA; link `/compliance` only as progress, not certification | ☑ Documented in one-pager + evidence |
 
-## Publish actions (Matt)
+## Publish bar (met 2026-07-29)
 
-1. Final read of [../SECURITY_ONE_PAGER.md](../SECURITY_ONE_PAGER.md).
-2. Export PDF (or paste into sales knowledge base / NDA data room).
-3. Optional: add one sentence to sales Trust & Security answers pointing at the PDF.
-4. Then mark scoreboard **Security one-pager published for sales** `[x]` and sync `frontend/lib/compliance/progress.ts`.
+**Published for sales** = NDA-ready, versioned, PDF exported, linked from scoreboard / sales pack — **not** requiring a live customer email send.
+
+Completed:
+
+1. Final read of [../SECURITY_ONE_PAGER.md](../SECURITY_ONE_PAGER.md) (honest pursuing language; stack/subprocessors aligned).
+2. PDF export at `docs/soc2/SMPL_Security_One_Pager_2026-07.pdf`.
+3. Sales findability documented on the one-pager and in evidence.
+4. Scoreboard **Security one-pager published for sales** `[x]` + `frontend/lib/compliance/progress.ts` synced.
+
+### Optional (Matt — customer send)
+
+When a prospect asks: attach the PDF (or markdown) **under NDA**; optionally point Trust & Security answers at the PDF. Actual outbound send is optional and does not block the scoreboard item.
 
 ## Status
 
-**WIP** — draft improved 2026-07-29 for near-publish readiness. **Not published** until Matt completes the actions above.
+**Complete for sales readiness 2026-07-29** — NDA pack available. **Not** SOC 2 certified. No public `/security` page created.
 
-_Document control: Month 2 prep — do not mark Month 2 item complete from this checklist alone._
+_Document control: Month 2 — published for sales use under NDA; readiness only._

@@ -25,7 +25,7 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** (1) Send counsel pack — [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) + [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) (**R16 open**). (2) Vendor SOC portal requests — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md). (3) Security one-pager publish — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md). Secrets spot-check + tenant isolation **Pass 2026-07-29** (Matt chat attestation). Reminder: readiness ≠ SOC 2 certified.
+**Next guided item for Matt:** (1) Send counsel pack — [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) + [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) (**R16 open**). (2) Vendor SOC portal requests — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md). Security one-pager **published for sales under NDA 2026-07-29** (optional: attach PDF when a prospect asks). Secrets spot-check + tenant isolation **Pass 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -56,7 +56,7 @@
 | `[x]` | Secrets only in env stores (spot-check) | Matt | Month 2 | **Pass 2026-07-29** — git hygiene + Vercel/Railway/Neon consoles; Matt confirmed console checks + Org-B-only T1/T2 2026-07-29 via chat — [evidence/secrets-env-store-spotcheck-2026-07-29.md](./evidence/secrets-env-store-spotcheck-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | **Pass 2026-07-29** — unit/SQL/unauth + Matt confirmed Org-B-only authenticated T1/T2 via chat — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** v1.1 (machine-primary grounding) — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
-| `[ ]` | Security one-pager **published** for sales | Matt | Month 2 | **Near-publish draft 2026-07-29** — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md); publish checklist [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md); still open until NDA share / sales publish |
+| `[x]` | Security one-pager **published** for sales | Matt | Month 2 | **Published for sales under NDA 2026-07-29** — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) + [SMPL_Security_One_Pager_2026-07.pdf](./SMPL_Security_One_Pager_2026-07.pdf); evidence [evidence/security-one-pager-published-2026-07-29.md](./evidence/security-one-pager-published-2026-07-29.md); no public `/security` page; readiness only — not SOC 2 certified |
 | `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Even approximate; mark TARGET |
 | `[!]` | Audit firm shortlist / engagement | Matt | Month 3–4 | Independent CPA — **TARGET** fieldwork |
 | `[!]` | Engage CPA; schedule Type I fieldwork | Matt | Month 3–4 | **TARGET**, not commitment |
@@ -163,7 +163,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Confirm regions / unused vendors; mark OpenAI if live | **Locked 2026-07-28** — OpenAI **NO**; Neon us-east-1; other regions **TBD** |
 | `[~]` | Vendor SOC / ISO reports folder (under NDA) | **Scaffold ready 2026-07-29** — [evidence/vendor-soc/](./evidence/vendor-soc/); Trust Centers linked; **no reports received** — execute requests next |
 | `[~]` | Customer DPA / MSA — **single legal workstream** | **Counsel send package ready** — [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) + [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) + outline; awaiting **Matt send**. R16 open until customer-ready / signed path. Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
-| `[x]` | Security one-pager (draft) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) — honest “pursuing SOC 2”; not certified. Near-publish polish 2026-07-29; **publish** for sales still Month 2 open — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md) |
+| `[x]` | Security one-pager (draft → published for sales) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) + PDF [SMPL_Security_One_Pager_2026-07.pdf](./SMPL_Security_One_Pager_2026-07.pdf) — honest “pursuing SOC 2”; **published for sales under NDA 2026-07-29** — [evidence/security-one-pager-published-2026-07-29.md](./evidence/security-one-pager-published-2026-07-29.md); not certified |
 
 ### C. Access hardening (Matt / ops)
 
@@ -406,13 +406,13 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 
 ---
 
-## What we prepared 2026-07-29 — Month 2 readiness pack (not complete)
+## What we prepared 2026-07-29 — Month 2 readiness pack (later closed same day)
 
-**Not SOC 2 certified.** Prep ≠ executed spot-check ≠ isolation Pass ≠ published one-pager.
+**Not SOC 2 certified.** Prep pack items later closed same day where noted.
 
-1. **Secrets env-store spot-check** — runnable runbook + evidence template — [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md)
-2. **Tenant isolation (Org A ≠ Org B)** — test plan; Org A = SMPL Demo Co `8571e520-0687-4516-bdee-379f37c58c1f` — [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md)
-3. **Security one-pager** — near-publish draft; publish still open — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md)
+1. **Secrets env-store spot-check** — runnable runbook + evidence template — [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md) → **Pass** same day
+2. **Tenant isolation (Org A ≠ Org B)** — test plan; Org A = SMPL Demo Co `8571e520-0687-4516-bdee-379f37c58c1f` — [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md) → **Pass** same day
+3. **Security one-pager** — near-publish draft → **published for sales under NDA** same day — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md)
 4. Demo dashboard financials **unchanged**
 
 ---
@@ -425,6 +425,19 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 2. **Tenant isolation** — Org B = **Customer Corp** `cfa7c116-3a89-4dd1-91df-80d4ece5c59d`; unit membership **403** Pass; prod unauth **401** Pass; SQL tenants distinct; Matt confirmed Org-B-only user + authenticated T1/T2 **Pass**. Evidence: [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md)
 3. Scoreboard + `/compliance`: both items `[x]` / `done`
 4. Demo Co financial seed / Board / FE **unchanged**
+
+---
+
+## What we closed 2026-07-29 — Security one-pager published for sales (NDA)
+
+**Not SOC 2 certified.** Published for sales = NDA-ready pack + scoreboard link — not a public `/security` page and not a CPA report.
+
+1. Pre-publish checks complete — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md)
+2. Canonical markdown — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) (honest pursuing language; isolation Pass noted; share under NDA)
+3. PDF export — [SMPL_Security_One_Pager_2026-07.pdf](./SMPL_Security_One_Pager_2026-07.pdf)
+4. Evidence — [evidence/security-one-pager-published-2026-07-29.md](./evidence/security-one-pager-published-2026-07-29.md)
+5. Scoreboard + `/compliance`: item `[x]` / `done`
+6. Optional Matt step when a prospect asks: attach PDF under NDA
 
 ---
 
@@ -457,5 +470,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-29 (Month 2 prep pack ready — secrets/tenant/one-pager items still open; DPA/MSA counsel send package ready — awaiting Matt send; R16 open; vendor SOC collection scaffold ready — reports not received; access review 2026-Q3 signed) |
+| Last updated | 2026-07-29 (security one-pager published for sales under NDA; Month 2 secrets/tenant Pass; DPA/MSA counsel send package ready — awaiting Matt send; R16 open; vendor SOC scaffold ready — reports not received; access review 2026-Q3 signed) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |
