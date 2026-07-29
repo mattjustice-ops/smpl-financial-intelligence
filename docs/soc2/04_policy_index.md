@@ -75,3 +75,4 @@ Platform templates (Vanta/Drata/etc.) are acceptable starting points later; cust
 | 2026-07-27 | **P15** AI/LLM draft created (ready for approval, not approved); platform deferred DIY logged in decision log. |
 | 2026-07-28 | **P15 Approved** by Matt Justice (redline: hallucination §4.7, logging/retention 30 days, P04/P08 companion edits). Approval ≠ SOC 2 certified. |
 | 2026-07-28 | **P15 v1.1 draft amendment** (machine-primary grounding / fail-closed / freeze-ID binding; human review not primary) + IR Scenario B / P04 companion — **pending Matt Allow**. Do not treat as Allowed until confirmed. |
+| 2026-07-28 | Normative controls docs added under [controls/](./controls/README.md); P15 §4.8 + Scenario B cite `_sources`, evidence-only Claude, freeze-ID, tie-out/second-pass gates; Part 6 adapted to periodic testing. Still **pending Matt Allow**. |

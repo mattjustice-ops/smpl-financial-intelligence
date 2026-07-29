@@ -361,6 +361,8 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 1. **P15 v1.1 draft** — machine-primary grounding (evidence binding, fail-closed, freeze-ID); human review before send not primary — [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md)
 2. **IR Scenario B rewrite** — root cause = grounding/validation fail-open; +18% / EMEA vs freeze ~4% — [runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md)
 3. P04 containment companion + WIP evidence — [evidence/ir-tabletop-2026-07-28-WIP.md](./evidence/ir-tabletop-2026-07-28-WIP.md)
+4. **Normative controls pack** — [controls/](./controls/README.md) (`data_integrity_framework.md`, `data_sources_tieout_prompt.md`); Part 6 human sign-off adapted → periodic testing; honest implemented-vs-roadmap labels
+5. **P15 §4.8 + Scenario B eradicate/prevent** — cite `_sources`, evidence-only Claude, freeze-ID, tie-out/second-pass as gates; residual = gates failed open; large commentary-vs-engine variance = unacceptable control failure
 
 ---
 
@@ -376,5 +378,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-28 (P15 v1.1 draft + Scenario B pending Allow) |
+| Last updated | 2026-07-28 (P15 v1.1 + controls docs + Scenario B pending Allow) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

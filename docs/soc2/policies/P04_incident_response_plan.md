@@ -70,7 +70,7 @@ Examples (not exhaustive):
 | Suspected cross-tenant leak | Disable affected feature/path; snapshot evidence; notify exec; assess customer impact |
 | Provider outage (Vercel/Railway/Neon) | Check status pages; communicate; failover only if pre-documented |
 | Secret in git | Rotate immediately; purge history if needed; treat as Sev2+ |
-| AI hallucination reaching customer | Identify affected output(s), freeze ID(s), and customer(s); **stop shipping** further bad commentary via technical controls (feature flag if present / disable narrative path / hotfix — fail closed); issue corrected output bound to freeze evidence; document root cause as grounding/validation **fail-open** or freeze-binding defect — **not** “skipped human review”; humans handle IR / exceptions / periodic testing (see P15 §4.7) |
+| AI hallucination reaching customer | Identify affected output(s), freeze ID(s), and customer(s); **stop shipping** further bad commentary via technical controls (feature flag if present / disable narrative path / hotfix — fail closed); issue corrected output bound to freeze evidence; document root cause as grounding/validation / provenance / claim-verify / tie-out gate **fail-open** or freeze-binding defect — **not** “skipped human review”; humans handle IR / exceptions / periodic testing (see P15 §4.7–§4.8; [../controls/README.md](../controls/README.md)) |
 
 ## 6. Evidence to keep
 

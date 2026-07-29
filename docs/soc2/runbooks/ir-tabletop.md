@@ -143,40 +143,58 @@ Work each inject through P04 §5. For every phase, write **what you would do**, 
 
 ## Scenario B — AI hallucination / unsupported claim reached a customer
 
-> **Product posture (must follow in this exercise):** Primary controls are backend security/engineering — automated evidence binding, fail-closed grounding, freeze-ID binding. Do **not** treat “human review before send” or “customer should have re-validated” as root cause or primary control. Hypothetical only — no live actions.
+> **Product posture (must follow in this exercise):** Primary controls are backend / automated **fail-closed** — provenance / `_sources`, structural claim verify, freeze-ID binding, tie-out / second-pass gates (P15 §4.7–§4.8; [../controls/README.md](../controls/README.md)). Do **not** treat “human review before send” or “customer should have re-validated” as root cause or primary control. Hypothetical only — no live actions.
+>
+> **How prevention is expected to work** (cite these; residual scenario = gates failed open):
+> 1. Package bound to **freeze ID**; numbers/drivers only from freeze / engine evidence
+> 2. LLM context carries **`_sources` / provenance**; Claude may only state values present in evidence
+> 3. **Structural claim verify** (numbers + driver attributions) + **second-pass / tie-out** as emit or release gates — FAIL blocks ship
+> 4. Unresolved → omit / **"don't know"** (fail closed)
+> 5. Humans = IR / exceptions / **periodic control testing** — not the day-to-day gate
+>
+> Honesty: not all layers above are fully shipping yet — label **required design / roadmap** vs **partial implemented** per controls README. Do not claim full framework coverage in prod.
 
 ### Inject (fictional / hypothetical)
 
 > A customer emails: their board package (or in-product customer-visible analysis) includes AI-generated commentary claiming MRR grew **+18% QoQ**, driven by **“expansion in EMEA enterprise.”** The warehouse / engine **freeze** for that period supports only **~4% QoQ** and has **no EMEA expansion driver**. The package was already delivered externally.
 >
-> **Root-cause framing for this exercise (required):** Backend grounding / claim-validation **failed open** (bug or misconfiguration) — unsupported numeric claim and wrong-context driver packaging were emitted despite the freeze. This is **not** “we skipped human review before send.” A large variance between commentary and engine (e.g. 14–18% vs ~4%) would be devastating to trust; users will misuse UI — the system must force the right path.
+> **Root-cause framing for this exercise (required):** One or more machine-primary gates **failed open** (bug or misconfiguration) — e.g. missing/unenforced `_sources`, structural claim verify skipped, freeze-ID not bound, or tie-out/second-pass gate not blocking FAIL — so an unsupported numeric claim **and** wrong-context driver packaging were emitted despite the freeze. This is **not** “we skipped human review before send.” A large commentary-vs-engine variance (e.g. ~18% vs ~4%) is an **unacceptable control failure** and devastating to trust; users will misuse UI — the system must force the right path. **Residual risk scenario** for the tabletop = gates failed open, not “controls don’t exist as a product idea.”
 
 ### Align to P04 + P15
 
 | Field | Expected working answer (challenge yourself) |
 |-------|-----------------------------------------------|
-| Incident type | AI-generated commentary reaching a customer with a claim that does not resolve to verified engine/warehouse evidence (P04 §3; P15 §4.7) |
+| Incident type | AI-generated commentary reaching a customer with a claim that does not resolve to verified engine/warehouse evidence (P04 §3; P15 §4.7–§4.8) |
 | Default severity | **Sev2** (P04 §4) |
-| Containment row | Stop shipping bad commentary via **technical controls**; identify freeze ID / package / org / period; issue corrected output; document root cause as grounding/validation **fail-open** (not human-review miss) |
-| Root cause (exercise) | Automated grounding/validation **failed open** — bug/misconfig |
+| Containment row | Stop shipping bad commentary via **technical controls**; identify freeze ID / package / org / period; issue corrected output; document root cause as grounding/validation / gate **fail-open** (not human-review miss) |
+| Root cause (exercise) | Automated gates **failed open** — bug/misconfig (provenance / claim verify / freeze bind / tie-out) |
+| Prevention design | [../controls/data_integrity_framework.md](../controls/data_integrity_framework.md) + [../controls/data_sources_tieout_prompt.md](../controls/data_sources_tieout_prompt.md); P15 §4.8 |
 
 ### Step prompts
 
-1. **Detect** — Customer report of variance (+18% / EMEA vs freeze ~4% / no EMEA). Note intake channel. Do not treat “customer should have caught it” as the control failure.
-2. **Classify** — Why Sev2 (not Sev3)? Material incorrect financial claim and wrong-context packaging delivered externally. Large commentary-vs-engine variance is trust-critical.
-3. **Contain** — Stop further bad commentary with **real technical controls**: feature flag if one exists, disable narrative generation path, and/or hotfix that fails closed. Identify freeze ID / package version / org / period. Issue corrected customer output bound to freeze evidence. Honesty: only claim product controls that exist (P15 §6.1) — no fake customer kill-switch claims.
-4. **Eradicate** — Fix the validation gate so unsupported claims **cannot** be emitted; bind packages to freeze ID; structural verification of claims vs engine; fail closed to don't-know / omit. Do **not** “eradicate” by adding human review before send as the primary control.
-5. **Recover** — Deliver corrected package/output; confirm commentary figures and drivers match the freeze; re-enable the narrative path only after the fail-closed gate is verified.
+1. **Detect** — Customer report of variance (+18% / EMEA vs freeze ~4% / no EMEA). Note intake channel. Do not treat “customer should have caught it” as the control failure. Large commentary-vs-engine variance is itself the detection signal of gate fail-open.
+2. **Classify** — Why Sev2 (not Sev3)? Material incorrect financial claim and wrong-context packaging delivered externally. Per P15: large commentary-vs-engine variance is an unacceptable control failure / trust-critical.
+3. **Contain** — Stop further bad commentary with **real technical controls**: feature flag if one exists, disable narrative generation path, and/or hotfix that fails closed. Identify freeze ID / package version / org / period. Issue corrected customer output bound to freeze evidence (values only from evidence). Honesty: only claim product controls that exist (P15 §6.1; controls README) — no fake customer kill-switch or “full `_sources` already everywhere” claims.
+4. **Eradicate / prevent** — Restore the **expected** prevention path (system design), not a human checklist:
+   - Enforce **`_sources` / provenance** on LLM payloads; Claude may only state values present in evidence
+   - **Freeze-ID binding** for board/customer-facing packages
+   - **Structural claim verify** (figures **and** drivers/regions/causes) against freeze evidence
+   - **Automated tie-out / second-pass verification** as deploy or release (emit) gates — FAIL blocks ship
+   - **Fail closed** → omit / don't-know on unresolved claims
+   - Confirm which gate failed open (bug/misconfig) and fix so it cannot fail open again
+   - Do **not** “eradicate” by adding human review before send as the primary control; humans remain IR / exceptions / periodic testing (framework Part 6 adapted — controls README)
+5. **Recover** — Deliver corrected package/output; confirm commentary figures and drivers match the freeze / `_sources`; re-enable the narrative path only after the fail-closed gate(s) are verified (and note any still-roadmap layers honestly).
 6. **Notify** — Customer correction (required for exercise narrative); any broader notice? Exec approval recorded. No live customer email in this tabletop.
-7. **Lessons** — Align with machine-primary controls: automated evidence binding, fail-closed grounding, freeze-ID binding. Humans = IR, exception handling, periodic control testing — not day-to-day re-validation of every output. Users misuse UI; system forces the right path.
+7. **Lessons** — Prevention is expected via machine-primary controls in P15 §4.8 + controls docs. Residual scenario = gates failed open. Product safety rises as roadmap gates ship fail-closed. Humans = IR, exceptions, periodic control testing — not day-to-day re-validation of every output.
 
 ### Evidence to “imagine” keeping
 
 - Affected output id / freeze ID / period (sanitized — no customer PII in git evidence)
+- Which gate failed open (provenance / claim verify / freeze bind / tie-out/second-pass) — planned RCA only in tabletop
 - Technical containment action (flag / path disable / hotfix) — planned only in tabletop
 - Correction sent (describe; don’t paste customer email)
-- Root-cause: grounding/validation **fail-open** (bug/misconfig) — not human-review miss
-- Follow-up ticket / PR to harden fail-closed gate + freeze-ID binding
+- Root-cause: gate **fail-open** (bug/misconfig) — not human-review miss
+- Follow-up ticket / PR to harden fail-closed gates toward [../controls/](../controls/README.md) (honest partial vs roadmap)
 
 ---
 

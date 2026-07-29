@@ -41,7 +41,7 @@
 | Detect / report | |
 | Classify (severity) | Expected working default: **Sev2** (P04 §4 / P15 §4.7) |
 | Contain (planned; not executed) | |
-| Eradicate | Grounding/validation **fail-open** ☐ / freeze-ID binding gap ☐ / other: _(do not use “skipped human review” as primary root cause)_ |
+| Eradicate / prevent | Gate **fail-open** ☐ / missing `_sources` ☐ / claim-verify gap ☐ / freeze-ID binding gap ☐ / tie-out/second-pass gap ☐ / other: _(do not use “skipped human review” as primary root cause; cite [../controls/](../controls/README.md))_ |
 | Recover | |
 | Notify (draft only — do not send) | |
 | Lessons learned | |
