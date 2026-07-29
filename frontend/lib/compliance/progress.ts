@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // Month 2 prep pack ready (items still open); DPA counsel send package ready (awaiting Matt send); vendor SOC scaffold ready (no reports); access review signed
+  lastUpdated: "2026-07-29", // Month 2 secrets+tenant partial evidence; DPA counsel pack awaiting send; vendor SOC scaffold; access review signed
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 prep pack ready 2026-07-29 (secrets/tenant/one-pager runbooks — checklist items still open). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (docs/soc2/evidence/vendor-soc/; no reports received). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next: Matt send DPA pack to counsel + execute vendor Trust Center requests + Month 2 checklists. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Partial 2026-07-29 (git Pass; consoles pending Matt). Tenant isolation Partial 2026-07-29 (unit/SQL/unauth; authenticated T1/T2 pending). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: Matt finish secrets consoles + isolation T1/T2 + send DPA pack + vendor Trust Center requests. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -313,20 +313,20 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   {
     id: "rem-secrets",
     label: "Secrets only in env stores (spot-check)",
-    status: "open",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Month 2",
     notes:
-      "Prep ready 2026-07-29 — docs/soc2/runbooks/secrets-env-store-spotcheck.md + evidence template; still open until Matt runs",
+      "Partial 2026-07-29 — git hygiene Pass; Vercel/Railway/Neon consoles awaiting Matt — docs/soc2/evidence/secrets-env-store-spotcheck-2026-07-29.md",
   },
   {
     id: "rem-tenant-isolation",
     label: "Tenant isolation evidence (Org A ≠ Org B)",
-    status: "open",
+    status: "in_progress",
     owner: "Matt",
     targetWindow: "Month 2",
     notes:
-      "Prep ready 2026-07-29 — docs/soc2/runbooks/tenant-isolation-test.md; Org A = SMPL Demo Co 8571e520-…; still open until Matt runs",
+      "Partial 2026-07-29 — unit 403 + unauth 401 + SQL; Org B = Customer Corp cfa7c116-…; authenticated T1/T2 pending (corporate email in both orgs) — docs/soc2/evidence/tenant-isolation-2026-07-29.md",
   },
   {
     id: "rem-ai-writeup",
@@ -399,7 +399,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; access review signed 2026-07-29; vendor reports / tenant isolation still open",
+      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; access review signed 2026-07-29; secrets/tenant isolation Partial 2026-07-29; vendor reports still open",
   },
   {
     id: "type-i-audit",
@@ -717,8 +717,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-3",
         label: "Secrets only in env stores (not git)",
-        status: "open",
-        notes: "Month 2",
+        status: "in_progress",
+        notes:
+          "Partial 2026-07-29 — git Pass; consoles pending — docs/soc2/evidence/secrets-env-store-spotcheck-2026-07-29.md",
       },
       {
         id: "eng-4",
@@ -730,8 +731,9 @@ export const complianceSections: ComplianceSection[] = [
       {
         id: "eng-5",
         label: "Tenant isolation evidence (Org A ≠ Org B)",
-        status: "open",
-        notes: "Month 2",
+        status: "in_progress",
+        notes:
+          "Partial 2026-07-29 — unit/SQL/unauth; T1/T2 Matt — docs/soc2/evidence/tenant-isolation-2026-07-29.md",
       },
       {
         id: "eng-6",
@@ -794,7 +796,13 @@ export const complianceSections: ComplianceSection[] = [
         notes:
           "Inventory locked 2026-07-28; collection scaffold ready 2026-07-29 (docs/soc2/evidence/vendor-soc/); reports not received/reviewed",
       },
-      { id: "bar-8", label: "Tenant isolation evidence", status: "open" },
+      {
+        id: "bar-8",
+        label: "Tenant isolation evidence",
+        status: "in_progress",
+        notes:
+          "Partial 2026-07-29 — docs/soc2/evidence/tenant-isolation-2026-07-29.md; authenticated Path A/B pending",
+      },
       {
         id: "bar-9",
         label: "P15 + AI/subprocessor write-up for Anthropic",

@@ -25,7 +25,7 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** (1) Send counsel pack — paste [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md); attach [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) + [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) (+ subprocessors / boundary / one-pager / P15). **R16 still open** (package ready ≠ email sent ≠ signed DPA). (2) Execute **vendor SOC / ISO portal requests** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) + [REQUEST_TEMPLATES.md](./evidence/vendor-soc/REQUEST_TEMPLATES.md) (**scaffold ready 2026-07-29; no reports received**). (3) Execute **Month 2 prep pack** (items still `[ ]`): [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md), [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md), [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md). **Access review #1 signed 2026-07-29** ([evidence/access-review-2026-Q3.md](./evidence/access-review-2026-Q3.md)) — OK/Allow; corporate email mattjustice@smpl-ai.com. Reminder: readiness ≠ SOC 2 certified; Month 2 rows stay open until executed/published.
+**Next guided item for Matt:** (1) **Finish Month 2 spot-checks** — secrets: confirm Vercel/Railway/Neon console rows in [evidence/secrets-env-store-spotcheck-2026-07-29.md](./evidence/secrets-env-store-spotcheck-2026-07-29.md) (git Pass; overall `[~]`); tenant isolation: invite Org-B-only user + run T1/T2 vs Customer Corp `cfa7c116-…` — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md) (unit/SQL/unauth done; authenticated Path A/B still open). (2) Send counsel pack — [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) + [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) (**R16 open**). (3) Vendor SOC portal requests — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md). (4) Security one-pager publish — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md). Reminder: readiness ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -53,8 +53,8 @@
 | `[x]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Complete 2026-07-28** — Scenarios A + B; async/chat-facilitated — [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md); readiness evidence only — not SOC 2 certified |
 | `[~]` | Vendor SOC / ISO reports folder (under NDA) — collection **in progress** | Matt | Week 3–4 | **Scaffold ready 2026-07-29** — [evidence/vendor-soc/](./evidence/vendor-soc/) (TRACKER + Trust Center links + request templates). **No reports received.** PDFs outside git / gitignored. |
 | `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Counsel send package ready 2026-07-29** — [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) + [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) + outline; **awaiting Matt send** (not emailed by agent). R16 **not** closed; also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
-| `[ ]` | Secrets only in env stores (spot-check) | Matt | Month 2 | **Prep ready 2026-07-29** — [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md) + [evidence/secrets-env-store-spotcheck-TEMPLATE.md](./evidence/secrets-env-store-spotcheck-TEMPLATE.md); still open until Matt runs |
-| `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | **Prep ready 2026-07-29** — [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md) + [evidence/tenant-isolation-TEMPLATE.md](./evidence/tenant-isolation-TEMPLATE.md); Org A = SMPL Demo Co `8571e520-…`; still open until Matt runs |
+| `[~]` | Secrets only in env stores (spot-check) | Matt | Month 2 | **Partial 2026-07-29** — git hygiene **Pass**; Vercel/Railway/Neon consoles still Matt — [evidence/secrets-env-store-spotcheck-2026-07-29.md](./evidence/secrets-env-store-spotcheck-2026-07-29.md) |
+| `[~]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | **Partial 2026-07-29** — unit 403 + unauth 401 + SQL tenants; Org B = Customer Corp `cfa7c116-…`; authenticated T1/T2 blocked (corporate email in both orgs) — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md) |
 | `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** v1.1 (machine-primary grounding) — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
 | `[ ]` | Security one-pager **published** for sales | Matt | Month 2 | **Near-publish draft 2026-07-29** — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md); publish checklist [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md); still open until NDA share / sales publish |
 | `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Even approximate; mark TARGET |
@@ -115,7 +115,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | Phase | Status | Exit criteria |
 |-------|--------|---------------|
 | 1. Kickoff | [~] In progress | Scope **APPROVED** + owners named; platform **deferred DIY**; **target month / CPA still open** |
-| 2. Controls live | [~] In progress | Policies **approved** (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning **confirmed 2026-07-28**; IR approved + **tabletop complete 2026-07-28**; access review **signed 2026-07-29**; vendor reports / tenant isolation still open |
+| 2. Controls live | [~] In progress | Policies **approved** (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning **confirmed 2026-07-28**; IR approved + **tabletop complete 2026-07-28**; access review **signed 2026-07-29**; secrets/tenant isolation **Partial 2026-07-29**; vendor reports still open |
 | 3. Type I audit | [ ] Open | CPA firm engaged; fieldwork complete; **Type I report issued** |
 | 4. Type II observation | [ ] Open | Controls operate cleanly over window; Type II report issued |
 
@@ -200,9 +200,9 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Protect `main` + required PR review | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
 | `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; GitHub/Vercel/Railway MFA done; branch protection live 2026-07-26 |
 | `[x]` | Dependabot + GitHub secret scanning enabled | **Confirmed 2026-07-28** — PR #19; Matt confirmed 4 Code security toggles — [evidence/dependabot-enabled-2026-07-28.md](./evidence/dependabot-enabled-2026-07-28.md) |
-| `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2; **runbook + evidence template ready 2026-07-29** |
+| `[~]` | Secrets only in env stores (not git) | **Partial 2026-07-29** — git Pass; consoles pending — [evidence/secrets-env-store-spotcheck-2026-07-29.md](./evidence/secrets-env-store-spotcheck-2026-07-29.md) |
 | `[x]` | Calendar or complete Neon backup **restore test** | **Pass 2026-07-27** — PITR throwaway validated; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
-| `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2; **runbook + evidence template ready 2026-07-29** |
+| `[~]` | Tenant isolation evidence (Org A ≠ Org B) | **Partial 2026-07-29** — unit/SQL/unauth; T1/T2 Matt — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md) |
 | `[x]` | **P15** + AI/LLM / Anthropic write-up | **Approved 2026-07-28** — [policies/P15_ai_llm_data_handling.md](./policies/P15_ai_llm_data_handling.md) |
 
 ### F. Pre–Type I readiness bar (from readiness v2)
@@ -218,7 +218,7 @@ Book the auditor only when these are **live**, not merely drafted:
 | `[x]` | Incident response plan (approved + operable) | **Approved** 2026-07-27; tabletop **complete 2026-07-28** ([runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md); [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md)) |
 | `[x]` | Backup restore test evidence | **Pass 2026-07-27** — PITR throwaway; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[~]` | Subprocessor inventory + vendor reports collected | Inventory **locked** 2026-07-28; collection scaffold **ready** 2026-07-29 ([evidence/vendor-soc/](./evidence/vendor-soc/)); reports **not** received/reviewed |
-| `[ ]` | Tenant isolation evidence | Month 2 — **prep ready 2026-07-29**; open until Pass |
+| `[~]` | Tenant isolation evidence | Month 2 — **Partial 2026-07-29**; authenticated Path A/B until Pass — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md) |
 | `[x]` | **P15** + AI/subprocessor write-up for Anthropic | **Approved 2026-07-28** |
 
 ### G. Type I → Type II
@@ -408,12 +408,22 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 
 ## What we prepared 2026-07-29 — Month 2 readiness pack (not complete)
 
-**Not SOC 2 certified.** Prep ≠ executed spot-check ≠ isolation Pass ≠ published one-pager. Month 2 checklist rows stay `[ ]`.
+**Not SOC 2 certified.** Prep ≠ executed spot-check ≠ isolation Pass ≠ published one-pager.
 
-1. **Secrets env-store spot-check** — runnable runbook + evidence template (Vercel / Railway / Neon / git hygiene); safe to fill Blocked without live consoles — [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md)
-2. **Tenant isolation (Org A ≠ Org B)** — test plan using Org A = SMPL Demo Co `8571e520-0687-4516-bdee-379f37c58c1f`; Org B = existing second org or Path B throwaway; non-destructive — [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md)
-3. **Security one-pager** — draft polished for NDA share; canonical `docs/soc2/SECURITY_ONE_PAGER.md`; no new public `/security` page (use NDA + existing `/compliance` progress only) — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md)
+1. **Secrets env-store spot-check** — runnable runbook + evidence template — [runbooks/secrets-env-store-spotcheck.md](./runbooks/secrets-env-store-spotcheck.md)
+2. **Tenant isolation (Org A ≠ Org B)** — test plan; Org A = SMPL Demo Co `8571e520-0687-4516-bdee-379f37c58c1f` — [runbooks/tenant-isolation-test.md](./runbooks/tenant-isolation-test.md)
+3. **Security one-pager** — near-publish draft; publish still open — [runbooks/security-one-pager-publish.md](./runbooks/security-one-pager-publish.md)
 4. Demo dashboard financials **unchanged**
+
+---
+
+## What we executed 2026-07-29 — Month 2 secrets + tenant isolation (partial)
+
+**Not SOC 2 certified.** Partial ≠ Pass. Scoreboard `[~]` until Matt closes console / authenticated rows.
+
+1. **Secrets** — git hygiene **Pass** (`check-ignore`, tracked `*.example` only, no live secrets in tracked grep); Vercel/Railway/Neon live consoles **Blocked** (no CLIs). Evidence: [evidence/secrets-env-store-spotcheck-2026-07-29.md](./evidence/secrets-env-store-spotcheck-2026-07-29.md)
+2. **Tenant isolation** — Org B = **Customer Corp** `cfa7c116-3a89-4dd1-91df-80d4ece5c59d`; unit membership **403** Pass; prod unauth workspace summary **401** Pass; SQL membership sanity (corporate email in **both** orgs — cannot assert alone). Authenticated T1/T2 **Blocked** pending Org-B-only invite. Evidence: [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md)
+3. Demo Co financial seed / Board / FE **unchanged**
 
 ---
 
