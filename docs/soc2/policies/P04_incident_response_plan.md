@@ -11,7 +11,7 @@
 | Related criteria | Security; Availability |
 | Version | 1.0 (companion note 2026-07-28) |
 | Effective date | 2026-07-27 |
-| Last expanded | 2026-07-28 (AI containment: machine-primary; pending P15 v1.1 Allow) |
+| Last expanded | 2026-07-28 (AI containment: machine-primary; P15 v1.1 Approved) |
 
 ---
 
