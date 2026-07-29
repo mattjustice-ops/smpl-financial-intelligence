@@ -25,7 +25,7 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** Send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel (R16 still open — outline ≠ signed DPA). Boundary/vendor Q1–Q10 **locked** 2026-07-28 — other vendor **regions** remain TBD (Neon us-east-1 only). In parallel: start vendor SOC report collection; first quarterly access review. **IR tabletop complete 2026-07-28** ([evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md)). **P15 Approved v1.1** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
+**Next guided item for Matt:** **First quarterly-style access review sign-off** (Week 3–4) — inventory first pass complete 2026-07-26; use [03_access_inventory_template.md](./03_access_inventory_template.md). In parallel: send [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) to counsel (R16 still open); start vendor SOC report collection. **Dependabot + secret scanning confirmed 2026-07-28** ([evidence/dependabot-enabled-2026-07-28.md](./evidence/dependabot-enabled-2026-07-28.md)). Boundary/vendor Q1–Q10 **locked** 2026-07-28 — other vendor **regions** remain TBD. **IR tabletop complete 2026-07-28**. **P15 Approved v1.1** 2026-07-28. Platform purchase deferred (DIY scoreboard) until enterprise GRC requirement **or** CPA Type I engagement. Reminder: approving ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -47,6 +47,7 @@
 | `[x]` | Compliance platform choice **or** “wait until ____” | Matt | Week 2 | **Deferred DIY 2026-07-27** — docs/soc2 + `/app/compliance`; revisit on enterprise GRC requirement **or** CPA Type I engagement (whichever first) |
 | `[x]` | Confirm boundary matches production | Matt | Week 2–3 | **Locked 2026-07-28** — Matt Q1–Q10 answered; [01_system_boundary.md](./01_system_boundary.md) |
 | `[x]` | Confirm vendor regions / unused vendors; OpenAI if live | Matt | Week 2–3 | **Locked 2026-07-28** — OpenAI/APM unused; Sanity/HubSpot off product DPA; Neon **us-east-1**; **other vendor regions TBD** — [02_subprocessors.md](./02_subprocessors.md) |
+| `[x]` | Dependabot + GitHub secret scanning enabled | Matt | Week 2–3 | **Confirmed 2026-07-28** — PR #19 merged; alerts, security updates, Secret Protection, push protection — [evidence/dependabot-enabled-2026-07-28.md](./evidence/dependabot-enabled-2026-07-28.md) |
 | `[ ]` | First quarterly-style access review sign-off | Matt | Week 3–4 | After MFA verified + inventory stable |
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[x]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Complete 2026-07-28** — Scenarios A + B; async/chat-facilitated — [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md); readiness evidence only — not SOC 2 certified |
@@ -114,7 +115,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | Phase | Status | Exit criteria |
 |-------|--------|---------------|
 | 1. Kickoff | [~] In progress | Scope **APPROVED** + owners named; platform **deferred DIY**; **target month / CPA still open** |
-| 2. Controls live | [~] In progress | Policies **approved** (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path; IR approved + **tabletop complete 2026-07-28**; vendor reports / tenant isolation still open |
+| 2. Controls live | [~] In progress | Policies **approved** (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning **confirmed 2026-07-28**; IR approved + **tabletop complete 2026-07-28**; vendor reports / tenant isolation / access review still open |
 | 3. Type I audit | [ ] Open | CPA firm engaged; fieldwork complete; **Type I report issued** |
 | 4. Type II observation | [ ] Open | Controls operate cleanly over window; Type II report issued |
 
@@ -198,6 +199,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 |--------|------|-------|
 | `[x]` | Protect `main` + required PR review | Done 2026-07-26 — GitHub branch ruleset; required PR before merge; solo-friendly (approvals may be 0) |
 | `[x]` | Document deploy path (Vercel FE, Railway API) + who can promote | [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md) — Matt can promote; GitHub/Vercel/Railway MFA done; branch protection live 2026-07-26 |
+| `[x]` | Dependabot + GitHub secret scanning enabled | **Confirmed 2026-07-28** — PR #19; Matt confirmed 4 Code security toggles — [evidence/dependabot-enabled-2026-07-28.md](./evidence/dependabot-enabled-2026-07-28.md) |
 | `[ ]` | Secrets only in env stores (not git) | Spot-check / confirm — Month 2 |
 | `[x]` | Calendar or complete Neon backup **restore test** | **Pass 2026-07-27** — PITR throwaway validated; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[ ]` | Tenant isolation evidence (Org A ≠ Org B) | Test plan + results — Month 2 |
@@ -212,7 +214,7 @@ Book the auditor only when these are **live**, not merely drafted:
 | `[x]` | MFA on admin/cloud accounts | Cloud + DNS (Squarespace) done 2026-07-26 (Anthropic via Google IdP); ops/break-glass covered by Neon/Railway MFA (solo; no separate login) |
 | `[x]` | Written policies **approved** by leadership | P01–P12 Approved 2026-07-27; **P15 Approved 2026-07-28**; approval ≠ certified |
 | `[~]` | Access inventory + first review artifact | Inventory first pass done; quarterly sign-off still open (Week 3–4) |
-| `[x]` | Documented change/deploy path + PR review on `main` | Path documented; GitHub ruleset protecting `main` live 2026-07-26 |
+| `[x]` | Documented change/deploy path + PR review on `main` | Path documented; GitHub ruleset protecting `main` live 2026-07-26; Dependabot + secret scanning confirmed 2026-07-28 |
 | `[x]` | Incident response plan (approved + operable) | **Approved** 2026-07-27; tabletop **complete 2026-07-28** ([runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md); [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md)) |
 | `[x]` | Backup restore test evidence | **Pass 2026-07-27** — PITR throwaway; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[~]` | Subprocessor inventory + vendor reports collected | Inventory **locked** 2026-07-28 (product DPA list); vendor reports **not** collected |
@@ -260,7 +262,7 @@ Not SOC 2 certified. Readiness evidence only.
 
 1. **[~]** Customer DPA / MSA — outline drafted ([legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md)); send to counsel — P10 R16 **still open**
 2. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
-3. Open evidence (keep honest): Dependabot **not confirmed** (P05). Staging **exists, no Customer Data** (Q3 locked). Other vendor **regions TBD**. Restore test **Pass** 2026-07-27 (P12). **IR tabletop complete** 2026-07-28 (P04). **P15 Approved v1.1** 2026-07-28
+3. **Week 3–4 next:** First quarterly-style **access review** sign-off ([03_access_inventory_template.md](./03_access_inventory_template.md)). Open evidence (keep honest): Staging **exists, no Customer Data** (Q3 locked). Other vendor **regions TBD**. Restore test **Pass** 2026-07-27 (P12). **IR tabletop complete** 2026-07-28 (P04). **Dependabot + secret scanning confirmed** 2026-07-28 (P05). **P15 Approved v1.1** 2026-07-28
 4. Start vendor SOC / ISO report collection (inventory locked; reports open)
 5. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
 
@@ -346,6 +348,15 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 3. Closed scoreboard items: confirm boundary matches production; confirm unused vendors / OpenAI / Neon region (other regions stay TBD in subprocessors table)
 4. Scoreboard + `/compliance` data synced
 
+## What we checked off 2026-07-28 — Dependabot + GitHub secret scanning
+
+**Not SOC 2 certified.** Enabling Dependabot and secret scanning = readiness evidence only — not CPA Type I report.
+
+1. `.github/dependabot.yml` merged on `main` via PR **#19** (npm `/frontend`, pip `/backend`, weekly Monday)
+2. Matt confirmed GitHub Code security toggles enabled: Dependabot alerts, Dependabot security updates, Secret Protection (secret scanning), push protection
+3. Filed evidence — [evidence/dependabot-enabled-2026-07-28.md](./evidence/dependabot-enabled-2026-07-28.md)
+4. P05 §6, [CHANGE_MANAGEMENT.md](./CHANGE_MANAGEMENT.md), IR tabletop follow-up #1, scoreboard + `/compliance` synced
+
 ## What we checked off 2026-07-28 — IR tabletop complete
 
 **Not SOC 2 certified.** Tabletop evidence = operable-IR readiness only — not CPA Type I report.
@@ -398,5 +409,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-28 (IR tabletop complete; P15 v1.1 Approved + Scenario B Allowed) |
+| Last updated | 2026-07-28 (Dependabot + secret scanning confirmed; IR tabletop complete; P15 v1.1 Approved + Scenario B Allowed) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

@@ -3,7 +3,7 @@
 **Status:** Working description of the **actual** production path (readiness documentation).  
 **Policy:** [policies/P05_change_management_policy.md](./policies/P05_change_management_policy.md) (DRAFT — not approved).  
 **Owner:** Matt Justice (Engineering owner)  
-**Last updated:** 2026-07-26
+**Last updated:** 2026-07-28
 
 Branch protection on `main` and MFA on GitHub/Vercel/Railway are **confirmed live** (2026-07-26). This document is readiness evidence — **not** a claim of SOC 2 certification.
 
@@ -103,7 +103,7 @@ Allowed to restore service or contain an incident ([P04](./policies/P04_incident
 - [x] MFA on GitHub, Vercel, Railway — done 2026-07-26
 - [x] Exact production project/service names documented — confirmed Matt Q4 **YES** 2026-07-28 ([01_system_boundary.md](./01_system_boundary.md))
 - [x] Staging separate? — **Exists; no Customer Data** (Matt Q3 2026-07-28); out of Type I production system
-- [!] Dependabot (or equivalent) enabled
+- [x] Dependabot (or equivalent) enabled — **confirmed 2026-07-28** — `.github/dependabot.yml` merged via PR #19; Matt confirmed Dependabot alerts, Dependabot security updates, Secret Protection (secret scanning), and push protection on `mattjustice-ops/smpl-financial-intelligence` — [evidence/dependabot-enabled-2026-07-28.md](./evidence/dependabot-enabled-2026-07-28.md)
 
 ---
 

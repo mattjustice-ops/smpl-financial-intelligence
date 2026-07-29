@@ -57,7 +57,7 @@ Do not use production customer data in personal sandboxes without authorization 
 ## 6. Secure SDLC hygiene
 
 - No secrets in git; use Vercel/Railway env/secret stores.
-- Prefer dependency alerting (e.g. Dependabot or equivalent) — enable/confirm (**[!]**).
+- Prefer dependency alerting (e.g. Dependabot or equivalent) — **confirmed 2026-07-28** (PR #19 + GitHub Code security toggles; [../evidence/dependabot-enabled-2026-07-28.md](../evidence/dependabot-enabled-2026-07-28.md)).
 - Anthropic / LLM keys only on Railway (API), never in browser or public board HTML.
 - Customer financial methodology changes follow product process; **Processing Integrity is out of Type I scope** — do not imply audit attestation of ARR/FP&A math.
 
