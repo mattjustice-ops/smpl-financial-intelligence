@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-28", // IR tabletop complete; P15 v1.1 Approved; Scenario B Allowed
+  lastUpdated: "2026-07-28", // Dependabot + secret scanning confirmed; IR tabletop complete; P15 v1.1 Approved
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Approval ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. DPA/MSA outline drafted (awaiting counsel). Boundary/vendor Q1–Q10 locked 2026-07-28 (other vendor regions TBD). Next Week 3–4: access review #1. Approval ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -257,6 +257,15 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
       "Locked 2026-07-28 — OpenAI/APM unused; Sanity/HubSpot off product DPA; Neon us-east-1; other vendor regions TBD — docs/soc2/02_subprocessors.md",
   },
   {
+    id: "rem-dependabot",
+    label: "Dependabot + GitHub secret scanning enabled",
+    status: "done",
+    owner: "Matt",
+    targetWindow: "Week 2–3",
+    notes:
+      "Confirmed 2026-07-28 — PR #19 merged; alerts, security updates, Secret Protection, push protection — docs/soc2/evidence/dependabot-enabled-2026-07-28.md",
+  },
+  {
     id: "rem-access-review",
     label: "First quarterly-style access review sign-off",
     status: "open",
@@ -382,7 +391,7 @@ export const compliancePhases: CompliancePhase[] = [
     name: "Controls live",
     status: "in_progress",
     exitCriteria:
-      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; vendor reports / tenant isolation still open",
+      "Policies approved (P01–P12 2026-07-27; P15 v1.1 2026-07-28); MFA + access inventory; change/deploy path + Dependabot/secret scanning confirmed 2026-07-28; IR approved + tabletop complete 2026-07-28; restore test Pass 2026-07-27; vendor reports / tenant isolation / access review still open",
   },
   {
     id: "type-i-audit",
@@ -687,6 +696,13 @@ export const complianceSections: ComplianceSection[] = [
           "docs/soc2/CHANGE_MANAGEMENT.md — MFA + branch protection live 2026-07-26",
       },
       {
+        id: "eng-2b",
+        label: "Dependabot + GitHub secret scanning enabled",
+        status: "done",
+        notes:
+          "Confirmed 2026-07-28 — PR #19; Matt confirmed 4 GitHub Code security toggles — docs/soc2/evidence/dependabot-enabled-2026-07-28.md",
+      },
+      {
         id: "eng-3",
         label: "Secrets only in env stores (not git)",
         status: "open",
@@ -741,7 +757,8 @@ export const complianceSections: ComplianceSection[] = [
         id: "bar-4",
         label: "Documented change/deploy path + PR review on main",
         status: "done",
-        notes: "Path documented; GitHub ruleset protecting main live 2026-07-26",
+        notes:
+          "Path documented; GitHub ruleset protecting main live 2026-07-26; Dependabot + secret scanning confirmed 2026-07-28",
       },
       {
         id: "bar-5",

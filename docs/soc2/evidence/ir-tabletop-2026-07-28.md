@@ -33,7 +33,7 @@
 | **Eradicate** | Remove secret from issue (delete comment); open PR to purge from git history if the key ever touched a commit (`git filter-repo` or GitHub secret-removal workflow). Root cause: human error — pasted key into public channel. Follow-ups: confirm GitHub **secret scanning** + push protection enabled; pre-commit secret scan (e.g. gitleaks) on developer machines; reiterate env-only policy (P05) in onboarding checklist. |
 | **Recover** | Redeploy Railway with new env vars; smoke-test auth, API health, one read-only tenant query; confirm old Neon connection string returns auth failure; confirm Anthropic calls succeed with new key. Validation: 401/403 on old credentials; app green on new credentials; no error spike in logs (real incident). |
 | **Notify (draft only — do not send)** | **Hat: Exec.** Internal: decision log entry (solo — note to self sufficient). Customer notice: **not required** for this inject unless rotation logs show the key was used to access Customer Data — none assumed. Vendor notice: optional heads-up to Anthropic/Neon abuse teams if scraping confirmed. Draft (if needed): *“We rotated an API credential after potential exposure in a public channel; we have no evidence of unauthorized access to your data.”* Counsel: not engaged for Sev2+ without confirmed data access. |
-| **Lessons learned** | P04 secret-in-git playbook is operable solo. Gaps: Dependabot/secret scanning status **not yet confirmed** on repo (P05 open item); no documented rotation runbook order beyond P04 table — acceptable for solo founder but worth a one-page checklist. Annual tabletop cadence satisfied for 2026. |
+| **Lessons learned** | P04 secret-in-git playbook is operable solo. Dependabot/secret scanning **confirmed 2026-07-28** (follow-up #1 closed — [dependabot-enabled-2026-07-28.md](./dependabot-enabled-2026-07-28.md)). Remaining gap: no documented rotation runbook order beyond P04 table — acceptable for solo founder but worth a one-page checklist. Annual tabletop cadence satisfied for 2026. |
 
 ---
 
@@ -92,7 +92,7 @@ Customer-visible AI commentary: **+18% QoQ** MRR + **EMEA enterprise expansion**
 
 | # | Action | Owner | Due | Done? |
 |---|--------|-------|-----|-------|
-| 1 | Confirm GitHub Dependabot / secret scanning enabled on SMPL repo (P05) | Matt Justice | Month 2 | ☐ |
+| 1 | Confirm GitHub Dependabot / secret scanning enabled on SMPL repo (P05) | Matt Justice | Month 2 | ☑ **2026-07-28** — PR #19 + 4 Code security toggles — [dependabot-enabled-2026-07-28.md](./dependabot-enabled-2026-07-28.md) |
 | 2 | First quarterly-style access review sign-off | Matt Justice | Week 3–4 | ☐ |
 | 3 | Vendor SOC / ISO report collection started (Vercel, Railway, Neon, Stripe, Anthropic, Resend, …) | Matt Justice | Week 3–4 | ☐ |
 | 4 | Customer DPA / MSA — outline → counsel redline | Matt Justice | Week 3–4 | ☐ (outline drafted) |
