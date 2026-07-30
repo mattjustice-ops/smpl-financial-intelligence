@@ -25,7 +25,7 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** (1) Await DPA/MSA counsel redline / customer-ready draft (**R16 open** — pack **sent 2026-07-29**). (2) Vendor SOC portal requests — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md). Security one-pager **published for sales under NDA 2026-07-29** (optional: attach PDF when a prospect asks). Secrets spot-check + tenant isolation **Pass 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
+**Next guided item for Matt:** (1) Await DPA/MSA counsel redline / customer-ready draft (**R16 open** — pack **sent 2026-07-29**; chase checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)). (2) Vendor SOC **Matt-only portal downloads** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) (public research done 2026-07-29; **no Type II received**). Security one-pager **published for sales under NDA 2026-07-29** (optional: attach PDF when a prospect asks). Secrets spot-check + tenant isolation **Pass 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -51,8 +51,8 @@
 | `[x]` | First quarterly-style access review sign-off | Matt | Week 3–4 | **Signed 2026-07-29** — OK/Allow; Matt Justice (security owner + exec sponsor); corporate email mattjustice@smpl-ai.com; items 1–12 OK — [evidence/access-review-2026-Q3.md](./evidence/access-review-2026-Q3.md); readiness only — not SOC 2 certified |
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[x]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Complete 2026-07-28** — Scenarios A + B; async/chat-facilitated — [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md); readiness evidence only — not SOC 2 certified |
-| `[~]` | Vendor SOC / ISO reports folder (under NDA) — collection **in progress** | Matt | Week 3–4 | **Scaffold ready 2026-07-29** — [evidence/vendor-soc/](./evidence/vendor-soc/) (TRACKER + Trust Center links + request templates). **No reports received.** PDFs outside git / gitignored. |
-| `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Matt attested send via chat (agent did not email) — [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md); also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
+| `[~]` | Vendor SOC / ISO reports folder (under NDA) — collection **in progress** | Matt | Week 3–4 | **Public research 2026-07-29** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) + [PUBLIC_RESEARCH_2026-07-29.md](./evidence/vendor-soc/PUBLIC_RESEARCH_2026-07-29.md). P0 + GitHub → `researched` / Stripe `public summary available` (SOC 3 only). **No Type II received.** PDFs outside git / gitignored. |
+| `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Chase checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); send attestation [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md); also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[x]` | Secrets only in env stores (spot-check) | Matt | Month 2 | **Pass 2026-07-29** — git hygiene + Vercel/Railway/Neon consoles; Matt confirmed console checks + Org-B-only T1/T2 2026-07-29 via chat — [evidence/secrets-env-store-spotcheck-2026-07-29.md](./evidence/secrets-env-store-spotcheck-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | **Pass 2026-07-29** — unit/SQL/unauth + Matt confirmed Org-B-only authenticated T1/T2 via chat — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** v1.1 (machine-primary grounding) — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
@@ -161,8 +161,8 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Confirm boundary matches production | **Locked 2026-07-28** by Matt Justice — [01_system_boundary.md](./01_system_boundary.md) |
 | `[x]` | Subprocessors named list draft | [02_subprocessors.md](./02_subprocessors.md) — product DPA list; Neon us-east-1; other regions TBD |
 | `[x]` | Confirm regions / unused vendors; mark OpenAI if live | **Locked 2026-07-28** — OpenAI **NO**; Neon us-east-1; other regions **TBD** |
-| `[~]` | Vendor SOC / ISO reports folder (under NDA) | **Scaffold ready 2026-07-29** — [evidence/vendor-soc/](./evidence/vendor-soc/); Trust Centers linked; **no reports received** — execute requests next |
-| `[~]` | Customer DPA / MSA — **single legal workstream** | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Evidence [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md). Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
+| `[~]` | Vendor SOC / ISO reports folder (under NDA) | **Public research 2026-07-29** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md); **no Type II received** (Stripe public SOC 3 only) — Matt portal downloads next |
+| `[~]` | Customer DPA / MSA — **single legal workstream** | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Chase [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); send [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md). Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
 | `[x]` | Security one-pager (draft → published for sales) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) + PDF [SMPL_Security_One_Pager_2026-07.pdf](./SMPL_Security_One_Pager_2026-07.pdf) — honest “pursuing SOC 2”; **published for sales under NDA 2026-07-29** — [evidence/security-one-pager-published-2026-07-29.md](./evidence/security-one-pager-published-2026-07-29.md); not certified |
 
 ### C. Access hardening (Matt / ops)
@@ -217,7 +217,7 @@ Book the auditor only when these are **live**, not merely drafted:
 | `[x]` | Documented change/deploy path + PR review on `main` | Path documented; GitHub ruleset protecting `main` live 2026-07-26; Dependabot + secret scanning confirmed 2026-07-28 |
 | `[x]` | Incident response plan (approved + operable) | **Approved** 2026-07-27; tabletop **complete 2026-07-28** ([runbooks/ir-tabletop.md](./runbooks/ir-tabletop.md); [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md)) |
 | `[x]` | Backup restore test evidence | **Pass 2026-07-27** — PITR throwaway; [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
-| `[~]` | Subprocessor inventory + vendor reports collected | Inventory **locked** 2026-07-28; collection scaffold **ready** 2026-07-29 ([evidence/vendor-soc/](./evidence/vendor-soc/)); reports **not** received/reviewed |
+| `[~]` | Subprocessor inventory + vendor reports collected | Inventory **locked** 2026-07-28; public research **2026-07-29** ([evidence/vendor-soc/](./evidence/vendor-soc/)); Type II reports **not** received/reviewed |
 | `[x]` | Tenant isolation evidence | Month 2 — **Pass 2026-07-29**; Matt confirmed Org-B-only T1/T2 via chat — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | **P15** + AI/subprocessor write-up for Anthropic | **Approved 2026-07-28** |
 
@@ -260,8 +260,8 @@ Not SOC 2 certified. Readiness evidence only.
 
 ## Top `[!]` for Matt (do next)
 
-1. **[~]** Customer DPA / MSA — **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed ([evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md); pack [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md))
-2. **[~]** Vendor SOC / ISO — **execute portal requests** ([evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md); templates in [REQUEST_TEMPLATES.md](./evidence/vendor-soc/REQUEST_TEMPLATES.md)). Scaffold ready; **no reports received**
+1. **[~]** Customer DPA / MSA — **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed ([evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md); chase [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); pack [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md))
+2. **[~]** Vendor SOC / ISO — **Matt-only Trust Center / Documents downloads** ([evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md)). Public research done 2026-07-29; **no Type II received**
 3. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
 4. Open evidence (keep honest): Staging **exists, no Customer Data** (Q3 locked). Other vendor **regions TBD**. Access review **signed 2026-07-29**. Restore test **Pass** 2026-07-27 (P12). **IR tabletop complete** 2026-07-28 (P04). **Dependabot + secret scanning confirmed** 2026-07-28 (P05). **P15 Approved v1.1** 2026-07-28
 5. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
@@ -467,6 +467,18 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 
 ---
 
+## What we researched 2026-07-29 — Vendor SOC public Trust Centers (no Matt console)
+
+**Not SOC 2 certified.** Public research ≠ Type II received. Scoreboard stays **[~]**.
+
+1. Researched P0 + GitHub public docs / Trust Centers without Matt login or Allow — [evidence/vendor-soc/PUBLIC_RESEARCH_2026-07-29.md](./evidence/vendor-soc/PUBLIC_RESEARCH_2026-07-29.md)
+2. Updated [TRACKER.md](./evidence/vendor-soc/TRACKER.md): P0 → `researched`; Stripe → `public summary available` (SOC 3 period 2024-10 → 2025-09); **no Type II `received`**
+3. Saved public Stripe SOC 3 only under gitignored `private/` — not committed
+4. DPA: added counsel chase checklist only — [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); R16 **still open**; no invented customer-ready DPA
+5. Scoreboard + `/compliance`: vendor SOC + DPA remain **[~] / in_progress**
+
+---
+
 ## How you’ll know Type I is complete
 
 **You hold a SOC 2 Type I report issued by an independent CPA firm** covering Security + Availability + Confidentiality (as scoped). Until then: readiness only.
@@ -479,5 +491,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-29 (DPA/MSA **sent to counsel** — awaiting redline; R16 open; security one-pager published for sales under NDA; Month 2 secrets/tenant Pass; vendor SOC scaffold ready — reports not received; access review 2026-Q3 signed) |
+| Last updated | 2026-07-29 (vendor SOC public research — no Type II received; DPA/MSA sent to counsel — awaiting redline, R16 open + chase checklist; security one-pager NDA; Month 2 secrets/tenant Pass; access review 2026-Q3 signed) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |
