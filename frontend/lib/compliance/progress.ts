@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // Security one-pager published for sales under NDA; Month 2 secrets+tenant Pass; DPA counsel pack awaiting send; vendor SOC scaffold
+  lastUpdated: "2026-07-29", // DPA/MSA sent to counsel; R16 open; security one-pager NDA; Month 2 secrets+tenant Pass; vendor SOC scaffold
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). Security one-pager published for sales under NDA 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md + SMPL_Security_One_Pager_2026-07.pdf). DPA/MSA counsel send package ready (awaiting Matt send — R16 open). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: send DPA pack + vendor Trust Center requests. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). Security one-pager published for sales under NDA 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md + SMPL_Security_One_Pager_2026-07.pdf). DPA/MSA sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed (firm unspecified; Matt attested send via chat). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: counsel redline + vendor Trust Center requests. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -91,14 +91,14 @@ export const complianceTimeline: ComplianceTimelineWindow[] = [
     window: "Week 2 (now)",
     approxDates: "~2026-07-29 → 2026-08-05",
     focus:
-      "P01–P12 Approved; platform deferred DIY; P15 Approved v1.1; DPA/MSA counsel send package ready (awaiting Matt send); boundary/vendor Q1–Q10 locked (other regions TBD)",
+      "P01–P12 Approved; platform deferred DIY; P15 Approved v1.1; DPA/MSA sent to counsel 2026-07-29 (awaiting redline); boundary/vendor Q1–Q10 locked (other regions TBD)",
   },
   {
     id: "week-3-4",
     window: "Week 3–4",
     approxDates: "~2026-08-05 → 2026-08-19",
     focus:
-      "Access review #1 signed 2026-07-29; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA counsel redline after Matt sends pack",
+      "Access review #1 signed 2026-07-29; restore test Pass 2026-07-27; IR tabletop notes; vendor SOC collection started; DPA counsel redline / customer-ready draft (pack sent 2026-07-29)",
   },
   {
     id: "month-2",
@@ -308,7 +308,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Counsel send package ready 2026-07-29 (docs/soc2/legal/COUNSEL_SEND_PACKAGE.md + DRAFT_EMAIL_TO_COUNSEL.md); awaiting Matt send — R16 not closed; P07/P08/P09 cross-ref only",
+      "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified. Matt attested send via chat (agent did not email) — docs/soc2/evidence/dpa-counsel-sent-2026-07-29.md; P07/P08/P09 cross-ref only",
   },
   {
     id: "rem-secrets",
@@ -554,7 +554,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Customer DPA / MSA — single legal workstream",
         status: "in_progress",
         notes:
-          "Counsel send package ready 2026-07-29 (docs/soc2/legal/COUNSEL_SEND_PACKAGE.md); awaiting Matt send — P10 R16 not closed",
+          "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified — docs/soc2/evidence/dpa-counsel-sent-2026-07-29.md",
       },
       {
         id: "bv-8",

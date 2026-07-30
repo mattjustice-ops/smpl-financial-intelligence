@@ -6,8 +6,8 @@
 | Field | Value |
 |-------|--------|
 | Workstream | Customer DPA / MSA — [P10](../policies/P10_risk_assessment.md) **R16** |
-| Package status | **Ready for Matt to send** (2026-07-29) — email **not** sent by agent |
-| R16 status | **Open** until counsel redline → customer-offerable / signed path |
+| Package status | **Sent to counsel 2026-07-29** — Matt attested send via chat; agent did **not** email. Counsel firm: **unspecified** |
+| R16 status | **Open** — awaiting redline / customer-ready draft; send alone does **not** close R16 |
 | Business owner | Matt Justice |
 | Draft email | [DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md) |
 | Primary outline | [DPA_MSA_OUTLINE.md](./DPA_MSA_OUTLINE.md) |
