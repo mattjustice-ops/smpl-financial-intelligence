@@ -2,7 +2,7 @@
 
 **Purpose:** Track and store evidence that SMPL reviewed material subprocessors’ independent assurance reports (SOC 2, ISO 27001, etc.) per [P09](../../policies/P09_vendor_subprocessor_management.md) and the named list in [02_subprocessors.md](../../02_subprocessors.md).
 
-**Status (2026-07-29):** Scaffold ready — tracker + request templates. **No reports received yet.** Readiness only — not SOC 2 certified.
+**Status (2026-07-29):** Public Trust Center research pass complete for P0 + GitHub — see [TRACKER.md](./TRACKER.md) + [PUBLIC_RESEARCH_2026-07-29.md](./PUBLIC_RESEARCH_2026-07-29.md). **No Type II reports received.** Public Stripe SOC 3 summary only (gitignored `private/`). Readiness only — not SOC 2 certified.
 
 Parent scoreboard: [../../PROGRESS.md](../../PROGRESS.md) · Tracker: [TRACKER.md](./TRACKER.md) · Templates: [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md)
 
@@ -50,7 +50,7 @@ After downloading a report, update [TRACKER.md](./TRACKER.md): status → `recei
 6. Update tracker status + date; mark “vendor report collected?” in [02_subprocessors.md](../../02_subprocessors.md) only after a real review.
 7. Annual re-pull (or on material change) — P09 cadence.
 
-**Honest statuses only:** `not started` → `requested` → `nda signed` → `received` → `reviewed`. Do not mark reviewed without a file in the private store and a date.
+**Honest statuses only:** `not started` → `researched` / `public summary available` → `requested` → `nda signed` → `received` → `reviewed`. Public SOC 3 / marketing pages are **not** Type II `received`. Do not mark reviewed without a file in the private store and a date.
 
 ---
 

@@ -27,6 +27,10 @@
 | Decision log + scoreboard updated | R16 closed / DPA complete |
 | Counsel firm left blank / unspecified | Named firm engagement confirmed |
 
+## Chase (awaiting counsel)
+
+Short follow-up checklist (R16 still open): [dpa-counsel-chase-checklist-2026-07-29.md](./dpa-counsel-chase-checklist-2026-07-29.md)
+
 ## Reminder
 
 **Readiness only — not SOC 2 certified.** R16 stays open until a customer-offerable draft exists (and until signed for the risk to fully close).

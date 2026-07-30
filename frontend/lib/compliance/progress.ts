@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // DPA/MSA sent to counsel; R16 open; security one-pager NDA; Month 2 secrets+tenant Pass; vendor SOC scaffold
+  lastUpdated: "2026-07-29", // vendor SOC public research (no Type II); DPA sent/awaiting redline R16 open; security one-pager NDA; Month 2 Pass
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). Security one-pager published for sales under NDA 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md + SMPL_Security_One_Pager_2026-07.pdf). DPA/MSA sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed (firm unspecified; Matt attested send via chat). Vendor SOC scaffold ready 2026-07-29 (no reports received). Next: counsel redline + vendor Trust Center requests. Readiness ≠ SOC 2 certified",
+    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). Security one-pager published for sales under NDA 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md + SMPL_Security_One_Pager_2026-07.pdf). DPA/MSA sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed (firm unspecified; chase checklist in docs/soc2/evidence/). Vendor SOC public Trust Center research 2026-07-29 (P0 + GitHub researched; Stripe public SOC 3 only; no Type II received). Next: Matt portal downloads + counsel redline. Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -294,12 +294,12 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-vendor-soc",
-    label: "Vendor SOC / ISO reports — collection in progress (scaffold ready)",
+    label: "Vendor SOC / ISO reports — collection in progress (public research done)",
     status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Scaffold ready 2026-07-29 — docs/soc2/evidence/vendor-soc/ (TRACKER + Trust Centers + request templates). No reports received. PDFs outside git.",
+      "Public research 2026-07-29 — docs/soc2/evidence/vendor-soc/TRACKER.md. P0 + GitHub researched; Stripe public SOC 3 only. No Type II received. PDFs outside git.",
   },
   {
     id: "rem-dpa",
@@ -308,7 +308,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified. Matt attested send via chat (agent did not email) — docs/soc2/evidence/dpa-counsel-sent-2026-07-29.md; P07/P08/P09 cross-ref only",
+      "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified. Chase checklist docs/soc2/evidence/dpa-counsel-chase-checklist-2026-07-29.md; send attestation docs/soc2/evidence/dpa-counsel-sent-2026-07-29.md; P07/P08/P09 cross-ref only",
   },
   {
     id: "rem-secrets",
@@ -547,14 +547,14 @@ export const complianceSections: ComplianceSection[] = [
         label: "Vendor SOC / ISO reports folder (under NDA)",
         status: "in_progress",
         notes:
-          "Scaffold ready 2026-07-29 — docs/soc2/evidence/vendor-soc/; Trust Centers linked; no reports received",
+          "Public research 2026-07-29 — docs/soc2/evidence/vendor-soc/; no Type II received (Stripe public SOC 3 only)",
       },
       {
         id: "bv-7",
         label: "Customer DPA / MSA — single legal workstream",
         status: "in_progress",
         notes:
-          "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified — docs/soc2/evidence/dpa-counsel-sent-2026-07-29.md",
+          "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified — chase docs/soc2/evidence/dpa-counsel-chase-checklist-2026-07-29.md",
       },
       {
         id: "bv-8",
@@ -794,7 +794,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Subprocessor inventory + vendor reports collected",
         status: "in_progress",
         notes:
-          "Inventory locked 2026-07-28; collection scaffold ready 2026-07-29 (docs/soc2/evidence/vendor-soc/); reports not received/reviewed",
+          "Inventory locked 2026-07-28; public research 2026-07-29 (docs/soc2/evidence/vendor-soc/); Type II reports not received/reviewed",
       },
       {
         id: "bar-8",
