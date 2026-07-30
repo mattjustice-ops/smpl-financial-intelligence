@@ -487,7 +487,8 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 2. **Live on** `/api/v1/commentary/generate` — evidence package in prompt + post-LLM verify + strip unsupported sections
 3. **Live on** MD&A Prompt 2 package path — matrix mismatch hard-blocks emit; post-LLM strip of unverifiable commentary cells; all-unverifiable variance sheet blocks emit
 4. Honest status: [controls/README.md](./controls/README.md) — board slide regenerate / Prompt 5 / Copilot still follow-ups; full `_sources` contract still roadmap
-5. Demo Board/FE seed financials **unchanged**
+5. Founder coverage checklist: [controls/ai_claim_verify.md](./controls/ai_claim_verify.md)
+6. Demo Board/FE seed financials **unchanged**
 
 ---
 
