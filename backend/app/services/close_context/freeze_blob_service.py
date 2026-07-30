@@ -168,7 +168,8 @@ def build_and_store_freeze_blob(
         pass
 
     # Persist structured packages alongside prose so Copilot freeze path can
-    # verify without re-collecting (commentary/MD&A parity). Not full _sources.
+    # verify without re-collecting (commentary/MD&A parity). Packages include
+    # `_sources` tags on values (catalog + ENGINE_PATH); not DOM overlay.
     evidence_package: dict[str, Any] | None = None
     attribution_package: dict[str, Any] | None = None
     try:

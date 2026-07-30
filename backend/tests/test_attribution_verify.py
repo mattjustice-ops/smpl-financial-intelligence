@@ -20,6 +20,7 @@ from app.services.commentary.schemas import (
     CommentaryInputs,
     CommentaryOutput,
     CommentarySection,
+    CustomerMovementSummary,
     MrrWaterfallSummary,
 )
 from app.services.commentary.service import generate_commentary
@@ -327,6 +328,121 @@ def test_copilot_blob_allowlist_is_thin_but_catches_invented_drivers() -> None:
     assert fail_closed_attribution_text(
         "ARR growth was driven by three enterprise upsells.", bad
     ) == DONT_KNOW_ATTRIBUTION
+
+
+def test_deal_count_and_named_logo_drivers_from_commentary_inputs() -> None:
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_commentary_inputs,
+        verify_text_attribution,
+    )
+    from app.services.commentary.schemas import CustomerMovementSummary
+
+    inputs = CommentaryInputs(
+        period_label="Jun 2026",
+        mrr_waterfall=MrrWaterfallSummary(
+            period=date(2026, 6, 1),
+            beginning_mrr=Decimal("7000000"),
+            new_mrr=Decimal("100000"),
+            expansion_mrr=Decimal("2700000"),
+            contraction_mrr=Decimal("-50000"),
+            churn_mrr=Decimal("-400000"),
+            reactivation_mrr=Decimal("0"),
+            ending_mrr=Decimal("9350000"),
+        ),
+        customer_movement=CustomerMovementSummary(
+            new_customers=3,
+            churned_customers=1,
+            expanded_customers=2,
+            contracted_customers=0,
+            reactivated_customers=0,
+            notable_customers=["Acme Corp", "Globex"],
+        ),
+    )
+    pkg = build_attribution_package_from_commentary_inputs(inputs)
+    labels = " ".join(
+        " ".join([d["label"], *(d.get("aliases") or [])]) for d in pkg["allowed_drivers"]
+    ).lower()
+    assert "three new customers" in labels or "3 new customers" in labels
+    assert "acme corp" in labels
+    assert "globex" in labels
+
+    ok = verify_text_attribution(
+        "Logo growth was driven by three new customers and Acme Corp.",
+        pkg,
+    )
+    assert ok.ok
+    # Invented deal story still fail-closed
+    bad = verify_text_attribution(
+        "ARR growth was driven by three enterprise upsells.",
+        pkg,
+    )
+    assert not bad.ok
+
+
+def test_magnitude_dominance_aliases_on_arr_bridge() -> None:
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_copilot_structures,
+        verify_text_attribution,
+    )
+
+    bundle = {
+        "as_of_period": "2026-06",
+        "comparison_waterfalls": {
+            "arr": [
+                {
+                    "waterfall_type": "expansion",
+                    "period": "2026-06",
+                    "amount": 2_700_000,
+                },
+                {
+                    "waterfall_type": "churn",
+                    "period": "2026-06",
+                    "amount": -400_000,
+                },
+                {
+                    "waterfall_type": "new_business",
+                    "period": "2026-06",
+                    "amount": 200_000,
+                },
+            ]
+        },
+        "opportunity_attribution": [
+            {
+                "customer_name": "Initech",
+                "opportunity_name": "Initech Upsell",
+                "movement_type": "expansion",
+                "amount": 900_000,
+            },
+            {
+                "customer_name": "Umbrella",
+                "movement_type": "expansion",
+                "amount": 800_000,
+            },
+            {
+                "customer_name": "Stark",
+                "movement_type": "expansion",
+                "amount": 700_000,
+            },
+        ],
+    }
+    pkg = build_attribution_package_from_copilot_structures(
+        bundle=bundle, focus_period="2026-06"
+    )
+    expansion = next(d for d in pkg["allowed_drivers"] if d["id"] == "expansion")
+    aliases = " ".join(expansion.get("aliases") or []).lower()
+    assert "primarily expansion" in aliases or "largest bridge component" in aliases
+
+    ok = verify_text_attribution(
+        "ARR movement was driven by the largest bridge component.",
+        pkg,
+    )
+    assert ok.ok
+
+    logo_blob = " ".join(
+        " ".join([d["label"], *(d.get("aliases") or [])]) for d in pkg["allowed_drivers"]
+    ).lower()
+    assert "initech" in logo_blob
+    assert "three expansion deals" in logo_blob or "3 expansion deals" in logo_blob
 
 
 def test_copilot_structured_attribution_from_waterfalls_and_cash_bridge() -> None:

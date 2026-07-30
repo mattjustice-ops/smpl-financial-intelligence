@@ -177,13 +177,17 @@
     });
   }
 
-  function replaceTsData(target, incoming) {
+  function replaceTsData(target, incoming, closeMonth) {
     if (!incoming || !target) return;
-    mergeTsData(target, incoming);
+    mergeTsData(target, incoming, closeMonth);
   }
 
-  /** Merge warehouse payload into embedded demo TS_DATA without wiping populated actual rows. */
-  function mergeTsData(target, incoming) {
+  /**
+   * Merge warehouse payload into embedded demo TS_DATA.
+   * Periods present in the live payload replace the whole row (no field-level
+   * Object.assign) so demo cells cannot survive a partial production hydrate.
+   */
+  function mergeTsData(target, incoming, closeMonth) {
     if (!incoming || !target) return target;
     ["Actual", "Forecast", "Budget"].forEach(function (sc) {
       if (!incoming[sc]) return;
@@ -201,11 +205,49 @@
             return row[k] != null;
           });
           if (!hasValue) return;
+          // Full row replace — never merge demo fields into live period rows.
           target[sc][stmt][period] = JSON.parse(JSON.stringify(row));
         });
       });
     });
+    pruneDemoActualResidue(target, incoming, closeMonth || getActiveCloseMonth(null));
     return target;
+  }
+
+  /**
+   * When live Actual has at least one populated closed period, drop demo Actual
+   * rows for other closed periods that the warehouse did not send. Prevents
+   * demo residue after a successful (even partial) production hydrate.
+   * Does not reseed demo; only deletes stale closed Actual cells.
+   */
+  function pruneDemoActualResidue(target, incoming, closeMonth) {
+    if (!target || !incoming || !closeMonth) return;
+    var liveActual = incoming.Actual;
+    if (!liveActual) return;
+    var livePeriods = {};
+    ["is", "cfs", "bs"].forEach(function (stmt) {
+      var block = liveActual[stmt];
+      if (!block) return;
+      Object.keys(block).forEach(function (period) {
+        var row = block[period];
+        if (!row || typeof row !== "object") return;
+        var hasValue = Object.keys(row).some(function (k) {
+          return row[k] != null;
+        });
+        if (hasValue) livePeriods[period] = true;
+      });
+    });
+    if (!Object.keys(livePeriods).length) return;
+    if (!target.Actual) return;
+    ["is", "cfs", "bs"].forEach(function (stmt) {
+      var block = target.Actual[stmt];
+      if (!block) return;
+      Object.keys(block).forEach(function (period) {
+        if (period <= closeMonth && !livePeriods[period]) {
+          delete block[period];
+        }
+      });
+    });
   }
 
   function getActiveCloseMonth(fallback) {
@@ -223,8 +265,9 @@
 
   /** Live warehouse payload when hydrated; otherwise shared demo seed (Board + Forecast). */
   function getOutlookTsData() {
-    // SMPL_DEMO_TS_DATA is the merge target during hydrate — prefer it so embedded
-    // actuals survive when warehouse TS_DATA is incomplete.
+    // After live hydrate, demo object is the merge target but closed Actual
+    // residue is pruned — prefer it so Board/FE share one post-hydrate object.
+    // Before hydrate (or offline), fall back to embedded demo / live snapshot.
     if (global.SMPL_DEMO_TS_DATA) return global.SMPL_DEMO_TS_DATA;
     if (isLiveOutlook()) return global.SMPL_TS_DATA;
     return null;
@@ -370,7 +413,8 @@
           return row[k] != null;
         });
         if (!hasValue) return;
-        target[stmt][period] = Object.assign({}, target[stmt][period] || {}, row);
+        // Full row replace (same contract as mergeTsData).
+        target[stmt][period] = JSON.parse(JSON.stringify(row));
       });
     });
   }
@@ -380,11 +424,12 @@
     Object.keys(incoming).forEach(function (period) {
       var row = incoming[period];
       if (!row) return;
-      target[period] = Object.assign({}, row);
+      target[period] = JSON.parse(JSON.stringify(row));
     });
   }
 
-  function mergeActuals(target, incoming) {
+  /** Replace whole SRC.actuals period rows; prune closed periods warehouse omitted. */
+  function mergeActuals(target, incoming, closeMonth) {
     if (!incoming) return;
     Object.keys(incoming).forEach(function (period) {
       var row = incoming[period];
@@ -393,7 +438,28 @@
         return row[k] != null;
       });
       if (!hasValue) return;
-      target[period] = Object.assign({}, target[period] || {}, row);
+      // Full replace — do not Object.assign demo fields onto live periods.
+      target[period] = JSON.parse(JSON.stringify(row));
+    });
+    pruneSrcActualResidue(target, incoming, closeMonth || getActiveCloseMonth(null));
+  }
+
+  function pruneSrcActualResidue(target, incoming, closeMonth) {
+    if (!target || !incoming || !closeMonth) return;
+    var livePeriods = {};
+    Object.keys(incoming).forEach(function (period) {
+      var row = incoming[period];
+      if (!row) return;
+      var hasValue = Object.keys(row).some(function (k) {
+        return row[k] != null;
+      });
+      if (hasValue) livePeriods[period] = true;
+    });
+    if (!Object.keys(livePeriods).length) return;
+    Object.keys(target).forEach(function (period) {
+      if (period <= closeMonth && !livePeriods[period]) {
+        delete target[period];
+      }
     });
   }
 
@@ -481,8 +547,11 @@
     global.SMPL_CASH_BRIDGE = data.CASH_BRIDGE || null;
     global.SMPL_LIVE_OUTLOOK = true;
 
+    var closeMonth =
+      (data.meta && data.meta.close_month) || getActiveCloseMonth(null);
+
     if (hooks.TS_DATA && data.TS_DATA) {
-      replaceTsData(hooks.TS_DATA, data.TS_DATA);
+      replaceTsData(hooks.TS_DATA, data.TS_DATA, closeMonth);
     }
 
     if (hooks.WF_TABLE && data.ARR_WATERFALL) {
@@ -491,7 +560,7 @@
 
     if (hooks.SRC && data.SRC && data.SRC.actuals) {
       hooks.SRC.actuals = hooks.SRC.actuals || {};
-      mergeActuals(hooks.SRC.actuals, data.SRC.actuals);
+      mergeActuals(hooks.SRC.actuals, data.SRC.actuals, closeMonth);
     }
 
     if (hooks.TS_DATA && global.SMPL_DEMO_TS_DATA === hooks.TS_DATA) {
@@ -597,6 +666,9 @@
     replaceArrWaterfallTable: replaceArrWaterfallTable,
     replaceTsData: replaceTsData,
     mergeTsData: mergeTsData,
+    mergeActuals: mergeActuals,
+    pruneDemoActualResidue: pruneDemoActualResidue,
+    pruneSrcActualResidue: pruneSrcActualResidue,
     getArrFromWaterfall: getArrFromWaterfall,
     buildOutlookFetchUrl: buildOutlookFetchUrl,
     isLiveOutlook: isLiveOutlook,

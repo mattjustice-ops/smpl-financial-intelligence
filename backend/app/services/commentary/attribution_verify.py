@@ -104,6 +104,99 @@ _CASH_BRIDGE_LABELS: dict[str, tuple[str, ...]] = {
     "ending_cash": ("ending cash", "cash eop", "closing cash"),
 }
 
+# Small integers → words for deal-count aliases ("three new customers").
+_COUNT_WORDS: dict[int, str] = {
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+    11: "eleven",
+    12: "twelve",
+}
+
+# Share of absolute bridge magnitude to tag a component as dominant.
+_DOMINANCE_SHARE = Decimal("0.50")
+
+
+def _count_aliases(count: int, noun: str) -> tuple[str, ...]:
+    """Build deal-count phrases only when count is an evidenced integer."""
+    if count <= 0:
+        return ()
+    noun = noun.strip().lower()
+    if not noun:
+        return ()
+    aliases = [f"{count} {noun}", f"{count} {noun.rstrip('s')}"]
+    word = _COUNT_WORDS.get(count)
+    if word:
+        aliases.append(f"{word} {noun}")
+        aliases.append(f"{word} {noun.rstrip('s')}")
+    return tuple(dict.fromkeys(aliases))
+
+
+def apply_magnitude_dominance(
+    drivers: Sequence[AllowedDriver],
+    *,
+    share_threshold: Decimal = _DOMINANCE_SHARE,
+) -> list[AllowedDriver]:
+    """Tag the largest |amount| driver when it dominates peer magnitudes.
+
+    Peers = drivers that share the same source prefix before the last dotted
+    segment (e.g. comparison_waterfalls.arr.*). Adds aliases so attribution
+    verify does not over-strip 'primarily expansion' / 'largest bridge' claims
+    when the engine amounts support dominance.
+    """
+    by_family: dict[str, list[AllowedDriver]] = {}
+    for d in drivers:
+        src = d.source or "unknown"
+        family = src.rsplit(".", 1)[0] if "." in src else src
+        by_family.setdefault(family, []).append(d)
+
+    dominant_ids: dict[str, tuple[str, ...]] = {}
+    for family, group in by_family.items():
+        with_amt = [(d, abs(d.amount)) for d in group if d.amount is not None]
+        if len(with_amt) < 2:
+            continue
+        total = sum((a for _, a in with_amt), Decimal("0"))
+        if total <= 0:
+            continue
+        top_d, top_amt = max(with_amt, key=lambda t: t[1])
+        if top_amt / total < share_threshold:
+            continue
+        label = top_d.label.lower()
+        dominant_ids[top_d.id] = (
+            f"primarily {label}",
+            f"mainly {label}",
+            f"largely {label}",
+            f"largest {label}",
+            "largest bridge component",
+            "magnitude dominance",
+            "dominant driver",
+        )
+
+    out: list[AllowedDriver] = []
+    for d in drivers:
+        extra = dominant_ids.get(d.id)
+        if not extra:
+            out.append(d)
+            continue
+        merged_aliases = tuple(dict.fromkeys(tuple(d.aliases) + extra))
+        out.append(
+            AllowedDriver(
+                id=d.id,
+                label=d.label,
+                amount=d.amount,
+                source=d.source,
+                aliases=merged_aliases,
+            )
+        )
+    return out
+
 
 @dataclass(frozen=True)
 class AllowedDriver:
@@ -409,8 +502,8 @@ def build_attribution_package_from_commentary_inputs(
       - quota_attainment segments / rep names
       - cash aging bucket keys
 
-    Honest gap: deal-count claims ("three enterprise upsells") are not evidenced
-    unless notable_customers / pipeline labels supply them — invented counts fail.
+    Deal-count / named-logo enrichment: customer_movement counts and
+    notable_customers become allowlisted phrases. Invented counts still fail.
     """
     drivers: list[AllowedDriver] = []
     period: str | None = None
@@ -478,32 +571,55 @@ def build_attribution_package_from_commentary_inputs(
 
     cm = data.get("customer_movement")
     if isinstance(cm, Mapping):
-        for key, aliases in (
-            ("new_customers", ("new customers",)),
-            ("churned_customers", ("churned customers",)),
-            ("expanded_customers", ("expanded customers",)),
+        for key, base_aliases in (
+            ("new_customers", ("new customers", "new logos", "new logo")),
+            ("churned_customers", ("churned customers", "logo churn", "churned logos")),
+            # Avoid bare "upsells" — substring-matches invented "enterprise upsells".
+            ("expanded_customers", ("expanded customers", "expansion logos")),
             ("contracted_customers", ("contracted customers",)),
             ("reactivated_customers", ("reactivated customers", "reactivations")),
         ):
-            if key in cm:
+            if key not in cm:
+                continue
+            raw_count = cm.get(key)
+            count_aliases: tuple[str, ...] = ()
+            try:
+                count_i = int(Decimal(str(raw_count)))
+                noun = key.replace("_", " ")
+                count_aliases = _count_aliases(count_i, noun) + _count_aliases(
+                    count_i, base_aliases[0]
+                )
+            except Exception:
+                count_i = None
+            drivers.append(
+                _driver(
+                    key,
+                    key.replace("_", " ").title(),
+                    amount=raw_count,
+                    source=f"customer_movement.{key}",
+                    aliases=base_aliases + count_aliases,
+                )
+            )
+            if count_i is not None and count_i > 0:
                 drivers.append(
                     _driver(
-                        key,
-                        key.replace("_", " ").title(),
-                        amount=cm.get(key),
-                        source=f"customer_movement.{key}",
-                        aliases=aliases,
+                        f"deal_count_{key}_{count_i}",
+                        f"{count_i} {key.replace('_', ' ')}",
+                        amount=count_i,
+                        source=f"customer_movement.{key}.deal_count",
+                        aliases=count_aliases,
                     )
                 )
         for name in cm.get("notable_customers") or []:
             if not str(name).strip():
                 continue
+            logo = str(name).strip()
             drivers.append(
                 _driver(
-                    _slug(str(name)),
-                    str(name).strip(),
+                    _slug(logo),
+                    logo,
                     source="customer_movement.notable_customers",
-                    aliases=(str(name).strip().lower(),),
+                    aliases=(logo.lower(), f"{logo.lower()} logo"),
                 )
             )
 
@@ -547,6 +663,7 @@ def build_attribution_package_from_commentary_inputs(
             continue
         seen.add(d.id)
         uniq.append(d)
+    uniq = apply_magnitude_dominance(uniq)
 
     return build_attribution_package(
         metric=metric,
@@ -593,10 +710,16 @@ def build_attribution_package_from_mda_payload(
                     extra_aliases = aliases
                     slug = key
                     break
+            amt = row.get("amount")
+            if amt is None:
+                amt = row.get("actual")
+            if amt is None:
+                amt = row.get("value")
             drivers.append(
                 _driver(
                     slug,
                     label,
+                    amount=amt,
                     source="arr_analysis.bridge_table",
                     aliases=extra_aliases + (label.lower(),),
                 )
@@ -607,6 +730,7 @@ def build_attribution_package_from_mda_payload(
                     _driver(
                         key,
                         key.replace("_", " ").title(),
+                        amount=arr.get(key),
                         source=f"arr_analysis.{key}",
                         aliases=aliases,
                     )
@@ -628,10 +752,16 @@ def build_attribution_package_from_mda_payload(
                     aliases = als
                     slug = key
                     break
+            amt = row.get("amount")
+            if amt is None:
+                amt = row.get("actual")
+            if amt is None:
+                amt = row.get("value")
             drivers.append(
                 _driver(
                     slug,
                     label,
+                    amount=amt,
                     source="cash_liquidity.bridge_table",
                     aliases=aliases + (label.lower(),),
                 )
@@ -699,6 +829,7 @@ def build_attribution_package_from_mda_payload(
             continue
         seen.add(d.id)
         uniq.append(d)
+    uniq = apply_magnitude_dominance(uniq)
 
     return build_attribution_package(
         metric="mda_package",
@@ -913,7 +1044,7 @@ def build_attribution_package_from_deck_payload(
     return build_attribution_package(
         metric="deck_package",
         period=period,
-        drivers=drivers,
+        drivers=apply_magnitude_dominance(drivers),
     )
 
 
@@ -1091,8 +1222,8 @@ def build_attribution_package_from_copilot_structures(
       - marketing channel names on the bundle
       - thin blob-label catalog as a supplement (legacy freezes)
 
-    Honest gap: not full per-metric ``_sources``; deal-count / named-logo drivers still
-    fail unless they appear as waterfall / pipeline labels.
+    Named logos / deal counts come from opportunity_attribution when present;
+    magnitude dominance tags the largest bridge component when share ≥ 50%.
     """
     drivers: list[AllowedDriver] = []
     period = focus_period
@@ -1170,18 +1301,85 @@ def build_attribution_package_from_copilot_structures(
                         aliases=aliases + (wtype.replace("_", " ").lower(),),
                     )
 
+        logo_names: list[str] = []
+        movement_counts: dict[str, int] = {}
         for attr in dump.get("opportunity_attribution") or []:
             if not isinstance(attr, Mapping):
                 continue
-            for field_name in ("movement_type", "label", "name", "channel"):
+            for field_name in (
+                "movement_type",
+                "label",
+                "name",
+                "channel",
+                "stage",
+                "marketing_channel",
+                "segment",
+            ):
                 val = str(attr.get(field_name) or "").strip()
                 if val:
                     _add(
                         _slug(val),
                         val,
+                        amount=attr.get("amount") or attr.get("arr_impact"),
                         source=f"opportunity_attribution.{field_name}",
                         aliases=(val.lower(),),
                     )
+            for logo_field in (
+                "customer_name",
+                "opportunity_name",
+                "account_name",
+            ):
+                logo = str(attr.get(logo_field) or "").strip()
+                if not logo:
+                    continue
+                logo_names.append(logo)
+                _add(
+                    _slug(logo),
+                    logo,
+                    amount=attr.get("amount") or attr.get("arr_impact"),
+                    source=f"opportunity_attribution.{logo_field}",
+                    aliases=(logo.lower(), f"{logo.lower()} logo"),
+                )
+            move = str(
+                attr.get("movement_type") or attr.get("stage") or "opportunity"
+            ).strip()
+            if move:
+                movement_counts[move] = movement_counts.get(move, 0) + 1
+
+        for move, count in movement_counts.items():
+            move_l = move.lower()
+            noun = f"{move_l} deals"
+            count_aliases = list(_count_aliases(count, noun))
+            count_aliases.extend(_count_aliases(count, "deals"))
+            if "closed won" in move_l or move_l in {"won", "closed_won"}:
+                count_aliases.extend(_count_aliases(count, "closed won deals"))
+            if any(tok in move_l for tok in ("expansion", "upsell", "expand")):
+                # Prefer explicit "N expansion deals" — avoid bare "upsells" substring traps.
+                count_aliases.extend(_count_aliases(count, "expansion deals"))
+                count_aliases.extend(_count_aliases(count, "enterprise expansion deals"))
+            count_aliases = list(dict.fromkeys(count_aliases))
+            if count_aliases:
+                _add(
+                    f"deal_count_{_slug(move)}_{count}",
+                    f"{count} {move} deals",
+                    amount=count,
+                    source="opportunity_attribution.deal_count",
+                    aliases=tuple(count_aliases),
+                )
+
+        if logo_names:
+            n_logos = len(set(logo_names))
+            logo_aliases = _count_aliases(n_logos, "logos") + _count_aliases(
+                n_logos, "named logos"
+            )
+            if logo_aliases:
+                _add(
+                    f"named_logo_count_{n_logos}",
+                    f"{n_logos} named logos",
+                    amount=n_logos,
+                    source="opportunity_attribution.named_logo_count",
+                    aliases=logo_aliases,
+                )
 
         mkt = dump.get("marketing_comparison") or dump.get("marketing_channel_comparison")
         if isinstance(mkt, Mapping):
@@ -1230,7 +1428,7 @@ def build_attribution_package_from_copilot_structures(
     structured = build_attribution_package(
         metric="copilot_package",
         period=period,
-        drivers=drivers,
+        drivers=apply_magnitude_dominance(drivers),
     )
     if metrics_blob:
         blob_pkg = build_attribution_package_from_text_blob(metrics_blob)

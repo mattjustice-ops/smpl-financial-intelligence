@@ -1,9 +1,9 @@
 # P15 AI claim-verify — coverage checklist (founder review)
 
 > **Not SOC 2 certification.** Product integrity gate for AI-stated numbers vs engine evidence.  
-> **Branch note:** numeric claim-verify merged via PR #55 (`main`). Attribution v1 (commentary + Prompt 2) via PR #56; remaining-path wire via PR #57. This branch: Copilot structured evidence + FE↔Board single-source.  
+> **Branch note:** numeric claim-verify merged via PR #55 (`main`). Attribution v1 (commentary + Prompt 2) via PR #56; remaining-path wire via PR #57; Copilot structured + FE↔Board via PR #58. This branch: `_sources` on evidence packages + richer drivers + FE hydrate residue fix.  
 > **Policy:** [P15 §4.7 / §4.8](../policies/P15_ai_llm_data_handling.md) · **Status snapshot:** [README.md](./README.md)  
-> **Non-numeric drivers:** [ai_attribution_verify.md](./ai_attribution_verify.md) (**live** on commentary, Prompt 2, Prompt 5, board regenerate, Copilot thin wire)
+> **Non-numeric drivers:** [ai_attribution_verify.md](./ai_attribution_verify.md)
 
 Use this page to confirm what shipped, what is still open, and where to open the code.
 
@@ -17,18 +17,19 @@ Use this page to confirm what shipped, what is still open, and where to open the
 | MD&A Prompt 2 package | **Hard block** if variance display ≠ period_matrix; walk nested commentary strings; don't-know on fail; **block emit** if variance sheet is fully unverifiable | `backend/app/services/reporting/export/prompt2_mda_package.py`, `board_platform_metrics.py` |
 | MD&A Prompt 5 deck | Evidence preview in user message; post-LLM verify of **$ / % / Nx in PPTX string literals** vs flattened deck payload; **hard block** (`CommentaryIntegrityError`) before Node render (adapt + fresh) | `backend/app/services/reporting/export/prompt5_deck.py` |
 | Board slide regenerate | Flatten slide payload (+ freeze blob numbers) → per-bullet verify → don't-know on fail; all-bad → don't-know narrative | `backend/app/services/reporting/export/board_commentary_service.py` (`enrich_slide_with_ai`) |
-| Board Copilot | **Structured packages:** evidence/attribution built from bundle / TS_DATA / cash bridge (same structures as the metrics blob); freeze packs store packages in `sections`; post-LLM verify against structured flatten (+ blob supplement). **Still not** full `_sources` | `board_platform_routes.py` (`board_copilot`), `claim_verify.build_evidence_package_from_copilot_structures`, freeze `sections.evidence_package` |
+| Board Copilot | **Structured packages:** evidence/attribution built from bundle / TS_DATA / cash bridge; freeze packs store packages in `sections`; post-LLM verify (+ blob supplement) | `board_platform_routes.py`, `claim_verify.build_evidence_package_from_copilot_structures` |
+| **`_sources` on evidence packages** | Every evidence value key gets a citable source tag (WAREHOUSE table/column, COMPUTED formula_id, or ENGINE_PATH). Embedded in commentary / Copilot prompt packages via `evidence_package_for_prompt` | `claim_verify.attach_sources_to_values`, `_SOURCE_FIELD_CATALOG` |
 
 Reusable helper: `backend/app/services/commentary/claim_verify.py`
 
-**Attribution (non-numeric) on the same paths:** see [ai_attribution_verify.md](./ai_attribution_verify.md) — Prompt 5 soft-strip + hard-block-when-fully-wiped; board per-bullet strip; Copilot thin blob-label allowlist.
+**Attribution (non-numeric) on the same paths:** see [ai_attribution_verify.md](./ai_attribution_verify.md).
 
 ---
 
 ## 2. Algorithm (short)
 
-1. **Build evidence** — flatten engine / freeze / display numbers into `evidence_package.values` (`build_evidence_package` / `flatten_evidence_values` / MD&A `evidence_values_from_mda_payload` / deck `evidence_values_from_deck_payload` / Copilot `build_evidence_package_from_copilot_structures` + blob supplement).
-2. **Prompt** — embed the same package (or metrics blob + packages for Copilot) so the model is told to state only those values.
+1. **Build evidence** — flatten engine / freeze / display numbers into `evidence_package.values`; attach `_sources` per key.
+2. **Prompt** — embed the same package (values + `_sources`) so the model is told to state only those values and cite paths.
 3. **Extract claims** — `$` amounts (incl. K/M/B), `%`, multipliers (`Nx`), select ratios (`extract_numeric_claims`). Prompt 5 scopes to string literals only.
 4. **Match** — each claim vs any evidence value within tolerance (`verify_text_against_evidence` / `_best_match`).
 5. **Fail closed** — mismatch or missing evidence → replace text with don't-know / omit section content; never emit unsupported material claims. MD&A Prompt 2 / Prompt 5 can **raise** `CommentaryIntegrityError`.
@@ -53,10 +54,10 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | MD&A Prompt 2 | **Live (harder)** | Matrix mismatch → hard block; post-LLM strip; fully unverifiable variance sheet → hard block |
 | Prompt 5 deck generation | **Live (hard block)** | String-literal $/%/Nx vs deck payload; invent → block emit. Chart array / layout coords not scanned |
 | Board slide regenerate | **Live (soft strip)** | Per-bullet don't-know; all-unverifiable → don't-know narrative |
-| Copilot / chat paths | **Live (structured + blob supplement)** | Evidence/attribution from bundle/TS/cash (+ frozen packages); fail-closed don't-know. **Gap:** still not full `_sources` per metric; older freezes without packages fall back to blob scrape; bare integers in answers may be under-constrained |
-| Full `_sources` provenance object on every LLM payload | **Open** | Framework Part 1; commentary/Copilot ship flatter `evidence_package.values` maps |
-| Driver / attribution claim verify (non-numeric) | **Live (primary paths)** | Helper + commentary, Prompt 2, Prompt 5, board regenerate, Copilot structured allowlist — see [ai_attribution_verify.md](./ai_attribution_verify.md) |
-| Production FE↔Board single-source | **Confirmed + tested** | Shared outlook API/builder; regression `test_outlook_ts_src_actuals_alignment.py`; demo dual-seed left alone — see [fe_board_single_source.md](./fe_board_single_source.md) |
+| Copilot / chat paths | **Live (structured + blob supplement)** | Evidence/attribution from bundle/TS/cash (+ frozen packages); fail-closed don't-know |
+| `_sources` on evidence packages | **Live (v1 contract)** | Catalog + ENGINE_PATH on primary package builders; freeze persists `_sources`. **Not** DOM `data-source` overlay; **not** full warehouse `loaded_at` / `org_id` / `is_final` on every row |
+| Driver / attribution claim verify (non-numeric) | **Live (primary paths)** | Deal-count / logo / dominance enrichment — see [ai_attribution_verify.md](./ai_attribution_verify.md) |
+| Production FE↔Board single-source | **Confirmed + hydrate residue fix** | Shared outlook API/builder; merge replace + prune closed Actuals — [fe_board_single_source.md](./fe_board_single_source.md) |
 | DOM `data-source` + full `runTieOut()` A–F publish gate | **Open** | See framework + tie-out prompt |
 
 ---
@@ -78,17 +79,19 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 
 | File | Covers |
 |------|--------|
-| `backend/tests/test_claim_verify.py` | `TOL_ACTUALS=$1`; extract money/%/ratio; match pass; invented → don't-know; empty evidence → missing; tolerance cannot loosen; section-only rewrite; generate embeds evidence + strips invented; variance tie-out `fail_closed=True` raises; PPTX script string-literal verify; bullet list strip; blob evidence; **Copilot structured evidence package** |
-| `backend/tests/test_attribution_verify.py` | Causal extract; allowed driver pass; invented driver fail-closed; empty allowlist strips causal; numeric-only unaffected; commentary generate embeds attribution package + strips invented cause; deck allowlist; bullet attribution strip; PPTX soft-strip + hard-block-when-fully-wiped; Copilot blob allowlist; **Copilot structured waterfall/cash attribution** |
+| `backend/tests/test_claim_verify.py` | `TOL_ACTUALS=$1`; extract money/%/ratio; match pass; invented → don't-know; empty evidence → missing; tolerance cannot loosen; section-only rewrite; generate embeds evidence + strips invented; variance tie-out `fail_closed=True` raises; PPTX script string-literal verify; bullet list strip; blob evidence; **Copilot structured evidence + `_sources` tags**; commentary package `_sources` |
+| `backend/tests/test_attribution_verify.py` | Causal extract; allowed driver pass; invented driver fail-closed; empty allowlist strips causal; numeric-only unaffected; commentary generate embeds attribution package + strips invented cause; deck allowlist; bullet attribution strip; PPTX soft-strip + hard-block-when-fully-wiped; Copilot blob allowlist; **Copilot structured waterfall/cash attribution**; **deal-count / logo / dominance** |
 | `backend/tests/test_commentary_service.py` | Sparse inputs + invented dollars → don't-know; evidence package in prompt |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | Production outlook `TS_DATA.Actual` ↔ `SRC.actuals` within $1; divergence / one-side-missing fail |
+| `frontend/scripts/verify-outlook-hydrate.mjs` | Partial live hydrate replaces period rows + prunes closed demo Actual residue (no reseed) |
 
 ---
 
 ## 6. Matt review checklist
 
 - [ ] Confirm live paths match product risk: commentary generate + MD&A Prompt 2 + Prompt 5 + board regenerate + Copilot structured packages for this increment
-- [ ] Confirm remaining open items (full `_sources`, FE hydrate merge residue) are acceptable follow-ups
+- [ ] Confirm `_sources` v1 (catalog + ENGINE_PATH; no DOM overlay yet) is the right next step
+- [ ] Confirm remaining open items (DOM `data-source`, full warehouse loaded_at/org_id) are acceptable follow-ups
 - [ ] Confirm **$1.00** actuals bar stays non-negotiable
 - [ ] Confirm fail-closed semantics: soft strip vs hard block (`CommentaryIntegrityError`) are correct per surface
 - [x] Wire Prompt 5 deck generation and Board slide regenerate to claim_verify.py
@@ -97,10 +100,24 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 - [x] Wire attribution through Prompt 5 + board regenerate + Copilot thin wire
 - [x] Confirm production Forecast Engine and Board Platform read one shared warehouse source per customer; automated TS↔SRC regression — [fe_board_single_source.md](./fe_board_single_source.md)
 - [x] Confirm data_integrity_framework.md's Guarantee 4 has been corrected to match README's machine-primary adaptation
-- [x] Upgrade Copilot from thin blob wire to structured evidence/attribution packages (still not full `_sources`)
+- [x] Upgrade Copilot from thin blob wire to structured evidence/attribution packages
+- [x] Attach `_sources` to primary evidence packages (commentary / Copilot / freeze)
+- [x] FE hydrate merge residue fix (replace + prune; no demo reseed)
 - [x] Merge `feat/p15-claim-verify-fail-closed` (PR #55)
 - [x] Merge `feat/p15-attribution-verify` (PR #56)
 - [x] Merge `feat/p15-attribution-wire-remaining` (PR #57)
+- [x] Merge `feat/p15-copilot-evidence-fe-board-source` (PR #58)
+
+---
+
+### Honesty — `_sources` v1 not wired
+
+| Wired | Not wired |
+|-------|-----------|
+| `_sources` map on `build_evidence_package` / Copilot structured packages / freeze `sections.evidence_package` | DOM `data-source` attributes + audit overlay |
+| WAREHOUSE table/column catalog for common IS/BS/CFS/ARR/MRR/cash leaves | Full warehouse `loaded_at`, `org_id`, `is_final` on every tag |
+| COMPUTED formula_id for known derived metrics (NRR, GM%, net new, opex sum) | Per-visual tie-out publish gate (Rule Sets A–F) |
+| ENGINE_PATH fallback so every value remains citable by dotted key | Automatic citation enforcement in post-LLM verify (verify still matches **values**, not source strings) |
 
 ---
 

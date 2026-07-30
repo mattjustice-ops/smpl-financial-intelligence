@@ -51,11 +51,11 @@ Code search / product surface as of this write-up. Labels:
 | MD&A Prompt 2 post-LLM claim strip | **Partial — implemented** | Nested commentary strings verified against payload evidence; unverifiable cells → don't-know; all-unverifiable variance sheet **blocks emit** |
 | Prompt 5 deck generation claim verify | **Implemented (hard block)** | Evidence embedded in Prompt 5 user message; post-LLM verify of $ / % / Nx in PPTX **string literals** vs deck payload; `CommentaryIntegrityError` blocks emit (adapt + fresh paths) |
 | Board slide regenerate claim verify | **Implemented (soft strip)** | `enrich_slide_with_ai`: flatten slide payload (+ freeze blob numbers) → per-bullet don't-know; all-bad → don't-know narrative |
-| Copilot runtime claim verify | **Implemented (structured + blob supplement)** | Packages from bundle/TS/cash (+ freeze `sections`); post-LLM verify. Still not full `_sources` |
-| Driver / attribution (non-numeric) claim verify | **Implemented on primary paths** | Helper live on commentary, Prompt 2, Prompt 5, board regenerate, Copilot structured allowlist. Design + gaps: [ai_attribution_verify.md](./ai_attribution_verify.md) |
-| Production single-source confirmation (FE + Board Platform) | **Confirmed + tested** | Shared `build_unified_outlook_payload` / outlook API; `test_outlook_ts_src_actuals_alignment.py`; demo seeds left alone — [fe_board_single_source.md](./fe_board_single_source.md) |
-| `_sources` provenance object on every LLM payload | **Required design / roadmap** | Framework Part 1 — not present as product-wide `_sources` contract (commentary path ships a flatter `evidence_package.values` map) |
-| Claude may only state values present in evidence | **Partial — implemented** | Prompt rules + structural verify on commentary generate, MD&A Prompt 2, Prompt 5 (string literals), board regenerate, Copilot structured packages; not full `_sources` contract |
+| Copilot runtime claim verify | **Implemented (structured + blob supplement)** | Packages from bundle/TS/cash (+ freeze `sections`); post-LLM verify; `_sources` tags on values |
+| Driver / attribution (non-numeric) claim verify | **Implemented on primary paths** | Helper + deal-count / logo / dominance catalogs. Design + gaps: [ai_attribution_verify.md](./ai_attribution_verify.md) |
+| Production single-source confirmation (FE + Board Platform) | **Confirmed + hydrate residue fix** | Shared outlook API/builder; TS↔SRC $1 regression; merge replace + prune closed Actuals — [fe_board_single_source.md](./fe_board_single_source.md) |
+| `_sources` provenance object on every LLM payload | **Partial — implemented (v1)** | Evidence packages attach `_sources` (WAREHOUSE catalog / COMPUTED / ENGINE_PATH). Not DOM overlay; not full warehouse loaded_at/org_id — [ai_claim_verify.md](./ai_claim_verify.md) |
+| Claude may only state values present in evidence | **Partial — implemented** | Prompt rules + structural verify on commentary generate, MD&A Prompt 2, Prompt 5 (string literals), board regenerate, Copilot structured packages; cite `_sources` in prompt policy |
 | Second-pass commentary verification (block on unverifiable) | **Partial — implemented** | Live on `/commentary/generate` (strip/don't-know) + MD&A Prompt 2 + Prompt 5 hard block + board regenerate strip + Copilot don't-know |
 | DOM `data-source` attributes + audit overlay | **Required design / roadmap** | Framework Part 3 |
 | Full `runTieOut()` Rule Sets A–F as publish gate | **Required design / roadmap** | Tie-out prompt Part 3–4; pieces of tie-out exist; full cross-platform gate not claimed live |
@@ -67,6 +67,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-30 | Evidence `_sources` tags on primary packages; richer attribution (deal-count / logos / magnitude dominance); FE hydrate replace+prune closed Actual residue (no demo reseed). $1 bar unchanged. Not SOC 2 certified. |
 | 2026-07-30 | Copilot structured evidence/attribution packages (commentary/MD&A parity flatten); freeze stores packages in sections; production FE↔Board single-source confirmed + TS↔SRC $1 regression. Demo seeds untouched. Not SOC 2 certified. |
 | 2026-07-30 | Attribution verify extended to Prompt 5 (soft-strip string literals; hard-block when fully wiped), board slide regenerate (per-bullet), Copilot thin blob-label wire. $1 numeric bar unchanged. Not SOC 2 certified. |
 | 2026-07-30 | Attribution verify v1: helper + commentary generate + MD&A Prompt 2 (allowlist from structured fields; empty allowlist strips causal claims). Prompt 5 / board / Copilot still follow-up. Not SOC 2 certified. |

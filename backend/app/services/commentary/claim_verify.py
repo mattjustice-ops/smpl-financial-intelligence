@@ -204,10 +204,12 @@ def build_evidence_package(
         for k, v in values.items()
         if not (v == v.to_integral_value() and _YEAR_RE.match(str(int(v))))
     }
+    sources = attach_sources_to_values(cleaned, period_label=period_label)
 
     return {
         "values": {k: str(v) for k, v in cleaned.items()},
         "values_decimal": cleaned,
+        "_sources": sources,
         "period_label": period_label,
         "freeze_id": freeze_id,
         "tolerance_actuals": str(TOL_ACTUALS),
@@ -585,6 +587,256 @@ def evidence_values_from_text_blob(text: str) -> dict[str, Decimal]:
     return out
 
 
+# Metric-field → warehouse / COMPUTED provenance (framework Part 1).
+# Matched on the leaf field of a dotted evidence key (e.g. ts.Actual.is.2026-06.revenue).
+_SOURCE_FIELD_CATALOG: dict[str, dict[str, Any]] = {
+    "revenue": {
+        "source_type": "WAREHOUSE",
+        "table": "income_statement",
+        "column": "revenue",
+    },
+    "cogs": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "cogs"},
+    "gross_profit": {
+        "source_type": "WAREHOUSE",
+        "table": "income_statement",
+        "column": "gross_profit",
+    },
+    "sm": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "sm"},
+    "rd": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "rd"},
+    "ga": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "ga"},
+    "total_opex": {
+        "source_type": "COMPUTED",
+        "formula_id": "total_opex_sm_rd_ga",
+        "formula": "sm + rd + ga",
+    },
+    "ebitda": {
+        "source_type": "WAREHOUSE",
+        "table": "income_statement",
+        "column": "ebitda",
+    },
+    "net_income": {
+        "source_type": "WAREHOUSE",
+        "table": "income_statement",
+        "column": "net_income",
+    },
+    "gross_margin_pct": {
+        "source_type": "COMPUTED",
+        "formula_id": "gross_profit_div_revenue",
+        "formula": "gross_profit / revenue",
+    },
+    "cash": {
+        "source_type": "WAREHOUSE",
+        "table": "balance_sheet",
+        "column": "cash",
+    },
+    "ar": {
+        "source_type": "WAREHOUSE",
+        "table": "balance_sheet",
+        "column": "ar",
+    },
+    "deferred_rev": {
+        "source_type": "WAREHOUSE",
+        "table": "balance_sheet",
+        "column": "deferred_rev",
+    },
+    "dr": {
+        "source_type": "WAREHOUSE",
+        "table": "balance_sheet",
+        "column": "deferred_rev",
+    },
+    "total_assets": {
+        "source_type": "WAREHOUSE",
+        "table": "balance_sheet",
+        "column": "total_assets",
+    },
+    "ending_cash": {
+        "source_type": "WAREHOUSE",
+        "table": "cash_flow_statement",
+        "column": "ending_cash",
+    },
+    "beginning_cash": {
+        "source_type": "WAREHOUSE",
+        "table": "cash_flow_statement",
+        "column": "beginning_cash",
+    },
+    "cfo": {
+        "source_type": "WAREHOUSE",
+        "table": "cash_flow_statement",
+        "column": "cfo",
+    },
+    "collections": {
+        "source_type": "WAREHOUSE",
+        "table": "cash_bridge",
+        "column": "collections",
+    },
+    "payroll": {
+        "source_type": "WAREHOUSE",
+        "table": "cash_bridge",
+        "column": "payroll",
+    },
+    "ending_arr": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "ending_arr",
+    },
+    "beginning_arr": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "beginning_arr",
+    },
+    "expansion": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "expansion",
+    },
+    "new_business": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "new_business",
+    },
+    "churn": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "churn",
+    },
+    "contraction": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "contraction",
+    },
+    "reactivation": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "reactivation",
+    },
+    "net_new": {
+        "source_type": "COMPUTED",
+        "formula_id": "arr_net_new",
+        "formula": "new_business + expansion + reactivation + contraction + churn",
+    },
+    "net_new_arr": {
+        "source_type": "COMPUTED",
+        "formula_id": "arr_net_new",
+        "formula": "new_business + expansion + reactivation + contraction + churn",
+    },
+    "ending_mrr": {
+        "source_type": "WAREHOUSE",
+        "table": "mrr_waterfall",
+        "column": "ending_mrr",
+    },
+    "beginning_mrr": {
+        "source_type": "WAREHOUSE",
+        "table": "mrr_waterfall",
+        "column": "beginning_mrr",
+    },
+    "new_mrr": {
+        "source_type": "WAREHOUSE",
+        "table": "mrr_waterfall",
+        "column": "new_mrr",
+    },
+    "expansion_mrr": {
+        "source_type": "WAREHOUSE",
+        "table": "mrr_waterfall",
+        "column": "expansion_mrr",
+    },
+    "contraction_mrr": {
+        "source_type": "WAREHOUSE",
+        "table": "mrr_waterfall",
+        "column": "contraction_mrr",
+    },
+    "churn_mrr": {
+        "source_type": "WAREHOUSE",
+        "table": "mrr_waterfall",
+        "column": "churn_mrr",
+    },
+    "reactivation_mrr": {
+        "source_type": "WAREHOUSE",
+        "table": "mrr_waterfall",
+        "column": "reactivation_mrr",
+    },
+    "nrr": {
+        "source_type": "COMPUTED",
+        "formula_id": "nrr_arr_bridge",
+        "formula": "(beginning_arr + expansion + reactivation - contraction - churn) / beginning_arr",
+    },
+    "grr": {
+        "source_type": "COMPUTED",
+        "formula_id": "grr_arr_bridge",
+        "formula": "(beginning_arr - contraction - churn) / beginning_arr",
+    },
+    "amount": {
+        "source_type": "WAREHOUSE",
+        "table": "arr_waterfall",
+        "column": "amount",
+    },
+}
+
+_PERIOD_TOKEN_RE = re.compile(r"^(19|20)\d{2}-\d{2}$")
+
+
+def _period_from_evidence_key(key: str) -> str | None:
+    for part in str(key).split("."):
+        token = part.split("[", 1)[0]
+        if _PERIOD_TOKEN_RE.match(token):
+            return token
+    return None
+
+
+def _leaf_field_from_evidence_key(key: str) -> str:
+    leaf = str(key).rsplit(".", 1)[-1]
+    return leaf.split("[", 1)[0].strip()
+
+
+def build_source_record(
+    evidence_key: str,
+    value: Decimal | Any,
+    *,
+    period_label: str | None = None,
+) -> dict[str, Any]:
+    """Build a citable ``_sources`` entry for one evidence value key.
+
+    Catalog hits → WAREHOUSE table/column or COMPUTED formula_id.
+    Unknown leaves → ENGINE_PATH (path still citable; not full warehouse provenance).
+    """
+    leaf = _leaf_field_from_evidence_key(evidence_key)
+    period = _period_from_evidence_key(evidence_key) or period_label
+    num = value if isinstance(value, Decimal) else _to_decimal(value)
+    value_str = str(num) if num is not None else str(value)
+    base = _SOURCE_FIELD_CATALOG.get(leaf)
+    if base:
+        record = dict(base)
+        record["path"] = evidence_key
+        record["value"] = value_str
+        if period:
+            record["period"] = period
+        return record
+    return {
+        "source_type": "ENGINE_PATH",
+        "path": evidence_key,
+        "field": leaf,
+        "value": value_str,
+        "period": period,
+        "note": (
+            "No warehouse table/column catalog hit for this leaf — cite engine path. "
+            "Not full framework Part 1 WAREHOUSE provenance."
+        ),
+    }
+
+
+def attach_sources_to_values(
+    values: Mapping[str, Any],
+    *,
+    period_label: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Map every evidence value key → source tag (framework Part 1 contract)."""
+    sources: dict[str, dict[str, Any]] = {}
+    for key, val in values.items():
+        sources[str(key)] = build_source_record(
+            str(key), val, period_label=period_label
+        )
+    return sources
+
+
 def _package_from_values(
     values: dict[str, Decimal],
     *,
@@ -596,9 +848,11 @@ def _package_from_values(
         for k, v in values.items()
         if not (v == v.to_integral_value() and _YEAR_RE.match(str(int(v))))
     }
+    sources = attach_sources_to_values(cleaned, period_label=period_label)
     return {
         "values": {k: str(v) for k, v in cleaned.items()},
         "values_decimal": cleaned,
+        "_sources": sources,
         "period_label": period_label,
         "freeze_id": freeze_id,
         "tolerance_actuals": str(TOL_ACTUALS),
@@ -739,8 +993,24 @@ def build_evidence_package_from_copilot_structures(
 def evidence_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, Any]:
     """LLM-facing evidence (omit Decimal map). Cap size for interactive prompts."""
     if not package:
-        return {"values": {}, "tolerance_actuals": str(TOL_ACTUALS)}
+        return {
+            "values": {},
+            "_sources": {},
+            "tolerance_actuals": str(TOL_ACTUALS),
+            "policy": (
+                "State only numeric values present in values (within $1.00 for money). "
+                "Cite _sources path/table/column or COMPUTED formula_id when stating a number."
+            ),
+        }
     values = package.get("values") or {}
+    sources = package.get("_sources") or {}
+    if not isinstance(sources, Mapping) or not sources:
+        if isinstance(values, Mapping):
+            sources = attach_sources_to_values(
+                values, period_label=str(package.get("period_label") or "") or None
+            )
+        else:
+            sources = {}
     if isinstance(values, Mapping) and len(values) > 400:
         # Prefer structured keys over anonymous blob scrape when capping.
         structured = {k: v for k, v in values.items() if not str(k).startswith("blob.")}
@@ -748,14 +1018,18 @@ def evidence_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, 
         keep = dict(list(structured.items())[:350])
         keep.update(dict(list(blob.items())[:50]))
         values = keep
+        sources = {k: sources[k] for k in values if k in sources}
     return {
         "period_label": package.get("period_label"),
         "freeze_id": package.get("freeze_id"),
         "tolerance_actuals": package.get("tolerance_actuals") or str(TOL_ACTUALS),
         "values": values,
+        "_sources": sources,
         "policy": (
             "State only numeric values present in values (within $1.00 for money). "
-            "Post-LLM verify uses this same package. Not full warehouse _sources."
+            "Cite _sources (table.column / COMPUTED formula_id / ENGINE_PATH) when stating "
+            "a material number. Post-LLM verify uses values; _sources is for citation. "
+            "DOM data-source overlay and full warehouse loaded_at/org_id not wired in v1."
         ),
     }
 

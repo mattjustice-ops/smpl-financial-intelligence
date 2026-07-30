@@ -12,6 +12,7 @@
     "copy:board-exports": "node scripts/copy-board-exports.mjs",
     "extract:demo-seed": "node scripts/extract-demo-seed.mjs",
     "verify:outlook": "node scripts/verify-outlook-alignment.mjs",
+    "verify:outlook-hydrate": "node scripts/verify-outlook-hydrate.mjs",
     "verify:board": "node scripts/verify-board-platform.mjs",
     "verify:forecast": "node scripts/verify-forecast-levers.mjs",
     "verify:platform": "npm run verify:board && npm run verify:outlook && npm run verify:pipeline-arr",
