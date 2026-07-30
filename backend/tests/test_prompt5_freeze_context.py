@@ -35,6 +35,7 @@ def test_prompt5_user_message_includes_freeze_context_and_stale_label() -> None:
     assert "2026-07-14T12:00:00+00:00" in msg
     assert "ARR section from freeze pack…" in msg
     assert "DATA PAYLOAD (JSON):" in msg
+    assert "EVIDENCE PACKAGE" in msg
 
 
 def test_prompt5_user_message_omits_freeze_block_when_absent() -> None:
@@ -54,3 +55,4 @@ def test_prompt5_user_message_omits_freeze_block_when_absent() -> None:
         msg = build_prompt5_user_message(object())  # type: ignore[arg-type]
     assert "CLOSE FREEZE CONTEXT" not in msg
     assert "DATA PAYLOAD (JSON):" in msg
+    assert "EVIDENCE PACKAGE" in msg

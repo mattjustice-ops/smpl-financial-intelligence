@@ -970,10 +970,15 @@ Every Claude response that contains numbers is verified by a second Claude API
 call that extracts and cross-checks every figure. Unverifiable numbers trigger
 a warning to the user.
 
-**Guarantee 4 — Human review gate**
-No close package goes live without a Finance team member running the spot-check
-queries, signing the tie-out report, and checking all 21 items on the review
-checklist. The system automates the verification but a human approves the release.
+**Guarantee 4 — Machine-primary release, human exception handling**
+Release safety is machine-primary: automated fail-closed gates (provenance,
+_sources, structural claim verify, freeze-ID binding, tie-out / second-pass
+verification) are the day-to-day control, not a human re-checking every package
+before it ships. The Finance review checklist and spot-check queries remain
+required, but as periodic control testing and exception review — not as the
+primary gate on every release. See README.md, "Adaptation of source Part 6,"
+for the full rationale. Do not reintroduce "human review before every send" as
+the primary control in this document, policy, sales language, or IR framing.
 
 ---
 

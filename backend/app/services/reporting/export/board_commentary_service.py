@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+import logging
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -24,6 +25,8 @@ from app.services.reporting.export.saas_semantic_reporting import (
 )
 from app.services.reporting.export.schemas import ReportingBundle
 from app.services.reporting.period_utils import period_range, to_period
+
+logger = logging.getLogger(__name__)
 
 _MONTH_NAME_TO_NUM: dict[str, int] = {
     name.lower(): i for i, name in enumerate(calendar.month_name[1:], start=1)
@@ -931,6 +934,28 @@ def enrich_slide_with_ai(
             max_words_per_bullet=max_words,
             max_chars_per_bullet=max_chars,
         )
+        # P15: post-LLM numeric claim verify against slide payload evidence.
+        from app.services.commentary.claim_verify import (
+            DONT_KNOW_NARRATIVE,
+            apply_fail_closed_to_bullet_list,
+            flatten_evidence_values,
+        )
+
+        evidence = flatten_evidence_values(payload, prefix="slide")
+        if interactive_freeze:
+            from app.services.commentary.claim_verify import evidence_values_from_text_blob
+
+            evidence = {**evidence, **evidence_values_from_text_blob(interactive_freeze)}
+        bullets, claim_result = apply_fail_closed_to_bullet_list(bullets, evidence)
+        if not claim_result.ok:
+            logger.warning(
+                "P15 board slide regenerate claim-verify stripped bullets on %s: %s",
+                slide_key,
+                claim_result.summary(),
+            )
+        # If every bullet was wiped, hard-fail closed to don't-know narrative (no invented deck text).
+        if bullets and all(b == DONT_KNOW_NARRATIVE for b in bullets):
+            return SlideCommentary(what_happened=DONT_KNOW_NARRATIVE, bullets=[DONT_KNOW_NARRATIVE])
         narrative = format_key_takeaway_bullets(bullets)
         if not narrative:
             return base

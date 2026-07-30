@@ -149,9 +149,58 @@ def build_claude_mda_package_xlsx_bytes(
             commentary = trim_commentary_response(raw)
             if not commentary.get("variance_commentary"):
                 raise RuntimeError("Claude response missing variance_commentary sheet.")
-            tie_warnings = payload.get("tie_out_warnings") or []
-            if tie_warnings:
-                logger.warning("MDA package tie-out warnings: %s", "; ".join(tie_warnings))
+
+            # P15 hard block: variance display must tie to period_matrix before emit.
+            from app.services.reporting.export.board_platform_metrics import (
+                evidence_values_from_mda_payload,
+                verify_variance_commentary_tieout,
+            )
+            from app.services.commentary.claim_verify import (
+                CommentaryIntegrityError,
+                verify_nested_commentary_strings,
+            )
+
+            display = payload.get("variance_commentary_display") or {}
+            matrix = (payload.get("deck_payload") or {}).get("period_matrix") or {}
+            verify_variance_commentary_tieout(display, matrix, fail_closed=True)
+
+            evidence_values = evidence_values_from_mda_payload(payload)
+            # Prefer serialized evidence_package.values when present (same dict shown to LLM).
+            ep = payload.get("evidence_package") or {}
+            if ep.get("values"):
+                from decimal import Decimal
+
+                from app.services.commentary.claim_verify import _to_decimal
+
+                merged = dict(evidence_values)
+                for k, v in (ep.get("values") or {}).items():
+                    num = _to_decimal(v)
+                    if num is not None:
+                        merged[str(k)] = num
+                evidence_values = merged
+
+            commentary, claim_result = verify_nested_commentary_strings(
+                commentary, evidence_values
+            )
+            if not claim_result.ok:
+                logger.warning(
+                    "P15 MD&A claim-verify stripped/omitted unverifiable claims: %s",
+                    claim_result.summary(),
+                )
+            # If every variance cell was wiped to don't-know after inventing numbers, block emit.
+            vc = commentary.get("variance_commentary") or {}
+            dont_know_marker = "could not be verified against engine evidence"
+            vc_texts = []
+            for row in vc.values():
+                if isinstance(row, dict):
+                    vc_texts.extend(str(v) for v in row.values() if isinstance(v, str))
+            if vc_texts and all(dont_know_marker in t for t in vc_texts):
+                raise CommentaryIntegrityError(
+                    "P15 fail-closed: MD&A variance commentary had no verifiable numeric claims; "
+                    "blocking package emit. " + claim_result.summary(),
+                    result=claim_result,
+                )
+
             payload_warnings = payload.get("payload_warnings") or []
             if payload_warnings:
                 logger.warning("MDA package payload warnings: %s", "; ".join(payload_warnings))
