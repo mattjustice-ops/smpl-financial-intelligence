@@ -60,8 +60,11 @@ def build_prompt2_user_message(
         "Be comprehensive: cover each payload row with specific, board-ready commentary — "
         "do not shorten into generic summaries.\n"
         "Use only metrics present in the payload — never invent dollars or percentages.\n"
+        "Cite each material dollar/percent with a _sources key, table.column, formula_id, "
+        "or ENGINE_PATH — e.g. '$110,000 (mrr_waterfall.ending_mrr)'.\n"
         "Causal / attribution language may only name drivers in "
-        "attribution_package.allowed_drivers; if that list is empty, restate metrics "
+        "attribution_package.allowed_drivers; multi-driver 'and'/comma lists require "
+        "every named driver allowlisted; if that list is empty, restate metrics "
         "without inventing causes.\n\n"
         f"{freeze_block}"
         f"DATA PAYLOAD (JSON):\n{json.dumps(payload, separators=(',', ':'))}"
@@ -163,8 +166,12 @@ def build_claude_mda_package_xlsx_bytes(
                 raise_if_attribution_fully_unverifiable,
                 verify_nested_commentary_attribution,
             )
+            from app.services.commentary.citation_verify import (
+                verify_nested_commentary_citations,
+            )
             from app.services.commentary.claim_verify import (
                 CommentaryIntegrityError,
+                attach_sources_to_values,
                 verify_nested_commentary_strings,
             )
 
@@ -219,6 +226,42 @@ def build_claude_mda_package_xlsx_bytes(
                     attr_result.summary(),
                 )
             raise_if_attribution_fully_unverifiable(commentary, attr_result)
+
+            # Post-LLM citation check: material $/% must cite _sources keys.
+            sources = ep.get("_sources") if isinstance(ep, dict) else None
+            if not isinstance(sources, dict) or not sources:
+                sources = attach_sources_to_values(
+                    {k: str(v) for k, v in evidence_values.items()},
+                    period_label=str(
+                        payload.get("close_period_label")
+                        or payload.get("close_period")
+                        or ""
+                    )
+                    or None,
+                    org_id=(str(ep.get("org_id") or "") or None) if isinstance(ep, dict) else None,
+                    loaded_at=(str(ep.get("loaded_at") or "") or None) if isinstance(ep, dict) else None,
+                    is_final=ep.get("is_final") if isinstance(ep, dict) else None,
+                )
+            commentary, cite_result = verify_nested_commentary_citations(
+                commentary, sources
+            )
+            if not cite_result.ok:
+                logger.warning(
+                    "P15 MD&A citation-verify stripped/omitted uncited claims: %s",
+                    cite_result.summary(),
+                )
+            cite_marker = "without a verifiable _sources citation"
+            cite_texts = []
+            vc_after = commentary.get("variance_commentary") or {}
+            for row in vc_after.values():
+                if isinstance(row, dict):
+                    cite_texts.extend(str(v) for v in row.values() if isinstance(v, str))
+            if cite_texts and all(cite_marker in t for t in cite_texts):
+                raise CommentaryIntegrityError(
+                    "P15 fail-closed: MD&A variance commentary had no verifiable "
+                    "_sources citations; blocking package emit. "
+                    + cite_result.summary(),
+                )
 
             payload_warnings = payload.get("payload_warnings") or []
             if payload_warnings:

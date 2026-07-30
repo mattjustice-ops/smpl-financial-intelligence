@@ -144,8 +144,8 @@ def test_generate_commentary_embeds_evidence_and_strips_invented() -> None:
         "period_label": "May 2026",
         "executive_summary": {
             "title": "Executive Summary",
-            "narrative": "Ending MRR closed at $110,000.",
-            "citations": [{"label": "ending_mrr", "value": "$110,000"}],
+            "narrative": "Ending MRR closed at $110,000 (mrr_waterfall.ending_mrr).",
+            "citations": [{"label": "mrr_waterfall.ending_mrr", "value": "$110,000"}],
         },
         "revenue_commentary": {
             "title": "Revenue",
@@ -154,8 +154,8 @@ def test_generate_commentary_embeds_evidence_and_strips_invented() -> None:
         },
         "mrr_waterfall_commentary": {
             "title": "MRR",
-            "narrative": "NRR of 1.05 on ending MRR $110,000.",
-            "citations": [],
+            "narrative": "NRR of 1.05 on ending MRR $110,000 (mrr_waterfall.ending_mrr).",
+            "citations": [{"label": "mrr_waterfall.ending_mrr", "value": "$110,000"}],
         },
         "bookings_forecast_commentary": {
             "title": "Bookings",
@@ -362,5 +362,7 @@ def test_evidence_package_attaches_sources_for_commentary_and_prompt() -> None:
     prompt_pkg = evidence_package_for_prompt(pkg)
     assert "_sources" in prompt_pkg
     assert prompt_pkg["_sources"]["mrr_waterfall.ending_mrr"]["table"] == "mrr_waterfall"
-    assert "Cite _sources" in (prompt_pkg.get("policy") or "")
+    assert "Cite" in (prompt_pkg.get("policy") or "")
+    for key in ("org_id", "loaded_at", "is_final"):
+        assert key in sources["mrr_waterfall.ending_mrr"]
 

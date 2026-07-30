@@ -24,7 +24,13 @@ from typing import Any, Iterable, Literal, Mapping, Sequence
 from app.services.commentary.claim_verify import CommentaryIntegrityError
 from app.services.commentary.schemas import CommentaryInputs, CommentaryOutput
 
-AttributionStatus = Literal["pass", "off_allowlist", "empty_allowlist", "unnamed_driver"]
+AttributionStatus = Literal[
+    "pass",
+    "off_allowlist",
+    "empty_allowlist",
+    "unnamed_driver",
+    "partial_allowlist",
+]
 
 DONT_KNOW_ATTRIBUTION = (
     "I don't know — one or more causal / driver claims in this section could not be "
@@ -333,6 +339,36 @@ def _phrase_matches_driver(phrase: str, driver: AllowedDriver) -> bool:
     return False
 
 
+def _split_driver_conjuncts(phrase: str) -> list[str]:
+    """Split multi-driver phrases joined by ``and`` / commas into named parts."""
+    raw = (phrase or "").strip()
+    if not raw:
+        return []
+    parts = re.split(r"\s+and\s+|\,\s*(?:and\s+)?", raw, flags=re.IGNORECASE)
+    cleaned: list[str] = []
+    for part in parts:
+        c = _clean_phrase(part)
+        if len(c) < 2:
+            continue
+        if not re.search(r"[A-Za-z]{3,}", c):
+            continue
+        cleaned.append(c)
+    if cleaned:
+        return cleaned
+    fallback = _clean_phrase(raw)
+    return [fallback] if fallback else []
+
+
+def _match_single_phrase(
+    phrase: str,
+    allowlist: Sequence[AllowedDriver],
+) -> str | None:
+    for driver in allowlist:
+        if _phrase_matches_driver(phrase, driver):
+            return driver.id
+    return None
+
+
 def _match_claim(
     claim: AttributionClaim,
     allowlist: Sequence[AllowedDriver],
@@ -340,13 +376,41 @@ def _match_claim(
     if not allowlist:
         return AttributionCheck(claim=claim, status="empty_allowlist")
 
-    for driver in allowlist:
-        if _phrase_matches_driver(claim.phrase, driver):
+    parts = _split_driver_conjuncts(claim.phrase)
+    # Multi-driver "and"/comma lists: EVERY named driver must be allowlisted.
+    if len(parts) > 1:
+        matched_ids: list[str] = []
+        unmatched: list[str] = []
+        for part in parts:
+            hit = _match_single_phrase(part, allowlist)
+            if hit:
+                matched_ids.append(hit)
+            else:
+                unmatched.append(part)
+        if not unmatched:
             return AttributionCheck(
                 claim=claim,
                 status="pass",
-                matched_driver_id=driver.id,
+                matched_driver_id="+".join(matched_ids),
             )
+        if matched_ids:
+            return AttributionCheck(
+                claim=claim,
+                status="partial_allowlist",
+                matched_driver_id="+".join(matched_ids),
+            )
+        if not re.search(r"[A-Za-z]{3,}", claim.phrase):
+            return AttributionCheck(claim=claim, status="unnamed_driver")
+        return AttributionCheck(claim=claim, status="off_allowlist")
+
+    phrase = parts[0] if parts else claim.phrase
+    hit = _match_single_phrase(phrase, allowlist)
+    if hit:
+        return AttributionCheck(
+            claim=claim,
+            status="pass",
+            matched_driver_id=hit,
+        )
 
     # Extremely vague phrases with no noun substance → unnamed.
     if not re.search(r"[A-Za-z]{3,}", claim.phrase):
@@ -483,6 +547,8 @@ def build_attribution_package(
         ],
         "policy": (
             "May only name drivers whose id/label/aliases appear in allowed_drivers. "
+            "When a causal phrase joins multiple drivers with 'and' or commas, "
+            "EVERY named driver must be on the allowlist (not just one). "
             "Empty allowlist means no causal claims are permitted. "
             "Numeric claims still governed by claim_verify TOL_ACTUALS=$1.00."
         ),
@@ -1457,6 +1523,7 @@ def attribution_package_for_prompt(package: Mapping[str, Any] | None) -> dict[st
         "policy": package.get("policy")
         or (
             "May only name drivers whose id/label/aliases appear in allowed_drivers. "
+            "Multi-driver 'and'/comma lists require EVERY named driver on the allowlist. "
             "Empty allowlist means no causal claims are permitted."
         ),
     }
