@@ -1,7 +1,7 @@
 # P15 AI claim-verify — coverage checklist (founder review)
 
 > **Not SOC 2 certification.** Product integrity gate for AI-stated numbers vs engine evidence.  
-> **Branch note:** numeric claim-verify merged via PR #55 (`main`). Attribution v1 (commentary + Prompt 2) via PR #56; remaining-path wire via PR #57; Copilot structured + FE↔Board via PR #58. This branch: `_sources` on evidence packages + richer drivers + FE hydrate residue fix.  
+> **Branch note:** numeric claim-verify merged via PR #55 (`main`). Attribution via PR #56–#58; `_sources` + drivers + hydrate residue via PR #59. This branch: **DOM `data-source` overlay + partial client `runTieOut` publish gate** (Board/FE UI).  
 > **Policy:** [P15 §4.7 / §4.8](../policies/P15_ai_llm_data_handling.md) · **Status snapshot:** [README.md](./README.md)  
 > **Non-numeric drivers:** [ai_attribution_verify.md](./ai_attribution_verify.md)
 
@@ -55,10 +55,11 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | Prompt 5 deck generation | **Live (hard block)** | String-literal $/%/Nx vs deck payload; invent → block emit. Chart array / layout coords not scanned |
 | Board slide regenerate | **Live (soft strip)** | Per-bullet don't-know; all-unverifiable → don't-know narrative |
 | Copilot / chat paths | **Live (structured + blob supplement)** | Evidence/attribution from bundle/TS/cash (+ frozen packages); fail-closed don't-know |
-| `_sources` on evidence packages | **Live (v1 contract)** | Catalog + ENGINE_PATH on primary package builders; freeze persists `_sources`. **Not** DOM `data-source` overlay; **not** full warehouse `loaded_at` / `org_id` / `is_final` on every row |
+| `_sources` on evidence packages | **Live (v1 contract)** | Catalog + ENGINE_PATH on primary package builders; freeze persists `_sources`. DOM overlay consumes when hydrate includes `_sources`; **not** full warehouse `loaded_at` / `org_id` / `is_final` on every row |
 | Driver / attribution claim verify (non-numeric) | **Live (primary paths)** | Deal-count / logo / dominance enrichment — see [ai_attribution_verify.md](./ai_attribution_verify.md) |
 | Production FE↔Board single-source | **Confirmed + hydrate residue fix** | Shared outlook API/builder; merge replace + prune closed Actuals — [fe_board_single_source.md](./fe_board_single_source.md) |
-| DOM `data-source` + full `runTieOut()` A–F publish gate | **Open** | See framework + tie-out prompt |
+| DOM `data-source` + audit overlay | **Partial — live (UI)** | Board/FE KPIs via `smpl-provenance.js`; prefers hydrate `_sources` when present; catalog fallback; `Ctrl+Shift+A` — [fe_board_single_source.md](./fe_board_single_source.md) |
+| Client `runTieOut()` publish gate | **Partial — live (Rule C/A)** | TS↔SRC Actuals + ARR identities; live FAIL blocks MD&A export + FINAL forecast promote; **not** full Rule Sets A–F |
 
 ---
 
@@ -84,14 +85,15 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | `backend/tests/test_commentary_service.py` | Sparse inputs + invented dollars → don't-know; evidence package in prompt |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | Production outlook `TS_DATA.Actual` ↔ `SRC.actuals` within $1; divergence / one-side-missing fail |
 | `frontend/scripts/verify-outlook-hydrate.mjs` | Partial live hydrate replaces period rows + prunes closed demo Actual residue (no reseed) |
+| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source` attrs from catalog/`_sources`; annotateDom; runTieOut pass/fail; live gate blocks / demo warns |
 
 ---
 
 ## 6. Matt review checklist
 
 - [ ] Confirm live paths match product risk: commentary generate + MD&A Prompt 2 + Prompt 5 + board regenerate + Copilot structured packages for this increment
-- [ ] Confirm `_sources` v1 (catalog + ENGINE_PATH; no DOM overlay yet) is the right next step
-- [ ] Confirm remaining open items (DOM `data-source`, full warehouse loaded_at/org_id) are acceptable follow-ups
+- [ ] Confirm DOM overlay + partial client tie-out gate match product risk for this increment
+- [ ] Confirm remaining open items (full Rule Sets A–F, warehouse loaded_at/org_id on every tag) are acceptable follow-ups
 - [ ] Confirm **$1.00** actuals bar stays non-negotiable
 - [ ] Confirm fail-closed semantics: soft strip vs hard block (`CommentaryIntegrityError`) are correct per surface
 - [x] Wire Prompt 5 deck generation and Board slide regenerate to claim_verify.py
@@ -107,16 +109,20 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 - [x] Merge `feat/p15-attribution-verify` (PR #56)
 - [x] Merge `feat/p15-attribution-wire-remaining` (PR #57)
 - [x] Merge `feat/p15-copilot-evidence-fe-board-source` (PR #58)
+- [x] Merge `feat/p15-sources-drivers-hydrate` (PR #59)
+- [x] DOM `data-source` overlay + audit hotkey on Board/FE material KPIs
+- [x] Partial client `runTieOut` publish gate (live export / FINAL promote)
 
 ---
 
-### Honesty — `_sources` v1 not wired
+### Honesty — DOM overlay + partial gate (this increment)
 
 | Wired | Not wired |
 |-------|-----------|
-| `_sources` map on `build_evidence_package` / Copilot structured packages / freeze `sections.evidence_package` | DOM `data-source` attributes + audit overlay |
-| WAREHOUSE table/column catalog for common IS/BS/CFS/ARR/MRR/cash leaves | Full warehouse `loaded_at`, `org_id`, `is_final` on every tag |
-| COMPUTED formula_id for known derived metrics (NRR, GM%, net new, opex sum) | Per-visual tie-out publish gate (Rule Sets A–F) |
+| `_sources` map on evidence packages + freeze | Full warehouse `loaded_at`, `org_id`, `is_final` on every tag |
+| DOM `data-source` / title / aria on Board + FE material KPIs; audit overlay hotkey | Every chart datapoint / commentary number tagged |
+| Client catalog fallback when hydrate omits `_sources` | Outlook API always emitting `_sources` for UI (consumes when present) |
+| Partial `runTieOut` Rule C + ARR A2/A3; live FAIL blocks MD&A export + FINAL promote | Full Rule Sets A–F + HTML warehouse tie-out report as publish gate |
 | ENGINE_PATH fallback so every value remains citable by dotted key | Automatic citation enforcement in post-LLM verify (verify still matches **values**, not source strings) |
 
 ---

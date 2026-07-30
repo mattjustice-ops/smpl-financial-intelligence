@@ -293,6 +293,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
+<script src="/shared/smpl-provenance.js?v=1"></script>
 <script src="/shared/board-data.js?v=8"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -522,6 +523,17 @@ const fV = v => {
 const fP = (v,b) => b ? ((v-b)/Math.abs(b)*100).toFixed(1)+'%' : '—';
 const vCls = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'vpos':'vneg';
 const vSign = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'pos':'neg';
+/** Provenance attrs for material metrics (data-source / title / aria). */
+function ds(metricKey) {
+  return (window.SMPLProvenance && typeof SMPLProvenance.attrString === 'function')
+    ? SMPLProvenance.attrString(metricKey)
+    : 'data-metric="' + metricKey + '"';
+}
+function boardAnnotateProvenance(root) {
+  if (window.SMPLProvenance && typeof SMPLProvenance.annotateDom === 'function') {
+    try { SMPLProvenance.annotateDom(root || document); } catch (e) { /* non-fatal */ }
+  }
+}
 
 function destroyCharts() { Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}}); charts={}; }
 
@@ -547,6 +559,7 @@ function show(name, btn) {
   area.innerHTML = '';
   const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot};
   if(renders[name]) renders[name](area);
+  boardAnnotateProvenance(area);
   if (name === 'pl' || name === 'threestmt') return;
   scheduleChartBuild(name, 50);
 }
@@ -595,10 +608,10 @@ function renderExec(area) {
 
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px">
     ${[
-      {lbl:'Ending ARR',     val:fM1(k.arrEop),   delta:arrVarLbl, dir:k.arrVar>=0?'pos':'neg', because:'Best net new ARR month of H1 — new logos + expansion both beat plan', link:'View waterfall →', tab:'arr'},
-      {lbl:'Net New ARR',    val:nnRoot,          delta:nnVarLbl, dir:k.nnVar>=0?'pos':'neg', because:'New business '+fM1(drivers[0]?.val)+' and expansion '+fM1(drivers[1]?.val)+' drove outperformance', link:'View driver tree →', tab:'arr'},
-      {lbl:'EBITDA',         val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:(k.ebitdaAct-k.ebitdaBud)<0?'neg':'pos', because:'Q2 variable comp accrual timing — underlying operating leverage is intact; normalizes Q3', link:'View P&L →', tab:'pl'},
-      {lbl:'Cash Balance',   val:fM1(k.cashAct),  delta:cashVarLbl, dir:(k.cashAct-k.cashBud)>=0?'pos':'neg', because:'Annual billing collection cycle front-loaded; favorable variance reflects billing structure', link:'View cash →', tab:'cash'},
+      {lbl:'Ending ARR',     metric:'ending_arr', val:fM1(k.arrEop),   delta:arrVarLbl, dir:k.arrVar>=0?'pos':'neg', because:'Best net new ARR month of H1 — new logos + expansion both beat plan', link:'View waterfall →', tab:'arr'},
+      {lbl:'Net New ARR',    metric:'net_new_arr', val:nnRoot,          delta:nnVarLbl, dir:k.nnVar>=0?'pos':'neg', because:'New business '+fM1(drivers[0]?.val)+' and expansion '+fM1(drivers[1]?.val)+' drove outperformance', link:'View driver tree →', tab:'arr'},
+      {lbl:'EBITDA',         metric:'ebitda', val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:(k.ebitdaAct-k.ebitdaBud)<0?'neg':'pos', because:'Q2 variable comp accrual timing — underlying operating leverage is intact; normalizes Q3', link:'View P&L →', tab:'pl'},
+      {lbl:'Cash Balance',   metric:'cash', val:fM1(k.cashAct),  delta:cashVarLbl, dir:(k.cashAct-k.cashBud)>=0?'pos':'neg', because:'Annual billing collection cycle front-loaded; favorable variance reflects billing structure', link:'View cash →', tab:'cash'},
     ].map(h=>`
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px">
       <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.lbl}</div>
@@ -606,7 +619,7 @@ function renderExec(area) {
         <span style="font-size:10px;font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.dir==='pos'?'▲':'▼'}</span>
         <span style="font-size:10px;font-family:var(--mono);font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.delta}</span>
       </div>
-      <div style="font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--text);line-height:1">${h.val}</div>
+      <div class="kpi-val" ${ds(h.metric)} style="font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--text);line-height:1">${h.val}</div>
       <div style="font-size:10px;color:var(--text3);line-height:1.5;border-top:0.5px solid var(--border);padding-top:7px;margin-top:2px">${h.because}</div>
       <div style="font-size:10px;color:var(--accent);cursor:pointer;font-weight:500" onclick="boardExecNav('${h.tab}')" role="link" tabindex="0">${h.link}</div>
     </div>`).join('')}
@@ -627,7 +640,7 @@ function renderExec(area) {
       <!-- Root -->
       <div style="flex-shrink:0;text-align:center;padding-right:20px;border-right:0.5px solid var(--border)">
         <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px">Net New ARR</div>
-        <div style="font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--teal)">${nnRoot}</div>
+        <div class="kpi-val" ${ds('net_new_arr')} style="font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--teal)">${nnRoot}</div>
         <div style="font-size:10px;color:${nnVarClr};font-weight:600;margin-top:2px">${nnVarLbl.replace(' vs bud',' vs budget')}</div>
       </div>
       <!-- Drivers -->
@@ -813,11 +826,11 @@ function renderARR(area) {
   <div class="slide-title">ARR / MRR Waterfall</div>
   <div class="slide-sub">Actual vs Budget · Net New ARR components · Ending ARR trend</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Ending ARR</div><div class="kpi-val">${fM1(k.eop||0)}</div><div class="kpi-delta ${k.eopVar>=0?'pos':'neg'}">${k.eopVar!=null?fV1(k.eopVar):'—'} vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Net New ARR</div><div class="kpi-val">${fM1(k.nn||0)}</div><div class="kpi-delta ${k.nnVar>=0?'pos':'neg'}">${k.nnVar!=null?fV1(k.nnVar):'—'} vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">New Business</div><div class="kpi-val">${fM1(k.nb||0)}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">Expansion ARR</div><div class="kpi-val">${fM1(k.exp||0)}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">Beginning ARR</div><div class="kpi-val">${fM1(k.bop||0)}</div><div class="kpi-delta neu">${CLOSE_MO} BOP</div></div>
+    <div class="kpi"><div class="kpi-lbl">Ending ARR</div><div class="kpi-val" ${ds('ending_arr')}>${fM1(k.eop||0)}</div><div class="kpi-delta ${k.eopVar>=0?'pos':'neg'}">${k.eopVar!=null?fV1(k.eopVar):'—'} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Net New ARR</div><div class="kpi-val" ${ds('net_new_arr')}>${fM1(k.nn||0)}</div><div class="kpi-delta ${k.nnVar>=0?'pos':'neg'}">${k.nnVar!=null?fV1(k.nnVar):'—'} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">New Business</div><div class="kpi-val" ${ds('new_business')}>${fM1(k.nb||0)}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">Expansion ARR</div><div class="kpi-val" ${ds('expansion')}>${fM1(k.exp||0)}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">Beginning ARR</div><div class="kpi-val" ${ds('beginning_arr')}>${fM1(k.bop||0)}</div><div class="kpi-delta neu">${CLOSE_MO} BOP</div></div>
   </div>
   <div class="two-col">
     <div class="card">
@@ -871,11 +884,11 @@ function renderRevenue(area) {
   <div class="slide-title">Revenue &amp; ARR</div>
   <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs Budget · Jan – June 2026</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Jun Revenue</div><div class="kpi-val">${fM1(rk.rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val">${fM1(rk.ytdRev)}</div><div class="kpi-delta ${ytdVar>=0?'pos':'neg'}">${ytdVar!=null?fV1(ytdVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val">${rk.gm!=null?rk.gm.toFixed(1)+'%':'—'}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR (Ending)</div><div class="kpi-val">${fM1(rk.arrEop)}</div><div class="kpi-delta ${arrVar>=0?'pos':'neg'}">${arrVar!=null?fV1(arrVar)+' vs budget':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val">${rk.nrr!=null?rk.nrr.toFixed(1)+'%':'—'}</div><div class="kpi-delta pos">↑ improving</div></div>
+    <div class="kpi"><div class="kpi-lbl">Jun Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.ytdRev)}</div><div class="kpi-delta ${ytdVar>=0?'pos':'neg'}">${ytdVar!=null?fV1(ytdVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val" ${ds('gross_margin_pct')}>${rk.gm!=null?rk.gm.toFixed(1)+'%':'—'}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR (Ending)</div><div class="kpi-val" ${ds('ending_arr')}>${fM1(rk.arrEop)}</div><div class="kpi-delta ${arrVar>=0?'pos':'neg'}">${arrVar!=null?fV1(arrVar)+' vs budget':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val" ${ds('nrr')}>${rk.nrr!=null?rk.nrr.toFixed(1)+'%':'—'}</div><div class="kpi-delta pos">↑ improving</div></div>
   </div>
   <div class="two-col">
     <div class="card">
@@ -972,7 +985,7 @@ function renderCash(area) {
   <div class="slide-title">Cash Forecast &amp; Liquidity</div>
   <div class="slide-sub">Collections → Operating Outflows → Ending Cash · Actual vs Budget · Jan – ${CLOSE_MO} ${cm.slice(0,4)}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Ending Cash</div><div class="kpi-val">${fM1(cashEnd)}</div><div class="kpi-delta ${cashEnd>=cashBud?'pos':'neg'}">${cashBud!=null?fV1(cashEnd-cashBud):'—'} vs budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Ending Cash</div><div class="kpi-val" ${ds('ending_cash')}>${fM1(cashEnd)}</div><div class="kpi-delta ${cashEnd>=cashBud?'pos':'neg'}">${cashBud!=null?fV1(cashEnd-cashBud):'—'} vs budget</div></div>
     <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Collections</div><div class="kpi-val">${fM1(collJun)}</div><div class="kpi-delta pos">${collMay!=null?'vs '+fM1(collMay)+' prior mo':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">Cash vs Floor</div><div class="kpi-val">$56.0M</div><div class="kpi-delta pos">Floor: $10M</div></div>
     <div class="kpi"><div class="kpi-lbl">Runway</div><div class="kpi-val">&gt;24 mo</div><div class="kpi-delta pos">well-capitalized</div></div>
@@ -1019,10 +1032,10 @@ function renderPL(area) {
   <div class="slide-title">Management P&amp;L</div>
   <div class="slide-sub">GL-level drilldown · Actual vs Budget vs Forecast · Click ▶ rows to expand account detail</div>
   <div class="kpi-strip kpi-strip-4">
-    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val">${fM1(pk.rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fM1(pk.gp)}</div><div class="kpi-delta neu">${pk.gm!=null?'Margin '+pk.gm.toFixed(1)+'%':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val">${fM1(pk.opex)}</div><div class="kpi-delta ${opexVar<=0?'pos':'neg'}">${opexVar!=null?fV1(opexVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val">${fM1(pk.ebitda)}</div><div class="kpi-delta ${ebitdaVar>=0?'pos':'neg'}">${ebitdaVar!=null?fV1(ebitdaVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(pk.rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val" ${ds('gross_profit')}>${fM1(pk.gp)}</div><div class="kpi-delta neu">${pk.gm!=null?'Margin '+pk.gm.toFixed(1)+'%':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val" ${ds('total_opex')}>${fM1(pk.opex)}</div><div class="kpi-delta ${opexVar<=0?'pos':'neg'}">${opexVar!=null?fV1(opexVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val" ${ds('ebitda')}>${fM1(pk.ebitda)}</div><div class="kpi-delta ${ebitdaVar>=0?'pos':'neg'}">${ebitdaVar!=null?fV1(ebitdaVar)+' vs bud':'—'}</div></div>
   </div>
   <div class="subnav">
     <button class="snav-btn on" onclick="showPLView('summary',this)">P&L Summary</button>
@@ -3370,7 +3383,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=30"></script>
+<script src="/shared/board-hydrate.js?v=31"></script>
 
 </body>
 </html>
