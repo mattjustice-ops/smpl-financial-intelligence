@@ -348,6 +348,18 @@ def build_prompt5_user_message(
         ),
     )
 
+    from app.services.reporting.export.board_platform_metrics import evidence_values_from_deck_payload
+
+    evidence_values = evidence_values_from_deck_payload(payload)
+    evidence_preview = {
+        k: str(v) for k, v in list(evidence_values.items())[:400]
+    }
+    evidence_block = (
+        "EVIDENCE PACKAGE (P15 — every customer-visible $ / % / Nx in the script must "
+        f"match these values within TOL_ACTUALS=$1.00):\n"
+        f"{json.dumps(evidence_preview, separators=(',', ':'))}\n\n"
+    )
+
     return (
         "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"
         "Follow the per-slide layout assignments in the system prompt exactly.\n"
@@ -355,6 +367,7 @@ def build_prompt5_user_message(
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers verbatim.\n\n"
         f"{freeze_block}"
+        f"{evidence_block}"
         f"PERIOD CONTEXT\n"
         f"Close period: {pc['close_period_label']}\n"
         f"Quarter: {pc['quarter']}\n"
@@ -631,11 +644,25 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
         return pptx_bytes, prepared
 
 
+def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> None:
+    """P15 hard block: invented display $ / % in PPTX script string literals."""
+    from app.services.commentary.claim_verify import verify_pptx_script_against_evidence
+    from app.services.reporting.export.board_platform_metrics import (
+        evidence_values_from_deck_payload,
+    )
+
+    evidence = evidence_values_from_deck_payload(payload)
+    result = verify_pptx_script_against_evidence(script, evidence, fail_closed=True)
+    if result.ok:
+        logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(result.checks))
+
+
 def _try_adapt_from_reference(
     client: Any,
     *,
     period: str,
     payload_json: str,
+    payload: dict[str, Any] | None = None,
 ) -> tuple[bytes, str] | None:
     """Last-resort: adapt a known-good reference script to the current payload."""
     from app.services.reporting.export.deck_gold import resolve_reference_script
@@ -671,6 +698,8 @@ def _try_adapt_from_reference(
         raise RuntimeError(
             f"Adapt fallback incomplete ({len(script_text)} chars, no pptx.writeFile)"
         )
+    if payload is not None:
+        _verify_prompt5_script_or_raise(script_text, payload)
     pptx_bytes, _ = _render_prepared_script(script_text, period=period)
     return pptx_bytes, f"claude_adapt_{kind or 'bundled'}"
 
@@ -687,6 +716,8 @@ def build_claude_deck_pptx_bytes(
     freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
     """Prompt 5: adapt known-good layout first; fresh Claude script only if needed."""
+    from app.services.commentary.claim_verify import CommentaryIntegrityError
+
     client = build_commentary_llm_client(purpose="export")
     if not hasattr(client, "generate_text"):
         raise RuntimeError("Configured LLM client does not support raw text generation.")
@@ -699,11 +730,14 @@ def build_claude_deck_pptx_bytes(
     # more reliable than 3 fresh layout regenerations (which blow the 10–15 min UI budget).
     try:
         adapted = _try_adapt_from_reference(
-            client, period=bundle.as_of_period, payload_json=payload_json
+            client,
+            period=bundle.as_of_period,
+            payload_json=payload_json,
+            payload=payload,
         )
         if adapted is not None:
             return adapted
-    except RuntimeError as adapt_exc:
+    except (RuntimeError, CommentaryIntegrityError) as adapt_exc:
         last_error = str(adapt_exc)
         logger.warning("Prompt 5 adapt-first failed: %s", adapt_exc)
 
@@ -749,11 +783,12 @@ def build_claude_deck_pptx_bytes(
                 logger.error(last_error)
                 continue
 
+            _verify_prompt5_script_or_raise(script_text, payload)
             pptx_bytes, _ = _render_prepared_script(
                 script_text, period=bundle.as_of_period
             )
             return pptx_bytes, "claude_prompt5"
-        except RuntimeError as exc:
+        except (RuntimeError, CommentaryIntegrityError) as exc:
             last_error = str(exc)
             logger.warning("Prompt 5 deck attempt %s failed: %s", attempt + 1, last_error)
             if script_text:

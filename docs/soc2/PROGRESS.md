@@ -486,9 +486,12 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 1. Reusable helper `backend/app/services/commentary/claim_verify.py` — extract material numeric claims; verify vs evidence package; TOL_ACTUALS **$1.00**; fail-closed omit / don't-know
 2. **Live on** `/api/v1/commentary/generate` — evidence package in prompt + post-LLM verify + strip unsupported sections
 3. **Live on** MD&A Prompt 2 package path — matrix mismatch hard-blocks emit; post-LLM strip of unverifiable commentary cells; all-unverifiable variance sheet blocks emit
-4. Honest status: [controls/README.md](./controls/README.md) — board slide regenerate / Prompt 5 / Copilot still follow-ups; full `_sources` contract still roadmap
-5. Founder coverage checklist: [controls/ai_claim_verify.md](./controls/ai_claim_verify.md)
-6. Demo Board/FE seed financials **unchanged**
+4. **Live on** Prompt 5 deck — evidence in prompt; post-LLM hard-block on invented $/% in PPTX string literals
+5. **Live on** board slide regenerate — per-bullet soft strip / don't-know
+6. **Partial** Copilot — thin wire vs metrics/freeze text-blob numbers (not full `_sources`)
+7. Attribution design (not coded): [controls/ai_attribution_verify.md](./controls/ai_attribution_verify.md); Guarantee 4 corrected to machine-primary
+8. Founder coverage checklist: [controls/ai_claim_verify.md](./controls/ai_claim_verify.md)
+9. Demo Board/FE seed financials **unchanged**
 
 ---
 

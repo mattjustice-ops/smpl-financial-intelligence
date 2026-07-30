@@ -205,3 +205,54 @@ def test_variance_tieout_fail_closed_on_mismatch() -> None:
     assert any(" != " in w for w in soft)
     with pytest.raises(CommentaryIntegrityError, match="fail-closed"):
         verify_variance_commentary_tieout(display, matrix, fail_closed=True)
+
+
+def test_pptx_script_string_literals_pass_and_invented_hard_blocks() -> None:
+    from app.services.commentary.claim_verify import verify_pptx_script_against_evidence
+
+    evidence = {"deck.arr": Decimal("86100000"), "deck.gm": Decimal("79.2")}
+    good = 'slide.addText("ARR closed at $86.1M with gross margin 79.2%");'
+    assert verify_pptx_script_against_evidence(good, evidence, fail_closed=False).ok
+
+    bad = 'slide.addText("ARR exploded to $99,000,000 this month.");'
+    with pytest.raises(CommentaryIntegrityError, match="Prompt 5"):
+        verify_pptx_script_against_evidence(bad, evidence, fail_closed=True)
+
+
+def test_pptx_script_ignores_layout_coords_outside_strings() -> None:
+    from app.services.commentary.claim_verify import verify_pptx_script_against_evidence
+
+    evidence = {"deck.arr": Decimal("86100000")}
+    # Bare layout numbers must not be treated as customer claims.
+    script = "const x = 0.35; const y = 1.25; slide.addText('ARR $86.1M');"
+    result = verify_pptx_script_against_evidence(script, evidence, fail_closed=False)
+    assert result.ok
+
+
+def test_apply_fail_closed_to_bullet_list() -> None:
+    from app.services.commentary.claim_verify import apply_fail_closed_to_bullet_list
+
+    evidence = {"slide.metrics.arr": Decimal("110000")}
+    bullets, result = apply_fail_closed_to_bullet_list(
+        [
+            "Ending ARR closed at $110,000.",
+            "Phantom bookings hit $888,000,000.",
+        ],
+        evidence,
+    )
+    assert not result.ok
+    assert "110,000" in bullets[0]
+    assert bullets[1] == DONT_KNOW_NARRATIVE
+
+
+def test_evidence_values_from_text_blob_allows_context_numbers() -> None:
+    from app.services.commentary.claim_verify import evidence_values_from_text_blob
+
+    blob = "Ending ARR: 86100000\nRevenue was $7,412,000 with GM 79.2%."
+    evidence = evidence_values_from_text_blob(blob)
+    assert evidence
+    ok = verify_text_against_evidence("ARR closed at $86.1M.", evidence)
+    assert ok.ok
+    bad = verify_text_against_evidence("ARR closed at $99,000,000.", evidence)
+    assert not bad.ok
+

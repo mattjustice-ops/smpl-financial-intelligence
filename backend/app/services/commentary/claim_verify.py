@@ -536,6 +536,112 @@ def verify_nested_commentary_strings(
     return rewritten, VerificationResult(checks=all_checks)
 
 
+# JS string literals in PptxGenJS scripts (single- or double-quoted).
+_JS_STRING_RE = re.compile(r"""(['"])(?:\\.|(?!\1).)*?\1""", re.DOTALL)
+# Bare integers / decimals common in freeze / metrics blobs (no $ required).
+_BLOB_NUMBER_RE = re.compile(
+    r"(?<![A-Za-z0-9])(-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+\.\d{2,4}|-?\d{4,})(?!\s*[%Xx])"
+)
+
+
+def extract_js_string_literal_text(script: str) -> str:
+    """Concatenate JS string literal contents for claim extraction (skip layout code)."""
+    if not script:
+        return ""
+    parts: list[str] = []
+    for m in _JS_STRING_RE.finditer(script):
+        raw = m.group(0)
+        # Strip surrounding quotes; unescape common sequences lightly.
+        inner = raw[1:-1]
+        inner = (
+            inner.replace(r"\'", "'")
+            .replace(r'\"', '"')
+            .replace(r"\n", " ")
+            .replace(r"\t", " ")
+        )
+        parts.append(inner)
+    return "\n".join(parts)
+
+
+def evidence_values_from_text_blob(text: str) -> dict[str, Decimal]:
+    """Build an evidence allowlist from a metrics/freeze text blob.
+
+    Used when Copilot (or similar) has prose context rather than structured JSON.
+    Every material numeric token in the blob is treated as allowable evidence.
+    """
+    out: dict[str, Decimal] = {}
+    if not text:
+        return out
+    for i, claim in enumerate(extract_numeric_claims(text)):
+        out[f"blob_claim[{i}].{claim.kind}"] = claim.value
+    for i, m in enumerate(_BLOB_NUMBER_RE.finditer(text)):
+        num = _to_decimal(m.group(1))
+        if num is None:
+            continue
+        # Skip bare calendar years.
+        if num == num.to_integral_value() and _YEAR_RE.match(str(int(num))):
+            continue
+        out[f"blob_num[{i}]"] = num
+    return out
+
+
+def verify_pptx_script_against_evidence(
+    script: str,
+    evidence: Mapping[str, Decimal] | Mapping[str, Any],
+    *,
+    fail_closed: bool = True,
+) -> VerificationResult:
+    """Verify money/%/multiplier claims in PPTX script *string literals* vs evidence.
+
+    Layout coordinates and chart array literals are ignored (they are not customer
+    narrative). Invented display figures in addText / titles are caught.
+    With ``fail_closed=True``, raises ``CommentaryIntegrityError`` on any failure.
+    """
+    display_text = extract_js_string_literal_text(script)
+    # Prefer money / percent / multiplier — drop bare ratio tokens that often appear
+    # as font sizes or layout fractions inside stringified CSS-ish snippets.
+    claims = [
+        c
+        for c in extract_numeric_claims(display_text)
+        if c.kind in ("money", "percent") or (c.kind == "ratio" and "x" in c.stated.lower())
+    ]
+    if hasattr(evidence, "get") and "values_decimal" in evidence:
+        values = evidence_values_from_package(evidence)  # type: ignore[arg-type]
+    else:
+        values = {}
+        for k, v in evidence.items():
+            num = v if isinstance(v, Decimal) else _to_decimal(v)
+            if num is not None:
+                values[str(k)] = num
+
+    checks = [_best_match(claim, values) for claim in claims]
+    result = VerificationResult(checks=checks)
+    if fail_closed and not result.ok:
+        raise CommentaryIntegrityError(
+            "P15 fail-closed: Prompt 5 / PPTX script numeric claims failed evidence verify: "
+            + result.summary(),
+            result=result,
+        )
+    return result
+
+
+def apply_fail_closed_to_bullet_list(
+    bullets: list[str],
+    evidence: Mapping[str, Decimal] | Mapping[str, Any],
+) -> tuple[list[str], VerificationResult]:
+    """Per-bullet don't-know rewrite for board slide regenerate."""
+    all_checks: list[ClaimCheck] = []
+    cleaned: list[str] = []
+    for bullet in bullets:
+        local = verify_text_against_evidence(bullet, evidence)
+        all_checks.extend(local.checks)
+        if local.ok:
+            cleaned.append(bullet)
+        else:
+            cleaned.append(DONT_KNOW_NARRATIVE)
+    return cleaned, VerificationResult(checks=all_checks)
+
+
 class CommentaryIntegrityError(Exception):
     """Raised when fail-closed policy blocks emit entirely (hard gate)."""
 

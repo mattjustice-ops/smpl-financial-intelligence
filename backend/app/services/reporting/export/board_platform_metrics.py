@@ -1113,6 +1113,25 @@ def evidence_values_from_mda_payload(payload: dict[str, Any]) -> dict[str, "Deci
     return parsed
 
 
+def evidence_values_from_deck_payload(payload: dict[str, Any]) -> dict[str, "Decimal"]:
+    """Flatten Prompt 5 / board deck payload numbers into an evidence map."""
+    from decimal import Decimal
+
+    from app.services.commentary.claim_verify import _to_decimal, flatten_evidence_values
+
+    values: dict[str, Decimal] = {}
+    flatten_evidence_values(payload, prefix="deck", out=values)
+    parsed: dict[str, Decimal] = {}
+    for key, val in values.items():
+        if isinstance(val, Decimal):
+            parsed[key] = val
+            continue
+        num = _to_decimal(val)
+        if num is not None:
+            parsed[key] = num
+    return parsed
+
+
 def validate_deck_payload(payload: dict[str, Any]) -> list[str]:
     """Pre-flight warnings before calling Claude."""
     warnings: list[str] = []

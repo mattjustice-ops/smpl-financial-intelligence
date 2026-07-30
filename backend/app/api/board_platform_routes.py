@@ -325,6 +325,31 @@ def board_copilot(
             answer = " ".join(str(v) for v in raw.values() if isinstance(v, str)).strip()
         if not answer:
             raise LLMError("Copilot returned an empty response.")
+
+        # P15 thin wire: verify answer numerics against numbers present in the
+        # metrics/freeze context blob. Not a full structured _sources package —
+        # invented $ / % not in the context → don't-know (fail closed).
+        from app.services.commentary.claim_verify import (
+            DONT_KNOW_NARRATIVE,
+            evidence_values_from_text_blob,
+            fail_closed_text,
+            verify_text_against_evidence,
+        )
+
+        evidence = evidence_values_from_text_blob(metrics_blob)
+        claim_result = verify_text_against_evidence(answer, evidence)
+        if not claim_result.ok:
+            logger.warning(
+                "P15 Copilot claim-verify fail-closed: %s",
+                claim_result.summary(),
+            )
+            answer = fail_closed_text(answer, claim_result)
+            if answer == DONT_KNOW_NARRATIVE:
+                answer = (
+                    "I don't know — one or more numeric claims in this Copilot answer could not "
+                    "be verified against the current metrics package. Unsupported figures were "
+                    "omitted. Ask again with a narrower question, or confirm the figure with Finance."
+                )
     except LLMError as exc:
         reset_usage_context(usage_tokens)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
