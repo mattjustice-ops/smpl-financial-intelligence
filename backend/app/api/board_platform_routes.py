@@ -299,6 +299,11 @@ def board_copilot(
             system_prompt=(
                 "You are SMPL Copilot for a B2B SaaS board platform. "
                 "Answer using ONLY the metrics provided. Never invent numbers. "
+                "Causal / driver claims may only name operational causes that appear as "
+                "canonical bridge or metric labels in the metrics context "
+                "(e.g. expansion, churn, payroll, collections). "
+                "If a cause is not evidenced in the metrics text, omit it or say you don't know — "
+                "do not invent deal-count or channel stories. "
                 "When the question names a month, use that month's sections — especially "
                 "'Monthly operational cash bridges' and 'Monthly Actual trends'. "
                 "Structure every answer in exactly three labeled sections:\n"
@@ -329,6 +334,12 @@ def board_copilot(
         # P15 thin wire: verify answer numerics against numbers present in the
         # metrics/freeze context blob. Not a full structured _sources package —
         # invented $ / % not in the context → don't-know (fail closed).
+        from app.services.commentary.attribution_verify import (
+            DONT_KNOW_ATTRIBUTION,
+            build_attribution_package_from_text_blob,
+            fail_closed_attribution_text,
+            verify_text_attribution,
+        )
         from app.services.commentary.claim_verify import (
             DONT_KNOW_NARRATIVE,
             evidence_values_from_text_blob,
@@ -349,6 +360,26 @@ def board_copilot(
                     "I don't know — one or more numeric claims in this Copilot answer could not "
                     "be verified against the current metrics package. Unsupported figures were "
                     "omitted. Ask again with a narrower question, or confirm the figure with Finance."
+                )
+
+        # P15 thin attribution wire: allowlist = canonical driver labels that
+        # literally appear in the metrics/freeze blob. Weak vs structured
+        # attribution_package — empty/thin allowlist + causal claims → don't-know.
+        attribution = build_attribution_package_from_text_blob(metrics_blob)
+        attr_result = verify_text_attribution(answer, attribution)
+        if not attr_result.ok:
+            logger.warning(
+                "P15 Copilot attribution-verify fail-closed (allowlist_size=%s): %s",
+                attr_result.allowlist_size,
+                attr_result.summary(),
+            )
+            answer = fail_closed_attribution_text(answer, attr_result)
+            if answer == DONT_KNOW_ATTRIBUTION:
+                answer = (
+                    "I don't know — one or more causal / driver claims in this Copilot answer "
+                    "could not be verified against engine-backed labels in the current metrics "
+                    "package. Unsupported attribution was omitted. (Copilot attribution allowlist "
+                    "is thin: only canonical bridge/metric labels present in context text.)"
                 )
     except LLMError as exc:
         reset_usage_context(usage_tokens)

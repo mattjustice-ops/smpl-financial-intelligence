@@ -935,6 +935,12 @@ def enrich_slide_with_ai(
             max_chars_per_bullet=max_chars,
         )
         # P15: post-LLM numeric claim verify against slide payload evidence.
+        from app.services.commentary.attribution_verify import (
+            DONT_KNOW_ATTRIBUTION,
+            apply_fail_closed_attribution_to_bullet_list,
+            build_attribution_package_from_deck_payload,
+            build_attribution_package_from_text_blob,
+        )
         from app.services.commentary.claim_verify import (
             DONT_KNOW_NARRATIVE,
             apply_fail_closed_to_bullet_list,
@@ -953,8 +959,42 @@ def enrich_slide_with_ai(
                 slide_key,
                 claim_result.summary(),
             )
+
+        # Attribution allowlist: prefer structured slide/deck fields; augment with
+        # weak freeze-blob labels when present (honest: blob labels are thin).
+        attribution = build_attribution_package_from_deck_payload(payload)
+        if interactive_freeze:
+            blob_pkg = build_attribution_package_from_text_blob(
+                interactive_freeze, metric="board_slide_freeze_blob"
+            )
+            from app.services.commentary.attribution_verify import normalize_allowlist
+
+            merged = normalize_allowlist(attribution) + normalize_allowlist(blob_pkg)
+            attribution = {
+                **attribution,
+                "allowed_drivers": [
+                    {
+                        "id": d.id,
+                        "label": d.label,
+                        "amount": str(d.amount) if d.amount is not None else None,
+                        "source": d.source,
+                        "aliases": list(d.aliases),
+                    }
+                    for d in {d.id: d for d in merged}.values()
+                ],
+            }
+        bullets, attr_result = apply_fail_closed_attribution_to_bullet_list(
+            bullets, attribution
+        )
+        if not attr_result.ok:
+            logger.warning(
+                "P15 board slide regenerate attribution-verify stripped bullets on %s: %s",
+                slide_key,
+                attr_result.summary(),
+            )
         # If every bullet was wiped, hard-fail closed to don't-know narrative (no invented deck text).
-        if bullets and all(b == DONT_KNOW_NARRATIVE for b in bullets):
+        wiped = {DONT_KNOW_NARRATIVE, DONT_KNOW_ATTRIBUTION}
+        if bullets and all(b in wiped for b in bullets):
             return SlideCommentary(what_happened=DONT_KNOW_NARRATIVE, bullets=[DONT_KNOW_NARRATIVE])
         narrative = format_key_takeaway_bullets(bullets)
         if not narrative:
