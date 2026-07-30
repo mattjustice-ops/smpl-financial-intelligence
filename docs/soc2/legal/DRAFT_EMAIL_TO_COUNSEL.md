@@ -1,8 +1,16 @@
 # Draft email to counsel — Customer DPA / MSA
 
 > **Paste-ready draft for Matt Justice.**  
-> Agent did **not** send this email. Update counsel name, firm, and attachment method before sending.  
+> **Send status: Sent 2026-07-29** — Matt attested send via chat (“send”); agent did **not** email counsel. Counsel firm: **unspecified**.  
 > Not legal advice. Not SOC 2 certified. R16 remains open until a customer-offerable agreement exists.
+
+| Field | Value |
+|-------|--------|
+| Send status | **Sent to counsel 2026-07-29** |
+| Counsel firm | Unspecified |
+| Attestation | Matt via chat; agent did not email |
+| Evidence | [../evidence/dpa-counsel-sent-2026-07-29.md](../evidence/dpa-counsel-sent-2026-07-29.md) |
+| R16 | **Open** — awaiting redline / customer-ready draft |
 
 ---
 
@@ -60,6 +68,6 @@ Optional: P04, P07, P08, P09 if counsel asks for more depth.
 
 ## After you send (Matt)
 
-1. Note date/time sent and counsel firm in [../00_decision_log.md](../00_decision_log.md) (or reply in chat so scoreboard can update).
+1. ~~Note date/time sent and counsel firm in [../00_decision_log.md](../00_decision_log.md)~~ — **done 2026-07-29** (firm left unspecified).
 2. Keep R16 **open** until a customer-offerable draft exists (and until signed for the risk to fully close).
 3. Do not mark “DPA done” on the scoreboard from send alone.

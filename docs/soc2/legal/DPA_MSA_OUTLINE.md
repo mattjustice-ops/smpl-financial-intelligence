@@ -6,23 +6,24 @@
 | Field | Value |
 |-------|--------|
 | Workstream | Customer DPA / MSA (single legal path) — [P10](../policies/P10_risk_assessment.md) **R16** |
-| Status | **Outline + counsel send package ready** — awaiting **Matt send** to counsel; then counsel redline / first customer-ready draft. Email **not** sent by agent. |
+| Status | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Counsel firm: **unspecified**. Matt attested send via chat; agent did **not** email. |
 | Owner (business) | Matt Justice |
 | Send package | [COUNSEL_SEND_PACKAGE.md](./COUNSEL_SEND_PACKAGE.md) · [DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md) |
 | Sources (internal) | P07, P08, P09, P15; [02_subprocessors.md](../02_subprocessors.md); [SECURITY_ONE_PAGER.md](../SECURITY_ONE_PAGER.md); Trust & Security sales KB themes |
 | Created | 2026-07-28 |
 | Package refreshed | 2026-07-29 |
+| Sent to counsel | 2026-07-29 (firm unspecified) |
 | Related scoreboard | [PROGRESS.md](../PROGRESS.md) |
 
 ---
 
 ## How to use this document
 
-1. Matt sends [COUNSEL_SEND_PACKAGE.md](./COUNSEL_SEND_PACKAGE.md) + this outline using [DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md) (Matt sends — agents do not email counsel).
+1. ~~Matt sends [COUNSEL_SEND_PACKAGE.md](./COUNSEL_SEND_PACKAGE.md) + this outline using [DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md)~~ — **Sent 2026-07-29** (Matt attested; agent did not email; firm unspecified).
 2. Counsel turns this outline into a DPA (and MSA pointers / schedules) suitable for US B2B SaaS.
 3. Matt confirms commercial defaults (notice periods, deletion windows, liability caps) before customer negotiation.
 4. Exhibits A/B stay synced with the living subprocessors list and security posture — **do not invent certifications**.
-5. R16 stays **open** until a customer-offerable agreement exists and can be offered / signed — outline + send package alone do **not** close R16.
+5. R16 stays **open** until a customer-offerable agreement exists and can be offered / signed — send alone does **not** close R16.
 
 ---
 
