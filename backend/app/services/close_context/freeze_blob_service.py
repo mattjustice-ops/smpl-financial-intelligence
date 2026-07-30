@@ -167,6 +167,40 @@ def build_and_store_freeze_blob(
     except Exception:
         pass
 
+    # Persist structured packages alongside prose so Copilot freeze path can
+    # verify without re-collecting (commentary/MD&A parity). Not full _sources.
+    evidence_package: dict[str, Any] | None = None
+    attribution_package: dict[str, Any] | None = None
+    try:
+        from app.services.commentary.attribution_verify import (
+            build_attribution_package_from_copilot_structures,
+        )
+        from app.services.commentary.claim_verify import (
+            build_evidence_package_from_copilot_structures,
+        )
+
+        evidence_package = build_evidence_package_from_copilot_structures(
+            bundle=bundle,
+            ts_data=ts_data,
+            cash_bridge_table=cash_bridge_table,
+            metrics_blob=context_text,
+            focus_period=period,
+            freeze_id=f"freeze:{organization_id}:{period}",
+            period_label=period,
+        )
+        # JSONB-safe: drop Decimal map (values string map is enough to rebuild).
+        evidence_package = {
+            k: v for k, v in evidence_package.items() if k != "values_decimal"
+        }
+        attribution_package = build_attribution_package_from_copilot_structures(
+            bundle=bundle,
+            cash_bridge_table=cash_bridge_table,
+            metrics_blob=context_text,
+            focus_period=period,
+        )
+    except Exception:
+        logger.debug("Freeze structured evidence/attribution packages skipped", exc_info=True)
+
     validation_status = None
     validation_check_ids: list[str] = []
     if bundle.validation is not None:
@@ -181,7 +215,7 @@ def build_and_store_freeze_blob(
         except Exception:
             validation_check_ids = []
 
-    sections = {
+    sections: dict[str, Any] = {
         "kpis": True,
         "arr": True,
         "cfs": True,
@@ -189,6 +223,10 @@ def build_and_store_freeze_blob(
         "pipeline": True,
         "validation": validation_status,
     }
+    if evidence_package is not None:
+        sections["evidence_package"] = evidence_package
+    if attribution_package is not None:
+        sections["attribution_package"] = attribution_package
     built_at = _utcnow()
     metadata = {
         "start_period": start_period,
@@ -196,6 +234,8 @@ def build_and_store_freeze_blob(
         "char_count": len(context_text),
         "organization_name": bundle.organization_name,
         "validation_check_ids": validation_check_ids,
+        "has_structured_evidence": evidence_package is not None,
+        "has_structured_attribution": attribution_package is not None,
     }
 
     existing = db.scalars(

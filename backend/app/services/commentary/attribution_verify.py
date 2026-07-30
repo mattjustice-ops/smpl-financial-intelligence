@@ -1048,3 +1048,217 @@ def build_attribution_package_from_text_blob(
             )
 
     return build_attribution_package(metric=metric, drivers=drivers)
+
+
+def merge_attribution_packages(
+    *packages: Mapping[str, Any] | None,
+    metric: str = "copilot_package",
+    period: str | None = None,
+) -> dict[str, Any]:
+    """Union attribution allowlists; first driver id wins."""
+    drivers: list[AllowedDriver] = []
+    seen: set[str] = set()
+    resolved_period = period
+    for pkg in packages:
+        if not pkg:
+            continue
+        if resolved_period is None:
+            resolved_period = str(pkg.get("period") or "") or None
+        for d in normalize_allowlist(pkg):
+            if d.id in seen:
+                continue
+            seen.add(d.id)
+            drivers.append(d)
+    return build_attribution_package(
+        metric=metric,
+        period=resolved_period,
+        drivers=drivers,
+    )
+
+
+def build_attribution_package_from_copilot_structures(
+    *,
+    bundle: Any | None = None,
+    cash_bridge_table: Mapping[str, Any] | None = None,
+    metrics_blob: str | None = None,
+    focus_period: str | None = None,
+) -> dict[str, Any]:
+    """Structured Copilot attribution allowlist from the same freeze/live structures.
+
+    Sources (when present):
+      - comparison_waterfalls ARR / pipeline / cash / deferred component types + amounts
+      - cash_bridge_table field labels for the focus period
+      - marketing channel names on the bundle
+      - thin blob-label catalog as a supplement (legacy freezes)
+
+    Honest gap: not full per-metric ``_sources``; deal-count / named-logo drivers still
+    fail unless they appear as waterfall / pipeline labels.
+    """
+    drivers: list[AllowedDriver] = []
+    period = focus_period
+    seen: set[str] = set()
+
+    def _add(
+        did: str,
+        label: str,
+        *,
+        amount: Any = None,
+        source: str,
+        aliases: Iterable[str] = (),
+    ) -> None:
+        if did in seen:
+            return
+        seen.add(did)
+        drivers.append(
+            _driver(did, label, amount=amount, source=source, aliases=aliases)
+        )
+
+    dump: Mapping[str, Any] = {}
+    if bundle is not None:
+        if hasattr(bundle, "model_dump"):
+            dump = bundle.model_dump(mode="python", exclude_none=True)
+        elif isinstance(bundle, Mapping):
+            dump = bundle
+        period = period or str(dump.get("as_of_period") or "") or None
+
+        waterfalls = dump.get("comparison_waterfalls") or {}
+        if isinstance(waterfalls, Mapping):
+            catalog_by_key = {
+                "arr": _ARR_BRIDGE_LABELS,
+                "pipeline": {
+                    "beginning_pipeline": ("beginning pipeline",),
+                    "pipeline_created": ("pipeline created", "pipeline"),
+                    "closed_won": ("closed won",),
+                    "closed_lost": ("closed lost",),
+                    "slipped_pipeline": ("slipped pipeline", "slipped"),
+                    "ending_pipeline": ("ending pipeline",),
+                },
+                "cash_flow": _CASH_BRIDGE_LABELS,
+                "deferred_revenue": {
+                    "beginning_deferred_revenue": ("beginning deferred revenue",),
+                    "billings": ("billings", "new billings"),
+                    "revenue_recognized": ("revenue recognized",),
+                    "ending_deferred_revenue": ("ending deferred revenue",),
+                },
+            }
+            for wf_key, rows in waterfalls.items():
+                if not isinstance(rows, list):
+                    continue
+                label_map = catalog_by_key.get(str(wf_key), {})
+                for row in rows:
+                    if not isinstance(row, Mapping):
+                        continue
+                    wtype = str(
+                        row.get("waterfall_type") or row.get("type") or ""
+                    ).strip()
+                    if not wtype:
+                        continue
+                    row_period = str(row.get("period") or "")[:7]
+                    if period and row_period and row_period != period:
+                        continue
+                    aliases = label_map.get(wtype, ())
+                    if not aliases:
+                        # Map common ARR short names.
+                        aliases = _ARR_BRIDGE_LABELS.get(wtype, ()) or _MRR_COMPONENT_LABELS.get(
+                            wtype, ()
+                        )
+                    _add(
+                        _slug(wtype),
+                        wtype.replace("_", " ").title(),
+                        amount=row.get("amount"),
+                        source=f"comparison_waterfalls.{wf_key}.{wtype}",
+                        aliases=aliases + (wtype.replace("_", " ").lower(),),
+                    )
+
+        for attr in dump.get("opportunity_attribution") or []:
+            if not isinstance(attr, Mapping):
+                continue
+            for field_name in ("movement_type", "label", "name", "channel"):
+                val = str(attr.get(field_name) or "").strip()
+                if val:
+                    _add(
+                        _slug(val),
+                        val,
+                        source=f"opportunity_attribution.{field_name}",
+                        aliases=(val.lower(),),
+                    )
+
+        mkt = dump.get("marketing_comparison") or dump.get("marketing_channel_comparison")
+        if isinstance(mkt, Mapping):
+            for ch in mkt.get("channels") or mkt.get("by_channel") or mkt.get("rows") or []:
+                if isinstance(ch, Mapping):
+                    name = str(
+                        ch.get("channel") or ch.get("name") or ch.get("category") or ""
+                    ).strip()
+                else:
+                    name = str(ch).strip()
+                if name:
+                    _add(
+                        _slug(name),
+                        name,
+                        source="marketing_channels",
+                        aliases=(name.lower(),),
+                    )
+
+    if isinstance(cash_bridge_table, Mapping):
+        focus = period
+        for scenario, periods in cash_bridge_table.items():
+            if not isinstance(periods, Mapping):
+                continue
+            rows = periods.get(focus) if focus and focus in periods else None
+            if rows is None and periods:
+                rows = list(periods.values())[-1]
+            if not isinstance(rows, Mapping):
+                continue
+            for field_name, amount in rows.items():
+                key = str(field_name)
+                aliases = _CASH_BRIDGE_LABELS.get(key, ())
+                # Normalize cash_collections → collections etc.
+                for canon, als in _CASH_BRIDGE_LABELS.items():
+                    if key == canon or key.replace("_cash_out", "") in als or key in als:
+                        key = canon
+                        aliases = als
+                        break
+                _add(
+                    _slug(key),
+                    key.replace("_", " ").title(),
+                    amount=amount,
+                    source=f"cash_bridge.{scenario}.{field_name}",
+                    aliases=aliases + (str(field_name).replace("_", " ").lower(),),
+                )
+
+    structured = build_attribution_package(
+        metric="copilot_package",
+        period=period,
+        drivers=drivers,
+    )
+    if metrics_blob:
+        blob_pkg = build_attribution_package_from_text_blob(metrics_blob)
+        return merge_attribution_packages(
+            structured,
+            blob_pkg,
+            metric="copilot_package",
+            period=period,
+        )
+    return structured
+
+
+def attribution_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, Any]:
+    """LLM-facing attribution package (same allowlist post-verify uses)."""
+    if not package:
+        return {
+            "allowed_drivers": [],
+            "policy": (
+                "Empty allowlist — no causal / driver claims are permitted."
+            ),
+        }
+    return {
+        "metric": package.get("metric"),
+        "period": package.get("period"),
+        "allowed_drivers": package.get("allowed_drivers") or [],
+        "policy": package.get("policy")
+        or (
+            "May only name drivers whose id/label/aliases appear in allowed_drivers. "
+            "Empty allowlist means no causal claims are permitted."
+        ),
+    }

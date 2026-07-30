@@ -36,6 +36,23 @@ The two platforms are running on **two entirely separate, independently-generate
 
 ---
 
+## Production hydrate path (confirmed in code — 2026-07-30)
+
+**Customer / production Board + Forecast Engine UIs share one warehouse outlook path.** Demo dual-seed inventory above still applies to offline HTML seeds only.
+
+| Layer | Detail |
+|-------|--------|
+| Builder | `build_unified_outlook_payload` → `TS_DATA` (Board) + `SRC.actuals` (FE) from `actual_income_statement` / `actual_balance_sheet` (+ MRR) |
+| API | `GET /api/v1/reporting/outlook` |
+| Frontend | `SMPLOutlook.hydrate` used by both Board (`board-hydrate.js`) and FE (`smplHydrate`) |
+| Guard | `diff_outlook_ts_src_actuals` / `assert_outlook_ts_src_actuals_aligned` — fail if same-period fields diverge by **>$1.00** |
+| Test | `backend/tests/test_outlook_ts_src_actuals_alignment.py` |
+| Control note | [fe_board_single_source.md](./fe_board_single_source.md) |
+
+Freeze packs are Copilot/MD&A context — **not** the statement UI hydrate source.
+
+---
+
 ## Exact deltas — June 2026 actuals, Forecast Engine vs Board Platform
 
 Computed directly from each file's own embedded data (`SRC.actuals['2026-06']` in the Forecast Engine vs `TS_DATA.Actual.is/cfs/bs['2026-06']` in the Board Platform). Not estimated — pulled and diffed programmatically.
@@ -196,6 +213,7 @@ The Forecast Engine's `SRC.dr_waterfall` object (beg_dr/billings/recognized/end_
 
 | Date | Change |
 |------|--------|
+| 2026-07-30 | Documented production shared outlook hydrate path + TS↔SRC $1 regression; demo inventory unchanged (do not reseed) |
 | 2026-07-29 | Ingested from Matt Downloads; severity relabeled to Matt bar ($0.01 rounding / ≤$1 investigate / >$1 significant_miss); remaining demo gaps documented honestly without reseeding |
 
 ---

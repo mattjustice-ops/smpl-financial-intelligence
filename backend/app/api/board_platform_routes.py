@@ -188,6 +188,7 @@ def board_copilot(
     db: Session = Depends(get_db),
 ) -> CopilotResponse:
     from datetime import datetime, timezone
+    import json
 
     from app.services.close_context.freeze_blob_service import get_servable_freeze
 
@@ -207,6 +208,12 @@ def board_copilot(
     stale = False
     context_built_at = datetime.now(timezone.utc)
     metrics_blob = ""
+    bundle = None
+    cash_bridge_table = None
+    ts_data = None
+    freeze_id: str | None = None
+    frozen_evidence: dict | None = None
+    frozen_attribution: dict | None = None
 
     freeze = None if body.prefer_live else get_servable_freeze(db, organization_id, as_of)
     if freeze is not None:
@@ -223,6 +230,12 @@ def board_copilot(
                 "Prefer focus-month detail if present in the pack; otherwise say coverage is limited.\n\n"
                 + metrics_blob
             )
+        sections = freeze.sections if isinstance(freeze.sections, dict) else {}
+        if isinstance(sections.get("evidence_package"), dict):
+            frozen_evidence = sections["evidence_package"]
+        if isinstance(sections.get("attribution_package"), dict):
+            frozen_attribution = sections["attribution_package"]
+        freeze_id = f"freeze:{organization_id}:{as_of}"
     else:
         token = bind_as_of_period(as_of)
         try:
@@ -293,16 +306,80 @@ def board_copilot(
     context_as_of = context_built_at.astimezone(timezone.utc).isoformat()
     freshness_label = "stale freeze" if stale else ("freeze pack" if context_source == "freeze" else "live warehouse")
 
+    from app.services.commentary.attribution_verify import (
+        DONT_KNOW_ATTRIBUTION,
+        attribution_package_for_prompt,
+        build_attribution_package_from_copilot_structures,
+        build_attribution_package_from_text_blob,
+        fail_closed_attribution_text,
+        merge_attribution_packages,
+        verify_text_attribution,
+    )
+    from app.services.commentary.claim_verify import (
+        DONT_KNOW_NARRATIVE,
+        build_evidence_package_from_copilot_structures,
+        evidence_package_for_prompt,
+        evidence_values_from_package,
+        evidence_values_from_text_blob,
+        fail_closed_text,
+        merge_evidence_values,
+        verify_text_against_evidence,
+    )
+
+    # Structured packages from the same freeze/live structures that feed the metrics blob.
+    # Freeze packs built after this change carry evidence_package / attribution_package in
+    # sections; older freezes fall back to blob scrape (+ thin labels).
+    if frozen_evidence is not None:
+        evidence_package = frozen_evidence
+        # Still union live blob numbers so soft-capped prose formatting verifies.
+        blob_vals = evidence_values_from_text_blob(metrics_blob)
+        evidence = merge_evidence_values(
+            evidence_values_from_package(evidence_package),
+            {f"blob.{k}": v for k, v in blob_vals.items()},
+        )
+    else:
+        evidence_package = build_evidence_package_from_copilot_structures(
+            bundle=bundle,
+            ts_data=ts_data,
+            cash_bridge_table=cash_bridge_table,
+            metrics_blob=metrics_blob,
+            focus_period=focus_period,
+            freeze_id=freeze_id,
+            period_label=as_of,
+        )
+        evidence = evidence_values_from_package(evidence_package)
+
+    if frozen_attribution is not None:
+        attribution = merge_attribution_packages(
+            frozen_attribution,
+            build_attribution_package_from_text_blob(metrics_blob),
+            metric="copilot_package",
+            period=focus_period,
+        )
+    else:
+        attribution = build_attribution_package_from_copilot_structures(
+            bundle=bundle,
+            cash_bridge_table=cash_bridge_table,
+            metrics_blob=metrics_blob,
+            focus_period=focus_period,
+        )
+
+    evidence_prompt = evidence_package_for_prompt(
+        {**evidence_package, "values": {k: str(v) for k, v in evidence.items()}}
+        if frozen_evidence is not None
+        else evidence_package
+    )
+    attribution_prompt = attribution_package_for_prompt(attribution)
+
     try:
         client = build_commentary_llm_client(purpose="interactive")
         raw = client.generate(
             system_prompt=(
                 "You are SMPL Copilot for a B2B SaaS board platform. "
-                "Answer using ONLY the metrics provided. Never invent numbers. "
-                "Causal / driver claims may only name operational causes that appear as "
-                "canonical bridge or metric labels in the metrics context "
+                "Answer using ONLY the metrics and evidence package provided. Never invent numbers. "
+                "Causal / driver claims may only name drivers in the ATTRIBUTION PACKAGE "
                 "(e.g. expansion, churn, payroll, collections). "
-                "If a cause is not evidenced in the metrics text, omit it or say you don't know — "
+                "If a cause is not in allowed_drivers, omit it or say you don't know — "
                 "do not invent deal-count or channel stories. "
                 "When the question names a month, use that month's sections — especially "
                 "'Monthly operational cash bridges' and 'Monthly Actual trends'. "
@@ -320,7 +397,12 @@ def board_copilot(
                 f"Context source: {context_source}"
                 f"{' (STALE — last complete freeze)' if stale else ''}. "
                 f"Context as of: {context_as_of}.\n"
-                f"Metrics:\n{metrics_blob}\n\nQuestion: {body.question}\n\n"
+                f"Metrics:\n{metrics_blob}\n\n"
+                "EVIDENCE PACKAGE (post-LLM verify uses this same dict; state only these values):\n"
+                f"```json\n{json.dumps(evidence_prompt, indent=2, default=str)}\n```\n\n"
+                "ATTRIBUTION PACKAGE (post-LLM attribution verify; name only these drivers):\n"
+                f"```json\n{json.dumps(attribution_prompt, indent=2, default=str)}\n```\n\n"
+                f"Question: {body.question}\n\n"
                 'Respond JSON: {"answer": "..."} where answer contains the three numbered sections as plain text.'
             ),
             max_tokens=1200,
@@ -331,23 +413,8 @@ def board_copilot(
         if not answer:
             raise LLMError("Copilot returned an empty response.")
 
-        # P15 thin wire: verify answer numerics against numbers present in the
-        # metrics/freeze context blob. Not a full structured _sources package —
-        # invented $ / % not in the context → don't-know (fail closed).
-        from app.services.commentary.attribution_verify import (
-            DONT_KNOW_ATTRIBUTION,
-            build_attribution_package_from_text_blob,
-            fail_closed_attribution_text,
-            verify_text_attribution,
-        )
-        from app.services.commentary.claim_verify import (
-            DONT_KNOW_NARRATIVE,
-            evidence_values_from_text_blob,
-            fail_closed_text,
-            verify_text_against_evidence,
-        )
-
-        evidence = evidence_values_from_text_blob(metrics_blob)
+        # P15: verify against structured flatten (commentary/MD&A parity), with blob
+        # numbers as a supplement. Still not full warehouse _sources.
         claim_result = verify_text_against_evidence(answer, evidence)
         if not claim_result.ok:
             logger.warning(
@@ -362,10 +429,6 @@ def board_copilot(
                     "omitted. Ask again with a narrower question, or confirm the figure with Finance."
                 )
 
-        # P15 thin attribution wire: allowlist = canonical driver labels that
-        # literally appear in the metrics/freeze blob. Weak vs structured
-        # attribution_package — empty/thin allowlist + causal claims → don't-know.
-        attribution = build_attribution_package_from_text_blob(metrics_blob)
         attr_result = verify_text_attribution(answer, attribution)
         if not attr_result.ok:
             logger.warning(
@@ -378,8 +441,7 @@ def board_copilot(
                 answer = (
                     "I don't know — one or more causal / driver claims in this Copilot answer "
                     "could not be verified against engine-backed labels in the current metrics "
-                    "package. Unsupported attribution was omitted. (Copilot attribution allowlist "
-                    "is thin: only canonical bridge/metric labels present in context text.)"
+                    "package. Unsupported attribution was omitted."
                 )
     except LLMError as exc:
         reset_usage_context(usage_tokens)

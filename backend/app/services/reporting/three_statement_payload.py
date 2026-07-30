@@ -866,3 +866,149 @@ def build_shared_reporting_payload(
             else ExportValidationSummary(status="pass").model_dump(mode="json")
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Production FE ↔ Board single-source guard (TS_DATA.Actual vs SRC.actuals)
+# ---------------------------------------------------------------------------
+# Board Platform hydrates TS_DATA; Forecast Engine hydrates SRC.actuals. Both
+# come from build_unified_outlook_payload → same warehouse tables. This guard
+# fails if the two shapes diverge for the same org/period on that shared path.
+# Demo HTML seeds are intentionally out of scope — do not reseed demos.
+
+# (field, TS statement bucket, SRC key) — aliases already normalized in builders.
+TS_SRC_ACTUALS_ALIGN_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("revenue", "is", "revenue"),
+    ("cogs", "is", "cogs"),
+    ("gross_profit", "is", "gross_profit"),
+    ("sm", "is", "sm"),
+    ("rd", "is", "rd"),
+    ("ga", "is", "ga"),
+    ("ebitda", "is", "ebitda"),
+    ("da", "is", "da"),
+    ("net_income", "is", "net_income"),
+    ("cash", "bs", "cash"),
+    ("ar", "bs", "ar"),
+    ("ap", "bs", "ap"),
+    ("deferred_rev", "bs", "deferred_rev"),
+    ("beginning_cash", "cfs", "beginning_cash"),
+    ("ending_cash", "cfs", "ending_cash"),
+    ("cfo", "cfs", "cfo"),
+    ("net_change", "cfs", "net_change"),
+)
+
+# Product closed-actuals bar — same as claim_verify TOL_ACTUALS.
+OUTLOOK_TS_SRC_MONEY_TOLERANCE = Decimal("1.00")
+
+
+def _as_decimal(value: Any) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return value if isinstance(value, Decimal) else Decimal(str(value))
+    except Exception:
+        return None
+
+
+def diff_outlook_ts_src_actuals(
+    ts_data: dict[str, Any] | None,
+    src: dict[str, Any] | None,
+    *,
+    as_of: str | None = None,
+    money_tolerance: Decimal = OUTLOOK_TS_SRC_MONEY_TOLERANCE,
+) -> list[dict[str, Any]]:
+    """Compare Board TS_DATA.Actual vs FE SRC.actuals for shared production fields.
+
+    Returns a list of divergence records (empty = aligned within tolerance).
+    """
+    if money_tolerance > OUTLOOK_TS_SRC_MONEY_TOLERANCE:
+        raise ValueError(
+            f"money_tolerance cannot exceed {OUTLOOK_TS_SRC_MONEY_TOLERANCE} (product $1 bar)"
+        )
+    actual = (ts_data or {}).get("Actual") or {}
+    src_actuals = (src or {}).get("actuals") or {}
+    if not isinstance(actual, dict) or not isinstance(src_actuals, dict):
+        return [
+            {
+                "period": as_of,
+                "field": "_shape",
+                "ts": None,
+                "src": None,
+                "delta": None,
+                "reason": "missing_ts_or_src_shape",
+            }
+        ]
+
+    periods = sorted(
+        p
+        for p in set(src_actuals.keys())
+        | set((actual.get("is") or {}).keys())
+        | set((actual.get("bs") or {}).keys())
+        | set((actual.get("cfs") or {}).keys())
+        if isinstance(p, str) and (as_of is None or p <= as_of)
+    )
+    diffs: list[dict[str, Any]] = []
+    for period in periods:
+        src_row = src_actuals.get(period) or {}
+        if not isinstance(src_row, dict):
+            continue
+        for field, stmt, src_key in TS_SRC_ACTUALS_ALIGN_FIELDS:
+            ts_bucket = actual.get(stmt) or {}
+            ts_row = ts_bucket.get(period) if isinstance(ts_bucket, dict) else None
+            ts_val = _as_decimal((ts_row or {}).get(field) if isinstance(ts_row, dict) else None)
+            src_val = _as_decimal(src_row.get(src_key))
+            # deferred_rev / dr alias on SRC
+            if src_val is None and src_key == "deferred_rev":
+                src_val = _as_decimal(src_row.get("dr"))
+            if ts_val is None and src_val is None:
+                continue
+            if ts_val is None or src_val is None:
+                diffs.append(
+                    {
+                        "period": period,
+                        "field": field,
+                        "ts": str(ts_val) if ts_val is not None else None,
+                        "src": str(src_val) if src_val is not None else None,
+                        "delta": None,
+                        "reason": "one_side_missing",
+                    }
+                )
+                continue
+            delta = abs(ts_val - src_val)
+            if delta > money_tolerance:
+                diffs.append(
+                    {
+                        "period": period,
+                        "field": field,
+                        "ts": str(ts_val),
+                        "src": str(src_val),
+                        "delta": str(delta),
+                        "reason": "significant_miss",
+                    }
+                )
+    return diffs
+
+
+def assert_outlook_ts_src_actuals_aligned(
+    payload: dict[str, Any],
+    *,
+    as_of: str | None = None,
+    money_tolerance: Decimal = OUTLOOK_TS_SRC_MONEY_TOLERANCE,
+) -> None:
+    """Raise ValueError if unified outlook TS_DATA vs SRC.actuals diverge > $1."""
+    close = as_of or str((payload.get("meta") or {}).get("close_month") or "") or None
+    diffs = diff_outlook_ts_src_actuals(
+        payload.get("TS_DATA"),
+        payload.get("SRC"),
+        as_of=close,
+        money_tolerance=money_tolerance,
+    )
+    if diffs:
+        sample = "; ".join(
+            f"{d['period']}.{d['field']} Δ={d.get('delta') or d.get('reason')}"
+            for d in diffs[:8]
+        )
+        raise ValueError(
+            f"Production outlook TS_DATA.Actual vs SRC.actuals diverge "
+            f"({len(diffs)} field(s) beyond ${money_tolerance}): {sample}"
+        )
