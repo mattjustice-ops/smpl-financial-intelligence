@@ -3,8 +3,7 @@
 > **Not SOC 2 certification.** Helper + path wiring — not a full ARR-bridge /
 > GTM attribution engine. Copilot uses **structured** packages from the same
 > freeze/live metric structures as the metrics blob (plus blob-label supplement).
-> Evidence packages now carry `_sources` tags (catalog + ENGINE_PATH) — see
-> [ai_claim_verify.md](./ai_claim_verify.md).  
+> Citation verify + `_sources` warehouse tags: [ai_claim_verify.md](./ai_claim_verify.md).  
 > Numeric claim-verify remains required and is **not sufficient** alone.  
 > Linked from [README.md](./README.md) · Policy: [P15](../policies/P15_ai_llm_data_handling.md) §4.7 / §4.8
 > · Production FE↔Board: [fe_board_single_source.md](./fe_board_single_source.md)
@@ -24,6 +23,23 @@ Example that passes numeric helper but fails attribution allowlist:
   (unless opportunity_attribution / customer_movement literally evidences that count + movement).
 
 Board and MD&A risk is often **wrong story with right math** — not only phantom figures.
+
+---
+
+## Multi-driver AND/comma rule
+
+When a causal phrase joins multiple drivers with `and` / commas, **every** named part must be on `allowed_drivers`.
+
+| Phrase | Allowlist | Result |
+|--------|-----------|--------|
+| driven by expansion | expansion | pass |
+| driven by expansion and churn | expansion, churn | pass |
+| driven by expansion and three enterprise upsells | expansion only | **fail** (`partial_allowlist`) |
+| driven by expansion, contraction, and churn | expansion, churn | **fail** (`partial_allowlist`) |
+
+Previously any single allowlisted token inside the phrase was enough.
+
+Code: `attribution_verify._split_driver_conjuncts`, `_match_claim`.
 
 ---
 
@@ -88,11 +104,10 @@ Never ship "correct number + invented cause" on the wired customer-visible paths
 
 | Gap | Notes |
 |-----|-------|
-| Full warehouse `_sources` metadata | Evidence packages have table/column / COMPUTED / ENGINE_PATH; not `loaded_at` / `org_id` / `is_final` everywhere — [ai_claim_verify.md](./ai_claim_verify.md) |
+| Warehouse `_sources` null honesty | Tags now include `org_id` / `loaded_at` / `is_final` with honest nulls when unknown — [ai_claim_verify.md](./ai_claim_verify.md) |
 | Older freeze packs | Freezes built before structured packages lack `sections.attribution_package` → blob-label fallback |
 | Invented deal stories | Still fail unless count + movement literally evidenced (e.g. expansion movement_type × N) |
-| Multi-driver "and" phrases | v1 matches if **any** allowlisted token appears in the causal phrase |
-| DOM overlay | Not in this increment |
+| DOM overlay / runTieOut | Shipped on DOM branch — see [ai_claim_verify.md](./ai_claim_verify.md) / [fe_board_single_source.md](./fe_board_single_source.md) |
 
 ---
 
@@ -106,7 +121,8 @@ Never ship "correct number + invented cause" on the wired customer-visible paths
 | **3** | Prompt constraints on commentary + Prompt 2 + Prompt 5 + board + Copilot | **Live** |
 | **4** | Structural post-verify + tests; soft strip / hard-block-when-fully-wiped | **Live on wired paths** |
 | **5** | Stronger Copilot structured evidence + FE↔Board single-source confirm | **Live** (prior PR) |
-| **6** | Deal-count / logo catalogs + magnitude dominance + evidence `_sources` + FE hydrate residue | **Live this increment** |
+| **6** | Deal-count / logo catalogs + magnitude dominance + evidence `_sources` + FE hydrate residue | **Live** |
+| **7** | Multi-driver AND/comma require-all | **Live** |
 
 ---
 
@@ -122,6 +138,7 @@ Wrong drivers are worse when FE and Board are on **different seeds** for the sam
 - [ ] Confirm empty-allowlist → strip causal claims is acceptable
 - [ ] Confirm soft strip + hard-block-when-fully-wiped on Prompt 2 / Prompt 5 matches product risk
 - [ ] Accept deal-count / logo / dominance enrichment (still invent → fail)
+- [ ] Confirm multi-driver require-all is the right bar
 - [ ] Confirm **$1.00** numeric bar unchanged
 - [ ] Merge when review OK — not SOC 2 certified
 

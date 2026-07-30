@@ -10,6 +10,9 @@ from app.services.commentary.attribution_verify import (
     apply_fail_closed_attribution_to_commentary,
     build_attribution_package_from_commentary_inputs,
 )
+from app.services.commentary.citation_verify import (
+    apply_fail_closed_citations_to_commentary,
+)
 from app.services.commentary.claim_verify import (
     apply_fail_closed_to_commentary,
     build_evidence_package,
@@ -28,9 +31,10 @@ def generate_commentary(
     """Generate validated CFO commentary from structured finance inputs.
 
     P15 fail-closed: after schema validation, (1) material numeric claims are
-    checked against the evidence package, then (2) causal / driver claims are
-    checked against the attribution allowlist. Mismatched or unverifiable
-    claims are omitted / replaced with don't-know — never emitted.
+    checked against the evidence package, (2) causal / driver claims are
+    checked against the attribution allowlist, then (3) material numbers must
+    cite ``_sources`` keys (or table.column / formula_id / path). Mismatched
+    or unverifiable claims are omitted / replaced with don't-know — never emitted.
 
     Raises `LLMError` if the model returns malformed JSON or a payload that
     doesn't conform to `CommentaryOutput`.
@@ -72,5 +76,14 @@ def generate_commentary(
         logger.warning(
             "P15 attribution-verify fail-closed on /commentary/generate: %s",
             attr_result.summary(),
+        )
+
+    verified, cite_result = apply_fail_closed_citations_to_commentary(
+        verified, evidence
+    )
+    if not cite_result.ok:
+        logger.warning(
+            "P15 citation-verify fail-closed on /commentary/generate: %s",
+            cite_result.summary(),
         )
     return verified

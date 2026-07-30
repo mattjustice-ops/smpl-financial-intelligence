@@ -185,23 +185,18 @@
         });
       });
     });
-    pruneDemoActualResidue(target, incoming, closeMonth || getActiveCloseMonth(null));
+    var asOf = closeMonth || getActiveCloseMonth(null);
+    pruneDemoActualResidue(target, incoming, asOf);
+    pruneDemoPlanResidue(target, incoming, asOf);
     return target;
   }
 
-  /**
-   * When live Actual has at least one populated closed period, drop demo Actual
-   * rows for other closed periods that the warehouse did not send. Prevents
-   * demo residue after a successful (even partial) production hydrate.
-   * Does not reseed demo; only deletes stale closed Actual cells.
-   */
-  function pruneDemoActualResidue(target, incoming, closeMonth) {
-    if (!target || !incoming || !closeMonth) return;
-    var liveActual = incoming.Actual;
-    if (!liveActual) return;
+  /** Collect period keys that have at least one non-null cell across IS/BS/CFS. */
+  function collectPopulatedScenarioPeriods(scenarioBlock) {
     var livePeriods = {};
+    if (!scenarioBlock) return livePeriods;
     ["is", "cfs", "bs"].forEach(function (stmt) {
-      var block = liveActual[stmt];
+      var block = scenarioBlock[stmt];
       if (!block) return;
       Object.keys(block).forEach(function (period) {
         var row = block[period];
@@ -212,6 +207,18 @@
         if (hasValue) livePeriods[period] = true;
       });
     });
+    return livePeriods;
+  }
+
+  /**
+   * When live Actual has at least one populated closed period, drop demo Actual
+   * rows for other closed periods that the warehouse did not send. Prevents
+   * demo residue after a successful (even partial) production hydrate.
+   * Does not reseed demo; only deletes stale closed Actual cells.
+   */
+  function pruneDemoActualResidue(target, incoming, closeMonth) {
+    if (!target || !incoming || !closeMonth) return;
+    var livePeriods = collectPopulatedScenarioPeriods(incoming.Actual);
     if (!Object.keys(livePeriods).length) return;
     if (!target.Actual) return;
     ["is", "cfs", "bs"].forEach(function (stmt) {
@@ -221,6 +228,35 @@
         if (period <= closeMonth && !livePeriods[period]) {
           delete block[period];
         }
+      });
+    });
+  }
+
+  /**
+   * Forecast / Budget forward-period residue prune (conservative).
+   *
+   * When live Forecast (resp. Budget) has ≥1 populated period, drop target
+   * periods for that scenario with period > closeMonth that the warehouse
+   * omitted. Empty live Forecast/Budget does not wipe demo scaffolding.
+   *
+   * Closed-month (≤ closeMonth) plan cells are left alone — warehouse often
+   * omits historical Budget/Forecast for closed months; pruning those would
+   * risk wiping valid demo overlays incorrectly.
+   */
+  function pruneDemoPlanResidue(target, incoming, closeMonth) {
+    if (!target || !incoming || !closeMonth) return;
+    ["Forecast", "Budget"].forEach(function (sc) {
+      var livePeriods = collectPopulatedScenarioPeriods(incoming[sc]);
+      if (!Object.keys(livePeriods).length) return;
+      if (!target[sc]) return;
+      ["is", "cfs", "bs"].forEach(function (stmt) {
+        var block = target[sc][stmt];
+        if (!block) return;
+        Object.keys(block).forEach(function (period) {
+          if (period > closeMonth && !livePeriods[period]) {
+            delete block[period];
+          }
+        });
       });
     });
   }
@@ -643,6 +679,7 @@
     mergeTsData: mergeTsData,
     mergeActuals: mergeActuals,
     pruneDemoActualResidue: pruneDemoActualResidue,
+    pruneDemoPlanResidue: pruneDemoPlanResidue,
     pruneSrcActualResidue: pruneSrcActualResidue,
     getArrFromWaterfall: getArrFromWaterfall,
     buildOutlookFetchUrl: buildOutlookFetchUrl,

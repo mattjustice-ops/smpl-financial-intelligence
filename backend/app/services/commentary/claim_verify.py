@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable, Literal, Mapping
+from typing import Any, Iterable, Literal, Mapping, Sequence
 
 from app.services.commentary.schemas import CommentaryInputs, CommentaryOutput, CommentarySection
 
@@ -144,7 +144,21 @@ def flatten_evidence_values(
     if isinstance(obj, Mapping):
         for key, val in obj.items():
             # Skip nested provenance blobs that duplicate values under metadata-only keys.
-            if str(key) in {"_sources", "sources", "loaded_at", "table", "column", "org_id", "note"}:
+            if str(key) in {
+                "_sources",
+                "sources",
+                "loaded_at",
+                "table",
+                "column",
+                "org_id",
+                "is_final",
+                "note",
+                "source_type",
+                "formula_id",
+                "formula",
+                "path",
+                "field",
+            }:
                 if str(key) == "_sources" and isinstance(val, Mapping):
                     flatten_evidence_values(val, prefix=f"{prefix}_sources" if prefix else "_sources", out=out)
                 continue
@@ -165,16 +179,35 @@ def flatten_evidence_values(
     return out
 
 
+
+def _provenance_from_mapping(data: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Pull org_id / loaded_at / is_final when present; otherwise honest nulls."""
+    if not data:
+        return {"org_id": None, "loaded_at": None, "is_final": None}
+    org = data.get("org_id") or data.get("organization_id")
+    org_id = str(org).strip() if org not in (None, "") else None
+    loaded = data.get("loaded_at") or data.get("as_of") or data.get("context_as_of")
+    loaded_at = str(loaded).strip() if loaded not in (None, "") else None
+    is_final = data.get("is_final")
+    if is_final is not None and not isinstance(is_final, bool):
+        is_final = str(is_final).strip().lower() in {"1", "true", "yes", "final"}
+    return {"org_id": org_id, "loaded_at": loaded_at, "is_final": is_final}
+
+
 def build_evidence_package(
     inputs: CommentaryInputs | Mapping[str, Any] | None,
     *,
     extra: Mapping[str, Any] | None = None,
+    org_id: str | None = None,
+    loaded_at: str | None = None,
+    is_final: bool | None = None,
 ) -> dict[str, Any]:
     """Structured evidence dict passed to the LLM and reused for post-verify.
 
     Shape:
       {
         "values": {dotted_key: number, ...},
+        "_sources": {dotted_key: {table|formula_id|path, org_id, loaded_at, is_final, ...}},
         "freeze_id": optional,
         "period_label": optional,
         "tolerance_actuals": "1.00",
@@ -183,6 +216,7 @@ def build_evidence_package(
     values: dict[str, Decimal] = {}
     period_label: str | None = None
     freeze_id: str | None = None
+    provenance = {"org_id": org_id, "loaded_at": loaded_at, "is_final": is_final}
 
     if isinstance(inputs, CommentaryInputs):
         period_label = inputs.period_label
@@ -192,10 +226,16 @@ def build_evidence_package(
         freeze_id = (
             str(inputs.get("freeze_id") or inputs.get("freezeId") or "").strip() or None
         )
+        for key, val in _provenance_from_mapping(inputs).items():
+            if provenance.get(key) is None and val is not None:
+                provenance[key] = val
         flatten_evidence_values(inputs, out=values)
 
     if extra:
         freeze_id = freeze_id or (str(extra.get("freeze_id") or "").strip() or None)
+        for key, val in _provenance_from_mapping(extra).items():
+            if provenance.get(key) is None and val is not None:
+                provenance[key] = val
         flatten_evidence_values(extra, prefix="extra", out=values)
 
     # Drop non-financial identifiers that look numeric (e.g. bare years in labels).
@@ -204,7 +244,13 @@ def build_evidence_package(
         for k, v in values.items()
         if not (v == v.to_integral_value() and _YEAR_RE.match(str(int(v))))
     }
-    sources = attach_sources_to_values(cleaned, period_label=period_label)
+    sources = attach_sources_to_values(
+        cleaned,
+        period_label=period_label,
+        org_id=provenance.get("org_id"),
+        loaded_at=provenance.get("loaded_at"),
+        is_final=provenance.get("is_final"),
+    )
 
     return {
         "values": {k: str(v) for k, v in cleaned.items()},
@@ -792,16 +838,25 @@ def build_source_record(
     value: Decimal | Any,
     *,
     period_label: str | None = None,
+    org_id: str | None = None,
+    loaded_at: str | None = None,
+    is_final: bool | None = None,
 ) -> dict[str, Any]:
     """Build a citable ``_sources`` entry for one evidence value key.
 
     Catalog hits → WAREHOUSE table/column or COMPUTED formula_id.
     Unknown leaves → ENGINE_PATH (path still citable; not full warehouse provenance).
+    Always includes ``org_id`` / ``loaded_at`` / ``is_final`` (honest nulls when unknown).
     """
     leaf = _leaf_field_from_evidence_key(evidence_key)
     period = _period_from_evidence_key(evidence_key) or period_label
     num = value if isinstance(value, Decimal) else _to_decimal(value)
     value_str = str(num) if num is not None else str(value)
+    warehouse_tags = {
+        "org_id": org_id,
+        "loaded_at": loaded_at,
+        "is_final": is_final,
+    }
     base = _SOURCE_FIELD_CATALOG.get(leaf)
     if base:
         record = dict(base)
@@ -809,6 +864,7 @@ def build_source_record(
         record["value"] = value_str
         if period:
             record["period"] = period
+        record.update(warehouse_tags)
         return record
     return {
         "source_type": "ENGINE_PATH",
@@ -820,6 +876,7 @@ def build_source_record(
             "No warehouse table/column catalog hit for this leaf — cite engine path. "
             "Not full framework Part 1 WAREHOUSE provenance."
         ),
+        **warehouse_tags,
     }
 
 
@@ -827,12 +884,20 @@ def attach_sources_to_values(
     values: Mapping[str, Any],
     *,
     period_label: str | None = None,
+    org_id: str | None = None,
+    loaded_at: str | None = None,
+    is_final: bool | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Map every evidence value key → source tag (framework Part 1 contract)."""
     sources: dict[str, dict[str, Any]] = {}
     for key, val in values.items():
         sources[str(key)] = build_source_record(
-            str(key), val, period_label=period_label
+            str(key),
+            val,
+            period_label=period_label,
+            org_id=org_id,
+            loaded_at=loaded_at,
+            is_final=is_final,
         )
     return sources
 
@@ -842,13 +907,22 @@ def _package_from_values(
     *,
     period_label: str | None = None,
     freeze_id: str | None = None,
+    org_id: str | None = None,
+    loaded_at: str | None = None,
+    is_final: bool | None = None,
 ) -> dict[str, Any]:
     cleaned = {
         k: v
         for k, v in values.items()
         if not (v == v.to_integral_value() and _YEAR_RE.match(str(int(v))))
     }
-    sources = attach_sources_to_values(cleaned, period_label=period_label)
+    sources = attach_sources_to_values(
+        cleaned,
+        period_label=period_label,
+        org_id=org_id,
+        loaded_at=loaded_at,
+        is_final=is_final,
+    )
     return {
         "values": {k: str(v) for k, v in cleaned.items()},
         "values_decimal": cleaned,
@@ -882,6 +956,9 @@ def build_evidence_package_from_copilot_structures(
     focus_period: str | None = None,
     freeze_id: str | None = None,
     period_label: str | None = None,
+    org_id: str | None = None,
+    loaded_at: str | None = None,
+    is_final: bool | None = None,
 ) -> dict[str, Any]:
     """Structured evidence for Copilot — flatten freeze/live metric structures.
 
@@ -889,8 +966,8 @@ def build_evidence_package_from_copilot_structures(
     structures used to render the metrics blob). Optionally union blob-scrape
     numbers so display formatting already present in prose still verifies.
 
-    Honest gap: still not full per-metric warehouse ``_sources`` provenance —
-    keys are engine field paths, not table/column citations.
+    ``_sources`` tags include catalog table/column or ENGINE_PATH plus warehouse
+    fields ``org_id`` / ``loaded_at`` / ``is_final`` (honest nulls when unknown).
     """
     values: dict[str, Decimal] = {}
     period = focus_period
@@ -987,7 +1064,14 @@ def build_evidence_package_from_copilot_structures(
         for k, v in blob_vals.items():
             values[f"blob.{k}"] = v
 
-    return _package_from_values(values, period_label=label, freeze_id=freeze_id)
+    return _package_from_values(
+        values,
+        period_label=label,
+        freeze_id=freeze_id,
+        org_id=org_id,
+        loaded_at=loaded_at,
+        is_final=is_final,
+    )
 
 
 def evidence_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -999,15 +1083,22 @@ def evidence_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, 
             "tolerance_actuals": str(TOL_ACTUALS),
             "policy": (
                 "State only numeric values present in values (within $1.00 for money). "
-                "Cite _sources path/table/column or COMPUTED formula_id when stating a number."
+                "Cite each material number with a _sources key, table.column, formula_id, "
+                "or ENGINE_PATH — e.g. '$110,000 (mrr_waterfall.ending_mrr)' or "
+                "citations[].label = evidence key. Missing citation → omit / don't-know."
             ),
         }
     values = package.get("values") or {}
     sources = package.get("_sources") or {}
     if not isinstance(sources, Mapping) or not sources:
         if isinstance(values, Mapping):
+            prov = _provenance_from_mapping(package)
             sources = attach_sources_to_values(
-                values, period_label=str(package.get("period_label") or "") or None
+                values,
+                period_label=str(package.get("period_label") or "") or None,
+                org_id=prov.get("org_id"),
+                loaded_at=prov.get("loaded_at"),
+                is_final=prov.get("is_final"),
             )
         else:
             sources = {}
@@ -1027,9 +1118,11 @@ def evidence_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, 
         "_sources": sources,
         "policy": (
             "State only numeric values present in values (within $1.00 for money). "
-            "Cite _sources (table.column / COMPUTED formula_id / ENGINE_PATH) when stating "
-            "a material number. Post-LLM verify uses values; _sources is for citation. "
-            "DOM data-source overlay and full warehouse loaded_at/org_id not wired in v1."
+            "Cite each material number with a _sources key, table.column, COMPUTED "
+            "formula_id, or ENGINE_PATH path — e.g. '$86.1M (arr_waterfall.ending_arr, "
+            "period 2026-06)'. Post-LLM verify checks values AND citations. "
+            "Source tags may include org_id / loaded_at / is_final (null when unknown). "
+            "DOM data-source overlay is a separate FE path."
         ),
     }
 

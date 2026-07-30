@@ -315,6 +315,11 @@ def board_copilot(
         merge_attribution_packages,
         verify_text_attribution,
     )
+    from app.services.commentary.citation_verify import (
+        DONT_KNOW_CITATION,
+        fail_closed_citation_text,
+        verify_text_citations,
+    )
     from app.services.commentary.claim_verify import (
         DONT_KNOW_NARRATIVE,
         build_evidence_package_from_copilot_structures,
@@ -346,6 +351,9 @@ def board_copilot(
             focus_period=focus_period,
             freeze_id=freeze_id,
             period_label=as_of,
+            org_id=str(organization_id),
+            loaded_at=context_as_of,
+            is_final=False,
         )
         evidence = evidence_values_from_package(evidence_package)
 
@@ -377,8 +385,11 @@ def board_copilot(
             system_prompt=(
                 "You are SMPL Copilot for a B2B SaaS board platform. "
                 "Answer using ONLY the metrics and evidence package provided. Never invent numbers. "
+                "Cite each material dollar/percent with a _sources key, table.column, formula_id, "
+                "or ENGINE_PATH — e.g. '$110,000 (mrr_waterfall.ending_mrr)'. "
                 "Causal / driver claims may only name drivers in the ATTRIBUTION PACKAGE "
                 "(e.g. expansion, churn, payroll, collections). "
+                "Multi-driver 'and'/comma lists require every named driver allowlisted. "
                 "If a cause is not in allowed_drivers, omit it or say you don't know — "
                 "do not invent deal-count or channel stories. "
                 "When the question names a month, use that month's sections — especially "
@@ -442,6 +453,20 @@ def board_copilot(
                     "I don't know — one or more causal / driver claims in this Copilot answer "
                     "could not be verified against engine-backed labels in the current metrics "
                     "package. Unsupported attribution was omitted."
+                )
+
+        cite_result = verify_text_citations(answer, evidence_package)
+        if not cite_result.ok:
+            logger.warning(
+                "P15 Copilot citation-verify fail-closed: %s",
+                cite_result.summary(),
+            )
+            answer = fail_closed_citation_text(answer, cite_result)
+            if answer == DONT_KNOW_CITATION:
+                answer = (
+                    "I don't know — one or more material numeric claims in this Copilot answer "
+                    "were stated without a verifiable _sources citation. Unsupported claims "
+                    "were omitted."
                 )
     except LLMError as exc:
         reset_usage_context(usage_tokens)
