@@ -27,14 +27,18 @@ Strict rules — violations are unacceptable:
 4. If the data does not support a confident root cause, say so plainly and
    add a `data_gaps` entry naming the specific input that would resolve it.
    Never speculate on causes you cannot evidence.
-5. Tone: concise, analytical, executive-ready. Avoid filler ("it's important
+5. Causal / attribution language ("driven by", "due to", "because of",
+   "offset by", etc.) may ONLY name drivers present in ATTRIBUTION PACKAGE
+   allowed_drivers (id / label / aliases). If the allowlist is empty, do not
+   assert material causes — restate metrics without inventing drivers.
+6. Tone: concise, analytical, executive-ready. Avoid filler ("it's important
    to note", "as we can see"). Avoid marketing language. Prefer dollar figures
    and rates over adjectives.
-6. Length: each section is 3 to 6 sentences. Risks, opportunities, and
+7. Length: each section is 3 to 6 sentences. Risks, opportunities, and
    follow-up questions should be specific and actionable.
-7. Currency: format all money values using the currency code in the input
+8. Currency: format all money values using the currency code in the input
    (e.g. "$1.20M USD"). Format rates as percentages with one decimal place.
-8. If a required input is missing or null, acknowledge it ("MRR waterfall not
+9. If a required input is missing or null, acknowledge it ("MRR waterfall not
    provided this period") rather than fabricating numbers.
 
 Output: a single JSON object that conforms exactly to the schema given in the
@@ -52,18 +56,31 @@ def build_user_prompt(
     inputs: CommentaryInputs,
     *,
     evidence_package: dict[str, Any] | None = None,
+    attribution_package: dict[str, Any] | None = None,
 ) -> str:
     """Render the input JSON plus the required output schema into a single user message."""
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_commentary_inputs,
+    )
     from app.services.commentary.claim_verify import build_evidence_package
 
     data_block: dict[str, Any] = inputs.model_dump(mode="json", exclude_none=False)
     evidence = evidence_package or build_evidence_package(inputs)
+    attribution = attribution_package or build_attribution_package_from_commentary_inputs(
+        inputs
+    )
     # LLM-facing evidence omits the Decimal map (serialized in `values`).
     evidence_for_prompt = {
         "period_label": evidence.get("period_label"),
         "freeze_id": evidence.get("freeze_id"),
         "tolerance_actuals": evidence.get("tolerance_actuals"),
         "values": evidence.get("values") or {},
+    }
+    attribution_for_prompt = {
+        "metric": attribution.get("metric"),
+        "period": attribution.get("period"),
+        "allowed_drivers": attribution.get("allowed_drivers") or [],
+        "policy": attribution.get("policy"),
     }
     return (
         f"Period: {inputs.period_label}\n"
@@ -76,6 +93,10 @@ def build_user_prompt(
         "EVIDENCE PACKAGE (post-LLM verify uses this same dict; state only these values):\n"
         "```json\n"
         f"{json.dumps(evidence_for_prompt, indent=2, default=str)}\n"
+        "```\n\n"
+        "ATTRIBUTION PACKAGE (post-LLM attribution verify; name only these drivers):\n"
+        "```json\n"
+        f"{json.dumps(attribution_for_prompt, indent=2, default=str)}\n"
         "```\n\n"
         "Produce a JSON object that strictly conforms to this schema:\n"
         "```json\n"

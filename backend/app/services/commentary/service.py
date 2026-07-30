@@ -1,4 +1,4 @@
-"""Orchestrator: build prompt -> call LLM -> validate JSON -> fail-closed claim verify."""
+"""Orchestrator: build prompt -> call LLM -> validate JSON -> fail-closed verify."""
 
 from __future__ import annotations
 
@@ -6,6 +6,10 @@ import logging
 
 from pydantic import ValidationError
 
+from app.services.commentary.attribution_verify import (
+    apply_fail_closed_attribution_to_commentary,
+    build_attribution_package_from_commentary_inputs,
+)
 from app.services.commentary.claim_verify import (
     apply_fail_closed_to_commentary,
     build_evidence_package,
@@ -23,15 +27,21 @@ def generate_commentary(
 ) -> CommentaryOutput:
     """Generate validated CFO commentary from structured finance inputs.
 
-    P15 fail-closed: after schema validation, material numeric claims are checked
-    against the same evidence package embedded in the prompt. Mismatched or
-    unverifiable claims are omitted / replaced with don't-know — never emitted.
+    P15 fail-closed: after schema validation, (1) material numeric claims are
+    checked against the evidence package, then (2) causal / driver claims are
+    checked against the attribution allowlist. Mismatched or unverifiable
+    claims are omitted / replaced with don't-know — never emitted.
 
     Raises `LLMError` if the model returns malformed JSON or a payload that
     doesn't conform to `CommentaryOutput`.
     """
     evidence = build_evidence_package(inputs)
-    user_prompt = build_user_prompt(inputs, evidence_package=evidence)
+    attribution = build_attribution_package_from_commentary_inputs(inputs)
+    user_prompt = build_user_prompt(
+        inputs,
+        evidence_package=evidence,
+        attribution_package=attribution,
+    )
     raw = client.generate(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
     if not isinstance(raw, dict):
         raise LLMError(f"Expected a JSON object from the LLM, got {type(raw).__name__}.")
@@ -53,5 +63,14 @@ def generate_commentary(
         logger.warning(
             "P15 claim-verify fail-closed on /commentary/generate: %s",
             result.summary(),
+        )
+
+    verified, attr_result = apply_fail_closed_attribution_to_commentary(
+        verified, attribution
+    )
+    if not attr_result.ok:
+        logger.warning(
+            "P15 attribution-verify fail-closed on /commentary/generate: %s",
+            attr_result.summary(),
         )
     return verified

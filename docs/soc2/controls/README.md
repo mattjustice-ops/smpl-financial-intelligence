@@ -7,7 +7,7 @@
 | File | Role |
 |------|------|
 | [ai_claim_verify.md](./ai_claim_verify.md) | **Founder review checklist** — P15 fail-closed claim-verify: what shipped, tolerances, covered vs open paths, tests |
-| [ai_attribution_verify.md](./ai_attribution_verify.md) | **Design only** — non-numeric driver/attribution verify (why numeric-only isn't enough; allowlist approach; phased rollout) |
+| [ai_attribution_verify.md](./ai_attribution_verify.md) | **Partially live** — non-numeric driver/attribution verify (helper + commentary generate + MD&A Prompt 2; Prompt 5/board/Copilot follow-up) |
 | [data_integrity_framework.md](./data_integrity_framework.md) | Provenance (`_sources`), Claude runtime rules, build-time `data-source` tags, automated tie-out report, commentary second-pass verification, close review checklist |
 | [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md) | Per-visual warehouse mapping + Rule Sets A–F + `runTieOut()` publish block |
 | [reconcile_financial_statements.md](./reconcile_financial_statements.md) | FE ↔ Board closed-actuals diff + severity bands (`rounding` / `investigate` / `significant_miss`) — honest demo `data_mismatch` inventory |
@@ -51,7 +51,7 @@ Code search / product surface as of this write-up. Labels:
 | Prompt 5 deck generation claim verify | **Implemented (hard block)** | Evidence embedded in Prompt 5 user message; post-LLM verify of $ / % / Nx in PPTX **string literals** vs deck payload; `CommentaryIntegrityError` blocks emit (adapt + fresh paths) |
 | Board slide regenerate claim verify | **Implemented (soft strip)** | `enrich_slide_with_ai`: flatten slide payload (+ freeze blob numbers) → per-bullet don't-know; all-bad → don't-know narrative |
 | Copilot runtime claim verify | **Partial — thin wire** | Shared `claim_verify.py` against numbers parsed from metrics/freeze **text blob** (not full `_sources`). Invented $ / % → don't-know. Structured provenance still roadmap |
-| Driver / attribution (non-numeric) claim verify | **Required — new design needed** | Design: [ai_attribution_verify.md](./ai_attribution_verify.md). Numeric helper does not catch wrong-cause / right-number |
+| Driver / attribution (non-numeric) claim verify | **Partial — implemented** | Helper `attribution_verify.py` + live on `/commentary/generate` and MD&A Prompt 2 (allowlist from structured waterfall/bridge/variance fields). Prompt 5 / board regenerate / Copilot **not wired**. Design + gaps: [ai_attribution_verify.md](./ai_attribution_verify.md) |
 | Production single-source confirmation (FE + Board Platform) | **Required — confirm + test** | Demo environment found FE/Board Platform seeded from two independent datasets for one closed month ($49.8M divergence on one line). Confirm production reads one shared warehouse source per customer; add an automated test, don't rely on assumption. Do **not** change demo seeds to fake equality — see [reconcile_financial_statements.md](./reconcile_financial_statements.md) |
 | `_sources` provenance object on every LLM payload | **Required design / roadmap** | Framework Part 1 — not present as product-wide `_sources` contract (commentary path ships a flatter `evidence_package.values` map) |
 | Claude may only state values present in evidence | **Partial — implemented** | Prompt rules + structural verify on commentary generate, MD&A Prompt 2, Prompt 5 (string literals), board regenerate, Copilot thin blob wire; not full `_sources` contract |
@@ -66,6 +66,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-30 | Attribution verify v1: helper + commentary generate + MD&A Prompt 2 (allowlist from structured fields; empty allowlist strips causal claims). Prompt 5 / board / Copilot still follow-up. Not SOC 2 certified. |
 | 2026-07-30 | Extended claim-verify to Prompt 5 (hard block on PPTX string-literal $/%), board slide regenerate (soft strip), Copilot thin blob wire. Attribution design: [ai_attribution_verify.md](./ai_attribution_verify.md). Guarantee 4 corrected to machine-primary. Not SOC 2 certified. |
 | 2026-07-30 | Claim-verify helper live on `/commentary/generate` + MD&A Prompt 2 (evidence package + post-LLM verify + hard block on matrix mismatch / fully unverifiable variance sheet). Founder checklist: [ai_claim_verify.md](./ai_claim_verify.md). Board slide regenerate / Prompt 5 / Copilot still follow-ups. Not SOC 2 certified. |
 | 2026-07-29 | Added financial_dashboard_cf_re_logic.md — customer/production GL→statements methodology; demo/lab surfaces explicitly carved out |
