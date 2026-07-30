@@ -174,8 +174,8 @@ def test_generate_embeds_attribution_and_strips_invented_driver() -> None:
         "period_label": "May 2026",
         "executive_summary": {
             "title": "Executive Summary",
-            "narrative": "Ending MRR closed at $110,000 driven by three enterprise upsells.",
-            "citations": [{"label": "ending_mrr", "value": "$110,000"}],
+            "narrative": "Ending MRR closed at $110,000 (mrr_waterfall.ending_mrr) driven by three enterprise upsells.",
+            "citations": [{"label": "mrr_waterfall.ending_mrr", "value": "$110,000"}],
         },
         "revenue_commentary": {
             "title": "Revenue",
@@ -184,8 +184,8 @@ def test_generate_embeds_attribution_and_strips_invented_driver() -> None:
         },
         "mrr_waterfall_commentary": {
             "title": "MRR",
-            "narrative": "Ending MRR was $110,000.",
-            "citations": [],
+            "narrative": "Ending MRR was $110,000 (mrr_waterfall.ending_mrr).",
+            "citations": [{"label": "mrr_waterfall.ending_mrr", "value": "$110,000"}],
         },
         "bookings_forecast_commentary": {
             "title": "Bookings",
@@ -505,3 +505,45 @@ def test_copilot_structured_attribution_from_waterfalls_and_cash_bridge() -> Non
         )
         == DONT_KNOW_ATTRIBUTION
     )
+
+def test_multi_driver_and_phrase_requires_all_allowlisted() -> None:
+    """Comma/'and' lists fail closed unless EVERY named driver is allowlisted."""
+    allowlist = [
+        AllowedDriver(
+            id="expansion_mrr",
+            label="Expansion MRR",
+            aliases=("expansion", "expansion mrr"),
+        ),
+        AllowedDriver(
+            id="churn_mrr",
+            label="Churn MRR",
+            aliases=("churn", "churn mrr"),
+        ),
+    ]
+    both_ok = verify_text_attribution(
+        "Net new was driven by expansion and churn.",
+        allowlist,
+    )
+    assert both_ok.ok
+    assert both_ok.checks[0].matched_driver_id
+    assert "expansion" in (both_ok.checks[0].matched_driver_id or "")
+    assert "churn" in (both_ok.checks[0].matched_driver_id or "")
+
+    oxford = verify_text_attribution(
+        "Movement was driven by expansion, contraction, and churn.",
+        allowlist,
+    )
+    assert not oxford.ok
+    assert any(c.status == "partial_allowlist" for c in oxford.failures)
+
+    mixed = verify_text_attribution(
+        "ARR growth was driven by expansion and three enterprise upsells.",
+        allowlist,
+    )
+    assert not mixed.ok
+    assert any(c.status == "partial_allowlist" for c in mixed.failures)
+    assert fail_closed_attribution_text(
+        "ARR growth was driven by expansion and three enterprise upsells.",
+        mixed,
+    ) == DONT_KNOW_ATTRIBUTION
+

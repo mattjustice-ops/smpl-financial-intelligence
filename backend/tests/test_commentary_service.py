@@ -39,26 +39,36 @@ def _well_formed_response(period_label: str = "May 2026") -> dict[str, Any]:
         "period_label": period_label,
         "executive_summary": {
             "title": "Executive Summary",
-            "narrative": "Ending MRR closed at $110,000 with NRR of 1.05.",
+            "narrative": "Ending MRR closed at $110,000 (mrr_waterfall.ending_mrr) with NRR of 1.05.",
             "citations": [
-                {"label": "ending_mrr", "value": "$110,000"},
-                {"label": "NRR", "value": "1.05"},
+                {"label": "mrr_waterfall.ending_mrr", "value": "$110,000"},
+                {"label": "mrr_waterfall.nrr", "value": "1.05"},
             ],
         },
         "revenue_commentary": {
             "title": "Revenue",
-            "narrative": "Revenue grew 10% over the prior period.",
-            "citations": [{"label": "revenue_growth", "value": "10%"}],
+            "narrative": "Revenue grew 10% (revenue_forecast.growth_rate) over the prior period.",
+            "citations": [{"label": "revenue_forecast.growth_rate", "value": "10%"}],
         },
         "mrr_waterfall_commentary": {
             "title": "MRR Waterfall",
-            "narrative": "$15k new, $5k expansion, $8k churn yielded $110k ending MRR.",
-            "citations": [{"label": "new_mrr", "value": "$15,000"}],
+            "narrative": (
+                "$15k new (mrr_waterfall.new_mrr), $5k expansion (mrr_waterfall.expansion_mrr), "
+                "$8k churn (mrr_waterfall.churn_mrr) yielded $110k ending MRR "
+                "(mrr_waterfall.ending_mrr)."
+            ),
+            "citations": [
+                {"label": "mrr_waterfall.new_mrr", "value": "$15,000"},
+                {"label": "mrr_waterfall.ending_mrr", "value": "$110,000"},
+            ],
         },
         "bookings_forecast_commentary": {
             "title": "Bookings Forecast",
-            "narrative": "Pipeline coverage of 3.0x supports the base forecast.",
-            "citations": [{"label": "coverage_ratio", "value": "3.0"}],
+            "narrative": (
+                "Pipeline coverage of 3.0x (bookings_forecast.coverage_ratio) "
+                "supports the base forecast."
+            ),
+            "citations": [{"label": "bookings_forecast.coverage_ratio", "value": "3.0"}],
         },
         "cash_forecast_commentary": {
             "title": "Cash Forecast",
@@ -68,8 +78,14 @@ def _well_formed_response(period_label: str = "May 2026") -> dict[str, Any]:
         "risks_and_opportunities": [
             {
                 "type": "risk",
-                "description": "Churn MRR represented 8% of beginning MRR.",
-                "evidence": "$8,000 churn on $100,000 beginning MRR.",
+                "description": (
+                    "Churn MRR represented 8% of beginning MRR "
+                    "(mrr_waterfall.churn_mrr)."
+                ),
+                "evidence": (
+                    "$8,000 (mrr_waterfall.churn_mrr) churn on "
+                    "$100,000 (mrr_waterfall.beginning_mrr) beginning MRR."
+                ),
                 "severity": "medium",
             }
         ],
@@ -229,7 +245,7 @@ def test_generate_commentary_happy_path() -> None:
     assert isinstance(out, CommentaryOutput)
     assert out.period_label == "May 2026"
     assert out.executive_summary.narrative.startswith("Ending MRR")
-    assert out.executive_summary.citations[0].label == "ending_mrr"
+    assert out.executive_summary.citations[0].label == "mrr_waterfall.ending_mrr"
     assert len(out.risks_and_opportunities) == 1
     assert out.risks_and_opportunities[0].type == "risk"
     assert out.followup_questions[0].question.startswith("Which segments")

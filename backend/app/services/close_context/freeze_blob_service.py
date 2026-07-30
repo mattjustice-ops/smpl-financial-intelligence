@@ -188,6 +188,9 @@ def build_and_store_freeze_blob(
             focus_period=period,
             freeze_id=f"freeze:{organization_id}:{period}",
             period_label=period,
+            org_id=str(organization_id),
+            loaded_at=datetime.now(timezone.utc).isoformat(),
+            is_final=True,
         )
         # JSONB-safe: drop Decimal map (values string map is enough to rebuild).
         evidence_package = {

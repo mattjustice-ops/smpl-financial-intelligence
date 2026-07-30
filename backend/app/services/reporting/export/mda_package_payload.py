@@ -438,21 +438,35 @@ def build_mda_package_payload(
     # Soft list for payload inspection; Prompt 2 emit path re-runs with fail_closed=True.
     tie_out_warnings = verify_variance_commentary_tieout(variance_commentary_display, matrix)
     payload_warnings = validate_deck_payload(deck) + tie_out_warnings
+    evidence_values_map = {
+        k: str(v)
+        for k, v in evidence_values_from_mda_payload(
+            {
+                "variance_commentary_display": variance_commentary_display,
+                "deck_payload": {"period_matrix": matrix},
+            }
+        ).items()
+    }
+    from app.services.commentary.claim_verify import attach_sources_to_values
+
+    evidence_sources = attach_sources_to_values(
+        evidence_values_map,
+        period_label=_period_label(as_of),
+        org_id=None,
+        loaded_at=None,
+        is_final=None,
+    )
     evidence_package = {
         "period_label": _period_label(as_of),
         "freeze_id": None,
         "tolerance_actuals": "1.00",
+        "org_id": None,
+        "loaded_at": None,
+        "is_final": None,
         "variance_commentary_display": variance_commentary_display,
         "period_matrix": matrix,
-        "values": {
-            k: str(v)
-            for k, v in evidence_values_from_mda_payload(
-                {
-                    "variance_commentary_display": variance_commentary_display,
-                    "deck_payload": {"period_matrix": matrix},
-                }
-            ).items()
-        },
+        "values": evidence_values_map,
+        "_sources": evidence_sources,
     }
     sheets = {
         "variance_commentary": _sheet_spec(
@@ -533,7 +547,10 @@ def build_mda_package_payload(
             "each row_id maps to description and recommended_action. Enforce character limits. "
             "Each column must stand alone. No bullets. No line breaks. "
             "State only dollar/percent figures present in evidence_package.values / display rows. "
+            "Cite each material number with a _sources key, table.column, formula_id, or path "
+            "(e.g. '$110,000 (mrr_waterfall.ending_mrr)'). "
             "Causal drivers must appear in attribution_package.allowed_drivers; "
+            "multi-driver 'and'/comma lists require every named driver allowlisted; "
             "if that list is empty, restate metrics without inventing causes."
         ),
         "payload_meta": {
