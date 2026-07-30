@@ -327,3 +327,65 @@ def test_copilot_blob_allowlist_is_thin_but_catches_invented_drivers() -> None:
     assert fail_closed_attribution_text(
         "ARR growth was driven by three enterprise upsells.", bad
     ) == DONT_KNOW_ATTRIBUTION
+
+
+def test_copilot_structured_attribution_from_waterfalls_and_cash_bridge() -> None:
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_copilot_structures,
+        fail_closed_attribution_text,
+        verify_text_attribution,
+    )
+
+    bundle = {
+        "as_of_period": "2026-06",
+        "comparison_waterfalls": {
+            "arr": [
+                {
+                    "waterfall_type": "expansion",
+                    "period": "2026-06",
+                    "scenario": "Actual",
+                    "amount": 2_700_000,
+                },
+                {
+                    "waterfall_type": "churn",
+                    "period": "2026-06",
+                    "scenario": "Actual",
+                    "amount": -400_000,
+                },
+            ]
+        },
+    }
+    cash_bridge = {
+        "Actual": {
+            "2026-06": {
+                "collections": 8_000_000,
+                "payroll": -3_000_000,
+            }
+        }
+    }
+    pkg = build_attribution_package_from_copilot_structures(
+        bundle=bundle,
+        cash_bridge_table=cash_bridge,
+        focus_period="2026-06",
+    )
+    ids = {d["id"] for d in pkg["allowed_drivers"]}
+    assert "expansion" in ids
+    assert "churn" in ids
+    assert "payroll" in ids or "collections" in ids
+    # Structured source — not only context_blob_label
+    sources = {d.get("source") or "" for d in pkg["allowed_drivers"]}
+    assert any(s.startswith("comparison_waterfalls") for s in sources)
+    assert any(s.startswith("cash_bridge") for s in sources)
+
+    ok = verify_text_attribution("ARR growth was driven by expansion.", pkg)
+    assert ok.ok
+    bad = verify_text_attribution(
+        "ARR growth was driven by three enterprise upsells.", pkg
+    )
+    assert not bad.ok
+    assert (
+        fail_closed_attribution_text(
+            "ARR growth was driven by three enterprise upsells.", bad
+        )
+        == DONT_KNOW_ATTRIBUTION
+    )

@@ -585,6 +585,181 @@ def evidence_values_from_text_blob(text: str) -> dict[str, Decimal]:
     return out
 
 
+def _package_from_values(
+    values: dict[str, Decimal],
+    *,
+    period_label: str | None = None,
+    freeze_id: str | None = None,
+) -> dict[str, Any]:
+    cleaned = {
+        k: v
+        for k, v in values.items()
+        if not (v == v.to_integral_value() and _YEAR_RE.match(str(int(v))))
+    }
+    return {
+        "values": {k: str(v) for k, v in cleaned.items()},
+        "values_decimal": cleaned,
+        "period_label": period_label,
+        "freeze_id": freeze_id,
+        "tolerance_actuals": str(TOL_ACTUALS),
+        "tolerance_ratio": str(TOL_RATIO),
+    }
+
+
+def merge_evidence_values(
+    *maps: Mapping[str, Decimal] | None,
+) -> dict[str, Decimal]:
+    """Union evidence maps; later maps overwrite on key collision."""
+    out: dict[str, Decimal] = {}
+    for m in maps:
+        if not m:
+            continue
+        for k, v in m.items():
+            out[str(k)] = v if isinstance(v, Decimal) else Decimal(str(v))
+    return out
+
+
+def build_evidence_package_from_copilot_structures(
+    *,
+    bundle: Any | None = None,
+    ts_data: Mapping[str, Any] | None = None,
+    cash_bridge_table: Mapping[str, Any] | None = None,
+    metrics_blob: str | None = None,
+    focus_period: str | None = None,
+    freeze_id: str | None = None,
+    period_label: str | None = None,
+) -> dict[str, Any]:
+    """Structured evidence for Copilot — flatten freeze/live metric structures.
+
+    Prefer dotted metric keys from ReportingBundle / TS_DATA / cash bridge (same
+    structures used to render the metrics blob). Optionally union blob-scrape
+    numbers so display formatting already present in prose still verifies.
+
+    Honest gap: still not full per-metric warehouse ``_sources`` provenance —
+    keys are engine field paths, not table/column citations.
+    """
+    values: dict[str, Decimal] = {}
+    period = focus_period
+    label = period_label
+
+    if bundle is not None:
+        dump: Mapping[str, Any]
+        if hasattr(bundle, "model_dump"):
+            dump = bundle.model_dump(mode="python", exclude_none=True)
+        elif isinstance(bundle, Mapping):
+            dump = bundle
+        else:
+            dump = {}
+        period = period or str(dump.get("as_of_period") or dump.get("focus_period") or "") or None
+        label = label or str(dump.get("period_label") or period or "") or None
+        # Executive KPIs + waterfalls + statements — skip heavy GL/headcount lists.
+        for key in (
+            "executive_flow",
+            "financial_statements",
+            "comparison_financial_statements",
+            "opportunity_attribution",
+        ):
+            block = dump.get(key)
+            if block is not None:
+                flatten_evidence_values(block, prefix=f"bundle.{key}", out=values)
+
+        # Waterfalls: use waterfall_type in the key so evidence paths are readable
+        # (arr.expansion.amount) rather than anonymous list indices only.
+        waterfalls = dump.get("comparison_waterfalls") or {}
+        if isinstance(waterfalls, Mapping):
+            for wf_key, rows in waterfalls.items():
+                if not isinstance(rows, list):
+                    flatten_evidence_values(
+                        rows, prefix=f"bundle.comparison_waterfalls.{wf_key}", out=values
+                    )
+                    continue
+                for idx, row in enumerate(rows):
+                    if not isinstance(row, Mapping):
+                        continue
+                    wtype = str(row.get("waterfall_type") or row.get("type") or idx)
+                    period_key = str(row.get("period") or "")[:7] or "period"
+                    scenario = str(row.get("scenario") or "Actual")
+                    prefix = (
+                        f"bundle.comparison_waterfalls.{wf_key}."
+                        f"{wtype}.{scenario}.{period_key}"
+                    )
+                    flatten_evidence_values(row, prefix=prefix, out=values)
+
+    if isinstance(ts_data, Mapping):
+        actual = ts_data.get("Actual") or {}
+        if isinstance(actual, Mapping):
+            focus = period
+            for stmt in ("is", "bs", "cfs"):
+                rows = actual.get(stmt) or {}
+                if not isinstance(rows, Mapping):
+                    continue
+                if focus and focus in rows:
+                    flatten_evidence_values(
+                        rows[focus],
+                        prefix=f"ts.Actual.{stmt}.{focus}",
+                        out=values,
+                    )
+                else:
+                    # Keep a bounded flatten when focus missing (close month only).
+                    for p, row in list(rows.items())[-3:]:
+                        flatten_evidence_values(
+                            row,
+                            prefix=f"ts.Actual.{stmt}.{p}",
+                            out=values,
+                        )
+
+    if isinstance(cash_bridge_table, Mapping):
+        focus = period
+        # Shape: {scenario: {period: {field: amount}}}
+        for scenario, periods in cash_bridge_table.items():
+            if not isinstance(periods, Mapping):
+                continue
+            if focus and focus in periods:
+                flatten_evidence_values(
+                    periods[focus],
+                    prefix=f"cash_bridge.{scenario}.{focus}",
+                    out=values,
+                )
+            elif focus is None:
+                for p, row in list(periods.items())[-2:]:
+                    flatten_evidence_values(
+                        row,
+                        prefix=f"cash_bridge.{scenario}.{p}",
+                        out=values,
+                    )
+
+    if metrics_blob:
+        blob_vals = evidence_values_from_text_blob(metrics_blob)
+        for k, v in blob_vals.items():
+            values[f"blob.{k}"] = v
+
+    return _package_from_values(values, period_label=label, freeze_id=freeze_id)
+
+
+def evidence_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, Any]:
+    """LLM-facing evidence (omit Decimal map). Cap size for interactive prompts."""
+    if not package:
+        return {"values": {}, "tolerance_actuals": str(TOL_ACTUALS)}
+    values = package.get("values") or {}
+    if isinstance(values, Mapping) and len(values) > 400:
+        # Prefer structured keys over anonymous blob scrape when capping.
+        structured = {k: v for k, v in values.items() if not str(k).startswith("blob.")}
+        blob = {k: v for k, v in values.items() if str(k).startswith("blob.")}
+        keep = dict(list(structured.items())[:350])
+        keep.update(dict(list(blob.items())[:50]))
+        values = keep
+    return {
+        "period_label": package.get("period_label"),
+        "freeze_id": package.get("freeze_id"),
+        "tolerance_actuals": package.get("tolerance_actuals") or str(TOL_ACTUALS),
+        "values": values,
+        "policy": (
+            "State only numeric values present in values (within $1.00 for money). "
+            "Post-LLM verify uses this same package. Not full warehouse _sources."
+        ),
+    }
+
+
 def verify_pptx_script_against_evidence(
     script: str,
     evidence: Mapping[str, Decimal] | Mapping[str, Any],

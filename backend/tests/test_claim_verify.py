@@ -256,3 +256,72 @@ def test_evidence_values_from_text_blob_allows_context_numbers() -> None:
     bad = verify_text_against_evidence("ARR closed at $99,000,000.", evidence)
     assert not bad.ok
 
+
+def test_copilot_structured_evidence_package_from_ts_and_waterfalls() -> None:
+    from app.services.commentary.claim_verify import (
+        build_evidence_package_from_copilot_structures,
+        evidence_values_from_package,
+        fail_closed_text,
+        verify_text_against_evidence,
+    )
+
+    ts_data = {
+        "Actual": {
+            "is": {"2026-06": {"revenue": 7_412_000, "ebitda": -1_297_000}},
+            "bs": {"2026-06": {"cash": 70_610_000, "deferred_rev": 1_120_000}},
+            "cfs": {"2026-06": {"ending_cash": 70_610_000}},
+        }
+    }
+    cash_bridge = {
+        "Actual": {
+            "2026-06": {
+                "beginning_cash": 66_000_000,
+                "collections": 8_000_000,
+                "payroll": -3_000_000,
+                "ending_cash": 70_610_000,
+            }
+        }
+    }
+    bundle = {
+        "as_of_period": "2026-06",
+        "period_label": "Jun 2026",
+        "comparison_waterfalls": {
+            "arr": [
+                {
+                    "waterfall_type": "expansion",
+                    "period": "2026-06",
+                    "scenario": "Actual",
+                    "amount": 2_700_000,
+                },
+                {
+                    "waterfall_type": "ending_arr",
+                    "period": "2026-06",
+                    "scenario": "Actual",
+                    "amount": 86_100_000,
+                },
+            ]
+        },
+    }
+    pkg = build_evidence_package_from_copilot_structures(
+        bundle=bundle,
+        ts_data=ts_data,
+        cash_bridge_table=cash_bridge,
+        focus_period="2026-06",
+        period_label="2026-06",
+    )
+    evidence = evidence_values_from_package(pkg)
+    assert any("revenue" in k for k in evidence)
+    assert any("ending_arr" in k or "expansion" in k for k in evidence)
+    # Structured dotted keys — not only anonymous blob_num
+    assert any(k.startswith("ts.") for k in evidence)
+    assert any(k.startswith("bundle.") for k in evidence)
+
+    ok = verify_text_against_evidence(
+        "Revenue closed at $7,412,000 and ending ARR was $86.1M.",
+        evidence,
+    )
+    assert ok.ok
+    bad = verify_text_against_evidence("Revenue closed at $99,000,000.", evidence)
+    assert not bad.ok
+    assert "don't know" in fail_closed_text("Revenue closed at $99,000,000.", bad).lower()
+
