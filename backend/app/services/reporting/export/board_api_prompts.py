@@ -38,10 +38,14 @@ OUTPUT FORMAT RULES — CRITICAL
 - Never start two consecutive bullets with the same word
 - Favorable variances: lead with the positive signal
 - Unfavorable variances: state the driver and the next-quarter expectation in the same bullet
+- Causal / attribution language may only name drivers present in attribution_package.allowed_drivers
+  (or structured slide metrics / freeze labels provided). If no allowlisted driver fits, restate
+  the metric variance without inventing an operational cause.
 
 DO NOT
 - Copy or lightly edit prior-month example commentary from templates
 - Invent metrics not present in the slide metrics object
+- Invent causal drivers not present in attribution allowlist / freeze labels
 - Output slide titles, headers, or markdown fences
 - Treat the deck as a layout template — you are writing fresh variance commentary only
 
@@ -77,6 +81,11 @@ def board_deck_single_slide_user_message(
     freeze_stale: bool = False,
 ) -> str:
     """Serialize the dynamic user message for a single-slide API call."""
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_deck_payload,
+        build_attribution_package_from_text_blob,
+        normalize_allowlist,
+    )
     from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
 
     freeze_block = format_freeze_prompt_block(
@@ -89,9 +98,30 @@ def board_deck_single_slide_user_message(
             "Bullet numbers must come from the slide payload JSON only — never invent figures."
         ),
     )
+    attribution = build_attribution_package_from_deck_payload(payload)
+    if freeze_context_text:
+        blob_pkg = build_attribution_package_from_text_blob(
+            freeze_context_text, metric="board_slide_freeze_blob"
+        )
+        merged = normalize_allowlist(attribution) + normalize_allowlist(blob_pkg)
+        by_id = {d.id: d for d in merged}
+        attribution = {
+            **attribution,
+            "allowed_drivers": [
+                {
+                    "id": d.id,
+                    "label": d.label,
+                    "amount": str(d.amount) if d.amount is not None else None,
+                    "source": d.source,
+                    "aliases": list(d.aliases),
+                }
+                for d in by_id.values()
+            ],
+        }
     body = {
         "task": "board_slide_commentary",
         **payload,
+        "attribution_package": attribution,
         "instructions": _SINGLE_SLIDE_INSTRUCTIONS,
     }
     payload_json = json.dumps(body, indent=2)

@@ -489,7 +489,7 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 4. **Live on** Prompt 5 deck — evidence in prompt; post-LLM hard-block on invented $/% in PPTX string literals
 5. **Live on** board slide regenerate — per-bullet soft strip / don't-know
 6. **Partial** Copilot — thin wire vs metrics/freeze text-blob numbers (not full `_sources`)
-7. **Attribution v1 (partial):** `attribution_verify.py` — allowlist causal/driver claims; live on commentary generate + MD&A Prompt 2; Prompt 5 / board / Copilot follow-up — [controls/ai_attribution_verify.md](./controls/ai_attribution_verify.md)
+7. **Attribution v1:** `attribution_verify.py` — allowlist causal/driver claims; live on commentary generate, MD&A Prompt 2, Prompt 5 (soft-strip + hard-block-when-fully-wiped), board regenerate (per-bullet), Copilot thin blob-label wire — [controls/ai_attribution_verify.md](./controls/ai_attribution_verify.md). Remaining: stronger Copilot structured evidence + FE↔Board single-source
 8. Founder coverage checklist: [controls/ai_claim_verify.md](./controls/ai_claim_verify.md)
 9. Demo Board/FE seed financials **unchanged**
 10. Guarantee 4 corrected to machine-primary
@@ -507,5 +507,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-30 (P15 claim-verify fail-closed live on `/commentary/generate` + MD&A Prompt 2; vendor SOC public research — no Type II; DPA/MSA awaiting redline) |
+| Last updated | 2026-07-30 (P15 claim-verify + attribution verify live on primary AI paths; vendor SOC public research — no Type II; DPA/MSA awaiting redline) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

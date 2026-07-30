@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from app.services.commentary.attribution_verify import (
     DONT_KNOW_ATTRIBUTION,
     AllowedDriver,
@@ -202,3 +204,126 @@ def test_generate_embeds_attribution_and_strips_invented_driver() -> None:
     out = generate_commentary(inputs, fake)
     assert "ATTRIBUTION PACKAGE" in fake.calls[0]["user"]
     assert out.executive_summary.narrative == DONT_KNOW_ATTRIBUTION
+
+
+def test_deck_payload_builds_bridge_and_matrix_allowlist() -> None:
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_deck_payload,
+    )
+
+    pkg = build_attribution_package_from_deck_payload(
+        {
+            "period_context": {"close_period": "2026-05"},
+            "period_matrix": {
+                "rows": [
+                    {"metric": "Ending ARR"},
+                    {"metric": "Revenue"},
+                ]
+            },
+            "arr_analysis": {
+                "expansion": "$1.2M",
+                "churn": "$0.4M",
+                "bridge_table": {
+                    "rows": [
+                        {"label": "Expansion"},
+                        {"label": "Churn"},
+                    ]
+                },
+            },
+            "gtm_performance": {
+                "channels": [{"channel": "Paid Search"}, {"channel": "Outbound"}]
+            },
+        }
+    )
+    ids = {d["id"] for d in pkg["allowed_drivers"]}
+    labels = {d["label"].lower() for d in pkg["allowed_drivers"]}
+    assert "expansion" in ids or any("expansion" in lab for lab in labels)
+    assert "ending_arr" in ids or any("ending arr" in lab for lab in labels)
+    assert any("paid search" in lab for lab in labels)
+
+
+def test_apply_fail_closed_attribution_to_bullet_list() -> None:
+    from app.services.commentary.attribution_verify import (
+        apply_fail_closed_attribution_to_bullet_list,
+    )
+
+    allowlist = [
+        AllowedDriver(
+            id="expansion",
+            label="Expansion",
+            aliases=("expansion", "expansion arr"),
+        )
+    ]
+    bullets, result = apply_fail_closed_attribution_to_bullet_list(
+        [
+            "Net new ARR growth was driven by expansion.",
+            "ARR grew due to three enterprise upsells.",
+            "Ending ARR closed at $86.1M.",
+        ],
+        allowlist,
+    )
+    assert not result.ok
+    assert "expansion" in bullets[0].lower()
+    assert bullets[1] == DONT_KNOW_ATTRIBUTION
+    assert "86.1" in bullets[2]
+
+
+def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() -> None:
+    from app.services.commentary.attribution_verify import (
+        apply_fail_closed_attribution_to_pptx_script,
+        raise_if_pptx_attribution_fully_unverifiable,
+    )
+    from app.services.commentary.claim_verify import CommentaryIntegrityError
+
+    allowlist = [
+        AllowedDriver(
+            id="expansion",
+            label="Expansion",
+            aliases=("expansion",),
+        )
+    ]
+    mixed = (
+        'slide.addText("ARR growth was driven by expansion.");'
+        'slide.addText("Growth was due to three enterprise upsells.");'
+    )
+    rewritten, result = apply_fail_closed_attribution_to_pptx_script(mixed, allowlist)
+    assert not result.ok
+    assert "expansion" in rewritten.lower()
+    assert DONT_KNOW_ATTRIBUTION[:40] in rewritten
+    # Partial wipe → do not hard-block
+    raise_if_pptx_attribution_fully_unverifiable(result)
+
+    bad_only = 'slide.addText("ARR grew due to three enterprise upsells.");'
+    wiped, bad_result = apply_fail_closed_attribution_to_pptx_script(bad_only, allowlist)
+    assert not bad_result.ok
+    assert all(c.status != "pass" for c in bad_result.checks)
+    assert DONT_KNOW_ATTRIBUTION[:40] in wiped
+    with pytest.raises(CommentaryIntegrityError, match="Prompt 5"):
+        raise_if_pptx_attribution_fully_unverifiable(bad_result)
+
+
+def test_copilot_blob_allowlist_is_thin_but_catches_invented_drivers() -> None:
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_text_blob,
+        fail_closed_attribution_text,
+        verify_text_attribution,
+    )
+
+    blob = (
+        "ARR bridge: beginning_arr, expansion, churn, ending_arr.\n"
+        "Cash bridge: collections, payroll, ending cash."
+    )
+    pkg = build_attribution_package_from_text_blob(blob)
+    ids = {d["id"] for d in pkg["allowed_drivers"]}
+    assert "expansion" in ids
+    assert "payroll" in ids
+
+    ok = verify_text_attribution("ARR growth was driven by expansion.", pkg)
+    assert ok.ok
+    bad = verify_text_attribution(
+        "ARR growth was driven by three enterprise upsells.", pkg
+    )
+    assert not bad.ok
+    assert fail_closed_attribution_text(
+        "ARR growth was driven by three enterprise upsells.", bad
+    ) == DONT_KNOW_ATTRIBUTION

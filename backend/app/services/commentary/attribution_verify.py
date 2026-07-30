@@ -849,3 +849,202 @@ def raise_if_attribution_fully_unverifiable(
             "P15 fail-closed: MD&A variance commentary had no verifiable attribution claims; "
             "blocking package emit. " + result.summary(),
         )
+
+
+def build_attribution_package_from_deck_payload(
+    payload: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Allowlist from Prompt 5 / board deck payload structured fields.
+
+    Reuses MDA bridge/sheet extraction and adds period_matrix metrics + GTM channels.
+    """
+    if not payload:
+        return build_attribution_package(metric="deck_package", drivers=[])
+
+    # MDA helper already walks arr_analysis / cash_liquidity / sheets / channels
+    # on both top-level and nested deck_payload shapes.
+    base = build_attribution_package_from_mda_payload(payload)
+    drivers = normalize_allowlist(base)
+    seen = {d.id for d in drivers}
+
+    def _add(did: str, label: str, *, source: str, aliases: Iterable[str] = ()) -> None:
+        if did in seen:
+            return
+        seen.add(did)
+        drivers.append(_driver(did, label, source=source, aliases=aliases))
+
+    matrix = payload.get("period_matrix") or {}
+    if isinstance(matrix, Mapping):
+        for row in matrix.get("rows") or []:
+            if not isinstance(row, Mapping):
+                continue
+            metric_name = str(row.get("metric") or "").strip()
+            if metric_name:
+                _add(
+                    _slug(metric_name),
+                    metric_name,
+                    source="period_matrix.metric",
+                    aliases=(metric_name.lower(),),
+                )
+
+    gtm = payload.get("gtm_performance") or {}
+    if isinstance(gtm, Mapping):
+        for ch in gtm.get("channels") or gtm.get("by_channel") or []:
+            if isinstance(ch, Mapping):
+                name = str(ch.get("channel") or ch.get("name") or "").strip()
+            else:
+                name = str(ch).strip()
+            if name:
+                _add(_slug(name), name, source="gtm_performance.channels", aliases=(name.lower(),))
+
+    # Waterfall / bridge component keys already on arr_analysis without table rows.
+    arr = payload.get("arr_analysis") or {}
+    if isinstance(arr, Mapping):
+        for key, aliases in _ARR_BRIDGE_LABELS.items():
+            if key in arr or f"{key}_budget" in arr:
+                _add(key, key.replace("_", " ").title(), source=f"arr_analysis.{key}", aliases=aliases)
+
+    period = str(
+        (payload.get("period_context") or {}).get("close_period")
+        if isinstance(payload.get("period_context"), Mapping)
+        else payload.get("close_period") or base.get("period") or ""
+    ) or None
+
+    return build_attribution_package(
+        metric="deck_package",
+        period=period,
+        drivers=drivers,
+    )
+
+
+def apply_fail_closed_attribution_to_bullet_list(
+    bullets: list[str],
+    allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+) -> tuple[list[str], AttributionVerificationResult]:
+    """Per-bullet don't-know rewrite for board slide regenerate (mirrors claim_verify)."""
+    all_checks: list[AttributionCheck] = []
+    drivers = normalize_allowlist(allowlist)
+    cleaned: list[str] = []
+    for bullet in bullets:
+        local = verify_text_attribution(bullet, drivers)
+        all_checks.extend(local.checks)
+        if local.ok:
+            cleaned.append(bullet)
+        else:
+            cleaned.append(DONT_KNOW_ATTRIBUTION)
+    return cleaned, AttributionVerificationResult(
+        checks=all_checks,
+        allowlist_size=len(drivers),
+    )
+
+
+def apply_fail_closed_attribution_to_pptx_script(
+    script: str,
+    allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+) -> tuple[str, AttributionVerificationResult]:
+    """Soft-strip off-allowlist causal claims inside PPTX JS string literals.
+
+    Layout / chart array code outside strings is ignored. Failed string literals
+    are replaced with DONT_KNOW_ATTRIBUTION; callers may hard-block when every
+    attribution check failed (see ``raise_if_pptx_attribution_fully_unverifiable``).
+    """
+    from app.services.commentary.claim_verify import _JS_STRING_RE
+
+    drivers = normalize_allowlist(allowlist)
+    all_checks: list[AttributionCheck] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        quote = match.group(1)
+        raw = match.group(0)
+        inner = raw[1:-1]
+        inner_unesc = (
+            inner.replace(r"\'", "'")
+            .replace(r'\"', '"')
+            .replace(r"\n", " ")
+            .replace(r"\t", " ")
+        )
+        local = verify_text_attribution(inner_unesc, drivers)
+        all_checks.extend(local.checks)
+        if local.ok:
+            return raw
+        escaped = (
+            DONT_KNOW_ATTRIBUTION.replace("\\", "\\\\")
+            .replace(quote, f"\\{quote}")
+            .replace("\n", "\\n")
+        )
+        return f"{quote}{escaped}{quote}"
+
+    rewritten = _JS_STRING_RE.sub(_replace, script or "")
+    return rewritten, AttributionVerificationResult(
+        checks=all_checks,
+        allowlist_size=len(drivers),
+    )
+
+
+def raise_if_pptx_attribution_fully_unverifiable(
+    result: AttributionVerificationResult,
+) -> None:
+    """Hard-block Prompt 5 emit when every causal claim in the script failed."""
+    if not result.checks:
+        return
+    if any(c.status == "pass" for c in result.checks):
+        return
+    raise CommentaryIntegrityError(
+        "P15 fail-closed: Prompt 5 / PPTX script had no verifiable attribution claims; "
+        "blocking deck emit. " + result.summary(),
+    )
+
+
+def build_attribution_package_from_text_blob(
+    text: str,
+    *,
+    metric: str = "copilot_context_blob",
+) -> dict[str, Any]:
+    """Thin / weak allowlist for Copilot: known bridge labels that appear in context text.
+
+    Honesty: this is **not** structured `_sources`. Only canonical ARR/MRR/cash component
+    labels (and a few common metric names) that literally appear in the freeze/metrics
+    blob are allowlisted. Invented deal stories still fail closed; many legitimate
+    free-text drivers in the blob that are not in the canonical catalog will also
+    fail — prefer don't-know over wrong-story packaging.
+    """
+    blob = (text or "").lower()
+    drivers: list[AllowedDriver] = []
+    seen: set[str] = set()
+
+    catalogs: list[tuple[str, tuple[str, ...]]] = []
+    for key, aliases in _MRR_COMPONENT_LABELS.items():
+        catalogs.append((key, aliases))
+    for key, aliases in _ARR_BRIDGE_LABELS.items():
+        catalogs.append((key, aliases))
+    for key, aliases in _CASH_BRIDGE_LABELS.items():
+        catalogs.append((key, aliases))
+    # Common board metrics that often appear as causal nouns in freeze prose.
+    for key, aliases in (
+        ("revenue", ("revenue",)),
+        ("ending_arr", ("ending arr", "arr")),
+        ("gross_margin", ("gross margin",)),
+        ("ebitda", ("ebitda",)),
+        ("ending_cash", ("ending cash", "cash")),
+        ("pipeline", ("pipeline", "pipeline coverage")),
+        ("paid_search", ("paid search",)),
+        ("payroll", ("payroll",)),
+    ):
+        catalogs.append((key, aliases))
+
+    for key, aliases in catalogs:
+        tokens = (key.replace("_", " "),) + tuple(aliases)
+        if any(t and t in blob for t in tokens):
+            if key in seen:
+                continue
+            seen.add(key)
+            drivers.append(
+                _driver(
+                    key,
+                    key.replace("_", " ").title(),
+                    source="context_blob_label",
+                    aliases=aliases,
+                )
+            )
+
+    return build_attribution_package(metric=metric, drivers=drivers)

@@ -308,6 +308,11 @@ def build_prompt5_payload(
 
     payload = enrich_deck_payload(payload, bundle, ts_data=ts_data)
     payload["payload_warnings"] = validate_deck_payload(payload)
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_deck_payload,
+    )
+
+    payload["attribution_package"] = build_attribution_package_from_deck_payload(payload)
     return payload
 
 
@@ -348,6 +353,9 @@ def build_prompt5_user_message(
         ),
     )
 
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_deck_payload,
+    )
     from app.services.reporting.export.board_platform_metrics import evidence_values_from_deck_payload
 
     evidence_values = evidence_values_from_deck_payload(payload)
@@ -360,6 +368,17 @@ def build_prompt5_user_message(
         f"{json.dumps(evidence_preview, separators=(',', ':'))}\n\n"
     )
 
+    attribution = payload.get("attribution_package") or build_attribution_package_from_deck_payload(
+        payload
+    )
+    if "attribution_package" not in payload:
+        payload["attribution_package"] = attribution
+    attribution_block = (
+        "ATTRIBUTION PACKAGE (P15 — causal / driver language may only name "
+        "allowed_drivers id/label/aliases; empty allowlist means no causal claims):\n"
+        f"{json.dumps(attribution, separators=(',', ':'))}\n\n"
+    )
+
     return (
         "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"
         "Follow the per-slide layout assignments in the system prompt exactly.\n"
@@ -368,6 +387,7 @@ def build_prompt5_user_message(
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers verbatim.\n\n"
         f"{freeze_block}"
         f"{evidence_block}"
+        f"{attribution_block}"
         f"PERIOD CONTEXT\n"
         f"Close period: {pc['close_period_label']}\n"
         f"Quarter: {pc['quarter']}\n"
@@ -644,8 +664,16 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
         return pptx_bytes, prepared
 
 
-def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> None:
-    """P15 hard block: invented display $ / % in PPTX script string literals."""
+def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
+    """P15: numeric hard-block + attribution soft-strip (hard-block if fully wiped).
+
+    Returns the (possibly attribution-rewritten) script for Node render.
+    """
+    from app.services.commentary.attribution_verify import (
+        apply_fail_closed_attribution_to_pptx_script,
+        build_attribution_package_from_deck_payload,
+        raise_if_pptx_attribution_fully_unverifiable,
+    )
     from app.services.commentary.claim_verify import verify_pptx_script_against_evidence
     from app.services.reporting.export.board_platform_metrics import (
         evidence_values_from_deck_payload,
@@ -655,6 +683,25 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> Non
     result = verify_pptx_script_against_evidence(script, evidence, fail_closed=True)
     if result.ok:
         logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(result.checks))
+
+    attribution = payload.get("attribution_package") or build_attribution_package_from_deck_payload(
+        payload
+    )
+    rewritten, attr_result = apply_fail_closed_attribution_to_pptx_script(script, attribution)
+    if attr_result.ok:
+        if attr_result.checks:
+            logger.info(
+                "P15 Prompt 5 attribution-verify passed (%s checks, allowlist=%s)",
+                len(attr_result.checks),
+                attr_result.allowlist_size,
+            )
+        return script
+    logger.warning(
+        "P15 Prompt 5 attribution-verify stripped off-allowlist drivers: %s",
+        attr_result.summary(),
+    )
+    raise_if_pptx_attribution_fully_unverifiable(attr_result)
+    return rewritten
 
 
 def _try_adapt_from_reference(
@@ -699,7 +746,7 @@ def _try_adapt_from_reference(
             f"Adapt fallback incomplete ({len(script_text)} chars, no pptx.writeFile)"
         )
     if payload is not None:
-        _verify_prompt5_script_or_raise(script_text, payload)
+        script_text = _verify_prompt5_script_or_raise(script_text, payload)
     pptx_bytes, _ = _render_prepared_script(script_text, period=period)
     return pptx_bytes, f"claude_adapt_{kind or 'bundled'}"
 
@@ -783,7 +830,7 @@ def build_claude_deck_pptx_bytes(
                 logger.error(last_error)
                 continue
 
-            _verify_prompt5_script_or_raise(script_text, payload)
+            script_text = _verify_prompt5_script_or_raise(script_text, payload)
             pptx_bytes, _ = _render_prepared_script(
                 script_text, period=bundle.as_of_period
             )
