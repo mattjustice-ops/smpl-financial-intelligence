@@ -1,5 +1,6 @@
 /**
- * Regression: partial live hydrate must not leave stale demo actuals.
+ * Regression: partial live hydrate must not leave stale demo Actual /
+ * Forecast / Budget residue. Empty live scenarios must not wipe demo.
  * Run from frontend/: node scripts/verify-outlook-hydrate.mjs
  */
 import fs from "fs";
@@ -137,6 +138,106 @@ check(
   "Empty live Actual does not prune demo",
   keepDemo.Actual.is["2026-06"] && keepDemo.Actual.is["2026-06"].revenue === 1,
   JSON.stringify(keepDemo.Actual.is["2026-06"])
+);
+
+// Forecast / Budget: prune forward demo periods omitted by partial live plan.
+const demoPlan = {
+  Actual: { is: {}, bs: {}, cfs: {} },
+  Forecast: {
+    periods: ["2026-07", "2026-08", "2026-12"],
+    is: {
+      "2026-07": { revenue: 100 },
+      "2026-08": { revenue: 200 },
+      "2026-12": { revenue: 999 },
+    },
+    bs: { "2026-08": { cash: 1 }, "2026-12": { cash: 9 } },
+    cfs: { "2026-12": { ending_cash: 9 } },
+  },
+  Budget: {
+    periods: ["2026-01", "2026-07", "2026-12"],
+    is: {
+      "2026-01": { revenue: 50 },
+      "2026-07": { revenue: 70 },
+      "2026-12": { revenue: 80 },
+    },
+    bs: {},
+    cfs: {},
+  },
+};
+const livePlan = {
+  Forecast: {
+    periods: ["2026-07"],
+    is: { "2026-07": { revenue: 7_500_000 } },
+    bs: {},
+    cfs: {},
+  },
+  Budget: {
+    periods: ["2026-07"],
+    is: { "2026-07": { revenue: 7_000_000 } },
+    bs: {},
+    cfs: {},
+  },
+};
+SMPLOutlook.mergeTsData(demoPlan, livePlan, "2026-06");
+check(
+  "Jul Forecast replaced by live",
+  demoPlan.Forecast.is["2026-07"].revenue === 7_500_000,
+  String(demoPlan.Forecast.is["2026-07"].revenue)
+);
+check(
+  "Aug/Dec Forecast pruned when warehouse omitted them",
+  demoPlan.Forecast.is["2026-08"] == null && demoPlan.Forecast.is["2026-12"] == null,
+  JSON.stringify({
+    aug: demoPlan.Forecast.is["2026-08"],
+    dec: demoPlan.Forecast.is["2026-12"],
+  })
+);
+check(
+  "Jul Budget replaced by live",
+  demoPlan.Budget.is["2026-07"].revenue === 7_000_000,
+  String(demoPlan.Budget.is["2026-07"].revenue)
+);
+check(
+  "Dec Budget forward period pruned",
+  demoPlan.Budget.is["2026-12"] == null,
+  demoPlan.Budget.is["2026-12"] == null ? "deleted" : "still present"
+);
+check(
+  "Closed-month Budget left alone (conservative)",
+  demoPlan.Budget.is["2026-01"] && demoPlan.Budget.is["2026-01"].revenue === 50,
+  JSON.stringify(demoPlan.Budget.is["2026-01"])
+);
+
+// Empty live Forecast/Budget must not wipe demo plan scaffolding.
+const keepPlan = {
+  Forecast: {
+    is: { "2026-12": { revenue: 42 } },
+    bs: {},
+    cfs: {},
+  },
+  Budget: {
+    is: { "2026-12": { revenue: 43 } },
+    bs: {},
+    cfs: {},
+  },
+};
+SMPLOutlook.mergeTsData(
+  keepPlan,
+  {
+    Forecast: { is: {}, bs: {}, cfs: {} },
+    Budget: { is: {}, bs: {}, cfs: {} },
+  },
+  "2026-06"
+);
+check(
+  "Empty live Forecast does not prune demo",
+  keepPlan.Forecast.is["2026-12"] && keepPlan.Forecast.is["2026-12"].revenue === 42,
+  JSON.stringify(keepPlan.Forecast.is["2026-12"])
+);
+check(
+  "Empty live Budget does not prune demo",
+  keepPlan.Budget.is["2026-12"] && keepPlan.Budget.is["2026-12"].revenue === 43,
+  JSON.stringify(keepPlan.Budget.is["2026-12"])
 );
 
 if (failed) {

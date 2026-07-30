@@ -54,17 +54,21 @@ The guard compares Board `TS_DATA.Actual` vs FE `SRC.actuals` for shared fields 
 
 1. **Full period-row replace** for every live period that has values — never `Object.assign` demo fields onto a live row.
 2. **Prune closed Actual residue** — when live Actual has ≥1 populated period, delete target Actual (TS) / SRC.actuals periods `≤ close_month` that the warehouse did not send.
-3. **Empty live Actual does not wipe demo** — incomplete/offline warehouse still keeps embedded demo (status stays warn).
-4. **No demo reseed** to fake ties.
+3. **Prune forward Forecast / Budget residue** — when live Forecast (resp. Budget) has ≥1 populated period, delete target periods for that scenario with `period > close_month` that the warehouse omitted (`pruneDemoPlanResidue`).
+4. **Empty live scenario does not wipe demo** — empty Actual / Forecast / Budget in the live payload leaves that scenario’s embedded demo alone (status stays warn).
+5. **No demo reseed** to fake ties.
 
-Code: `frontend/canonical/shared/smpl-outlook.js` and `frontend/public/shared/smpl-outlook.js`.
+**Conservative Forecast/Budget choice:** closed-month (`≤ close_month`) Budget/Forecast cells are **not** pruned. Warehouse often omits historical plan for closed months; wiping those would risk removing valid demo overlays when live plan is only partial forward coverage. Each scenario is gated independently (live Forecast does not prune Budget, and vice versa).
+
+Code: `frontend/canonical/shared/smpl-outlook.js` and `frontend/public/shared/smpl-outlook.js`.  
+Regression: `npm run verify:outlook-hydrate` (Actual + Forecast/Budget cases).
 
 ---
 
 ## Remaining risks (honest)
 
-1. Forecast / Budget scenarios are not pruned the same way as closed Actuals (by design — forward demo scaffolding may remain until live forecast arrives).
-2. FE display may prefer TS while levers/`computePeriod` read `SRC.actuals` — both should match after a full live hydrate; partial hydrate now replaces/prunes closed Actuals on both.
+1. Closed-month Budget/Forecast demo cells can remain after a partial live plan hydrate (by design — see conservative choice above).
+2. FE display may prefer TS while levers/`computePeriod` read `SRC.actuals` — both should match after a full live hydrate; partial hydrate now replaces/prunes closed Actuals and forward Forecast/Budget on TS.
 3. Field alias bugs (`deferred_rev` / `dr`) can look like source divergence — the backend guard checks both.
 
 ---
