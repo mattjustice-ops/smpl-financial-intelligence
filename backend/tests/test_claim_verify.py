@@ -325,3 +325,42 @@ def test_copilot_structured_evidence_package_from_ts_and_waterfalls() -> None:
     assert not bad.ok
     assert "don't know" in fail_closed_text("Revenue closed at $99,000,000.", bad).lower()
 
+    # Provenance contract: material keys carry _sources tags
+    sources = pkg.get("_sources") or {}
+    assert sources
+    rev_keys = [k for k in sources if k.endswith(".revenue") or k.endswith("revenue")]
+    assert rev_keys
+    rev_src = sources[rev_keys[0]]
+    assert rev_src.get("source_type") == "WAREHOUSE"
+    assert rev_src.get("table") == "income_statement"
+    assert rev_src.get("column") == "revenue"
+    assert rev_src.get("period") == "2026-06" or rev_src.get("path")
+
+
+def test_evidence_package_attaches_sources_for_commentary_and_prompt() -> None:
+    from app.services.commentary.claim_verify import (
+        build_evidence_package,
+        evidence_package_for_prompt,
+    )
+
+    pkg = build_evidence_package(
+        {
+            "period_label": "2026-06",
+            "mrr_waterfall": {
+                "ending_mrr": 7_175_000,
+                "expansion_mrr": 225_000,
+                "new_mrr": 100_000,
+            },
+        }
+    )
+    sources = pkg["_sources"]
+    assert "mrr_waterfall.ending_mrr" in sources
+    assert sources["mrr_waterfall.ending_mrr"]["source_type"] == "WAREHOUSE"
+    assert sources["mrr_waterfall.ending_mrr"]["table"] == "mrr_waterfall"
+    assert sources["mrr_waterfall.expansion_mrr"]["column"] == "expansion_mrr"
+
+    prompt_pkg = evidence_package_for_prompt(pkg)
+    assert "_sources" in prompt_pkg
+    assert prompt_pkg["_sources"]["mrr_waterfall.ending_mrr"]["table"] == "mrr_waterfall"
+    assert "Cite _sources" in (prompt_pkg.get("policy") or "")
+

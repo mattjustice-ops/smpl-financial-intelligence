@@ -488,11 +488,11 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 3. **Live on** MD&A Prompt 2 package path — matrix mismatch hard-blocks emit; post-LLM strip of unverifiable commentary cells; all-unverifiable variance sheet blocks emit
 4. **Live on** Prompt 5 deck — evidence in prompt; post-LLM hard-block on invented $/% in PPTX string literals
 5. **Live on** board slide regenerate — per-bullet soft strip / don't-know
-6. **Copilot** — structured evidence/attribution packages from bundle/TS/cash (+ freeze `sections`); blob supplement; still not full `_sources`
-7. **Attribution v1:** `attribution_verify.py` — allowlist causal/driver claims; live on commentary generate, MD&A Prompt 2, Prompt 5 (soft-strip + hard-block-when-fully-wiped), board regenerate (per-bullet), Copilot structured packages — [controls/ai_attribution_verify.md](./controls/ai_attribution_verify.md)
-8. **Production FE↔Board single-source** confirmed (shared outlook API/builder) + TS↔SRC $1 regression — [controls/fe_board_single_source.md](./controls/fe_board_single_source.md)
+6. **Copilot** — structured evidence/attribution packages from bundle/TS/cash (+ freeze `sections`); blob supplement; **`_sources` tags** on evidence values (catalog + ENGINE_PATH)
+7. **Attribution v1:** `attribution_verify.py` — allowlist causal/driver claims; live on commentary generate, MD&A Prompt 2, Prompt 5 (soft-strip + hard-block-when-fully-wiped), board regenerate (per-bullet), Copilot structured packages; **deal-count / named-logo / magnitude dominance** — [controls/ai_attribution_verify.md](./controls/ai_attribution_verify.md)
+8. **Production FE↔Board single-source** confirmed (shared outlook API/builder) + TS↔SRC $1 regression + **hydrate residue fix** (full row replace + prune closed Actuals) — [controls/fe_board_single_source.md](./controls/fe_board_single_source.md)
 9. Founder coverage checklist: [controls/ai_claim_verify.md](./controls/ai_claim_verify.md)
-10. Demo Board/FE seed financials **unchanged**
+10. Demo Board/FE seed financials **unchanged** (no reseed)
 11. Guarantee 4 corrected to machine-primary
 ---
 
@@ -508,5 +508,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-30 (P15 Copilot structured evidence + FE↔Board single-source; vendor SOC public research — no Type II; DPA/MSA awaiting redline) |
+| Last updated | 2026-07-30 (P15 `_sources` + drivers + hydrate residue; vendor SOC public research — no Type II; DPA/MSA awaiting redline) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

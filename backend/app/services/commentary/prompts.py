@@ -62,20 +62,18 @@ def build_user_prompt(
     from app.services.commentary.attribution_verify import (
         build_attribution_package_from_commentary_inputs,
     )
-    from app.services.commentary.claim_verify import build_evidence_package
+    from app.services.commentary.claim_verify import (
+        build_evidence_package,
+        evidence_package_for_prompt,
+    )
 
     data_block: dict[str, Any] = inputs.model_dump(mode="json", exclude_none=False)
     evidence = evidence_package or build_evidence_package(inputs)
     attribution = attribution_package or build_attribution_package_from_commentary_inputs(
         inputs
     )
-    # LLM-facing evidence omits the Decimal map (serialized in `values`).
-    evidence_for_prompt = {
-        "period_label": evidence.get("period_label"),
-        "freeze_id": evidence.get("freeze_id"),
-        "tolerance_actuals": evidence.get("tolerance_actuals"),
-        "values": evidence.get("values") or {},
-    }
+    # LLM-facing evidence omits Decimal map; includes values + _sources.
+    evidence_for_prompt = evidence_package_for_prompt(evidence)
     attribution_for_prompt = {
         "metric": attribution.get("metric"),
         "period": attribution.get("period"),
