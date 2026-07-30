@@ -218,6 +218,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=4"></script>
 <script src="/shared/smpl-outlook.js?v=17"></script>
+<script src="/shared/smpl-provenance.js?v=1"></script>
 <script src="/shared/smpl-pipeline.js?v=2"></script>
 <script src="/shared/smpl-demo-seed.js?v=2"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
@@ -889,7 +890,17 @@ function buildKPIs(results){
     ['Dec Cash',fM(dec_cash,1),'From opening $48.0M','pos'],
     ['G$R / N$R',fP(dec_grr)+' / '+fP(dec_nrr),'Dec 2026 retention','pos'],
   ];
-  return `<div class="kpi-strip ks5">${items.map(([l,v,d,c])=>`<div class="kpi"><div class="kpi-lbl">${l}</div><div class="kpi-val">${v}</div><div class="kpi-delta ${c}">${d}</div></div>`).join('')}</div>`;
+  const ds = (window.SMPLProvenance && SMPLProvenance.attrString)
+    ? (k) => SMPLProvenance.attrString(k)
+    : () => '';
+  const metricFor = {
+    'Dec ARR': 'ending_arr',
+    'Forecast Revenue': 'revenue',
+    'Forecast EBITDA': 'ebitda',
+    'Dec Cash': 'ending_cash',
+    'G$R / N$R': 'nrr',
+  };
+  return `<div class="kpi-strip ks5">${items.map(([l,v,d,c])=>`<div class="kpi"><div class="kpi-lbl">${l}</div><div class="kpi-val" ${ds(metricFor[l]||'')}>${v}</div><div class="kpi-delta ${c}">${d}</div></div>`).join('')}</div>`;
 }
 
 // \u2500\u2500 LEFT PANEL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -1984,8 +1995,17 @@ updLabels();
         WF_TABLE: window.SMPL_DEMO_WF_TABLE,
       },
       onStatus: setWarehouseStatus,
-      onApplied: function () {
+      onApplied: function (data) {
+        if (window.SMPLProvenance && typeof window.SMPLProvenance.ingestOutlook === 'function') {
+          window.SMPLProvenance.ingestOutlook(data);
+        }
         if (typeof refresh === 'function') refresh();
+        if (window.SMPLProvenance) {
+          try {
+            window.SMPLProvenance.annotateDom(document);
+            window.SMPLProvenance.runTieOut();
+          } catch (e) { console.warn('[forecast-engine] provenance', e); }
+        }
         if (window.SMPLOutlook && window.SMPLOutlook.buildAlignmentReport) {
           console.info('[forecast-engine] alignment', window.SMPLOutlook.buildAlignmentReport(ALL_P, getCloseMonth()));
         }
@@ -1995,6 +2015,16 @@ updLabels();
   window.saveVersion=async function(status){
     const orgId=await smplOrgId();
     if(!orgId){alert('Sign in to save forecast versions.');return;}
+    if (status === 'final' && window.SMPLProvenance && typeof window.SMPLProvenance.gatePublish === 'function') {
+      var gate = window.SMPLProvenance.gatePublish({ closeMonth: window.SMPL_CLOSE_MONTH || CLOSE_MONTH });
+      if (gate.blocked) {
+        alert('FINAL promote blocked — tie-out failed.\n\n' + (gate.message || ''));
+        return;
+      }
+      if (gate.result && !gate.result.passed) {
+        console.warn('[forecast-engine] tie-out warning (draft/demo path)', gate.message);
+      }
+    }
     const res=getResults();
     const lv=getLevers();
     const name=prompt('Name this '+(status==='final'?'FINAL':'draft')+' version:','Forecast '+new Date().toLocaleDateString());

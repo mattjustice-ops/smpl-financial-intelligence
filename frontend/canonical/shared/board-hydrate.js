@@ -835,9 +835,20 @@
       },
       onApplied: function (data) {
         try {
+          if (global.SMPLProvenance && typeof global.SMPLProvenance.ingestOutlook === "function") {
+            global.SMPLProvenance.ingestOutlook(data);
+          }
           syncBoardFromOutlook(data);
           updateCopilotWelcome(data);
           smplBoardRefreshView();
+          if (global.SMPLProvenance) {
+            try {
+              global.SMPLProvenance.annotateDom(document);
+              global.SMPLProvenance.runTieOut();
+            } catch (provErr) {
+              console.warn("[board-hydrate] provenance annotate/tie-out failed", provErr);
+            }
+          }
         } catch (err) {
           console.error("[board-hydrate] post-hydrate refresh failed", err);
         }
@@ -1155,6 +1166,23 @@
     var year = closeMonth.slice(0, 4);
     if (!orgId) {
       return "no-org";
+    }
+
+    // Customer publish: partial client tie-out (Rule C/A). Live FAIL → block.
+    // Demo/offline: console warn only (dual demo seeds are known mismatches).
+    if (global.SMPLProvenance && typeof global.SMPLProvenance.gatePublish === "function") {
+      var gate = global.SMPLProvenance.gatePublish({ closeMonth: closeMonth });
+      if (gate.blocked) {
+        alert(
+          (format === "pptx" ? "MD&A Deck" : "Variance Commentary") +
+            " export blocked — tie-out failed.\n\n" +
+            (gate.message || "Resolve FE↔Board Actual mismatches ($1 bar) before publish."),
+        );
+        return "tieout-blocked";
+      }
+      if (gate.result && !gate.result.passed && gate.message) {
+        console.warn("[board-hydrate] tie-out warning (demo/offline — not blocked)", gate.message);
+      }
     }
 
     // Board header buttons — must match backend export registry (export_sheet_registry.py).

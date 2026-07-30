@@ -73,4 +73,21 @@ Regression: `npm run verify:outlook-hydrate` (Actual + Forecast/Budget cases).
 
 ---
 
+## UI provenance overlay (2026-07-30)
+
+Board + Forecast Engine material KPIs attach `data-source` / `data-period` / `title` / `aria-label` after hydrate (and on tab render).
+
+| Piece | Location |
+|-------|----------|
+| Shared module | `frontend/public/shared/smpl-provenance.js` (+ canonical) |
+| Prefer hydrate `_sources` | `SMPLProvenance.ingestOutlook` reads `payload._sources` / `meta._sources` / `evidence_package._sources` when present; else field catalog |
+| Audit overlay | `Ctrl+Shift+A` / `Cmd+Shift+A` toggles inline source tags |
+| Client tie-out | `runTieOut()` — **partial** Rule C (TS↔SRC Actuals) + ARR A2/A3 when SRC has `arr_*`; **not** full Rule Sets A–F |
+| Publish gate | Live hydrate + FAIL → block MD&A export (`board-hydrate.js`) and FINAL forecast promote; demo/offline warns only |
+| Regression | `npm run verify:provenance` |
+
+**Limitation:** Full warehouse-vs-DOM `runTieOut()` A–F and HTML tie-out report remain roadmap. Demo dual seeds stay mismatched on purpose — do not reseed.
+
+---
+
 _End of FE↔Board single-source note_
