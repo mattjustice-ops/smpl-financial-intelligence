@@ -59,7 +59,10 @@ def build_prompt2_user_message(
         "commentary columns (or description/recommended_action for risks_and_opportunities).\n"
         "Be comprehensive: cover each payload row with specific, board-ready commentary — "
         "do not shorten into generic summaries.\n"
-        "Use only metrics present in the payload — never invent dollars or percentages.\n\n"
+        "Use only metrics present in the payload — never invent dollars or percentages.\n"
+        "Causal / attribution language may only name drivers in "
+        "attribution_package.allowed_drivers; if that list is empty, restate metrics "
+        "without inventing causes.\n\n"
         f"{freeze_block}"
         f"DATA PAYLOAD (JSON):\n{json.dumps(payload, separators=(',', ':'))}"
     )
@@ -155,6 +158,11 @@ def build_claude_mda_package_xlsx_bytes(
                 evidence_values_from_mda_payload,
                 verify_variance_commentary_tieout,
             )
+            from app.services.commentary.attribution_verify import (
+                build_attribution_package_from_mda_payload,
+                raise_if_attribution_fully_unverifiable,
+                verify_nested_commentary_attribution,
+            )
             from app.services.commentary.claim_verify import (
                 CommentaryIntegrityError,
                 verify_nested_commentary_strings,
@@ -168,8 +176,6 @@ def build_claude_mda_package_xlsx_bytes(
             # Prefer serialized evidence_package.values when present (same dict shown to LLM).
             ep = payload.get("evidence_package") or {}
             if ep.get("values"):
-                from decimal import Decimal
-
                 from app.services.commentary.claim_verify import _to_decimal
 
                 merged = dict(evidence_values)
@@ -200,6 +206,19 @@ def build_claude_mda_package_xlsx_bytes(
                     "blocking package emit. " + claim_result.summary(),
                     result=claim_result,
                 )
+
+            attribution = payload.get("attribution_package") or build_attribution_package_from_mda_payload(
+                payload
+            )
+            commentary, attr_result = verify_nested_commentary_attribution(
+                commentary, attribution
+            )
+            if not attr_result.ok:
+                logger.warning(
+                    "P15 MD&A attribution-verify stripped/omitted unverifiable drivers: %s",
+                    attr_result.summary(),
+                )
+            raise_if_attribution_fully_unverifiable(commentary, attr_result)
 
             payload_warnings = payload.get("payload_warnings") or []
             if payload_warnings:

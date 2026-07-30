@@ -454,6 +454,60 @@ def build_mda_package_payload(
             ).items()
         },
     }
+    sheets = {
+        "variance_commentary": _sheet_spec(
+            f"Board-facing Variance Commentary tab — {month} Actual/Budget/QTD/YTD. 400 chars per column.",
+            400,
+            variance_rows,
+        ),
+        "q2_vs_budget": _sheet_spec(
+            "Q2 vs Budget summary blocks — Income Statement, ARR, Cash. 300 chars per column.",
+            300,
+            [{"row_id": "qvb_income_statement", "category": "INCOME STATEMENT"}],
+        ),
+        "arr_waterfall": _sheet_spec("ARR waterfall rows. 300 chars per column.", 300, arr_rows),
+        "income_statement": _sheet_spec("Income statement GL lines. 200 chars per column.", 200, is_rows),
+        "cash_forecast": _sheet_spec(
+            "Cash bridge rows from cash_liquidity block. 200 chars per column.",
+            200,
+            [
+                {
+                    "row_id": f"cf_{line}",
+                    "period": cash.get("current_month", {}),
+                }
+                for line in ("collections", "payroll", "vendor_payments", "commissions", "capex", "cash_eop_actual")
+            ],
+        ),
+        "cash_flow_statement": _sheet_spec(
+            "YTD CFS lines from appendix. 200 chars per column.",
+            200,
+            [{"row_id": "cfs_cfo", "period": cash.get("current_month", {})}],
+        ),
+        "gtm_review": _sheet_spec("Marketing channel efficiency. 175 chars per column.", 175, gtm_rows),
+        "headcount": _sheet_spec("Headcount by department. 200 chars per column.", 200, []),
+        "risks_and_opportunities": {
+            "description": "Risks & Opportunities matrix. Description 350 chars, action 200 chars.",
+            "max_chars_description": 350,
+            "max_chars_action": 200,
+            "rows": ro_rows,
+        },
+    }
+
+    from app.services.commentary.attribution_verify import (
+        build_attribution_package_from_mda_payload,
+    )
+
+    attribution_package = build_attribution_package_from_mda_payload(
+        {
+            "close_period": as_of,
+            "close_period_label": _period_label(as_of),
+            "deck_payload": deck,
+            "variance_commentary_display": variance_commentary_display,
+            "arr_analysis": arr,
+            "cash_liquidity": cash,
+            "sheets": sheets,
+        }
+    )
 
     return {
         "task": "mda_full_package",
@@ -467,54 +521,20 @@ def build_mda_package_payload(
             "col_2": "qtd_vs_budget",
             "col_3": "ytd_vs_budget",
         },
-        "sheets": {
-            "variance_commentary": _sheet_spec(
-                f"Board-facing Variance Commentary tab — {month} Actual/Budget/QTD/YTD. 400 chars per column.",
-                400,
-                variance_rows,
-            ),
-            "q2_vs_budget": _sheet_spec(
-                "Q2 vs Budget summary blocks — Income Statement, ARR, Cash. 300 chars per column.",
-                300,
-                [{"row_id": "qvb_income_statement", "category": "INCOME STATEMENT"}],
-            ),
-            "arr_waterfall": _sheet_spec("ARR waterfall rows. 300 chars per column.", 300, arr_rows),
-            "income_statement": _sheet_spec("Income statement GL lines. 200 chars per column.", 200, is_rows),
-            "cash_forecast": _sheet_spec(
-                "Cash bridge rows from cash_liquidity block. 200 chars per column.",
-                200,
-                [
-                    {
-                        "row_id": f"cf_{line}",
-                        "period": cash.get("current_month", {}),
-                    }
-                    for line in ("collections", "payroll", "vendor_payments", "commissions", "capex", "cash_eop_actual")
-                ],
-            ),
-            "cash_flow_statement": _sheet_spec(
-                "YTD CFS lines from appendix. 200 chars per column.",
-                200,
-                [{"row_id": "cfs_cfo", "period": cash.get("current_month", {})}],
-            ),
-            "gtm_review": _sheet_spec("Marketing channel efficiency. 175 chars per column.", 175, gtm_rows),
-            "headcount": _sheet_spec("Headcount by department. 200 chars per column.", 200, []),
-            "risks_and_opportunities": {
-                "description": "Risks & Opportunities matrix. Description 350 chars, action 200 chars.",
-                "max_chars_description": 350,
-                "max_chars_action": 200,
-                "rows": ro_rows,
-            },
-        },
+        "sheets": sheets,
         "variance_commentary_display": variance_commentary_display,
         "deck_payload": deck,
         "evidence_package": evidence_package,
+        "attribution_package": attribution_package,
         "instructions": (
             "Generate commentary for all sheets. Return a single JSON object with sheet name keys. "
             "For all sheets except risks_and_opportunities, each row_id maps to an object with "
             "period_vs_budget, qtd_vs_budget, ytd_vs_budget strings. For risks_and_opportunities, "
             "each row_id maps to description and recommended_action. Enforce character limits. "
             "Each column must stand alone. No bullets. No line breaks. "
-            "State only dollar/percent figures present in evidence_package.values / display rows."
+            "State only dollar/percent figures present in evidence_package.values / display rows. "
+            "Causal drivers must appear in attribution_package.allowed_drivers; "
+            "if that list is empty, restate metrics without inventing causes."
         ),
         "payload_meta": {
             "version": "prompt2_v1",

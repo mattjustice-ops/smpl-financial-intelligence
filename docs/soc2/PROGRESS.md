@@ -489,10 +489,10 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 4. **Live on** Prompt 5 deck — evidence in prompt; post-LLM hard-block on invented $/% in PPTX string literals
 5. **Live on** board slide regenerate — per-bullet soft strip / don't-know
 6. **Partial** Copilot — thin wire vs metrics/freeze text-blob numbers (not full `_sources`)
-7. Attribution design (not coded): [controls/ai_attribution_verify.md](./controls/ai_attribution_verify.md); Guarantee 4 corrected to machine-primary
+7. **Attribution v1 (partial):** `attribution_verify.py` — allowlist causal/driver claims; live on commentary generate + MD&A Prompt 2; Prompt 5 / board / Copilot follow-up — [controls/ai_attribution_verify.md](./controls/ai_attribution_verify.md)
 8. Founder coverage checklist: [controls/ai_claim_verify.md](./controls/ai_claim_verify.md)
 9. Demo Board/FE seed financials **unchanged**
-
+10. Guarantee 4 corrected to machine-primary
 ---
 
 ## How you’ll know Type I is complete
