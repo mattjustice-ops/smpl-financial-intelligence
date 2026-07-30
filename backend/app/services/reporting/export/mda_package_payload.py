@@ -11,6 +11,7 @@ from app.services.reporting.export.board_period_ytd import rollup_waterfall_metr
 from app.services.reporting.export.board_platform_metrics import (
     build_deck_payload,
     build_deliverable_data_map,
+    evidence_values_from_mda_payload,
     validate_deck_payload,
     verify_variance_commentary_tieout,
 )
@@ -434,8 +435,25 @@ def build_mda_package_payload(
             for r in variance_rows
         ],
     }
+    # Soft list for payload inspection; Prompt 2 emit path re-runs with fail_closed=True.
     tie_out_warnings = verify_variance_commentary_tieout(variance_commentary_display, matrix)
     payload_warnings = validate_deck_payload(deck) + tie_out_warnings
+    evidence_package = {
+        "period_label": _period_label(as_of),
+        "freeze_id": None,
+        "tolerance_actuals": "1.00",
+        "variance_commentary_display": variance_commentary_display,
+        "period_matrix": matrix,
+        "values": {
+            k: str(v)
+            for k, v in evidence_values_from_mda_payload(
+                {
+                    "variance_commentary_display": variance_commentary_display,
+                    "deck_payload": {"period_matrix": matrix},
+                }
+            ).items()
+        },
+    }
 
     return {
         "task": "mda_full_package",
@@ -489,12 +507,14 @@ def build_mda_package_payload(
         },
         "variance_commentary_display": variance_commentary_display,
         "deck_payload": deck,
+        "evidence_package": evidence_package,
         "instructions": (
             "Generate commentary for all sheets. Return a single JSON object with sheet name keys. "
             "For all sheets except risks_and_opportunities, each row_id maps to an object with "
             "period_vs_budget, qtd_vs_budget, ytd_vs_budget strings. For risks_and_opportunities, "
             "each row_id maps to description and recommended_action. Enforce character limits. "
-            "Each column must stand alone. No bullets. No line breaks."
+            "Each column must stand alone. No bullets. No line breaks. "
+            "State only dollar/percent figures present in evidence_package.values / display rows."
         ),
         "payload_meta": {
             "version": "prompt2_v1",

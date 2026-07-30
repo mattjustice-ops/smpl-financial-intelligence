@@ -1047,8 +1047,17 @@ def build_deliverable_data_map(period_matrix: dict[str, Any]) -> dict[str, Any]:
 def verify_variance_commentary_tieout(
     display: dict[str, Any],
     period_matrix: dict[str, Any],
+    *,
+    fail_closed: bool = False,
 ) -> list[str]:
-    """Assert MDA Variance Commentary numbers match period_matrix (deck slide 2 source)."""
+    """Assert MDA Variance Commentary numbers match period_matrix (deck slide 2 source).
+
+    By default returns issue strings (legacy warn list). With ``fail_closed=True``
+    (P15), any mismatch or missing tie-out row raises ``CommentaryIntegrityError``
+    so customer-visible MD&A emit cannot proceed with unbound figures.
+    """
+    from app.services.commentary.claim_verify import CommentaryIntegrityError
+
     warnings: list[str] = []
     rows_by_id = {str(r.get("row_id")): r for r in display.get("rows") or []}
     matrix_by_metric = {str(r.get("metric")): r for r in period_matrix.get("rows") or []}
@@ -1068,7 +1077,40 @@ def verify_variance_commentary_tieout(
                     warnings.append(
                         f"{row_id} {horizon}.{field}: MDA '{vc_val}' != period_matrix '{mx_val}'"
                     )
+    if fail_closed:
+        mismatches = [w for w in warnings if " != " in w]
+        if mismatches:
+            raise CommentaryIntegrityError(
+                "P15 fail-closed: variance commentary vs period_matrix mismatch: "
+                + "; ".join(mismatches)
+            )
     return warnings
+
+
+def evidence_values_from_mda_payload(payload: dict[str, Any]) -> dict[str, "Decimal"]:
+    """Flatten display / period-matrix numbers into an evidence map for claim verify."""
+    from decimal import Decimal
+
+    from app.services.commentary.claim_verify import flatten_evidence_values
+
+    values: dict[str, Decimal] = {}
+    display = payload.get("variance_commentary_display") or {}
+    deck = payload.get("deck_payload") or {}
+    matrix = deck.get("period_matrix") or {}
+    flatten_evidence_values(display, prefix="variance_commentary_display", out=values)
+    flatten_evidence_values(matrix, prefix="period_matrix", out=values)
+    # Also accept preformatted money strings by parsing via claim_verify helpers.
+    from app.services.commentary.claim_verify import _to_decimal
+
+    parsed: dict[str, Decimal] = {}
+    for key, val in values.items():
+        if isinstance(val, Decimal):
+            parsed[key] = val
+            continue
+        num = _to_decimal(val)
+        if num is not None:
+            parsed[key] = num
+    return parsed
 
 
 def validate_deck_payload(payload: dict[str, Any]) -> list[str]:

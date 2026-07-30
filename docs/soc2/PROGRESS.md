@@ -479,6 +479,18 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 
 ---
 
+## What we shipped 2026-07-30 — P15 claim-verify fail-closed (incremental)
+
+**Not SOC 2 certified.** Product integrity gate — not a CPA report.
+
+1. Reusable helper `backend/app/services/commentary/claim_verify.py` — extract material numeric claims; verify vs evidence package; TOL_ACTUALS **$1.00**; fail-closed omit / don't-know
+2. **Live on** `/api/v1/commentary/generate` — evidence package in prompt + post-LLM verify + strip unsupported sections
+3. **Live on** MD&A Prompt 2 package path — matrix mismatch hard-blocks emit; post-LLM strip of unverifiable commentary cells; all-unverifiable variance sheet blocks emit
+4. Honest status: [controls/README.md](./controls/README.md) — board slide regenerate / Prompt 5 / Copilot still follow-ups; full `_sources` contract still roadmap
+5. Demo Board/FE seed financials **unchanged**
+
+---
+
 ## How you’ll know Type I is complete
 
 **You hold a SOC 2 Type I report issued by an independent CPA firm** covering Security + Availability + Confidentiality (as scoped). Until then: readiness only.
@@ -491,5 +503,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-29 (vendor SOC public research — no Type II received; DPA/MSA sent to counsel — awaiting redline, R16 open + chase checklist; security one-pager NDA; Month 2 secrets/tenant Pass; access review 2026-Q3 signed) |
+| Last updated | 2026-07-30 (P15 claim-verify fail-closed live on `/commentary/generate` + MD&A Prompt 2; vendor SOC public research — no Type II; DPA/MSA awaiting redline) |
 | Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |

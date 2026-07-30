@@ -32,7 +32,7 @@ The integrity framework’s Part 6 (“Finance review sign-off before every depl
 
 Do **not** reintroduce “human review before send” as the primary control in policy, sales language, or IR root-cause framing.
 
-## Implemented vs required design (honest snapshot — 2026-07-28)
+## Implemented vs required design (honest snapshot — 2026-07-30)
 
 Code search / product surface as of this write-up. Labels:
 
@@ -43,10 +43,13 @@ Code search / product surface as of this write-up. Labels:
 |-------|--------|-------|
 | Freeze pack required for some export / MD&A paths | **Partial — implemented** | e.g. `freeze_pack_required` hard-block when no COMPLETE/STALE pack; freeze context passed into commentary prompts |
 | Financial / close tie-out validations | **Partial — implemented** | Close workflow financial integrity blockers; statement validation services; export validation summaries |
-| MDA variance commentary vs period matrix check | **Partial — implemented** | `verify_variance_commentary_tieout` — warnings path; not full framework second-pass block of all narrative claims |
-| `_sources` provenance object on every LLM payload | **Required design / roadmap** | Framework Part 1 — not present as product-wide `_sources` contract |
-| Claude may only state values present in evidence | **Required design / roadmap** | System-prompt + structural verify as hard gate — design target in P15; not fully enforced end-to-end |
-| Second-pass commentary verification (block on unverifiable) | **Required design / roadmap** | Framework Part 5 — design target as deploy/release gate |
+| MDA variance commentary vs period matrix check | **Partial — implemented (harder)** | `verify_variance_commentary_tieout(..., fail_closed=True)` **blocks MD&A Prompt 2 emit on value mismatch**; missing rows still soft-warn |
+| `/commentary/generate` post-LLM claim verify | **Implemented on this path** | `claim_verify.py`: evidence package in prompt + post-LLM numeric verify (TOL_ACTUALS $1) + don't-know / omit on fail — **live on `/api/v1/commentary/generate` only** |
+| MD&A Prompt 2 post-LLM claim strip | **Partial — implemented** | Nested commentary strings verified against payload evidence; unverifiable cells → don't-know; all-unverifiable variance sheet **blocks emit** |
+| Board slide regenerate / Prompt 5 deck / Copilot | **Required design / roadmap** | Not yet wired to the same fail-closed helper — follow-up |
+| `_sources` provenance object on every LLM payload | **Required design / roadmap** | Framework Part 1 — not present as product-wide `_sources` contract (commentary path ships a flatter `evidence_package.values` map) |
+| Claude may only state values present in evidence | **Partial — implemented** | Prompt rules + structural verify on commentary generate + MD&A Prompt 2; not all customer-visible AI paths |
+| Second-pass commentary verification (block on unverifiable) | **Partial — implemented** | Live on `/commentary/generate` (strip/don't-know) + MD&A Prompt 2 (strip + hard block when variance sheet fully unverifiable / matrix mismatch) |
 | DOM `data-source` attributes + audit overlay | **Required design / roadmap** | Framework Part 3 |
 | Full `runTieOut()` Rule Sets A–F as publish gate | **Required design / roadmap** | Tie-out prompt Part 3–4; pieces of tie-out exist; full cross-platform gate not claimed live |
 | Human review before every send as primary control | **Not the control** (by design) | Rejected posture — see P15 |
@@ -57,6 +60,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-30 | Claim-verify helper live on `/commentary/generate` + MD&A Prompt 2 (evidence package + post-LLM verify + hard block on matrix mismatch / fully unverifiable variance sheet). Board slide regenerate / Prompt 5 / Copilot still follow-ups. Not SOC 2 certified. |
 | 2026-07-29 | Added financial_dashboard_cf_re_logic.md — customer/production GL→statements methodology; demo/lab surfaces explicitly carved out |
 | 2026-07-29 | Added reconcile_financial_statements.md; closed-actuals severity bar ($0.01 rounding / ≤$1 investigate / >$1 significant_miss); tie-out prompt + framework language tightened so $100/$1K are not called “rounding” for statement actuals |
 | 2026-07-28 | Copied normative framework + tie-out prompt from Matt Downloads; README states adaptation of Part 6 and honest implemented-vs-target labels |

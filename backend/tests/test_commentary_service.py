@@ -213,6 +213,7 @@ def test_user_prompt_includes_period_and_data() -> None:
 
 def test_system_prompt_locks_down_invention() -> None:
     assert "Use only the numbers and facts contained in the JSON data block" in SYSTEM_PROMPT
+    assert "EVIDENCE PACKAGE" in SYSTEM_PROMPT
     assert "Never speculate on causes you cannot evidence." in SYSTEM_PROMPT
 
 
@@ -304,11 +305,33 @@ def test_sparse_inputs_still_generate_valid_output() -> None:
     sparse = CommentaryInputs(period_label="May 2026", organization_name="Demo")
     response = _well_formed_response()
     # Simulate the model marking missing data instead of inventing it
+    response["executive_summary"]["narrative"] = "Limited inputs for May 2026; declining to state figures."
+    response["executive_summary"]["citations"] = []
+    response["revenue_commentary"]["narrative"] = "Revenue inputs not provided this period."
+    response["revenue_commentary"]["citations"] = []
     response["mrr_waterfall_commentary"]["narrative"] = "MRR waterfall not provided this period."
     response["mrr_waterfall_commentary"]["citations"] = []
+    response["bookings_forecast_commentary"]["narrative"] = "Bookings forecast not provided this period."
+    response["bookings_forecast_commentary"]["citations"] = []
+    response["cash_forecast_commentary"]["narrative"] = "Cash forecast not provided this period."
+    response["cash_forecast_commentary"]["citations"] = []
+    response["risks_and_opportunities"] = []
+    response["followup_questions"] = []
     fake = FakeLLMClient(response)
     out = generate_commentary(sparse, fake)
     assert "not provided" in out.mrr_waterfall_commentary.narrative
+    assert "EVIDENCE PACKAGE" in fake.calls[0]["user"]
+
+
+def test_sparse_inputs_strip_invented_numbers() -> None:
+    """Empty evidence + invented dollars → don't-know (P15 missing evidence)."""
+    from app.services.commentary.claim_verify import DONT_KNOW_NARRATIVE
+
+    sparse = CommentaryInputs(period_label="May 2026", organization_name="Demo")
+    response = _well_formed_response()
+    fake = FakeLLMClient(response)
+    out = generate_commentary(sparse, fake)
+    assert out.executive_summary.narrative == DONT_KNOW_NARRATIVE
 
 
 # ---------------------------------------------------------------------------
