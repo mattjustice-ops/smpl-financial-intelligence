@@ -384,7 +384,7 @@ def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() 
     ]
     mixed = (
         'slide.addText("ARR growth was driven by expansion.");'
-        'slide.addText("Growth was due to three enterprise upsells.");'
+        'slide.addText("Growth this quarter was due to three enterprise upsells outside the allowlist.");'
     )
     rewritten, result = apply_fail_closed_attribution_to_pptx_script(mixed, allowlist)
     assert not result.ok
@@ -393,7 +393,9 @@ def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() 
     # Partial wipe → do not hard-block
     raise_if_pptx_attribution_fully_unverifiable(result)
 
-    bad_only = 'slide.addText("ARR grew due to three enterprise upsells.");'
+    bad_only = (
+        'slide.addText("ARR grew this quarter due to three enterprise upsells outside allowlist.");'
+    )
     wiped, bad_result = apply_fail_closed_attribution_to_pptx_script(bad_only, allowlist)
     assert not bad_result.ok
     assert all(c.status != "pass" for c in bad_result.checks)

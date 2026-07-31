@@ -252,20 +252,25 @@ def test_pptx_script_string_literals_pass_and_invented_hard_blocks() -> None:
 
 
 def test_pptx_script_soft_strips_unmatched_money_without_hard_block() -> None:
-    from app.services.commentary.claim_verify import apply_fail_closed_claims_to_pptx_script
+    from app.services.commentary.claim_verify import (
+        PPTX_SOFT_STRIP_CELL,
+        apply_fail_closed_claims_to_pptx_script,
+    )
 
     evidence = {"deck.arr": Decimal("86100000")}
     mixed = (
         'slide.addText("ARR closed at $86.1M.");'
-        'slide.addText("ARR exploded to $99,000,000 this month.");'
+        'slide.addText("$99,000,000");'
+        'slide.addText("ARR exploded to an unverified $99,000,000 this month vs plan.");'
     )
     rewritten, result = apply_fail_closed_claims_to_pptx_script(mixed, evidence)
     assert not result.ok
     assert "86.1" in rewritten or "86.1M" in rewritten
     assert "$99,000,000" not in rewritten
+    assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
     assert DONT_KNOW_NARRATIVE[:40] in rewritten
     # Soft-strip path never raises — Prompt 5 export continues.
-    assert result.summary(max_failures=8).startswith("1 failed claim")
+    assert "failed claim" in result.summary(max_failures=8)
 
 
 def test_prompt5_verify_soft_strips_and_exports() -> None:
@@ -288,15 +293,18 @@ def test_prompt5_verify_soft_strips_and_exports() -> None:
             }
         },
     }
-    # Invented $ + missing cite + invented driver — all soft-stripped; must not raise.
+    # Invented $ + invented driver soft-stripped; missing cite kept (warn-only).
     script = (
         'slide.addText("ARR closed at $86,100,000 (deck.arr) driven by expansion.");'
         'slide.addText("Cash hit $99,000,000 due to three enterprise upsells.");'
+        'slide.addText("$86,100,000");'  # uncited KPI cell — must NOT become don't-know
     )
     out = _verify_prompt5_script_or_raise(script, payload)
     assert isinstance(out, str)
     assert len(out) > 20
     assert "$99,000,000" not in out
+    assert "$86,100,000" in out
+    assert "verifiable _sources citation" not in out
 
 
 def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:
