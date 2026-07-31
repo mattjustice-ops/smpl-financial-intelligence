@@ -69,6 +69,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-31 | Prompt 5 narrative depth: Key Takeaways / risks / board actions require regenerate/Copilot-style 3–5 insight bullets (driver + variance, retention/pipeline, Actual vs Forecast vs Pipeline, board action); freeze + evidence wired into adapt-first path; KPI/table cells stay numbers/`—` (soft-strip unchanged). Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Prompt 5 soft-strip hotfix: citation warn-only; claim/citation/attribution PPTX soft-strip always → `—` (never multi-sentence don't-know essays in deck cells). Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Prompt 5 evidence package widened (actual/forecast/pipeline/bridges + `series_kind` tags) and prompts tightened so rich board narrative can use package context; invent still soft-strips; soft-export retained. Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Prompt 5 deck export: numeric + citation soft-strip unmatched PPTX string literals (export continues); attribution surgical strip; prefer export over hard-block. Prompt 2 stays stricter. Export-time warehouse / client A–F validation unchanged (advisory). Demo dual seeds untouched. Not SOC 2 certified. |

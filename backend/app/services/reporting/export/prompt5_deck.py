@@ -332,44 +332,8 @@ def build_prompt5_payload(
     return payload
 
 
-def build_prompt5_user_message(
-    bundle: ReportingBundle,
-    ts_data: dict[str, Any] | None = None,
-    cash_bridge_data: dict[str, Any] | None = None,
-    *,
-    freeze_context_text: str | None = None,
-    freeze_context_as_of: str | None = None,
-    freeze_status: str | None = None,
-    freeze_stale: bool = False,
-    payload: dict[str, Any] | None = None,
-) -> str:
-    if payload is None:
-        payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
-    pc = payload["period_context"]
-    warnings = payload.get("payload_warnings") or []
-    warn_block = ""
-    if warnings:
-        warn_block = "PAYLOAD WARNINGS (omit empty sections, do not invent data):\n" + "\n".join(
-            f"- {w}" for w in warnings
-        ) + "\n\n"
-
-    from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
-
-    # Quality-first: never truncate freeze prose for Prompt 5 — slide numbers still from JSON.
-    freeze_max = None
-    freeze_block = format_freeze_prompt_block(
-        context_text=freeze_context_text,
-        context_as_of=freeze_context_as_of,
-        status=freeze_status,
-        stale=freeze_stale,
-        max_chars=freeze_max,
-        number_guidance=(
-            "Use this freeze for narrative tone, drivers, and period framing. "
-            "Copy slide numbers from DATA PAYLOAD / EVIDENCE PACKAGE verbatim — "
-            "do not invent figures. Prefer package context for rich story."
-        ),
-    )
-
+def _ensure_prompt5_packages(payload: dict[str, Any]) -> dict[str, Any]:
+    """Attach evidence / attribution / _sources on the payload if missing; return evidence pkg."""
     from app.services.commentary.attribution_verify import (
         build_attribution_package_from_deck_payload,
     )
@@ -378,6 +342,7 @@ def build_prompt5_user_message(
         evidence_values_from_deck_payload,
     )
 
+    pc = payload.get("period_context") or {}
     evidence_package = payload.get("evidence_package")
     if not isinstance(evidence_package, dict) or not evidence_package.get("values"):
         evidence_package = build_evidence_package_from_deck_payload(payload)
@@ -385,6 +350,54 @@ def build_prompt5_user_message(
             k: v for k, v in evidence_package.items() if k != "values_decimal"
         }
         payload["_sources"] = evidence_package.get("_sources") or payload.get("_sources") or {}
+
+    if "attribution_package" not in payload or not payload.get("attribution_package"):
+        payload["attribution_package"] = build_attribution_package_from_deck_payload(payload)
+
+    sources = payload.get("_sources") or evidence_package.get("_sources") or {}
+    if not sources:
+        from app.services.commentary.claim_verify import attach_sources_to_values
+
+        sources = attach_sources_to_values(
+            evidence_values_from_deck_payload(payload),
+            period_label=str(pc.get("close_period") or "") or None,
+        )
+        payload["_sources"] = sources
+    return evidence_package
+
+
+def build_prompt5_package_preamble(
+    payload: dict[str, Any],
+    *,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
+) -> str:
+    """Freeze + evidence + attribution + citation blocks for fresh and adapt Prompt 5."""
+    from app.services.reporting.export.board_platform_metrics import (
+        evidence_values_from_deck_payload,
+    )
+    from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
+    from app.services.reporting.export.prompt5_narrative import PROMPT5_BOARD_NARRATIVE_RULES
+
+    pc = payload["period_context"]
+    evidence_package = _ensure_prompt5_packages(payload)
+
+    # Quality-first: never truncate freeze prose for Prompt 5 — slide numbers still from JSON.
+    freeze_block = format_freeze_prompt_block(
+        context_text=freeze_context_text,
+        context_as_of=freeze_context_as_of,
+        status=freeze_status,
+        stale=freeze_stale,
+        max_chars=None,
+        number_guidance=(
+            "Use this freeze for narrative tone, drivers, retention/pipeline context, "
+            "and period framing — inject into Key Takeaways / risks / board actions. "
+            "Copy slide numbers from DATA PAYLOAD / EVIDENCE PACKAGE verbatim — "
+            "do not invent figures. Prefer package + freeze for rich board story."
+        ),
+    )
 
     evidence_for_prompt = {
         "close_period": evidence_package.get("close_period") or pc.get("close_period"),
@@ -398,33 +411,21 @@ def build_prompt5_user_message(
     evidence_block = (
         "EVIDENCE PACKAGE (P15 — prefer every customer-visible $ / % / Nx from these "
         "values within TOL_ACTUALS=$1.00. Actuals ≤ close_period; forecast after close; "
-        "pipeline/opportunity dollars from pipeline-tagged keys. Rich narrative using "
-        "this package is encouraged — do not invent outside it):\n"
+        "pipeline/opportunity dollars from pipeline-tagged keys. Use this package for "
+        "rich board narrative in takeaways — do not invent outside it):\n"
         f"{json.dumps(evidence_for_prompt, separators=(',', ':'))}\n\n"
     )
 
-    attribution = payload.get("attribution_package") or build_attribution_package_from_deck_payload(
-        payload
-    )
-    if "attribution_package" not in payload:
-        payload["attribution_package"] = attribution
+    attribution = payload["attribution_package"]
     attribution_block = (
         "ATTRIBUTION PACKAGE (P15 — causal / driver language may only name "
         "allowed_drivers id/label/aliases; forward-looking watch-outs must ground in "
         "forecast/pipeline allowlist entries; empty allowlist means no causal claims; "
-        "rich story from allowlisted drivers is encouraged — do not invent causes):\n"
+        "rich story from allowlisted drivers is required in takeaways — do not invent causes):\n"
         f"{json.dumps(attribution, separators=(',', ':'))}\n\n"
     )
 
     sources = payload.get("_sources") or evidence_package.get("_sources") or {}
-    if not sources:
-        from app.services.commentary.claim_verify import attach_sources_to_values
-
-        sources = attach_sources_to_values(
-            evidence_values_from_deck_payload(payload),
-            period_label=str(pc.get("close_period") or "") or None,
-        )
-        payload["_sources"] = sources
     citation_preview = {
         k: {
             "source_type": (v or {}).get("source_type"),
@@ -447,6 +448,43 @@ def build_prompt5_user_message(
         f"{json.dumps(citation_preview, separators=(',', ':'))}\n\n"
     )
 
+    narrative_block = (
+        "TAKEAWAY / COMMENTARY SHAPE (mandatory — see also system prompt):\n"
+        f"{PROMPT5_BOARD_NARRATIVE_RULES}\n"
+    )
+
+    return freeze_block + evidence_block + attribution_block + citation_block + narrative_block
+
+
+def build_prompt5_user_message(
+    bundle: ReportingBundle,
+    ts_data: dict[str, Any] | None = None,
+    cash_bridge_data: dict[str, Any] | None = None,
+    *,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
+    payload: dict[str, Any] | None = None,
+) -> str:
+    if payload is None:
+        payload = build_prompt5_payload(bundle, ts_data=ts_data, cash_bridge_data=cash_bridge_data)
+    pc = payload["period_context"]
+    warnings = payload.get("payload_warnings") or []
+    warn_block = ""
+    if warnings:
+        warn_block = "PAYLOAD WARNINGS (omit empty sections, do not invent data):\n" + "\n".join(
+            f"- {w}" for w in warnings
+        ) + "\n\n"
+
+    package_preamble = build_prompt5_package_preamble(
+        payload,
+        freeze_context_text=freeze_context_text,
+        freeze_context_as_of=freeze_context_as_of,
+        freeze_status=freeze_status,
+        freeze_stale=freeze_stale,
+    )
+    evidence_package = payload.get("evidence_package") or {}
     close_label = pc.get("close_period_label") or pc.get("close_period") or ""
     close_period = pc.get("close_period") or evidence_package.get("close_period") or ""
 
@@ -456,14 +494,15 @@ def build_prompt5_user_message(
         "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers from EVIDENCE PACKAGE / "
-        "DATA PAYLOAD verbatim, label actual vs forecast vs pipeline, and cite _sources "
-        "in narrative takeaways (not inside KPI/table cells).\n"
-        "Use the full package for rich board narrative (bridges, waterfalls, drivers, "
-        "forecast, pipeline) — do not invent outside the packages.\n\n"
-        f"{freeze_block}"
-        f"{evidence_block}"
-        f"{attribution_block}"
-        f"{citation_block}"
+        "DATA PAYLOAD verbatim into KPI/table cells (numbers or '—' only). "
+        "Key Takeaways / risks / board actions = 3–5 insight bullets each "
+        "(PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, ROOT CAUSE, "
+        "FORWARD READ labeled Actual vs Forecast vs Pipeline, RECOMMENDED BOARD ACTION) — "
+        "cite _sources in narrative takeaways only, never inside KPI/table cells.\n"
+        "When a freeze block is present above, inject its drivers into takeaway narrative. "
+        "Use the full package for board-ready story — do not invent outside the packages; "
+        "do not keep thin one-line delta stubs.\n\n"
+        f"{package_preamble}"
         f"PERIOD CONTEXT\n"
         f"Close period: {close_label} ({close_period})\n"
         f"Actuals: periods ≤ {close_period or close_label}\n"
@@ -841,8 +880,12 @@ def _try_adapt_from_reference(
     period: str,
     payload_json: str,
     payload: dict[str, Any] | None = None,
+    freeze_context_text: str | None = None,
+    freeze_context_as_of: str | None = None,
+    freeze_status: str | None = None,
+    freeze_stale: bool = False,
 ) -> tuple[bytes, str] | None:
-    """Last-resort: adapt a known-good reference script to the current payload."""
+    """Adapt a known-good reference script to the current payload (layout-preserving)."""
     from app.services.reporting.export.deck_gold import resolve_reference_script
     from app.services.reporting.export.prompt5_adapt import PROMPT5_ADAPT_SYSTEM
 
@@ -862,12 +905,28 @@ def _try_adapt_from_reference(
         kind or "bundled",
         ref_path,
     )
+    package_preamble = ""
+    if payload is not None:
+        package_preamble = build_prompt5_package_preamble(
+            payload,
+            freeze_context_text=freeze_context_text,
+            freeze_context_as_of=freeze_context_as_of,
+            freeze_status=freeze_status,
+            freeze_stale=freeze_stale,
+        )
     adapt_prompt = (
         f"Adapt the reference PptxGenJS script for close period {period}.\n"
-        "Preserve layout/helpers; replace data values from the payload.\n"
+        "Preserve layout/helpers; replace KPI/table/chart numbers from the payload "
+        "(numbers or '—' only in cells).\n"
+        "REWRITE all Key Takeaways, risks/opportunities detail+action, board-action "
+        "copy, and commentary strings for this period using BOARD NARRATIVE DEPTH — "
+        "3–5 insight bullets (PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, "
+        "ROOT CAUSE, FORWARD READ with Actual vs Forecast vs Pipeline labels, "
+        "RECOMMENDED BOARD ACTION). Do not keep thin reference one-liners.\n"
         "Return complete raw JavaScript ending with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n\n"
-        f"REFERENCE SCRIPT:\n{_excerpt_for_fix(ref_script, limit=40000)}\n\n"
-        f"DATA PAYLOAD (JSON):\n{_excerpt_for_fix(payload_json, limit=20000)}\n"
+        f"{package_preamble}"
+        f"REFERENCE SCRIPT:\n{_excerpt_for_prompt(ref_script, limit=40000)}\n\n"
+        f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=20000)}\n"
     )
     script_text = _generate_deck_script_text(
         client, adapt_prompt, system_prompt=PROMPT5_ADAPT_SYSTEM
@@ -906,12 +965,17 @@ def build_claude_deck_pptx_bytes(
 
     # Adapt-first: one Claude call against a shipped reference script is faster and
     # more reliable than 3 fresh layout regenerations (which blow the 10–15 min UI budget).
+    # Freeze + evidence packages are injected so takeaways rewrite at regenerate/Copilot depth.
     try:
         adapted = _try_adapt_from_reference(
             client,
             period=bundle.as_of_period,
             payload_json=payload_json,
             payload=payload,
+            freeze_context_text=freeze_context_text,
+            freeze_context_as_of=freeze_context_as_of,
+            freeze_status=freeze_status,
+            freeze_stale=freeze_stale,
         )
         if adapted is not None:
             return adapted

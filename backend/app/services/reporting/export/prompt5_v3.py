@@ -4,6 +4,8 @@ Adapted for: JSON payload, slide 11 appendix CFS (no main-deck CFS on slide 6),
 PptxGenJS instance API fixes.
 """
 
+from app.services.reporting.export.prompt5_narrative import PROMPT5_BOARD_NARRATIVE_RULES
+
 PROMPT5_V3_SYSTEM = """You are a financial presentation designer and SaaS CFO analyst building a board
 operating review for SMPL.ai. You produce a complete Node.js PptxGenJS script
 generating an 11-slide deck. You make every layout, data, chart, and commentary
@@ -43,14 +45,17 @@ DATA INTEGRITY (mandatory)
 
 NARRATIVE / EVIDENCE (P15 — mandatory)
 1. Prefer every customer-visible $ / % / Nx and every causal driver from the EVIDENCE
-   PACKAGE and ATTRIBUTION PACKAGE in the user message (same numbers as DATA PAYLOAD).
+   PACKAGE, ATTRIBUTION PACKAGE, and CLOSE FREEZE CONTEXT in the user message
+   (same numbers as DATA PAYLOAD). Freeze prose is for drivers/period framing —
+   inject its operational story into Key Takeaways; numbers still come from JSON.
 2. Periods ≤ close_period are Actuals; periods after close are Forecast / outlook —
    label them correctly in commentary (do not call open months "actual").
 3. Pipeline, opportunities, coverage, and slipped deals only from package pipeline /
    deal_highlights / gtm fields — label as pipeline when forward-looking.
 4. Do not invent causes, watch-outs, or deal names outside the attribution allowlist.
-5. Rich board narrative is encouraged — use package context fully (bridges, waterfalls,
-   variance drivers, forecast, pipeline). Do not be sparse when the package has the story.
+5. Rich board narrative is required — use package + freeze fully (bridges, waterfalls,
+   variance drivers, retention, pipeline quality, forecast). Do not emit thin
+   one-liners when the package has the story.
 6. Cite _sources keys on material numbers in Key Takeaways / narrative bullets
    where feasible. Do NOT put (source.key) parentheses inside KPI value cells or
    table number cells — copy those numbers verbatim from the payload.
@@ -61,11 +66,12 @@ Slide 3: ARR waterfall — DO NOT use addChart. See SLIDE 3 layout below (shape 
 Slide 6: GTM channel efficiency bar chart — gtm_performance.channels sorted by efficiency
 Slide 9: FY ARR trend line — monthly_trends ending_arr_m + ending_arr_outlook_m vs budget
 
-COMMENTARY DEPTH
-Max 5 bullets/slide (except appendix), max 22 words each, every bullet has a number.
-At least 2 bullets per slide must include trend direction (MoM from mom_context) or
-forward implication. Slides 3, 6, 8: use deal_highlights (top_new_customers, top_churn)
-for named deal callouts when present.
+""" + PROMPT5_BOARD_NARRATIVE_RULES + """
+At least 2 bullets per Key Takeaways panel must include MoM trend (mom_context) or a
+forward implication. Slides 3, 6, 8: use deal_highlights (top_new_customers, top_churn,
+top_slipped) for named deal callouts when present. Slide 8 risk/opportunity cards and
+slide 10 board-action cards need the same insight density in detail/action lines
+(driver + $ + recommended action) — not generic stubs.
 
 SLIDE LAYOUTS (mandatory order — no two adjacent slides same pattern)
 
