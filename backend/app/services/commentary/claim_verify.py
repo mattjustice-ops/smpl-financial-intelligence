@@ -160,10 +160,17 @@ def _to_decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     if isinstance(value, str):
         text = value.strip().replace(",", "").replace("$", "").replace("%", "")
+        if not text or text in {"—", "-", "n/a", "N/A", "na", "NA"}:
+            return None
+        # Accounting negatives: ($1.2M) → -1.2M
+        if text.startswith("(") and text.endswith(")"):
+            text = "-" + text[1:-1].strip()
+        # Keep leading minus; drop decorative plus on variance strings (+$1.2M).
+        text = text.lstrip("+").strip()
         if not text:
             return None
         mult = Decimal("1")
-        if text[-1:] in "KkMmBb" and text[:-1].replace(".", "", 1).isdigit():
+        if text[-1:] in "KkMmBb" and text[:-1].lstrip("-").replace(".", "", 1).isdigit():
             suffix = text[-1].upper()
             text = text[:-1]
             mult = {"K": Decimal("1000"), "M": Decimal("1000000"), "B": Decimal("1000000000")}[suffix]
@@ -908,12 +915,14 @@ def build_source_record(
     org_id: str | None = None,
     loaded_at: str | None = None,
     is_final: bool | None = None,
+    series_kind: str | None = None,
 ) -> dict[str, Any]:
     """Build a citable ``_sources`` entry for one evidence value key.
 
     Catalog hits → WAREHOUSE table/column or COMPUTED formula_id.
     Unknown leaves → ENGINE_PATH (path still citable; not full warehouse provenance).
     Always includes ``org_id`` / ``loaded_at`` / ``is_final`` (honest nulls when unknown).
+    Optional ``series_kind`` labels actual / forecast / pipeline / budget / bridge.
     """
     leaf = _leaf_field_from_evidence_key(evidence_key)
     period = _period_from_evidence_key(evidence_key) or period_label
@@ -932,8 +941,10 @@ def build_source_record(
         if period:
             record["period"] = period
         record.update(warehouse_tags)
+        if series_kind:
+            record["series_kind"] = series_kind
         return record
-    return {
+    record = {
         "source_type": "ENGINE_PATH",
         "path": evidence_key,
         "field": leaf,
@@ -945,6 +956,9 @@ def build_source_record(
         ),
         **warehouse_tags,
     }
+    if series_kind:
+        record["series_kind"] = series_kind
+    return record
 
 
 def attach_sources_to_values(
@@ -954,8 +968,10 @@ def attach_sources_to_values(
     org_id: str | None = None,
     loaded_at: str | None = None,
     is_final: bool | None = None,
+    series_kinds: Mapping[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Map every evidence value key → source tag (framework Part 1 contract)."""
+    kinds = series_kinds or {}
     sources: dict[str, dict[str, Any]] = {}
     for key, val in values.items():
         sources[str(key)] = build_source_record(
@@ -965,6 +981,7 @@ def attach_sources_to_values(
             org_id=org_id,
             loaded_at=loaded_at,
             is_final=is_final,
+            series_kind=kinds.get(str(key)),
         )
     return sources
 

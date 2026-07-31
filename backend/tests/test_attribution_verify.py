@@ -210,6 +210,7 @@ def test_generate_embeds_attribution_and_strips_invented_driver() -> None:
 def test_deck_payload_builds_bridge_and_matrix_allowlist() -> None:
     from app.services.commentary.attribution_verify import (
         build_attribution_package_from_deck_payload,
+        forecast_pipeline_allowlist,
     )
 
     pkg = build_attribution_package_from_deck_payload(
@@ -234,6 +235,11 @@ def test_deck_payload_builds_bridge_and_matrix_allowlist() -> None:
             "gtm_performance": {
                 "channels": [{"channel": "Paid Search"}, {"channel": "Outbound"}]
             },
+            "deal_highlights": {
+                "top_slipped": [{"name": "Acme Corp", "arr": "$2.4M"}],
+            },
+            "cash_liquidity": {"current_month": {"collections": "$1M"}},
+            "fy_outlook": {"arr_eoy": {"outlook": "$95M"}},
         }
     )
     ids = {d["id"] for d in pkg["allowed_drivers"]}
@@ -241,6 +247,13 @@ def test_deck_payload_builds_bridge_and_matrix_allowlist() -> None:
     assert "expansion" in ids or any("expansion" in lab for lab in labels)
     assert "ending_arr" in ids or any("ending arr" in lab for lab in labels)
     assert any("paid search" in lab for lab in labels)
+    assert "pipeline_coverage" in ids or "fy_outlook" in ids
+    assert any("acme" in lab for lab in labels)
+    fp = forecast_pipeline_allowlist(pkg)
+    assert fp, "deck allowlist should include forecast/pipeline grounding keys"
+    assert "forecast" in (pkg.get("policy") or "").lower() or "pipeline" in (
+        pkg.get("policy") or ""
+    ).lower()
 
 
 def test_apply_fail_closed_attribution_to_bullet_list() -> None:

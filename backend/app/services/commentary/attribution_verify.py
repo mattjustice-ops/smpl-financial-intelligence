@@ -1342,17 +1342,93 @@ def build_attribution_package_from_deck_payload(
             if key in arr or f"{key}_budget" in arr:
                 _add(key, key.replace("_", " ").title(), source=f"arr_analysis.{key}", aliases=aliases)
 
+    # Forecast / pipeline forward-looking keys so outlook narrative can ground.
+    for did, label, source, aliases in (
+        ("pipeline_coverage", "Pipeline coverage", "gtm_performance.pipeline_coverage", ("pipeline coverage", "coverage")),
+        ("slipped_pipeline", "Slipped pipeline", "pipeline.slipped", ("slipped pipeline", "slipped")),
+        ("pipeline_created", "Pipeline created", "pipeline.created", ("pipeline created", "pipeline")),
+        ("forecast_arr", "Forecast ARR", "fy_outlook.forecast", ("forecast arr", "arr outlook", "outlook arr")),
+        ("fy_outlook", "FY outlook", "fy_outlook", ("fy outlook", "full year outlook", "outlook")),
+        ("bookings_forecast", "Bookings forecast", "forecast.bookings", ("bookings forecast", "bookings outlook")),
+        ("cash_forecast", "Cash forecast", "forecast.cash", ("cash forecast", "cash outlook", "collections outlook")),
+        ("deferred_pipeline", "Deferred pipeline", "pipeline.deferred", ("deferred pipeline",)),
+    ):
+        _add(did, label, source=source, aliases=aliases)
+
+    deals = payload.get("deal_highlights") or {}
+    if isinstance(deals, Mapping):
+        for bucket in ("top_new_customers", "top_expansion", "top_churn", "top_slipped"):
+            rows = deals.get(bucket) or []
+            if not isinstance(rows, list):
+                continue
+            source = f"deal_highlights.{bucket}"
+            # Slipped / expansion deals count as pipeline grounding for forward claims.
+            if bucket in {"top_slipped", "top_expansion"}:
+                source = f"pipeline.{bucket}"
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                name = str(row.get("name") or "").strip()
+                if not name:
+                    continue
+                _add(
+                    _slug(name),
+                    name,
+                    source=source,
+                    aliases=(name.lower(),),
+                )
+
+    risks = payload.get("risks_and_opportunities") or {}
+    if isinstance(risks, Mapping):
+        for side in ("risks", "opportunities"):
+            for item in risks.get(side) or []:
+                if not isinstance(item, Mapping):
+                    continue
+                title = str(item.get("title") or item.get("name") or "").strip()
+                if not title:
+                    continue
+                # Tag opportunities / pipeline-ish risks as forecast/pipeline sources.
+                src = (
+                    f"pipeline.risks_and_opportunities.{side}"
+                    if side == "opportunities"
+                    or any(h in title.lower() for h in ("pipeline", "forecast", "outlook", "coverage"))
+                    else f"risks_and_opportunities.{side}"
+                )
+                _add(_slug(title), title, source=src, aliases=(title.lower(),))
+
+    cash = payload.get("cash_liquidity") or {}
+    if isinstance(cash, Mapping) and cash:
+        for key, aliases in _CASH_BRIDGE_LABELS.items():
+            _add(
+                key,
+                key.replace("_", " ").title(),
+                source=f"cash_liquidity.{key}",
+                aliases=aliases,
+            )
+
     period = str(
         (payload.get("period_context") or {}).get("close_period")
         if isinstance(payload.get("period_context"), Mapping)
         else payload.get("close_period") or base.get("period") or ""
     ) or None
 
-    return build_attribution_package(
+    pkg = build_attribution_package(
         metric="deck_package",
         period=period,
         drivers=apply_magnitude_dominance(drivers),
     )
+    pkg["policy"] = (
+        "May only name drivers whose id/label/aliases appear in allowed_drivers. "
+        "When a causal phrase joins multiple drivers with 'and' or commas, "
+        "EVERY named driver must be on the allowlist (not just one). "
+        "Empty allowlist means no causal claims are permitted. "
+        "Forward-looking / watch-out language must ground in forecast or pipeline "
+        "allowlist entries (source/label containing forecast, pipeline, outlook, "
+        "opportunity, coverage, etc.). "
+        "Numeric claims still governed by claim_verify TOL_ACTUALS=$1.00. "
+        "Rich narrative from allowlisted drivers is encouraged — do not invent causes."
+    )
+    return pkg
 
 
 def apply_fail_closed_attribution_to_bullet_list(

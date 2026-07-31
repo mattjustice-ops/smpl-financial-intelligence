@@ -50,7 +50,7 @@ Code search / product surface as of this write-up. Labels:
 | MDA variance commentary vs period matrix check | **Partial — implemented (harder)** | `verify_variance_commentary_tieout(..., fail_closed=True)` **blocks MD&A Prompt 2 emit on value mismatch**; missing rows still soft-warn |
 | `/commentary/generate` post-LLM claim verify | **Implemented (interactive)** | Numeric + citation soft-warn (board numbers trusted); attribution / forward surgical strip — [ai_claim_verify.md](./ai_claim_verify.md) |
 | MD&A Prompt 2 post-LLM claim strip | **Partial — implemented (strict)** | Nested commentary strings verified against payload evidence; unverifiable cells → don't-know; all-unverifiable variance sheet **blocks emit** |
-| Prompt 5 deck generation claim verify | **Implemented (soft-strip + export)** | Evidence embedded in Prompt 5 user message; post-LLM soft-strip of unmatched $ / % / Nx / uncited literals in PPTX **string literals**; attribution surgical strip; deck **exports** (adapt + fresh paths). Prompt 2 remains stricter. |
+| Prompt 5 deck generation claim verify | **Implemented (soft-strip + export)** | Widened evidence (actuals ≤ close, forecast after close, pipeline/deals, bridges) + attribution forward keys embedded in Prompt 5; post-LLM soft-strip of unmatched $ / % / Nx / uncited literals in PPTX **string literals**; attribution surgical strip; deck **exports**. Prompt 2 remains stricter. |
 | Board slide regenerate claim verify | **Implemented (interactive)** | Numeric + citation soft-warn; attribution / forward surgical strip; all-story-wiped → don't-know |
 | Copilot runtime claim verify | **Implemented (interactive)** | Packages from bundle/TS/cash (+ freeze `sections`); numeric/citation soft-warn; story strip; `_sources` tags on values |
 | Driver / attribution (non-numeric) claim verify | **Implemented on primary paths** | Helper + deal-count / logo / dominance + forward/pipeline grounding. Design + gaps: [ai_attribution_verify.md](./ai_attribution_verify.md) |
@@ -69,6 +69,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-31 | Prompt 5 evidence package widened (actual/forecast/pipeline/bridges + `series_kind` tags) and prompts tightened so rich board narrative can use package context; invent still soft-strips; soft-export retained. Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Prompt 5 deck export: numeric + citation soft-strip unmatched PPTX string literals (export continues); attribution surgical strip; prefer export over hard-block. Prompt 2 stays stricter. Export-time warehouse / client A–F validation unchanged (advisory). Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Interactive AI policy retune: commentary generate / board regenerate / Copilot soft-warn numeric + citation (board numbers trusted); attribution + forward/pipeline surgical strip. Prompt 2 stays strict; Prompt 5 later retuned to soft-strip + export. Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Export-time client A–F → **advisory** (MD&A deck + FINAL promote proceed; HTML WARN companion). Forecast C5/F4 soft after close. Hard identification documented at import/close — not presentation pull. Demo dual seeds untouched. Not SOC 2 certified. |

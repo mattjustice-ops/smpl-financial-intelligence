@@ -299,6 +299,76 @@ def test_prompt5_verify_soft_strips_and_exports() -> None:
     assert "$99,000,000" not in out
 
 
+def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:
+    from app.services.commentary.claim_verify import verify_text_against_evidence
+    from app.services.reporting.export.board_platform_metrics import (
+        build_evidence_package_from_deck_payload,
+    )
+    from app.services.reporting.export.prompt5_deck import _verify_prompt5_script_or_raise
+
+    payload = {
+        "period_context": {"close_period": "2026-06", "year": "2026", "close_period_label": "June 2026"},
+        "monthly_trends": {
+            "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"],
+            "ending_arr_m": [80, 81, 82, 83, 84, 86.1, 0, 0],
+            "ending_arr_outlook_m": [80, 81, 82, 83, 84, 86.1, 88.2, 90.0],
+            "revenue_outlook_m": [6.1, 6.2, 6.3, 6.4, 6.5, 7.4, 7.6, 7.8],
+            "pipeline_created_m": [1.1, 1.2, 1.0, 1.3, 1.4, 1.5, 1.6, 1.7],
+        },
+        "deal_highlights": {
+            "top_slipped": [{"name": "Acme Corp", "arr": "$2.4M"}],
+            "top_new_customers": [{"name": "Globex", "arr": "$1.1M"}],
+        },
+        "cash_liquidity": {
+            "current_month": {"collections": "$4.2M", "cash_eop_actual": "$12.5M"},
+            "bridge_table": {"rows": [{"label": "Collections", "actual": "$4.2M"}]},
+        },
+        "arr_analysis": {"expansion": "$1.2M", "churn": "$0.4M"},
+        "fy_outlook": {"arr_eoy": {"outlook": "$95.0M", "budget": "$100.0M"}},
+    }
+    pkg = build_evidence_package_from_deck_payload(payload)
+    assert pkg["close_period"] == "2026-06"
+    values = pkg["values_decimal"]
+    # Forecast after close is absolute dollars and verifies.
+    assert any(
+        abs(v - Decimal("88200000")) <= Decimal("1")
+        for k, v in values.items()
+        if "2026-07" in k and "ending_arr" in k
+    )
+    july = verify_text_against_evidence(
+        "July ARR outlook is $88.2M (story.forecast.ending_arr_outlook.2026-07).",
+        values,
+    )
+    assert july.ok, july.summary()
+    pipe = verify_text_against_evidence(
+        "Slipped pipeline includes Acme Corp at $2.4M.",
+        values,
+    )
+    assert pipe.ok, pipe.summary()
+    # Sources tagged with series_kind where feasible.
+    assert any(
+        isinstance(s, dict) and s.get("series_kind") in {"forecast", "pipeline", "actual", "bridge"}
+        for s in (pkg.get("_sources") or {}).values()
+    )
+
+    # Invented dollars still soft-strip; forecast-in-package keeps; export continues.
+    script = (
+        'slide.addText("July ARR outlook $88.2M (story.forecast.ending_arr_outlook.2026-07).");'
+        'slide.addText("Invented cash spike to $99,000,000.");'
+    )
+    out = _verify_prompt5_script_or_raise(script, payload)
+    assert "$88.2M" in out or "88.2" in out
+    assert "$99,000,000" not in out
+
+
+def test_to_decimal_parses_variance_plus_and_parens() -> None:
+    from app.services.commentary.claim_verify import _to_decimal
+
+    assert _to_decimal("+$1.2M") == Decimal("1200000")
+    assert _to_decimal("($0.4M)") == Decimal("-400000")
+    assert _to_decimal("—") is None
+
+
 def test_pptx_script_ignores_layout_coords_outside_strings() -> None:
     from app.services.commentary.claim_verify import verify_pptx_script_against_evidence
 
