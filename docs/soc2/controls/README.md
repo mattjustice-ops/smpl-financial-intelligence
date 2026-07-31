@@ -6,6 +6,7 @@
 
 | File | Role |
 |------|------|
+| [WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./WAREHOUSE_GATE_NEAR_TERM_PLAN.md) | **Near-term plan (2–4 weeks)** — calculate → validate → AI explains validated evidence → fail closed; LIVE/PARTIAL/OPEN matrix; board must-haves vs nice-to-haves |
 | [ai_claim_verify.md](./ai_claim_verify.md) | **Founder review checklist** — P15 fail-closed claim-verify: what shipped, tolerances, covered vs open paths, tests |
 | [ai_attribution_verify.md](./ai_attribution_verify.md) | **Live on primary AI paths** — non-numeric driver/attribution verify (commentary, Prompt 2, Prompt 5, board regenerate, Copilot structured packages) |
 | [fe_board_single_source.md](./fe_board_single_source.md) | **Production FE↔Board hydrate** — shared outlook API/builder confirmed + TS↔SRC $1 regression; demo dual-seed left alone |
@@ -68,6 +69,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-30 | Near-term warehouse-gate plan: [WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./WAREHOUSE_GATE_NEAR_TERM_PLAN.md) — DoD, path×gate matrix, phased workstreams, board must-haves, verify plan, claim boundaries. Not SOC 2 certified. |
 | 2026-07-30 | Client `runTieOut` Rule Sets A–F (skip when data absent) + client HTML tie-out report as publish gate; Prompt 5 + board regenerate citation verify on string literals/bullets. Live warehouse SQL HTML report still open. Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-30 | DOM `data-source` overlay + audit hotkey on Board/FE KPIs; partial client `runTieOut` (Rule C/A) gates live MD&A export + FINAL forecast promote. Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-30 | Post-LLM citation verify + warehouse tags (`org_id` / `loaded_at` / `is_final` honest nulls) + multi-driver AND attribution rule. $1 bar unchanged. Not SOC 2 certified. |
