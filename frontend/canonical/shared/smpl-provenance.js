@@ -4,12 +4,18 @@
  * Demo path stays usable — tags still apply from catalog; publish gate only hard-blocks
  * on live hydrate FAIL (customer export / final forecast promote).
  *
- * Not SOC 2 certified. Rule Sets A–F are only partially implemented (see docs).
+ * Client Rule Sets A–F run when local Board/FE data exists (SRC, TS_DATA, WF_TABLE,
+ * baseline_engine, display arrays). Skips D/E (and bank B2) when structures absent.
+ * HTML report is client-side from those checks — not live warehouse SQL.
+ * Not SOC 2 certified.
  */
 (function (global) {
   "use strict";
 
   var TOL_ACTUALS = 1.0;
+  var TOL_EXACT = 0;
+  var TOL_DISPLAY_M = 0.001; // million-scale UI display_precision (~$1K)
+  var TOL_BANK_SOFT = 1000; // bank timing soft — not statement rounding
 
   /** Leaf field → WAREHOUSE / COMPUTED tag (mirrors claim_verify._SOURCE_FIELD_CATALOG). */
   var FIELD_CATALOG = {
@@ -117,6 +123,7 @@
 
   var _payloadSources = null;
   var _lastTieOut = null;
+  var _lastTieOutHtml = null;
   var _auditBound = false;
 
   function closeMonth() {
@@ -328,12 +335,101 @@
     }
   }
 
+  function periodMonthIndex(period) {
+    if (!period || String(period).length < 7) return -1;
+    return parseInt(String(period).slice(5, 7), 10) - 1;
+  }
+
+  function resolveWfTable() {
+    return (
+      global.SMPL_ARR_WATERFALL ||
+      global.SMPL_DEMO_WF_TABLE ||
+      (global.SMPLOutlook &&
+        typeof global.SMPLOutlook.getArrWaterfall === "function" &&
+        global.SMPLOutlook.getArrWaterfall()) ||
+      null
+    );
+  }
+
+  function resolveEngineResults(engineResults, tsData, closeMo) {
+    if (engineResults && typeof engineResults === "object") return engineResults;
+    if (global.SMPL_BASELINE_ENGINE && typeof global.SMPL_BASELINE_ENGINE === "object") {
+      return global.SMPL_BASELINE_ENGINE;
+    }
+    var payload = global.SMPL_OUTLOOK_PAYLOAD;
+    if (payload && payload.baseline_engine) return payload.baseline_engine;
+    if (typeof global.getResults === "function") {
+      try {
+        return global.getResults();
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    if (typeof global.compute === "function") {
+      try {
+        return global.compute();
+      } catch (err2) {
+        /* ignore */
+      }
+    }
+    void tsData;
+    void closeMo;
+    return null;
+  }
+
+  /** A2: accept signed (neg cont/churn) or magnitude (positive cont/churn) conventions. */
+  function arrNetNewFromComponents(nb, exp, react, cont, churn) {
+    var signed =
+      (nb || 0) + (exp || 0) + (react || 0) + (cont || 0) + (churn || 0);
+    var mag =
+      (nb || 0) +
+      (exp || 0) +
+      (react || 0) -
+      Math.abs(cont || 0) -
+      Math.abs(churn || 0);
+    return { signed: signed, mag: mag };
+  }
+
+  function arrComponentsMatchNn(nb, exp, react, cont, churn, nn, tol) {
+    if (nn == null || nb == null || exp == null) return null;
+    var parts = arrNetNewFromComponents(nb, exp, react, cont, churn);
+    if (Math.abs(parts.signed - nn) <= tol) return parts.signed;
+    if (Math.abs(parts.mag - nn) <= tol) return parts.mag;
+    return parts.signed; // prefer signed for failure message (framework A2)
+  }
+
+  function softChk(rule, period, metric, expected, actual, softs, tol) {
+    if (actual == null || expected == null) return;
+    var diff = Math.abs(expected - actual);
+    if (diff > tol) {
+      softs.push(
+        "[" +
+          rule +
+          "] " +
+          period +
+          " " +
+          metric +
+          ": expected=" +
+          expected.toFixed(0) +
+          " actual=" +
+          actual.toFixed(0) +
+          " diff=" +
+          diff.toFixed(0) +
+          " (soft)",
+      );
+    }
+  }
+
   /**
-   * Client tie-out — Rule C (TS↔SRC actuals) + ARR identities when SRC has arr_*.
-   * Full Rule Sets A–F are NOT claimed live; see docs limitation.
+   * Client Rule Sets A–F when local Board/FE structures exist.
+   * Hard fails use TOL_ACTUALS=$1. Soft bank/display go to warnings.
+   * D/E skipped when headcount/sales structures absent (honest skip notes).
    */
   function runTieOut(srcActuals, tsData, engineResults, closeMo) {
     var fails = [];
+    var softs = [];
+    var skipped = [];
+    var checksRun = [];
     var tol = TOL_ACTUALS;
     closeMo = closeMo || closeMonth();
 
@@ -343,12 +439,15 @@
     if (!tsData && global.TS_DATA) tsData = global.TS_DATA;
     if (!srcActuals && global.SRC && global.SRC.actuals) srcActuals = global.SRC.actuals;
 
-    // Normalize: SRC may be { actuals: {...} } or flat period map
     if (srcActuals && srcActuals.actuals && typeof srcActuals.actuals === "object") {
       srcActuals = srcActuals.actuals;
     }
 
     var actual = (tsData && tsData.Actual) || {};
+    var forecast = (tsData && tsData.Forecast) || {};
+    var engine = resolveEngineResults(engineResults, tsData, closeMo);
+    var wf = resolveWfTable();
+
     var periods = {};
     if (srcActuals && typeof srcActuals === "object") {
       Object.keys(srcActuals).forEach(function (p) {
@@ -369,33 +468,28 @@
       })
       .sort();
 
-    if (!periodList.length) {
-      // No comparable actuals — pass with note (demo offline / empty warehouse)
-      _lastTieOut = {
-        passed: true,
-        failures: [],
-        warnings: ["tie-out skipped: no overlapping Actual periods"],
-        scope: "partial-C",
-        live: isLive(),
-      };
-      return _lastTieOut;
+    var fcPeriods = [];
+    if (forecast.is && typeof forecast.is === "object") {
+      fcPeriods = Object.keys(forecast.is).sort();
+    } else if (forecast.periods && forecast.periods.length) {
+      fcPeriods = forecast.periods.slice().sort();
+    }
+
+    // ── Rule A: ARR ────────────────────────────────────────────────────
+    if (wf && Array.isArray(wf.Ending) && Array.isArray(wf.Beginning)) {
+      checksRun.push("A1");
+      for (var i = 0; i < wf.Ending.length - 1; i++) {
+        var endN = num(wf.Ending[i]);
+        var begNext = num(wf.Beginning[i + 1]);
+        if (endN == null || begNext == null) continue;
+        chk("A1", "idx" + i + "→" + (i + 1), "arr chain ending=next beginning", endN, begNext, fails, TOL_EXACT);
+      }
+    } else {
+      skipped.push("A1: no WF_TABLE / ARR_WATERFALL");
     }
 
     periodList.forEach(function (p) {
       var srcRow = (srcActuals && srcActuals[p]) || {};
-      TS_SRC_FIELDS.forEach(function (triple) {
-        var field = triple[0];
-        var stmt = triple[1];
-        var srcKey = triple[2];
-        var tsRow = ((actual[stmt] || {})[p]) || {};
-        var tsVal = num(tsRow[field]);
-        var srcVal = num(srcRow[srcKey]);
-        if (srcVal == null && srcKey === "deferred_rev") srcVal = num(srcRow.dr);
-        if (tsVal == null && srcVal == null) return;
-        chk("C", p, field, srcVal, tsVal, fails, tol);
-      });
-
-      // ARR identities when SRC carries arr_* (Rule A2/A3 subset)
       var nb = num(srcRow.arr_nb);
       var exp = num(srcRow.arr_exp);
       var react = num(srcRow.arr_react);
@@ -404,26 +498,376 @@
       var nn = num(srcRow.arr_nn);
       var bop = num(srcRow.arr_bop);
       var eop = num(srcRow.arr_eop);
+
       if (nn != null && nb != null && exp != null) {
-        var comp =
-          (nb || 0) +
-          (exp || 0) +
-          (react || 0) +
-          (cont || 0) +
-          (churn || 0);
-        chk("A2", p, "arr net_new components", comp, nn, fails, tol);
+        checksRun.push("A2");
+        var matched = arrComponentsMatchNn(nb, exp, react, cont, churn, nn, tol);
+        chk("A2", p, "arr net_new components", matched, nn, fails, tol);
       }
+
       if (eop != null && bop != null && nn != null) {
+        checksRun.push("A3");
         chk("A3", p, "arr ending=bop+nn", bop + nn, eop, fails, tol);
+      }
+
+      // A4/A5: WF_TABLE ↔ SRC arr_* for close-year months
+      if (wf && Array.isArray(wf.Ending)) {
+        var mi = periodMonthIndex(p);
+        if (mi >= 0 && mi < wf.Ending.length) {
+          var wfEnd = num(wf.Ending[mi]);
+          var wfBeg = num(wf.Beginning && wf.Beginning[mi]);
+          if (eop != null && wfEnd != null) {
+            checksRun.push("A4");
+            chk("A4", p, "WF Ending ↔ SRC arr_eop", wfEnd, eop, fails, tol);
+          }
+          if (bop != null && wfBeg != null) {
+            checksRun.push("A4");
+            chk("A4", p, "WF Beginning ↔ SRC arr_bop", wfBeg, bop, fails, tol);
+          }
+          if (nn != null && wf.Ending && wf.Beginning) {
+            var wfNn =
+              (num(wf["New Business"] && wf["New Business"][mi]) || 0) +
+              (num(wf.Expansion && wf.Expansion[mi]) || 0) +
+              (num(wf.Reactivation && wf.Reactivation[mi]) || 0) +
+              (num(wf.Contraction && wf.Contraction[mi]) || 0) +
+              (num(wf.Churn && wf.Churn[mi]) || 0);
+            checksRun.push("A5");
+            chk("A5", p, "WF component nn ↔ SRC arr_nn", wfNn, nn, fails, tol);
+            if (wfEnd != null) {
+              chk("A5", p, "SRC arr_eop ↔ WF Ending", eop, wfEnd, fails, tol);
+            }
+          }
+        }
       }
     });
 
-    // Soft: engineResults / forecast Rule F not required for v1 gate
-    void engineResults;
+    // A2/A3 from WF alone when SRC lacks arr_*
+    if (wf && Array.isArray(wf.Ending)) {
+      var yearPrefix = closeMo ? String(closeMo).slice(0, 4) : null;
+      for (var wi = 0; wi < wf.Ending.length; wi++) {
+        var wNb = num(wf["New Business"] && wf["New Business"][wi]);
+        var wExp = num(wf.Expansion && wf.Expansion[wi]);
+        var wReact = num(wf.Reactivation && wf.Reactivation[wi]);
+        var wCont = num(wf.Contraction && wf.Contraction[wi]);
+        var wChurn = num(wf.Churn && wf.Churn[wi]);
+        var wBeg = num(wf.Beginning && wf.Beginning[wi]);
+        var wEnd = num(wf.Ending[wi]);
+        if (wNb == null || wExp == null || wEnd == null || wBeg == null) continue;
+        var wNn =
+          (wNb || 0) + (wExp || 0) + (wReact || 0) + (wCont || 0) + (wChurn || 0);
+        var label =
+          (yearPrefix || "yr") + "-" + String(wi + 1).padStart(2, "0");
+        if (closeMo && label > closeMo) continue;
+        checksRun.push("A2-wf");
+        chk("A2", label, "WF arr net_new components", wNn, wEnd - wBeg, fails, tol);
+        checksRun.push("A3-wf");
+        chk("A3", label, "WF ending=bop+nn", wBeg + wNn, wEnd, fails, tol);
+      }
+    }
+
+    if (fcPeriods.length && closeMo) {
+      var actEndArr =
+        (srcActuals && srcActuals[closeMo] && num(srcActuals[closeMo].arr_eop)) ||
+        (wf &&
+          Array.isArray(wf.Ending) &&
+          num(wf.Ending[periodMonthIndex(closeMo)]));
+      var firstFC = fcPeriods[0];
+      var engBop =
+        engine &&
+        engine[firstFC] &&
+        engine[firstFC].arr &&
+        num(engine[firstFC].arr.arr_bop);
+      if (actEndArr != null && engBop != null) {
+        checksRun.push("A6");
+        chk("A6", firstFC, "forecast arr_bop == actual arr_eop", actEndArr, engBop, fails, tol);
+      } else if (actEndArr != null && engBop == null) {
+        skipped.push("A6: no engineResults/baseline_engine arr_bop for " + firstFC);
+      }
+    }
+
+    // ── Rule B: Cash ───────────────────────────────────────────────────
+    var cashPeriods = periodList.slice();
+    if (actual.cfs) {
+      Object.keys(actual.cfs).forEach(function (p) {
+        if (!closeMo || p <= closeMo) cashPeriods.push(p);
+      });
+    }
+    cashPeriods = cashPeriods
+      .filter(function (p, idx, arr) {
+        return arr.indexOf(p) === idx;
+      })
+      .sort();
+
+    for (var ci = 0; ci < cashPeriods.length - 1; ci++) {
+      var pN = cashPeriods[ci];
+      var pN1 = cashPeriods[ci + 1];
+      var endCash =
+        num((actual.cfs && actual.cfs[pN] && actual.cfs[pN].ending_cash)) ||
+        num(srcActuals && srcActuals[pN] && srcActuals[pN].ending_cash);
+      var begNextCash =
+        num((actual.cfs && actual.cfs[pN1] && actual.cfs[pN1].beginning_cash)) ||
+        num(srcActuals && srcActuals[pN1] && srcActuals[pN1].beginning_cash);
+      if (endCash == null || begNextCash == null) continue;
+      checksRun.push("B1");
+      chk("B1", pN + "→" + pN1, "cash chain ending=next beginning", endCash, begNextCash, fails, tol);
+    }
+    if (!checksRun.some(function (x) { return x === "B1"; })) {
+      skipped.push("B1: insufficient CFS/SRC cash chain periods");
+    }
+
+    skipped.push("B2: bank_account_balances not in Board/FE client payload (warehouse-only soft check)");
+
+    if (fcPeriods.length && closeMo) {
+      var actEndCash =
+        num(srcActuals && srcActuals[closeMo] && srcActuals[closeMo].ending_cash) ||
+        num(actual.cfs && actual.cfs[closeMo] && actual.cfs[closeMo].ending_cash);
+      var firstFc = fcPeriods[0];
+      var tsBeg = num(forecast.cfs && forecast.cfs[firstFc] && forecast.cfs[firstFc].beginning_cash);
+      var engBeg =
+        engine &&
+        engine[firstFc] &&
+        engine[firstFc].cfs &&
+        num(engine[firstFc].cfs.beg_cash != null ? engine[firstFc].cfs.beg_cash : engine[firstFc].cfs.beginning_cash);
+      if (actEndCash != null && tsBeg != null) {
+        checksRun.push("B3");
+        chk("B3a", firstFc, "TS forecast beg_cash == actual ending", actEndCash, tsBeg, fails, tol);
+      }
+      if (actEndCash != null && engBeg != null) {
+        checksRun.push("B3");
+        chk("B3b", firstFc, "Engine forecast beg_cash == actual ending", actEndCash, engBeg, fails, tol);
+      }
+      if (actEndCash != null && tsBeg == null && engBeg == null) {
+        skipped.push("B3: no Forecast CFS / engine beg_cash for " + firstFc);
+      }
+    }
+
+    // B4: CASH_ACT display array (soft display_precision)
+    if (typeof global.CASH_ACT !== "undefined" && Array.isArray(global.CASH_ACT) && closeMo) {
+      var cmi = periodMonthIndex(closeMo);
+      var cashDisp = num(global.CASH_ACT[cmi]);
+      var cashWh =
+        num(actual.cfs && actual.cfs[closeMo] && actual.cfs[closeMo].ending_cash) ||
+        num(srcActuals && srcActuals[closeMo] && srcActuals[closeMo].ending_cash);
+      if (cashDisp != null && cashWh != null) {
+        checksRun.push("B4");
+        softChk("B4", closeMo, "CASH_ACT vs ending_cash/1e6", cashWh / 1e6, cashDisp, softs, TOL_DISPLAY_M);
+      }
+    } else {
+      skipped.push("B4: CASH_ACT display array absent");
+    }
+
+    // B5: CFO identity from CFS row when components present
+    cashPeriods.forEach(function (p) {
+      var cfsRow = (actual.cfs && actual.cfs[p]) || {};
+      var cfo = num(cfsRow.cfo);
+      var ni = num(cfsRow.net_income);
+      var da = num(cfsRow.da);
+      var sbc = num(cfsRow.sbc);
+      var car = num(cfsRow.chg_ar);
+      var cdr = num(cfsRow.chg_dr);
+      var cap = num(cfsRow.chg_ap);
+      var pre = num(cfsRow.chg_prepaids);
+      if (cfo == null || ni == null || da == null) return;
+      var compCfo =
+        (ni || 0) +
+        (da || 0) +
+        (sbc || 0) +
+        (car || 0) +
+        (cdr || 0) +
+        (cap || 0) +
+        (pre || 0);
+      checksRun.push("B5");
+      chk("B5", p, "CFO identity", compCfo, cfo, fails, tol);
+    });
+
+    // ── Rule C: IS identities + TS↔SRC ─────────────────────────────────
+    periodList.forEach(function (p) {
+      var srcRow = (srcActuals && srcActuals[p]) || {};
+      var isRow = (actual.is && actual.is[p]) || {};
+
+      // C1 / C2 from whichever side has full IS
+      var rev = num(isRow.revenue != null ? isRow.revenue : srcRow.revenue);
+      var cogs = num(isRow.cogs != null ? isRow.cogs : srcRow.cogs);
+      var gp = num(isRow.gross_profit != null ? isRow.gross_profit : srcRow.gross_profit);
+      var sm = num(isRow.sm != null ? isRow.sm : srcRow.sm);
+      var rd = num(isRow.rd != null ? isRow.rd : srcRow.rd);
+      var ga = num(isRow.ga != null ? isRow.ga : srcRow.ga);
+      var ebitda = num(isRow.ebitda != null ? isRow.ebitda : srcRow.ebitda);
+
+      if (rev != null && cogs != null && gp != null) {
+        checksRun.push("C1");
+        chk("C1", p, "gross_profit = revenue - cogs", rev - cogs, gp, fails, tol);
+      }
+      if (gp != null && sm != null && rd != null && ga != null && ebitda != null) {
+        checksRun.push("C2");
+        chk("C2", p, "ebitda = gp - sm - rd - ga", gp - sm - rd - ga, ebitda, fails, tol);
+      }
+
+      // C3 TS↔SRC: only when period exists on both sides (chain-only periods skip).
+      var srcHas = srcActuals && srcActuals[p] && typeof srcActuals[p] === "object";
+      var tsHas =
+        (actual.is && actual.is[p]) ||
+        (actual.bs && actual.bs[p]) ||
+        (actual.cfs && actual.cfs[p]);
+      if (srcHas && tsHas) {
+        TS_SRC_FIELDS.forEach(function (triple) {
+          var field = triple[0];
+          var stmt = triple[1];
+          var srcKey = triple[2];
+          var tsRow = ((actual[stmt] || {})[p]) || {};
+          var tsVal = num(tsRow[field]);
+          var srcVal = num(srcRow[srcKey]);
+          if (srcVal == null && srcKey === "deferred_rev") srcVal = num(srcRow.dr);
+          if (tsVal == null && srcVal == null) return;
+          checksRun.push("C3");
+          chk("C3", p, field, srcVal, tsVal, fails, tol);
+        });
+      }
+    });
+
+    // C3 soft: REV_ACT / EBITDA_ACT display vs TS (million scale)
+    if (typeof global.REV_ACT !== "undefined" && Array.isArray(global.REV_ACT) && closeMo) {
+      var rmi = periodMonthIndex(closeMo);
+      var revDisp = num(global.REV_ACT[rmi]);
+      var revWh = num(actual.is && actual.is[closeMo] && actual.is[closeMo].revenue);
+      if (revDisp != null && revWh != null) {
+        checksRun.push("C3-disp");
+        softChk("C3-disp", closeMo, "REV_ACT vs revenue/1e6", revWh / 1e6, revDisp, softs, TOL_DISPLAY_M);
+      }
+    }
+
+    fcPeriods.forEach(function (p) {
+      var eng = engine && engine[p];
+      var tsIs = forecast.is && forecast.is[p];
+      if (!eng || !eng.is || !tsIs) return;
+      checksRun.push("C4");
+      chk("C4", p, "revenue", num(eng.is.revenue), num(tsIs.revenue), fails, tol);
+      chk("C4", p, "gross_profit", num(eng.is.gross_profit), num(tsIs.gross_profit), fails, tol);
+      chk("C4", p, "ebitda", num(eng.is.ebitda), num(tsIs.ebitda), fails, tol);
+      chk("C4", p, "net_income", num(eng.is.net_income), num(tsIs.net_income), fails, tol);
+      // C5: revenue ≈ arr_eop / 12
+      var arrEop = eng.arr && num(eng.arr.arr_eop);
+      if (arrEop != null && num(eng.is.revenue) != null) {
+        checksRun.push("C5");
+        chk("C5", p, "revenue ≈ arr_eop/12", arrEop / 12, num(eng.is.revenue), fails, tol);
+      }
+    });
+    if (fcPeriods.length && !engine) {
+      skipped.push("C4/C5/F: no engineResults / baseline_engine / compute()");
+    }
+
+    // ── Rule D: Headcount (exact) when WF_HC_ALL present ────────────────
+    var wfHc = global.WF_HC_ALL;
+    if (wfHc && typeof wfHc === "object") {
+      checksRun.push("D1");
+      // Internal consistency: department columns same length; no warehouse plan → skip D2–D4
+      var depts = Object.keys(wfHc);
+      var lengths = depts.map(function (d) {
+        return Array.isArray(wfHc[d]) ? wfHc[d].length : 0;
+      });
+      var len0 = lengths[0] || 0;
+      if (!depts.length || lengths.some(function (l) { return l !== len0; })) {
+        fails.push("[D1] WF_HC_ALL department column lengths mismatch");
+      }
+      skipped.push("D2–D4: headcount_plan / open_requisitions warehouse tables not in client payload");
+    } else {
+      skipped.push("D: WF_HC_ALL absent");
+    }
+
+    // ── Rule E: Sales when SD present ──────────────────────────────────
+    var sd = global.SD || (payload && payload.SD) || null;
+    if (sd && sd.monthly && typeof sd.monthly === "object") {
+      checksRun.push("E1");
+      Object.keys(sd.monthly).forEach(function (p) {
+        if (closeMo && p > closeMo) return;
+        var row = sd.monthly[p] || {};
+        // Internal non-null sanity only — warehouse quota_assignments not in client
+        if (row.quota == null && row.attained == null) {
+          softs.push("[E1] " + p + " SD.monthly missing quota/attained (soft)");
+        }
+      });
+      skipped.push("E1–E3 warehouse quota_assignments / opportunities not in client — SD present for display only");
+    } else {
+      skipped.push("E: SD.monthly absent");
+    }
+
+    // ── Rule F: Engine ↔ TS Forecast cross-tie ─────────────────────────
+    if (engine && fcPeriods.length) {
+      fcPeriods.forEach(function (p) {
+        var eng = engine[p];
+        var tsIs = forecast.is && forecast.is[p];
+        var tsCfs = forecast.cfs && forecast.cfs[p];
+        if (!eng || !tsIs) {
+          fails.push("[F] missing data for " + p);
+          return;
+        }
+        checksRun.push("F2");
+        chk("F2", p, "revenue", num(eng.is && eng.is.revenue), num(tsIs.revenue), fails, tol);
+        checksRun.push("F3");
+        chk("F3", p, "ebitda", num(eng.is && eng.is.ebitda), num(tsIs.ebitda), fails, tol);
+        if (eng.cfs && tsCfs) {
+          checksRun.push("F4");
+          chk(
+            "F4a",
+            p,
+            "beg_cash",
+            num(eng.cfs.beg_cash != null ? eng.cfs.beg_cash : eng.cfs.beginning_cash),
+            num(tsCfs.beginning_cash),
+            fails,
+            tol,
+          );
+          chk(
+            "F4b",
+            p,
+            "end_cash",
+            num(eng.cfs.end_cash != null ? eng.cfs.end_cash : eng.cfs.ending_cash),
+            num(tsCfs.ending_cash),
+            fails,
+            tol,
+          );
+        }
+        var engArr = eng.arr && num(eng.arr.arr_eop);
+        if (engArr != null && wf && Array.isArray(wf.Ending)) {
+          var fmi = periodMonthIndex(p);
+          var wfFcEnd = num(wf.Ending[fmi]);
+          if (wfFcEnd != null) {
+            checksRun.push("F1");
+            chk("F1", p, "engine arr_eop ↔ WF Ending", engArr, wfFcEnd, fails, tol);
+          }
+        }
+      });
+      skipped.push("F5: payroll lever soft check not automated (requires SRC.open_reqs vs WF_PAYROLL)");
+    }
+
+    if (!periodList.length && !checksRun.length) {
+      _lastTieOut = {
+        passed: true,
+        failures: [],
+        warnings: ["tie-out skipped: no overlapping Actual periods / WF / engine data"],
+        skipped: skipped,
+        soft: softs,
+        checksRun: checksRun,
+        scope: "empty",
+        live: isLive(),
+        closeMonth: closeMo,
+      };
+      _lastTieOutHtml = renderTieOutReportHtml(_lastTieOut);
+      global.SMPL_LAST_TIEOUT = _lastTieOut;
+      global.SMPL_LAST_TIEOUT_HTML = _lastTieOutHtml;
+      return _lastTieOut;
+    }
 
     var passed = fails.length === 0;
-    if (passed) console.info("[smpl-provenance] ✓ TIE-OUT PASSED (partial Rule C/A)");
-    else {
+    var uniqueChecks = checksRun.filter(function (x, i, a) {
+      return a.indexOf(x) === i;
+    });
+    if (passed) {
+      console.info(
+        "[smpl-provenance] ✓ TIE-OUT PASSED (client A–F subset: " +
+          uniqueChecks.join(",") +
+          ")",
+      );
+    } else {
       console.error("[smpl-provenance] ✗ TIE-OUT FAILED (" + fails.length + " issues)");
       fails.forEach(function (f) {
         console.error(" " + f);
@@ -433,20 +877,132 @@
     _lastTieOut = {
       passed: passed,
       failures: fails,
-      warnings: [
-        "Partial client gate only (Rule C TS↔SRC + ARR A2/A3 when present). Full Rule Sets A–F not live.",
-      ],
-      scope: "partial-C-A",
+      warnings: softs.concat(
+        skipped.map(function (s) {
+          return "skip: " + s;
+        }),
+      ),
+      skipped: skipped,
+      soft: softs,
+      checksRun: uniqueChecks,
+      scope: "client-A-F",
       live: isLive(),
       closeMonth: closeMo,
+      note:
+        "Client A–F from Board/FE structures. Not live warehouse SQL. " +
+        "D2–D4 / E warehouse / B2 bank / F5 payroll remain skipped when data absent. " +
+        "TOL_ACTUALS=$" +
+        TOL_ACTUALS.toFixed(2) +
+        ".",
     };
+    _lastTieOutHtml = renderTieOutReportHtml(_lastTieOut);
     global.SMPL_LAST_TIEOUT = _lastTieOut;
+    global.SMPL_LAST_TIEOUT_HTML = _lastTieOutHtml;
     return _lastTieOut;
   }
 
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  /** Client-side HTML tie-out report (not warehouse SQL Part 5). */
+  function renderTieOutReportHtml(result) {
+    result = result || _lastTieOut || {};
+    var fails = result.failures || [];
+    var soft = result.soft || [];
+    var skipped = result.skipped || [];
+    var checks = result.checksRun || [];
+    var status = result.passed
+      ? "APPROVED FOR DEPLOYMENT (client checks)"
+      : "BLOCKED — tie-out failures";
+    var rows = fails
+      .map(function (f) {
+        return "<tr class='fail'><td>FAIL</td><td>" + escapeHtml(f) + "</td></tr>";
+      })
+      .concat(
+        soft.map(function (f) {
+          return "<tr class='soft'><td>SOFT</td><td>" + escapeHtml(f) + "</td></tr>";
+        }),
+      )
+      .concat(
+        skipped.map(function (f) {
+          return "<tr class='skip'><td>SKIP</td><td>" + escapeHtml(f) + "</td></tr>";
+        }),
+      )
+      .join("");
+    return (
+      "<!DOCTYPE html><html><head><meta charset='utf-8'><title>SMPL Tie-Out Report</title>" +
+      "<style>body{font-family:ui-monospace,Consolas,monospace;padding:24px;background:#0f1410;color:#dde8d6}" +
+      "h1{font-size:18px}table{border-collapse:collapse;width:100%;margin-top:16px}" +
+      "td,th{border:1px solid #2e3f31;padding:6px 8px;font-size:12px;text-align:left}" +
+      ".fail td{color:#b8705f}.soft td{color:#b89060}.skip td{color:#72826a}" +
+      ".ok{color:#5fa878}.bad{color:#b8705f}</style></head><body>" +
+      "<h1>SMPL.ai — Client Data Tie-Out Report</h1>" +
+      "<p>Close: " +
+      escapeHtml(result.closeMonth || "") +
+      " · Live: " +
+      (result.live ? "yes" : "no") +
+      " · Scope: " +
+      escapeHtml(result.scope || "") +
+      "</p>" +
+      "<p>Checks run: " +
+      escapeHtml(checks.join(", ") || "(none)") +
+      "</p>" +
+      "<p class='" +
+      (result.passed ? "ok" : "bad") +
+      "'>STATUS: " +
+      escapeHtml(status) +
+      "</p>" +
+      "<p>Hard failures: " +
+      fails.length +
+      " · Soft: " +
+      soft.length +
+      " · Skipped: " +
+      skipped.length +
+      "</p>" +
+      "<p>TOL_ACTUALS=$" +
+      TOL_ACTUALS.toFixed(2) +
+      ". Not SOC 2 certified. Not live warehouse SQL.</p>" +
+      "<table><thead><tr><th>Kind</th><th>Detail</th></tr></thead><tbody>" +
+      (rows || "<tr><td>OK</td><td>No failures, soft flags, or skips recorded.</td></tr>") +
+      "</tbody></table>" +
+      "<p style='margin-top:24px;color:#72826a'>Finance sign-off boxes are intentionally blank — " +
+      "do not treat this auto-report as founder Allow.</p>" +
+      "</body></html>"
+    );
+  }
+
+  function downloadTieOutReport(result) {
+    var html = renderTieOutReportHtml(result || _lastTieOut);
+    _lastTieOutHtml = html;
+    global.SMPL_LAST_TIEOUT_HTML = html;
+    if (typeof document === "undefined") return html;
+    try {
+      var blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      var cm = (result && result.closeMonth) || closeMonth() || "unknown";
+      a.href = url;
+      a.download = "tieout_report_client_" + cm + ".html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () {
+        URL.revokeObjectURL(url);
+      }, 2000);
+    } catch (err) {
+      console.warn("[smpl-provenance] HTML report download failed", err);
+    }
+    return html;
+  }
+
   /**
-   * Customer publish gate. Returns { ok, blocked, result, message }.
-   * - Live + FAIL → block (ok=false, blocked=true)
+   * Customer publish gate. Returns { ok, blocked, result, message, reportHtml }.
+   * - Live + FAIL → block (ok=false, blocked=true); HTML report attached
    * - Demo / no live → warn only (ok=true, blocked=false) unless forceBlock
    */
   function gatePublish(options) {
@@ -455,6 +1011,7 @@
     var live = options.forceLive != null ? options.forceLive : isLive();
     var forceBlock = Boolean(options.forceBlock);
     var blocked = (!result.passed && live) || (!result.passed && forceBlock);
+    var reportHtml = _lastTieOutHtml || renderTieOutReportHtml(result);
     var message = "";
     if (!result.passed) {
       message =
@@ -467,14 +1024,27 @@
         (result.failures.length > 12 ? "\n…" : "") +
         "\n\nClosed-actuals bar: $" +
         TOL_ACTUALS.toFixed(2) +
-        ". Partial Rule C/A only — not full A–F.";
+        ". Client Rule Sets A–F (skips when data absent). HTML report attached.";
       if (blocked) {
         message += "\n\nCustomer publish/export blocked until resolved.";
+        if (options.downloadReport !== false) {
+          try {
+            downloadTieOutReport(result);
+          } catch (err) {
+            /* ignore */
+          }
+        }
       } else {
         message += "\n\nDemo/offline path: warning only (not hard-blocked).";
       }
     }
-    return { ok: !blocked, blocked: blocked, result: result, message: message };
+    return {
+      ok: !blocked,
+      blocked: blocked,
+      result: result,
+      message: message,
+      reportHtml: reportHtml,
+    };
   }
 
   function clearAuditTags() {
@@ -534,6 +1104,8 @@
 
   global.SMPLProvenance = {
     TOL_ACTUALS: TOL_ACTUALS,
+    TOL_DISPLAY_M: TOL_DISPLAY_M,
+    TOL_BANK_SOFT: TOL_BANK_SOFT,
     FIELD_CATALOG: FIELD_CATALOG,
     ingestOutlook: ingestOutlook,
     resolveRecord: resolveRecord,
@@ -543,11 +1115,16 @@
     applyAttrsToEl: applyAttrsToEl,
     runTieOut: runTieOut,
     gatePublish: gatePublish,
+    renderTieOutReportHtml: renderTieOutReportHtml,
+    downloadTieOutReport: downloadTieOutReport,
     toggleAuditOverlay: toggleAuditOverlay,
     clearAuditTags: clearAuditTags,
     install: install,
     getLastTieOut: function () {
       return _lastTieOut;
+    },
+    getLastTieOutHtml: function () {
+      return _lastTieOutHtml;
     },
     getPayloadSources: function () {
       return _payloadSources;

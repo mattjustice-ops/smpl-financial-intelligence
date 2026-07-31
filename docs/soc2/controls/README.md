@@ -55,11 +55,11 @@ Code search / product surface as of this write-up. Labels:
 | Driver / attribution (non-numeric) claim verify | **Implemented on primary paths** | Helper + deal-count / logo / dominance catalogs. Design + gaps: [ai_attribution_verify.md](./ai_attribution_verify.md) |
 | Production single-source confirmation (FE + Board Platform) | **Confirmed + hydrate residue fix** | Shared outlook API/builder; TS↔SRC $1 regression; merge replace + prune closed Actuals — [fe_board_single_source.md](./fe_board_single_source.md) |
 | `_sources` provenance object on every LLM payload | **Partial — implemented (v1 + tags)** | Evidence packages attach `_sources` (WAREHOUSE catalog / COMPUTED / ENGINE_PATH) with `org_id` / `loaded_at` / `is_final` (honest nulls). DOM overlay consumes when present — [ai_claim_verify.md](./ai_claim_verify.md) |
-| Post-LLM citation verify | **Partial — implemented** | Material money/%/Nx must cite `_sources` key / table.column / formula_id on commentary generate, MD&A Prompt 2, Copilot — [ai_claim_verify.md](./ai_claim_verify.md) |
+| Post-LLM citation verify | **Implemented on primary paths** | Material money/%/Nx must cite `_sources` key / table.column / formula_id on commentary generate, MD&A Prompt 2, Copilot, Prompt 5 PPTX string literals, board regenerate bullets — [ai_claim_verify.md](./ai_claim_verify.md) |
 | Claude may only state values present in evidence | **Partial — implemented** | Prompt rules + structural verify on commentary generate, MD&A Prompt 2, Prompt 5 (string literals), board regenerate, Copilot structured packages; cite `_sources` in prompt policy |
 | Second-pass commentary verification (block on unverifiable) | **Partial — implemented** | Live on `/commentary/generate` (strip/don't-know) + MD&A Prompt 2 + Prompt 5 hard block + board regenerate strip + Copilot don't-know |
 | DOM `data-source` attributes + audit overlay | **Partial — implemented (UI)** | Board/FE KPIs via `smpl-provenance.js`; hydrate `_sources` when present; `Ctrl+Shift+A` overlay — [fe_board_single_source.md](./fe_board_single_source.md) |
-| Full `runTieOut()` Rule Sets A–F as publish gate | **Partial — client Rule C/A** | Live FAIL blocks MD&A export + FINAL forecast promote; full A–F + HTML warehouse report still roadmap |
+| Full `runTieOut()` Rule Sets A–F as publish gate | **Partial — client A–F** | Client A–F + HTML report gate live MD&A export + FINAL promote when local data exists; skips D2–D4/E/B2/F5 without warehouse; live SQL warehouse HTML report still roadmap |
 | Human review before every send as primary control | **Not the control** (by design) | Rejected posture — see P15 |
 
 **Safer as gates are built:** Policy and IR language already require machine-primary fail-closed behavior. Product safety and trust rise as the roadmap layers above are implemented and fail-closed in production — not when humans re-check every package.
@@ -68,6 +68,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-07-30 | Client `runTieOut` Rule Sets A–F (skip when data absent) + client HTML tie-out report as publish gate; Prompt 5 + board regenerate citation verify on string literals/bullets. Live warehouse SQL HTML report still open. Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-30 | DOM `data-source` overlay + audit hotkey on Board/FE KPIs; partial client `runTieOut` (Rule C/A) gates live MD&A export + FINAL forecast promote. Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-30 | Post-LLM citation verify + warehouse tags (`org_id` / `loaded_at` / `is_final` honest nulls) + multi-driver AND attribution rule. $1 bar unchanged. Not SOC 2 certified. |
 | 2026-07-30 | Evidence `_sources` tags on primary packages; richer attribution (deal-count / logos / magnitude dominance); FE hydrate replace+prune closed Actual residue (no demo reseed). $1 bar unchanged. Not SOC 2 certified. |

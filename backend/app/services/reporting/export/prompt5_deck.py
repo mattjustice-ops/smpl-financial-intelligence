@@ -313,6 +313,24 @@ def build_prompt5_payload(
     )
 
     payload["attribution_package"] = build_attribution_package_from_deck_payload(payload)
+    from app.services.commentary.claim_verify import attach_sources_to_values
+    from app.services.reporting.export.board_platform_metrics import (
+        evidence_values_from_deck_payload,
+    )
+
+    evidence_vals = evidence_values_from_deck_payload(payload)
+    period = str(
+        (payload.get("period_context") or {}).get("close_period")
+        or payload.get("close_period")
+        or ""
+    ) or None
+    payload["_sources"] = attach_sources_to_values(
+        evidence_vals,
+        period_label=period,
+        org_id=getattr(bundle, "organization_id", None),
+        loaded_at=None,
+        is_final=None,
+    )
     return payload
 
 
@@ -379,15 +397,45 @@ def build_prompt5_user_message(
         f"{json.dumps(attribution, separators=(',', ':'))}\n\n"
     )
 
+    sources = payload.get("_sources") or {}
+    if not sources:
+        from app.services.commentary.claim_verify import attach_sources_to_values
+
+        sources = attach_sources_to_values(
+            evidence_values,
+            period_label=str(pc.get("close_period") or "") or None,
+        )
+        payload["_sources"] = sources
+    citation_preview = {
+        k: {
+            "source_type": (v or {}).get("source_type"),
+            "table": (v or {}).get("table"),
+            "column": (v or {}).get("column"),
+            "formula_id": (v or {}).get("formula_id"),
+            "path": (v or {}).get("path"),
+        }
+        for k, v in list(sources.items())[:200]
+        if isinstance(v, dict)
+    }
+    citation_block = (
+        "CITATION PACKAGE (P15 — every customer-visible $ / % / Nx in PPTX string "
+        "literals must cite a _sources key, table.column, formula_id, or path — "
+        "e.g. '$7.4M (income_statement.revenue)' or '$86.1M (arr_waterfall.ending_arr, "
+        "period 2026-06)'). Post-LLM citation verify soft-strips uncited literals and "
+        "hard-blocks when fully wiped:\n"
+        f"{json.dumps(citation_preview, separators=(',', ':'))}\n\n"
+    )
+
     return (
         "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"
         "Follow the per-slide layout assignments in the system prompt exactly.\n"
         "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
-        "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers verbatim.\n\n"
+        "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers verbatim and cite _sources.\n\n"
         f"{freeze_block}"
         f"{evidence_block}"
         f"{attribution_block}"
+        f"{citation_block}"
         f"PERIOD CONTEXT\n"
         f"Close period: {pc['close_period_label']}\n"
         f"Quarter: {pc['quarter']}\n"
@@ -665,16 +713,23 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
 
 
 def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
-    """P15: numeric hard-block + attribution soft-strip (hard-block if fully wiped).
+    """P15: numeric hard-block + attribution/citation soft-strip (hard-block if fully wiped).
 
-    Returns the (possibly attribution-rewritten) script for Node render.
+    Returns the (possibly attribution/citation-rewritten) script for Node render.
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
         build_attribution_package_from_deck_payload,
         raise_if_pptx_attribution_fully_unverifiable,
     )
-    from app.services.commentary.claim_verify import verify_pptx_script_against_evidence
+    from app.services.commentary.citation_verify import (
+        apply_fail_closed_citations_to_pptx_script,
+        raise_if_pptx_citation_fully_unverifiable,
+    )
+    from app.services.commentary.claim_verify import (
+        attach_sources_to_values,
+        verify_pptx_script_against_evidence,
+    )
     from app.services.reporting.export.board_platform_metrics import (
         evidence_values_from_deck_payload,
     )
@@ -695,13 +750,40 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
                 len(attr_result.checks),
                 attr_result.allowlist_size,
             )
-        return script
+        working = script
+    else:
+        logger.warning(
+            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers: %s",
+            attr_result.summary(),
+        )
+        raise_if_pptx_attribution_fully_unverifiable(attr_result)
+        working = rewritten
+
+    sources = payload.get("_sources")
+    if not isinstance(sources, dict) or not sources:
+        period = str(
+            (payload.get("period_context") or {}).get("close_period")
+            or payload.get("close_period")
+            or ""
+        ) or None
+        sources = attach_sources_to_values(evidence, period_label=period)
+        payload["_sources"] = sources
+
+    cited, cite_result = apply_fail_closed_citations_to_pptx_script(working, sources)
+    if cite_result.ok:
+        if cite_result.checks:
+            logger.info(
+                "P15 Prompt 5 citation-verify passed (%s checks, sources=%s)",
+                len(cite_result.checks),
+                cite_result.sources_size,
+            )
+        return working
     logger.warning(
-        "P15 Prompt 5 attribution-verify stripped off-allowlist drivers: %s",
-        attr_result.summary(),
+        "P15 Prompt 5 citation-verify stripped uncited material numbers: %s",
+        cite_result.summary(),
     )
-    raise_if_pptx_attribution_fully_unverifiable(attr_result)
-    return rewritten
+    raise_if_pptx_citation_fully_unverifiable(cite_result)
+    return cited
 
 
 def _try_adapt_from_reference(

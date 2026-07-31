@@ -992,8 +992,35 @@ def enrich_slide_with_ai(
                 slide_key,
                 attr_result.summary(),
             )
+
+        from app.services.commentary.citation_verify import (
+            DONT_KNOW_CITATION,
+            apply_fail_closed_citations_to_bullet_list,
+        )
+        from app.services.commentary.claim_verify import attach_sources_to_values
+
+        slide_sources = attach_sources_to_values(
+            evidence,
+            period_label=str(
+                (payload.get("period_context") or {}).get("close_period")
+                or payload.get("close_period")
+                or getattr(bundle, "as_of_period", None)
+                or ""
+            )
+            or None,
+            org_id=getattr(bundle, "organization_id", None),
+        )
+        bullets, cite_result = apply_fail_closed_citations_to_bullet_list(
+            bullets, slide_sources
+        )
+        if not cite_result.ok:
+            logger.warning(
+                "P15 board slide regenerate citation-verify stripped bullets on %s: %s",
+                slide_key,
+                cite_result.summary(),
+            )
         # If every bullet was wiped, hard-fail closed to don't-know narrative (no invented deck text).
-        wiped = {DONT_KNOW_NARRATIVE, DONT_KNOW_ATTRIBUTION}
+        wiped = {DONT_KNOW_NARRATIVE, DONT_KNOW_ATTRIBUTION, DONT_KNOW_CITATION}
         if bullets and all(b in wiped for b in bullets):
             return SlideCommentary(what_happened=DONT_KNOW_NARRATIVE, bullets=[DONT_KNOW_NARRATIVE])
         narrative = format_key_takeaway_bullets(bullets)

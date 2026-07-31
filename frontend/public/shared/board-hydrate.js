@@ -1168,7 +1168,7 @@
       return "no-org";
     }
 
-    // Customer publish: partial client tie-out (Rule C/A). Live FAIL → block.
+    // Customer publish: client Rule Sets A–F (+ HTML report). Live FAIL → block.
     // Demo/offline: console warn only (dual demo seeds are known mismatches).
     if (global.SMPLProvenance && typeof global.SMPLProvenance.gatePublish === "function") {
       var gate = global.SMPLProvenance.gatePublish({ closeMonth: closeMonth });
@@ -1176,7 +1176,8 @@
         alert(
           (format === "pptx" ? "MD&A Deck" : "Variance Commentary") +
             " export blocked — tie-out failed.\n\n" +
-            (gate.message || "Resolve FE↔Board Actual mismatches ($1 bar) before publish."),
+            (gate.message || "Resolve FE↔Board Actual mismatches ($1 bar) before publish.") +
+            "\n\nClient HTML tie-out report downloaded when available.",
         );
         return "tieout-blocked";
       }

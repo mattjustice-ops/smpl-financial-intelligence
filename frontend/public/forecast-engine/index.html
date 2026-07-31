@@ -218,7 +218,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=4"></script>
 <script src="/shared/smpl-outlook.js?v=17"></script>
-<script src="/shared/smpl-provenance.js?v=1"></script>
+<script src="/shared/smpl-provenance.js?v=2"></script>
 <script src="/shared/smpl-pipeline.js?v=2"></script>
 <script src="/shared/smpl-demo-seed.js?v=2"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
@@ -2018,7 +2018,7 @@ updLabels();
     if (status === 'final' && window.SMPLProvenance && typeof window.SMPLProvenance.gatePublish === 'function') {
       var gate = window.SMPLProvenance.gatePublish({ closeMonth: window.SMPL_CLOSE_MONTH || CLOSE_MONTH });
       if (gate.blocked) {
-        alert('FINAL promote blocked — tie-out failed.\n\n' + (gate.message || ''));
+        alert('FINAL promote blocked — tie-out failed.\n\n' + (gate.message || '') + '\n\nClient HTML tie-out report downloaded when available.');
         return;
       }
       if (gate.result && !gate.result.passed) {

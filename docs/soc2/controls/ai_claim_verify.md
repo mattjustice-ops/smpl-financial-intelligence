@@ -1,7 +1,7 @@
 # P15 AI claim-verify — coverage checklist (founder review)
 
 > **Not SOC 2 certification.** Product integrity gate for AI-stated numbers vs engine evidence.  
-> **Branch note:** on main after prior PRs. This branch adds DOM overlay + runTieOut; citation/tags/AND already on main.  
+> **Branch note:** `feat/p15-integrity-finish` completes client A–F + Prompt 5/board citation.  
 > **Policy:** [P15 §4.7 / §4.8](../policies/P15_ai_llm_data_handling.md) · **Status snapshot:** [README.md](./README.md)  
 > **Non-numeric drivers:** [ai_attribution_verify.md](./ai_attribution_verify.md)
 
@@ -15,13 +15,13 @@ Use this page to confirm what shipped, what is still open, and where to open the
 |------|----------|------|
 | `/api/v1/commentary/generate` | Numeric verify → attribution verify → **citation verify** → soft strip / don't-know | `service.py`, `citation_verify.py`, `claim_verify.py` |
 | MD&A Prompt 2 | Nested string numeric + attribution + **citation** walk; hard block if variance fully wiped | `prompt2_mda_package.py` |
-| MD&A Prompt 5 deck | Evidence preview; post-LLM verify of **$ / % / Nx in PPTX string literals**; **hard block** before Node render (adapt + fresh). Citation gate not on PPTX literals this slice | `prompt5_deck.py` |
-| Board slide regenerate | Flatten slide payload → per-bullet verify → don't-know on fail; all-bad → don't-know narrative | `board_commentary_service.py` |
+| MD&A Prompt 5 deck | Evidence + `_sources` + attribution in prompt; post-LLM verify of **$ / % / Nx in PPTX string literals**; numeric **hard block**; attribution + **citation soft-strip / hard-block when fully wiped** | `prompt5_deck.py` |
+| Board slide regenerate | Flatten slide payload → per-bullet numeric + attribution + **citation** → don't-know on fail; all-bad → don't-know narrative | `board_commentary_service.py` |
 | Board Copilot | Numeric + attribution + **citation** on answer; live packages carry org/loaded_at tags | `board_platform_routes.py` |
 | **`_sources` warehouse tags** | Every source tag includes `org_id` / `loaded_at` / `is_final` (honest nulls when unknown) | `claim_verify.build_source_record` |
 | **Post-LLM citation check** | Material money/%/Nx must cite `_sources` key, `table.column`, `formula_id`, or path | `citation_verify.py` |
 | **DOM `data-source` overlay** | Board/FE material KPIs tagged; prefers hydrate `_sources`; catalog fallback; `Ctrl+Shift+A` audit | `smpl-provenance.js` |
-| **Client `runTieOut` publish gate** | Partial Rule C/A; live FAIL blocks MD&A export + FINAL forecast promote | `smpl-provenance.js`, `board-hydrate.js` |
+| **Client `runTieOut` publish gate** | Client Rule Sets A–F when local data exists; live FAIL blocks MD&A export + FINAL forecast promote; **client HTML report** downloaded on block | `smpl-provenance.js`, `board-hydrate.js` |
 
 Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.py`
 
@@ -36,7 +36,7 @@ Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.p
 3. Extract numeric claims; match within **$1.00** / ratio tolerances.
 4. Attribution allowlist check (multi-driver AND → all required).
 5. Citation check: each material money/%/Nx cites a `_sources` token (inline or `citations[].label`).
-6. Fail closed → don't-know / omit (Prompt 2 may hard-block).
+6. Fail closed → don't-know / omit (Prompt 2 / Prompt 5 may hard-block).
 
 ### Agreed citation formats
 
@@ -65,14 +65,14 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 |---------|--------|-------|
 | Commentary generate API | **Live** | Numeric → attribution → citation; section-level strip; soft log warning; still returns package with don't-know sections |
 | MD&A Prompt 2 | **Live (harder)** | Matrix mismatch → hard block; post-LLM strip + citation; fully unverifiable variance sheet → hard block |
-| Prompt 5 deck generation | **Live (hard block)** | String-literal $/%/Nx vs deck payload; invent → block emit. Chart array / layout coords not scanned. Citation gate not on PPTX literals this slice |
-| Board slide regenerate | **Live (soft strip)** | Per-bullet don't-know; all-unverifiable → don't-know narrative (prior numeric/attribution; citation not on this path this slice) |
+| Prompt 5 deck generation | **Live (hard block)** | String-literal $/%/Nx vs deck payload; invent → block emit. Attribution + **citation** soft-strip; fully wiped → hard block. Chart array / layout coords not scanned |
+| Board slide regenerate | **Live (soft strip)** | Per-bullet don't-know for numeric / attribution / **citation**; all-unverifiable → don't-know narrative |
 | Copilot / chat paths | **Live (structured + blob supplement)** | Evidence/attribution/citation from bundle/TS/cash (+ frozen packages); fail-closed don't-know |
 | `_sources` + warehouse tags | **Live (v1 + honest nulls)** | Catalog + ENGINE_PATH on primary builders; freeze: org + loaded_at + is_final=true; live Copilot: org + loaded_at + is_final=false (nulls when unknown). DOM overlay consumes when hydrate includes `_sources` |
 | Driver / attribution claim verify (non-numeric) | **Live (primary paths)** | Deal-count / logo / dominance + multi-driver AND — see [ai_attribution_verify.md](./ai_attribution_verify.md) |
 | Production FE↔Board single-source | **Confirmed + hydrate residue fix** | Shared outlook API/builder; merge replace + prune closed Actuals — [fe_board_single_source.md](./fe_board_single_source.md) |
 | DOM `data-source` + audit overlay | **Partial — live (UI)** | Board/FE KPIs via `smpl-provenance.js`; prefers hydrate `_sources` when present; catalog fallback; `Ctrl+Shift+A` — [fe_board_single_source.md](./fe_board_single_source.md) |
-| Client `runTieOut()` publish gate | **Partial — live (Rule C/A)** | TS↔SRC Actuals + ARR identities; live FAIL blocks MD&A export + FINAL forecast promote; **not** full Rule Sets A–F |
+| Client `runTieOut()` publish gate | **Partial — live (client A–F)** | A–F when SRC/TS/WF/engine/display present; skips D2–D4 / E warehouse / B2 bank / F5 without data; live FAIL blocks MD&A export + FINAL promote; **client HTML report** (not live warehouse SQL) |
 
 ---
 
@@ -94,22 +94,22 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | File | Covers |
 |------|--------|
 | `backend/tests/test_claim_verify.py` | `TOL_ACTUALS=$1`; extract money/%/ratio; match pass; invented → don't-know; empty evidence → missing; tolerance cannot loosen; section-only rewrite; generate embeds evidence + strips invented; variance tie-out `fail_closed=True` raises; PPTX script string-literal verify; bullet list strip; blob evidence; **Copilot structured evidence + `_sources` / warehouse tags**; commentary package `_sources` |
-| `backend/tests/test_citation_verify.py` | Inline/structured citation; warehouse tags; material money/%/Nx must cite `_sources` token |
+| `backend/tests/test_citation_verify.py` | Inline/structured citation; warehouse tags; material money/%/Nx must cite `_sources` token; **PPTX soft-strip + hard-block-when-fully-wiped**; **bullet citation strip** |
 | `backend/tests/test_attribution_verify.py` | Causal extract; allowed driver pass; invented driver fail-closed; empty allowlist strips causal; numeric-only unaffected; commentary generate embeds attribution package + strips invented cause; deck allowlist; bullet attribution strip; PPTX soft-strip + hard-block-when-fully-wiped; Copilot blob allowlist; **Copilot structured waterfall/cash attribution**; **deal-count / logo / dominance**; **multi-driver AND/comma require-all** |
 | `backend/tests/test_commentary_service.py` | Sparse inputs + invented dollars → don't-know; evidence package in prompt; happy path with `_sources` cites |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | Production outlook `TS_DATA.Actual` ↔ `SRC.actuals` within $1; divergence / one-side-missing fail |
 | `frontend/scripts/verify-outlook-hydrate.mjs` | Partial live hydrate replaces period rows + prunes closed demo Actual residue (no reseed) |
-| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source` attrs from catalog/`_sources`; annotateDom; runTieOut pass/fail; live gate blocks / demo warns |
+| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source` attrs; annotateDom; client A–F runTieOut pass/fail; HTML report; live gate blocks / demo warns |
 
 ---
 
 ## 6. Matt review checklist
 
 - [ ] Confirm live paths match product risk: commentary generate + MD&A Prompt 2 + Prompt 5 + board regenerate + Copilot structured packages for this increment
-- [ ] Confirm citation formats are the right bar
+- [ ] Confirm citation formats are the right bar (including Prompt 5 PPTX string literals)
 - [ ] Confirm warehouse tags with honest nulls are acceptable
-- [ ] Confirm DOM overlay + partial client tie-out gate match product risk for this increment
-- [ ] Confirm remaining open items (full Rule Sets A–F, citation on Prompt 5 PPTX literals) are acceptable follow-ups
+- [ ] Confirm DOM overlay + client A–F tie-out gate + client HTML report match product risk for this increment
+- [ ] Confirm remaining open items (live warehouse SQL HTML report; D2–D4/E/B2/F5 without warehouse tables) are acceptable follow-ups
 - [ ] Confirm **$1.00** actuals bar stays non-negotiable
 - [ ] Confirm fail-closed semantics: soft strip vs hard block (`CommentaryIntegrityError`) are correct per surface
 - [ ] Merge when review OK — not SOC 2 certified
@@ -130,25 +130,29 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 - [x] Post-LLM citation verify + warehouse tags (`org_id` / `loaded_at` / `is_final`) + multi-driver AND (on main via citation PR)
 - [x] DOM `data-source` overlay + audit hotkey on Board/FE material KPIs
 - [x] Partial client `runTieOut` publish gate (live export / FINAL promote)
+- [x] Client Rule Sets A–F + client HTML tie-out report as publish gate
+- [x] Citation verify on Prompt 5 PPTX string literals + board regenerate bullets
 
 ---
 
-### Honesty — citation + warehouse tags (on main)
+### Honesty — citation + warehouse tags
 
 | Wired | Not wired |
 |-------|-----------|
-| Post-LLM citation check on commentary generate, MD&A Prompt 2, Copilot | Citation gate on Prompt 5 PPTX string literals / board regenerate bullets |
-| `_sources` tags include `org_id` / `loaded_at` / `is_final` (honest nulls when unknown) | Every chart datapoint / commentary number forced to cite at render time |
-| Freeze packs: org + loaded_at + is_final=true | Older freeze packs without tagged `_sources` |
+| Post-LLM citation check on commentary generate, MD&A Prompt 2, Copilot, **Prompt 5 PPTX literals**, **board regenerate bullets** | Every chart datapoint / commentary number forced to cite at render time |
+| `_sources` tags include `org_id` / `loaded_at` / `is_final` (honest nulls when unknown) | Older freeze packs without tagged `_sources` |
+| Freeze packs: org + loaded_at + is_final=true | — |
 | Live Copilot: org + loaded_at + is_final=false | — |
+| Prompt 5 payload attaches `_sources` from deck evidence flatten | Gold/adapt reference scripts without cites soft-strip → hard-block if fully wiped (fail-closed) |
 
-### Honesty — DOM overlay + partial gate (this branch)
+### Honesty — DOM overlay + client A–F gate
 
 | Wired | Not wired |
 |-------|-----------|
 | DOM `data-source` / title / aria on Board + FE material KPIs; audit overlay hotkey | Every chart datapoint / commentary number tagged |
 | Client catalog fallback when hydrate omits `_sources` | Outlook API always emitting `_sources` for UI (consumes when present) |
-| Partial `runTieOut` Rule C + ARR A2/A3; live FAIL blocks MD&A export + FINAL promote | Full Rule Sets A–F + HTML warehouse tie-out report as publish gate |
+| Client Rule Sets A–F when SRC/TS/WF/engine/display present; live FAIL blocks MD&A export + FINAL promote | Live warehouse SQL HTML report (`tieout_report_{org}_{month}.html` with per-cell queries) |
+| Client HTML tie-out report (download on live block) | D2–D4 / E warehouse quota-ops / B2 bank balances / F5 payroll soft without those tables in client |
 | Prefers hydrate `_sources` when present for overlay labels | — |
 
 ---
