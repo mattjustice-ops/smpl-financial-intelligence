@@ -210,7 +210,7 @@ def build_claude_mda_package_xlsx_bytes(
             if vc_texts and all(dont_know_marker in t for t in vc_texts):
                 raise CommentaryIntegrityError(
                     "P15 fail-closed: MD&A variance commentary had no verifiable numeric claims; "
-                    "blocking package emit. " + claim_result.summary(),
+                    f"blocking package emit. {claim_result.summary(max_failures=8)}",
                     result=claim_result,
                 )
 
@@ -260,7 +260,7 @@ def build_claude_mda_package_xlsx_bytes(
                 raise CommentaryIntegrityError(
                     "P15 fail-closed: MD&A variance commentary had no verifiable "
                     "_sources citations; blocking package emit. "
-                    + cite_result.summary(),
+                    f"{cite_result.summary(max_failures=8)}",
                 )
 
             payload_warnings = payload.get("payload_warnings") or []

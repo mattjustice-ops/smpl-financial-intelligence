@@ -245,8 +245,58 @@ def test_pptx_script_string_literals_pass_and_invented_hard_blocks() -> None:
     assert verify_pptx_script_against_evidence(good, evidence, fail_closed=False).ok
 
     bad = 'slide.addText("ARR exploded to $99,000,000 this month.");'
-    with pytest.raises(CommentaryIntegrityError, match="Prompt 5"):
+    with pytest.raises(CommentaryIntegrityError, match="failed claim") as exc_info:
         verify_pptx_script_against_evidence(bad, evidence, fail_closed=True)
+    assert "$99,000,000" in str(exc_info.value)
+    assert "1 failed claim" in str(exc_info.value)
+
+
+def test_pptx_script_soft_strips_unmatched_money_without_hard_block() -> None:
+    from app.services.commentary.claim_verify import apply_fail_closed_claims_to_pptx_script
+
+    evidence = {"deck.arr": Decimal("86100000")}
+    mixed = (
+        'slide.addText("ARR closed at $86.1M.");'
+        'slide.addText("ARR exploded to $99,000,000 this month.");'
+    )
+    rewritten, result = apply_fail_closed_claims_to_pptx_script(mixed, evidence)
+    assert not result.ok
+    assert "86.1" in rewritten or "86.1M" in rewritten
+    assert "$99,000,000" not in rewritten
+    assert DONT_KNOW_NARRATIVE[:40] in rewritten
+    # Soft-strip path never raises — Prompt 5 export continues.
+    assert result.summary(max_failures=8).startswith("1 failed claim")
+
+
+def test_prompt5_verify_soft_strips_and_exports() -> None:
+    from app.services.reporting.export.prompt5_deck import _verify_prompt5_script_or_raise
+
+    payload = {
+        "period_context": {"close_period": "2026-06"},
+        "period_matrix": {"arr": {"actual": 86_100_000}},
+        "attribution_package": {
+            "allowed_drivers": [
+                {"id": "expansion", "label": "Expansion", "aliases": ["expansion"]}
+            ]
+        },
+        "_sources": {
+            "deck.arr": {
+                "source_type": "WAREHOUSE",
+                "table": "arr_waterfall",
+                "column": "ending_arr",
+                "path": "deck.arr",
+            }
+        },
+    }
+    # Invented $ + missing cite + invented driver — all soft-stripped; must not raise.
+    script = (
+        'slide.addText("ARR closed at $86,100,000 (deck.arr) driven by expansion.");'
+        'slide.addText("Cash hit $99,000,000 due to three enterprise upsells.");'
+    )
+    out = _verify_prompt5_script_or_raise(script, payload)
+    assert isinstance(out, str)
+    assert len(out) > 20
+    assert "$99,000,000" not in out
 
 
 def test_pptx_script_ignores_layout_coords_outside_strings() -> None:

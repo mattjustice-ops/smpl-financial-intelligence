@@ -352,6 +352,10 @@ def test_forward_looking_requires_forecast_pipeline_grounding() -> None:
 
 
 def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() -> None:
+    """Helper soft-strips; optional raise_if still hard-blocks when fully wiped.
+
+    Prompt 5 export no longer calls raise_if (prefers soft-strip + export).
+    """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
         raise_if_pptx_attribution_fully_unverifiable,
@@ -381,8 +385,9 @@ def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() 
     assert not bad_result.ok
     assert all(c.status != "pass" for c in bad_result.checks)
     assert DONT_KNOW_ATTRIBUTION[:40] in wiped
-    with pytest.raises(CommentaryIntegrityError, match="Prompt 5"):
+    with pytest.raises(CommentaryIntegrityError, match="failed attribution") as exc_info:
         raise_if_pptx_attribution_fully_unverifiable(bad_result)
+    assert "enterprise upsells" in str(exc_info.value).lower()
 
 
 def test_copilot_blob_allowlist_is_thin_but_catches_invented_drivers() -> None:

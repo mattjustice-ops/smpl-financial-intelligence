@@ -71,7 +71,7 @@ Non-claims (out of scope for closed-period attribution): pure process advice wit
 | Attribution package contract | `{ metric, period, value?, allowed_drivers[{id,label,amount?,source?,aliases}], policy }` | same module (`build_attribution_package*`) |
 | `/commentary/generate` | Build allowlist from `CommentaryInputs` → embed ATTRIBUTION PACKAGE in prompt → post-LLM attribution verify after numeric verify → soft strip | `service.py`, `prompts.py` |
 | MD&A Prompt 2 | Emit `attribution_package` on payload from ARR/cash bridge labels + variance metrics + sheet labels → nested string walk → soft strip; fully wiped variance sheet → hard block | `mda_package_payload.py`, `prompt2_mda_package.py` |
-| Prompt 5 deck | Emit `attribution_package` on deck payload; embed in user message; post-LLM soft-strip off-allowlist causal claims in PPTX **string literals**; **hard block** if every attribution check failed | `prompt5_deck.py` |
+| Prompt 5 deck | Emit `attribution_package` on deck payload; embed in user message; post-LLM soft-strip off-allowlist causal claims in PPTX **string literals**; **export continues** even if every attribution check failed | `prompt5_deck.py` |
 | Board slide regenerate | Allowlist from slide/deck fields (+ thin freeze-blob labels); per-bullet attribution strip → don't-know; all-wiped → don't-know narrative | `board_commentary_service.py`, `board_api_prompts.py` |
 | Copilot | **Structured:** allowlist from comparison_waterfalls / cash_bridge / opportunity logos (+ frozen `attribution_package`); blob-label catalog as supplement | `board_platform_routes.py`, `build_attribution_package_from_copilot_structures` |
 | **Deal-count / named-logo catalogs** | `customer_movement` counts → "N / word new customers"; notable customers + opportunity `customer_name` / `opportunity_name` / `account_name` as logos; movement-type deal counts | `attribution_verify.py` |
@@ -96,7 +96,7 @@ Non-claims (out of scope for closed-period attribution): pure process advice wit
 |---------|-------------|
 | `/commentary/generate` | **Interactive:** surgical strip of bad causal / ungrounded forward sentences (prefer keep good clauses) |
 | MD&A Prompt 2 | Soft strip nested strings; **hard block** if entire variance sheet is attribution don't-know (**strict** deck) |
-| Prompt 5 deck | Soft strip bad string literals; **hard block** if every attribution check failed (**strict**) |
+| Prompt 5 deck | Soft strip bad string literals; prefer **export with stripped text** (no hard-block on full wipe) |
 | Board slide regenerate | **Interactive:** per-bullet surgical strip; all-story-wiped → don't-know narrative |
 | Copilot | **Interactive:** surgical strip of bad causal / forward clauses; full don't-know only if nothing remains |
 
@@ -140,7 +140,7 @@ Wrong drivers are worse when FE and Board are on **different seeds** for the sam
 
 - [ ] Confirm causal detector + allowlist match is the right v1 bar (no second LLM judge)
 - [ ] Confirm empty-allowlist → strip causal claims is acceptable
-- [ ] Confirm soft strip + hard-block-when-fully-wiped on Prompt 2 / Prompt 5 matches product risk
+- [ ] Confirm soft strip + hard-block-when-fully-wiped on Prompt 2 matches product risk; Prompt 5 soft-strip + export
 - [ ] Accept deal-count / logo / dominance enrichment (still invent → fail)
 - [ ] Confirm multi-driver require-all is the right bar
 - [ ] Confirm **$1.00** numeric bar unchanged

@@ -419,10 +419,10 @@ def build_prompt5_user_message(
     }
     citation_block = (
         "CITATION PACKAGE (P15 — every customer-visible $ / % / Nx in PPTX string "
-        "literals must cite a _sources key, table.column, formula_id, or path — "
+        "literals should cite a _sources key, table.column, formula_id, or path — "
         "e.g. '$7.4M (income_statement.revenue)' or '$86.1M (arr_waterfall.ending_arr, "
-        "period 2026-06)'). Post-LLM citation verify soft-strips uncited literals and "
-        "hard-blocks when fully wiped:\n"
+        "period 2026-06)'). Post-LLM citation verify soft-strips uncited literals "
+        "(deck still exports):\n"
         f"{json.dumps(citation_preview, separators=(',', ':'))}\n\n"
     )
 
@@ -713,36 +713,44 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
 
 
 def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
-    """P15: numeric hard-block + attribution/citation soft-strip (hard-block if fully wiped).
+    """P15 Prompt 5: soft-strip unmatched numbers/cites + attribution; always export.
 
-    Returns the (possibly attribution/citation-rewritten) script for Node render.
+    Numeric + citation: soft-strip failed PPTX string literals (board/warehouse
+    numbers trusted; demo evidence gaps must not block the deck). Attribution /
+    forward-looking: surgical strip of off-allowlist causal claims. Prefer export
+    with stripped text over hard-block even when fully wiped.
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
         build_attribution_package_from_deck_payload,
-        raise_if_pptx_attribution_fully_unverifiable,
     )
     from app.services.commentary.citation_verify import (
         apply_fail_closed_citations_to_pptx_script,
-        raise_if_pptx_citation_fully_unverifiable,
     )
     from app.services.commentary.claim_verify import (
+        apply_fail_closed_claims_to_pptx_script,
         attach_sources_to_values,
-        verify_pptx_script_against_evidence,
     )
     from app.services.reporting.export.board_platform_metrics import (
         evidence_values_from_deck_payload,
     )
 
     evidence = evidence_values_from_deck_payload(payload)
-    result = verify_pptx_script_against_evidence(script, evidence, fail_closed=True)
-    if result.ok:
-        logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(result.checks))
+    working, claim_result = apply_fail_closed_claims_to_pptx_script(script, evidence)
+    if claim_result.ok:
+        logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(claim_result.checks))
+        working = script
+    else:
+        logger.warning(
+            "P15 Prompt 5 claim-verify soft-stripped unmatched $/%%/Nx "
+            "(export continues): %s",
+            claim_result.summary(max_failures=8),
+        )
 
     attribution = payload.get("attribution_package") or build_attribution_package_from_deck_payload(
         payload
     )
-    rewritten, attr_result = apply_fail_closed_attribution_to_pptx_script(script, attribution)
+    rewritten, attr_result = apply_fail_closed_attribution_to_pptx_script(working, attribution)
     if attr_result.ok:
         if attr_result.checks:
             logger.info(
@@ -750,13 +758,12 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
                 len(attr_result.checks),
                 attr_result.allowlist_size,
             )
-        working = script
     else:
         logger.warning(
-            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers: %s",
+            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers "
+            "(export continues): %s",
             attr_result.summary(),
         )
-        raise_if_pptx_attribution_fully_unverifiable(attr_result)
         working = rewritten
 
     sources = payload.get("_sources")
@@ -779,10 +786,10 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             )
         return working
     logger.warning(
-        "P15 Prompt 5 citation-verify stripped uncited material numbers: %s",
+        "P15 Prompt 5 citation-verify soft-stripped uncited material numbers "
+        "(export continues): %s",
         cite_result.summary(),
     )
-    raise_if_pptx_citation_fully_unverifiable(cite_result)
     return cited
 
 

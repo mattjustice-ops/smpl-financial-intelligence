@@ -308,18 +308,23 @@ class AttributionVerificationResult:
     def failures(self) -> list[AttributionCheck]:
         return [c for c in self.checks if c.status != "pass"]
 
-    def summary(self) -> str:
+    def summary(self, *, max_failures: int = 8) -> str:
         if self.ok:
             if not self.checks:
                 return "no causal / attribution claims detected"
             return "all attribution claims verified against allowlist"
+        failures = self.failures
+        n = len(failures)
         parts = [
             f"{c.claim.phrase!r} ({c.status}"
             + (f", matched={c.matched_driver_id}" if c.matched_driver_id else "")
             + ")"
-            for c in self.failures
+            for c in failures[: max(0, max_failures)]
         ]
-        return "; ".join(parts)
+        body = "; ".join(parts)
+        if n > max_failures > 0:
+            body += f"; …+{n - max_failures} more"
+        return f"{n} failed attribution(s): {body}"
 
 
 def _normalize(text: str) -> str:
@@ -1379,8 +1384,8 @@ def apply_fail_closed_attribution_to_pptx_script(
     """Soft-strip off-allowlist causal claims inside PPTX JS string literals.
 
     Layout / chart array code outside strings is ignored. Failed string literals
-    are replaced with DONT_KNOW_ATTRIBUTION; callers may hard-block when every
-    attribution check failed (see ``raise_if_pptx_attribution_fully_unverifiable``).
+    are replaced with DONT_KNOW_ATTRIBUTION. Prompt 5 exports the rewritten script;
+    optional ``raise_if_pptx_attribution_fully_unverifiable`` remains for strict callers.
     """
     from app.services.commentary.claim_verify import _JS_STRING_RE
 
@@ -1418,14 +1423,18 @@ def apply_fail_closed_attribution_to_pptx_script(
 def raise_if_pptx_attribution_fully_unverifiable(
     result: AttributionVerificationResult,
 ) -> None:
-    """Hard-block Prompt 5 emit when every causal claim in the script failed."""
+    """Optional hard-block when every causal claim in the script failed.
+
+    Prompt 5 deck export no longer calls this (prefers soft-strip + export).
+    Kept for callers that still want a strict gate; error text leads with samples.
+    """
     if not result.checks:
         return
     if any(c.status == "pass" for c in result.checks):
         return
     raise CommentaryIntegrityError(
         "P15 fail-closed: Prompt 5 / PPTX script had no verifiable attribution claims; "
-        "blocking deck emit. " + result.summary(),
+        f"blocking deck emit. {result.summary(max_failures=8)}",
     )
 
 

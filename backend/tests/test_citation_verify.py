@@ -77,6 +77,10 @@ def test_inline_and_structured_citations_pass() -> None:
 
 
 def test_pptx_script_citation_soft_strips_and_hard_blocks_when_fully_wiped() -> None:
+    """Helper soft-strips; optional raise_if still hard-blocks when fully wiped.
+
+    Prompt 5 export no longer calls raise_if (prefers soft-strip + export).
+    """
     sources = {
         "income_statement.revenue": {
             "source_type": "WAREHOUSE",
@@ -101,8 +105,9 @@ def test_pptx_script_citation_soft_strips_and_hard_blocks_when_fully_wiped() -> 
     assert not bad_result.ok
     assert all(c.status != "pass" for c in bad_result.checks)
     assert DONT_KNOW_CITATION[:40] in wiped
-    with pytest.raises(CommentaryIntegrityError, match="Prompt 5"):
+    with pytest.raises(CommentaryIntegrityError, match="failed citation") as exc_info:
         raise_if_pptx_citation_fully_unverifiable(bad_result)
+    assert "$70,000,000" in str(exc_info.value)
 
 
 def test_bullet_list_citation_soft_strip() -> None:
