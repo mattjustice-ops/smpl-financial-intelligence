@@ -439,11 +439,11 @@ def build_prompt5_user_message(
         if isinstance(v, dict)
     }
     citation_block = (
-        "CITATION PACKAGE (P15 — every customer-visible $ / % / Nx in PPTX string "
-        "literals should cite a _sources key, table.column, formula_id, or path — "
-        "e.g. '$7.4M (income_statement.revenue)' or '$86.1M (arr_waterfall.ending_arr, "
-        "period 2026-06)'). Post-LLM citation verify soft-strips uncited literals "
-        "(deck still exports):\n"
+        "CITATION PACKAGE (P15 — cite _sources keys in Key Takeaways / narrative "
+        "bullets where feasible, e.g. '$7.4M (income_statement.revenue)'. "
+        "Do NOT put (source.key) parentheses inside KPI value cells or period_matrix "
+        "/ table number cells — those copy payload numbers verbatim. Citation verify "
+        "is warn-only on Prompt 5 (does not wipe cells):\n"
         f"{json.dumps(citation_preview, separators=(',', ':'))}\n\n"
     )
 
@@ -456,7 +456,8 @@ def build_prompt5_user_message(
         "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers from EVIDENCE PACKAGE / "
-        "DATA PAYLOAD verbatim, label actual vs forecast vs pipeline, and cite _sources.\n"
+        "DATA PAYLOAD verbatim, label actual vs forecast vs pipeline, and cite _sources "
+        "in narrative takeaways (not inside KPI/table cells).\n"
         "Use the full package for rich board narrative (bridges, waterfalls, drivers, "
         "forecast, pipeline) — do not invent outside the packages.\n\n"
         f"{freeze_block}"
@@ -742,24 +743,27 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
 
 
 def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
-    """P15 Prompt 5: soft-strip unmatched numbers/cites + attribution; always export.
+    """P15 Prompt 5: soft-strip invented numbers + attribution; always export.
 
-    Numeric + citation: soft-strip failed PPTX string literals (board/warehouse
-    numbers trusted; demo evidence gaps must not block the deck). Attribution /
-    forward-looking: surgical strip of off-allowlist causal claims. Prefer export
-    with stripped text over hard-block even when fully wiped.
+    Numeric: soft-strip unmatched $/%%/Nx in PPTX string literals (short cells →
+    em dash; narrative → don't-know). Attribution: strip off-allowlist causal
+    claims the same way. Citation: **warn-only** — board KPI/table cells come
+    from DATA PAYLOAD / evidence and must not be wiped for missing
+    ``(source.key)`` parentheses (that produced unreadable don't-know decks).
+    Prefer export with stripped text over hard-block.
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
         build_attribution_package_from_deck_payload,
     )
     from app.services.commentary.citation_verify import (
-        apply_fail_closed_citations_to_pptx_script,
+        verify_text_citations,
     )
     from app.services.commentary.claim_verify import (
         apply_fail_closed_claims_to_pptx_script,
         attach_sources_to_values,
         evidence_values_from_package,
+        extract_js_string_literal_text,
     )
     from app.services.reporting.export.board_platform_metrics import (
         build_evidence_package_from_deck_payload,
@@ -813,7 +817,9 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
         sources = attach_sources_to_values(evidence, period_label=period)
         payload["_sources"] = sources
 
-    cited, cite_result = apply_fail_closed_citations_to_pptx_script(working, sources)
+    # Warn-only citation: do not rewrite script. Requiring (source.key) on every
+    # KPI/table cell is unusable for board decks and previously nuked exports.
+    cite_result = verify_text_citations(extract_js_string_literal_text(working), sources)
     if cite_result.ok:
         if cite_result.checks:
             logger.info(
@@ -821,13 +827,13 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
                 len(cite_result.checks),
                 cite_result.sources_size,
             )
-        return working
-    logger.warning(
-        "P15 Prompt 5 citation-verify soft-stripped uncited material numbers "
-        "(export continues): %s",
-        cite_result.summary(),
-    )
-    return cited
+    else:
+        logger.warning(
+            "P15 Prompt 5 citation-verify warn-only (uncited material numbers kept; "
+            "export continues): %s",
+            cite_result.summary(),
+        )
+    return working
 
 
 def _try_adapt_from_reference(

@@ -51,7 +51,9 @@ NARRATIVE / EVIDENCE (P15 — mandatory)
 4. Do not invent causes, watch-outs, or deal names outside the attribution allowlist.
 5. Rich board narrative is encouraged — use package context fully (bridges, waterfalls,
    variance drivers, forecast, pipeline). Do not be sparse when the package has the story.
-6. Cite _sources keys on material numbers in string literals where feasible.
+6. Cite _sources keys on material numbers in Key Takeaways / narrative bullets
+   where feasible. Do NOT put (source.key) parentheses inside KPI value cells or
+   table number cells — copy those numbers verbatim from the payload.
 
 CHARTS — REQUIRED (use pptx.addChart on slides 2, 6, 9 only; pptx.ChartType on INSTANCE not pptxgen)
 Slide 2: KPI sparklines (line) — data from monthly_trends (ending_arr_m, revenue_m, cash_m)
