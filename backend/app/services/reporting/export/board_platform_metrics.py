@@ -10,7 +10,7 @@ import calendar
 import math
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
 from app.services.reporting.export.board_chart_service import _wf
 from app.services.reporting.export.board_metrics_snapshot import build_metrics_snapshot
@@ -1130,6 +1130,292 @@ def evidence_values_from_deck_payload(payload: dict[str, Any]) -> dict[str, "Dec
         if num is not None:
             parsed[key] = num
     return parsed
+
+
+_MONTH_ABBR_NUM = {calendar.month_abbr[i]: f"{i:02d}" for i in range(1, 13)}
+_M_SCALE_CEILING = Decimal("10000")  # values tagged *_m below this are treated as $M units
+
+
+def _deck_close_period(payload: Mapping[str, Any] | dict[str, Any]) -> str | None:
+    pc = payload.get("period_context") if isinstance(payload, dict) else None
+    if isinstance(pc, dict):
+        close = str(pc.get("close_period") or "").strip()
+        if close:
+            return to_period(close)
+    close = str(payload.get("close_period") or "").strip()
+    return to_period(close) if close else None
+
+
+def _infer_series_kind(key: str, close_period: str | None) -> str:
+    low = key.lower()
+    if any(h in low for h in ("pipeline", "opportunity", "opportunities", "deal_highlight")):
+        return "pipeline"
+    if "budget" in low:
+        return "budget"
+    if any(
+        h in low
+        for h in (
+            "forecast",
+            "outlook",
+            "fy_outlook",
+            "ending_arr_outlook",
+            "revenue_outlook",
+        )
+    ):
+        return "forecast"
+    if any(h in low for h in ("bridge", "waterfall", "variance", "cash_liquidity", "arr_analysis")):
+        return "bridge"
+    # Period-keyed actual vs forecast when close is known.
+    if close_period:
+        for part in low.replace("[", ".").replace("]", ".").split("."):
+            if len(part) == 7 and part[4] == "-" and part[:4].isdigit() and part[5:].isdigit():
+                return "actual" if part <= close_period else "forecast"
+    return "actual"
+
+
+def _promote_million_scale_keys(
+    values: dict[str, "Decimal"],
+    kinds: dict[str, str],
+    close_period: str | None,
+) -> None:
+    """If a key ends with _m and looks like millions, also store absolute dollars."""
+    from decimal import Decimal
+
+    extras: dict[str, Decimal] = {}
+    for key, val in list(values.items()):
+        leaf = key.rsplit(".", 1)[-1]
+        if not leaf.endswith("_m") and "outlook_m" not in leaf and not leaf.endswith("_m]"):
+            # Also handle monthly_trends.revenue_outlook_m[3] style.
+            if "_m[" not in key and not key.endswith("_m"):
+                continue
+        if abs(val) >= _M_SCALE_CEILING:
+            continue
+        abs_key = f"{key}.__dollars"
+        extras[abs_key] = val * Decimal("1000000")
+        kinds[abs_key] = kinds.get(key) or _infer_series_kind(key, close_period)
+    values.update(extras)
+
+
+def _add_monthly_trend_absolute_evidence(
+    payload: dict[str, Any],
+    values: dict[str, "Decimal"],
+    kinds: dict[str, str],
+    close_period: str | None,
+) -> None:
+    """Materialize Jan–Dec trend series as absolute dollars with actual/forecast labels."""
+    from decimal import Decimal
+
+    from app.services.commentary.claim_verify import _to_decimal
+
+    trends = payload.get("monthly_trends") or {}
+    if not isinstance(trends, dict):
+        return
+    months = trends.get("months") or []
+    pc = payload.get("period_context") or {}
+    year = str((pc.get("year") if isinstance(pc, dict) else None) or (close_period or "")[:4] or "")
+    if not year or len(year) != 4:
+        return
+
+    series_specs = (
+        ("ending_arr_m", "ending_arr", "actual"),
+        ("ending_arr_outlook_m", "ending_arr_outlook", "forecast"),
+        ("ending_arr_budget_m", "ending_arr_budget", "budget"),
+        ("revenue_outlook_m", "revenue_outlook", "forecast"),
+        ("revenue_budget_m", "revenue_budget", "budget"),
+        ("pipeline_created_m", "pipeline_created", "pipeline"),
+    )
+    for series_key, metric, default_kind in series_specs:
+        arr = trends.get(series_key)
+        if not isinstance(arr, list):
+            continue
+        for idx, raw in enumerate(arr):
+            num = _to_decimal(raw)
+            if num is None or num == 0:
+                continue
+            month_token = str(months[idx]) if idx < len(months) else ""
+            mm = _MONTH_ABBR_NUM.get(month_token) or (
+                month_token if len(month_token) == 2 and month_token.isdigit() else None
+            )
+            period = f"{year}-{mm}" if mm else None
+            # Chart series may be absolute dollars OR millions — promote both.
+            dollars = num if abs(num) >= _M_SCALE_CEILING else num * Decimal("1000000")
+            if default_kind in {"budget", "pipeline"}:
+                kind = default_kind
+            elif period and close_period:
+                kind = "actual" if period <= close_period else "forecast"
+            else:
+                kind = default_kind
+            key = (
+                f"story.{kind}.{metric}.{period}"
+                if period
+                else f"story.{kind}.{metric}[{idx}]"
+            )
+            values[key] = dollars
+            kinds[key] = kind
+            # Keep compact millions form for charts that quote 86.1 not 86100000.
+            if abs(dollars) >= _M_SCALE_CEILING:
+                m_key = f"{key}.millions"
+                values[m_key] = (dollars / Decimal("1000000")).quantize(Decimal("0.001"))
+                kinds[m_key] = kind
+
+
+def _add_deal_and_bridge_story_keys(
+    payload: dict[str, Any],
+    values: dict[str, "Decimal"],
+    kinds: dict[str, str],
+) -> None:
+    """Promote deals, bridges, and outlook blocks into stable story.* evidence keys."""
+    from app.services.commentary.claim_verify import _to_decimal
+
+    deals = payload.get("deal_highlights") or {}
+    if isinstance(deals, dict):
+        for bucket in ("top_new_customers", "top_expansion", "top_churn", "top_slipped"):
+            rows = deals.get(bucket) or []
+            if not isinstance(rows, list):
+                continue
+            kind = "pipeline" if bucket in {"top_slipped", "top_expansion"} else "actual"
+            for idx, row in enumerate(rows):
+                if not isinstance(row, dict):
+                    continue
+                amt = _to_decimal(row.get("arr"))
+                if amt is None:
+                    continue
+                name = str(row.get("name") or f"deal_{idx}")[:48]
+                slug = "".join(ch if ch.isalnum() else "_" for ch in name.lower()).strip("_")
+                key = f"story.pipeline.deal.{bucket}.{slug or idx}"
+                values[key] = amt
+                kinds[key] = "pipeline" if "slipped" in bucket or kind == "pipeline" else kind
+
+    for block_name, kind in (
+        ("cash_liquidity", "bridge"),
+        ("arr_analysis", "bridge"),
+        ("fy_outlook", "forecast"),
+        ("gtm_performance", "pipeline"),
+        ("gtm_funnel", "pipeline"),
+        ("pl_detail", "actual"),
+        ("executive_summary", "actual"),
+        ("mom_context", "actual"),
+    ):
+        block = payload.get(block_name)
+        if block is None:
+            continue
+        from app.services.commentary.claim_verify import flatten_evidence_values
+
+        nested: dict[str, Decimal] = {}
+        flatten_evidence_values(block, prefix=f"story.{kind}.{block_name}", out=nested)
+        for key, val in nested.items():
+            values[key] = val
+            kinds[key] = kind
+
+
+def build_evidence_package_from_deck_payload(
+    payload: dict[str, Any] | None,
+    *,
+    org_id: str | None = None,
+    loaded_at: str | None = None,
+    is_final: bool | None = None,
+    prompt_value_cap: int = 500,
+) -> dict[str, Any]:
+    """Rich Prompt 5 evidence package — actuals, forecast, pipeline, bridges.
+
+    Widens the verify/prompt surface so board narrative can use post-close
+    forecast, pipeline/opportunities, cash/ARR bridges, and variance drivers
+    without false P15 shutdowns. Invented figures outside the package still fail
+    verify (soft-strip on Prompt 5 export).
+    """
+    from decimal import Decimal
+
+    from app.services.commentary.claim_verify import (
+        TOL_ACTUALS,
+        TOL_RATIO,
+        attach_sources_to_values,
+    )
+
+    if not payload:
+        return {
+            "values": {},
+            "values_decimal": {},
+            "_sources": {},
+            "close_period": None,
+            "period_label": None,
+            "tolerance_actuals": str(TOL_ACTUALS),
+            "tolerance_ratio": str(TOL_RATIO),
+            "series_kinds": {},
+            "policy": (
+                "State only numeric values present in values (within $1.00 for money). "
+                "Label actuals (≤ close_period) vs forecast/pipeline after close. "
+                "Rich narrative from this package is encouraged — do not invent outside it."
+            ),
+        }
+
+    close_period = _deck_close_period(payload)
+    values: dict[str, Decimal] = dict(evidence_values_from_deck_payload(payload))
+    kinds: dict[str, str] = {k: _infer_series_kind(k, close_period) for k in values}
+
+    _promote_million_scale_keys(values, kinds, close_period)
+    _add_monthly_trend_absolute_evidence(payload, values, kinds, close_period)
+    _add_deal_and_bridge_story_keys(payload, values, kinds)
+
+    # Drop bare calendar years that look numeric (same bar as claim_verify).
+    import re
+
+    year_re = re.compile(r"^(19|20)\d{2}$")
+    values = {
+        k: v
+        for k, v in values.items()
+        if not (v == v.to_integral_value() and year_re.match(str(int(v))))
+    }
+
+    sources = attach_sources_to_values(
+        values,
+        period_label=close_period,
+        org_id=org_id,
+        loaded_at=loaded_at,
+        is_final=is_final,
+        series_kinds=kinds,
+    )
+
+    # Prefer story.* / bridge / forecast / pipeline keys in the LLM-facing preview.
+    def _rank(key: str) -> tuple[int, str]:
+        low = key.lower()
+        if low.startswith("story."):
+            return (0, key)
+        if any(h in low for h in ("forecast", "outlook", "pipeline", "bridge", "waterfall")):
+            return (1, key)
+        if low.startswith("deck."):
+            return (2, key)
+        return (3, key)
+
+    ordered = sorted(values.keys(), key=_rank)
+    prompt_keys = ordered[: max(50, prompt_value_cap)]
+    prompt_values = {k: str(values[k]) for k in prompt_keys}
+    prompt_sources = {k: sources[k] for k in prompt_keys if k in sources}
+
+    return {
+        "values": prompt_values,
+        "values_decimal": values,
+        "_sources": sources,
+        "prompt_sources": prompt_sources,
+        "close_period": close_period,
+        "period_label": close_period,
+        "tolerance_actuals": str(TOL_ACTUALS),
+        "tolerance_ratio": str(TOL_RATIO),
+        "series_kinds": {
+            "actual": "Closed periods ≤ close_period — state as actuals",
+            "forecast": "Open periods after close_period — label as forecast/outlook",
+            "pipeline": "Pipeline / opportunities / coverage — label as pipeline",
+            "budget": "Budget comparables",
+            "bridge": "Cash bridge / ARR·MRR waterfall / variance bridge components",
+        },
+        "policy": (
+            "Prefer every customer-visible $ / % / Nx from values (TOL_ACTUALS=$1.00). "
+            f"close_period={close_period or 'n/a'}: periods ≤ close are Actuals; "
+            "periods after close are Forecast. Pipeline/opportunity dollars only from "
+            "pipeline-tagged keys. Use package context for rich board narrative — "
+            "do not invent figures, causes, or watch-outs outside values / attribution allowlist. "
+            "Cite _sources keys where feasible."
+        ),
+    }
 
 
 def validate_deck_payload(payload: dict[str, Any]) -> list[str]:

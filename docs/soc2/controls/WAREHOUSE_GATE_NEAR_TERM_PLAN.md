@@ -60,7 +60,7 @@ demo HTML, and not a CPA-grade warehouse SQL report for every cell.
 | **Validate (AI numeric)** | `claim_verify.py` on commentary generate, MD&A Prompt 2, Prompt 5 (string literals), board regenerate, Copilot structured packages; `TOL_ACTUALS = $1.00` non-negotiable |
 | **Validate (attribution)** | `attribution_verify.py` on the same paths; multi-driver AND; empty allowlist + causal claim → fail closed |
 | **Validate (citation)** | `citation_verify.py` on the same paths; material money/%/Nx must cite `_sources` token / table.column / formula_id / path |
-| **AI explains only validated evidence** | Evidence + `_sources` (+ attribution package) embedded in prompts; post-LLM structural verify before emit; soft strip where product chooses; hard-block when fully wiped / matrix mismatch / Prompt 5 invent |
+| **AI explains only validated evidence** | Evidence + `_sources` (+ attribution package) embedded in prompts; post-LLM structural verify before emit; soft strip where product chooses; Prompt 5 soft-strip + export; Prompt 2 hard-block when variance fully wiped / matrix mismatch |
 | **Fail closed** | No fail-open on missing evidence, invented numbers, invented drivers, or uncited material claims on wired paths |
 
 **Explicitly out of near-term DoD** (still OPEN / nice-to-have — see §4):
@@ -81,7 +81,7 @@ Labels: **LIVE** = fail-closed on that gate for that path · **PARTIAL** = real 
 |----------------|------------------------------------|----------------------|----------------------|--------------------|-----------------|-----------------------------|-------------------|
 | `/api/v1/commentary/generate` | LIVE (inputs → evidence package) | N/A | **LIVE** (soft strip / don’t-know) | **LIVE** | **LIVE** | **LIVE** (v1 + honest nulls) | N/A |
 | MD&A Prompt 2 | PARTIAL (freeze when required) | N/A (emit gate = claim path) | **LIVE** (harder: matrix / full wipe → hard block) | **LIVE** | **LIVE** | **LIVE** on payload builders | N/A |
-| MD&A Prompt 5 deck | PARTIAL (freeze / deck evidence) | N/A | **LIVE** (hard block on string-literal $/%/Nx) | **LIVE** (soft-strip; hard-block if all fail) | **LIVE** (PPTX literals; soft-strip / hard-block when wiped) | **LIVE** from deck flatten | N/A |
+| MD&A Prompt 5 deck | PARTIAL (freeze / deck evidence) | N/A | **LIVE** (soft-strip unmatched string-literal $/%/Nx; export continues) | **LIVE** (soft-strip; export continues) | **LIVE** (PPTX literals; soft-strip; export continues) | **LIVE** from deck flatten | N/A |
 | Board slide regenerate | PARTIAL (slide + freeze blob) | N/A | **LIVE** (soft strip / don’t-know) | **LIVE** | **LIVE** (bullets) | PARTIAL (via flatten / freeze) | N/A |
 | Board Copilot | PARTIAL (bundle/TS/cash + freeze sections) | N/A | **LIVE** (structured + blob supplement) | **LIVE** | **LIVE** | **LIVE** (org/loaded_at; is_final=false live) | N/A |
 | Live MD&A export (Board) | LIVE hydrate path | **ADVISORY — client A–F + HTML** (does not block) | via package generation above | via above | via above | PARTIAL (consumes when hydrate has `_sources`) | **PARTIAL — LIVE UI KPIs** |
@@ -194,7 +194,7 @@ Move from “client structures agree” toward “we can prove warehouse agreeme
 | Suite | What it proves |
 |-------|----------------|
 | `backend/tests/test_claim_verify.py` | $1 bar; invent → don’t-know; PPTX literals; Copilot `_sources` |
-| `backend/tests/test_citation_verify.py` | Cite required; PPTX / bullet strip; hard-block when fully wiped |
+| `backend/tests/test_citation_verify.py` | Cite required; PPTX / bullet strip; optional raise_if hard-block helper (Prompt 5 does not call it) |
 | `backend/tests/test_attribution_verify.py` | Drivers / logos / dominance / multi-driver AND |
 | `backend/tests/test_commentary_service.py` | Generate path embeds evidence; invent dollars → don’t-know |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | FE↔Board actuals $1 |
@@ -215,7 +215,7 @@ One staging or friendly close:
 | Step | Pass criteria |
 |------|---------------|
 | Generate MD&A Prompt 2 | No invented $; citations present or stripped; matrix mismatch cannot emit |
-| Generate Prompt 5 | Invent in slide text blocked; fully wiped attribution/citation → hard block |
+| Generate Prompt 5 | Invent in slide text soft-stripped; attribution/citation soft-strip; deck still exports |
 | Copilot 3 questions (ARR bridge, cash, “why”) | Wrong-cause → don’t-know; numbers cite or don’t-know |
 | Export / promote after intentional client FAIL | Deck/promote succeeds; advisory HTML WARN report downloads |
 

@@ -41,6 +41,18 @@ DATA INTEGRITY (mandatory)
 5. Table headers: "CM Actual", "CM Budget", "CM Variance", "YTD Actual", "YTD Budget", "YTD Variance"
 6. Copy all numbers verbatim from payload — never recalculate
 
+NARRATIVE / EVIDENCE (P15 — mandatory)
+1. Prefer every customer-visible $ / % / Nx and every causal driver from the EVIDENCE
+   PACKAGE and ATTRIBUTION PACKAGE in the user message (same numbers as DATA PAYLOAD).
+2. Periods ≤ close_period are Actuals; periods after close are Forecast / outlook —
+   label them correctly in commentary (do not call open months "actual").
+3. Pipeline, opportunities, coverage, and slipped deals only from package pipeline /
+   deal_highlights / gtm fields — label as pipeline when forward-looking.
+4. Do not invent causes, watch-outs, or deal names outside the attribution allowlist.
+5. Rich board narrative is encouraged — use package context fully (bridges, waterfalls,
+   variance drivers, forecast, pipeline). Do not be sparse when the package has the story.
+6. Cite _sources keys on material numbers in string literals where feasible.
+
 CHARTS — REQUIRED (use pptx.addChart on slides 2, 6, 9 only; pptx.ChartType on INSTANCE not pptxgen)
 Slide 2: KPI sparklines (line) — data from monthly_trends (ending_arr_m, revenue_m, cash_m)
 Slide 3: ARR waterfall — DO NOT use addChart. See SLIDE 3 layout below (shape rectangles only).

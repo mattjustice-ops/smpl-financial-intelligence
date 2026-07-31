@@ -313,24 +313,22 @@ def build_prompt5_payload(
     )
 
     payload["attribution_package"] = build_attribution_package_from_deck_payload(payload)
-    from app.services.commentary.claim_verify import attach_sources_to_values
     from app.services.reporting.export.board_platform_metrics import (
-        evidence_values_from_deck_payload,
+        build_evidence_package_from_deck_payload,
     )
 
-    evidence_vals = evidence_values_from_deck_payload(payload)
-    period = str(
-        (payload.get("period_context") or {}).get("close_period")
-        or payload.get("close_period")
-        or ""
-    ) or None
-    payload["_sources"] = attach_sources_to_values(
-        evidence_vals,
-        period_label=period,
-        org_id=getattr(bundle, "organization_id", None),
+    evidence_package = build_evidence_package_from_deck_payload(
+        payload,
+        org_id=str(getattr(bundle, "organization_id", "") or "") or None,
         loaded_at=None,
         is_final=None,
     )
+    payload["evidence_package"] = {
+        k: v
+        for k, v in evidence_package.items()
+        if k != "values_decimal"
+    }
+    payload["_sources"] = evidence_package.get("_sources") or {}
     return payload
 
 
@@ -367,23 +365,42 @@ def build_prompt5_user_message(
         max_chars=freeze_max,
         number_guidance=(
             "Use this freeze for narrative tone, drivers, and period framing. "
-            "Copy slide numbers from DATA PAYLOAD JSON verbatim — do not invent figures."
+            "Copy slide numbers from DATA PAYLOAD / EVIDENCE PACKAGE verbatim — "
+            "do not invent figures. Prefer package context for rich story."
         ),
     )
 
     from app.services.commentary.attribution_verify import (
         build_attribution_package_from_deck_payload,
     )
-    from app.services.reporting.export.board_platform_metrics import evidence_values_from_deck_payload
+    from app.services.reporting.export.board_platform_metrics import (
+        build_evidence_package_from_deck_payload,
+        evidence_values_from_deck_payload,
+    )
 
-    evidence_values = evidence_values_from_deck_payload(payload)
-    evidence_preview = {
-        k: str(v) for k, v in list(evidence_values.items())[:400]
+    evidence_package = payload.get("evidence_package")
+    if not isinstance(evidence_package, dict) or not evidence_package.get("values"):
+        evidence_package = build_evidence_package_from_deck_payload(payload)
+        payload["evidence_package"] = {
+            k: v for k, v in evidence_package.items() if k != "values_decimal"
+        }
+        payload["_sources"] = evidence_package.get("_sources") or payload.get("_sources") or {}
+
+    evidence_for_prompt = {
+        "close_period": evidence_package.get("close_period") or pc.get("close_period"),
+        "tolerance_actuals": evidence_package.get("tolerance_actuals"),
+        "series_kinds": evidence_package.get("series_kinds"),
+        "policy": evidence_package.get("policy"),
+        "values": evidence_package.get("values") or {
+            k: str(v) for k, v in list(evidence_values_from_deck_payload(payload).items())[:400]
+        },
     }
     evidence_block = (
-        "EVIDENCE PACKAGE (P15 — every customer-visible $ / % / Nx in the script must "
-        f"match these values within TOL_ACTUALS=$1.00):\n"
-        f"{json.dumps(evidence_preview, separators=(',', ':'))}\n\n"
+        "EVIDENCE PACKAGE (P15 — prefer every customer-visible $ / % / Nx from these "
+        "values within TOL_ACTUALS=$1.00. Actuals ≤ close_period; forecast after close; "
+        "pipeline/opportunity dollars from pipeline-tagged keys. Rich narrative using "
+        "this package is encouraged — do not invent outside it):\n"
+        f"{json.dumps(evidence_for_prompt, separators=(',', ':'))}\n\n"
     )
 
     attribution = payload.get("attribution_package") or build_attribution_package_from_deck_payload(
@@ -393,16 +410,18 @@ def build_prompt5_user_message(
         payload["attribution_package"] = attribution
     attribution_block = (
         "ATTRIBUTION PACKAGE (P15 — causal / driver language may only name "
-        "allowed_drivers id/label/aliases; empty allowlist means no causal claims):\n"
+        "allowed_drivers id/label/aliases; forward-looking watch-outs must ground in "
+        "forecast/pipeline allowlist entries; empty allowlist means no causal claims; "
+        "rich story from allowlisted drivers is encouraged — do not invent causes):\n"
         f"{json.dumps(attribution, separators=(',', ':'))}\n\n"
     )
 
-    sources = payload.get("_sources") or {}
+    sources = payload.get("_sources") or evidence_package.get("_sources") or {}
     if not sources:
         from app.services.commentary.claim_verify import attach_sources_to_values
 
         sources = attach_sources_to_values(
-            evidence_values,
+            evidence_values_from_deck_payload(payload),
             period_label=str(pc.get("close_period") or "") or None,
         )
         payload["_sources"] = sources
@@ -413,31 +432,41 @@ def build_prompt5_user_message(
             "column": (v or {}).get("column"),
             "formula_id": (v or {}).get("formula_id"),
             "path": (v or {}).get("path"),
+            "series_kind": (v or {}).get("series_kind"),
+            "period": (v or {}).get("period"),
         }
-        for k, v in list(sources.items())[:200]
+        for k, v in list(sources.items())[:250]
         if isinstance(v, dict)
     }
     citation_block = (
         "CITATION PACKAGE (P15 — every customer-visible $ / % / Nx in PPTX string "
-        "literals must cite a _sources key, table.column, formula_id, or path — "
+        "literals should cite a _sources key, table.column, formula_id, or path — "
         "e.g. '$7.4M (income_statement.revenue)' or '$86.1M (arr_waterfall.ending_arr, "
-        "period 2026-06)'). Post-LLM citation verify soft-strips uncited literals and "
-        "hard-blocks when fully wiped:\n"
+        "period 2026-06)'). Post-LLM citation verify soft-strips uncited literals "
+        "(deck still exports):\n"
         f"{json.dumps(citation_preview, separators=(',', ':'))}\n\n"
     )
+
+    close_label = pc.get("close_period_label") or pc.get("close_period") or ""
+    close_period = pc.get("close_period") or evidence_package.get("close_period") or ""
 
     return (
         "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"
         "Follow the per-slide layout assignments in the system prompt exactly.\n"
         "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
-        "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers verbatim and cite _sources.\n\n"
+        "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers from EVIDENCE PACKAGE / "
+        "DATA PAYLOAD verbatim, label actual vs forecast vs pipeline, and cite _sources.\n"
+        "Use the full package for rich board narrative (bridges, waterfalls, drivers, "
+        "forecast, pipeline) — do not invent outside the packages.\n\n"
         f"{freeze_block}"
         f"{evidence_block}"
         f"{attribution_block}"
         f"{citation_block}"
         f"PERIOD CONTEXT\n"
-        f"Close period: {pc['close_period_label']}\n"
+        f"Close period: {close_label} ({close_period})\n"
+        f"Actuals: periods ≤ {close_period or close_label}\n"
+        f"Forecast / outlook: periods after {close_period or close_label}\n"
         f"Quarter: {pc['quarter']}\n"
         f"YTD label: {pc['ytd_label']}\n"
         f"Output filename: {pc['output_filename']}\n\n"
@@ -713,36 +742,52 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
 
 
 def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
-    """P15: numeric hard-block + attribution/citation soft-strip (hard-block if fully wiped).
+    """P15 Prompt 5: soft-strip unmatched numbers/cites + attribution; always export.
 
-    Returns the (possibly attribution/citation-rewritten) script for Node render.
+    Numeric + citation: soft-strip failed PPTX string literals (board/warehouse
+    numbers trusted; demo evidence gaps must not block the deck). Attribution /
+    forward-looking: surgical strip of off-allowlist causal claims. Prefer export
+    with stripped text over hard-block even when fully wiped.
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
         build_attribution_package_from_deck_payload,
-        raise_if_pptx_attribution_fully_unverifiable,
     )
     from app.services.commentary.citation_verify import (
         apply_fail_closed_citations_to_pptx_script,
-        raise_if_pptx_citation_fully_unverifiable,
     )
     from app.services.commentary.claim_verify import (
+        apply_fail_closed_claims_to_pptx_script,
         attach_sources_to_values,
-        verify_pptx_script_against_evidence,
+        evidence_values_from_package,
     )
     from app.services.reporting.export.board_platform_metrics import (
+        build_evidence_package_from_deck_payload,
         evidence_values_from_deck_payload,
     )
 
-    evidence = evidence_values_from_deck_payload(payload)
-    result = verify_pptx_script_against_evidence(script, evidence, fail_closed=True)
-    if result.ok:
-        logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(result.checks))
+    # Rebuild full package at verify time (prompt preview omits values_decimal).
+    evidence_package = build_evidence_package_from_deck_payload(payload)
+    evidence = evidence_values_from_package(evidence_package) or evidence_values_from_deck_payload(
+        payload
+    )
+    if not payload.get("_sources"):
+        payload["_sources"] = evidence_package.get("_sources") or {}
+    working, claim_result = apply_fail_closed_claims_to_pptx_script(script, evidence)
+    if claim_result.ok:
+        logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(claim_result.checks))
+        working = script
+    else:
+        logger.warning(
+            "P15 Prompt 5 claim-verify soft-stripped unmatched $/%%/Nx "
+            "(export continues): %s",
+            claim_result.summary(max_failures=8),
+        )
 
     attribution = payload.get("attribution_package") or build_attribution_package_from_deck_payload(
         payload
     )
-    rewritten, attr_result = apply_fail_closed_attribution_to_pptx_script(script, attribution)
+    rewritten, attr_result = apply_fail_closed_attribution_to_pptx_script(working, attribution)
     if attr_result.ok:
         if attr_result.checks:
             logger.info(
@@ -750,13 +795,12 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
                 len(attr_result.checks),
                 attr_result.allowlist_size,
             )
-        working = script
     else:
         logger.warning(
-            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers: %s",
+            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers "
+            "(export continues): %s",
             attr_result.summary(),
         )
-        raise_if_pptx_attribution_fully_unverifiable(attr_result)
         working = rewritten
 
     sources = payload.get("_sources")
@@ -779,10 +823,10 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             )
         return working
     logger.warning(
-        "P15 Prompt 5 citation-verify stripped uncited material numbers: %s",
+        "P15 Prompt 5 citation-verify soft-stripped uncited material numbers "
+        "(export continues): %s",
         cite_result.summary(),
     )
-    raise_if_pptx_citation_fully_unverifiable(cite_result)
     return cited
 
 

@@ -5,7 +5,10 @@ structured evidence package (freeze / engine numbers). Actuals tolerance is
 TOL_ACTUALS = $1.00 (cents–$1) — do not loosen.
 
 Policy surfaces:
-  - ``strict`` (Prompt 2 / Prompt 5): fail-closed don't-know / hard-block.
+  - ``strict`` (Prompt 2 MD&A package): fail-closed don't-know / hard-block on
+    fully wiped variance commentary.
+  - Prompt 5 deck: soft-strip unmatched $/% in PPTX string literals; export
+    proceeds (board/warehouse numbers trusted at this stage).
   - ``interactive`` (board regenerate, Copilot, commentary generate): board
     numbers are trusted — verify + warn/log only; do not nuke whole answers
     for unmatched $/% alone. Story / forecast grounding stays gated elsewhere.
@@ -110,18 +113,29 @@ class VerificationResult:
     def missing_evidence_count(self) -> int:
         return sum(1 for c in self.checks if c.status == "missing_evidence")
 
-    def summary(self) -> str:
+    def summary(self, *, max_failures: int = 8) -> str:
+        """Human-readable failure summary with claim samples first.
+
+        ``max_failures`` caps listed samples so UI/logs stay useful without
+        mid-phrase truncation of a giant join.
+        """
         if self.ok:
             return "all material numeric claims verified"
+        failures = self.failures
+        n = len(failures)
         parts: list[str] = []
-        for c in self.failures:
+        for c in failures[: max(0, max_failures)]:
             mv = c.matched_value
             parts.append(
                 f"{c.claim.stated} ({c.status}"
                 + (f", nearest={mv}" if mv is not None else "")
+                + (f", key={c.matched_key}" if c.matched_key else "")
                 + ")"
             )
-        return "; ".join(parts)
+        body = "; ".join(parts)
+        if n > max_failures > 0:
+            body += f"; …+{n - max_failures} more"
+        return f"{n} failed claim(s): {body}"
 
 
 # Prefer explicit currency / compact forms first.
@@ -146,10 +160,17 @@ def _to_decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     if isinstance(value, str):
         text = value.strip().replace(",", "").replace("$", "").replace("%", "")
+        if not text or text in {"—", "-", "n/a", "N/A", "na", "NA"}:
+            return None
+        # Accounting negatives: ($1.2M) → -1.2M
+        if text.startswith("(") and text.endswith(")"):
+            text = "-" + text[1:-1].strip()
+        # Keep leading minus; drop decorative plus on variance strings (+$1.2M).
+        text = text.lstrip("+").strip()
         if not text:
             return None
         mult = Decimal("1")
-        if text[-1:] in "KkMmBb" and text[:-1].replace(".", "", 1).isdigit():
+        if text[-1:] in "KkMmBb" and text[:-1].lstrip("-").replace(".", "", 1).isdigit():
             suffix = text[-1].upper()
             text = text[:-1]
             mult = {"K": Decimal("1000"), "M": Decimal("1000000"), "B": Decimal("1000000000")}[suffix]
@@ -894,12 +915,14 @@ def build_source_record(
     org_id: str | None = None,
     loaded_at: str | None = None,
     is_final: bool | None = None,
+    series_kind: str | None = None,
 ) -> dict[str, Any]:
     """Build a citable ``_sources`` entry for one evidence value key.
 
     Catalog hits → WAREHOUSE table/column or COMPUTED formula_id.
     Unknown leaves → ENGINE_PATH (path still citable; not full warehouse provenance).
     Always includes ``org_id`` / ``loaded_at`` / ``is_final`` (honest nulls when unknown).
+    Optional ``series_kind`` labels actual / forecast / pipeline / budget / bridge.
     """
     leaf = _leaf_field_from_evidence_key(evidence_key)
     period = _period_from_evidence_key(evidence_key) or period_label
@@ -918,8 +941,10 @@ def build_source_record(
         if period:
             record["period"] = period
         record.update(warehouse_tags)
+        if series_kind:
+            record["series_kind"] = series_kind
         return record
-    return {
+    record = {
         "source_type": "ENGINE_PATH",
         "path": evidence_key,
         "field": leaf,
@@ -931,6 +956,9 @@ def build_source_record(
         ),
         **warehouse_tags,
     }
+    if series_kind:
+        record["series_kind"] = series_kind
+    return record
 
 
 def attach_sources_to_values(
@@ -940,8 +968,10 @@ def attach_sources_to_values(
     org_id: str | None = None,
     loaded_at: str | None = None,
     is_final: bool | None = None,
+    series_kinds: Mapping[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Map every evidence value key → source tag (framework Part 1 contract)."""
+    kinds = series_kinds or {}
     sources: dict[str, dict[str, Any]] = {}
     for key, val in values.items():
         sources[str(key)] = build_source_record(
@@ -951,6 +981,7 @@ def attach_sources_to_values(
             org_id=org_id,
             loaded_at=loaded_at,
             is_final=is_final,
+            series_kind=kinds.get(str(key)),
         )
     return sources
 
@@ -1180,6 +1211,28 @@ def evidence_package_for_prompt(package: Mapping[str, Any] | None) -> dict[str, 
     }
 
 
+def _pptx_material_claims(display_text: str) -> list[NumericClaim]:
+    """Money / percent / Nx claims from PPTX display text (skip bare layout ratios)."""
+    return [
+        c
+        for c in extract_numeric_claims(display_text)
+        if c.kind in ("money", "percent") or (c.kind == "ratio" and "x" in c.stated.lower())
+    ]
+
+
+def _evidence_values_map(
+    evidence: Mapping[str, Decimal] | Mapping[str, Any],
+) -> dict[str, Decimal]:
+    if hasattr(evidence, "get") and "values_decimal" in evidence:
+        return evidence_values_from_package(evidence)  # type: ignore[arg-type]
+    values: dict[str, Decimal] = {}
+    for k, v in evidence.items():
+        num = v if isinstance(v, Decimal) else _to_decimal(v)
+        if num is not None:
+            values[str(k)] = num
+    return values
+
+
 def verify_pptx_script_against_evidence(
     script: str,
     evidence: Mapping[str, Decimal] | Mapping[str, Any],
@@ -1191,33 +1244,62 @@ def verify_pptx_script_against_evidence(
     Layout coordinates and chart array literals are ignored (they are not customer
     narrative). Invented display figures in addText / titles are caught.
     With ``fail_closed=True``, raises ``CommentaryIntegrityError`` on any failure.
+    Prompt 5 export prefers ``apply_fail_closed_claims_to_pptx_script`` (soft-strip)
+    over hard-block.
     """
     display_text = extract_js_string_literal_text(script)
-    # Prefer money / percent / multiplier — drop bare ratio tokens that often appear
-    # as font sizes or layout fractions inside stringified CSS-ish snippets.
-    claims = [
-        c
-        for c in extract_numeric_claims(display_text)
-        if c.kind in ("money", "percent") or (c.kind == "ratio" and "x" in c.stated.lower())
-    ]
-    if hasattr(evidence, "get") and "values_decimal" in evidence:
-        values = evidence_values_from_package(evidence)  # type: ignore[arg-type]
-    else:
-        values = {}
-        for k, v in evidence.items():
-            num = v if isinstance(v, Decimal) else _to_decimal(v)
-            if num is not None:
-                values[str(k)] = num
+    claims = _pptx_material_claims(display_text)
+    values = _evidence_values_map(evidence)
 
     checks = [_best_match(claim, values) for claim in claims]
     result = VerificationResult(checks=checks)
     if fail_closed and not result.ok:
         raise CommentaryIntegrityError(
-            "P15 fail-closed: Prompt 5 / PPTX script numeric claims failed evidence verify: "
-            + result.summary(),
+            "P15 fail-closed: Prompt 5 / PPTX script numeric claims failed evidence "
+            f"verify. {result.summary(max_failures=8)}",
             result=result,
         )
     return result
+
+
+def apply_fail_closed_claims_to_pptx_script(
+    script: str,
+    evidence: Mapping[str, Decimal] | Mapping[str, Any],
+) -> tuple[str, VerificationResult]:
+    """Soft-strip unmatched money/%/Nx inside PPTX JS string literals.
+
+    Failed string literals are replaced with ``DONT_KNOW_NARRATIVE``. Layout /
+    chart array code outside strings is ignored. Prompt 5 callers warn + export
+    the rewritten script (no hard-block on invent / evidence gaps).
+    """
+    values = _evidence_values_map(evidence)
+    all_checks: list[ClaimCheck] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        quote = match.group(1)
+        raw = match.group(0)
+        inner = raw[1:-1]
+        inner_unesc = (
+            inner.replace(r"\'", "'")
+            .replace(r'\"', '"')
+            .replace(r"\n", " ")
+            .replace(r"\t", " ")
+        )
+        claims = _pptx_material_claims(inner_unesc)
+        local_checks = [_best_match(claim, values) for claim in claims]
+        all_checks.extend(local_checks)
+        local = VerificationResult(checks=local_checks)
+        if local.ok:
+            return raw
+        escaped = (
+            DONT_KNOW_NARRATIVE.replace("\\", "\\\\")
+            .replace(quote, f"\\{quote}")
+            .replace("\n", "\\n")
+        )
+        return f"{quote}{escaped}{quote}"
+
+    rewritten = _JS_STRING_RE.sub(_replace, script or "")
+    return rewritten, VerificationResult(checks=all_checks)
 
 
 def apply_fail_closed_to_bullet_list(

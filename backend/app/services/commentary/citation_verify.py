@@ -65,18 +65,23 @@ class CitationVerificationResult:
     def failures(self) -> list[CitationCheck]:
         return [c for c in self.checks if c.status != "pass"]
 
-    def summary(self) -> str:
+    def summary(self, *, max_failures: int = 8) -> str:
         if self.ok:
             if not self.checks:
                 return "no material numeric claims requiring citation"
             return "all material numeric claims cited against _sources"
+        failures = self.failures
+        n = len(failures)
         parts = [
             f"{c.claim.stated!r} ({c.status}"
             + (f", cited={c.cited_token}" if c.cited_token else "")
             + ")"
-            for c in self.failures
+            for c in failures[: max(0, max_failures)]
         ]
-        return "; ".join(parts)
+        body = "; ".join(parts)
+        if n > max_failures > 0:
+            body += f"; …+{n - max_failures} more"
+        return f"{n} failed citation(s): {body}"
 
 
 def _normalize_cite_token(token: str) -> str:
@@ -321,8 +326,8 @@ def apply_fail_closed_citations_to_pptx_script(
     """Soft-strip uncited material money/%/Nx inside PPTX JS string literals.
 
     Layout / chart array code outside strings is ignored. Failed string literals
-    are replaced with DONT_KNOW_CITATION; callers may hard-block when every
-    citation check failed (see ``raise_if_pptx_citation_fully_unverifiable``).
+    are replaced with DONT_KNOW_CITATION. Prompt 5 exports the rewritten script;
+    optional ``raise_if_pptx_citation_fully_unverifiable`` remains for strict callers.
     """
     from app.services.commentary.claim_verify import _JS_STRING_RE
 
@@ -359,7 +364,11 @@ def apply_fail_closed_citations_to_pptx_script(
 def raise_if_pptx_citation_fully_unverifiable(
     result: CitationVerificationResult,
 ) -> None:
-    """Hard-block Prompt 5 emit when every material citation check in the script failed."""
+    """Optional hard-block when every material citation check failed.
+
+    Prompt 5 deck export no longer calls this (prefers soft-strip + export).
+    Kept for callers that still want a strict gate; error text leads with samples.
+    """
     from app.services.commentary.claim_verify import CommentaryIntegrityError
 
     if not result.checks:
@@ -368,7 +377,7 @@ def raise_if_pptx_citation_fully_unverifiable(
         return
     raise CommentaryIntegrityError(
         "P15 fail-closed: Prompt 5 / PPTX script had no verifiable _sources citations; "
-        "blocking deck emit. " + result.summary(),
+        f"blocking deck emit. {result.summary(max_failures=8)}",
     )
 
 
