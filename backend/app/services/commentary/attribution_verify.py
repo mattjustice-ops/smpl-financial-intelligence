@@ -1459,9 +1459,9 @@ def apply_fail_closed_attribution_to_pptx_script(
 ) -> tuple[str, AttributionVerificationResult]:
     """Soft-strip off-allowlist causal claims inside PPTX JS string literals.
 
-    Layout / chart array code outside strings is ignored. Failed metric cells
-    become ``—``; longer narrative literals become DONT_KNOW_ATTRIBUTION.
-    Prompt 5 exports the rewritten script; optional
+    Layout / chart array code outside strings is ignored. Failed literals
+    become ``—`` (never a multi-sentence don't-know essay). Prompt 5 exports
+    the rewritten script; optional
     ``raise_if_pptx_attribution_fully_unverifiable`` remains for strict callers.
     """
     from app.services.commentary.claim_verify import (

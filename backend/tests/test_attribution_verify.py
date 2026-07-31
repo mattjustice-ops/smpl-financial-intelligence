@@ -386,10 +386,13 @@ def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() 
         'slide.addText("ARR growth was driven by expansion.");'
         'slide.addText("Growth this quarter was due to three enterprise upsells outside the allowlist.");'
     )
+    from app.services.commentary.claim_verify import PPTX_SOFT_STRIP_CELL
+
     rewritten, result = apply_fail_closed_attribution_to_pptx_script(mixed, allowlist)
     assert not result.ok
     assert "expansion" in rewritten.lower()
-    assert DONT_KNOW_ATTRIBUTION[:40] in rewritten
+    assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
+    assert "I don't know" not in rewritten
     # Partial wipe → do not hard-block
     raise_if_pptx_attribution_fully_unverifiable(result)
 
@@ -399,7 +402,8 @@ def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() 
     wiped, bad_result = apply_fail_closed_attribution_to_pptx_script(bad_only, allowlist)
     assert not bad_result.ok
     assert all(c.status != "pass" for c in bad_result.checks)
-    assert DONT_KNOW_ATTRIBUTION[:40] in wiped
+    assert f'"{PPTX_SOFT_STRIP_CELL}"' in wiped
+    assert "I don't know" not in wiped
     with pytest.raises(CommentaryIntegrityError, match="failed attribution") as exc_info:
         raise_if_pptx_attribution_fully_unverifiable(bad_result)
     assert "enterprise upsells" in str(exc_info.value).lower()

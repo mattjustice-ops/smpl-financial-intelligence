@@ -15,7 +15,7 @@ Use this page to confirm what shipped, what is still open, and where to open the
 |------|----------|------|
 | `/api/v1/commentary/generate` | **Interactive policy:** numeric + citation **soft-warn** (board numbers trusted); attribution + forward-looking **surgical strip** | `service.py`, `citation_verify.py`, `claim_verify.py`, `attribution_verify.py` |
 | MD&A Prompt 2 | Nested string numeric + attribution + **citation** walk; hard block if variance fully wiped (**strict** — deck publish) | `prompt2_mda_package.py` |
-| MD&A Prompt 5 deck | **Widened evidence package** (actuals ≤ close, forecast after close, pipeline/deals, cash/ARR bridges, variance drivers) + `_sources` (`series_kind` where tagged) + attribution (incl. forecast/pipeline forward keys) in prompt; post-LLM verify of **$ / % / Nx in PPTX string literals**; numeric **soft-strip** (short KPI/table cells → `—`, narrative → don't-know); citation **warn-only** (do not wipe uncited board cells); attribution soft-strip; prefer export even when fully wiped. Prompt: cite in takeaways, not inside KPI/table cells | `prompt5_deck.py`, `board_platform_metrics.build_evidence_package_from_deck_payload` |
+| MD&A Prompt 5 deck | **Widened evidence package** (actuals ≤ close, forecast after close, pipeline/deals, cash/ARR bridges, variance drivers) + `_sources` (`series_kind` where tagged) + attribution (incl. forecast/pipeline forward keys) in prompt; post-LLM verify of **$ / % / Nx in PPTX string literals**; numeric + attribution **soft-strip to `—`** (never multi-sentence don't-know essays in PPTX cells); citation **warn-only** (do not wipe uncited board cells); prefer export even when fully wiped. Prompt: cite in takeaways, not inside KPI/table cells | `prompt5_deck.py`, `board_platform_metrics.build_evidence_package_from_deck_payload` |
 | Board slide regenerate | **Interactive:** numeric + citation soft-warn; attribution / forward surgical strip; all-story-wiped → don't-know | `board_commentary_service.py` |
 | Board Copilot | **Interactive:** numeric + citation soft-warn; attribution + forward surgical strip | `board_platform_routes.py` |
 | **`_sources` warehouse tags** | Every source tag includes `org_id` / `loaded_at` / `is_final` (honest nulls when unknown) | `claim_verify.build_source_record` |
@@ -32,7 +32,7 @@ Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.p
 | Surface | Numbers ($ / % / cites) | Story (what happened + outlook) |
 |---------|-------------------------|----------------------------------|
 | Commentary generate, board regenerate, Copilot | Trusted — verify + **warn/log**; do **not** replace the whole answer for unmatched $/% or missing cites alone (demo / incomplete evidence packages) | Attribution fail-closed via **surgical clause strip**; forward-looking must ground in **forecast / pipeline** allowlist |
-| Prompt 5 deck | Soft-strip unmatched $/% in PPTX strings (cells → `—`); citation **warn-only**; **export continues** (board/warehouse numbers trusted; demo evidence gaps must not block the deck) | Attribution soft-strip; prefer export with stripped text over hard-block |
+| Prompt 5 deck | Soft-strip unmatched $/% in PPTX strings → `—` (never don't-know essays); citation **warn-only**; **export continues** (board/warehouse numbers trusted; demo evidence gaps must not block the deck) | Attribution soft-strip → `—`; prefer export with stripped text over hard-block |
 | Prompt 2 MD&A package | Keep **strict** fail-closed / hard-block when variance sheet fully wiped | Soft strip; hard-block when fully wiped |
 | Tie-out identification | Hard gate remains an **import/close** concern — not regenerate/Copilot / Prompt 5 export | — |
 
@@ -45,7 +45,7 @@ Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.p
 3. Extract numeric claims; match within **$1.00** / ratio tolerances.
 4. Attribution allowlist check (multi-driver AND → all required); forward-looking → forecast/pipeline subset.
 5. Citation check: each material money/%/Nx cites a `_sources` token (inline or `citations[].label`).
-6. Apply policy: **interactive** soft-warns numeric/citation and surgically strips bad story clauses; Prompt 5 soft-strips invented PPTX numbers (cells → `—`), citation warn-only, and exports; **strict** don't-know / hard-block remains on Prompt 2 when fully wiped.
+6. Apply policy: **interactive** soft-warns numeric/citation and surgically strips bad story clauses; Prompt 5 soft-strips invented PPTX numbers / bad attribution to `—` (never don't-know essays), citation warn-only, and exports; **strict** don't-know / hard-block remains on Prompt 2 when fully wiped.
 
 ### Agreed citation formats
 
@@ -74,7 +74,7 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 |---------|--------|-------|
 | Commentary generate API | **Live (interactive)** | Numeric + citation soft-warn; attribution / forward surgical strip |
 | MD&A Prompt 2 | **Live (harder / strict)** | Matrix mismatch → hard block; post-LLM strip + citation; fully unverifiable variance sheet → hard block |
-| Prompt 5 deck generation | **Live (soft-strip + export)** | Widened evidence (actual/forecast/pipeline/bridges) so rich board story can use package context without false shutdowns; invent still soft-strips (KPI/table cells → `—`, not don't-know essays); citation **warn-only** (uncited board cells kept); attribution soft-strip; **export continues**. Chart array / layout coords not scanned. Export-time warehouse / client A–F validation unchanged (advisory). |
+| Prompt 5 deck generation | **Live (soft-strip + export)** | Widened evidence (actual/forecast/pipeline/bridges) so rich board story can use package context without false shutdowns; invent / bad attribution soft-strip to `—` only (never don't-know essays in PPTX); citation **warn-only** (uncited board cells kept); **export continues**. Chart array / layout coords not scanned. Export-time warehouse / client A–F validation unchanged (advisory). |
 | Board slide regenerate | **Live (interactive)** | Numeric + citation soft-warn; attribution / forward surgical strip; all-story-wiped → don't-know |
 | Copilot / chat paths | **Live (interactive)** | Structured packages + blob supplement; numeric/citation soft-warn; story strip |
 | `_sources` + warehouse tags | **Live (v1 + honest nulls)** | Catalog + ENGINE_PATH on primary builders; freeze: org + loaded_at + is_final=true; live Copilot: org + loaded_at + is_final=false (nulls when unknown). DOM overlay consumes when hydrate includes `_sources` |

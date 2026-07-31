@@ -325,9 +325,9 @@ def apply_fail_closed_citations_to_pptx_script(
 ) -> tuple[str, CitationVerificationResult]:
     """Soft-strip uncited material money/%/Nx inside PPTX JS string literals.
 
-    Layout / chart array code outside strings is ignored. Failed metric cells
-    become ``—``; longer narrative literals become DONT_KNOW_CITATION.
-    Prompt 5 export prefers warn-only citation (see ``_verify_prompt5_script_or_raise``);
+    Layout / chart array code outside strings is ignored. Failed literals
+    become ``—`` (never a multi-sentence don't-know essay). Prompt 5 export
+    prefers warn-only citation (see ``_verify_prompt5_script_or_raise``);
     optional ``raise_if_pptx_citation_fully_unverifiable`` remains for strict callers.
     """
     from app.services.commentary.claim_verify import (

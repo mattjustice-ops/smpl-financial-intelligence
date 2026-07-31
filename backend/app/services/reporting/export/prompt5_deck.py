@@ -745,12 +745,11 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
 def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
     """P15 Prompt 5: soft-strip invented numbers + attribution; always export.
 
-    Numeric: soft-strip unmatched $/%%/Nx in PPTX string literals (short cells →
-    em dash; narrative → don't-know). Attribution: strip off-allowlist causal
-    claims the same way. Citation: **warn-only** — board KPI/table cells come
-    from DATA PAYLOAD / evidence and must not be wiped for missing
-    ``(source.key)`` parentheses (that produced unreadable don't-know decks).
-    Prefer export with stripped text over hard-block.
+    Numeric / attribution: soft-strip failed PPTX string literals to ``—``
+    (never multi-sentence don't-know essays). Citation: **warn-only** — board
+    KPI/table cells come from DATA PAYLOAD / evidence and must not be wiped
+    for missing ``(source.key)`` parentheses (that produced unreadable
+    don't-know decks). Prefer export with stripped text over hard-block.
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,

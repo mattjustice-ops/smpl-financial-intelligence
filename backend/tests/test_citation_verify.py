@@ -77,10 +77,9 @@ def test_inline_and_structured_citations_pass() -> None:
 
 
 def test_pptx_script_citation_soft_strips_and_hard_blocks_when_fully_wiped() -> None:
-    """Helper soft-strips; optional raise_if still hard-blocks when fully wiped.
+    """Helper soft-strips to em dash; optional raise_if still hard-blocks when fully wiped.
 
     Prompt 5 export no longer calls raise_if (and no longer citation-rewrites).
-    Short metric cells become em dash; long narrative becomes don't-know.
     """
     from app.services.commentary.claim_verify import PPTX_SOFT_STRIP_CELL
 
@@ -100,8 +99,8 @@ def test_pptx_script_citation_soft_strips_and_hard_blocks_when_fully_wiped() -> 
     rewritten, result = apply_fail_closed_citations_to_pptx_script(mixed, sources)
     assert not result.ok
     assert "income_statement.revenue" in rewritten
-    assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
-    assert DONT_KNOW_CITATION[:40] in rewritten
+    assert rewritten.count(f'"{PPTX_SOFT_STRIP_CELL}"') >= 2
+    assert "I don't know" not in rewritten
     # Partial wipe → do not hard-block
     raise_if_pptx_citation_fully_unverifiable(result)
 
@@ -111,7 +110,8 @@ def test_pptx_script_citation_soft_strips_and_hard_blocks_when_fully_wiped() -> 
     wiped, bad_result = apply_fail_closed_citations_to_pptx_script(bad_only, sources)
     assert not bad_result.ok
     assert all(c.status != "pass" for c in bad_result.checks)
-    assert DONT_KNOW_CITATION[:40] in wiped
+    assert f'"{PPTX_SOFT_STRIP_CELL}"' in wiped
+    assert "I don't know" not in wiped
     with pytest.raises(CommentaryIntegrityError, match="failed citation") as exc_info:
         raise_if_pptx_citation_fully_unverifiable(bad_result)
     assert "$70,000,000" in str(exc_info.value)

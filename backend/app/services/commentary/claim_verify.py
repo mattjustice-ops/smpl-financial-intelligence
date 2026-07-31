@@ -40,26 +40,21 @@ DONT_KNOW_NARRATIVE = (
     "against engine evidence for the current package. Unsupported figures were omitted."
 )
 
-# Short KPI / table cells must never become a multi-sentence don't-know essay.
+# Prompt 5 PPTX soft-strip: never inject multi-sentence don't-know essays into
+# string literals (KPI/table cells and takeaways). Em dash keeps layout intact.
 PPTX_SOFT_STRIP_CELL = "—"
-_PPTX_METRIC_CELL_RE = re.compile(
-    r"^[+\-–—()]?\s*\$?\s*[\d,]+(?:\.\d+)?\s*[KkMmBb%]?\s*\)?$"
-)
 
 
 def pptx_soft_strip_literal_replacement(inner: str, *, dont_know: str) -> str:
-    """Choose replacement text for a failed PPTX JS string literal.
+    """Replacement for a failed PPTX JS string literal under deck soft policy.
 
-    Metric-sized cells (KPI values, table numbers) become an em dash so the
-    board layout stays intact. Longer narrative / takeaway strings keep the
-    full don't-know message.
+    Always returns ``—``. The ``dont_know`` argument is accepted for call-site
+    compatibility but must not be written into the deck — stuffing
+    multi-sentence don't-know essays into short cells produced unreadable
+    board decks (hundreds of essay cells, almost no real $ figures).
     """
-    compact = (inner or "").replace("\\n", " ").replace("\n", " ").strip()
-    if not compact:
-        return PPTX_SOFT_STRIP_CELL
-    if len(compact) <= 48 or _PPTX_METRIC_CELL_RE.match(compact):
-        return PPTX_SOFT_STRIP_CELL
-    return dont_know
+    _ = (inner, dont_know)
+    return PPTX_SOFT_STRIP_CELL
 
 
 # Sentence ends that are not dotted identifiers (mrr_waterfall.ending_mrr).
@@ -1290,10 +1285,9 @@ def apply_fail_closed_claims_to_pptx_script(
 ) -> tuple[str, VerificationResult]:
     """Soft-strip unmatched money/%/Nx inside PPTX JS string literals.
 
-    Failed metric cells become ``—``; longer narrative literals become
-    ``DONT_KNOW_NARRATIVE``. Layout / chart array code outside strings is
-    ignored. Prompt 5 callers warn + export the rewritten script (no hard-block
-    on invent / evidence gaps).
+    Failed literals become ``—`` (never a multi-sentence don't-know essay).
+    Layout / chart array code outside strings is ignored. Prompt 5 callers
+    warn + export the rewritten script (no hard-block on invent / evidence gaps).
     """
     values = _evidence_values_map(evidence)
     all_checks: list[ClaimCheck] = []

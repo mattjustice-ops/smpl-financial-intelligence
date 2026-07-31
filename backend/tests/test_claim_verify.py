@@ -267,8 +267,8 @@ def test_pptx_script_soft_strips_unmatched_money_without_hard_block() -> None:
     assert not result.ok
     assert "86.1" in rewritten or "86.1M" in rewritten
     assert "$99,000,000" not in rewritten
-    assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
-    assert DONT_KNOW_NARRATIVE[:40] in rewritten
+    assert rewritten.count(f'"{PPTX_SOFT_STRIP_CELL}"') >= 2
+    assert "I don't know" not in rewritten
     # Soft-strip path never raises — Prompt 5 export continues.
     assert "failed claim" in result.summary(max_failures=8)
 
@@ -305,6 +305,8 @@ def test_prompt5_verify_soft_strips_and_exports() -> None:
     assert "$99,000,000" not in out
     assert "$86,100,000" in out
     assert "verifiable _sources citation" not in out
+    assert "I don't know" not in out
+    assert 'slide.addText("—")' in out or "slide.addText('—')" in out
 
 
 def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:
@@ -367,6 +369,7 @@ def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:
     out = _verify_prompt5_script_or_raise(script, payload)
     assert "$88.2M" in out or "88.2" in out
     assert "$99,000,000" not in out
+    assert "I don't know" not in out
 
 
 def test_to_decimal_parses_variance_plus_and_parens() -> None:
