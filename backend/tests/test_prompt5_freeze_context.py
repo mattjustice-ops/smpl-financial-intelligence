@@ -43,7 +43,9 @@ def test_prompt5_user_message_includes_freeze_context_and_stale_label() -> None:
     assert "EVIDENCE PACKAGE" in msg
     assert "Actuals: periods ≤" in msg
     assert "Forecast / outlook" in msg
-    assert "rich board narrative" in msg.lower() or "Rich narrative" in msg
+    assert "rich board narrative" in msg.lower() or "board-ready" in msg.lower()
+    assert "TAKEAWAY / COMMENTARY SHAPE" in msg
+    assert "PRIMARY DRIVER + VARIANCE" in msg
 
 
 def test_prompt5_user_message_omits_freeze_block_when_absent() -> None:
@@ -62,7 +64,8 @@ def test_prompt5_user_message_omits_freeze_block_when_absent() -> None:
         return_value=fake_payload,
     ):
         msg = build_prompt5_user_message(object())  # type: ignore[arg-type]
-    assert "CLOSE FREEZE CONTEXT" not in msg
+    assert "Context source: freeze" not in msg
     assert "DATA PAYLOAD (JSON):" in msg
     assert "EVIDENCE PACKAGE" in msg
+    assert "TAKEAWAY / COMMENTARY SHAPE" in msg
     assert "series_kinds" in msg

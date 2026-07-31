@@ -124,11 +124,13 @@ DATA RULES — CRITICAL
 
 COMMENTARY RULES
 - Write all Key Takeaways bullets from the data — never truncate
-- Max 5 bullets per slide (except appendix), max 22 words each
+- Prefer 3–5 insight bullets per Key Takeaways panel; each ~28–45 words
+  (driver + actual/budget/variance + retention/pipeline or board action) — not one-line deltas
 - Every bullet must contain at least one real number
-- Lead with the most important signal
+- Lead with the most important signal; label Actual vs Forecast vs Pipeline
 - Favorable: lead with positive dollar/percentage
-- Unfavorable: variance first, then driver
+- Unfavorable: variance first, then driver + next-quarter expectation
+- KPI/table cells = numbers or "—" only; citations OK only in takeaway/narrative bullets
 
 OUTPUT — PptxGenJS runtime requirements
 Return a single complete Node.js script. It must:
