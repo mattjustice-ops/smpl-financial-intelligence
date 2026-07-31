@@ -13,6 +13,7 @@ from app.services.reporting.period_utils import prior_period, to_period
 from app.services.reporting.validation_service import ValidationCheck, compare_values, warning
 
 TOLERANCE = Decimal("1.00")  # Align with financial statement closed-actuals fail-closed bar
+MARKETING_TABLE_MARKERS = ("marketing_pipeline", "actual_marketing_pipeline", "budget_marketing_pipeline")
 
 
 def _fs_to_validation_checks(summary: SummaryResponse | None) -> list[ValidationCheck]:

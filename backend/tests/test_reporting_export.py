@@ -38,6 +38,7 @@ def _minimal_bundle() -> ReportingBundle:
         scenario="Combined",
         start_period="2026-01",
         end_period="2026-05",
+        as_of_period="2026-05",
         waterfalls={"arr": arr},
     )
     return ReportingBundle(
@@ -133,7 +134,47 @@ def test_export_validation_aggregates_executive_checks() -> None:
         scenario="Combined",
         start_period="2026-01",
         end_period="2026-05",
+        as_of_period="2026-05",
         validation=[check],
     )
     summary = run_export_validation(executive, None)
     assert summary.passed_count >= 1
+
+
+def test_export_validation_filters_marketing_pipeline_checks() -> None:
+    """Pipeline checks sourced from marketing tables must be dropped without NameError."""
+    keep = ValidationCheck(
+        scenario="Combined",
+        period="2026-05",
+        validation_name="pipeline_waterfall_ties",
+        status="pass",
+        source_tables_used=["pipeline_waterfall"],
+    )
+    drop = ValidationCheck(
+        scenario="Combined",
+        period="2026-05",
+        validation_name="pipeline_closed_won_ties",
+        status="fail",
+        source_tables_used=["actual_marketing_pipeline"],
+    )
+    drop_by_name = ValidationCheck(
+        scenario="Combined",
+        period="2026-05",
+        validation_name="marketing_pipeline_spend_ties",
+        status="fail",
+        source_tables_used=["pipeline_waterfall"],
+    )
+    executive = ExecutiveFlowResponse(
+        organization_id="org",
+        scenario="Combined",
+        start_period="2026-01",
+        end_period="2026-05",
+        as_of_period="2026-05",
+        validation=[keep, drop, drop_by_name],
+    )
+    summary = run_export_validation(executive, None)
+    names = {c.validation_name for c in summary.checks}
+    assert "pipeline_waterfall_ties" in names
+    assert "pipeline_closed_won_ties" not in names
+    assert "marketing_pipeline_spend_ties" not in names
+    assert summary.failed_count == 0
