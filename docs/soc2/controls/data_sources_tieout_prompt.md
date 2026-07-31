@@ -2,7 +2,7 @@
 ### Cursor Prompt: Align Board Platform + Forecast Engine to Warehouse Schema
 ### Priority: Customer demo ready by Monday
 
-> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Tie-out / `runTieOut()` publish-block rules are **required control design** for board/customer-facing packages (P15 §4.8). **Client A–F** (when SRC/TS/WF/engine/display exist) + client HTML report are live as a publish gate; live warehouse SQL HTML report and D2–D4/E/B2/F5 without warehouse tables remain open — see [ai_claim_verify.md](./ai_claim_verify.md).  
+> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Hard identification for production **actuals** belongs at **import/ingest/close** (P15 §4.8 design). **Client A–F** at MD&A export / FINAL promote is **advisory** (WARN + HTML companion; does not block); forecast C5/F4 soft after close. Live warehouse SQL HTML report and D2–D4/E/B2/F5 without warehouse tables remain open — see [ai_claim_verify.md](./ai_claim_verify.md) / [WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./WAREHOUSE_GATE_NEAR_TERM_PLAN.md).  
 > **Customer GL → statements:** Construction methodology (RE_BASE, openings, three-rollup, dept-299) is [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md) — does not change demo Board/FE seed behavior.
 
 ---

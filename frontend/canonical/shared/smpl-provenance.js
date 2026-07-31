@@ -1,12 +1,15 @@
 /**
- * DOM data-source provenance + client tie-out gate (P15 / framework Part 3–4).
+ * DOM data-source provenance + client tie-out (P15 / framework Part 3–4).
  * Prefers hydrate payload `_sources` when present; falls back to field catalog.
- * Demo path stays usable — tags still apply from catalog; publish gate only hard-blocks
- * on live hydrate FAIL (customer export / final forecast promote).
  *
  * Client Rule Sets A–F run when local Board/FE data exists (SRC, TS_DATA, WF_TABLE,
  * baseline_engine, display arrays). Skips D/E (and bank B2) when structures absent.
  * HTML report is client-side from those checks — not live warehouse SQL.
+ *
+ * Export / FINAL promote: client A–F is **advisory** (WARN + HTML companion report).
+ * Hard identification belongs at data import / ingest (and close), not when finance
+ * pulls presentations. Forecast C5/F4 are soft after close_month; actuals ≤ close stay hard
+ * in runTieOut scoring. AI P15 narrative gates remain fail-closed elsewhere.
  * Not SOC 2 certified.
  */
 (function (global) {
@@ -420,6 +423,24 @@
     }
   }
 
+  /** Hard for actuals ≤ close_month; soft for forecast months after close (C5/F4). */
+  function isActualsPeriod(period, closeMo) {
+    return !closeMo || period <= closeMo;
+  }
+
+  function softOrHardChk(rule, period, metric, expected, actual, fails, softs, tol, hard) {
+    if (hard) {
+      chk(rule, period, metric, expected, actual, fails, tol);
+      return;
+    }
+    if (actual == null && expected == null) return;
+    if (actual == null || expected == null) {
+      softs.push("[" + rule + "] " + period + " " + metric + ": missing (forecast soft)");
+      return;
+    }
+    softChk(rule, period, metric, expected, actual, softs, tol);
+  }
+
   /**
    * Client Rule Sets A–F when local Board/FE structures exist.
    * Hard fails use TOL_ACTUALS=$1. Soft bank/display go to warnings.
@@ -745,11 +766,21 @@
       chk("C4", p, "gross_profit", num(eng.is.gross_profit), num(tsIs.gross_profit), fails, tol);
       chk("C4", p, "ebitda", num(eng.is.ebitda), num(tsIs.ebitda), fails, tol);
       chk("C4", p, "net_income", num(eng.is.net_income), num(tsIs.net_income), fails, tol);
-      // C5: revenue ≈ arr_eop / 12
+      // C5: revenue ≈ arr_eop / 12 — hard only for actuals ≤ close; forecast soft
       var arrEop = eng.arr && num(eng.arr.arr_eop);
-      if (arrEop != null && num(eng.is.revenue) != null) {
+      if (arrEop != null || num(eng.is.revenue) != null) {
         checksRun.push("C5");
-        chk("C5", p, "revenue ≈ arr_eop/12", arrEop / 12, num(eng.is.revenue), fails, tol);
+        softOrHardChk(
+          "C5",
+          p,
+          "revenue ≈ arr_eop/12",
+          arrEop != null ? arrEop / 12 : null,
+          num(eng.is.revenue),
+          fails,
+          softs,
+          tol,
+          isActualsPeriod(p, closeMo),
+        );
       }
     });
     if (fcPeriods.length && !engine) {
@@ -807,24 +838,32 @@
         chk("F3", p, "ebitda", num(eng.is && eng.is.ebitda), num(tsIs.ebitda), fails, tol);
         if (eng.cfs && tsCfs) {
           checksRun.push("F4");
-          chk(
+          var f4Hard = isActualsPeriod(p, closeMo);
+          softOrHardChk(
             "F4a",
             p,
             "beg_cash",
             num(eng.cfs.beg_cash != null ? eng.cfs.beg_cash : eng.cfs.beginning_cash),
             num(tsCfs.beginning_cash),
             fails,
+            softs,
             tol,
+            f4Hard,
           );
-          chk(
+          softOrHardChk(
             "F4b",
             p,
             "end_cash",
             num(eng.cfs.end_cash != null ? eng.cfs.end_cash : eng.cfs.ending_cash),
             num(tsCfs.ending_cash),
             fails,
+            softs,
             tol,
+            f4Hard,
           );
+        } else if (eng && tsIs && (!eng.cfs || !tsCfs) && !isActualsPeriod(p, closeMo)) {
+          checksRun.push("F4");
+          softs.push("[F4] " + p + " cash CFS missing on engine or TS Forecast (forecast soft)");
         }
         var engArr = eng.arr && num(eng.arr.arr_eop);
         if (engArr != null && wf && Array.isArray(wf.Ending)) {
@@ -890,6 +929,8 @@
       closeMonth: closeMo,
       note:
         "Client A–F from Board/FE structures. Not live warehouse SQL. " +
+        "Export/promote is advisory — hard identification at import/close. " +
+        "C5/F4 hard only for periods ≤ close_month; forecast soft. " +
         "D2–D4 / E warehouse / B2 bank / F5 payroll remain skipped when data absent. " +
         "TOL_ACTUALS=$" +
         TOL_ACTUALS.toFixed(2) +
@@ -917,8 +958,8 @@
     var skipped = result.skipped || [];
     var checks = result.checksRun || [];
     var status = result.passed
-      ? "APPROVED FOR DEPLOYMENT (client checks)"
-      : "BLOCKED — tie-out failures";
+      ? "PASS (client checks)"
+      : "WARN — tie-out failures (advisory; does not block export/promote)";
     var rows = fails
       .map(function (f) {
         return "<tr class='fail'><td>FAIL</td><td>" + escapeHtml(f) + "</td></tr>";
@@ -1001,46 +1042,50 @@
   }
 
   /**
-   * Customer publish gate. Returns { ok, blocked, result, message, reportHtml }.
-   * - Live + FAIL → block (ok=false, blocked=true); HTML report attached
-   * - Demo / no live → warn only (ok=true, blocked=false) unless forceBlock
+   * Advisory publish companion. Returns { ok, blocked, status, result, message, reportHtml }.
+   * - FAIL → status WARN; HTML report downloaded (unless downloadReport=false); does not block
+   * - forceBlock=true → legacy hard-block for tests / ops escape hatch only
+   * Hard customer actuals identification belongs at import/close — not export-time.
    */
   function gatePublish(options) {
     options = options || {};
     var result = runTieOut(options.srcActuals, options.tsData, options.engineResults, options.closeMonth);
-    var live = options.forceLive != null ? options.forceLive : isLive();
     var forceBlock = Boolean(options.forceBlock);
-    var blocked = (!result.passed && live) || (!result.passed && forceBlock);
+    var blocked = !result.passed && forceBlock;
+    var status = result.passed ? "PASS" : "WARN";
     var reportHtml = _lastTieOutHtml || renderTieOutReportHtml(result);
     var message = "";
     if (!result.passed) {
       message =
-        "Tie-out FAILED (" +
+        "Tie-out WARN (" +
         result.failures.length +
-        " issue" +
+        " hard issue" +
         (result.failures.length === 1 ? "" : "s") +
         ").\n\n" +
         result.failures.slice(0, 12).join("\n") +
         (result.failures.length > 12 ? "\n…" : "") +
         "\n\nClosed-actuals bar: $" +
         TOL_ACTUALS.toFixed(2) +
-        ". Client Rule Sets A–F (skips when data absent). HTML report attached.";
+        ". Client Rule Sets A–F (skips when data absent). HTML report attached. " +
+        "Advisory at export — fix data at import/close for production actuals.";
       if (blocked) {
-        message += "\n\nCustomer publish/export blocked until resolved.";
-        if (options.downloadReport !== false) {
-          try {
-            downloadTieOutReport(result);
-          } catch (err) {
-            /* ignore */
-          }
-        }
+        message += "\n\nforceBlock: publish/export blocked until resolved.";
       } else {
-        message += "\n\nDemo/offline path: warning only (not hard-blocked).";
+        message += "\n\nExport/promote proceeds; review the companion HTML report.";
+      }
+      if (options.downloadReport !== false) {
+        try {
+          downloadTieOutReport(result);
+        } catch (err) {
+          /* ignore */
+        }
       }
     }
     return {
       ok: !blocked,
       blocked: blocked,
+      status: status,
+      advisory: !result.passed && !blocked,
       result: result,
       message: message,
       reportHtml: reportHtml,

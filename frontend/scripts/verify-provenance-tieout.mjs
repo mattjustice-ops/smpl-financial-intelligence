@@ -1,5 +1,5 @@
 /**
- * Regression: DOM provenance helpers + client A–F runTieOut / HTML report / publish gate.
+ * Regression: DOM provenance helpers + client A–F runTieOut / HTML report / advisory gate.
  * Run from frontend/: node scripts/verify-provenance-tieout.mjs
  */
 import fs from "fs";
@@ -67,9 +67,19 @@ const sandbox = {
           this._on = true;
         },
       },
+      appendChild() {},
+      removeChild() {},
     },
     readyState: "complete",
     addEventListener() {},
+    createElement() {
+      return {
+        href: "",
+        download: "",
+        click() {},
+        style: {},
+      };
+    },
     querySelectorAll(sel) {
       if (sel === ".kpi") return [kpi];
       if (sel === "[data-metric]") return kpiVal.getAttribute("data-metric") ? [kpiVal] : [];
@@ -77,6 +87,17 @@ const sandbox = {
       if (sel === ".smpl-audit-tag") return [];
       return [];
     },
+  },
+  Blob: class Blob {
+    constructor(parts) {
+      this.size = parts.reduce((n, p) => n + String(p).length, 0);
+    }
+  },
+  URL: {
+    createObjectURL() {
+      return "blob:test";
+    },
+    revokeObjectURL() {},
   },
   addEventListener() {},
   window: null,
@@ -217,6 +238,23 @@ sandbox.SMPL_OUTLOOK_PAYLOAD = {
   },
 };
 sandbox.SMPL_LIVE_OUTLOOK = true;
+
+// Forecast C5 (arr_eop/12 ≠ revenue) + F4 cash miss → soft after close, not hard FAIL
+sandbox.SMPL_OUTLOOK_PAYLOAD.baseline_engine["2026-07"].arr.arr_eop = 999999;
+sandbox.SMPL_OUTLOOK_PAYLOAD.TS_DATA.Forecast.cfs["2026-07"].beginning_cash = null;
+const softFc = P.runTieOut();
+check(
+  "forecast C5/F4 soft after close",
+  softFc.passed === true &&
+    (softFc.soft || []).some((s) => s.includes("C5")) &&
+    (softFc.soft || []).some((s) => s.includes("F4") || s.includes("beg_cash")),
+  JSON.stringify({ failures: softFc.failures, soft: softFc.soft }),
+);
+
+// Restore aligned forecast cash / C5 for pass fixture
+sandbox.SMPL_OUTLOOK_PAYLOAD.baseline_engine["2026-07"].arr.arr_eop = 14400;
+sandbox.SMPL_OUTLOOK_PAYLOAD.TS_DATA.Forecast.cfs["2026-07"].beginning_cash = 5000;
+
 const pass = P.runTieOut();
 check("runTieOut aligned pass", pass.passed === true, JSON.stringify(pass.failures));
 check(
@@ -227,25 +265,35 @@ check(
 const html = P.renderTieOutReportHtml(pass);
 check(
   "HTML tie-out report",
-  typeof html === "string" && html.includes("Client Data Tie-Out Report") && html.includes("APPROVED"),
+  typeof html === "string" && html.includes("Client Data Tie-Out Report") && html.includes("PASS"),
 );
 
-// Divergence > $1 → fail
+// Divergence > $1 on actuals → fail scoring
 sandbox.SMPL_OUTLOOK_PAYLOAD.SRC.actuals["2026-06"].revenue = 1050;
 const fail = P.runTieOut();
 check("runTieOut miss fails", fail.passed === false && fail.failures.some((f) => f.includes("revenue")));
 check(
-  "HTML report on fail",
-  (P.getLastTieOutHtml() || "").includes("BLOCKED"),
+  "HTML report on fail is WARN advisory",
+  (P.getLastTieOutHtml() || "").includes("WARN") && !(P.getLastTieOutHtml() || "").includes("BLOCKED —"),
 );
 
 const gateLive = P.gatePublish({ closeMonth: "2026-06", downloadReport: false });
-check("gatePublish live FAIL blocks", gateLive.blocked === true && gateLive.ok === false);
+check(
+  "gatePublish live FAIL is advisory (not blocked)",
+  gateLive.blocked === false && gateLive.ok === true && gateLive.status === "WARN" && gateLive.advisory === true,
+  JSON.stringify({ blocked: gateLive.blocked, ok: gateLive.ok, status: gateLive.status }),
+);
 check("gatePublish attaches reportHtml", typeof gateLive.reportHtml === "string" && gateLive.reportHtml.length > 50);
 
 sandbox.SMPL_LIVE_OUTLOOK = false;
 const gateDemo = P.gatePublish({ closeMonth: "2026-06", downloadReport: false });
 check("gatePublish demo FAIL warns only", gateDemo.blocked === false && gateDemo.ok === true);
+
+const gateForce = P.gatePublish({ closeMonth: "2026-06", downloadReport: false, forceBlock: true });
+check(
+  "gatePublish forceBlock still hard-blocks",
+  gateForce.blocked === true && gateForce.ok === false,
+);
 
 if (failed) {
   console.error("\n" + failed + " check(s) failed");
