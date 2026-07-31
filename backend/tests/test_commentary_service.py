@@ -339,15 +339,17 @@ def test_sparse_inputs_still_generate_valid_output() -> None:
     assert "EVIDENCE PACKAGE" in fake.calls[0]["user"]
 
 
-def test_sparse_inputs_strip_invented_numbers() -> None:
-    """Empty evidence + invented dollars → don't-know (P15 missing evidence)."""
+def test_sparse_inputs_keep_numbers_soft_warn_interactive() -> None:
+    """Interactive policy: empty evidence + $ claims soft-warn — do not nuke section."""
     from app.services.commentary.claim_verify import DONT_KNOW_NARRATIVE
 
     sparse = CommentaryInputs(period_label="May 2026", organization_name="Demo")
     response = _well_formed_response()
     fake = FakeLLMClient(response)
     out = generate_commentary(sparse, fake)
-    assert out.executive_summary.narrative == DONT_KNOW_NARRATIVE
+    # Board-trusted numbers: keep model narrative rather than full don't-know.
+    assert out.executive_summary.narrative != DONT_KNOW_NARRATIVE
+    assert out.executive_summary.narrative.strip()
 
 
 # ---------------------------------------------------------------------------

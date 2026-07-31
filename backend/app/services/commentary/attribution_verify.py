@@ -1,4 +1,4 @@
-"""P15 fail-closed attribution / driver claim verification.
+"""P15 attribution / driver claim verification.
 
 Numeric claim-verify catches invented dollars. This helper catches **right math,
 wrong causal story** — narrative that names an operational cause not present in
@@ -7,11 +7,15 @@ an engine-backed allowlist for the package.
 v1 scope:
   - Detect causal / attribution language (driven by, due to, because of, …).
   - Match asserted driver phrases against structured `allowed_drivers`.
-  - Fail-closed: unnamed or off-allowlist material drivers → don't-know / omit
-    (same spirit as claim_verify). Empty allowlist + causal claims → fail closed.
+  - Fail-closed or surgical strip: unnamed / off-allowlist drivers → omit.
+  - Forward-looking ("watch out", future impact) must ground in forecast /
+    pipeline allowlist evidence — inventing future drivers → strip clause.
+  - Empty allowlist + causal claims → fail closed / strip.
   - Numeric-only text with no causal language is unaffected.
 
-See docs/soc2/controls/ai_attribution_verify.md.
+Interactive surfaces (regenerate / Copilot / commentary generate) prefer
+surgical clause strip over nuking the whole answer. Deck Prompt 2/5 stay
+stricter. See docs/soc2/controls/ai_attribution_verify.md.
 """
 
 from __future__ import annotations
@@ -21,7 +25,12 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Iterable, Literal, Mapping, Sequence
 
-from app.services.commentary.claim_verify import CommentaryIntegrityError
+from app.services.commentary.claim_verify import (
+    CommentaryIntegrityError,
+    VerifyPolicy,
+    join_sentences,
+    split_sentences,
+)
 from app.services.commentary.schemas import CommentaryInputs, CommentaryOutput
 
 AttributionStatus = Literal[
@@ -30,12 +39,64 @@ AttributionStatus = Literal[
     "empty_allowlist",
     "unnamed_driver",
     "partial_allowlist",
+    "ungrounded_forward",
 ]
 
 DONT_KNOW_ATTRIBUTION = (
     "I don't know — one or more causal / driver claims in this section could not be "
     "verified against engine-backed attribution evidence for the current package. "
     "Unsupported attribution was omitted."
+)
+
+DONT_KNOW_FORWARD = (
+    "I don't know — one or more forward-looking / predictive claims in this section "
+    "could not be grounded in forecast or pipeline evidence for the current package. "
+    "Unsupported outlook was omitted."
+)
+
+# Sources / labels that count as forecast / pipeline grounding for predictive claims.
+_FORECAST_PIPELINE_HINTS = (
+    "forecast",
+    "pipeline",
+    "bookings",
+    "scenario",
+    "coverage",
+    "weighted",
+    "quota",
+    "outlook",
+    "opportunity",
+    "opportunities",
+)
+
+_FORWARD_CUE_RE = re.compile(
+    r"\b(?:"
+    r"watch\s+out|watch\s+for|looking\s+ahead|going\s+forward|"
+    r"next\s+(?:month|quarter|period)|"
+    r"will\s+(?:impact|drive|pressur\w*|increase|decrease|erode|improve|weigh|be)|"
+    r"expect(?:ed|s)?|forecast(?:s|ed|ing)?|"
+    r"pipeline\s+(?:will|coverage|risk|pressure)|"
+    r"risk\s+that|could\s+(?:impact|erode|drive|weigh)|"
+    r"projected|outlook"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_FORWARD_DRIVER_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:watch\s+out\s+for|watch\s+for|risk\s+(?:from|of)|pressure\s+from)\s+"
+        r"(.+?)(?=[.;:\n]|$)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bwill\s+(?:be\s+)?(?:driven by|due to|pressured by|impacted by)\s+"
+        r"(.+?)(?=[.;:\n]|$)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:expect(?:ed)?|projected|forecast(?:ed)?)\s+"
+        r"(?:to\s+be\s+)?(?:driven by|due to|from)\s+(.+?)(?=[.;:\n]|$)",
+        re.IGNORECASE,
+    ),
 )
 
 # Causal cue → capture the following driver phrase (light, deterministic).
@@ -430,17 +491,161 @@ def verify_text_attribution(
     return AttributionVerificationResult(checks=checks, allowlist_size=len(drivers))
 
 
+def _sentence_touches_failed_claim(sentence: str, failures: Sequence[AttributionCheck]) -> bool:
+    s = sentence.lower()
+    for check in failures:
+        phrase = (check.claim.phrase or "").strip().lower()
+        stated = (check.claim.stated or "").strip().lower()
+        if phrase and phrase in s:
+            return True
+        if stated and stated in s:
+            return True
+    return False
+
+
+def strip_failed_attribution_sentences(
+    text: str,
+    result: AttributionVerificationResult,
+    *,
+    empty_fallback: str = DONT_KNOW_ATTRIBUTION,
+) -> str:
+    """Remove only sentences that carry failed attribution / forward claims."""
+    if result.ok:
+        return text
+    failures = result.failures
+    kept = [
+        s
+        for s in split_sentences(text)
+        if not _sentence_touches_failed_claim(s, failures)
+    ]
+    joined = join_sentences(kept)
+    return joined if joined.strip() else empty_fallback
+
+
 def fail_closed_attribution_text(
     text: str,
     result: AttributionVerificationResult | None = None,
     *,
     allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None = None,
+    policy: VerifyPolicy = "strict",
 ) -> str:
+    """``strict`` → whole-text don't-know; ``interactive`` → surgical sentence strip."""
     if result is None:
         result = verify_text_attribution(text, allowlist)
     if result.ok:
         return text
+    if policy == "interactive":
+        return strip_failed_attribution_sentences(text, result)
     return DONT_KNOW_ATTRIBUTION
+
+
+def is_forecast_pipeline_driver(driver: AllowedDriver) -> bool:
+    blob = " ".join(
+        [
+            driver.id,
+            driver.label,
+            driver.source or "",
+            " ".join(driver.aliases),
+        ]
+    ).lower()
+    return any(h in blob for h in _FORECAST_PIPELINE_HINTS)
+
+
+def forecast_pipeline_allowlist(
+    allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+) -> list[AllowedDriver]:
+    return [d for d in normalize_allowlist(allowlist) if is_forecast_pipeline_driver(d)]
+
+
+def extract_forward_looking_claims(text: str) -> list[AttributionClaim]:
+    """Extract predictive / outlook driver phrases that need forecast/pipeline grounding."""
+    if not text or not text.strip():
+        return []
+    claims: list[AttributionClaim] = []
+    seen: set[str] = set()
+
+    def _add(stated: str, phrase: str, pattern: str) -> None:
+        cleaned = _clean_phrase(phrase)
+        if len(cleaned) < 2 or not re.search(r"[A-Za-z]{3,}", cleaned):
+            return
+        key = _normalize(cleaned)
+        if key in seen:
+            return
+        seen.add(key)
+        claims.append(
+            AttributionClaim(stated=stated.strip(), phrase=cleaned, pattern=pattern)
+        )
+
+    for pat in _FORWARD_DRIVER_PATTERNS:
+        for m in pat.finditer(text):
+            groups = [g for g in m.groups() if g]
+            for g in groups:
+                _add(m.group(0), g, "forward:" + pat.pattern[:40])
+
+    # Forward cue + existing causal extract in the same sentence.
+    for sentence in split_sentences(text):
+        if not _FORWARD_CUE_RE.search(sentence):
+            continue
+        for claim in extract_attribution_claims(sentence):
+            key = _normalize(claim.phrase)
+            if key in seen:
+                continue
+            seen.add(key)
+            claims.append(
+                AttributionClaim(
+                    stated=claim.stated,
+                    phrase=claim.phrase,
+                    pattern="forward+causal:" + claim.pattern[:32],
+                )
+            )
+    return claims
+
+
+def verify_text_forward_looking(
+    text: str,
+    allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+) -> AttributionVerificationResult:
+    """Forward-looking driver claims must match forecast/pipeline allowlist entries."""
+    fp_drivers = forecast_pipeline_allowlist(allowlist)
+    claims = extract_forward_looking_claims(text)
+    checks: list[AttributionCheck] = []
+    for claim in claims:
+        if not fp_drivers:
+            checks.append(
+                AttributionCheck(claim=claim, status="ungrounded_forward")
+            )
+            continue
+        hit = _match_claim(claim, fp_drivers)
+        if hit.status == "pass":
+            checks.append(hit)
+        else:
+            checks.append(
+                AttributionCheck(
+                    claim=claim,
+                    status="ungrounded_forward",
+                    matched_driver_id=hit.matched_driver_id,
+                )
+            )
+    return AttributionVerificationResult(checks=checks, allowlist_size=len(fp_drivers))
+
+
+def apply_forward_looking_policy_to_text(
+    text: str,
+    allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+    *,
+    policy: VerifyPolicy = "interactive",
+) -> tuple[str, AttributionVerificationResult]:
+    result = verify_text_forward_looking(text, allowlist)
+    if result.ok:
+        return text, result
+    if policy == "interactive":
+        return (
+            strip_failed_attribution_sentences(
+                text, result, empty_fallback=DONT_KNOW_FORWARD
+            ),
+            result,
+        )
+    return DONT_KNOW_FORWARD, result
 
 
 def normalize_allowlist(
@@ -929,27 +1134,55 @@ def verify_commentary_attribution(
     return verify_text_attribution("\n".join(blobs), allowlist)
 
 
+def _apply_story_policy_to_text(
+    text: str,
+    allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+    *,
+    policy: VerifyPolicy,
+) -> tuple[str, list[AttributionCheck]]:
+    """Attribution + forward-looking policy for one narrative blob."""
+    checks: list[AttributionCheck] = []
+    local = verify_text_attribution(text, allowlist)
+    checks.extend(local.checks)
+    fwd = verify_text_forward_looking(text, allowlist)
+    checks.extend(fwd.checks)
+    out = text
+    if policy == "interactive":
+        if not local.ok:
+            out = strip_failed_attribution_sentences(out, local)
+        if out not in (DONT_KNOW_ATTRIBUTION, DONT_KNOW_FORWARD) and not fwd.ok:
+            out = strip_failed_attribution_sentences(
+                out, fwd, empty_fallback=DONT_KNOW_FORWARD
+            )
+        return out, checks
+    if not local.ok:
+        return DONT_KNOW_ATTRIBUTION, checks
+    if not fwd.ok:
+        return DONT_KNOW_FORWARD, checks
+    return text, checks
+
+
 def apply_fail_closed_attribution_to_commentary(
     output: CommentaryOutput,
     allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+    *,
+    policy: VerifyPolicy = "strict",
 ) -> tuple[CommentaryOutput, AttributionVerificationResult]:
-    """Strip / don't-know sections whose causal claims fail allowlist verify."""
-    overall = verify_commentary_attribution(output, allowlist)
-    if overall.ok:
-        return output, overall
-
+    """Strip bad causal / ungrounded forward claims; prefer surgical strip when interactive."""
     data = output.model_dump(mode="python")
     drivers = normalize_allowlist(allowlist)
+    all_checks: list[AttributionCheck] = []
 
     def _rewrite_section(key: str) -> None:
         section = data[key]
-        text_blob = section.get("narrative", "") + "\n" + "\n".join(
-            c.get("value", "") for c in (section.get("citations") or [])
+        narr, checks = _apply_story_policy_to_text(
+            section.get("narrative", ""), drivers, policy=policy
         )
-        local = verify_text_attribution(text_blob, drivers)
-        if not local.ok:
-            section["narrative"] = DONT_KNOW_ATTRIBUTION
-            section["citations"] = []
+        all_checks.extend(checks)
+        if narr != section.get("narrative", ""):
+            section["narrative"] = narr
+            if narr in (DONT_KNOW_ATTRIBUTION, DONT_KNOW_FORWARD) and policy != "interactive":
+                section["citations"] = []
 
     for key in (
         "executive_summary",
@@ -962,29 +1195,29 @@ def apply_fail_closed_attribution_to_commentary(
 
     cleaned_risks = []
     for item in data.get("risks_and_opportunities") or []:
-        local = verify_text_attribution(
-            f"{item.get('description', '')}\n{item.get('evidence', '')}",
-            drivers,
-        )
-        if local.ok:
+        desc = item.get("description", "")
+        rewritten, checks = _apply_story_policy_to_text(desc, drivers, policy=policy)
+        all_checks.extend(checks)
+        if rewritten == desc:
             cleaned_risks.append(item)
-        else:
+        elif rewritten in (DONT_KNOW_ATTRIBUTION, DONT_KNOW_FORWARD) and policy != "interactive":
             cleaned_risks.append(
                 {
                     **item,
-                    "description": DONT_KNOW_ATTRIBUTION,
+                    "description": rewritten,
                     "evidence": "Unverified attribution claim omitted (P15 fail-closed).",
                 }
             )
+        else:
+            cleaned_risks.append({**item, "description": rewritten})
     data["risks_and_opportunities"] = cleaned_risks
 
     cleaned_qs = []
     for item in data.get("followup_questions") or []:
-        local = verify_text_attribution(
-            f"{item.get('question', '')}\n{item.get('rationale', '')}",
-            drivers,
-        )
-        if local.ok:
+        blob = f"{item.get('question', '')}\n{item.get('rationale', '')}"
+        local = verify_text_attribution(blob, drivers)
+        all_checks.extend(local.checks)
+        if local.ok or policy == "interactive":
             cleaned_qs.append(item)
         else:
             cleaned_qs.append(
@@ -996,7 +1229,10 @@ def apply_fail_closed_attribution_to_commentary(
             )
     data["followup_questions"] = cleaned_qs
 
-    return CommentaryOutput.model_validate(data), overall
+    return CommentaryOutput.model_validate(data), AttributionVerificationResult(
+        checks=all_checks,
+        allowlist_size=len(drivers),
+    )
 
 
 def verify_nested_commentary_attribution(
@@ -1117,18 +1353,19 @@ def build_attribution_package_from_deck_payload(
 def apply_fail_closed_attribution_to_bullet_list(
     bullets: list[str],
     allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
+    *,
+    policy: VerifyPolicy = "strict",
 ) -> tuple[list[str], AttributionVerificationResult]:
-    """Per-bullet don't-know rewrite for board slide regenerate (mirrors claim_verify)."""
+    """Per-bullet story policy for board slide regenerate."""
     all_checks: list[AttributionCheck] = []
     drivers = normalize_allowlist(allowlist)
     cleaned: list[str] = []
     for bullet in bullets:
-        local = verify_text_attribution(bullet, drivers)
-        all_checks.extend(local.checks)
-        if local.ok:
-            cleaned.append(bullet)
-        else:
-            cleaned.append(DONT_KNOW_ATTRIBUTION)
+        rewritten, checks = _apply_story_policy_to_text(
+            bullet, drivers, policy=policy
+        )
+        all_checks.extend(checks)
+        cleaned.append(rewritten)
     return cleaned, AttributionVerificationResult(
         checks=all_checks,
         allowlist_size=len(drivers),

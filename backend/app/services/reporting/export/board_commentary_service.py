@@ -937,6 +937,7 @@ def enrich_slide_with_ai(
         # P15: post-LLM numeric claim verify against slide payload evidence.
         from app.services.commentary.attribution_verify import (
             DONT_KNOW_ATTRIBUTION,
+            DONT_KNOW_FORWARD,
             apply_fail_closed_attribution_to_bullet_list,
             build_attribution_package_from_deck_payload,
             build_attribution_package_from_text_blob,
@@ -952,10 +953,13 @@ def enrich_slide_with_ai(
             from app.services.commentary.claim_verify import evidence_values_from_text_blob
 
             evidence = {**evidence, **evidence_values_from_text_blob(interactive_freeze)}
-        bullets, claim_result = apply_fail_closed_to_bullet_list(bullets, evidence)
+        # Interactive: board numbers trusted — warn on unmatched $/%, do not wipe bullets.
+        bullets, claim_result = apply_fail_closed_to_bullet_list(
+            bullets, evidence, policy="interactive"
+        )
         if not claim_result.ok:
             logger.warning(
-                "P15 board slide regenerate claim-verify stripped bullets on %s: %s",
+                "P15 board slide regenerate claim-verify soft-warn on %s: %s",
                 slide_key,
                 claim_result.summary(),
             )
@@ -984,11 +988,11 @@ def enrich_slide_with_ai(
                 ],
             }
         bullets, attr_result = apply_fail_closed_attribution_to_bullet_list(
-            bullets, attribution
+            bullets, attribution, policy="interactive"
         )
         if not attr_result.ok:
             logger.warning(
-                "P15 board slide regenerate attribution-verify stripped bullets on %s: %s",
+                "P15 board slide regenerate attribution/forward strip on %s: %s",
                 slide_key,
                 attr_result.summary(),
             )
@@ -1011,18 +1015,20 @@ def enrich_slide_with_ai(
             org_id=getattr(bundle, "organization_id", None),
         )
         bullets, cite_result = apply_fail_closed_citations_to_bullet_list(
-            bullets, slide_sources
+            bullets, slide_sources, policy="interactive"
         )
         if not cite_result.ok:
             logger.warning(
-                "P15 board slide regenerate citation-verify stripped bullets on %s: %s",
+                "P15 board slide regenerate citation-verify soft-warn on %s: %s",
                 slide_key,
                 cite_result.summary(),
             )
-        # If every bullet was wiped, hard-fail closed to don't-know narrative (no invented deck text).
-        wiped = {DONT_KNOW_NARRATIVE, DONT_KNOW_ATTRIBUTION, DONT_KNOW_CITATION}
+        # Only story gates can wipe bullets interactive; numeric/citation soft-warn.
+        wiped = {DONT_KNOW_ATTRIBUTION, DONT_KNOW_FORWARD, DONT_KNOW_NARRATIVE, DONT_KNOW_CITATION}
         if bullets and all(b in wiped for b in bullets):
-            return SlideCommentary(what_happened=DONT_KNOW_NARRATIVE, bullets=[DONT_KNOW_NARRATIVE])
+            return SlideCommentary(
+                what_happened=DONT_KNOW_ATTRIBUTION, bullets=[DONT_KNOW_ATTRIBUTION]
+            )
         narrative = format_key_takeaway_bullets(bullets)
         if not narrative:
             return base

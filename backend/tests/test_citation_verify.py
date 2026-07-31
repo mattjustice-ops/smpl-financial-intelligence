@@ -124,6 +124,32 @@ def test_bullet_list_citation_soft_strip() -> None:
     assert cleaned[1] == DONT_KNOW_CITATION
 
 
+def test_interactive_citation_policy_keeps_uncited_money() -> None:
+    sources = {
+        "arr_waterfall.ending_arr": {
+            "source_type": "WAREHOUSE",
+            "table": "arr_waterfall",
+            "column": "ending_arr",
+            "path": "arr_waterfall.ending_arr",
+        }
+    }
+    text = "Revenue hit $7,400,000."
+    missing = verify_text_citations(text, sources)
+    assert not missing.ok
+    assert fail_closed_citation_text(text, missing, policy="interactive") == text
+    assert fail_closed_citation_text(text, missing, policy="strict") == DONT_KNOW_CITATION
+
+    bullets = [
+        "Ending ARR closed at $86,100,000 (arr_waterfall.ending_arr).",
+        "Revenue hit $7,400,000.",
+    ]
+    cleaned, result = apply_fail_closed_citations_to_bullet_list(
+        bullets, sources, policy="interactive"
+    )
+    assert not result.ok
+    assert "7,400,000" in cleaned[1]
+
+
 def test_warehouse_tags_on_sources_honest_nulls_and_populated() -> None:
     pkg = build_evidence_package(
         {

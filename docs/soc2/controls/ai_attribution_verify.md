@@ -4,7 +4,9 @@
 > GTM attribution engine. Copilot uses **structured** packages from the same
 > freeze/live metric structures as the metrics blob (plus blob-label supplement).
 > Citation verify + `_sources` warehouse tags: [ai_claim_verify.md](./ai_claim_verify.md).  
-> Numeric claim-verify remains required and is **not sufficient** alone.  
+> Numeric claim-verify on **interactive** surfaces (regenerate / Copilot / commentary
+> generate) is soft-warn only — board numbers are trusted; this helper is the
+> primary gate for **what happened** and **forward-looking** story quality.  
 > Linked from [README.md](./README.md) · Policy: [P15](../policies/P15_ai_llm_data_handling.md) §4.7 / §4.8
 > · Production FE↔Board: [fe_board_single_source.md](./fe_board_single_source.md)
 
@@ -55,7 +57,9 @@ Treat as an **attribution claim** when narrative asserts that a material metric 
 | Timing / one-time | "Cash dip from **annual prepay timing**" |
 | Negation / exclusion | "Churn was **not** logo loss; it was contraction" |
 
-Non-claims (out of scope for v1): pure forward opinion ("we should hire"), process advice without a stated causal link to a closed-period figure, or restating a metric with no cause.
+Non-claims (out of scope for closed-period attribution): pure process advice without a stated causal link ("we should hire"), or restating a metric with no cause.
+
+**Forward-looking / predictive** ("watch out", "will be driven by", next-quarter outlook that names a driver) must match the **forecast / pipeline** subset of `allowed_drivers` (source/id/label hints: forecast, pipeline, bookings, scenario, coverage, weighted, quota, outlook, opportunity). Invented future drivers → surgical strip / don't-know that clause.
 
 ---
 
@@ -90,13 +94,13 @@ Non-claims (out of scope for v1): pure forward opinion ("we should hire"), proce
 
 | Surface | v1 behavior |
 |---------|-------------|
-| `/commentary/generate` | Soft strip / don't-know on section with unverified driver |
-| MD&A Prompt 2 | Soft strip nested strings; **hard block** if entire variance sheet is attribution don't-know |
-| Prompt 5 deck | Soft strip bad string literals; **hard block** if every attribution check failed |
-| Board slide regenerate | Per-bullet attribution strip → don't-know; all-wiped → don't-know narrative |
-| Copilot | Structured allowlist → don't-know answer when causal claims fail |
+| `/commentary/generate` | **Interactive:** surgical strip of bad causal / ungrounded forward sentences (prefer keep good clauses) |
+| MD&A Prompt 2 | Soft strip nested strings; **hard block** if entire variance sheet is attribution don't-know (**strict** deck) |
+| Prompt 5 deck | Soft strip bad string literals; **hard block** if every attribution check failed (**strict**) |
+| Board slide regenerate | **Interactive:** per-bullet surgical strip; all-story-wiped → don't-know narrative |
+| Copilot | **Interactive:** surgical strip of bad causal / forward clauses; full don't-know only if nothing remains |
 
-Never ship "correct number + invented cause" on the wired customer-visible paths above.
+Never ship "correct number + invented cause" or invented forward drivers on the wired customer-visible paths above. Interactive surfaces no longer nuke whole answers for unmatched $/% alone — see [ai_claim_verify.md](./ai_claim_verify.md).
 
 ---
 

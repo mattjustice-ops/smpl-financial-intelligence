@@ -30,11 +30,11 @@ def generate_commentary(
 ) -> CommentaryOutput:
     """Generate validated CFO commentary from structured finance inputs.
 
-    P15 fail-closed: after schema validation, (1) material numeric claims are
-    checked against the evidence package, (2) causal / driver claims are
-    checked against the attribution allowlist, then (3) material numbers must
-    cite ``_sources`` keys (or table.column / formula_id / path). Mismatched
-    or unverifiable claims are omitted / replaced with don't-know — never emitted.
+    Interactive policy (board-trusted numbers): after schema validation,
+    (1) numeric claim_verify and citation_verify warn/log only — do not replace
+    whole sections for unmatched $/% or missing cites alone; (2) causal /
+    attribution and forward-looking claims are surgically stripped when they
+    fail engine allowlist / forecast-pipeline grounding.
 
     Raises `LLMError` if the model returns malformed JSON or a payload that
     doesn't conform to `CommentaryOutput`.
@@ -62,28 +62,30 @@ def generate_commentary(
             f"{exc.errors()[:3]}"
         ) from exc
 
-    verified, result = apply_fail_closed_to_commentary(output, evidence)
+    verified, result = apply_fail_closed_to_commentary(
+        output, evidence, policy="interactive"
+    )
     if not result.ok:
         logger.warning(
-            "P15 claim-verify fail-closed on /commentary/generate: %s",
+            "P15 claim-verify soft-warn on /commentary/generate (numbers trusted): %s",
             result.summary(),
         )
 
     verified, attr_result = apply_fail_closed_attribution_to_commentary(
-        verified, attribution
+        verified, attribution, policy="interactive"
     )
     if not attr_result.ok:
         logger.warning(
-            "P15 attribution-verify fail-closed on /commentary/generate: %s",
+            "P15 attribution/forward strip on /commentary/generate: %s",
             attr_result.summary(),
         )
 
     verified, cite_result = apply_fail_closed_citations_to_commentary(
-        verified, evidence
+        verified, evidence, policy="interactive"
     )
     if not cite_result.ok:
         logger.warning(
-            "P15 citation-verify fail-closed on /commentary/generate: %s",
+            "P15 citation-verify soft-warn on /commentary/generate (numbers trusted): %s",
             cite_result.summary(),
         )
     return verified

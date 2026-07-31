@@ -269,6 +269,88 @@ def test_apply_fail_closed_attribution_to_bullet_list() -> None:
     assert "86.1" in bullets[2]
 
 
+def test_interactive_attribution_surgical_strip_keeps_good_sentences() -> None:
+    from app.services.commentary.attribution_verify import (
+        apply_fail_closed_attribution_to_bullet_list,
+        fail_closed_attribution_text,
+        verify_text_attribution,
+    )
+
+    allowlist = [
+        AllowedDriver(
+            id="expansion",
+            label="Expansion",
+            aliases=("expansion", "expansion arr"),
+        )
+    ]
+    text = (
+        "Ending ARR closed at $86.1M. "
+        "Growth was driven by three enterprise upsells. "
+        "Expansion remained the largest bridge component."
+    )
+    result = verify_text_attribution(text, allowlist)
+    assert not result.ok
+    cleaned = fail_closed_attribution_text(text, result, policy="interactive")
+    assert "86.1" in cleaned
+    assert "three enterprise upsells" not in cleaned.lower()
+    assert cleaned != DONT_KNOW_ATTRIBUTION
+
+    bullets, bres = apply_fail_closed_attribution_to_bullet_list(
+        [
+            "Ending ARR closed at $86.1M. ARR grew due to three enterprise upsells.",
+            "Net new ARR growth was driven by expansion.",
+        ],
+        allowlist,
+        policy="interactive",
+    )
+    assert not bres.ok
+    assert "86.1" in bullets[0]
+    assert "three enterprise upsells" not in bullets[0].lower()
+    assert "expansion" in bullets[1].lower()
+
+
+def test_forward_looking_requires_forecast_pipeline_grounding() -> None:
+    from app.services.commentary.attribution_verify import (
+        DONT_KNOW_FORWARD,
+        apply_forward_looking_policy_to_text,
+        verify_text_forward_looking,
+    )
+
+    allowlist = [
+        AllowedDriver(
+            id="expansion",
+            label="Expansion",
+            source="comparison_waterfalls.arr.expansion",
+            aliases=("expansion",),
+        ),
+        AllowedDriver(
+            id="pipeline_coverage",
+            label="Pipeline coverage",
+            source="pipeline_changes.coverage",
+            aliases=("pipeline coverage", "coverage"),
+        ),
+    ]
+    invented = "Watch out for logo-loss churn next quarter."
+    bad = verify_text_forward_looking(invented, allowlist)
+    assert not bad.ok
+    stripped, _ = apply_forward_looking_policy_to_text(
+        invented, allowlist, policy="interactive"
+    )
+    assert stripped == DONT_KNOW_FORWARD
+
+    grounded = (
+        "Ending ARR closed at $86.1M. "
+        "Watch out for pipeline coverage pressure next quarter."
+    )
+    ok = verify_text_forward_looking(grounded, allowlist)
+    assert ok.ok
+    kept, _ = apply_forward_looking_policy_to_text(
+        grounded, allowlist, policy="interactive"
+    )
+    assert "86.1" in kept
+    assert "pipeline coverage" in kept.lower()
+
+
 def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() -> None:
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,

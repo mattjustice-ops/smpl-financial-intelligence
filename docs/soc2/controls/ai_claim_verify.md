@@ -13,19 +13,27 @@ Use this page to confirm what shipped, what is still open, and where to open the
 
 | Path | Behavior | Code |
 |------|----------|------|
-| `/api/v1/commentary/generate` | Numeric verify → attribution verify → **citation verify** → soft strip / don't-know | `service.py`, `citation_verify.py`, `claim_verify.py` |
-| MD&A Prompt 2 | Nested string numeric + attribution + **citation** walk; hard block if variance fully wiped | `prompt2_mda_package.py` |
-| MD&A Prompt 5 deck | Evidence + `_sources` + attribution in prompt; post-LLM verify of **$ / % / Nx in PPTX string literals**; numeric **hard block**; attribution + **citation soft-strip / hard-block when fully wiped** | `prompt5_deck.py` |
-| Board slide regenerate | Flatten slide payload → per-bullet numeric + attribution + **citation** → don't-know on fail; all-bad → don't-know narrative | `board_commentary_service.py` |
-| Board Copilot | Numeric + attribution + **citation** on answer; live packages carry org/loaded_at tags | `board_platform_routes.py` |
+| `/api/v1/commentary/generate` | **Interactive policy:** numeric + citation **soft-warn** (board numbers trusted); attribution + forward-looking **surgical strip** | `service.py`, `citation_verify.py`, `claim_verify.py`, `attribution_verify.py` |
+| MD&A Prompt 2 | Nested string numeric + attribution + **citation** walk; hard block if variance fully wiped (**strict** — deck publish) | `prompt2_mda_package.py` |
+| MD&A Prompt 5 deck | Evidence + `_sources` + attribution in prompt; post-LLM verify of **$ / % / Nx in PPTX string literals**; numeric **hard block**; attribution + **citation soft-strip / hard-block when fully wiped** (**strict**) | `prompt5_deck.py` |
+| Board slide regenerate | **Interactive:** numeric + citation soft-warn; attribution / forward surgical strip; all-story-wiped → don't-know | `board_commentary_service.py` |
+| Board Copilot | **Interactive:** numeric + citation soft-warn; attribution + forward surgical strip | `board_platform_routes.py` |
 | **`_sources` warehouse tags** | Every source tag includes `org_id` / `loaded_at` / `is_final` (honest nulls when unknown) | `claim_verify.build_source_record` |
-| **Post-LLM citation check** | Material money/%/Nx must cite `_sources` key, `table.column`, `formula_id`, or path | `citation_verify.py` |
+| **Post-LLM citation check** | Material money/%/Nx should cite `_sources`; **strict** emit paths don't-know / hard-block; **interactive** warn only | `citation_verify.py` |
 | **DOM `data-source` overlay** | Board/FE material KPIs tagged; prefers hydrate `_sources`; catalog fallback; `Ctrl+Shift+A` audit | `smpl-provenance.js` |
-| **Client `runTieOut` advisory export** | Client Rule Sets A–F when local data exists; FAIL → **WARN** + HTML companion; MD&A export + FINAL promote **proceed** (hard actuals ID at import/close). Forecast C5/F4 soft after close. AI narrative gates stay fail-closed | `smpl-provenance.js`, `board-hydrate.js` |
+| **Client `runTieOut` advisory export** | Client Rule Sets A–F when local data exists; FAIL → **WARN** + HTML companion; MD&A export + FINAL promote **proceed** (hard actuals ID at import/close). Forecast C5/F4 soft after close | `smpl-provenance.js`, `board-hydrate.js` |
 
-Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.py`
+Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.py` (`VerifyPolicy`: `strict` \| `interactive`)
 
-**Attribution (non-numeric) on the same paths:** see [ai_attribution_verify.md](./ai_attribution_verify.md) (includes multi-driver AND rule).
+**Attribution (non-numeric) on the same paths:** see [ai_attribution_verify.md](./ai_attribution_verify.md) (includes multi-driver AND + forward/pipeline grounding).
+
+### Product split (honest)
+
+| Surface | Numbers ($ / % / cites) | Story (what happened + outlook) |
+|---------|-------------------------|----------------------------------|
+| Commentary generate, board regenerate, Copilot | Trusted — verify + **warn/log**; do **not** replace the whole answer for unmatched $/% or missing cites alone (demo / incomplete evidence packages) | Attribution fail-closed via **surgical clause strip**; forward-looking must ground in **forecast / pipeline** allowlist |
+| Prompt 2 / Prompt 5 deck | Keep **strict** fail-closed / hard-block (publish surfaces) | Keep existing strip / hard-block when fully wiped |
+| Tie-out identification | Hard gate remains an **import/close** concern — not regenerate/Copilot | — |
 
 ---
 
@@ -34,9 +42,9 @@ Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.p
 1. Build evidence values + `_sources` (with warehouse tags).
 2. Prompt embeds the same package.
 3. Extract numeric claims; match within **$1.00** / ratio tolerances.
-4. Attribution allowlist check (multi-driver AND → all required).
+4. Attribution allowlist check (multi-driver AND → all required); forward-looking → forecast/pipeline subset.
 5. Citation check: each material money/%/Nx cites a `_sources` token (inline or `citations[].label`).
-6. Fail closed → don't-know / omit (Prompt 2 / Prompt 5 may hard-block).
+6. Apply policy: **interactive** soft-warns numeric/citation and surgically strips bad story clauses; **strict** don't-know / hard-block (Prompt 2 / Prompt 5).
 
 ### Agreed citation formats
 
@@ -63,11 +71,11 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 
 | Surface | Status | Notes |
 |---------|--------|-------|
-| Commentary generate API | **Live** | Numeric → attribution → citation; section-level strip; soft log warning; still returns package with don't-know sections |
-| MD&A Prompt 2 | **Live (harder)** | Matrix mismatch → hard block; post-LLM strip + citation; fully unverifiable variance sheet → hard block |
-| Prompt 5 deck generation | **Live (hard block)** | String-literal $/%/Nx vs deck payload; invent → block emit. Attribution + **citation** soft-strip; fully wiped → hard block. Chart array / layout coords not scanned |
-| Board slide regenerate | **Live (soft strip)** | Per-bullet don't-know for numeric / attribution / **citation**; all-unverifiable → don't-know narrative |
-| Copilot / chat paths | **Live (structured + blob supplement)** | Evidence/attribution/citation from bundle/TS/cash (+ frozen packages); fail-closed don't-know |
+| Commentary generate API | **Live (interactive)** | Numeric + citation soft-warn; attribution / forward surgical strip |
+| MD&A Prompt 2 | **Live (harder / strict)** | Matrix mismatch → hard block; post-LLM strip + citation; fully unverifiable variance sheet → hard block |
+| Prompt 5 deck generation | **Live (hard block / strict)** | String-literal $/%/Nx vs deck payload; invent → block emit. Attribution + **citation** soft-strip; fully wiped → hard block. Chart array / layout coords not scanned |
+| Board slide regenerate | **Live (interactive)** | Numeric + citation soft-warn; attribution / forward surgical strip; all-story-wiped → don't-know |
+| Copilot / chat paths | **Live (interactive)** | Structured packages + blob supplement; numeric/citation soft-warn; story strip |
 | `_sources` + warehouse tags | **Live (v1 + honest nulls)** | Catalog + ENGINE_PATH on primary builders; freeze: org + loaded_at + is_final=true; live Copilot: org + loaded_at + is_final=false (nulls when unknown). DOM overlay consumes when hydrate includes `_sources` |
 | Driver / attribution claim verify (non-numeric) | **Live (primary paths)** | Deal-count / logo / dominance + multi-driver AND — see [ai_attribution_verify.md](./ai_attribution_verify.md) |
 | Production FE↔Board single-source | **Confirmed + hydrate residue fix** | Shared outlook API/builder; merge replace + prune closed Actuals — [fe_board_single_source.md](./fe_board_single_source.md) |
@@ -93,10 +101,10 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 
 | File | Covers |
 |------|--------|
-| `backend/tests/test_claim_verify.py` | `TOL_ACTUALS=$1`; extract money/%/ratio; match pass; invented → don't-know; empty evidence → missing; tolerance cannot loosen; section-only rewrite; generate embeds evidence + strips invented; variance tie-out `fail_closed=True` raises; PPTX script string-literal verify; bullet list strip; blob evidence; **Copilot structured evidence + `_sources` / warehouse tags**; commentary package `_sources` |
-| `backend/tests/test_citation_verify.py` | Inline/structured citation; warehouse tags; material money/%/Nx must cite `_sources` token; **PPTX soft-strip + hard-block-when-fully-wiped**; **bullet citation strip** |
-| `backend/tests/test_attribution_verify.py` | Causal extract; allowed driver pass; invented driver fail-closed; empty allowlist strips causal; numeric-only unaffected; commentary generate embeds attribution package + strips invented cause; deck allowlist; bullet attribution strip; PPTX soft-strip + hard-block-when-fully-wiped; Copilot blob allowlist; **Copilot structured waterfall/cash attribution**; **deal-count / logo / dominance**; **multi-driver AND/comma require-all** |
-| `backend/tests/test_commentary_service.py` | Sparse inputs + invented dollars → don't-know; evidence package in prompt; happy path with `_sources` cites |
+| `backend/tests/test_claim_verify.py` | `TOL_ACTUALS=$1`; extract money/%/ratio; match pass; invented → don't-know (**strict**); **interactive keeps unmatched $**; empty evidence → missing; tolerance cannot loosen; section-only rewrite; generate embeds evidence + keeps numbers interactive; variance tie-out `fail_closed=True` raises; PPTX script string-literal verify; bullet list strip; blob evidence; **Copilot structured evidence + `_sources` / warehouse tags**; commentary package `_sources` |
+| `backend/tests/test_citation_verify.py` | Inline/structured citation; warehouse tags; material money/%/Nx must cite `_sources` token (**strict**); **interactive keeps uncited $**; **PPTX soft-strip + hard-block-when-fully-wiped**; **bullet citation strip** |
+| `backend/tests/test_attribution_verify.py` | Causal extract; allowed driver pass; invented driver fail-closed; empty allowlist strips causal; numeric-only unaffected; commentary generate embeds attribution package + strips invented cause; deck allowlist; bullet attribution strip; **interactive surgical strip**; **forward-looking forecast/pipeline grounding**; PPTX soft-strip + hard-block-when-fully-wiped; Copilot blob allowlist; **Copilot structured waterfall/cash attribution**; **deal-count / logo / dominance**; **multi-driver AND/comma require-all** |
+| `backend/tests/test_commentary_service.py` | Sparse inputs keep numbers under interactive policy; evidence package in prompt; happy path with `_sources` cites |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | Production outlook `TS_DATA.Actual` ↔ `SRC.actuals` within $1; divergence / one-side-missing fail |
 | `frontend/scripts/verify-outlook-hydrate.mjs` | Partial live hydrate replaces period rows + prunes closed demo Actual residue (no reseed) |
 | `frontend/scripts/verify-provenance-tieout.mjs` | `data-source` attrs; annotateDom; client A–F runTieOut pass/fail; HTML WARN advisory; export not blocked; C5/F4 forecast soft; `forceBlock` escape hatch |
