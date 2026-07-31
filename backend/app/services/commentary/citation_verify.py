@@ -289,6 +289,84 @@ def fail_closed_citation_text(
     return DONT_KNOW_CITATION
 
 
+def apply_fail_closed_citations_to_bullet_list(
+    bullets: list[str],
+    sources: Mapping[str, Any] | None,
+) -> tuple[list[str], CitationVerificationResult]:
+    """Per-bullet don't-know rewrite for board slide regenerate (mirrors attribution)."""
+    all_checks: list[CitationCheck] = []
+    source_map = _sources_from_package_or_map(sources)
+    cleaned: list[str] = []
+    for bullet in bullets:
+        local = verify_text_citations(bullet, source_map)
+        all_checks.extend(local.checks)
+        if local.ok:
+            cleaned.append(bullet)
+        else:
+            cleaned.append(DONT_KNOW_CITATION)
+    return cleaned, CitationVerificationResult(
+        checks=all_checks, sources_size=len(source_map)
+    )
+
+
+def apply_fail_closed_citations_to_pptx_script(
+    script: str,
+    sources: Mapping[str, Any] | None,
+) -> tuple[str, CitationVerificationResult]:
+    """Soft-strip uncited material money/%/Nx inside PPTX JS string literals.
+
+    Layout / chart array code outside strings is ignored. Failed string literals
+    are replaced with DONT_KNOW_CITATION; callers may hard-block when every
+    citation check failed (see ``raise_if_pptx_citation_fully_unverifiable``).
+    """
+    from app.services.commentary.claim_verify import _JS_STRING_RE
+
+    source_map = _sources_from_package_or_map(sources)
+    all_checks: list[CitationCheck] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        quote = match.group(1)
+        raw = match.group(0)
+        inner = raw[1:-1]
+        inner_unesc = (
+            inner.replace(r"\'", "'")
+            .replace(r'\"', '"')
+            .replace(r"\n", " ")
+            .replace(r"\t", " ")
+        )
+        local = verify_text_citations(inner_unesc, source_map)
+        all_checks.extend(local.checks)
+        if local.ok:
+            return raw
+        escaped = (
+            DONT_KNOW_CITATION.replace("\\", "\\\\")
+            .replace(quote, f"\\{quote}")
+            .replace("\n", "\\n")
+        )
+        return f"{quote}{escaped}{quote}"
+
+    rewritten = _JS_STRING_RE.sub(_replace, script or "")
+    return rewritten, CitationVerificationResult(
+        checks=all_checks, sources_size=len(source_map)
+    )
+
+
+def raise_if_pptx_citation_fully_unverifiable(
+    result: CitationVerificationResult,
+) -> None:
+    """Hard-block Prompt 5 emit when every material citation check in the script failed."""
+    from app.services.commentary.claim_verify import CommentaryIntegrityError
+
+    if not result.checks:
+        return
+    if any(c.status == "pass" for c in result.checks):
+        return
+    raise CommentaryIntegrityError(
+        "P15 fail-closed: Prompt 5 / PPTX script had no verifiable _sources citations; "
+        "blocking deck emit. " + result.summary(),
+    )
+
+
 def verify_commentary_citations(
     output: CommentaryOutput,
     sources: Mapping[str, Any] | None,

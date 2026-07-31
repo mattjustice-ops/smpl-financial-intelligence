@@ -82,11 +82,12 @@ Board + Forecast Engine material KPIs attach `data-source` / `data-period` / `ti
 | Shared module | `frontend/public/shared/smpl-provenance.js` (+ canonical) |
 | Prefer hydrate `_sources` | `SMPLProvenance.ingestOutlook` reads `payload._sources` / `meta._sources` / `evidence_package._sources` when present; else field catalog |
 | Audit overlay | `Ctrl+Shift+A` / `Cmd+Shift+A` toggles inline source tags |
-| Client tie-out | `runTieOut()` — **partial** Rule C (TS↔SRC Actuals) + ARR A2/A3 when SRC has `arr_*`; **not** full Rule Sets A–F |
+| Client tie-out | `runTieOut()` — **client Rule Sets A–F** when SRC / TS_DATA / WF_TABLE / baseline_engine / display arrays exist; skips D2–D4 / E warehouse / B2 bank / F5 when structures absent |
+| HTML report | `renderTieOutReportHtml` / download on live publish FAIL — client checks only (not live warehouse SQL) |
 | Publish gate | Live hydrate + FAIL → block MD&A export (`board-hydrate.js`) and FINAL forecast promote; demo/offline warns only |
 | Regression | `npm run verify:provenance` |
 
-**Limitation:** Full warehouse-vs-DOM `runTieOut()` A–F and HTML tie-out report remain roadmap. Demo dual seeds stay mismatched on purpose — do not reseed.
+**Limitation:** Live warehouse SQL HTML report (`output/tieout_report_{org}_{month}.html` with per-cell warehouse queries) remains Matt/infra follow-up. Client A–F + client HTML report are the shippable gate. Demo dual seeds stay mismatched on purpose — do not reseed.
 
 ---
 
