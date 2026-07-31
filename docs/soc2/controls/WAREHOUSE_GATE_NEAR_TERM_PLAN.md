@@ -3,7 +3,7 @@
 > **Not SOC 2 certification.** Product integrity plan so blog / sales CTAs about
 > “calculate → validate → AI explains only validated evidence → fail closed”
 > match what actually ships.  
-> **Inventory date:** 2026-07-30 (post-merge of P15 integrity finish / client A–F).  
+> **Inventory date:** 2026-07-31 (export-time client A–F → advisory; hard ID at import/close).  
 > **Source of truth for live vs open:** [README.md](./README.md), [ai_claim_verify.md](./ai_claim_verify.md), [ai_attribution_verify.md](./ai_attribution_verify.md), [fe_board_single_source.md](./fe_board_single_source.md), [data_integrity_framework.md](./data_integrity_framework.md), [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md).  
 > **Policy:** [P15 §4.7 / §4.8](../policies/P15_ai_llm_data_handling.md)
 
@@ -16,10 +16,20 @@ by the engine/warehouse, **validated** by automated gates, and **AI only narrate
 validated evidence** — or the path **fails closed** (omit / don’t-know / hard-block).
 
 Today that story is **mostly true on primary AI paths**, **partially true on
-publish/tie-out**, and **not true** for the full normative framework (live
-warehouse SQL tie-out report, every chart datapoint cited at render time, etc.).
+tie-out** (hard identification belongs at **data import / ingest and close**, not
+when finance pulls MD&A presentations — export-time client A–F is **advisory**),
+and **not true** for the full normative framework (live warehouse SQL tie-out
+report, every chart datapoint cited at render time, etc.).
 This plan closes the gap that board-facing packages still care about — without
 pretending the entire integrity framework is done.
+
+### Product posture — where hard tie-out lives
+
+| Layer | Role |
+|-------|------|
+| **Import / ingest / close** | Hard fail-closed for production **actuals** (identification). Do not tell customers they can freely export/review when numbers don’t tie — **fix data at import first**, then use the platform freely. |
+| **Export / FINAL promote (client A–F)** | **Advisory**: always produce the deck / promote; download companion HTML report with PASS/WARN. Forecast months after `close_month` (esp. C5 / F4 cash) are **soft** — forecast will not fully tie like actuals. |
+| **AI P15 narrative** | Remains **fail-closed** (claim / attribution / citation) on wired commentary / MD&A / Copilot paths. |
 
 ---
 
@@ -46,7 +56,7 @@ demo HTML, and not a CPA-grade warehouse SQL report for every cell.
 | Gate type | Near-term “live everywhere” means |
 |-----------|-----------------------------------|
 | **Calculate** | Production Board + FE hydrate from one outlook builder / warehouse tables; TS↔SRC actuals aligned within **$1**; freeze packs bind MD&A / Copilot / export context where required |
-| **Validate (tie-out)** | Client `runTieOut` Rule Sets **A–F** (when local structures exist) **block** live MD&A export + FINAL forecast promote on FAIL; client HTML report downloaded on block; remaining warehouse-only checks (D2–D4 / E / B2 / F5 without tables) either wired with real data or explicitly **skipped with fail-closed policy** documented — not silently assumed PASS |
+| **Validate (tie-out)** | Hard production-actuals identification at **import/close** (near-term Phase 2 / ingest). Export-time client `runTieOut` A–F is **advisory**: MD&A export + FINAL promote **proceed**; companion HTML report on WARN; C5/F4 hard only for periods ≤ `close_month`, forecast soft. Warehouse-only checks (D2–D4 / E / B2 / F5) skipped honestly when data absent |
 | **Validate (AI numeric)** | `claim_verify.py` on commentary generate, MD&A Prompt 2, Prompt 5 (string literals), board regenerate, Copilot structured packages; `TOL_ACTUALS = $1.00` non-negotiable |
 | **Validate (attribution)** | `attribution_verify.py` on the same paths; multi-driver AND; empty allowlist + causal claim → fail closed |
 | **Validate (citation)** | `citation_verify.py` on the same paths; material money/%/Nx must cite `_sources` token / table.column / formula_id / path |
@@ -74,10 +84,10 @@ Labels: **LIVE** = fail-closed on that gate for that path · **PARTIAL** = real 
 | MD&A Prompt 5 deck | PARTIAL (freeze / deck evidence) | N/A | **LIVE** (hard block on string-literal $/%/Nx) | **LIVE** (soft-strip; hard-block if all fail) | **LIVE** (PPTX literals; soft-strip / hard-block when wiped) | **LIVE** from deck flatten | N/A |
 | Board slide regenerate | PARTIAL (slide + freeze blob) | N/A | **LIVE** (soft strip / don’t-know) | **LIVE** | **LIVE** (bullets) | PARTIAL (via flatten / freeze) | N/A |
 | Board Copilot | PARTIAL (bundle/TS/cash + freeze sections) | N/A | **LIVE** (structured + blob supplement) | **LIVE** | **LIVE** | **LIVE** (org/loaded_at; is_final=false live) | N/A |
-| Live MD&A export (Board) | LIVE hydrate path | **PARTIAL — LIVE client A–F** | via package generation above | via above | via above | PARTIAL (consumes when hydrate has `_sources`) | **PARTIAL — LIVE UI KPIs** |
-| FINAL forecast promote (FE) | LIVE hydrate path | **PARTIAL — LIVE client A–F** | N/A (UI promote) | N/A | N/A | PARTIAL | **PARTIAL — LIVE UI KPIs** |
+| Live MD&A export (Board) | LIVE hydrate path | **ADVISORY — client A–F + HTML** (does not block) | via package generation above | via above | via above | PARTIAL (consumes when hydrate has `_sources`) | **PARTIAL — LIVE UI KPIs** |
+| FINAL forecast promote (FE) | LIVE hydrate path | **ADVISORY — client A–F + HTML** (does not block) | N/A (UI promote) | N/A | N/A | PARTIAL | **PARTIAL — LIVE UI KPIs** |
 | Production FE ↔ Board hydrate | **LIVE** (shared outlook API/builder; residue prune) | N/A | N/A | N/A | N/A | PARTIAL (API does not always emit `_sources` for UI) | **PARTIAL** |
-| Client `runTieOut` A–F | Uses local SRC/TS/WF/engine/display | **PARTIAL** — skips D2–D4 / E warehouse / B2 bank / F5 without data | N/A | N/A | N/A | Prefers hydrate `_sources`; catalog fallback | Tied to overlay |
+| Client `runTieOut` A–F | Uses local SRC/TS/WF/engine/display | **ADVISORY at export** — hard fails still scored for actuals ≤ close; C5/F4 forecast soft; skips D2–D4 / E / B2 / F5 without data | N/A | N/A | N/A | Prefers hydrate `_sources`; catalog fallback | Tied to overlay |
 | Live warehouse SQL tie-out HTML | OPEN | **OPEN** | N/A | N/A | N/A | OPEN (per-cell warehouse query report) | OPEN |
 | Chart arrays / layout coords (Prompt 5) | — | — | **OPEN** (not scanned) | OPEN | OPEN | — | — |
 | Every chart datapoint cite at render | — | — | OPEN | OPEN | OPEN | OPEN | OPEN |
@@ -90,7 +100,7 @@ Labels: **LIVE** = fail-closed on that gate for that path · **PARTIAL** = real 
 | Helpers: `claim_verify` / `citation_verify` / `attribution_verify` | **LIVE** | Reusable; $1 bar locked |
 | Primary AI emit paths (commentary, P2, P5, board regen, Copilot) | **LIVE** | Soft vs hard-block differs by surface — intentional |
 | FE↔Board single-source | **LIVE** | Demo dual-seed left mismatched on purpose |
-| DOM provenance + client A–F publish gate | **PARTIAL** | Shipable gate; not warehouse SQL |
+| DOM provenance + client A–F advisory export report | **PARTIAL** | Advisory companion; hard ID at import/close; not warehouse SQL |
 | Normative framework Parts 4/7 live SQL report | **OPEN** | Biggest honesty gap vs “full warehouse gate” language |
 | Framework Part 5 second-LLM auditor | **OPEN / superseded** | Structural helpers are the shipping control; do not reintroduce dual-LLM as primary |
 
@@ -132,13 +142,13 @@ Move from “client structures agree” toward “we can prove warehouse agreeme
 
 | ID | Work | Owner | Effort | Depends on |
 |----|------|-------|--------|------------|
-| P2.1 | **Server-side tie-out subset for board close** — backend job or API that runs Rule Sets **A, B (statement cash), C, F** against warehouse / outlook payload for `org_id` + `close_month`; FAIL blocks the same publish surfaces as client gate (or blocks freeze COMPLETE → export) | Eng/agent | L | Outlook builder, client gate contract |
+| P2.1 | **Server-side / import-time tie-out for production actuals** — Rule Sets **A, B (statement cash), C, F** (actuals ≤ close) at ingest or close; FAIL blocks **import/close** (not presentation pull). Export-time client A–F stays advisory + HTML | Eng/agent | L | Ingest pipeline, outlook builder |
 | P2.2 | **HTML report v1 (server)** — generate downloadable report for A/B/C/F results (org, month, per-check PASS/FAIL/SKIP, tolerance). Not yet full Part 4 per-cell SQL library | Eng/agent | M–L | P2.1 |
 | P2.3 | Wire D2–D4 / E / B2 / F5 **only where warehouse tables exist** in prod schema; otherwise remain SKIP with reason (honest) | Eng/agent | M | P2.1 |
 | P2.4 | Regression tests: invent mismatch → FAIL blocks export/promote; aligned demo/customer fixture → PASS | Eng/agent | M | P2.1–P2.2 |
 | P2.5 | Matt commentary trial: one real (or staging) close — generate Prompt 2 + Prompt 5 + Copilot Q; confirm invent/driver/citation failures; accept residual soft-strip surfaces | Matt | S | Phase 1 + P2.2 |
 
-**Exit (near-term “warehouse gate live everywhere” for board packages):** Server A/B/C/F + client A–F + AI claim/attribution/citation stack all fail-closed on board-facing publish/emit. Still **not** claiming full Part 4/7 SQL library.
+**Exit (near-term “warehouse gate live everywhere” for board packages):** Import/close A/B/C/F fail-closed on production **actuals** + AI claim/attribution/citation fail-closed on narrative emit + export-time client A–F advisory HTML. Still **not** claiming full Part 4/7 SQL library; forecast need not fully tie.
 
 ### Phase 3 — Nice-to-have / stretch (week 3–4, defer freely)
 
@@ -160,9 +170,10 @@ Move from “client structures agree” toward “we can prove warehouse agreeme
 - [x] Attribution verify on those paths *(LIVE)*
 - [x] Citation verify on those paths *(LIVE)*
 - [x] Production FE↔Board single-source + $1 TS↔SRC guard *(LIVE)*
-- [x] Client A–F `runTieOut` blocks live MD&A export + FINAL promote *(PARTIAL but shippable)*
+- [x] Client A–F `runTieOut` advisory on MD&A export + FINAL promote + HTML companion *(shipped 2026-07-31)*
+- [x] Forecast C5/F4 soft after `close_month`; actuals ≤ close remain hard in scoring *(shipped 2026-07-31)*
 - [ ] Phase 1: hydrate `_sources` for UI + honest SKIP reporting + invent smoke *(open)*
-- [ ] Phase 2: server-side A/B/C/F warehouse-backed publish proof + HTML report v1 *(open)*
+- [ ] Phase 2: **import/close** A/B/C/F warehouse-backed fail-closed for production actuals + HTML report v1 *(open — not export-time)*
 - [ ] Matt accept soft vs hard-block matrix + commentary trial *(open)*
 
 ### Nice-to-have (do not block CTA honesty if Phase 1–2 done)
@@ -188,14 +199,14 @@ Move from “client structures agree” toward “we can prove warehouse agreeme
 | `backend/tests/test_commentary_service.py` | Generate path embeds evidence; invent dollars → don’t-know |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | FE↔Board actuals $1 |
 | `frontend/scripts/verify-outlook-hydrate.mjs` | Replace + prune residue (no reseed) |
-| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source`; client A–F; HTML report; live gate blocks |
-| **New (Phase 2)** | Server A/B/C/F FAIL → export/promote blocked; PASS fixture green |
+| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source`; client A–F; HTML WARN advisory; export not blocked; C5/F4 forecast soft |
+| **New (Phase 2)** | Import/close A/B/C/F FAIL → ingest/close blocked; PASS fixture green |
 
 ### Manual smoke (Phase 1 exit)
 
 1. Live hydrate Board + FE for one org/month → `Ctrl+Shift+A` shows warehouse-ish tags (not only catalog) when `_sources` present.
-2. Break a Rule C/A identity in client data → MD&A export / FINAL promote **blocked**; HTML report downloads with FAIL (and SKIP reasons if any).
-3. Prompt 5 / commentary: ask model path to invent a dollar and a driver → omit / don’t-know / hard-block as designed.
+2. Break a Rule C/A identity in client data → MD&A export / FINAL promote **still succeed**; HTML report downloads with **WARN** (and SKIP / soft forecast notes if any).
+3. Prompt 5 / commentary: ask model path to invent a dollar and a driver → omit / don’t-know / hard-block as designed (AI gates unchanged).
 
 ### Commentary trial (Phase 2 exit — Matt)
 
@@ -206,7 +217,7 @@ One staging or friendly close:
 | Generate MD&A Prompt 2 | No invented $; citations present or stripped; matrix mismatch cannot emit |
 | Generate Prompt 5 | Invent in slide text blocked; fully wiped attribution/citation → hard block |
 | Copilot 3 questions (ARR bridge, cash, “why”) | Wrong-cause → don’t-know; numbers cite or don’t-know |
-| Export / promote after intentional FAIL | Blocked with report |
+| Export / promote after intentional client FAIL | Deck/promote succeeds; advisory HTML WARN report downloads |
 
 Record date + org + freeze ID in a short note under `docs/soc2/` evidence or PR description. **Not** SOC 2 evidence of certification.
 
@@ -227,9 +238,9 @@ Until Phase 1 + Phase 2 exit criteria are met, do **not** say publicly or in sal
 | “Human Finance signs every package” | Rejected as primary control (machine-primary) |
 | “D2–D4 / E / B2 / F5 always run” | Skipped when warehouse tables absent |
 
-**Safe to say now (with care):** On primary commentary / MD&A / Copilot paths, AI narrative is checked against engine evidence for material numbers, citations, and allowlisted drivers, and fails closed when checks fail; live publish of MD&A export and FINAL promote is blocked when client tie-out Rule Sets A–F fail.
+**Safe to say now (with care):** On primary commentary / MD&A / Copilot paths, AI narrative is checked against engine evidence for material numbers, citations, and allowlisted drivers, and fails closed when checks fail. Export-time client A–F is advisory (deck + HTML report); do **not** tell customers they can freely review when production actuals don’t tie — fix at import/close first. Forecast will not fully tie like actuals.
 
-**Safe to say after Phase 2:** Board-facing packages are blocked unless warehouse-backed A/B/C/F tie-outs and AI claim/attribution/citation gates pass (fail closed).
+**Safe to say after Phase 2:** Production actuals are fail-closed at import/close via warehouse-backed A/B/C/F; AI claim/attribution/citation remain fail-closed on narrative emit; export stays usable with advisory client reports.
 
 ---
 

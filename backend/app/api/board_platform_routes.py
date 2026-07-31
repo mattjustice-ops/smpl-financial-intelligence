@@ -308,6 +308,8 @@ def board_copilot(
 
     from app.services.commentary.attribution_verify import (
         DONT_KNOW_ATTRIBUTION,
+        DONT_KNOW_FORWARD,
+        apply_forward_looking_policy_to_text,
         attribution_package_for_prompt,
         build_attribution_package_from_copilot_structures,
         build_attribution_package_from_text_blob,
@@ -316,12 +318,10 @@ def board_copilot(
         verify_text_attribution,
     )
     from app.services.commentary.citation_verify import (
-        DONT_KNOW_CITATION,
         fail_closed_citation_text,
         verify_text_citations,
     )
     from app.services.commentary.claim_verify import (
-        DONT_KNOW_NARRATIVE,
         build_evidence_package_from_copilot_structures,
         evidence_package_for_prompt,
         evidence_values_from_package,
@@ -384,14 +384,15 @@ def board_copilot(
         raw = client.generate(
             system_prompt=(
                 "You are SMPL Copilot for a B2B SaaS board platform. "
-                "Answer using ONLY the metrics and evidence package provided. Never invent numbers. "
-                "Cite each material dollar/percent with a _sources key, table.column, formula_id, "
-                "or ENGINE_PATH — e.g. '$110,000 (mrr_waterfall.ending_mrr)'. "
-                "Causal / driver claims may only name drivers in the ATTRIBUTION PACKAGE "
+                "Board numbers in the metrics / evidence package are trusted — quote them. "
+                "Prefer citing material dollars with a _sources key when available "
+                "(e.g. '$110,000 (mrr_waterfall.ending_mrr)'), but do not invent figures. "
+                "Causal / 'what happened' claims may only name drivers in the ATTRIBUTION PACKAGE "
                 "(e.g. expansion, churn, payroll, collections). "
                 "Multi-driver 'and'/comma lists require every named driver allowlisted. "
-                "If a cause is not in allowed_drivers, omit it or say you don't know — "
-                "do not invent deal-count or channel stories. "
+                "If a cause is not in allowed_drivers, omit it — do not invent deal-count stories. "
+                "Forward-looking / 'watch out' claims must ground in forecast or pipeline "
+                "drivers from the attribution package — do not invent future drivers. "
                 "When the question names a month, use that month's sections — especially "
                 "'Monthly operational cash bridges' and 'Monthly Actual trends'. "
                 "Structure every answer in exactly three labeled sections:\n"
@@ -424,30 +425,26 @@ def board_copilot(
         if not answer:
             raise LLMError("Copilot returned an empty response.")
 
-        # P15: verify against structured flatten (commentary/MD&A parity), with blob
-        # numbers as a supplement. Still not full warehouse _sources.
+        # Interactive: board numbers trusted — soft-warn on unmatched $/% / missing cites.
+        # Story gates: surgical strip of bad causal / ungrounded forward-looking clauses.
         claim_result = verify_text_against_evidence(answer, evidence)
         if not claim_result.ok:
             logger.warning(
-                "P15 Copilot claim-verify fail-closed: %s",
+                "P15 Copilot claim-verify soft-warn (numbers trusted): %s",
                 claim_result.summary(),
             )
-            answer = fail_closed_text(answer, claim_result)
-            if answer == DONT_KNOW_NARRATIVE:
-                answer = (
-                    "I don't know — one or more numeric claims in this Copilot answer could not "
-                    "be verified against the current metrics package. Unsupported figures were "
-                    "omitted. Ask again with a narrower question, or confirm the figure with Finance."
-                )
+            answer = fail_closed_text(answer, claim_result, policy="interactive")
 
         attr_result = verify_text_attribution(answer, attribution)
         if not attr_result.ok:
             logger.warning(
-                "P15 Copilot attribution-verify fail-closed (allowlist_size=%s): %s",
+                "P15 Copilot attribution strip (allowlist_size=%s): %s",
                 attr_result.allowlist_size,
                 attr_result.summary(),
             )
-            answer = fail_closed_attribution_text(answer, attr_result)
+            answer = fail_closed_attribution_text(
+                answer, attr_result, policy="interactive"
+            )
             if answer == DONT_KNOW_ATTRIBUTION:
                 answer = (
                     "I don't know — one or more causal / driver claims in this Copilot answer "
@@ -455,19 +452,30 @@ def board_copilot(
                     "package. Unsupported attribution was omitted."
                 )
 
+        answer, fwd_result = apply_forward_looking_policy_to_text(
+            answer, attribution, policy="interactive"
+        )
+        if not fwd_result.ok:
+            logger.warning(
+                "P15 Copilot forward-looking strip: %s",
+                fwd_result.summary(),
+            )
+            if answer == DONT_KNOW_FORWARD:
+                answer = (
+                    "I don't know — one or more forward-looking claims in this Copilot answer "
+                    "could not be grounded in forecast or pipeline evidence. Unsupported "
+                    "outlook was omitted."
+                )
+
         cite_result = verify_text_citations(answer, evidence_package)
         if not cite_result.ok:
             logger.warning(
-                "P15 Copilot citation-verify fail-closed: %s",
+                "P15 Copilot citation-verify soft-warn (numbers trusted): %s",
                 cite_result.summary(),
             )
-            answer = fail_closed_citation_text(answer, cite_result)
-            if answer == DONT_KNOW_CITATION:
-                answer = (
-                    "I don't know — one or more material numeric claims in this Copilot answer "
-                    "were stated without a verifiable _sources citation. Unsupported claims "
-                    "were omitted."
-                )
+            answer = fail_closed_citation_text(
+                answer, cite_result, policy="interactive"
+            )
     except LLMError as exc:
         reset_usage_context(usage_tokens)
         raise HTTPException(status_code=503, detail=str(exc)) from exc

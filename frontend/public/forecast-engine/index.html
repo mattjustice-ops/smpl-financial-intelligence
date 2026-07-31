@@ -2018,11 +2018,16 @@ updLabels();
     if (status === 'final' && window.SMPLProvenance && typeof window.SMPLProvenance.gatePublish === 'function') {
       var gate = window.SMPLProvenance.gatePublish({ closeMonth: window.SMPL_CLOSE_MONTH || CLOSE_MONTH });
       if (gate.blocked) {
-        alert('FINAL promote blocked — tie-out failed.\n\n' + (gate.message || '') + '\n\nClient HTML tie-out report downloaded when available.');
+        alert('FINAL promote blocked — tie-out failed (forceBlock).\n\n' + (gate.message || '') + '\n\nClient HTML tie-out report downloaded when available.');
         return;
       }
       if (gate.result && !gate.result.passed) {
-        console.warn('[forecast-engine] tie-out warning (draft/demo path)', gate.message);
+        console.warn('[forecast-engine] tie-out advisory (FINAL promote proceeds)', gate.message);
+        alert(
+          'FINAL promote proceeding.\n\nClient tie-out report downloaded (advisory). ' +
+            'Forecast gaps are OK to review; production actuals should be fixed at import/close.\n\n' +
+            (gate.message || ''),
+        );
       }
     }
     const res=getResults();

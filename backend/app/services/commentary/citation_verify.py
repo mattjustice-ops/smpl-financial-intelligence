@@ -1,4 +1,4 @@
-"""P15 fail-closed citation verify — material claims must cite ``_sources``.
+"""P15 citation verify — material claims should cite ``_sources``.
 
 Runs after numeric claim_verify / attribution_verify. Accepted citation formats
 (framework Part 1 + evidence_package policy):
@@ -8,7 +8,9 @@ Runs after numeric claim_verify / attribution_verify. Accepted citation formats
   $7.4M (income_statement.revenue)
   citations[].label = evidence key / table.column / formula_id / path
 
-Fail-closed: missing or unknown citation → don't-know / omit.
+``strict`` (Prompt 2 / Prompt 5): missing or unknown citation → don't-know / omit.
+``interactive`` (board regenerate, Copilot, commentary generate): verify + warn;
+do not replace whole answers for missing cites alone — board numbers are trusted.
 See docs/soc2/controls/ai_claim_verify.md.
 """
 
@@ -18,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping, Sequence
 
-from app.services.commentary.claim_verify import extract_numeric_claims
+from app.services.commentary.claim_verify import VerifyPolicy, extract_numeric_claims
 from app.services.commentary.schemas import CommentaryOutput
 
 CitationStatus = Literal["pass", "missing_citation", "unknown_source", "empty_sources"]
@@ -279,12 +281,13 @@ def fail_closed_citation_text(
     *,
     sources: Mapping[str, Any] | None = None,
     structured_citations: Sequence[Any] | None = None,
+    policy: VerifyPolicy = "strict",
 ) -> str:
     if result is None:
         result = verify_text_citations(
             text, sources, structured_citations=structured_citations
         )
-    if result.ok:
+    if result.ok or policy == "interactive":
         return text
     return DONT_KNOW_CITATION
 
@@ -292,15 +295,17 @@ def fail_closed_citation_text(
 def apply_fail_closed_citations_to_bullet_list(
     bullets: list[str],
     sources: Mapping[str, Any] | None,
+    *,
+    policy: VerifyPolicy = "strict",
 ) -> tuple[list[str], CitationVerificationResult]:
-    """Per-bullet don't-know rewrite for board slide regenerate (mirrors attribution)."""
+    """Per-bullet citation policy. ``interactive`` keeps bullets (warn upstream)."""
     all_checks: list[CitationCheck] = []
     source_map = _sources_from_package_or_map(sources)
     cleaned: list[str] = []
     for bullet in bullets:
         local = verify_text_citations(bullet, source_map)
         all_checks.extend(local.checks)
-        if local.ok:
+        if local.ok or policy == "interactive":
             cleaned.append(bullet)
         else:
             cleaned.append(DONT_KNOW_CITATION)
@@ -398,10 +403,12 @@ def verify_commentary_citations(
 def apply_fail_closed_citations_to_commentary(
     output: CommentaryOutput,
     sources: Mapping[str, Any] | None,
+    *,
+    policy: VerifyPolicy = "strict",
 ) -> tuple[CommentaryOutput, CitationVerificationResult]:
-    """Strip / don't-know sections whose material numbers lack ``_sources`` cites."""
+    """Apply citation verify; ``strict`` don't-knows, ``interactive`` keeps text."""
     overall = verify_commentary_citations(output, sources)
-    if overall.ok:
+    if overall.ok or policy == "interactive":
         return output, overall
 
     data = output.model_dump(mode="python")

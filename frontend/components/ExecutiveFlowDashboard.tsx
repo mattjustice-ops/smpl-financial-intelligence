@@ -2489,7 +2489,7 @@ function ValidationIssuesPanel({ issues }: { issues: ValidationCheck[] }) {
         Checks requiring review ({issues.length})
       </div>
       <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
-        Resolve failed tie-outs before board export. Warnings are informational but should be acknowledged in MD&amp;A.
+        Resolve failed actuals tie-outs at import/close. Export-time client A–F is advisory; acknowledge warnings in MD&amp;A.
       </p>
       {renderGroup("Failed", failed, "fail")}
       {renderGroup("Warnings", warned, "warn")}

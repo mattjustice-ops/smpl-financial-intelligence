@@ -129,7 +129,7 @@ class _Fake:
         return self.response
 
 
-def test_generate_commentary_embeds_evidence_and_strips_invented() -> None:
+def test_generate_commentary_embeds_evidence_and_keeps_numbers_interactive() -> None:
     inputs = CommentaryInputs(
         period_label="May 2026",
         organization_name="Demo",
@@ -175,7 +175,37 @@ def test_generate_commentary_embeds_evidence_and_strips_invented() -> None:
     out = generate_commentary(inputs, fake)
     assert "EVIDENCE PACKAGE" in fake.calls[0]["user"]
     assert "110,000" in out.executive_summary.narrative
-    assert out.revenue_commentary.narrative == DONT_KNOW_NARRATIVE
+    # Interactive: unmatched $ soft-warns — section is not replaced with don't-know.
+    assert out.revenue_commentary.narrative != DONT_KNOW_NARRATIVE
+    assert "888,000,000" in out.revenue_commentary.narrative
+
+
+def test_interactive_numeric_policy_keeps_text_strict_nukes() -> None:
+    from app.services.commentary.claim_verify import fail_closed_text
+
+    evidence = {"ending_mrr": Decimal("110000")}
+    text = "Phantom ARR hit $99,000,000."
+    bad = verify_text_against_evidence(text, evidence)
+    assert not bad.ok
+    assert fail_closed_text(text, bad, policy="interactive") == text
+    assert fail_closed_text(text, bad, policy="strict") == DONT_KNOW_NARRATIVE
+
+
+def test_interactive_bullet_list_keeps_unmatched_money() -> None:
+    from app.services.commentary.claim_verify import apply_fail_closed_to_bullet_list
+
+    evidence = {"slide.metrics.arr": Decimal("110000")}
+    bullets, result = apply_fail_closed_to_bullet_list(
+        [
+            "Ending ARR closed at $110,000.",
+            "Phantom bookings hit $888,000,000.",
+        ],
+        evidence,
+        policy="interactive",
+    )
+    assert not result.ok
+    assert "110,000" in bullets[0]
+    assert "888,000,000" in bullets[1]
 
 
 def test_variance_tieout_fail_closed_on_mismatch() -> None:

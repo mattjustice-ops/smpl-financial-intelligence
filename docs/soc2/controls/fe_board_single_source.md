@@ -82,12 +82,12 @@ Board + Forecast Engine material KPIs attach `data-source` / `data-period` / `ti
 | Shared module | `frontend/public/shared/smpl-provenance.js` (+ canonical) |
 | Prefer hydrate `_sources` | `SMPLProvenance.ingestOutlook` reads `payload._sources` / `meta._sources` / `evidence_package._sources` when present; else field catalog |
 | Audit overlay | `Ctrl+Shift+A` / `Cmd+Shift+A` toggles inline source tags |
-| Client tie-out | `runTieOut()` — **client Rule Sets A–F** when SRC / TS_DATA / WF_TABLE / baseline_engine / display arrays exist; skips D2–D4 / E warehouse / B2 bank / F5 when structures absent |
-| HTML report | `renderTieOutReportHtml` / download on live publish FAIL — client checks only (not live warehouse SQL) |
-| Publish gate | Live hydrate + FAIL → block MD&A export (`board-hydrate.js`) and FINAL forecast promote; demo/offline warns only |
+| Client tie-out | `runTieOut()` — **client Rule Sets A–F** when SRC / TS_DATA / WF_TABLE / baseline_engine / display arrays exist; skips D2–D4 / E warehouse / B2 bank / F5 when structures absent; C5/F4 **hard** for periods ≤ `close_month`, **soft** for forecast after close |
+| HTML report | `renderTieOutReportHtml` / download as **advisory companion** on WARN — client checks only (not live warehouse SQL) |
+| Export / promote | Client A–F is **advisory** — MD&A export + FINAL promote proceed; UI: “deck ready + tie-out report downloaded”. Hard identification for production **actuals** belongs at **import/ingest/close**, not presentation pull |
 | Regression | `npm run verify:provenance` |
 
-**Limitation:** Live warehouse SQL HTML report (`output/tieout_report_{org}_{month}.html` with per-cell warehouse queries) remains Matt/infra follow-up. Client A–F + client HTML report are the shippable gate. Demo dual seeds stay mismatched on purpose — do not reseed.
+**Limitation:** Live warehouse SQL HTML report and import-time fail-closed for production actuals remain follow-ups. Do **not** tell customers they can freely export/review when actuals don’t tie — fix at import first. Forecast will not fully tie like actuals. Demo dual seeds stay mismatched on purpose — do not reseed.
 
 ---
 

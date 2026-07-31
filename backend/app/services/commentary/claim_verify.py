@@ -1,12 +1,17 @@
-"""P15 fail-closed numeric claim verification against engine evidence.
+"""P15 numeric claim verification against engine evidence.
 
 Extracts material numeric claims from AI narrative and checks them against a
 structured evidence package (freeze / engine numbers). Actuals tolerance is
 TOL_ACTUALS = $1.00 (cents–$1) — do not loosen.
 
-Fail-closed behavior: omit / replace with an explicit don't-know — never emit
-unsupported material claims. See docs/soc2/policies/P15_ai_llm_data_handling.md
-and docs/soc2/controls/data_integrity_framework.md Part 5.
+Policy surfaces:
+  - ``strict`` (Prompt 2 / Prompt 5): fail-closed don't-know / hard-block.
+  - ``interactive`` (board regenerate, Copilot, commentary generate): board
+    numbers are trusted — verify + warn/log only; do not nuke whole answers
+    for unmatched $/% alone. Story / forecast grounding stays gated elsewhere.
+
+See docs/soc2/policies/P15_ai_llm_data_handling.md and
+docs/soc2/controls/ai_claim_verify.md.
 """
 
 from __future__ import annotations
@@ -25,10 +30,45 @@ TOL_RATIO = Decimal("0.0005")
 # Display percent points when evidence stores whole percents (e.g. 10 for 10%).
 TOL_PERCENT_POINTS = Decimal("0.05")
 
+VerifyPolicy = Literal["strict", "interactive"]
+
 DONT_KNOW_NARRATIVE = (
     "I don't know — one or more numeric claims in this section could not be verified "
     "against engine evidence for the current package. Unsupported figures were omitted."
 )
+
+# Sentence ends that are not dotted identifiers (mrr_waterfall.ending_mrr).
+_SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)|\n")
+
+
+def split_sentences(text: str) -> list[str]:
+    """Split narrative into sentences without treating dotted ids as boundaries."""
+    if not text or not text.strip():
+        return []
+    ends: list[int] = []
+    for m in _SENTENCE_END_RE.finditer(text):
+        ends.append(m.end() if m.group(0) == "\n" else m.end())
+    if not ends:
+        return [text.strip()]
+    out: list[str] = []
+    start = 0
+    for end in ends:
+        chunk = text[start:end].strip()
+        if chunk:
+            out.append(chunk)
+        start = end
+    tail = text[start:].strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
+def join_sentences(sentences: Sequence[str]) -> str:
+    parts = [s.strip() for s in sentences if s and s.strip()]
+    if not parts:
+        return ""
+    return " ".join(parts)
+
 
 ClaimKind = Literal["money", "percent", "ratio", "count"]
 CheckStatus = Literal["pass", "mismatch", "missing_evidence"]
@@ -447,13 +487,23 @@ def verify_text_against_evidence(
     return VerificationResult(checks=checks)
 
 
-def fail_closed_text(text: str, result: VerificationResult | None = None, *, evidence: Mapping[str, Any] | None = None) -> str:
-    """If any claim fails, replace the whole text with don't-know (omit unsupported claims)."""
+def fail_closed_text(
+    text: str,
+    result: VerificationResult | None = None,
+    *,
+    evidence: Mapping[str, Any] | None = None,
+    policy: VerifyPolicy = "strict",
+) -> str:
+    """Apply numeric policy after verify.
+
+    ``strict``: any failure → whole-text don't-know.
+    ``interactive``: keep text (caller should warn/log); board numbers trusted.
+    """
     if result is None:
         if evidence is None:
             raise ValueError("fail_closed_text requires result or evidence")
         result = verify_text_against_evidence(text, evidence)
-    if result.ok:
+    if result.ok or policy == "interactive":
         return text
     return DONT_KNOW_NARRATIVE
 
@@ -492,14 +542,17 @@ def verify_commentary_output(
 def apply_fail_closed_to_commentary(
     output: CommentaryOutput,
     evidence: Mapping[str, Decimal] | Mapping[str, Any],
+    *,
+    policy: VerifyPolicy = "strict",
 ) -> tuple[CommentaryOutput, VerificationResult]:
-    """Strip / don't-know any section whose material claims fail verification.
+    """Apply numeric verify; ``strict`` don't-knows bad sections, ``interactive`` keeps text.
 
     Returns the (possibly rewritten) output plus the aggregate verification result.
-    Empty evidence + material claims → don't-know (missing evidence).
+    Empty evidence + material claims still fail verify (callers warn); interactive
+    does not replace narrative with don't-know for unmatched $/% alone.
     """
     overall = verify_commentary_output(output, evidence)
-    if overall.ok:
+    if overall.ok or policy == "interactive":
         return output, overall
 
     data = output.model_dump(mode="python")
@@ -1170,14 +1223,16 @@ def verify_pptx_script_against_evidence(
 def apply_fail_closed_to_bullet_list(
     bullets: list[str],
     evidence: Mapping[str, Decimal] | Mapping[str, Any],
+    *,
+    policy: VerifyPolicy = "strict",
 ) -> tuple[list[str], VerificationResult]:
-    """Per-bullet don't-know rewrite for board slide regenerate."""
+    """Per-bullet numeric policy. ``interactive`` keeps bullets (warn upstream)."""
     all_checks: list[ClaimCheck] = []
     cleaned: list[str] = []
     for bullet in bullets:
         local = verify_text_against_evidence(bullet, evidence)
         all_checks.extend(local.checks)
-        if local.ok:
+        if local.ok or policy == "interactive":
             cleaned.append(bullet)
         else:
             cleaned.append(DONT_KNOW_NARRATIVE)

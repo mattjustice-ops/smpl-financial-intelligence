@@ -555,7 +555,7 @@
       var demoText = buildDemoCommentary(slideKey, targetId);
       if (lastApiStatus === 409) {
         demoText +=
-          " Warehouse validation notes (e.g. pipeline_waterfall_ties) do not block board review — export package still requires tie-outs.";
+          " Warehouse validation notes (e.g. pipeline_waterfall_ties) do not block board review — client A–F at export is advisory (HTML report companion).";
       } else if (!orgId) {
         demoText +=
           " (Embedded narrative — sign in at /app/board for live Claude commentary from your warehouse.)";
@@ -1168,21 +1168,22 @@
       return "no-org";
     }
 
-    // Customer publish: client Rule Sets A–F (+ HTML report). Live FAIL → block.
-    // Demo/offline: console warn only (dual demo seeds are known mismatches).
+    // Client A–F is advisory at export: always proceed; companion HTML report on WARN.
+    // Hard identification belongs at import/close — not when finance pulls presentations.
+    var tieOutGate = null;
     if (global.SMPLProvenance && typeof global.SMPLProvenance.gatePublish === "function") {
-      var gate = global.SMPLProvenance.gatePublish({ closeMonth: closeMonth });
-      if (gate.blocked) {
+      tieOutGate = global.SMPLProvenance.gatePublish({ closeMonth: closeMonth });
+      if (tieOutGate.blocked) {
         alert(
           (format === "pptx" ? "MD&A Deck" : "Variance Commentary") +
-            " export blocked — tie-out failed.\n\n" +
-            (gate.message || "Resolve FE↔Board Actual mismatches ($1 bar) before publish.") +
+            " export blocked — tie-out failed (forceBlock).\n\n" +
+            (tieOutGate.message || "") +
             "\n\nClient HTML tie-out report downloaded when available.",
         );
         return "tieout-blocked";
       }
-      if (gate.result && !gate.result.passed && gate.message) {
-        console.warn("[board-hydrate] tie-out warning (demo/offline — not blocked)", gate.message);
+      if (tieOutGate.result && !tieOutGate.result.passed && tieOutGate.message) {
+        console.warn("[board-hydrate] tie-out advisory (export proceeds)", tieOutGate.message);
       }
     }
 
@@ -1224,7 +1225,20 @@
       var exportUrl = boardLiveUrl(directBase, exportSpec.path) + "?" + params.toString();
 
       if (directBase && !isLocal) {
-        return await pollAndDownloadExport(directBase, exportSpec, format, params);
+        var pollStatus = await pollAndDownloadExport(directBase, exportSpec, format, params);
+        if (
+          (pollStatus === "ok" || pollStatus === "started") &&
+          tieOutGate &&
+          tieOutGate.status === "WARN"
+        ) {
+          alert(
+            exportSpec.label +
+              " ready.\n\nClient tie-out report downloaded (advisory). " +
+              "Forecast gaps are OK to review; production actuals should be fixed at import/close.\n\n" +
+              (tieOutGate.message || ""),
+          );
+        }
+        return pollStatus;
       }
 
       if (!directBase && !isLocal) {
@@ -1239,7 +1253,17 @@
       var exportBase = directBase || "";
       try {
         var result = await fetchBoardExportBlob(exportBase, exportUrl, exportSpec, exportTimeoutMs);
-        if (result.ok) return "ok";
+        if (result.ok) {
+          if (tieOutGate && tieOutGate.status === "WARN") {
+            alert(
+              exportSpec.label +
+                " ready.\n\nClient tie-out report downloaded (advisory). " +
+                "Forecast gaps are OK to review; production actuals should be fixed at import/close.\n\n" +
+                (tieOutGate.message || ""),
+            );
+          }
+          return "ok";
+        }
         alert(exportSpec.label + " export failed:\n" + (result.message || "Unknown error"));
         return "error";
       } catch (err) {
