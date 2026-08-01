@@ -16,10 +16,13 @@ RULES:
 3. REWRITE all narrative text for the new period — do NOT keep thin reference one-liners.
    Replace every Key Takeaways bullet, risk/opportunity detail+action line, board-action
    copy, and slide commentary string using the BOARD NARRATIVE DEPTH rules below and the
-   CLOSE FREEZE / EVIDENCE / ATTRIBUTION packages in the user message. Label actuals ≤
-   close vs forecast after close; pipeline only from package pipeline/deal fields.
+   CLOSE FREEZE / EVIDENCE / ATTRIBUTION / BOARD R&O SEED / GTM NARRATIVE packages in the
+   user message. Label actuals ≤ close vs forecast after close; pipeline only from package
+   pipeline/deal fields. GTM takeaways must cover closed-lost, slipped, coverage, action.
+   Risks/Opps cards must rewrite from BOARD R&O SEED (driver + magnitude + action).
 4. Causal language may only name ATTRIBUTION PACKAGE allowed_drivers; forward watch-outs
-   must ground in forecast/pipeline allowlist entries. Rich story from packages is required.
+   must ground in forecast/pipeline allowlist entries. Rich story from packages + board
+   R&O seed is required — never empty "-" risk details.
 5. Use pptx.ShapeType / pptx.ChartType on the pptx instance — never pptxgen.ShapeType.
 6. End with pptx.writeFile({ fileName: "OUTPUT.pptx" }). Return raw JavaScript only.
 

@@ -16,7 +16,6 @@ from typing import Any
 from app.core.config import _BACKEND_ROOT
 from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.reporting.export.board_metrics_snapshot import build_metrics_snapshot
-from app.services.reporting.export.board_slide_commentary_payload import fmt_deck_money
 from app.services.reporting.export.schemas import ReportingBundle
 from app.services.reporting.period_utils import to_period
 
@@ -139,87 +138,38 @@ def _marketing_by_channel(bundle: ReportingBundle, period: str) -> list[dict[str
 
 
 def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
-    """Structured risks + opportunities for slide 8 two-column grid."""
-    risks: list[dict[str, str]] = []
-    opps: list[dict[str, str]] = []
+    """Structured risks + opportunities for slide 8 — board platform R&O seed.
 
-    def add_risk(level: str, title: str, detail: str, action: str, impact: str = "") -> None:
-        risks.append(
-            {"level": level, "type": "RISK", "title": title, "detail": detail, "action": action, "impact": impact}
-        )
+    Prefer Board Platform Risks & Opportunities tab cards (renderRisks) over thin
+    heuristic fillers so Prompt 5 rewrite keeps driver + magnitude + action.
+    Live slipped / closed-lost magnitudes are attached as package cross-checks.
+    """
+    from app.services.reporting.export.board_platform_ro_seed import board_ro_cards_for_payload
 
-    def add_opp(level: str, title: str, detail: str, action: str, upside: str = "") -> None:
-        opps.append(
-            {"level": level, "type": "OPP", "title": title, "detail": detail, "action": action, "upside": upside}
-        )
-
-    cur = bundle.currency
-    if m.churn and m.ending_arr and m.churn / m.ending_arr > Decimal("0.03"):
-        add_risk(
-            "HIGH",
-            "Churn concentration",
-            f"Churn {_money_m(m.churn)}M vs ending ARR {_money_m(m.ending_arr)}M in {bundle.as_of_period}.",
-            "Segment churn by cohort; tighten renewal playbook for at-risk accounts.",
-            fmt_deck_money(m.churn),
-        )
-    if m.slipped and m.slipped > Decimal("500000"):
-        add_risk(
-            "MEDIUM",
-            "Deferred pipeline",
-            f"Slipped pipeline {_money_m(m.slipped)}M requires next-quarter coverage review.",
-            "Re-stage opportunities with validated next steps and owners.",
-            fmt_deck_money(m.slipped),
-        )
-    if m.net_new_arr and m.new_arr_budget and m.net_new_arr > m.new_arr_budget:
-        add_opp(
-            "HIGH",
-            "Net new ARR beat",
-            f"Net new ARR {_money_m(m.net_new_arr)}M exceeded budget {_money_m(m.new_arr_budget)}M.",
-            "Double down on winning channels and rep capacity in H2.",
-            fmt_deck_money(m.net_new_arr - m.new_arr_budget),
-        )
-    if m.cash_actual and m.cash_actual > Decimal("50000000"):
-        add_opp(
-            "MEDIUM",
-            "Liquidity headroom",
-            f"Cash {_money_m(m.cash_actual)}M provides runway for strategic investments.",
-            "Prioritize high-ROI GTM and product bets with board approval.",
-            fmt_deck_money(m.cash_actual - Decimal("10000000")),
-        )
-    for field in bundle.mda_commentary or bundle.commentary_fields:
-        text = " ".join(
-            p for p in [field.unfavorable, field.leadership_attention, field.recommended_actions] if p
-        ).strip()
-        if not text:
-            continue
-        if field.unfavorable:
-            add_risk("MEDIUM", field.section[:60], text[:240], (field.recommended_actions or "Review.")[:120])
-        else:
-            add_opp("MEDIUM", field.section[:60], text[:240], (field.recommended_actions or "Review.")[:120])
-
-    while len(risks) < 4:
-        risks.append(
-            {
-                "level": "MEDIUM",
-                "type": "RISK",
-                "title": "Close validation",
-                "detail": f"Validation status: {bundle.validation.status}. Confirm tie-outs before distribution.",
-                "action": "Finance to certify waterfall and GL reconciliations.",
-                "impact": "",
-            }
-        )
-    while len(opps) < 4:
-        opps.append(
-            {
-                "level": "MEDIUM",
-                "type": "OPP",
-                "title": "Operating leverage",
-                "detail": f"YTD revenue {_money_m(m.revenue_actual)}M with gross margin target on track.",
-                "action": "Maintain discipline on opex pacing through H2.",
-                "upside": "",
-            }
-        )
-    return {"risks": risks[:4], "opportunities": opps[:4]}
+    seeded = board_ro_cards_for_payload()
+    # Cross-check magnitudes from the close package (do not displace board cards).
+    package_cross_check: dict[str, Any] = {
+        "source": "board_platform_ro_seed",
+        "close_period": bundle.as_of_period,
+        "slipped_pipeline": _money_k(m.slipped) if m.slipped else "—",
+        "slipped_pipeline_raw": float(m.slipped or 0),
+        "closed_lost": _money_k(m.closed_lost) if m.closed_lost else "—",
+        "closed_lost_raw": float(m.closed_lost or 0),
+        "churn": _money_k(m.churn) if m.churn else "—",
+        "churn_raw": float(m.churn or 0),
+        "ending_arr": _money_k(m.ending_arr) if m.ending_arr else "—",
+        "ending_arr_raw": float(m.ending_arr or 0),
+        "validation_status": getattr(bundle.validation, "status", None),
+    }
+    return {
+        "risks": seeded["risks"][:4],
+        "opportunities": seeded["opportunities"][:4],
+        "package_cross_check": package_cross_check,
+        "rewrite_policy": (
+            "MUST rewrite card detail+action from BOARD R&O SEED / these cards — "
+            "keep driver, magnitude, action; PPTX-succinct; no thin stubs."
+        ),
+    }
 
 
 def _board_actions(bundle: ReportingBundle) -> list[dict[str, str]]:
@@ -258,10 +208,27 @@ def _board_actions(bundle: ReportingBundle) -> list[dict[str, str]]:
 
 
 def _marketing_block(bundle, as_of, m):
+    from app.services.reporting.export.board_chart_service import _wf
+
     channels = _marketing_by_channel(bundle, as_of)
     total_spend = sum(c.get("spend_raw") or 0 for c in channels)
     total_pipe = sum(c.get("pipeline_raw") or 0 for c in channels)
     best_wr = max(channels, key=lambda c: c["win_rate_pct"], default=None)
+    closed_lost = m.closed_lost or Decimal("0")
+    closed_lost_bud = abs(_wf(bundle, "pipeline", "closed_lost", as_of, "Budget"))
+    slipped = m.slipped or Decimal("0")
+    slipped_bud = abs(_wf(bundle, "pipeline", "slipped_pipeline", as_of, "Budget"))
+    ending_pipeline = abs(_wf(bundle, "pipeline", "ending_pipeline", as_of, "Actual"))
+    coverage_vs_arr = (
+        float(ending_pipeline / m.ending_arr)
+        if ending_pipeline and m.ending_arr
+        else None
+    )
+    closed_lost_var_pct = (
+        float((closed_lost - closed_lost_bud) / closed_lost_bud * 100)
+        if closed_lost_bud
+        else None
+    )
     return {
         "total_mqls": float(m.mql),
         "total_pipeline": _money_k(m.pipeline_from_marketing or m.pipeline_created),
@@ -281,9 +248,36 @@ def _marketing_block(bundle, as_of, m):
         ],
         "format_note": "Channel spend and pipeline pre-formatted — display verbatim",
         "pipeline_coverage_x": (
-            f"{float(m.pipeline_created / m.closed_won):.1f}x" if m.closed_won else "n/a"
+            f"{coverage_vs_arr:.1f}x"
+            if coverage_vs_arr is not None
+            else (
+                f"{float(m.pipeline_created / m.closed_won):.1f}x" if m.closed_won else "n/a"
+            )
         ),
+        "ending_pipeline": _money_k(ending_pipeline) if ending_pipeline else "—",
+        "ending_pipeline_raw": float(ending_pipeline),
+        "ending_arr": _money_k(m.ending_arr) if m.ending_arr else "—",
+        "ending_arr_raw": float(m.ending_arr or 0),
         "closed_won": _money_k(m.closed_won),
+        "closed_won_raw": float(m.closed_won or 0),
+        # Copilot-depth GTM evidence (pipeline waterfall)
+        "closed_lost": _money_k(closed_lost) if closed_lost else "—",
+        "closed_lost_raw": float(closed_lost),
+        "closed_lost_budget": _money_k(closed_lost_bud) if closed_lost_bud else "—",
+        "closed_lost_budget_raw": float(closed_lost_bud),
+        "closed_lost_variance_pct": closed_lost_var_pct,
+        "slipped_pipeline": _money_k(slipped) if slipped else "—",
+        "slipped_pipeline_raw": float(slipped),
+        "slipped_pipeline_budget": _money_k(slipped_bud) if slipped_bud else "—",
+        "slipped_pipeline_budget_raw": float(slipped_bud),
+        "pipeline_created": _money_k(m.pipeline_created) if m.pipeline_created else "—",
+        "pipeline_created_raw": float(m.pipeline_created or 0),
+        "narrative_must_cover": [
+            "closed_lost actual vs budget + variance",
+            "slipped pipeline actual vs budget",
+            "coverage vs ending ARR",
+            "recommended board action (losses review or channel reallocation)",
+        ],
     }
 
 
@@ -453,7 +447,23 @@ def build_prompt5_package_preamble(
         f"{PROMPT5_BOARD_NARRATIVE_RULES}\n"
     )
 
-    return freeze_block + evidence_block + attribution_block + citation_block + narrative_block
+    from app.services.reporting.export.board_platform_ro_seed import (
+        format_board_ro_seed_block,
+        format_gtm_narrative_requirements_block,
+    )
+
+    ro_seed_block = format_board_ro_seed_block()
+    gtm_seed_block = format_gtm_narrative_requirements_block()
+
+    return (
+        freeze_block
+        + evidence_block
+        + attribution_block
+        + citation_block
+        + ro_seed_block
+        + gtm_seed_block
+        + narrative_block
+    )
 
 
 def build_prompt5_user_message(
@@ -499,6 +509,10 @@ def build_prompt5_user_message(
         "(PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, ROOT CAUSE, "
         "FORWARD READ labeled Actual vs Forecast vs Pipeline, RECOMMENDED BOARD ACTION) — "
         "cite _sources in narrative takeaways only, never inside KPI/table cells.\n"
+        "GTM/Pipeline Key Takeaways MUST follow GTM NARRATIVE REQUIREMENTS "
+        "(closed-lost, slipped, coverage, recommended board action) from package evidence.\n"
+        "Strategic Assessment risk/opportunity cards MUST rewrite from BOARD R&O SEED "
+        "(driver + magnitude + action) — never thin stubs or empty '-'.\n"
         "When a freeze block is present above, inject its drivers into takeaway narrative. "
         "Use the full package for board-ready story — do not invent outside the packages; "
         "do not keep thin one-line delta stubs.\n\n"
@@ -923,6 +937,11 @@ def _try_adapt_from_reference(
         "3–5 insight bullets (PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, "
         "ROOT CAUSE, FORWARD READ with Actual vs Forecast vs Pipeline labels, "
         "RECOMMENDED BOARD ACTION). Do not keep thin reference one-liners.\n"
+        "GTM/Pipeline takeaways MUST use GTM NARRATIVE REQUIREMENTS (closed-lost, "
+        "slipped, coverage, recommended action) from gtm_performance + EVIDENCE PACKAGE.\n"
+        "Risks/Opportunities cards MUST be rewritten from BOARD R&O SEED "
+        "(must-use board risk matrix cards) — keep driver, magnitude, action; "
+        "PPTX-succinct; never 'Close validation' fillers or empty '-'.\n"
         "Return complete raw JavaScript ending with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n\n"
         f"{package_preamble}"
         f"REFERENCE SCRIPT:\n{_excerpt_for_prompt(ref_script, limit=40000)}\n\n"
