@@ -7,6 +7,8 @@ from unittest.mock import patch
 from app.services.reporting.export.prompt5_adapt import PROMPT5_ADAPT_SYSTEM
 from app.services.reporting.export.prompt5_deck import (
     PROMPT5_SYSTEM,
+    _build_fix_prompt,
+    _excerpt_for_prompt,
     build_prompt5_user_message,
 )
 from app.services.reporting.export.prompt5_narrative import PROMPT5_BOARD_NARRATIVE_RULES
@@ -73,3 +75,20 @@ def test_prompt5_user_message_injects_narrative_shape_and_freeze() -> None:
     assert "ATTRIBUTION PACKAGE" in msg
     assert "KPI/table cells" in msg.lower() or "KPI/table" in msg
     assert "rich board narrative" in msg.lower() or "board-ready" in msg.lower()
+
+
+def test_excerpt_for_prompt_truncates_and_is_callable_from_repair() -> None:
+    """Adapt/repair prompts must resolve _excerpt_for_prompt (NameError regression)."""
+    short = "abc"
+    assert _excerpt_for_prompt(short, limit=10) == short
+    long = "x" * 100
+    out = _excerpt_for_prompt(long, limit=20)
+    assert len(out) < len(long)
+    assert "middle omitted" in out
+    repair = _build_fix_prompt(
+        last_error="boom",
+        failed_script="const pptx = new PptxGenJS();",
+        payload_json='{"period":"2026-06"}',
+    )
+    assert "FAILED SCRIPT:" in repair
+    assert "DATA PAYLOAD" in repair
