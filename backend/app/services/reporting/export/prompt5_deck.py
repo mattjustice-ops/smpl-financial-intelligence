@@ -1,4 +1,17 @@
-"""Prompt 5: Claude generates a complete PptxGenJS deck from ReportingBundle data."""
+"""Prompt 5: Claude generates a complete PptxGenJS deck from ReportingBundle data.
+
+Authoring principle (Matt / Prompt 5 product intent — do not reintroduce template-fill):
+- Claude creates slide decks on its own (generative authorship of layout, charts,
+  and commentary) — not by filling rigid template slots.
+- Prompts teach *craft criteria*: when Claude chooses a visual or commentary form
+  (waterfall, Key Takeaways, closed-month Actuals), it must follow the matching
+  construction / layout / data rules.
+- Board / R&O / GTM / KT packages are **evidence inputs** Claude may cite when
+  authoring. They are NOT a post-process source that patches blank takeaways
+  after claim-verify soft-strip (no seed-refill / canned slot-fill).
+- Soft-strip may redact unmatched $/% tokens inside bullets without blanking the
+  whole bullet; do not "fix" emptied strings from seed afterward.
+"""
 
 from __future__ import annotations
 
@@ -138,11 +151,12 @@ def _marketing_by_channel(bundle: ReportingBundle, period: str) -> list[dict[str
 
 
 def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
-    """Structured risks + opportunities for slide 8 — board platform R&O seed.
+    """Structured risks + opportunities for slide 8 — board platform R&O evidence.
 
-    Prefer Board Platform Risks & Opportunities tab cards (renderRisks) over thin
-    heuristic fillers so Prompt 5 rewrite keeps driver + magnitude + action.
-    Live slipped / closed-lost magnitudes are attached as package cross-checks.
+    Prefer Board Platform Risks & Opportunities tab cards (renderRisks) as
+    authorship evidence over thin heuristic fillers so Claude can keep driver +
+    magnitude + action. Live slipped / closed-lost magnitudes are attached as
+    package cross-checks.
     """
     from app.services.reporting.export.board_platform_ro_seed import board_ro_cards_for_payload
 
@@ -166,8 +180,9 @@ def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
         "opportunities": seeded["opportunities"][:4],
         "package_cross_check": package_cross_check,
         "rewrite_policy": (
-            "MUST rewrite card detail+action from BOARD R&O SEED / these cards — "
-            "keep driver, magnitude, action; PPTX-succinct; no thin stubs."
+            "Author card detail+action from BOARD R&O EVIDENCE / these cards — "
+            "keep driver, magnitude, action; PPTX-succinct; no thin stubs. "
+            "Evidence for authorship, not a blank-slot template."
         ),
     }
 
@@ -328,7 +343,12 @@ def build_prompt5_payload(
     payload = enrich_deck_payload(payload, bundle, ts_data=ts_data)
     from app.services.reporting.export.board_platform_kt_seed import build_seed_key_takeaways
 
+    # Authorship evidence only — never used for post-soft-strip slot refill.
     payload["key_takeaways_by_slide"] = build_seed_key_takeaways(payload)
+    payload["key_takeaways_policy"] = (
+        "Claude authors Key Takeaways. key_takeaways_by_slide is optional board-"
+        "platform evidence to cite/draw from — not a template of slots to fill."
+    )
     payload["payload_warnings"] = validate_deck_payload(payload)
     from app.services.commentary.attribution_verify import (
         build_attribution_package_from_deck_payload,
@@ -401,7 +421,10 @@ def build_prompt5_package_preamble(
         evidence_values_from_deck_payload,
     )
     from app.services.reporting.export.freeze_prompt import format_freeze_prompt_block
-    from app.services.reporting.export.prompt5_narrative import PROMPT5_BOARD_NARRATIVE_RULES
+    from app.services.reporting.export.prompt5_narrative import (
+        PROMPT5_BOARD_NARRATIVE_RULES,
+        PROMPT5_CRAFT_CRITERIA,
+    )
 
     pc = payload["period_context"]
     evidence_package = _ensure_prompt5_packages(payload)
@@ -470,6 +493,10 @@ def build_prompt5_package_preamble(
         f"{json.dumps(citation_preview, separators=(',', ':'))}\n\n"
     )
 
+    craft_block = (
+        "CRAFT CRITERIA (mandatory — generative authorship, not slot-fill):\n"
+        f"{PROMPT5_CRAFT_CRITERIA}\n"
+    )
     narrative_block = (
         "TAKEAWAY / COMMENTARY SHAPE (mandatory — see also system prompt):\n"
         f"{PROMPT5_BOARD_NARRATIVE_RULES}\n"
@@ -490,6 +517,7 @@ def build_prompt5_package_preamble(
         + evidence_block
         + attribution_block
         + citation_block
+        + craft_block
         + ro_seed_block
         + gtm_seed_block
         + kt_seed_block
@@ -531,7 +559,10 @@ def build_prompt5_user_message(
 
     return (
         "Build the complete SMPL.ai board deck PptxGenJS script using the JSON data payload below.\n"
-        "Follow the per-slide layout assignments in the system prompt exactly.\n"
+        "You AUTHOR the deck (generative authorship). Follow CRAFT CRITERIA and per-slide "
+        "layout assignments in the system prompt — when you choose a waterfall or Key "
+        "Takeaways, apply those construction rules. Evidence packages inform authorship; "
+        "they are not blank slots to fill and not a post-process refill source.\n"
         "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
         "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers from EVIDENCE PACKAGE / "
@@ -539,10 +570,11 @@ def build_prompt5_user_message(
         "Key Takeaways / risks / board actions = 3–5 insight bullets each "
         "(PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, ROOT CAUSE, "
         "FORWARD READ labeled Actual vs Forecast vs Pipeline, RECOMMENDED BOARD ACTION) — "
-        "cite _sources in narrative takeaways only, never inside KPI/table cells.\n"
-        "GTM/Pipeline Key Takeaways MUST follow GTM NARRATIVE REQUIREMENTS "
+        "cite _sources in narrative takeaways only, never inside KPI/table cells. "
+        "Never emit blank or lone '—' takeaways.\n"
+        "GTM/Pipeline Key Takeaways: follow GTM NARRATIVE REQUIREMENTS craft criteria "
         "(closed-lost, slipped, coverage, recommended board action) from package evidence.\n"
-        "Strategic Assessment risk/opportunity cards MUST rewrite from BOARD R&O SEED "
+        "Strategic Assessment risk/opportunity cards: author from BOARD R&O EVIDENCE "
         "(driver + magnitude + action) — never thin stubs or empty '-'.\n"
         "When a freeze block is present above, inject its drivers into takeaway narrative. "
         "Use the full package for board-ready story — do not invent outside the packages; "
@@ -666,71 +698,6 @@ def _prepare_script(script: str, output_path: Path) -> str:
     else:
         script += f'\npptx.writeFile({{ fileName: "{out}" }});\n'
     return script
-
-
-def _refill_stripped_key_takeaways(script: str, payload: dict[str, Any]) -> str:
-    """Replace emptied ``"—"`` takeaway array slots with seed bullets (deterministic)."""
-    from app.services.reporting.export.board_platform_kt_seed import build_seed_key_takeaways
-
-    seeds = payload.get("key_takeaways_by_slide") or build_seed_key_takeaways(payload)
-    if not seeds or not script:
-        return script
-
-    # Map common bulletsN const names / slide keys used by reference + adapt scripts.
-    alias = {
-        "bullets2": "slide_2_executive",
-        "bullets3": "slide_3_arr",
-        "bullets4": "slide_4_pl",
-        "bullets5": "slide_5_cash",
-        "bullets6": "slide_6_gtm",
-        "bullets7": "slide_7_pipeline",
-        "bullets9": "slide_9_outlook",
-    }
-    out = script
-    for const_name, seed_key in alias.items():
-        bullets = seeds.get(seed_key) or []
-        if not bullets:
-            continue
-        pattern = re.compile(
-            rf"((?:const|let|var)\s+{const_name}\s*=\s*\[)(.*?)(\])",
-            re.DOTALL,
-        )
-
-        def _fill(match: re.Match[str], _bullets: list[str] = bullets) -> str:
-            head, body, tail = match.group(1), match.group(2), match.group(3)
-            # Split top-level string literals in the array.
-            parts = re.findall(r'"((?:\\.|[^"\\])*)"|\'((?:\\.|[^\'\\])*)\'', body)
-            if not parts:
-                return match.group(0)
-            filled: list[str] = []
-            for i, (dq, sq) in enumerate(parts):
-                raw = dq if dq else sq
-                quote = '"' if dq or not sq else "'"
-                unesc = raw.replace(r"\'", "'").replace(r'\"', '"')
-                if unesc.strip() in {"—", "-", "–", ""} and i < len(_bullets):
-                    repl = (
-                        _bullets[i]
-                        .replace("\\", "\\\\")
-                        .replace(quote, f"\\{quote}")
-                        .replace("\n", "\\n")
-                    )
-                    filled.append(f"{quote}{repl}{quote}")
-                else:
-                    filled.append(f"{quote}{raw}{quote}")
-            # Preserve any trailing seed slots Claude omitted entirely.
-            if len(filled) < min(3, len(_bullets)):
-                for j in range(len(filled), min(4, len(_bullets))):
-                    repl = (
-                        _bullets[j]
-                        .replace("\\", "\\\\")
-                        .replace('"', '\\"')
-                        .replace("\n", "\\n")
-                    )
-                    filled.append(f'"{repl}"')
-            return head + ",\n    ".join(filled) + tail
-
-        out = pattern.sub(_fill, out)
-    return out
 
 
 def _excerpt_for_prompt(text: str, *, limit: int = 24000) -> str:
@@ -981,11 +948,8 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             "export continues): %s",
             cite_result.summary(),
         )
-    # Refill Key Takeaways slots wiped to "—" from deterministic payload seed.
-    refilled = _refill_stripped_key_takeaways(working, payload)
-    if refilled != working:
-        logger.info("P15 Prompt 5 refilled Key Takeaways slots from board KT seed")
-        working = refilled
+    # Intentionally NO seed-refill of blank/"—" takeaways. Soft-strip may redact
+    # unmatched $/% inside bullets; Claude must author complete takeaways up front.
     return working
 
 
@@ -1033,30 +997,32 @@ def _try_adapt_from_reference(
         f"Adapt the reference PptxGenJS script for close period {period}.\n"
         "Preserve layout/helpers; replace KPI/table/chart numbers from the payload "
         "(numbers or '—' only in cells).\n"
-        "REWRITE all Key Takeaways, risks/opportunities detail+action, board-action "
-        "copy, and commentary strings for this period using BOARD NARRATIVE DEPTH — "
-        "3–5 insight bullets (PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, "
-        "ROOT CAUSE, FORWARD READ with Actual vs Forecast vs Pipeline labels, "
-        "RECOMMENDED BOARD ACTION). Do not keep thin reference one-liners.\n"
-        "GTM/Pipeline takeaways MUST use GTM NARRATIVE REQUIREMENTS (closed-lost, "
-        "slipped, coverage, recommended action) from gtm_performance + EVIDENCE PACKAGE.\n"
-        "Risks/Opportunities cards MUST be rewritten from BOARD R&O SEED "
-        "(must-use board risk matrix cards) — keep driver, magnitude, action; "
-        "PPTX-succinct; never 'Close validation' fillers or empty '-'.\n"
+        "AUTHOR all Key Takeaways, risks/opportunities detail+action, board-action "
+        "copy, and commentary strings for this period using BOARD NARRATIVE DEPTH + "
+        "CRAFT CRITERIA — 3–5 insight bullets (PRIMARY DRIVER + VARIANCE, "
+        "RETENTION/PIPELINE QUALITY, ROOT CAUSE, FORWARD READ with Actual vs Forecast "
+        "vs Pipeline labels, RECOMMENDED BOARD ACTION). Do not keep thin reference "
+        "one-liners. Evidence packages inform authorship — not slot-fill / seed-refill.\n"
+        "GTM/Pipeline takeaways: follow GTM NARRATIVE REQUIREMENTS craft criteria "
+        "(closed-lost, slipped, coverage, recommended action) from gtm_performance + "
+        "EVIDENCE PACKAGE.\n"
+        "Risks/Opportunities cards: author from BOARD R&O EVIDENCE (board risk matrix) "
+        "— keep driver, magnitude, action; PPTX-succinct; never 'Close validation' "
+        "fillers or empty '-'.\n"
         "Return complete raw JavaScript ending with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n\n"
         f"{package_preamble}"
-        "LAYOUT LOCKS (must apply even when adapting):\n"
+        "LAYOUT LOCKS (craft criteria — apply even when adapting):\n"
         "- Slide 3: Key Takeaways FULL WIDTH under the ARR waterfall (not cramped right of bridge).\n"
         "- Slide 5: Use cash_liquidity.ytd_cash_summary (not a thin liquidity-headroom stub); "
         "KT box must end above footer (y+h ≤ 6.85).\n"
-        "- Slide 6: MARKETING FUNNEL section label must not overlap the June title; "
-        "fill all KT slots (use KEY TAKEAWAYS SEED if needed).\n"
+        "- Slide 6: MARKETING FUNNEL section label must not overlap the period title; "
+        "author complete KT bullets (never blank/—).\n"
         "- Slide 7: Pipeline waterfall from gtm_performance.pipeline_waterfall_chart.shape_bars "
-        "(Begin AND End totals, additive). Category labels on x-axis (bar.category_y). "
-        "Key Takeaways FULL WIDTH below the waterfall.\n"
+        "(Begin AND End totals, additive, real beginning value). Category labels on x-axis "
+        "(bar.category_y). Key Takeaways FULL WIDTH below the waterfall.\n"
         "- Slide 11 CFS: copy appendix.ytd_cash_flow_statement Actual/Budget/Variance — "
         "Actual for periods ≤ close only; never Forecast.\n"
-        "- Every Key Takeaways panel: 3–5 filled bullets (never lone '—');\n\n"
+        "- Every Key Takeaways panel you include: 3–5 authored bullets (never lone '—');\n\n"
         f"REFERENCE SCRIPT:\n{_excerpt_for_prompt(ref_script, limit=40000)}\n\n"
         f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=60000)}\n"
     )

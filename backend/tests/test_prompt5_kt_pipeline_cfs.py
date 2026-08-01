@@ -1,4 +1,4 @@
-"""Prompt 5 KT seed, pipeline waterfall, and YTD CFS Actual wiring."""
+"""Prompt 5 craft rules: pipeline waterfall, YTD CFS Actual, KT evidence (no refill)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from app.services.reporting.export.board_platform_metrics import (
     build_ytd_cash_flow_statement,
 )
 from app.services.reporting.export.prompt5_deck import (
-    _refill_stripped_key_takeaways,
+    _verify_prompt5_script_or_raise,
     build_prompt5_payload,
 )
 from app.services.reporting.export.schemas import ExportValidationSummary, ReportingBundle
@@ -146,29 +146,49 @@ def test_ytd_cfs_actual_not_forecast_and_keeps_zeros():
     assert "999" not in cfs["actual"]["net_income"]
 
 
-def test_kt_seed_and_refill_wiped_slots():
+def test_kt_evidence_is_authorship_input_not_slot_fill():
+    """KT bullets are evidence for Claude; marker forbids slot-fill / refill."""
     payload = build_prompt5_payload(_minimal_bundle())
     assert "key_takeaways_by_slide" in payload
     seeds = payload["key_takeaways_by_slide"]
     assert len(seeds["slide_2_executive"]) >= 4
-    assert KT_SEED_MARKER in format_kt_seed_block(payload)
+    policy = (payload.get("key_takeaways_policy") or "").lower()
+    assert "authors" in policy or "evidence" in policy
+    assert "not a template" in policy or "slots" in policy
+
+    block = format_kt_seed_block(payload)
+    assert KT_SEED_MARKER in block
+    assert "NOT SLOT-FILL" in KT_SEED_MARKER or "NOT SLOT-FILL" in block
+    assert "post-process" in block.lower() or "slot-fill" in block.lower()
+    assert "VERBATIM" not in block
+    assert "MUST-USE FALLBACK" not in block
+
+
+def test_verify_does_not_refill_blank_takeaways_from_seed():
+    """Soft-strip path must not paste seed bullets into emptied takeaway slots."""
+    payload = build_prompt5_payload(_minimal_bundle())
+    seeds = build_seed_key_takeaways(payload)
+    seed_fragment = seeds["slide_2_executive"][1][:40]
 
     script = (
+        "const pptxgen = require('pptxgenjs');\n"
+        "const pptx = new pptxgen();\n"
         "const bullets2 = [\n"
-        '  "1. Keep me",\n'
+        '  "1. Keep me with $0 revenue",\n'
         '  "—",\n'
         '  "—",\n'
         '  "4. Keep four",\n'
         "];\n"
+        "pptx.writeFile({ fileName: 'OUTPUT.pptx' });\n"
     )
-    out = _refill_stripped_key_takeaways(script, payload)
-    assert '"—"' not in out or out.count('"—"') < 2
+    out = _verify_prompt5_script_or_raise(script, payload)
     assert "1. Keep me" in out
-    # Slot 2 refilled from seed.
-    assert seeds["slide_2_executive"][1].split(",")[0] in out or "2." in out
+    assert "4. Keep four" in out
+    # Emptied slots stay empty/"—" — no deterministic seed paste into slot 2.
+    assert seed_fragment not in out
 
 
-def test_prompt5_payload_wires_beginning_pipeline_and_kt_seed():
+def test_prompt5_payload_wires_beginning_pipeline_and_kt_evidence():
     rows = [
         _pipe_row("2026-05", "ending_pipeline", Decimal("180000000")),
         _pipe_row("2026-06", "ending_pipeline", Decimal("166000000")),

@@ -2,15 +2,25 @@
 
 Adapted for: JSON payload, slide 11 appendix CFS (no main-deck CFS on slide 6),
 PptxGenJS instance API fixes.
+
+Authoring principle (do not reintroduce template-fill):
+Claude creates the deck — generative authorship of layout, charts, and commentary.
+Board / R&O / GTM / KT packages are evidence + craft criteria ("when you choose X,
+do Y"), not blank slots to fill and not a post-process source that patches emptied
+takeaways after claim-verify soft-strip.
 """
 
-from app.services.reporting.export.prompt5_narrative import PROMPT5_BOARD_NARRATIVE_RULES
+from app.services.reporting.export.prompt5_narrative import (
+    PROMPT5_BOARD_NARRATIVE_RULES,
+    PROMPT5_CRAFT_CRITERIA,
+)
 
 PROMPT5_V3_SYSTEM = """You are a financial presentation designer and SaaS CFO analyst building a board
 operating review for SMPL.ai. You produce a complete Node.js PptxGenJS script
 generating an 11-slide deck. You make every layout, data, chart, and commentary
-decision in one pass. Never use placeholder text. Every metric cell contains a
-real value from the JSON data payload.
+decision in one pass — generative authorship, not filling a rigid template.
+Never use placeholder text. Every metric cell contains a real value from the
+JSON data payload.
 
 COMPANY
 SMPL.ai — AI operating system for SaaS finance teams · Series B
@@ -59,6 +69,8 @@ NARRATIVE / EVIDENCE (P15 — mandatory)
 6. Cite _sources keys on material numbers in Key Takeaways / narrative bullets
    where feasible. Do NOT put (source.key) parentheses inside KPI value cells or
    table number cells — copy those numbers verbatim from the payload.
+7. Board R&O / GTM / KT evidence blocks are authorship inputs — author commentary
+   from them; never leave blanks for a later seed-refill step.
 
 CHARTS — REQUIRED (use pptx.addChart on slides 2, 6, 9 only; pptx.ChartType on INSTANCE not pptxgen)
 Slide 2: KPI sparklines (line) — data from monthly_trends (ending_arr_m, revenue_m, cash_m)
@@ -66,7 +78,7 @@ Slide 3: ARR waterfall — DO NOT use addChart. See SLIDE 3 layout below (shape 
 Slide 6: GTM channel efficiency bar chart — gtm_performance.channels sorted by efficiency
 Slide 9: FY ARR trend line — monthly_trends ending_arr_m + ending_arr_outlook_m vs budget
 
-""" + PROMPT5_BOARD_NARRATIVE_RULES + """
+""" + PROMPT5_CRAFT_CRITERIA + "\n" + PROMPT5_BOARD_NARRATIVE_RULES + """
 At least 2 bullets per Key Takeaways panel must include MoM trend (mom_context) or a
 forward implication. Slides 3, 6, 8: use deal_highlights (top_new_customers, top_churn,
 top_slipped) for named deal callouts when present. Slide 8 risk/opportunity cards and
@@ -89,7 +101,7 @@ Slide 1 — TITLE COVER (centered — board deck reference cover)
 
 Slide 2 — EXECUTIVE DASHBOARD: Row1 five KPI cards with embedded sparklines
 (ARR, Revenue, Cash, Gross Margin %, EBITDA). Row2 left 55% period_matrix table,
-right 45% Key Takeaways.
+right 45% Key Takeaways (author 3–5 complete bullets; never blank/—).
 
 Slide 3 — ARR ANALYSIS: Left 52% waterfall from arr_analysis.waterfall_chart.shape_bars.
   CRITICAL — use slide.addShape(pptx.ShapeType.rect) for each shape_bars[] entry:
@@ -97,13 +109,13 @@ Slide 3 — ARR ANALYSIS: Left 52% waterfall from arr_analysis.waterfall_chart.s
     value label from bar.label above/below per bar.label_position (8pt).
   Category labels (bar.category) on the x-axis baseline under the chart — NOT stacked
   under value labels. Optional y-axis gridlines. NEVER addChart on slide 3.
-  Right 48%: KPIs + arr_analysis.bridge_table only.
+  Real beginning ARR (not 0/blank). Right 48%: KPIs + arr_analysis.bridge_table only.
   Key Takeaways FULL WIDTH under the waterfall+bridge (y≥5.9, max 4 bullets) — more
   commentary space; do not crowd KT into the right column over the bridge.
 
 Slide 4 — P&L REVIEW: Top 4 KPI cards. Bottom left 60% pl_detail table (full GL lines
 including CM/YTD Variance columns verbatim from pl_detail.*.variance).
-Bottom right 40% Key Takeaways (all 5 slots filled — use KEY TAKEAWAYS SEED if needed).
+Bottom right 40% Key Takeaways (author 3–5 complete insight bullets; never blank/—).
 
 Slide 5 — CASH & LIQUIDITY: Left 42% cash bridge + cash_liquidity.ytd_cash_summary
 (replace thin "liquidity headroom" callouts with the YTD cash summary block).
@@ -111,25 +123,26 @@ Right: KPI grid + Key Takeaways. KT box must end above footer (y+h ≤ 6.85).
 Show "—" only for true zero/missing bridge lines.
 
 Slide 6 — GTM / MARKETING FUNNEL: Funnel tables (CM / Q2 / YTD) from gtm_funnel.
-Section label "MARKETING FUNNEL" must NOT share coordinates with the June title
+Section label "MARKETING FUNNEL" must NOT share coordinates with the period title
 (place funnel label below the slide title, e.g. y≥0.95). Pipeline summary strip.
-Key Takeaways full-width at bottom — fill all slots (GTM NARRATIVE REQUIREMENTS +
-KEY TAKEAWAYS SEED fallback). Never blank KT #1.
+Key Takeaways full-width at bottom — author complete bullets per GTM NARRATIVE
+REQUIREMENTS craft criteria. Never blank KT #1.
 
 Slide 7 — PIPELINE WATERFALL: Left shape_bars from
 gtm_performance.pipeline_waterfall_chart (additive Begin + Created − Closed Won −
-Closed Lost − Slipped → End). Category labels on x-axis (bar.category at
-bar.category_y). Right: pipeline KPIs + bridge table (include beginning_pipeline).
-Key Takeaways FULL WIDTH below the waterfall (not overlapping the bridge).
+Closed Lost − Slipped → End; real beginning value). Category labels on x-axis
+(bar.category at bar.category_y). Right: pipeline KPIs + bridge table (include
+beginning_pipeline). Key Takeaways FULL WIDTH below the waterfall (not overlapping
+the bridge).
 
 Slide 8 — STRATEGIC ASSESSMENT: 2 columns — RISKS left (red border), OPPORTUNITIES right
-(green border). 4 cards each from risks_and_opportunities.risks and .opportunities
-(BOARD R&O SEED / board platform risk matrix — rewrite for PPTX; keep driver+$+action).
+(green border). Author 4 cards each from BOARD R&O EVIDENCE /
+risks_and_opportunities (board platform risk matrix — keep driver+$+action).
 Each card: level badge, title, detail with $, action line, impact/upside field.
 Never thin stubs or empty "-" details.
 
 Slide 9 — FINANCIAL OUTLOOK: Left FY ARR trend chart + fy_outlook summary table.
-Right h2_priorities cards + Key Takeaways (all 4 slots filled).
+Right h2_priorities cards + Key Takeaways (author 3–4 complete bullets).
 
 Slide 10 — BOARD ACTIONS: 2×2 grid from board_actions. Large cyan numbers 01-04.
 

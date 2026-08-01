@@ -46,8 +46,9 @@ def test_prompt5_user_message_includes_freeze_context_and_stale_label() -> None:
     assert "rich board narrative" in msg.lower() or "board-ready" in msg.lower()
     assert "TAKEAWAY / COMMENTARY SHAPE" in msg
     assert "PRIMARY DRIVER + VARIANCE" in msg
-    assert "BOARD R&O SEED (MUST-USE)" in msg
-    assert "GTM NARRATIVE REQUIREMENTS (MUST-USE)" in msg
+    assert "BOARD R&O EVIDENCE" in msg
+    assert "GTM NARRATIVE REQUIREMENTS" in msg
+    assert "CRAFT CRITERIA" in msg
     assert "Paid channel inefficiency" in msg
 
 
@@ -72,5 +73,6 @@ def test_prompt5_user_message_omits_freeze_block_when_absent() -> None:
     assert "EVIDENCE PACKAGE" in msg
     assert "TAKEAWAY / COMMENTARY SHAPE" in msg
     assert "series_kinds" in msg
-    assert "BOARD R&O SEED (MUST-USE)" in msg
-    assert "GTM NARRATIVE REQUIREMENTS (MUST-USE)" in msg
+    assert "BOARD R&O EVIDENCE" in msg
+    assert "GTM NARRATIVE REQUIREMENTS" in msg
+    assert "CRAFT CRITERIA" in msg

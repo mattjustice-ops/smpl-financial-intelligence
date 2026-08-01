@@ -20,7 +20,10 @@ from app.services.reporting.export.prompt5_deck import (
     build_prompt5_package_preamble,
     build_prompt5_user_message,
 )
-from app.services.reporting.export.prompt5_narrative import PROMPT5_BOARD_NARRATIVE_RULES
+from app.services.reporting.export.prompt5_narrative import (
+    PROMPT5_BOARD_NARRATIVE_RULES,
+    PROMPT5_CRAFT_CRITERIA,
+)
 
 
 def test_prompt5_narrative_rules_require_insight_shape_not_delta_stubs() -> None:
@@ -35,18 +38,37 @@ def test_prompt5_narrative_rules_require_insight_shape_not_delta_stubs() -> None
     assert "KPI / TABLE CELLS" in text
     assert 'numbers (or "—") ONLY' in text
     assert "don't-know essays" in text
-    assert "BOARD R&O SEED" in text or "RISKS / OPPORTUNITIES CARDS" in text
+    assert "BOARD R&O EVIDENCE" in text or "RISKS / OPPORTUNITIES CARDS" in text
     assert "closed-lost" in text.lower() or "CLOSED-LOST" in text
+    assert "slot-fill" in text.lower() or "blank" in text.lower()
+
+
+def test_prompt5_craft_criteria_teach_when_you_choose_x() -> None:
+    craft = PROMPT5_CRAFT_CRITERIA
+    assert "when you choose" in craft.lower() or "When you use" in craft
+    assert "WATERFALL" in craft
+    assert "begin" in craft.lower() and "x-axis" in craft.lower()
+    assert "KEY TAKEAWAYS" in craft
+    assert "never" in craft.lower() and ("blank" in craft.lower() or "—" in craft)
+    assert "Actual" in craft
+    assert "Forecast" in craft
+    assert "slot-fill" in craft.lower()
 
 
 def test_prompt5_v3_and_adapt_systems_embed_narrative_rules() -> None:
     assert "PRIMARY DRIVER + VARIANCE CONTEXT" in PROMPT5_SYSTEM
     assert "BOARD NARRATIVE DEPTH" in PROMPT5_SYSTEM
+    assert "CRAFT CRITERIA" in PROMPT5_SYSTEM
+    assert "generative authorship" in PROMPT5_SYSTEM.lower()
     assert "KPI / TABLE CELLS" in PROMPT5_SYSTEM
     assert "PRIMARY DRIVER + VARIANCE CONTEXT" in PROMPT5_ADAPT_SYSTEM
     assert "REWRITE all narrative text" in PROMPT5_ADAPT_SYSTEM or "REWRITE" in PROMPT5_ADAPT_SYSTEM
-    assert "BOARD R&O SEED" in PROMPT5_ADAPT_SYSTEM
+    assert "BOARD R&O EVIDENCE" in PROMPT5_ADAPT_SYSTEM
+    assert "CRAFT CRITERIA" in PROMPT5_ADAPT_SYSTEM
     assert "closed-lost" in PROMPT5_ADAPT_SYSTEM.lower()
+    assert "KEY TAKEAWAYS SEED verbatim" not in PROMPT5_ADAPT_SYSTEM
+    assert "MUST-USE FALLBACK" not in PROMPT5_SYSTEM
+    assert "MUST-USE FALLBACK" not in PROMPT5_ADAPT_SYSTEM
     # Old thin stub cap must not remain as the governing instruction.
     assert "max 22 words" not in PROMPT5_SYSTEM
     assert "max 22 words" not in PROMPT5_ADAPT_SYSTEM
@@ -71,9 +93,11 @@ def test_board_ro_seed_matches_board_platform_tab_cards() -> None:
     seed = format_board_ro_seed_block()
     assert BOARD_RO_SEED_MARKER in seed
     assert "Paid channel inefficiency" in seed
-    assert "MUST" in seed
+    assert "AUTHORSHIP" in BOARD_RO_SEED_MARKER or "evidence" in seed.lower()
+    assert "slot-fill" in seed.lower() or "blank-slot" in seed.lower() or "author" in seed.lower()
     gtm = format_gtm_narrative_requirements_block()
     assert GTM_NARRATIVE_SEED_MARKER in gtm
+    assert "CRAFT" in GTM_NARRATIVE_SEED_MARKER or "craft" in gtm.lower()
     assert "closed-lost" in gtm.lower()
     assert "slipped" in gtm.lower()
     assert "coverage" in gtm.lower()
@@ -129,9 +153,13 @@ def test_prompt5_preamble_and_user_message_inject_ro_and_gtm_seeds() -> None:
     assert "ATTRIBUTION PACKAGE" in msg
     assert BOARD_RO_SEED_MARKER in msg
     assert GTM_NARRATIVE_SEED_MARKER in msg
-    assert "BOARD R&O SEED" in msg
+    assert "BOARD R&O EVIDENCE" in msg
     assert "GTM NARRATIVE REQUIREMENTS" in msg
-    assert "KEY TAKEAWAYS SEED" in msg
+    assert "KEY TAKEAWAYS EVIDENCE" in msg
+    assert "CRAFT CRITERIA" in msg
+    assert "generative authorship" in msg.lower() or "AUTHOR" in msg
+    assert "MUST-USE FALLBACK" not in msg
+    assert "copy the matching seed bullet VERBATIM" not in msg
     assert "KPI/table cells" in msg.lower() or "KPI/table" in msg
     assert "rich board narrative" in msg.lower() or "board-ready" in msg.lower()
 

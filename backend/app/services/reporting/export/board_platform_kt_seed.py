@@ -1,10 +1,17 @@
-"""Deterministic Key Takeaways seed for Prompt 5 — fallback when Claude/soft-strip blanks slots."""
+"""Board-platform Key Takeaways *evidence* for Prompt 5 (not a slot-fill template).
+
+Principle (do not reintroduce): Claude authors Key Takeaways. This module supplies
+optional board-platform insight bullets as **input evidence** Claude may cite or
+draw from when authoring. It is NOT a template of blank slots to fill, and MUST
+NOT be used to post-process / refill emptied takeaway strings after soft-strip.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
-KT_SEED_MARKER = "KEY TAKEAWAYS SEED (MUST-USE FALLBACK)"
+# Evidence marker — not a must-use fallback fill source.
+KT_SEED_MARKER = "KEY TAKEAWAYS EVIDENCE (AUTHORSHIP INPUT — NOT SLOT-FILL)"
 
 
 def _s(block: dict[str, Any] | None, *keys: str, default: str = "—") -> str:
@@ -24,10 +31,11 @@ def _period_label(payload: dict[str, Any]) -> str:
 
 
 def build_seed_key_takeaways(payload: dict[str, Any]) -> dict[str, list[str]]:
-    """Build 4–5 board-ready takeaway bullets per narrative slide from payload metrics.
+    """Build board-platform takeaway *evidence* bullets from payload metrics.
 
-    Numbers are copied from the deck payload (already evidence-backed). Used as:
-    1) prompt must-fill slots, and 2) post-soft-strip refill when a bullet is ``—``.
+    Numbers are copied from the deck payload (already evidence-backed). Injected
+    into the prompt as authorship context only. Do not use for post-export
+    slot refill.
     """
     label = _period_label(payload)
     pm = payload.get("period_matrix") or {}
@@ -129,13 +137,16 @@ def build_seed_key_takeaways(payload: dict[str, Any]) -> dict[str, list[str]]:
 
 
 def format_kt_seed_block(payload: dict[str, Any]) -> str:
-    """Prompt block — Claude must fill every KT slot; use these if inventing would fail verify."""
+    """Prompt block — optional evidence Claude may use when *authoring* takeaways."""
     seeds = payload.get("key_takeaways_by_slide") or build_seed_key_takeaways(payload)
     lines = [
         f"{KT_SEED_MARKER}",
-        "Every Key Takeaways panel MUST have 3–5 filled bullets (never blank or lone '—').",
-        "Prefer rewritten insight bullets from packages; if a slot would be empty/soft-stripped,",
-        "copy the matching seed bullet VERBATIM (numbers already match EVIDENCE PACKAGE).",
+        "Claude AUTHORS every Key Takeaways panel (generative authorship).",
+        "These bullets are board-platform evidence you may cite or draw from — NOT a",
+        "template of slots to fill, and NOT a post-process fallback to paste into blanks.",
+        "Craft rule: when you include Key Takeaways, write 3–5 complete insight bullets",
+        "(never blank, lone '—', or empty placeholders). Soft-strip may redact bad numbers",
+        "inside a bullet; do not emit empty takeaway strings.",
         "",
     ]
     for slide_key, bullets in seeds.items():
