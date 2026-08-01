@@ -1,9 +1,9 @@
-"""Board Platform Risks & Opportunities seed for Prompt 5.
+"""Board Platform Risks & Opportunities evidence for Prompt 5.
 
 Source of truth: frontend/canonical/board/index.html ``renderRisks`` cards
 (Operational risk matrix · Strategic opportunities). Injected into Prompt 5
-fresh + adapt prompts as must-use rewrite material — adapt for PPTX brevity
-while keeping driver, magnitude, and action.
+as authorship *evidence* Claude may use when writing Strategic Assessment cards —
+not a blank-slot template to fill after the fact.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ import json
 from typing import Any
 
 # Stable phrases asserted by tests — keep labels aligned with the board tab.
-BOARD_RO_SEED_MARKER = "BOARD R&O SEED (MUST-USE)"
-GTM_NARRATIVE_SEED_MARKER = "GTM NARRATIVE REQUIREMENTS (MUST-USE)"
+BOARD_RO_SEED_MARKER = "BOARD R&O EVIDENCE (AUTHORSHIP INPUT)"
+GTM_NARRATIVE_SEED_MARKER = "GTM NARRATIVE REQUIREMENTS (CRAFT CRITERIA)"
 
 # Cards match board platform Risks & Opps tab (renderRisks). Actions are the
 # board-implied next step split out for PPTX card Action lines.
@@ -184,23 +184,23 @@ def board_ro_cards_for_payload() -> dict[str, list[dict[str, str]]]:
 
 
 def format_board_ro_seed_block() -> str:
-    """Must-use R&O seed block for Prompt 5 package preamble (fresh + adapt)."""
+    """R&O evidence block for Prompt 5 package preamble (fresh + adapt)."""
     seed = {
         "source": "Board Platform Risks & Opportunities tab (renderRisks)",
         "policy": (
-            "MUST rewrite slide Risks/Opportunities cards from these seeds. "
-            "Keep driver + magnitude + recommended action. Adapt wording for PPTX "
-            "brevity (detail ~35–55 words; action one crisp line). Do NOT replace "
-            "with thin stubs ('Deferred pipeline', 'Close validation', empty '-'). "
-            "Prefer these insights over generic heuristic fillers. Numbers in seeds "
-            "are board-tab grounded — keep magnitudes when rewriting."
+            "When you author Strategic Assessment Risks/Opportunities cards, use "
+            "these board-platform insights as evidence (driver + magnitude + action). "
+            "Adapt wording for PPTX brevity (detail ~35–55 words; action one crisp "
+            "line). Do NOT emit thin stubs ('Deferred pipeline', 'Close validation', "
+            "empty '-'). Not a slot-fill template — author the cards; cite magnitudes "
+            "from this evidence / EVIDENCE PACKAGE."
         ),
         "risks": BOARD_PLATFORM_RISKS_OPPORTUNITIES["risks"],
         "opportunities": BOARD_PLATFORM_RISKS_OPPORTUNITIES["opportunities"],
     }
     return (
-        f"{BOARD_RO_SEED_MARKER} — rewrite Strategic Assessment cards from this "
-        "board risk matrix; keep driver, $, and action:\n"
+        f"{BOARD_RO_SEED_MARKER} — board risk matrix evidence for authoring "
+        "Strategic Assessment cards (driver, $, action):\n"
         f"{json.dumps(seed, separators=(',', ':'))}\n\n"
     )
 
@@ -231,14 +231,16 @@ def format_gtm_narrative_requirements_block() -> str:
             ),
         ],
         "policy": (
-            "Match Copilot depth: closed-lost, slipped, coverage, recommended action. "
-            "Use package evidence only (TOL_ACTUALS=$1). Label pipeline as pipeline, "
-            "not actual revenue. KPI/table cells stay numbers or '—' — narrative carries "
-            "the story. Never leave Key Takeaways as thin closed-won-only stubs."
+            "Craft criteria when authoring GTM/Pipeline takeaways: cover closed-lost, "
+            "slipped, coverage, recommended action at Copilot depth. Use package "
+            "evidence only (TOL_ACTUALS=$1). Label pipeline as pipeline, not actual "
+            "revenue. KPI/table cells stay numbers or '—' — narrative carries the "
+            "story. Author complete bullets; never thin closed-won-only stubs or "
+            "blank/— takeaways."
         ),
     }
     return (
-        f"{GTM_NARRATIVE_SEED_MARKER} — GTM/Pipeline takeaways must follow this "
-        "Copilot-depth structure using package evidence:\n"
+        f"{GTM_NARRATIVE_SEED_MARKER} — when you write GTM/Pipeline takeaways, "
+        "follow this Copilot-depth structure using package evidence:\n"
         f"{json.dumps(req, separators=(',', ':'))}\n\n"
     )
