@@ -131,6 +131,7 @@ def test_prompt5_preamble_and_user_message_inject_ro_and_gtm_seeds() -> None:
     assert GTM_NARRATIVE_SEED_MARKER in msg
     assert "BOARD R&O SEED" in msg
     assert "GTM NARRATIVE REQUIREMENTS" in msg
+    assert "KEY TAKEAWAYS SEED" in msg
     assert "KPI/table cells" in msg.lower() or "KPI/table" in msg
     assert "rich board narrative" in msg.lower() or "board-ready" in msg.lower()
 

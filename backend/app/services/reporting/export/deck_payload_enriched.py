@@ -232,10 +232,16 @@ def build_pl_detail_block(
             if label == "cm"
             else gross_margin_pct_horizon(bundle, periods, "Budget")
         )
+        gm_var = "—"
+        if gm_a is not None and gm_b is not None:
+            delta = float(gm_a) - float(gm_b)
+            # gm_* are already percent points (e.g. 70.0) when as_percent=False path used below.
+            gm_var = f"{delta:+.1f}pp"
         rows["gross_margin_pct"] = {
             "label": "Gross Margin %",
             "actual": fmt_deck_pct(gm_a, as_percent=False) if gm_a is not None else "n/a",
             "budget": fmt_deck_pct(gm_b, as_percent=False) if gm_b is not None else "n/a",
+            "variance": gm_var,
         }
         return rows
 

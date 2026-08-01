@@ -43,10 +43,13 @@ DONT_KNOW_NARRATIVE = (
 # Prompt 5 PPTX soft-strip: never inject multi-sentence don't-know essays into
 # string literals (KPI/table cells and takeaways). Em dash keeps layout intact.
 PPTX_SOFT_STRIP_CELL = "—"
+# Long narrative / Key Takeaways: redact only failed claims; keep verified prose.
+_NARRATIVE_SOFT_STRIP_MIN_LEN = 80
+_TAKEAWAY_BULLET_RE = re.compile(r"^\s*\d+\.\s+")
 
 
 def pptx_soft_strip_literal_replacement(inner: str, *, dont_know: str) -> str:
-    """Replacement for a failed PPTX JS string literal under deck soft policy.
+    """Fallback whole-literal replacement under deck soft policy (short cells).
 
     Always returns ``—``. The ``dont_know`` argument is accepted for call-site
     compatibility but must not be written into the deck — stuffing
@@ -55,6 +58,36 @@ def pptx_soft_strip_literal_replacement(inner: str, *, dont_know: str) -> str:
     """
     _ = (inner, dont_know)
     return PPTX_SOFT_STRIP_CELL
+
+
+def _pptx_is_narrative_literal(inner: str) -> bool:
+    """Takeaway/commentary literals — redact claims, do not wipe the whole bullet."""
+    text = (inner or "").strip()
+    if not text:
+        return False
+    if _TAKEAWAY_BULLET_RE.match(text):
+        return True
+    return len(text) >= _NARRATIVE_SOFT_STRIP_MIN_LEN
+
+
+def pptx_soft_strip_failed_claims_in_literal(
+    inner: str,
+    failed_stated: Sequence[str],
+) -> str:
+    """Redact failed claim tokens inside a narrative literal; keep verified text."""
+    text = inner or ""
+    if not text.strip():
+        return PPTX_SOFT_STRIP_CELL
+    # Longest first so "$1.2M" is not partially eaten by "$1".
+    for stated in sorted({s for s in failed_stated if s}, key=len, reverse=True):
+        text = text.replace(stated, PPTX_SOFT_STRIP_CELL)
+    cleaned = re.sub(r"\s{2,}", " ", text).strip(" ,;|")
+    cleaned = re.sub(r"(?:\s*—){2,}", f" {PPTX_SOFT_STRIP_CELL}", cleaned).strip()
+    # If redaction left only numbering / em dashes, collapse to a single cell dash.
+    remnant = re.sub(r"[\d\.\s—\-–|]+", "", cleaned)
+    if not remnant:
+        return PPTX_SOFT_STRIP_CELL
+    return cleaned if cleaned else PPTX_SOFT_STRIP_CELL
 
 
 # Sentence ends that are not dotted identifiers (mrr_waterfall.ending_mrr).
@@ -1285,9 +1318,10 @@ def apply_fail_closed_claims_to_pptx_script(
 ) -> tuple[str, VerificationResult]:
     """Soft-strip unmatched money/%/Nx inside PPTX JS string literals.
 
-    Failed literals become ``—`` (never a multi-sentence don't-know essay).
-    Layout / chart array code outside strings is ignored. Prompt 5 callers
-    warn + export the rewritten script (no hard-block on invent / evidence gaps).
+    Short KPI/table cells become ``—``. Long Key Takeaways / commentary keep
+    verified prose and redact only failed claim tokens (so one invented $ does
+    not blank an entire board bullet). Layout / chart array code outside
+    strings is ignored. Prompt 5 callers warn + export the rewritten script.
     """
     values = _evidence_values_map(evidence)
     all_checks: list[ClaimCheck] = []
@@ -1308,9 +1342,15 @@ def apply_fail_closed_claims_to_pptx_script(
         local = VerificationResult(checks=local_checks)
         if local.ok:
             return raw
-        replacement = pptx_soft_strip_literal_replacement(
-            inner_unesc, dont_know=DONT_KNOW_NARRATIVE
-        )
+        if _pptx_is_narrative_literal(inner_unesc):
+            failed_stated = [c.claim.stated for c in local.failures]
+            replacement = pptx_soft_strip_failed_claims_in_literal(
+                inner_unesc, failed_stated
+            )
+        else:
+            replacement = pptx_soft_strip_literal_replacement(
+                inner_unesc, dont_know=DONT_KNOW_NARRATIVE
+            )
         escaped = (
             replacement.replace("\\", "\\\\")
             .replace(quote, f"\\{quote}")

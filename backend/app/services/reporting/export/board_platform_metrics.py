@@ -464,48 +464,75 @@ def _sum_cfs_from_ts(
     periods: list[str],
     scenario: str,
 ) -> dict[str, float | None]:
+    """Sum CFS flow keys. Missing keys stay None (distinct from true zero)."""
     block = ts_data.get(scenario) or {}
     cfs_by_period = block.get("cfs") or {}
-    totals: dict[str, float] = {k: 0.0 for k in _CFS_YTD_SUM_KEYS}
+    totals: dict[str, float | None] = {k: None for k in _CFS_YTD_SUM_KEYS}
     for period in periods:
+        # Closed YTD must use Actual rows only — never Forecast for ≤ as_of.
         row = cfs_by_period.get(period) or {}
         for key in _CFS_YTD_SUM_KEYS:
             val = row.get(key)
             if val not in (None, ""):
-                totals[key] += float(val)
+                totals[key] = (totals[key] or 0.0) + float(val)
     return totals
+
+
+def _merge_cfs_totals(
+    primary: dict[str, float | None],
+    fallback: dict[str, Decimal] | dict[str, float | None],
+) -> dict[str, float | None]:
+    """Prefer primary (ts Actual/Budget); fill gaps from FS without inventing Forecast."""
+    out: dict[str, float | None] = {}
+    for key in _CFS_YTD_SUM_KEYS:
+        val = primary.get(key)
+        if val is not None:
+            out[key] = float(val)
+            continue
+        fb = fallback.get(key)
+        if fb is None:
+            out[key] = None
+        else:
+            out[key] = float(fb)
+    return out
 
 
 def build_ytd_cash_flow_statement(
     bundle: ReportingBundle,
     ts_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """YTD indirect CFS — Actual + Budget (matches board 3-statement tab)."""
+    """YTD indirect CFS — Actual + Budget for periods ≤ close_month (never Forecast)."""
     as_of = bundle.as_of_period
     ytd_p = ytd_periods(as_of)
     cur = bundle.currency
 
-    def pack_scenario(scenario: str) -> dict[str, str]:
+    def pack_scenario(scenario: str) -> dict[str, Any]:
+        # Force Actual/Budget only — Forecast is never a YTD CFS source for closed months.
+        if scenario not in ("Actual", "Budget"):
+            scenario = "Actual"
+        fs_totals = {k: float(v) for k, v in _sum_cfs_from_fs(bundle, ytd_p, scenario).items()}
         if ts_data and scenario in ts_data:
-            totals = _sum_cfs_from_ts(ts_data, ytd_p, scenario)
+            ts_totals = _sum_cfs_from_ts(ts_data, ytd_p, scenario)
+            totals = _merge_cfs_totals(ts_totals, fs_totals)
             end = (ts_data[scenario].get("cfs") or {}).get(as_of, {}).get("ending_cash")
         else:
-            dec = _sum_cfs_from_fs(bundle, ytd_p, scenario)
-            totals = {k: float(v) for k, v in dec.items()}
+            totals = {k: fs_totals.get(k) for k in _CFS_YTD_SUM_KEYS}
             end = _cfs_point_from_fs(bundle, as_of, scenario, "ending cash")
 
         beg_val = _ytd_beginning_cash(bundle, ts_data, ytd_p, scenario)
-        end_val = Decimal(str(end)) if end is not None else None
-        if end_val is None and end:
-            end_val = Decimal(str(end))
+        end_val = Decimal(str(end)) if end is not None and end != "" else None
+        if end_val is None:
+            end_fs = _cfs_point_from_fs(bundle, as_of, scenario, "ending cash")
+            end_val = end_fs if end_fs else None
 
         def fmt(key: str) -> str:
             val = totals.get(key)
-            if val is None or val == 0:
+            if val is None:
                 return "n/a"
+            # Preserve true zeros — do not collapse observed 0.0 into n/a.
             return fmt_deck_money(Decimal(str(val)))
 
-        return {
+        display = {
             "beginning_cash": _fmt_cfs_line(beg_val, allow_zero=True),
             "net_income": fmt("net_income"),
             "depreciation_amortization": fmt("da"),
@@ -522,12 +549,53 @@ def build_ytd_cash_flow_statement(
             "ending_cash": _fmt_cfs_line(end_val, allow_zero=True),
             "ytd_periods": ytd_p,
             "currency": cur,
+            "scenario": scenario,
         }
+        # Raw floats for evidence / variance (None when truly missing).
+        display["raw"] = {
+            "beginning_cash": float(beg_val) if beg_val is not None else None,
+            "ending_cash": float(end_val) if end_val is not None else None,
+            **{k: totals.get(k) for k in _CFS_YTD_SUM_KEYS},
+        }
+        return display
+
+    actual = pack_scenario("Actual")
+    budget = pack_scenario("Budget")
+
+    def _var(a: float | None, b: float | None) -> str:
+        if a is None or b is None:
+            return "—"
+        return fmt_deck_var(Decimal(str(a)), Decimal(str(b)))
+
+    a_raw = actual.get("raw") or {}
+    b_raw = budget.get("raw") or {}
+    variance = {
+        "beginning_cash": _var(a_raw.get("beginning_cash"), b_raw.get("beginning_cash")),
+        "net_income": _var(a_raw.get("net_income"), b_raw.get("net_income")),
+        "depreciation_amortization": _var(a_raw.get("da"), b_raw.get("da")),
+        "stock_based_compensation": _var(a_raw.get("sbc"), b_raw.get("sbc")),
+        "change_in_ar": _var(a_raw.get("chg_ar"), b_raw.get("chg_ar")),
+        "change_in_deferred_revenue": _var(a_raw.get("chg_dr"), b_raw.get("chg_dr")),
+        "change_in_ap": _var(a_raw.get("chg_ap"), b_raw.get("chg_ap")),
+        "change_in_prepaids": _var(a_raw.get("chg_prepaids"), b_raw.get("chg_prepaids")),
+        "cfo": _var(a_raw.get("cfo"), b_raw.get("cfo")),
+        "capex": _var(a_raw.get("capex"), b_raw.get("capex")),
+        "cfi": _var(a_raw.get("cfi"), b_raw.get("cfi")),
+        "cff": _var(a_raw.get("cff"), b_raw.get("cff")),
+        "net_change_in_cash": _var(a_raw.get("net_change"), b_raw.get("net_change")),
+        "ending_cash": _var(a_raw.get("ending_cash"), b_raw.get("ending_cash")),
+    }
 
     return {
         "label": f"YTD Cash Flow Statement ({_ytd_label(as_of)})",
-        "actual": pack_scenario("Actual"),
-        "budget": pack_scenario("Budget"),
+        "actual": actual,
+        "budget": budget,
+        "variance": variance,
+        "scenario_policy": (
+            f"YTD Actual uses Actual CFS for periods ≤ {as_of} (close_month); "
+            "never Forecast. Budget column is Budget scenario only."
+        ),
+        "table_headers": ["Line Item", "YTD Actual", "YTD Budget", "YTD Variance"],
         "source": "build_ts_data.cfs" if ts_data else "financial_statements.cash_flow",
     }
 
@@ -616,8 +684,28 @@ def build_cash_liquidity_block(
         },
         "ytd": {
             "collections": fmt_deck_money(coll_ytd),
+            "collections_raw": float(coll_ytd),
             "cash_eop_actual": fmt_deck_money(cash_r.ytd),
+            "cash_eop_actual_raw": float(cash_r.ytd or 0),
             "cash_eop_budget": fmt_deck_money(cash_r.budget_fy),
+            "cash_eop_budget_raw": float(cash_r.budget_fy or 0),
+        },
+        # Prefer YTD cash summary on slide 5 over a thin "liquidity headroom" callout.
+        "ytd_cash_summary": {
+            "title": "YTD Cash Summary",
+            "collections": fmt_deck_money(coll_ytd),
+            "ending_cash": fmt_deck_money(cash_r.ytd),
+            "ending_cash_budget": fmt_deck_money(cash_r.budget_fy),
+            "lines": [
+                f"YTD Collections: {fmt_deck_money(coll_ytd)}",
+                f"YTD Ending Cash: {fmt_deck_money(cash_r.ytd)}",
+                f"YTD Ending Cash Budget: {fmt_deck_money(cash_r.budget_fy)}",
+            ],
+            "display": (
+                f"YTD Collections: {fmt_deck_money(coll_ytd)}  |  "
+                f"YTD Ending Cash: {fmt_deck_money(cash_r.ytd)}  |  "
+                f"Budget: {fmt_deck_money(cash_r.budget_fy)}"
+            ),
         },
         "currency": cur,
     }
@@ -889,10 +977,133 @@ def build_arr_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
         },
         "label_decimals": 2,
         "render": "shape_rectangles",
+        "category_label_placement": "x_axis_below_bars",
         "note": (
             "MANDATORY: draw slide 3 waterfall with slide.addShape rectangles from shape_bars "
-            "(one rect + one text label per bar). DO NOT use addChart on slide 3 — stacked charts "
-            "corrupt the PPTX. Actuals only — never Budget in a waterfall."
+            "(one rect + one text label per bar). Place bar.category on the x-axis under the "
+            "plot (not stacked under value labels). DO NOT use addChart on slide 3 — stacked "
+            "charts corrupt the PPTX. Actuals only — never Budget in a waterfall."
+        ),
+    }
+
+
+def build_pipeline_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
+    """Actual additive pipeline waterfall — Begin + flows → Ending (shape_bars)."""
+    as_of = bundle.as_of_period
+    prior = prior_period(as_of)
+
+    def pipe(wtype: str, period: str = as_of, scenario: str = "Actual") -> Decimal:
+        val = _wf(bundle, "pipeline", wtype, period, scenario)
+        return abs(val) if val else ZERO
+
+    beginning = pipe("beginning_pipeline")
+    if not beginning:
+        # Standard bridge: prior ending is this period's beginning.
+        beginning = pipe("ending_pipeline", prior)
+    created = pipe("pipeline_created")
+    closed_won = pipe("closed_won")
+    closed_lost = pipe("closed_lost")
+    slipped = pipe("slipped_pipeline")
+    ending = pipe("ending_pipeline")
+
+    def to_m(val: Decimal) -> float:
+        return round(float(val) / 1_000_000, 4)
+
+    bop_m = to_m(beginning)
+    created_m = to_m(created)
+    won_m = -to_m(closed_won)
+    lost_m = -to_m(closed_lost)
+    slip_m = -to_m(slipped)
+    end_m = to_m(ending)
+
+    after_created = bop_m + created_m
+    after_won = after_created + won_m
+    after_lost = after_won + lost_m
+    after_slip = after_lost + slip_m
+    # Prefer warehouse ending; fall back to additive close so the bridge is complete.
+    if end_m <= 0 and (bop_m or created_m):
+        end_m = after_slip
+
+    labels = [
+        "Begin Pipeline",
+        "Created",
+        "Closed Won",
+        "Closed Lost",
+        "Slipped",
+        "End Pipeline",
+    ]
+    kinds = ["total", "increase", "decrease", "decrease", "decrease", "total"]
+    signed_m = [bop_m, created_m, won_m, lost_m, slip_m, end_m]
+    offsets_m = [0, bop_m, after_won, after_lost, after_slip, 0]
+    heights_m = [bop_m, created_m, abs(won_m), abs(lost_m), abs(slip_m), end_m]
+
+    color_map = {
+        "total": "00d4aa",
+        "increase": "166534",
+        "decrease": "991b1b",
+    }
+    bar_colors = [color_map[kind] for kind in kinds]
+    steps = [
+        {
+            "label": label,
+            "kind": kind,
+            "value_m": signed_m[i],
+            "display": _waterfall_display_m(signed_m[i], is_total=kind == "total"),
+            "offset_m": offsets_m[i],
+            "height_m": heights_m[i],
+            "bar_color": bar_colors[i],
+        }
+        for i, (label, kind) in enumerate(zip(labels, kinds))
+    ]
+
+    month_label = f"{calendar.month_name[int(as_of[5:7])]} {as_of[:4]}"
+    span_vals = [v for v in (bop_m, end_m, after_created, after_slip) if v]
+    y_min = 0.0
+    y_max = math.ceil(max(span_vals) * 1.05) if span_vals else 10.0
+    chart_area = {"x": 0.35, "y": 1.05, "w": 6.6, "h": 3.55}
+    shape_bars = _compute_waterfall_shape_bars(
+        kinds=kinds,
+        offsets_m=[round(v, 2) for v in offsets_m],
+        heights_m=[round(v, 2) for v in heights_m],
+        bar_colors=bar_colors,
+        steps=steps,
+        y_min=y_min,
+        y_max=y_max,
+        chart_x=chart_area["x"],
+        chart_y=chart_area["y"],
+        chart_w=chart_area["w"],
+        chart_h=chart_area["h"],
+    )
+    # X-axis category labels sit on a shared baseline under the plot (not under bars).
+    axis_y = round(chart_area["y"] + chart_area["h"] + 0.08, 3)
+    for bar, step in zip(shape_bars, steps):
+        bar["category_y"] = axis_y
+        bar["category"] = step["label"]
+
+    return {
+        "title": f"Pipeline waterfall — {month_label}",
+        "subtitle": "Begin Pipeline → flows → Ending Pipeline ($M ARR)",
+        "scenario": "Actual",
+        "labels": labels,
+        "steps": steps,
+        "offsets_m": [round(v, 2) for v in offsets_m],
+        "heights_m": [round(v, 2) for v in heights_m],
+        "signed_m": [round(v, 2) for v in signed_m],
+        "bar_colors": bar_colors,
+        "shape_bars": shape_bars,
+        "chart_area": chart_area,
+        "beginning_pipeline_raw": float(beginning),
+        "ending_pipeline_raw": float(ending) if ending else float(end_m * 1_000_000),
+        "beginning_display": fmt_deck_money(beginning) if beginning else _waterfall_display_m(bop_m, is_total=True),
+        "ending_display": fmt_deck_money(ending) if ending else _waterfall_display_m(end_m, is_total=True),
+        "colors": color_map,
+        "y_axis": {"min_m": y_min, "max_m": y_max, "tick_format": "$0M"},
+        "category_label_placement": "x_axis_below_chart",
+        "render": "shape_rectangles",
+        "note": (
+            "MANDATORY slide 7: additive pipeline waterfall from shape_bars with Begin AND End "
+            "totals. Category labels from bar.category at bar.category_y on the x-axis "
+            "(shared baseline) — not under each bar value label. No addChart."
         ),
     }
 

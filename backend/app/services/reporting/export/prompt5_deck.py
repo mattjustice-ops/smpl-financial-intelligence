@@ -209,6 +209,10 @@ def _board_actions(bundle: ReportingBundle) -> list[dict[str, str]]:
 
 def _marketing_block(bundle, as_of, m):
     from app.services.reporting.export.board_chart_service import _wf
+    from app.services.reporting.export.board_platform_metrics import (
+        build_pipeline_waterfall_chart,
+    )
+    from app.services.reporting.period_utils import prior_period
 
     channels = _marketing_by_channel(bundle, as_of)
     total_spend = sum(c.get("spend_raw") or 0 for c in channels)
@@ -219,6 +223,18 @@ def _marketing_block(bundle, as_of, m):
     slipped = m.slipped or Decimal("0")
     slipped_bud = abs(_wf(bundle, "pipeline", "slipped_pipeline", as_of, "Budget"))
     ending_pipeline = abs(_wf(bundle, "pipeline", "ending_pipeline", as_of, "Actual"))
+    beginning_pipeline = abs(_wf(bundle, "pipeline", "beginning_pipeline", as_of, "Actual"))
+    if not beginning_pipeline:
+        beginning_pipeline = abs(
+            _wf(bundle, "pipeline", "ending_pipeline", prior_period(as_of), "Actual")
+        )
+    beginning_pipeline_bud = abs(
+        _wf(bundle, "pipeline", "beginning_pipeline", as_of, "Budget")
+    ) or abs(_wf(bundle, "pipeline", "ending_pipeline", prior_period(as_of), "Budget"))
+    ending_pipeline_bud = abs(_wf(bundle, "pipeline", "ending_pipeline", as_of, "Budget"))
+    pipe_wf = build_pipeline_waterfall_chart(bundle)
+    if not beginning_pipeline and pipe_wf.get("beginning_pipeline_raw"):
+        beginning_pipeline = Decimal(str(pipe_wf["beginning_pipeline_raw"]))
     coverage_vs_arr = (
         float(ending_pipeline / m.ending_arr)
         if ending_pipeline and m.ending_arr
@@ -254,8 +270,16 @@ def _marketing_block(bundle, as_of, m):
                 f"{float(m.pipeline_created / m.closed_won):.1f}x" if m.closed_won else "n/a"
             )
         ),
+        "beginning_pipeline": _money_k(beginning_pipeline) if beginning_pipeline else "—",
+        "beginning_pipeline_raw": float(beginning_pipeline or 0),
+        "beginning_pipeline_budget": (
+            _money_k(beginning_pipeline_bud) if beginning_pipeline_bud else "—"
+        ),
         "ending_pipeline": _money_k(ending_pipeline) if ending_pipeline else "—",
         "ending_pipeline_raw": float(ending_pipeline),
+        "ending_pipeline_budget": (
+            _money_k(ending_pipeline_bud) if ending_pipeline_bud else "—"
+        ),
         "ending_arr": _money_k(m.ending_arr) if m.ending_arr else "—",
         "ending_arr_raw": float(m.ending_arr or 0),
         "closed_won": _money_k(m.closed_won),
@@ -272,6 +296,7 @@ def _marketing_block(bundle, as_of, m):
         "slipped_pipeline_budget_raw": float(slipped_bud),
         "pipeline_created": _money_k(m.pipeline_created) if m.pipeline_created else "—",
         "pipeline_created_raw": float(m.pipeline_created or 0),
+        "pipeline_waterfall_chart": pipe_wf,
         "narrative_must_cover": [
             "closed_lost actual vs budget + variance",
             "slipped pipeline actual vs budget",
@@ -301,6 +326,9 @@ def build_prompt5_payload(
     from app.services.reporting.export.deck_payload_enriched import enrich_deck_payload
 
     payload = enrich_deck_payload(payload, bundle, ts_data=ts_data)
+    from app.services.reporting.export.board_platform_kt_seed import build_seed_key_takeaways
+
+    payload["key_takeaways_by_slide"] = build_seed_key_takeaways(payload)
     payload["payload_warnings"] = validate_deck_payload(payload)
     from app.services.commentary.attribution_verify import (
         build_attribution_package_from_deck_payload,
@@ -447,6 +475,7 @@ def build_prompt5_package_preamble(
         f"{PROMPT5_BOARD_NARRATIVE_RULES}\n"
     )
 
+    from app.services.reporting.export.board_platform_kt_seed import format_kt_seed_block
     from app.services.reporting.export.board_platform_ro_seed import (
         format_board_ro_seed_block,
         format_gtm_narrative_requirements_block,
@@ -454,6 +483,7 @@ def build_prompt5_package_preamble(
 
     ro_seed_block = format_board_ro_seed_block()
     gtm_seed_block = format_gtm_narrative_requirements_block()
+    kt_seed_block = format_kt_seed_block(payload)
 
     return (
         freeze_block
@@ -462,6 +492,7 @@ def build_prompt5_package_preamble(
         + citation_block
         + ro_seed_block
         + gtm_seed_block
+        + kt_seed_block
         + narrative_block
     )
 
@@ -637,6 +668,71 @@ def _prepare_script(script: str, output_path: Path) -> str:
     return script
 
 
+def _refill_stripped_key_takeaways(script: str, payload: dict[str, Any]) -> str:
+    """Replace emptied ``"—"`` takeaway array slots with seed bullets (deterministic)."""
+    from app.services.reporting.export.board_platform_kt_seed import build_seed_key_takeaways
+
+    seeds = payload.get("key_takeaways_by_slide") or build_seed_key_takeaways(payload)
+    if not seeds or not script:
+        return script
+
+    # Map common bulletsN const names / slide keys used by reference + adapt scripts.
+    alias = {
+        "bullets2": "slide_2_executive",
+        "bullets3": "slide_3_arr",
+        "bullets4": "slide_4_pl",
+        "bullets5": "slide_5_cash",
+        "bullets6": "slide_6_gtm",
+        "bullets7": "slide_7_pipeline",
+        "bullets9": "slide_9_outlook",
+    }
+    out = script
+    for const_name, seed_key in alias.items():
+        bullets = seeds.get(seed_key) or []
+        if not bullets:
+            continue
+        pattern = re.compile(
+            rf"((?:const|let|var)\s+{const_name}\s*=\s*\[)(.*?)(\])",
+            re.DOTALL,
+        )
+
+        def _fill(match: re.Match[str], _bullets: list[str] = bullets) -> str:
+            head, body, tail = match.group(1), match.group(2), match.group(3)
+            # Split top-level string literals in the array.
+            parts = re.findall(r'"((?:\\.|[^"\\])*)"|\'((?:\\.|[^\'\\])*)\'', body)
+            if not parts:
+                return match.group(0)
+            filled: list[str] = []
+            for i, (dq, sq) in enumerate(parts):
+                raw = dq if dq else sq
+                quote = '"' if dq or not sq else "'"
+                unesc = raw.replace(r"\'", "'").replace(r'\"', '"')
+                if unesc.strip() in {"—", "-", "–", ""} and i < len(_bullets):
+                    repl = (
+                        _bullets[i]
+                        .replace("\\", "\\\\")
+                        .replace(quote, f"\\{quote}")
+                        .replace("\n", "\\n")
+                    )
+                    filled.append(f"{quote}{repl}{quote}")
+                else:
+                    filled.append(f"{quote}{raw}{quote}")
+            # Preserve any trailing seed slots Claude omitted entirely.
+            if len(filled) < min(3, len(_bullets)):
+                for j in range(len(filled), min(4, len(_bullets))):
+                    repl = (
+                        _bullets[j]
+                        .replace("\\", "\\\\")
+                        .replace('"', '\\"')
+                        .replace("\n", "\\n")
+                    )
+                    filled.append(f'"{repl}"')
+            return head + ",\n    ".join(filled) + tail
+
+        out = pattern.sub(_fill, out)
+    return out
+
+
 def _excerpt_for_prompt(text: str, *, limit: int = 24000) -> str:
     if len(text) <= limit:
         return text
@@ -659,7 +755,7 @@ def _build_fix_prompt(*, last_error: str, failed_script: str, payload_json: str)
         "- End with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n"
         "- Copy numbers from DATA PAYLOAD verbatim.\n\n"
         f"FAILED SCRIPT:\n{_excerpt_for_prompt(failed_script)}\n\n"
-        f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=20000)}\n\n"
+        f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=60000)}\n\n"
         "Return only the corrected raw JavaScript."
     )
 
@@ -885,6 +981,11 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             "export continues): %s",
             cite_result.summary(),
         )
+    # Refill Key Takeaways slots wiped to "—" from deterministic payload seed.
+    refilled = _refill_stripped_key_takeaways(working, payload)
+    if refilled != working:
+        logger.info("P15 Prompt 5 refilled Key Takeaways slots from board KT seed")
+        working = refilled
     return working
 
 
@@ -944,8 +1045,20 @@ def _try_adapt_from_reference(
         "PPTX-succinct; never 'Close validation' fillers or empty '-'.\n"
         "Return complete raw JavaScript ending with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n\n"
         f"{package_preamble}"
+        "LAYOUT LOCKS (must apply even when adapting):\n"
+        "- Slide 3: Key Takeaways FULL WIDTH under the ARR waterfall (not cramped right of bridge).\n"
+        "- Slide 5: Use cash_liquidity.ytd_cash_summary (not a thin liquidity-headroom stub); "
+        "KT box must end above footer (y+h ≤ 6.85).\n"
+        "- Slide 6: MARKETING FUNNEL section label must not overlap the June title; "
+        "fill all KT slots (use KEY TAKEAWAYS SEED if needed).\n"
+        "- Slide 7: Pipeline waterfall from gtm_performance.pipeline_waterfall_chart.shape_bars "
+        "(Begin AND End totals, additive). Category labels on x-axis (bar.category_y). "
+        "Key Takeaways FULL WIDTH below the waterfall.\n"
+        "- Slide 11 CFS: copy appendix.ytd_cash_flow_statement Actual/Budget/Variance — "
+        "Actual for periods ≤ close only; never Forecast.\n"
+        "- Every Key Takeaways panel: 3–5 filled bullets (never lone '—');\n\n"
         f"REFERENCE SCRIPT:\n{_excerpt_for_prompt(ref_script, limit=40000)}\n\n"
-        f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=20000)}\n"
+        f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=60000)}\n"
     )
     script_text = _generate_deck_script_text(
         client, adapt_prompt, system_prompt=PROMPT5_ADAPT_SYSTEM
