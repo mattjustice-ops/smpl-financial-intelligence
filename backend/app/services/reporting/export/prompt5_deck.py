@@ -623,7 +623,7 @@ def _prepare_script(script: str, output_path: Path) -> str:
     return script
 
 
-def _excerpt_for_fix(text: str, *, limit: int = 24000) -> str:
+def _excerpt_for_prompt(text: str, *, limit: int = 24000) -> str:
     if len(text) <= limit:
         return text
     half = limit // 2
@@ -644,8 +644,8 @@ def _build_fix_prompt(*, last_error: str, failed_script: str, payload_json: str)
         "- Chart data must be numeric arrays; labels must be string arrays.\n"
         "- End with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n"
         "- Copy numbers from DATA PAYLOAD verbatim.\n\n"
-        f"FAILED SCRIPT:\n{_excerpt_for_fix(failed_script)}\n\n"
-        f"DATA PAYLOAD (JSON):\n{_excerpt_for_fix(payload_json, limit=20000)}\n\n"
+        f"FAILED SCRIPT:\n{_excerpt_for_prompt(failed_script)}\n\n"
+        f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=20000)}\n\n"
         "Return only the corrected raw JavaScript."
     )
 
