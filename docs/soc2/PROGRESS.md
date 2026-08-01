@@ -25,7 +25,7 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** (1) Await DPA/MSA counsel redline / customer-ready draft (**R16 open** — pack **sent 2026-07-29**; chase checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)). (2) Vendor SOC **Matt-only portal downloads** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) (public research done 2026-07-29; **no Type II received**). Security one-pager **published for sales under NDA 2026-07-29** (optional: attach PDF when a prospect asks). Secrets spot-check + tenant isolation **Pass 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
+**Next guided item for Matt:** (1) Await DPA/MSA counsel redline / customer-ready draft (**R16 open** — pack **sent 2026-07-29**; chase checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)). (2) Vendor SOC **Matt-only portal downloads** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) (public research done 2026-07-29; **no Type II received**). (3) **Decide Type I month + 2–3 firms to contact** — [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) (still `[!]`). Security one-pager **published for sales under NDA 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -57,9 +57,9 @@
 | `[x]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | **Pass 2026-07-29** — unit/SQL/unauth + Matt confirmed Org-B-only authenticated T1/T2 via chat — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** v1.1 (machine-primary grounding) — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
 | `[x]` | Security one-pager **published** for sales | Matt | Month 2 | **Published for sales under NDA 2026-07-29** — [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) + [SMPL_Security_One_Pager_2026-07.pdf](./SMPL_Security_One_Pager_2026-07.pdf); evidence [evidence/security-one-pager-published-2026-07-29.md](./evidence/security-one-pager-published-2026-07-29.md); no public `/security` page; readiness only — not SOC 2 certified |
-| `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Even approximate; mark TARGET |
-| `[!]` | Audit firm shortlist / engagement | Matt | Month 3–4 | Independent CPA — **TARGET** fieldwork |
-| `[!]` | Engage CPA; schedule Type I fieldwork | Matt | Month 3–4 | **TARGET**, not commitment |
+| `[!]` | Target Type I month (YYYY-MM) | Matt | Month 2–3 | Decision pack [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) — options 2026-10 / 2026-11 / 2026-Q4; **Matt pick still open** (TARGET, not commitment) |
+| `[!]` | Audit firm shortlist / engagement | Matt | Month 3–4 | Shortlist drafted in [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) (Johanson, BARR, Sensiba, A-LIGN, Schellman, Prescient) — **Matt pick 2–3 to contact**; independent CPA — **TARGET** fieldwork |
+| `[!]` | Engage CPA; schedule Type I fieldwork | Matt | Month 3–4 | After Matt decides month + firm via [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md); **TARGET**, not commitment |
 | `[ ]` | **Type I report issued** | Matt + CPA | When report in hand | **Only then** Type I is “done” / shareable as Type I |
 | `[ ]` | Type II observation (3–12 months) + Type II report | Matt + CPA | After Type I | Keep controls operating |
 
@@ -149,8 +149,8 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Name engineering owner | Matt Justice (all roles for now) |
 | `[x]` | Name ops / CS privileged-access owner | Matt Justice (all roles for now) |
 | `[x]` | Compliance platform choice **or** explicit “wait until ____” | **Deferred DIY 2026-07-27** — [00_decision_log.md](./00_decision_log.md). Use docs/soc2 + `/app/compliance`. Triggers (whichever first): paying enterprise requires formal GRC platform **or** CPA Type I engagement |
-| `[!]` | Target Type I month | Even approximate YYYY-MM — **TARGET**, not commitment |
-| `[!]` | Audit firm shortlist / engagement | Independent CPA; platform partner network OK later |
+| `[!]` | Target Type I month | Pack: [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) — Matt still picks YYYY-MM (**TARGET**, not commitment) |
+| `[!]` | Audit firm shortlist / engagement | Pack: [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) — shortlist ready; Matt contacts 2–3; independent CPA |
 
 ### B. System boundary & vendors (documentation)
 
@@ -225,7 +225,7 @@ Book the auditor only when these are **live**, not merely drafted:
 
 | Status | Item |
 |--------|------|
-| `[!]` | Engage CPA firm; schedule fieldwork | **TARGET** Month 3–4 |
+| `[!]` | Engage CPA firm; schedule fieldwork | **TARGET** Month 3–4 — see [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md); Matt decisions still open |
 | `[ ]` | Type I report issued → **this is when Type I is “done”** |
 | `[ ]` | Keep controls operating; start Type II observation clock |
 | `[ ]` | Type II report issued |
@@ -262,7 +262,7 @@ Not SOC 2 certified. Readiness evidence only.
 
 1. **[~]** Customer DPA / MSA — **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed ([evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md); chase [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); pack [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md))
 2. **[~]** Vendor SOC / ISO — **Matt-only Trust Center / Documents downloads** ([evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md)). Public research done 2026-07-29; **no Type II received**
-3. **[!]** Target Type I month + audit-firm shortlist (**TARGET**, not commitment)
+3. **[!]** Target Type I month + CPA shortlist — decision pack ready: [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) (**Matt still decides** month + 2–3 firms; TARGET, not commitment)
 4. Open evidence (keep honest): Staging **exists, no Customer Data** (Q3 locked). Other vendor **regions TBD**. Access review **signed 2026-07-29**. Restore test **Pass** 2026-07-27 (P12). **IR tabletop complete** 2026-07-28 (P04). **Dependabot + secret scanning confirmed** 2026-07-28 (P05). **P15 Approved v1.1** 2026-07-28
 5. Platform purchase **deferred DIY** (decided 2026-07-27) — revisit on enterprise GRC requirement or CPA Type I engagement
 
@@ -498,6 +498,16 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 13. Guarantee 4 corrected to machine-primary
 ---
 
+## What we drafted 2026-07-31 — Type I month + CPA shortlist (Matt decisions open)
+
+**Not SOC 2 certified.** Decision pack ≠ month chosen ≠ firm engaged ≠ Type I report.
+
+1. Added founder decision pack — [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md): target window options (2026-10 / 2026-11 / 2026-Q4), 6-firm shortlist, pre-engagement checklist, draft outreach email, Matt decision boxes
+2. Honest blockers called out: DPA/MSA counsel redline still open; vendor Type II **not** received
+3. Scoreboard `[!]` rows for target month / CPA shortlist / engage CPA still **open** — point at the pack until Matt decides
+
+---
+
 ## How you’ll know Type I is complete
 
 **You hold a SOC 2 Type I report issued by an independent CPA firm** covering Security + Availability + Confidentiality (as scoped). Until then: readiness only.
@@ -510,5 +520,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-30 (P15 client A–F + citation on Prompt 5/board; vendor SOC public research — no Type II; DPA/MSA awaiting redline) |
-| Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md) |
+| Last updated | 2026-07-31 (Type I month + CPA shortlist decision pack — Matt decisions still `[!]`) |
+| Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md), [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) |
