@@ -200,6 +200,7 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
     slide.addText(`$${tick}M`, { x: 0.0, y: yPos - 0.1, w: 0.45, h: 0.2, fontSize: 7, color: C.muted, fontFace: "Calibri", align: "right" });
   });
 
+  const axisY = 5.15;
   shapeBars.forEach(bar => {
     slide.addShape(pptx.ShapeType.rect, {
       x: bar.x, y: bar.y, w: bar.w, h: bar.h,
@@ -209,13 +210,14 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
     const labelY = bar.label_position === "above" ? bar.y - 0.22 : bar.y + bar.h + 0.04;
     const lc = bar.color === "991b1b" ? C.red : (bar.color === "166534" ? C.green : C.cyan);
     slide.addText(bar.label, { x: bar.x - 0.05, y: labelY, w: bar.w + 0.1, h: 0.2, fontSize: 7.5, color: lc, fontFace: "Calibri", align: "center", bold: true });
-    slide.addText(bar.category, { x: bar.x - 0.05, y: bar.y + bar.h + 0.28, w: bar.w + 0.1, h: 0.2, fontSize: 7, color: C.muted, fontFace: "Calibri", align: "center" });
+    // Category labels on shared x-axis baseline (not under each bar).
+    slide.addText(bar.category, { x: bar.x - 0.05, y: axisY, w: bar.w + 0.1, h: 0.28, fontSize: 7, color: C.muted, fontFace: "Calibri", align: "center", wrap: true });
   });
 
   addDivider(slide, 7.1, 1.05, 0.03);
-  slide.addShape(pptx.ShapeType.rect, { x: 7.05, y: 1.05, w: 0.03, h: 5.8, fill: { color: C.divider } });
+  slide.addShape(pptx.ShapeType.rect, { x: 7.05, y: 1.05, w: 0.03, h: 4.2, fill: { color: C.divider } });
 
-  // Right panel
+  // Right panel — KPIs + bridge only (KT moves under waterfall for commentary space)
   const rx = 7.25;
   addSectionLabel(slide, "ARR KPIs", rx, 1.05, 5.7);
 
@@ -252,19 +254,20 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
       else if (isVar && cell.startsWith("-")) fc = C.red;
       const xOff = bColW.slice(0, ci).reduce((a, b) => a + b, 0);
       slide.addShape(pptx.ShapeType.rect, {
-        x: rx + xOff, y: 3.72 + ri * 0.27, w: bColW[ci], h: 0.27,
+        x: rx + xOff, y: 3.72 + ri * 0.22, w: bColW[ci], h: 0.22,
         fill: { color: ri % 2 === 0 ? C.surface : C.surfaceAlt },
         line: { color: C.divider, width: 0.3 }
       });
       slide.addText(cell, {
-        x: rx + xOff + 0.05, y: 3.72 + ri * 0.27, w: bColW[ci] - 0.05, h: 0.27,
-        fontSize: 8, color: fc, fontFace: "Calibri", valign: "middle", bold: isHeader
+        x: rx + xOff + 0.05, y: 3.72 + ri * 0.22, w: bColW[ci] - 0.05, h: 0.22,
+        fontSize: 7.5, color: fc, fontFace: "Calibri", valign: "middle", bold: isHeader
       });
     });
   });
 
-  // Key Takeaways
-  addSectionLabel(slide, "Key Takeaways", rx, 5.95, 5.7);
+  // Key Takeaways — full width under waterfall for more commentary space
+  addDivider(slide, 0.35, 5.48, 12.63);
+  addSectionLabel(slide, "Key Takeaways", 0.35, 5.55, 12.63);
   const bullets3 = [
     "1. Ending ARR $85.31M beat budget by +$413.1K; MoM growth +2.2% from $83.44M in May 2026.",
     "2. New Business $1.68M slightly below $1.77M budget; expansion $869.1K vs $912.6K budget.",
@@ -272,7 +275,7 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
     "4. FY ARR outlook $90.29M vs $96.10M budget; H2 ramp requires pipeline acceleration."
   ];
   bullets3.forEach((b, i) => {
-    slide.addText(b, { x: rx, y: 6.12 + i * 0.17, w: 5.7, h: 0.17, fontSize: 8, color: C.white, fontFace: "Calibri", wrap: true });
+    slide.addText(b, { x: 0.35, y: 5.75 + i * 0.28, w: 12.63, h: 0.26, fontSize: 9, color: C.white, fontFace: "Calibri", wrap: true });
   });
 }
 
@@ -400,21 +403,24 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
     });
   });
 
-  // YTD summary
+  // YTD cash summary (primary liquidity read — replaces thin headroom stub)
   addSectionLabel(slide, "YTD Cash Summary", 0.35, 4.0, 4.2);
-  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 4.2, w: 4.2, h: 0.55, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
-  slide.addText("YTD Collections: $58.82M  |  YTD Ending Cash: $48.43M  |  Budget: $23.85M", {
-    x: 0.45, y: 4.25, w: 4.0, h: 0.45, fontSize: 8, color: C.white, fontFace: "Calibri", wrap: true
+  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 4.2, w: 4.2, h: 1.35, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
+  slide.addText("YTD Collections: $58.82M", { x: 0.45, y: 4.28, w: 4.0, h: 0.28, fontSize: 10, color: C.white, fontFace: "Calibri", bold: true });
+  slide.addText("YTD Ending Cash: $50.26M", { x: 0.45, y: 4.58, w: 4.0, h: 0.28, fontSize: 10, color: C.cyan, fontFace: "Calibri", bold: true });
+  slide.addText("YTD Ending Cash Budget: $48.17M", { x: 0.45, y: 4.88, w: 4.0, h: 0.28, fontSize: 9, color: C.muted, fontFace: "Calibri" });
+  slide.addText("Primary liquidity read for the close — update H2 collections model.", {
+    x: 0.45, y: 5.18, w: 4.0, h: 0.28, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
   });
 
-  // Right: 2x2 KPI grid + Key Takeaways
+  // Right: 2x2 KPI grid + Key Takeaways (box ends above footer)
   const rx5 = 4.85;
   addSectionLabel(slide, "Cash KPIs", rx5, 0.98, 8.1);
   const cashKpis = [
-    { label: "Ending Cash (CM)", value: "$48.43M", sub: "vs bud $31.46M  +54.0%" },
-    { label: "Cash Headroom", value: "$38.43M", sub: "above $10.00M floor" },
+    { label: "Ending Cash (CM)", value: "$50.26M", sub: "vs bud $48.17M  +4.3%" },
+    { label: "YTD Collections", value: "$58.82M", sub: "Jan–Jun actual" },
     { label: "FY Cash Outlook", value: "$49.92M", sub: "vs bud $23.85M  +109.3%" },
-    { label: "YTD Collections", value: "$58.82M", sub: "vs bud collections" }
+    { label: "YTD Ending Cash", value: "$50.26M", sub: "vs bud $48.17M" }
   ];
   const ckw = 4.0;
   cashKpis.forEach((k, i) => {
@@ -423,15 +429,16 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
 
   addDivider(slide, rx5, 3.38, 8.1);
   addSectionLabel(slide, "Key Takeaways", rx5, 3.45, 8.1);
-  slide.addShape(pptx.ShapeType.rect, { x: rx5, y: 3.65, w: 8.1, h: 3.0, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
+  slide.addShape(pptx.ShapeType.rect, { x: rx5, y: 3.65, w: 8.1, h: 2.95, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
   const bullets5 = [
-    "1. Ending cash $48.43M, +54.0% vs $31.46M budget; MoM +1.0% from $49.76M in May 2026.",
-    "2. Cash headroom $38.43M above $10.00M floor provides significant strategic runway.",
-    "3. Collections $6.81M CM vs $8.91M budget; YTD collections $58.82M tracking strong.",
-    "4. FY cash outlook $49.92M vs $23.85M budget — +109.3% upside from disciplined spend."
+    "1. Ending cash $50.26M, +4.3% vs $48.17M budget; MoM bridge shows collections vs outflows.",
+    "2. YTD collections $58.82M; YTD ending cash $50.26M is the primary liquidity summary.",
+    "3. Collections $6.81M CM vs $8.91M budget; H2 model should assume moderation vs Q1 spike.",
+    "4. FY cash outlook $49.92M vs $23.85M budget — +109.3% upside from disciplined spend.",
+    "5. Maintain $10.00M floor; deploy excess only against board-approved investments."
   ];
   bullets5.forEach((b, i) => {
-    slide.addText(b, { x: rx5 + 0.15, y: 3.78 + i * 0.68, w: 7.8, h: 0.6, fontSize: 9, color: C.white, fontFace: "Calibri", valign: "top", wrap: true });
+    slide.addText(b, { x: rx5 + 0.15, y: 3.72 + i * 0.54, w: 7.8, h: 0.5, fontSize: 8.5, color: C.white, fontFace: "Calibri", valign: "top", wrap: true });
   });
 }
 
@@ -443,8 +450,10 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
   addSlideBackground(slide);
   addFooter(slide, 6);
 
-  addSectionLabel(slide, "GTM Performance", 0.35, 0.35, 5);
-  slide.addText("GTM Performance — June 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
+  addSectionLabel(slide, "GTM & Pipeline Performance", 0.35, 0.35, 5);
+  slide.addText("GTM & Pipeline Performance — June 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
+  // Funnel section label sits BELOW the title (never overlap "June 2026")
+  addSectionLabel(slide, "Marketing Funnel", 0.35, 0.92, 3.8);
 
   // Top 4 KPI cards
   const gtmCards = [
@@ -455,7 +464,7 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
   ];
   const gcw = 3.1;
   gtmCards.forEach((c, i) => {
-    kpiCard(slide, 0.35 + i * (gcw + 0.07), 0.95, gcw, 0.98, c.label, c.value, c.sub, C.cyan);
+    kpiCard(slide, 0.35 + i * (gcw + 0.07), 1.12, gcw, 0.90, c.label, c.value, c.sub, C.cyan);
   });
 
   addDivider(slide, 0.35, 2.0, 12.63);
@@ -538,113 +547,93 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SLIDE 7 — GTM FUNNEL
+// SLIDE 7 — PIPELINE WATERFALL (additive Begin → End)
 // ═══════════════════════════════════════════════════════════════════════════════
 {
   const slide = pptx.addSlide();
   addSlideBackground(slide);
   addFooter(slide, 7);
 
-  addSectionLabel(slide, "GTM Funnel", 0.35, 0.35, 5);
-  slide.addText("GTM Funnel Analysis — Jan–Jun 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
+  addSectionLabel(slide, "Pipeline Waterfall", 0.35, 0.35, 5);
+  slide.addText("Pipeline Waterfall — June 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
+  slide.addText("Begin Pipeline → flows → Ending Pipeline ($M ARR)", { x: 0.35, y: 0.88, w: 7, h: 0.2, fontSize: 9, color: C.muted, fontFace: "Calibri" });
 
-  const funnelMetrics = [
-    { label: "MQLs", q1: "362", q2: "359", ytd: "721" },
-    { label: "SQLs", q1: "126", q2: "125", ytd: "251" },
-    { label: "SALs", q1: "100", q2: "97", ytd: "197" },
-    { label: "Opportunities", q1: "45", q2: "42", ytd: "87" },
-    { label: "Pipeline ARR", q1: "$12.15M", q2: "$15.75M", ytd: "$27.90M" },
-    { label: "Closed Won ARR", q1: "$4.05M", q2: "$5.25M", ytd: "$9.30M" },
-    { label: "Spend", q1: "$144.8K", q2: "$146.0K", ytd: "$290.8K" }
+  // Additive shape_bars: Begin + Created − Closed Won − Closed Lost − Slipped → End
+  const pipeBars = [
+    { x: 0.55, y: 1.55, w: 0.85, h: 3.05, color: "00d4aa", label: "$180.77M", label_position: "above", category: "Begin Pipeline" },
+    { x: 1.55, y: 1.55, w: 0.85, h: 0.18, color: "166534", label: "+$5.40M", label_position: "above", category: "Created" },
+    { x: 2.55, y: 1.67, w: 0.85, h: 0.06, color: "991b1b", label: "-$1.80M", label_position: "below", category: "Closed Won" },
+    { x: 3.55, y: 1.55, w: 0.85, h: 0.28, color: "991b1b", label: "-$7.91M", label_position: "below", category: "Closed Lost" },
+    { x: 4.55, y: 1.55, w: 0.85, h: 0.35, color: "991b1b", label: "-$9.87M", label_position: "below", category: "Slipped" },
+    { x: 5.55, y: 1.78, w: 0.85, h: 2.82, color: "00d4aa", label: "$166.59M", label_position: "above", category: "End Pipeline" }
   ];
-
-  // Q1 table
-  addSectionLabel(slide, "Q1 2026", 0.35, 0.98, 3.8);
-  const fHdr = ["Metric", "Q1 Actual"];
-  const fCW1 = [2.0, 1.6];
-  [fHdr, ...funnelMetrics.map(r => [r.label, r.q1])].forEach((row, ri) => {
-    row.forEach((cell, ci) => {
-      const isHeader = ri === 0;
-      const xOff = fCW1.slice(0, ci).reduce((a, b) => a + b, 0);
-      slide.addShape(pptx.ShapeType.rect, {
-        x: 0.35 + xOff, y: 1.18 + ri * 0.3, w: fCW1[ci], h: 0.3,
-        fill: { color: ri % 2 === 0 ? C.surface : C.surfaceAlt },
-        line: { color: C.divider, width: 0.3 }
-      });
-      slide.addText(cell, {
-        x: 0.35 + xOff + 0.05, y: 1.18 + ri * 0.3, w: fCW1[ci] - 0.05, h: 0.3,
-        fontSize: 8.5, color: isHeader ? C.muted : C.white, fontFace: "Calibri",
-        valign: "middle", bold: isHeader
-      });
+  const pipeAxisY = 4.75;
+  pipeBars.forEach(bar => {
+    slide.addShape(pptx.ShapeType.rect, {
+      x: bar.x, y: bar.y, w: bar.w, h: bar.h,
+      fill: { color: bar.color },
+      line: { color: bar.color, width: 0.5 }
     });
+    const labelY = bar.label_position === "above" ? bar.y - 0.22 : bar.y + bar.h + 0.02;
+    const lc = bar.color === "991b1b" ? C.red : (bar.color === "166534" ? C.green : C.cyan);
+    slide.addText(bar.label, { x: bar.x - 0.05, y: labelY, w: bar.w + 0.1, h: 0.2, fontSize: 7.5, color: lc, fontFace: "Calibri", align: "center", bold: true });
+    slide.addText(bar.category, { x: bar.x - 0.08, y: pipeAxisY, w: bar.w + 0.16, h: 0.35, fontSize: 7, color: C.muted, fontFace: "Calibri", align: "center", wrap: true });
   });
 
-  // Q2 table
-  addSectionLabel(slide, "Q2 2026", 4.1, 0.98, 3.8);
-  const fCW2 = [2.0, 1.6];
-  [["Metric", "Q2 Actual"], ...funnelMetrics.map(r => [r.label, r.q2])].forEach((row, ri) => {
-    row.forEach((cell, ci) => {
-      const isHeader = ri === 0;
-      const xOff = fCW2.slice(0, ci).reduce((a, b) => a + b, 0);
-      slide.addShape(pptx.ShapeType.rect, {
-        x: 4.1 + xOff, y: 1.18 + ri * 0.3, w: fCW2[ci], h: 0.3,
-        fill: { color: ri % 2 === 0 ? C.surface : C.surfaceAlt },
-        line: { color: C.divider, width: 0.3 }
-      });
-      slide.addText(cell, {
-        x: 4.1 + xOff + 0.05, y: 1.18 + ri * 0.3, w: fCW2[ci] - 0.05, h: 0.3,
-        fontSize: 8.5, color: isHeader ? C.muted : C.white, fontFace: "Calibri",
-        valign: "middle", bold: isHeader
-      });
-    });
-  });
-
-  // YTD table
-  addSectionLabel(slide, "YTD Jan–Jun 2026", 7.85, 0.98, 5.0);
-  const fCW3 = [2.0, 1.6];
-  [["Metric", "YTD Actual"], ...funnelMetrics.map(r => [r.label, r.ytd])].forEach((row, ri) => {
-    row.forEach((cell, ci) => {
-      const isHeader = ri === 0;
-      const xOff = fCW3.slice(0, ci).reduce((a, b) => a + b, 0);
-      slide.addShape(pptx.ShapeType.rect, {
-        x: 7.85 + xOff, y: 1.18 + ri * 0.3, w: fCW3[ci], h: 0.3,
-        fill: { color: ri % 2 === 0 ? C.surface : C.surfaceAlt },
-        line: { color: C.divider, width: 0.3 }
-      });
-      slide.addText(cell, {
-        x: 7.85 + xOff + 0.05, y: 1.18 + ri * 0.3, w: fCW3[ci] - 0.05, h: 0.3,
-        fontSize: 8.5, color: isHeader ? C.muted : C.white, fontFace: "Calibri",
-        valign: "middle", bold: isHeader
-      });
-    });
-  });
-
-  addDivider(slide, 0.35, 3.42, 12.63);
-
-  // Pipeline coverage strip
-  addSectionLabel(slide, "Pipeline Summary", 0.35, 3.5, 12.63);
-  const summaryCards = [
-    { label: "Pipeline Coverage", value: "3.0x", sub: "vs ending ARR" },
-    { label: "YTD Closed Won", value: "$9.30M", sub: "ARR closed Jan–Jun" },
-    { label: "YTD Pipeline Created", value: "$27.90M", sub: "total opportunities" },
-    { label: "YTD Spend", value: "$290.8K", sub: "total GTM spend" }
+  // Right KPIs + bridge
+  const rx7 = 7.25;
+  addSectionLabel(slide, "Pipeline KPIs", rx7, 1.05, 5.7);
+  const pipeKpis = [
+    { label: "Ending Pipeline", value: "$166.59M", sub: "vs beginning $180.77M" },
+    { label: "Pipeline Created", value: "$5.40M", sub: "vs bud $5.31M  +$92.8K" },
+    { label: "Closed Lost", value: "$7.91M", sub: "vs bud — review losses" },
+    { label: "Slipped Pipeline", value: "$9.87M", sub: "vs bud $3.18M  -$6.69M" }
   ];
-  const scw = 3.1;
-  summaryCards.forEach((c, i) => {
-    kpiCard(slide, 0.35 + i * (scw + 0.07), 3.7, scw, 0.98, c.label, c.value, c.sub, C.cyan);
+  pipeKpis.forEach((k, i) => {
+    kpiCard(slide, rx7 + (i % 2) * 2.95, 1.28 + Math.floor(i / 2) * 1.0, 2.8, 0.92, k.label, k.value, k.sub, C.cyan);
   });
 
-  addDivider(slide, 0.35, 4.75, 12.63);
-  addSectionLabel(slide, "Key Takeaways", 0.35, 4.82, 12.63);
-  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 5.0, w: 12.63, h: 1.7, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
+  addSectionLabel(slide, "Pipeline Bridge", rx7, 3.4, 5.7);
+  const pipeBridge = [
+    ["Component", "Actual", "Budget", "Variance"],
+    ["Beginning Pipeline", "$180.77M", "—", "—"],
+    ["Created", "$5.40M", "$5.31M", "+$92.8K"],
+    ["Closed Won", "-$1.80M", "-$1.77M", "—"],
+    ["Closed Lost", "-$7.91M", "-$2.22M", "—"],
+    ["Slipped", "-$9.87M", "-$3.18M", "-$6.69M"],
+    ["Ending Pipeline", "$166.59M", "—", "—"]
+  ];
+  const pbW = [1.55, 1.0, 1.0, 1.0];
+  pipeBridge.forEach((row, ri) => {
+    row.forEach((cell, ci) => {
+      const isHeader = ri === 0;
+      let fc = isHeader ? C.muted : C.white;
+      if (!isHeader && ci === 3 && cell.startsWith("+")) fc = C.green;
+      if (!isHeader && ci === 3 && cell.startsWith("-")) fc = C.red;
+      const xOff = pbW.slice(0, ci).reduce((a, b) => a + b, 0);
+      slide.addShape(pptx.ShapeType.rect, {
+        x: rx7 + xOff, y: 3.6 + ri * 0.22, w: pbW[ci], h: 0.22,
+        fill: { color: ri % 2 === 0 ? C.surface : C.surfaceAlt },
+        line: { color: C.divider, width: 0.3 }
+      });
+      slide.addText(cell, {
+        x: rx7 + xOff + 0.04, y: 3.6 + ri * 0.22, w: pbW[ci] - 0.04, h: 0.22,
+        fontSize: 7.5, color: fc, fontFace: "Calibri", valign: "middle", bold: isHeader
+      });
+    });
+  });
+
+  // Key Takeaways full width BELOW waterfall
+  addDivider(slide, 0.35, 5.2, 12.63);
+  addSectionLabel(slide, "Key Takeaways", 0.35, 5.28, 12.63);
   const bullets7 = [
-    "1. YTD MQLs 721 with Q2 359 slightly below Q1 362 — funnel volume stable MoM into H2.",
-    "2. YTD closed won $9.30M ARR; Q2 $5.25M outpaced Q1 $4.05M — positive conversion trend.",
-    "3. Pipeline coverage 3.0x provides near-term visibility; YTD pipeline $27.90M supports H2 targets.",
-    "4. YTD GTM spend $290.8K; efficiency improvement opportunity via channel reallocation to Outbound."
+    "1. Beginning pipeline $180.77M → ending $166.59M; additive bridge includes created, won, lost, slipped.",
+    "2. Created $5.40M; closed won $1.80M; closed lost $7.91M — run a structured loss review.",
+    "3. Slipped pipeline $9.87M vs $3.18M budget; re-stage with owners before H2 forecast lock.",
+    "4. Pipeline coverage 3.0x supports H2 ramp; prioritize enterprise conversion velocity."
   ];
   bullets7.forEach((b, i) => {
-    slide.addText(b, { x: 0.5, y: 5.1 + i * 0.38, w: 12.3, h: 0.35, fontSize: 9, color: C.white, fontFace: "Calibri", wrap: true });
+    slide.addText(b, { x: 0.35, y: 5.48 + i * 0.32, w: 12.63, h: 0.3, fontSize: 9, color: C.white, fontFace: "Calibri", wrap: true });
   });
 }
 
@@ -900,8 +889,8 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
 
   // Data gaps note
   slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 5.6, w: 12.63, h: 0.6, fill: { color: C.surfaceAlt }, line: { color: C.amber, width: 0.5 } });
-  slide.addText("⚠ Data Gaps: No Forecast ARR waterfall rows for 2026-06. No Forecast revenue line for 2026-06. Validation status: FAIL — Finance to certify reconciliations before distribution.", {
-    x: 0.5, y: 5.65, w: 12.3, h: 0.5, fontSize: 8, color: C.amber, fontFace: "Calibri", wrap: true
+  slide.addText("YTD Actual column uses Actual CFS for periods ≤ close_month (never Forecast). Validation notes belong in Risks — do not substitute Forecast into this table.", {
+    x: 0.5, y: 5.65, w: 12.3, h: 0.5, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
   });
 
   // Headcount note

@@ -262,12 +262,15 @@ def test_pptx_script_soft_strips_unmatched_money_without_hard_block() -> None:
         'slide.addText("ARR closed at $86.1M.");'
         'slide.addText("$99,000,000");'
         'slide.addText("ARR exploded to an unverified $99,000,000 this month vs plan.");'
+        'slide.addText("1. Cash hit $99,000,000 while ARR closed at $86.1M on plan.");'
     )
     rewritten, result = apply_fail_closed_claims_to_pptx_script(mixed, evidence)
     assert not result.ok
     assert "86.1" in rewritten or "86.1M" in rewritten
     assert "$99,000,000" not in rewritten
-    assert rewritten.count(f'"{PPTX_SOFT_STRIP_CELL}"') >= 2
+    # Short KPI/table cells wipe to em dash; long takeaways redact only the bad claim.
+    assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
+    assert "this month vs plan" in rewritten or "on plan" in rewritten
     assert "I don't know" not in rewritten
     # Soft-strip path never raises — Prompt 5 export continues.
     assert "failed claim" in result.summary(max_failures=8)

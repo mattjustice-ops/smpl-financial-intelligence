@@ -94,25 +94,33 @@ right 45% Key Takeaways.
 Slide 3 — ARR ANALYSIS: Left 52% waterfall from arr_analysis.waterfall_chart.shape_bars.
   CRITICAL — use slide.addShape(pptx.ShapeType.rect) for each shape_bars[] entry:
     rect at (x,y,w,h) with fill color from bar.color, borderRadius 2
-    text label from bar.label above or below per bar.label_position (8pt white/green/red)
-  Draw category labels under each bar from bar.category (8pt muted).
-  Optional: light horizontal gridlines for y_axis min/max. Subtitle from waterfall_chart.subtitle.
-  NEVER use addChart on slide 3. NEVER stack offset/value chart series.
-  Right 48%: KPIs + arr_analysis.bridge_table + Key Takeaways (max 4 bullets).
+    value label from bar.label above/below per bar.label_position (8pt).
+  Category labels (bar.category) on the x-axis baseline under the chart — NOT stacked
+  under value labels. Optional y-axis gridlines. NEVER addChart on slide 3.
+  Right 48%: KPIs + arr_analysis.bridge_table only.
+  Key Takeaways FULL WIDTH under the waterfall+bridge (y≥5.9, max 4 bullets) — more
+  commentary space; do not crowd KT into the right column over the bridge.
 
-Slide 4 — P&L REVIEW: Top 4 KPI cards. Bottom left 60% pl_detail table (full GL lines).
-Bottom right 40% Key Takeaways.
+Slide 4 — P&L REVIEW: Top 4 KPI cards. Bottom left 60% pl_detail table (full GL lines
+including CM/YTD Variance columns verbatim from pl_detail.*.variance).
+Bottom right 40% Key Takeaways (all 5 slots filled — use KEY TAKEAWAYS SEED if needed).
 
-Slide 5 — CASH & LIQUIDITY: Left 42% vertical cash bridge (cash_liquidity.current_month).
-Right 58% 2×2 KPI grid + Key Takeaways. Show "—" for zero/missing bridge lines.
+Slide 5 — CASH & LIQUIDITY: Left 42% cash bridge + cash_liquidity.ytd_cash_summary
+(replace thin "liquidity headroom" callouts with the YTD cash summary block).
+Right: KPI grid + Key Takeaways. KT box must end above footer (y+h ≤ 6.85).
+Show "—" only for true zero/missing bridge lines.
 
-Slide 6 — GTM PERFORMANCE: Top 4 KPI cards. Middle channel table (gtm_performance.channels).
-Bottom efficiency bar chart. If only 1 channel, add note per data integrity rules.
-Key Takeaways MUST follow GTM NARRATIVE REQUIREMENTS (closed-lost, slipped, coverage,
-recommended board action) from gtm_performance + evidence — Copilot depth, not thin stubs.
+Slide 6 — GTM / MARKETING FUNNEL: Funnel tables (CM / Q2 / YTD) from gtm_funnel.
+Section label "MARKETING FUNNEL" must NOT share coordinates with the June title
+(place funnel label below the slide title, e.g. y≥0.95). Pipeline summary strip.
+Key Takeaways full-width at bottom — fill all slots (GTM NARRATIVE REQUIREMENTS +
+KEY TAKEAWAYS SEED fallback). Never blank KT #1.
 
-Slide 7 — GTM FUNNEL: Side-by-side Q1/Q2/YTD tables from gtm_funnel.new_logo.
-Summary strip at bottom with pipeline coverage.
+Slide 7 — PIPELINE WATERFALL: Left shape_bars from
+gtm_performance.pipeline_waterfall_chart (additive Begin + Created − Closed Won −
+Closed Lost − Slipped → End). Category labels on x-axis (bar.category at
+bar.category_y). Right: pipeline KPIs + bridge table (include beginning_pipeline).
+Key Takeaways FULL WIDTH below the waterfall (not overlapping the bridge).
 
 Slide 8 — STRATEGIC ASSESSMENT: 2 columns — RISKS left (red border), OPPORTUNITIES right
 (green border). 4 cards each from risks_and_opportunities.risks and .opportunities
@@ -121,12 +129,14 @@ Each card: level badge, title, detail with $, action line, impact/upside field.
 Never thin stubs or empty "-" details.
 
 Slide 9 — FINANCIAL OUTLOOK: Left FY ARR trend chart + fy_outlook summary table.
-Right h2_priorities cards + Key Takeaways.
+Right h2_priorities cards + Key Takeaways (all 4 slots filled).
 
 Slide 10 — BOARD ACTIONS: 2×2 grid from board_actions. Large cyan numbers 01-04.
 
 Slide 11 — APPENDIX A YTD CFS: Full-width from appendix.ytd_cash_flow_statement.
-Columns: Line Item | YTD Actual | YTD Budget | YTD Variance. No Key Takeaways.
+Columns: Line Item | YTD Actual | YTD Budget | YTD Variance.
+Copy Actual from .actual (periods ≤ close_month ONLY — never Forecast).
+Use .variance for the variance column. No Key Takeaways.
 
 OUTPUT
 const pptxgen = require("pptxgenjs"); const pptx = new pptxgen();
