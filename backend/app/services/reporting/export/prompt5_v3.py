@@ -108,13 +108,17 @@ Right 58% 2×2 KPI grid + Key Takeaways. Show "—" for zero/missing bridge line
 
 Slide 6 — GTM PERFORMANCE: Top 4 KPI cards. Middle channel table (gtm_performance.channels).
 Bottom efficiency bar chart. If only 1 channel, add note per data integrity rules.
+Key Takeaways MUST follow GTM NARRATIVE REQUIREMENTS (closed-lost, slipped, coverage,
+recommended board action) from gtm_performance + evidence — Copilot depth, not thin stubs.
 
 Slide 7 — GTM FUNNEL: Side-by-side Q1/Q2/YTD tables from gtm_funnel.new_logo.
 Summary strip at bottom with pipeline coverage.
 
 Slide 8 — STRATEGIC ASSESSMENT: 2 columns — RISKS left (red border), OPPORTUNITIES right
-(green border). 4 cards each from risks_and_opportunities.risks and .opportunities.
+(green border). 4 cards each from risks_and_opportunities.risks and .opportunities
+(BOARD R&O SEED / board platform risk matrix — rewrite for PPTX; keep driver+$+action).
 Each card: level badge, title, detail with $, action line, impact/upside field.
+Never thin stubs or empty "-" details.
 
 Slide 9 — FINANCIAL OUTLOOK: Left FY ARR trend chart + fy_outlook summary table.
 Right h2_priorities cards + Key Takeaways.

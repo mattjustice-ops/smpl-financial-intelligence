@@ -38,6 +38,18 @@ Bullet craft (match regenerate / Copilot depth, PPTX-succinct):
 - Never invent metrics, deal names, or causal drivers outside the packages.
 - Never use the word "significant" — use the number. No filler ("it is worth noting").
 
+GTM / PIPELINE TAKEAWAYS (mandatory when that slide exists):
+- Follow GTM NARRATIVE REQUIREMENTS in the user message: closed-lost actual vs budget,
+  slipped pipeline, coverage vs ending ARR, and a recommended board action.
+- Match Copilot depth using gtm_performance + pipeline waterfall evidence — not a
+  single closed-won stub.
+
+RISKS / OPPORTUNITIES CARDS (mandatory on Strategic Assessment):
+- Rewrite from BOARD R&O SEED / risks_and_opportunities payload cards (board platform
+  risk matrix). Each card keeps: severity, title, detail with driver+$ , action line.
+- Do NOT emit thin fillers ("Close validation", "Deferred pipeline" one-liners, or
+  detail "-"). Adapt seed prose for PPTX brevity; keep the insight.
+
 KPI / TABLE CELLS (strict — separate from narrative):
 - Value cells and table number cells = numbers (or "—") ONLY, copied verbatim from
   the DATA PAYLOAD / EVIDENCE PACKAGE.
