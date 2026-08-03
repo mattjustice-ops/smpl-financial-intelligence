@@ -29,6 +29,7 @@
 
 ## Chase (awaiting counsel)
 
+This-week chase pack (email + cadence): [../DPA_COUNSEL_CHASE_PACK.md](../DPA_COUNSEL_CHASE_PACK.md)  
 Short follow-up checklist (R16 still open): [dpa-counsel-chase-checklist-2026-07-29.md](./dpa-counsel-chase-checklist-2026-07-29.md)
 
 ## Reminder

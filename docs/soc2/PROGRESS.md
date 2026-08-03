@@ -25,7 +25,9 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** (1) Await DPA/MSA counsel redline / customer-ready draft (**R16 open** — pack **sent 2026-07-29**; chase checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)). (2) Vendor SOC **Matt-only portal downloads** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) (public research done 2026-07-29; **no Type II received**). (3) **Decide Type I month + 2–3 firms to contact** — [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) (still `[!]`). Security one-pager **published for sales under NDA 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
+**Stakeholder week (2026-08-03):** Meeting pack — [STAKEHOLDER_WEEK_BRIEF.md](./STAKEHOLDER_WEEK_BRIEF.md). Say **pursuing / readiness** only — **not** certified.
+
+**Next guided item for Matt:** (1) **DPA chase due ~2026-08-05** (~5 BD after send) — confirm firm + ping if no ack (**R16 open** — chase pack [DPA_COUNSEL_CHASE_PACK.md](./DPA_COUNSEL_CHASE_PACK.md); checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)). (2) Vendor SOC **Matt-only portal downloads** — session kit [evidence/vendor-soc/SESSION_CHECKLIST_2026-07-31.md](./evidence/vendor-soc/SESSION_CHECKLIST_2026-07-31.md) (**no Type II received**). (3) **Decide Type I month + 2–3 firms to contact** — [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) (still `[!]`). Security one-pager **published for sales under NDA 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -52,7 +54,7 @@
 | `[x]` | Neon backup **restore test** evidence | Matt | Week 3–4 | **Pass 2026-07-27** — PITR throwaway `restore-test-2026-07-27`; Railway URL unchanged — [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | `[x]` | IR tabletop notes (operable IR) | Matt | Week 3–4 | **Complete 2026-07-28** — Scenarios A + B; async/chat-facilitated — [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md); readiness evidence only — not SOC 2 certified |
 | `[~]` | Vendor SOC / ISO reports folder (under NDA) — collection **in progress** | Matt | Week 3–4 | **Public research 2026-07-29** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) + [PUBLIC_RESEARCH_2026-07-29.md](./evidence/vendor-soc/PUBLIC_RESEARCH_2026-07-29.md). P0 + GitHub → `researched` / Stripe `public summary available` (SOC 3 only). **No Type II received.** PDFs outside git / gitignored. |
-| `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Chase checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); send attestation [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md); also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
+| `[~]` | Customer DPA / MSA — **single legal workstream** (privacy, retention, subprocessors) | Matt | Week 3–4 | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Chase pack [DPA_COUNSEL_CHASE_PACK.md](./DPA_COUNSEL_CHASE_PACK.md); checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); send attestation [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md); also [P10](./policies/P10_risk_assessment.md) R16; P07/P08/P09 cross-ref only |
 | `[x]` | Secrets only in env stores (spot-check) | Matt | Month 2 | **Pass 2026-07-29** — git hygiene + Vercel/Railway/Neon consoles; Matt confirmed console checks + Org-B-only T1/T2 2026-07-29 via chat — [evidence/secrets-env-store-spotcheck-2026-07-29.md](./evidence/secrets-env-store-spotcheck-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | Tenant isolation evidence (Org A ≠ Org B) | Matt | Month 2 | **Pass 2026-07-29** — unit/SQL/unauth + Matt confirmed Org-B-only authenticated T1/T2 via chat — [evidence/tenant-isolation-2026-07-29.md](./evidence/tenant-isolation-2026-07-29.md); readiness only — not SOC 2 certified |
 | `[x]` | **P15** AI/LLM Data Handling — Approved | Matt | Week 2 | **Approved 2026-07-28** v1.1 (machine-primary grounding) — [P15](./policies/P15_ai_llm_data_handling.md); approval ≠ SOC 2 certified |
@@ -162,7 +164,7 @@ Type II comes later: after Type I, controls operate over an observation window (
 | `[x]` | Subprocessors named list draft | [02_subprocessors.md](./02_subprocessors.md) — product DPA list; Neon us-east-1; other regions TBD |
 | `[x]` | Confirm regions / unused vendors; mark OpenAI if live | **Locked 2026-07-28** — OpenAI **NO**; Neon us-east-1; other regions **TBD** |
 | `[~]` | Vendor SOC / ISO reports folder (under NDA) | **Public research 2026-07-29** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md); **no Type II received** (Stripe public SOC 3 only) — Matt portal downloads next |
-| `[~]` | Customer DPA / MSA — **single legal workstream** | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Chase [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); send [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md). Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
+| `[~]` | Customer DPA / MSA — **single legal workstream** | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Firm: unspecified. Chase pack [DPA_COUNSEL_CHASE_PACK.md](./DPA_COUNSEL_CHASE_PACK.md); checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md); send [evidence/dpa-counsel-sent-2026-07-29.md](./evidence/dpa-counsel-sent-2026-07-29.md). Also P10 R16 (covers privacy/retention/subprocessors formerly flagged in P07–P09) |
 | `[x]` | Security one-pager (draft → published for sales) | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) + PDF [SMPL_Security_One_Pager_2026-07.pdf](./SMPL_Security_One_Pager_2026-07.pdf) — honest “pursuing SOC 2”; **published for sales under NDA 2026-07-29** — [evidence/security-one-pager-published-2026-07-29.md](./evidence/security-one-pager-published-2026-07-29.md); not certified |
 
 ### C. Access hardening (Matt / ops)
@@ -508,6 +510,17 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 
 ---
 
+## What we prepared 2026-08-03 — Stakeholder week brief (readiness only)
+
+**Not SOC 2 certified.** Brief ≠ Type I report ≠ customer-ready DPA ≠ vendor Type II received.
+
+1. Added meeting pack — [STAKEHOLDER_WEEK_BRIEF.md](./STAKEHOLDER_WEEK_BRIEF.md): talking points, Done/Open/Matt/external, show pack, ordered week queue
+2. DPA chase calendar note — ~5 BD after 2026-07-29 send ≈ **2026-08-05** ([evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)); R16 still open
+3. Evidence README pointers + `/compliance` `progress.ts` synced (CPA shortlist notes + lastUpdated)
+4. No invented signatures, Type II PDFs, or counsel redlines
+
+---
+
 ## How you’ll know Type I is complete
 
 **You hold a SOC 2 Type I report issued by an independent CPA firm** covering Security + Availability + Confidentiality (as scoped). Until then: readiness only.
@@ -520,5 +533,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-31 (Type I month + CPA shortlist decision pack — Matt decisions still `[!]`) |
-| Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md), [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) |
+| Last updated | 2026-08-03 (stakeholder week brief + DPA chase calendar; CPA pack still `[!]`; no Type II / no certification) |
+| Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md), [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md), [STAKEHOLDER_WEEK_BRIEF.md](./STAKEHOLDER_WEEK_BRIEF.md) |

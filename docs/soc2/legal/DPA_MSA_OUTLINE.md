@@ -8,7 +8,7 @@
 | Workstream | Customer DPA / MSA (single legal path) — [P10](../policies/P10_risk_assessment.md) **R16** |
 | Status | **Sent to counsel 2026-07-29** — awaiting redline / customer-ready draft; R16 **not** closed. Counsel firm: **unspecified**. Matt attested send via chat; agent did **not** email. |
 | Owner (business) | Matt Justice |
-| Send package | [COUNSEL_SEND_PACKAGE.md](./COUNSEL_SEND_PACKAGE.md) · [DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md) |
+| Send package | [COUNSEL_SEND_PACKAGE.md](./COUNSEL_SEND_PACKAGE.md) · [DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md) · chase [../DPA_COUNSEL_CHASE_PACK.md](../DPA_COUNSEL_CHASE_PACK.md) |
 | Sources (internal) | P07, P08, P09, P15; [02_subprocessors.md](../02_subprocessors.md); [SECURITY_ONE_PAGER.md](../SECURITY_ONE_PAGER.md); Trust & Security sales KB themes |
 | Created | 2026-07-28 |
 | Package refreshed | 2026-07-29 |

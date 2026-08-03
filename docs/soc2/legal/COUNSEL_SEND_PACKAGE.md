@@ -10,6 +10,7 @@
 | R16 status | **Open** — awaiting redline / customer-ready draft; send alone does **not** close R16 |
 | Business owner | Matt Justice |
 | Draft email | [DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md) |
+| Chase pack | [../DPA_COUNSEL_CHASE_PACK.md](../DPA_COUNSEL_CHASE_PACK.md) |
 | Primary outline | [DPA_MSA_OUTLINE.md](./DPA_MSA_OUTLINE.md) |
 
 ---
@@ -174,11 +175,11 @@ Align to approved policies + one-pager; **no fake certificates:**
 
 | Claim | Truth |
 |-------|-------|
-| Counsel engaged / emailed | **No** — Matt must send ([DRAFT_EMAIL_TO_COUNSEL.md](./DRAFT_EMAIL_TO_COUNSEL.md)) |
-| Customer-ready DPA exists | **No** — outline + this pack only |
+| Counsel pack sent | **Yes — 2026-07-29** (Matt attested; agent did not email; firm unspecified) — chase [../DPA_COUNSEL_CHASE_PACK.md](../DPA_COUNSEL_CHASE_PACK.md) |
+| Customer-ready DPA exists | **No** — outline + this pack only; awaiting redline |
 | R16 closed | **No** |
 | SOC 2 certified | **No** |
-| Vendor SOC reports collected | **No** (inventory locked; collection open) |
+| Vendor SOC Type II collected | **No** (public research done; Type II not received) |
 | All vendor regions known | **No** — only Neon us-east-1 locked |
 
 ---
