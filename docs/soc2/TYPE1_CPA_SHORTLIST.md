@@ -1,13 +1,14 @@
 # Type I month + CPA shortlist — founder decision pack
 
-**Purpose:** Help Matt pick a **target Type I month** and **2–3 CPA firms to contact**.  
+**Purpose:** Help Matt pick a **target Type I month** and **2–3 CPA firms to contact** when outreach is unblocked.  
 **Status:** Readiness decision pack only — **not** SOC 2 certified / not an engagement.  
+**Outreach:** **Intentionally held (funding)** as of 2026-08-03 — do **not** send CPA inquiries until Matt lifts the hold.  
 **Owner:** Matt Justice  
 **Related:** [PROGRESS.md](./PROGRESS.md) · [00_decision_log.md](./00_decision_log.md) · [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) · [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)
 
 ---
 
-## Honest readiness snapshot (as of pack date)
+## Honest readiness snapshot (as of 2026-08-03 sync)
 
 | Area | State |
 |------|--------|
@@ -16,11 +17,12 @@
 | Access review, restore test, IR tabletop | **Done** (evidence filed) |
 | Secrets spot-check + tenant isolation | **Pass** |
 | Security one-pager | **Published for sales under NDA** |
-| Customer DPA / MSA (R16) | **Open** — sent to counsel 2026-07-29; awaiting redline / customer-ready draft |
-| Vendor SOC / ISO Type II pack | **Open** — public research done; **no Type II received**; Matt portal downloads next |
+| Customer DPA / MSA (R16) | **Open** — pack sent 2026-07-29; counsel firm **not selected**; awaiting redline / customer-ready draft |
+| Vendor SOC / ISO Type II pack | **Partial** — Railway / Neon / Stripe / Anthropic / Resend Type II **received + reviewed** (Matt skim 2026-08-03); **Vercel** waiting/requested; GitHub P1 **deferred** until Type I audit engagement |
+| CPA outreach | **Held (funding)** — pack ready; no inquiries until hold lifts |
 | Other vendor regions | **TBD** (Neon us-east-1 locked) |
 
-**Bottom line:** Control design + core evidence are strong for a solo founder. **Do not** book fieldwork until DPA counsel draft is customer-offerable (or explicitly deferred in writing with auditor awareness) **and** P0 vendor Type II reports are in the private store / reviewed. Inquiry outreach can start earlier.
+**Bottom line:** Control design + core evidence are strong for a solo founder. **Do not** book fieldwork until DPA is customer-offerable (or explicitly deferred in writing with auditor awareness) **and** remaining P0 vendor Type II (Vercel) is reviewed. **Do not** start CPA inquiry outreach while the funding hold is active.
 
 ---
 
@@ -74,8 +76,8 @@ Book kickoff / fieldwork only when these are green. Inquiry emails can go out wh
 | 7 | IR plan operable + tabletop evidence | [evidence/ir-tabletop-2026-07-28.md](./evidence/ir-tabletop-2026-07-28.md) |
 | 8 | Backup restore test Pass | [evidence/neon-restore-test-2026-07-27.md](./evidence/neon-restore-test-2026-07-27.md) |
 | 9 | Secrets-in-env + tenant isolation Pass | Month 2 evidence files |
-| 10 | **P0 vendor SOC Type II** received/reviewed under NDA (Vercel, Railway, Neon, Stripe, Anthropic, Resend; GitHub as available) | [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) — **not green yet** |
-| 11 | **Customer DPA/MSA** customer-ready (or written deferral + auditor informed) | R16 — **not green yet** |
+| 10 | **P0 vendor SOC Type II** received/reviewed under NDA (Vercel, Railway, Neon, Stripe, Anthropic, Resend; GitHub as available) | [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) — five P0 **reviewed**; **Vercel** still open; GitHub deferred |
+| 11 | **Customer DPA/MSA** customer-ready (or written deferral + auditor informed) | R16 — **not green yet** (counsel firm not selected) |
 | 12 | Evidence index ready to share (policies, runbooks, dated Pass notes; PDFs outside git) | [evidence/README.md](./evidence/README.md) |
 | 13 | Honest sales language still in force | “Pursuing SOC 2” / readiness — never “certified” until report in hand |
 

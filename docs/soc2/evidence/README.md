@@ -17,7 +17,7 @@ Use `*.local.md` for scratch notes containing secrets (gitignored).
 | [tenant-isolation-TEMPLATE.md](./tenant-isolation-TEMPLATE.md) | Template for Org A ≠ Org B isolation test |
 | [tenant-isolation-2026-07-29.md](./tenant-isolation-2026-07-29.md) | **Pass 2026-07-29** — unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat; readiness only — not certified |
 | [security-one-pager-published-2026-07-29.md](./security-one-pager-published-2026-07-29.md) | Security one-pager **published for sales under NDA 2026-07-29** — markdown + PDF; no public `/security` page; readiness only — not certified |
-| [vendor-soc/](./vendor-soc/) | Vendor SOC / ISO collection — [WORKING_PACK_2026-08.md](./vendor-soc/WORKING_PACK_2026-08.md) + tracker + session kit + [REVIEW_CHECKLIST.md](./vendor-soc/REVIEW_CHECKLIST.md); **PDFs outside git / gitignored** — **in progress**, **no Type II received** |
+| [vendor-soc/](./vendor-soc/) | Vendor SOC / ISO collection — [WORKING_PACK_2026-08.md](./vendor-soc/WORKING_PACK_2026-08.md) + tracker + session kit + [REVIEW_CHECKLIST.md](./vendor-soc/REVIEW_CHECKLIST.md); **PDFs outside git / gitignored** — five P0 Type II **reviewed** 2026-08-03; **Vercel** waiting; GitHub P1 deferred |
 | [dpa-counsel-sent-2026-07-29.md](./dpa-counsel-sent-2026-07-29.md) | DPA/MSA **sent to counsel** 2026-07-29 (Matt attestation) — R16 still open; not a signed DPA |
 | [dpa-send-evidence-log-TEMPLATE.md](./dpa-send-evidence-log-TEMPLATE.md) | Counsel correspondence evidence log template + redline-file checklist |
 | [dpa-counsel-chase-checklist-2026-07-29.md](./dpa-counsel-chase-checklist-2026-07-29.md) | Counsel chase checklist — ~5 BD chase window ~**2026-08-05**; firm **[MATT FILL]** / unspecified |

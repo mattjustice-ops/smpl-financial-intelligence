@@ -2,7 +2,7 @@
 
 > **INTERNAL — FOR MATT THIS WEEK**  
 > Readiness only. **Not** SOC 2 certified.  
-> Public research is done; Railway + Neon + Stripe + Anthropic + Resend Type II **received** (review pending); Vercel waiting. Do not invent PDFs or flip statuses without a private-store file.  
+> Public research is done; Railway + Neon + Stripe + Anthropic + Resend Type II **reviewed** (Matt skim attested 2026-08-03); Vercel waiting; GitHub P1 deferred until Type I audit engagement. Do not invent PDFs or flip statuses without a private-store file.  
 > Agents do **not** log into vendor portals or email vendors.
 
 | Field | Value |
@@ -22,17 +22,17 @@
 | Vendor | Tier | Target report | Status (as of pack) | File in private store? |
 |--------|------|---------------|---------------------|------------------------|
 | Vercel | P0 | SOC 2 Type II | `requested` (waiting approval) | **No** |
-| Railway | P0 | SOC 2 Type II | `received` (review pending) | **Yes** (Type II + bridge; outside git) |
-| Neon | P0 | SOC 2 Type II (+ ISO if listed) | `received` (review pending) | **Yes** (Type 2 + HIPAA 2026; outside git) |
-| Stripe | P0 | SOC 2 Type II (+ SOC 1 optional) | `received` (review pending) | **Yes** (current Type II + bridge + previous archive; outside git) |
-| Anthropic | P0 | SOC 2 Type II (+ ISO packs) | `received` (review pending) | **Yes** (SOC 2 Type II + CSA STAR L2; SOC 3 bonus; outside git) |
-| Resend | P0 | SOC 2 Type II | `received` (review pending) | **Yes** (outside git) |
-| GitHub | P1 | SOC 2 / SOC 3 / ISO (plan-dependent) | `researched` | **No** |
+| Railway | P0 | SOC 2 Type II | `reviewed` (Matt skim 2026-08-03) | **Yes** (Type II + bridge; outside git) |
+| Neon | P0 | SOC 2 Type II (+ ISO if listed) | `reviewed` (Matt skim 2026-08-03) | **Yes** (Type 2 + HIPAA 2026; outside git) |
+| Stripe | P0 | SOC 2 Type II (+ SOC 1 optional) | `reviewed` (Matt skim 2026-08-03) | **Yes** (current Type II + bridge + previous archive; outside git) |
+| Anthropic | P0 | SOC 2 Type II (+ ISO packs) | `reviewed` (Matt skim 2026-08-03) | **Yes** (SOC 2 Type II + CSA STAR L2; SOC 3 bonus; outside git) |
+| Resend | P0 | SOC 2 Type II | `reviewed` (Matt skim 2026-08-03) | **Yes** (outside git) |
+| GitHub | P1 | SOC 2 / SOC 3 / ISO (plan-dependent) | `researched` — **deferred** until Type I audit engagement | **No** |
 
 **Legit path:** `researched` → `requested` / `nda signed` → `received` → `reviewed`.  
 **Never:** treat marketing pages or public SOC 3 as Type II `received`.
 
-Scoreboard stays `[~]` until P0 are at least honestly `reviewed` (or documented `blocked`).
+Scoreboard stays `[~]` until **all** P0 are at least honestly `reviewed` (or documented `blocked`) — Vercel still open.
 
 ---
 
@@ -118,7 +118,7 @@ Not SOC 2 certified.
 |-----|------------|
 | Vendor SOC collection **in progress** — Trust Centers researched; downloading Type II under NDA | “We have all vendor SOC 2 reports” |
 | Pursuing **SOC 2 Type I** readiness | “SOC 2 certified” / “SOC 2 compliant” |
-| Stripe Type II + bridge **received** (review pending); public SOC 3 also on file | Treating SOC 3 alone as Type II complete |
+| Five P0 Type II **reviewed** (Railway/Neon/Stripe/Anthropic/Resend); Vercel still waiting; public SOC 3 also on file for Stripe | “All vendor SOC 2 reports collected” / treating SOC 3 alone as Type II complete |
 | Reports stored **privately under NDA** (not in public git) | Pasting report findings into public materials |
 
 Optional spoken line:  
@@ -138,12 +138,10 @@ Optional spoken line:
 
 ## 8. Ordered next actions (Matt)
 
-1. Create private folder `~/Documents/SMPL/soc2/vendor-reports/` (or confirm OneDrive equivalent).
-2. Run [SESSION_CHECKLIST_2026-07-31.md](./SESSION_CHECKLIST_2026-07-31.md) for P0 #1–#6 (Vercel → … → Resend).
-3. For each download: run [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md); update [TRACKER.md](./TRACKER.md).
-4. If Neon (or others) pending: leave `requested` + date; do not fake `received`.
-5. Bonus: GitHub org Compliance if time.
-6. Reply with the session outcome block (or edit TRACKER yourself).
+1. **Vercel** — Wait for SafeBase / Trust Center approval → download Type II → skim → `reviewed`.
+2. Private store already at `~/Documents/SMPL/soc2/vendor-reports/` for Railway / Neon / Stripe / Anthropic / Resend (**reviewed** 2026-08-03).
+3. **GitHub P1** — deferred until Type I audit engagement (do not pull now).
+4. Keep scoreboard `[~]` until Vercel is `reviewed` (or honestly `blocked`).
 
 Companion legal track (separate): [DPA_COUNSEL_CHASE_PACK.md](../../DPA_COUNSEL_CHASE_PACK.md) — R16 still open.
 

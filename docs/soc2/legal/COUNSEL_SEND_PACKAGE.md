@@ -179,7 +179,7 @@ Align to approved policies + one-pager; **no fake certificates:**
 | Customer-ready DPA exists | **No** — outline + this pack only; awaiting redline |
 | R16 closed | **No** |
 | SOC 2 certified | **No** |
-| Vendor SOC Type II collected | **No** (public research done; Type II not received) |
+| Vendor SOC Type II collected | **Partial** — Railway/Neon/Stripe/Anthropic/Resend Type II **received + reviewed** (Matt skim 2026-08-03); **Vercel** waiting/requested; GitHub P1 deferred until Type I audit engagement |
 | All vendor regions known | **No** — only Neon us-east-1 locked |
 
 ---

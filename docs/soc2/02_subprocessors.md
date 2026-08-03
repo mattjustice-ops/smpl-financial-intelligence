@@ -4,11 +4,11 @@ Vendors that process or store customer data (or auth-related personal data) in t
 
 Collect each vendor’s SOC 2 / ISO report under NDA where available. Review cadence: at least annually for material processors, or on material change ([P09](./policies/P09_vendor_subprocessor_management.md)).
 
-**Collection scaffold (2026-07-29):** Tracker + Trust Center links + request templates — [evidence/vendor-soc/](./evidence/vendor-soc/). **No reports marked received yet.** Store NDA PDFs outside git (see that README).
+**Collection (2026-08-03):** Tracker + Trust Center links — [evidence/vendor-soc/](./evidence/vendor-soc/). Railway / Neon / Stripe / Anthropic / Resend Type II **reviewed** (Matt skim attested); Vercel still waiting; GitHub P1 deferred until Type I audit engagement. Store NDA PDFs outside git (see that README).
 
 Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Boundary: [01_system_boundary.md](./01_system_boundary.md) · Scoreboard: [PROGRESS.md](./PROGRESS.md)
 
-**Status (2026-07-28):** Named Customer Data list locked from Matt Q1–Q10. **Neon = AWS us-east-1**; **other vendor regions remain TBD** (do not invent). Sanity / HubSpot / OpenAI / APM **not** on product Customer Data exhibit. **Not** SOC 2 certified.
+**Status (2026-08-03):** Named Customer Data list locked from Matt Q1–Q10. **Neon = AWS us-east-1**; **other vendor regions remain TBD** (do not invent). Sanity / HubSpot / OpenAI / APM **not** on product Customer Data exhibit. **Not** SOC 2 certified.
 
 ---
 
@@ -16,13 +16,13 @@ Parent: [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md) · Boundary: [01_sy
 
 | Vendor | Purpose | Data typically involved | Region / notes | Vendor report collected? |
 |--------|---------|-------------------------|----------------|--------------------------|
-| **Vercel** | Host customer-facing Next.js app / edge (`www.smpl-ai.com`, project `smpl-financial-intelligence`) | Session cookies, app traffic, env-held secrets | **TBD** — confirm plan / deployment region in Vercel console | [ ] |
-| **Railway** | Host FastAPI (`sfi-api-production`) | API traffic, app logs, env-held secrets (incl. LLM keys) | **TBD** — confirm service region in Railway console | [ ] |
-| **Neon** | Managed Postgres (`smpl-auth-prod` / branch `production`) | Customer financial facts, auth/org data | **AWS us-east-1** — confirmed Matt Q5 (2026-07-28); restore evidence `*.us-east-1.aws.neon.tech` | [ ] |
-| **Resend** | Transactional email (magic links, notifications) | Email addresses, message content | **TBD** | [ ] |
-| **Anthropic** | LLM API for AI narrative / commentary | Prompt context derived from engine outputs (may include customer metrics) | Keys on Railway only; not in browser. Processing region **TBD** | [ ] |
-| **Stripe** | Billing / subscriptions | Billing contact, payment metadata (card data via Stripe) | **TBD** | [ ] |
-| **GitHub** | Source control, CI (may hold secrets config, not customer warehouse) | Code, CI logs; avoid customer dumps in repos | **TBD** / provider multi-region | [ ] |
+| **Vercel** | Host customer-facing Next.js app / edge (`www.smpl-ai.com`, project `smpl-financial-intelligence`) | Session cookies, app traffic, env-held secrets | **TBD** — confirm plan / deployment region in Vercel console | [ ] (access requested; Type II not received) |
+| **Railway** | Host FastAPI (`sfi-api-production`) | API traffic, app logs, env-held secrets (incl. LLM keys) | **TBD** — confirm service region in Railway console | [x] reviewed 2026-08-03 (Matt skim; NDA PDF outside git) |
+| **Neon** | Managed Postgres (`smpl-auth-prod` / branch `production`) | Customer financial facts, auth/org data | **AWS us-east-1** — confirmed Matt Q5 (2026-07-28); restore evidence `*.us-east-1.aws.neon.tech` | [x] reviewed 2026-08-03 (Matt skim; NDA PDF outside git) |
+| **Resend** | Transactional email (magic links, notifications) | Email addresses, message content | **TBD** | [x] reviewed 2026-08-03 (Matt skim; NDA PDF outside git) |
+| **Anthropic** | LLM API for AI narrative / commentary | Prompt context derived from engine outputs (may include customer metrics) | Keys on Railway only; not in browser. Processing region **TBD** | [x] reviewed 2026-08-03 (Matt skim; NDA PDF outside git) |
+| **Stripe** | Billing / subscriptions | Billing contact, payment metadata (card data via Stripe) | **TBD** | [x] reviewed 2026-08-03 (Matt skim; NDA PDF outside git) |
+| **GitHub** | Source control, CI (may hold secrets config, not customer warehouse) | Code, CI logs; avoid customer dumps in repos | **TBD** / provider multi-region | [ ] deferred until Type I audit engagement |
 
 **Auth.js** is application software running on Vercel — not a separate subprocessor vendor.
 
@@ -89,3 +89,4 @@ Matt Q10 **NO** (2026-07-28): no other production vendors process Customer Data 
 | 2026-07-22 | Initial named list from SMPL stack; regions marked for Matt confirm | Kickoff |
 | 2026-07-28 | Aligned to production hosts; Neon us-east-1 from restore evidence; OpenAI/HubSpot/APM/staging conditional; no invented regions | Agent (Week 2 vendors) |
 | 2026-07-29 | Vendor SOC collection scaffold — evidence/vendor-soc tracker + Trust Center links; reports still open | Agent (Week 3–4 readiness) |
+| 2026-08-03 | Flipped “Vendor report collected?” for Railway / Neon / Resend / Anthropic / Stripe after Matt attested Type II skim reviews; Vercel waiting; GitHub deferred until Type I audit engagement | Matt (attestation); Agent (docs) |
