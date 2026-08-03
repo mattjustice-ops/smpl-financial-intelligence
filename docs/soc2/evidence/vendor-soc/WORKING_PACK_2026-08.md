@@ -2,7 +2,7 @@
 
 > **INTERNAL — FOR MATT THIS WEEK**  
 > Readiness only. **Not** SOC 2 certified.  
-> Public research is done; Railway Type II **received** (review pending); other P0 still open. Do not invent PDFs or flip statuses without a private-store file.  
+> Public research is done; Railway + Neon Type II **received** (review pending); Vercel waiting; other P0 still open. Do not invent PDFs or flip statuses without a private-store file.  
 > Agents do **not** log into vendor portals or email vendors.
 
 | Field | Value |
@@ -23,7 +23,7 @@
 |--------|------|---------------|---------------------|------------------------|
 | Vercel | P0 | SOC 2 Type II | `requested` (waiting approval) | **No** |
 | Railway | P0 | SOC 2 Type II | `received` (review pending) | **Yes** (Type II + bridge; outside git) |
-| Neon | P0 | SOC 2 Type II (+ ISO if listed) | `researched` | **No** |
+| Neon | P0 | SOC 2 Type II (+ ISO if listed) | `received` (review pending) | **Yes** (Type 2 + HIPAA 2026; outside git) |
 | Stripe | P0 | SOC 2 Type II (+ SOC 1 optional) | `public summary available` (SOC 3 only) | SOC 3 only — **not** Type II |
 | Anthropic | P0 | SOC 2 Type II (+ ISO packs) | `researched` | **No** |
 | Resend | P0 | SOC 2 Type II | `researched` | **No** |
