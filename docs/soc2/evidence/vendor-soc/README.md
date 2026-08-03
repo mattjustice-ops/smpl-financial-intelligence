@@ -2,9 +2,9 @@
 
 **Purpose:** Track and store evidence that SMPL reviewed material subprocessors’ independent assurance reports (SOC 2, ISO 27001, etc.) per [P09](../../policies/P09_vendor_subprocessor_management.md) and the named list in [02_subprocessors.md](../../02_subprocessors.md).
 
-**Status (2026-07-29):** Public Trust Center research pass complete for P0 + GitHub — see [TRACKER.md](./TRACKER.md) + [PUBLIC_RESEARCH_2026-07-29.md](./PUBLIC_RESEARCH_2026-07-29.md). **No Type II reports received.** Public Stripe SOC 3 summary only (gitignored `private/`). Readiness only — not SOC 2 certified.
+**Status (2026-08-03):** Public Trust Center research pass complete for P0 + GitHub — see [TRACKER.md](./TRACKER.md) + [PUBLIC_RESEARCH_2026-07-29.md](./PUBLIC_RESEARCH_2026-07-29.md). **No Type II reports received.** Public Stripe SOC 3 summary only (gitignored `private/`). This-week execution: [WORKING_PACK_2026-08.md](./WORKING_PACK_2026-08.md). Readiness only — not SOC 2 certified.
 
-Parent scoreboard: [../../PROGRESS.md](../../PROGRESS.md) · Tracker: [TRACKER.md](./TRACKER.md) · Templates: [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md)
+Parent scoreboard: [../../PROGRESS.md](../../PROGRESS.md) · Tracker: [TRACKER.md](./TRACKER.md) · Working pack: [WORKING_PACK_2026-08.md](./WORKING_PACK_2026-08.md) · Session kit: [SESSION_CHECKLIST_2026-07-31.md](./SESSION_CHECKLIST_2026-07-31.md) · Review: [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md) · Templates: [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md)
 
 ---
 
@@ -12,7 +12,7 @@ Parent scoreboard: [../../PROGRESS.md](../../PROGRESS.md) · Tracker: [TRACKER.m
 
 | Artifact | Commit? | Notes |
 |----------|---------|--------|
-| This README, [TRACKER.md](./TRACKER.md), [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md) | **Yes** | Process + status only |
+| This README, [TRACKER.md](./TRACKER.md), [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md), working pack, session kit, review checklist | **Yes** | Process + status only |
 | Redacted review notes (date reviewed, report type/period, exceptions noted, “OK for use”) | **Yes** | Prefer markdown; no customer data, no NDA-secret excerpts |
 | Links to Trust Centers / portals | **Yes** | Already in the tracker |
 | Full SOC / ISO **PDFs**, bridge letters, pentest packs under NDA | **No** | See storage rules below |

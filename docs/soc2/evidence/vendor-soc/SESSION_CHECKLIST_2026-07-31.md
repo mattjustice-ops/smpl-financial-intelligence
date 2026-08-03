@@ -4,7 +4,7 @@
 **Goal:** Knock out P0 Trust Center downloads (login → NDA → Type II) in one sitting.  
 **Honesty:** Readiness only — **not** SOC 2 certified. Public SOC 3 / marketing claims are **not** Type II `received`. Do not mark `received` without a private-store file (or documented portal-only review date).
 
-**Companion docs:** [TRACKER.md](./TRACKER.md) · [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md) · [PUBLIC_RESEARCH_2026-07-29.md](./PUBLIC_RESEARCH_2026-07-29.md) · [README.md](./README.md)
+**Companion docs:** [WORKING_PACK_2026-08.md](./WORKING_PACK_2026-08.md) (this-week hub) · [TRACKER.md](./TRACKER.md) · [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md) · [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md) · [PUBLIC_RESEARCH_2026-07-29.md](./PUBLIC_RESEARCH_2026-07-29.md) · [README.md](./README.md)
 
 ---
 
@@ -187,9 +187,10 @@ Not SOC 2 certified.
 
 Also after each real download:
 
-1. Update [TRACKER.md](./TRACKER.md) status + **Next action** + date in Progress log.
-2. Flip “Vendor report collected?” in [02_subprocessors.md](../../02_subprocessors.md) only after a real **review** skim.
-3. Optional: sanitized one-liner in a future `REVIEW_NOTES.md` — no NDA-secret excerpts.
+1. Run [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md) (scope, period, exceptions).
+2. Update [TRACKER.md](./TRACKER.md) status + **Next action** + date in Progress log.
+3. Flip “Vendor report collected?” in [02_subprocessors.md](../../02_subprocessors.md) only after a real **review** skim.
+4. Optional: sanitized one-liner in tracker notes — no NDA-secret excerpts.
 
 ---
 

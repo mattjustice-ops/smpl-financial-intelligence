@@ -17,10 +17,10 @@ Send date **2026-07-29**. ~5 business days → chase window opens about **2026-0
 
 | # | Action | Done? |
 |---|--------|-------|
-| 1 | Confirm counsel firm / matter name (still **unspecified** in repo) | [ ] |
-| 2 | If no ack within ~5 business days of send (~**2026-08-05**): polite ping asking for ETA on first redline | [ ] |
-| 3 | When redline arrives: file privately; note date here / decision log — **do not** close R16 until customer-offerable draft exists | [ ] |
-| 4 | When customer-ready draft exists: update scoreboard notes; keep R16 open until offerable/signed path per P10 | [ ] |
+| 1 | Fill counsel firm / contact / matter — **[MATT FILL]** (still **unspecified** in repo; do not invent) | [ ] |
+| 2 | If no ack within ~5 business days of send (~**2026-08-05**): polite ping asking for ETA on first redline; log in [dpa-send-evidence-log-TEMPLATE.md](./dpa-send-evidence-log-TEMPLATE.md) | [ ] |
+| 3 | When redline arrives: follow chase pack §5a — private store + evidence log + decision log — **do not** close R16 from receipt alone | [ ] |
+| 4 | When customer-ready draft exists: update scoreboard notes; keep R16 **open / in progress** until offerable/signed path per P10 | [ ] |
 
 ## Explicit non-goals for agents
 
