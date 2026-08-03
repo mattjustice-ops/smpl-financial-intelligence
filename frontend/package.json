@@ -33,7 +33,7 @@
     "@portabletext/react": "^3.2.4",
     "@sanity/client": "^6.29.1",
     "@sanity/image-url": "^1.2.0",
-    "@sanity/vision": "^3.99.0",
+    "@sanity/vision": "^6.8.0",
     "clsx": "^2.1.1",
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.469.0",
