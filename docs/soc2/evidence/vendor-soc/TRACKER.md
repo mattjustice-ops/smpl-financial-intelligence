@@ -3,7 +3,8 @@
 **Owner:** Matt Justice  
 **Scaffold created:** 2026-07-29  
 **Public research pass:** 2026-07-29 (agent — no Matt console / no Allow)  
-**Matt session kit:** [SESSION_CHECKLIST_2026-07-31.md](./SESSION_CHECKLIST_2026-07-31.md)  
+**This-week working pack:** [WORKING_PACK_2026-08.md](./WORKING_PACK_2026-08.md)  
+**Matt session kit:** [SESSION_CHECKLIST_2026-07-31.md](./SESSION_CHECKLIST_2026-07-31.md) · Review after download: [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md)  
 **Collection status:** **not complete** — P0 Trust Centers researched; **no Type II reports marked received**. Public Stripe SOC 3 summary only (see notes). Readiness only — not SOC 2 certified.
 
 How to store files: [README.md](./README.md) · Request copy: [REQUEST_TEMPLATES.md](./REQUEST_TEMPLATES.md) · Inventory: [../../02_subprocessors.md](../../02_subprocessors.md) · Research notes: [PUBLIC_RESEARCH_2026-07-29.md](./PUBLIC_RESEARCH_2026-07-29.md)
@@ -57,7 +58,9 @@ How to store files: [README.md](./README.md) · Request copy: [REQUEST_TEMPLATES
 
 ## Matt-only clicks remaining (P0 + GitHub)
 
-**Executable pack:** [SESSION_CHECKLIST_2026-07-31.md](./SESSION_CHECKLIST_2026-07-31.md) (ordered checkboxes + reply format).
+**This-week pack:** [WORKING_PACK_2026-08.md](./WORKING_PACK_2026-08.md) (targets, store paths, status board, stakeholder language).  
+**Executable session:** [SESSION_CHECKLIST_2026-07-31.md](./SESSION_CHECKLIST_2026-07-31.md) (ordered checkboxes + reply format).  
+**After download:** [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md).
 
 When Matt is back (console login / Allow as needed) — **exact path per vendor:**
 
@@ -81,6 +84,7 @@ After each download: update this tracker to `received` / `reviewed` + date + per
 | 2026-07-29 | **Public research pass (no Matt console):** P0 + GitHub Trust Centers / docs reviewed. Statuses → `researched` or `public summary available` (Stripe SOC 3 only). **No Type II received.** Stripe public SOC 3 saved under gitignored `private/`. Notes: [PUBLIC_RESEARCH_2026-07-29.md](./PUBLIC_RESEARCH_2026-07-29.md). |
 | 2026-07-31 | **Session kit:** [SESSION_CHECKLIST_2026-07-31.md](./SESSION_CHECKLIST_2026-07-31.md) — ordered P0 clicks, private-store paths, post-session TRACKER reply format. Added **Next action** column. Statuses unchanged — **still no Type II received**. |
 | 2026-08-03 | **Stakeholder week:** pointed meeting brief at this tracker + session kit — [../../STAKEHOLDER_WEEK_BRIEF.md](../../STAKEHOLDER_WEEK_BRIEF.md). Statuses unchanged — **still no Type II received**. Matt portal session still required. |
+| 2026-08-03 | **Working pack:** [WORKING_PACK_2026-08.md](./WORKING_PACK_2026-08.md) + [REVIEW_CHECKLIST.md](./REVIEW_CHECKLIST.md) — P0 download targets, private store rules, review skim, honest status board. Statuses unchanged — **still no Type II received**. |
 
 ---
 
