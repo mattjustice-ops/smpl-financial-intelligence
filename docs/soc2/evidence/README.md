@@ -20,5 +20,6 @@ Use `*.local.md` for scratch notes containing secrets (gitignored).
 | [vendor-soc/](./vendor-soc/) | Vendor SOC / ISO collection scaffold — tracker + request templates; **PDFs outside git / gitignored** — collection **in progress**, not complete |
 | [dpa-counsel-sent-2026-07-29.md](./dpa-counsel-sent-2026-07-29.md) | DPA/MSA **sent to counsel** 2026-07-29 (Matt attestation) — R16 still open; not a signed DPA |
 | [dpa-counsel-chase-checklist-2026-07-29.md](./dpa-counsel-chase-checklist-2026-07-29.md) | Counsel chase checklist — ~5 BD chase window ~**2026-08-05**; firm unspecified |
+| [../DPA_COUNSEL_CHASE_PACK.md](../DPA_COUNSEL_CHASE_PACK.md) | DPA counsel chase pack — status, copy-paste chase email, cadence, done criteria; R16 still open |
 | [../STAKEHOLDER_WEEK_BRIEF.md](../STAKEHOLDER_WEEK_BRIEF.md) | Stakeholder week talking points + pack (2026-08-03) — readiness only; not certified |
 | [../TYPE1_CPA_SHORTLIST.md](../TYPE1_CPA_SHORTLIST.md) | Type I month + CPA firm decision pack — Matt picks still open |

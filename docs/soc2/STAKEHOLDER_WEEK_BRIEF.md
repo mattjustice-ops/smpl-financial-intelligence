@@ -41,6 +41,7 @@ Evidence index: [evidence/README.md](./evidence/README.md) · Vendor tracker: [e
 |-------|-----|------|
 | Public progress UI | Honest dashboard (not certification) | https://www.smpl-ai.com/compliance |
 | This brief | Talking points + open queue | `docs/soc2/STAKEHOLDER_WEEK_BRIEF.md` |
+| DPA counsel chase pack | Copy-paste chase email + cadence | [DPA_COUNSEL_CHASE_PACK.md](./DPA_COUNSEL_CHASE_PACK.md) |
 | Security one-pager | Share under NDA if asked | [SECURITY_ONE_PAGER.md](./SECURITY_ONE_PAGER.md) + [SMPL_Security_One_Pager_2026-07.pdf](./SMPL_Security_One_Pager_2026-07.pdf) |
 | Scoreboard | Detail on Pass vs open | [PROGRESS.md](./PROGRESS.md) |
 | CPA decision pack | Month + firm shortlist | [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) |
@@ -58,7 +59,7 @@ Agent-completable items (docs/sync) are first; Matt/external next.
 |---|------|-------|--------|
 | 1 | Stakeholder brief + scoreboard/`/compliance` sync for CPA pack + this week | Agent | **This branch** |
 | 2 | **Vendor SOC session** (~45–90 min) — P0 downloads per session checklist; update TRACKER only when files exist | Matt | Open — Matt login |
-| 3 | **DPA chase** — confirm counsel firm; if no ack by ~2026-08-05 (~5 BD after 2026-07-29 send), polite ETA ping | Matt → counsel | Open — chase due this week |
+| 3 | **DPA chase** — confirm counsel firm; if no ack by ~2026-08-05 (~5 BD after 2026-07-29 send), polite ETA ping — pack [DPA_COUNSEL_CHASE_PACK.md](./DPA_COUNSEL_CHASE_PACK.md) | Matt → counsel | Open — chase due this week |
 | 4 | **CPA month + 2–3 firms** — decide boxes in TYPE1_CPA_SHORTLIST; send draft outreach (inquiry OK while DPA/vendor still `[~]`) | Matt | Open — Matt decide |
 | 5 | Book Type I fieldwork only when pre-engagement checklist green (P0 Type II reviewed + DPA customer-ready or written deferral) | Matt + CPA | Later — not this week’s close |
 | 6 | Warehouse-gate product integrity (Phase 1–2) | Eng / Matt | Parallel product track — **not** Type I certification; see [controls/WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./controls/WAREHOUSE_GATE_NEAR_TERM_PLAN.md) |
