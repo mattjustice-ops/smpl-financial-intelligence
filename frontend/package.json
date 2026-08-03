@@ -27,7 +27,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed:sanity": "node scripts/seed-sanity.mjs",
-    "publish:finance-os-posts": "node scripts/publish-finance-os-posts.mjs"
+    "publish:finance-os-posts": "node scripts/publish-finance-os-posts.mjs",
+    "publish:aug3-posts": "node scripts/publish-aug3-posts.mjs"
   },
   "dependencies": {
     "@portabletext/react": "^3.2.4",
