@@ -21,7 +21,7 @@ export const SITE_TITLE =
   "SaaS FP&A Software & Board Reporting, Built to Be Trusted | SMPL.ai";
 
 /** Absolute URL to square logo for Google Organization schema (min 112×112 PNG/JPG). */
-export function siteLogoUrl(path = "/brand/smpl-logo.png"): string {
+export function siteLogoUrl(path = "/brand/icon-512.png"): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 

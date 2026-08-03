@@ -13,12 +13,13 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   icons: {
-    // Root /favicon.ico is also in /public for Google + legacy browsers.
+    // Prefer ≥48px PNG for Google SERP (their guideline). Multi-size
+    // /favicon.ico remains for legacy browsers.
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
       { url: "/brand/favicon-48.png", type: "image/png", sizes: "48x48" },
       { url: "/brand/favicon-96.png", type: "image/png", sizes: "96x96" },
-      { url: "/brand/smpl-logo.png", type: "image/png", sizes: "512x512" },
+      { url: "/brand/icon-512.png", type: "image/png", sizes: "512x512" },
+      { url: "/favicon.ico", sizes: "any" },
     ],
     shortcut: "/favicon.ico",
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
