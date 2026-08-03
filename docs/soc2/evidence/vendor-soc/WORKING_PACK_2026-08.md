@@ -2,7 +2,7 @@
 
 > **INTERNAL — FOR MATT THIS WEEK**  
 > Readiness only. **Not** SOC 2 certified.  
-> Public research is done; Railway + Neon Type II **received** (review pending); Vercel waiting; other P0 still open. Do not invent PDFs or flip statuses without a private-store file.  
+> Public research is done; Railway + Neon + Stripe Type II **received** (review pending); Vercel waiting; Anthropic/Resend still open. Do not invent PDFs or flip statuses without a private-store file.  
 > Agents do **not** log into vendor portals or email vendors.
 
 | Field | Value |
@@ -24,7 +24,7 @@
 | Vercel | P0 | SOC 2 Type II | `requested` (waiting approval) | **No** |
 | Railway | P0 | SOC 2 Type II | `received` (review pending) | **Yes** (Type II + bridge; outside git) |
 | Neon | P0 | SOC 2 Type II (+ ISO if listed) | `received` (review pending) | **Yes** (Type 2 + HIPAA 2026; outside git) |
-| Stripe | P0 | SOC 2 Type II (+ SOC 1 optional) | `public summary available` (SOC 3 only) | SOC 3 only — **not** Type II |
+| Stripe | P0 | SOC 2 Type II (+ SOC 1 optional) | `received` (review pending) | **Yes** (current Type II + bridge + previous archive; outside git) |
 | Anthropic | P0 | SOC 2 Type II (+ ISO packs) | `researched` | **No** |
 | Resend | P0 | SOC 2 Type II | `researched` | **No** |
 | GitHub | P1 | SOC 2 / SOC 3 / ISO (plan-dependent) | `researched` | **No** |
@@ -118,7 +118,7 @@ Not SOC 2 certified.
 |-----|------------|
 | Vendor SOC collection **in progress** — Trust Centers researched; downloading Type II under NDA | “We have all vendor SOC 2 reports” |
 | Pursuing **SOC 2 Type I** readiness | “SOC 2 certified” / “SOC 2 compliant” |
-| Stripe **public SOC 3** on file; **Type II still pending** Dashboard download | Treating SOC 3 as Type II complete |
+| Stripe Type II + bridge **received** (review pending); public SOC 3 also on file | Treating SOC 3 alone as Type II complete |
 | Reports stored **privately under NDA** (not in public git) | Pasting report findings into public materials |
 
 Optional spoken line:  
