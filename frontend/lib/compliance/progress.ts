@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-08-03", // stakeholder week brief; CPA shortlist pack on scoreboard; DPA chase ~2026-08-05; still no Type II / not certified
+  lastUpdated: "2026-08-03", // five P0 Type II reviewed; Vercel waiting; GitHub P1 deferred; DPA chase ~2026-08-05; not certified
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Stakeholder week 2026-08-03: meeting brief docs/soc2/STAKEHOLDER_WEEK_BRIEF.md. Core readiness closed (policies Approved; MFA; access review signed; restore Pass; IR tabletop; secrets + tenant isolation Pass; security one-pager under NDA). Open: DPA/MSA sent 2026-07-29 — chase ~2026-08-05 if no ack (R16 open); vendor SOC researched — no Type II received (Matt portal session); Type I month + 2–3 CPA firms — docs/soc2/TYPE1_CPA_SHORTLIST.md (Matt decide; default target 2026-11). Readiness ≠ SOC 2 certified",
+    "Stakeholder week 2026-08-03: meeting brief docs/soc2/STAKEHOLDER_WEEK_BRIEF.md. Core readiness closed (policies Approved; MFA; access review signed; restore Pass; IR tabletop; secrets + tenant isolation Pass; security one-pager under NDA). Open: DPA/MSA sent 2026-07-29 — chase ~2026-08-05 if no ack (R16 open); vendor SOC — five P0 Type II reviewed 2026-08-03 (Railway/Neon/Stripe/Anthropic/Resend); Vercel still waiting; GitHub P1 deferred until Type I audit engagement; Type I month + 2–3 CPA firms — docs/soc2/TYPE1_CPA_SHORTLIST.md (Matt decide; default target 2026-11). Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -294,12 +294,12 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
   },
   {
     id: "rem-vendor-soc",
-    label: "Vendor SOC / ISO reports — collection in progress (public research done)",
+    label: "Vendor SOC / ISO reports — collection in progress (five P0 reviewed; Vercel open)",
     status: "in_progress",
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Public research 2026-07-29 — docs/soc2/evidence/vendor-soc/TRACKER.md. P0 + GitHub researched; Stripe public SOC 3 only. No Type II received. PDFs outside git.",
+      "2026-08-03: Railway/Neon/Stripe/Anthropic/Resend Type II reviewed (Matt skim) — docs/soc2/evidence/vendor-soc/TRACKER.md. Vercel still requested (waiting). GitHub P1 deferred until Type I audit engagement. PDFs outside git.",
   },
   {
     id: "rem-dpa",
@@ -552,7 +552,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Vendor SOC / ISO reports folder (under NDA)",
         status: "in_progress",
         notes:
-          "Public research 2026-07-29 — docs/soc2/evidence/vendor-soc/; no Type II received (Stripe public SOC 3 only)",
+          "2026-08-03: five P0 Type II reviewed (Railway/Neon/Stripe/Anthropic/Resend); Vercel waiting; GitHub P1 deferred — docs/soc2/evidence/vendor-soc/TRACKER.md",
       },
       {
         id: "bv-7",
@@ -799,7 +799,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Subprocessor inventory + vendor reports collected",
         status: "in_progress",
         notes:
-          "Inventory locked 2026-07-28; public research 2026-07-29 (docs/soc2/evidence/vendor-soc/); Type II reports not received/reviewed",
+          "Inventory locked 2026-07-28; five P0 Type II reviewed 2026-08-03; Vercel open; GitHub deferred — docs/soc2/02_subprocessors.md + vendor-soc/TRACKER.md",
       },
       {
         id: "bar-8",
