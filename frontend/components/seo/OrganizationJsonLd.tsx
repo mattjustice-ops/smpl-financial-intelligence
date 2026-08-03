@@ -2,7 +2,8 @@ import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, siteLogoUrl } from "@/lib/site";
 
 /** Organization schema for Google knowledge panel / logo (Search Console). */
 export function OrganizationJsonLd() {
-  // Dedicated 512² mark. New path helps Google refetch after the old SERP cache.
+  // Keep dedicated /brand/icon-512.png URL (cache-bust path from SERP fix) but
+  // ship the restored pre-SERP smpl-logo.png content there — not regenerated sparkles.
   const logoUrl = siteLogoUrl("/brand/icon-512.png");
 
   const jsonLd = {
