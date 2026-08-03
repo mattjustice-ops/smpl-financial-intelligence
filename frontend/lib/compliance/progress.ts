@@ -58,12 +58,12 @@ export type ComplianceRemainingItem = {
 
 /** Update `lastUpdated` when you change checklist items (YYYY-MM-DD). */
 export const complianceProgressMeta = {
-  lastUpdated: "2026-07-29", // vendor SOC public research (no Type II); DPA sent/awaiting redline R16 open; security one-pager NDA; Month 2 Pass
+  lastUpdated: "2026-08-03", // stakeholder week brief; CPA shortlist pack on scoreboard; DPA chase ~2026-08-05; still no Type II / not certified
   title: "SOC 2 readiness",
   subtitle:
     "Honest progress toward SOC 2 Type I. We are not certified until an independent CPA firm issues a report.",
   currentFocus:
-    "Week 1 complete 2026-07-26. P01–P12 Approved 2026-07-27. Neon restore test Pass 2026-07-27. Platform deferred DIY. P15 Approved v1.1 2026-07-28. Dependabot + secret scanning confirmed 2026-07-28. Access review #1 signed 2026-07-29 (OK/Allow). Month 2 secrets spot-check Pass 2026-07-29 (Matt confirmed consoles via chat). Tenant isolation Pass 2026-07-29 (unit/SQL/unauth + Matt confirmed Org-B-only T1/T2 via chat). Security one-pager published for sales under NDA 2026-07-29 (docs/soc2/SECURITY_ONE_PAGER.md + SMPL_Security_One_Pager_2026-07.pdf). DPA/MSA sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed (firm unspecified; chase checklist in docs/soc2/evidence/). Vendor SOC public Trust Center research 2026-07-29 (P0 + GitHub researched; Stripe public SOC 3 only; no Type II received). Next: Matt portal downloads + counsel redline. Readiness ≠ SOC 2 certified",
+    "Stakeholder week 2026-08-03: meeting brief docs/soc2/STAKEHOLDER_WEEK_BRIEF.md. Core readiness closed (policies Approved; MFA; access review signed; restore Pass; IR tabletop; secrets + tenant isolation Pass; security one-pager under NDA). Open: DPA/MSA sent 2026-07-29 — chase ~2026-08-05 if no ack (R16 open); vendor SOC researched — no Type II received (Matt portal session); Type I month + 2–3 CPA firms — docs/soc2/TYPE1_CPA_SHORTLIST.md (Matt decide; default target 2026-11). Readiness ≠ SOC 2 certified",
   scopeLocked:
     "Scope APPROVED 2026-07-22 by Matt Justice: Security + Availability + Confidentiality IN; Processing Integrity and Privacy DEFERRED. All roles: Matt Justice.",
   /** What “done” means for Type I — shown prominently on the page. */
@@ -308,7 +308,7 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     owner: "Matt",
     targetWindow: "Week 3–4",
     notes:
-      "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified. Chase checklist docs/soc2/evidence/dpa-counsel-chase-checklist-2026-07-29.md; send attestation docs/soc2/evidence/dpa-counsel-sent-2026-07-29.md; P07/P08/P09 cross-ref only",
+      "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified. Chase ~2026-08-05 (~5 BD) — docs/soc2/evidence/dpa-counsel-chase-checklist-2026-07-29.md; send attestation docs/soc2/evidence/dpa-counsel-sent-2026-07-29.md; stakeholder brief docs/soc2/STAKEHOLDER_WEEK_BRIEF.md",
   },
   {
     id: "rem-secrets",
@@ -352,7 +352,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Month 2–3",
-    notes: "TARGET, not commitment",
+    notes:
+      "Decision pack docs/soc2/TYPE1_CPA_SHORTLIST.md — options 2026-10 / 2026-11 / 2026-Q4; recommended default 2026-11; Matt pick still open (TARGET, not commitment)",
   },
   {
     id: "rem-audit-firm",
@@ -360,7 +361,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Month 3–4",
-    notes: "Independent CPA — TARGET fieldwork",
+    notes:
+      "Shortlist in docs/soc2/TYPE1_CPA_SHORTLIST.md (Johanson, BARR, Sensiba, A-LIGN, Schellman, Prescient) — Matt pick 2–3 to contact; independent CPA — TARGET fieldwork",
   },
   {
     id: "rem-engage-cpa",
@@ -368,7 +370,8 @@ export const complianceRemainingItems: ComplianceRemainingItem[] = [
     status: "needs_owner",
     owner: "Matt",
     targetWindow: "Month 3–4",
-    notes: "TARGET, not commitment",
+    notes:
+      "After Matt decides month + firm via docs/soc2/TYPE1_CPA_SHORTLIST.md; TARGET, not commitment — not engaged yet",
   },
   {
     id: "rem-type-i-report",
@@ -494,13 +497,15 @@ export const complianceSections: ComplianceSection[] = [
         id: "kg-12",
         label: "Target Type I month",
         status: "needs_owner",
-        notes: "Even approximate YYYY-MM — TARGET, not commitment",
+        notes:
+          "Pack docs/soc2/TYPE1_CPA_SHORTLIST.md — Matt still picks YYYY-MM (TARGET; default suggestion 2026-11)",
       },
       {
         id: "kg-13",
         label: "Audit firm shortlist / engagement",
         status: "needs_owner",
-        notes: "Independent CPA; platform partner network OK later",
+        notes:
+          "Pack docs/soc2/TYPE1_CPA_SHORTLIST.md — shortlist ready; Matt contacts 2–3; independent CPA",
       },
     ],
   },
@@ -554,7 +559,7 @@ export const complianceSections: ComplianceSection[] = [
         label: "Customer DPA / MSA — single legal workstream",
         status: "in_progress",
         notes:
-          "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified — chase docs/soc2/evidence/dpa-counsel-chase-checklist-2026-07-29.md",
+          "Sent to counsel 2026-07-29 — awaiting redline / customer-ready draft; R16 not closed. Firm: unspecified — chase ~2026-08-05 docs/soc2/evidence/dpa-counsel-chase-checklist-2026-07-29.md",
       },
       {
         id: "bv-8",

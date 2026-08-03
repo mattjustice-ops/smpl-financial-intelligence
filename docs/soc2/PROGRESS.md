@@ -25,7 +25,9 @@
 | **Month 3–4** | ~2026-09-19 → 2026-11-19 | Engage CPA / Type I fieldwork **TARGET** (adjustable — not a commitment) |
 | **After Type I** | Report in hand + 3–12 months | Type II observation window, then Type II report |
 
-**Next guided item for Matt:** (1) Await DPA/MSA counsel redline / customer-ready draft (**R16 open** — pack **sent 2026-07-29**; chase checklist [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)). (2) Vendor SOC **Matt-only portal downloads** — [evidence/vendor-soc/TRACKER.md](./evidence/vendor-soc/TRACKER.md) (public research done 2026-07-29; **no Type II received**). (3) **Decide Type I month + 2–3 firms to contact** — [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) (still `[!]`). Security one-pager **published for sales under NDA 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
+**Stakeholder week (2026-08-03):** Meeting pack — [STAKEHOLDER_WEEK_BRIEF.md](./STAKEHOLDER_WEEK_BRIEF.md). Say **pursuing / readiness** only — **not** certified.
+
+**Next guided item for Matt:** (1) **DPA chase due ~2026-08-05** (~5 BD after send) — confirm firm + ping if no ack (**R16 open** — [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)). (2) Vendor SOC **Matt-only portal downloads** — session kit [evidence/vendor-soc/SESSION_CHECKLIST_2026-07-31.md](./evidence/vendor-soc/SESSION_CHECKLIST_2026-07-31.md) (**no Type II received**). (3) **Decide Type I month + 2–3 firms to contact** — [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) (still `[!]`). Security one-pager **published for sales under NDA 2026-07-29**. Reminder: readiness ≠ SOC 2 certified.
 
 ### Remaining `[!]` and `[ ]` items
 
@@ -508,6 +510,17 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 
 ---
 
+## What we prepared 2026-08-03 — Stakeholder week brief (readiness only)
+
+**Not SOC 2 certified.** Brief ≠ Type I report ≠ customer-ready DPA ≠ vendor Type II received.
+
+1. Added meeting pack — [STAKEHOLDER_WEEK_BRIEF.md](./STAKEHOLDER_WEEK_BRIEF.md): talking points, Done/Open/Matt/external, show pack, ordered week queue
+2. DPA chase calendar note — ~5 BD after 2026-07-29 send ≈ **2026-08-05** ([evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md)); R16 still open
+3. Evidence README pointers + `/compliance` `progress.ts` synced (CPA shortlist notes + lastUpdated)
+4. No invented signatures, Type II PDFs, or counsel redlines
+
+---
+
 ## How you’ll know Type I is complete
 
 **You hold a SOC 2 Type I report issued by an independent CPA firm** covering Security + Availability + Confidentiality (as scoped). Until then: readiness only.
@@ -520,5 +533,5 @@ Not approved at the time. Not SOC 2 certified. Readiness documentation only.
 |-------|--------|
 | Title | SMPL.ai SOC 2 Type I Progress Scoreboard |
 | Status | Internal living draft |
-| Last updated | 2026-07-31 (Type I month + CPA shortlist decision pack — Matt decisions still `[!]`) |
-| Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md), [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md) |
+| Last updated | 2026-08-03 (stakeholder week brief + DPA chase calendar; CPA pack still `[!]`; no Type II / no certification) |
+| Related | [../SOC2_TYPE1_KICKOFF.md](../SOC2_TYPE1_KICKOFF.md), [00_decision_log.md](./00_decision_log.md), [TYPE1_CPA_SHORTLIST.md](./TYPE1_CPA_SHORTLIST.md), [STAKEHOLDER_WEEK_BRIEF.md](./STAKEHOLDER_WEEK_BRIEF.md) |
