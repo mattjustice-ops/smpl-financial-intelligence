@@ -16,6 +16,7 @@
 | Send evidence log | [evidence/dpa-send-evidence-log-TEMPLATE.md](./evidence/dpa-send-evidence-log-TEMPLATE.md) |
 | Stakeholder brief | [STAKEHOLDER_WEEK_BRIEF.md](./STAKEHOLDER_WEEK_BRIEF.md) |
 | Parallel track | Vendor SOC working pack — [evidence/vendor-soc/WORKING_PACK_2026-08.md](./evidence/vendor-soc/WORKING_PACK_2026-08.md) |
+| Finding counsel | [legal/COUNSEL_FINDER_NOTES.md](./legal/COUNSEL_FINDER_NOTES.md) — where to look + what to ask (no firm shortlist) |
 
 ---
 
@@ -157,6 +158,7 @@ Do **not** invent redline content, firm names, or “signed” status.
 | Send / chase evidence log template | [evidence/dpa-send-evidence-log-TEMPLATE.md](./evidence/dpa-send-evidence-log-TEMPLATE.md) |
 | Chase checklist | [evidence/dpa-counsel-chase-checklist-2026-07-29.md](./evidence/dpa-counsel-chase-checklist-2026-07-29.md) |
 | Counsel send package (what was packaged) | [legal/COUNSEL_SEND_PACKAGE.md](./legal/COUNSEL_SEND_PACKAGE.md) |
+| Counsel finder notes (how to find a firm) | [legal/COUNSEL_FINDER_NOTES.md](./legal/COUNSEL_FINDER_NOTES.md) |
 | Original draft email to counsel | [legal/DRAFT_EMAIL_TO_COUNSEL.md](./legal/DRAFT_EMAIL_TO_COUNSEL.md) |
 | DPA/MSA outline | [legal/DPA_MSA_OUTLINE.md](./legal/DPA_MSA_OUTLINE.md) |
 | Subprocessors | [02_subprocessors.md](./02_subprocessors.md) |
@@ -188,7 +190,7 @@ Optional spoken line:
 - Do **not** mark R16 closed or scoreboard `[x]` from this chase pack.
 - Do **not** invent a counsel firm name.
 - Do **not** clear completed SOC 2 evidence elsewhere to create urgency.
-- CPA outreach remains a separate `[!]` track — leave it alone.
+- CPA outreach remains a separate `[!]` track — **intentionally held (funding)**; leave it alone.
 
 ---
 
