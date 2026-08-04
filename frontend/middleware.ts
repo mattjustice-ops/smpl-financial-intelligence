@@ -2,8 +2,23 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
 import { authConfig } from "@/auth.config";
+import { sitePageUrl } from "@/lib/site";
 
 const { auth } = NextAuth(authConfig);
+
+/** HTTP Link canonical reinforces HTML <link rel="canonical"> for indexable marketing URLs. */
+function withCanonicalLink(pathname: string, res: NextResponse) {
+  if (
+    pathname === "/blog" ||
+    pathname.startsWith("/blog/") ||
+    pathname === "/glossary" ||
+    pathname.startsWith("/glossary/")
+  ) {
+    const canonical = sitePageUrl(pathname);
+    res.headers.set("Link", `<${canonical}>; rel="canonical"`);
+  }
+  return res;
+}
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -27,9 +42,18 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return withCanonicalLink(pathname, NextResponse.next());
 });
 
 export const config = {
-  matcher: ["/app/:path*", "/account/:path*", "/forecast-engine/:path*", "/board"],
+  matcher: [
+    "/app/:path*",
+    "/account/:path*",
+    "/forecast-engine/:path*",
+    "/board",
+    "/blog",
+    "/blog/:path*",
+    "/glossary",
+    "/glossary/:path*",
+  ],
 };
