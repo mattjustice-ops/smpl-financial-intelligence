@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { BlogShareControls } from "@/components/blog/BlogShareControls";
 import { BlogTableOfContents } from "@/components/blog/BlogTableOfContents";
 import { PortableBody } from "@/components/sanity/PortableBody";
+import { BlogPostingJsonLd } from "@/components/seo/BlogPostingJsonLd";
 import { isSanityConfigured, sanityFetch } from "@/lib/sanity/client";
 import { extractPortableHeadings } from "@/lib/sanity/headings";
 import { urlForImage } from "@/lib/sanity/image";
@@ -47,11 +48,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: { absolute: title },
     description,
     alternates: { canonical: url },
+    robots: { index: true, follow: true },
     openGraph: {
       title,
       description,
       url,
       type: "article",
+      siteName: SITE_NAME,
       images: imageUrl ? [{ url: imageUrl }] : undefined,
     },
     twitter: {
@@ -104,10 +107,23 @@ export default async function BlogPostPage({ params }: PageProps) {
     ? `${articleMaxClass} lg:ml-[calc(14rem+3rem)]`
     : articleMaxClass;
 
+  const description =
+    post.seoDescription?.trim() ||
+    post.excerpt?.trim() ||
+    `Read ${post.title} on ${SITE_NAME}.`;
+
   return (
     <main
       className={`mx-auto px-6 py-16 ${hasComparisonTable ? "max-w-7xl" : "max-w-6xl"}`}
     >
+      <BlogPostingJsonLd
+        title={post.title}
+        description={description}
+        url={pageUrl}
+        datePublished={post.publishedAt}
+        imageUrl={imageUrl}
+        authorName={post.author?.name}
+      />
       <div className={articleOffsetClass}>
         <Link
           href="/blog"
