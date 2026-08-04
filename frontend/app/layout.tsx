@@ -1,9 +1,27 @@
 import type { Metadata } from "next";
+import { DM_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, siteLogoUrl } from "@/lib/site";
+
+/** Self-hosted brand fonts (replaces render-blocking fonts.googleapis.com CSS). */
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  weight: "variable",
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+  variable: "--font-serif",
+  display: "swap",
+});
+
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -55,7 +73,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${fraunces.variable} ${dmMono.variable}`}>
       <body>
         <OrganizationJsonLd />
         <AuthProvider>{children}</AuthProvider>
