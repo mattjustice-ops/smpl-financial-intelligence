@@ -7,7 +7,9 @@ import { BlogShareControls } from "@/components/blog/BlogShareControls";
 import { BlogTableOfContents } from "@/components/blog/BlogTableOfContents";
 import { PortableBody } from "@/components/sanity/PortableBody";
 import { BlogPostingJsonLd } from "@/components/seo/BlogPostingJsonLd";
+import { FaqJsonLd } from "@/components/seo/FaqJsonLd";
 import { isSanityConfigured, sanityFetch } from "@/lib/sanity/client";
+import { extractFaqFromBody } from "@/lib/sanity/faq";
 import { extractPortableHeadings } from "@/lib/sanity/headings";
 import { urlForImage } from "@/lib/sanity/image";
 import { postBySlugQuery, postSlugsQuery } from "@/lib/sanity/queries";
@@ -90,6 +92,7 @@ export default async function BlogPostPage({ params }: PageProps) {
   const imageUrl = urlForImage(post.mainImage)?.width(1400).height(788).url();
   const pageUrl = sitePageUrl(`/blog/${post.slug}`);
   const headings = extractPortableHeadings(post.body);
+  const faqItems = extractFaqFromBody(post.body);
   const hasToc = headings.length > 0;
   const hasComparisonTable = Boolean(
     post.body?.some(
@@ -124,6 +127,7 @@ export default async function BlogPostPage({ params }: PageProps) {
         imageUrl={imageUrl}
         authorName={post.author?.name}
       />
+      <FaqJsonLd items={faqItems} />
       <div className={articleOffsetClass}>
         <Link
           href="/blog"

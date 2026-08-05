@@ -796,6 +796,46 @@ export const glossaryTerms = [
       "Boards often see both ARR (operating) and GAAP revenue (accounting). Never interchange them without a bridge explanation.",
     ),
   },
+  {
+    _id: "glossary-fisod",
+    term: "FISoD",
+    slug: "fisod",
+    shortDefinition:
+      "Financial Intelligence Segregation of Duties — keep deterministic financial calculation separate from AI interpretation.",
+    body: blocks(
+      "FISoD (Financial Intelligence Segregation of Duties) extends traditional segregation of duties into AI-assisted finance: deterministic systems produce and validate the numbers; AI explains trusted results rather than creating and validating its own conclusions.",
+      "Use FISoD as a vendor and architecture lens: who defines the logic, are calculations deterministic and traceable, and does AI interpret validated outputs or invent figures?",
+      "Full framework: [Financial Intelligence Segregation of Duties (FISoD)](/blog/financial-intelligence-segregation-of-duties).",
+    ),
+    relatedPosts: [
+      {
+        _type: "reference",
+        _ref: "post-financial-intelligence-segregation-of-duties",
+      },
+    ],
+    relatedTerms: [
+      { _type: "reference", _ref: "glossary-segregation-of-duties" },
+    ],
+  },
+  {
+    _id: "glossary-segregation-of-duties",
+    term: "Segregation of duties",
+    slug: "segregation-of-duties",
+    shortDefinition:
+      "Separating responsibilities so no single person (or system) controls a process end to end without an independent check.",
+    body: blocks(
+      "In finance operations, segregation of duties means the person who enters a transaction is not the sole approver, reconciler, or reviewer — independent validation reduces risk.",
+      "Applied to financial intelligence and AI, the same idea is [Financial Intelligence Segregation of Duties (FISoD)](/glossary/fisod): calculation and AI interpretation stay separate so AI explains trusted results instead of acting as both accountant and auditor.",
+      "Read the framework: [AI should never be both accountant and auditor](/blog/financial-intelligence-segregation-of-duties).",
+    ),
+    relatedPosts: [
+      {
+        _type: "reference",
+        _ref: "post-financial-intelligence-segregation-of-duties",
+      },
+    ],
+    relatedTerms: [{ _type: "reference", _ref: "glossary-fisod" }],
+  },
 ];
 
 // Attach slug objects for glossary seed

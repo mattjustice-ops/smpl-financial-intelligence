@@ -29,7 +29,8 @@
     "seed:sanity": "node scripts/seed-sanity.mjs",
     "publish:finance-os-posts": "node scripts/publish-finance-os-posts.mjs",
     "publish:aug3-posts": "node scripts/publish-aug3-posts.mjs",
-    "publish:aug4-posts": "node scripts/publish-aug4-posts.mjs"
+    "publish:aug4-posts": "node scripts/publish-aug4-posts.mjs",
+    "publish:fisod-seo": "node scripts/publish-fisod-seo.mjs"
   },
   "dependencies": {
     "@portabletext/react": "^3.2.4",
