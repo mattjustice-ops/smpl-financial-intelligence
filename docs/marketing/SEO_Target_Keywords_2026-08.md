@@ -2,6 +2,7 @@
 
 **Purpose:** Short working tracker for SMPL.ai buyer-intent SEO after the category SEO advisory.  
 **Companion file:** `docs/marketing/SEO_Target_Keywords_2026-08.xlsx`  
+**Strategy (themes + ads/SEO channel split):** `docs/marketing/SEO_Keyword_Strategy_Intent_Themes.md` (+ `.xlsx`) — use that for intent-theme review; keep this file for per-query → URL execution.  
 **Related history:** `docs/marketing/SEO_Keywords_Before_After_2026-08.xlsx` (metadata before/after reconstruction — not this tracker)
 
 ## North-star rule
