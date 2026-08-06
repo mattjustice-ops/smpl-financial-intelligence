@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { GoogleAdsTag } from "@/components/analytics/GoogleAdsTag";
 import { LandingHeader } from "@/components/landing/LandingHeader";
 import { SITE_DESCRIPTION, SITE_TITLE } from "@/lib/site";
 import "./landing.css";
@@ -20,6 +21,7 @@ export const metadata: Metadata = {
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="marketing-root min-h-screen bg-slate-950 text-white antialiased">
+      <GoogleAdsTag />
       <LandingHeader />
       {children}
     </div>
