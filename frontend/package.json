@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@portabletext/react": "^3.2.4",
-    "@sanity/client": "^6.29.1",
+    "@sanity/client": "^7.26.2",
     "@sanity/image-url": "^1.2.0",
     "@sanity/vision": "^3.99.0",
     "clsx": "^2.1.1",
