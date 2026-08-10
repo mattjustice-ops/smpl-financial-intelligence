@@ -396,7 +396,15 @@ export function LeadIntakeForm({ intent, preferredTier, onDemoSubmitted }: Props
         </div>
       </div>
 
-      <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6">
+      <p className="mt-8 text-xs leading-relaxed text-slate-500">
+        By submitting, you agree we may use your details to respond to this request. See our{" "}
+        <Link href="/privacy" className="text-slate-300 underline-offset-2 hover:text-white hover:underline">
+          Privacy Policy
+        </Link>
+        .
+      </p>
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6">
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white">
           <ArrowLeft size={16} />
           Back to home

@@ -14,9 +14,12 @@ export function LandingFooter() {
           <Link href="/app" className="transition hover:text-white">
             Platform
           </Link>
-          <a href="#trust" className="transition hover:text-white">
+          <Link href="/privacy" className="transition hover:text-white">
+            Privacy
+          </Link>
+          <Link href={{ pathname: "/", hash: "trust" }} className="transition hover:text-white">
             Trust layer
-          </a>
+          </Link>
         </div>
       </div>
     </footer>
