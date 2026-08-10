@@ -50,7 +50,7 @@
     "server-only": "^0.0.1",
     "stripe": "^17.7.0",
     "styled-components": "^6.4.4",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
