@@ -16,6 +16,8 @@ Anthropic requires a payment method on the account before production traffic. Fo
 
 Recommended model (configured in code): `claude-sonnet-4-20250514`
 
+**Routing posture:** prefer thick freeze / evidence packages + the purpose-based model in `llm_factory` (`SMPL_FAST_AI` Haiku for latency; Sonnet when fast is off). Do not chase larger models for board-ready output from thin prompts — see [AI_SKILL_PRACTICES.md](./AI_SKILL_PRACTICES.md) §6.
+
 ## 3. Add the key to each environment
 
 ### Local backend

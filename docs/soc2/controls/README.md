@@ -9,6 +9,7 @@
 | [WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./WAREHOUSE_GATE_NEAR_TERM_PLAN.md) | **Near-term plan (2–4 weeks)** — calculate → validate → AI explains validated evidence → fail closed; LIVE/PARTIAL/OPEN matrix; board must-haves vs nice-to-haves |
 | [ai_claim_verify.md](./ai_claim_verify.md) | **Founder review checklist** — P15 fail-closed claim-verify: what shipped, tolerances, covered vs open paths, tests |
 | [ai_attribution_verify.md](./ai_attribution_verify.md) | **Live on primary AI paths** — non-numeric driver/attribution verify (commentary, Prompt 2, Prompt 5, board regenerate, Copilot structured packages) |
+| [../../AI_SKILL_PRACTICES.md](../../AI_SKILL_PRACTICES.md) | **Internal process** — skill lifecycle + definition skills; maps clarify-before-write / thick-context routing onto existing verify gates (not SOC 2 cert) |
 | [fe_board_single_source.md](./fe_board_single_source.md) | **Production FE↔Board hydrate** — shared outlook API/builder confirmed + TS↔SRC $1 regression; demo dual-seed left alone |
 | [data_integrity_framework.md](./data_integrity_framework.md) | Provenance (`_sources`), Claude runtime rules, build-time `data-source` tags, automated tie-out report, commentary second-pass verification, close review checklist |
 | [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md) | Per-visual warehouse mapping + Rule Sets A–F + `runTieOut()` publish block |

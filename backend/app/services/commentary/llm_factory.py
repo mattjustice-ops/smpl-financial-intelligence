@@ -18,7 +18,9 @@ def build_commentary_llm_client(*, purpose: LlmPurpose = "export") -> Commentary
     - interactive: Copilot / regenerate — 120s headroom for comprehensive answers
     - export: Prompt 2 / Prompt 5 — Haiku + longer timeout; full freeze context
 
-    Set SMPL_FAST_AI=false to restore Sonnet on export paths.
+    Prefer thick evidence + freeze packages with an appropriate model over chasing
+    larger models with thin prompts. Set SMPL_FAST_AI=false to restore Sonnet on
+    export paths when a close needs more headroom.
     """
     settings = get_settings()
     fast = bool(getattr(settings, "smpl_fast_ai", True))
