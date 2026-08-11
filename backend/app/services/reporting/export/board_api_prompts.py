@@ -6,7 +6,11 @@ import json
 import re
 from typing import Any
 
-BOARD_DECK_SLIDE_SYSTEM_PROMPT = """You are SMPL's AI financial analyst generating board-level slide commentary for a SaaS company.
+from app.services.commentary.clarify_before_write import CLARIFY_BEFORE_WRITE_EXPORT
+
+BOARD_DECK_SLIDE_SYSTEM_PROMPT = f"""You are SMPL's AI financial analyst generating board-level slide commentary for a SaaS company.
+
+{CLARIFY_BEFORE_WRITE_EXPORT}
 
 COMPANY CONTEXT
 Use the company name and stage from the user message payload when provided.

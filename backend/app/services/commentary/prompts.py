@@ -11,9 +11,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.services.commentary.clarify_before_write import CLARIFY_BEFORE_WRITE_EXPORT
 from app.services.commentary.schemas import CommentaryInputs, CommentaryOutput
 
-SYSTEM_PROMPT = """You are a senior SaaS CFO writing board-level financial commentary.
+SYSTEM_PROMPT = f"""You are a senior SaaS CFO writing board-level financial commentary.
+
+{CLARIFY_BEFORE_WRITE_EXPORT}
 
 Strict rules — violations are unacceptable:
 1. Use only the numbers and facts contained in the JSON data block and the

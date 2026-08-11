@@ -11,6 +11,7 @@ Product and domain documentation for the SaaS Financial Intelligence platform.
 | [Forecasting_Assumptions.md](./Forecasting_Assumptions.md) | Forecast drivers, build sequence, roll-forward rules |
 | [Close_Process.md](./Close_Process.md) | Month-end close workflow, roles, sign-off |
 | [Reporting_Logic.md](./Reporting_Logic.md) | Report definitions, tie-outs, validation catalog |
+| [AI_SKILL_PRACTICES.md](./AI_SKILL_PRACTICES.md) | Internal AI skill lifecycle — definition skills, clarify-before-write, validate-then-promote (not a Skills UI) |
 | [CLOSE_PEAK_WORKLOAD.md](./CLOSE_PEAK_WORKLOAD.md) | **Month-end peak concurrency strategy** — Prompt 5, Copilot, ingest (Rev 4); engineering backlog in §6a–6b |
 | [CUSTOMER_CLOSE_WORKFLOW.md](./CUSTOMER_CLOSE_WORKFLOW.md) | **Canonical Customer Close Workflow** — state machine, Lock → Certified Close, UX/API/DB (implementation spec) |
 | [CUSTOMER_CLOSE_DATA_READINESS.md](./CUSTOMER_CLOSE_DATA_READINESS.md) | Superseded alignment brief — see Close Workflow |

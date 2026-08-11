@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps.request_context import get_request_user_id
 from app.db.session import get_db
 from app.services.board_platform_service import BoardPlatformPayload, build_board_platform_payload
+from app.services.commentary.clarify_before_write import CLARIFY_BEFORE_WRITE_INTERACTIVE
 from app.services.commentary.llm_factory import build_commentary_llm_client, LLMError
 from app.services.organizations import get_organization_or_404
 from app.services.ops.usage_context import reset_usage_context, set_usage_context
@@ -395,6 +396,7 @@ def board_copilot(
                 "drivers from the attribution package — do not invent future drivers. "
                 "When the question names a month, use that month's sections — especially "
                 "'Monthly operational cash bridges' and 'Monthly Actual trends'. "
+                f"{CLARIFY_BEFORE_WRITE_INTERACTIVE}\n"
                 "Structure every answer in exactly three labeled sections:\n"
                 "1. PRIMARY DRIVER + VARIANCE CONTEXT\n"
                 "2. FINANCIAL AND OPERATIONAL ROOT CAUSE\n"

@@ -9,8 +9,12 @@ may cite when authoring — never a template of blank slots to fill, and never a
 post-process source that patches emptied takeaways after soft-strip.
 """
 
+from app.services.commentary.clarify_before_write import CLARIFY_BEFORE_WRITE_EXPORT
+
 # Asserted by tests — keep phrases stable.
-PROMPT5_CRAFT_CRITERIA = """\
+PROMPT5_CRAFT_CRITERIA = f"""\
+{CLARIFY_BEFORE_WRITE_EXPORT}
+
 CRAFT CRITERIA (when you choose X, do Y — generative authorship, not slot-fill)
 You author the deck. Packages below are evidence you may use — do NOT treat them
 as blank fields to copy into, and do NOT leave placeholders for a later refill.
