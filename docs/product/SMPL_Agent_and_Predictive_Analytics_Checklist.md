@@ -2,7 +2,7 @@
 
 Internal working checklist. Captures the phased Slack/ops agent path (as pasted) and predictive analytics (lever-aware scenario intelligence) milestones from product discussion. **Docs/checklist only — not an implementation plan commitment.**
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-18
 
 ---
 
@@ -210,3 +210,54 @@ Radar check, not a feature checklist. Skip competitor features that fight the st
 - [ ] Covenant tiers as packaging story now vs literal constraint engine in v2
 - [ ] First 5 agent tools + which roles can use them
 - [ ] Separate “support agent” vs “analyst agent” for segregation of duties (optional later)
+
+---
+
+# Part 4 — Datadog takeaways (security + process)
+
+From Datadog Bits / observability review (2026-08). **Steal patterns, not SKUs.** Do not clone Bits AI, Bits Workflows, or AgentCore. Docs/checklist only — not an implementation commitment.
+
+## Hypothesis-tree RCA (finance variance / recon)
+
+Named hypotheses; evidence = SMPL facts + SoR citations. No auto GL journal.
+
+- [ ] Variance/recon RCA starts as a **named hypothesis tree** (not a free-form narrative)
+- [ ] Each leaf: **verify / reject / insufficient evidence**
+- [ ] Residual unexplained is **fail-closed** (never “must be X”)
+- [ ] Citations bind to freeze facts + source-system evidence
+- [ ] Explicitly out of scope: auto GL journal / ERP write-back (see Principles)
+
+## Agent observability (Copilot / MD&A jobs)
+
+Job is to debug **“why did MD&A say X?”** without guessing.
+
+- [ ] Per job: inputs (freeze ID, prompt, user/role)
+- [ ] Per job: retrieved sources
+- [ ] Per job: calc IDs used
+- [ ] Per job: tokens / cost
+- [ ] Per job: policy gates hit
+- [ ] Per job: fail-closed reason (if any)
+
+## Close as spine (fragmented-workflow analog)
+
+Slack / Excel / ERP stay fragmented. SMPL is the **system of investigation**.
+
+- [ ] Close exception → Slack **starting packet** with deep links into SMPL
+- [ ] Packet is a pointer, not a second ledger
+- [ ] Evidence, RCA, and resolution stay in SMPL (not Slack-as-SoT)
+
+## Agent lifecycle (tenant support agent)
+
+Operating model around existing Slack **phases 0–3**. No unreviewed compounding memory.
+
+- [ ] **Registry** — what the tenant support agent is and what it can do
+- [ ] **Identity** — tenant + user (not a shared company bot)
+- [ ] **Policy every run** — FISoD (finance isolation + segregation of duties) + allowlisted tools; tenant policy pack applied each run (`bits.md` analog, not a Datadog clone)
+- [ ] **Memory** — reviewed, human-accepted resolved RCA only; no silent accumulation
+- [ ] Phase 0–3 remain the rollout; this is the control plane around them
+
+## Constraints (do not weaken)
+
+- [ ] **No auto-PR / auto-fix** for finance
+- [ ] **Propose-then-approve** is the default (Phase 1); constrained writes stay allowlisted + role-checked
+- [ ] **Type I readiness, not SOC 2 certified** — do not say otherwise until a CPA Type I report is in hand
