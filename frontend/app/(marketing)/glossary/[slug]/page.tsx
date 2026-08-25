@@ -6,6 +6,7 @@ import { PortableBody } from "@/components/sanity/PortableBody";
 import { isSanityConfigured, sanityFetch } from "@/lib/sanity/client";
 import { glossaryBySlugQuery, glossarySlugsQuery } from "@/lib/sanity/queries";
 import type { SanityGlossaryTerm } from "@/lib/sanity/types";
+import { isGlossaryTermIndexable } from "@/lib/seo/glossary";
 import { SITE_NAME, sitePageUrl } from "@/lib/site";
 
 export const revalidate = 60;
@@ -37,10 +38,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const title = `${term.term} | Glossary | ${SITE_NAME}`;
   const description = term.shortDefinition;
   const url = sitePageUrl(`/glossary/${term.slug}`);
+  const indexable = isGlossaryTermIndexable(term.body);
   return {
     title: { absolute: title },
     description,
     alternates: { canonical: url },
+    // One-line stubs still render for humans / internal links, but stay out of the index.
+    robots: indexable
+      ? { index: true, follow: true }
+      : { index: false, follow: true },
     openGraph: { title, description, url },
     twitter: { title, description },
   };

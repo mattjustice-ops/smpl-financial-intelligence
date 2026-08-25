@@ -23,6 +23,20 @@ export function portableBlockPlainText(block: PortableTextBlock): string {
     .trim();
 }
 
+/** Concatenated plain text across Portable Text blocks (for thin-content checks). */
+export function portableBodyPlainText(
+  body?: PortableTextBlock[] | null,
+): string {
+  if (!body?.length) return "";
+  return body
+    .filter((block) => block._type === "block")
+    .map((block) => portableBlockPlainText(block))
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function slugifyHeading(text: string): string {
   const slug = text
     .toLowerCase()

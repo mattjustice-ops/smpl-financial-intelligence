@@ -2,24 +2,15 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
 import { authConfig } from "@/auth.config";
-import { sitePageUrl } from "@/lib/site";
 
 const { auth } = NextAuth(authConfig);
 
-/** HTTP Link canonical reinforces HTML <link rel="canonical"> for indexable marketing URLs. */
-function withCanonicalLink(pathname: string, res: NextResponse) {
-  if (
-    pathname === "/blog" ||
-    pathname.startsWith("/blog/") ||
-    pathname === "/glossary" ||
-    pathname.startsWith("/glossary/")
-  ) {
-    const canonical = sitePageUrl(pathname);
-    res.headers.set("Link", `<${canonical}>; rel="canonical"`);
-  }
-  return res;
-}
-
+/**
+ * Auth + board redirects only.
+ * Canonicals live in route metadata (HTML <link rel="canonical">). Avoid setting
+ * duplicate HTTP Link: rel=canonical here — Vercel/Next already emit them for
+ * blog/glossary and double headers confuse crawlers.
+ */
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isProtected =
@@ -42,7 +33,7 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  return withCanonicalLink(pathname, NextResponse.next());
+  return NextResponse.next();
 });
 
 export const config = {
@@ -51,9 +42,5 @@ export const config = {
     "/account/:path*",
     "/forecast-engine/:path*",
     "/board",
-    "/blog",
-    "/blog/:path*",
-    "/glossary",
-    "/glossary/:path*",
   ],
 };
