@@ -10,6 +10,9 @@ Disallow: /studio
 Disallow: /forecast-engine
 Disallow: /billing/
 
+# APIs / auth callbacks (not marketing content)
+Disallow: /api/
+
 # Demo / internal HTML that must not compete with marketing pages
 Disallow: /board/
 Disallow: /board-sample

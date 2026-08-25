@@ -30,7 +30,10 @@ export const postBySlugQuery = groq`
 `;
 
 export const postSlugsQuery = groq`
-  *[_type == "post" && defined(slug.current)]{ "slug": slug.current }
+  *[_type == "post" && defined(slug.current) && defined(publishedAt)]{
+    "slug": slug.current,
+    publishedAt
+  }
 `;
 
 export const glossaryListQuery = groq`
@@ -65,5 +68,8 @@ export const glossaryBySlugQuery = groq`
 `;
 
 export const glossarySlugsQuery = groq`
-  *[_type == "glossaryTerm" && defined(slug.current)]{ "slug": slug.current }
+  *[_type == "glossaryTerm" && defined(slug.current)]{
+    "slug": slug.current,
+    body
+  }
 `;

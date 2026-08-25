@@ -19,7 +19,15 @@ export function OrganizationJsonLd() {
     },
     description: SITE_DESCRIPTION,
     email: "mattjustice@smpl-ai.com",
-    sameAs: [] as string[],
+    // Populate with real public profiles (LinkedIn company page, X, etc.) when ready.
+    // Empty sameAs is worse than omitting — leave unset until URLs are confirmed.
+    ...(process.env.NEXT_PUBLIC_ORG_SAME_AS
+      ? {
+          sameAs: process.env.NEXT_PUBLIC_ORG_SAME_AS.split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        }
+      : {}),
   };
 
   return (
