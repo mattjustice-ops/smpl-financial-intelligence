@@ -19,7 +19,7 @@ Disallow: /board-sample
 Disallow: /progress
 Disallow: /compliance
 
-# Link-only shareables (pitch deck, etc.) — not marketing SEO
-Disallow: /resources/
+# Link-only shareables (unlisted PDFs, etc.) — not marketing SEO
+Disallow: /s/
 
 Sitemap: https://www.smpl-ai.com/sitemap.xml
