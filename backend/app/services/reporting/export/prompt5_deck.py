@@ -682,6 +682,194 @@ def _sanitize_pptxgen_script(script: str) -> str:
     return script
 
 
+def _strip_slide2_kpi_sparklines(script: str) -> str:
+    """Remove mini line charts under slide-2 KPI cards (Ending ARR / Revenue / Cash)."""
+    if "sparkDefs" not in script:
+        return script
+
+    # Prefer cutting from the sparkline comment / months const through forEach close.
+    start_pat = re.compile(
+        r"[ \t]*(?://[^\n]*[Ss]parkline[^\n]*\n)?[ \t]*const months\s*=",
+    )
+    alt_start = re.compile(r"[ \t]*const sparkDefs\s*=")
+    m = start_pat.search(script) or alt_start.search(script)
+    if not m:
+        return script
+    start = m.start()
+    for_each = re.search(r"sparkDefs\.forEach\s*\(", script[start:])
+    if not for_each:
+        return script
+    # Brace-count from the `{` after => to the matching `});`
+    abs_fe = start + for_each.end()
+    brace_open = script.find("{", abs_fe)
+    if brace_open < 0:
+        return script
+    depth = 0
+    i = brace_open
+    while i < len(script):
+        ch = script[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                # consume trailing `);` / `;` / whitespace/newline
+                end = i + 1
+                if end < len(script) and script[end] == ")":
+                    end += 1
+                if end < len(script) and script[end] == ";":
+                    end += 1
+                while end < len(script) and script[end] in " \t":
+                    end += 1
+                if end < len(script) and script[end] == "\n":
+                    end += 1
+                return (
+                    script[:start]
+                    + "  // KPI sparklines removed — not helpful under Ending ARR / Revenue / Cash.\n"
+                    + script[end:]
+                )
+        i += 1
+    return script
+
+
+def _fix_slide5_ytd_summary_overlap(script: str) -> str:
+    """Ensure YTD Cash Summary sits below the cash bridge (no Ending Cash overlap)."""
+
+    def _nudge_label(m: re.Match[str]) -> str:
+        y = float(m.group(2))
+        if y < 4.0:
+            return f"{m.group(1)}4.05{m.group(3)}"
+        return m.group(0)
+
+    return re.sub(
+        r'(addSectionLabel\(\s*slide\s*,\s*["\']YTD Cash Summary["\']\s*,\s*[^,]+,\s*)'
+        r"(\d+(?:\.\d+)?)"
+        r"(\s*,)",
+        _nudge_label,
+        script,
+        flags=re.IGNORECASE,
+    )
+
+
+def _fix_slide11_source_overlap(script: str) -> str:
+    """Push CFS Source note below Ending Cash when y is packed too tightly."""
+
+    def _nudge_source(m: re.Match[str]) -> str:
+        y = float(m.group(2))
+        if y < 5.55:
+            return f"{m.group(1)}5.65{m.group(3)}"
+        return m.group(0)
+
+    return re.sub(
+        r'(addText\(\s*["\']Source:\s*[^"\']*["\']\s*,\s*\{[^}]*?\by\s*:\s*)'
+        r"(\d+(?:\.\d+)?)"
+        r"(\s*,)",
+        _nudge_source,
+        script,
+        flags=re.IGNORECASE,
+    )
+
+
+def _reinject_period_matrix_ending_cash_row(script: str, payload: dict[str, Any]) -> str:
+    """Force Ending Cash period_matrix row (incl. YTD Variance) from payload."""
+    matrix = payload.get("period_matrix") or {}
+    rows = matrix.get("rows") or []
+    cash_row = next(
+        (r for r in rows if str(r.get("metric") or "").lower() == "ending cash"),
+        None,
+    )
+    if not isinstance(cash_row, dict):
+        return script
+    cm = cash_row.get("cm") or {}
+    ytd = cash_row.get("ytd") or {}
+    cells = [
+        "Ending Cash",
+        str(cm.get("actual") or "—"),
+        str(cm.get("budget") or "—"),
+        str(cm.get("variance") or "—"),
+        str(ytd.get("actual") or "—"),
+        str(ytd.get("budget") or "—"),
+        str(ytd.get("variance") or "—"),
+    ]
+    quoted = ", ".join(json.dumps(c) for c in cells)
+    replacement = f"[{quoted}]"
+    new_script, n = re.subn(
+        r'\[\s*["\']Ending Cash["\']\s*,\s*["\'][^"\']*["\']\s*,\s*["\'][^"\']*["\']\s*,'
+        r'\s*["\'][^"\']*["\']\s*,\s*["\'][^"\']*["\']\s*,\s*["\'][^"\']*["\']\s*,'
+        r'\s*["\'][^"\']*["\']\s*\]',
+        lambda _m: replacement,
+        script,
+        count=1,
+    )
+    if n:
+        logger.info("Reinjected period_matrix Ending Cash row (incl. YTD variance) from payload")
+        return new_script
+    return script
+
+
+_CFS_VARIANCE_KEYS: tuple[tuple[str, str], ...] = (
+    ("Beginning Cash", "beginning_cash"),
+    ("Net Income", "net_income"),
+    ("Depreciation & Amortization", "depreciation_amortization"),
+    ("Stock-Based Compensation", "stock_based_compensation"),
+    ("Change in Accounts Receivable", "change_in_ar"),
+    ("Change in Deferred Revenue", "change_in_deferred_revenue"),
+    ("Change in Accounts Payable", "change_in_ap"),
+    ("Change in Prepaids", "change_in_prepaids"),
+    ("Cash from Operations (CFO)", "cfo"),
+    ("Capex", "capex"),
+    ("Cash from Investing (CFI)", "cfi"),
+    ("Cash from Financing (CFF)", "cff"),
+    ("Net Change in Cash", "net_change_in_cash"),
+    ("Ending Cash", "ending_cash"),
+)
+
+
+def _reinject_cfs_variances(script: str, payload: dict[str, Any]) -> str:
+    """Restore appendix CFS Actual/Budget/Variance cells from payload after soft-strip."""
+    appendix = payload.get("appendix") or {}
+    cfs = appendix.get("ytd_cash_flow_statement") or payload.get("ytd_cash_flow_statement") or {}
+    actual = cfs.get("actual") or {}
+    budget = cfs.get("budget") or {}
+    variance = cfs.get("variance") or {}
+    if not variance:
+        return script
+
+    out = script
+    changed = False
+    for label, key in _CFS_VARIANCE_KEYS:
+        a = str(actual.get(key) or "—")
+        b = str(budget.get(key) or "—")
+        v = str(variance.get(key) or "—")
+        pattern = (
+            rf'(\{{\s*label:\s*["\']{re.escape(label)}["\']\s*,\s*actual:\s*)["\'][^"\']*["\']'
+            rf'(\s*,\s*budget:\s*)["\'][^"\']*["\']'
+            rf'(\s*,\s*variance:\s*)["\'][^"\']*["\']'
+        )
+
+        def _repl(m: re.Match[str], _a: str = a, _b: str = b, _v: str = v) -> str:
+            return f"{m.group(1)}{json.dumps(_a)}{m.group(2)}{json.dumps(_b)}{m.group(3)}{json.dumps(_v)}"
+
+        out2, n = re.subn(pattern, _repl, out, count=1)
+        if n:
+            out = out2
+            changed = True
+    if changed:
+        logger.info("Reinjected YTD CFS Actual/Budget/Variance cells from payload")
+    return out
+
+
+def _postprocess_prompt5_script(script: str, payload: dict[str, Any] | None = None) -> str:
+    """Deterministic layout/data fixes after Claude adapt / soft-strip."""
+    script = _strip_slide2_kpi_sparklines(script)
+    script = _fix_slide5_ytd_summary_overlap(script)
+    script = _fix_slide11_source_overlap(script)
+    if payload:
+        script = _reinject_period_matrix_ending_cash_row(script, payload)
+        script = _reinject_cfs_variances(script, payload)
+    return script
+
+
 def _prepare_script(script: str, output_path: Path) -> str:
     script = _strip_markdown_fences(script)
     script = _sanitize_pptxgen_script(script)
@@ -715,7 +903,8 @@ def _build_fix_prompt(*, last_error: str, failed_script: str, payload_json: str)
         "- Never redeclare the same const/let name (use unique names per slide or reassign).\n"
         "- Identifiers must be camelCase with no spaces (bridgeY not 'bridge Y').\n"
         "- Use pptx.ShapeType / pptx.ChartType on the pptx instance, never pptxgen.ShapeType.\n"
-        "- Charts: only slides 2, 6, 9 via addChart; slide 3 waterfall uses ShapeType.rect bars only.\n"
+        "- Charts: only slides 6, 9 via addChart (NO slide-2 KPI sparklines); "
+        "slide 3 waterfall uses ShapeType.rect bars only.\n"
         "- Chart data must be numeric arrays; labels must be string arrays.\n"
         "- End with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n"
         "- Copy numbers from DATA PAYLOAD verbatim.\n\n"
@@ -1011,16 +1200,22 @@ def _try_adapt_from_reference(
         "Return complete raw JavaScript ending with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n\n"
         f"{package_preamble}"
         "LAYOUT LOCKS (craft criteria — apply even when adapting):\n"
+        "- Slide 2: NO sparklines / mini line charts under Ending ARR, Revenue (CM), or "
+        "Ending Cash KPI cards. period_matrix must copy CM/YTD Actual/Budget/Variance "
+        "verbatim — Ending Cash YTD Variance must show (pos and neg) when both sides exist.\n"
         "- Slide 3: Key Takeaways FULL WIDTH under the ARR waterfall (not cramped right of bridge).\n"
         "- Slide 5: Use cash_liquidity.ytd_cash_summary (not a thin liquidity-headroom stub); "
-        "KT box must end above footer (y+h ≤ 6.85).\n"
+        "place YTD Cash Summary BELOW the cash bridge (label y ≥ last bridge row + 0.35) — "
+        "never overlap Ending Cash; KT box must end above footer (y+h ≤ 6.85).\n"
         "- Slide 6: MARKETING FUNNEL section label must not overlap the period title; "
         "author complete KT bullets (never blank/—).\n"
         "- Slide 7: Pipeline waterfall from gtm_performance.pipeline_waterfall_chart.shape_bars "
         "(Begin AND End totals, additive, real beginning value). Category labels on x-axis "
         "(bar.category_y). Key Takeaways FULL WIDTH below the waterfall.\n"
-        "- Slide 11 CFS: copy appendix.ytd_cash_flow_statement Actual/Budget/Variance — "
-        "Actual for periods ≤ close only; never Forecast.\n"
+        "- Slide 11 CFS: copy appendix.ytd_cash_flow_statement Actual/Budget/Variance for "
+        "every row (pos/neg; zero as +$0.00 when both sides exist) — Actual for periods ≤ "
+        "close only; never Forecast. Source note y ≥ last CFS row y + rowH + 0.10 — never "
+        "overlap Ending Cash.\n"
         "- Every Key Takeaways panel you include: 3–5 authored bullets (never lone '—');\n\n"
         f"REFERENCE SCRIPT:\n{_excerpt_for_prompt(ref_script, limit=40000)}\n\n"
         f"DATA PAYLOAD (JSON):\n{_excerpt_for_prompt(payload_json, limit=60000)}\n"
@@ -1034,6 +1229,9 @@ def _try_adapt_from_reference(
         )
     if payload is not None:
         script_text = _verify_prompt5_script_or_raise(script_text, payload)
+        script_text = _postprocess_prompt5_script(script_text, payload)
+    else:
+        script_text = _postprocess_prompt5_script(script_text, None)
     pptx_bytes, _ = _render_prepared_script(script_text, period=period)
     return pptx_bytes, f"claude_adapt_{kind or 'bundled'}"
 
@@ -1123,6 +1321,7 @@ def build_claude_deck_pptx_bytes(
                 continue
 
             script_text = _verify_prompt5_script_or_raise(script_text, payload)
+            script_text = _postprocess_prompt5_script(script_text, payload)
             pptx_bytes, _ = _render_prepared_script(
                 script_text, period=bundle.as_of_period
             )

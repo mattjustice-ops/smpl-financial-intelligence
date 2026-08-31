@@ -38,8 +38,10 @@ RULES:
 4. Causal language may only name ATTRIBUTION PACKAGE allowed_drivers; forward watch-outs
    must ground in forecast/pipeline allowlist entries. Rich story from packages + board
    R&O evidence is required — never empty "-" risk details.
-5. Apply LAYOUT LOCKS from the user message (KT under waterfalls on slides 3/7; YTD cash
-   summary on slide 5; pipeline shape_bars with Begin+End; no overlapping funnel titles).
+5. Apply LAYOUT LOCKS from the user message (no slide-2 KPI sparklines; period_matrix /
+   CFS YTD Variance from payload including Ending Cash; KT under waterfalls on slides 3/7;
+   YTD cash summary below bridge on slide 5 with no overlap; CFS Source below Ending Cash;
+   pipeline shape_bars with Begin+End; no overlapping funnel titles).
 6. Use pptx.ShapeType / pptx.ChartType on the pptx instance — never pptxgen.ShapeType.
 7. End with pptx.writeFile({ fileName: "OUTPUT.pptx" }). Return raw JavaScript only.
 

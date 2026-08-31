@@ -64,8 +64,9 @@ Slide 1 — TITLE (full-bleed dark, centered)
   Subtitle and period below. Confidential note bottom. No tables or KPIs.
 
 Slide 2 — EXECUTIVE SUMMARY (dashboard grid)
-  Top half: 5 KPI cards in a single row spanning full width.
+  Top half: 5 KPI cards in a single row spanning full width (NO sparklines under ARR/Revenue/Cash).
   Bottom half: split — period_matrix summary table left 55%, Key Takeaways right 45%.
+  Copy all CM/YTD Variance cells from period_matrix (Ending Cash YTD variance must show).
   KPI cards: Ending ARR, Revenue, Cash, Gross Margin %, EBITDA (from period_matrix / executive_summary).
 
 Slide 3 — ARR ANALYSIS (left table + right KPI column)
@@ -80,8 +81,9 @@ Slide 4 — P&L REVIEW (top KPI row + bottom table + right takeaways)
 Slide 5 — CASH & LIQUIDITY (bridge list left + stats right)
   Left 45%: cash bridge vertical flow from cash_liquidity.current_month (label | amount rows).
   Bold ending cash at bottom with cyan highlight.
+  YTD Cash Summary from cash_liquidity.ytd_cash_summary BELOW the bridge (no overlap).
   Right 55%: 2×2 KPI grid (Ending Cash Actual/Budget, CFO, Headroom vs Floor, YTD collections).
-  Key Takeaways below KPI grid.
+  Key Takeaways below KPI grid (y+h ≤ 6.85).
 
 Slide 6 — GTM PERFORMANCE (channel table + top KPI strip)
   Top strip: 4 KPI cards (Total MQLs, Total Pipeline, Total Spend, Best Win Rate from gtm_performance).
@@ -113,6 +115,7 @@ Slide 11 — APPENDIX A: YTD CASH FLOW STATEMENT (full-width CFS table)
   Section label: "APPENDIX A". Title: "YTD Cash Flow Statement".
   Full-width three-section indirect CFS (OPERATING, INVESTING, FINANCING).
   Actual vs Budget columns from appendix.ytd_cash_flow_statement (or ytd_cash_flow_statement).
+  Copy .variance for every row (pos/neg). Source note below Ending Cash (no overlap).
   Subtotal rows bold with surface-alt background. No Key Takeaways on this slide.
 
 DATA RULES — CRITICAL

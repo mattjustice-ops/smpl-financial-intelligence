@@ -682,30 +682,31 @@ def build_cash_liquidity_block(
             "columns": ["Line Item", "Actual", "Budget"],
             "rows": bridge_rows,
         },
+        # Prefer YTD cash summary on slide 5 over a thin "liquidity headroom" callout.
+        # Ending-cash budget here is YTD point-in-time budget (budget_ytd), NOT FY EoY.
+        "ytd_cash_summary": {
+            "title": "YTD Cash Summary",
+            "collections": fmt_deck_money(coll_ytd),
+            "ending_cash": fmt_deck_money(cash_r.ytd),
+            "ending_cash_budget": fmt_deck_money(cash_r.budget_ytd),
+            "lines": [
+                f"YTD Collections: {fmt_deck_money(coll_ytd)}",
+                f"YTD Ending Cash: {fmt_deck_money(cash_r.ytd)}",
+                f"YTD Ending Cash Budget: {fmt_deck_money(cash_r.budget_ytd)}",
+            ],
+            "display": (
+                f"YTD Collections: {fmt_deck_money(coll_ytd)}  |  "
+                f"YTD Ending Cash: {fmt_deck_money(cash_r.ytd)}  |  "
+                f"Budget: {fmt_deck_money(cash_r.budget_ytd)}"
+            ),
+        },
         "ytd": {
             "collections": fmt_deck_money(coll_ytd),
             "collections_raw": float(coll_ytd),
             "cash_eop_actual": fmt_deck_money(cash_r.ytd),
             "cash_eop_actual_raw": float(cash_r.ytd or 0),
-            "cash_eop_budget": fmt_deck_money(cash_r.budget_fy),
-            "cash_eop_budget_raw": float(cash_r.budget_fy or 0),
-        },
-        # Prefer YTD cash summary on slide 5 over a thin "liquidity headroom" callout.
-        "ytd_cash_summary": {
-            "title": "YTD Cash Summary",
-            "collections": fmt_deck_money(coll_ytd),
-            "ending_cash": fmt_deck_money(cash_r.ytd),
-            "ending_cash_budget": fmt_deck_money(cash_r.budget_fy),
-            "lines": [
-                f"YTD Collections: {fmt_deck_money(coll_ytd)}",
-                f"YTD Ending Cash: {fmt_deck_money(cash_r.ytd)}",
-                f"YTD Ending Cash Budget: {fmt_deck_money(cash_r.budget_fy)}",
-            ],
-            "display": (
-                f"YTD Collections: {fmt_deck_money(coll_ytd)}  |  "
-                f"YTD Ending Cash: {fmt_deck_money(cash_r.ytd)}  |  "
-                f"Budget: {fmt_deck_money(cash_r.budget_fy)}"
-            ),
+            "cash_eop_budget": fmt_deck_money(cash_r.budget_ytd),
+            "cash_eop_budget_raw": float(cash_r.budget_ytd or 0),
         },
         "currency": cur,
     }

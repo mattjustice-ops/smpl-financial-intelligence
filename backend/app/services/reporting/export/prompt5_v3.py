@@ -72,8 +72,8 @@ NARRATIVE / EVIDENCE (P15 — mandatory)
 7. Board R&O / GTM / KT evidence blocks are authorship inputs — author commentary
    from them; never leave blanks for a later seed-refill step.
 
-CHARTS — REQUIRED (use pptx.addChart on slides 2, 6, 9 only; pptx.ChartType on INSTANCE not pptxgen)
-Slide 2: KPI sparklines (line) — data from monthly_trends (ending_arr_m, revenue_m, cash_m)
+CHARTS — REQUIRED (use pptx.addChart on slides 6, 9 only; pptx.ChartType on INSTANCE not pptxgen)
+Slide 2: NO sparklines / mini line charts under KPI cards (Ending ARR, Revenue, Ending Cash).
 Slide 3: ARR waterfall — DO NOT use addChart. See SLIDE 3 layout below (shape rectangles only).
 Slide 6: GTM channel efficiency bar chart — gtm_performance.channels sorted by efficiency
 Slide 9: FY ARR trend line — monthly_trends ending_arr_m + ending_arr_outlook_m vs budget
@@ -99,9 +99,12 @@ Slide 1 — TITLE COVER (centered — board deck reference cover)
   Footer slide 1 ONLY: "SMPL · Board Operating Review · {Q} {YEAR} · 1/11"
   NO "CONFIDENTIAL" on slide 1. No KPI cards, no tables.
 
-Slide 2 — EXECUTIVE DASHBOARD: Row1 five KPI cards with embedded sparklines
-(ARR, Revenue, Cash, Gross Margin %, EBITDA). Row2 left 55% period_matrix table,
-right 45% Key Takeaways (author 3–5 complete bullets; never blank/—).
+Slide 2 — EXECUTIVE DASHBOARD: Row1 five KPI cards (NO sparklines / mini-charts under
+Ending ARR, Revenue, or Ending Cash). Row2 left 55% period_matrix table with ALL
+CM/YTD Variance cells copied verbatim from period_matrix.*.variance (including Ending
+Cash YTD — show positive and negative; never blank "—" when actual+budget exist).
+Right 45% Key Takeaways (author 3–5 complete bullets; never blank/—). Use the vertical
+space under KPIs for the matrix + takeaways — do not leave a large empty band.
 
 Slide 3 — ARR ANALYSIS: Left 52% waterfall from arr_analysis.waterfall_chart.shape_bars.
   CRITICAL — use slide.addShape(pptx.ShapeType.rect) for each shape_bars[] entry:
@@ -118,9 +121,10 @@ including CM/YTD Variance columns verbatim from pl_detail.*.variance).
 Bottom right 40% Key Takeaways (author 3–5 complete insight bullets; never blank/—).
 
 Slide 5 — CASH & LIQUIDITY: Left 42% cash bridge + cash_liquidity.ytd_cash_summary
-(replace thin "liquidity headroom" callouts with the YTD cash summary block).
-Right: KPI grid + Key Takeaways. KT box must end above footer (y+h ≤ 6.85).
-Show "—" only for true zero/missing bridge lines.
+BELOW the bridge (ytd summary label y ≥ last bridge row y + 0.35 — never overlap
+Ending Cash). Right: KPI grid + Key Takeaways. KT box must end above footer (y+h ≤ 6.85).
+Show "—" only for true zero/missing bridge lines (not for variance columns when both
+actual and budget exist).
 
 Slide 6 — GTM / MARKETING FUNNEL: Funnel tables (CM / Q2 / YTD) from gtm_funnel.
 Section label "MARKETING FUNNEL" must NOT share coordinates with the period title
@@ -149,7 +153,9 @@ Slide 10 — BOARD ACTIONS: 2×2 grid from board_actions. Large cyan numbers 01-
 Slide 11 — APPENDIX A YTD CFS: Full-width from appendix.ytd_cash_flow_statement.
 Columns: Line Item | YTD Actual | YTD Budget | YTD Variance.
 Copy Actual from .actual (periods ≤ close_month ONLY — never Forecast).
-Use .variance for the variance column. No Key Takeaways.
+Copy .variance for EVERY row (pos and neg; zero deltas as +$0.00 — not blank "—" when
+both actual and budget exist). Source note y ≥ last table row y + rowH + 0.10 — never
+overlap Ending Cash. No Key Takeaways.
 
 OUTPUT
 const pptxgen = require("pptxgenjs"); const pptx = new pptxgen();

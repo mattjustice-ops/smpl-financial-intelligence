@@ -86,35 +86,13 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
     kpiCard(slide, 0.35 + i * (cw + 0.07), cy, cw, ch, c.label, c.value, c.sub, c.vc || C.cyan);
   });
 
-  // Sparkline charts (slide 2 only)
-  const months = ["Jan","Feb","Mar","Apr","May","Jun"];
-  const arrData = [76.31, 77.82, 79.51, 81.39, 83.45, 85.31];
-  const revData = [5.9, 6.1, 6.4, 6.7, 7.0, 7.35];
-  const cashData = [45.30, 46.0, 47.0, 47.5, 49.76, 48.43];
+  // No KPI sparklines / mini-charts under Ending ARR / Revenue / Ending Cash —
+  // they crowd the cards and add no board value.
 
-  const sparkDefs = [
-    { data: arrData, x: 0.35, color: C.cyan },
-    { data: revData, x: 2.87, color: C.amber },
-    { data: cashData, x: 5.39, color: C.green }
-  ];
-  sparkDefs.forEach(sp => {
-    slide.addChart(pptx.ChartType.line, [{
-      name: "Trend", labels: months, values: sp.data
-    }], {
-      x: sp.x, y: 1.62, w: 2.3, h: 0.55,
-      showLegend: false, showTitle: false, showValue: false,
-      showGridLineMajorX: false, showGridLineMajorY: false,
-      chartColors: [sp.color],
-      lineDataSymbol: "none",
-      plotArea: { fill: { color: C.surface } },
-      chartArea: { fill: { color: C.surface }, border: { color: C.surface } }
-    });
-  });
-
-  addDivider(slide, 0.35, 2.28, 12.63);
+  addDivider(slide, 0.35, 2.10, 12.63);
 
   // Period matrix table
-  const tblX = 0.35; const tblY = 2.38; const tblW = 7.2;
+  const tblX = 0.35; const tblY = 2.20; const tblW = 7.2;
   addSectionLabel(slide, "Period Matrix", tblX, tblY, 4);
 
   const pmRows = [
@@ -152,7 +130,7 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
   });
 
   // Key Takeaways
-  const ktX = 7.75; const ktY = 2.38;
+  const ktX = 7.75; const ktY = 2.20;
   addSectionLabel(slide, "Key Takeaways", ktX, ktY, 5);
   slide.addShape(pptx.ShapeType.rect, { x: ktX, y: ktY + 0.22, w: 5.23, h: 4.2, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
   const bullets2 = [
@@ -403,14 +381,16 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
     });
   });
 
-  // YTD cash summary (primary liquidity read — replaces thin headroom stub)
-  addSectionLabel(slide, "YTD Cash Summary", 0.35, 4.0, 4.2);
-  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 4.2, w: 4.2, h: 1.35, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
-  slide.addText("YTD Collections: $58.82M", { x: 0.45, y: 4.28, w: 4.0, h: 0.28, fontSize: 10, color: C.white, fontFace: "Calibri", bold: true });
-  slide.addText("YTD Ending Cash: $50.26M", { x: 0.45, y: 4.58, w: 4.0, h: 0.28, fontSize: 10, color: C.cyan, fontFace: "Calibri", bold: true });
-  slide.addText("YTD Ending Cash Budget: $48.17M", { x: 0.45, y: 4.88, w: 4.0, h: 0.28, fontSize: 9, color: C.muted, fontFace: "Calibri" });
+  // YTD cash summary — MUST sit below the bridge Ending Cash row (no overlap).
+  // Bridge: header @ 1.18 + 9 rows × 0.3 = last row ends ~3.88 → summary starts ≥ 4.05.
+  const ytdSumY = 4.05;
+  addSectionLabel(slide, "YTD Cash Summary", 0.35, ytdSumY, 4.2);
+  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: ytdSumY + 0.20, w: 4.2, h: 1.35, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
+  slide.addText("YTD Collections: $58.82M", { x: 0.45, y: ytdSumY + 0.28, w: 4.0, h: 0.28, fontSize: 10, color: C.white, fontFace: "Calibri", bold: true });
+  slide.addText("YTD Ending Cash: $50.26M", { x: 0.45, y: ytdSumY + 0.58, w: 4.0, h: 0.28, fontSize: 10, color: C.cyan, fontFace: "Calibri", bold: true });
+  slide.addText("YTD Ending Cash Budget: $31.46M", { x: 0.45, y: ytdSumY + 0.88, w: 4.0, h: 0.28, fontSize: 9, color: C.muted, fontFace: "Calibri" });
   slide.addText("Primary liquidity read for the close — update H2 collections model.", {
-    x: 0.45, y: 5.18, w: 4.0, h: 0.28, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
+    x: 0.45, y: ytdSumY + 1.18, w: 4.0, h: 0.28, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
   });
 
   // Right: 2x2 KPI grid + Key Takeaways (box ends above footer)
@@ -882,21 +862,22 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
     });
   });
 
-  // Source note
+  // Source note — MUST sit below Ending Cash row (cfsY + 15 rows × 0.3 = 5.55).
+  const cfsSourceY = cfsY + (cfsRows.length + 1) * 0.3 + 0.08;
   slide.addText("Source: build_ts_data.cfs  |  Period: Jan–Jun 2026  |  Currency: USD", {
-    x: 0.35, y: 5.35, w: 12.63, h: 0.22, fontSize: 7.5, color: C.muted, fontFace: "Calibri"
+    x: 0.35, y: cfsSourceY, w: 12.63, h: 0.22, fontSize: 7.5, color: C.muted, fontFace: "Calibri"
   });
 
   // Data gaps note
-  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 5.6, w: 12.63, h: 0.6, fill: { color: C.surfaceAlt }, line: { color: C.amber, width: 0.5 } });
+  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: cfsSourceY + 0.28, w: 12.63, h: 0.55, fill: { color: C.surfaceAlt }, line: { color: C.amber, width: 0.5 } });
   slide.addText("YTD Actual column uses Actual CFS for periods ≤ close_month (never Forecast). Validation notes belong in Risks — do not substitute Forecast into this table.", {
-    x: 0.5, y: 5.65, w: 12.3, h: 0.5, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
+    x: 0.5, y: cfsSourceY + 0.33, w: 12.3, h: 0.45, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
   });
 
   // Headcount note
-  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 6.28, w: 12.63, h: 0.4, fill: { color: C.surfaceAlt }, line: { color: C.muted, width: 0.5 } });
+  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: cfsSourceY + 0.92, w: 12.63, h: 0.36, fill: { color: C.surfaceAlt }, line: { color: C.muted, width: 0.5 } });
   slide.addText("⚠ Headcount: Current month actual = 0 — verify headcount_plan / workforce tables loaded. EOY forecast = 16 headcount (integers, not dollars).", {
-    x: 0.5, y: 6.32, w: 12.3, h: 0.32, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
+    x: 0.5, y: cfsSourceY + 0.96, w: 12.3, h: 0.28, fontSize: 8, color: C.muted, fontFace: "Calibri", wrap: true
   });
 }
 

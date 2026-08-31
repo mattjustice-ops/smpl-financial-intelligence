@@ -36,6 +36,10 @@ When laying out ANY slide:
 - No commentary into the footer band (content y+h ≤ 6.85; footer y=7.05).
 - KT under waterfalls goes FULL WIDTH below the chart (slides 3/7), not cramped
   beside the bridge.
+- Prefer using available vertical space for Key Takeaways (slightly taller panel /
+  wrapping) when the visual above leaves room — still no overlap with charts/tables.
+- Slide 5: YTD Cash Summary must not overlap the cash bridge Ending Cash row.
+- Slide 11: Source / notes must sit below the CFS Ending Cash row (pack by row count).
 
 When showing CLOSED-MONTH financials (periods ≤ close_period, e.g. June Actual):
 - Label and source as Actuals — never Forecast-with-validation-fail for closed months.
