@@ -41,7 +41,10 @@ RULES:
 5. Apply LAYOUT LOCKS from the user message (no slide-2 KPI sparklines; period_matrix /
    CFS YTD Variance from payload including Ending Cash; KT under waterfalls on slides 3/7;
    YTD cash summary below bridge on slide 5 with no overlap; CFS Source below Ending Cash;
-   pipeline shape_bars with Begin+End; no overlapping funnel titles).
+   pipeline shape_bars with Begin+End; no overlapping funnel titles; slide 6 GTM uses
+   full-width KT below primary visual per deck_slide_order.gtm_slide_6; omit projected
+   headcount slide when include_slide is false; Department Updates section labels on
+   dept_funnel_efficiency and dept_big_efforts slides).
 6. Use pptx.ShapeType / pptx.ChartType on the pptx instance — never pptxgen.ShapeType.
 7. End with pptx.writeFile({ fileName: "OUTPUT.pptx" }). Return raw JavaScript only.
 

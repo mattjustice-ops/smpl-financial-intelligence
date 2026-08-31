@@ -3,62 +3,50 @@
 Short design plan from Matt’s feedback on `mda_deck_2026-06 (18).pptx` and attached reference slides.  
 Reference images live in [`docs/partners/mda-design-refs/`](../partners/mda-design-refs/).
 
-**Status:** Plan only (except layout/bug fixes already shipped in Prompt 5). Full new slides are optional / later.
+**Status:** **Shipped** (Prompt 5 payload + system prompt + reference deck — Aug 2026). Layout/bug fixes from dafd8c0 remain in place.
 
 ---
 
-## 1. GTM performance slide (priority redesign)
+## 1. GTM performance slide (priority redesign) — **Shipped**
 
 **Problem:** Current GTM slide under-uses space and reads as a thin funnel stub rather than a board-grade GTM operating review.
 
-**Recommended composition (pick one primary layout per regenerate; don’t cram all):**
+**Shipped composition:**
+- Payload: `gtm_channel_metrics` (wide table), `gtm_channel_drilldown`, `gtm_funnel`, `gtm_performance` (existing pipeline waterfall on slide 7).
+- Layout picker: `deck_slide_order.gtm_slide_6.primary_layout` → `channel_metrics_table` (preferred) | `funnel_tables` | `channel_drilldown_cards`.
+- Slide 6: 4 KPI cards + **one dense primary visual** + **full-width Key Takeaways below** (no cramped right-rail KT).
+- Code: `prompt5_mda_slides.py`, `prompt5_v3.py`, `generate_deck_reference.js`.
 
-| Pattern | Inspiration (ref file) | Use when |
-|---|---|---|
-| **Funnel tables (New Logo / Migration)** | `pipeline-bookings-funnel-tables.png` | Need volume → conversion → $ outcome + vs budget in one view. 2×2: Actual/Fcst top, vs Budget bottom; segment by size (new logo) vs product (migration). |
-| **Channel metrics (time × source)** | `performance-by-channel-metrics.png` | Multi-quarter pipeline / close rates / bookings / lost by Marketing, Partner, BDR, Sales, Referral + FY + vs budget. |
-| **Channel metrics (wide efficiency table)** | `channel-metrics-table.png` | Single-period deep dive: Spend → MQL → SQL → Opps → Pipeline ARR → Closed Won → CAC → Win Rate by channel. |
-| **Channel drilldown cards** | `channel-drilldowns-cards.png`, `channel-drilldowns-cards-grid.png` | At-a-glance Actual vs Budget cards (Spend / Pipeline / Closed Won / Efficiency) — good second visual or appendix. |
-| **CAC / payback charts** | `funnel-and-efficiency-cac.png` | Efficiency story: CAC trend + CAC payback months; pair with Key Takeaways bar. |
-| **Source detail + commentary** | `marketing-performance-by-source-referral-detail.png`, `marketing-performance-referral.png` | One channel deep-dive (e.g. Referral) with forecast/budget columns and a right-rail narrative. |
-
-**Layout craft for MD&A Prompt 5:**
-- Fill ≥75% of usable area; avoid a sparse funnel strip + empty band.
-- Prefer **one dense primary visual** (funnel 2×2 or channel table) + **full-width Key Takeaways** under it (same packing rule as ARR/pipeline waterfalls).
-- Optional second beat: CAC/payback dual cards *or* a compact channel-card strip — not both plus a third table.
-- Wire to existing payload: `gtm_funnel`, `gtm_performance.channels`, pipeline waterfall / closed-lost / coverage fields already in evidence packages.
-
-**Not in v1 build:** Marketing Roadmap / Lead-gen strategy templates (`lead-gen-funnel-strategy.png`) — keep as Department Updates inspiration (below).
+**Not in v1 build:** Marketing Roadmap / Lead-gen strategy templates (`lead-gen-funnel-strategy.png`) — kept as Department Updates inspiration (below).
 
 ---
 
-## 2. Projected Headcount slide
+## 2. Projected Headcount slide — **Shipped (optional slide)**
 
 **Matt likes the idea** (`projected-headcount-mock.png`): stacked headcount by department (actual solid / goal dashed) + tenure / length-of-employment lines.
 
-**Platform today:** Strong headcount bridge already exists in the board / workforce experience (`headcount` on the reporting bundle; FY outlook already exposes HC actual / budget / forecast via `headcount_totals`).
+**Shipped:**
+1. Payload block `projected_headcount` from `ReportingBundle.headcount` (same SoT as platform `headcount_totals` / `fy_outlook.headcount`).
+2. Optional slide 10 when `projected_headcount.include_slide` is true (department stacked bars, monthly totals, KPIs, full-width KT).
+3. Graceful skip when no headcount rows or all zero — deck becomes 13 slides; `deck_slide_order` drives numbering.
 
-**MD&A plan (don’t build full slide unless trivial):**
-1. Add a **payload block** `headcount_bridge` / `projected_headcount` from the same SoT as the platform bridge (by department, CM + forward months, actual vs plan).
-2. New optional slide (or swap into appendix): left stacked bars (actual + goal), right tenure or bridge table; Key Takeaways under.
-3. Until then: keep the appendix CFS headcount warning honest; don’t invent HC charts from empty tables.
-
----
-
-## 3. Marketing / Department Updates (future section)
-
-Refs for a later **Department Updates** chapter (not core Financials MD&A):
-- `big-efforts-milestones-dept.png` — priorities / milestones card strip.
-- `lead-gen-funnel-strategy.png` — strategy funnel (lead gen vs demand creation).
-- Source performance + roadmap-style slides (see GTM table above).
-
-Treat as a second deck section or optional slides after Board Actions — same visual language (serif title, takeaways bar, footer section nav) as the mocks.
+**Gap (open):** Tenure / length-of-employment requires `workforce_employees` in export bundle — payload exposes `tenure.available: false` until workforce roster is wired into ReportingBundle.
 
 ---
 
-## 4. Commentary
+## 3. Marketing / Department Updates — **Shipped**
 
-Improving; keep regenerating with craft criteria. Light nudge only: when visuals leave vertical room, **expand Key Takeaways panel height** (still 3–5 bullets, no overlap with charts/footer). Already reflected in Prompt 5 narrative layout locks.
+**Shipped as slides 12–13** (14-slide deck with headcount; 13 without):
+- **Slide 12 — Funnel & Efficiency:** `department_updates.funnel_efficiency` — CAC proxy, CAC payback, channel efficiency table, full-width KT.
+- **Slide 13 — Big Efforts & Milestones:** `department_updates.big_efforts_milestones` — 4 milestone cards + optional channel table; Claude authors from freeze/evidence.
+
+Section nav: cyan **DEPARTMENT UPDATES** label per `deck_slide_order.section_nav`.
+
+---
+
+## 4. Commentary — **Shipped (prompt nudge)**
+
+Improving; keep regenerating with craft criteria. Prompt 5 craft criteria already expand KT panel height when vertical room exists — no soft-strip regression.
 
 ---
 
@@ -77,3 +65,28 @@ Concrete fixes for Matt’s (18) review (see chat summary):
 4. Slide 11 — CFS variances reinjected from payload; Source note packed below Ending Cash.
 
 **Redeploy:** Backend Prompt 5 / board metrics changes require a backend deploy before the next regenerate picks them up.
+
+---
+
+## Deck order (Prompt 5 — 14 slides with headcount)
+
+| # | Slide | Payload | Skip if |
+|---|-------|---------|---------|
+| 1 | Title | `period_context` | — |
+| 2 | Executive Dashboard | `period_matrix` | — |
+| 3 | ARR Analysis | `arr_analysis` | — |
+| 4 | P&L Review | `pl_detail` | — |
+| 5 | Cash & Liquidity | `cash_liquidity` | — |
+| 6 | **GTM Performance** | `gtm_channel_metrics`, `gtm_funnel`, `gtm_performance` | — |
+| 7 | Pipeline Waterfall | `gtm_performance.pipeline_waterfall_chart` | — |
+| 8 | Risks & Opportunities | `risks_and_opportunities` | — |
+| 9 | Financial Outlook | `fy_outlook`, `monthly_trends` | — |
+| 10 | **Projected Headcount** | `projected_headcount` | `include_slide` false |
+| 11 | Board Actions | `board_actions` | — |
+| 12 | **Dept — Funnel & Efficiency** | `department_updates.funnel_efficiency` | — |
+| 13 | **Dept — Big Efforts** | `department_updates.big_efforts_milestones` | — |
+| 14 | Appendix CFS | `appendix.ytd_cash_flow_statement` | — |
+
+**Regenerate:** Prompt 5 deck export after backend deploy. Verify payload via `build_prompt5_payload()` → check `deck_slide_order`, `gtm_channel_metrics.available`, `projected_headcount.include_slide`.
+
+**Tests:** `backend/tests/test_prompt5_mda_slides.py`

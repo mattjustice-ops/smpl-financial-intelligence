@@ -26,9 +26,12 @@ BOARD_DECK_SLIDE_KEYS = frozenset(
         "cash_flow_statement",
         "gtm_performance",
         "gtm_funnel",
+        "projected_headcount",
         "risks_opportunities",
         "financial_outlook",
         "board_actions",
+        "dept_funnel_efficiency",
+        "dept_big_efforts",
     }
 )
 
@@ -75,28 +78,35 @@ _SLIDE_SPECS: dict[str, dict[str, Any]] = {
         "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "gtm_performance": {
-        "slide_number": 7,
-        "slide_title": "GTM & Marketing",
+        "slide_number": 6,
+        "slide_title": "GTM Performance",
         "max_bullets": 11,
         "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
         "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "gtm_funnel": {
-        "slide_number": 8,
-        "slide_title": "Funnel Analysis",
+        "slide_number": 6,
+        "slide_title": "GTM Funnel",
+        "max_bullets": 4,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
+    },
+    "projected_headcount": {
+        "slide_number": 10,
+        "slide_title": "Projected Headcount",
         "max_bullets": 4,
         "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
         "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "risks_opportunities": {
-        "slide_number": 9,
+        "slide_number": 8,
         "slide_title": "Risks & Opportunities",
         "max_bullets": 4,
         "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
         "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
     "financial_outlook": {
-        "slide_number": 10,
+        "slide_number": 9,
         "slide_title": "Financial Outlook",
         "max_bullets": 4,
         "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
@@ -106,6 +116,20 @@ _SLIDE_SPECS: dict[str, dict[str, Any]] = {
         "slide_number": 11,
         "slide_title": "Board Actions",
         "max_bullets": 4,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
+    },
+    "dept_funnel_efficiency": {
+        "slide_number": 12,
+        "slide_title": "Marketing — Funnel & Efficiency",
+        "max_bullets": 5,
+        "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
+        "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
+    },
+    "dept_big_efforts": {
+        "slide_number": 13,
+        "slide_title": "Marketing — Big Efforts & Milestones",
+        "max_bullets": 5,
         "max_words_per_bullet": _DEFAULT_MAX_WORDS_PER_BULLET,
         "max_chars_per_bullet": _DEFAULT_MAX_CHARS_PER_BULLET,
     },
@@ -413,9 +437,12 @@ _METRIC_BUILDERS = {
     "cash_flow_statement": _metrics_cash,
     "gtm_performance": _metrics_gtm,
     "gtm_funnel": _metrics_gtm,
+    "projected_headcount": _metrics_headcount,
     "risks_opportunities": _metrics_risks,
     "financial_outlook": _metrics_executive,
     "board_actions": _metrics_risks,
+    "dept_funnel_efficiency": _metrics_gtm,
+    "dept_big_efforts": _metrics_gtm,
 }
 
 
