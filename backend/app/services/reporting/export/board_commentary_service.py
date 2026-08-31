@@ -855,6 +855,32 @@ CFO_BOARD_NARRATIVE_SYSTEM = (
     "No bullet points. Do not start with 'The data shows.' No generic consulting filler."
 )
 
+# Matt experiment 2026-08-31: align presentation regen freeze with Copilot 48k.
+# Override via BOARD_PRESENTATION_FREEZE_MAX_CHARS (Settings.board_presentation_freeze_max_chars).
+PRESENTATION_FREEZE_MAX_CHARS = 48_000
+
+
+def _presentation_freeze_max_chars() -> int:
+    try:
+        configured = int(get_settings().board_presentation_freeze_max_chars)
+    except Exception:
+        configured = PRESENTATION_FREEZE_MAX_CHARS
+    return configured if configured > 0 else PRESENTATION_FREEZE_MAX_CHARS
+
+
+def _soft_cap_presentation_freeze(
+    freeze_context_text: str | None,
+    *,
+    suffix: str,
+) -> str | None:
+    """Soft-cap interactive freeze prose; slide JSON remains the number source."""
+    if not freeze_context_text:
+        return freeze_context_text
+    cap = _presentation_freeze_max_chars()
+    if len(freeze_context_text) <= cap:
+        return freeze_context_text
+    return freeze_context_text[:cap] + suffix
+
 
 def enrich_slide_with_ai(
     bundle: ReportingBundle,
@@ -907,15 +933,15 @@ def enrich_slide_with_ai(
             slide_obj["max_bullets"] = max_bullets
             slide_obj["max_words_per_bullet"] = max_words
             slide_obj["max_chars_per_bullet"] = max_chars
-        # Quality-preserving speed: slide JSON owns numbers; freeze owns drivers.
-        # Soft-cap interactive freeze so Haiku finishes under the 120s budget.
-        interactive_freeze = freeze_context_text
-        if interactive_freeze and len(interactive_freeze) > 24000:
-            interactive_freeze = (
-                interactive_freeze[:24000]
-                + "\n...[freeze drivers soft-capped at 24k for interactive regenerate; "
+        # Quality-preserving: slide JSON owns numbers; freeze owns drivers.
+        # Soft-cap matches Copilot live/store (48k) — see PRESENTATION_FREEZE_MAX_CHARS.
+        interactive_freeze = _soft_cap_presentation_freeze(
+            freeze_context_text,
+            suffix=(
+                "\n...[freeze drivers soft-capped for interactive regenerate; "
                 "slide payload JSON remains the number source]"
-            )
+            ),
+        )
         raw = client.generate(
             system_prompt=BOARD_DECK_SLIDE_SYSTEM_PROMPT,
             user_prompt=board_deck_single_slide_user_message(
@@ -1052,12 +1078,10 @@ def _enrich_slide_with_ai_legacy(
 
     try:
         client = build_commentary_llm_client(purpose="interactive")
-        interactive_freeze = freeze_context_text
-        if interactive_freeze and len(interactive_freeze) > 24000:
-            interactive_freeze = (
-                interactive_freeze[:24000]
-                + "\n...[freeze drivers soft-capped at 24k for interactive regenerate]"
-            )
+        interactive_freeze = _soft_cap_presentation_freeze(
+            freeze_context_text,
+            suffix="\n...[freeze drivers soft-capped for interactive regenerate]",
+        )
         freeze_block = format_freeze_prompt_block(
             context_text=interactive_freeze,
             context_as_of=freeze_context_as_of,

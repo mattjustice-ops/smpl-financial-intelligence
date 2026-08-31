@@ -89,6 +89,12 @@ class Settings(BaseSettings):
         validation_alias="BOARD_PPTX_EXPORT_MODE",
         description="template_first | template_only | programmatic",
     )
+    # Matt experiment 2026-08-31: align presentation regen freeze with Copilot 48k.
+    board_presentation_freeze_max_chars: int = Field(
+        default=48_000,
+        validation_alias="BOARD_PRESENTATION_FREEZE_MAX_CHARS",
+        description="Soft-cap for freeze prose on board slide regenerate / interactive presentation commentary.",
+    )
     smpl_usage_limits_enabled: bool = Field(
         default=True,
         validation_alias="SMPL_USAGE_LIMITS_ENABLED",
