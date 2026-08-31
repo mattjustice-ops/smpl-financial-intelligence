@@ -1457,15 +1457,17 @@ def apply_fail_closed_attribution_to_pptx_script(
     script: str,
     allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
 ) -> tuple[str, AttributionVerificationResult]:
-    """Soft-strip off-allowlist causal claims inside PPTX JS string literals.
+    """Verify causal claims in PPTX JS literals; soft-strip metric cells only.
 
-    Layout / chart array code outside strings is ignored. Failed literals
-    become ``—`` (never a multi-sentence don't-know essay). Prompt 5 exports
-    the rewritten script; optional
+    Layout / chart array code outside strings is ignored. Key Takeaways /
+    commentary match interactive soft-warn (keep text, record failures). Short
+    KPI/table cells with failed attribution become ``—``. Prompt 5 exports the
+    (possibly rewritten) script; optional
     ``raise_if_pptx_attribution_fully_unverifiable`` remains for strict callers.
     """
     from app.services.commentary.claim_verify import (
         _JS_STRING_RE,
+        _pptx_is_narrative_literal,
         pptx_soft_strip_literal_replacement,
     )
 
@@ -1484,7 +1486,7 @@ def apply_fail_closed_attribution_to_pptx_script(
         )
         local = verify_text_attribution(inner_unesc, drivers)
         all_checks.extend(local.checks)
-        if local.ok:
+        if local.ok or _pptx_is_narrative_literal(inner_unesc):
             return raw
         replacement = pptx_soft_strip_literal_replacement(
             inner_unesc, dont_know=DONT_KNOW_ATTRIBUTION

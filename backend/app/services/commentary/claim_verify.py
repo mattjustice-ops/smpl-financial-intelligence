@@ -7,8 +7,9 @@ TOL_ACTUALS = $1.00 (cents–$1) — do not loosen.
 Policy surfaces:
   - ``strict`` (Prompt 2 MD&A package): fail-closed don't-know / hard-block on
     fully wiped variance commentary.
-  - Prompt 5 deck: soft-strip unmatched $/% in PPTX string literals; export
-    proceeds (board/warehouse numbers trusted at this stage).
+  - Prompt 5 deck: soft-strip unmatched $/%/Nx in short KPI/table/metric
+    cells only (``—``). Key Takeaways / commentary literals match interactive
+    soft-warn — verify + log, keep narrative figures; export proceeds.
   - ``interactive`` (board regenerate, Copilot, commentary generate): board
     numbers are trusted — verify + warn/log only; do not nuke whole answers
     for unmatched $/% alone. Story / forecast grounding stays gated elsewhere.
@@ -41,15 +42,28 @@ DONT_KNOW_NARRATIVE = (
 )
 
 # Prompt 5 PPTX soft-strip: never inject multi-sentence don't-know essays into
-# string literals (KPI/table cells and takeaways). Em dash keeps layout intact.
+# KPI/table cells. Em dash keeps layout intact. Narrative/takeaway literals are
+# soft-warned (kept) like interactive regenerate / Copilot.
 PPTX_SOFT_STRIP_CELL = "—"
-# Long narrative / Key Takeaways: redact only failed claims; keep verified prose.
+# Long prose is always narrative; short multi-word takeaways are too unless they
+# look like a lone metric cell ($86.1M / 79.2% / 2.4x).
 _NARRATIVE_SOFT_STRIP_MIN_LEN = 80
-_TAKEAWAY_BULLET_RE = re.compile(r"^\s*\d+\.\s+")
+_TAKEAWAY_BULLET_RE = re.compile(r"^\s*(?:\d+\.|[•\u2022\-\*])\s+")
+_METRIC_CELL_RE = re.compile(
+    r"^[\s\$\(\+\-–—]*"
+    r"(?:"
+    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?[MmKkBb]?|"
+    r"\d+(?:\.\d+)?[MmKkBb]?|"
+    r"\d+(?:\.\d+)?%|"
+    r"\d+(?:\.\d+)?[xX]|"
+    r"[Nn]/?[Aa]|—"
+    r")"
+    r"[\s\)\%xXMmKkBb]*$"
+)
 
 
 def pptx_soft_strip_literal_replacement(inner: str, *, dont_know: str) -> str:
-    """Fallback whole-literal replacement under deck soft policy (short cells).
+    """Whole-literal replacement for short KPI/table/metric cells only.
 
     Always returns ``—``. The ``dont_know`` argument is accepted for call-site
     compatibility but must not be written into the deck — stuffing
@@ -61,20 +75,29 @@ def pptx_soft_strip_literal_replacement(inner: str, *, dont_know: str) -> str:
 
 
 def _pptx_is_narrative_literal(inner: str) -> bool:
-    """Takeaway/commentary literals — redact claims, do not wipe the whole bullet."""
+    """True for Key Takeaways / commentary; False for lone KPI/table cells."""
     text = (inner or "").strip()
     if not text:
         return False
     if _TAKEAWAY_BULLET_RE.match(text):
         return True
-    return len(text) >= _NARRATIVE_SOFT_STRIP_MIN_LEN
+    if len(text) >= _NARRATIVE_SOFT_STRIP_MIN_LEN:
+        return True
+    if _METRIC_CELL_RE.match(text):
+        return False
+    # Short multi-word prose (succinct PPTX takeaways) is still narrative.
+    return len(re.findall(r"[A-Za-z]+", text)) >= 2
 
 
 def pptx_soft_strip_failed_claims_in_literal(
     inner: str,
     failed_stated: Sequence[str],
 ) -> str:
-    """Redact failed claim tokens inside a narrative literal; keep verified text."""
+    """Legacy token redaction; Prompt 5 narrative path soft-warns instead.
+
+    Kept for call-site compatibility / tests that still exercise surgical
+    redaction. Prefer keeping narrative literals intact (interactive posture).
+    """
     text = inner or ""
     if not text.strip():
         return PPTX_SOFT_STRIP_CELL
@@ -1316,12 +1339,12 @@ def apply_fail_closed_claims_to_pptx_script(
     script: str,
     evidence: Mapping[str, Decimal] | Mapping[str, Any],
 ) -> tuple[str, VerificationResult]:
-    """Soft-strip unmatched money/%/Nx inside PPTX JS string literals.
+    """Verify money/%/Nx in PPTX JS string literals; soft-strip metric cells only.
 
-    Short KPI/table cells become ``—``. Long Key Takeaways / commentary keep
-    verified prose and redact only failed claim tokens (so one invented $ does
-    not blank an entire board bullet). Layout / chart array code outside
-    strings is ignored. Prompt 5 callers warn + export the rewritten script.
+    Short KPI/table cells with unmatched claims become ``—``. Key Takeaways /
+    commentary literals match interactive soft-warn: keep text, record failures
+    for caller logs. Layout / chart array code outside strings is ignored.
+    Prompt 5 callers warn + export (rewritten only when cells were stripped).
     """
     values = _evidence_values_map(evidence)
     all_checks: list[ClaimCheck] = []
@@ -1340,17 +1363,11 @@ def apply_fail_closed_claims_to_pptx_script(
         local_checks = [_best_match(claim, values) for claim in claims]
         all_checks.extend(local_checks)
         local = VerificationResult(checks=local_checks)
-        if local.ok:
+        if local.ok or _pptx_is_narrative_literal(inner_unesc):
             return raw
-        if _pptx_is_narrative_literal(inner_unesc):
-            failed_stated = [c.claim.stated for c in local.failures]
-            replacement = pptx_soft_strip_failed_claims_in_literal(
-                inner_unesc, failed_stated
-            )
-        else:
-            replacement = pptx_soft_strip_literal_replacement(
-                inner_unesc, dont_know=DONT_KNOW_NARRATIVE
-            )
+        replacement = pptx_soft_strip_literal_replacement(
+            inner_unesc, dont_know=DONT_KNOW_NARRATIVE
+        )
         escaped = (
             replacement.replace("\\", "\\\\")
             .replace(quote, f"\\{quote}")

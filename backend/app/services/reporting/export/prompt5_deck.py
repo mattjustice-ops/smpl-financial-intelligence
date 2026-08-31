@@ -859,13 +859,14 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
 
 
 def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
-    """P15 Prompt 5: soft-strip invented numbers + attribution; always export.
+    """P15 Prompt 5: soft-warn narrative; soft-strip KPI cells; always export.
 
-    Numeric / attribution: soft-strip failed PPTX string literals to ``—``
-    (never multi-sentence don't-know essays). Citation: **warn-only** — board
-    KPI/table cells come from DATA PAYLOAD / evidence and must not be wiped
-    for missing ``(source.key)`` parentheses (that produced unreadable
-    don't-know decks). Prefer export with stripped text over hard-block.
+    Numeric / attribution: Key Takeaways / commentary match interactive
+    soft-warn (keep unmatched $/%%/Nx and off-allowlist drivers; log only).
+    Short KPI/table/metric cells still soft-strip to ``—``. Citation:
+    **warn-only** — board KPI/table cells come from DATA PAYLOAD / evidence and
+    must not be wiped for missing ``(source.key)`` parentheses. Prefer export
+    over hard-block.
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
@@ -898,8 +899,8 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
         working = script
     else:
         logger.warning(
-            "P15 Prompt 5 claim-verify soft-stripped unmatched $/%%/Nx "
-            "(export continues): %s",
+            "P15 Prompt 5 claim-verify soft-warn unmatched $/%%/Nx "
+            "(narrative kept; KPI cells may soft-strip; export continues): %s",
             claim_result.summary(max_failures=8),
         )
 
@@ -916,8 +917,8 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             )
     else:
         logger.warning(
-            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers "
-            "(export continues): %s",
+            "P15 Prompt 5 attribution-verify soft-warn off-allowlist drivers "
+            "(narrative kept; export continues): %s",
             attr_result.summary(),
         )
         working = rewritten
@@ -948,8 +949,8 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             "export continues): %s",
             cite_result.summary(),
         )
-    # Intentionally NO seed-refill of blank/"—" takeaways. Soft-strip may redact
-    # unmatched $/% inside bullets; Claude must author complete takeaways up front.
+    # Intentionally NO seed-refill of blank/"—" takeaways. Narrative soft-warn
+    # keeps unmatched $/% in takeaways; only short KPI cells soft-strip to —.
     return working
 
 

@@ -364,10 +364,10 @@ def test_forward_looking_requires_forecast_pipeline_grounding() -> None:
     assert "pipeline coverage" in kept.lower()
 
 
-def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() -> None:
-    """Helper soft-strips; optional raise_if still hard-blocks when fully wiped.
+def test_pptx_script_attribution_soft_warns_narrative_and_hard_blocks_when_fully_failed() -> None:
+    """Narrative soft-warn keeps prose; raise_if still hard-blocks when all fail.
 
-    Prompt 5 export no longer calls raise_if (prefers soft-strip + export).
+    Prompt 5 export no longer calls raise_if (prefers soft-warn + export).
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
@@ -386,24 +386,23 @@ def test_pptx_script_attribution_soft_strips_and_hard_blocks_when_fully_wiped() 
         'slide.addText("ARR growth was driven by expansion.");'
         'slide.addText("Growth this quarter was due to three enterprise upsells outside the allowlist.");'
     )
-    from app.services.commentary.claim_verify import PPTX_SOFT_STRIP_CELL
 
     rewritten, result = apply_fail_closed_attribution_to_pptx_script(mixed, allowlist)
     assert not result.ok
     assert "expansion" in rewritten.lower()
-    assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
+    assert "three enterprise upsells" in rewritten.lower()
     assert "I don't know" not in rewritten
-    # Partial wipe → do not hard-block
+    # Partial failures → do not hard-block
     raise_if_pptx_attribution_fully_unverifiable(result)
 
     bad_only = (
         'slide.addText("ARR grew this quarter due to three enterprise upsells outside allowlist.");'
     )
-    wiped, bad_result = apply_fail_closed_attribution_to_pptx_script(bad_only, allowlist)
+    kept, bad_result = apply_fail_closed_attribution_to_pptx_script(bad_only, allowlist)
     assert not bad_result.ok
     assert all(c.status != "pass" for c in bad_result.checks)
-    assert f'"{PPTX_SOFT_STRIP_CELL}"' in wiped
-    assert "I don't know" not in wiped
+    assert "enterprise upsells" in kept.lower()
+    assert "I don't know" not in kept
     with pytest.raises(CommentaryIntegrityError, match="failed attribution") as exc_info:
         raise_if_pptx_attribution_fully_unverifiable(bad_result)
     assert "enterprise upsells" in str(exc_info.value).lower()
