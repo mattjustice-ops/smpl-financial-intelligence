@@ -82,6 +82,62 @@ def test_pipeline_waterfall_includes_beginning_and_end_totals():
     assert len(wf["shape_bars"]) == 6
     assert all("category_y" in b for b in wf["shape_bars"])
     assert wf["category_label_placement"] == "x_axis_below_chart"
+    assert wf["identity"]["ties_ok"] is True
+    # begin + created - won - lost - slipped = end
+    begin, created, won, lost, slipped, end = wf["signed_m"]
+    assert abs(begin + created + won + lost + slipped - end) < 0.02
+
+
+def test_pipeline_waterfall_reconciles_wrong_beginning_identity():
+    """Matt deck bug: begin $141.63M was end−created+signed_outflows (double-subtract).
+
+    Warehouse beginning can be wrong while movements + ending are correct; chart must
+    back-solve so begin + created − won − lost − slipped = ending.
+    """
+    from app.services.reporting.export.board_platform_metrics import (
+        reconcile_pipeline_waterfall_identity,
+    )
+
+    # Double-subtracted beginning (matches exported deck 141.63M).
+    bad_begin = Decimal("141610000")
+    created = Decimal("5400000")
+    won = Decimal("1800000")
+    lost = Decimal("7910000")
+    slipped = Decimal("9870000")
+    ending = Decimal("166590000")
+    prior = Decimal("180770000")
+
+    bop, eop, ok, note = reconcile_pipeline_waterfall_identity(
+        beginning=bad_begin,
+        created=created,
+        closed_won=won,
+        closed_lost=lost,
+        slipped=slipped,
+        ending=ending,
+        prior_ending=prior,
+    )
+    assert ok
+    assert note == "prior_ending_as_beginning"
+    assert bop == prior
+    assert eop == ending
+    assert bop + created - won - lost - slipped == ending
+
+    rows = [
+        _pipe_row("2026-05", "ending_pipeline", prior),
+        _pipe_row("2026-06", "beginning_pipeline", bad_begin),
+        _pipe_row("2026-06", "pipeline_created", created),
+        _pipe_row("2026-06", "closed_won", won),
+        _pipe_row("2026-06", "closed_lost", lost),
+        _pipe_row("2026-06", "slipped_pipeline", slipped),
+        _pipe_row("2026-06", "ending_pipeline", ending),
+    ]
+    wf = build_pipeline_waterfall_chart(
+        _minimal_bundle(comparison_waterfalls={"pipeline": rows})
+    )
+    assert wf["beginning_pipeline_raw"] == float(prior)
+    assert wf["identity"]["ties_ok"] is True
+    begin, created_m, won_m, lost_m, slip_m, end_m = wf["signed_m"]
+    assert abs(begin + created_m + won_m + lost_m + slip_m - end_m) < 0.02
 
 
 def test_ytd_cfs_actual_not_forecast_and_keeps_zeros():
@@ -191,17 +247,20 @@ def test_verify_does_not_refill_blank_takeaways_from_seed():
 def test_prompt5_payload_wires_beginning_pipeline_and_kt_evidence():
     rows = [
         _pipe_row("2026-05", "ending_pipeline", Decimal("180000000")),
-        _pipe_row("2026-06", "ending_pipeline", Decimal("166000000")),
         _pipe_row("2026-06", "pipeline_created", Decimal("5400000")),
+        _pipe_row("2026-06", "closed_won", Decimal("1620000")),
         _pipe_row("2026-06", "closed_lost", Decimal("7910000")),
         _pipe_row("2026-06", "slipped_pipeline", Decimal("9870000")),
+        _pipe_row("2026-06", "ending_pipeline", Decimal("166000000")),
     ]
+    # 180 + 5.4 - 1.62 - 7.91 - 9.87 = 166 — prior ending is beginning.
     payload = build_prompt5_payload(
         _minimal_bundle(comparison_waterfalls={"pipeline": rows})
     )
     gtm = payload["gtm_performance"]
     assert "beginning_pipeline" in gtm
     assert gtm["beginning_pipeline_raw"] == 180000000.0
+    assert gtm["pipeline_waterfall_chart"]["identity"]["ties_ok"] is True
     assert "pipeline_waterfall_chart" in gtm
     assert gtm["pipeline_waterfall_chart"]["render"] == "shape_rectangles"
     assert payload["key_takeaways_by_slide"]["slide_7_pipeline"]

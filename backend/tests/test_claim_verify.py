@@ -45,6 +45,41 @@ def test_extract_money_percent_and_ratio() -> None:
     assert Decimal("15000") in money_vals
 
 
+def test_extract_negative_money_keeps_sign() -> None:
+    """Slide 2 CM/YTD variance cells use -$370.0K — sign must survive claim extract."""
+    claims = extract_numeric_claims("CM Variance -$370.0K; YTD -$1.97M; beat +$413.1K")
+    money = {c.stated.replace(" ", ""): c.value for c in claims if c.kind == "money"}
+    assert any(v == Decimal("-370000") for v in money.values())
+    assert any(v == Decimal("-1970000") for v in money.values())
+    assert any(v == Decimal("413100") for v in money.values())
+
+
+def test_soft_strip_keeps_matched_negative_variance_cells() -> None:
+    from app.services.commentary.claim_verify import (
+        PPTX_SOFT_STRIP_CELL,
+        apply_fail_closed_claims_to_pptx_script,
+    )
+
+    evidence = {
+        "period_matrix.Revenue.cm.variance": Decimal("-370000"),
+        "period_matrix.Revenue.ytd.variance": Decimal("-1970000"),
+        "period_matrix.ARR.cm.variance": Decimal("413100"),
+    }
+    script = (
+        'slide.addText("-$370.0K");'
+        'slide.addText("-$1.97M");'
+        'slide.addText("+$413.1K");'
+        'slide.addText("-$99.0M");'  # unmatched negative — still strip
+    )
+    rewritten, result = apply_fail_closed_claims_to_pptx_script(script, evidence)
+    assert '"-$370.0K"' in rewritten
+    assert '"-$1.97M"' in rewritten
+    assert '"+$413.1K"' in rewritten
+    assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
+    assert '"-$99.0M"' not in rewritten
+    assert not result.ok  # unmatched -$99M
+
+
 def test_matching_numbers_pass() -> None:
     evidence = {
         "ending_mrr": Decimal("110000"),

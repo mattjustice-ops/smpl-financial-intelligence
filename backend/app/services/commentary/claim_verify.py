@@ -212,10 +212,15 @@ class VerificationResult:
 
 
 # Prefer explicit currency / compact forms first.
+# Optional leading +/- so variance cells like -$370.0K keep their sign (soft-strip
+# previously treated them as positive and wiped valid negative variances).
+# Lookbehind excludes '.' so we never match the fractional tail ('.0K', '.97M').
 _MONEY_WITH_SUFFIX = re.compile(
-    r"(?<![A-Za-z0-9])\$?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\s*([KkMmBb])\b"
+    r"(?<![A-Za-z0-9.])([+-])?\$?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\s*([KkMmBb])\b"
 )
-_MONEY_DOLLAR = re.compile(r"\$\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\b")
+_MONEY_DOLLAR = re.compile(
+    r"(?<![A-Za-z0-9.])([+-])?\$\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\b"
+)
 _PERCENT_RE = re.compile(r"(?<![A-Za-z0-9])(\d+(?:\.\d+)?)\s*%")
 _MULTIPLIER_RE = re.compile(r"(?<![A-Za-z0-9\$])(\d+(?:\.\d+)?)\s*x\b", re.IGNORECASE)
 _RATIO_RE = re.compile(r"(?<![A-Za-z0-9\$])(\d+\.\d{2,4})(?!\s*[%MmBbKkXx])\b")
@@ -445,15 +450,19 @@ def extract_numeric_claims(text: str) -> list[NumericClaim]:
         _add(m.group(0), pct, "percent", m.start(), m.end())
 
     for m in _MONEY_WITH_SUFFIX.finditer(text):
-        value = _parse_money_groups(m.group(1), m.group(2), m.group(3))
+        value = _parse_money_groups(m.group(2), m.group(3), m.group(4))
         if value is None:
             continue
+        if m.group(1) == "-":
+            value = -value
         _add(m.group(0), value, "money", m.start(), m.end())
 
     for m in _MONEY_DOLLAR.finditer(text):
-        value = _parse_money_groups(m.group(1), m.group(2), None)
+        value = _parse_money_groups(m.group(2), m.group(3), None)
         if value is None:
             continue
+        if m.group(1) == "-":
+            value = -value
         _add(m.group(0), value, "money", m.start(), m.end())
 
     for m in _MULTIPLIER_RE.finditer(text):

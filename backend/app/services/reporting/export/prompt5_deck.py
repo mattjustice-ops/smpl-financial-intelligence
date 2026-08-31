@@ -180,7 +180,8 @@ def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
         "opportunities": seeded["opportunities"][:4],
         "package_cross_check": package_cross_check,
         "rewrite_policy": (
-            "Author card detail+action from BOARD R&O EVIDENCE / these cards — "
+            "Author ALL 4 risk cards and ALL 4 opportunity cards from BOARD R&O "
+            "EVIDENCE / these cards (include Paid channel inefficiency) — "
             "keep driver, magnitude, action; PPTX-succinct; no thin stubs. "
             "Evidence for authorship, not a blank-slot template."
         ),
@@ -237,19 +238,16 @@ def _marketing_block(bundle, as_of, m):
     closed_lost_bud = abs(_wf(bundle, "pipeline", "closed_lost", as_of, "Budget"))
     slipped = m.slipped or Decimal("0")
     slipped_bud = abs(_wf(bundle, "pipeline", "slipped_pipeline", as_of, "Budget"))
-    ending_pipeline = abs(_wf(bundle, "pipeline", "ending_pipeline", as_of, "Actual"))
-    beginning_pipeline = abs(_wf(bundle, "pipeline", "beginning_pipeline", as_of, "Actual"))
-    if not beginning_pipeline:
-        beginning_pipeline = abs(
-            _wf(bundle, "pipeline", "ending_pipeline", prior_period(as_of), "Actual")
-        )
+    pipe_wf = build_pipeline_waterfall_chart(bundle)
+    # Always take begin/end from the reconciled chart SoT so KPI/bridge match bars.
+    beginning_pipeline = Decimal(str(pipe_wf.get("beginning_pipeline_raw") or 0))
+    ending_pipeline = Decimal(str(pipe_wf.get("ending_pipeline_raw") or 0))
+    if not ending_pipeline:
+        ending_pipeline = abs(_wf(bundle, "pipeline", "ending_pipeline", as_of, "Actual"))
     beginning_pipeline_bud = abs(
         _wf(bundle, "pipeline", "beginning_pipeline", as_of, "Budget")
     ) or abs(_wf(bundle, "pipeline", "ending_pipeline", prior_period(as_of), "Budget"))
     ending_pipeline_bud = abs(_wf(bundle, "pipeline", "ending_pipeline", as_of, "Budget"))
-    pipe_wf = build_pipeline_waterfall_chart(bundle)
-    if not beginning_pipeline and pipe_wf.get("beginning_pipeline_raw"):
-        beginning_pipeline = Decimal(str(pipe_wf["beginning_pipeline_raw"]))
     coverage_vs_arr = (
         float(ending_pipeline / m.ending_arr)
         if ending_pipeline and m.ending_arr

@@ -850,8 +850,10 @@ def _compute_waterfall_shape_bars(
             y_top_m = offsets_m[i] + heights_m[i]
             label_pos = "above"
         else:
+            # Board Chart.js convention: offset is the post-decrease floor; bar
+            # height stacks upward to the pre-decrease top (same as increase).
             y_bot_m = offsets_m[i]
-            y_top_m = offsets_m[i] - heights_m[i]
+            y_top_m = offsets_m[i] + heights_m[i]
             label_pos = "below"
 
         y_top = y_in(y_top_m)
@@ -912,6 +914,7 @@ def build_arr_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
     ]
     kinds = ["total", "increase", "increase", "increase", "decrease", "decrease", "total"]
     signed_m = [bop_m, nb_m, exp_m, react_m, con_m, churn_m, after_churn]
+    # Board Chart.js convention: decrease offsets are the post-decrease floor.
     offsets_m = [0, bop_m, after_nb, after_exp, after_con, after_churn, 0]
     heights_m = [bop_m, nb_m, exp_m, react_m, abs(con_m), abs(churn_m), after_churn]
 
@@ -987,6 +990,50 @@ def build_arr_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
     }
 
 
+def reconcile_pipeline_waterfall_identity(
+    *,
+    beginning: Decimal,
+    created: Decimal,
+    closed_won: Decimal,
+    closed_lost: Decimal,
+    slipped: Decimal,
+    ending: Decimal,
+    prior_ending: Decimal = ZERO,
+    tol: Decimal = Decimal("1"),
+) -> tuple[Decimal, Decimal, bool, str]:
+    """Enforce platform pipeline identity (magnitudes).
+
+    Platform SoT (``calculate_pipeline_waterfall`` / ``pipeline_waterfall_ties``):
+      ending = beginning + created - closed_won - closed_lost - slipped
+
+    When warehouse beginning is wrong (e.g. double-subtracted signed outflows),
+    prefer prior ending, then back-solve beginning from ending + movements.
+    """
+    def expected_end(bop: Decimal) -> Decimal:
+        return bop + created - closed_won - closed_lost - slipped
+
+    def ties(bop: Decimal, eop: Decimal) -> bool:
+        return bool(bop or eop) and abs(expected_end(bop) - eop) <= tol
+
+    if beginning and ending and ties(beginning, ending):
+        return beginning, ending, True, "warehouse_ties"
+
+    if prior_ending and ending and ties(prior_ending, ending):
+        return prior_ending, ending, True, "prior_ending_as_beginning"
+
+    if ending and (created or closed_won or closed_lost or slipped or beginning):
+        solved = ending - created + closed_won + closed_lost + slipped
+        if solved >= 0 and ties(solved, ending):
+            return solved, ending, True, "back_solved_beginning"
+
+    if beginning and (created or closed_won or closed_lost or slipped) and not ending:
+        derived = expected_end(beginning)
+        return beginning, derived, True, "derived_ending"
+
+    ok = bool(beginning and ending and ties(beginning, ending))
+    return beginning, ending, ok, "unreconciled"
+
+
 def build_pipeline_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
     """Actual additive pipeline waterfall — Begin + flows → Ending (shape_bars)."""
     as_of = bundle.as_of_period
@@ -997,14 +1044,25 @@ def build_pipeline_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
         return abs(val) if val else ZERO
 
     beginning = pipe("beginning_pipeline")
+    prior_ending = pipe("ending_pipeline", prior)
     if not beginning:
         # Standard bridge: prior ending is this period's beginning.
-        beginning = pipe("ending_pipeline", prior)
+        beginning = prior_ending
     created = pipe("pipeline_created")
     closed_won = pipe("closed_won")
     closed_lost = pipe("closed_lost")
     slipped = pipe("slipped_pipeline")
     ending = pipe("ending_pipeline")
+
+    beginning, ending, ties_ok, reconcile_note = reconcile_pipeline_waterfall_identity(
+        beginning=beginning,
+        created=created,
+        closed_won=closed_won,
+        closed_lost=closed_lost,
+        slipped=slipped,
+        ending=ending,
+        prior_ending=prior_ending,
+    )
 
     def to_m(val: Decimal) -> float:
         return round(float(val) / 1_000_000, 4)
@@ -1034,6 +1092,8 @@ def build_pipeline_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
     ]
     kinds = ["total", "increase", "decrease", "decrease", "decrease", "total"]
     signed_m = [bop_m, created_m, won_m, lost_m, slip_m, end_m]
+    # Board Chart.js convention: decrease offsets are the post-decrease floor;
+    # shape_bars stack height upward from that floor.
     offsets_m = [0, bop_m, after_won, after_lost, after_slip, 0]
     heights_m = [bop_m, created_m, abs(won_m), abs(lost_m), abs(slip_m), end_m]
 
@@ -1096,6 +1156,14 @@ def build_pipeline_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
         "ending_pipeline_raw": float(ending) if ending else float(end_m * 1_000_000),
         "beginning_display": fmt_deck_money(beginning) if beginning else _waterfall_display_m(bop_m, is_total=True),
         "ending_display": fmt_deck_money(ending) if ending else _waterfall_display_m(end_m, is_total=True),
+        "identity": {
+            "formula": "beginning + created - closed_won - closed_lost - slipped = ending",
+            "ties_ok": ties_ok,
+            "reconcile_note": reconcile_note,
+            "expected_ending_raw": float(
+                beginning + created - closed_won - closed_lost - slipped
+            ),
+        },
         "colors": color_map,
         "y_axis": {"min_m": y_min, "max_m": y_max, "tick_format": "$0M"},
         "category_label_placement": "x_axis_below_chart",
@@ -1103,7 +1171,8 @@ def build_pipeline_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
         "note": (
             "MANDATORY slide 7: additive pipeline waterfall from shape_bars with Begin AND End "
             "totals. Category labels from bar.category at bar.category_y on the x-axis "
-            "(shared baseline) — not under each bar value label. No addChart."
+            "(shared baseline) — not under each bar value label. No addChart. "
+            "Validate: begin + created − won − lost − slipped = end (see identity.ties_ok)."
         ),
     }
 
