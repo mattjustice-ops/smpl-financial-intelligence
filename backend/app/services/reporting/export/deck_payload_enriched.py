@@ -397,9 +397,6 @@ def enrich_deck_payload(
     payload["deal_highlights"] = build_deal_highlights_block(bundle)
     payload["slide_metrics"] = build_all_slide_metrics(bundle)
     payload["h2_priorities"] = build_h2_priorities_stub(bundle)
-    from app.services.reporting.export.prompt5_mda_slides import enrich_mda_deck_slides
-
-    payload = enrich_mda_deck_slides(payload, bundle)
     payload["commentary_rules"] = {
         "min_trend_bullets_per_slide": 2,
         "require_deal_callouts_slides": [3, 6, 8],

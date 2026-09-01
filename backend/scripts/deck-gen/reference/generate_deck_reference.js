@@ -11,11 +11,10 @@ const C = {
 };
 
 const Q = "Q2"; const YEAR = "2026"; const MONTH = "June 2026";
-const TOTAL_SLIDES = 14;
 const footerBase = `SMPL · Board Operating Review · ${Q} ${YEAR} · CONFIDENTIAL`;
 
 function addFooter(slide, n) {
-  slide.addText(`${footerBase}  ${n}/${TOTAL_SLIDES}`, {
+  slide.addText(`${footerBase}  ${n}/11`, {
     x: 0.35, y: 7.05, w: 12.63, h: 0.22,
     fontSize: 7.5, color: C.muted, fontFace: "Calibri", align: "center"
   });
@@ -58,7 +57,7 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
   slide.addText("Board Operating Review", { x: 0, y: 3.45, w: 13.33, h: 0.55, fontSize: 28, bold: true, color: C.white, fontFace: "Calibri", align: "center" });
   slide.addText(`${Q} ${YEAR} · ${MONTH} · Series B`, { x: 0, y: 4.05, w: 13.33, h: 0.3, fontSize: 12, color: C.muted, fontFace: "Calibri", align: "center" });
 
-  slide.addText(`SMPL · Board Operating Review · ${Q} ${YEAR} · 1/${TOTAL_SLIDES}`, {
+  slide.addText(`SMPL · Board Operating Review · ${Q} ${YEAR} · 1/11`, {
     x: 0.35, y: 7.05, w: 12.63, h: 0.22, fontSize: 7.5, color: C.muted, fontFace: "Calibri", align: "center"
   });
 }
@@ -424,16 +423,19 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SLIDE 6 — GTM PERFORMANCE (dense channel table + full-width KT)
+// SLIDE 6 — GTM PERFORMANCE
 // ═══════════════════════════════════════════════════════════════════════════════
 {
   const slide = pptx.addSlide();
   addSlideBackground(slide);
   addFooter(slide, 6);
 
-  addSectionLabel(slide, "GTM Performance", 0.35, 0.35, 5);
-  slide.addText("GTM Performance — June 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
+  addSectionLabel(slide, "GTM & Pipeline Performance", 0.35, 0.35, 5);
+  slide.addText("GTM & Pipeline Performance — June 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
+  // Funnel section label sits BELOW the title (never overlap "June 2026")
+  addSectionLabel(slide, "Marketing Funnel", 0.35, 0.92, 3.8);
 
+  // Top 4 KPI cards
   const gtmCards = [
     { label: "Total Pipeline", value: "$5.40M", sub: "CM created  vs bud $5.31M" },
     { label: "Total MQLs", value: "119", sub: "CM  best: Organic Search" },
@@ -442,55 +444,85 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
   ];
   const gcw = 3.1;
   gtmCards.forEach((c, i) => {
-    kpiCard(slide, 0.35 + i * (gcw + 0.07), 0.92, gcw, 0.82, c.label, c.value, c.sub, C.cyan);
+    kpiCard(slide, 0.35 + i * (gcw + 0.07), 1.12, gcw, 0.90, c.label, c.value, c.sub, C.cyan);
   });
 
-  addDivider(slide, 0.35, 1.82, 12.63);
-  addSectionLabel(slide, "Channel Performance", 0.35, 1.88, 8);
+  addDivider(slide, 0.35, 2.0, 12.63);
 
-  const gtmHdr = ["Channel", "Spend (Act)", "Spend (Bud)", "Pipeline", "MQLs", "SQLs", "Opps", "Closed Won", "CAC", "Eff.", "Win %"];
+  // Channel table
+  addSectionLabel(slide, "Channel Performance", 0.35, 2.08, 8);
+  const gtmHdr = ["Channel", "Spend (Act)", "Spend (Bud)", "Pipeline (Act)", "MQLs", "Efficiency", "Win Rate"];
   const gtmData = [
-    ["Outbound", "$5K", "$8K", "$484K", "12", "6", "4", "$180K", "$278", "96.1x", "8.1%"],
-    ["Organic Search", "$5K", "$7K", "$443K", "13", "7", "4", "$120K", "$208", "81.2x", "23.8%"],
-    ["Paid Search", "$8K", "$8K", "$508K", "19", "10", "6", "$90K", "$444", "63.7x", "3.3%"],
-    ["Paid Social", "$12K", "$2K", "$524K", "28", "14", "9", "$75K", "$800", "44.5x", "10.6%"],
-    ["Content Syndication", "$7K", "$9K", "$310K", "17", "9", "5", "$55K", "$636", "43.5x", "9.1%"]
+    ["Paid Social", "$12K", "$2K", "$524K", "28", "44.5x", "10.6%"],
+    ["Paid Search", "$8K", "$8K", "$508K", "19", "63.7x", "3.3%"],
+    ["Content Syndication", "$7K", "$9K", "$310K", "17", "43.5x", "9.1%"],
+    ["Organic Search", "$5K", "$7K", "$443K", "13", "81.2x", "23.8%"],
+    ["Outbound", "$5K", "$8K", "$484K", "12", "96.1x", "8.1%"]
   ];
-  const gColW = [1.15, 0.85, 0.85, 0.95, 0.55, 0.55, 0.55, 0.95, 0.65, 0.65, 0.65];
+  const gColW = [1.8, 1.0, 1.0, 1.1, 0.7, 1.0, 0.85];
   [gtmHdr, ...gtmData].forEach((row, ri) => {
     row.forEach((cell, ci) => {
       const isHeader = ri === 0;
       const xOff = gColW.slice(0, ci).reduce((a, b) => a + b, 0);
       let fc = C.white;
       if (isHeader) fc = C.muted;
-      else if (ci === 9) {
+      else if (ci === 5) {
         const val = parseFloat(cell);
         fc = val >= 80 ? C.green : val >= 60 ? C.cyan : C.amber;
       }
       slide.addShape(pptx.ShapeType.rect, {
-        x: 0.35 + xOff, y: 2.05 + ri * 0.26, w: gColW[ci], h: 0.26,
+        x: 0.35 + xOff, y: 2.28 + ri * 0.28, w: gColW[ci], h: 0.28,
         fill: { color: ri % 2 === 0 ? C.surface : C.surfaceAlt },
         line: { color: C.divider, width: 0.3 }
       });
       slide.addText(cell, {
-        x: 0.35 + xOff + 0.04, y: 2.05 + ri * 0.26, w: gColW[ci] - 0.04, h: 0.26,
-        fontSize: 7.5, color: fc, fontFace: "Calibri", valign: "middle", bold: isHeader
+        x: 0.35 + xOff + 0.05, y: 2.28 + ri * 0.28, w: gColW[ci] - 0.05, h: 0.28,
+        fontSize: 8.5, color: fc, fontFace: "Calibri", valign: "middle", bold: isHeader
       });
     });
   });
 
-  addDivider(slide, 0.35, 3.55, 12.63);
-  addSectionLabel(slide, "Key Takeaways", 0.35, 3.62, 12.63);
-  slide.addShape(pptx.ShapeType.rect, { x: 0.35, y: 3.82, w: 12.63, h: 2.85, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
+  addDivider(slide, 0.35, 3.75, 12.63);
+
+  // Efficiency bar chart
+  addSectionLabel(slide, "Channel Efficiency (Pipeline / Spend)", 0.35, 3.82, 8);
+  const channels = [
+    { name: "Content Syndication", eff: 43.5 },
+    { name: "Paid Social", eff: 44.5 },
+    { name: "Paid Search", eff: 63.7 },
+    { name: "Organic Search", eff: 81.2 },
+    { name: "Outbound", eff: 96.1 }
+  ];
+  slide.addChart(pptx.ChartType.bar, [{
+    name: "Efficiency (x)",
+    labels: channels.map(c => c.name),
+    values: channels.map(c => c.eff)
+  }], {
+    x: 0.35, y: 4.0, w: 7.5, h: 2.65,
+    barDir: "bar",
+    showLegend: false, showTitle: false, showValue: true,
+    dataLabelFontSize: 8, dataLabelColor: C.white,
+    chartColors: [C.amber, C.amber, C.cyan, C.green, C.green],
+    plotArea: { fill: { color: C.surface } },
+    chartArea: { fill: { color: C.surface }, border: { color: C.surface } },
+    valAxisMinVal: 0, valAxisMaxVal: 110,
+    catAxisLabelColor: C.muted, catAxisLabelFontSize: 8,
+    valAxisLabelColor: C.muted, valAxisLabelFontSize: 8
+  });
+
+  // Key Takeaways right
+  const ktX6 = 8.1;
+  addSectionLabel(slide, "Key Takeaways", ktX6, 3.82, 5.0);
+  slide.addShape(pptx.ShapeType.rect, { x: ktX6, y: 4.0, w: 5.0, h: 2.65, fill: { color: C.surface }, line: { color: C.divider, width: 0.5 } });
   const bullets6 = [
-    "1. Outbound leads efficiency at 96.1x; Organic Search 81.2x with best win rate 23.8% — prioritize high-conversion channels.",
-    "2. Closed lost $7.91M vs budget — run structured loss review; slipped $9.87M vs $3.18M budget requires re-stage before H2 lock.",
-    "3. Paid Social spend $12K vs $2K budget — overspend warrants reallocation to Outbound and Organic Search.",
-    "4. Total pipeline $5.40M CM vs $5.31M budget; pipeline coverage 3.0x vs ending ARR supports near-term targets.",
-    "5. Recommended board action: approve channel mix shift and loss-review cadence at operating review."
+    "1. Outbound leads efficiency at 96.1x; Organic Search 81.2x with best win rate 23.8%.",
+    "2. Paid Social spend $12K vs $2K budget — overspend warrants reallocation review.",
+    "3. Total pipeline $5.40M vs $5.31M budget; YTD pipeline -79.9% vs $26.91M budget.",
+    "4. MQL volume 119 CM; pipeline coverage 3.0x supports near-term ARR targets.",
+    "5. Content Syndication lowest efficiency 43.5x — consider budget shift to Outbound."
   ];
   bullets6.forEach((b, i) => {
-    slide.addText(b, { x: 0.5, y: 3.92 + i * 0.52, w: 12.3, h: 0.48, fontSize: 9, color: C.white, fontFace: "Calibri", valign: "top", wrap: true });
+    slide.addText(b, { x: ktX6 + 0.15, y: 4.12 + i * 0.48, w: 4.7, h: 0.42, fontSize: 8.5, color: C.white, fontFace: "Calibri", valign: "top", wrap: true });
   });
 }
 
@@ -731,61 +763,12 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SLIDE 10 — PROJECTED HEADCOUNT
+// SLIDE 10 — BOARD ACTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 {
   const slide = pptx.addSlide();
   addSlideBackground(slide);
   addFooter(slide, 10);
-
-  addSectionLabel(slide, "Workforce", 0.35, 0.35, 5);
-  slide.addText("Projected Headcount — June 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
-
-  const hcDepts = [
-    { dept: "Engineering", actual: 8, goal: 10 },
-    { dept: "Sales", actual: 4, goal: 5 },
-    { dept: "Marketing", actual: 2, goal: 3 },
-    { dept: "G&A", actual: 2, goal: 2 }
-  ];
-  const maxHc = 10;
-  hcDepts.forEach((d, i) => {
-    const bx = 0.55 + i * 1.55;
-    const actH = (d.actual / maxHc) * 2.8;
-    const goalH = (d.goal / maxHc) * 2.8;
-    slide.addShape(pptx.ShapeType.rect, { x: bx, y: 4.0 - actH, w: 0.55, h: actH, fill: { color: C.cyan } });
-    slide.addShape(pptx.ShapeType.rect, { x: bx + 0.62, y: 4.0 - goalH, w: 0.55, h: goalH, fill: { color: C.surface }, line: { color: C.amber, width: 1, dashType: "dash" } });
-    slide.addText(String(d.actual), { x: bx - 0.05, y: 4.0 - actH - 0.22, w: 0.65, h: 0.2, fontSize: 8, color: C.cyan, fontFace: "Calibri", align: "center", bold: true });
-    slide.addText(String(d.goal), { x: bx + 0.57, y: 4.0 - goalH - 0.22, w: 0.65, h: 0.2, fontSize: 8, color: C.amber, fontFace: "Calibri", align: "center" });
-    slide.addText(d.dept, { x: bx - 0.1, y: 4.05, w: 1.3, h: 0.35, fontSize: 7, color: C.muted, fontFace: "Calibri", align: "center", wrap: true });
-  });
-  slide.addText("Solid = Actual FTE   |   Dashed = Goal (Budget)", { x: 0.35, y: 4.45, w: 6.5, h: 0.2, fontSize: 7.5, color: C.muted, fontFace: "Calibri" });
-
-  const rx10 = 7.1;
-  addSectionLabel(slide, "Headcount KPIs", rx10, 0.95, 5.8);
-  kpiCard(slide, rx10, 1.15, 2.7, 0.9, "Total HC (CM)", "16", "vs bud 18  -2", C.cyan);
-  kpiCard(slide, rx10 + 2.85, 1.15, 2.7, 0.9, "EOY Budget", "18", "Dec plan", C.amber);
-  kpiCard(slide, rx10, 2.15, 2.7, 0.9, "EOY Forecast", "16", "Outlook", C.cyan);
-  kpiCard(slide, rx10 + 2.85, 2.15, 2.7, 0.9, "Open Reqs", "0", "Current", C.muted);
-
-  addDivider(slide, 0.35, 5.0, 12.63);
-  addSectionLabel(slide, "Key Takeaways", 0.35, 5.08, 12.63);
-  const bullets10 = [
-    "1. Total HC 16 actual vs 18 budget CM (-2); EOY forecast 16 vs EOY budget 18 — hiring plan gap in Sales and Engineering.",
-    "2. Engineering 8/10 and Sales 4/5 vs goal — prioritize open reqs before H2 pipeline ramp.",
-    "3. ARR/FTE productivity should be tracked alongside headcount bridge — approve hiring adjustments at next board cycle."
-  ];
-  bullets10.forEach((b, i) => {
-    slide.addText(b, { x: 0.5, y: 5.28 + i * 0.42, w: 12.3, h: 0.38, fontSize: 9, color: C.white, fontFace: "Calibri", wrap: true });
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SLIDE 11 — BOARD ACTIONS
-// ═══════════════════════════════════════════════════════════════════════════════
-{
-  const slide = pptx.addSlide();
-  addSlideBackground(slide);
-  addFooter(slide, 11);
 
   addSectionLabel(slide, "Board Actions", 0.35, 0.35, 5);
   slide.addText("Board Actions — June 2026", { x: 0.35, y: 0.55, w: 9, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
@@ -823,88 +806,12 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SLIDE 12 — DEPT UPDATES: FUNNEL & EFFICIENCY
+// SLIDE 11 — APPENDIX A: YTD CASH FLOW STATEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 {
   const slide = pptx.addSlide();
   addSlideBackground(slide);
-  addFooter(slide, 12);
-
-  addSectionLabel(slide, "Department Updates", 0.35, 0.35, 5);
-  slide.addText("Marketing — Funnel & Efficiency", { x: 0.35, y: 0.55, w: 10, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
-
-  kpiCard(slide, 0.35, 1.0, 3.0, 1.0, "Blended CAC Proxy", "$278", "CM marketing spend / won proxy", C.cyan);
-  kpiCard(slide, 3.5, 1.0, 3.0, 1.0, "CAC Payback", "5.2 mo", "At current GM%", C.amber);
-  kpiCard(slide, 6.65, 1.0, 3.0, 1.0, "Blended Efficiency", "60.7x", "Pipeline / spend", C.green);
-  kpiCard(slide, 9.8, 1.0, 3.2, 1.0, "MQLs (CM)", "119", "YTD funnel in payload", C.cyan);
-
-  addSectionLabel(slide, "Channel Efficiency Summary", 0.35, 2.15, 8);
-  const effHdr = ["Channel", "Spend", "Pipeline", "Efficiency", "Win Rate"];
-  const effData = [
-    ["Outbound", "$5K", "$484K", "96.1x", "8.1%"],
-    ["Organic Search", "$5K", "$443K", "81.2x", "23.8%"],
-    ["Paid Search", "$8K", "$508K", "63.7x", "3.3%"]
-  ];
-  const eColW = [2.2, 1.2, 1.4, 1.2, 1.0];
-  [effHdr, ...effData].forEach((row, ri) => {
-    row.forEach((cell, ci) => {
-      const xOff = eColW.slice(0, ci).reduce((a, b) => a + b, 0);
-      slide.addShape(pptx.ShapeType.rect, {
-        x: 0.35 + xOff, y: 2.35 + ri * 0.28, w: eColW[ci], h: 0.28,
-        fill: { color: ri % 2 === 0 ? C.surface : C.surfaceAlt }, line: { color: C.divider, width: 0.3 }
-      });
-      slide.addText(cell, { x: 0.4 + xOff, y: 2.35 + ri * 0.28, w: eColW[ci] - 0.05, h: 0.28, fontSize: 8.5, color: ri === 0 ? C.muted : C.white, fontFace: "Calibri", valign: "middle", bold: ri === 0 });
-    });
-  });
-
-  addDivider(slide, 0.35, 3.55, 12.63);
-  addSectionLabel(slide, "Key Takeaways", 0.35, 3.62, 12.63);
-  ["1. CAC payback 5.2 months at current gross margin — within SaaS benchmark if win rates hold on Outbound/Organic.",
-   "2. Reallocate Paid Social overspend toward 80x+ efficiency channels before H2 budget lock.",
-   "3. YTD funnel SQL→Opp conversion should be tracked weekly — author detail from freeze when present."].forEach((b, i) => {
-    slide.addText(b, { x: 0.5, y: 3.82 + i * 0.52, w: 12.3, h: 0.48, fontSize: 9, color: C.white, fontFace: "Calibri", wrap: true });
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SLIDE 13 — DEPT UPDATES: BIG EFFORTS & MILESTONES
-// ═══════════════════════════════════════════════════════════════════════════════
-{
-  const slide = pptx.addSlide();
-  addSlideBackground(slide);
-  addFooter(slide, 13);
-
-  addSectionLabel(slide, "Department Updates", 0.35, 0.35, 5);
-  slide.addText("Marketing — Big Efforts & Milestones", { x: 0.35, y: 0.55, w: 10, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
-
-  const milestones = [
-    { title: "GTM / Pipeline", detail: "3.0x coverage; slipped $9.87M — re-stage owners before forecast lock." },
-    { title: "Channel Mix", detail: "Shift budget to Outbound (96.1x) and Organic (23.8% win rate)." },
-    { title: "Efficiency / CAC", detail: "Blended 60.7x; CAC proxy $278 — monitor Paid Social overspend." },
-    { title: "H2 Priorities", detail: "Enterprise conversion velocity + loss review cadence for board." }
-  ];
-  milestones.forEach((m, i) => {
-    slide.addShape(pptx.ShapeType.rect, { x: 0.35 + (i % 2) * 6.5, y: 1.05 + Math.floor(i / 2) * 1.35, w: 6.14, h: 1.2, fill: { color: C.surface }, line: { color: C.cyan, width: 0.5 } });
-    slide.addText(m.title, { x: 0.5 + (i % 2) * 6.5, y: 1.12 + Math.floor(i / 2) * 1.35, w: 5.8, h: 0.25, fontSize: 10, bold: true, color: C.cyan, fontFace: "Calibri" });
-    slide.addText(m.detail, { x: 0.5 + (i % 2) * 6.5, y: 1.4 + Math.floor(i / 2) * 1.35, w: 5.8, h: 0.75, fontSize: 8.5, color: C.white, fontFace: "Calibri", wrap: true });
-  });
-
-  addDivider(slide, 0.35, 3.85, 12.63);
-  addSectionLabel(slide, "Key Takeaways", 0.35, 3.92, 12.63);
-  ["1. Milestone cards summarize GTM operating priorities — replace with freeze narrative on regenerate.",
-   "2. Channel reallocation and loss review are the two highest-leverage marketing actions this quarter.",
-   "3. Board should approve H2 GTM plan alongside headcount hiring adjustments (slides 10–11)."].forEach((b, i) => {
-    slide.addText(b, { x: 0.5, y: 4.12 + i * 0.52, w: 12.3, h: 0.48, fontSize: 9, color: C.white, fontFace: "Calibri", wrap: true });
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SLIDE 14 — APPENDIX A: YTD CASH FLOW STATEMENT
-// ═══════════════════════════════════════════════════════════════════════════════
-{
-  const slide = pptx.addSlide();
-  addSlideBackground(slide);
-  addFooter(slide, 14);
+  addFooter(slide, 11);
 
   addSectionLabel(slide, "Appendix A", 0.35, 0.35, 5);
   slide.addText("YTD Cash Flow Statement — Jan–Jun 2026", { x: 0.35, y: 0.55, w: 12, h: 0.35, fontSize: 22, bold: true, color: C.white, fontFace: "Calibri" });
@@ -974,4 +881,4 @@ function kpiCard(slide, x, y, w, h, label, value, sub, valueColor) {
   });
 }
 
-pptx.writeFile({ fileName: "OUTPUT.pptx" });
+pptx.writeFile({ fileName: "C:/Users/mattj/AppData/Local/Temp/smpl-deck-znbbp6p2/mda_deck_2026-06.pptx" });

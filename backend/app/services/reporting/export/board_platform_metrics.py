@@ -1573,9 +1573,6 @@ def _add_deal_and_bridge_story_keys(
         ("fy_outlook", "forecast"),
         ("gtm_performance", "pipeline"),
         ("gtm_funnel", "pipeline"),
-        ("gtm_channel_metrics", "pipeline"),
-        ("projected_headcount", "actual"),
-        ("department_updates", "pipeline"),
         ("pl_detail", "actual"),
         ("executive_summary", "actual"),
         ("mom_context", "actual"),
@@ -1713,16 +1710,6 @@ def validate_deck_payload(payload: dict[str, Any]) -> list[str]:
     hc = (payload.get("fy_outlook") or {}).get("headcount") or {}
     if hc.get("eoy_budget") == 0 and hc.get("current_month_actual") == 0:
         warnings.append("Headcount is zero — verify headcount_plan / workforce tables loaded.")
-    proj_hc = payload.get("projected_headcount") or {}
-    if proj_hc.get("available") and not proj_hc.get("include_slide"):
-        warnings.append(
-            "Projected headcount slide omitted — headcount rows loaded but all zero at close."
-        )
-    gtm_cm = payload.get("gtm_channel_metrics") or {}
-    if not gtm_cm.get("available") and not (payload.get("gtm_funnel") or {}).get("available"):
-        warnings.append(
-            "GTM channel metrics and funnel tables unavailable — use gtm_performance.channels only on slide 6."
-        )
     matrix = payload.get("period_matrix") or {}
     rows = matrix.get("rows") or []
     if not rows:

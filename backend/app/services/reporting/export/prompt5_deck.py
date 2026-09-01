@@ -310,7 +310,6 @@ def _marketing_block(bundle, as_of, m):
         "pipeline_created": _money_k(m.pipeline_created) if m.pipeline_created else "—",
         "pipeline_created_raw": float(m.pipeline_created or 0),
         "pipeline_waterfall_chart": pipe_wf,
-        "primary_layout_note": "See deck_slide_order.gtm_slide_6.primary_layout in payload.",
         "narrative_must_cover": [
             "closed_lost actual vs budget + variance",
             "slipped pipeline actual vs budget",
@@ -564,13 +563,7 @@ def build_prompt5_user_message(
         "they are not blank slots to fill and not a post-process refill source.\n"
         "Slide 1: centered cover (cyan SMPL.ai, divider, no CONFIDENTIAL). "
         "Slide 3: waterfall_chart.shape_bars with addShape rectangles ONLY — no addChart on slide 3.\n"
-        "Follow deck_slide_order.slides in payload for slide count (13–14) and numbering. "
-        "Omit projected_headcount when projected_headcount.include_slide is false. "
-        "Slide 6 GTM: one dense primary visual per deck_slide_order.gtm_slide_6.primary_layout "
-        "+ full-width Key Takeaways below (not right-rail). Department Updates slides use "
-        "DEPARTMENT UPDATES section label.\n"
-        "Main deck through board actions + department updates; final slide appendix CFS. "
-        "Copy numbers from EVIDENCE PACKAGE / "
+        "Slides 1–10 main deck; slide 11 appendix CFS. Copy numbers from EVIDENCE PACKAGE / "
         "DATA PAYLOAD verbatim into KPI/table cells (numbers or '—' only). "
         "Key Takeaways / risks / board actions = 3–5 insight bullets each "
         "(PRIMARY DRIVER + VARIANCE, RETENTION/PIPELINE QUALITY, ROOT CAUSE, "
@@ -675,67 +668,10 @@ def _rewrite_redeclared_bindings(script: str) -> str:
     return "\n".join(out)
 
 
-def _format_node_script_error(stderr: str, stdout: str) -> str:
-    """Surface the actionable Node/pptxgenjs message (UI often truncates stderr prefix)."""
-    combined = "\n".join(part.strip() for part in (stderr, stdout) if part and part.strip())
-    if not combined:
-        return "Node exited with code 1 (no stderr/stdout)"
-
-    priority_markers = (
-        "PPTX_WRITE_ERROR:",
-        "Error:",
-        "TypeError:",
-        "SyntaxError:",
-        "ReferenceError:",
-        "Cannot find module",
-        "ENOENT:",
-        "MODULE_NOT_FOUND",
-    )
-    for line in combined.splitlines():
-        stripped = line.strip()
-        if any(marker in stripped for marker in priority_markers):
-            return stripped[:2000]
-
-    lines = [ln.strip() for ln in combined.splitlines() if ln.strip()]
-    if len(lines) >= 2:
-        # Stack traces often start with node_modules paths; the message is usually last.
-        return f"{lines[-1]} | trace: {lines[0][:240]}"
-    return combined[:2000]
-
-
-def _inject_deck_runtime_guards(script: str) -> str:
-    """Inject helpers so optional payload arrays/objects do not crash at runtime."""
-    if "_deckArr" in script:
-        return script
-    guards = (
-        "\n// Deck runtime guards — optional payload blocks may be empty on regenerate.\n"
-        "function _deckArr(v){return Array.isArray(v)?v:[];}\n"
-        "function _deckObj(v){return (v&&typeof v==='object')?v:{};}\n"
-    )
-    for req in ('require("pptxgenjs")', "require('pptxgenjs')"):
-        if req in script:
-            return script.replace(req, req + guards, 1)
-    return script
-
-
-def _wrap_writefile_catch(script: str) -> str:
-    """Catch pptx.writeFile promise rejections so Node stderr includes the real error."""
-    if re.search(r"pptx\.writeFile\s*\([^)]*\)\s*\.catch\s*\(", script):
-        return script
-    wrapped, n = re.subn(
-        r"(pptx\.writeFile\s*\(\s*\{[^}]+\}\s*\))\s*;?\s*\Z",
-        r"\1.catch(function(err){ console.error('PPTX_WRITE_ERROR: ' + (err && err.message || String(err))); process.exit(1); });",
-        script.rstrip(),
-        count=1,
-    )
-    return wrapped if n else script
-
-
 def _sanitize_pptxgen_script(script: str) -> str:
     """Fix common Claude PptxGenJS API mistakes before Node execution."""
     script = _fix_spaced_identifiers(script)
     script = _rewrite_redeclared_bindings(script)
-    script = _inject_deck_runtime_guards(script)
     inst = _detect_pptx_instance_var(script)
     # ShapeType / ChartType live on the presentation instance, not the constructor.
     for ctor in ("pptxgen", "PptxGenJS", "PptxGenjs"):
@@ -743,7 +679,6 @@ def _sanitize_pptxgen_script(script: str) -> str:
         script = script.replace(f"{ctor}.ChartType", f"{inst}.ChartType")
     # Thin rect is more reliable than line shapes across PptxGenJS versions.
     script = script.replace(f"{inst}.ShapeType.line", f"{inst}.ShapeType.rect")
-    script = _wrap_writefile_catch(script)
     return script
 
 
@@ -980,31 +915,18 @@ def _build_fix_prompt(*, last_error: str, failed_script: str, payload_json: str)
 
 
 def _ensure_deck_gen_runtime() -> None:
-    dist = DECK_GEN_DIR / "node_modules" / "pptxgenjs" / "dist" / "pptxgen.cjs.js"
-    if dist.is_file():
+    node_modules = DECK_GEN_DIR / "node_modules" / "pptxgenjs"
+    if node_modules.exists():
         return
-    logger.warning(
-        "pptxgenjs runtime missing at %s — running npm install in %s",
-        dist,
-        DECK_GEN_DIR,
-    )
-    result = subprocess.run(
+    logger.info("Installing pptxgenjs in %s", DECK_GEN_DIR)
+    subprocess.run(
         ["npm", "install", "--omit=dev"],
         cwd=DECK_GEN_DIR,
+        check=True,
         capture_output=True,
         text=True,
         timeout=180,
     )
-    if result.returncode != 0:
-        raise RuntimeError(
-            "Failed to install pptxgenjs for deck export: "
-            f"{result.stderr.strip() or result.stdout.strip() or 'npm install failed'}"
-        )
-    if not dist.is_file():
-        raise RuntimeError(
-            f"pptxgenjs still missing after npm install (expected {dist}). "
-            "Rebuild the backend Docker image or run npm install in scripts/deck-gen."
-        )
 
 
 def _check_node_syntax(script_path: Path) -> None:
@@ -1037,9 +959,9 @@ def _run_node_script(script_path: Path, output_path: Path) -> None:
         timeout=180,
     )
     if result.returncode != 0:
-        detail = _format_node_script_error(result.stderr, result.stdout)
         raise RuntimeError(
-            f"Node deck script failed (exit {result.returncode}): {detail}"
+            f"Node deck script failed (exit {result.returncode}): "
+            f"{result.stderr.strip() or result.stdout.strip()}"
         )
     if not output_path.exists() or output_path.stat().st_size < 1000:
         raise RuntimeError(
@@ -1107,34 +1029,6 @@ def _archive_artifacts(period: str, script: str, pptx_bytes: bytes) -> None:
         (dest / f"mda_deck_{period}.pptx").write_bytes(pptx_bytes)
     except OSError as exc:
         logger.warning("Could not archive deck artifacts: %s", exc)
-
-
-def _try_bundled_reference_render(
-    period: str,
-    payload: dict[str, Any] | None = None,
-) -> tuple[bytes, str] | None:
-    """Last-resort: render shipped reference script when Claude/Node attempts all fail."""
-    from app.services.reporting.export.deck_gold import BUNDLED_REFERENCE_SCRIPT
-
-    if not BUNDLED_REFERENCE_SCRIPT.is_file():
-        return None
-    try:
-        ref_script = BUNDLED_REFERENCE_SCRIPT.read_text(encoding="utf-8")
-    except OSError as exc:
-        logger.warning("Bundled reference script unreadable: %s", exc)
-        return None
-    if len(ref_script) < 1000:
-        return None
-    try:
-        logger.warning(
-            "Prompt 5 falling back to bundled reference script (no Claude layout adapt)"
-        )
-        script = _postprocess_prompt5_script(ref_script, payload)
-        pptx_bytes, _ = _render_prepared_script(script, period=period)
-        return pptx_bytes, "bundled_reference_fallback"
-    except RuntimeError as exc:
-        logger.warning("Bundled reference fallback failed: %s", exc)
-        return None
 
 
 def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, str]:
@@ -1441,14 +1335,6 @@ def build_claude_deck_pptx_bytes(
                     script_text,
                     f"failed_attempt_{attempt + 1}",
                 )
-
-    fallback = _try_bundled_reference_render(bundle.as_of_period, payload)
-    if fallback is not None:
-        logger.warning(
-            "Prompt 5 using bundled reference fallback after adapt + %s fresh attempts failed",
-            max_retries + 1,
-        )
-        return fallback
 
     raise RuntimeError(
         f"Claude deck generation failed after adapt + {max_retries + 1} fresh attempts. "

@@ -5,14 +5,10 @@ from __future__ import annotations
 from app.services.reporting.export.prompt5_deck import (
     _fix_slide5_ytd_summary_overlap,
     _fix_slide11_source_overlap,
-    _format_node_script_error,
-    _inject_deck_runtime_guards,
     _postprocess_prompt5_script,
     _reinject_cfs_variances,
     _reinject_period_matrix_ending_cash_row,
-    _sanitize_pptxgen_script,
     _strip_slide2_kpi_sparklines,
-    _wrap_writefile_catch,
 )
 
 
@@ -162,36 +158,3 @@ def test_postprocess_composes_fixes() -> None:
     assert "y: 5.65" in out
     assert '"+$16.98M"' in out
     assert 'variance: "+$2.09M"' in out
-
-
-def test_format_node_script_error_prefers_message_over_path_prefix() -> None:
-    stderr = (
-        "/app/scripts/deck-gen/node_modules/pptxgenjs/dist/pptxgen.cjs.js:1234\n"
-        "TypeError: Cannot read properties of undefined (reading 'forEach')\n"
-    )
-    msg = _format_node_script_error(stderr, "")
-    assert "TypeError" in msg
-    assert "forEach" in msg
-
-
-def test_sanitize_injects_runtime_guards_and_writefile_catch() -> None:
-    src = 'const pptxgen = require("pptxgenjs");\nconst pptx = new pptxgen();\npptx.writeFile({ fileName: "OUTPUT.pptx" });'
-    out = _sanitize_pptxgen_script(src)
-    assert "_deckArr" in out
-    assert "PPTX_WRITE_ERROR" in out
-    assert ".catch(" in out
-
-
-def test_inject_deck_runtime_guards_idempotent() -> None:
-    once = _inject_deck_runtime_guards('require("pptxgenjs");')
-    twice = _inject_deck_runtime_guards(once)
-    assert once.count("_deckArr") == 1
-    assert twice == once
-
-
-def test_wrap_writefile_catch_idempotent() -> None:
-    src = 'pptx.writeFile({ fileName: "OUTPUT.pptx" });'
-    once = _wrap_writefile_catch(src)
-    twice = _wrap_writefile_catch(once)
-    assert once.count(".catch(") == 1
-    assert twice == once
