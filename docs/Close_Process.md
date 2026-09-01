@@ -104,7 +104,23 @@ python scripts\load_versioned_csvs.py <organization_id> "<csv-folder>"
 
 Or dashboard CSV upload for demo profiles.
 
-### 3. Run validation pre-check
+### 3. Pre-flight completeness (before validation)
+
+Complete this pass **once** per close attempt — do not iterate exports on a half-loaded model.
+
+| Check | Pass criteria |
+|-------|---------------|
+| Scope | `as_of_period`, scenario, org filters set |
+| P0 loads | GL, MRR waterfall, cash bridge, BS, deferred waterfall present for close month |
+| Source map | CRM, billing (Stripe / Chargebee / Maxio if applicable), ERP identified |
+| Definitions | Tenant ARR/bookings date policy documented (one policy — no mid-close switches) |
+| Plan-before-execute | Forecast or spreadsheet changes go through stated plan + missing-input list first |
+
+If billing runs through **Maxio** (or similar sub-ledger), treat billing export as SoT for **actual** ARR movements; CRM remains SoT for pipeline forecast. Reconcile closed-won ↔ new ARR per [Reporting_Logic.md](./Reporting_Logic.md).
+
+Full checklist: [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md).
+
+### 4. Run validation pre-check
 
 Before distributing Excel:
 
@@ -129,20 +145,20 @@ Key validations (see [Reporting_Logic.md](./Reporting_Logic.md)):
 - Opportunity movements reconcile to pipeline waterfall
 - Deferred waterfall roll-forward
 
-### 4. Variance commentary
+### 5. Variance commentary
 
 1. Export `variance-commentary.xlsx` or use month-end close tab **Variance Commentary**.
 2. Review auto-filled **Metric Context** column (Actual vs Budget vs Forecast).
 3. Owners complete narrative columns; optional AI draft via `include_ai_commentary=true`.
 4. Controller approves material variances (> threshold per policy).
 
-### 5. Management review
+### 6. Management review
 
 - Export `management-review.xlsx` (executive subset).
 - Review Executive Flow dashboard: waterfalls, KPI scorecard, GAAP revenue forecast.
 - Document decisions that require Forecast driver updates.
 
-### 6. Roll forward to Forecast
+### 7. Roll forward to Forecast
 
 After Actual for `as_of_period` is certified:
 
@@ -151,13 +167,13 @@ After Actual for `as_of_period` is certified:
 3. Re-run forecast build sequence (drivers → bridges → statements).
 4. Set Combined scenario cutover to `as_of_period`.
 
-### 7. Board package
+### 8. Board package
 
 - Export `board-presentation.pptx`.
 - Slides include canonical KPIs, pipeline/GAAP/validation summary.
 - Attach validation slide — board expects green or explained warnings only.
 
-### 8. Lock and archive
+### 9. Lock and archive
 
 | Artifact | Storage recommendation |
 |----------|------------------------|
@@ -230,3 +246,4 @@ See [../backend/docs/REPORTING_EXPORT.md](../backend/docs/REPORTING_EXPORT.md) f
 - [Reporting_Logic.md](./Reporting_Logic.md) — tie-out definitions
 - [Data_Model.md](./Data_Model.md) — required tables
 - [Architecture_Master.md](./Architecture_Master.md) — system boundaries
+- [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md) — pre-flight and cross-system ties

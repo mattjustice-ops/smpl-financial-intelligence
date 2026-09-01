@@ -115,6 +115,8 @@ saas-financial-intelligence/
 | [Forecasting_Assumptions.md](./Forecasting_Assumptions.md) | Forecast drivers and roll-forward rules |
 | [Close_Process.md](./Close_Process.md) | Month-end workflow and sign-off |
 | [Reporting_Logic.md](./Reporting_Logic.md) | Report definitions and tie-out rules |
+| [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md) | Agent/model pre-flight and cross-system tie-outs |
+| [product/SMPL_Predictive_Planning_Intelligence_Framework.md](./product/SMPL_Predictive_Planning_Intelligence_Framework.md) | PPI architecture: Plan→Test→Observe→Reassess→Act; layer separation; phased plan |
 
 ---
 
@@ -151,6 +153,8 @@ All warehouse and demo tables are keyed by `organization_id`. API routes require
 
 Exports aggregate `ValidationCheck` results from executive flow and financial statements. Optional `block_on_failure=true` returns HTTP 409 when checks fail.
 
+**Governed context (foundation):** Tie-outs assume reconciled warehouse data and tenant metric definitions loaded before validation — prompts and AI narrative sit on top of that layer, not instead of it. Pre-flight checklist: [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md).
+
 ### 5. API-first reporting
 
 Dashboards and Excel/PPTX exports read the **same** service layer. No duplicate business logic in the frontend or export templates.
@@ -179,6 +183,10 @@ flowchart LR
     GAAP[gaap_revenue_forecast_service]
   end
 
+  subgraph ppi [Predictive Planning Intelligence]
+    PPI[feasibility / PoA / trajectory planned]
+  end
+
   subgraph deliver [Delivery]
     Executive[executive-flow]
     Commentary[commentary + OpenAI]
@@ -189,7 +197,11 @@ flowchart LR
   core --> forecast
   core --> deliver
   forecast --> deliver
+  forecast --> ppi
+  ppi --> Commentary
 ```
+
+Predictive Planning Intelligence sits **between** deterministic forecast outputs and the LLM — it does not replace waterfalls. See [product/SMPL_Predictive_Planning_Intelligence_Framework.md](./product/SMPL_Predictive_Planning_Intelligence_Framework.md).
 
 | Service area | Primary endpoints | Notes |
 |--------------|-------------------|-------|

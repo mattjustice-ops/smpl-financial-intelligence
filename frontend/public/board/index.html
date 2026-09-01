@@ -1753,15 +1753,11 @@ if (typeof boardValidate === 'function') {
 }
 
 function boardTsSource() {
-  var embedded = window.TS_DATA || TS_DATA;
-  if (window.SMPL_LIVE_OUTLOOK && window.SMPLOutlook && typeof window.SMPLOutlook.getOutlookTsData === 'function') {
+  if (window.SMPL_LIVE_OUTLOOK && window.SMPLOutlook && typeof window.SMPLOutlook.getOutlookTsData === "function") {
     var live = window.SMPLOutlook.getOutlookTsData();
-    if (live && window.SMPLOutlook.mergeTsData) {
-      return window.SMPLOutlook.mergeTsData(embedded, live);
-    }
     if (live) return live;
   }
-  return embedded;
+  return window.TS_DATA || TS_DATA;
 }
 
 function tsGetPeriods(sc) {

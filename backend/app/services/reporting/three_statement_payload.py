@@ -106,6 +106,7 @@ CFS_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("capex", ("capex", "capital_expenditures")),
     ("cfi", ("cfi", "net_cash_from_investing_activities")),
     ("cff", ("cff", "net_cash_from_financing_activities")),
+    ("debt", ("debt", "debt_issuance_repayment")),
     ("net_change", ("net_change", "net_change_in_cash")),
     ("ending_cash", ("ending_cash",)),
 )
@@ -339,7 +340,8 @@ def build_baseline_engine(
         is_row = dict(is_data.get(period, {}))
         _enrich_is(is_row)
         bs_row = bs_data.get(period, {})
-        cfs_row = build_cfs_from_statements(
+        loaded_cfs = _load_cfs_by_period(db, organization_id, "forecast")
+        cfs_row = loaded_cfs.get(period) or build_cfs_from_statements(
             [period],
             {period: is_row},
             {period: bs_row},
@@ -610,6 +612,37 @@ def _calculate_cfs_row(
     return cfs
 
 
+def _enrich_cfs_row(row: dict[str, float | None]) -> None:
+    """Board-facing aliases and tie-out fields for a loaded warehouse CFS row."""
+    if row.get("cff") is None and row.get("debt") is not None:
+        row["cff"] = row["debt"]
+    if row.get("debt") is None and row.get("cff") is not None:
+        row["debt"] = row["cff"]
+
+    cfo = row.get("cfo")
+    if cfo is not None:
+        cfi = row.get("cfi") or 0.0
+        cff = row.get("cff") or 0.0
+        row["net_change_computed"] = cfo + cfi + cff
+        nc = row.get("net_change")
+        if nc is not None:
+            row["cash_tie_variance"] = nc - row["net_change_computed"]
+
+
+def _load_cfs_by_period(
+    db: Session,
+    organization_id: uuid.UUID,
+    prefix: str,
+) -> dict[str, dict[str, float | None]]:
+    rows = _period_dict_from_field_specs(
+        _read_statement_table(db, organization_id, f"{prefix}_cash_flow_statement"),
+        CFS_FIELD_SPECS,
+    )
+    for row in rows.values():
+        _enrich_cfs_row(row)
+    return rows
+
+
 def build_cfs_from_statements(
     periods: list[str],
     is_data: dict[str, dict[str, float | None]],
@@ -617,7 +650,7 @@ def build_cfs_from_statements(
     *,
     cross_scenario_bs: dict[str, dict[str, float | None]] | None = None,
 ) -> dict[str, dict[str, float | None]]:
-    """Build cash flow rows from IS + BS. Balance sheet is source of truth for cash."""
+    """Build cash flow rows from IS + BS when no loaded CFS row exists for a period."""
     out: dict[str, dict[str, float | None]] = {}
     for period in periods:
         is_row = is_data.get(period, {})
@@ -626,6 +659,33 @@ def build_cfs_from_statements(
             continue
         prior_bs = _resolve_prior_bs(period, bs_data, cross_scenario_bs=cross_scenario_bs)
         out[period] = _calculate_cfs_row(is_row, bs_row, prior_bs)
+    return out
+
+
+def build_cfs_for_scenario(
+    db: Session,
+    organization_id: uuid.UUID,
+    prefix: str,
+    periods: list[str],
+    is_data: dict[str, dict[str, float | None]],
+    bs_data: dict[str, dict[str, float | None]],
+    *,
+    cross_scenario_bs: dict[str, dict[str, float | None]] | None = None,
+) -> dict[str, dict[str, float | None]]:
+    """Prefer loaded *_cash_flow_statement rows; fall back to IS+BS derivation."""
+    loaded = _load_cfs_by_period(db, organization_id, prefix)
+    computed = build_cfs_from_statements(
+        periods,
+        is_data,
+        bs_data,
+        cross_scenario_bs=cross_scenario_bs,
+    )
+    out: dict[str, dict[str, float | None]] = {}
+    for period in periods:
+        if loaded.get(period):
+            out[period] = loaded[period]
+        else:
+            out[period] = computed.get(period, {})
     return out
 
 
@@ -688,7 +748,10 @@ def build_ts_data(
             continue
 
         cross_bs = actual_bs_data if scenario in ("Forecast", "Budget") else None
-        cfs_data = build_cfs_from_statements(
+        cfs_data = build_cfs_for_scenario(
+            db,
+            organization_id,
+            prefix,
             periods,
             is_data,
             bs_data,
@@ -722,7 +785,10 @@ def build_forecast_engine_src(
     bs_by_period = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
     for period, bs_row in bs_by_period.items():
         _normalize_bs_display(bs_row)
-    cfs_by_period = build_cfs_from_statements(
+    cfs_by_period = build_cfs_for_scenario(
+        db,
+        organization_id,
+        "actual",
         sorted(is_by_period.keys()),
         is_by_period,
         bs_by_period,

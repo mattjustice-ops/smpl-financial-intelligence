@@ -44,3 +44,11 @@ docs/soc2/evidence/**/*.local.md
 docs/soc2/evidence/vendor-soc/**/*.pdf
 docs/soc2/evidence/vendor-soc/private/*
 !docs/soc2/evidence/vendor-soc/private/.gitkeep
+
+# Local partner credential dumps (never commit)
+backend/.credentials/
+
+
+# Local probe/export/catalog scratch
+backend/tmp/
+

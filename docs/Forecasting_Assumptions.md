@@ -219,3 +219,4 @@ Implement period locks as a future `period_close_status` table per `organization
 - Data tables: [Data_Model.md](./Data_Model.md)
 - Tie-outs: [Reporting_Logic.md](./Reporting_Logic.md)
 - Close calendar: [Close_Process.md](./Close_Process.md)
+- Predictive Planning Intelligence (tests whether the plan is deliverable): [product/SMPL_Predictive_Planning_Intelligence_Framework.md](./product/SMPL_Predictive_Planning_Intelligence_Framework.md)

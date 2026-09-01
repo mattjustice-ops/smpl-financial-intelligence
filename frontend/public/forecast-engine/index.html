@@ -278,6 +278,19 @@ function getOutlookCFS(p){
   return outlookRowHasValues(row)?row:null;
 }
 
+/** Loaded warehouse CFS row (Actual or Forecast) with beg/end cash from CSV model. */
+function cfsFromWarehouse(p){
+  var wh=getOutlookCFS(p);
+  if(!wh||wh.end_cash==null) return null;
+  var beg=wh.beg_cash!=null?wh.beg_cash:wh.beginning_cash;
+  var end=wh.end_cash!=null?wh.end_cash:wh.ending_cash;
+  if(end==null) return null;
+  var net=wh.net_change!=null?wh.net_change:(beg!=null?end-beg:null);
+  var row=Object.assign({},wh,{beg_cash:beg,end_cash:end});
+  if(net!=null) row.net_change=net;
+  return row;
+}
+
 function getOutlookBS(p){
   if(!window.SMPLOutlook) return null;
   var row=window.SMPLOutlook.getWarehouseBS(p,ALL_P,getCloseMonth());
@@ -402,11 +415,13 @@ function getDisplayIS(p){
 }
 
 function getDisplayBS(p){
+  var wh=getOutlookBS(p);
+  if(wh) return enrichForecastBS(wh,cfsFromWarehouse(p));
   if(isForecastPeriod(p)){
     var r=getResults()[p];
     return r&&r.bs?enrichForecastBS(r.bs,r.cfs):null;
   }
-  return getOutlookBS(p)||actualBsFromDemoTs(p)||actualBsFromSrc(p);
+  return actualBsFromDemoTs(p)||actualBsFromSrc(p);
 }
 
 var _cfsChainCache=null;
@@ -786,19 +801,19 @@ function buildCFSChain(cfg, resOverride){
   var res=resOverride||getResults();
   var allP=[...cfg.act,...cfg.fc];
   var chain={};
-  var prev_end=SRC.actuals[ACT_P[0]].beginning_cash;
+  var prev_end=null;
   allP.forEach(function(p){
+    var whRow=cfsFromWarehouse(p);
+    if(whRow){
+      if(whRow.beg_cash==null&&prev_end!=null) whRow.beg_cash=prev_end;
+      if(whRow.net_change==null&&whRow.beg_cash!=null) whRow.net_change=whRow.end_cash-whRow.beg_cash;
+      chain[p]=whRow;
+      prev_end=whRow.end_cash;
+      return;
+    }
     if(p<=getCloseMonth()){
-      var wh=getOutlookCFS(p);
-      if(wh&&wh.end_cash!=null){
-        var beg=prev_end;
-        var end=wh.end_cash;
-        var net=end-beg;
-        prev_end=end;
-        chain[p]=Object.assign({},wh,{beg_cash:beg,net_change:net,end_cash:end});
-        return;
-      }
       var a=SRC.actuals[p];
+      if(!a) return;
       var eb=(a.gross_profit||0)-((a.sm||0)+(a.rd||0)+(a.ga||0));
       var pt=eb-(a.da||0)-(a.interest||0);
       var tax=pt>0?Math.round(pt*0.30):0;
@@ -808,7 +823,7 @@ function buildCFSChain(cfg, resOverride){
       var cfo=ni+a.da+sbc+car+cdr+cap+pre;
       var capex=a.cfi;
       var net=cfo+capex;
-      var beg=prev_end;
+      var beg=prev_end!=null?prev_end:(a.beginning_cash||0);
       var end=beg+net;
       prev_end=end;
       chain[p]={beg_cash:beg,ni:ni,da:a.da,sbc:sbc,chg_ar:car,chg_dr:cdr,
@@ -816,16 +831,20 @@ function buildCFSChain(cfg, resOverride){
                 cff:0,net_change:net,end_cash:end,is_actual:true};
     } else {
       var fc=res[p]&&res[p].cfs?res[p].cfs:null;
-      if(fc){
-        var beg=prev_end;
-        var net=fc.cfo+fc.cfi;
-        var end=beg+net;
-        var row={};
-        for(var k in fc) row[k]=fc[k];
-        row.beg_cash=beg; row.net_change=net; row.end_cash=end;
-        chain[p]=row;
-        prev_end=end;
+      if(!fc) return;
+      if(!_scenarioDirty&&leversAtDefault()&&fc.end_cash!=null&&fc.beg_cash!=null){
+        chain[p]=Object.assign({},fc);
+        prev_end=fc.end_cash;
+        return;
       }
+      var beg=prev_end!=null?prev_end:(fc.beg_cash||0);
+      var net=fc.cfo+(fc.cfi||0)+(fc.cff||0);
+      var end=beg+net;
+      var row={};
+      for(var k in fc) row[k]=fc[k];
+      row.beg_cash=beg; row.net_change=net; row.end_cash=end;
+      chain[p]=row;
+      prev_end=end;
     }
   });
   return chain;
@@ -855,7 +874,10 @@ function updLabels(){
   if(cap) document.getElementById('v-capex').textContent='$'+cap.value+'K';
 }
 
-function refresh(){markScenarioDirty();updLabels();showTab(curTab);}
+function refresh(opts){
+  if(!opts||!opts.skipDirty) markScenarioDirty();
+  updLabels();showTab(curTab);
+}
 
 // \u2500\u2500 TABS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function showTab(name,btn){
@@ -986,13 +1008,39 @@ function renderOverview(area){
   const res=getResults();
   const lv=getLevers();
   const dec=res[FC_P[FC_P.length-1]];
-  const gap=dec.arr.arr_eop-97503876;
+  // Dec target = dashed "Base plan" in buildOverviewCharts: 83.445+(i+1)*2 $M (Jun close → ~$95.44M).
+  const decBasePlanM=+(83.445+FC_P.length*2).toFixed(2);
+  const target=decBasePlanM*1e6;
+  const gap=dec.arr.arr_eop-target;
   let gapHtml='';
   if(Math.abs(gap)>100000){
-    gapHtml=`<div class="gap-alert">
-      <strong>${fV(gap)}</strong> vs base forecast ($97.5M target). 
-      ${gap<0?'Pipeline implies '+fM(dec.arr.arr_eop,1)+'. To close: increase NB attainment ~'+Math.round(-gap/dec.arr.arr_nb*100)+'% or improve renewal rates ~'+Math.round(-gap/SRC.renewals['2026-06'].arr*100)+'pp.':'Tracking ahead of plan.'}
-    </div>`;
+    if(gap>=0){
+      gapHtml=`<div class="gap-alert"><strong>${fV(gap)}</strong> vs base plan (${fM(target,1)}). Tracking ahead of plan.</div>`;
+    } else {
+      let sumNb=0,sumGrossRen=0,sumRenW=0;
+      FC_P.forEach(p=>{
+        sumNb+=(res[p]?.arr?.arr_nb)||0;
+        const ren=SRC.renewals[p];
+        if(ren&&ren.arr){sumGrossRen+=ren.arr;sumRenW+=ren.weighted||0;}
+      });
+      const nbPct=sumNb>0?Math.round((-gap/sumNb)*100):null;
+      const renPp=sumGrossRen>0?Math.round((-gap/sumGrossRen)*100):null;
+      const baseRenRate=sumGrossRen>0?sumRenW/sumGrossRen:0;
+      const renHeadroomPp=Math.max(0,(1-(baseRenRate+lv.ren_adj))*100);
+      const tips=[];
+      if(nbPct!=null){
+        tips.push(nbPct>200
+          ?`increase NB attainment by ~${nbPct}% (would require ~${100+nbPct}% of weighted pipeline; infeasible at current pool)`
+          :`increase NB attainment by ~${nbPct}%`);
+      }
+      if(renPp!=null){
+        tips.push(renPp>renHeadroomPp+0.5
+          ?`improve renewal rates by ~${renPp}pp (would push rates above 100%; infeasible at current pool)`
+          :`improve renewal rates by ~${renPp}pp`);
+      }
+      const closeLine=tips.length?` To close across remaining forecast months: ${tips.join(' or ')}.`:'';
+      gapHtml=`<div class="gap-alert"><strong>${fV(gap)}</strong> vs base plan (${fM(target,1)}). Pipeline implies ${fM(dec.arr.arr_eop,1)}.${closeLine}</div>`;
+    }
   }
   area.innerHTML=`<div class="slide">
     <div class="slide-title">Rolling Forecast . ${hz.replace('p','+')} . ${HORIZON[hz].label}</div>
@@ -1999,7 +2047,8 @@ updLabels();
         if (window.SMPLProvenance && typeof window.SMPLProvenance.ingestOutlook === 'function') {
           window.SMPLProvenance.ingestOutlook(data);
         }
-        if (typeof refresh === 'function') refresh();
+        if (typeof invalidateCfsChain === 'function') invalidateCfsChain();
+        if (typeof refresh === 'function') refresh({ skipDirty: true });
         if (window.SMPLProvenance) {
           try {
             window.SMPLProvenance.annotateDom(document);

@@ -124,6 +124,20 @@ pipeline.closed_won(P) ≈ mrr_waterfall.new_arr(P)
 
 Tolerance: default **$1.00** (`validation_service.compare_values`). Status `fail` if outside tolerance.
 
+### Cross-system tie-out patterns (CRM ↔ billing ↔ ERP)
+
+When a customer runs a **billing sub-ledger** (Maxio, Stripe Billing, Chargebee) plus CRM and ERP:
+
+| Layer | Role in SMPL | Tie-out |
+|-------|--------------|---------|
+| **CRM** | Pipeline waterfall, opportunity drilldown, **forecast** bookings | `closed_won` ↔ MRR `new_arr` (bookings date policy must match tenant) |
+| **Billing sub-ledger** | Subscription MRR/ARR, contract metadata, rev-rec schedules | Billing-export new/churn/expansion ↔ MRR waterfall; deferred billings ↔ deferred waterfall |
+| **ERP / GL** | Audited P&L, balance sheet, cash, deferred balance | GL revenue ↔ deferred `recognized`; GL deferred ↔ waterfall ending |
+
+**Maxio-shaped stack (common mid-market SaaS):** CRM feeds contracts into Maxio; Maxio posts rev-rec to NetSuite/QBO/Rillet/Intacct. SMPL reads all three — CRM for pipeline/forecast, Maxio (or export) for **actual** ARR/rev-rec, ERP for GL. Do not treat CRM closed-won as SoT for *actual* new ARR when Maxio is the billing system of record; reconcile both and fail on `$1` gaps. See [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md) §3.
+
+**Stand by the numbers:** prose and AI commentary never override a failed validation check. Export with `block_on_failure=true` returns HTTP 409 until ties pass or exceptions are documented in variance commentary.
+
 **Closed actuals severity labels** (do not call multi-thousand gaps “rounding”):
 
 | |Δ| | Label |

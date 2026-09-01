@@ -3,7 +3,7 @@
 > Practical takeaways from external “Claude Skills” workflows, mapped onto **SMPL** — not a Skills product UI and not marketing claims.  
 > **Honesty:** SOC 2 Type I readiness ≠ certified. AI **explains after validation**; do not invent methodologies.
 
-Related: [Reporting_Logic.md](./Reporting_Logic.md) · [EXECUTIVE_REPORTING_GOVERNANCE.md](./EXECUTIVE_REPORTING_GOVERNANCE.md) · [soc2/controls/ai_claim_verify.md](./soc2/controls/ai_claim_verify.md) · [soc2/policies/P15_ai_llm_data_handling.md](./soc2/policies/P15_ai_llm_data_handling.md) · [ANTHROPIC_SETUP.md](./ANTHROPIC_SETUP.md)
+Related: [Reporting_Logic.md](./Reporting_Logic.md) · [EXECUTIVE_REPORTING_GOVERNANCE.md](./EXECUTIVE_REPORTING_GOVERNANCE.md) · [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md) · [soc2/controls/ai_claim_verify.md](./soc2/controls/ai_claim_verify.md) · [soc2/policies/P15_ai_llm_data_handling.md](./soc2/policies/P15_ai_llm_data_handling.md) · [ANTHROPIC_SETUP.md](./ANTHROPIC_SETUP.md)
 
 ---
 
@@ -47,6 +47,13 @@ Before writing MD&A or board narrative:
 1. Resolve period, scenario (Actual / Budget / Forecast), and metric definitions from freeze + payload.
 2. If the ask is underspecified (which month? bookings close-date vs start-date?), **ask** (interactive) or **flag insufficient evidence** (export) — do not paper over gaps.
 3. Only then draft commentary.
+
+**Fluvo CFO webinar (2026-08-26) — same posture, plainer words:**
+
+- **Foundation first:** reconciled data + governed definitions before prompt tricks (see [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md) §1).
+- **Pre-flight in one message:** list missing/ambiguous inputs before running analysis — do not start with “What is my cash runway?” on a half-loaded model.
+- **Plan before execute:** for Excel/forecast edits, *“Give me a plan before you change anything”* — model must not rewrite cells without approval.
+- **Checks step (PGCI + C):** self-validate; flag gaps; **never invent numbers** — in finance you only catch hallucinations by auditing figures, not by reading prose.
 
 **Product hooks:**
 

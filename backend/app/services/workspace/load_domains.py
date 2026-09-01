@@ -53,7 +53,7 @@ LOAD_DOMAINS: list[dict[str, Any]] = [
             "forecast_revenue_schedule",
             "customers",
         ],
-        "typical_systems": ["Stripe", "Chargebee", "Salesforce CPQ"],
+        "typical_systems": ["Stripe", "Chargebee", "Maxio", "Salesforce CPQ"],
     },
     {
         "id": "cash",

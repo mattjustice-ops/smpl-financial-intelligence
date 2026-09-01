@@ -986,13 +986,39 @@ function renderOverview(area){
   const res=getResults();
   const lv=getLevers();
   const dec=res[FC_P[FC_P.length-1]];
-  const gap=dec.arr.arr_eop-97503876;
+  // Dec target = dashed "Base plan" in buildOverviewCharts: 83.445+(i+1)*2 $M (Jun close → ~$95.44M).
+  const decBasePlanM=+(83.445+FC_P.length*2).toFixed(2);
+  const target=decBasePlanM*1e6;
+  const gap=dec.arr.arr_eop-target;
   let gapHtml='';
   if(Math.abs(gap)>100000){
-    gapHtml=`<div class="gap-alert">
-      <strong>${fV(gap)}</strong> vs base forecast ($97.5M target). 
-      ${gap<0?'Pipeline implies '+fM(dec.arr.arr_eop,1)+'. To close: increase NB attainment ~'+Math.round(-gap/dec.arr.arr_nb*100)+'% or improve renewal rates ~'+Math.round(-gap/SRC.renewals['2026-06'].arr*100)+'pp.':'Tracking ahead of plan.'}
-    </div>`;
+    if(gap>=0){
+      gapHtml=`<div class="gap-alert"><strong>${fV(gap)}</strong> vs base plan (${fM(target,1)}). Tracking ahead of plan.</div>`;
+    } else {
+      let sumNb=0,sumGrossRen=0,sumRenW=0;
+      FC_P.forEach(p=>{
+        sumNb+=(res[p]?.arr?.arr_nb)||0;
+        const ren=SRC.renewals[p];
+        if(ren&&ren.arr){sumGrossRen+=ren.arr;sumRenW+=ren.weighted||0;}
+      });
+      const nbPct=sumNb>0?Math.round((-gap/sumNb)*100):null;
+      const renPp=sumGrossRen>0?Math.round((-gap/sumGrossRen)*100):null;
+      const baseRenRate=sumGrossRen>0?sumRenW/sumGrossRen:0;
+      const renHeadroomPp=Math.max(0,(1-(baseRenRate+lv.ren_adj))*100);
+      const tips=[];
+      if(nbPct!=null){
+        tips.push(nbPct>200
+          ?`increase NB attainment by ~${nbPct}% (would require ~${100+nbPct}% of weighted pipeline; infeasible at current pool)`
+          :`increase NB attainment by ~${nbPct}%`);
+      }
+      if(renPp!=null){
+        tips.push(renPp>renHeadroomPp+0.5
+          ?`improve renewal rates by ~${renPp}pp (would push rates above 100%; infeasible at current pool)`
+          :`improve renewal rates by ~${renPp}pp`);
+      }
+      const closeLine=tips.length?` To close across remaining forecast months: ${tips.join(' or ')}.`:'';
+      gapHtml=`<div class="gap-alert"><strong>${fV(gap)}</strong> vs base plan (${fM(target,1)}). Pipeline implies ${fM(dec.arr.arr_eop,1)}.${closeLine}</div>`;
+    }
   }
   area.innerHTML=`<div class="slide">
     <div class="slide-title">Rolling Forecast . ${hz.replace('p','+')} . ${HORIZON[hz].label}</div>
