@@ -24,22 +24,42 @@
   async function resolveOrgId(options) {
     options = options || {};
     var fromQuery = resolveOrgIdFromQuery();
-    if (fromQuery) return fromQuery;
-    if (global.SMPL_ORG_ID) return global.SMPL_ORG_ID;
+    var sessionOrgs = null;
+    try {
+      var res = await fetch("/api/auth/session", { credentials: "include" });
+      if (res.ok) {
+        var j = await res.json();
+        if (j && j.user) {
+          sessionOrgs = {
+            activeId: j.user.activeOrganizationId || null,
+            orgIds: (j.user.organizations || [])
+              .map(function (o) {
+                return o.organizationId;
+              })
+              .filter(Boolean),
+          };
+        }
+      }
+    } catch (_) {}
+
+    function pick(preferred) {
+      if (!sessionOrgs || !sessionOrgs.orgIds.length) return preferred || null;
+      if (preferred && sessionOrgs.orgIds.indexOf(preferred) >= 0) return preferred;
+      if (sessionOrgs.activeId && sessionOrgs.orgIds.indexOf(sessionOrgs.activeId) >= 0) {
+        return sessionOrgs.activeId;
+      }
+      return sessionOrgs.orgIds[0];
+    }
+
+    if (fromQuery) return pick(fromQuery);
+    if (global.SMPL_ORG_ID) return pick(global.SMPL_ORG_ID);
 
     if (options.waitForParent !== false) {
       var waited = await waitForParentOrg(options.parentWaitMs || 4000);
-      if (waited) return waited;
+      if (waited) return pick(waited);
     }
 
-    try {
-      var res = await fetch("/api/auth/session", { credentials: "include" });
-      if (!res.ok) return null;
-      var j = await res.json();
-      return j && j.user && j.user.activeOrganizationId ? j.user.activeOrganizationId : null;
-    } catch (_) {
-      return null;
-    }
+    return pick(null);
   }
 
   function waitForParentOrg(timeoutMs) {
@@ -81,10 +101,15 @@
   global.addEventListener("message", function (event) {
     if (event.origin !== global.location.origin) return;
     var data = event.data;
-    if (!data || data.type !== "smpl:org" || !data.organizationId) return;
-    global.SMPL_ORG_ID = data.organizationId;
-    if (typeof global.SMPL_ON_ORG_READY === "function") {
-      global.SMPL_ON_ORG_READY(data.organizationId);
+    if (!data || !data.type) return;
+    if (data.type === "smpl:org" && data.organizationId) {
+      global.SMPL_ORG_ID = data.organizationId;
+      if (typeof global.SMPL_ON_ORG_READY === "function") {
+        global.SMPL_ON_ORG_READY(data.organizationId);
+      }
+    }
+    if (data.type === "smpl:api-base" && data.apiBase) {
+      global.SMPL_LONG_RUNNING_API_BASE = String(data.apiBase).replace(/\/$/, "");
     }
   });
 
@@ -553,6 +578,29 @@
 
     global.SMPL_OUTLOOK_PAYLOAD = data;
     global.SMPL_ARR_WATERFALL = data.ARR_WATERFALL || null;
+    // Stamp period labels onto the waterfall so consumers index Beginning[i] correctly
+    // even when the array spans a fiscal range that is not "Jan..Dec of close year".
+    if (global.SMPL_ARR_WATERFALL && data.meta && data.meta.start_period && data.meta.end_period) {
+      var stamped = [];
+      var sp = String(data.meta.start_period).split("-");
+      var ep = String(data.meta.end_period).split("-");
+      var y = parseInt(sp[0], 10);
+      var m = parseInt(sp[1], 10);
+      var ey = parseInt(ep[0], 10);
+      var em = parseInt(ep[1], 10);
+      while (y < ey || (y === ey && m <= em)) {
+        stamped.push(y + "-" + String(m).padStart(2, "0"));
+        m += 1;
+        if (m > 12) {
+          m = 1;
+          y += 1;
+        }
+        if (stamped.length > 36) break;
+      }
+      if (stamped.length && (!global.SMPL_ARR_WATERFALL.periods || !global.SMPL_ARR_WATERFALL.periods.length)) {
+        global.SMPL_ARR_WATERFALL.periods = stamped;
+      }
+    }
     global.SMPL_BASELINE_ENGINE = data.baseline_engine || null;
     global.SMPL_TS_DATA = data.TS_DATA || null;
     global.SMPL_CASH_BRIDGE = data.CASH_BRIDGE || null;
