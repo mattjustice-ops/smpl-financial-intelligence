@@ -1035,7 +1035,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 3;
+const BUDGET_PLAN_REV = 4;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
 /**
  * Seeded from outlook hist every load — never persist, or localhost and /app diverge.
@@ -1079,6 +1079,7 @@ function loadBudgetState() {
     try {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v1');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v2');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v3');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1116,6 +1117,7 @@ function clearBudgetState() {
     localStorage.removeItem(BUDGET_STATE_KEY);
     localStorage.removeItem('smpl.budgetEngine.fy2027.v1');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v2');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v3');
   } catch (e) { /* ignore */ }
 }
 
@@ -1314,38 +1316,59 @@ function histRowHasMovement(row) {
   return ((row.nb || 0) + (row.exp || 0)) > 0;
 }
 
-/** Scale FY26 hist so Dec ending matches Jan BOP_LOCK (board/forecast $90.29M). */
-let _budgetHistScale = null;
-function budgetHistScaleToBopLock() {
-  if (_budgetHistScale != null) return _budgetHistScale;
-  let dec = null;
+/** Raw Dec'26 ending from outlook/demo WF — never go through getHistRow (avoids cache/scale loops). */
+function peekUnscaledDecEndingArr() {
   const decPeriod = `${BUDGET_YEAR - 1}-12`;
-  // Prefer live waterfall Dec before demo seed ($97.56M).
-  const liveWf = window.SMPL_ARR_WATERFALL;
-  if (liveWf && liveWf.Ending && liveWf.Ending.length) {
-    const periods = allOutlookPeriods();
-    const i = periods.indexOf(decPeriod);
-    if (i >= 0 && liveWf.Ending[i] != null) dec = Number(liveWf.Ending[i]);
-    else if (liveWf.Ending.length >= 12) dec = Number(liveWf.Ending[11]);
+  const allP = allOutlookPeriods();
+  const num = (v) => {
+    if (v == null || v === '') return null;
+    const n = Number(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : null;
+  };
+  if (window.SMPLOutlook && typeof window.SMPLOutlook.getCombinedArr === 'function') {
+    try {
+      const raw = window.SMPLOutlook.getCombinedArr(decPeriod, allP, CLOSE_MONTH);
+      const eop = raw ? num(raw.arr_eop) : null;
+      if (eop != null && eop > 0) return eop;
+    } catch (e) { /* ignore */ }
   }
-  if (dec == null || !(dec > 0)) {
-    const demoWf = window.SMPL_DEMO_WF_TABLE;
-    if (demoWf && demoWf.Ending && demoWf.Ending.length) {
-      dec = Number(demoWf.Ending[Math.min(11, demoWf.Ending.length - 1)]);
+  const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE;
+  if (wf && wf.Ending && wf.Ending.length) {
+    const periods = (wf.periods && wf.periods.length) ? wf.periods : allP;
+    let i = periods.indexOf(decPeriod);
+    if (i < 0 && wf.Ending.length >= 12) i = 11;
+    if (i >= 0) {
+      const eop = num(wf.Ending[i]);
+      if (eop != null && eop > 0) return eop;
     }
   }
-  _budgetHistScale = dec && dec > 0 && Math.abs(dec - BOP_LOCK) > 5e4
-    ? BOP_LOCK / dec
-    : 1;
+  // Embedded demo seed Dec fingerprint (what /app was stuck on).
+  return 97560000;
+}
+
+/**
+ * Scale FY26 hist so Dec ending matches Jan BOP_LOCK ($90.29M).
+ * Always recompute from raw Dec — do not trust a stale scale=1 cache after hydrate.
+ */
+let _budgetHistScale = null;
+function budgetHistScaleToBopLock() {
+  const dec = peekUnscaledDecEndingArr();
+  const next = dec > 0 && Math.abs(dec - BOP_LOCK) > 1000 ? BOP_LOCK / dec : 1;
+  // If hydrate/demo flipped under us, invalidate cached hist rows so UI cannot keep $97.56M.
+  if (_budgetHistScale != null && Math.abs(_budgetHistScale - next) > 1e-9) {
+    STATE.histRows = {};
+    STATE.gtmHistRows = {};
+  }
+  _budgetHistScale = next;
   return _budgetHistScale;
 }
 
 function applyBudgetHistScale(row) {
   if (!row) return row;
   const scale = budgetHistScaleToBopLock();
-  if (scale === 1 || row._budgetScaled) return row;
+  if (Math.abs(scale - 1) < 1e-12) return row;
+  if (row._budgetScaled && Math.abs((row._budgetScale || 1) - scale) < 1e-12) return row;
   return {
-    ...row,
     bop: (row.bop || 0) * scale,
     eop: (row.eop || 0) * scale,
     nb: (row.nb || 0) * scale,
@@ -1354,6 +1377,10 @@ function applyBudgetHistScale(row) {
     cont: (row.cont || 0) * scale,
     churn: (row.churn || 0) * scale,
     nn: (row.nn || 0) * scale,
+    grr: row.grr,
+    nrr: row.nrr,
+    _src: row._src,
+    _fallback: row._fallback,
     _budgetScaled: true,
     _budgetScale: scale,
   };
@@ -1456,6 +1483,10 @@ function getHistRow(period) {
   }
   if (!row) row = getDemoHistRow(period);
   row = applyBudgetHistScale(row);
+  // Dec must land exactly on the Jan'27 lock — no $97.56M next to a $90.29M BOP.
+  if (row && period === `${BUDGET_YEAR - 1}-12` && Math.abs((row.eop || 0) - BOP_LOCK) > 1) {
+    row = { ...row, eop: BOP_LOCK, _eopForcedToBopLock: true };
+  }
   if (row) STATE.histRows[period] = row;
   return row;
 }
