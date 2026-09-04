@@ -45,6 +45,8 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .slide-sub{font-size:11.5px;color:var(--text2);margin-bottom:14px}
 .ctx-banner{font-size:11px;color:var(--text2);background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r);padding:8px 12px;margin-bottom:12px}
 .ctx-banner strong{color:var(--amber);font-family:var(--mono)}
+.ctx-banner.warn{border-color:var(--amber);background:rgba(212,160,64,0.08)}
+.ctx-banner.tie{font-size:10.5px;line-height:1.45}
 .bud-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;table-layout:fixed;margin-bottom:16px}
 .bud-tbl th{padding:4px 6px;font-size:9px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--border2);text-align:right;white-space:nowrap}
 .bud-tbl thead th{position:sticky;top:0;z-index:5;background:var(--bg);box-shadow:inset 0 -1px 0 var(--border2)}
@@ -1033,11 +1035,11 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 2;
+const BUDGET_PLAN_REV = 3;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
 /**
  * Seeded from outlook hist every load — never persist, or localhost and /app diverge.
- * Scalar levers + intentional HC/P&L edits still persist within a browser.
+ * Manual sales hire overrides also ephemeral so auto gap math stays the source of truth.
  */
 const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
   'mixByPeriod',
@@ -1046,9 +1048,11 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
   'gtmChannelCplByPeriod',
   'histRows',
   'gtmHistRows',
+  'salesHireOverride',
 ]);
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
+  '_salesHireManual',
   '_assureNarrative', '_assureHistoryNarrative', '_assureScenarioNarrative',
   '_assureScenarioSuite', '_assureShowNerd',
 ]);
@@ -1062,7 +1066,8 @@ function persistBudgetState() {
       out[k] = STATE[k];
     }
     out.curTab = curTab;
-    out._salesHireManual = !!STATE._salesHireManual;
+    // Never persist manual hire overrides — they are the #1 Sales tab drift source.
+    out._salesHireManual = false;
     localStorage.setItem(BUDGET_STATE_KEY, JSON.stringify(out));
   } catch (e) {
     console.warn('Budget engine: could not save assumptions', e);
@@ -1071,9 +1076,9 @@ function persistBudgetState() {
 
 function loadBudgetState() {
   try {
-    // Drop legacy keys so old poisoned mix/GTM caches cannot reload.
     try {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v1');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v2');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1081,21 +1086,21 @@ function loadBudgetState() {
     if (!saved || typeof saved !== 'object') return false;
     if (saved._planRev != null && saved._planRev !== BUDGET_PLAN_REV) return false;
     for (const k of Object.keys(saved)) {
-      if (k === '_planRev') continue;
+      if (k === '_planRev' || k === '_salesHireManual') continue;
       if (BUDGET_PERSIST_SKIP.has(k) || BUDGET_EPHEMERAL_SEED_KEYS.has(k)) continue;
       if (k === 'curTab') {
         curTab = saved.curTab || 'overview';
         continue;
       }
-      if (k === '_salesHireManual' || Object.prototype.hasOwnProperty.call(STATE, k)) {
+      if (Object.prototype.hasOwnProperty.call(STATE, k)) {
         STATE[k] = saved[k];
       }
     }
-    // Migrate legacy annual-billing deferred lever (6–6.5 mo) → H2 steady-state (~0.16 mo)
+    STATE._salesHireManual = false;
+    STATE.salesHireOverride = {};
     if (STATE.drMonthsRev != null && STATE.drMonthsRev >= 2) {
       STATE.drMonthsRev = STATE_DEFAULTS.drMonthsRev;
     }
-    // Migrate legacy AP % (18) → Dec H2 close (~13)
     if (STATE.apPctOpex != null && Math.abs(STATE.apPctOpex - 18) < 0.05) {
       STATE.apPctOpex = STATE_DEFAULTS.apPctOpex;
     }
@@ -1110,22 +1115,87 @@ function clearBudgetState() {
   try {
     localStorage.removeItem(BUDGET_STATE_KEY);
     localStorage.removeItem('smpl.budgetEngine.fy2027.v1');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v2');
   } catch (e) { /* ignore */ }
 }
 
 /** Compact fingerprint so localhost vs /app assumption drift is visible. */
 function budgetAssumptionFingerprint() {
+  let salesBit = '';
+  try {
+    const t = salesTieOutDrivers();
+    salesBit = [
+      'fy26nb' + Math.round((t.fy26Nb || 0) / 1e6) + 'M',
+      'fy26exp' + Math.round((t.fy26Exp || 0) / 1e6) + 'M',
+      'ch' + Math.round((t.churnBase || 0) / 1e6) + 'M',
+      'nbb' + Math.round((t.existingNbQuota || 0) / 1e6) + 'M',
+      'csb' + Math.round((t.existingCsQuota || 0) / 1e6) + 'M',
+      'csd' + Math.round((t.csDemand || 0) / 1e6) + 'M',
+      'csh' + (t.csGrowthHires || 0),
+      'src' + (t.histSource || '?'),
+    ].join(' · ');
+  } catch (e) { /* sales not ready */ }
   return [
     'r' + BUDGET_PLAN_REV,
     'yoy' + STATE.yoyEndingArrGrowthPct,
     'pipe' + STATE.pipelineCoverageMult,
     'attr' + STATE.salesAttritionPct,
     'qlift' + (STATE.quotaYoyLiftPct || 0),
-    'bench' + STATE.existingBenchCoverPct,
     'csc' + STATE.csChurnCoverageMult,
-    'cogs' + STATE.cogsPctRev,
-    'cash' + Math.round((STATE.cashFloorDec || 0) / 1e6) + 'M',
-  ].join(' · ');
+    salesBit,
+  ].filter(Boolean).join(' · ');
+}
+
+/** Hist + demand drivers behind Sales Over/Under and hire counts. */
+function salesTieOutDrivers() {
+  const sales = computeSalesPlan();
+  const m = sales.meta;
+  const fy26Nb = fy26NbTotal();
+  const fy26Exp = fy26ExpTotal();
+  const churnBase = fy26ChurnContTotal();
+  let monthsWithArr = 0;
+  let monthsDemoFallback = 0;
+  let monthsOutlook = 0;
+  for (const q of CTX_QUARTERS) {
+    for (const p of q.months) {
+      const r = getHistRow(p);
+      if (!r) continue;
+      monthsWithArr += 1;
+      if (r._src === 'demo' || r._fallback) monthsDemoFallback += 1;
+      else if (r._src === 'outlook') monthsOutlook += 1;
+    }
+  }
+  const histSource = monthsDemoFallback > 0 && monthsDemoFallback >= monthsOutlook
+    ? (monthsOutlook ? 'mixed-demo-fallback' : 'demo')
+    : (monthsOutlook ? 'outlook' : (monthsWithArr ? 'wf' : 'empty'));
+  const nbOuFy = BUD_P.reduce((s, p) => s + (sales.byPeriod[p].nbMonthGap || 0), 0);
+  const csOuFy = BUD_P.reduce((s, p) => s + (sales.byPeriod[p].csMonthGap || 0), 0);
+  const seedUnscaled = (m.scaleNb26 == null || Math.abs(m.scaleNb26 - 1) < 1e-9) && fy26Nb <= 0;
+  return {
+    histSource,
+    monthsWithArr,
+    monthsDemoFallback,
+    monthsOutlook,
+    fy26Nb,
+    fy26Exp,
+    churnBase,
+    fyNb: m.fyNb,
+    fyExp: m.fyExp,
+    csDemand: m.csDemand,
+    csFloor: m.csFloor,
+    existingNbQuota: m.existingNbQuota,
+    existingCsQuota: m.existingCsQuota,
+    nbGapSigned: m.nbGapSigned,
+    csGapSigned: m.csGapSigned,
+    nbGrowthHires: m.nbGrowthHires,
+    csGrowthHires: m.csGrowthHires,
+    scaleNb26: m.scaleNb26,
+    scaleCs26: m.scaleCs26,
+    nbOuFy,
+    csOuFy,
+    histThin: monthsWithArr < 12 || fy26Nb <= 0 || fy26Exp <= 0 || seedUnscaled,
+    usedDemoFallback: monthsDemoFallback > 0,
+  };
 }
 
 function reseedPlanFromHistory(reason) {
@@ -1135,6 +1205,8 @@ function reseedPlanFromHistory(reason) {
   STATE.gtmRatesByPeriod = {};
   STATE.gtmChannelMixByPeriod = {};
   STATE.gtmChannelCplByPeriod = {};
+  STATE.salesHireOverride = {};
+  STATE._salesHireManual = false;
   seedMixFromHistory();
   seedGtmFromHistory();
   return reason || 'reseeding';
@@ -1211,12 +1283,14 @@ function allOutlookPeriods() {
   return Array.from({ length: len }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
 }
 
-function getHistRowFromWfTable(period) {
-  const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE;
-  if (!wf || !wf.Beginning) return null;
-  const periods = allOutlookPeriods();
-  const i = periods.indexOf(period);
-  if (i < 0) return null;
+function histRowHasMovement(row) {
+  if (!row) return false;
+  return ((row.nb || 0) + (row.exp || 0)) > 0;
+}
+
+/** Build a hist row from a waterfall table + period index. */
+function histRowFromWfAt(wf, i) {
+  if (!wf || !wf.Beginning || i < 0 || i >= wf.Beginning.length) return null;
   const num = (arr) => (arr && arr[i] != null ? Number(String(arr[i]).replace(/,/g, '')) : 0);
   const nb = num(wf['New Business'] || wf.New_Business);
   const exp = num(wf.Expansion);
@@ -1225,6 +1299,7 @@ function getHistRowFromWfTable(period) {
   const churn = Math.abs(num(wf.Churn));
   const bop = num(wf.Beginning);
   const eop = num(wf.Ending);
+  if (bop == null && eop == null && nb === 0 && exp === 0) return null;
   const nn = nb + exp + react - cont - churn;
   return {
     bop, nb, exp, react, cont, churn, eop, nn,
@@ -1233,12 +1308,41 @@ function getHistRowFromWfTable(period) {
   };
 }
 
+/**
+ * Embedded demo waterfall for FY of CLOSE_MONTH (always Jan–Dec index 0..11).
+ * Used when live warehouse Ending validates but New Business / Expansion are empty —
+ * that path previously forced quota scale=1 (full seed book → fake multi-$M surplus).
+ */
+function getDemoHistRow(period) {
+  const wf = window.SMPL_DEMO_WF_TABLE;
+  if (!wf || !wf.Beginning) return null;
+  const year = CLOSE_MONTH.slice(0, 4);
+  if (!period || period.slice(0, 4) !== year) return null;
+  const mo = parseInt(period.slice(5, 7), 10);
+  if (!mo || mo < 1 || mo > wf.Beginning.length) return null;
+  const row = histRowFromWfAt(wf, mo - 1);
+  if (row) row._src = 'demo';
+  return row;
+}
+
+function getHistRowFromWfTable(period) {
+  const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE;
+  if (!wf || !wf.Beginning) return null;
+  const periods = allOutlookPeriods();
+  const i = periods.indexOf(period);
+  if (i < 0) return getDemoHistRow(period);
+  const row = histRowFromWfAt(wf, i);
+  if (histRowHasMovement(row)) return row;
+  return getDemoHistRow(period) || row;
+}
+
 function getHistRow(period) {
   if (STATE.histRows[period]) return STATE.histRows[period];
   const allP = allOutlookPeriods();
+  let row = null;
   if (window.SMPLOutlook && window.SMPLOutlook.getCombinedArr) {
     const raw = window.SMPLOutlook.getCombinedArr(period, allP, CLOSE_MONTH);
-    if (raw) {
+    if (raw && (raw.arr_bop != null || raw.arr_eop != null || raw.arr_nb != null || raw.arr_exp != null)) {
       const nb = raw.arr_nb || 0;
       const exp = raw.arr_exp || 0;
       const react = raw.arr_react || 0;
@@ -1246,17 +1350,24 @@ function getHistRow(period) {
       const churn = raw.arr_nr_churn || 0;
       const bop = raw.arr_bop;
       const nn = nb + exp + react - cont - churn;
-      const row = {
+      row = {
         bop, nb, exp, react, cont, churn, eop: raw.arr_eop, nn,
         grr: raw.grr, nrr: raw.nrr,
+        _src: 'outlook',
       };
-      STATE.histRows[period] = row;
-      return row;
     }
   }
-  const fallback = getHistRowFromWfTable(period);
-  if (fallback) STATE.histRows[period] = fallback;
-  return fallback;
+  if (!histRowHasMovement(row)) {
+    const fallback = getHistRowFromWfTable(period);
+    if (histRowHasMovement(fallback)) row = fallback;
+    else if (!row) row = fallback;
+  }
+  if (!histRowHasMovement(row)) {
+    const demo = getDemoHistRow(period);
+    if (demo) row = { ...demo, _fallback: 'demo-empty-live' };
+  }
+  if (row) STATE.histRows[period] = row;
+  return row;
 }
 
 function buildQuarterSummary(q) {
@@ -4364,18 +4475,42 @@ function renderSalesQuotaMonthsRow(label, months12, opts) {
   return html;
 }
 
+function fmtOuInline(v) {
+  if (v == null || isNaN(v)) return '—';
+  if (Math.abs(v) < 0.5) return fmtM(0);
+  return (v > 0 ? '+' : '') + fmtM(v);
+}
+
 function renderSales() {
   const sales = computeSalesPlan();
   const m = sales.meta;
+  const tie = salesTieOutDrivers();
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
   const segs = sales.segments;
   const autoTag = !STATE._salesHireManual ? '<span class="lock-tag">auto from gap</span>' : '';
   const rampTag = `${Math.round(HIRE_QUOTA_RAMP[0] * 100)}/${Math.round(HIRE_QUOTA_RAMP[1] * 100)}/100`;
+  const fmtGap = (signed) => signed < 0 ? `(${fmtM(-signed)}) surplus` : fmtM(signed);
+  const tieWarn = tie.usedDemoFallback || tie.histThin;
 
   let html = `
     <div class="slide-title">Sales · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">Hires = (budget − existing full quota book) ÷ avg $/head. Ramp ${rampTag} shapes capacity in the waterfall only — it does not multiply headcount. Quotas ${m.quotaYoyLiftPct ? `+${m.quotaYoyLiftPct.toFixed(0)}% vs FY26` : 'flat vs FY26'}.</div>
     ${adjLegend()}
+    <div class="ctx-banner tie${tieWarn ? ' warn' : ''}">
+      <strong>Sales tie-out</strong> · hist <code>${tie.histSource}</code>
+      (${tie.monthsWithArr}/12 mo${tie.monthsDemoFallback ? `, ${tie.monthsDemoFallback} demo-fallback` : ''})
+      · FY26 NB <strong>${fmtM(tie.fy26Nb)}</strong>
+      · Exp <strong>${fmtM(tie.fy26Exp)}</strong>
+      · churn+cont <strong>${fmtM(tie.churnBase)}</strong>
+      · scale NB/CS <strong>${(m.scaleNb26 || 0).toFixed(2)}× / ${(m.scaleCs26 || 0).toFixed(2)}×</strong>
+      · books NB/CS <strong>${fmtM(tie.existingNbQuota)}</strong> / <strong>${fmtM(tie.existingCsQuota)}</strong>
+      · demand NB/CS <strong>${fmtM(tie.fyNb)}</strong> / <strong>${fmtM(tie.csDemand)}</strong>
+      (CS floor ${fmtM(tie.csFloor)})
+      · annual gap NB/CS <strong>${fmtGap(tie.nbGapSigned)}</strong> / <strong>${fmtGap(tie.csGapSigned)}</strong>
+      → hires <strong>${tie.nbGrowthHires}</strong> / <strong>${tie.csGrowthHires}</strong>
+      · monthly O/U FY <strong>${fmtOuInline(tie.nbOuFy)}</strong> / <strong>${fmtOuInline(tie.csOuFy)}</strong>
+      ${tieWarn ? '<span style="display:block;margin-top:4px">⚠ Live warehouse had empty NB/Exp for some months — using demo hist so quota scale is not forced to 1× (unscaled ~$33M seed book). Match this banner on localhost vs /app after deploy.</span>' : ''}
+    </div>
     <div class="ctx-banner">
       NB budget <strong>${fmtM(m.fyNb)}</strong>
       − book <strong>${fmtM(m.existingNbQuota)}</strong> (avg <strong>${fmtM(m.avgNbQuota)}</strong>/AE)
@@ -4385,7 +4520,6 @@ function renderSales() {
       CS: gap <strong>${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) < 0 ? '(' + fmtM(-(m.csGapSigned != null ? m.csGapSigned : 0)) + ') surplus' : fmtM(m.hireCsTarget)}</strong> ÷ <strong>${fmtM(m.avgCsQuota)}</strong>
       → <strong>${m.csGrowthHires} CS growth</strong>
       (+${m.csAttritionReplace} backfill) · need <strong>${fmtN(m.csNeeded)}</strong> CS.
-      (+${m.csAttritionReplace} backfill).
       Combined growth <strong>${m.nbGrowthHires + m.csGrowthHires}</strong>
       · with attrition <strong>${m.nbHiresNeed + m.csHiresNeed}</strong>.
       Dec NB/CS <strong>${fmtN(m.decAes)}</strong> / <strong>${fmtN(m.decCs)}</strong>.
