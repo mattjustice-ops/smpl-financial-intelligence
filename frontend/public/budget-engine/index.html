@@ -4525,7 +4525,7 @@ function renderSales() {
   const segs = sales.segments;
   const autoTag = !STATE._salesHireManual ? '<span class="lock-tag">auto from gap</span>' : '';
   const rampTag = `${Math.round(HIRE_QUOTA_RAMP[0] * 100)}/${Math.round(HIRE_QUOTA_RAMP[1] * 100)}/100`;
-  const fmtGap = (signed) => signed < 0 ? `(${fmtM(-signed)}) surplus` : fmtM(signed);
+  const fmtSignedGap = (signed) => signed < 0 ? `(${fmtM(-signed)}) surplus` : fmtM(signed);
   const tieWarn = tie.usedDemoFallback || tie.histThin;
 
   let html = `
@@ -4542,7 +4542,7 @@ function renderSales() {
       · books NB/CS <strong>${fmtM(tie.existingNbQuota)}</strong> / <strong>${fmtM(tie.existingCsQuota)}</strong>
       · demand NB/CS <strong>${fmtM(tie.fyNb)}</strong> / <strong>${fmtM(tie.csDemand)}</strong>
       (CS floor ${fmtM(tie.csFloor)})
-      · annual gap NB/CS <strong>${fmtGap(tie.nbGapSigned)}</strong> / <strong>${fmtGap(tie.csGapSigned)}</strong>
+      · annual gap NB/CS <strong>${fmtSignedGap(tie.nbGapSigned)}</strong> / <strong>${fmtSignedGap(tie.csGapSigned)}</strong>
       → hires <strong>${tie.nbGrowthHires}</strong> / <strong>${tie.csGrowthHires}</strong>
       · monthly O/U FY <strong>${fmtOuInline(tie.nbOuFy)}</strong> / <strong>${fmtOuInline(tie.csOuFy)}</strong>
       ${tieWarn ? '<span style="display:block;margin-top:4px">⚠ Live warehouse had empty NB/Exp for some months — using demo hist so quota scale is not forced to 1× (unscaled ~$33M seed book). Match this banner on localhost vs /app after deploy.</span>' : ''}
