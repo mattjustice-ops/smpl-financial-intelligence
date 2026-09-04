@@ -16,7 +16,8 @@ export default auth((req) => {
   const isProtected =
     pathname.startsWith("/app") ||
     pathname.startsWith("/account") ||
-    pathname.startsWith("/forecast-engine");
+    pathname.startsWith("/forecast-engine") ||
+    pathname.startsWith("/budget-engine");
 
   if (pathname === "/board" && req.auth) {
     return NextResponse.redirect(new URL("/app/board", req.nextUrl.origin));
@@ -41,6 +42,7 @@ export const config = {
     "/app/:path*",
     "/account/:path*",
     "/forecast-engine/:path*",
+    "/budget-engine/:path*",
     "/board",
   ],
 };
