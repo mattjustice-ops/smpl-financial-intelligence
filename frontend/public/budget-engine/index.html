@@ -408,8 +408,8 @@ const BUDGET_METRIC_DEFS = [
     formula: '(Beginning ARR + Expansion + Reactivation − Contraction − Churn) / Beginning ARR',
     formula_id: 'nrr_arr_bridge' },
   { id: 'arr_mix_pct', domain: 'ARR', label: 'Component mix % of BOP', source_type: 'ASSUMPTION', tab: 'arr',
-    description: 'Shape of the ARR waterfall as % of beginning ARR. Dollars still scale to hit the YoY net-new target.',
-    formula: 'Editable mix_nb, mix_exp, mix_react, mix_cont, mix_churn (renormalized)',
+    description: 'Monthly ARR components as % of beginning ARR. Dollars = BOP × mix, uniformly scaled so Dec ending hits the YoY target.',
+    formula: 'nb_m = BOP_m × mix_nb_m × scale\nscale = YoY_net_new / Σ(raw mix×BOP net new)',
     formula_id: 'arr_mix_shape' },
 
   // Revenue bridge
@@ -1488,45 +1488,62 @@ function monthWeightsCloseByHistQuarter(heads12, histField) {
   return normalizeWeights(raw);
 }
 
+/**
+ * FY27 ARR path from editable monthly mix (% of BOP).
+ * Dollars = BOP × mix × scale, where scale makes Dec ending hit the YoY target.
+ * (Previously months were reshaped by Sales HC + FY26 hist weights, so identical
+ * mix inputs could still produce different monthly $ on localhost vs /app.)
+ */
 function computeBudgetArr() {
   const annual = computeArrAnnualTargets();
-  const sales = buildSalesPlanFromDemand(annual.nb, annual.exp, annual.cont + annual.churn);
-  const nbW = monthWeightsCloseByHistQuarter(BUD_P.map(p => sales.byPeriod[p].endingAes), 'nb');
-  const expW = monthWeightsCloseByHistQuarter(BUD_P.map(p => sales.byPeriod[p].endingCs), 'exp');
-  const otherHeads = BUD_P.map((_, i) => 1 + 0.035 * i);
-  const reactW = monthWeightsCloseByHistQuarter(otherHeads, 'react');
-  const contW = monthWeightsCloseByHistQuarter(otherHeads, 'cont');
-  const churnW = monthWeightsCloseByHistQuarter(otherHeads, 'churn');
 
-  const out = {};
-  let prior = BOP_LOCK;
-  for (let i = 0; i < BUD_P.length; i++) {
-    const p = BUD_P[i];
-    const bop = prior;
-    const nb = annual.nb * nbW[i];
-    const exp = annual.exp * expW[i];
-    const react = annual.react * reactW[i];
-    const cont = annual.cont * contW[i];
-    const churn = annual.churn * churnW[i];
-    const nn = nb + exp + react - cont - churn;
-    const eop = bop + nn;
-    out[p] = {
-      bop, nb, exp, react, cont, churn, nn, eop,
-      grr: bop > 0 ? (bop - churn - cont) / bop : null,
-      nrr: bop > 0 ? (bop + nn - nb) / bop : null,
-      check: eop - (i === 11 ? annual.targetDec : null),
-    };
-    prior = eop;
+  function walk(scale) {
+    const months = {};
+    let prior = BOP_LOCK;
+    for (let i = 0; i < BUD_P.length; i++) {
+      const p = BUD_P[i];
+      const m = getMix(p);
+      const bop = prior;
+      const nb = bop * (m.nb || 0) * scale;
+      const exp = bop * (m.exp || 0) * scale;
+      const react = bop * (m.react || 0) * scale;
+      const cont = bop * (m.cont || 0) * scale;
+      const churn = bop * (m.churn || 0) * scale;
+      const nn = nb + exp + react - cont - churn;
+      const eop = bop + nn;
+      months[p] = {
+        bop, nb, exp, react, cont, churn, nn, eop,
+        grr: bop > 0 ? (bop - churn - cont) / bop : null,
+        nrr: bop > 0 ? (bop + nn - nb) / bop : null,
+        check: null,
+      };
+      prior = eop;
+    }
+    return months;
   }
+
+  const raw = walk(1);
+  const rawNn = BUD_P.reduce((s, p) => s + (raw[p].nn || 0), 0);
+  const scale = Math.abs(rawNn) > 1 ? annual.fyNn / rawNn : 1;
+  const out = walk(scale);
+
   // Tiny Dec plug so ending ARR hits YoY target exactly
   const drift = annual.targetDec - out[BUD_P[11]].eop;
   if (Math.abs(drift) > 1) {
     out[BUD_P[11]].nb += drift;
     out[BUD_P[11]].nn += drift;
     out[BUD_P[11]].eop = annual.targetDec;
-    out[BUD_P[11]].check = 0;
   }
+  out[BUD_P[11]].check = 0;
+  out._mixScale = scale;
+  out._fyNn = annual.fyNn;
+  out._rawNn = rawNn;
   return out;
+}
+
+function fy26DecEndingArr() {
+  const r = getHistRow(`${BUDGET_YEAR - 1}-12`);
+  return r && r.eop != null ? Number(r.eop) : null;
 }
 
 function fyPlanValue(plan, row) {
@@ -4119,12 +4136,22 @@ function renderARR() {
   const fyBill = BUD_P.reduce((s, p) => s + bridge[p].billings, 0);
   const fySub = BUD_P.reduce((s, p) => s + bridge[p].sub, 0);
   const annualPct = planAnnualBillPct(open);
+  const dec26 = fy26DecEndingArr();
+  const lockGap = dec26 != null ? dec26 - BOP_LOCK : null;
+  const lockMismatch = lockGap != null && Math.abs(lockGap) > 5e4;
+  const mixScale = plan._mixScale != null ? plan._mixScale : 1;
+  const scaleNote = Math.abs(mixScale - 1) > 0.015
+    ? ` Monthly $ = BOP × mix × <strong>${(mixScale * 100).toFixed(0)}%</strong> scale so Dec hits the YoY target (raw mix path was ${fmtM(plan._rawNn)} net new vs ${fmtM(plan._fyNn)} needed).`
+    : ' Monthly $ = BOP × mix (path already hits YoY within tolerance).';
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">FY ending ARR from YoY growth. Component mix is <strong>% of beginning ARR</strong> (shape of the waterfall); dollars still scale to hit the YoY net-new target. Monthly NB/Exp follow sales HC with quarter-end close weighting.</div>
+    <div class="slide-sub">FY ending ARR from YoY growth. Editable mix is <strong>% of beginning ARR</strong>; monthly dollars = BOP × mix, uniformly scaled to hit the Dec YoY target. Same mix ⇒ same months (no Sales-HC reshape).</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.</div>`;
+    <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.${scaleNote}</div>`;
+  if (lockMismatch) {
+    html += `<div class="ctx-banner warn"><strong>FY26 hist ≠ Jan lock</strong> · Dec '26 ending from hist is <strong>${fmtM(dec26)}</strong> (${lockGap > 0 ? '+' : ''}${fmtM(lockGap)} vs lock). Context columns use outlook/demo hist; the FY27 path still starts at the locked <strong>${fmtM(BOP_LOCK)}</strong>. Align warehouse ARR or the BOP_LOCK constant so these tie.</div>`;
+  }
 
   const sections = [
     { sec: 'Component mix (% of beginning ARR)', rows: [
