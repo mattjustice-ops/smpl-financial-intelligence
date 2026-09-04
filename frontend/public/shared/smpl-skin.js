@@ -200,13 +200,45 @@
     }
   }
 
+  var SKIN_LABELS = {
+    canvas: "Canvas",
+    smpl: "SMPL",
+    midnight: "Midnight",
+    harbor: "Harbor",
+    eclipse: "Eclipse",
+    graphite: "Graphite",
+    aurora: "Aurora",
+    ember: "Ember",
+    slate: "Slate",
+    mist: "Mist",
+  };
+
+  function fillSelectOptions(sel) {
+    if (!sel || sel.getAttribute("data-skins-filled") === "1") return;
+    var keys = Object.keys(SKINS);
+    var existing = {};
+    Array.prototype.forEach.call(sel.options || [], function (o) {
+      existing[o.value] = true;
+    });
+    keys.forEach(function (k) {
+      if (existing[k]) return;
+      var opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = SKIN_LABELS[k] || k.charAt(0).toUpperCase() + k.slice(1);
+      sel.appendChild(opt);
+    });
+    sel.setAttribute("data-skins-filled", "1");
+  }
+
   function init(selectId, onRefresh) {
     var saved = "canvas";
     try {
       saved = localStorage.getItem("smpl-skin") || "canvas";
     } catch (_) {}
+    if (!SKINS[saved]) saved = "canvas";
     var sel = document.getElementById(selectId);
     if (sel) {
+      fillSelectOptions(sel);
       sel.value = saved;
     }
     /* Apply tokens only on init — avoid full tab rebuild racing first chart paint */

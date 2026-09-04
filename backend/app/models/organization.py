@@ -34,6 +34,11 @@ class Organization(Base):
         ForeignKey("forecast_versions.id", ondelete="SET NULL", use_alter=True, name="fk_organizations_active_forecast_version"),
         nullable=True,
     )
+    active_budget_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("budget_versions.id", ondelete="SET NULL", use_alter=True, name="fk_organizations_active_budget_version"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -70,6 +75,17 @@ class Organization(Base):
     active_forecast_version: Mapped["ForecastVersion | None"] = relationship(
         "ForecastVersion",
         foreign_keys=[active_forecast_version_id],
+        post_update=True,
+    )
+    budget_versions: Mapped[list["BudgetVersion"]] = relationship(
+        "BudgetVersion",
+        back_populates="organization",
+        foreign_keys="BudgetVersion.organization_id",
+        cascade="all, delete-orphan",
+    )
+    active_budget_version: Mapped["BudgetVersion | None"] = relationship(
+        "BudgetVersion",
+        foreign_keys=[active_budget_version_id],
         post_update=True,
     )
 

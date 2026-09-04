@@ -970,6 +970,14 @@ PROMOTABLE_FORECAST_TABLES: tuple[str, ...] = (
     "forecast_headcount_plan",
 )
 
+PROMOTABLE_BUDGET_TABLES: tuple[str, ...] = (
+    "budget_mrr_waterfall",
+    "budget_income_statement",
+    "budget_cash_flow_statement",
+    "budget_balance_sheet",
+    "budget_bookings_summary",
+)
+
 
 def load_physical_table_rows(
     session: Session,
@@ -1028,6 +1036,44 @@ def promote_forecast_tables(
                 organization_id,
                 table_name=table_name,
                 rows=rows,
+            )
+    return loaded
+
+
+def promote_budget_tables(
+    session: Session,
+    organization_id: uuid.UUID,
+    *,
+    tables: dict[str, list[dict[str, str]]],
+    budget_version_id: uuid.UUID,
+    as_of_period: str,
+) -> dict[str, int]:
+    """Write promoted budget rows into physical warehouse tables (budget_*)."""
+    org_key = str(organization_id)
+    version_key = str(budget_version_id)
+    loaded: dict[str, int] = {}
+    for table_name, raw_rows in tables.items():
+        if table_name not in PROMOTABLE_BUDGET_TABLES:
+            continue
+        rows: list[dict[str, str]] = []
+        for raw in raw_rows:
+            row = {str(k): "" if v is None else str(v) for k, v in raw.items()}
+            scenario = (row.get("version") or "Budget").strip()
+            if scenario.lower() == "actual":
+                continue
+            row.setdefault("organization_id", org_key)
+            row["budget_version_id"] = version_key
+            row.setdefault("as_of_period", as_of_period)
+            row["version"] = "Budget"
+            rows.append(row)
+        if rows:
+            stem = table_name.removeprefix("budget_")
+            loaded[table_name] = load_physical_table_rows(
+                session,
+                organization_id,
+                table_name=table_name,
+                rows=rows,
+                filename=f"Budget_{stem}.csv",
             )
     return loaded
 

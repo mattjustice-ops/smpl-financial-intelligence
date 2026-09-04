@@ -19,6 +19,7 @@ from app.api.board_platform_routes import board_platform_router
 from app.api.forecast_engine_routes import forecast_engine_router
 from app.api.reporting_outlook_routes import reporting_outlook_router
 from app.api.forecast_version_routes import forecast_versions_router
+from app.api.budget_version_routes import budget_versions_router
 from app.api.bookings_routes import bookings_router
 from app.api.commentary_routes import commentary_router
 from app.api.demo_csv_routes import demo_csv_router, org_router
@@ -134,6 +135,7 @@ app.include_router(board_package_router, prefix="/api/v1")
 app.include_router(financial_statements_router, prefix="/api/v1")
 app.include_router(forecast_router, prefix="/api/v1")
 app.include_router(forecast_versions_router, prefix="/api/v1")
+app.include_router(budget_versions_router, prefix="/api/v1")
 app.include_router(reporting_outlook_router, prefix="/api/v1")
 app.include_router(forecast_engine_router, prefix="/api/v1")
 app.include_router(board_platform_router, prefix="/api/v1")

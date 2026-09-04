@@ -47,6 +47,10 @@ const nextConfig = {
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       {
+        source: "/budget-engine/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
         source: "/studio/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },

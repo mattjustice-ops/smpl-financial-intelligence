@@ -85,6 +85,7 @@ export default function BoardPlatformPage() {
         <>
 
           <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/budget-engine">Budget Engine</EmbeddedModuleNavLink>
 
           <EmbeddedModuleNavLink href="/app">Operating OS</EmbeddedModuleNavLink>
 
