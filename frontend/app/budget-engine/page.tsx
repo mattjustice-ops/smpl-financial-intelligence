@@ -24,7 +24,7 @@ export default function BudgetEnginePage() {
   }
 
   // Bust CDN/browser cache so /app picks up Budget Engine HTML after deploy.
-  const src = `/budget-engine/index.html?embedded=1&v=3`;
+  const src = `/budget-engine/index.html?embedded=1&v=4`;
 
   return (
     <EmbeddedModuleChrome

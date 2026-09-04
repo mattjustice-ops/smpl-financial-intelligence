@@ -1199,6 +1199,7 @@ function salesTieOutDrivers() {
 }
 
 function reseedPlanFromHistory(reason) {
+  _budgetHistScale = null;
   STATE.histRows = {};
   STATE.gtmHistRows = {};
   STATE.mixByPeriod = {};
@@ -1313,6 +1314,51 @@ function histRowHasMovement(row) {
   return ((row.nb || 0) + (row.exp || 0)) > 0;
 }
 
+/** Scale FY26 hist so Dec ending matches Jan BOP_LOCK (board/forecast $90.29M). */
+let _budgetHistScale = null;
+function budgetHistScaleToBopLock() {
+  if (_budgetHistScale != null) return _budgetHistScale;
+  let dec = null;
+  const decPeriod = `${BUDGET_YEAR - 1}-12`;
+  // Prefer live waterfall Dec before demo seed ($97.56M).
+  const liveWf = window.SMPL_ARR_WATERFALL;
+  if (liveWf && liveWf.Ending && liveWf.Ending.length) {
+    const periods = allOutlookPeriods();
+    const i = periods.indexOf(decPeriod);
+    if (i >= 0 && liveWf.Ending[i] != null) dec = Number(liveWf.Ending[i]);
+    else if (liveWf.Ending.length >= 12) dec = Number(liveWf.Ending[11]);
+  }
+  if (dec == null || !(dec > 0)) {
+    const demoWf = window.SMPL_DEMO_WF_TABLE;
+    if (demoWf && demoWf.Ending && demoWf.Ending.length) {
+      dec = Number(demoWf.Ending[Math.min(11, demoWf.Ending.length - 1)]);
+    }
+  }
+  _budgetHistScale = dec && dec > 0 && Math.abs(dec - BOP_LOCK) > 5e4
+    ? BOP_LOCK / dec
+    : 1;
+  return _budgetHistScale;
+}
+
+function applyBudgetHistScale(row) {
+  if (!row) return row;
+  const scale = budgetHistScaleToBopLock();
+  if (scale === 1 || row._budgetScaled) return row;
+  return {
+    ...row,
+    bop: (row.bop || 0) * scale,
+    eop: (row.eop || 0) * scale,
+    nb: (row.nb || 0) * scale,
+    exp: (row.exp || 0) * scale,
+    react: (row.react || 0) * scale,
+    cont: (row.cont || 0) * scale,
+    churn: (row.churn || 0) * scale,
+    nn: (row.nn || 0) * scale,
+    _budgetScaled: true,
+    _budgetScale: scale,
+  };
+}
+
 /** Build a hist row from a waterfall table + period index. */
 function histRowFromWfAt(wf, i) {
   if (!wf || !wf.Beginning || i < 0 || i >= wf.Beginning.length) return null;
@@ -1335,8 +1381,7 @@ function histRowFromWfAt(wf, i) {
 
 /**
  * Embedded demo waterfall for FY of CLOSE_MONTH (always Jan–Dec index 0..11).
- * Used when live warehouse Ending validates but New Business / Expansion are empty —
- * that path previously forced quota scale=1 (full seed book → fake multi-$M surplus).
+ * Dollar alignment to BOP_LOCK is applied once in applyBudgetHistScale (raw demo Dec is $97.56M).
  */
 function getDemoHistRow(period) {
   const wf = window.SMPL_DEMO_WF_TABLE;
@@ -1350,15 +1395,38 @@ function getDemoHistRow(period) {
   return row;
 }
 
+/** Keep live BOP/EOP (board lock path); borrow demo movement only when live NB/Exp are empty. */
+function mergeHistLiveAnchors(live, demo) {
+  if (!live) return demo || null;
+  if (!demo || histRowHasMovement(live)) return live;
+  const nb = (live.nb || 0) > 0 ? live.nb : (demo.nb || 0);
+  const exp = (live.exp || 0) > 0 ? live.exp : (demo.exp || 0);
+  const react = (live.react || 0) > 0 ? live.react : (demo.react || 0);
+  const cont = (live.cont || 0) > 0 ? live.cont : (demo.cont || 0);
+  const churn = (live.churn || 0) > 0 ? live.churn : (demo.churn || 0);
+  const bop = live.bop != null ? live.bop : demo.bop;
+  const eop = live.eop != null ? live.eop : demo.eop;
+  const nn = nb + exp + react - cont - churn;
+  return {
+    bop, eop, nb, exp, react, cont, churn, nn,
+    grr: bop > 0 ? (bop - churn - cont) / bop : live.grr,
+    nrr: bop > 0 ? (bop + nn - nb) / bop : live.nrr,
+    _src: live._src || 'outlook',
+    _fallback: 'demo-movement-only',
+  };
+}
+
 function getHistRowFromWfTable(period) {
   const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE;
-  if (!wf || !wf.Beginning) return null;
+  if (!wf || !wf.Beginning) return getDemoHistRow(period);
   const periods = allOutlookPeriods();
   const i = periods.indexOf(period);
   if (i < 0) return getDemoHistRow(period);
   const row = histRowFromWfAt(wf, i);
+  if (!row) return getDemoHistRow(period);
   if (histRowHasMovement(row)) return row;
-  return getDemoHistRow(period) || row;
+  // Live/warehouse row has Ending but no NB/Exp — do not replace Ending with raw demo $97.56M.
+  return mergeHistLiveAnchors(row, getDemoHistRow(period));
 }
 
 function getHistRow(period) {
@@ -1384,13 +1452,10 @@ function getHistRow(period) {
   }
   if (!histRowHasMovement(row)) {
     const fallback = getHistRowFromWfTable(period);
-    if (histRowHasMovement(fallback)) row = fallback;
-    else if (!row) row = fallback;
+    row = mergeHistLiveAnchors(row, fallback);
   }
-  if (!histRowHasMovement(row)) {
-    const demo = getDemoHistRow(period);
-    if (demo) row = { ...demo, _fallback: 'demo-empty-live' };
-  }
+  if (!row) row = getDemoHistRow(period);
+  row = applyBudgetHistScale(row);
   if (row) STATE.histRows[period] = row;
   return row;
 }
@@ -4150,16 +4215,18 @@ function renderARR() {
   const fySub = BUD_P.reduce((s, p) => s + bridge[p].sub, 0);
   const annualPct = planAnnualBillPct(open);
   const dec26 = fy26DecEndingArr();
-  const lockGap = dec26 != null ? dec26 - BOP_LOCK : null;
-  const lockMismatch = lockGap != null && Math.abs(lockGap) > 5e4;
+  const histScale = budgetHistScaleToBopLock();
+  const histScaled = Math.abs(histScale - 1) > 1e-6;
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">FY ending ARR from YoY growth. Component mix is <strong>% of beginning ARR</strong> (shape of the waterfall); dollars still scale to hit the YoY net-new target. Monthly NB/Exp follow sales HC with quarter-end close weighting.</div>
     ${adjLegend()}
     <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.</div>`;
-  if (lockMismatch) {
-    html += `<div class="ctx-banner warn"><strong>FY26 hist ≠ Jan lock</strong> · Dec '26 ending from hist is <strong>${fmtM(dec26)}</strong> (${lockGap > 0 ? '+' : ''}${fmtM(lockGap)} vs lock ${fmtM(BOP_LOCK)}). FY27 still starts at the lock — this usually means /app hydrated a different ARR waterfall than the board Dec forecast. Hard-refresh or check outlook hydrate.</div>`;
+  if (histScaled) {
+    html += `<div class="ctx-banner warn"><strong>FY26 hist aligned to Jan lock</strong> · context path scaled ×${histScale.toFixed(4)} so Dec '26 ends at <strong>${fmtM(BOP_LOCK)}</strong> (was demo/warehouse ~$97.56M). Live outlook hydrate should supply the board forecast series directly.</div>`;
+  } else if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
+    html += `<div class="ctx-banner warn"><strong>FY26 hist ≠ Jan lock</strong> · Dec '26 ending is <strong>${fmtM(dec26)}</strong> vs lock <strong>${fmtM(BOP_LOCK)}</strong>.</div>`;
   }
 
   const sections = [
@@ -8065,13 +8132,22 @@ async function init() {
     try { await window.SMPLBootstrapDemo.load(); } catch (e) { console.warn(e); }
   }
   const setStatus = (t) => { const el = document.getElementById('statusLine'); if (el) el.textContent = t; };
+  // Wait for parent shell to post smpl:org (Forecast/Board pattern).
+  // Without this, /app often stays on demo FY26 Ending $97.56M instead of lock $90.29M.
+  if (window.SMPLOutlook && typeof window.SMPLOutlook.resolveOrgId === 'function') {
+    try {
+      await window.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 6000 });
+    } catch (e) { console.warn('[budget-engine] org wait', e); }
+  }
+  await new Promise((r) => setTimeout(r, 50));
   if (window.SMPLOutlook && window.SMPLOutlook.hydrate) {
     await window.SMPLOutlook.hydrate({
       endpoint: 'reporting/outlook',
+      waitForParent: true,
+      parentWaitMs: 6000,
       hooks: { TS_DATA: window.SMPL_DEMO_TS_DATA, WF_TABLE: window.SMPL_DEMO_WF_TABLE },
       onStatus: setStatus,
       onApplied: function () {
-        // Always reseed mix/GTM from the hydrated hist — never keep browser-cached rates.
         reseedPlanFromHistory('outlook-hydrate');
         refresh();
       },
@@ -8082,6 +8158,11 @@ async function init() {
   seedHcOps();
   if (restored) {
     document.querySelectorAll('.nav-btn[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === curTab));
+  }
+  const dec26 = fy26DecEndingArr();
+  if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
+    setStatus('FY26 hist Dec ' + fmtM(dec26) + ' ≠ Jan lock ' + fmtM(BOP_LOCK) + ' — check outlook hydrate');
+  } else if (restored) {
     setStatus('Levers restored · mix/GTM reseeded from history (rev ' + BUDGET_PLAN_REV + ')');
   } else {
     setStatus('Base plan · mix/GTM seeded from history (rev ' + BUDGET_PLAN_REV + ')');
