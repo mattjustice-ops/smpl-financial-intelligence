@@ -23,7 +23,8 @@ export default function BudgetEnginePage() {
     );
   }
 
-  const src = "/budget-engine/index.html?embedded=1";
+  // Bust CDN/browser cache so /app picks up Budget Engine HTML after deploy.
+  const src = `/budget-engine/index.html?embedded=1&v=5`;
 
   return (
     <EmbeddedModuleChrome

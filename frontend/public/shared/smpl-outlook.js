@@ -578,6 +578,29 @@
 
     global.SMPL_OUTLOOK_PAYLOAD = data;
     global.SMPL_ARR_WATERFALL = data.ARR_WATERFALL || null;
+    // Stamp period labels onto the waterfall so consumers index Beginning[i] correctly
+    // even when the array spans a fiscal range that is not "Jan..Dec of close year".
+    if (global.SMPL_ARR_WATERFALL && data.meta && data.meta.start_period && data.meta.end_period) {
+      var stamped = [];
+      var sp = String(data.meta.start_period).split("-");
+      var ep = String(data.meta.end_period).split("-");
+      var y = parseInt(sp[0], 10);
+      var m = parseInt(sp[1], 10);
+      var ey = parseInt(ep[0], 10);
+      var em = parseInt(ep[1], 10);
+      while (y < ey || (y === ey && m <= em)) {
+        stamped.push(y + "-" + String(m).padStart(2, "0"));
+        m += 1;
+        if (m > 12) {
+          m = 1;
+          y += 1;
+        }
+        if (stamped.length > 36) break;
+      }
+      if (stamped.length && (!global.SMPL_ARR_WATERFALL.periods || !global.SMPL_ARR_WATERFALL.periods.length)) {
+        global.SMPL_ARR_WATERFALL.periods = stamped;
+      }
+    }
     global.SMPL_BASELINE_ENGINE = data.baseline_engine || null;
     global.SMPL_TS_DATA = data.TS_DATA || null;
     global.SMPL_CASH_BRIDGE = data.CASH_BRIDGE || null;
