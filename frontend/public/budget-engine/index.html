@@ -408,9 +408,9 @@ const BUDGET_METRIC_DEFS = [
     formula: '(Beginning ARR + Expansion + Reactivation − Contraction − Churn) / Beginning ARR',
     formula_id: 'nrr_arr_bridge' },
   { id: 'arr_mix_pct', domain: 'ARR', label: 'Component mix % of BOP', source_type: 'ASSUMPTION', tab: 'arr',
-    description: 'Shape of the ARR waterfall as % of beginning ARR. Dollars still scale to hit the YoY net-new target.',
-    formula: 'Editable mix_nb, mix_exp, mix_react, mix_cont, mix_churn (renormalized)',
-    formula_id: 'arr_mix_shape' },
+    description: 'Monthly ARR component as % of beginning ARR. Dollar row = BOP × this %. Dec may include a small NB plug so ending ARR hits the YoY target.',
+    formula: 'nb_m = BOP_m × mix_nb_m\n(same for exp / react / cont / churn)\nDec NB += plug so Dec EOP = YoY target',
+    formula_id: 'arr_mix_bop' },
 
   // Revenue bridge
   { id: 'billings', domain: 'Revenue bridge', label: 'Billings', source_type: 'COMPUTED', tab: 'arr', scrollTo: 'rev-bridge',
@@ -1609,44 +1609,45 @@ function monthWeightsCloseByHistQuarter(heads12, histField) {
   return normalizeWeights(raw);
 }
 
+/**
+ * FY27 ARR path: monthly component $ = Beginning ARR × editable mix %.
+ * YoY Dec target is hit with a Dec NB plug only — Jan–Nov always tie to BOP × %.
+ * (Previously annual $ were reshaped by Sales HC / hist weights, so 1.6% × BOP
+ * did not equal the New business $ row — and localhost vs /app diverged.)
+ */
 function computeBudgetArr() {
   const annual = computeArrAnnualTargets();
-  const sales = buildSalesPlanFromDemand(annual.nb, annual.exp, annual.cont + annual.churn);
-  const nbW = monthWeightsCloseByHistQuarter(BUD_P.map(p => sales.byPeriod[p].endingAes), 'nb');
-  const expW = monthWeightsCloseByHistQuarter(BUD_P.map(p => sales.byPeriod[p].endingCs), 'exp');
-  const otherHeads = BUD_P.map((_, i) => 1 + 0.035 * i);
-  const reactW = monthWeightsCloseByHistQuarter(otherHeads, 'react');
-  const contW = monthWeightsCloseByHistQuarter(otherHeads, 'cont');
-  const churnW = monthWeightsCloseByHistQuarter(otherHeads, 'churn');
-
   const out = {};
   let prior = BOP_LOCK;
   for (let i = 0; i < BUD_P.length; i++) {
     const p = BUD_P[i];
+    const m = getMix(p);
     const bop = prior;
-    const nb = annual.nb * nbW[i];
-    const exp = annual.exp * expW[i];
-    const react = annual.react * reactW[i];
-    const cont = annual.cont * contW[i];
-    const churn = annual.churn * churnW[i];
+    const nb = bop * (m.nb || 0);
+    const exp = bop * (m.exp || 0);
+    const react = bop * (m.react || 0);
+    const cont = bop * (m.cont || 0);
+    const churn = bop * (m.churn || 0);
     const nn = nb + exp + react - cont - churn;
     const eop = bop + nn;
     out[p] = {
       bop, nb, exp, react, cont, churn, nn, eop,
       grr: bop > 0 ? (bop - churn - cont) / bop : null,
       nrr: bop > 0 ? (bop + nn - nb) / bop : null,
-      check: eop - (i === 11 ? annual.targetDec : null),
+      check: null,
     };
     prior = eop;
   }
-  // Tiny Dec plug so ending ARR hits YoY target exactly
+  // Dec plug on NB only so ending ARR hits YoY target — leaves Jan–Nov BOP×mix exact.
   const drift = annual.targetDec - out[BUD_P[11]].eop;
   if (Math.abs(drift) > 1) {
     out[BUD_P[11]].nb += drift;
     out[BUD_P[11]].nn += drift;
     out[BUD_P[11]].eop = annual.targetDec;
-    out[BUD_P[11]].check = 0;
   }
+  out[BUD_P[11]].check = 0;
+  out._yoYPlug = drift;
+  out._targetDec = annual.targetDec;
   return out;
 }
 
@@ -4251,9 +4252,13 @@ function renderARR() {
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">FY ending ARR from YoY growth. Component mix is <strong>% of beginning ARR</strong> (shape of the waterfall); dollars still scale to hit the YoY net-new target. Monthly NB/Exp follow sales HC with quarter-end close weighting.</div>
+    <div class="slide-sub">FY ending ARR from YoY growth. Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix (Jan–Nov always tie). Any YoY gap is a <strong>Dec NB plug</strong> only.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.</div>`;
+    <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.${
+      plan._yoYPlug != null && Math.abs(plan._yoYPlug) > 500
+        ? ` Dec NB includes a <strong>${fmtM(plan._yoYPlug)}</strong> plug so ending ARR hits ${fmtM(plan._targetDec)}.`
+        : ''
+    }</div>`;
   if (histScaled) {
     html += `<div class="ctx-banner warn"><strong>FY26 hist aligned to Jan lock</strong> · context path scaled ×${histScale.toFixed(4)} so Dec '26 ends at <strong>${fmtM(BOP_LOCK)}</strong> (was demo/warehouse ~$97.56M). Live outlook hydrate should supply the board forecast series directly.</div>`;
   } else if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
