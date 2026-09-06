@@ -192,6 +192,51 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .assure-nerd-card h4{margin:0 0 4px;font-size:11px;font-weight:500;color:var(--text)}
 .assure-nerd-card p{margin:0 0 6px;font-size:10px;color:var(--text3);line-height:1.4}
 .assure-nerd-svg{width:100%;height:72px;display:block}
+
+/* Analytics tab — full-width Plan Assurance (mockup vocabulary, live packets) */
+.pa-analytics{max-width:1180px;margin:0 auto}
+.pa-head{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.pa-toggles{display:flex;flex-wrap:wrap;gap:8px}
+.pa-toggle{display:inline-flex;border:0.5px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2)}
+.pa-toggle button{font:inherit;font-size:12px;color:var(--text3);background:transparent;border:0;padding:7px 12px;cursor:pointer}
+.pa-toggle button[aria-pressed="true"]{background:var(--bg);color:var(--text);box-shadow:inset 0 -2px 0 var(--blue)}
+.pa-verdict{border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);padding:16px 18px;margin:14px 0 18px;display:flex;gap:14px;align-items:flex-start}
+.pa-dot{width:10px;height:10px;border-radius:50%;margin-top:6px;flex:none;background:var(--amber)}
+.pa-dot.break{background:var(--red)}.pa-dot.hold{background:var(--teal)}.pa-dot.watch{background:var(--amber)}
+.pa-verdict .pa-big{font-size:16px;font-weight:500;line-height:1.45;color:var(--text);margin:0}
+.pa-verdict .pa-small{color:var(--text2);font-size:12.5px;margin:6px 0 0;max-width:78ch;line-height:1.55}
+.pa-readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--border);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:22px}
+.pa-ro{background:var(--bg2);padding:14px 16px}
+.pa-ro .lab{font-size:11px;color:var(--text3)}
+.pa-ro .val{font-size:22px;font-weight:500;margin-top:2px;line-height:1.2;font-family:var(--mono);color:var(--text)}
+.pa-ro .val.break{color:var(--red)}.pa-ro .val.watch{color:var(--amber)}.pa-ro .val.hold{color:var(--teal)}
+.pa-ro .note{font-size:11px;color:var(--text3);margin-top:2px}
+.pa-section{margin-top:28px}
+.pa-section-hd{font-size:15px;font-weight:500;margin:0 0 4px;color:var(--text)}
+.pa-section-sub{color:var(--text2);font-size:12.5px;max-width:78ch;margin:0 0 14px;line-height:1.5}
+.pa-stack{display:flex;flex-direction:column;gap:14px}
+.pa-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);padding:14px 16px}
+.pa-card-hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
+.pa-card-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.45px;color:var(--text3);font-weight:500;margin:0}
+.pa-body{font-size:12.5px;color:var(--text2);line-height:1.55}
+.pa-body strong{color:var(--text);font-weight:500}
+.pa-analytics .assure-sc-table{font-size:12px}
+.pa-analytics .assure-sc-table th{font-size:10px;padding:6px 8px}
+.pa-analytics .assure-sc-table td{padding:8px 8px;font-size:12px}
+.pa-analytics .assure-nerd-grid{grid-template-columns:1fr 1fr}
+.pa-analytics .assure-nerd-svg{height:96px}
+.pa-banner{font-size:12px;color:var(--text2);background:var(--bg2);border:0.5px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;line-height:1.5}
+.pa-banner a{color:var(--blue);cursor:pointer;text-decoration:underline}
+.pa-l3{opacity:.92}
+.pa-l3 .pa-section-hd::after{content:' · LRP preview';font-size:11px;color:var(--text3);font-weight:400}
+body[data-pa-horizon="1y"] .pa-h3{display:none}
+body[data-pa-horizon="3y"] .pa-h1{display:none}
+.pa-analytics[data-pa-horizon="1y"] .pa-h3{display:none}
+.pa-analytics[data-pa-horizon="3y"] .pa-h1{display:none}
+body[data-pa-mode="tech"] .pa-plain-only{display:none}
+body[data-pa-mode="plain"] .pa-tech-only{display:none}
+.pa-analytics[data-pa-mode="tech"] .pa-plain-only{display:none}
+.pa-analytics[data-pa-mode="plain"] .pa-tech-only{display:none}
 .bud-tbl td.ctx-c{background:rgba(114,130,106,0.05);font-size:9px;line-height:1.35;vertical-align:top}
 .bud-tbl td.bud-c{color:var(--text)}
 .bud-tbl td.fy-c{font-weight:600;color:var(--text);min-width:92px;white-space:nowrap}
@@ -263,6 +308,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <nav class="nav">
   <button class="nav-btn active" data-tab="overview" onclick="showTab('overview')">Overview</button>
+  <button class="nav-btn" data-tab="analytics" onclick="showTab('analytics')">Analytics</button>
   <button class="nav-btn" data-tab="arr" onclick="showTab('arr')">ARR</button>
   <button class="nav-btn" data-tab="gtm" onclick="showTab('gtm')">GTM / Pipeline</button>
   <button class="nav-btn" data-tab="sales" onclick="showTab('sales')">Sales</button>
@@ -377,7 +423,7 @@ const BUDGET_ENGINE_BACKLOG = [
   'Budget promote: expand warehouse tables (HC, GTM channels, GL) beyond core statements',
   'Plan Assurance: scenario stress sweeps (NB/CPL/attrition/churn) — DONE (Monte Carlo + nerd view)',
   'Goals → Draft: targets packet generates draft version inside formula graph',
-  'Plan Assurance: optional dedicated tab separate from Overview visuals',
+  'Plan Assurance: optional dedicated tab separate from Overview visuals — DONE (Analytics tab, horizontal)',
 ];
 
 /**
@@ -1021,6 +1067,10 @@ const STATE = {
   gtmHistRows: {},
   ovGrain: 'q',
   ovShowFy24: true,
+  /** Analytics tab: '1y' | '3y' */
+  paHorizon: '1y',
+  /** Analytics tab: 'plain' | 'tech' */
+  paMode: 'plain',
   plDept: 'total',
   plRates: {},
   /** Per-period $ for discretionary P&L lines: plFlat[dept][line][period]. Seeded flat YoY; edit cells for variability. */
@@ -3380,8 +3430,8 @@ function buildQuarterGtm(q) {
 function renderSidebar() {
   const el = document.getElementById('sidebar');
   const layout = document.querySelector('.layout');
-  if (layout) layout.classList.toggle('no-sidebar', curTab === 'overview');
-  if (curTab === 'overview') {
+  if (layout) layout.classList.toggle('no-sidebar', curTab === 'overview' || curTab === 'analytics');
+  if (curTab === 'overview' || curTab === 'analytics') {
     el.innerHTML = '';
     return;
   }
@@ -6063,83 +6113,23 @@ function renderOverview() {
   const grainQ = STATE.ovGrain !== 'm';
   const packet = buildBudgetAssurancePacket();
   const risks = runBudgetRiskChecks(packet);
-  const hist = buildAssuranceHistoryPacket(packet);
-  const statusHtml = (STATE._assureNarrative || buildDeterministicAssuranceNarrative(packet, risks))
-    .replace(/</g, '&lt;').replace(/\n/g, '<br>');
-  const histNarrative = (STATE._assureHistoryNarrative || buildDeterministicHistoryNarrative(hist))
-    .replace(/</g, '&lt;').replace(/\n/g, '<br>');
-  const scenarioHtml = renderAssureScenarioHtml(
-    STATE._assureScenarioSuite && STATE._assureScenarioSuite.fp === scenarioPlanFingerprint(packet)
-      ? STATE._assureScenarioSuite
-      : null
-  );
   const riskHtml = renderAssureFindingRows(risks);
-  const histFindingsHtml = renderAssureFindingRows(
-    (hist.findings || []).filter(f => f.severity !== 'ok' || f.id === 'in_line_summary')
-  );
   const highN = risks.filter(r => r.severity === 'high').length;
   const medN = risks.filter(r => r.severity === 'medium').length;
-  const histFlags = (hist.findings || []).filter(f => f.severity === 'high' || f.severity === 'medium').length;
   return `
     <div class="slide-title">Overview · FY${BUDGET_YEAR}</div>
-    <div class="slide-sub">Outlier review · Status · Scenarios side-by-side · Risk below · YoY visuals under that.</div>
+    <div class="slide-sub">Risk checks + operating plan visuals. Outlier / Status / Predictive live on <button type="button" class="act-btn" onclick="showTab('analytics')" style="display:inline;padding:2px 8px;vertical-align:baseline">Analytics →</button></div>
 
-    <div class="assure-panel" id="plan-assurance">
-      <div class="assure-hd">
-        <div>
-          <div class="assure-title">Plan Assurance</div>
-          <div class="assure-sub">1 Outlier review · 2 Status · 3 Scenario · Risk below</div>
-        </div>
-        <div style="font-size:11px;color:var(--text3)">
-          ${histFlags ? `<span style="color:var(--amber)">${histFlags} history flags</span> · ` : ''}
-          ${highN ? `<span style="color:var(--red)">${highN} high risk</span> · ` : ''}
-          ${medN ? `<span style="color:var(--amber)">${medN} med risk</span> · ` : ''}
-          ${risks.filter(r => r.severity === 'ok').length} risk clear
-        </div>
-      </div>
+    <div class="pa-banner">
+      Plan Assurance lanes moved to <strong>Analytics</strong> (full-width). This page keeps formula-graph <strong>risk checks</strong> and the YoY operating visuals.
+      ${highN || medN ? ` · <span style="color:${highN ? 'var(--red)' : 'var(--amber)'}">${highN ? highN + ' high' : ''}${highN && medN ? ' · ' : ''}${medN ? medN + ' med' : ''} risk</span>` : ' · risk strip clear'}
+    </div>
 
-      <div class="assure-lanes">
-        <div class="assure-lane">
-          <div class="assure-lane-hd">
-            <div class="assure-lane-lbl">1 · Outlier review (vs history)</div>
-            <div class="assure-lane-acts">
-              <button class="act-btn" type="button" onclick="refreshAssuranceHistory(false)">↺ Refresh</button>
-              <button class="act-btn success" type="button" onclick="refreshAssuranceHistory(true)">Generate history</button>
-            </div>
-          </div>
-          <div class="assure-lane-body" id="assureHistoryBody">
-            <div style="margin-bottom:8px">${histNarrative}</div>
-            ${histFindingsHtml || '<div style="color:var(--text3)">No outliers vs history / intra-year thresholds.</div>'}
-          </div>
-        </div>
-        <div class="assure-lane">
-          <div class="assure-lane-hd">
-            <div class="assure-lane-lbl">2 · Plan Assurance (status)</div>
-            <div class="assure-lane-acts">
-              <button class="act-btn" type="button" onclick="refreshAssuranceNarrative(false)">↺ Refresh</button>
-              <button class="act-btn success" type="button" onclick="refreshAssuranceNarrative(true)">Generate status</button>
-            </div>
-          </div>
-          <div class="assure-lane-body" id="assureStatusBody">${statusHtml}</div>
-        </div>
-        <div class="assure-lane">
-          <div class="assure-lane-hd">
-            <div class="assure-lane-lbl">3 · Predictive / scenario</div>
-            <div class="assure-lane-acts">
-              <button class="act-btn" type="button" onclick="refreshAssuranceScenarios(false)">↺ Refresh</button>
-              <button class="act-btn success" type="button" onclick="refreshAssuranceScenarios(true)">Generate scenarios</button>
-            </div>
-          </div>
-          <div class="assure-lane-body" id="assureScenarioBody">
-            ${scenarioHtml}
-          </div>
-        </div>
-      </div>
-
-      <div class="assure-wide">
+    <div class="assure-panel" id="plan-assurance-risk">
+      <div class="assure-wide" style="margin:0">
         <div class="assure-wide-hd">
           <div class="assure-lane-lbl">Risk checks · formula-graph validations</div>
-          <div style="font-size:10px;color:var(--text3)">Refresh with the plan</div>
+          <div style="font-size:10px;color:var(--text3)">${risks.filter(r => r.severity === 'ok').length} clear · refreshes with the plan</div>
         </div>
         <div class="assure-risk-grid">${riskHtml || '<div style="color:var(--text3)">No checks yet.</div>'}</div>
       </div>
@@ -6225,6 +6215,238 @@ function renderOverview() {
 }
 
 // ─── PLAN ASSURANCE (status · risk · context) ──────────────────────────────
+
+window.setPaHorizon = function(h) {
+  STATE.paHorizon = h === '3y' ? '3y' : '1y';
+  refresh();
+};
+window.setPaMode = function(m) {
+  STATE.paMode = m === 'tech' ? 'tech' : 'plain';
+  refresh();
+};
+
+function paAnalyticsVerdict(suite, packet) {
+  if (!suite || !suite.mc) {
+    return {
+      sev: 'watch',
+      big: 'Run scenarios to stress this plan.',
+      small: 'Named lever shocks + 1,000 Monte Carlo draws through the formula graph populate the readouts and predictive section.',
+    };
+  }
+  const mc = suite.mc;
+  const breakN = suite.cases.filter(c => c.status === 'break').length;
+  const pHold = Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0));
+  const pCash = mc.cash.pBreak || 0;
+  let sev = 'hold';
+  if (breakN >= 2 || pCash >= 0.15) sev = 'break';
+  else if (breakN >= 1 || pCash >= 0.05 || (mc.arr.pMiss || 0) >= 0.25) sev = 'watch';
+  const cplCase = suite.cases.find(c => /cpl|lead|paid/i.test(c.label || '') || /cpl/i.test(c.id || ''));
+  const lean = cplCase && (cplCase.status === 'break' || cplCase.status === 'watch')
+    ? 'what it costs to buy demand'
+    : 'a few named lever shocks';
+  return {
+    sev,
+    big: sev === 'hold'
+      ? 'The plan holds under stated priors — still watch the levers that swing cash.'
+      : `The plan works, but it leans on ${lean}.`,
+    small: `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. `
+      + `P(cash under floor) ${(pCash * 100).toFixed(0)}% · P(ARR miss) ${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`
+      + (breakN ? ` · ${breakN} named case${breakN === 1 ? '' : 's'} break` : '')
+      + `. Dec cash plan ${fmtM(packet.endCash)} vs floor ${fmtM(packet.cashFloor)}.`,
+  };
+}
+
+function renderPaReadouts(suite) {
+  if (!suite || !suite.mc) {
+    return [
+      { lab: 'Years that hold up', val: '—', note: 'Run scenarios', cls: '' },
+      { lab: 'Cash under floor', val: '—', note: 'MC pending', cls: '' },
+      { lab: 'ARR miss', val: '—', note: 'MC pending', cls: '' },
+      { lab: 'Named breaks', val: '—', note: 'MC pending', cls: '' },
+    ];
+  }
+  const mc = suite.mc;
+  const pHold = Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0));
+  const breakN = suite.cases.filter(c => c.status === 'break').length;
+  return [
+    { lab: 'Years that hold up', val: `${(pHold * 100).toFixed(0)}%`, note: 'approx. all-green under priors', cls: 'hold' },
+    { lab: 'Cash under floor', val: `${((mc.cash.pBreak || 0) * 100).toFixed(0)}%`, note: 'P(Dec cash < floor)', cls: (mc.cash.pBreak || 0) >= 0.1 ? 'break' : 'watch' },
+    { lab: 'ARR miss', val: `${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`, note: 'P(Dec ARR < YoY target)', cls: (mc.arr.pMiss || 0) >= 0.25 ? 'watch' : '' },
+    { lab: 'Named breaks', val: String(breakN), note: `${suite.cases.length} stress cases`, cls: breakN ? 'break' : 'hold' },
+  ];
+}
+
+function renderPaCashCorridorSvg(packet, suite) {
+  const { cfs } = computeCfBsPlan();
+  const plan = BUD_P.map(p => (cfs[p] && cfs[p].ending_cash != null ? cfs[p].ending_cash : 0) / 1e6);
+  const floor = (packet.cashFloor || STATE.cashFloorDec || 3e7) / 1e6;
+  const decSd = suite && suite.mc && suite.mc.cash && suite.mc.cash.sd ? suite.mc.cash.sd / 1e6 : 0;
+  const W = 900, H = 280, PL = 48, PR = 16, PT = 16, PB = 28;
+  const yMax = Math.max(floor * 1.15, ...plan) * 1.08;
+  const yMin = Math.min(0, floor * 0.5, ...plan) ;
+  const xs = (i) => PL + i * (W - PL - PR) / 11;
+  const ys = (v) => PT + (1 - (v - yMin) / (yMax - yMin || 1)) * (H - PT - PB);
+  const pts = (arr) => arr.map((v, i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
+  let band = '';
+  if (decSd > 0) {
+    const hi = plan.map((v, i) => v + decSd * (i / 11));
+    const lo = plan.map((v, i) => Math.max(0, v - decSd * (i / 11)));
+    const d = `M${hi.map((v, i) => `${xs(i)},${ys(v)}`).join('L')}L${lo.slice().reverse().map((v, i) => `${xs(11 - i)},${ys(v)}`).join('L')}Z`;
+    band = `<path d="${d}" fill="rgba(82,150,222,.18)"/>`;
+  }
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(t => {
+    const v = yMin + t * (yMax - yMin);
+    return `<line x1="${PL}" y1="${ys(v)}" x2="${W - PR}" y2="${ys(v)}" stroke="var(--border)" stroke-width="1"/>`
+      + `<text x="${PL - 8}" y="${ys(v) + 4}" fill="var(--text3)" font-size="11" text-anchor="end">$${v.toFixed(0)}M</text>`;
+  }).join('');
+  const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const labels = months.map((m, i) => `<text x="${xs(i)}" y="${H - 8}" fill="var(--text3)" font-size="11" text-anchor="middle">${m}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Plan ending cash by month vs cash floor" style="width:100%;height:auto;display:block">
+    ${grid}${band}
+    <line x1="${PL}" y1="${ys(floor)}" x2="${W - PR}" y2="${ys(floor)}" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <polyline fill="none" stroke="#5296DE" stroke-width="2.2" points="${pts(plan)}"/>
+    ${labels}
+  </svg>`;
+}
+
+function renderAnalytics() {
+  const packet = buildBudgetAssurancePacket();
+  const hist = buildAssuranceHistoryPacket(packet);
+  const suite = STATE._assureScenarioSuite && STATE._assureScenarioSuite.fp === scenarioPlanFingerprint(packet)
+    ? STATE._assureScenarioSuite
+    : null;
+  const statusHtml = (STATE._assureNarrative || buildDeterministicAssuranceNarrative(packet, runBudgetRiskChecks(packet)))
+    .replace(/</g, '&lt;').replace(/\n/g, '<br>');
+  const histNarrative = (STATE._assureHistoryNarrative || buildDeterministicHistoryNarrative(hist))
+    .replace(/</g, '&lt;').replace(/\n/g, '<br>');
+  const histFindingsHtml = renderAssureFindingRows(
+    (hist.findings || []).filter(f => f.severity !== 'ok' || f.id === 'in_line_summary')
+  );
+  const scenarioHtml = renderAssureScenarioHtml(suite);
+  const verdict = paAnalyticsVerdict(suite, packet);
+  const readouts = renderPaReadouts(suite);
+  const horizon = STATE.paHorizon === '3y' ? '3y' : '1y';
+  const mode = STATE.paMode === 'tech' ? 'tech' : 'plain';
+  const histFlags = (hist.findings || []).filter(f => f.severity === 'high' || f.severity === 'medium').length;
+
+  const readoutHtml = readouts.map(r => `
+    <div class="pa-ro">
+      <div class="lab">${r.lab}</div>
+      <div class="val ${r.cls || ''}">${r.val}</div>
+      <div class="note">${r.note}</div>
+    </div>`).join('');
+
+  return `
+    <div class="pa-analytics" id="plan-assurance" data-pa-horizon="${horizon}" data-pa-mode="${mode}">
+      <div class="pa-head">
+        <div>
+          <div class="slide-title" style="margin:0">Analytics · FY${BUDGET_YEAR}</div>
+          <div class="slide-sub" style="margin-top:4px">
+            <span class="pa-plain-only">What could break this plan — full-width Plan Assurance.</span>
+            <span class="pa-tech-only">Outlier · status · stress + MC on the formula graph (1y). 3y is an LRP shell until the multi-year bridge ships.</span>
+          </div>
+        </div>
+        <div class="pa-toggles">
+          <div class="pa-toggle" role="group" aria-label="Time horizon">
+            <button type="button" aria-pressed="${horizon === '1y'}" onclick="setPaHorizon('1y')">This year</button>
+            <button type="button" aria-pressed="${horizon === '3y'}" onclick="setPaHorizon('3y')">Three years</button>
+          </div>
+          <div class="pa-toggle" role="group" aria-label="Reading level">
+            <button type="button" aria-pressed="${mode === 'plain'}" onclick="setPaMode('plain')">Plain English</button>
+            <button type="button" aria-pressed="${mode === 'tech'}" onclick="setPaMode('tech')">Analyst</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pa-h1">
+        <div class="pa-verdict">
+          <span class="pa-dot ${verdict.sev}"></span>
+          <div>
+            <p class="pa-big">${verdict.big.replace(/</g, '&lt;')}</p>
+            <p class="pa-small">${verdict.small.replace(/</g, '&lt;')}</p>
+          </div>
+        </div>
+        <div class="pa-readouts">${readoutHtml}</div>
+
+        <div class="pa-section">
+          <h2 class="pa-section-hd">Cash through the year</h2>
+          <p class="pa-section-sub">
+            <span class="pa-plain-only">Plan ending cash each month vs the floor we promised not to cross. Blue band (when scenarios have run) sketches Dec-cash uncertainty along the path.</span>
+            <span class="pa-tech-only">Plan CFS ending cash · floor = cashFloorDec · optional σ band from MC Dec cash when suite is fresh.</span>
+          </p>
+          <div class="pa-card">
+            ${renderPaCashCorridorSvg(packet, suite)}
+            <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--text3);margin-top:10px">
+              <span>■ Plan cash</span><span style="color:var(--red)">— Cash floor (${fmtM(packet.cashFloor)})</span>
+              ${suite && suite.mc ? '<span style="color:#7a9fc2">Band ≈ MC Dec σ tapered</span>' : '<span>Run scenarios for uncertainty band</span>'}
+            </div>
+          </div>
+        </div>
+
+        <div class="pa-stack pa-section">
+          <div class="pa-card">
+            <div class="pa-card-hd">
+              <div class="pa-card-lbl">1 · Outlier review (vs history)${histFlags ? ` · ${histFlags} flags` : ''}</div>
+              <div class="assure-lane-acts">
+                <button class="act-btn" type="button" onclick="refreshAssuranceHistory(false)">↺ Refresh</button>
+                <button class="act-btn success" type="button" onclick="refreshAssuranceHistory(true)">Generate history</button>
+              </div>
+            </div>
+            <div class="pa-body" id="assureHistoryBody">
+              <div style="margin-bottom:8px">${histNarrative}</div>
+              ${histFindingsHtml || '<div style="color:var(--text3)">No outliers vs history / intra-year thresholds.</div>'}
+            </div>
+          </div>
+
+          <div class="pa-card">
+            <div class="pa-card-hd">
+              <div class="pa-card-lbl">2 · Plan Assurance (status)</div>
+              <div class="assure-lane-acts">
+                <button class="act-btn" type="button" onclick="refreshAssuranceNarrative(false)">↺ Refresh</button>
+                <button class="act-btn success" type="button" onclick="refreshAssuranceNarrative(true)">Generate status</button>
+              </div>
+            </div>
+            <div class="pa-body" id="assureStatusBody">${statusHtml}</div>
+          </div>
+
+          <div class="pa-card">
+            <div class="pa-card-hd">
+              <div class="pa-card-lbl">3 · Predictive / scenario</div>
+              <div class="assure-lane-acts">
+                <button class="act-btn" type="button" onclick="refreshAssuranceScenarios(false)">↺ Refresh</button>
+                <button class="act-btn success" type="button" onclick="refreshAssuranceScenarios(true)">Generate scenarios</button>
+              </div>
+            </div>
+            <div class="pa-body" id="assureScenarioBody">${scenarioHtml}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pa-h3 pa-l3">
+        <div class="pa-verdict">
+          <span class="pa-dot watch"></span>
+          <div>
+            <p class="pa-big">Three-year LRP — shell only</p>
+            <p class="pa-small">
+              Same Plan → Test vocabulary as the FY operating plan, on a coarse multi-year bridge.
+              Not warehouse-bound yet — we will not invent Dec cash or ARR paths here.
+              Next: thin FY28–FY29 endpoints (ARR / cash / HC) on this formula graph, then trip-wires.
+            </p>
+          </div>
+        </div>
+        <div class="pa-section">
+          <h2 class="pa-section-hd">Where this goes next</h2>
+          <p class="pa-section-sub">Reuse Analytics + historical LLM context on Board close packs and Forecast Engine versions — monthly “what changed / what breaks” with the same evidence chips.</p>
+          <div class="pa-card pa-body">
+            <strong>Board / month-end:</strong> outlier + status lanes over freeze context.<br>
+            <strong>Forecast Engine:</strong> scenario lane per active forecast version.<br>
+            <strong>Budget 3y:</strong> annual gates, not 36 months of mix cells.
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderAssureFindingRows(items) {
   if (!items || !items.length) return '';
   return items.map(r => {
@@ -7632,7 +7854,7 @@ function renderAssureScenarioHtml(suite) {
       <span class="assure-sc-chip ok">${okN} hold</span>
       ${suite.mc ? `<span style="font-size:10px;color:var(--text3);margin-left:6px">MC n=${suite.mc.n.toLocaleString()}</span>` : ''}
     </div>
-    <div style="overflow:auto;max-height:420px">
+    <div style="overflow:auto;max-height:none">
       <table class="assure-sc-table">
         <thead><tr><th>Case &amp; plain-English read</th><th>Δ ARR</th><th>Δ Cash</th><th>Δ EBITDA</th><th>Result</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -8137,7 +8359,7 @@ function refresh() {
       : curTab === 'pnl' ? '↺ Reset P&L rates'
       : (curTab === 'cf' || curTab === 'bs') ? '↺ Reset WC / cash drivers'
       : '↺ Reset mix from history';
-    footerBtn.style.display = (curTab === 'promote' || curTab === 'defs') ? 'none' : '';
+    footerBtn.style.display = (curTab === 'promote' || curTab === 'defs' || curTab === 'analytics') ? 'none' : '';
   }
   main.innerHTML = curTab === 'arr' ? renderARR()
     : curTab === 'gtm' ? renderGTM()
@@ -8149,9 +8371,21 @@ function refresh() {
     : curTab === 'bs' ? renderBS()
     : curTab === 'defs' ? renderDefinitions()
     : curTab === 'promote' ? renderPromote()
+    : curTab === 'analytics' ? renderAnalytics()
     : renderOverview();
   if (curTab === 'overview') paintOverviewCharts();
   else destroyOvCharts();
+  // Sync horizon/mode attrs if Analytics re-rendered mid-toggle without full body replace
+  const paRoot = document.getElementById('plan-assurance');
+  if (paRoot && curTab === 'analytics') {
+    paRoot.setAttribute('data-pa-horizon', STATE.paHorizon === '3y' ? '3y' : '1y');
+    paRoot.setAttribute('data-pa-mode', STATE.paMode === 'tech' ? 'tech' : 'plain');
+    document.body.setAttribute('data-pa-horizon', STATE.paHorizon === '3y' ? '3y' : '1y');
+    document.body.setAttribute('data-pa-mode', STATE.paMode === 'tech' ? 'tech' : 'plain');
+  } else {
+    document.body.removeAttribute('data-pa-horizon');
+    document.body.removeAttribute('data-pa-mode');
+  }
   const fpEl = document.getElementById('assumeFp');
   if (fpEl) fpEl.textContent = budgetAssumptionFingerprint();
   persistBudgetState();
