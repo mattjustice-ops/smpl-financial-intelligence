@@ -1036,7 +1036,9 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 5;
+const BUDGET_PLAN_REV = 6;
+/** Mix % of BOP is seeded once from this reference YoY plan — not rewritten when the growth lever moves. */
+const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
 /**
  * Seeded from outlook hist every load — never persist, or localhost and /app diverge.
@@ -1082,6 +1084,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v2');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v3');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v4');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v5');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1121,6 +1124,7 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v2');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v3');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v4');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v5');
   } catch (e) { /* ignore */ }
 }
 
@@ -1537,8 +1541,9 @@ function getMix(period) {
   return STATE.mixByPeriod[period];
 }
 
-function computeArrAnnualTargets() {
-  const g = monthlyRateFromYoy(STATE.yoyEndingArrGrowthPct);
+function computeArrAnnualTargets(yoyPct) {
+  const yoy = yoyPct == null ? STATE.yoyEndingArrGrowthPct : yoyPct;
+  const g = monthlyRateFromYoy(yoy);
   const targetDec = BOP_LOCK * Math.pow(1 + g, 12);
   const fyNn = targetDec - BOP_LOCK;
   const mix = { nb: 0, exp: 0, react: 0, cont: 0, churn: 0 };
@@ -1676,24 +1681,24 @@ function fyPlanValue(plan, row) {
 }
 
 /**
- * Seed editable mix % so BOP × mix reproduces the canonical YoY plan dollars
- * (annual net-new allocated with hist/HC month weights — the pre-tie-out path).
- * Displayed % then matches the $ row; localhost and /app share the same seed policy.
+ * Seed editable mix % once from the canonical +20% plan dollar path.
+ * Uses hist relative component weights + fixed seasonality (not Sales HC),
+ * so localhost and /app match. Changing the YoY growth lever does NOT rewrite
+ * these rates — Dec NB plug absorbs target changes while BOP × mix stays exact.
  */
 function seedMixFromHistory() {
   STATE.mixByPeriod = {};
-  // 1) Hist relative component weights → annual NB/exp/… at current YoY target
+  // Hist relative weights only (temporary) → annual NB/exp/… at fixed +20% seed
   for (const p of BUD_P) getMix(p);
-  const annual = computeArrAnnualTargets();
-  const sales = buildSalesPlanFromDemand(annual.nb, annual.exp, annual.cont + annual.churn);
-  const nbW = monthWeightsCloseByHistQuarter(BUD_P.map(p => sales.byPeriod[p].endingAes), 'nb');
-  const expW = monthWeightsCloseByHistQuarter(BUD_P.map(p => sales.byPeriod[p].endingCs), 'exp');
-  const otherHeads = BUD_P.map((_, i) => 1 + 0.035 * i);
-  const reactW = monthWeightsCloseByHistQuarter(otherHeads, 'react');
-  const contW = monthWeightsCloseByHistQuarter(otherHeads, 'cont');
-  const churnW = monthWeightsCloseByHistQuarter(otherHeads, 'churn');
+  const annual = computeArrAnnualTargets(MIX_SEED_YOY_PCT);
+  // Stable month shape — no Sales HC (that diverged localhost vs /app)
+  const seasonHeads = BUD_P.map((_, i) => 1 + 0.035 * i);
+  const nbW = monthWeightsCloseByHistQuarter(seasonHeads, 'nb');
+  const expW = monthWeightsCloseByHistQuarter(seasonHeads, 'exp');
+  const reactW = monthWeightsCloseByHistQuarter(seasonHeads, 'react');
+  const contW = monthWeightsCloseByHistQuarter(seasonHeads, 'cont');
+  const churnW = monthWeightsCloseByHistQuarter(seasonHeads, 'churn');
 
-  // 2) Convert those monthly $ into % of beginning ARR (what the grid edits)
   let prior = BOP_LOCK;
   for (let i = 0; i < BUD_P.length; i++) {
     const p = BUD_P[i];
@@ -3806,8 +3811,7 @@ window.setYoyGrowth = function(pct) {
   STATE.yoyEndingArrGrowthPct = pct;
   const v = document.getElementById('v-growth');
   if (v) v.textContent = pct.toFixed(1) + '%';
-  // Keep mix % = plan $ / BOP so the grid still ties after the lever moves.
-  seedMixFromHistory();
+  // Mix % of BOP stays fixed — Dec NB plug in computeBudgetArr hits the new YoY target.
   refresh();
 };
 
@@ -4289,7 +4293,7 @@ function renderARR() {
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">FY ending ARR from YoY growth (base plan <strong>+20%</strong>). Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix. Percents are seeded from the YoY plan dollar path so the grid ties; any residual YoY gap is a <strong>Dec NB plug</strong>.</div>
+    <div class="slide-sub">FY ending ARR from YoY growth. Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix. Mix % is seeded from the <strong>+${MIX_SEED_YOY_PCT}%</strong> base plan and <strong>does not change</strong> when you move the YoY lever (any gap is a <strong>Dec NB plug</strong>).</div>
     ${adjLegend()}
     <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.${
       plan._yoYPlug != null && Math.abs(plan._yoYPlug) > 500
@@ -8236,9 +8240,9 @@ async function init() {
   if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
     setStatus('FY26 hist Dec ' + fmtM(dec26) + ' ≠ Jan lock ' + fmtM(BOP_LOCK) + ' — check outlook hydrate');
   } else if (restored) {
-    setStatus('Levers restored · mix seeded from ' + STATE.yoyEndingArrGrowthPct.toFixed(0) + '% YoY plan dollars (rev ' + BUDGET_PLAN_REV + ')');
+    setStatus('Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever does not rewrite mix %)');
   } else {
-    setStatus('Base plan · mix seeded from ' + STATE.yoyEndingArrGrowthPct.toFixed(0) + '% YoY plan dollars (rev ' + BUDGET_PLAN_REV + ')');
+    setStatus('Base plan · mix seeded from +' + MIX_SEED_YOY_PCT + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever does not rewrite mix %)');
   }
   if (window.SMPLSkin) window.SMPLSkin.init('skinSelect', refresh);
   else refresh();
