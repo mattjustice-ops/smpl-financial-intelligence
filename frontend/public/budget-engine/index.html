@@ -6216,21 +6216,12 @@ function renderOverview() {
 
 // ─── PLAN ASSURANCE (status · risk · context) ──────────────────────────────
 
-window.setPaHorizon = function(h) {
-  STATE.paHorizon = h === '3y' ? '3y' : '1y';
-  refresh();
-};
-window.setPaMode = function(m) {
-  STATE.paMode = m === 'tech' ? 'tech' : 'plain';
-  refresh();
-};
-
 function paAnalyticsVerdict(suite, packet) {
   if (!suite || !suite.mc) {
     return {
       sev: 'watch',
       big: 'Run scenarios to stress this plan.',
-      small: 'Named lever shocks + 1,000 Monte Carlo draws through the formula graph populate the readouts and predictive section.',
+      small: 'Named lever shocks + Monte Carlo through the formula graph populate likelihoods and stress chips.',
     };
   }
   const mc = suite.mc;
@@ -6256,58 +6247,160 @@ function paAnalyticsVerdict(suite, packet) {
   };
 }
 
-function renderPaReadouts(suite) {
-  if (!suite || !suite.mc) {
-    return [
-      { lab: 'Years that hold up', val: '—', note: 'Run scenarios', cls: '' },
-      { lab: 'Cash under floor', val: '—', note: 'MC pending', cls: '' },
-      { lab: 'ARR miss', val: '—', note: 'MC pending', cls: '' },
-      { lab: 'Named breaks', val: '—', note: 'MC pending', cls: '' },
-    ];
-  }
-  const mc = suite.mc;
-  const pHold = Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0));
-  const breakN = suite.cases.filter(c => c.status === 'break').length;
-  return [
-    { lab: 'Years that hold up', val: `${(pHold * 100).toFixed(0)}%`, note: 'approx. all-green under priors', cls: 'hold' },
-    { lab: 'Cash under floor', val: `${((mc.cash.pBreak || 0) * 100).toFixed(0)}%`, note: 'P(Dec cash < floor)', cls: (mc.cash.pBreak || 0) >= 0.1 ? 'break' : 'watch' },
-    { lab: 'ARR miss', val: `${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`, note: 'P(Dec ARR < YoY target)', cls: (mc.arr.pMiss || 0) >= 0.25 ? 'watch' : '' },
-    { lab: 'Named breaks', val: String(breakN), note: `${suite.cases.length} stress cases`, cls: breakN ? 'break' : 'hold' },
-  ];
+function buildPaLeversLivePacket() {
+  const packet = buildBudgetAssurancePacket();
+  const { cfs } = computeCfBsPlan();
+  const gtm = computeGtmPlan();
+  const planCash = BUD_P.map(p => Number(((cfs[p] && cfs[p].ending_cash) || 0) / 1e6));
+  const floorM = Number((packet.cashFloor || STATE.cashFloorDec || 3e7) / 1e6);
+  const spend = BUD_P.map(p => Number(((gtm[p] && gtm[p].spend) || 0) / 1e6));
+  const suite = STATE._assureScenarioSuite && STATE._assureScenarioSuite.fp === scenarioPlanFingerprint(packet)
+    ? STATE._assureScenarioSuite
+    : null;
+  const mc = suite && suite.mc;
+  const decSd = mc && mc.cash && mc.cash.sd != null ? mc.cash.sd / 1e6 : 0;
+  const pHold = mc
+    ? Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0))
+    : null;
+
+  const readouts = mc ? [
+    {
+      plain: 'Years that hold up', tech: 'Trials all-green',
+      val: `${(pHold * 100).toFixed(0)}%`,
+      note: { plain: 'under stated lever priors', tech: 'ARR, cash rails inside priors' },
+      cls: pHold >= 0.55 ? 'hold' : 'watch',
+    },
+    {
+      plain: 'Years we run short on cash', tech: 'P(cash < floor)',
+      val: `${((mc.cash.pBreak || 0) * 100).toFixed(0)}%`,
+      note: { plain: 'Dec cash vs floor', tech: 'empirical MC frequency' },
+      cls: (mc.cash.pBreak || 0) >= 0.1 ? 'break' : 'watch',
+    },
+    {
+      plain: 'Years we miss the growth number', tech: 'P(ending ARR < commit)',
+      val: `${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`,
+      note: { plain: 'Dec ARR under YoY target', tech: 'empirical MC frequency' },
+      cls: (mc.arr.pMiss || 0) >= 0.25 ? 'watch' : '',
+    },
+    {
+      plain: 'Named cases that break', tech: 'Break-count / cases',
+      val: String((suite.cases || []).filter(c => c.status === 'break').length),
+      note: { plain: `${(suite.cases || []).length} stress cases`, tech: 'formula-graph named shocks' },
+      cls: (suite.cases || []).some(c => c.status === 'break') ? 'break' : 'hold',
+    },
+  ] : null;
+
+  const cases = (suite && suite.cases || []).map(c => {
+    const dCashM = (c.dCash || 0) / 1e6;
+    const dArrM = (c.dArr || 0) / 1e6;
+    const dEbM = (c.dEbitda || 0) / 1e6;
+    const s = c.status === 'break' ? 'break' : c.status === 'watch' ? 'watch' : 'hold';
+    return {
+      plain: c.label || c.id || 'Case',
+      tech: (c.explain || c.label || '').slice(0, 120),
+      s,
+      d: dCashM,
+      arr: `${dArrM >= 0 ? '+' : ''}${dArrM.toFixed(1)}M`,
+      eb: dEbM,
+      xp: c.explain || c.label || '',
+      xt: (c.breaks && c.breaks.length ? c.breaks.join('; ') : (c.watches || []).join('; ')) || c.explain || '',
+    };
+  });
+
+  const levers = (suite && suite.cases || [])
+    .slice()
+    .sort((a, b) => Math.abs(b.dCash || 0) - Math.abs(a.dCash || 0))
+    .slice(0, 12)
+    .map(c => {
+      const dn = Math.min(0, (c.dCash || 0) / 1e6);
+      const up = Math.max(0, Math.abs(dn) * 0.45);
+      const tier = c.status === 'break' ? 'break' : c.status === 'watch' ? 'mid' : (Math.abs(dn) < 2 ? 'flat' : 'up');
+      return {
+        plain: c.label || c.id,
+        tech: c.id || c.label,
+        mp: c.explain || 'Named stress on the formula graph',
+        mt: (c.breaks || c.watches || []).slice(0, 2).join(', ') || 'live stress case',
+        dn,
+        up,
+        tier,
+      };
+    });
+
+  const jan = planCash[0];
+  const dec = planCash[11];
+  return {
+    sourceLabel: suite && suite.mc
+      ? `Live · MC n=${suite.mc.n.toLocaleString()} · floor ${fmtM(packet.cashFloor)}`
+      : `Live plan cash · run scenarios for MC bands`,
+    plan: planCash,
+    floor: floorM,
+    spend,
+    decCashSdM: decSd,
+    readouts,
+    cases: cases.length ? cases : undefined,
+    levers: levers.length ? levers : undefined,
+    copy: {
+      vbig: {
+        plain: suite && suite.mc
+          ? (paAnalyticsVerdict(suite, packet).big)
+          : 'Run scenarios to test what could break this plan.',
+        tech: suite && suite.mc
+          ? 'Live Monte Carlo + named shocks on the FY formula graph.'
+          : 'Pending stress suite — corridor shows plan CFS vs cash floor only.',
+      },
+      vsmall: {
+        plain: suite && suite.mc
+          ? paAnalyticsVerdict(suite, packet).small
+          : `Plan cash ${fmtM(jan * 1e6)} → ${fmtM(dec * 1e6)} vs floor ${fmtM(packet.cashFloor)}. Generate scenarios for likelihoods.`,
+        tech: `Plan CFS path · floor ${floorM.toFixed(1)}M · YoY ${STATE.yoyEndingArrGrowthPct}% · BOP ${fmtM(BOP_LOCK)}.`,
+      },
+      corr: {
+        plain: `Plan spends from $${jan.toFixed(1)}M to $${dec.toFixed(1)}M. Red line is the floor (${floorM.toFixed(1)}M). Shaded band appears after Monte Carlo.`,
+        tech: `Plan CFS ending cash vs cashFloorDec=${floorM.toFixed(1)}M. Band from MC Dec σ when suite is fresh.`,
+      },
+      foot: {
+        plain: 'Cash path and stress dollars bind to the Budget formula graph. Frequencies are how often draws breached under stated priors — not a calibrated Probability of Attainment.',
+        tech: 'View layer invents no dollars. Frequencies = empirical counts under lever priors; not calibrated PoA.',
+      },
+    },
+  };
 }
 
-function renderPaCashCorridorSvg(packet, suite) {
-  const { cfs } = computeCfBsPlan();
-  const plan = BUD_P.map(p => (cfs[p] && cfs[p].ending_cash != null ? cfs[p].ending_cash : 0) / 1e6);
-  const floor = (packet.cashFloor || STATE.cashFloorDec || 3e7) / 1e6;
-  const decSd = suite && suite.mc && suite.mc.cash && suite.mc.cash.sd ? suite.mc.cash.sd / 1e6 : 0;
-  const W = 900, H = 280, PL = 48, PR = 16, PT = 16, PB = 28;
-  const yMax = Math.max(floor * 1.15, ...plan) * 1.08;
-  const yMin = Math.min(0, floor * 0.5, ...plan) ;
-  const xs = (i) => PL + i * (W - PL - PR) / 11;
-  const ys = (v) => PT + (1 - (v - yMin) / (yMax - yMin || 1)) * (H - PT - PB);
-  const pts = (arr) => arr.map((v, i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
-  let band = '';
-  if (decSd > 0) {
-    const hi = plan.map((v, i) => v + decSd * (i / 11));
-    const lo = plan.map((v, i) => Math.max(0, v - decSd * (i / 11)));
-    const d = `M${hi.map((v, i) => `${xs(i)},${ys(v)}`).join('L')}L${lo.slice().reverse().map((v, i) => `${xs(11 - i)},${ys(v)}`).join('L')}Z`;
-    band = `<path d="${d}" fill="rgba(82,150,222,.18)"/>`;
+function pushPaLeversToFrame() {
+  const frame = document.getElementById('paLeversFrame');
+  if (!frame || !frame.contentWindow) return;
+  const live = buildPaLeversLivePacket();
+  try {
+    frame.contentWindow.postMessage({ type: 'smpl:pa-levers', packet: live }, '*');
+    frame.contentWindow.postMessage({
+      type: 'smpl:pa-mode',
+      mode: STATE.paMode === 'tech' ? 'tech' : 'plain',
+    }, '*');
+    frame.contentWindow.postMessage({
+      type: 'smpl:pa-horizon',
+      horizon: STATE.paHorizon === '3y' ? '3y' : '1y',
+    }, '*');
+  } catch (e) {
+    console.warn('[budget-engine] pa levers postMessage', e);
   }
-  const grid = [0, 0.25, 0.5, 0.75, 1].map(t => {
-    const v = yMin + t * (yMax - yMin);
-    return `<line x1="${PL}" y1="${ys(v)}" x2="${W - PR}" y2="${ys(v)}" stroke="var(--border)" stroke-width="1"/>`
-      + `<text x="${PL - 8}" y="${ys(v) + 4}" fill="var(--text3)" font-size="11" text-anchor="end">$${v.toFixed(0)}M</text>`;
-  }).join('');
-  const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-  const labels = months.map((m, i) => `<text x="${xs(i)}" y="${H - 8}" fill="var(--text3)" font-size="11" text-anchor="middle">${m}</text>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Plan ending cash by month vs cash floor" style="width:100%;height:auto;display:block">
-    ${grid}${band}
-    <line x1="${PL}" y1="${ys(floor)}" x2="${W - PR}" y2="${ys(floor)}" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 3"/>
-    <polyline fill="none" stroke="#5296DE" stroke-width="2.2" points="${pts(plan)}"/>
-    ${labels}
-  </svg>`;
 }
+window.pushPaLeversToFrame = pushPaLeversToFrame;
+
+window.addEventListener('message', function (ev) {
+  if (!ev.data || ev.data.type !== 'smpl:pa-levers-ready') return;
+  pushPaLeversToFrame();
+});
+
+window.setPaHorizon = function(h) {
+  STATE.paHorizon = h === '3y' ? '3y' : '1y';
+  refresh();
+  setTimeout(pushPaLeversToFrame, 50);
+};
+window.setPaMode = function(m) {
+  STATE.paMode = m === 'tech' ? 'tech' : 'plain';
+  refresh();
+  setTimeout(pushPaLeversToFrame, 50);
+};
 
 function renderAnalytics() {
   const packet = buildBudgetAssurancePacket();
@@ -6322,19 +6415,9 @@ function renderAnalytics() {
   const histFindingsHtml = renderAssureFindingRows(
     (hist.findings || []).filter(f => f.severity !== 'ok' || f.id === 'in_line_summary')
   );
-  const scenarioHtml = renderAssureScenarioHtml(suite);
-  const verdict = paAnalyticsVerdict(suite, packet);
-  const readouts = renderPaReadouts(suite);
   const horizon = STATE.paHorizon === '3y' ? '3y' : '1y';
   const mode = STATE.paMode === 'tech' ? 'tech' : 'plain';
   const histFlags = (hist.findings || []).filter(f => f.severity === 'high' || f.severity === 'medium').length;
-
-  const readoutHtml = readouts.map(r => `
-    <div class="pa-ro">
-      <div class="lab">${r.lab}</div>
-      <div class="val ${r.cls || ''}">${r.val}</div>
-      <div class="note">${r.note}</div>
-    </div>`).join('');
 
   return `
     <div class="pa-analytics" id="plan-assurance" data-pa-horizon="${horizon}" data-pa-mode="${mode}">
@@ -6342,8 +6425,7 @@ function renderAnalytics() {
         <div>
           <div class="slide-title" style="margin:0">Analytics · FY${BUDGET_YEAR}</div>
           <div class="slide-sub" style="margin-top:4px">
-            <span class="pa-plain-only">What could break this plan — full-width Plan Assurance.</span>
-            <span class="pa-tech-only">Outlier · status · stress + MC on the formula graph (1y). 3y is an LRP shell until the multi-year bridge ships.</span>
+            History outliers + status up top. Predictive craft below binds the live plan (and MC when you Generate scenarios).
           </div>
         </div>
         <div class="pa-toggles">
@@ -6358,90 +6440,56 @@ function renderAnalytics() {
         </div>
       </div>
 
-      <div class="pa-h1">
-        <div class="pa-verdict">
-          <span class="pa-dot ${verdict.sev}"></span>
-          <div>
-            <p class="pa-big">${verdict.big.replace(/</g, '&lt;')}</p>
-            <p class="pa-small">${verdict.small.replace(/</g, '&lt;')}</p>
-          </div>
-        </div>
-        <div class="pa-readouts">${readoutHtml}</div>
-
-        <div class="pa-section">
-          <h2 class="pa-section-hd">Cash through the year</h2>
-          <p class="pa-section-sub">
-            <span class="pa-plain-only">Plan ending cash each month vs the floor we promised not to cross. Blue band (when scenarios have run) sketches Dec-cash uncertainty along the path.</span>
-            <span class="pa-tech-only">Plan CFS ending cash · floor = cashFloorDec · optional σ band from MC Dec cash when suite is fresh.</span>
-          </p>
-          <div class="pa-card">
-            ${renderPaCashCorridorSvg(packet, suite)}
-            <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--text3);margin-top:10px">
-              <span>■ Plan cash</span><span style="color:var(--red)">— Cash floor (${fmtM(packet.cashFloor)})</span>
-              ${suite && suite.mc ? '<span style="color:#7a9fc2">Band ≈ MC Dec σ tapered</span>' : '<span>Run scenarios for uncertainty band</span>'}
+      <div class="pa-stack pa-section" style="margin-top:8px">
+        <div class="pa-card">
+          <div class="pa-card-hd">
+            <div class="pa-card-lbl">1 · Outlier review (vs history)${histFlags ? ` · ${histFlags} flags` : ''}</div>
+            <div class="assure-lane-acts">
+              <button class="act-btn" type="button" onclick="refreshAssuranceHistory(false)">↺ Refresh</button>
+              <button class="act-btn success" type="button" onclick="refreshAssuranceHistory(true)">Generate history</button>
             </div>
+          </div>
+          <div class="pa-body" id="assureHistoryBody">
+            <div style="margin-bottom:8px">${histNarrative}</div>
+            ${histFindingsHtml || '<div style="color:var(--text3)">No outliers vs history / intra-year thresholds.</div>'}
           </div>
         </div>
 
-        <div class="pa-stack pa-section">
-          <div class="pa-card">
-            <div class="pa-card-hd">
-              <div class="pa-card-lbl">1 · Outlier review (vs history)${histFlags ? ` · ${histFlags} flags` : ''}</div>
-              <div class="assure-lane-acts">
-                <button class="act-btn" type="button" onclick="refreshAssuranceHistory(false)">↺ Refresh</button>
-                <button class="act-btn success" type="button" onclick="refreshAssuranceHistory(true)">Generate history</button>
-              </div>
-            </div>
-            <div class="pa-body" id="assureHistoryBody">
-              <div style="margin-bottom:8px">${histNarrative}</div>
-              ${histFindingsHtml || '<div style="color:var(--text3)">No outliers vs history / intra-year thresholds.</div>'}
+        <div class="pa-card">
+          <div class="pa-card-hd">
+            <div class="pa-card-lbl">2 · Plan Assurance (status)</div>
+            <div class="assure-lane-acts">
+              <button class="act-btn" type="button" onclick="refreshAssuranceNarrative(false)">↺ Refresh</button>
+              <button class="act-btn success" type="button" onclick="refreshAssuranceNarrative(true)">Generate status</button>
             </div>
           </div>
-
-          <div class="pa-card">
-            <div class="pa-card-hd">
-              <div class="pa-card-lbl">2 · Plan Assurance (status)</div>
-              <div class="assure-lane-acts">
-                <button class="act-btn" type="button" onclick="refreshAssuranceNarrative(false)">↺ Refresh</button>
-                <button class="act-btn success" type="button" onclick="refreshAssuranceNarrative(true)">Generate status</button>
-              </div>
-            </div>
-            <div class="pa-body" id="assureStatusBody">${statusHtml}</div>
-          </div>
-
-          <div class="pa-card">
-            <div class="pa-card-hd">
-              <div class="pa-card-lbl">3 · Predictive / scenario</div>
-              <div class="assure-lane-acts">
-                <button class="act-btn" type="button" onclick="refreshAssuranceScenarios(false)">↺ Refresh</button>
-                <button class="act-btn success" type="button" onclick="refreshAssuranceScenarios(true)">Generate scenarios</button>
-              </div>
-            </div>
-            <div class="pa-body" id="assureScenarioBody">${scenarioHtml}</div>
-          </div>
+          <div class="pa-body" id="assureStatusBody">${statusHtml}</div>
         </div>
-      </div>
 
-      <div class="pa-h3 pa-l3">
-        <div class="pa-verdict">
-          <span class="pa-dot watch"></span>
-          <div>
-            <p class="pa-big">Three-year LRP — shell only</p>
-            <p class="pa-small">
-              Same Plan → Test vocabulary as the FY operating plan, on a coarse multi-year bridge.
-              Not warehouse-bound yet — we will not invent Dec cash or ARR paths here.
-              Next: thin FY28–FY29 endpoints (ARR / cash / HC) on this formula graph, then trip-wires.
-            </p>
+        <div class="pa-card" style="padding:10px 10px 6px">
+          <div class="pa-card-hd">
+            <div class="pa-card-lbl">3 · Predictive / lever review</div>
+            <div class="assure-lane-acts">
+              <button class="act-btn" type="button" onclick="refreshAssuranceScenarios(false)">↺ Refresh</button>
+              <button class="act-btn success" type="button" onclick="refreshAssuranceScenarios(true)">Generate scenarios</button>
+              <button class="act-btn" type="button" onclick="pushPaLeversToFrame()">↻ Sync live packet</button>
+            </div>
           </div>
-        </div>
-        <div class="pa-section">
-          <h2 class="pa-section-hd">Where this goes next</h2>
-          <p class="pa-section-sub">Reuse Analytics + historical LLM context on Board close packs and Forecast Engine versions — monthly “what changed / what breaks” with the same evidence chips.</p>
-          <div class="pa-card pa-body">
-            <strong>Board / month-end:</strong> outlier + status lanes over freeze context.<br>
-            <strong>Forecast Engine:</strong> scenario lane per active forecast version.<br>
-            <strong>Budget 3y:</strong> annual gates, not 36 months of mix cells.
+          <div class="pa-banner" style="margin:0 6px 8px">
+            Claude predictive surface (corridor, levers, tolerances, trip-wires).
+            ${suite && suite.mc
+              ? `<strong>Live-bound</strong> to plan CFS + MC n=${suite.mc.n.toLocaleString()}.`
+              : '<strong>Plan cash path live</strong> — Generate scenarios to replace illustrative stress chips with formula-graph cases.'}
+            3y craft inside the frame is still an LRP preview until the multi-year bridge ships.
           </div>
+          <iframe
+            id="paLeversFrame"
+            title="Plan assurance lever review"
+            src="/budget-engine/plan-assurance-levers.html?embedded=1&v=1"
+            style="width:100%;min-height:3200px;border:0;border-radius:8px;background:#0E1113;display:block"
+            onload="pushPaLeversToFrame()"
+          ></iframe>
+          <div id="assureScenarioBody" style="display:none">${renderAssureScenarioHtml(suite)}</div>
         </div>
       </div>
     </div>`;
@@ -7938,6 +7986,7 @@ window.refreshAssuranceScenarios = async function(useLlm) {
   suite.narrative = text;
   if (body) body.innerHTML = renderAssureScenarioHtml(suite);
   else refresh();
+  pushPaLeversToFrame();
 };
 
 window.refreshAssuranceHistory = async function(useLlm) {
