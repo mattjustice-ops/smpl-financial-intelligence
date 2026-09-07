@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import date
 from pathlib import Path
@@ -52,6 +53,15 @@ PLAN_ENTITLEMENTS_BUILD = "gl-3-v1"
 # Visible proof that Haiku / SMPL_FAST_AI board path is live (bump when AI runtime changes).
 AI_FAST_BUILD_ID = "board-ai-quality-speed-v4"
 TRUST_VALIDATION_BUILD_ID = "trust-tab-lineage-v1"
+# The hand-maintained build strings above only move when someone remembers to bump them,
+# so they cannot answer "did my push actually deploy?". Railway injects the deployed commit;
+# surface it so /health can be checked against `git rev-parse HEAD`.
+GIT_COMMIT_SHA = (
+    os.environ.get("RAILWAY_GIT_COMMIT_SHA")
+    or os.environ.get("RENDER_GIT_COMMIT")
+    or os.environ.get("GIT_COMMIT_SHA")
+    or "unknown"
+)[:7]
 _MAIN_FILE = Path(__file__).resolve()
 
 app = FastAPI(
@@ -459,6 +469,7 @@ def health(response: Response) -> dict[str, str | bool]:
     return {
         "status": "ok",
         "build": SFI_BUILD_ID,
+        "git_commit": GIT_COMMIT_SHA,
         "workforce_build": WORKFORCE_BUILD_ID,
         "demo_csv_build": DEMO_CSV_BUILD_ID,
         "plan_entitlements": True,
