@@ -126,10 +126,11 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .risk-desc { font-size: 11px; color: var(--text2); line-height: 1.55; }
 /* PL TABLE */
 .pl-tbl { width: 100%; border-collapse: collapse; font-size: 11.5px; table-layout: fixed; }
-.pl-tbl th { text-align: right; padding: 5px 7px; font-size: 9.5px; color: var(--text3); font-weight: 500; border-bottom: 0.5px solid var(--border2); }
+.pl-tbl th { text-align: center; padding: 5px 7px; font-size: 9.5px; color: var(--text3); font-weight: 500; border-bottom: 0.5px solid var(--border2); }
 .pl-tbl th:first-child { text-align: left; }
 .pl-tbl td { padding: 5px 7px; border-bottom: 0.5px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-tbl td:not(:first-child) { text-align: right; font-family: var(--mono); font-size: 11px; color: var(--text2); }
+.pl-tbl td:not(:first-child) { text-align: center; font-family: var(--mono); font-size: 11px; color: var(--text2); }
+.pl-tbl th.al, .pl-tbl td.al { text-align: left; font-family: inherit; }
 .pl-tbl td:first-child { color: var(--text); }
 .pl-tbl tr.pl-sec td { background: var(--bg2); font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--text2); font-weight: 500; padding: 6px 7px; }
 .pl-tbl tr.pl-sub td { font-weight: 500; color: var(--text); border-top: 0.5px solid var(--border2); }
@@ -293,7 +294,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
-<script src="/shared/smpl-provenance.js?v=2"></script>
+<script src="/shared/smpl-provenance.js?v=3"></script>
 <script src="/shared/board-data.js?v=8"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -1753,15 +1754,11 @@ if (typeof boardValidate === 'function') {
 }
 
 function boardTsSource() {
-  var embedded = window.TS_DATA || TS_DATA;
-  if (window.SMPL_LIVE_OUTLOOK && window.SMPLOutlook && typeof window.SMPLOutlook.getOutlookTsData === 'function') {
+  if (window.SMPL_LIVE_OUTLOOK && window.SMPLOutlook && typeof window.SMPLOutlook.getOutlookTsData === "function") {
     var live = window.SMPLOutlook.getOutlookTsData();
-    if (live && window.SMPLOutlook.mergeTsData) {
-      return window.SMPLOutlook.mergeTsData(embedded, live);
-    }
     if (live) return live;
   }
-  return embedded;
+  return window.TS_DATA || TS_DATA;
 }
 
 function tsGetPeriods(sc) {
@@ -2515,6 +2512,7 @@ const SD = {
     EMEA:   {reps:7,ytd_quota:2289000,ytd_attained:2157500,ytd_pct:.9426,jun_quota:382500,jun_attained:374850},
     East:   {reps:11,ytd_quota:3534000,ytd_attained:3296000,ytd_pct:.9328,jun_quota:594000,jun_attained:603200},
     Central:{reps:6,ytd_quota:1510500,ytd_attained:1456000,ytd_pct:.9640,jun_quota:131000,jun_attained:114575},
+    APAC:   {reps:3,ytd_quota:1150000,ytd_attained:1040000,ytd_pct:.9043,jun_quota:190000,jun_attained:168000},
   },
   roles:{
     'Sr Account Executive':{reps:8,ytd_quota:3668000,ytd_attained:3462792,ytd_pct:.9440},
@@ -2534,7 +2532,7 @@ const SD = {
     {id:'ASALES-2018',name:'Rep 2018',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:151987,pct:1.2183,annual_q:300000, comm:12159},
     {id:'ASALES-2020',name:'Rep 2020',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:140965,pct:1.1300,annual_q:300000, comm:11277},
     {id:'ASALES-2021',name:'Rep 2021',role:'Sales Dev Rep',    region:'West',   sub:'Sales Development',  ytd_q:124750, ytd_a:138980,pct:1.1141,annual_q:300000, comm:11118},
-    {id:'ASALES-2022',name:'Rep 2022',role:'Sales Dev Rep',    region:'EMEA',   sub:'Sales Development',  ytd_q:124750, ytd_a:136842,pct:1.0969,annual_q:300000, comm:10947},
+    {id:'ASALES-2022',name:'Rep 2022',role:'Sales Dev Rep',    region:'APAC',   sub:'Sales Development',  ytd_q:124750, ytd_a:136842,pct:1.0969,annual_q:300000, comm:10947},
     {id:'ASALES-2002',name:'Rep 2002',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:499120,pct:1.0891,annual_q:1100000,comm:49912},
     {id:'ASALES-2023',name:'Rep 2023',role:'Sales Dev Rep',    region:'Central',sub:'Sales Development',  ytd_q:124750, ytd_a:135619,pct:1.0871,annual_q:300000, comm:10850},
     {id:'ASALES-2028',name:'Rep 2028',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:134812,pct:1.0807,annual_q:300000, comm:10785},
@@ -2547,9 +2545,9 @@ const SD = {
     {id:'ASALES-2007',name:'Rep 2007',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:456890,pct:.9969, annual_q:1100000,comm:45689},
     {id:'ASALES-2009',name:'Rep 2009',role:'Account Executive', region:'West',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:331667,pct:.9950, annual_q:800000, comm:29850},
     {id:'ASALES-2005',name:'Rep 2005',role:'Sr Account Executive',region:'West', sub:'Enterprise Sales', ytd_q:458333, ytd_a:447080,pct:.9754, annual_q:1100000,comm:44708},
-    {id:'ASALES-2010',name:'Rep 2010',role:'Account Executive', region:'EMEA',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:321667,pct:.9650, annual_q:800000, comm:28950},
+    {id:'ASALES-2010',name:'Rep 2010',role:'Account Executive', region:'APAC',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:321667,pct:.9650, annual_q:800000, comm:28950},
     {id:'ASALES-2013',name:'Rep 2013',role:'Account Executive', region:'Central',sub:'Mid-Market Sales', ytd_q:333333, ytd_a:318333,pct:.9550, annual_q:800000, comm:28650},
-    {id:'ASALES-2008',name:'Rep 2008',role:'Sr Account Executive',region:'EMEA', sub:'Enterprise Sales', ytd_q:458333, ytd_a:433480,pct:.9458, annual_q:1100000,comm:43348},
+    {id:'ASALES-2008',name:'Rep 2008',role:'Sr Account Executive',region:'APAC', sub:'Enterprise Sales', ytd_q:458333, ytd_a:433480,pct:.9458, annual_q:1100000,comm:43348},
     {id:'ASALES-2011',name:'Rep 2011',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:308333,pct:.9250, annual_q:800000, comm:27750},
     {id:'ASALES-2014',name:'Rep 2014',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:301667,pct:.9050, annual_q:800000, comm:27150},
     {id:'ASALES-2016',name:'Rep 2016',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:291667,pct:.8750, annual_q:800000, comm:26250},
@@ -2558,7 +2556,8 @@ const SD = {
   ],
 };
 
-const RCOLS={West:'#1D9E75',EMEA:'#534AB7',East:'#185FA5',Central:'#BA7517'};
+const RCOLS={West:'#1D9E75',EMEA:'#534AB7',East:'#185FA5',Central:'#BA7517',APAC:'#0F6E56'};
+const RDISP={West:'NAM - West',East:'NAM - East',Central:'NAM - Central',EMEA:'EMEA',APAC:'APAC'};
 const SALES_TERRITORY_BASEMAP_URL = '/board/us_emea_basemap.svg';
 const SALES_TERRITORY_EU_NAMES = new Set([
   'Austria','Belgium','Bulgaria','Croatia','Cyprus','Czechia','Czech Rep.',
@@ -2566,6 +2565,11 @@ const SALES_TERRITORY_EU_NAMES = new Set([
   'Ireland','Italy','Latvia','Lithuania','Luxembourg','Malta','Netherlands',
   'Poland','Portugal','Romania','Slovakia','Slovenia','Spain','Sweden',
   'United Kingdom','Norway','Switzerland'
+]);
+const SALES_TERRITORY_APAC_NAMES = new Set([
+  'Australia','New Zealand','Japan','South Korea','China','India','Singapore',
+  'Indonesia','Malaysia','Thailand','Philippines','Vietnam','Taiwan','Hong Kong',
+  'Bangladesh','Sri Lanka','Pakistan','Myanmar','Cambodia','Laos'
 ]);
 // Verified basemap projection — do not change without regenerating us_emea_basemap.svg.
 const SALES_TERRITORY_PROJECTION = {
@@ -2577,6 +2581,7 @@ const SALES_TERRITORY_PIN_XY = {
   Central: { x: 295.51, y: 257.99 },
   East:    { x: 405.18, y: 257.99 },
   EMEA:    { x: 920.94, y: 179.74 },
+  APAC:    { x: 1460.00, y: 310.00 },
 };
 let _salesTerritoryBasemapCache = null;
 
@@ -2602,7 +2607,7 @@ function _salesTerritoryPinColor(attPct) {
 }
 
 function _salesTerritoryPinData() {
-  return ['West', 'Central', 'East', 'EMEA'].map(function(name) {
+  return ['West', 'Central', 'East', 'EMEA', 'APAC'].map(function(name) {
     const d = SD.regions[name];
     const att = d && d.jun_quota ? (d.jun_attained / d.jun_quota) * 100 : 0;
     const xy = SALES_TERRITORY_PIN_XY[name];
@@ -2621,7 +2626,7 @@ function _salesTerritoryApplySkin(svgRoot) {
   const colors = _salesTerritoryMapColors();
   svgRoot.querySelectorAll('path[data-country]').forEach(function(path) {
     const n = path.getAttribute('data-country');
-    const highlight = n === 'United States of America' || SALES_TERRITORY_EU_NAMES.has(n);
+    const highlight = n === 'United States of America' || SALES_TERRITORY_EU_NAMES.has(n) || SALES_TERRITORY_APAC_NAMES.has(n);
     path.setAttribute('fill', highlight ? colors.cBg3 : colors.cBg2);
     path.setAttribute('stroke', highlight ? colors.cHighlightStroke : colors.cBorder);
     path.setAttribute('stroke-width', highlight ? '0.9' : '0.5');
@@ -2683,10 +2688,13 @@ function _salesTerritoryMountBasemap(container, svgText, pins) {
   container.innerHTML = svgText;
   const svg = container.querySelector('svg');
   if (!svg) throw new Error('basemap missing svg root');
+  // Keep visual style but zoom out enough to show APAC pin.
+  svg.setAttribute('viewBox', '-30 -8 1810 680');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.setAttribute('width', '100%');
   svg.style.display = 'block';
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'US and EMEA sales territory map with regional attainment pins');
+  svg.setAttribute('aria-label', 'US, EMEA, and APAC sales territory map with regional attainment pins');
   _salesTerritoryApplySkin(svg);
   _salesTerritoryRenderPins(svg, pins);
 }
@@ -2773,7 +2781,7 @@ const _pill=pct=>{const p=pct*100;if(p>=100)return`<span class="badge badge-gree
 function renderSales(area) {
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Sales Intelligence</div>
-  <div class="slide-sub">25 quota-carrying reps · 4 regions · Jan–June 2026 actuals from Actual_Sales_Quotas.csv + Budget_Sales_Quotas.csv</div>
+  <div class="slide-sub">25 quota-carrying reps · 5 regions · Jan–June 2026 actuals from Actual_Sales_Quotas.csv + Budget_Sales_Quotas.csv</div>
   <div class="kpi-strip kpi-strip-5">
     <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">$8.96M</div><div class="kpi-delta neu">Jan–Jun 2026</div></div>
     <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">$8.45M</div><div class="kpi-delta pos">94.4% of quota</div></div>
@@ -2831,7 +2839,7 @@ function _sOverview(el) {
     <div class="card">
       <div class="card-title">Attainment by region — YTD</div>
       <div class="card-sub">West leads at 94.9% · Central trailing at 88.5%</div>
-      <div class="chart-wrap" style="height:170px"><canvas id="sRegC" role="img" aria-label="YTD attainment by region. West 94.9%, EMEA 93.5%, East 89.2%, Central 88.5%.">West 94.9%, EMEA 93.5%, East 89.2%, Central 88.5%.</canvas></div>
+      <div class="chart-wrap" style="height:170px"><canvas id="sRegC" role="img" aria-label="YTD attainment by region. West, EMEA, East, Central, and APAC.">Regional attainment by all five sales regions.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Rep performance distribution</div>
@@ -2857,8 +2865,8 @@ function _sOverview(el) {
       {label:'Quota',  data:roles.map(r=>+((SD.roles[r]?.ytd_quota||0)/1e6).toFixed(1)),backgroundColor:'rgba(136,135,128,0.28)',borderColor:'rgba(136,135,128,0.8)',borderWidth:1.5,borderRadius:3},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(255,255,255,0.14)'}}}}});
 
-    const regs=['East','EMEA','West','Central'];
-    _smk('sRegC',{type:'bar',data:{labels:regs,datasets:[
+    const regs=['East','EMEA','West','Central','APAC'];
+    _smk('sRegC',{type:'bar',data:{labels:regs.map(r=>RDISP[r]),datasets:[
       {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(1)),backgroundColor:regs.map(r=>RCOLS[r]+'88'),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1.5,borderRadius:3},
       {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(1)),backgroundColor:regs.map(()=>'rgba(136,135,128,0.28)'),borderColor:regs.map(()=>'rgba(136,135,128,0.8)'),borderWidth:1.5,borderRadius:3},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(255,255,255,0.14)'}}}}});
@@ -2911,9 +2919,9 @@ function _sMap(el) {
   <div class="two-col">
     <div class="card" style="padding:16px">
       <div class="card-title">Sales territory — headcount &amp; attainment by region</div>
-      <div class="card-sub">Pin size = rep count · color = Jun attainment · US + EU/EMEA territories</div>
+      <div class="card-sub">Pin size = rep count · color = Jun attainment · US + EMEA + APAC territories</div>
       <div style="position:relative;background:var(--bg2);border-radius:8px;overflow:hidden;height:300px">
-        <div id="sTerritoryMap" style="width:100%;height:100%" role="img" aria-label="Map showing sales territories across the United States and Europe with pins sized by rep headcount and colored by June attainment percentage"></div>
+        <div id="sTerritoryMap" style="width:100%;height:100%" role="img" aria-label="Map showing sales territories across the United States, Europe, and APAC with pins sized by rep headcount and colored by June attainment percentage"></div>
       </div>
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px">
         <span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--teal);display:inline-block"></span>Green = ≥100%</span>
@@ -2928,11 +2936,11 @@ function _sMap(el) {
         <table class="pl-tbl"><thead><tr>
           <th style="text-align:left">Region</th><th>Reps</th><th>Jun Quota</th><th>Jun Att'd</th><th>Jun %</th><th>YTD %</th>
         </tr></thead><tbody>
-          ${['West','EMEA','East','Central'].map(reg=>{
+          ${['West','EMEA','East','Central','APAC'].map(reg=>{
             const d=SD.regions[reg];
             const mayP=d.jun_attained/d.jun_quota;
             return `<tr>
-              <td style="font-weight:500"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${RCOLS[reg]};margin-right:5px;vertical-align:middle"></span>${reg}</td>
+              <td style="font-weight:500"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${RCOLS[reg]};margin-right:5px;vertical-align:middle"></span>${RDISP[reg]}</td>
               <td>${d.reps}</td>
               <td>${_sf(d.jun_quota,0)}</td>
               <td>${_sf(d.jun_attained,0)}</td>
@@ -2951,8 +2959,8 @@ function _sMap(el) {
   </div>`;
   setTimeout(function() {
     renderSalesTerritoryMap('sTerritoryMap');
-    const regs=['East','EMEA','West','Central'];
-    _smk('sRegBudC',{type:'bar',data:{labels:regs,datasets:[
+    const regs=['East','EMEA','West','Central','APAC'];
+    _smk('sRegBudC',{type:'bar',data:{labels:regs.map(r=>RDISP[r]),datasets:[
       {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(2)),backgroundColor:regs.map(r=>RCOLS[r]+'88'),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1,borderRadius:3},
       {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(1)),backgroundColor:regs.map(()=>'rgba(136,135,128,0.28)'),borderColor:regs.map(()=>'rgba(136,135,128,0.8)'),borderWidth:1.5,borderRadius:3},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
@@ -2978,14 +2986,14 @@ function _sReps(el) {
     <div class="card-title" style="margin-bottom:8px">Individual rep detail — YTD Jan–Jun 2026 (Jun close)</div>
     <table class="pl-tbl"><thead><tr>
       <th style="text-align:left;width:16%">Rep</th>
-      <th style="text-align:left;width:18%">Role</th>
-      <th style="text-align:left">Region</th>
+      <th class="al" style="width:18%">Role</th>
+      <th class="al">Region</th>
       <th>Annual Quota</th><th>YTD Quota</th><th>YTD Attained</th><th>Attainment</th>
     </tr></thead><tbody>
       ${sorted.map(r=>`<tr>
         <td style="color:var(--text);font-size:11px">${r.name.replace('Actual ','')}</td>
-        <td style="font-size:10px;color:var(--text2)">${r.role}</td>
-        <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${RCOLS[r.region]};margin-right:4px;vertical-align:middle"></span>${r.region}</td>
+        <td class="al" style="font-size:10px;color:var(--text2)">${r.role}</td>
+        <td class="al"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${RCOLS[r.region]};margin-right:4px;vertical-align:middle"></span>${RDISP[r.region]}</td>
         <td>${_sf(r.annual_q,0)}</td>
         <td>${_sf(r.ytd_q,0)}</td>
         <td>${_sf(r.ytd_a,0)}</td>
@@ -3025,15 +3033,15 @@ function _sComm(el) {
     <table class="pl-tbl"><thead><tr>
       <th style="text-align:left;width:5%">Rank</th>
       <th style="text-align:left;width:16%">Rep</th>
-      <th style="text-align:left;width:18%">Role</th>
-      <th style="text-align:left">Region</th>
+      <th class="al" style="width:18%">Role</th>
+      <th class="al">Region</th>
       <th>YTD Attained</th><th>Attainment</th><th>Commission YTD</th>
     </tr></thead><tbody>
       ${sorted.map((r,i)=>`<tr>
         <td style="color:var(--text3);text-align:right">${i+1}</td>
-        <td style="color:var(--text);font-size:11px">${r.name.replace('Actual ','')}</td>
-        <td style="font-size:10px;color:var(--text2)">${r.role}</td>
-        <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${RCOLS[r.region]};margin-right:4px;vertical-align:middle"></span>${r.region}</td>
+        <td class="al" style="color:var(--text);font-size:11px">${r.name.replace('Actual ','')}</td>
+        <td class="al" style="font-size:10px;color:var(--text2)">${r.role}</td>
+        <td class="al"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${RCOLS[r.region]};margin-right:4px;vertical-align:middle"></span>${RDISP[r.region]}</td>
         <td>${_sf(r.ytd_a,0)}</td>
         <td class="${r.pct>=1?'vpos':r.pct>=.9?'amb':'vneg'}">${_sp(r.pct)}</td>
         <td style="color:#1D9E75;font-weight:500">$${r.comm.toLocaleString()}</td>
