@@ -1041,6 +1041,13 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
         script_path.write_text(prepared, encoding="utf-8")
         _run_node_script(script_path, output_path)
         pptx_bytes = output_path.read_bytes()
+        # Claude authors every coordinate, so commentary length can push the last
+        # bullets off the bottom of the slide. Re-pitch before anyone downloads it.
+        from app.services.reporting.export.deck_layout_repair import repair_deck_layout
+
+        pptx_bytes, layout = repair_deck_layout(pptx_bytes)
+        for issue in layout.unfixable:
+            logger.warning("Deck layout: %s", issue)
         _archive_artifacts(period, prepared, pptx_bytes)
         return pptx_bytes, prepared
 

@@ -140,6 +140,37 @@ def test_pipeline_waterfall_reconciles_wrong_beginning_identity():
     assert abs(begin + created_m + won_m + lost_m + slip_m - end_m) < 0.02
 
 
+def test_pipeline_waterfall_does_not_invent_a_beginning_when_created_is_missing():
+    """A NULL created column must not be laundered into a back-solved beginning.
+
+    The June-2026 deck read created=0 (the value had landed in a synonym column), so the
+    reconciler back-solved beginning to $16.36M against a true $8.27M and returned
+    ties_ok — and the commentary narrated a pipeline "decline" that never happened.
+    """
+    from app.services.reporting.export.board_platform_metrics import (
+        reconcile_pipeline_waterfall_identity,
+    )
+
+    beginning = Decimal("8265545")
+    ending = Decimal("8265545")
+    won = Decimal("3530638")
+    lost = Decimal("4562484")
+
+    bop, eop, ok, note = reconcile_pipeline_waterfall_identity(
+        beginning=beginning,
+        created=Decimal("0"),
+        closed_won=won,
+        closed_lost=lost,
+        slipped=Decimal("0"),
+        ending=ending,
+    )
+    assert ok is False, "a bridge built on an absent component must not report as tied"
+    assert note == "missing_created_component"
+    assert bop == beginning, "beginning must stay as reported, not be back-solved"
+    # The fabricated value the old code produced.
+    assert bop != ending + won + lost
+
+
 def test_ytd_cfs_actual_not_forecast_and_keeps_zeros():
     ts_data = {
         "Actual": {

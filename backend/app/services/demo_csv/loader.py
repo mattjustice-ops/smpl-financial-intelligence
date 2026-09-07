@@ -488,6 +488,12 @@ def _sync_physical_version_table(
     session.execute(text(f"alter table {q_table} add column if not exists source_filename text"))
     for col in deduped:
         session.execute(text(f"alter table {q_table} add column if not exists {_quote_ident(col)} text"))
+    # Canonical alias targets must exist even when this CSV only carries the synonym,
+    # otherwise there is nowhere to land the aliased value.
+    for target_col in PHYSICAL_REQUIRED_ALIASES.get(table_name, {}):
+        session.execute(
+            text(f"alter table {q_table} add column if not exists {_quote_ident(target_col)} text")
+        )
     return deduped
 
 
@@ -534,10 +540,28 @@ def _coerce_physical_value(value: Any, data_type: str) -> Any:
     return value
 
 
-# Legacy ORM tables may require columns that versioned warehouse CSVs name differently.
+# Canonical column <- header synonyms, for tables whose CSVs name a field differently.
+#
+# Physical landing tables add a text column per CSV header, so a renamed header silently
+# creates a parallel column that no reader queries while the canonical one stays NULL.
+# The pipeline waterfall CSVs shipped "new_pipeline_created" / "slipped_arr", which left
+# pipeline_arr_created and slipped_pipeline_arr empty in every actual and forecast row —
+# the bridge then read zero created and zero slipped and back-solved a beginning balance.
 PHYSICAL_REQUIRED_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
     "forecast_opportunities": {
         "forecast_period": ("period", "forecast_period"),
+    },
+    "actual_pipeline_waterfall": {
+        "pipeline_arr_created": ("pipeline_arr_created", "new_pipeline_created"),
+        "slipped_pipeline_arr": ("slipped_pipeline_arr", "slipped_arr"),
+    },
+    "forecast_pipeline_waterfall": {
+        "pipeline_arr_created": ("pipeline_arr_created", "new_pipeline_created"),
+        "slipped_pipeline_arr": ("slipped_pipeline_arr", "slipped_arr"),
+    },
+    "budget_pipeline_waterfall": {
+        "pipeline_arr_created": ("pipeline_arr_created", "new_pipeline_created"),
+        "slipped_pipeline_arr": ("slipped_pipeline_arr", "slipped_arr"),
     },
 }
 
@@ -581,6 +605,9 @@ def _apply_physical_required_aliases(
             if target_type == "date":
                 row_payload[target] = _coerce_physical_value(existing, target_type)
             continue
+        # The target is always bound in the insert, so it must exist as a key even when
+        # no synonym carried a value for this row.
+        row_payload.setdefault(target, None)
         for source in sources:
             if source in row_payload and row_payload[source] not in (None, ""):
                 row_payload[target] = _coerce_physical_value(row_payload[source], target_type)
@@ -625,7 +652,9 @@ def _load_physical_version_csv(
     version_hint = _version_from_filename(filename)
     extra_columns = _physical_extra_insert_columns(columns, required_columns)
     for target_col in PHYSICAL_REQUIRED_ALIASES.get(table_name, {}):
-        if target_col in required_columns and target_col not in columns and target_col not in extra_columns:
+        # Nullable targets need this too: the CSV that carries only the synonym would
+        # otherwise never write the canonical column, leaving it NULL for every row.
+        if target_col not in columns and target_col not in extra_columns:
             extra_columns.append(target_col)
     all_insert_columns = [*columns, *extra_columns]
     q_table = _quote_ident(table_name)

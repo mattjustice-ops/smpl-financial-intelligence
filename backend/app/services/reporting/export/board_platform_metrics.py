@@ -1022,6 +1022,14 @@ def reconcile_pipeline_waterfall_identity(
     if prior_ending and ending and ties(prior_ending, ending):
         return prior_ending, ending, True, "prior_ending_as_beginning"
 
+    # Real closing activity against zero created pipeline means the created column never
+    # arrived, not that the team sourced nothing all month. Back-solving a beginning
+    # balance from an absent component invents a number, and returning ties_ok alongside
+    # it is circular — it ties because it was solved to tie. Downstream that reads as a
+    # verified bridge and gets narrated as a decline that never happened.
+    if not created and (closed_won or closed_lost):
+        return beginning, ending, False, "missing_created_component"
+
     if ending and (created or closed_won or closed_lost or slipped or beginning):
         solved = ending - created + closed_won + closed_lost + slipped
         if solved >= 0 and ties(solved, ending):
