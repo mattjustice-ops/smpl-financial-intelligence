@@ -6,9 +6,9 @@ import json
 import re
 from typing import Any
 
-
-class LLMError(RuntimeError):
-    """Raised when the LLM call or its parsed payload is unusable."""
+# One LLMError class across providers: routes catch the openai_client symbol, so a
+# separate Anthropic class would escape `except LLMError` and surface as a 500.
+from app.services.commentary.openai_client import LLMError
 
 
 class CommentaryLLMClient:
@@ -25,7 +25,9 @@ class AnthropicCommentaryClient:
         model: str = "claude-sonnet-4-6",
         temperature: float = 0.2,
         timeout_seconds: float = 60.0,
-        max_tokens: int = 4096,
+        # Plan Assurance packets (stress cases + MC) run long; 4096 truncated the
+        # JSON mid-object and the whole call failed.
+        max_tokens: int = 8192,
     ) -> None:
         try:
             import anthropic  # type: ignore
@@ -94,10 +96,19 @@ class AnthropicCommentaryClient:
         return content
 
 
+_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
+
+
 def _parse_json_response(content: str) -> dict[str, Any]:
     try:
         return json.loads(content)
     except json.JSONDecodeError:
+        unfenced = _FENCE_RE.sub("", content).strip()
+        if unfenced != content:
+            try:
+                return json.loads(unfenced)
+            except json.JSONDecodeError:
+                pass
         match = re.search(r"\{[\s\S]*\}", content)
         if match:
             try:
