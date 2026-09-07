@@ -31,11 +31,9 @@ export default function ForecastEnginePage() {
       moduleTitle="Forecast Engine"
       links={
         <>
-          <EmbeddedModuleNavLink href="/budget-engine?tab=analytics">
-            Plan Assurance →
-          </EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/app/board">Board Platform →</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/budget-engine">Budget Engine →</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/app/workspace">Workspace →</EmbeddedModuleNavLink>
         </>
       }
     >

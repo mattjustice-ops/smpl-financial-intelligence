@@ -1222,8 +1222,9 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * Bump whenever the stress model changes shape or semantics, so a suite saved in
  * localStorage under the old model is discarded instead of silently re-rendering.
  * rev 2: GTM spend is committed under shock (a growth miss no longer refunds it).
+ * rev 3: cash watch threshold 25% -> 5%; paid-channel shock sized down from ×2.5.
  */
-const PA_STRESS_MODEL_REV = 2;
+const PA_STRESS_MODEL_REV = 3;
 
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
@@ -8628,6 +8629,9 @@ function bumpChurnMix(factor) {
   }
 }
 
+/** Cash moves inside this band are noise; past it a case is a watch, not a hold. */
+const CASH_WATCH_PCT = 0.05;
+
 function classifyScenarioOutcome(base, shock) {
   const breaks = [];
   const watches = [];
@@ -8645,15 +8649,17 @@ function classifyScenarioOutcome(base, shock) {
     watches.push('Mid-year cash trough vs floor');
     cashPostureWatch = true;
   }
+  // 5% is the noise floor used below for the ARR-only wording — anything past it is a
+  // real cash move and the chip should say so rather than reading as a clean hold.
   if (cashDropPct >= 0.50) {
     breaks.push('Cash down ≥50% vs plan');
-  } else if (cashDropPct >= 0.25) {
-    watches.push('Cash down ≥25% vs plan');
+  } else if (cashDropPct >= CASH_WATCH_PCT) {
+    watches.push('Cash down ≥5% vs plan');
     cashPostureWatch = true;
   }
 
   if (shock.decArr < base.targetArr * 0.995) {
-    watches.push(absCashPct < 0.05
+    watches.push(absCashPct < CASH_WATCH_PCT
       ? 'Dec ARR vs YoY target (cash ≈ noise)'
       : 'Dec ARR vs YoY target');
   }
@@ -8753,13 +8759,15 @@ function buildScenarioCaseDefs(hist) {
     {
       id: 'ops_cash_crisis', family: 'liquidity',
       chipPlain: 'Paid channels stop working',
-      chipTech: 'CPL ×2.5 + pipeline +2× + attrition +8pp',
+      chipTech: 'CPL ×1.6 + pipeline +1× + attrition +4pp',
       label: 'Paid channels stop working',
-      plain: 'Leads get far more expensive right as we lose reps. We keep spending to hit the number and the cushion is gone by autumn.',
+      plain: 'Leads get more expensive right as we lose reps. We hold the plan for a quarter before reacting, and the cushion thins out.',
+      // Sized as one bad quarter we ride out, not a year of doing nothing: a real
+      // team cuts spend long before the original ×2.5 shock reached the floor.
       apply: () => {
-        scaleAllGtmCpl(2.5);
-        STATE.pipelineCoverageMult = (STATE.pipelineCoverageMult || 3) + 2;
-        STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 8;
+        scaleAllGtmCpl(1.6);
+        STATE.pipelineCoverageMult = (STATE.pipelineCoverageMult || 3) + 1;
+        STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 4;
       },
       weight: /cash|liquidity|mkt|spend|cpl/.test(seedText) ? 5 : 4,
     },

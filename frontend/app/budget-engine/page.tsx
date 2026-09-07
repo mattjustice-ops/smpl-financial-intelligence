@@ -29,18 +29,16 @@ function BudgetEngineInner() {
 
   // Bust CDN/browser cache so /app picks up Budget Engine HTML after deploy.
   const tabQ = tab ? `&tab=${encodeURIComponent(tab)}` : "";
-  const src = `/budget-engine/index.html?embedded=1&v=28${tabQ}`;
+  const src = `/budget-engine/index.html?embedded=1&v=29${tabQ}`;
 
   return (
     <EmbeddedModuleChrome
       moduleTitle="Budget Engine"
       links={
         <>
-          <EmbeddedModuleNavLink href="/budget-engine?tab=analytics">
-            Plan Assurance →
-          </EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/app/board">Board Platform →</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine →</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/app/workspace">Workspace →</EmbeddedModuleNavLink>
         </>
       }
     >

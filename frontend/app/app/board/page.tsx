@@ -37,12 +37,9 @@ export default function BoardPlatformPage() {
       moduleTitle="Board Platform"
       links={
         <>
-          <EmbeddedModuleNavLink href="/budget-engine?tab=analytics">
-            Plan Assurance →
-          </EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/budget-engine">Budget Engine</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app">Operating OS</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/app/workspace">Workspace</EmbeddedModuleNavLink>
         </>
       }
     >
