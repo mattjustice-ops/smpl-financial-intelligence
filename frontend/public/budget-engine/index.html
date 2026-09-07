@@ -7520,7 +7520,9 @@ function paintPaCorridor() {
   const p25 = live.p25 || bands.p25;
   const p75 = live.p75 || bands.p75;
   const p95 = live.p95 || bands.p95;
-  const W = 900, H = 320, PL = 52, PR = 16, PT = 18, PB = 30;
+  // PR carries a right gutter so the Dec end labels sit beside their line ends
+  // instead of stacking on top of each other inside the plot.
+  const W = 900, H = 320, PL = 52, PR = 168, PT = 18, PB = 30;
   const ymax = Math.max(
     floor * 1.5,
     Math.max.apply(null, plan.concat(p95, rails.watch, [40])) * 1.08,
@@ -7561,7 +7563,7 @@ function paintPaCorridor() {
   // End-of-year plan label — where the mean lands vs the rails
   const planDec = plan[11];
   g += `<circle cx="${xs(11)}" cy="${ys(planDec)}" r="4" fill="${teal}"/>`;
-  g += `<text x="${xs(11) - 8}" y="${ys(planDec) - 10}" fill="${teal}" font-size="12" text-anchor="end">Plan Dec $${planDec.toFixed(1)}M</text>`;
+  g += `<text x="${xs(11) + 10}" y="${ys(planDec) + 4}" fill="${teal}" font-size="12">Plan Dec $${planDec.toFixed(1)}M</text>`;
   g += `<polyline id="paCaseLine" points="" fill="none" stroke="none" stroke-width="2.5" stroke-linejoin="round"/>`;
   g += `<g id="paCaseMark"></g>`;
   g += `<g id="paCaseEoy"></g>`;
@@ -7604,7 +7606,7 @@ window.selectPaCase = function(idx, silent) {
     : paCasePathFromDelta(plan, (c.dCash || 0) / 1e6);
   // MUST use the same ymax as paintPaCorridor — recomputing shifts the line vs floor/rails.
   const W = corr.W || 900, H = corr.H || 320;
-  const PL = corr.PL || 52, PR = corr.PR || 16, PT = corr.PT || 18, PB = corr.PB || 30;
+  const PL = corr.PL || 52, PR = corr.PR || 168, PT = corr.PT || 18, PB = corr.PB || 30;
   const floor = corr.floor;
   const ymax = corr.ymax || Math.max(floor * 1.5, Math.max.apply(null, plan.concat(path, [40])) * 1.08, 40);
   const xs = (i) => PL + i * (W - PL - PR) / 11;
@@ -7625,20 +7627,27 @@ window.selectPaCase = function(idx, silent) {
       if (wIdx >= 0) bi = wIdx;
     }
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    // A December marker would restate the end label sitting in the right gutter.
     mark.innerHTML = `<circle cx="${xs(bi)}" cy="${ys(path[bi])}" r="5" fill="${col}"/>` +
-      `<text x="${xs(bi)}" y="${ys(path[bi]) - 10}" fill="${col}" font-size="11" text-anchor="middle">${months[bi]} $${path[bi].toFixed(1)}M</text>`;
+      (bi === 11
+        ? ''
+        : `<text x="${xs(bi)}" y="${ys(path[bi]) - 10}" fill="${col}" font-size="11" text-anchor="middle">${months[bi]} $${path[bi].toFixed(1)}M</text>`);
   }
   const eoy = document.getElementById('paCaseEoy');
   if (eoy) {
     const planDec = plan[11];
     const end = path[11];
     const d = end - planDec;
-    // Offset scenario label if it lands on top of the plan label
-    const yOff = Math.abs(ys(end) - ys(planDec)) < 14 ? (end <= planDec ? 14 : -14) : 0;
+    // Both end labels live in the right gutter, so nudge this one clear of the
+    // plan label when the two December values land close together.
+    const yOff = Math.abs(ys(end) - ys(planDec)) < 34 ? (end <= planDec ? 24 : -24) : 0;
+    const lx = xs(11) + 10;
     eoy.innerHTML =
       `<circle cx="${xs(11)}" cy="${ys(end)}" r="4" fill="${col}"/>` +
-      `<text x="${xs(11) - 8}" y="${ys(end) - 10 + yOff}" fill="${col}" font-size="12" text-anchor="end">` +
-      `This year $${end.toFixed(1)}M (${d >= 0 ? '+' : ''}${d.toFixed(1)} vs plan)</text>`;
+      `<text x="${lx}" y="${ys(end) - 2 + yOff}" fill="${col}" font-size="12">` +
+      `This year $${end.toFixed(1)}M</text>` +
+      `<text x="${lx}" y="${ys(end) + 12 + yOff}" fill="${col}" font-size="11" opacity="0.85">` +
+      `${d >= 0 ? '+' : ''}${d.toFixed(1)} vs plan</text>`;
   }
   if (callout) {
     const title = String((modeKey === 'tech' ? (c.chipTech || c.label) : (c.chipPlain || c.label)) || '').replace(/</g, '&lt;');
