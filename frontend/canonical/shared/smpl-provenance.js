@@ -497,6 +497,9 @@
     }
 
     // ── Rule A: ARR ────────────────────────────────────────────────────
+    // Year the WF_TABLE covers; A4/A5 below are only meaningful within it.
+    var wfYear = closeMo ? String(closeMo).slice(0, 4) : null;
+
     if (wf && Array.isArray(wf.Ending) && Array.isArray(wf.Beginning)) {
       checksRun.push("A1");
       for (var i = 0; i < wf.Ending.length - 1; i++) {
@@ -532,7 +535,11 @@
       }
 
       // A4/A5: WF_TABLE ↔ SRC arr_* for close-year months
-      if (wf && Array.isArray(wf.Ending)) {
+      // The waterfall is a single close-year table indexed 0-11, so it can only be
+      // compared against months of that same year. periodMonthIndex() drops the year,
+      // so without this guard every prior-year month tied out against the same-numbered
+      // month of the close year and failed by the whole growth gap between them.
+      if (wf && Array.isArray(wf.Ending) && (!wfYear || p.slice(0, 4) === wfYear)) {
         var mi = periodMonthIndex(p);
         if (mi >= 0 && mi < wf.Ending.length) {
           var wfEnd = num(wf.Ending[mi]);
@@ -564,7 +571,7 @@
 
     // A2/A3 from WF alone when SRC lacks arr_*
     if (wf && Array.isArray(wf.Ending)) {
-      var yearPrefix = closeMo ? String(closeMo).slice(0, 4) : null;
+      var yearPrefix = wfYear;
       for (var wi = 0; wi < wf.Ending.length; wi++) {
         var wNb = num(wf["New Business"] && wf["New Business"][wi]);
         var wExp = num(wf.Expansion && wf.Expansion[wi]);

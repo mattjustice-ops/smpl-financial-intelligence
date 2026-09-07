@@ -268,6 +268,80 @@ check(
   typeof html === "string" && html.includes("Client Data Tie-Out Report") && html.includes("PASS"),
 );
 
+// A4/A5 are close-year-only. The waterfall is a single 12-month table indexed 0-11,
+// so a prior-year month has no counterpart in it. Before the year guard, every 2024/2025
+// month tied out against the same-numbered month of the close year and failed by the
+// entire growth gap — 96 false failures on a real June-2026 close.
+{
+  const savedPayload = sandbox.SMPL_OUTLOOK_PAYLOAD;
+  const savedWf = sandbox.SMPL_ARR_WATERFALL;
+
+  // Clean 12-month close-year chain: +135 net new every month from a 1000 open.
+  const beg = [];
+  const end = [];
+  for (let i = 0; i < 12; i++) {
+    beg.push(1000 + i * 135);
+    end.push(1000 + (i + 1) * 135);
+  }
+  const fill = (v) => Array(12).fill(v);
+  sandbox.SMPL_ARR_WATERFALL = {
+    Beginning: beg,
+    "New Business": fill(100),
+    Expansion: fill(50),
+    Reactivation: fill(0),
+    Contraction: fill(-10),
+    Churn: fill(-5),
+    Ending: end,
+  };
+  const arrRow = (bop, nn, eop) => ({
+    arr_nb: nn - 35,
+    arr_exp: 50,
+    arr_react: 0,
+    arr_cont: -10,
+    arr_churn: -5,
+    arr_nn: nn,
+    arr_bop: bop,
+    arr_eop: eop,
+  });
+  sandbox.SMPL_OUTLOOK_PAYLOAD = {
+    meta: { close_month: "2026-06" },
+    TS_DATA: { Actual: {}, Forecast: {} },
+    SRC: {
+      actuals: {
+        // Prior year, on a totally different ARR scale — as real 2024/2025 history is.
+        "2025-06": arrRow(500, 135, 635),
+        // Close year, June = waterfall index 5.
+        "2026-06": arrRow(beg[5], 135, end[5]),
+      },
+    },
+  };
+
+  const yearScoped = P.runTieOut();
+  const priorYearFails = (yearScoped.failures || []).filter((f) => f.includes("2025-"));
+  check(
+    "A4/A5 skip prior-year months (no cross-year waterfall compare)",
+    priorYearFails.length === 0,
+    priorYearFails.slice(0, 3).join(" | ") || "none",
+  );
+  check(
+    "A4/A5 still run on the close year",
+    (yearScoped.checksRun || []).includes("A4") && (yearScoped.checksRun || []).includes("A5"),
+    JSON.stringify(yearScoped.checksRun),
+  );
+
+  // And they still catch a genuine close-year break.
+  sandbox.SMPL_OUTLOOK_PAYLOAD.SRC.actuals["2026-06"] = arrRow(beg[5], 135, end[5] + 500);
+  const realBreak = P.runTieOut();
+  check(
+    "A4 catches a real close-year waterfall mismatch",
+    (realBreak.failures || []).some((f) => f.includes("[A4]") && f.includes("2026-06")),
+    (realBreak.failures || []).find((f) => f.includes("[A4]")) || "no A4 failure",
+  );
+
+  sandbox.SMPL_OUTLOOK_PAYLOAD = savedPayload;
+  sandbox.SMPL_ARR_WATERFALL = savedWf;
+}
+
 // Divergence > $1 on actuals → fail scoring
 sandbox.SMPL_OUTLOOK_PAYLOAD.SRC.actuals["2026-06"].revenue = 1050;
 const fail = P.runTieOut();
