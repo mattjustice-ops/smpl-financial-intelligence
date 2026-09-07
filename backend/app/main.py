@@ -372,6 +372,15 @@ async def workforce_response_validation_handler(
 
 
 @app.on_event("startup")
+def _check_database_target() -> None:
+    from app.core.config import get_settings
+    from app.core.db_guard import assert_local_database_target
+
+    target = assert_local_database_target(get_settings().database_url)
+    print(f"[SFI] Database target: {target}")
+
+
+@app.on_event("startup")
 def _log_board_engine() -> None:
     try:
         from app.core.config import clear_settings_cache, get_settings
