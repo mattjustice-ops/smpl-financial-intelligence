@@ -1218,6 +1218,13 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
   'gtmHistRows',
   'salesHireOverride',
 ]);
+/**
+ * Bump whenever the stress model changes shape or semantics, so a suite saved in
+ * localStorage under the old model is discarded instead of silently re-rendering.
+ * rev 2: GTM spend is committed under shock (a growth miss no longer refunds it).
+ */
+const PA_STRESS_MODEL_REV = 2;
+
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
   '_salesHireManual',
@@ -1273,6 +1280,13 @@ function loadBudgetState() {
     }
     STATE._salesHireManual = false;
     STATE.salesHireOverride = {};
+    // A suite saved under an older stress model would keep rendering its old cash
+    // paths on the corridor after a deploy. Drop it so the lane asks for a re-run.
+    if (STATE._assureScenarioSuite && STATE._assureScenarioSuite.rev !== PA_STRESS_MODEL_REV) {
+      STATE._assureScenarioSuite = null;
+      STATE._assureScenarioNarrative = null;
+      STATE._paCaseSel = null;
+    }
     if (STATE.drMonthsRev != null && STATE.drMonthsRev >= 2) {
       STATE.drMonthsRev = STATE_DEFAULTS.drMonthsRev;
     }
@@ -9175,6 +9189,7 @@ async function runScenarioStressSuite(opts) {
     releaseGtmMqlCommitment();
     const suite = {
       fp: scenarioPlanFingerprint(base),
+      rev: PA_STRESS_MODEL_REV,
       at: Date.now(),
       base: {
         decArr: base.decArr,
