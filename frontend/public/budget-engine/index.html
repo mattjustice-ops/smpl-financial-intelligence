@@ -1184,6 +1184,8 @@ const STATE = {
   _assureNarrativeAt: null,
   /** In-flight scenario generation progress (not critical to persist). */
   _assureScenarioRunning: null,
+  /** Committed demand-gen MQL volume, set only while a stress run is in flight. */
+  _gtmCommittedMqls: null,
   plDept: 'total',
   plRates: {},
   /** Per-period $ for discretionary P&L lines: plFlat[dept][line][period]. Seeded flat YoY; edit cells for variability. */
@@ -1220,6 +1222,7 @@ const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
   '_salesHireManual',
   '_assureScenarioRunning', // ephemeral progress only
+  '_gtmCommittedMqls', // stress-run only; persisting it would distort the live plan
 ]);
 
 function persistBudgetState() {
@@ -2092,7 +2095,13 @@ function computeGtmPlan() {
     // Program $ = funnel MQLs × blended CPL (hist-seeded / editable).
     // Channel CPL only allocates that MQL budget across channels (efficiency share).
     const blendedCpl = Math.max(0, Number(rates.cpl) || DEFAULT_GTM_RATES.cpl);
-    const totalSpend = (row.mqls || 0) * blendedCpl;
+    // Under stress the demand-gen budget is already committed: a growth miss does not
+    // refund the MQL volume we bought, and a CPL shock prices that same volume higher.
+    const committed = STATE._gtmCommittedMqls;
+    const buyMqls = committed && committed[p] != null
+      ? Math.max(row.mqls || 0, committed[p])
+      : (row.mqls || 0);
+    const totalSpend = buyMqls * blendedCpl;
     const alloc = allocateGtmChannels(totalSpend, p, row.mqls || 0);
     row.channels = alloc.channels;
     row.channelMqls = alloc.mqlSum;
@@ -8532,6 +8541,23 @@ function restoreScenarioLevers(snap) {
   }
 }
 
+/**
+ * Pin the plan's MQL volume as a committed demand-gen budget for stress runs.
+ * Without this, lowering the growth target re-derives a smaller funnel and hands
+ * the marketing money back, so missing plan reads as a cash *gain*.
+ */
+function commitGtmMqlsFromPlan() {
+  STATE._gtmCommittedMqls = null;
+  const plan = computeGtmPlan();
+  const committed = {};
+  for (const p of BUD_P) committed[p] = (plan[p] && plan[p].mqls) || 0;
+  STATE._gtmCommittedMqls = committed;
+}
+
+function releaseGtmMqlCommitment() {
+  STATE._gtmCommittedMqls = null;
+}
+
 function scenarioPlanFingerprint(p) {
   p = p || buildBudgetAssurancePacket();
   return [
@@ -8594,17 +8620,22 @@ function classifyScenarioOutcome(base, shock) {
   const baseCash = Math.max(1, base.endCash || 1);
   const cashDropPct = (base.endCash - shock.endCash) / baseCash;
   const absCashPct = Math.abs(cashDropPct);
+  // Tracked structurally, not by matching the watch prose: the ARR-only watch
+  // reads "(cash ≈ noise)" and a substring test on "cash" flipped it to yellow.
+  let cashPostureWatch = false;
 
   // Cash rails drive break/watch for craft chips. ARR miss alone is not a red year.
   if (shock.endCash < base.cashFloor) {
     breaks.push('Dec cash floor');
   } else if (shock.minCash < base.cashFloor) {
     watches.push('Mid-year cash trough vs floor');
+    cashPostureWatch = true;
   }
   if (cashDropPct >= 0.50) {
     breaks.push('Cash down ≥50% vs plan');
   } else if (cashDropPct >= 0.25) {
     watches.push('Cash down ≥25% vs plan');
+    cashPostureWatch = true;
   }
 
   if (shock.decArr < base.targetArr * 0.995) {
@@ -8615,13 +8646,19 @@ function classifyScenarioOutcome(base, shock) {
 
   if (shock.salesEnd < shock.aeNeeded) breaks.push('NB AE cover');
   if (shock.csEnd < shock.csNeeded) breaks.push('CS cover');
-  if (shock.fyEbitda < 0 && base.fyEbitda >= 0) watches.push('EBITDA turns negative');
-  if (shock.fyMkt > base.fyMkt * 1.2) watches.push('Marketing spend +20%');
+  if (shock.fyEbitda < 0 && base.fyEbitda >= 0) {
+    watches.push('EBITDA turns negative');
+    cashPostureWatch = true;
+  }
+  if (shock.fyMkt > base.fyMkt * 1.2) {
+    watches.push('Marketing spend +20%');
+    cashPostureWatch = true;
+  }
 
   // Status mirrors cash posture: ARR-only flags stay green (hold).
   let status = 'ok';
   if (breaks.length) status = 'break';
-  else if (watches.some(w => /cash|25%|50%|floor|EBITDA|Marketing/i.test(w))) status = 'watch';
+  else if (cashPostureWatch) status = 'watch';
   return { status, breaks, watches, cashDropPct };
 }
 
@@ -9103,12 +9140,16 @@ async function runScenarioStressSuite(opts) {
   const hist = opts.hist || buildAssuranceHistoryPacket();
   const onProgress = opts.onProgress;
   const snap = snapshotScenarioLevers();
+  releaseGtmMqlCommitment();
   const base = buildBudgetAssurancePacket();
   // attach fyMkt onto base for explain helpers
   base.fyMkt = base.fyMkt;
   const defs = buildScenarioCaseDefs(hist);
   const cases = [];
   try {
+    // Baseline captured above is uncommitted; every shock below prices against
+    // the committed budget (named cases, Monte Carlo, and sensitivity alike).
+    commitGtmMqlsFromPlan();
     if (onProgress) onProgress('cases', 0, defs.length);
     for (let i = 0; i < defs.length; i++) {
       const d = defs[i];
@@ -9131,6 +9172,7 @@ async function runScenarioStressSuite(opts) {
       if (onProgress) onProgress('sens', 2, 2);
     }
     restoreScenarioLevers(snap);
+    releaseGtmMqlCommitment();
     const suite = {
       fp: scenarioPlanFingerprint(base),
       at: Date.now(),
@@ -9158,6 +9200,7 @@ async function runScenarioStressSuite(opts) {
     return suite;
   } catch (e) {
     restoreScenarioLevers(snap);
+    releaseGtmMqlCommitment();
     throw e;
   }
 }
