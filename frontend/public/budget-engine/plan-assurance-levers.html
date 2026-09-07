@@ -248,33 +248,32 @@ body[data-mode="tech"] li .tech-only{display:inline}
   </div>
 
   <div class="section h1">
-    <h2 class="section-head" data-plain="How far each lever can move before it hurts" data-tech="Tolerance envelopes \u2014 distance to floor breach">How far each lever can move before it hurts</h2>
-    <p class="section-sub" id="tol-sub"></p>
-    <div class="ledger" id="tolerance"></div>
-    <p class="hint" id="tol-hint"></p>
+    <h2 class="section-head" data-plain="What a bad year actually costs us" data-tech="Forced-response cost by shock severity">What a bad year actually costs us</h2>
+    <p class="section-sub" id="resp-sub"></p>
+    <div class="chart-card">
+      <svg id="response" viewBox="0 0 900 300" role="img" aria-label="For each severity of cost-per-lead increase, the month by which corrective action is forced and the growth given up as a result. Up to plus 30 percent no action is needed; at plus 150 percent action is forced by March, costing 10.6 points of growth."></svg>
+    </div>
+    <p class="hint" id="resp-hint"></p>
   </div>
 
   <div class="section h1">
-    <h2 class="section-head" data-plain="How long we can run hot" data-tech="Duration tolerance \u2014 cumulative burn vs cushion">How long we can run hot</h2>
-    <p class="section-sub" id="dur-sub"></p>
+    <h2 class="section-head" data-plain="How fast we would actually see it" data-tech="Detection latency by lever">How fast we would actually see it</h2>
+    <p class="section-sub" id="lat-sub"></p>
     <div class="chart-card">
       <div class="legend">
-        <span><i class="sw b" style="background:#2A4A3C"></i><span data-plain="Still fine" data-tech="Cushion &gt; 25%">Still fine</span></span>
-        <span><i class="sw b" style="background:#4A3B18"></i><span data-plain="Getting thin" data-tech="Cushion &lt; 25%">Getting thin</span></span>
-        <span><i class="sw b" style="background:#5C2626"></i><span data-plain="Floor is gone" data-tech="Cumulative burn &gt; cushion">Floor is gone</span></span>
+        <span><i class="sw b" style="background:#4A5257"></i><span data-plain="Time spent finding out" data-tech="Detection latency">Time spent finding out</span></span>
+        <span><i class="sw b" style="background:#2A4A3C"></i><span data-plain="Time left to act" data-tech="Usable decision window">Time left to act</span></span>
       </div>
-      <div class="grid-scroll"><table class="grid" id="durgrid"></table></div>
+      <svg id="latency" viewBox="0 0 900 300" role="img" aria-label="Detection latency against available decision window for four levers. Win rate and churn each spend around half their warning time on detection, while cost per lead and attrition are seen quickly."></svg>
     </div>
-    <p class="hint" id="dur-hint"></p>
+    <p class="hint" id="lat-note"></p>
   </div>
 
   <div class="section h1">
-    <h2 class="section-head" data-plain="When it starts changes everything" data-tech="Start-month sensitivity \u2014 max tolerable uplift">When it starts changes everything</h2>
-    <p class="section-sub" id="start-sub"></p>
-    <div class="chart-card">
-      <svg id="startcurve" viewBox="0 0 900 260" role="img" aria-label="Maximum tolerable cost-per-lead uplift by the month the increase starts, rising from 60 percent in January to over 300 percent in November."></svg>
-    </div>
-    <p class="hint" id="start-hint"></p>
+    <h2 class="section-head" data-plain="What better measurement is worth" data-tech="Instrumentation value in cushion-equivalent">What better measurement is worth</h2>
+    <p class="section-sub" id="latfix-sub"></p>
+    <div class="ledger" id="latfix"></div>
+    <p class="hint" id="lat-hint"></p>
   </div>
 
   <div class="section h1">
@@ -585,69 +584,6 @@ PACKET.offsets=[
 
 var TOLC={ok:'#2A4A3C', thin:'#4A3B18', gone:'#5C2626'};
 
-function drawTolerance(){
-  $('tolerance').innerHTML = PACKET.tol.map(function(t){
-    var brk=CUSH/t.per, safe=PACKET.thin/t.per, sc=t.max;
-    var w1=Math.min(safe/sc,1)*100, w2=Math.min(brk/sc,1)*100;
-    return '<div class="trow"><div class="lname">'+t[mode==='plain'?'plain':'tech']
-      + '<span class="meta">'+(mode==='plain'?t.np:t.nt)+'</span></div>'
-      + '<div class="tol">'
-      + '<i class="z1" style="width:'+w1+'%"></i>'
-      + '<i class="z2" style="left:'+w1+'%;width:'+(w2-w1)+'%"></i>'
-      + '<i class="z3" style="left:'+w2+'%"></i>'
-      + '<span class="now" style="left:0"></span>'
-      + '<span class="nowlab" style="left:0">plan</span></div>'
-      + '<div class="tolval"><b>'+t.fmt(brk)+'</b>'
-      + (mode==='plain'?'breaks the floor':'floor breach point')+'</div></div>';
-  }).join('');
-}
-
-function drawDuration(){
-  var sev=[0.10,0.20,0.30,0.50,0.75,1.00,1.50];
-  var h='<tr><th class="rh"></th>'+PACKET.months.map(function(m){return '<th>'+m+'</th>';}).join('')+'</tr>';
-  sev.forEach(function(x){
-    var c=0, done=false;
-    h+='<tr><th class="rh">+'+Math.round(x*100)+'%</th>';
-    PACKET.months.forEach(function(m,i){
-      c+=PACKET.spend[i]*x;
-      var cls, lab='';
-      if(c>CUSH){ cls=done?'gone':'gone edge'; if(!done){lab='<span>'+m+'</span>'; done=true;} }
-      else if(c>CUSH*0.75){ cls='thin'; }
-      else { cls='ok'; }
-      h+='<td class="'+cls+'">'+lab+'</td>';
-    });
-    h+='</tr>';
-  });
-  $('durgrid').innerHTML=h;
-}
-
-function drawStartCurve(){
-  var W=900,H=260,PL=54,PR=18,PT=18,PB=32, YMX=340;
-  var vals=PACKET.months.map(function(m,i){
-    var rem=PACKET.spend.slice(i).reduce(function(a,b){return a+b;},0);
-    return CUSH/rem*100;
-  });
-  var x=function(i){return PL+i*(W-PL-PR)/11;};
-  var y=function(v){return PT+(1-Math.min(v,YMX)/YMX)*(H-PT-PB);};
-  var g='';
-  [0,100,200,300].forEach(function(v){
-    g+='<line x1="'+PL+'" y1="'+y(v)+'" x2="'+(W-PR)+'" y2="'+y(v)+'" stroke="#272F34"/>'
-     + '<text x="'+(PL-10)+'" y="'+(y(v)+4)+'" fill="#6C7A80" font-size="12" text-anchor="end">+'+v+'%</text>';
-  });
-  g+='<path d="M'+vals.map(function(v,i){return x(i)+','+y(v);}).join('L')
-    +'L'+x(11)+','+(H-PB)+'L'+PL+','+(H-PB)+'Z" fill="rgba(82,150,222,.14)"/>';
-  g+='<polyline points="'+vals.map(function(v,i){return x(i)+','+y(v);}).join(' ')
-    +'" fill="none" stroke="#5296DE" stroke-width="2.5" stroke-linejoin="round"/>';
-  vals.forEach(function(v,i){
-    g+='<circle cx="'+x(i)+'" cy="'+y(v)+'" r="3.5" fill="#5296DE"/>';
-    if(i%2===0) g+='<text x="'+x(i)+'" y="'+(y(v)-12)+'" fill="#9AA7AD" font-size="11.5" text-anchor="middle">+'+Math.round(v)+'%</text>';
-  });
-  PACKET.months.forEach(function(m,i){
-    g+='<text x="'+x(i)+'" y="'+(H-9)+'" fill="#6C7A80" font-size="12" text-anchor="middle">'+m+'</text>';
-  });
-  $('startcurve').innerHTML=g;
-}
-
 function drawTrips(){
   var T=[
    {p:'Cost per lead',t:'Blended CPL',
@@ -701,6 +637,181 @@ function drawOffsets(){
     : 'Combined recovery $'+f1(tot)+'M versus a $'+f1(CUSH)+'M cushion. Covers watch-tier cases; both break cases exceed the offset set and require a re-plan or a financing decision.';
 }
 
+/* ---- per-lever volatility (priors: CPL log-sigma 0.12, attrition sigma 1.5pp) ---- */
+PACKET.tol[0].sig=12.7;
+PACKET.tol[1].sig=2.0;
+PACKET.tol[2].sig=0.12;
+PACKET.tol[3].sig=1.5;
+
+/* ---- forced-response model: the floor is never hit, growth is surrendered ---- */
+PACKET.resp={ spend:21.60, nb:22.90, arr0:96.878, detect:2 };
+
+function respRows(){
+  var R=PACKET.resp, out=[];
+  [0.10,0.20,0.30,0.50,0.75,1.00,1.50].forEach(function(x){
+    var over=R.spend*x/12, k=CUSH/over, forced=k<12;
+    var kk=forced?Math.floor(k):12;
+    var lost=forced ? R.nb*(x/(1+x))*((12-kk)/12) : 0;
+    out.push({x:x, forced:forced, act:kk, pts:lost/R.arr0*100,
+              cash:Math.min(over*kk, R.spend*x), slack:kk-R.detect});
+  });
+  return out;
+}
+
+function drawResponse(){
+  var W=900,H=300,PL=78,PR=168,PT=34,PB=40, R=PACKET.resp;
+  var rows=respRows();
+  var x=function(m){ return PL+m/12*(W-PL-PR); };
+  var rh=(H-PT-PB)/rows.length, bh=Math.min(rh*0.52,18);
+  var g='';
+  PACKET.months.forEach(function(m,i){
+    g+='<line x1="'+x(i+1)+'" y1="'+PT+'" x2="'+x(i+1)+'" y2="'+(H-PB)+'" stroke="#232A2E"/>'
+     + '<text x="'+((x(i)+x(i+1))/2)+'" y="'+(H-PB+18)+'" fill="#6C7A80" font-size="11" text-anchor="middle">'+m.charAt(0)+'</text>';
+  });
+  g+='<line x1="'+x(R.detect)+'" y1="'+(PT-10)+'" x2="'+x(R.detect)+'" y2="'+(H-PB+2)+'" stroke="#5296DE" stroke-width="1.5" stroke-dasharray="4 3"/>'
+   + '<text x="'+(x(R.detect)+7)+'" y="'+(PT-13)+'" fill="#5296DE" font-size="11.5">'
+   + (mode==='plain'?'we would know by here':'detection, M+2')+'</text>';
+  rows.forEach(function(r,i){
+    var cy=PT+rh*(i+0.5);
+    g+='<text x="'+(PL-14)+'" y="'+(cy+4)+'" fill="#E7ECEE" font-size="13" text-anchor="end">+'+Math.round(r.x*100)+'%</text>';
+    g+='<rect x="'+PL+'" y="'+(cy-bh/2)+'" width="'+(x(12)-PL)+'" height="'+bh+'" rx="3" fill="#1C2225"/>';
+    var col = !r.forced ? '#3FB27F' : (r.slack<=1 ? '#E05252' : r.slack<=3 ? '#DFA23A' : '#4A5257');
+    g+='<rect x="'+PL+'" y="'+(cy-bh/2)+'" width="'+(x(r.act)-PL)+'" height="'+bh+'" rx="3" fill="'+col+'"/>';
+    var lab;
+    if(!r.forced) lab = mode==='plain' ? 'no action needed' : 'within cushion';
+    else lab = (mode==='plain' ? 'cut by '+PACKET.months[r.act-1]+', give up ' : 'act '+PACKET.months[r.act-1]+', ')
+             + r.pts.toFixed(1)+'pp';
+    g+='<text x="'+(x(12)+14)+'" y="'+(cy+4)+'" fill="'+(r.forced?col:'#9AA7AD')+'" font-size="12">'+lab+'</text>';
+    if(r.forced) g+='<circle cx="'+x(r.act)+'" cy="'+cy+'" r="3.5" fill="#0E1113"/>';
+  });
+  $('response').innerHTML=g;
+}
+
+/* ---- derived scenarios: built from the packet, not authored ---- */
+function deriveCases(){
+  var L={}; PACKET.levers.forEach(function(l){ L[l.tech]=l; });
+  var S={}; PACKET.tol.forEach(function(t){ S[t.tech]=t; });
+  var order=PACKET.tol.map(function(t){ return {t:t, z:(CUSH/t.per)/t.sig}; })
+                      .sort(function(a,b){ return a.z-b.z; });
+  var R=PACKET.resp;
+
+  function growthCost(cash){
+    if(cash<=CUSH) return 0;
+    var frac=Math.min(CUSH/cash,1);
+    return R.nb*(1-frac)*0.55/R.arr0*100;
+  }
+  function mk(label, tech, mult, sigmas){
+    var cash=sigmas.reduce(function(a,s){ return a + s.t.per*s.t.sig*s.n; },0);
+    var z=Math.max.apply(null, sigmas.map(function(s){ return s.n; }));
+    var pts=growthCost(cash);
+    var st = cash>=CUSH ? 'break' : cash>=CUSH*0.5 ? 'watch' : 'hold';
+    var why = sigmas.map(function(s){
+      return s.t[mode==='plain'?'plain':'tech']+' '+s.n.toFixed(1)+'x normal';
+    }).join(' + ');
+    return {plain:label, tech:tech, s:st, d:-cash, arr:'-'+pts.toFixed(1)+'pp', eb:cash*0.55,
+            why:why, cash:cash, pts:pts,
+            xp: st==='break'
+              ? 'We would be forced to cut back before this ran its course, giving up about '+pts.toFixed(1)+' points of growth.'
+              : 'Uncomfortable, but inside what the cushion absorbs without changing the plan.',
+            xt: (st==='break'
+              ? 'Exceeds cushion; forces corrective action. Estimated '+pts.toFixed(1)+'pp growth surrendered.'
+              : 'Within cushion; absorbed without corrective action.')+' Surfaced because '+why+'.'};
+  }
+  var a=order[0].t, b=order[1].t, c=order[2].t;
+  var cases=[
+    mk('Everything goes wrong at once','Compound: '+a.tech+', '+b.tech+', '+c.tech,3,
+       [{t:a,n:1.6},{t:b,n:1.6},{t:c,n:1.4}]),
+    mk('Our two weakest points slip together','Pair: '+a.tech+' + '+b.tech,2,
+       [{t:a,n:1.5},{t:b,n:1.5}]),
+    mk('A bad year on '+a[mode==='plain'?'plain':'tech'].toLowerCase(), a.tech+' at 2.0x sigma',1,[{t:a,n:2.0}]),
+    mk('A bad year on '+b[mode==='plain'?'plain':'tech'].toLowerCase(), b.tech+' at 2.0x sigma',1,[{t:b,n:2.0}]),
+    mk('A poor quarter on '+a[mode==='plain'?'plain':'tech'].toLowerCase(), a.tech+' at 1.0x sigma',1,[{t:a,n:1.0}]),
+    mk('A poor quarter on '+c[mode==='plain'?'plain':'tech'].toLowerCase(), c.tech+' at 1.0x sigma',1,[{t:c,n:1.0}])
+  ];
+  cases.sort(function(p,q){ return p.d-q.d; });
+  PACKET.cases=cases;
+}
+
+/* ---- detection latency: how fast we would actually see each lever move ---- */
+PACKET.latency={
+  stress:2.5, axis:18,
+  rows:[
+    {plain:'How often we win', tech:'NB win rate', detect:4.0, window:8.4, best:2.0,
+     wp:'Deals close lumpy, so one month tells you nothing. You need a quarter of data before a real slip separates from noise.',
+     wt:'Monthly dispersion ~3pp against a 3.5pp breach shift: three periods to reach 2-sigma separation, plus one close.',
+     fp:'Track stage-to-stage conversion, not closed-won', ft:'Instrument stage conversion as leading indicator'},
+    {plain:'How many customers leave', tech:'Churn / GRR', detect:6.0, window:13.4, best:2.0,
+     wp:'You only find out a customer is leaving when their renewal comes up, and those are spread through the year.',
+     wt:'Renewal-date timing adds ~2 months of structural lag on top of three periods of confirmation.',
+     fp:'Watch the forward renewal book and health scores', ft:'Forward renewal cohort + health scoring as leading indicator'},
+    {plain:'What a lead costs', tech:'Blended CPL', detect:2.0, window:17.5, best:1.0,
+     wp:'Spend divided by leads, visible every close. This one is already well instrumented.',
+     wt:'Low observation noise relative to threshold; one confirming period plus close lag.',
+     fp:'Weekly rather than monthly tracking', ft:'Move to weekly cadence for sub-month detection'},
+    {plain:'How many reps we keep', tech:'AE attrition', detect:0.5, window:30.5, best:0.5,
+     wp:'You know the day somebody resigns. Nothing to improve here.',
+     wt:'Event-observed, zero confirmation lag. Capacity impact lags by ramp, but the signal does not.',
+     fp:'Already immediate', ft:'No instrumentation gain available'}
+  ]
+};
+
+function latencyValue(r){
+  var burn=CUSH/r.window;
+  return { gain:Math.max(r.detect-r.best,0), val:Math.max(r.detect-r.best,0)*burn,
+           eaten:r.detect/r.window*100 };
+}
+
+function drawLatency(){
+  var W=900,H=300,PL=132,PR=232,PT=40,PB=40,AX=PACKET.latency.axis;
+  var rows=PACKET.latency.rows;
+  var x=function(m){ return PL+Math.min(m,AX)/AX*(W-PL-PR); };
+  var rh=(H-PT-PB)/rows.length, bh=Math.min(rh*0.40,17);
+  var g='';
+  [0,3,6,9,12,15,18].forEach(function(v){
+    g+='<line x1="'+x(v)+'" y1="'+PT+'" x2="'+x(v)+'" y2="'+(H-PB)+'" stroke="#232A2E"/>'
+     + '<text x="'+x(v)+'" y="'+(H-PB+18)+'" fill="#6C7A80" font-size="11" text-anchor="middle">'+v+'</text>';
+  });
+  g+='<text x="'+PL+'" y="'+(PT-16)+'" fill="#9AA7AD" font-size="11.5">'
+   + (mode==='plain'?'months from the problem starting':'months from shock onset, 2.5x sigma')+'</text>';
+  rows.forEach(function(r,i){
+    var v=latencyValue(r), cy=PT+rh*(i+0.5), over=r.window>AX;
+    var heavy=v.eaten>=35;
+    g+='<text x="'+(PL-14)+'" y="'+(cy+4)+'" fill="#E7ECEE" font-size="13" text-anchor="end">'
+      + r[mode==='plain'?'plain':'tech']+'</text>';
+    g+='<rect x="'+PL+'" y="'+(cy-bh/2)+'" width="'+(x(r.window)-PL)+'" height="'+bh+'" rx="3" fill="#2A4A3C"/>';
+    g+='<rect x="'+PL+'" y="'+(cy-bh/2)+'" width="'+(x(r.detect)-PL)+'" height="'+bh+'" rx="3" fill="'+(heavy?'#E05252':'#4A5257')+'"/>';
+    if(over){
+      g+='<text x="'+(x(AX)+6)+'" y="'+(cy+4)+'" fill="#3FB27F" font-size="12">\u203a</text>';
+    }
+    var l1 = mode==='plain'
+      ? (heavy? Math.round(v.eaten)+'% of the warning spent finding out' : 'seen quickly, plenty of room')
+      : v.detect_lbl || (r.detect.toFixed(1)+' of '+r.window.toFixed(1)+' mo \u00b7 '+Math.round(v.eaten)+'% consumed');
+    var l2 = v.gain>0
+      ? (mode==='plain' ? 'faster tracking is worth $'+v.val.toFixed(1)+'M' : 'instrumentation value $'+v.val.toFixed(1)+'M')
+      : (mode==='plain' ? 'nothing to gain' : 'no gain available');
+    g+='<text x="'+(W-PR+18)+'" y="'+(cy-3)+'" fill="'+(heavy?'#E05252':'#9AA7AD')+'" font-size="12">'+l1+'</text>';
+    g+='<text x="'+(W-PR+18)+'" y="'+(cy+14)+'" fill="'+(v.gain>0?'#3FB27F':'#6C7A80')+'" font-size="12">'+l2+'</text>';
+  });
+  $('latency').innerHTML=g;
+}
+
+function drawLatencyFix(){
+  var rows=PACKET.latency.rows.filter(function(r){ return latencyValue(r).gain>0; });
+  var tot=PACKET.latency.rows.reduce(function(a,r){ return a+latencyValue(r).val; },0);
+  var mx=0; rows.forEach(function(r){ mx=Math.max(mx,latencyValue(r).val); });
+  $('latfix').innerHTML=rows.map(function(r){
+    var v=latencyValue(r);
+    return '<div class="lrow"><div class="lname">'+(mode==='plain'?r.fp:r.ft)
+      + '<span class="meta">'+r[mode==='plain'?'plain':'tech']+' \u00b7 '
+      + r.detect.toFixed(1)+' \u2192 '+r.best.toFixed(1)+' months</span></div>'
+      + '<div class="track"><span class="bar up" style="left:0;width:'+(v.val/mx*94)+'%"></span></div>'
+      + '<div class="lval"><i>+$'+v.val.toFixed(1)+'M</i></div></div>';
+  }).join('');
+  $('lat-hint').textContent = mode==='plain'
+    ? 'Together that is worth about $'+tot.toFixed(1)+'M of extra room \u2014 roughly 60% of the entire cash cushion, for the price of measuring three things better. Holding another $6M in the bank would cost us $6M. This costs a reporting change.'
+    : 'Combined instrumentation value $'+tot.toFixed(1)+'M against a $'+CUSH.toFixed(0)+'M cushion (~59%). Equivalent headroom via balance sheet requires actual capital; this requires reporting cadence and leading-indicator definitions. Strictly dominant on cost.';
+}
+
 /* ---------- copy that swaps wholesale ---------- */
 var COPY={
   vbig:{plain:'The plan works, but it leans on one thing: what it costs to buy demand.',
@@ -714,18 +825,16 @@ var COPY={
 };
 
 var COPY2={
- tolsub:{plain:'We have $10M of room between the plan and the floor. This is how far each lever can move before that room is gone \u2014 green is comfortable, amber is thin, red is past the floor.',
-         tech:'Cushion is $10.0M (Dec cash $35.0M less the $25M board floor). Bands show distance to breach under a full-year sustained shock, one lever at a time.'},
- tolhint:{plain:'Win rate is the tightest of the four. A 3.5 point drop ends the year, and that is well inside what a normal bad quarter looks like. Lead costs have to rise 46% and stay there to do the same damage. We watch lead costs closely because they are easy to see \u2014 but win rate is the one that can actually surprise us.',
-          tech:'Note the asymmetry: the NB win-rate breakpoint (-3.5pp) falls inside historical quarterly dispersion, whereas CPL requires +46% sustained. Detection is inverted \u2014 CPL is highly visible monthly, win rate degrades quietly inside stage conversion. Prioritise instrumentation accordingly.'},
- dursub:{plain:'One bad month never breaks us \u2014 a single 50% spike in lead costs is about $0.9M against $10M of room. The question is always how long it lasts. Each row is a severity, each square is a month.',
-         tech:'Cumulative burn against cushion, sustained from January. Single-period shocks run $0.81M to $0.96M depending on month; breach is a function of persistence, not amplitude.'},
- durhint:{plain:'Up to +30% we can absorb the whole year and still finish above the floor. At +50% we only just make it to December. At +75% we get seven months. At +100%, five \u2014 the floor goes in June. At +150% we are done by April. The outlined square is the month it breaks.',
-          tech:'Breach thresholds from January: +30% survives 12 months (Dec $28.5M), +50% breaches in month 12, +75% month 8, +100% month 6, +150% month 4. Outlined cell marks first breach.'},
- startsub:{plain:'The same increase is survivable or fatal depending on when it lands. This is the biggest uplift we could absorb, if it started in that month and ran through December.',
-           tech:'Maximum tolerable sustained CPL uplift by shock onset month, holding the cushion constant. Reflects remaining program spend exposure.'},
- starthint:{plain:'A 46% rise starting in January breaks the year. The very same 46% starting in July does not come close \u2014 there simply are not enough months left to spend the difference. That is why the January to March closes carry far more weight than their size suggests, and why a Q1 miss deserves a different reaction than the same miss in Q3.',
-            tech:'Tolerance rises from +46% (Jan onset) to +89% (Jul) to +269% (Nov). Practical consequence: Q1 variance carries roughly double the year-end cash consequence of identical Q3 variance, before any ARR compounding. Early-period thresholds should be tighter than late-period ones.'},
+ respsub:{plain:'What happens if lead costs run over plan and stay there. The bar shows how long we could keep spending before we would have to cut back, and what cutting back costs us in growth.',
+         tech:'Forced-response model. Bar terminates where cumulative overspend consumes the cushion, at which point corrective action is mandatory. Growth cost assumes volume is cut to hold spend flat.'},
+ resphint:{plain:'None of these end with us hitting the floor, because we would never let it get that far \u2014 someone would make us cut. So the real cost is not cash, it is the growth we give up to protect the cash. Up to +30% we can absorb it and carry on. At +100% we are cutting by May and lose about 7 points of growth. At +150% we would have roughly one month between finding out and having to act, which is the number that should worry us \u2014 not the floor.',
+           tech:'The floor is not the binding outcome; management response is. Below +30% the cushion absorbs the shock with no intervention. Above it, action is forced and the cost converts to surrendered ARR growth (-0.7pp at +50%, -6.9pp at +100%, -10.6pp at +150%), which then compounds into the FY28 base. At +150% the interval between detection (M+2) and mandatory action is a single month, so the operative constraint is detection latency rather than cushion size.'},
+ latsub:{plain:'A threshold only helps if we can see it trip. This is how long each lever takes to show a real change, against how long we would have before we were forced to act on it.',
+        tech:'Detection latency (confirmation periods + reporting lag + structural lag) against the decision window to forced action under a common 2.5x sigma stress.'},
+ latnote:{plain:'Two of them are fine. Lead costs show up on a dashboard within a month, and we know the day a rep resigns. But win rate and churn each burn about half their warning time before we can even be confident anything is wrong \u2014 and those are the two levers this plan is most exposed to. We are best instrumented on the risk that matters least.',
+          tech:'CPL and attrition are effectively real time (11% and 2% of window consumed). NB win rate and churn consume 47% and 45% respectively \u2014 and these are the two nearest to breach on the fragility ranking. Instrumentation quality is inversely correlated with risk-adjusted exposure.'},
+ latfixsub:{plain:'What we would gain by measuring the slow ones better, converted into the equivalent amount of extra cash in the bank.',
+            tech:'Months of decision window recovered, priced at the monthly burn rate of a 2.5x sigma shock in that lever.'},
  tripsub:{plain:'A threshold is only useful if we know when we would see it and how long we have to do something. These are the four worth wiring to an alert.',
           tech:'Trip conditions with detection lag and decision window for each load-bearing lever.'},
  offsub:{plain:'If something trips, these are the levers that give cash back, and roughly how much.',
@@ -747,11 +856,11 @@ var COMMENTARY={
   ['What this plan actually is',
    'FY26 ended with $96.9M of recurring revenue, $52.6M in the bank and a business that made money \u2014 roughly 8% margins, cash going up rather than down. <b>This plan deliberately reverses that.</b> It pushes sales and marketing from about a third of revenue to over half, turns an 8% profit into a 12% loss, and burns $17.6M to buy 25% growth. That may well be the right call. But it is a strategy change, not a continuation, and everything below measures how much rope that decision leaves us.'],
   ['Where the risk actually sits',
-   'What the plan depends on is not what people usually argue about. Lead costs get the attention because they appear on a dashboard every month. But <b>win rate is the lever with the least room</b>: a 3.5 point drop uses the entire cushion, and 3.5 points is an ordinary bad quarter. Lead costs would have to rise 46% and stay there all year to do the same damage.'],
-  ['How much we can take, and for how long',
-   'We have $10M between the plan and the floor. A single bad month is close to irrelevant \u2014 one 50% spike in lead costs is about $0.9M. <b>Persistence is the whole risk.</b> At +30% we can run the entire year and still finish above the floor. At +75% we get seven months. At +100% we get five, and the floor goes in June. So the right question at any close is never "was this month bad" \u2014 it is "is this the second or third month in a row."'],
-  ['When it happens matters more than how bad it is',
-   'A 46% rise in lead costs starting in January breaks the year. The identical 46% starting in July does not come close, because there are only five months of spending left to get it wrong. <b>Q1 variance is worth roughly double the same variance in Q3.</b> That argues for tighter thresholds early in the year and a genuinely different reaction to a Q1 miss than a Q3 one \u2014 the opposite of how most teams run, where Q1 gets the benefit of the doubt and Q4 gets the panic.'],
+   'What the plan depends on is not what people usually argue about. Lead costs get the attention because they appear on a dashboard every month. But <b>win rate is the lever with the least room</b>: a 3.5 point drop uses the entire cushion, and measured against how much win rate normally moves, that is far closer than any other lever. Lead costs would have to rise 46% to do the same damage — nearly four times their normal swing. On its own, though, no single lever is likely to break us. <b>It is combinations that do it</b>, because all four spend the same $10M.'],
+  ['What a bad year really costs',
+   'We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash, it is the growth we give up to protect the cash.</b> Up to +30% on lead costs we absorb it and carry on. At +100% we are cutting back by May and surrender about 7 points of growth. At +150% we would have roughly one month between finding out and having to act. That last number is the one that matters: the constraint is how fast we notice, not how much money is in the bank.'],
+  ['Speed of noticing beats size of cushion',
+   'Lead costs and rep departures we see almost immediately. Win rate and churn we do not \u2014 each burns about half its warning time before we can be confident anything is wrong, and those are precisely the two levers this plan is thinnest on. <b>We are best instrumented on the risk that matters least.</b> Fixing that is worth roughly $5.9M of extra room, about 60% of the entire cash cushion, and it costs a reporting change rather than $5.9M of actual money.'],
   ['What to do about it',
    'Four things are worth an alert: lead costs 19% over plan for two closes running, win rate down 1.4 points on a trailing basis, churn a tenth worse for a quarter, attrition nearly 4 points over. Win rate deserves the most attention and gets the least, because it degrades quietly inside stage conversion while lead cost degrades loudly on a chart. If something trips, the four offsetting levers together buy back $10.8M \u2014 just about the whole cushion, but only if we pull all four at once. Either scenario that truly breaks the year exceeds what the levers can recover and needs a decision about the plan itself.']
  ],
@@ -759,13 +868,13 @@ var COMMENTARY={
   ['Plan posture',
    'FY26 exit: $96.9M ARR, $52.6M cash, ~8% EBITDA, positive net cash generation. The FY27 plan steps S&amp;M from ~35% to 55% of revenue, moving EBITDA to -12% and consuming $17.6M to fund 25% ARR growth. <b>This is a discontinuity, not an extrapolation</b>, and the framing below is calibrated to the investment posture rather than the FY26 operating base.'],
   ['Sensitivity concentration',
-   'Downside concentrates in four levers, but ranking by headline delta is misleading. <b>NB win rate has the shortest distance to breach at -3.5pp</b>, inside historical quarterly dispersion, versus +46% sustained for blended CPL. Attention allocation is inverted relative to risk-adjusted exposure.'],
+   'Downside concentrates in four levers, but ranking by headline delta is misleading. Normalised to each lever\'s own dispersion, <b>NB win rate is nearest to breach at 1.8x sigma</b>, versus 2.8x (churn), 3.7x (CPL) and 6.4x (attrition). <b>No single lever breaches at a probable magnitude</b>, yet 12% of draws breach — so the breach set is driven by covariance rather than any marginal. Individual-threshold monitoring will systematically under-warn; the shared cushion is the binding constraint.'],
   ['Tolerance envelopes',
    'Cushion $10.0M (Dec cash $35.0M less $25M floor). Full-year sustained breakpoints: CPL +46% (safe to +19%), NB win rate -3.5pp (safe to -1.4pp), churn mix 1.34x (safe to 1.13x), AE attrition +9.5pp (safe to +3.8pp). Envelopes are one-at-a-time; the cushion is shared, so concurrent shocks consume it jointly and the combination set is materially tighter than any single row implies.'],
-  ['Duration versus amplitude',
-   'Single-period shocks are immaterial ($0.81M to $0.96M for a +50% CPL month). Breach is driven by persistence: from a January onset, +30% survives all 12 months (Dec $28.5M), +50% breaches in month 12, +75% at month 8, +100% at month 6, +150% at month 4. Alert logic should be consecutive-period with a two-close confirmation window.'],
-  ['Onset timing and response',
-   'Maximum tolerable sustained CPL uplift rises with onset month: +46% (Jan), +60% (Apr), +89% (Jul), +269% (Nov). <b>Identical variance in Q1 carries roughly double the year-end cash consequence of Q3</b>, before ARR compounding. Detection lag runs opposite to materiality: CPL is observable at M+1 close with high clarity; NB win rate degrades inside stage conversion and surfaces only in trailing data; churn carries the longest lag, with the forward renewal cohort as leading indicator. Combined offset capacity $10.8M against a $10.0M cushion \u2014 nominally sufficient, but only with simultaneous execution. Both break cases exceed the offset set and resolve to a re-plan or financing decision.']
+  ['Response, not endurance',
+   'Passive-endurance framing overstates exposure: it assumes no management response, which is not a credible operating assumption under board oversight. Modelling forced correction instead, the floor is never reached. Below +30% the cushion absorbs the shock without intervention. Above it, action is mandatory and the cost converts to surrendered growth: -0.7pp at +50%, -6.9pp at +100%, -10.6pp at +150%, compounding into the FY28 base.'],
+  ['Detection latency is the binding constraint',
+   'Detection consumes 48% of the decision window on NB win rate and 45% on churn, versus 11% on CPL and 2% on attrition \u2014 <b>inversely correlated with risk-adjusted exposure</b>, since win rate and churn are also the two nearest to breach. Recovering that latency (stage-conversion leading indicators, forward renewal cohort) returns ~$5.9M of cushion-equivalent against a $10.0M cushion. Equivalent headroom via the balance sheet requires actual capital; this requires reporting cadence and leading-indicator definitions, so it is strictly dominant on cost. Recommend detection latency become a first-class field on the lever registry.']
  ],
  plain3:[
   ['The one-year view is not enough',
@@ -811,16 +920,15 @@ function setMode(m){
   $('v-small').textContent=COPY.vsmall[m];
   $('corr-sub').textContent=COPY.corr[m];
   $('foot').textContent=COPY.foot[m];
-  $('tol-sub').textContent=COPY2.tolsub[m];
-  $('tol-hint').textContent=COPY2.tolhint[m];
-  $('dur-sub').textContent=COPY2.dursub[m];
-  $('dur-hint').textContent=COPY2.durhint[m];
-  $('start-sub').textContent=COPY2.startsub[m];
-  $('start-hint').textContent=COPY2.starthint[m];
+  $('resp-sub').textContent=COPY2.respsub[m];
+  $('lat-sub').textContent=COPY2.latsub[m];
+  $('lat-note').textContent=COPY2.latnote[m];
+  $('latfix-sub').textContent=COPY2.latfixsub[m];
+  $('resp-hint').textContent=COPY2.resphint[m];
   $('trip-sub').textContent=COPY2.tripsub[m];
   $('off-sub').textContent=COPY2.offsub[m];
   drawReadouts(); drawChips(); drawLedger(); drawGroups();
-  drawTolerance(); drawDuration(); drawTrips(); drawOffsets(); drawCommentary();
+  deriveCases(); drawResponse(); drawLatency(); drawLatencyFix(); drawTrips(); drawOffsets(); drawCommentary();
   var keep=sel; sel=-1; if(keep>=0){ pick(keep); } else { pick(-1); }
   if(typeof horizon!=='undefined' && horizon==='3y') render3();
 }
@@ -1061,104 +1169,10 @@ $('h-3y').onclick=function(){ setHorizon('3y'); };
 
 
 drawCorridor();
-drawStartCurve();
 setMode('plain');
 setHorizon('1y');
 $('m-plain').onclick=function(){ setMode('plain'); };
 $('m-tech').onclick=function(){ setMode('tech'); };
-</script>
-<script>
-/* SMPL embed bridge — parent Budget Analytics posts live packets; mock craft stays. */
-(function () {
-  var params = new URLSearchParams(location.search);
-  var embedded = params.get('embedded') === '1';
-  if (embedded) {
-    document.documentElement.classList.add('smpl-embedded');
-    var style = document.createElement('style');
-    style.textContent = '.smpl-embedded .wrap{max-width:none;padding:8px 4px 40px}.smpl-embedded .head{margin-bottom:6px}.live-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin-left:8px}.live-badge.on{color:var(--hold);border-color:#2A4A3C}';
-    document.head.appendChild(style);
-  }
-
-  function approxBands(plan, floor, decSd) {
-    var sd = Math.max(0, Number(decSd) || 0);
-    return {
-      p05: plan.map(function (v, i) { return Math.max(0, +(v - sd * (0.35 + 0.65 * i / 11)).toFixed(2)); }),
-      p25: plan.map(function (v, i) { return Math.max(0, +(v - sd * (0.18 + 0.45 * i / 11)).toFixed(2)); }),
-      p75: plan.map(function (v, i) { return +(v + sd * (0.18 + 0.35 * i / 11)).toFixed(2); }),
-      p95: plan.map(function (v, i) { return +(v + sd * (0.35 + 0.55 * i / 11)).toFixed(2); }),
-      floor: floor
-    };
-  }
-
-  function applyLive(live) {
-    if (!live || typeof live !== 'object') return;
-    if (Array.isArray(live.plan) && live.plan.length === 12) PACKET.plan = live.plan.map(Number);
-    if (live.floor != null) PACKET.floor = Number(live.floor);
-    if (Array.isArray(live.spend) && live.spend.length === 12) PACKET.spend = live.spend.map(Number);
-    var bands = approxBands(PACKET.plan, PACKET.floor, live.decCashSdM);
-    if (live.p05) PACKET.p05 = live.p05; else PACKET.p05 = bands.p05;
-    if (live.p25) PACKET.p25 = live.p25; else PACKET.p25 = bands.p25;
-    if (live.p75) PACKET.p75 = live.p75; else PACKET.p75 = bands.p75;
-    if (live.p95) PACKET.p95 = live.p95; else PACKET.p95 = bands.p95;
-    if (Array.isArray(live.readouts) && live.readouts.length) PACKET.readouts = live.readouts;
-    if (Array.isArray(live.cases) && live.cases.length) PACKET.cases = live.cases;
-    if (Array.isArray(live.levers) && live.levers.length) PACKET.levers = live.levers;
-    if (live.copy) {
-      if (live.copy.vbig) COPY.vbig = live.copy.vbig;
-      if (live.copy.vsmall) COPY.vsmall = live.copy.vsmall;
-      if (live.copy.corr) COPY.corr = live.copy.corr;
-      if (live.copy.foot) COPY.foot = Object.assign({}, COPY.foot, live.copy.foot);
-    }
-    // Recompute cushion-dependent views
-    CUSH = +(PACKET.plan[11] - PACKET.floor).toFixed(2);
-    FYSPEND = PACKET.spend.reduce(function (a, b) { return a + b; }, 0);
-    if (PACKET.tol && PACKET.tol[0]) PACKET.tol[0].per = FYSPEND / 100;
-
-    var badge = document.getElementById('liveBadge');
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.id = 'liveBadge';
-      badge.className = 'live-badge on';
-      var head = document.querySelector('.head > div');
-      if (head) head.appendChild(badge);
-    }
-    badge.className = 'live-badge on';
-    badge.textContent = live.sourceLabel || 'Live formula graph';
-
-    // Fix hardcoded floor label by redrawing
-    YMAX = Math.max(PACKET.floor * 1.4, Math.max.apply(null, PACKET.plan.concat(PACKET.p95)) * 1.08, 40);
-    ys = function (v) { return PT + (1 - v / YMAX) * (H - PT - PB); };
-    drawCorridor();
-    // Patch floor label text after draw
-    try {
-      var texts = document.querySelectorAll('#corridor text');
-      texts.forEach(function (t) {
-        if (/Cash floor/i.test(t.textContent || '')) t.textContent = 'Cash floor  + f1(PACKET.floor) + 'M';
-      });
-    } catch (e) {}
-
-    if (typeof setMode === 'function') setMode(mode);
-    else {
-      drawReadouts(); drawChips(); drawLedger(); drawGroups();
-      drawTolerance(); drawDuration(); drawStartCurve(); drawTrips(); drawOffsets(); drawCommentary();
-    }
-    if (typeof horizon !== 'undefined' && horizon === '3y' && typeof render3 === 'function') render3();
-  }
-
-  window.addEventListener('message', function (ev) {
-    var d = ev.data;
-    if (!d || typeof d !== 'object') return;
-    if (d.type === 'smpl:pa-levers' && d.packet) applyLive(d.packet);
-    if (d.type === 'smpl:pa-mode' && d.mode) setMode(d.mode === 'tech' ? 'tech' : 'plain');
-    if (d.type === 'smpl:pa-horizon' && d.horizon) {
-      if (typeof setHorizon === 'function') setHorizon(d.horizon === '3y' ? '3y' : '1y');
-    }
-  });
-
-  if (embedded && window.parent && window.parent !== window) {
-    window.parent.postMessage({ type: 'smpl:pa-levers-ready' }, '*');
-  }
-})();
 </script>
 </body>
 </html>

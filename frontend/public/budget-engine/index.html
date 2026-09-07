@@ -154,8 +154,20 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .assure-lane{border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg);min-height:140px;display:flex;flex-direction:column}
 .assure-lane-hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
 .assure-lane-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:500;margin:0}
-.assure-lane-acts{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.assure-lane-acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .assure-lane-acts .act-btn{font-size:10px;padding:3px 8px}
+.assure-run-meta{font-size:11px;color:var(--text3);line-height:1.3;max-width:220px}
+.assure-run-meta b{color:var(--text2);font-weight:500}
+.assure-run-prog{
+  width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;
+  background:rgba(184,144,96,0.12);border:0.5px solid rgba(184,144,96,0.35);
+  font-size:12px;color:var(--amber);line-height:1.4;
+}
+.assure-run-prog[hidden]{display:none!important}
+.assure-run-prog .bar{
+  display:block;height:3px;margin-top:6px;border-radius:2px;background:var(--border);overflow:hidden;
+}
+.assure-run-prog .bar>i{display:block;height:100%;width:0;background:var(--amber);transition:width .15s ease}
 .assure-lane-body{font-size:12px;color:var(--text2);line-height:1.55;flex:1}
 .assure-lane-body strong{color:var(--text);font-weight:500}
 .assure-wide{border:0.5px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg);margin-bottom:12px}
@@ -237,6 +249,97 @@ body[data-pa-mode="tech"] .pa-plain-only{display:none}
 body[data-pa-mode="plain"] .pa-tech-only{display:none}
 .pa-analytics[data-pa-mode="tech"] .pa-plain-only{display:none}
 .pa-analytics[data-pa-mode="plain"] .pa-tech-only{display:none}
+.pa-corridor-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px;margin-bottom:12px}
+.pa-corridor-legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--text2);margin-bottom:8px}
+.pa-corridor-legend span{display:inline-flex;align-items:center;gap:6px}
+.pa-sw{width:14px;height:3px;border-radius:2px;display:inline-block;background:var(--teal)}
+.pa-sw.band{width:11px;height:11px;border-radius:3px;background:rgba(95,168,120,.35)}
+.pa-sw.floor{background:var(--red);height:3px;border-style:dashed}
+.pa-sw.watch{background:var(--amber);height:3px;opacity:.95}
+.pa-sw.alarm{background:var(--red);height:3px;opacity:.7}
+.pa-sw.case{background:var(--amber)}
+.pa-corridor-svg{display:block;width:100%;height:auto;max-height:340px}
+.pa-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pa-chip{font:inherit;font-size:11.5px;color:var(--text2);background:var(--bg2);border:0.5px solid var(--border);border-radius:20px;padding:5px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.pa-chip:hover{color:var(--text);border-color:var(--text3)}
+.pa-chip[aria-pressed="true"]{color:var(--text);border-color:var(--accent);background:rgba(196,133,90,0.12)}
+.pa-chip .cdot{width:7px;height:7px;border-radius:50%;flex:none}
+.pa-callout{border-left:3px solid var(--accent);background:var(--bg2);padding:10px 12px;margin-top:10px;font-size:12px;color:var(--text2);line-height:1.5}
+.pa-callout strong{color:var(--text);font-weight:500}
+.pa-lever-ledger{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden;margin-top:10px}
+.pa-lrow{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(160px,2fr) 100px;gap:10px;align-items:center;padding:8px 12px;border-top:0.5px solid var(--border);font-size:12px}
+.pa-lrow:first-child{border-top:0}
+.pa-lname{color:var(--text);line-height:1.3}
+.pa-lname .meta{display:block;font-size:10.5px;color:var(--text3);margin-top:2px}
+.pa-ltrack{position:relative;height:18px}
+.pa-laxis{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border)}
+.pa-lbar{position:absolute;top:3px;height:12px;border-radius:2px}
+.pa-lbar.dn{right:50%;background:var(--red)}
+.pa-lbar.up{left:50%;background:var(--teal)}
+.pa-lval{text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap}
+.pa-lval b{color:var(--red);font-weight:500}
+.pa-impact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px}
+.pa-impact{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px}
+.pa-impact.break{border-color:rgba(184,112,95,0.45)}
+.pa-impact.watch{border-color:rgba(184,144,96,0.45)}
+.pa-impact-hd{font-size:13px;font-weight:500;color:var(--text);margin:0 0 6px;line-height:1.35}
+.pa-impact-metrics{font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:8px}
+.pa-impact-metrics b{color:var(--text);font-weight:500}
+.pa-impact-body{font-size:12px;color:var(--text2);line-height:1.5}
+.pa-dist-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+@media (max-width:720px){.pa-dist-grid{grid-template-columns:1fr}}
+.pa-dist-card{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:12px 14px}
+.pa-dist-card h4{margin:0 0 4px;font-size:12px;font-weight:500;color:var(--text)}
+.pa-dist-card p{margin:0 0 8px;font-size:11px;color:var(--text3);line-height:1.4}
+.pa-trips{display:grid;gap:1px;background:var(--border);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-top:10px}
+.pa-trip{background:var(--bg);padding:12px 14px;display:grid;grid-template-columns:minmax(140px,1fr) 2fr;gap:12px}
+@media (max-width:720px){.pa-trip{grid-template-columns:1fr}}
+.pa-trip h4{margin:0 0 4px;font-size:13px;font-weight:500;color:var(--text)}
+.pa-trip .wat{font-size:11px;color:var(--text3)}
+.pa-trip dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px}
+.pa-trip dt{color:var(--text3);font-size:11px}
+.pa-trip dd{margin:0;color:var(--text2)}
+.pa-trip dd b{color:var(--text);font-weight:500}
+.pa-dur-wrap{overflow-x:auto;margin-top:10px}
+.pa-dur{border-collapse:separate;border-spacing:3px;width:100%;min-width:560px}
+.pa-dur th{font-weight:400;font-size:11px;color:var(--text3);padding:2px 0;text-align:center}
+.pa-dur th.rh{text-align:right;padding-right:8px;width:52px;color:var(--text2)}
+.pa-dur td{height:26px;border-radius:3px;text-align:center;font-size:10px}
+.pa-dur td.ok{background:rgba(95,168,120,0.45)}
+.pa-dur td.thin{background:rgba(184,144,96,0.5)}
+.pa-dur td.thin.edge{box-shadow:inset 0 0 0 2px var(--amber)}
+.pa-dur td.gone{background:rgba(184,112,95,0.5)}
+.pa-dur td.edge{box-shadow:inset 0 0 0 2px var(--red)}
+.pa-dur td span{color:var(--text);font-size:10px}
+.pa-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:14px}
+.pa-group{border-top:2px solid var(--border);padding-top:12px}
+.pa-group.g-break{border-top-color:var(--red)}
+.pa-group.g-up{border-top-color:var(--teal)}
+.pa-group.g-flat{border-top-color:var(--text3)}
+.pa-group h4{margin:0 0 4px;font-size:14px;font-weight:500;color:var(--text)}
+.pa-group .gs{margin:0 0 8px;font-size:12px;color:var(--text2);line-height:1.45}
+.pa-group ul{list-style:none;margin:0;padding:0}
+.pa-group li{font-size:12.5px;padding:6px 0;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;gap:10px;color:var(--text)}
+.pa-group li:first-child{border-top:0}
+.pa-group li span:last-child{color:var(--text3);white-space:nowrap;font-family:var(--mono);font-size:11px}
+.pa-ledger-head{display:grid;grid-template-columns:minmax(140px,1.2fr) minmax(160px,2fr) 100px;gap:10px;padding:8px 12px;font-size:11px;color:var(--text3);border:0.5px solid var(--border);border-bottom:0;border-radius:10px 10px 0 0;background:var(--bg2)}
+.pa-ledger-head + .pa-lever-ledger{border-radius:0 0 10px 10px;margin-top:0}
+.pa-commentary{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);padding:8px 16px 16px;margin-top:10px}
+.pa-commentary h4{margin:16px 0 6px;font-size:14px;font-weight:500;color:var(--text)}
+.pa-commentary h4:first-child{margin-top:8px}
+.pa-commentary p{margin:0 0 8px;font-size:13px;color:var(--text2);line-height:1.6;max-width:82ch}
+.pa-commentary b{color:var(--text);font-weight:500}
+.pa-tol-box{border:0.5px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden;margin-top:10px}
+.pa-tol-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(200px,2fr) 120px;gap:12px;align-items:center;padding:10px 12px;border-top:0.5px solid var(--border)}
+.pa-tol-row:first-child{border-top:0}
+.pa-tol-track{position:relative;height:22px;background:var(--bg3,#2b3c2e);border-radius:3px;overflow:hidden}
+.pa-tol-track i{position:absolute;top:0;bottom:0;display:block}
+.pa-tol-track .z1{left:0;background:rgba(95,168,120,0.4)}
+.pa-tol-track .z2{background:rgba(184,144,96,0.42)}
+.pa-tol-track .z3{background:rgba(184,112,95,0.45);right:0}
+.pa-tol-track .now{position:absolute;top:-3px;bottom:-3px;width:2px;left:0;background:var(--text)}
+.pa-tol-val{text-align:right;font-size:12px;color:var(--text2)}
+.pa-tol-val b{display:block;font-weight:500;color:var(--text);font-family:var(--mono)}
 .bud-tbl td.ctx-c{background:rgba(114,130,106,0.05);font-size:9px;line-height:1.35;vertical-align:top}
 .bud-tbl td.bud-c{color:var(--text)}
 .bud-tbl td.fy-c{font-weight:600;color:var(--text);min-width:92px;white-space:nowrap}
@@ -454,8 +557,8 @@ const BUDGET_METRIC_DEFS = [
     formula: '(Beginning ARR + Expansion + Reactivation − Contraction − Churn) / Beginning ARR',
     formula_id: 'nrr_arr_bridge' },
   { id: 'arr_mix_pct', domain: 'ARR', label: 'Component mix % of BOP', source_type: 'ASSUMPTION', tab: 'arr',
-    description: 'Monthly ARR component as % of beginning ARR. Dollar row = BOP × this %. Dec may include a small NB plug so ending ARR hits the YoY target.',
-    formula: 'nb_m = BOP_m × mix_nb_m\n(same for exp / react / cont / churn)\nDec NB += plug so Dec EOP = YoY target',
+    description: 'Monthly ARR component as % of beginning ARR. Dollar row = BOP × this %. YoY growth rebalances the seasonal waterfall (not a Dec-only NB dump).',
+    formula: 'nb_m = BOP_m × mix_nb_m\n(same for exp / react / cont / churn)\nYoY lever → rebuildMixPathForYoy(target)',
     formula_id: 'arr_mix_bop' },
 
   // Revenue bridge
@@ -996,8 +1099,8 @@ function plAllLines(dept) {
 const STATE = {
   /** Canonical operating plan: +20% ending ARR YoY (Dec'27 vs Dec'26 lock). */
   yoyEndingArrGrowthPct: 20,
-  /** Dec ending cash floor used by Plan Assurance risk checks ($). */
-  cashFloorDec: 30000000,
+  /** Dec ending cash floor used by Plan Assurance risk checks ($). Canonical: $10M. */
+  cashFloorDec: 10000000,
   pipelineCoverageMult: 3.0,
   /** Within-quarter close pattern (quota is quarterly — M3 is the big month). */
   quarterCloseWeights: [0.22, 0.30, 0.48],
@@ -1071,6 +1174,16 @@ const STATE = {
   paHorizon: '1y',
   /** Analytics tab: 'plain' | 'tech' */
   paMode: 'plain',
+  /** Persisted Plan Assurance outputs (survive tab switches + reload). */
+  _assureNarrative: null,
+  _assureHistoryNarrative: null,
+  _assureScenarioNarrative: null,
+  _assureScenarioSuite: null,
+  _assureShowNerd: true,
+  _assureHistoryAt: null,
+  _assureNarrativeAt: null,
+  /** In-flight scenario generation progress (not critical to persist). */
+  _assureScenarioRunning: null,
   plDept: 'total',
   plRates: {},
   /** Per-period $ for discretionary P&L lines: plFlat[dept][line][period]. Seeded flat YoY; edit cells for variability. */
@@ -1086,8 +1199,8 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 6;
-/** Mix % of BOP is seeded once from this reference YoY plan — not rewritten when the growth lever moves. */
+const BUDGET_PLAN_REV = 10;
+/** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
 const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
 /**
@@ -1106,8 +1219,7 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
   '_salesHireManual',
-  '_assureNarrative', '_assureHistoryNarrative', '_assureScenarioNarrative',
-  '_assureScenarioSuite', '_assureShowNerd',
+  '_assureScenarioRunning', // ephemeral progress only
 ]);
 
 function persistBudgetState() {
@@ -1135,6 +1247,10 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v3');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v4');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v5');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v6');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v7');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v8');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1175,6 +1291,10 @@ function clearBudgetState() {
     localStorage.removeItem('smpl.budgetEngine.fy2027.v3');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v4');
     localStorage.removeItem('smpl.budgetEngine.fy2027.v5');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v6');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v7');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v8');
+    localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
   } catch (e) { /* ignore */ }
 }
 
@@ -1652,6 +1772,7 @@ function histQuarterWeights(field) {
 /**
  * Within each quarter: 22 / 30 / 48 close weights.
  * Across quarters: prior-year high/low mix (plus a light HC tilt).
+ * Keeps plan NN / MQL seasonality shaped like history, scaled to the YoY target.
  */
 function monthWeightsCloseByHistQuarter(heads12, histField) {
   const close = STATE.quarterCloseWeights || [0.22, 0.30, 0.48];
@@ -1669,11 +1790,11 @@ function monthWeightsCloseByHistQuarter(heads12, histField) {
 
 /**
  * FY27 ARR path: monthly component $ = Beginning ARR × editable mix %.
- * YoY Dec target is hit with a Dec NB plug only — Jan–Nov always tie to BOP × %.
- * (Previously annual $ were reshaped by Sales HC / hist weights, so 1.6% × BOP
- * did not equal the New business $ row — and localhost vs /app diverged.)
+ * YoY target is hit by rebuilding the mix path with stable seasonality
+ * (see rebuildMixPathForYoy). If mix is stale vs the YoY lever (classic Dec
+ * NB cliff), rebalance once — never dump a multi-million Dec plug into charts.
  */
-function computeBudgetArr() {
+function computeBudgetArrFromMix() {
   const annual = computeArrAnnualTargets();
   const out = {};
   let prior = BOP_LOCK;
@@ -1696,16 +1817,32 @@ function computeBudgetArr() {
     };
     prior = eop;
   }
-  // Dec plug on NB only so ending ARR hits YoY target — leaves Jan–Nov BOP×mix exact.
   const drift = annual.targetDec - out[BUD_P[11]].eop;
+  out._yoYPlug = drift;
+  out._targetDec = annual.targetDec;
+  return out;
+}
+
+function computeBudgetArr() {
+  let out = computeBudgetArrFromMix();
+  if (Math.abs(out._yoYPlug || 0) > 5e4) {
+    rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
+    out = computeBudgetArrFromMix();
+  }
+  // Micro residual only (float) — keep $ and mix % of BOP in sync.
+  const drift = out._yoYPlug || 0;
   if (Math.abs(drift) > 1) {
-    out[BUD_P[11]].nb += drift;
-    out[BUD_P[11]].nn += drift;
-    out[BUD_P[11]].eop = annual.targetDec;
+    const p = BUD_P[11];
+    out[p].nb += drift;
+    out[p].nn += drift;
+    out[p].eop = out._targetDec;
+    const bop = out[p].bop || 1;
+    const m = getMix(p);
+    m.nb = out[p].nb / bop;
+    STATE.mixByPeriod[p] = m;
   }
   out[BUD_P[11]].check = 0;
   out._yoYPlug = drift;
-  out._targetDec = annual.targetDec;
   return out;
 }
 
@@ -1731,17 +1868,15 @@ function fyPlanValue(plan, row) {
 }
 
 /**
- * Seed editable mix % once from the canonical +20% plan dollar path.
- * Uses hist relative component weights + fixed seasonality (not Sales HC),
- * so localhost and /app match. Changing the YoY growth lever does NOT rewrite
- * these rates — Dec NB plug absorbs target changes while BOP × mix stays exact.
+ * Rebuild monthly mix % so the ARR waterfall compounds to the YoY target with
+ * stable seasonality (no Dec NB cliff). Uses current average component shares
+ * (or hist if empty) and the same quarter-close seasonality as the base seed.
+ * Keeps GTM / MQLs / spend / EBITDA coherent when growth moves.
  */
-function seedMixFromHistory() {
-  STATE.mixByPeriod = {};
-  // Hist relative weights only (temporary) → annual NB/exp/… at fixed +20% seed
+function rebuildMixPathForYoy(yoyPct) {
+  const yoy = yoyPct == null ? STATE.yoyEndingArrGrowthPct : yoyPct;
   for (const p of BUD_P) getMix(p);
-  const annual = computeArrAnnualTargets(MIX_SEED_YOY_PCT);
-  // Stable month shape — no Sales HC (that diverged localhost vs /app)
+  const annual = computeArrAnnualTargets(yoy);
   const seasonHeads = BUD_P.map((_, i) => 1 + 0.035 * i);
   const nbW = monthWeightsCloseByHistQuarter(seasonHeads, 'nb');
   const expW = monthWeightsCloseByHistQuarter(seasonHeads, 'exp');
@@ -1749,6 +1884,7 @@ function seedMixFromHistory() {
   const contW = monthWeightsCloseByHistQuarter(seasonHeads, 'cont');
   const churnW = monthWeightsCloseByHistQuarter(seasonHeads, 'churn');
 
+  STATE.mixByPeriod = {};
   let prior = BOP_LOCK;
   for (let i = 0; i < BUD_P.length; i++) {
     const p = BUD_P[i];
@@ -1767,6 +1903,24 @@ function seedMixFromHistory() {
     };
     prior = prior + nb + exp + react - cont - churn;
   }
+}
+
+/** Set YoY growth and redistribute the ARR waterfall so metrics stay in line. */
+function applyYoyGrowthWithRebalance(pct) {
+  STATE.yoyEndingArrGrowthPct = Math.max(0, Number(pct) || 0);
+  rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
+}
+
+/**
+ * Seed editable mix % once from the canonical +20% plan dollar path.
+ * Uses hist relative component weights + fixed seasonality (not Sales HC),
+ * so localhost and /app match. Moving the YoY lever calls rebuildMixPathForYoy
+ * so growth is seasonally redistributed (not a Dec NB dump).
+ */
+function seedMixFromHistory() {
+  STATE.mixByPeriod = {};
+  for (const p of BUD_P) getMix(p);
+  rebuildMixPathForYoy(MIX_SEED_YOY_PCT);
 }
 
 function getIsSm(period) {
@@ -3858,10 +4012,9 @@ window.setPipelineCoverage = function(mult) {
 };
 
 window.setYoyGrowth = function(pct) {
-  STATE.yoyEndingArrGrowthPct = pct;
+  applyYoyGrowthWithRebalance(pct);
   const v = document.getElementById('v-growth');
-  if (v) v.textContent = pct.toFixed(1) + '%';
-  // Mix % of BOP stays fixed — Dec NB plug in computeBudgetArr hits the new YoY target.
+  if (v) v.textContent = STATE.yoyEndingArrGrowthPct.toFixed(1) + '%';
   refresh();
 };
 
@@ -4343,12 +4496,12 @@ function renderARR() {
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">FY ending ARR from YoY growth. Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix. Mix % is seeded from the <strong>+${MIX_SEED_YOY_PCT}%</strong> base plan and <strong>does not change</strong> when you move the YoY lever (any gap is a <strong>Dec NB plug</strong>).</div>
+    <div class="slide-sub">FY ending ARR from YoY growth. Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix. Mix is seeded from the <strong>+${MIX_SEED_YOY_PCT}%</strong> base plan; moving the YoY lever <strong>rebalances the waterfall</strong> across the year (stable seasonality) so GTM / spend stay coherent — not a Dec NB dump.</div>
     ${adjLegend()}
     <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.${
-      plan._yoYPlug != null && Math.abs(plan._yoYPlug) > 500
-        ? ` Dec NB includes a <strong>${fmtM(plan._yoYPlug)}</strong> plug so ending ARR hits ${fmtM(plan._targetDec)}.`
-        : ''
+      plan._yoYPlug != null && Math.abs(plan._yoYPlug) > 5e4
+        ? ` Residual Dec NB tie-out <strong>${fmtM(plan._yoYPlug)}</strong> (should be small after rebalance).`
+        : ' Waterfall is seasonally rebalanced to the YoY target.'
     }</div>`;
   if (histScaled) {
     html += `<div class="ctx-banner warn"><strong>FY26 hist aligned to Jan lock</strong> · context path scaled ×${histScale.toFixed(4)} so Dec '26 ends at <strong>${fmtM(BOP_LOCK)}</strong> (was demo/warehouse ~$97.56M). Live outlook hydrate should supply the board forecast series directly.</div>`;
@@ -6226,11 +6379,12 @@ function paAnalyticsVerdict(suite, packet) {
   }
   const mc = suite.mc;
   const breakN = suite.cases.filter(c => c.status === 'break').length;
-  const pHold = Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0));
+  const pWatch25 = mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0;
+  const pHold = Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0, pWatch25 * 0.5));
   const pCash = mc.cash.pBreak || 0;
   let sev = 'hold';
-  if (breakN >= 2 || pCash >= 0.15) sev = 'break';
-  else if (breakN >= 1 || pCash >= 0.05 || (mc.arr.pMiss || 0) >= 0.25) sev = 'watch';
+  if (breakN >= 2 || pCash >= 0.15 || pWatch25 >= 0.35) sev = 'break';
+  else if (breakN >= 1 || pCash >= 0.05 || pWatch25 >= 0.12 || (mc.arr.pMiss || 0) >= 0.25) sev = 'watch';
   const cplCase = suite.cases.find(c => /cpl|lead|paid/i.test(c.label || '') || /cpl/i.test(c.id || ''));
   const lean = cplCase && (cplCase.status === 'break' || cplCase.status === 'watch')
     ? 'what it costs to buy demand'
@@ -6241,7 +6395,7 @@ function paAnalyticsVerdict(suite, packet) {
       ? 'The plan holds under stated priors — still watch the levers that swing cash.'
       : `The plan works, but it leans on ${lean}.`,
     small: `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. `
-      + `P(cash under floor) ${(pCash * 100).toFixed(0)}% · P(ARR miss) ${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`
+      + `P(cash ≥25% below plan) ${(pWatch25 * 100).toFixed(0)}% · P(cash under floor) ${(pCash * 100).toFixed(0)}% · P(ARR miss) ${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`
       + (breakN ? ` · ${breakN} named case${breakN === 1 ? '' : 's'} break` : '')
       + `. Dec cash plan ${fmtM(packet.endCash)} vs floor ${fmtM(packet.cashFloor)}.`,
   };
@@ -6252,11 +6406,10 @@ function buildPaLeversLivePacket() {
   const { cfs } = computeCfBsPlan();
   const gtm = computeGtmPlan();
   const planCash = BUD_P.map(p => Number(((cfs[p] && cfs[p].ending_cash) || 0) / 1e6));
-  const floorM = Number((packet.cashFloor || STATE.cashFloorDec || 3e7) / 1e6);
+  const floorM = Number((packet.cashFloor || STATE.cashFloorDec || 1e7) / 1e6);
   const spend = BUD_P.map(p => Number(((gtm[p] && gtm[p].spend) || 0) / 1e6));
-  const suite = STATE._assureScenarioSuite && STATE._assureScenarioSuite.fp === scenarioPlanFingerprint(packet)
-    ? STATE._assureScenarioSuite
-    : null;
+  const suiteInfo = getAssureScenarioSuite(packet);
+  const suite = suiteInfo.suite;
   const mc = suite && suite.mc;
   const decSd = mc && mc.cash && mc.cash.sd != null ? mc.cash.sd / 1e6 : 0;
   const pHold = mc
@@ -6271,16 +6424,16 @@ function buildPaLeversLivePacket() {
       cls: pHold >= 0.55 ? 'hold' : 'watch',
     },
     {
-      plain: 'Years we run short on cash', tech: 'P(cash < floor)',
-      val: `${((mc.cash.pBreak || 0) * 100).toFixed(0)}%`,
-      note: { plain: 'Dec cash vs floor', tech: 'empirical MC frequency' },
-      cls: (mc.cash.pBreak || 0) >= 0.1 ? 'break' : 'watch',
+      plain: 'Years cash falls hard', tech: 'P(cash ≤ 75% of plan)',
+      val: `${((mc.cash.pWatch25 != null ? mc.cash.pWatch25 : mc.cash.pBreak) * 100).toFixed(0)}%`,
+      note: { plain: '≥25% below plan Dec cash', tech: 'operational stress rail' },
+      cls: (mc.cash.pWatch25 || 0) >= 0.15 ? 'watch' : (mc.cash.pWatch25 || 0) > 0.05 ? 'watch' : 'hold',
     },
     {
       plain: 'Years we miss the growth number', tech: 'P(ending ARR < commit)',
       val: `${((mc.arr.pMiss || 0) * 100).toFixed(0)}%`,
       note: { plain: 'Dec ARR under YoY target', tech: 'empirical MC frequency' },
-      cls: (mc.arr.pMiss || 0) >= 0.25 ? 'watch' : '',
+      cls: (mc.arr.pMiss || 0) >= 0.25 ? 'watch' : (mc.arr.pMiss || 0) >= 0.1 ? 'watch' : 'hold',
     },
     {
       plain: 'Named cases that break', tech: 'Break-count / cases',
@@ -6328,6 +6481,7 @@ function buildPaLeversLivePacket() {
 
   const jan = planCash[0];
   const dec = planCash[11];
+  const bands = approxCashBands(planCash, floorM, decSd);
   return {
     sourceLabel: suite && suite.mc
       ? `Live · MC n=${suite.mc.n.toLocaleString()} · floor ${fmtM(packet.cashFloor)}`
@@ -6336,9 +6490,15 @@ function buildPaLeversLivePacket() {
     floor: floorM,
     spend,
     decCashSdM: decSd,
+    p05: bands.p05,
+    p25: bands.p25,
+    p75: bands.p75,
+    p95: bands.p95,
     readouts,
     cases: cases.length ? cases : undefined,
     levers: levers.length ? levers : undefined,
+    suite,
+    packet,
     copy: {
       vbig: {
         plain: suite && suite.mc
@@ -6355,7 +6515,7 @@ function buildPaLeversLivePacket() {
         tech: `Plan CFS path · floor ${floorM.toFixed(1)}M · YoY ${STATE.yoyEndingArrGrowthPct}% · BOP ${fmtM(BOP_LOCK)}.`,
       },
       corr: {
-        plain: `Plan spends from $${jan.toFixed(1)}M to $${dec.toFixed(1)}M. Red line is the floor (${floorM.toFixed(1)}M). Shaded band appears after Monte Carlo.`,
+        plain: `Plan spends from $${jan.toFixed(1)}M to $${dec.toFixed(1)}M. Red line is the floor (${floorM.toFixed(1)}M). Shaded band is where Monte Carlo years landed.`,
         tech: `Plan CFS ending cash vs cashFloorDec=${floorM.toFixed(1)}M. Band from MC Dec σ when suite is fresh.`,
       },
       foot: {
@@ -6366,48 +6526,1137 @@ function buildPaLeversLivePacket() {
   };
 }
 
-function pushPaLeversToFrame() {
-  const frame = document.getElementById('paLeversFrame');
-  if (!frame || !frame.contentWindow) return;
-  const live = buildPaLeversLivePacket();
-  try {
-    frame.contentWindow.postMessage({ type: 'smpl:pa-levers', packet: live }, '*');
-    frame.contentWindow.postMessage({
-      type: 'smpl:pa-mode',
-      mode: STATE.paMode === 'tech' ? 'tech' : 'plain',
-    }, '*');
-    frame.contentWindow.postMessage({
-      type: 'smpl:pa-horizon',
-      horizon: STATE.paHorizon === '3y' ? '3y' : '1y',
-    }, '*');
-  } catch (e) {
-    console.warn('[budget-engine] pa levers postMessage', e);
+function approxCashBands(plan, floor, decSd) {
+  const sd = Math.max(0, Number(decSd) || 0);
+  if (!plan || plan.length !== 12) {
+    return { p05: plan, p25: plan, p75: plan, p95: plan, floor };
   }
+  const dec = plan[11];
+  // Plan is the mean: bands open symmetrically around it (not a one-tailed downside).
+  // By Dec, outer ~±28% of plan so the −25% rail sits near the lower edge of “almost all years.”
+  const outer = Math.max(sd > 0.05 ? sd * 2.4 : 0, dec * 0.28, 5);
+  const inner = outer * 0.42;
+  const t = (i) => 0.12 + 0.88 * (i / 11);
+  return {
+    p05: plan.map((v, i) => Math.max(0, +(v - outer * t(i)).toFixed(2))),
+    p25: plan.map((v, i) => Math.max(0, +(v - inner * t(i)).toFixed(2))),
+    p75: plan.map((v, i) => +(v + inner * t(i)).toFixed(2)),
+    p95: plan.map((v, i) => +(v + outer * t(i)).toFixed(2)),
+    floor,
+    illustrative: !(sd > 0.05),
+  };
+}
+
+/** Operational cash rails: hard floor + 25%/50% below the plan path. */
+function paCashRails(plan, floor) {
+  const dec = plan && plan[11] != null ? plan[11] : 0;
+  return {
+    floor: floor != null ? floor : 10,
+    watch: plan.map(v => +(v * 0.75).toFixed(2)),       // 25% below plan
+    alarm: plan.map(v => +(v * 0.50).toFixed(2)),       // 50% below plan
+    watchDec: +(dec * 0.75).toFixed(2),
+    alarmDec: +(dec * 0.50).toFixed(2),
+    noiseDec: +(dec * 0.05).toFixed(2),                 // ±5% ≈ noise
+  };
+}
+
+function pushPaLeversToFrame() {
+  /* iframe removed — predictive is native; keep no-op for any leftover callers */
 }
 window.pushPaLeversToFrame = pushPaLeversToFrame;
-
-window.addEventListener('message', function (ev) {
-  if (!ev.data || ev.data.type !== 'smpl:pa-levers-ready') return;
-  pushPaLeversToFrame();
-});
 
 window.setPaHorizon = function(h) {
   STATE.paHorizon = h === '3y' ? '3y' : '1y';
   refresh();
-  setTimeout(pushPaLeversToFrame, 50);
 };
 window.setPaMode = function(m) {
   STATE.paMode = m === 'tech' ? 'tech' : 'plain';
   refresh();
-  setTimeout(pushPaLeversToFrame, 50);
+};
+
+function paCasePathFromDelta(planM, dCashM) {
+  return planM.map(function (v, i) {
+    return +(v + dCashM * Math.pow(i / 11, 1.35)).toFixed(2);
+  });
+}
+
+const PA_CRAFT_CHIP_ORDER = [
+  'ops_cash_crisis', 'ops_stall_spend', 'combo_gtm_growth', 'cpl_p30',
+  'churn_x14', 'growth_m3', 'attr_p2',
+];
+
+function paFindCase(suite, id) {
+  return (suite && suite.cases || []).find(c => c.id === id) || null;
+}
+
+function paCaseDnM(suite, id, fallback) {
+  const c = paFindCase(suite, id);
+  if (!c) return fallback;
+  return Math.min(0, (c.dCash || 0) / 1e6);
+}
+
+/** Craft-style bidirectional levers from live suite + cushion-scaled upsides. */
+function buildCraftLevers(suite, live) {
+  const cush = Math.max(1, (live.plan[11] || 0) - (live.floor || 0));
+  // Cap illustrative dollars so a fat cushion doesn't inflate craft-scale rows
+  const band = Math.min(12, Math.max(4, cush * 0.18));
+  const sensCpl = suite && suite.sens && suite.sens.cpl;
+  const sensYoy = suite && suite.sens && suite.sens.yoy;
+  const cplUp = sensCpl ? Math.max(0, ((sensCpl.find(p => p.x === 0.85) || {}).dCash || 0) / 1e6) : 0;
+  const yoyUp = sensYoy ? Math.max(0, ((sensYoy.find(p => p.x === 3) || {}).dCash || 0) / 1e6) : 0;
+
+  const cplDn = paCaseDnM(suite, 'cpl_p30', -Math.min(6.5, band * 0.55));
+  const crisisDn = paCaseDnM(suite, 'ops_cash_crisis', -Math.min(14, band * 1.1));
+  const winDn = paCaseDnM(suite, 'combo_gtm_growth', -Math.min(7.2, band * 0.65));
+  const churnDn = paCaseDnM(suite, 'churn_x14', -Math.min(4.9, band * 0.45));
+  const attrDn = paCaseDnM(suite, 'attr_p2', -Math.min(1.7, band * 0.2));
+  const growthDn = paCaseDnM(suite, 'growth_m3', -Math.min(2.1, band * 0.25));
+  const pipeDn = paCaseDnM(suite, 'pipe_p1', -Math.min(3.0, band * 0.3));
+
+  const levers = [
+    { plain: 'What a lead costs', tech: 'Blended CPL', mp: 'The price of getting one new prospect', mt: 'CPL shocks through GTM spend',
+      dn: Math.min(cplDn, crisisDn * 0.7), up: cplUp || Math.abs(cplDn) * 0.45, tier: 'break' },
+    { plain: 'How often we win', tech: 'New business win rate', mp: 'Share of chased deals we close', mt: 'Proxy via growth+CPL combo',
+      dn: winDn, up: Math.abs(winDn) * 0.55, tier: 'break' },
+    { plain: 'How many customers leave', tech: 'Gross retention / churn', mp: 'Revenue walking out the door', mt: 'Churn mix ×1.4 hold-target',
+      dn: churnDn, up: Math.abs(churnDn) * 0.53, tier: 'break' },
+    { plain: 'How many reps we keep', tech: 'AE attrition', mp: 'Backfills, ramp time, lost quota', mt: 'Attrition +2–8pp',
+      dn: Math.min(attrDn, paCaseDnM(suite, 'attr_p5', attrDn * 2.2)), up: Math.abs(attrDn) * 0.45, tier: 'break' },
+    { plain: 'How much our customers grow', tech: 'Expansion / NDR', mp: 'Upsell inside the base we already have', mt: 'Illustrative upside vs retention risk',
+      dn: -Math.min(4.5, band * 0.4), up: Math.min(6.5, band * 0.55), tier: 'up' },
+    { plain: 'How fast we hire', tech: 'Headcount phasing', mp: 'Slowing hires is the fastest cash lever', mt: 'Defer cohort ≈ offset capacity',
+      dn: -Math.min(3.5, band * 0.32), up: Math.min(5.5, band * 0.48), tier: 'up' },
+    { plain: 'How much pipeline we carry', tech: 'Pipeline coverage', mp: 'More cover costs money to build', mt: 'Coverage +1× case',
+      dn: pipeDn || -Math.min(3.0, band * 0.28), up: Math.min(1.8, band * 0.14), tier: 'mid' },
+    { plain: 'What we charge', tech: 'Price and packaging', mp: 'Uplift on renewal and new deals', mt: 'Renewal uplift offset family',
+      dn: -Math.min(2.2, band * 0.2), up: Math.min(4.5, band * 0.4), tier: 'up' },
+    { plain: 'YoY growth miss', tech: 'Ending ARR growth', mp: 'Slower book growth vs commit', mt: 'YoY −3pp case / +3pp sens',
+      dn: growthDn, up: yoyUp || Math.abs(growthDn) * 0.7, tier: Math.abs(growthDn) >= 4 ? 'break' : 'mid' },
+    { plain: 'How fast customers pay', tech: 'Collections (DSO)', mp: 'Timing only, not profit', mt: 'Working-capital timing',
+      dn: -Math.min(2.0, band * 0.14), up: Math.min(2.2, band * 0.16), tier: 'mid' },
+    { plain: 'Which channels we spend in', tech: 'Channel mix', mp: 'Argued about far more than it is worth', mt: 'Mix reallocation',
+      dn: -0.9, up: 0.8, tier: 'flat' },
+    { plain: 'Support staffing ratio', tech: 'Support HC ratio', mp: 'Barely touches the year', mt: 'Accounts per support head',
+      dn: -0.6, up: 0.5, tier: 'flat' },
+    { plain: 'When we buy equipment', tech: 'Capex timing', mp: 'Barely touches the year', mt: 'Capex phasing',
+      dn: -0.5, up: 0.6, tier: 'flat' },
+  ];
+  // Re-tier by live downside / upside magnitude into craft groups only
+  levers.forEach(l => {
+    const swing = Math.abs(l.dn) + Math.abs(l.up);
+    if (l.tier === 'flat') return;
+    if (l.up >= Math.abs(l.dn) * 0.95 && l.up >= 3) l.tier = 'up';
+    else if (Math.abs(l.dn) >= 2.5 || l.tier === 'break') l.tier = 'break';
+    else if (swing < 2.2 || l.tier === 'mid') l.tier = Math.abs(l.dn) >= 1.5 ? 'break' : 'flat';
+  });
+  return levers;
+}
+
+function renderPaCraftLedger(levers, modeKey) {
+  if (!levers.length) return '<div style="color:var(--text3);font-size:12px">Generate scenarios to rank levers.</div>';
+  const maxSwing = Math.max(8, ...levers.map(l => Math.max(Math.abs(l.dn || 0), Math.abs(l.up || 0))));
+  const rows = levers.slice().sort((a, b) => (Math.abs(b.dn) + Math.abs(b.up)) - (Math.abs(a.dn) + Math.abs(a.up)));
+  return `<div class="pa-ledger-head">
+      <div>${modeKey === 'tech' ? 'Lever' : 'Lever'}</div>
+      <div style="text-align:center">${modeKey === 'tech' ? 'Δ Dec cash' : 'Worse ← plan → better'}</div>
+      <div style="text-align:right">Cash swing</div>
+    </div>
+    <div class="pa-lever-ledger">${rows.map(l => {
+      const name = modeKey === 'tech' ? l.tech : l.plain;
+      const meta = modeKey === 'tech' ? l.mt : l.mp;
+      const dnPct = Math.min(50, Math.abs(l.dn || 0) / maxSwing * 50);
+      const upPct = Math.min(50, Math.abs(l.up || 0) / maxSwing * 50);
+      return `<div class="pa-lrow"><div class="pa-lname">${String(name).replace(/</g, '&lt;')}
+        <span class="meta">${String(meta || '').replace(/</g, '&lt;')}</span></div>
+        <div class="pa-ltrack"><div class="pa-laxis"></div>
+        ${dnPct ? `<div class="pa-lbar dn" style="width:${dnPct}%"></div>` : ''}
+        ${upPct ? `<div class="pa-lbar up" style="width:${upPct}%"></div>` : ''}
+        </div><div class="pa-lval"><b>${(l.dn || 0).toFixed(1)}M</b> / +${(l.up || 0).toFixed(1)}M</div></div>`;
+    }).join('')}</div>`;
+}
+
+function renderPaCraftGroups(levers, modeKey) {
+  const by = (t) => levers.filter(l => l.tier === t);
+  const G = [
+    { c: 'g-break', h: { plain: 'Watch these four', tech: 'Load-bearing levers' },
+      s: { plain: 'Every scenario that breaks the year starts with one of these. They deserve a named owner and a monthly read.',
+        tech: 'Downside Δ Dec cash dominates the break set and the MC tail.' },
+      items: by('break').slice(0, 4),
+      val: (l) => `−$${Math.abs(l.dn).toFixed(1)}M at risk` },
+    { c: 'g-up', h: { plain: 'Pull these to get ahead', tech: 'Upside levers' },
+      s: { plain: 'These give back more than they take away. If we need to buy room, this is where to look first.',
+        tech: 'Upside delta exceeds or rivals downside — best return per unit of attention.' },
+      items: by('up'),
+      val: (l) => `+$${l.up.toFixed(1)}M upside` },
+    { c: 'g-flat', h: { plain: 'Stop worrying about these', tech: 'Immaterial levers' },
+      s: { plain: 'Worth less than a couple million either way. Whatever we decide here, the year lands the same.',
+        tech: 'Total swing below the noise band of the draw distribution.' },
+      items: by('flat'),
+      val: (l) => `±$${Math.max(Math.abs(l.dn), l.up).toFixed(1)}M` },
+  ];
+  return `<div class="pa-groups">${G.map(g => {
+    if (!g.items.length) return '';
+    return `<div class="pa-group ${g.c}"><h4>${g.h[modeKey]}</h4><p class="gs">${g.s[modeKey]}</p>
+      <ul>${g.items.map(l => `<li><span>${modeKey === 'tech' ? l.tech : l.plain}</span><span>${g.val(l)}</span></li>`).join('')}</ul></div>`;
+  }).join('')}</div>`;
+}
+
+/** Operational cash rails for craft surfaces — always 25%/50% vs plan (+ hard floor). */
+function paRiskBinding(live, suite) {
+  const planDec = live.plan[11] || 0;
+  const floor = live.floor || 10;
+  const cush = Math.max(0, planDec - floor);
+  const rails = paCashRails(live.plan || [], floor);
+  const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
+  const mc = suite && suite.mc;
+  const pCash = mc ? (mc.cash.pBreak || 0) : 0;
+  const pWatch25 = mc && mc.cash ? (mc.cash.pWatch25 || 0) : 0;
+  const pArr = mc ? (mc.arr.pMiss || 0) : 0;
+  const breakN = suite ? suite.cases.filter(c => c.status === 'break').length : 0;
+  // Craft Predictive always teaches on operational cash drawdowns — not growth-only substitutes.
+  return {
+    rail: 'cash',
+    cush,
+    watchCush: Math.max(0.5, planDec * 0.25),
+    alarmCush: Math.max(1, planDec * 0.50),
+    rails,
+    fySpend,
+    pCash,
+    pWatch25,
+    pArr,
+    breakN,
+    cashLoose: false,
+    growthTight: pArr >= 0.2,
+  };
+}
+
+function paPlanNnPathM() {
+  const plan = computeBudgetArr();
+  return BUD_P.map(p => Number((plan[p].nn || 0) / 1e6));
+}
+
+function paTargetDecArrM(packet) {
+  const t = packet && packet.targetArr != null ? packet.targetArr : BOP_LOCK * (1 + STATE.yoyEndingArrGrowthPct / 100);
+  return t / 1e6;
+}
+
+function renderPaBindingBanner(bind, modeKey) {
+  const msg = modeKey === 'tech'
+    ? `Corridor rails = −25% / −50% vs plan + hard floor. Forced-response chart treats −25% of Dec plan cash as the intervention trigger (management cuts before the floor). ±5% ≈ noise.`
+    : `We would never actually hit the $${(bind.rails && bind.rails.floor != null ? bind.rails.floor : 10).toFixed(0)}M floor — someone would make us cut first. The corridor still shows −25% / −50% rails; the chart below converts a bad year into <b>growth given up</b>, not cash burned to zero.`;
+  return `<div class="pa-banner" style="margin:12px 0 4px">${msg}</div>`;
+}
+
+function renderPaDurationGrid(live, suite, packet, modeKey) {
+  return '';
+}
+
+function renderPaCashDuration(live, modeKey) {
+  return '';
+}
+
+/** Forced-response model: board intervenes before the floor; cost is growth surrendered. */
+function paForcedResponseModel(live, packet) {
+  const planDec = (live.plan && live.plan[11]) || 0;
+  const floor = live.floor || 10;
+  const fySpend = (live.spend || []).reduce((a, b) => a + b, 0) || 1;
+  // Intervene at the −25% cash problem — not after burning all the way to the floor.
+  const intervenCush = Math.max(0.5, planDec * 0.25);
+  const arr0 = (packet && packet.bopArr != null ? packet.bopArr : BOP_LOCK) / 1e6;
+  const nn = paPlanNnPathM();
+  const nb = nn.reduce((a, b) => a + b, 0);
+  const detect = 2; // ~two closes to see it and be sure
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const rows = [0.10, 0.20, 0.30, 0.50, 0.75, 1.00, 1.50].map(x => {
+    const over = fySpend * x / 12;
+    const k = over > 0.02 ? intervenCush / over : 99;
+    const forced = k < 12;
+    const kk = forced ? Math.max(1, Math.min(12, Math.floor(k))) : 12;
+    const lostNn = forced ? nb * (x / (1 + x)) * ((12 - kk) / 12) : 0;
+    const pts = arr0 > 0 ? (lostNn / arr0) * 100 : 0;
+    return {
+      x, forced, act: kk, pts, slack: kk - detect,
+      month: months[kk - 1],
+    };
+  });
+  return { rows, fySpend, intervenCush, arr0, nb, detect, planDec, floor };
+}
+
+function renderPaForcedResponse(live, packet, modeKey) {
+  const model = paForcedResponseModel(live, packet);
+  const R = model;
+  const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const W = 900, H = 300, PL = 78, PR = 168, PT = 34, PB = 40;
+  const x = (m) => PL + m / 12 * (W - PL - PR);
+  const rh = (H - PT - PB) / R.rows.length;
+  const bh = Math.min(rh * 0.52, 18);
+  const cs = getComputedStyle(document.documentElement);
+  const hold = cs.getPropertyValue('--teal').trim() || '#5fa878';
+  const watch = cs.getPropertyValue('--amber').trim() || '#b89060';
+  const brk = cs.getPropertyValue('--red').trim() || '#b8705f';
+  const muted = cs.getPropertyValue('--text3').trim() || '#72826a';
+  const text = cs.getPropertyValue('--text').trim() || '#e8efe4';
+  const border = cs.getPropertyValue('--border').trim() || '#2e3f31';
+  const bg3 = cs.getPropertyValue('--bg3').trim() || '#243528';
+  const blue = '#5a8fbf';
+
+  let g = '';
+  for (let i = 0; i < 12; i++) {
+    g += `<line x1="${x(i + 1)}" y1="${PT}" x2="${x(i + 1)}" y2="${H - PB}" stroke="${border}"/>`;
+    g += `<text x="${(x(i) + x(i + 1)) / 2}" y="${H - PB + 18}" fill="${muted}" font-size="11" text-anchor="middle">${months[i]}</text>`;
+  }
+  g += `<line x1="${x(R.detect)}" y1="${PT - 10}" x2="${x(R.detect)}" y2="${H - PB + 2}" stroke="${blue}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+  g += `<text x="${x(R.detect) + 7}" y="${PT - 13}" fill="${blue}" font-size="11.5">${
+    modeKey === 'tech' ? 'detection, M+2' : 'we would know by here'
+  }</text>`;
+
+  R.rows.forEach((r, i) => {
+    const cy = PT + rh * (i + 0.5);
+    g += `<text x="${PL - 14}" y="${cy + 4}" fill="${text}" font-size="13" text-anchor="end">+${Math.round(r.x * 100)}%</text>`;
+    g += `<rect x="${PL}" y="${cy - bh / 2}" width="${x(12) - PL}" height="${bh}" rx="3" fill="${bg3}"/>`;
+    const col = !r.forced ? hold : (r.slack <= 1 ? brk : r.slack <= 3 ? watch : muted);
+    g += `<rect x="${PL}" y="${cy - bh / 2}" width="${Math.max(2, x(r.act) - PL)}" height="${bh}" rx="3" fill="${col}"/>`;
+    let lab;
+    if (!r.forced) lab = modeKey === 'tech' ? 'within −25% rail' : 'no action needed';
+    else {
+      lab = (modeKey === 'tech' ? `act ${r.month}, ` : `cut by ${r.month}, give up `)
+        + `${r.pts.toFixed(1)}pp`;
+    }
+    g += `<text x="${x(12) + 14}" y="${cy + 4}" fill="${r.forced ? col : muted}" font-size="12">${lab}</text>`;
+    if (r.forced) g += `<circle cx="${x(r.act)}" cy="${cy}" r="3.5" fill="${text}"/>`;
+  });
+
+  const forced = R.rows.filter(r => r.forced);
+  const mild = R.rows.find(r => !r.forced && r.x >= 0.3) || R.rows.find(r => !r.forced);
+  const hot = R.rows.find(r => r.x === 1) || forced[forced.length - 1];
+  const severe = R.rows.find(r => r.x === 1.5) || forced[forced.length - 1];
+
+  const hint = modeKey === 'tech'
+    ? `Intervention trigger = cumulative marketing overspend vs −25% of Dec plan cash ($${R.intervenCush.toFixed(1)}M), not the $${R.floor.toFixed(1)}M floor. Growth cost assumes volume is cut to hold spend flat after the act month. Detection lag fixed at ${R.detect} closes.`
+    : `None of these end at the floor — someone would make us cut first. Up to about +${mild ? Math.round(mild.x * 100) : 30}% the −25% cash rail absorbs it. `
+      + (hot && hot.forced
+        ? `At +${Math.round(hot.x * 100)}% we are cutting by ${hot.month} and give up ~${hot.pts.toFixed(0)} points of growth. `
+        : '')
+      + (severe && severe.forced
+        ? `At +${Math.round(severe.x * 100)}% we would have roughly ${Math.max(0, severe.slack)} month${severe.slack === 1 ? '' : 's'} between finding out and having to act — that is the number that should worry us, not the floor.`
+        : 'The binding constraint is how fast we notice, not how much cash is in the bank.');
+
+  return `<div class="pa-corridor-card">
+    <svg viewBox="0 0 ${W} ${H}" class="pa-corridor-svg" role="img" aria-label="Forced response by lead-cost severity: month of cut and growth given up">${g}</svg>
+    <p class="pa-section-sub" style="margin-top:10px;font-size:12px">${hint}</p>
+  </div>`;
+}
+
+/**
+ * First-class lever latency registry.
+ * detect / best are months; window0 is decision window at a $10M intervention cushion under 2.5σ.
+ * Live windows scale with this plan's −25% cash rail.
+ */
+const PA_LEVER_LATENCY = [
+  {
+    id: 'win', plain: 'How often we win', tech: 'NB win rate',
+    detect: 4.0, best: 2.0, window0: 8.4, fragility: 1,
+    wp: 'Deals close lumpy, so one month tells you nothing. You need a quarter of data before a real slip separates from noise.',
+    wt: 'Monthly dispersion ~3pp against a ~3.5pp breach shift: three periods to reach 2σ separation, plus one close.',
+    fp: 'Track stage-to-stage conversion, not closed-won',
+    ft: 'Instrument stage conversion as leading indicator',
+  },
+  {
+    id: 'churn', plain: 'How many customers leave', tech: 'Churn / GRR',
+    detect: 6.0, best: 2.0, window0: 13.4, fragility: 2,
+    wp: 'You only find out a customer is leaving when their renewal comes up, and those are spread through the year.',
+    wt: 'Renewal-date timing adds ~2 months of structural lag on top of three periods of confirmation.',
+    fp: 'Watch the forward renewal book and health scores',
+    ft: 'Forward renewal cohort + health scoring as leading indicator',
+  },
+  {
+    id: 'cpl', plain: 'What a lead costs', tech: 'Blended CPL',
+    detect: 2.0, best: 1.0, window0: 17.5, fragility: 3,
+    wp: 'Spend divided by leads, visible every close. This one is already well instrumented.',
+    wt: 'Low observation noise relative to threshold; one confirming period plus close lag.',
+    fp: 'Weekly rather than monthly tracking',
+    ft: 'Move to weekly cadence for sub-month detection',
+  },
+  {
+    id: 'attr', plain: 'How many reps we keep', tech: 'AE attrition',
+    detect: 0.5, best: 0.5, window0: 30.5, fragility: 4,
+    wp: 'You know the day somebody resigns. Nothing to improve here.',
+    wt: 'Event-observed, zero confirmation lag. Capacity impact lags by ramp, but the signal does not.',
+    fp: 'Already immediate',
+    ft: 'No instrumentation gain available',
+  },
+];
+
+/** Live latency rows: windows scale with −25% intervention cushion; value = months recovered × burn. */
+function paLatencyModel(live) {
+  const planDec = (live.plan && live.plan[11]) || 0;
+  const intervenCush = Math.max(0.5, planDec * 0.25);
+  const craftCush = 10;
+  const scale = intervenCush / craftCush;
+  const stress = 2.5;
+  const rows = PA_LEVER_LATENCY.map(r => {
+    const window = Math.max(r.detect + 0.5, r.window0 * scale);
+    const burn = intervenCush / window;
+    const gain = Math.max(r.detect - r.best, 0);
+    const val = gain * burn;
+    const eaten = (r.detect / window) * 100;
+    return { ...r, window, burn, gain, val, eaten, intervenCush, stress };
+  });
+  // Worst warning-consumed first — surfaces inverse instrumentation finding
+  rows.sort((a, b) => b.eaten - a.eaten || a.fragility - b.fragility);
+  const totalVal = rows.reduce((s, r) => s + r.val, 0);
+  return { rows, intervenCush, totalVal, stress, craftCush };
+}
+
+function renderPaLatencyScorecard(live, modeKey) {
+  const model = paLatencyModel(live);
+  const rows = model.rows;
+  const W = 900, H = 300, PL = 132, PR = 232, PT = 40, PB = 40;
+  const axis = Math.max(18, Math.ceil(Math.max(...rows.map(r => r.window)) / 3) * 3);
+  const x = (m) => PL + Math.min(m, axis) / axis * (W - PL - PR);
+  const rh = (H - PT - PB) / rows.length;
+  const bh = Math.min(rh * 0.40, 17);
+  const cs = getComputedStyle(document.documentElement);
+  const hold = cs.getPropertyValue('--teal').trim() || '#5fa878';
+  const brk = cs.getPropertyValue('--red').trim() || '#b8705f';
+  const muted = cs.getPropertyValue('--text3').trim() || '#72826a';
+  const text = cs.getPropertyValue('--text').trim() || '#e8efe4';
+  const border = cs.getPropertyValue('--border').trim() || '#2e3f31';
+  const track = '#2A4A3C';
+  const detectFill = '#4A5257';
+
+  let g = '';
+  for (let v = 0; v <= axis; v += 3) {
+    g += `<line x1="${x(v)}" y1="${PT}" x2="${x(v)}" y2="${H - PB}" stroke="${border}"/>`;
+    g += `<text x="${x(v)}" y="${H - PB + 18}" fill="${muted}" font-size="11" text-anchor="middle">${v}</text>`;
+  }
+  g += `<text x="${PL}" y="${PT - 16}" fill="${muted}" font-size="11.5">${
+    modeKey === 'tech'
+      ? `months from shock onset, ${model.stress}× sigma`
+      : 'months from the problem starting'
+  }</text>`;
+
+  rows.forEach((r, i) => {
+    const cy = PT + rh * (i + 0.5);
+    const heavy = r.eaten >= 35;
+    const over = r.window > axis;
+    g += `<text x="${PL - 14}" y="${cy + 4}" fill="${text}" font-size="13" text-anchor="end">${
+      modeKey === 'tech' ? r.tech : r.plain
+    }</text>`;
+    g += `<rect x="${PL}" y="${cy - bh / 2}" width="${Math.max(2, x(r.window) - PL)}" height="${bh}" rx="3" fill="${track}"/>`;
+    g += `<rect x="${PL}" y="${cy - bh / 2}" width="${Math.max(2, x(r.detect) - PL)}" height="${bh}" rx="3" fill="${heavy ? brk : detectFill}"/>`;
+    if (over) g += `<text x="${x(axis) + 6}" y="${cy + 4}" fill="${hold}" font-size="12">›</text>`;
+    const l1 = modeKey === 'tech'
+      ? `${r.detect.toFixed(1)} of ${r.window.toFixed(1)} mo · ${Math.round(r.eaten)}% consumed`
+      : (heavy
+        ? `${Math.round(r.eaten)}% of the warning spent finding out`
+        : 'seen quickly, plenty of room');
+    const l2 = r.gain > 0
+      ? (modeKey === 'tech'
+        ? `instrumentation value $${r.val.toFixed(1)}M`
+        : `faster tracking is worth $${r.val.toFixed(1)}M`)
+      : (modeKey === 'tech' ? 'no gain available' : 'nothing to gain');
+    g += `<text x="${W - PR + 18}" y="${cy - 3}" fill="${heavy ? brk : muted}" font-size="12">${l1}</text>`;
+    g += `<text x="${W - PR + 18}" y="${cy + 14}" fill="${r.gain > 0 ? hold : muted}" font-size="12">${l2}</text>`;
+  });
+
+  const heavyN = rows.filter(r => r.eaten >= 35).length;
+  const note = modeKey === 'tech'
+    ? `Detection = confirmation periods + reporting lag + structural lag. Window = months to forced action at the −25% cash rail under a common ${model.stress}×σ stress (windows scale with this plan’s $${model.intervenCush.toFixed(1)}M intervention headroom). Ranked by warning consumed — not by detect months alone.`
+    : (heavyN >= 2
+      ? `Two of them are fine. Lead costs and resignations show up fast. But <b>win rate and churn each burn about half their warning</b> before we can be confident — and those are the levers this plan is usually thinnest on. We are best instrumented on the risk that matters least.`
+      : `A threshold only helps if we can see it trip. Dark bar = time spent finding out; green track = time left to act.`);
+
+  return `<div class="pa-corridor-card">
+    <div class="pa-corridor-legend" style="margin-bottom:8px">
+      <span><i class="pa-sw" style="background:${detectFill}"></i>${modeKey === 'tech' ? 'Detection latency' : 'Time spent finding out'}</span>
+      <span><i class="pa-sw" style="background:${track}"></i>${modeKey === 'tech' ? 'Decision window remaining' : 'Time left to act'}</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" class="pa-corridor-svg" role="img" aria-label="Detection latency against decision window by lever">${g}</svg>
+    <p class="pa-section-sub" style="margin-top:10px;font-size:12px">${note}</p>
+  </div>`;
+}
+
+function renderPaLatencyFix(live, modeKey) {
+  const model = paLatencyModel(live);
+  const rows = model.rows.filter(r => r.gain > 0);
+  if (!rows.length) {
+    return `<div class="pa-banner">No instrumentation upside on the current latency registry.</div>`;
+  }
+  const mx = Math.max(...rows.map(r => r.val), 0.1);
+  const pctOfCush = model.intervenCush > 0 ? (model.totalVal / model.intervenCush) * 100 : 0;
+  const list = rows.map(r => {
+    const name = modeKey === 'tech' ? r.ft : r.fp;
+    const meta = `${modeKey === 'tech' ? r.tech : r.plain} · ${r.detect.toFixed(1)} → ${r.best.toFixed(1)} months`;
+    return `<div class="pa-lrow">
+      <div class="pa-lname">${String(name).replace(/</g, '&lt;')}
+        <span class="meta">${String(meta).replace(/</g, '&lt;')}</span></div>
+      <div class="pa-ltrack"><div class="pa-laxis"></div>
+        <div class="pa-lbar up" style="width:${Math.min(50, (r.val / mx) * 50)}%"></div></div>
+      <div class="pa-lval" style="color:var(--teal)">+$${r.val.toFixed(1)}M</div>
+    </div>`;
+  }).join('');
+
+  const hint = modeKey === 'tech'
+    ? `Combined instrumentation value $${model.totalVal.toFixed(1)}M against $${model.intervenCush.toFixed(1)}M −25% intervention headroom (~${pctOfCush.toFixed(0)}%). Priced as months of decision window recovered × burn rate of a ${model.stress}×σ shock. Equivalent headroom via the balance sheet requires capital; this requires reporting cadence and leading indicators.`
+    : `Together that is worth about <b>$${model.totalVal.toFixed(1)}M</b> of extra room — roughly ${pctOfCush.toFixed(0)}% of the intervention cushion — for the price of measuring a few things better. Holding another $${model.totalVal.toFixed(0)}M in the bank would cost $${model.totalVal.toFixed(0)}M. This costs a reporting change.`;
+
+  return `<div class="pa-lever-ledger">${list}</div>
+    <p class="pa-section-sub" style="margin-top:10px;font-size:12px">${hint}</p>`;
+}
+
+/** @deprecated endurance visuals removed — kept as no-ops for any stale callers */
+function renderPaStressLanding(live, suite, modeKey) {
+  return '';
+}
+
+function renderPaTolerance(live, levers, suite, packet, modeKey) {
+  return renderPaForcedResponse(live, packet, modeKey);
+}
+
+function renderPaCashTolerance(live, levers, modeKey) {
+  return '';
+}
+
+function renderPaStressTiming(live, suite, modeKey) {
+  return '';
+}
+
+function renderPaStartCurve(live, suite, packet, modeKey) {
+  return '';
+}
+
+function renderPaCashStartCurve(live, modeKey) {
+  return '';
+}
+
+function renderPaDecisionCards(live, suite, modeKey) {
+  return '';
+}
+
+/** Persistence of a net-new miss vs the YoY ending-ARR commit (Analyst only). */
+function renderPaGrowthDuration(live, packet, modeKey, bind) {
+  const nn = paPlanNnPathM();
+  const target = paTargetDecArrM(packet);
+  const planDec = BOP_LOCK / 1e6 + nn.reduce((a, b) => a + b, 0);
+  // Material miss — not "any dollar under a target the plan sits on."
+  const material = Math.max(0.5, target * 0.01);
+  const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  const sev = [0.10, 0.20, 0.30, 0.40, 0.50, 0.75, 1.00];
+  let h = `<tr><th class="rh"></th>${months.map(m => `<th>${m}</th>`).join('')}</tr>`;
+  sev.forEach(x => {
+    let done = false;
+    h += `<tr><th class="rh">−${Math.round(x * 100)}%</th>`;
+    months.forEach((m, i) => {
+      let eop = BOP_LOCK / 1e6;
+      for (let j = 0; j < 12; j++) eop += nn[j] * (j <= i ? (1 - x) : 1);
+      const shortfall = target - eop;
+      let cls = 'ok', lab = '';
+      if (shortfall > material) {
+        cls = done ? 'gone' : 'gone edge';
+        if (!done) { lab = `<span>${m}</span>`; done = true; }
+      } else if (shortfall > material * 0.35) cls = 'thin';
+      h += `<td class="${cls}">${lab}</td>`;
+    });
+    h += '</tr>';
+  });
+  const sub = modeKey === 'tech'
+    ? `Cells turn when a sustained net-new haircut from January already forces Dec ARR &gt;$${material.toFixed(1)}M under the YoY commit (${target.toFixed(1)}M). Plan Dec ~$${planDec.toFixed(1)}M.`
+    : `If net new runs light from January, when is a material Dec growth miss already locked? Green = still within ~$${material.toFixed(1)}M of the commit, amber = thin, red = miss locked (plan ~$${planDec.toFixed(1)}M vs $${target.toFixed(1)}M).`;
+  return `<p class="pa-section-sub" style="margin:0 0 8px"><b>Analyst · growth rail</b> — ${sub}</p>
+    <div class="pa-dur-wrap"><table class="pa-dur">${h}</table></div>`;
+}
+
+/** Live named-shock distance to missing the YoY ARR commit (Analyst only). */
+function renderPaGrowthTolerance(suite, packet, modeKey, bind) {
+  const target = paTargetDecArrM(packet);
+  const cases = (suite && suite.cases) || [];
+  const pick = (id) => cases.find(c => c.id === id) || null;
+  const rows = [
+    { id: 'growth_m3', plain: 'We grow a little slower', tech: 'YoY ending ARR −3pp',
+      np: 'Ordinary soft year vs the commit.', nt: 'Named −3pp shock through the formula graph.' },
+    { id: 'growth_m5', plain: 'We grow a lot slower', tech: 'YoY ending ARR −5pp',
+      np: 'Harder miss — still the same lever family.', nt: 'Named −5pp shock.' },
+    { id: 'cpl_p30', plain: 'Leads cost 30% more', tech: 'CPL +30%',
+      np: 'Demand gets pricier while we still chase the number.', nt: 'GTM efficiency shock → ARR via funnel.' },
+    { id: 'churn_x14', plain: 'More customers leave', tech: 'Churn mix ×1.4',
+      np: 'Retention hole the team has to sell through.', nt: 'Retention shock → extra NB load.' },
+    { id: 'combo_gtm_growth', plain: 'Softer sales and pricier leads', tech: 'Growth −3pp + CPL +15%',
+      np: 'The combination that usually shows up together.', nt: 'Combo case.' },
+  ].map(r => {
+    const c = pick(r.id);
+    const dArr = c ? (c.dArr || 0) / 1e6 : 0;
+    const miss = c ? (target - (c.decArr || 0) / 1e6) : 0;
+    const status = c ? c.status : 'ok';
+    return { ...r, dArr, miss, status, has: !!c };
+  }).filter(r => r.has);
+
+  if (!rows.length) {
+    return `<div class="pa-banner">Generate scenarios to see how far each named shock sits from the growth commit.</div>`;
+  }
+
+  const maxMiss = Math.max(2, ...rows.map(r => Math.abs(r.miss || r.dArr)));
+  return `<p class="pa-section-sub" style="margin:0 0 8px">${modeKey === 'tech'
+    ? `Distance to YoY Dec ARR commit (${target.toFixed(1)}M). Bar length = |Δ Dec ARR| from the live case.`
+    : `How hard each live stress hits the <b>growth number</b> (plan Dec ARR vs the YoY commit). Longer red = bigger miss.`}</p>
+    <div class="pa-tol-box">${rows.map(r => {
+      const hit = Math.abs(r.miss > 0 ? r.miss : Math.min(0, r.dArr));
+      const w = Math.min(100, (hit / maxMiss) * 100);
+      const cls = r.status === 'break' ? 'z3' : r.status === 'watch' ? 'z2' : 'z1';
+      const lab = r.miss > 0.05
+        ? `−$${r.miss.toFixed(1)}M vs commit`
+        : `${r.dArr >= 0 ? '+' : ''}$${r.dArr.toFixed(1)}M ARR`;
+      const note = r.status === 'break'
+        ? (modeKey === 'tech' ? 'breaks ARR rail' : 'misses the growth number')
+        : r.status === 'watch'
+          ? (modeKey === 'tech' ? 'watch' : 'close — watch')
+          : (modeKey === 'tech' ? 'holds' : 'still holds');
+      return `<div class="pa-tol-row"><div class="pa-lname">${modeKey === 'tech' ? r.tech : r.plain}
+        <span class="meta">${modeKey === 'tech' ? r.nt : r.np}</span></div>
+        <div class="pa-tol-track">
+          <i class="${cls}" style="left:0;width:${w}%;right:auto"></i>
+          <span class="now"></span>
+        </div>
+        <div class="pa-tol-val"><b>${lab}</b>${note}</div></div>`;
+    }).join('')}</div>
+    <p class="pa-section-sub" style="margin-top:8px;font-size:11px">Analyst growth rail — cash posture is on the craft surfaces above.</p>`;
+}
+
+/** Dec ARR shortfall ($M) if net-new runs 30% light from that month through Dec. */
+function renderPaGrowthStartCurve(packet, modeKey, bind) {
+  const nn = paPlanNnPathM();
+  const target = paTargetDecArrM(packet);
+  const planDec = BOP_LOCK / 1e6 + nn.reduce((a, b) => a + b, 0);
+  const haircut = 0.30;
+  const vals = nn.map((_, i) => {
+    let eop = BOP_LOCK / 1e6;
+    for (let j = 0; j < 12; j++) eop += nn[j] * (j >= i ? (1 - haircut) : 1);
+    return Math.max(0, target - eop); // shortfall vs commit
+  });
+  const W = 900, H = 260, PL = 64, PR = 18, PT = 28, PB = 36;
+  const dataMax = Math.max(1, ...vals);
+  const yMax = Math.max(2, Math.ceil(dataMax * 1.15 * 2) / 2);
+  const x = (i) => PL + i * (W - PL - PR) / 11;
+  const y = (v) => PT + (1 - Math.min(v, yMax) / yMax) * (H - PT - PB);
+  const cs = getComputedStyle(document.documentElement);
+  const teal = cs.getPropertyValue('--teal').trim() || '#5fa878';
+  const red = cs.getPropertyValue('--red').trim() || '#b8705f';
+  const muted = cs.getPropertyValue('--text3').trim() || '#72826a';
+  const border = cs.getPropertyValue('--border').trim() || '#2e3f31';
+  let g = '';
+  g += `<text x="${PL}" y="16" fill="${muted}" font-size="12">Dec ARR shortfall vs commit ($M) if net new runs 30% light from that month on</text>`;
+  const tickStep = yMax <= 4 ? 1 : yMax <= 10 ? 2 : 5;
+  for (let v = 0; v <= yMax + 0.01; v += tickStep) {
+    g += `<line x1="${PL}" y1="${y(v)}" x2="${W - PR}" y2="${y(v)}" stroke="${border}"/>`;
+    g += `<text x="${PL - 8}" y="${y(v) + 4}" fill="${muted}" font-size="11" text-anchor="end">$${v.toFixed(0)}M</text>`;
+  }
+  g += `<path d="M${vals.map((v, i) => `${x(i)},${y(v)}`).join('L')}L${x(11)},${H - PB}L${PL},${H - PB}Z" fill="${red}" fill-opacity="0.14"/>`;
+  g += `<polyline points="${vals.map((v, i) => `${x(i)},${y(v)}`).join(' ')}" fill="none" stroke="${red}" stroke-width="2.5"/>`;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  vals.forEach((v, i) => {
+    g += `<circle cx="${x(i)}" cy="${y(v)}" r="3.2" fill="${red}"/>`;
+    if (i % 2 === 0 || i === 11) g += `<text x="${x(i)}" y="${y(v) - 10}" fill="${muted}" font-size="11" text-anchor="middle">$${v.toFixed(1)}M</text>`;
+    g += `<text x="${x(i)}" y="${H - 10}" fill="${muted}" font-size="11" text-anchor="middle">${months[i]}</text>`;
+  });
+  const sub = modeKey === 'tech'
+    ? `Haircut ${Math.round(haircut * 100)}% on monthly NN from onset month. Plan Dec $${planDec.toFixed(1)}M · commit $${target.toFixed(1)}M. Same shape as craft start-month: Q1 onset hurts more.`
+    : `Same soft year, different start date. A 30% net-new miss starting in January costs far more Dec ARR than the identical miss starting in July — <b>when it starts changes the year</b>. Plan ends ~$${planDec.toFixed(1)}M vs a $${target.toFixed(1)}M commit.`;
+  return `<div class="pa-corridor-card">
+    <p class="pa-section-sub" style="margin:0 0 8px">${sub}</p>
+    <svg viewBox="0 0 ${W} ${H}" class="pa-corridor-svg" role="img">${g}</svg>
+    <p class="pa-section-sub" style="margin-top:8px;font-size:11px">Not a CPL chart — cash cushion ($${bind.cush.toFixed(1)}M) is not the story on this plan.</p>
+  </div>`;
+}
+
+
+function renderPaTrips(live, modeKey) {
+  const cush = Math.max(0, (live.plan && live.plan[11] || 0) - (live.floor || 0));
+  const fySpend = (live.spend || []).reduce((a, b) => a + b, 0);
+  const cplBreakPct = fySpend > 0 ? Math.round((cush / (fySpend / 100))) : 24;
+  const trips = [
+    {
+      plain: 'Cost per lead', tech: 'Blended CPL',
+      wp: 'Program spend ÷ qualified leads, every close', wt: 'blended CPL from the GTM packet, monthly',
+      tripP: `Runs more than ~${Math.max(15, Math.min(40, cplBreakPct))}% over plan for two closes`,
+      tripT: `CPL > +${Math.max(15, Math.min(40, cplBreakPct))}% vs plan, two consecutive periods`,
+      seeP: 'Around the 10th, once the month closes', seeT: 'M+1 close, roughly day 10',
+      actP: 'You usually have a quarter from the first signal', actT: 'Decision window ~1–2 quarters depending on burn rate',
+      pullP: 'Cut program spend, or push hiring back', pullT: 'Program spend −15% and/or defer hiring cohort',
+    },
+    {
+      plain: 'Win rate', tech: 'New business win rate',
+      wp: 'Closed-won vs everything we worked', wt: 'stage-weighted NB close rate, trailing 3 months',
+      tripP: 'Down 1.5 points or more against plan', tripT: '−1.5pp vs plan on a trailing three-month basis',
+      seeP: 'Hides inside stage conversion — slower than CPL', seeT: 'Trailing confirmation; leading signal is stage mix drift',
+      actP: 'This is the tight one — two bad quarters can end the year', actT: 'Breakpoint often sits inside normal quarterly dispersion',
+      pullP: 'Tighten stages, or raise coverage / spend', pullT: 'Stage hygiene, coverage, or CPL budget',
+    },
+    {
+      plain: 'Cash against the rails', tech: 'Dec cash vs −25% / −50% / floor',
+      wp: `Cash path vs −25% plan (cut trigger), −50% plan, and the ${live.floor.toFixed(1)}M floor`, wt: 'monthly CFS vs plan×0.75 / plan×0.50 / cashFloorDec',
+      tripP: 'Any month on track for ≥25% below plan Dec cash — that is when we cut, not when we hit the floor',
+      tripT: `endCash ≤ 75% of plan (forced response) or min(cash) < floor`,
+      seeP: 'In the plan itself and at each close', seeT: 'Visible in base CFS; stress suite sharpens tails',
+      actP: 'Act in the quarter you first see the trough — waiting to the floor is not a plan', actT: 'Highest decision value mid-year, not at Dec',
+      pullP: 'Spend discipline, hiring deferral, or collections', pullT: 'Program −15%, HC defer, DSO −5 days',
+    },
+    {
+      plain: 'How many customers leave', tech: 'Gross retention / churn',
+      wp: 'Revenue walking out — renewals warn earlier than the close', wt: 'churn + contraction over beginning ARR',
+      tripP: 'Churn a tenth worse than plan for a quarter', tripT: 'churn mix > 1.10× for one quarter',
+      seeP: 'Slowest signal — watch the forward renewal book', seeT: 'Long detection lag; renewal cohort is the leading indicator',
+      actP: 'Slow to show and slow to fix — do not wait for the close', actT: 'Detection lag dominates; instrument renewals monthly',
+      pullP: 'Push expansion in the base you still have', pullT: 'Expansion / NDR on retained accounts',
+    },
+    {
+      plain: 'How many reps we keep', tech: 'AE attrition',
+      wp: 'Turnover vs the hiring plan', wt: 'sales attrition vs plan assumption',
+      tripP: 'Nearly 4 points over the attrition plan', tripT: '+3.9pp vs plan attrition',
+      seeP: 'You know the day someone resigns', seeT: 'Immediate; capacity impact lags one ramp cycle',
+      actP: 'Most forgiving of the four — do not spend attention here first', actT: 'Widest envelope; lowest priority of the load-bearing set',
+      pullP: 'Pull hiring forward, or lower the growth target', pullT: 'Advance hiring or re-plan YoY',
+    },
+  ];
+  return `<div class="pa-trips">${trips.map(r => `
+    <div class="pa-trip">
+      <div><h4>${modeKey === 'tech' ? r.tech : r.plain}</h4><div class="wat">${modeKey === 'tech' ? r.wt : r.wp}</div></div>
+      <dl>
+        <dt>${modeKey === 'tech' ? 'Threshold' : 'Trips when'}</dt><dd><b>${modeKey === 'tech' ? r.tripT : r.tripP}</b></dd>
+        <dt>${modeKey === 'tech' ? 'Observable' : 'We see it'}</dt><dd>${modeKey === 'tech' ? r.seeT : r.seeP}</dd>
+        <dt>${modeKey === 'tech' ? 'Window' : 'Time to act'}</dt><dd>${modeKey === 'tech' ? r.actT : r.actP}</dd>
+        <dt>${modeKey === 'tech' ? 'Offsets' : 'What buys it back'}</dt><dd>${modeKey === 'tech' ? r.pullT : r.pullP}</dd>
+      </dl>
+    </div>`).join('')}</div>`;
+}
+
+function renderPaOffsets(live, modeKey) {
+  const cush = Math.max(0, (live.plan && live.plan[11] || 0) - (live.floor || 0));
+  // Craft packet used ~$10M cushion; keep offset amplitudes in that grammar even when Dec cash is fat
+  const scale = Math.min(1.4, Math.max(0.55, Math.min(cush, 14) / 10));
+  const offsets = [
+    { plain: 'Push the next hiring wave back a quarter', tech: 'Defer hiring cohort one quarter', amt: 3.2 * scale,
+      sp: 'Fastest cash lever. Costs capacity later, not cash now.', st: 'HC phasing; quota capacity impact lands later.' },
+    { plain: 'Cut program spend 15% for the rest of the year', tech: 'Program spend −15% from trip date', amt: 2.4 * scale,
+      sp: 'Direct and immediate, but it feeds the pipeline problem.', st: 'Reduces MQL supply; compounds coverage gaps.' },
+    { plain: 'Raise renewal pricing 3%', tech: 'Renewal uplift +3%', amt: 3.3 * scale,
+      sp: 'Real money, but only as accounts renew.', st: 'Partial-year realisation on the renewal cohort.' },
+    { plain: 'Collect five days faster', tech: 'DSO −5 days', amt: 1.9 * scale,
+      sp: 'One-off timing gain — you can only do it once.', st: 'Working capital release; non-recurring.' },
+  ];
+  const total = offsets.reduce((s, o) => s + o.amt, 0);
+  const barRef = Math.max(10, Math.min(cush, 20));
+  return `<div class="pa-lever-ledger">${offsets.map(o => `
+    <div class="pa-lrow">
+      <div class="pa-lname">${modeKey === 'tech' ? o.tech : o.plain}
+        <span class="meta">${modeKey === 'tech' ? o.st : o.sp}</span></div>
+      <div class="pa-ltrack"><div class="pa-laxis"></div>
+        <div class="pa-lbar up" style="width:${Math.min(50, (o.amt / barRef) * 50)}%"></div></div>
+      <div class="pa-lval" style="color:var(--teal)">+${o.amt.toFixed(1)}M</div>
+    </div>`).join('')}</div>
+    <p class="pa-section-sub" style="margin-top:8px">Together these buy back roughly <strong>$${total.toFixed(1)}M</strong>
+    against a Dec cushion of <strong>$${cush.toFixed(1)}M</strong> — enough for a soft miss, not a plan rewrite.</p>`;
+}
+
+function buildPaTheRead(packet, suite, live, modeKey) {
+  const planDec = live.plan[11] || 0;
+  const floor = live.floor || 10;
+  const cush = Math.max(0, planDec - floor);
+  const watchCush = Math.max(0.5, planDec * 0.25);
+  const alarmCush = Math.max(1, planDec * 0.50);
+  const jan = live.plan[0] || 0;
+  const dec = planDec;
+  const mc = suite && suite.mc;
+  const breakN = suite ? suite.cases.filter(c => c.status === 'break').length : 0;
+  const pCash = mc ? ((mc.cash.pBreak || 0) * 100).toFixed(0) : '—';
+  const pWatch = mc ? (((mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0) * 100)).toFixed(0) : '—';
+  const pHold = mc
+    ? ((Math.max(0, 1 - Math.max(mc.arr.pMiss || 0, mc.cash.pBreak || 0, mc.pOpsRisk || 0))) * 100).toFixed(0)
+    : '—';
+  const narr = (STATE._assureScenarioNarrative || (suite && suite.narrative) || '').trim();
+
+  if (modeKey === 'tech') {
+    const lat = paLatencyModel(live);
+    return [
+      ['Plan posture',
+        `Live CFS path ${fmtM(jan * 1e6)} → ${fmtM(dec * 1e6)} vs floor ${fmtM(packet.cashFloor)}. Operational rails: −25% = $${watchCush.toFixed(1)}M burn, −50% = $${alarmCush.toFixed(1)}M. YoY ending-ARR target ${packet.yoyGrowthPct.toFixed(1)}%.`],
+      ['Distribution',
+        mc
+          ? `MC n=${mc.n.toLocaleString()}: P(cash ≤ 75% plan) ${pWatch}%, P(cash &lt; floor) ${pCash}%, P(ARR miss) ${((mc.arr.pMiss || 0) * 100).toFixed(1)}%, P(ops liquidity risk) ${((mc.pOpsRisk || 0) * 100).toFixed(1)}%. Named break cases: ${breakN}.`
+          : 'Run Generate scenarios for Monte Carlo frequencies and named-shock ranking.'],
+      ['Detection latency',
+        `Warning consumed: ${lat.rows.map(r => `${r.tech} ${Math.round(r.eaten)}%`).join(' · ')}. Instrumentation value $${lat.totalVal.toFixed(1)}M vs $${lat.intervenCush.toFixed(1)}M −25% headroom (~${((lat.totalVal / lat.intervenCush) * 100).toFixed(0)}%). Latency is first-class on PA_LEVER_LATENCY (detect/best/window0).`],
+      ['Response',
+        narr ? narr.replace(/</g, '&lt;').slice(0, 900) : 'Offsets below are scaled to this plan’s cushion; concurrent shocks share one cushion.'],
+    ];
+  }
+
+  const sections = [
+    ['What this plan actually is',
+      `The operating plan ${dec < jan - 0.5 ? 'spends cash from' : dec > jan + 0.5 ? 'builds cash from' : 'holds cash near'} about <b>$${jan.toFixed(1)}M</b> to <b>$${dec.toFixed(1)}M</b>. The hard floor is <b>$${floor.toFixed(0)}M</b>, but we also watch <b>$${watchCush.toFixed(1)}M</b> of drawdown (25% below plan) and treat <b>$${alarmCush.toFixed(1)}M</b> (50%) as an alarm. Moves inside about ±5% are noise.`],
+    ['Where the risk actually sits',
+      mc
+        ? `In about <b>${pHold}%</b> of tested years the main rails hold. Cash falls hard (≥25% below plan) in roughly <b>${pWatch}%</b> of draws; the hard floor is breached in about <b>${pCash}%</b>. <b>${breakN}</b> named scenario${breakN === 1 ? '' : 's'} break — usually lead costs, growth stalling while spend continues, or both.`
+        : 'Generate scenarios to see which named stresses break the year and how often the 25%/50% cash rails are at risk.'],
+    ['How much we can take, and for how long',
+      `We would never actually hit the floor, because someone would stop us first. <b>So the cost of a bad year is not cash — it is the growth we give up to protect the cash.</b> The forced-response chart shows when a sustained lead-cost overshoot would force a cut at the −25% rail, and how many growth points that cut costs.`],
+    ['When it happens matters more than how bad it is',
+      `It takes about two closes to see a problem and be sure of it. For a mild shock that is fine. For a severe one it is almost all the time we have. <b>Adding a month of detection lag costs more than adding a million dollars of cushion</b> — which is an argument for instrumenting slow-signal levers (win rate, churn), not for holding more cash.`],
+    ['Speed of noticing beats size of cushion',
+      (() => {
+        const lat = paLatencyModel(live);
+        const heavy = lat.rows.filter(r => r.eaten >= 35);
+        const names = heavy.map(r => modeKey === 'tech' ? r.tech : r.plain).join(' and ');
+        return `${names || 'Win rate and churn'} burn the most warning before we can act, and they are usually the thinnest levers. <b>We are best instrumented on the risk that matters least.</b> Closing that gap is worth about <b>$${lat.totalVal.toFixed(1)}M</b> of intervention headroom (~${((lat.totalVal / lat.intervenCush) * 100).toFixed(0)}% of the −25% cushion) — a reporting change, not $${lat.totalVal.toFixed(0)}M in the bank.`;
+      })()],
+    ['What to do about it',
+      `Wire alerts to lead costs, win rate, churn, and attrition — with detection lag in mind. Prefer stage-conversion and forward renewal instrumentation over more cash. If something trips, the offsetting levers below buy the year back. Scenarios that still force a cut need a decision about the plan itself.`],
+  ];
+  if (narr) {
+    sections.push(['From this stress run', narr.replace(/</g, '&lt;').replace(/\n/g, '<br>')]);
+  }
+  return sections;
+}
+
+function renderPaTheRead(packet, suite, live, modeKey) {
+  const sections = buildPaTheRead(packet, suite, live, modeKey);
+  return `<div class="pa-commentary">${sections.map(s => `<h4>${s[0]}</h4><p>${s[1]}</p>`).join('')}</div>`;
+}
+
+function renderPaPredictiveNative(packet, suite, mode) {
+  const live = buildPaLeversLivePacket();
+  const modeKey = mode === 'tech' ? 'tech' : 'plain';
+  const levers = buildCraftLevers(suite, live);
+  const verdict = suite && suite.mc
+    ? (() => { const v = paAnalyticsVerdict(suite, packet); return { big: v.big, small: v.small, tone: v.sev || 'watch' }; })()
+    : {
+      big: 'Run scenarios to test what could break this plan.',
+      small: `Plan cash ${fmtM(packet.endCash)} vs floor ${fmtM(packet.cashFloor)}. Generate scenarios for the corridor fan, chips, and The Read.`,
+      tone: 'watch',
+    };
+
+  const readouts = live.readouts || [];
+  const readoutHtml = readouts.map(r => {
+    const lab = r[modeKey] || r.plain || '';
+    const note = (r.note && (r.note[modeKey] || r.note.plain)) || '';
+    const cls = r.cls ? ` ${r.cls}` : '';
+    return `<div class="pa-ro"><div class="lab">${lab}</div><div class="val${cls}">${r.val}</div><div class="note">${note}</div></div>`;
+  }).join('');
+
+  // Craft chip strip — curated short names in story order
+  let chipCases = [];
+  if (suite && suite.cases) {
+    PA_CRAFT_CHIP_ORDER.forEach(id => {
+      const c = suite.cases.find(x => x.id === id);
+      if (c) chipCases.push(c);
+    });
+    if (modeKey === 'tech') {
+      suite.cases.forEach(c => {
+        if (!chipCases.includes(c) && !c.analystOnly) chipCases.push(c);
+      });
+    }
+  }
+
+  const chipHtml = chipCases.length
+    ? chipCases.map(c => {
+      const realIdx = suite.cases.indexOf(c);
+      const s = c.status === 'break' ? 'break' : c.status === 'watch' ? 'watch' : 'hold';
+      const col = s === 'break' ? 'var(--red)' : s === 'watch' ? 'var(--amber)' : 'var(--teal)';
+      const label = modeKey === 'tech'
+        ? (c.chipTech || c.label)
+        : (c.chipPlain || c.label);
+      return `<button type="button" class="pa-chip" data-pa-case="${realIdx}" aria-pressed="false" onclick="selectPaCase(${realIdx})">` +
+        `<span class="cdot" style="background:${col}"></span>${String(label).replace(/</g, '&lt;')}</button>`;
+    }).join('')
+    : `<span style="font-size:12px;color:var(--text3)">Generate scenarios to pick a year and draw it on the corridor.</span>`;
+
+  const jan = live.plan[0] || 0;
+  const dec = live.plan[11] || 0;
+  const pathVerb = dec < jan - 0.5 ? 'spends down from' : dec > jan + 0.5 ? 'builds cash from' : 'holds cash near';
+  const corrSub = modeKey === 'tech'
+    ? `Plan CFS is the mean path. Fan = ± band around plan (not one-tailed). Rails = −25% / −50% / floor ${live.floor.toFixed(1)}M. Dec labels show plan vs selected stress.`
+    : `The plan line is the mean — the fan opens around it. Amber / red dashed paths are 25% and 50% below plan. The solid red line is the $${live.floor.toFixed(0)}M floor. Dec labels show where the year ends.`;
+
+  const bind = paRiskBinding(live, suite);
+  const analystExtra = modeKey === 'tech'
+    ? `<div class="pa-section" style="margin-top:18px">
+        <h3 class="pa-section-hd">Scenario table &amp; nerd math</h3>
+        <p class="pa-section-sub">Full case table + Monte Carlo histograms. Growth-persistence helpers stay here for analysts.</p>
+        <div id="assureScenarioBody">${renderAssureScenarioHtml(suite)}</div>
+        <div style="margin-top:16px">${renderPaGrowthDuration(live, packet, modeKey, bind)}</div>
+        <div style="margin-top:16px">${renderPaGrowthTolerance(suite, packet, modeKey, bind)}</div>
+        <div style="margin-top:16px">${renderPaGrowthStartCurve(packet, modeKey, bind)}</div>
+      </div>`
+    : `<div id="assureScenarioBody" style="display:none"></div>`;
+
+  const respHd = modeKey === 'tech' ? 'Forced-response cost by shock severity' : 'What a bad year actually costs us';
+  const respSub = modeKey === 'tech'
+    ? 'Bar ends where cumulative CPL-like overspend forces a cut at the −25% cash rail. Label = growth pp surrendered after the cut.'
+    : 'What happens if lead costs run over plan and stay there. The bar shows how long we could keep spending before we would have to cut back — and what cutting back costs us in growth.';
+
+  return `
+    <div class="pa-verdict">
+      <span class="pa-dot ${verdict.tone || 'watch'}"></span>
+      <div>
+        <p class="pa-big">${String(verdict.big).replace(/</g, '&lt;')}</p>
+        <p class="pa-small">${String(verdict.small).replace(/</g, '&lt;')}</p>
+      </div>
+    </div>
+    ${readoutHtml ? `<div class="pa-readouts">${readoutHtml}</div>` : ''}
+    ${renderPaBindingBanner(bind, modeKey)}
+
+    <div class="pa-section pa-h1" style="margin-top:8px">
+      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Dec cash corridor — plan vs draw distribution' : 'Cash through the year'}</h3>
+      <p class="pa-section-sub">${corrSub}</p>
+      <div class="pa-corridor-card">
+        <div class="pa-corridor-legend">
+          <span><i class="pa-sw"></i>Plan</span>
+          <span><i class="pa-sw band" style="opacity:.9"></i>Half of all years</span>
+          <span><i class="pa-sw band" style="opacity:.45"></i>Almost all years</span>
+          <span><i class="pa-sw watch"></i>25% below plan</span>
+          <span><i class="pa-sw alarm"></i>50% below plan</span>
+          <span><i class="pa-sw floor"></i>Cash floor</span>
+        </div>
+        <svg id="paCorridorSvg" class="pa-corridor-svg" viewBox="0 0 900 320" role="img" aria-label="Cash corridor with plan, likelihood fan, 25 and 50 percent rails, floor, and scenario path"></svg>
+        <div class="pa-chips" id="paCaseChips">${chipHtml}</div>
+        <div class="pa-callout" id="paCaseCallout">Pick a scenario below to see how that year would have gone.</div>
+      </div>
+    </div>
+
+    <div class="pa-section pa-h1" style="margin-top:22px">
+      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Lever sensitivity — Δ Dec cash' : 'Which levers actually move the year'}</h3>
+      <p class="pa-section-sub">${modeKey === 'tech'
+        ? 'One-at-a-time style ranking from named shocks + sensitivity; left downside, right upside.'
+        : 'Each row moves one thing and holds everything else still. Left is how much cash we lose if it goes against us. Right is how much we gain if it goes our way.'}</p>
+      ${renderPaCraftLedger(levers, modeKey)}
+      ${renderPaCraftGroups(levers, modeKey)}
+    </div>
+
+    <div class="pa-section pa-h1" style="margin-top:22px">
+      <h3 class="pa-section-hd">${respHd}</h3>
+      <p class="pa-section-sub">${respSub}</p>
+      ${renderPaForcedResponse(live, packet, modeKey)}
+    </div>
+
+    <div class="pa-section pa-h1" style="margin-top:22px">
+      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Detection latency by lever' : 'How fast we would actually see it'}</h3>
+      <p class="pa-section-sub">${modeKey === 'tech'
+        ? 'Detection latency (confirmation + reporting + structural lag) against the decision window to forced action under a common 2.5×σ stress.'
+        : 'A threshold only helps if we can see it trip. This is how long each lever takes to show a real change, against how long we would have before we were forced to act.'}</p>
+      ${renderPaLatencyScorecard(live, modeKey)}
+    </div>
+
+    <div class="pa-section pa-h1" style="margin-top:22px">
+      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Instrumentation value — months recovered × burn' : 'What faster noticing is worth'}</h3>
+      <p class="pa-section-sub">${modeKey === 'tech'
+        ? 'Months of decision window recovered, priced at the monthly burn rate of a 2.5×σ shock in that lever.'
+        : 'If we cut detection time to what is realistically possible, how much extra room does that buy — valued like cash cushion.'}</p>
+      ${renderPaLatencyFix(live, modeKey)}
+    </div>
+
+    <div class="pa-section pa-h1" style="margin-top:22px">
+      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Trip-wires and decision windows' : 'What to watch, and when to act'}</h3>
+      <p class="pa-section-sub">A threshold is only useful if we know when we would see it and how long we have to do something. Detection lag is the binding constraint at high severity.</p>
+      ${renderPaTrips(live, modeKey)}
+    </div>
+
+    <div class="pa-section pa-h1" style="margin-top:22px">
+      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Offsetting actions' : 'If a trip-wire fires, here is what buys the year back'}</h3>
+      <p class="pa-section-sub">Levers that give cash back, scaled to this plan’s cushion.</p>
+      ${renderPaOffsets(live, modeKey)}
+    </div>
+
+    <div class="pa-section pa-h1" style="margin-top:22px">
+      <h3 class="pa-section-hd">${modeKey === 'tech' ? 'Commentary' : 'The read'}</h3>
+      ${renderPaTheRead(packet, suite, live, modeKey)}
+    </div>
+
+    <div class="pa-section pa-h3" style="margin-top:18px">
+      <h3 class="pa-section-hd">Three-year LRP preview</h3>
+      <p class="pa-section-sub">Multi-year craft stays illustrative until the LRP bridge ships. Use This year for live dollars.</p>
+    </div>
+
+    ${analystExtra}
+    <p class="pa-section-sub" style="margin-top:14px;font-size:11px">${(live.copy && live.copy.foot && live.copy.foot[modeKey]) || ''}</p>
+  `;
+}
+
+function paintPaCorridor() {
+  const svg = document.getElementById('paCorridorSvg');
+  if (!svg) return;
+  const live = buildPaLeversLivePacket();
+  const plan = live.plan || [];
+  if (plan.length !== 12) {
+    svg.innerHTML = '';
+    return;
+  }
+  const floor = live.floor != null ? live.floor : 10;
+  const rails = paCashRails(plan, floor);
+  const bands = approxCashBands(plan, floor, live.decCashSdM);
+  const p05 = live.p05 || bands.p05;
+  const p25 = live.p25 || bands.p25;
+  const p75 = live.p75 || bands.p75;
+  const p95 = live.p95 || bands.p95;
+  const W = 900, H = 320, PL = 52, PR = 16, PT = 18, PB = 30;
+  const ymax = Math.max(
+    floor * 1.5,
+    Math.max.apply(null, plan.concat(p95, rails.watch, [40])) * 1.08,
+    40
+  );
+  const xs = (i) => PL + i * (W - PL - PR) / 11;
+  const ys = (v) => PT + (1 - v / ymax) * (H - PT - PB);
+  const pts = (a) => a.map((v, i) => `${xs(i)},${ys(v)}`).join(' ');
+  const band = (lo, hi) => {
+    const top = hi.map((v, i) => `${xs(i)},${ys(v)}`).join('L');
+    const bot = lo.slice().reverse().map((v, i) => `${xs(11 - i)},${ys(v)}`).join('L');
+    return `M${top}L${bot}Z`;
+  };
+  const cs = getComputedStyle(document.documentElement);
+  const teal = cs.getPropertyValue('--teal').trim() || '#5fa878';
+  const red = cs.getPropertyValue('--red').trim() || '#b8705f';
+  const amber = cs.getPropertyValue('--amber').trim() || '#b89060';
+  const muted = cs.getPropertyValue('--text3').trim() || '#72826a';
+  const border = cs.getPropertyValue('--border').trim() || '#2e3f31';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  let g = '';
+  const tickStep = ymax > 80 ? 20 : 10;
+  for (let v = 0; v <= ymax * 1.01; v += tickStep) {
+    g += `<line x1="${PL}" y1="${ys(v)}" x2="${W - PR}" y2="${ys(v)}" stroke="${border}" stroke-width="1"/>`;
+    g += `<text x="${PL - 8}" y="${ys(v) + 4}" fill="${muted}" font-size="12" text-anchor="end">$${v}M</text>`;
+  }
+  g += `<path d="${band(p05, p95)}" fill="${teal}" fill-opacity="0.17"/>`;
+  g += `<path d="${band(p25, p75)}" fill="${teal}" fill-opacity="0.42"/>`;
+  // 25% / 50% below plan — operational problem rails (not the hard floor)
+  g += `<polyline points="${pts(rails.watch)}" fill="none" stroke="${amber}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.9"/>`;
+  g += `<polyline points="${pts(rails.alarm)}" fill="none" stroke="${red}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"/>`;
+  g += `<text x="${PL + 6}" y="${ys(rails.watch[0]) - 6}" fill="${amber}" font-size="11">25% below plan</text>`;
+  g += `<text x="${PL + 6}" y="${ys(rails.alarm[0]) - 6}" fill="${red}" font-size="11">50% below plan</text>`;
+  const fy = ys(floor);
+  g += `<line x1="${PL}" y1="${fy}" x2="${W - PR}" y2="${fy}" stroke="${red}" stroke-width="2.2" stroke-dasharray="7 5"/>`;
+  g += `<text x="${W - PR}" y="${fy - 8}" fill="${red}" font-size="12" text-anchor="end">Cash floor $${floor.toFixed(1)}M</text>`;
+  g += `<polyline class="draw" points="${pts(plan)}" fill="none" stroke="${teal}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  // End-of-year plan label — where the mean lands vs the rails
+  const planDec = plan[11];
+  g += `<circle cx="${xs(11)}" cy="${ys(planDec)}" r="4" fill="${teal}"/>`;
+  g += `<text x="${xs(11) - 8}" y="${ys(planDec) - 10}" fill="${teal}" font-size="12" text-anchor="end">Plan Dec $${planDec.toFixed(1)}M</text>`;
+  g += `<polyline id="paCaseLine" points="" fill="none" stroke="none" stroke-width="2.5" stroke-linejoin="round"/>`;
+  g += `<g id="paCaseMark"></g>`;
+  g += `<g id="paCaseEoy"></g>`;
+  months.forEach((m, i) => {
+    g += `<text x="${xs(i)}" y="${H - 8}" fill="${muted}" font-size="12" text-anchor="middle">${m}</text>`;
+  });
+  if (bands.illustrative && !(live.decCashSdM > 0.05)) {
+    g += `<text x="${PL + 8}" y="${PT + 12}" fill="${muted}" font-size="11">Illustrative fan — Generate scenarios for live likelihood</text>`;
+  }
+  svg.innerHTML = g;
+  STATE._paCorridor = { plan, floor, live, rails, ymax, W, H, PL, PR, PT, PB, xs, ys };
+  if (STATE._paCaseSel != null) selectPaCase(STATE._paCaseSel, true);
+}
+
+
+window.selectPaCase = function(idx, silent) {
+  const suite = STATE._assureScenarioSuite;
+  const cases = suite && suite.cases || [];
+  const c = cases[idx];
+  const callout = document.getElementById('paCaseCallout');
+  const line = document.getElementById('paCaseLine');
+  const mark = document.getElementById('paCaseMark');
+  const modeKey = STATE.paMode === 'tech' ? 'tech' : 'plain';
+  document.querySelectorAll('.pa-chip[data-pa-case]').forEach(el => {
+    el.setAttribute('aria-pressed', String(+el.getAttribute('data-pa-case') === idx));
+  });
+  if (!c || !STATE._paCorridor) {
+    if (callout && !silent) {
+      callout.innerHTML = modeKey === 'tech'
+        ? 'Select a named case to overlay its cash path on the corridor.'
+        : 'Pick a scenario below to see how that year would have gone.';
+    }
+    return;
+  }
+  STATE._paCaseSel = idx;
+  const corr = STATE._paCorridor;
+  const plan = corr.plan;
+  const path = (c.cashPathM && c.cashPathM.length === 12)
+    ? c.cashPathM
+    : paCasePathFromDelta(plan, (c.dCash || 0) / 1e6);
+  // MUST use the same ymax as paintPaCorridor — recomputing shifts the line vs floor/rails.
+  const W = corr.W || 900, H = corr.H || 320;
+  const PL = corr.PL || 52, PR = corr.PR || 16, PT = corr.PT || 18, PB = corr.PB || 30;
+  const floor = corr.floor;
+  const ymax = corr.ymax || Math.max(floor * 1.5, Math.max.apply(null, plan.concat(path, [40])) * 1.08, 40);
+  const xs = (i) => PL + i * (W - PL - PR) / 11;
+  const ys = (v) => PT + (1 - v / ymax) * (H - PT - PB);
+  const col = c.status === 'break' ? 'var(--red)' : c.status === 'watch' ? 'var(--amber)' : 'var(--teal)';
+  if (line) {
+    line.setAttribute('points', path.map((v, i) => `${xs(i)},${ys(v)}`).join(' '));
+    line.setAttribute('stroke', col);
+  }
+  if (mark) {
+    const rails = corr.rails || paCashRails(plan, floor);
+    let bi = path.reduce((best, v, i) => (v < path[best] ? i : best), 0);
+    // Prefer first month that crosses 50% / 25% / floor rails when present
+    const crossIdx = path.findIndex((v, i) => v < rails.alarm[i] || v < floor);
+    if (crossIdx >= 0) bi = crossIdx;
+    else {
+      const wIdx = path.findIndex((v, i) => v < rails.watch[i]);
+      if (wIdx >= 0) bi = wIdx;
+    }
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    mark.innerHTML = `<circle cx="${xs(bi)}" cy="${ys(path[bi])}" r="5" fill="${col}"/>` +
+      `<text x="${xs(bi)}" y="${ys(path[bi]) - 10}" fill="${col}" font-size="11" text-anchor="middle">${months[bi]} $${path[bi].toFixed(1)}M</text>`;
+  }
+  const eoy = document.getElementById('paCaseEoy');
+  if (eoy) {
+    const planDec = plan[11];
+    const end = path[11];
+    const d = end - planDec;
+    // Offset scenario label if it lands on top of the plan label
+    const yOff = Math.abs(ys(end) - ys(planDec)) < 14 ? (end <= planDec ? 14 : -14) : 0;
+    eoy.innerHTML =
+      `<circle cx="${xs(11)}" cy="${ys(end)}" r="4" fill="${col}"/>` +
+      `<text x="${xs(11) - 8}" y="${ys(end) - 10 + yOff}" fill="${col}" font-size="12" text-anchor="end">` +
+      `This year $${end.toFixed(1)}M (${d >= 0 ? '+' : ''}${d.toFixed(1)} vs plan)</text>`;
+  }
+  if (callout) {
+    const title = String((modeKey === 'tech' ? (c.chipTech || c.label) : (c.chipPlain || c.label)) || '').replace(/</g, '&lt;');
+    const body = String((modeKey === 'tech' ? (c.explain || c.xp || '') : (c.xp || c.plain || c.explain || '')) || '')
+      .replace(/</g, '&lt;');
+    const dCash = (c.dCash || 0) / 1e6;
+    const dArr = (c.dArr || 0) / 1e6;
+    const planDec = plan[11];
+    const end = path[11];
+    const dropPct = c.cashDropPct != null ? c.cashDropPct : (planDec > 0 ? (planDec - end) / planDec : 0);
+    const breaks = c.breaks || [];
+    const watches = c.watches || [];
+    const cashFloorBreak = breaks.some(b => /cash floor/i.test(b));
+    const cash50 = breaks.some(b => /50%/i.test(b)) || dropPct >= 0.50;
+    const cash25 = watches.some(b => /25%/i.test(b)) || dropPct >= 0.25;
+    const arrMiss = [...breaks, ...watches].some(b => /ARR|YoY/i.test(b));
+    let cashBit;
+    if (modeKey === 'tech') {
+      cashBit = `Δ cash ${dCash >= 0 ? '+' : ''}${dCash.toFixed(1)}M (${(dropPct * 100).toFixed(0)}% vs plan) · Δ ARR ${dArr >= 0 ? '+' : ''}${dArr.toFixed(1)}M · ${c.status}`;
+    } else if (cashFloorBreak) {
+      cashBit = `Crosses the $${floor.toFixed(0)}M floor — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M.`;
+    } else if (cash50) {
+      cashBit = `Alarm — ends $${end.toFixed(1)}M (~${(dropPct * 100).toFixed(0)}% below plan $${planDec.toFixed(1)}M).`;
+    } else if (cash25) {
+      cashBit = `Watch — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (still above the floor).`;
+    } else if (arrMiss && Math.abs(dropPct) < 0.05) {
+      cashBit = `Misses the growth number (ARR ${dArr >= 0 ? '+' : ''}${dArr.toFixed(1)}M). Cash ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M — inside ±5% noise.`;
+    } else if (Math.abs(dropPct) < 0.05) {
+      cashBit = `Cash barely moves — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (under ±5%).`;
+    } else {
+      cashBit = `Holds the cash rails — ends $${end.toFixed(1)}M vs plan $${planDec.toFixed(1)}M (${dCash >= 0 ? '+' : ''}${dCash.toFixed(1)}M).`;
+    }
+    callout.innerHTML = `<strong>${title}</strong> — ${body || cashBit}${body ? ` ${cashBit}` : ''}`;
+  }
 };
 
 function renderAnalytics() {
   const packet = buildBudgetAssurancePacket();
   const hist = buildAssuranceHistoryPacket(packet);
-  const suite = STATE._assureScenarioSuite && STATE._assureScenarioSuite.fp === scenarioPlanFingerprint(packet)
-    ? STATE._assureScenarioSuite
-    : null;
+  const suiteInfo = getAssureScenarioSuite(packet);
+  const suite = suiteInfo.suite;
+  const suiteStale = suiteInfo.stale;
   const statusHtml = (STATE._assureNarrative || buildDeterministicAssuranceNarrative(packet, runBudgetRiskChecks(packet)))
     .replace(/</g, '&lt;').replace(/\n/g, '<br>');
   const histNarrative = (STATE._assureHistoryNarrative || buildDeterministicHistoryNarrative(hist))
@@ -6418,6 +7667,18 @@ function renderAnalytics() {
   const horizon = STATE.paHorizon === '3y' ? '3y' : '1y';
   const mode = STATE.paMode === 'tech' ? 'tech' : 'plain';
   const histFlags = (hist.findings || []).filter(f => f.severity === 'high' || f.severity === 'medium').length;
+  const histMeta = assureRunMetaHtml(STATE._assureHistoryAt, false);
+  const statusMeta = assureRunMetaHtml(STATE._assureNarrativeAt, false);
+  const scenMeta = assureRunMetaHtml(suite && suite.at, suiteStale);
+  const running = STATE._assureScenarioRunning;
+  const scenProgHtml = running
+    ? `<div id="assureScenarioProg" class="assure-run-prog">${String(running.msg || 'Running…').replace(/</g, '&lt;')}${
+        running.pct != null
+          ? `<span class="bar"><i style="width:${Math.max(0, Math.min(100, running.pct))}%"></i></span>`
+          : ''
+      }</div>`
+    : `<div id="assureScenarioProg" class="assure-run-prog" hidden></div>`;
+  const scenBtnsDisabled = running ? ' disabled' : '';
 
   return `
     <div class="pa-analytics" id="plan-assurance" data-pa-horizon="${horizon}" data-pa-mode="${mode}">
@@ -6425,7 +7686,7 @@ function renderAnalytics() {
         <div>
           <div class="slide-title" style="margin:0">Analytics · FY${BUDGET_YEAR}</div>
           <div class="slide-sub" style="margin-top:4px">
-            History outliers + status up top. Predictive craft below binds the live plan (and MC when you Generate scenarios).
+            History outliers + status up top. Predictive below follows the craft packet: corridor fan, levers, trip-wires, and The Read.
           </div>
         </div>
         <div class="pa-toggles">
@@ -6447,6 +7708,7 @@ function renderAnalytics() {
             <div class="assure-lane-acts">
               <button class="act-btn" type="button" onclick="refreshAssuranceHistory(false)">↺ Refresh</button>
               <button class="act-btn success" type="button" onclick="refreshAssuranceHistory(true)">Generate history</button>
+              ${histMeta}
             </div>
           </div>
           <div class="pa-body" id="assureHistoryBody">
@@ -6461,35 +7723,32 @@ function renderAnalytics() {
             <div class="assure-lane-acts">
               <button class="act-btn" type="button" onclick="refreshAssuranceNarrative(false)">↺ Refresh</button>
               <button class="act-btn success" type="button" onclick="refreshAssuranceNarrative(true)">Generate status</button>
+              ${statusMeta}
             </div>
           </div>
           <div class="pa-body" id="assureStatusBody">${statusHtml}</div>
         </div>
 
-        <div class="pa-card" style="padding:10px 10px 6px">
+        <div class="pa-card">
           <div class="pa-card-hd">
             <div class="pa-card-lbl">3 · Predictive / lever review</div>
             <div class="assure-lane-acts">
-              <button class="act-btn" type="button" onclick="refreshAssuranceScenarios(false)">↺ Refresh</button>
-              <button class="act-btn success" type="button" onclick="refreshAssuranceScenarios(true)">Generate scenarios</button>
-              <button class="act-btn" type="button" onclick="pushPaLeversToFrame()">↻ Sync live packet</button>
+              <button class="act-btn" type="button" id="assureScenariosRefreshBtn" onclick="refreshAssuranceScenarios(false)"${scenBtnsDisabled}>↺ Refresh</button>
+              <button class="act-btn success" type="button" id="assureScenariosGenBtn" onclick="refreshAssuranceScenarios(true)"${scenBtnsDisabled}>Generate scenarios</button>
+              <span id="assureScenarioMeta">${scenMeta}</span>
             </div>
           </div>
-          <div class="pa-banner" style="margin:0 6px 8px">
-            Claude predictive surface (corridor, levers, tolerances, trip-wires).
+          ${scenProgHtml}
+          <div class="pa-banner" style="margin-bottom:10px">
             ${suite && suite.mc
-              ? `<strong>Live-bound</strong> to plan CFS + MC n=${suite.mc.n.toLocaleString()}.`
-              : '<strong>Plan cash path live</strong> — Generate scenarios to replace illustrative stress chips with formula-graph cases.'}
-            3y craft inside the frame is still an LRP preview until the multi-year bridge ships.
+              ? (suiteStale
+                ? `<strong>Saved results</strong> from ${formatAssureRunAt(suite.at) || 'earlier'} — plan has changed since. Regenerate to re-bind the corridor.`
+                : `<strong>Live-bound</strong> · last run ${formatAssureRunAt(suite.at) || '—'} · MC n=${suite.mc.n.toLocaleString()}. Click a scenario chip to draw that path on the corridor.`)
+              : '<strong>Plan cash path live</strong> — Generate scenarios for distribution bands, case lines, and lever ranking.'}
           </div>
-          <iframe
-            id="paLeversFrame"
-            title="Plan assurance lever review"
-            src="/budget-engine/plan-assurance-levers.html?embedded=1&v=1"
-            style="width:100%;min-height:3200px;border:0;border-radius:8px;background:#0E1113;display:block"
-            onload="pushPaLeversToFrame()"
-          ></iframe>
-          <div id="assureScenarioBody" style="display:none">${renderAssureScenarioHtml(suite)}</div>
+          <div class="pa-body" id="assurePredictiveBody">
+            ${renderPaPredictiveNative(packet, suite, mode)}
+          </div>
         </div>
       </div>
     </div>`;
@@ -6963,7 +8222,7 @@ function buildBudgetAssurancePacket() {
   const minCash = Math.min(...cashByMonth);
   const minCashPeriod = BUD_P[cashByMonth.indexOf(minCash)];
   const endCash = cfs[dec].ending_cash;
-  const cashFloor = STATE.cashFloorDec != null ? STATE.cashFloorDec : 30000000;
+  const cashFloor = STATE.cashFloorDec != null ? STATE.cashFloorDec : 10000000;
   const janHc = hc[jan].headsTotal;
   const janHcExpected = HC_BOP_TOTAL;
   const fyIsSm = BUD_P.reduce((s, p) => s + is[p].sm, 0);
@@ -6982,6 +8241,7 @@ function buildBudgetAssurancePacket() {
     cashFloor,
     minCash,
     minCashPeriod,
+    cashByMonth,
     fyMkt,
     fyMql,
     fyChMql,
@@ -7280,6 +8540,33 @@ function scenarioPlanFingerprint(p) {
   ].join('|');
 }
 
+/** Saved suite + whether the live plan has drifted since that run. */
+function getAssureScenarioSuite(packet) {
+  const suite = STATE._assureScenarioSuite;
+  if (!suite) return { suite: null, stale: false };
+  const fp = scenarioPlanFingerprint(packet || buildBudgetAssurancePacket());
+  return { suite, stale: !!(suite.fp && suite.fp !== fp) };
+}
+
+function formatAssureRunAt(ts) {
+  if (!ts) return null;
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+function assureRunMetaHtml(ts, stale) {
+  const when = formatAssureRunAt(ts);
+  if (!when) return '<span class="assure-run-meta">Not run yet</span>';
+  return `<span class="assure-run-meta">${stale ? '<b>Stale</b> · ' : ''}Last run <b>${when}</b></span>`;
+}
+
 function scaleAllGtmCpl(factor) {
   for (const p of BUD_P) {
     const r = getGtmRates(p);
@@ -7304,24 +8591,38 @@ function bumpChurnMix(factor) {
 function classifyScenarioOutcome(base, shock) {
   const breaks = [];
   const watches = [];
-  if (shock.decArr < base.targetArr * 0.995) breaks.push('Dec ARR vs YoY target');
-  if (shock.endCash < base.cashFloor) breaks.push('Dec cash floor');
-  else if (shock.minCash < base.cashFloor) watches.push('Mid-year cash trough');
-  // Operating liquidity: deep drawdown even if still above formal floor, or floor crushed
-  const cashDrop = base.endCash - shock.endCash;
-  if (shock.endCash < base.cashFloor * 0.55 || cashDrop >= Math.max(12e6, base.endCash * 0.35)) {
-    breaks.push('Operating liquidity at risk');
-  } else if (cashDrop >= Math.max(6e6, base.endCash * 0.18)) {
-    watches.push('Material cash drawdown');
+  const baseCash = Math.max(1, base.endCash || 1);
+  const cashDropPct = (base.endCash - shock.endCash) / baseCash;
+  const absCashPct = Math.abs(cashDropPct);
+
+  // Cash rails drive break/watch for craft chips. ARR miss alone is not a red year.
+  if (shock.endCash < base.cashFloor) {
+    breaks.push('Dec cash floor');
+  } else if (shock.minCash < base.cashFloor) {
+    watches.push('Mid-year cash trough vs floor');
   }
+  if (cashDropPct >= 0.50) {
+    breaks.push('Cash down ≥50% vs plan');
+  } else if (cashDropPct >= 0.25) {
+    watches.push('Cash down ≥25% vs plan');
+  }
+
+  if (shock.decArr < base.targetArr * 0.995) {
+    watches.push(absCashPct < 0.05
+      ? 'Dec ARR vs YoY target (cash ≈ noise)'
+      : 'Dec ARR vs YoY target');
+  }
+
   if (shock.salesEnd < shock.aeNeeded) breaks.push('NB AE cover');
   if (shock.csEnd < shock.csNeeded) breaks.push('CS cover');
   if (shock.fyEbitda < 0 && base.fyEbitda >= 0) watches.push('EBITDA turns negative');
   if (shock.fyMkt > base.fyMkt * 1.2) watches.push('Marketing spend +20%');
+
+  // Status mirrors cash posture: ARR-only flags stay green (hold).
   let status = 'ok';
   if (breaks.length) status = 'break';
-  else if (watches.length) status = 'watch';
-  return { status, breaks, watches };
+  else if (watches.some(w => /cash|25%|50%|floor|EBITDA|Marketing/i.test(w))) status = 'watch';
+  return { status, breaks, watches, cashDropPct };
 }
 
 function explainScenarioCase(base, c, def) {
@@ -7338,8 +8639,9 @@ function explainScenarioCase(base, c, def) {
   }
   if (Math.abs(c.dCash) >= 1000) {
     const vsFloor = c.endCash - base.cashFloor;
+    const dropPct = base.endCash > 0 ? (base.endCash - c.endCash) / base.endCash : 0;
     bits.push(
-      `Dec cash ${fmtM(base.endCash)} → ${fmtM(c.endCash)} (${fmtM(c.dCash)}); ` +
+      `Dec cash ${fmtM(base.endCash)} → ${fmtM(c.endCash)} (${fmtM(c.dCash)}, ${(dropPct * 100).toFixed(0)}% vs plan); ` +
       `${vsFloor >= 0 ? fmtM(vsFloor) + ' above' : fmtM(Math.abs(vsFloor)) + ' below'} the ${fmtM(base.cashFloor)} floor` +
       (c.minCash < c.endCash ? `; trough ${fmtM(c.minCash)}` : '') + '.'
     );
@@ -7367,11 +8669,13 @@ function evaluateScenarioShock(label, family, applyFn, base, snap, def) {
     status: cls.status,
     breaks: cls.breaks,
     watches: cls.watches,
+    cashDropPct: cls.cashDropPct,
     decArr: shock.decArr,
     dArr: shock.decArr - base.decArr,
     endCash: shock.endCash,
     dCash: shock.endCash - base.endCash,
     minCash: shock.minCash,
+    cashPathM: (shock.cashByMonth || []).map(v => Number(v || 0) / 1e6),
     fyEbitda: shock.fyEbitda,
     dEbitda: shock.fyEbitda - base.fyEbitda,
     fyMkt: shock.fyMkt,
@@ -7381,6 +8685,10 @@ function evaluateScenarioShock(label, family, applyFn, base, snap, def) {
     csEnd: shock.csEnd,
     csNeeded: shock.csNeeded,
     yoyGrowthPct: shock.yoyGrowthPct,
+    chipPlain: (def && (def.chipPlain || def.label)) || label,
+    chipTech: (def && (def.chipTech || def.label)) || label,
+    xp: (def && def.plain) || '',
+    analystOnly: !!(def && def.analystOnly),
   };
   row.explain = explainScenarioCase(base, row, def);
   return row;
@@ -7392,92 +8700,119 @@ function buildScenarioCaseDefs(hist) {
   const yoy = STATE.yoyEndingArrGrowthPct;
   const defs = [
     {
-      id: 'growth_m3', family: 'growth',
-      label: `Softer growth: ${yoy.toFixed(0)}% → ${(yoy - 3).toFixed(0)}% YoY ending ARR`,
-      plain: `A 3 percentage-point miss on the YoY ending-ARR goal (plan ${yoy.toFixed(1)}% → ${(yoy - 3).toFixed(1)}%). That is slower book growth — not a 3% revenue haircut.`,
-      apply: () => { STATE.yoyEndingArrGrowthPct = Math.max(0, STATE.yoyEndingArrGrowthPct - 3); },
-      weight: /arr|growth|nn|decel|accel/.test(seedText) ? 3 : 1,
-    },
-    {
-      id: 'growth_m5', family: 'growth',
-      label: `Hard growth miss: ${yoy.toFixed(0)}% → ${(yoy - 5).toFixed(0)}% YoY ending ARR`,
-      plain: `A 5 percentage-point miss vs the committed YoY ending-ARR rate. Example: ${yoy.toFixed(0)}% planned becomes ${(yoy - 5).toFixed(0)}% delivered — typically several million less Dec ARR and net new.`,
-      apply: () => { STATE.yoyEndingArrGrowthPct = Math.max(0, STATE.yoyEndingArrGrowthPct - 5); },
-      weight: /arr|growth|nn/.test(seedText) ? 2 : 1,
-    },
-    {
-      id: 'cpl_p15', family: 'gtm',
-      label: 'Demand efficiency miss: CPL +15%',
-      plain: 'Every MQL costs 15% more. Same funnel volume → higher marketing cash burn and EBITDA pressure.',
-      apply: () => scaleAllGtmCpl(1.15),
-      weight: /mkt|mql|cpl|spend|marketing|intensity/.test(seedText) ? 3 : 1,
-    },
-    {
-      id: 'cpl_p30', family: 'gtm',
-      label: 'Severe efficiency miss: CPL +30%',
-      plain: 'Blended cost-per-MQL up 30% — a classic “paid channels got worse” year.',
-      apply: () => scaleAllGtmCpl(1.30),
-      weight: /mkt|mql|cpl|spend/.test(seedText) ? 2 : 1,
-    },
-    {
-      id: 'pipe_p1', family: 'gtm',
-      label: 'Heavier pipeline cover (+1.0×)',
-      plain: 'We insist on one extra turn of pipeline for the same NB — more MQLs and program spend to buy the same bookings.',
-      apply: () => { STATE.pipelineCoverageMult = STATE.pipelineCoverageMult + 1; },
-      weight: /pipeline|mql|mkt/.test(seedText) ? 2 : 1,
-    },
-    {
-      id: 'attr_p2', family: 'sales',
-      label: 'Attrition +2pp (more backfills)',
-      plain: 'Two extra points of annual AE/CS attrition → more replacement hiring, payroll, and ramp drag.',
-      apply: () => { STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 2; },
-      weight: /hc|fte|attrition|bench|ae|cs/.test(seedText) ? 2 : 1,
-    },
-    {
-      id: 'attr_p5', family: 'sales',
-      label: 'Attrition +5pp',
-      plain: 'Elevated turnover year — backfills and loaded cost stack up against the same quota math.',
-      apply: () => { STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 5; },
-      weight: 1,
-    },
-    {
-      id: 'churn_x14', family: 'retention',
-      label: 'Churn mix ×1.4 (hold Dec ARR target)',
-      plain: 'More churn/contraction in the bridge while still targeting the same Dec ARR — the plan must replace lost book with extra NB (GTM + AE load).',
-      apply: () => bumpChurnMix(1.4),
-      weight: /grr|churn|retention|ebitda/.test(seedText) ? 2 : 1,
-    },
-    {
-      id: 'combo_gtm_growth', family: 'combo',
-      label: `Combo: ${(yoy - 3).toFixed(0)}% growth + CPL +15%`,
-      plain: 'Simultaneous softer growth and worse demand efficiency — ARR path softens while marketing still spends up.',
-      apply: () => {
-        STATE.yoyEndingArrGrowthPct = Math.max(0, STATE.yoyEndingArrGrowthPct - 3);
-        scaleAllGtmCpl(1.15);
-      },
-      weight: 2,
-    },
-    {
       id: 'ops_cash_crisis', family: 'liquidity',
-      label: 'Ops liquidity stress: CPL ×2.5 + pipeline +2× + attrition +8pp',
-      plain: 'Intentional severe case: marketing becomes far more expensive, we over-cover pipeline, and sales turnover spikes — meant to show a cash drawdown that can put operations at risk vs the floor.',
+      chipPlain: 'Paid channels stop working',
+      chipTech: 'CPL ×2.5 + pipeline +2× + attrition +8pp',
+      label: 'Paid channels stop working',
+      plain: 'Leads get far more expensive right as we lose reps. We keep spending to hit the number and the cushion is gone by autumn.',
       apply: () => {
         scaleAllGtmCpl(2.5);
         STATE.pipelineCoverageMult = (STATE.pipelineCoverageMult || 3) + 2;
         STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 8;
       },
-      weight: /cash|liquidity|mkt|spend|cpl/.test(seedText) ? 4 : 3,
+      weight: /cash|liquidity|mkt|spend|cpl/.test(seedText) ? 5 : 4,
     },
     {
       id: 'ops_stall_spend', family: 'liquidity',
-      label: `Growth stall + spend spike: ${Math.max(0, yoy - 5).toFixed(0)}% YoY + CPL ×2 + pipeline +1.5×`,
-      plain: 'We miss the growth goal hard while still pouring spend into an inefficient funnel — less ARR, more cash out the door.',
+      chipPlain: 'Growth stalls, spending does not',
+      chipTech: 'Growth stall + spend spike',
+      label: 'Growth stalls, spending does not',
+      plain: 'Sales flattens out but we keep paying for the plan we wrote in January.',
       apply: () => {
-        STATE.yoyEndingArrGrowthPct = Math.max(0, STATE.yoyEndingArrGrowthPct - 5);
+        applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 5));
         scaleAllGtmCpl(2.0);
         STATE.pipelineCoverageMult = (STATE.pipelineCoverageMult || 3) + 1.5;
       },
+      weight: 4,
+    },
+    {
+      id: 'combo_gtm_growth', family: 'combo',
+      chipPlain: 'Softer sales and pricier leads',
+      chipTech: 'Growth −3pp with CPL +15%',
+      label: 'Softer sales and pricier leads',
+      plain: 'A soft year on growth with slightly pricier leads — check cash, do not assume a crisis.',
+      apply: () => {
+        applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 3));
+        scaleAllGtmCpl(1.15);
+      },
       weight: 3,
+    },
+    {
+      id: 'cpl_p30', family: 'gtm',
+      chipPlain: 'Leads cost 30% more',
+      chipTech: 'CPL +30%',
+      label: 'Leads cost 30% more',
+      plain: 'Same number of leads, meaningfully bigger bill.',
+      apply: () => scaleAllGtmCpl(1.30),
+      weight: /mkt|mql|cpl|spend/.test(seedText) ? 3 : 2,
+    },
+    {
+      id: 'churn_x14', family: 'retention',
+      chipPlain: 'More customers leave',
+      chipTech: 'Churn mix ×1.4',
+      label: 'More customers leave',
+      plain: 'More churn means the team has to sell more just to stand still.',
+      apply: () => bumpChurnMix(1.4),
+      weight: /grr|churn|retention|ebitda/.test(seedText) ? 3 : 2,
+    },
+    {
+      id: 'growth_m3', family: 'growth',
+      chipPlain: 'We grow 3 points slower',
+      chipTech: 'YoY ending ARR −3pp',
+      label: 'We grow 3 points slower',
+      plain: 'We miss the growth target but the business is never in danger.',
+      apply: () => { applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 3)); },
+      weight: /arr|growth|nn|decel|accel/.test(seedText) ? 3 : 2,
+    },
+    {
+      id: 'attr_p2', family: 'sales',
+      chipPlain: 'We lose a few more reps',
+      chipTech: 'AE attrition +2pp',
+      label: 'We lose a few more reps',
+      plain: 'Absorbed without much trouble.',
+      apply: () => { STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 2; },
+      weight: /hc|fte|attrition|bench|ae|cs/.test(seedText) ? 2 : 1,
+    },
+    // Extra analyst cases (not in the short chip strip)
+    {
+      id: 'cpl_p15', family: 'gtm',
+      chipPlain: 'Leads cost 15% more',
+      chipTech: 'CPL +15%',
+      label: 'Leads cost 15% more',
+      plain: 'Every MQL costs 15% more — same funnel volume, higher burn.',
+      apply: () => scaleAllGtmCpl(1.15),
+      weight: 1,
+      analystOnly: true,
+    },
+    {
+      id: 'pipe_p1', family: 'gtm',
+      chipPlain: 'Heavier pipeline cover',
+      chipTech: 'Pipeline +1.0×',
+      label: 'Heavier pipeline cover',
+      plain: 'One extra turn of pipeline for the same NB — more MQLs and spend.',
+      apply: () => { STATE.pipelineCoverageMult = STATE.pipelineCoverageMult + 1; },
+      weight: 1,
+      analystOnly: true,
+    },
+    {
+      id: 'growth_m5', family: 'growth',
+      chipPlain: 'We grow 5 points slower',
+      chipTech: 'YoY ending ARR −5pp',
+      label: 'We grow 5 points slower',
+      plain: 'A harder miss on the YoY ending-ARR rate.',
+      apply: () => { applyYoyGrowthWithRebalance(Math.max(0, STATE.yoyEndingArrGrowthPct - 5)); },
+      weight: 1,
+      analystOnly: true,
+    },
+    {
+      id: 'attr_p5', family: 'sales',
+      chipPlain: 'Attrition runs hot',
+      chipTech: 'AE attrition +5pp',
+      label: 'Attrition runs hot',
+      plain: 'Elevated turnover — backfills and ramp drag stack up.',
+      apply: () => { STATE.salesAttritionPct = (STATE.salesAttritionPct || 0) + 5; },
+      weight: 1,
+      analystOnly: true,
     },
   ];
   defs.sort((a, b) => b.weight - a.weight);
@@ -7561,8 +8896,8 @@ function runScenarioMonteCarlo(base, snap, n) {
   const arrSamples = [];
   const cashSamples = [];
   const ebitdaSamples = [];
-  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0;
-  const sig = { yoyPp: 2.0, cplLog: 0.12, attrPp: 1.5, pipe: 0.35 };
+  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch25 = 0, pAlarm50 = 0;
+  const sig = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
   for (let i = 0; i < n; i++) {
     restoreScenarioLevers(snap);
     const dy = randn() * sig.yoyPp;
@@ -7570,6 +8905,7 @@ function runScenarioMonteCarlo(base, snap, n) {
     const dattr = Math.max(0, (snap.salesAttritionPct || 0) + randn() * sig.attrPp);
     const dpipe = Math.max(1.0, (snap.pipelineCoverageMult || 3) + randn() * sig.pipe);
     STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + dy);
+    rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
     scaleAllGtmCpl(dcpl);
     STATE.salesAttritionPct = dattr;
     STATE.pipelineCoverageMult = dpipe;
@@ -7580,13 +8916,16 @@ function runScenarioMonteCarlo(base, snap, n) {
     if (s.decArr < base.targetArr * 0.995) pArrMiss += 1;
     if (s.endCash < base.cashFloor) pCashBreak += 1;
     if (s.salesEnd < s.aeNeeded) pAeShort += 1;
-    if (s.endCash < base.cashFloor * 0.55 || (base.endCash - s.endCash) >= Math.max(12e6, base.endCash * 0.35)) pOpsRisk += 1;
+    const drop = (base.endCash - s.endCash) / Math.max(1, base.endCash);
+    if (drop >= 0.25) pWatch25 += 1;
+    if (drop >= 0.50) pAlarm50 += 1;
+    if (s.endCash < base.cashFloor || drop >= 0.50) pOpsRisk += 1;
   }
   restoreScenarioLevers(snap);
-  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk);
+  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50);
 }
 
-function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk) {
+function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50) {
   const arrHist = histogram(arrSamples, 16);
   const cashHist = histogram(cashSamples, 16);
   const arrMean = arrHist.mean;
@@ -7609,9 +8948,15 @@ function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples
       `Attrition ~ N(base, ${sig.attrPp}pp) truncated ≥0`,
       `Pipeline cover ~ N(base, ${sig.pipe}×) truncated ≥1×`,
       'Levers drawn independently per sample.',
+      'Cash rails: ±5% ≈ noise; ≥25% below plan = watch; ≥50% or under floor = alarm.',
     ],
     arr: { hist: arrHist, mean: arrMean, sd: arrSd, pMiss: pArrMiss / n },
-    cash: { hist: cashHist, mean: cashMean, sd: cashSd, pBreak: pCashBreak / n },
+    cash: {
+      hist: cashHist, mean: cashMean, sd: cashSd,
+      pBreak: pCashBreak / n,
+      pWatch25: (pWatch25 != null ? pWatch25 : 0) / n,
+      pAlarm50: (pAlarm50 != null ? pAlarm50 : 0) / n,
+    },
     ebitda: { mean: ebitdaSamples.reduce((a, b) => a + b, 0) / n },
     pAeShort: pAeShort / n,
     pOpsRisk: pOpsRisk / n,
@@ -7625,8 +8970,8 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
   const arrSamples = [];
   const cashSamples = [];
   const ebitdaSamples = [];
-  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0;
-  const sig = { yoyPp: 2.0, cplLog: 0.12, attrPp: 1.5, pipe: 0.35 };
+  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch25 = 0, pAlarm50 = 0;
+  const sig = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
   const chunk = 20;
   for (let i = 0; i < n; i++) {
     restoreScenarioLevers(snap);
@@ -7635,6 +8980,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
     const dattr = Math.max(0, (snap.salesAttritionPct || 0) + randn() * sig.attrPp);
     const dpipe = Math.max(1.0, (snap.pipelineCoverageMult || 3) + randn() * sig.pipe);
     STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + dy);
+    rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
     scaleAllGtmCpl(dcpl);
     STATE.salesAttritionPct = dattr;
     STATE.pipelineCoverageMult = dpipe;
@@ -7645,14 +8991,17 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
     if (s.decArr < base.targetArr * 0.995) pArrMiss += 1;
     if (s.endCash < base.cashFloor) pCashBreak += 1;
     if (s.salesEnd < s.aeNeeded) pAeShort += 1;
-    if (s.endCash < base.cashFloor * 0.55 || (base.endCash - s.endCash) >= Math.max(12e6, base.endCash * 0.35)) pOpsRisk += 1;
+    const drop = (base.endCash - s.endCash) / Math.max(1, base.endCash);
+    if (drop >= 0.25) pWatch25 += 1;
+    if (drop >= 0.50) pAlarm50 += 1;
+    if (s.endCash < base.cashFloor || drop >= 0.50) pOpsRisk += 1;
     if (onProgress && ((i + 1) % chunk === 0 || i + 1 === n)) {
       onProgress(i + 1, n);
       await new Promise(r => setTimeout(r, 0));
     }
   }
   restoreScenarioLevers(snap);
-  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk);
+  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50);
 }
 
 function runScenarioSensitivity(base, snap, leverId) {
@@ -7660,7 +9009,7 @@ function runScenarioSensitivity(base, snap, leverId) {
   let grid, applyAt;
   if (leverId === 'yoy') {
     grid = [-5, -3, -1, 0, 1, 3];
-    applyAt = (d) => { STATE.yoyEndingArrGrowthPct = snap.yoyEndingArrGrowthPct + d; };
+    applyAt = (d) => { applyYoyGrowthWithRebalance(snap.yoyEndingArrGrowthPct + d); };
   } else if (leverId === 'cpl') {
     grid = [0.85, 1.0, 1.15, 1.3, 1.5];
     applyAt = (d) => { scaleAllGtmCpl(d); };
@@ -7922,9 +9271,31 @@ window.toggleAssureNerd = function() {
 };
 
 window.refreshAssuranceScenarios = async function(useLlm) {
-  const body = document.getElementById('assureScenarioBody');
-  const setProg = (msg) => { if (body) body.innerHTML = `<span style="color:var(--text3)">${msg}</span>`; };
-  setProg('Running named stress cases…');
+  if (STATE._assureScenarioRunning) return;
+  const prog = document.getElementById('assureScenarioProg');
+  const meta = document.getElementById('assureScenarioMeta');
+  const genBtn = document.getElementById('assureScenariosGenBtn');
+  const refBtn = document.getElementById('assureScenariosRefreshBtn');
+  const setBusy = (busy) => {
+    if (genBtn) genBtn.disabled = !!busy;
+    if (refBtn) refBtn.disabled = !!busy;
+  };
+  const setProg = (msg, pct) => {
+    STATE._assureScenarioRunning = { msg, pct: pct == null ? null : pct };
+    const el = document.getElementById('assureScenarioProg') || prog;
+    if (!el) return;
+    el.hidden = false;
+    const p = pct == null ? null : Math.max(0, Math.min(100, pct));
+    el.innerHTML = `${String(msg).replace(/</g, '&lt;')}${p != null ? `<span class="bar"><i style="width:${p}%"></i></span>` : ''}`;
+  };
+  const clearProg = () => {
+    STATE._assureScenarioRunning = null;
+    const el = document.getElementById('assureScenarioProg');
+    if (el) { el.hidden = true; el.innerHTML = ''; }
+  };
+
+  setBusy(true);
+  setProg('Starting named stress cases…', 2);
   await new Promise(r => setTimeout(r, 30));
 
   let suite;
@@ -7933,19 +9304,27 @@ window.refreshAssuranceScenarios = async function(useLlm) {
       monteCarlo: true,
       mcN: 1000,
       onProgress: (phase, done, total) => {
-        if (phase === 'cases') setProg(`Named stress cases ${done}/${total}…`);
-        else if (phase === 'mc') setProg(`Monte Carlo ${done.toLocaleString()}/${total.toLocaleString()} full-plan draws…`);
-        else if (phase === 'sens') setProg('Building sensitivity curves…');
+        if (phase === 'cases') {
+          const pct = 5 + (done / Math.max(1, total)) * 25;
+          setProg(`Named stress cases ${done}/${total}…`, pct);
+        } else if (phase === 'mc') {
+          const pct = 30 + (done / Math.max(1, total)) * 55;
+          setProg(`Monte Carlo ${done.toLocaleString()} / ${total.toLocaleString()} full-plan draws…`, pct);
+        } else if (phase === 'sens') {
+          setProg('Building sensitivity curves…', 90);
+        }
       },
     });
   } catch (e) {
-    if (body) body.innerHTML = `<span style="color:var(--red)">Scenario stress failed: ${String(e.message || e)}</span>`;
+    setProg(`Scenario stress failed: ${String(e.message || e)}`, null);
+    STATE._assureScenarioRunning = null;
+    setBusy(false);
     return;
   }
 
   let text = suite.narrative;
   if (useLlm) {
-    setProg('Drafting commentary from stress packet…');
+    setProg('Drafting commentary from stress packet…', 94);
     try {
       const breakLines = suite.cases.filter(c => c.status !== 'ok').map(c =>
         `[${c.status}] ${c.label}: ${c.explain || ''} dARR ${Math.round(c.dArr)}, dCash ${Math.round(c.dCash)}`
@@ -7982,11 +9361,17 @@ window.refreshAssuranceScenarios = async function(useLlm) {
     }
   }
 
-  STATE._assureScenarioNarrative = text;
+  suite.at = Date.now();
   suite.narrative = text;
-  if (body) body.innerHTML = renderAssureScenarioHtml(suite);
-  else refresh();
-  pushPaLeversToFrame();
+  STATE._assureScenarioSuite = suite;
+  STATE._assureScenarioNarrative = text;
+  try { persistBudgetState(); } catch (e) { /* ignore */ }
+
+  if (meta) meta.innerHTML = assureRunMetaHtml(suite.at, false);
+  setProg('Done — updating Analytics…', 100);
+  clearProg();
+  setBusy(false);
+  refresh();
 };
 
 window.refreshAssuranceHistory = async function(useLlm) {
@@ -8021,9 +9406,9 @@ window.refreshAssuranceHistory = async function(useLlm) {
   }
 
   STATE._assureHistoryNarrative = text;
-  if (body) {
-    body.innerHTML = `<div style="margin-bottom:8px">${text.replace(/</g, '&lt;').replace(/\n/g, '<br>')}</div>${findingsHtml}`;
-  } else refresh();
+  STATE._assureHistoryAt = Date.now();
+  try { persistBudgetState(); } catch (e) { /* ignore */ }
+  refresh();
 };
 
 function assurancePacketToCommentaryInputs(packet) {
@@ -8107,8 +9492,9 @@ window.refreshAssuranceNarrative = async function(useLlm) {
   }
 
   STATE._assureNarrative = text;
-  if (body) body.innerHTML = text.replace(/</g, '&lt;').replace(/\n/g, '<br>');
-  else refresh();
+  STATE._assureNarrativeAt = Date.now();
+  try { persistBudgetState(); } catch (e) { /* ignore */ }
+  refresh();
 };
 
 // ─── PROMOTE / VERSIONS (warehouse push) ───────────────────────────────────
@@ -8424,6 +9810,9 @@ function refresh() {
     : renderOverview();
   if (curTab === 'overview') paintOverviewCharts();
   else destroyOvCharts();
+  if (curTab === 'analytics') {
+    try { paintPaCorridor(); } catch (e) { console.warn('[budget-engine] paintPaCorridor', e); }
+  }
   // Sync horizon/mode attrs if Analytics re-rendered mid-toggle without full body replace
   const paRoot = document.getElementById('plan-assurance');
   if (paRoot && curTab === 'analytics') {
@@ -8516,16 +9905,21 @@ async function init() {
   reseedPlanFromHistory('init');
   seedHcDefaults();
   seedHcOps();
-  if (restored) {
+  // Deep-link: /budget-engine?tab=analytics (or iframe ?tab=) opens Plan Assurance demo home.
+  try {
+    const qTab = new URLSearchParams(location.search).get('tab');
+    if (qTab && document.querySelector(`.nav-btn[data-tab="${qTab}"]`)) curTab = qTab;
+  } catch (e) { /* ignore */ }
+  if (restored || curTab !== 'overview') {
     document.querySelectorAll('.nav-btn[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === curTab));
   }
   const dec26 = fy26DecEndingArr();
   if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
     setStatus('FY26 hist Dec ' + fmtM(dec26) + ' ≠ Jan lock ' + fmtM(BOP_LOCK) + ' — check outlook hydrate');
   } else if (restored) {
-    setStatus('Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever does not rewrite mix %)');
+    setStatus('Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
   } else {
-    setStatus('Base plan · mix seeded from +' + MIX_SEED_YOY_PCT + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever does not rewrite mix %)');
+    setStatus('Base plan · mix seeded from +' + MIX_SEED_YOY_PCT + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
   }
   if (window.SMPLSkin) window.SMPLSkin.init('skinSelect', refresh);
   else refresh();
