@@ -43,6 +43,12 @@ RULES:
    YTD cash summary below bridge on slide 5 with no overlap; CFS Source below Ending Cash;
    pipeline shape_bars with Begin+End; no overlapping funnel titles).
 6. Use pptx.ShapeType / pptx.ChartType on the pptx instance — never pptxgen.ShapeType.
-7. End with pptx.writeFile({ fileName: "OUTPUT.pptx" }). Return raw JavaScript only.
+7. SAFE AREA overrides "preserve the reference geometry". The slide is 13.33 x 7.50in
+   and the footer sits at y 7.05. No shape may have y + h > 7.00. The reference script
+   pitches Key Takeaways bullets at 0.55in boxes 0.60in apart, which puts a third
+   bullet off the bottom of the slide — do not copy that pitch. Use h=0.20 on a 0.26
+   pitch and check the last bullet: y0 + 0.28 + 0.26 * count <= 7.00. If the period's
+   commentary needs more room than that allows, write fewer, denser bullets.
+8. End with pptx.writeFile({ fileName: "OUTPUT.pptx" }). Return raw JavaScript only.
 
 """ + PROMPT5_CRAFT_CRITERIA + "\n" + PROMPT5_BOARD_NARRATIVE_RULES

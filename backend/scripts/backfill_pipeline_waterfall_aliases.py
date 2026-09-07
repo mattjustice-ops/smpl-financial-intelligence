@@ -53,10 +53,18 @@ def _columns(db, table: str) -> set[str]:
     return {r[0] for r in rows}
 
 
-def _identity_report(db, table: str) -> None:
-    """Beginning + created - won - lost - slipped should equal ending."""
+def _identity_report(db, table: str, org: str | None) -> None:
+    """Beginning + created - won - lost - slipped should equal ending.
+
+    Scoped to one organization. These tables hold every tenant, and summing a period
+    across all of them produces a bridge and an ending that belong to nobody — which
+    reads as a multi-million-dollar break in data that is actually clean.
+    """
     cols = _columns(db, table)
     if not {"beginning_pipeline_arr", "ending_pipeline_arr"} <= cols:
+        return
+    if org is None:
+        print("      (skipped — pass --organization-id for a meaningful identity check)")
         return
 
     def s(col: str) -> str:
@@ -73,9 +81,11 @@ def _identity_report(db, table: str) -> None:
                    {s('slipped_pipeline_arr')}   slipped,
                    {s('ending_pipeline_arr')}    ending
             from {table}
+            where organization_id = :org
             group by period order by period desc limit 3
             """
-        )
+        ),
+        {"org": org},
     ).fetchall()
     for r in row:
         period, beg, created, won, lost, slipped, ending = r
@@ -88,7 +98,12 @@ def _identity_report(db, table: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="write changes (default: report only)")
+    ap.add_argument(
+        "--organization-id",
+        help="restrict the backfill to one tenant (recommended; omitting it writes table-wide)",
+    )
     args = ap.parse_args()
+    org = args.organization_id
 
     print(f"Database: {describe_target(get_settings().database_url)}")
     print(f"Mode:     {'APPLY' if args.apply else 'dry run (no writes)'}\n")
@@ -114,7 +129,9 @@ def main() -> None:
                         f"select count(*) from {table} "
                         f"where ({canonical} is null or {canonical} = '') "
                         f"and {synonym} is not null and {synonym} <> ''"
-                    )
+                        + (" and organization_id = :org" if org else "")
+                    ),
+                    {"org": org} if org else {},
                 ).scalar()
                 if not n:
                     print(f"  {canonical:24} already populated")
@@ -127,10 +144,12 @@ def main() -> None:
                             f"update {table} set {canonical} = {synonym} "
                             f"where ({canonical} is null or {canonical} = '') "
                             f"and {synonym} is not null and {synonym} <> ''"
-                        )
+                            + (" and organization_id = :org" if org else "")
+                        ),
+                        {"org": org} if org else {},
                     )
             print("    bridge identity, latest periods:")
-            _identity_report(db, table)
+            _identity_report(db, table, org)
             print()
 
         if args.apply:

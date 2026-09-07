@@ -85,6 +85,24 @@ top_slipped) for named deal callouts when present. Slide 8 risk/opportunity card
 slide 10 board-action cards need the same insight density in detail/action lines
 (driver + $ + recommended action) — not generic stubs.
 
+SLIDE GEOMETRY (mandatory — these are hard limits, not guidance)
+The slide is 13.33 x 7.50 inches. The footer occupies y 7.05-7.25 on every slide
+except slide 1.
+1. NO shape may have y + h > 7.00. A box placed lower is invisible in the exported
+   file and prints through the footer. This has shipped in a board deck — check the
+   arithmetic on the LAST box of every stack before you emit it.
+2. Key Takeaways geometry: label box h=0.22; each bullet box h=0.20 on a 0.26 pitch
+   at 8.5pt. From a start y0 the block occupies y0 + 0.28 + 0.26 * bullet_count.
+   Bullet count must satisfy y0 + 0.28 + 0.26 * count <= 7.00. Write fewer, denser
+   bullets rather than overflowing — never let the block run past 7.00.
+3. A Key Takeaways block must not overlap a chart, its bars, its category labels, or
+   a table. When KT sits under a chart, start it at least 0.30 below the chart's
+   lowest element (for shape_bars charts that is max(bar.category_y) + label height).
+4. Charts built from shape_bars must stay inside the chart_area given in the payload
+   and place category labels at the supplied bar.category_y. Do not move a chart down
+   the slide or scale it past chart_area.h — the Key Takeaways band below it is sized
+   against those coordinates.
+
 SLIDE LAYOUTS (mandatory order — no two adjacent slides same pattern)
 
 Slide 1 — TITLE COVER (centered — board deck reference cover)
@@ -113,8 +131,9 @@ Slide 3 — ARR ANALYSIS: Left 52% waterfall from arr_analysis.waterfall_chart.s
   Category labels (bar.category) on the x-axis baseline under the chart — NOT stacked
   under value labels. Optional y-axis gridlines. NEVER addChart on slide 3.
   Real beginning ARR (not 0/blank). Right 48%: KPIs + arr_analysis.bridge_table only.
-  Key Takeaways FULL WIDTH under the waterfall+bridge (y≥5.9, max 4 bullets) — more
-  commentary space; do not crowd KT into the right column over the bridge.
+  Key Takeaways FULL WIDTH under the waterfall+bridge, label at y=5.90 — do not crowd
+  KT into the right column over the bridge. At y0=5.90 the geometry rule allows at
+  most 3 bullets (5.90 + 0.28 + 3*0.26 = 6.96). Never 4.
 
 Slide 4 — P&L REVIEW: Top 4 KPI cards. Bottom left 60% pl_detail table (full GL lines
 including CM/YTD Variance columns verbatim from pl_detail.*.variance).
@@ -134,10 +153,13 @@ REQUIREMENTS craft criteria. Never blank KT #1.
 
 Slide 7 — PIPELINE WATERFALL: Left shape_bars from
 gtm_performance.pipeline_waterfall_chart (additive Begin + Created − Closed Won −
-Closed Lost − Slipped → End; real beginning value). Category labels on x-axis
-(bar.category at bar.category_y). Right: pipeline KPIs + bridge table (include
-beginning_pipeline). Key Takeaways FULL WIDTH below the waterfall (not overlapping
-the bridge).
+Closed Lost − Slipped → End; real beginning value). The waterfall must stay inside
+chart_area from that same block — it ends near y=4.60 with category labels at the
+supplied bar.category_y (~4.68). Do not stretch it toward the footer: the Key
+Takeaways band lives underneath and there is no room if the chart runs past 4.9.
+Right: pipeline KPIs + bridge table (include beginning_pipeline). Key Takeaways FULL
+WIDTH below the waterfall, label at y=5.05, 3 bullets — not overlapping the bridge,
+the bars, or the category labels.
 
 Slide 8 — STRATEGIC ASSESSMENT: 2 columns — RISKS left (red border), OPPORTUNITIES right
 (green border). Author 4 cards each from BOARD R&O EVIDENCE /
