@@ -449,7 +449,55 @@ def build_cash_bridge_data(
                 by_period[period] = bucket
         if by_period:
             scenarios[scenario] = by_period
+    _align_budget_balances_to_statement(db, organization_id, scenarios, allowed)
     return scenarios
+
+
+def _align_budget_balances_to_statement(
+    db: Session,
+    organization_id: uuid.UUID,
+    scenarios: dict[str, dict[str, dict[str, float | None]]],
+    allowed: set[str],
+) -> None:
+    """Take budget opening/closing cash from the cash flow statement, not the direct bridge.
+
+    budget_cash_flow_bridge and budget_cash_flow_statement are two independently authored
+    models and they do not agree. The bridge opens January at $10.25M; the statement, the
+    budget balance sheet and the actuals all open at $25.74M. Across H1 the bridge shows
+    +$21.2M of cash generation against the statement's +$1.4M, and the two series differ by
+    as much as $13.8M in a single month.
+
+    That split reached the board deck as a contradiction: the monthly bridge slide reported
+    June cash $1.46M BEHIND budget while the YTD cash flow slide reported it $2.09M AHEAD -
+    same month, opposite verdicts, because each slide read a different table.
+
+    The statement wins because it opens where the actuals open. Line items stay on the
+    bridge since it is the only source of budgeted payroll, vendor, commission and capex
+    detail, so the budget column will not foot to these balances until the bridge itself is
+    rebuilt. That residual is real and disclosed rather than plugged - inventing a
+    balancing line here would be the same back-solving that made the pipeline waterfall
+    report a fabricated beginning balance as if it tied.
+    """
+    budget = scenarios.get("Budget")
+    if not budget:
+        return
+    rows = _read_statement_table(db, organization_id, "budget_cash_flow_statement")
+    if not rows:
+        return
+    for raw in rows:
+        period_raw = raw.get("period") or raw.get("posting_period")
+        if not period_raw:
+            continue
+        period = to_period(str(period_raw))
+        if period not in allowed or period not in budget:
+            continue
+        for dst, aliases in (
+            ("beginning_cash", ("beginning_cash",)),
+            ("ending_cash", ("ending_cash",)),
+        ):
+            val = _row_field_value(raw, *aliases)
+            if val is not None:
+                budget[period][dst] = val
 
 
 def build_unified_outlook_payload(
