@@ -533,6 +533,8 @@ const BUDGET_ENGINE_BACKLOG = [
   'Monte Carlo: watch bar still 25% below plan while named-case chips moved to 5% (CASH_WATCH_PCT) — decide whether both should be 5%',
   'Corridor legend reads 25% / 50% rails while chips flag at 5% — same threshold question, visible on the chart',
   'Board AI: attribution allowlist lacks revenue/margin drivers (G&A, S&M, R&D, cost of revenue), so those causal bullets intermittently strip to "I don\'t know"',
+  'Board exec summary: "Next: test whether FY can deliver the plan" band pulled — it pointed at Budget Engine Analytics, but the post-close question is a forecast one. Restore it aimed at Forecast Engine once that carries predictive analytics + historical context + model valuation',
+  'Board UI: ~40 hardcoded "June 2026" period strings across 12 render functions (renderARR, renderRevenue, renderSales, buildPL*) plus hardcoded figures in P&L chart aria-labels — correct for this close, silently wrong at the next roll',
 ];
 
 /**

@@ -678,18 +678,17 @@ function renderExec(area) {
   </div>
 
   <!-- ── VERDICT ── -->
-  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:16px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
+  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:24px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
     <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">${execVerdict}</div>
   </div>
 
-  <!-- ── PLAN ASSURANCE LOOP ── -->
-  <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r) var(--r) 0;background:var(--bg2);padding:12px 14px;margin-bottom:24px;box-shadow:var(--shadow)">
-    <div style="font-size:12px;color:var(--text2);line-height:1.5;max-width:52rem">
-      <strong style="color:var(--text);font-weight:600">Next: test whether FY can deliver the plan.</strong>
-      Board MD&amp;A stays on close actuals. Cash corridor, forced response, and detection latency live in Budget Engine Analytics.
-    </div>
-    <a href="/budget-engine?tab=analytics" target="_top" style="font-size:11.5px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap">Plan Assurance →</a>
-  </div>
+  <!-- ── PLAN ASSURANCE LOOP — pulled, see note ──
+       "Next: test whether FY can deliver the plan" handed the reader off to Budget Engine
+       Analytics. That is the wrong next step: the question the board is left holding after
+       close actuals is a forecast question, so it belongs with scenario analysis, historical
+       context and model valuation in Forecast Engine. Restore this band pointing at Forecast
+       Engine once that surface carries predictive analytics — do not re-point it at Budget
+       Engine Analytics. -->
 
   <!-- ── 01: WHERE WE STAND ── -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
