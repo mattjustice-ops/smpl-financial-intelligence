@@ -566,6 +566,83 @@ function show(name, btn) {
 }
 
 // ─── EXEC ──────────────────────────────────────────────────────────────────
+const MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MON_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function boardCloseParts() {
+  const s = String(typeof CLOSE_MONTH !== 'undefined' ? CLOSE_MONTH : '2026-06');
+  const y = parseInt(s.slice(0, 4), 10) || 2026;
+  const m = parseInt(s.slice(5, 7), 10) || 6;
+  return { year: y, month: m };
+}
+
+/**
+ * Verdict line for the executive summary, composed from the close-month KPIs.
+ *
+ * This sentence used to be hardcoded, so it went on asserting cash at 2.2x budget long
+ * after the re-anchor brought cash back in line with plan, and claimed the strongest
+ * net new month of the year regardless of which month was actually the strongest.
+ */
+function boardExecVerdict(k) {
+  const cp = boardCloseParts();
+  const frame = cp.month === 12 ? 'FY closed'
+    : cp.month === 6 ? 'H1 closed'
+    : MON_FULL[cp.month - 1] + ' closed';
+
+  // fM1 renders anything under $0.1M as "$0.0M"; drop to thousands so small variances
+  // read as the numbers they are rather than as zero.
+  const amt = v => Math.abs(v) < 0.1 ? '$' + Math.round(Math.abs(v) * 1000) + 'K' : fM1(Math.abs(v));
+
+  const lead = [];
+  if (k.arrVar != null) {
+    lead.push(Math.abs(k.arrVar) < 0.005
+      ? 'ARR on plan'
+      : 'ARR ' + amt(k.arrVar) + (k.arrVar > 0 ? ' ahead of plan' : ' behind plan'));
+  }
+  // Only claim the superlative in a month where it is actually true.
+  const nnSeries = (window.NN_ACT || []).slice(0, (k.idx != null ? k.idx : 0) + 1);
+  if (k.nn != null && nnSeries.length > 1) {
+    lead.push(k.nn >= Math.max.apply(null, nnSeries)
+      ? 'the strongest net new ARR month of the year'
+      : 'net new ARR of ' + fM1(k.nn));
+  }
+
+  const mid = [];
+  let favourable = 0;
+  if (k.gmVarPp != null) {
+    if (k.gmVarPp > 0.05) { mid.push('margin expansion'); favourable++; }
+    else if (k.gmVarPp < -0.05) { mid.push('margin compression'); favourable--; }
+    else mid.push('flat margins');
+  }
+  if (k.cashAct != null && k.cashBud) {
+    const ratio = k.cashAct / k.cashBud;
+    if (ratio >= 1.15) { mid.push('a cash position ' + ratio.toFixed(1) + '\u00d7 budget'); favourable++; }
+    else if (ratio <= 0.85) { mid.push('cash ' + Math.round((1 - ratio) * 100) + '% below budget'); favourable--; }
+    else mid.push('cash in line with budget');
+  }
+
+  const horizon = cp.month < 6 ? 'H1' : cp.month < 12 ? 'H2' : 'FY' + String(cp.year + 1).slice(2);
+  const outlook = favourable > 0 ? ' create ' + horizon + ' headroom'
+    : favourable < 0 ? ' tighten ' + horizon + ' flexibility'
+    : ' hold ' + horizon + ' to plan';
+
+  let tail = '';
+  if (k.ebitdaAct != null && k.ebitdaBud != null) {
+    const ev = k.ebitdaAct - k.ebitdaBud;
+    // Only narrate EBITDA when the miss or beat is material. A $14K variance on $661K of
+    // budget is rounding, and calling it out crowds the line with noise.
+    const material = Math.abs(ev) >= Math.max(0.05, Math.abs(k.ebitdaBud) * 0.05);
+    if (material) {
+      tail = ev < 0
+        ? ', while EBITDA timing variance warrants monitoring'
+        : ', with EBITDA ' + amt(ev) + ' ahead of plan';
+    }
+  }
+
+  const first = lead.length ? frame + ' with ' + lead.join(' and ') : frame;
+  return mid.length ? first + ' \u2014 ' + mid.join(' and ') + outlook + tail + '.' : first + tail + '.';
+}
+
 function renderExec(area) {
   const k = typeof boardExecKpis === 'function' ? boardExecKpis() : {};
   const drivers = k.drivers || [];
@@ -577,24 +654,41 @@ function renderExec(area) {
   const ebitdaVarLbl = k.ebitdaAct != null && k.ebitdaBud != null ? fV1(k.ebitdaAct - k.ebitdaBud) + ' vs bud' : '—';
   const cashVarLbl = k.cashAct != null && k.cashBud != null ? fV1(k.cashAct - k.cashBud) + ' vs bud' : '—';
   const gmVarLbl = k.gmVarPp != null ? (k.gmVarPp >= 0 ? '+' : '') + k.gmVarPp.toFixed(1) + 'pp' : '—';
+  const execCp = boardCloseParts();
+  const execRange = 'Jan – ' + MON_ABBR[execCp.month - 1] + ' ' + execCp.year;
+  const execCloseLbl = MON_FULL[execCp.month - 1] + ' ' + execCp.year + ' Close';
+  const execVerdict = boardExecVerdict(k);
+  const execAhead = k.arrVar == null || k.arrVar >= 0;
+  const execBadge = execAhead ? '▲ Ahead of Plan' : '▼ Behind Plan';
+  const execBadgeClr = execAhead ? 'var(--teal)' : 'var(--red)';
+  const execBadgeBg = execAhead ? 'rgba(95,168,120,0.15)' : 'rgba(200,80,80,0.15)';
 
   area.innerHTML = `<div class="slide" style="padding:20px 24px 32px">
 
   <!-- ── MASTHEAD ── -->
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:0.5px solid var(--border)">
     <div>
-      <div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px">Jan – Jun 2026</div>
+      <div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px">${execRange}</div>
       <div style="font-size:26px;font-weight:700;letter-spacing:-0.6px;color:var(--text);line-height:1.1">Executive Operating Summary</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:5px">Prepared for Board of Directors · June 2026 Close</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:5px">Prepared for Board of Directors · ${execCloseLbl}</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-      <span style="font-size:11px;font-weight:600;padding:5px 13px;border-radius:20px;background:rgba(95,168,120,0.15);color:var(--teal);border:0.5px solid var(--teal);letter-spacing:.02em">▲ Ahead of Plan</span>
+      <span style="font-size:11px;font-weight:600;padding:5px 13px;border-radius:20px;background:${execBadgeBg};color:${execBadgeClr};border:0.5px solid ${execBadgeClr};letter-spacing:.02em">${execBadge}</span>
     </div>
   </div>
 
   <!-- ── VERDICT ── -->
-  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:24px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
-    <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">H1 closed with ARR $0.58M ahead of plan and the strongest net new ARR month of the year — margin expansion and a cash position 2.2× budget create H2 headroom, while EBITDA timing variance warrants monitoring.</div>
+  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:16px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
+    <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">${execVerdict}</div>
+  </div>
+
+  <!-- ── PLAN ASSURANCE LOOP ── -->
+  <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r) var(--r) 0;background:var(--bg2);padding:12px 14px;margin-bottom:24px;box-shadow:var(--shadow)">
+    <div style="font-size:12px;color:var(--text2);line-height:1.5;max-width:52rem">
+      <strong style="color:var(--text);font-weight:600">Next: test whether FY can deliver the plan.</strong>
+      Board MD&amp;A stays on close actuals. Cash corridor, forced response, and detection latency live in Budget Engine Analytics.
+    </div>
+    <a href="/budget-engine?tab=analytics" target="_top" style="font-size:11.5px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap">Plan Assurance →</a>
   </div>
 
   <!-- ── 01: WHERE WE STAND ── -->

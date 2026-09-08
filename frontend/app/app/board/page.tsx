@@ -30,7 +30,7 @@ export default function BoardPlatformPage() {
     );
   }
 
-  const src = "/board/index.html?embedded=1&v=9";
+  const src = "/board/index.html?embedded=1&v=10";
 
   return (
     <EmbeddedModuleChrome
