@@ -103,6 +103,27 @@ except slide 1.
    the slide or scale it past chart_area.h — the Key Takeaways band below it is sized
    against those coordinates.
 
+DATA FIDELITY (mandatory — a supplied value that renders as "—" is a defect)
+A. When the payload gives a table its rows, render every row from those rows and no
+   other source. The monthly cash bridge on slide 5 is cash_liquidity.bridge_table.rows:
+   each entry has label / actual / budget already formatted as display strings. Emit them
+   verbatim. Do not re-derive them, do not look for the underlying column names
+   (payroll_cash_out, vendor_cash_out_n30, commission_cash_out), and do not substitute
+   "—" for a row that carries a value. Payroll, Vendor payments, Commissions and Capex
+   are populated every month; blanks in those cells have shipped to a board and been
+   caught by the CFO, while the Key Takeaways on the same slide quoted the real figures.
+B. "—" means the payload value is absent or null. It does not mean you could not find it.
+   If a number appears anywhere in the payload for that cell, it must appear in the cell.
+C. Never repeat one value down a per-item column. Efficiency and Win Rate on the GTM
+   channel table are PER CHANNEL: if every channel would print the same figure you have
+   picked up a blended total instead of the channel's own value — read the per-channel
+   field, and if the payload genuinely has only a blended number, leave the per-channel
+   cells "—" rather than stamping the blend onto every row and the TOTAL.
+D. A TOTAL row must be the total of the rows above it as printed. If the column has
+   values, total them; do not leave a TOTAL blank while its constituents carry numbers.
+E. Numbers in narrative must match the numbers in the tables on the same slide. If a
+   takeaway cites payroll or MQLs, the table must show the same figure.
+
 SLIDE LAYOUTS (mandatory order — no two adjacent slides same pattern)
 
 Slide 1 — TITLE COVER (centered — board deck reference cover)
