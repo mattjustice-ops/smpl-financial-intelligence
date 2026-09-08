@@ -859,6 +859,126 @@ def _reinject_cfs_variances(script: str, payload: dict[str, Any]) -> str:
     return out
 
 
+def _row_cell_patterns(label: str, width: int) -> tuple[str, ...]:
+    """Regexes matching a table row keyed by its first cell, in either literal shape.
+
+    Claude writes rows as arrays (["Payroll", "$2.47M", "$4.00M"]) or as objects
+    ({ label: "Payroll", actual: "$2.47M", budget: "$4.00M" }) depending on which
+    reference block it adapted, so both have to be reachable.
+    """
+    cell = r"""["'][^"']*["']"""
+    array = (
+        r"\[\s*[\"']"
+        + re.escape(label)
+        + r"[\"']\s*"
+        + (r",\s*" + cell + r"\s*") * (width - 1)
+        + r"\]"
+    )
+    key = r"(?:label|name|channel|lineItem|line_item|item)"
+    val = r"(?:[A-Za-z_][A-Za-z0-9_]*|[\"'][^\"']*[\"'])\s*:\s*" + cell
+    obj = (
+        r"\{\s*"
+        + key
+        + r"\s*:\s*[\"']"
+        + re.escape(label)
+        + r"[\"']\s*"
+        + (r",\s*" + val + r"\s*") * (width - 1)
+        + r"\}"
+    )
+    return (array, obj)
+
+
+def _rewrite_row(script: str, label: str, cells: list[str]) -> tuple[str, bool]:
+    """Replace the trailing cells of the row whose first cell is `label`.
+
+    Runs after the claim verifier, so these values are final: the payload is the
+    authority for them and nothing downstream re-checks or re-strips them.
+    """
+    width = len(cells) + 1
+    quoted = [json.dumps(c) for c in cells]
+
+    for pattern in _row_cell_patterns(label, width):
+        match = re.search(pattern, script)
+        if not match:
+            continue
+        literal = match.group(0)
+        idx = 0
+
+        def _sub(m: re.Match[str]) -> str:
+            nonlocal idx
+            if idx == 0:  # the label itself stays put
+                idx += 1
+                return m.group(0)
+            out = quoted[idx - 1] if idx - 1 < len(quoted) else m.group(0)
+            idx += 1
+            return out
+
+        rebuilt = re.sub(r"""["'][^"']*["']""", _sub, literal)
+        if rebuilt != literal:
+            return script[: match.start()] + rebuilt + script[match.end() :], True
+        return script, False
+    return script, False
+
+
+def _reinject_cash_bridge_rows(script: str, payload: dict[str, Any]) -> str:
+    """Restore slide-5 cash bridge cells from the payload after soft-strip.
+
+    The verifier matches signed values, but every bridge outflow is stored as a
+    positive magnitude (build_cash_liquidity_block applies abs_out). When the deck
+    writes payroll as "-$2.47M" nothing in the evidence map matches it and the cell
+    is replaced with an em-dash, so the table went blank while the Key Takeaways
+    beside it -- exempt from stripping -- quoted the same figures correctly.
+    """
+    table = ((payload.get("cash_liquidity") or {}).get("bridge_table")) or {}
+    rows = table.get("rows") or []
+    out = script
+    restored: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("label") or "").strip()
+        if not label:
+            continue
+        cells = [str(row.get("actual") or "—"), str(row.get("budget") or "—")]
+        out, hit = _rewrite_row(out, label, cells)
+        if hit:
+            restored.append(label)
+    if restored:
+        logger.info("Reinjected cash bridge rows from payload: %s", ", ".join(restored))
+    return out
+
+
+def _reinject_gtm_channel_rows(script: str, payload: dict[str, Any]) -> str:
+    """Restore slide-6 per-channel GTM cells from the payload after soft-strip."""
+    gtm = payload.get("gtm_performance") or {}
+    channels = gtm.get("channels") or []
+    out = script
+    restored: list[str] = []
+    for ch in channels:
+        if not isinstance(ch, dict):
+            continue
+        name = str(ch.get("name") or "").strip()
+        if not name:
+            continue
+        mqls = ch.get("mqls")
+        eff = ch.get("efficiency_x")
+        win = ch.get("win_rate_pct")
+        cells = [
+            str(ch.get("spend") or "—"),
+            str(ch.get("spend_budget") or "—"),
+            str(ch.get("pipeline") or "—"),
+            "—" if mqls is None else f"{float(mqls):,.0f}",
+            "—" if eff is None else f"{float(eff):.1f}x",
+            "—" if win is None else f"{float(win):.1f}%",
+        ]
+        out, hit = _rewrite_row(out, name, cells)
+        if hit:
+            restored.append(name)
+    if restored:
+        logger.info("Reinjected GTM channel rows from payload: %s", ", ".join(restored))
+    return out
+
+
 def _postprocess_prompt5_script(script: str, payload: dict[str, Any] | None = None) -> str:
     """Deterministic layout/data fixes after Claude adapt / soft-strip."""
     script = _strip_slide2_kpi_sparklines(script)
@@ -867,6 +987,8 @@ def _postprocess_prompt5_script(script: str, payload: dict[str, Any] | None = No
     if payload:
         script = _reinject_period_matrix_ending_cash_row(script, payload)
         script = _reinject_cfs_variances(script, payload)
+        script = _reinject_cash_bridge_rows(script, payload)
+        script = _reinject_gtm_channel_rows(script, payload)
     return script
 
 
