@@ -30,7 +30,8 @@
     "publish:finance-os-posts": "node scripts/publish-finance-os-posts.mjs",
     "publish:aug3-posts": "node scripts/publish-aug3-posts.mjs",
     "publish:aug4-posts": "node scripts/publish-aug4-posts.mjs",
-    "publish:sep1-posts": "node scripts/publish-sep1-posts.mjs"
+    "publish:sep1-posts": "node scripts/publish-sep1-posts.mjs",
+    "publish:sep9-posts": "node scripts/publish-sep9-posts.mjs"
   },
   "dependencies": {
     "@portabletext/react": "^3.2.4",

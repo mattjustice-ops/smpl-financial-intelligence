@@ -105,6 +105,7 @@ const baseComponents: PortableTextComponents = {
         columns={value?.columns}
         rows={value?.rows}
         showLegend={value?.showLegend}
+        rowHeader={value?.rowHeader}
       />
     ),
   },

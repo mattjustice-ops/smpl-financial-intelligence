@@ -18,6 +18,13 @@ export const comparisonTable = defineType({
       description: "Optional accessible label for the table.",
     }),
     defineField({
+      name: "rowHeader",
+      title: "Row header label",
+      type: "string",
+      description:
+        "Heading for the first column. Defaults to 'Capability'.",
+    }),
+    defineField({
       name: "columns",
       title: "Columns",
       type: "array",

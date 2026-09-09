@@ -9,6 +9,8 @@ export type CapabilityComparisonTableProps = {
   }> | null;
   caption?: string | null;
   showLegend?: boolean | null;
+  /** Heading for the first column. Defaults to "Capability". */
+  rowHeader?: string | null;
 };
 
 const MARK_DISPLAY: Record<string, { glyph: string; className: string; label: string }> = {
@@ -44,6 +46,7 @@ export function CapabilityComparisonTable({
   rows,
   caption,
   showLegend = true,
+  rowHeader,
 }: CapabilityComparisonTableProps) {
   const cols = (columns ?? []).filter(Boolean);
   const dataRows = (rows ?? []).filter((row) => row?.capability);
@@ -61,7 +64,7 @@ export function CapabilityComparisonTable({
                 scope="col"
                 className="sticky left-0 z-10 bg-slate-800 px-3 py-3 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-300 sm:px-4"
               >
-                Capability
+                {rowHeader || "Capability"}
               </th>
               {cols.map((col) => (
                 <th
