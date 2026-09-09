@@ -6,7 +6,10 @@ from datetime import date
 from decimal import Decimal
 
 from app.services.reporting.export.board_commentary_service import build_slide_commentary
-from app.services.reporting.export.board_export_service import build_board_package_from_bundle
+from app.services.reporting.export.board_export_service import (
+    build_board_package_from_bundle,
+    build_mda_deck_pptx_bytes,
+)
 from app.services.dashboard.schemas import ExecutiveFlowResponse
 from app.services.reporting.export.schemas import (
     CommentaryField,
@@ -110,6 +113,15 @@ def test_render_pptx_bytes_non_empty():
     bundle = _minimal_bundle()
     pkg = build_board_package_from_bundle(bundle)
     raw = render_pptx_bytes(pkg)
+    assert raw[:2] == b"PK"
+    assert len(raw) > 5000
+
+
+def test_mda_deck_uses_programmatic_render():
+    """Customer MD&A decks must not go through Prompt 5 / PptxGenJS."""
+    bundle = _minimal_bundle()
+    raw, source = build_mda_deck_pptx_bytes(bundle, use_ai_commentary=False)
+    assert source == "programmatic"
     assert raw[:2] == b"PK"
     assert len(raw) > 5000
 
