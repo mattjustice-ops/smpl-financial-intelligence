@@ -73,7 +73,9 @@ _FORWARD_CUE_RE = re.compile(
     r"watch\s+out|watch\s+for|looking\s+ahead|going\s+forward|"
     r"next\s+(?:month|quarter|period)|"
     r"will\s+(?:impact|drive|pressur\w*|increase|decrease|erode|improve|weigh|be)|"
-    r"expect(?:ed|s)?|forecast(?:s|ed|ing)?|"
+    # "better-than-expected churn" reports a closed period, so the retrospective
+    # idiom must not trip the forward-looking grounding requirement.
+    r"(?<!than[-\s])expect(?:ed|s)?|forecast(?:s|ed|ing)?|"
     r"pipeline\s+(?:will|coverage|risk|pressure)|"
     r"risk\s+that|could\s+(?:impact|erode|drive|weigh)|"
     r"projected|outlook"
@@ -137,6 +139,43 @@ _TRAILING_CLAUSE = re.compile(
     re.IGNORECASE,
 )
 
+# Closed set on purpose. A blanket "-ing" rule would discard "marketing", "hiring"
+# and "billing", which are real drivers; these verbs only ever open a purpose clause
+# ("and protecting profitability"), so listing them explicitly keeps the loosening
+# auditable rather than silently excusing any gerund from the allowlist.
+_PURPOSE_GERUNDS = (
+    r"protecting|preserving|maintaining|improving|supporting|enabling|ensuring|"
+    r"sustaining|mitigating|offsetting|prioritiz(?:ing)|balancing|safeguarding|"
+    r"positioning|strengthening|accelerating|defending"
+)
+_GERUND_OPENER_RE = re.compile(r"^(?:" + _PURPOSE_GERUNDS + r")\b", re.IGNORECASE)
+
+_MONTH_NAMES = (
+    r"january|february|march|april|may|june|july|august|september|october|"
+    r"november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec"
+)
+
+# Phrases that only locate a cause in time. Matched whole, so "June hiring" —
+# a real driver that happens to name a month — is unaffected.
+_TEMPORAL_ONLY_RE = re.compile(
+    r"(?:in|during|through|for|as\s+of|within)?\s*(?:the\s+)?"
+    r"(?:" + _MONTH_NAMES + r"|q[1-4]|h[12]|fy\s*\d{2,4}|ytd|qtd|mtd|"
+    r"year\s+to\s+date|quarter|month|period|prior\s+(?:year|quarter|month)|"
+    r"the\s+quarter|the\s+month)"
+    r"(?:\s+\d{4})?\s*",
+    re.IGNORECASE,
+)
+
+# A comma followed by a participle opens a commentary clause, never another driver:
+# "offsetting churn, requiring focus on expansion" names churn and nothing more.
+# Without this the clause becomes a conjunct and fails the allowlist as a phantom driver.
+_TRAILING_PARTICIPLE_CLAUSE = re.compile(
+    r"\s*,\s*(?:requiring|indicating|suggesting|reflecting|driving|prompting|"
+    r"signal(?:ing|l?ing)|warranting|leaving|resulting|implying|highlighting|"
+    r"underscoring|pointing|raising|creating)\b.*$",
+    re.IGNORECASE,
+)
+
 # Canonical MRR / ARR bridge component labels (engine field → human labels).
 # Keep aliases close to engine vocabulary — do not treat free-text deal stories
 # ("three enterprise upsells") as synonyms of component buckets.
@@ -159,6 +198,21 @@ _ARR_BRIDGE_LABELS: dict[str, tuple[str, ...]] = {
     "net_new": ("net new", "net new arr", "net-new arr"),
     "beginning_arr": ("beginning arr", "bop arr"),
     "ending_arr": ("ending arr", "eop arr"),
+}
+
+# P&L detail lines are engine-computed with actual/budget/variance per horizon, so
+# they are legitimate variance drivers. Without them, correct commentary naming an
+# expense line ("R&D underspend") was deleted as an unverifiable cause.
+_PL_LINE_LABELS: dict[str, tuple[str, ...]] = {
+    "revenue": ("revenue", "total revenue"),
+    "cogs": ("cogs", "cost of revenue", "cost of goods sold"),
+    "gross_profit": ("gross profit",),
+    "sm": ("s&m", "sales and marketing", "sales & marketing", "s&m spend"),
+    "rd": ("r&d", "research and development", "research & development", "r&d spend"),
+    "ga": ("g&a", "general and administrative", "general & administrative", "g&a spend"),
+    "ebitda": ("ebitda",),
+    "da": ("d&a", "depreciation", "depreciation and amortization", "amortization"),
+    "net_income": ("net income", "net loss"),
 }
 
 _CASH_BRIDGE_LABELS: dict[str, tuple[str, ...]] = {
@@ -331,9 +385,26 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
 
 
+# Inline source citation, e.g. "(variance_commentary_display.rows[4].qtd.var)".
+# Causal patterns capture to end of clause, so the citation was absorbed into the
+# driver phrase and the last conjunct ("R&D spend (variance_commentary_display")
+# could never match the allowlist. The closing paren is optional because the
+# capture group often stops short of it. Prose parentheticals are left alone:
+# a citation has no interior whitespace and always carries a dot or bracket.
+_INLINE_SOURCE_PAREN = re.compile(r"\s*\((?=[^\s()]*[.\[])[^\s()]*\)?")
+
+# A capture that ends mid-parenthetical leaves a dangling fragment such as
+# "expansion underperformance ($869", which matched no driver. Only fragments
+# without interior spaces are dropped, so prose like "(net of churn" survives.
+_DANGLING_OPEN_PAREN = re.compile(r"\s*\([^\s()]*$")
+
+
 def _clean_phrase(raw: str) -> str:
     phrase = raw.strip().strip("\"'“”‘’")
+    phrase = _INLINE_SOURCE_PAREN.sub("", phrase)
+    phrase = _DANGLING_OPEN_PAREN.sub("", phrase)
     phrase = _TRAILING_CLAUSE.sub("", phrase)
+    phrase = _TRAILING_PARTICIPLE_CLAUSE.sub("", phrase)
     phrase = _FILLER_PREFIX.sub("", phrase).strip(" ,;")
     # Drop trailing money / percent that belong to the effect, not the cause name.
     phrase = re.sub(r"\s+of\s+\$[\d,.]+[KkMmBb]?\s*$", "", phrase)
@@ -358,6 +429,14 @@ def extract_attribution_claims(text: str) -> list[AttributionClaim]:
     def _add(stated: str, phrase: str, pattern: str, *, start: int, end: int) -> None:
         cleaned = _clean_phrase(phrase)
         if len(cleaned) < 2:
+            return
+        # A bare amount is the size of an effect, never the name of a cause, so
+        # "offset by $84.2K" must not register "$84" as an unnamed driver.
+        if not re.search(r"[A-Za-z]{3,}|[A-Za-z]&[A-Za-z]", cleaned):
+            return
+        # Likewise a period is when the cause acted, not the cause: the driver in
+        # "spend of $534.1K in June drove pipeline" is the spend, not "in June".
+        if _TEMPORAL_ONLY_RE.fullmatch(cleaned):
             return
         sentence = _sentence_at(start, end)
         # Questions ask about drivers; they do not assert a closed-period cause.
@@ -416,7 +495,15 @@ def _split_driver_conjuncts(phrase: str) -> list[str]:
         c = _clean_phrase(part)
         if len(c) < 2:
             continue
-        if not re.search(r"[A-Za-z]{3,}", c):
+        # A conjunct needs a real word, or an ampersand acronym — "S&M", "R&D" and
+        # "G&A" are allowlisted P&L lines with no 3-letter run, and dropping them
+        # left multi-driver lists like "R&D and S&M" only half-verified.
+        if not re.search(r"[A-Za-z]{3,}|[A-Za-z]&[A-Za-z]", c):
+            continue
+        # "cost control and protecting profitability" names one driver and then a
+        # purpose. Drivers are noun phrases, so a conjunct opening with a gerund is
+        # intent rather than a second cause and must not be demanded of the engine.
+        if _GERUND_OPENER_RE.match(c):
             continue
         cleaned.append(c)
     if cleaned:
@@ -587,22 +674,26 @@ def extract_forward_looking_claims(text: str) -> list[AttributionClaim]:
             for g in groups:
                 _add(m.group(0), g, "forward:" + pat.pattern[:40])
 
-    # Forward cue + existing causal extract in the same sentence.
+    # Forward cue + existing causal extract in the same clause. Semicolons join
+    # independent clauses, and a forecast in the second one says nothing about the
+    # closed-period cause in the first: "below budget, driven by collections
+    # timing; H2 forecast of $32.02M" explains June, then reports the forecast.
     for sentence in split_sentences(text):
-        if not _FORWARD_CUE_RE.search(sentence):
-            continue
-        for claim in extract_attribution_claims(sentence):
-            key = _normalize(claim.phrase)
-            if key in seen:
+        for clause in re.split(r"\s*;\s*", sentence):
+            if not _FORWARD_CUE_RE.search(clause):
                 continue
-            seen.add(key)
-            claims.append(
-                AttributionClaim(
-                    stated=claim.stated,
-                    phrase=claim.phrase,
-                    pattern="forward+causal:" + claim.pattern[:32],
+            for claim in extract_attribution_claims(clause):
+                key = _normalize(claim.phrase)
+                if key in seen:
+                    continue
+                seen.add(key)
+                claims.append(
+                    AttributionClaim(
+                        stated=claim.stated,
+                        phrase=claim.phrase,
+                        pattern="forward+causal:" + claim.pattern[:32],
+                    )
                 )
-            )
     return claims
 
 
@@ -1043,6 +1134,23 @@ def build_attribution_package_from_mda_payload(
                 )
             )
 
+    pl_detail = deck.get("pl_detail") or payload.get("pl_detail") or {}
+    if isinstance(pl_detail, Mapping):
+        cm_lines = pl_detail.get("cm") or {}
+        for key, aliases in _PL_LINE_LABELS.items():
+            row = cm_lines.get(key) if isinstance(cm_lines, Mapping) else None
+            if not isinstance(row, Mapping):
+                continue
+            label = str(row.get("label") or key.replace("_", " ").title()).strip()
+            drivers.append(
+                _driver(
+                    key,
+                    label,
+                    source=f"pl_detail.cm.{key}",
+                    aliases=aliases + (label.lower(),),
+                )
+            )
+
     display = payload.get("variance_commentary_display") or {}
     if isinstance(display, Mapping):
         for row in display.get("rows") or []:
@@ -1287,6 +1395,80 @@ def raise_if_attribution_fully_unverifiable(
             "P15 fail-closed: MD&A variance commentary had no verifiable attribution claims; "
             "blocking package emit. " + result.summary(),
         )
+
+
+# Slide metric keys are "<driver><value-suffix>", e.g. "net_new_arr_actual".
+_METRIC_VALUE_SUFFIXES = (
+    "_var_dollar",
+    "_var_pct",
+    "_actual",
+    "_budget",
+    "_forecast",
+    "_var",
+    "_raw",
+)
+
+# Stems whose title-cased form would not match how finance writes them.
+_METRIC_STEM_ALIASES: dict[str, tuple[str, ...]] = {
+    "n_dollar_r": ("n$r", "net revenue retention"),
+    "g_dollar_r": ("g$r", "gross revenue retention"),
+    "sm": ("s&m", "sales and marketing"),
+    "rd": ("r&d", "research and development"),
+    "ga": ("g&a", "general and administrative"),
+    "arr_ending": ("ending arr", "arr"),
+    "net_new_arr": ("net new arr", "net new"),
+    "fy_arr": ("fy arr", "arr outlook"),
+    "gross_margin": ("gross margin", "gross margin %"),
+}
+
+# Prompt/layout config that shares the slide dict with real metrics.
+SLIDE_CONFIG_KEYS = frozenset(
+    {
+        "slide_number",
+        "max_bullets",
+        "max_words_per_bullet",
+        "max_chars_per_bullet",
+        "max_table_rows",
+    }
+)
+
+
+def build_attribution_package_from_slide_payload(
+    payload: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Allowlist derived from a single-slide payload's own metric keys.
+
+    Board slide commentary was verified against the deck-payload allowlist, which
+    does not see the per-slide shape, so plainly valid drivers ("Net New ARR")
+    were rejected and the bullet was replaced with "I don't know" on the deck.
+    """
+    slide = (payload or {}).get("slide") or {}
+    metrics = slide.get("metrics") if isinstance(slide, Mapping) else None
+    if not isinstance(metrics, Mapping):
+        return build_attribution_package(metric="board_slide", drivers=[])
+
+    drivers: list[AllowedDriver] = []
+    seen: set[str] = set()
+    for raw_key in metrics:
+        stem = str(raw_key)
+        for suffix in _METRIC_VALUE_SUFFIXES:
+            if stem.endswith(suffix):
+                stem = stem[: -len(suffix)]
+                break
+        stem = stem.strip("_")
+        if not stem or stem in seen:
+            continue
+        seen.add(stem)
+        words = stem.replace("_", " ")
+        drivers.append(
+            _driver(
+                stem,
+                words.title(),
+                source=f"slide.metrics.{raw_key}",
+                aliases=(words,) + _METRIC_STEM_ALIASES.get(stem, ()),
+            )
+        )
+    return build_attribution_package(metric="board_slide", drivers=drivers)
 
 
 def build_attribution_package_from_deck_payload(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+import logging
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -35,7 +36,41 @@ from app.services.reporting.export.schemas import (
     ReportingBundle,
 )
 from app.services.reporting.export.validation_precheck import run_export_validation_bundle
+from app.services.reporting.as_of_period import infer_as_of_period
 from app.services.reporting.period_utils import to_period
+
+logger = logging.getLogger(__name__)
+
+
+def _resolve_close_period(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str | None,
+    end_period: str,
+) -> str:
+    """Close month, never later than the last month that has Actual rows.
+
+    Callers routinely pass the reporting window's end (December) as the as-of
+    month. Unclamped, every Actual-vs-Budget variance for the still-open months
+    compares budget against a zero actual and reports a 100% miss.
+    """
+    requested = to_period(as_of_period or end_period)
+    try:
+        closed = infer_as_of_period(db, organization_id)
+    except Exception:
+        logger.exception("Close-month inference failed for %s; using %s", organization_id, requested)
+        return requested
+    if not closed:
+        return requested
+    if closed < requested:
+        logger.info(
+            "Clamping as-of %s to last closed actual month %s for %s",
+            requested,
+            closed,
+            organization_id,
+        )
+        return closed
+    return requested
 
 
 def _statement_date_range(start_period: str, end_period: str) -> tuple[date, date]:
@@ -145,7 +180,7 @@ def collect_reporting_bundle(
     org = get_organization_or_404(db, organization_id)
     start = to_period(start_period)
     end = to_period(end_period)
-    as_of = to_period(as_of_period or end_period)
+    as_of = _resolve_close_period(db, organization_id, as_of_period, end)
 
     params = {
         "scenario": scenario,
@@ -291,6 +326,7 @@ def collect_reporting_bundle(
                 as_of_period=as_of,
                 bundle_data=executive,
                 financial=financial,
+                comparison_waterfalls=comparison_waterfalls,
             )
             client = build_commentary_llm_client()
             commentary = generate_commentary(inputs, client)
@@ -304,6 +340,12 @@ def collect_reporting_bundle(
                 source="ai",
             )
         except Exception:
+            logger.exception(
+                "AI executive-summary commentary failed for %s (%s); "
+                "export falls back to metric templates",
+                getattr(org, "name", None),
+                as_of,
+            )
             commentary = None
 
     bundle = ReportingBundle(
@@ -423,7 +465,7 @@ def collect_board_platform_bundle(
     org = get_organization_or_404(db, organization_id)
     start = to_period(start_period)
     end = to_period(end_period)
-    as_of = to_period(as_of_period or end_period)
+    as_of = _resolve_close_period(db, organization_id, as_of_period, end)
 
     params = {
         "scenario": scenario,
@@ -487,7 +529,7 @@ def collect_copilot_bundle(
     """
     start = to_period(start_period)
     end = to_period(end_period)
-    as_of = to_period(as_of_period or end_period)
+    as_of = _resolve_close_period(db, organization_id, as_of_period, end)
     focus = to_period(focus_period or as_of)
 
     bundle = collect_board_platform_bundle(

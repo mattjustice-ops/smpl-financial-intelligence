@@ -58,7 +58,11 @@ class BookingsForecastInput(_ApiModel):
 class RevenueForecastInput(_ApiModel):
     period_start: date
     period_end: date
-    forecasted_revenue: Decimal
+    # Optional so a closed month with no forecast row reads as absent rather than
+    # $0 — a literal zero reads to the model as a data-loading failure.
+    forecasted_revenue: Optional[Decimal] = None
+    actual_revenue: Optional[Decimal] = None
+    budget_revenue: Optional[Decimal] = None
     prior_period_revenue: Optional[Decimal] = None
     growth_rate: Optional[Decimal] = None
     method: Optional[str] = None

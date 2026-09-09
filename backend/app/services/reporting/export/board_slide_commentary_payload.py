@@ -136,6 +136,52 @@ def fmt_deck_pct(ratio: Decimal | None, *, as_percent: bool = True) -> str:
     return f"{val:.1f}%"
 
 
+def money_trio(stem: str, actual: Decimal | None, budget: Decimal | None) -> dict[str, str]:
+    """actual / budget / variance $ / variance % for one money metric.
+
+    Board bullets must state a variance, but most slide metrics shipped only
+    actual and budget, so the model subtracted the two rounded figures itself.
+    That arithmetic misses the engine value (a true -$84.2K reads as -$90.0K)
+    and the bullet is then deleted as unverifiable. Computing from raw values
+    here means the bullet copies an engine number instead of deriving one.
+    """
+    out = {
+        f"{stem}_actual": fmt_deck_money(actual),
+        f"{stem}_budget": fmt_deck_money(budget),
+    }
+    if actual is not None and budget is not None:
+        out[f"{stem}_var"] = fmt_deck_var(actual, budget)
+        out[f"{stem}_var_pct"] = fmt_deck_var_pct(actual, budget)
+    return out
+
+
+def ratio_fields(stem: str, value: Decimal | None) -> dict[str, str]:
+    """A multiple as both display text and a bare number.
+
+    "5.5x" carries the ratio inside a unit suffix, so it never parsed into the
+    evidence map and every cited coverage/efficiency multiple was unverifiable.
+    The bare "<stem>_x" value is what claim verification can actually match.
+    """
+    if value is None:
+        return {stem: "n/a"}
+    return {stem: f"{float(value):.1f}x", f"{stem}_x": f"{float(value):.1f}"}
+
+
+def pct_trio(stem: str, actual: Decimal | None, budget: Decimal | None) -> dict[str, str]:
+    """actual / budget / bps delta for one percentage metric.
+
+    Percent metrics get a basis-point delta rather than a percent-of-a-percent,
+    which is the board convention and the only unambiguous reading.
+    """
+    out = {
+        f"{stem}_actual": fmt_deck_pct(actual, as_percent=False) if actual is not None else "n/a",
+        f"{stem}_budget": fmt_deck_pct(budget, as_percent=False) if budget is not None else "n/a",
+    }
+    if actual is not None and budget is not None:
+        out[f"{stem}_var_bps"] = f"{(Decimal(actual) - Decimal(budget)) * 100:+.0f}bps"
+    return out
+
+
 def fmt_deck_var(actual: Decimal, budget: Decimal) -> str:
     if budget == 0 and actual == 0:
         return "n/a"
@@ -235,24 +281,35 @@ def _metrics_executive(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]
     if ndr is None and m.grr is not None:
         ndr = m.grr
     return {
-        "revenue_actual": fmt_deck_money(m.revenue_actual),
-        "revenue_budget": fmt_deck_money(m.revenue_budget),
-        "revenue_var_pct": fmt_deck_var_pct(m.revenue_actual, m.revenue_budget),
-        "arr_ending_actual": fmt_deck_money(arr.current_month),
-        "arr_ending_budget": fmt_deck_money(arr.budget_cm),
+        **money_trio("revenue", m.revenue_actual, m.revenue_budget),
+        **money_trio("arr_ending", arr.current_month, arr.budget_cm),
+        # Long-standing key the deck template reads; same value as arr_ending_var.
         "arr_var_dollar": fmt_deck_var(arr.current_month, arr.budget_cm),
-        "net_new_arr_actual": fmt_deck_money(m.net_new_arr),
-        "net_new_arr_budget": fmt_deck_money(m.new_arr_budget),
-        "gross_margin_actual": fmt_deck_pct(gm_act, as_percent=False) if gm_act is not None else "n/a",
-        "gross_margin_budget": fmt_deck_pct(gm_bud, as_percent=False) if gm_bud is not None else "n/a",
-        "ebitda_actual": fmt_deck_money(m.ebitda_actual),
-        "ebitda_budget": fmt_deck_money(m.ebitda_budget),
-        "cash_actual": fmt_deck_money(cash.current_month),
-        "cash_budget": fmt_deck_money(cash_bud or cash.budget_cm),
+        **money_trio("net_new_arr", m.net_new_arr, m.new_arr_budget),
+        # The summary slides quote N$R, so they need the retention components that
+        # explain it; without them "driven by churn" reads as an unsupported cause.
+        **money_trio(
+            "new_business",
+            _arr_component(bundle, as_of, "new_business", "Actual"),
+            _arr_component(bundle, as_of, "new_business", "Budget"),
+        ),
+        **money_trio(
+            "expansion",
+            _arr_component(bundle, as_of, "expansion", "Actual"),
+            _arr_component(bundle, as_of, "expansion", "Budget"),
+        ),
+        **money_trio(
+            "churn",
+            abs(_arr_component(bundle, as_of, "churn", "Actual")),
+            abs(_arr_component(bundle, as_of, "churn", "Budget")),
+        ),
+        **pct_trio("gross_margin", gm_act, gm_bud),
+        **money_trio("ebitda", m.ebitda_actual, m.ebitda_budget),
+        **money_trio("cash", cash.current_month, cash_bud or cash.budget_cm),
+        **_cash_floor_fields(cash.current_month),
         "n_dollar_r_actual": fmt_deck_pct(ndr) if ndr is not None else "n/a",
         "n_dollar_r_budget": "n/a",
-        "ytd_revenue_actual": fmt_deck_money(rev.ytd),
-        "ytd_revenue_budget": fmt_deck_money(rev.budget_ytd),
+        **money_trio("ytd_revenue", rev.ytd, rev.budget_ytd),
     }
 
 
@@ -266,26 +323,21 @@ def _metrics_arr(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
     churn_b = abs(_arr_component(bundle, as_of, "churn", "Budget"))
     gdr = m.grr
     pipeline_end = _wf(bundle, "pipeline", "ending_pipeline", as_of, "Actual")
-    pipeline_cov = "n/a"
+    pipeline_cov = None
     if m.pipeline_created and m.closed_won:
-        pipeline_cov = f"{float(m.pipeline_created / max(m.closed_won, Decimal('1'))):.1f}x"
+        pipeline_cov = m.pipeline_created / max(m.closed_won, Decimal("1"))
     return {
-        "arr_ending_actual": fmt_deck_money(arr.current_month),
-        "arr_ending_budget": fmt_deck_money(arr.budget_cm),
-        "net_new_arr_actual": fmt_deck_money(m.net_new_arr),
-        "net_new_arr_budget": fmt_deck_money(m.new_arr_budget),
-        "new_business_actual": fmt_deck_money(nb_a),
-        "new_business_budget": fmt_deck_money(nb_b),
-        "expansion_actual": fmt_deck_money(exp_a),
-        "expansion_budget": fmt_deck_money(exp_b),
-        "churn_actual": fmt_deck_money(churn_a),
-        "churn_budget": fmt_deck_money(churn_b),
+        **money_trio("arr_ending", arr.current_month, arr.budget_cm),
+        **money_trio("net_new_arr", m.net_new_arr, m.new_arr_budget),
+        **money_trio("new_business", nb_a, nb_b),
+        **money_trio("expansion", exp_a, exp_b),
+        **money_trio("churn", churn_a, churn_b),
         "n_dollar_r_actual": fmt_deck_pct(m.nrr) if m.nrr is not None else "n/a",
         "g_dollar_r_actual": fmt_deck_pct(gdr) if gdr is not None else "n/a",
-        "pipeline_coverage": pipeline_cov,
+        **ratio_fields("pipeline_coverage", pipeline_cov),
         "pipeline_ending": fmt_deck_money(pipeline_end),
+        **money_trio("fy_arr", arr.fy_outlook, arr.budget_fy),
         "fy_arr_forecast": fmt_deck_money(arr.fy_outlook),
-        "fy_arr_budget": fmt_deck_money(arr.budget_fy),
     }
 
 
@@ -306,19 +358,39 @@ def _metrics_pl(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
         bundle, as_of, "rd", "Budget"
     )
     return {
-        "revenue_actual": fmt_deck_money(m.revenue_actual),
-        "revenue_budget": fmt_deck_money(m.revenue_budget),
-        "gross_margin_actual": fmt_deck_pct(gm_act, as_percent=False) if gm_act is not None else "n/a",
-        "gross_margin_budget": fmt_deck_pct(gm_bud, as_percent=False) if gm_bud is not None else "n/a",
-        "ebitda_actual": fmt_deck_money(m.ebitda_actual),
-        "ebitda_budget": fmt_deck_money(m.ebitda_budget),
-        "sm_actual": fmt_deck_money(sm_a),
-        "sm_budget": fmt_deck_money(sm_b),
-        "rd_actual": fmt_deck_money(rd_a),
-        "rd_budget": fmt_deck_money(rd_b),
-        "ytd_revenue_actual": fmt_deck_money(rev.ytd),
-        "ytd_revenue_budget": fmt_deck_money(rev.budget_ytd),
+        **money_trio("revenue", m.revenue_actual, m.revenue_budget),
+        **pct_trio("gross_margin", gm_act, gm_bud),
+        **money_trio("ebitda", m.ebitda_actual, m.ebitda_budget),
+        **money_trio("sm", sm_a, sm_b),
+        **money_trio("rd", rd_a, rd_b),
+        **money_trio("ytd_revenue", rev.ytd, rev.budget_ytd),
         "known_one_time_items": "n/a",
+    }
+
+
+CASH_FLOOR = Decimal("10000000")
+
+
+def _cash_floor_fields(cash_actual: Decimal | None) -> dict[str, str]:
+    """Publish the floor and headroom on every slide whose bullets discuss cash.
+
+    Both are deterministic, but they used to live only on the cash slides, so the
+    same accurate liquidity sentence verified there and was deleted on the summary
+    slides for quoting figures that slide never published.
+    """
+    if cash_actual is None:
+        return {}
+    return {
+        "cash_floor": fmt_deck_money(CASH_FLOOR),
+        "cash_headroom": fmt_deck_money(cash_actual - CASH_FLOOR),
+        # Liquidity bullets reach for a coverage multiple, and cash over floor is a
+        # real quotient of two published figures. Leaving it unpublished meant the
+        # model divided them itself and the bullet was deleted for a number the
+        # engine could have stated exactly.
+        **ratio_fields("cash_floor_coverage", cash_actual / CASH_FLOOR),
+        **ratio_fields(
+            "cash_headroom_coverage", (cash_actual - CASH_FLOOR) / CASH_FLOOR
+        ),
     }
 
 
@@ -330,16 +402,11 @@ def _metrics_cash(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
     )
     cfo_a = _wf(bundle, "cash_flow", "cfo", as_of, "Actual")
     cfo_b = _wf(bundle, "cash_flow", "cfo", as_of, "Budget")
-    floor = Decimal("10000000")
-    headroom = cash.current_month - floor
     return {
-        "cash_actual": fmt_deck_money(cash.current_month),
-        "cash_budget": fmt_deck_money(cash_bud or cash.budget_cm),
+        **money_trio("cash", cash.current_month, cash_bud or cash.budget_cm),
         "collections_actual": fmt_deck_money(collections),
-        "cfo_actual": fmt_deck_money(cfo_a),
-        "cfo_budget": fmt_deck_money(cfo_b),
-        "cash_floor": fmt_deck_money(floor),
-        "cash_headroom": fmt_deck_money(headroom),
+        **money_trio("cfo", cfo_a, cfo_b),
+        **_cash_floor_fields(cash.current_month),
         "h2_cash_forecast": fmt_deck_money(cash.fy_outlook),
     }
 
@@ -347,18 +414,27 @@ def _metrics_cash(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
 def _metrics_gtm(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
     spend = m.marketing_spend
     pipeline = m.pipeline_from_marketing or m.pipeline_created
-    blended = f"{float(pipeline / spend):.1f}x" if spend else "n/a"
+    blended = (pipeline / spend) if spend else None
     pipe_end = _wf(bundle, "pipeline", "ending_pipeline", as_of, "Actual")
+    # Funnel conversion was the one GTM figure with no published form, so every
+    # bullet quoting it divided SQL by MQL and failed verification.
+    mql_to_sql = (Decimal(m.sql) / Decimal(m.mql) * 100) if m.mql else None
     return {
         "marketing_spend_actual": fmt_deck_money(spend),
         "marketing_spend_budget": "n/a",
         "pipeline_created_actual": fmt_deck_money(m.pipeline_created),
         "pipeline_ending": fmt_deck_money(pipe_end),
-        "pipeline_coverage": blended,
-        "blended_efficiency": blended,
+        **ratio_fields("pipeline_coverage", blended),
+        **ratio_fields("blended_efficiency", blended),
         "closed_won_arr_actual": fmt_deck_money(m.closed_won_arr_mkt or m.closed_won),
-        "sm_actual": fmt_deck_money(_is_line_amount(bundle, as_of, "sales and marketing", "Actual")),
-        "sm_budget": fmt_deck_money(_is_line_amount(bundle, as_of, "sales and marketing", "Budget")),
+        "mql_to_sql_conversion": (
+            f"{float(mql_to_sql):.1f}%" if mql_to_sql is not None else "n/a"
+        ),
+        **money_trio(
+            "sm",
+            _is_line_amount(bundle, as_of, "sales and marketing", "Actual"),
+            _is_line_amount(bundle, as_of, "sales and marketing", "Budget"),
+        ),
         "mql_actual": str(int(m.mql)),
         "sql_actual": str(int(m.sql)),
     }
@@ -396,11 +472,23 @@ def _metrics_risks(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
     return {
         "validation_status": bundle.validation.status,
         "failed_checks": str(bundle.validation.failed_count),
-        "churn_actual": fmt_deck_money(m.churn),
-        "expansion_actual": fmt_deck_money(m.expansion),
+        # Budget comparators for the retention components: with actuals alone the
+        # only contrast available was churn against expansion, which the model kept
+        # expressing as an invented percentage.
+        **money_trio(
+            "churn",
+            abs(_arr_component(bundle, as_of, "churn", "Actual")) or m.churn,
+            abs(_arr_component(bundle, as_of, "churn", "Budget")),
+        ),
+        **money_trio(
+            "expansion",
+            _arr_component(bundle, as_of, "expansion", "Actual") or m.expansion,
+            _arr_component(bundle, as_of, "expansion", "Budget"),
+        ),
         "deferred_pipeline": fmt_deck_money(m.slipped),
         "pipeline_created": fmt_deck_money(m.pipeline_created),
         "cash_actual": fmt_deck_money(m.cash_actual),
+        **_cash_floor_fields(m.cash_actual),
         "data_gaps": gaps or "none",
     }
 

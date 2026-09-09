@@ -239,7 +239,7 @@
   async function boardLiveApiBase() {
     var host = global.location && global.location.hostname;
     if (host === "localhost" || host === "127.0.0.1") {
-      return "http://127.0.0.1:8001";
+      return "http://127.0.0.1:8000";
     }
     return "";
   }
@@ -859,7 +859,7 @@
   function boardExportApiBase() {
     var host = global.location && global.location.hostname;
     if (host === "localhost" || host === "127.0.0.1") {
-      return Promise.resolve("http://127.0.0.1:8001");
+      return Promise.resolve("http://127.0.0.1:8000");
     }
     if (global.SMPL_LONG_RUNNING_API_BASE) {
       return Promise.resolve(global.SMPL_LONG_RUNNING_API_BASE);

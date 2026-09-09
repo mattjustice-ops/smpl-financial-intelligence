@@ -489,22 +489,29 @@ def extract_numeric_claims(text: str) -> list[NumericClaim]:
 
 
 def _candidates_for_claim(claim: NumericClaim) -> list[tuple[Decimal, Decimal]]:
-    """Return (candidate_value, tolerance) pairs to try against evidence."""
+    """Return (candidate_value, tolerance) pairs to try against evidence.
+
+    Every candidate is also tried negated. An unfavorable variance is stored as
+    -$84.2K, but finance prose states the magnitude and carries the direction in
+    words ("missed budget by $84.2K"). Both describe the same evidence value, and
+    requiring the signed form deleted most commentary as unverifiable.
+    """
     if claim.kind == "money":
-        return [(claim.value, TOL_ACTUALS)]
-    if claim.kind == "percent":
-        ratio = claim.value / Decimal("100")
-        return [
-            (ratio, TOL_RATIO),
+        base = [(claim.value, TOL_ACTUALS)]
+    elif claim.kind == "percent":
+        base = [
+            (claim.value / Decimal("100"), TOL_RATIO),
             (claim.value, TOL_PERCENT_POINTS),  # evidence stored as 10 for 10%
         ]
-    if claim.kind == "ratio":
-        return [
+    elif claim.kind == "ratio":
+        base = [
             (claim.value, TOL_RATIO),
             (claim.value * Decimal("100"), TOL_PERCENT_POINTS),  # stated 1.05 vs evidence 105
         ]
-    # count
-    return [(claim.value, TOL_ACTUALS)]
+    else:  # count
+        base = [(claim.value, TOL_ACTUALS)]
+
+    return base + [(-value, tol) for value, tol in base if value != 0]
 
 
 def _best_match(

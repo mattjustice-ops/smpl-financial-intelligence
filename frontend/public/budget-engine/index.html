@@ -1232,7 +1232,7 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 2: GTM spend is committed under shock (a growth miss no longer refunds it).
  * rev 3: cash watch threshold 25% -> 5%; paid-channel shock sized down from ×2.5.
  */
-const PA_STRESS_MODEL_REV = 3;
+const PA_STRESS_MODEL_REV = 4;
 
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
@@ -8941,6 +8941,77 @@ function histogram(values, bins) {
   return { edges, counts, density, lo, hi, width, n: values.length, mean: values.reduce((a, b) => a + b, 0) / values.length };
 }
 
+/** Linear-interpolated percentile on an already-ascending array. */
+function pctlSorted(sorted, q) {
+  if (!sorted.length) return null;
+  const idx = (sorted.length - 1) * q;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+/**
+ * Cross-sectional percentiles of cash by month across Monte Carlo draws.
+ * Each row is one calendar month, measured across trials — not a single path.
+ */
+function buildMonthlyCashBands(paths, floor) {
+  if (!paths || !paths.length) return [];
+  const months = paths[0].length;
+  const out = [];
+  for (let m = 0; m < months; m++) {
+    const col = [];
+    for (const p of paths) {
+      const v = p[m];
+      if (v != null && !isNaN(v)) col.push(v);
+    }
+    if (!col.length) continue;
+    col.sort((a, b) => a - b);
+    out.push({
+      period: (typeof BUD_P !== 'undefined' && BUD_P[m]) ? BUD_P[m] : String(m + 1),
+      p10: pctlSorted(col, 0.10),
+      p50: pctlSorted(col, 0.50),
+      p90: pctlSorted(col, 0.90),
+      mean: col.reduce((a, b) => a + b, 0) / col.length,
+      lo: col[0],
+      hi: col[col.length - 1],
+      pBelowFloor: floor != null ? col.filter(v => v < floor).length / col.length : null,
+    });
+  }
+  return out;
+}
+
+/** P10–P90 fan across months with the cash floor drawn in. */
+function svgCashFan(monthly, floor, fmtTick) {
+  if (!monthly || !monthly.length) return '';
+  const W = 280, H = 96, padX = 4, padT = 6, padB = 12;
+  let lo = Math.min(...monthly.map(m => m.p10));
+  let hi = Math.max(...monthly.map(m => m.p90));
+  if (floor != null) { lo = Math.min(lo, floor); hi = Math.max(hi, floor); }
+  if (!(hi > lo)) hi = lo + 1;
+  const pad = (hi - lo) * 0.06;
+  lo -= pad; hi += pad;
+  const x = (i) => padX + (i / Math.max(1, monthly.length - 1)) * (W - 2 * padX);
+  const y = (v) => padT + (1 - (v - lo) / (hi - lo || 1)) * (H - padT - padB);
+
+  let band = '';
+  monthly.forEach((m, i) => { band += `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(m.p90).toFixed(1)} `; });
+  for (let i = monthly.length - 1; i >= 0; i--) band += `L${x(i).toFixed(1)},${y(monthly[i].p10).toFixed(1)} `;
+  band += 'Z';
+
+  let mid = '';
+  monthly.forEach((m, i) => { mid += `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(m.p50).toFixed(1)} `; });
+
+  const floorLine = floor != null
+    ? `<line x1="${padX}" x2="${W - padX}" y1="${y(floor).toFixed(1)}" y2="${y(floor).toFixed(1)}" stroke="#b4645a" stroke-width="1" stroke-dasharray="3,2"/>`
+    : '';
+  const tick = fmtTick ? fmtTick(monthly[monthly.length - 1].p50) : '';
+  return `<svg class="assure-nerd-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">` +
+    `<path d="${band}" fill="rgba(61,126,166,0.22)" stroke="none"/>` +
+    `<path d="${mid}" fill="none" stroke="#3d7ea6" stroke-width="1.5"/>${floorLine}` +
+    `<text x="${W / 2}" y="${H - 2}" text-anchor="middle" fill="rgba(170,184,162,0.75)" font-size="9" font-family="var(--mono)">` +
+    `P10-P90 by month · dashed = floor · Dec P50 ${tick}</text></svg>`;
+}
+
 function svgHistogramWithNormal(hist, mu, sigma, fmtTick) {
   const W = 280, H = 72, pad = 4;
   const maxD = Math.max(...hist.density, normalPdf(mu, mu, sigma), 1e-12);
@@ -8972,6 +9043,9 @@ function runScenarioMonteCarlo(base, snap, n) {
   const arrSamples = [];
   const cashSamples = [];
   const ebitdaSamples = [];
+  const cashPaths = [];
+  const troughSamples = [];
+  let pTroughBreach = 0;
   let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch25 = 0, pAlarm50 = 0;
   const sig = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
   for (let i = 0; i < n; i++) {
@@ -8989,6 +9063,13 @@ function runScenarioMonteCarlo(base, snap, n) {
     arrSamples.push(s.decArr);
     cashSamples.push(s.endCash);
     ebitdaSamples.push(s.fyEbitda);
+    // Keep the whole monthly cash path per draw. December alone cannot show a
+    // mid-year trough, and the trough is the month that actually needs financing.
+    if (s.cashByMonth) cashPaths.push(s.cashByMonth.slice());
+    if (s.minCash != null) {
+      troughSamples.push(s.minCash);
+      if (s.minCash < base.cashFloor) pTroughBreach += 1;
+    }
     if (s.decArr < base.targetArr * 0.995) pArrMiss += 1;
     if (s.endCash < base.cashFloor) pCashBreak += 1;
     if (s.salesEnd < s.aeNeeded) pAeShort += 1;
@@ -8998,26 +9079,53 @@ function runScenarioMonteCarlo(base, snap, n) {
     if (s.endCash < base.cashFloor || drop >= 0.50) pOpsRisk += 1;
   }
   restoreScenarioLevers(snap);
-  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50);
+  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, { cashPaths, troughSamples, pTroughBreach });
 }
 
-function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50) {
+function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, pathData) {
   const arrHist = histogram(arrSamples, 16);
   const cashHist = histogram(cashSamples, 16);
   const arrMean = arrHist.mean;
   const cashMean = cashHist.mean;
   const arrSd = Math.sqrt(arrSamples.reduce((a, v) => a + (v - arrMean) ** 2, 0) / Math.max(1, n - 1));
   const cashSd = Math.sqrt(cashSamples.reduce((a, v) => a + (v - cashMean) ** 2, 0) / Math.max(1, n - 1));
+
+  const paths = (pathData && pathData.cashPaths) || [];
+  const troughs = (pathData && pathData.troughSamples) || [];
+  const monthly = buildMonthlyCashBands(paths, base.cashFloor);
+  // Worst month = highest share of draws under the floor; this is the financing month.
+  const worstMonth = monthly.reduce(
+    (w, m) => (w == null || (m.pBelowFloor || 0) > (w.pBelowFloor || 0) ? m : w),
+    null
+  );
+  let trough = null;
+  if (troughs.length) {
+    const sorted = troughs.slice().sort((a, b) => a - b);
+    const tMean = troughs.reduce((a, b) => a + b, 0) / troughs.length;
+    trough = {
+      hist: histogram(troughs, 16),
+      mean: tMean,
+      sd: Math.sqrt(troughs.reduce((a, v) => a + (v - tMean) ** 2, 0) / Math.max(1, troughs.length - 1)),
+      p10: pctlSorted(sorted, 0.10),
+      p50: pctlSorted(sorted, 0.50),
+      p90: pctlSorted(sorted, 0.90),
+      pBreachAnyMonth: (pathData && pathData.pTroughBreach ? pathData.pTroughBreach : 0) / n,
+    };
+  }
+
   return {
     n,
     sig,
-    method: 'monte_carlo_annual_lever_shocks',
+    method: 'monte_carlo_annual_lever_shocks_monthly_propagation',
+    cashFloor: base.cashFloor,
     whatItIs: [
       `${n} independent draws of a full-year plan.`,
-      'Each draw shocks 4 annual levers once (YoY growth, CPL, attrition, pipeline cover), then recomputes the closed formula graph.',
-      'This is NOT a combinatorial grid of every lever×month path, and NOT a day-by-day simulation through the year.',
-      'It estimates the distribution of year-end outcomes under the stated uncertainty priors.',
+      'Each draw shocks 4 annual levers once (YoY growth, CPL, attrition, pipeline cover), then recomputes the closed formula graph month by month.',
+      'Every draw keeps its full 12-month cash path, so the monthly P10-P90 band and the intra-year trough are measured across draws — not inferred from December.',
+      'Annual levers are drawn once per trial and then propagated. Shocks are NOT independently resampled each month, and this is not a day-by-day simulation.',
+      'It estimates the distribution of monthly and year-end outcomes under the stated uncertainty priors.',
     ],
+    cashPath: { monthly, trough, worstMonth },
     assumptions: [
       `Δ YoY ARR growth ~ N(0, ${sig.yoyPp}pp)`,
       `CPL multiplier ~ LogNormal(0, ${sig.cplLog})`,
@@ -9046,6 +9154,9 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
   const arrSamples = [];
   const cashSamples = [];
   const ebitdaSamples = [];
+  const cashPaths = [];
+  const troughSamples = [];
+  let pTroughBreach = 0;
   let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch25 = 0, pAlarm50 = 0;
   const sig = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
   const chunk = 20;
@@ -9064,6 +9175,13 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
     arrSamples.push(s.decArr);
     cashSamples.push(s.endCash);
     ebitdaSamples.push(s.fyEbitda);
+    // Keep the whole monthly cash path per draw. December alone cannot show a
+    // mid-year trough, and the trough is the month that actually needs financing.
+    if (s.cashByMonth) cashPaths.push(s.cashByMonth.slice());
+    if (s.minCash != null) {
+      troughSamples.push(s.minCash);
+      if (s.minCash < base.cashFloor) pTroughBreach += 1;
+    }
     if (s.decArr < base.targetArr * 0.995) pArrMiss += 1;
     if (s.endCash < base.cashFloor) pCashBreak += 1;
     if (s.salesEnd < s.aeNeeded) pAeShort += 1;
@@ -9077,7 +9195,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
     }
   }
   restoreScenarioLevers(snap);
-  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50);
+  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, { cashPaths, troughSamples, pTroughBreach });
 }
 
 function runScenarioSensitivity(base, snap, leverId) {
@@ -9307,6 +9425,18 @@ function renderAssureScenarioHtml(suite) {
           <p>μ ${fmtM(mc.cash.mean)} · σ ${fmtM(mc.cash.sd)} · P(&lt; floor) ${(mc.cash.pBreak * 100).toFixed(1)}% · P(ops liquidity risk) ${((mc.pOpsRisk || 0) * 100).toFixed(1)}%</p>
           ${svgHistogramWithNormal(mc.cash.hist, mc.cash.mean, mc.cash.sd || 1, fmtM)}
         </div>
+        ${(mc.cashPath && mc.cashPath.monthly && mc.cashPath.monthly.length) ? `
+        <div class="assure-nerd-card">
+          <h4>Monthly cash path · P10–P90</h4>
+          <p>Cross-sectional percentiles by month across ${mc.n.toLocaleString()} draws${mc.cashPath.worstMonth ? ` · tightest month ${mc.cashPath.worstMonth.period} at ${((mc.cashPath.worstMonth.pBelowFloor || 0) * 100).toFixed(0)}% of draws under floor` : ''}</p>
+          ${svgCashFan(mc.cashPath.monthly, mc.cashFloor, fmtM)}
+        </div>` : ''}
+        ${(mc.cashPath && mc.cashPath.trough) ? `
+        <div class="assure-nerd-card">
+          <h4>Intra-year cash trough</h4>
+          <p>P10 ${fmtM(mc.cashPath.trough.p10)} · median ${fmtM(mc.cashPath.trough.p50)} · P(any month &lt; floor) ${((mc.cashPath.trough.pBreachAnyMonth || 0) * 100).toFixed(1)}% vs P(Dec &lt; floor) ${(mc.cash.pBreak * 100).toFixed(1)}%</p>
+          ${svgHistogramWithNormal(mc.cashPath.trough.hist, mc.cashPath.trough.mean, mc.cashPath.trough.sd || 1, fmtM)}
+        </div>` : ''}
         <div class="assure-nerd-card">
           <h4>Sensitivity · YoY growth (pp)</h4>
           <p>Δ Dec ARR if growth rate shifts −5…+3 percentage points</p>
@@ -9427,7 +9557,8 @@ window.refreshAssuranceScenarios = async function(useLlm) {
             'Explain percentage points vs percent; translate shocks into $ ARR and cash vs floor; call out ops liquidity risk clearly.',
             `Baseline Dec ARR ${Math.round(suite.base.decArr)}, YoY ${suite.base.yoyGrowthPct}%, cash ${Math.round(suite.base.endCash)}, floor ${Math.round(suite.base.cashFloor)}.`,
             `Cases: ${breakLines.join(' | ') || 'all held'}`,
-            mc ? `MC n=${mc.n}: annual lever shocks (not month-path combinatorial). P(ARR miss)=${(mc.arr.pMiss * 100).toFixed(1)}%, P(cash break)=${(mc.cash.pBreak * 100).toFixed(1)}%, P(ops liquidity)=${((mc.pOpsRisk || 0) * 100).toFixed(1)}%.` : '',
+            mc ? `MC n=${mc.n}: annual lever shocks drawn once per trial, propagated through the monthly formula graph (not resampled monthly). P(ARR miss)=${(mc.arr.pMiss * 100).toFixed(1)}%, P(Dec cash break)=${(mc.cash.pBreak * 100).toFixed(1)}%, P(ops liquidity)=${((mc.pOpsRisk || 0) * 100).toFixed(1)}%.` : '',
+            mc && mc.cashPath && mc.cashPath.trough ? `Monthly cash path: P(any month < floor)=${((mc.cashPath.trough.pBreachAnyMonth || 0) * 100).toFixed(1)}%, trough P10 ${Math.round(mc.cashPath.trough.p10)}, trough median ${Math.round(mc.cashPath.trough.p50)}${mc.cashPath.worstMonth ? `, tightest month ${mc.cashPath.worstMonth.period} (${((mc.cashPath.worstMonth.pBelowFloor || 0) * 100).toFixed(0)}% of draws under floor)` : ''}.` : '',
             'Write a concise CFO scenario briefing in plain English. Cite only provided deltas. Do not apply changes.',
           ].filter(Boolean).join('\n'),
         }),

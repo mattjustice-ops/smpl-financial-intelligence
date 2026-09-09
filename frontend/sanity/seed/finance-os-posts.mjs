@@ -328,6 +328,11 @@ export const financeOsPosts = [
         "It's a single authoritative representation of the business that every source system maps into. It standardizes what each metric means and gives every downstream report a common financial language, so numbers can't disagree across audiences.",
       ),
 
+      h2("Related reading"),
+      p(
+        "Two practical follow-ons from this category: [why AI vs. automation is the wrong question for Finance](/blog/ai-vs-automation-finance) and [build vs. buy for Finance AI](/blog/build-vs-buy-finance-ai).",
+      ),
+
       h2("Where SMPL.ai fits"),
       p(
         "SMPL.ai is an example of this emerging category — an AI operating system built for growth-stage SaaS finance teams.",

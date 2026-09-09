@@ -31,6 +31,7 @@ def _bundle(**kwargs) -> ReportingBundle:
             scenario="Combined",
             start_period="2026-01",
             end_period="2026-12",
+            as_of_period="2026-05",
         ),
     )
     defaults.update(kwargs)

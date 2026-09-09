@@ -24,6 +24,35 @@ logger = logging.getLogger(__name__)
 ARCHIVE_DIR = _BACKEND_ROOT / "tmp" / "mda-package-archive"
 MDA_COMMENTARY_MAX_TOKENS = 24000
 
+# The verifiers replace a rejected string with one of these sentinels. They are
+# internal outcomes, not commentary, so they must never reach a customer's cell.
+_DK_PREFIX = "I don't know"
+
+
+def _blank_unverified_cells(node: Any) -> tuple[Any, int]:
+    """Recursively replace verification sentinels with empty strings.
+
+    Returns the cleaned structure and the number of cells blanked.
+    """
+    if isinstance(node, str):
+        return ("", 1) if node.lstrip().startswith(_DK_PREFIX) else (node, 0)
+    if isinstance(node, dict):
+        out: dict[Any, Any] = {}
+        total = 0
+        for key, value in node.items():
+            out[key], count = _blank_unverified_cells(value)
+            total += count
+        return out, total
+    if isinstance(node, list):
+        cleaned: list[Any] = []
+        total = 0
+        for value in node:
+            new_value, count = _blank_unverified_cells(value)
+            cleaned.append(new_value)
+            total += count
+        return cleaned, total
+    return node, 0
+
 
 def build_prompt2_user_message(
     bundle: ReportingBundle,
@@ -266,6 +295,19 @@ def build_claude_mda_package_xlsx_bytes(
             payload_warnings = payload.get("payload_warnings") or []
             if payload_warnings:
                 logger.warning("MDA package payload warnings: %s", "; ".join(payload_warnings))
+
+            # Blank rejected cells rather than shipping the verification sentinel as
+            # prose. This runs after the fail-closed citation gate above so that gate
+            # still sees the markers and can block a wholly unverified package; from
+            # here on an empty cell is the honest output, since the alternative was a
+            # workbook that told the reader "I don't know" in the commentary column.
+            commentary, blanked = _blank_unverified_cells(commentary)
+            if blanked:
+                logger.warning(
+                    "P15 MD&A: blanked %d unverified commentary cell(s) before write",
+                    blanked,
+                )
+
             xlsx_bytes = build_mda_package_xlsx_bytes(
                 template_path=template,
                 commentary=commentary,

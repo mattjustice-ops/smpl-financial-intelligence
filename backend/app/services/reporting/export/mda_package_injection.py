@@ -248,11 +248,37 @@ def _truncate_at_sentence(text: str, limit: int) -> str:
     return clipped.rstrip(".,;:") + "…"
 
 
+def _normalize_sheet_rows(rows: Any) -> dict[str, Any]:
+    """Accept either row-keyed or list-of-rows sheet shapes.
+
+    The prompt asks for a row_id-keyed object, but the model just as often returns
+    ``{"rows": [{"row_id": ..., ...}]}`` or a bare list. Both are unambiguous, so
+    they are normalized here rather than failing the whole export.
+    """
+    if isinstance(rows, dict):
+        inner = rows.get("rows")
+        if isinstance(inner, (list, dict)) and len(rows) == 1:
+            return _normalize_sheet_rows(inner)
+        return rows
+    if isinstance(rows, list):
+        out: dict[str, Any] = {}
+        for entry in rows:
+            if not isinstance(entry, dict):
+                continue
+            row_id = entry.get("row_id") or entry.get("id")
+            if not row_id:
+                continue
+            out[str(row_id)] = {k: v for k, v in entry.items() if k not in ("row_id", "id")}
+        return out
+    return {}
+
+
 def trim_commentary_response(response: dict[str, Any]) -> dict[str, Any]:
     """Enforce per-sheet character limits on Claude JSON."""
     out: dict[str, Any] = {}
-    for sheet, rows in response.items():
-        if not isinstance(rows, dict):
+    for sheet, raw_rows in response.items():
+        rows = _normalize_sheet_rows(raw_rows)
+        if not rows:
             continue
         limits = CHAR_LIMITS.get(sheet, {})
         sheet_out: dict[str, Any] = {}

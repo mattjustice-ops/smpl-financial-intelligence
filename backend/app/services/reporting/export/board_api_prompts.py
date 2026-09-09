@@ -36,7 +36,8 @@ OUTPUT FORMAT RULES — CRITICAL
 - Respect max_bullets and max_words_per_bullet from the slide object
 - No bullet may repeat information from another bullet on the same slide
 - Lead with the most important signal, not chronology
-- Always include: current period actual, budget, variance ($), and one forward-looking implication when metrics support it
+- Always include: current period actual, budget, variance ($). Add a forward-looking
+  implication only when a forecast or pipeline value in the payload supports it
 - Reference periods using close_period_label from the payload (current month), QTD, YTD, H2 as appropriate
 - Never use the word "significant" — use the actual number instead
 - Never start two consecutive bullets with the same word
@@ -45,6 +46,43 @@ OUTPUT FORMAT RULES — CRITICAL
 - Causal / attribution language may only name drivers present in attribution_package.allowed_drivers
   (or structured slide metrics / freeze labels provided). If no allowlisted driver fits, restate
   the metric variance without inventing an operational cause.
+
+NUMBERS — COPY, NEVER COMPUTE
+The metrics object already contains every figure a bullet needs. For each metric it
+publishes the actual, the budget, and the variance: "<metric>_var" in dollars,
+"<metric>_var_pct" in percent, and "<metric>_var_bps" for percentage metrics.
+- Quote those verbatim. Do not subtract actual minus budget yourself.
+- A variance you computed will differ from the engine in the last digit and the
+  whole bullet is deleted. Use "ebitda_var", never your own "$661.5K - $647.5K".
+- If a metric has no published variance, state actual and budget only.
+- Never invent a ratio, coverage multiple, or per-unit figure. Use the published
+  "pipeline_coverage", "blended_efficiency", "cash_floor_coverage" or
+  "cash_headroom_coverage" values, or omit the point entirely. Dividing cash by the
+  floor yourself produces the same rejected bullet as any other computed number.
+- A benchmark you compare against is also a figure and must be in the payload.
+  The only real thresholds are the published budget values and "cash_floor".
+  Industry rules of thumb do not exist in this engine: "healthy threshold of 3x+",
+  "retention below 100%", "rule of 40", "best-in-class 80% margin" are all invented
+  and delete the bullet, even when the rest of it is correct.
+  Write "pipeline coverage of 5.5x", never "5.5x, above the healthy 3x".
+  The figure and its budget comparison are the whole story — nothing else is needed.
+
+DRIVERS AND FORWARD CLAIMS — A REJECTED BULLET IS DELETED
+A bullet that names an unverifiable cause, or predicts something the payload cannot
+support, is replaced on the slide with "I don't know". Protect the bullet:
+- Name a cause only from attribution_package.allowed_drivers or the slide metrics.
+- Vague causes are rejected: "timing", "timing of contract starts", "seasonality",
+  "mix", "one-time items", "execution". They are not drivers.
+- Trend and sentiment words are rejected for the same reason: "momentum",
+  "weakening demand", "softening", "stability", "headwind", "traction". The engine
+  measured one closed month against budget; it cannot confirm a trend. Name the
+  metric instead — "expansion of $869.1K, $43.5K under budget", not "weaker upsell
+  momentum".
+- A forward-looking claim must rest on a forecast or pipeline value in the payload.
+  Say "FY forecast ARR of $X vs budget $Y", not "churn may accelerate in H2".
+- Conditional speculation ("if expansion does not recover...") is always rejected.
+- With no allowlisted driver, state the variance and its magnitude plainly. A precise
+  bullet with no cause is far better than a deleted one.
 
 DO NOT
 - Copy or lightly edit prior-month example commentary from templates

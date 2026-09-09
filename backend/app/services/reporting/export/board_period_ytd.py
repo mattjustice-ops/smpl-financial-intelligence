@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from app.services.reporting.export.effective_periods import export_fiscal_periods, is_closed_period
+from app.services.reporting.export.is_line_resolver import fs_by_period
 from app.services.reporting.export.period_views import qtd_periods, ytd_periods
 from app.services.reporting.export.schemas import ReportingBundle
 from app.services.reporting.period_utils import to_period
@@ -42,18 +43,13 @@ def _fs_by_period(
     line_match: str,
     scenario: str,
 ) -> dict[str, Decimal]:
-    fs = bundle.comparison_financial_statements or bundle.financial_statements
-    if not fs:
-        return {}
-    n = line_match.lower()
-    out: dict[str, Decimal] = {}
-    for row in fs.income_statement.rows:
-        p = to_period(str(row.period)[:7])
-        if row.scenario != scenario:
-            continue
-        if n in row.line_item.lower() and "deferred" not in row.line_item.lower():
-            out[p] = row.amount
-    return out
+    """One amount per period for a logical income-statement field.
+
+    Delegates to the strict resolver: a substring test on "revenue" also matches
+    "cost of revenue", and because the later row wins the rollup silently returned
+    COGS as revenue.
+    """
+    return fs_by_period(bundle, line_match, scenario)
 
 
 def _sum_periods(values: dict[str, Decimal], periods: list[str]) -> Decimal:

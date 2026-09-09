@@ -32,6 +32,13 @@ DONT_KNOW_CITATION = (
 )
 
 _INLINE_CITATION_RE = re.compile(r"\(([^)]{2,160})\)|\[([^\]\[]{2,160})\]")
+
+#: Parenthetical that is purely a number — optional sign, currency, magnitude or
+#: unit suffix. These are prose asides, never citation tokens.
+_BARE_FIGURE_RE = re.compile(
+    r"[+\-\u2212]?\s*\$?\s*[\d,]+(?:\.\d+)?\s*(?:[KkMmBb]|%|bps|pts?|pp|x|FTE)?",
+    re.IGNORECASE,
+)
 _PERIOD_CLAUSE_RE = re.compile(
     r",?\s*period\s+[0-9]{4}-[0-9]{2}\b",
     re.IGNORECASE,
@@ -133,9 +140,10 @@ def extract_inline_citation_tokens(text: str) -> list[str]:
     tokens: list[str] = []
     for m in _INLINE_CITATION_RE.finditer(text):
         body = m.group(1) or m.group(2) or ""
-        if re.fullmatch(r"\$?\s*[\d,]+(?:\.\d+)?\s*[KkMmBb]?", body.strip()):
-            continue
-        if re.fullmatch(r"[\d.]+\s*%", body.strip()):
+        # A parenthetical that is only a figure is prose, not a citation attempt.
+        # The sign matters: "(+0.5%)" and "(-$84.2K)" are how finance writes a
+        # variance, and treating them as failed citations blanked whole cells.
+        if _BARE_FIGURE_RE.fullmatch(body.strip()):
             continue
         norm = _normalize_cite_token(body)
         if norm:

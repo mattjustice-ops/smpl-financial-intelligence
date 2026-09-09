@@ -1376,6 +1376,28 @@ def verify_variance_commentary_tieout(
     return warnings
 
 
+_RENDER_GEOMETRY_KEY_HINTS = ("chart", "shape_bars", "sparkline", "geometry")
+
+
+def strip_render_geometry(obj: Any) -> Any:
+    """Drop chart/rendering subtrees so geometry is never treated as a financial fact.
+
+    Bar heights and offsets are unitless layout numbers that happen to sit in the
+    same payload as real metrics. Leaving them in the evidence map let a wrong
+    figure "verify" against a bar height (a 180% claim matched a 1.72 bar), which
+    is worse than a missing match because it passes silently.
+    """
+    if isinstance(obj, dict):
+        return {
+            k: strip_render_geometry(v)
+            for k, v in obj.items()
+            if not any(hint in str(k).lower() for hint in _RENDER_GEOMETRY_KEY_HINTS)
+        }
+    if isinstance(obj, list):
+        return [strip_render_geometry(v) for v in obj]
+    return obj
+
+
 def evidence_values_from_mda_payload(payload: dict[str, Any]) -> dict[str, "Decimal"]:
     """Flatten display / period-matrix numbers into an evidence map for claim verify."""
     from decimal import Decimal
@@ -1386,8 +1408,39 @@ def evidence_values_from_mda_payload(payload: dict[str, Any]) -> dict[str, "Deci
     display = payload.get("variance_commentary_display") or {}
     deck = payload.get("deck_payload") or {}
     matrix = deck.get("period_matrix") or {}
-    flatten_evidence_values(display, prefix="variance_commentary_display", out=values)
-    flatten_evidence_values(matrix, prefix="period_matrix", out=values)
+    flatten_evidence_values(
+        strip_render_geometry(display), prefix="variance_commentary_display", out=values
+    )
+    flatten_evidence_values(strip_render_geometry(matrix), prefix="period_matrix", out=values)
+    # The model is shown the whole deck payload and the per-sheet metric rows, so
+    # everything it is allowed to read has to be verifiable. Covering only the
+    # variance display and period matrix stripped correct figures — ARR bridge
+    # movements, P&L detail, and cash liquidity — back to "I don't know".
+    for block in ("arr_analysis", "pl_review", "pl_detail", "cash_liquidity", "fy_outlook"):
+        source = deck.get(block)
+        if not source:
+            continue
+        flatten_evidence_values(
+            strip_render_geometry(source), prefix=f"deck.{block}", out=values
+        )
+    sheets = payload.get("sheets") or {}
+    if isinstance(sheets, dict):
+        for sheet_name, sheet in sheets.items():
+            if not isinstance(sheet, dict) or not sheet.get("rows"):
+                continue
+            # Key by row_id, not list position. Commentary cites the row it is
+            # written for ("gtm_paid_search.spend"), which never resolved against
+            # positional keys like "sheets.gtm_review[0].spend".
+            for index, row in enumerate(sheet["rows"]):
+                row_key = None
+                if isinstance(row, dict):
+                    row_key = str(row.get("row_id") or "").strip() or None
+                prefix = (
+                    f"sheets.{sheet_name}.{row_key}"
+                    if row_key
+                    else f"sheets.{sheet_name}[{index}]"
+                )
+                flatten_evidence_values(row, prefix=prefix, out=values)
     # Also accept preformatted money strings by parsing via claim_verify helpers.
     from app.services.commentary.claim_verify import _to_decimal
 
@@ -1409,7 +1462,7 @@ def evidence_values_from_deck_payload(payload: dict[str, Any]) -> dict[str, "Dec
     from app.services.commentary.claim_verify import _to_decimal, flatten_evidence_values
 
     values: dict[str, Decimal] = {}
-    flatten_evidence_values(payload, prefix="deck", out=values)
+    flatten_evidence_values(strip_render_geometry(payload), prefix="deck", out=values)
     parsed: dict[str, Decimal] = {}
     for key, val in values.items():
         if isinstance(val, Decimal):

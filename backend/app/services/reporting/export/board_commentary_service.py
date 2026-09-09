@@ -964,9 +964,12 @@ def enrich_slide_with_ai(
         from app.services.commentary.attribution_verify import (
             DONT_KNOW_ATTRIBUTION,
             DONT_KNOW_FORWARD,
+            SLIDE_CONFIG_KEYS,
             apply_fail_closed_attribution_to_bullet_list,
             build_attribution_package_from_deck_payload,
+            build_attribution_package_from_slide_payload,
             build_attribution_package_from_text_blob,
+            normalize_allowlist,
         )
         from app.services.commentary.claim_verify import (
             DONT_KNOW_NARRATIVE,
@@ -974,7 +977,18 @@ def enrich_slide_with_ai(
             flatten_evidence_values,
         )
 
-        evidence = flatten_evidence_values(payload, prefix="slide")
+        # Prompt limits live on the same slide dict as the metrics. Flattening them
+        # offered "max_bullets: 5" and "slide_number: 2" as financial evidence, so a
+        # wrong "4.8%" could match 5 and pass. Verify against metrics only.
+        evidence_payload = {
+            k: (
+                {ik: iv for ik, iv in v.items() if ik not in SLIDE_CONFIG_KEYS}
+                if k == "slide" and isinstance(v, dict)
+                else v
+            )
+            for k, v in payload.items()
+        }
+        evidence = flatten_evidence_values(evidence_payload, prefix="slide")
         if interactive_freeze:
             from app.services.commentary.claim_verify import evidence_values_from_text_blob
 
@@ -993,26 +1007,28 @@ def enrich_slide_with_ai(
         # Attribution allowlist: prefer structured slide/deck fields; augment with
         # weak freeze-blob labels when present (honest: blob labels are thin).
         attribution = build_attribution_package_from_deck_payload(payload)
+        merged = normalize_allowlist(attribution) + normalize_allowlist(
+            build_attribution_package_from_slide_payload(payload)
+        )
         if interactive_freeze:
-            blob_pkg = build_attribution_package_from_text_blob(
-                interactive_freeze, metric="board_slide_freeze_blob"
+            merged += normalize_allowlist(
+                build_attribution_package_from_text_blob(
+                    interactive_freeze, metric="board_slide_freeze_blob"
+                )
             )
-            from app.services.commentary.attribution_verify import normalize_allowlist
-
-            merged = normalize_allowlist(attribution) + normalize_allowlist(blob_pkg)
-            attribution = {
-                **attribution,
-                "allowed_drivers": [
-                    {
-                        "id": d.id,
-                        "label": d.label,
-                        "amount": str(d.amount) if d.amount is not None else None,
-                        "source": d.source,
-                        "aliases": list(d.aliases),
-                    }
-                    for d in {d.id: d for d in merged}.values()
-                ],
-            }
+        attribution = {
+            **attribution,
+            "allowed_drivers": [
+                {
+                    "id": d.id,
+                    "label": d.label,
+                    "amount": str(d.amount) if d.amount is not None else None,
+                    "source": d.source,
+                    "aliases": list(d.aliases),
+                }
+                for d in {d.id: d for d in merged}.values()
+            ],
+        }
         bullets, attr_result = apply_fail_closed_attribution_to_bullet_list(
             bullets, attribution, policy="interactive"
         )
@@ -1051,14 +1067,26 @@ def enrich_slide_with_ai(
             )
         # Only story gates can wipe bullets interactive; numeric/citation soft-warn.
         wiped = {DONT_KNOW_ATTRIBUTION, DONT_KNOW_FORWARD, DONT_KNOW_NARRATIVE, DONT_KNOW_CITATION}
-        if bullets and all(b in wiped for b in bullets):
-            return SlideCommentary(
-                what_happened=DONT_KNOW_ATTRIBUTION, bullets=[DONT_KNOW_ATTRIBUTION]
+        # A rejected bullet is dropped, never printed. The sentinel is an internal
+        # verification outcome, so rendering it put "I don't know — one or more
+        # causal claims could not be verified" on a board slide. The bullets that
+        # survive are engine-verified, and every drop is already logged above, so
+        # the audit trail lives in the log rather than on the customer's screen.
+        kept = [b for b in bullets if b not in wiped]
+        dropped = len(bullets) - len(kept)
+        if dropped:
+            logger.warning(
+                "P15 board slide %s: dropped %d unverified bullet(s) from render",
+                slide_key,
+                dropped,
             )
-        narrative = format_key_takeaway_bullets(bullets)
+        # With nothing left, the deterministic pre-AI commentary is a real fallback.
+        if not kept:
+            return base
+        narrative = format_key_takeaway_bullets(kept)
         if not narrative:
             return base
-        return SlideCommentary(what_happened=narrative, bullets=bullets)
+        return SlideCommentary(what_happened=narrative, bullets=kept)
     except Exception:
         return base
 

@@ -33,13 +33,21 @@ def _minimal_bundle() -> ReportingBundle:
             scenario="Combined",
             start_period="2026-01",
             end_period="2026-12",
+            as_of_period="2026-05",
         ),
         validation=ExportValidationSummary(
             status="pass",
             failed_count=0,
             warning_count=0,
             passed_count=1,
-            checks=[ValidationCheck(validation_name="stub", status="pass")],
+            checks=[
+                ValidationCheck(
+                    scenario="Combined",
+                    period="2026-05",
+                    validation_name="stub",
+                    status="pass",
+                )
+            ],
         ),
         mda_commentary=[
             CommentaryField(
@@ -55,35 +63,47 @@ def _minimal_bundle() -> ReportingBundle:
 def test_board_package_full_narrative():
     bundle = _minimal_bundle()
     pkg = build_board_package_from_bundle(bundle, include_validation_appendix=True)
-    assert len(pkg.slides) >= 10  # viability filter may drop sparse slides
-    assert pkg.slides[0].slide_id == "executive_summary"
-    assert pkg.slides[0].layout == "executive_ytd"
-    assert pkg.slides[-1].slide_id == "validation"
+    # Content slides are preceded by section_transition dividers, so assert on
+    # slide ids rather than positions.
+    ids = [s.slide_id for s in pkg.slides]
+    assert "executive_summary" in ids
+    assert ids[-1] == "validation"
+    assert ids.index("section_executive_summary") < ids.index("executive_summary")
 
 
 def test_executive_package_mode():
     bundle = _minimal_bundle()
     pkg = build_board_package_from_bundle(bundle, package_mode="executive_summary")
-    assert len(pkg.slides) == 5
-    assert all(s.slide_id != "marketing_channels" for s in pkg.slides)
+    ids = [s.slide_id for s in pkg.slides]
+    # Executive mode drops the section dividers and any slide the viability
+    # filter finds too sparse to stand on its own.
+    assert ids == ["executive_summary", "mda_summary", "cash_forecast", "risks_opportunities"]
+    assert "marketing_channels" not in ids
 
 
 def test_executive_summary_executive_ytd_layout():
     bundle = _minimal_bundle()
     pkg = build_board_package_from_bundle(bundle)
-    exec_slide = pkg.slides[0]
+    exec_slide = next(s for s in pkg.slides if s.slide_id == "executive_summary")
     assert exec_slide.layout == "executive_scorecard"
     assert exec_slide.table is not None or exec_slide.chart is not None
     if exec_slide.table:
         assert exec_slide.table.headers[1] == "CM"
 
 
-def test_gtm_slide_uses_story_layout():
+def test_story_slide_layout_has_no_secondary_chart():
     bundle = _minimal_bundle()
     pkg = build_board_package_from_bundle(bundle)
-    gtm = next(s for s in pkg.slides if s.slide_id == "gtm_performance")
-    assert gtm.layout == "story_slide"
-    assert gtm.secondary_chart is None
+    story = [s for s in pkg.slides if s.layout == "story_slide"]
+    assert story, "expected at least one story_slide in the deck"
+    assert all(s.secondary_chart is None for s in story)
+
+
+def test_viability_filter_drops_slides_without_data():
+    # The minimal bundle carries no GTM rows; the slide must not be emitted
+    # rather than rendering as an empty frame in front of a board.
+    pkg = build_board_package_from_bundle(_minimal_bundle())
+    assert "gtm_performance" not in [s.slide_id for s in pkg.slides]
 
 
 def test_render_pptx_bytes_non_empty():

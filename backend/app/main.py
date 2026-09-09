@@ -39,6 +39,7 @@ from app.api.close_workflow_routes import close_workflow_router
 from app.api.workspace_routes import workspace_router
 from app.api.waterfall_routes import waterfall_router
 from app.api.workforce_routes import workforce_router
+from app.api.predictive_planning_routes import predictive_planning_router
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
@@ -159,6 +160,7 @@ app.include_router(workspace_router, prefix="/api/v1")
 app.include_router(ingest_router, prefix="/api/v1")
 app.include_router(close_workflow_router, prefix="/api/v1")
 app.include_router(workforce_router, prefix="/api/v1")
+app.include_router(predictive_planning_router, prefix="/api/v1")
 
 
 @app.get("/api/v1/workforce/ping", tags=["workforce"])

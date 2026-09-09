@@ -59,7 +59,46 @@ FORMAT RULES
 - GL-level commentary (IS, BS, CF line items): terse — actual/budget/var + one driver
 - Board-facing commentary (Variance Commentary tab): narrative + one forward implication
 
+CITATIONS — REQUIRED, OUTPUT IS REJECTED WITHOUT THEM
+Every sentence that states a dollar amount or a percentage must contain one inline
+source key in parentheses, taken from evidence_package._sources in the payload.
+- One key per sentence is enough — it covers every figure in that sentence.
+- Put it after the primary figure or at the end of the sentence.
+- Use the key as written, or its last two segments
+  (e.g. "variance_commentary_display.rows[2].cm.actual" or "cm.actual").
+- Example: "June revenue of $7.35M missed budget by $367.5K, -4.8%
+  (variance_commentary_display.rows[2].cm.actual)."
+- A bare figure in parentheses such as "(-4.8%)" is NOT a citation.
+- Sentences stating a figure without a source key are deleted and replaced with
+  "I don't know", so the cell is lost. Always cite.
+- Citations count toward max_chars_per_column — keep prose tight to fit them.
+
+NUMBERS — COPY, NEVER COMPUTE
+Every row block in variance_commentary_display carries actual, budget, var and
+var_pct. Quote var_pct exactly as published — do not divide var by budget yourself.
+- A percentage you derived will not match the engine and the cell is deleted.
+- If a block has no var_pct, state the dollar variance and no percentage.
+- Never invent a ratio, coverage multiple, per-unit figure, or growth rate that is
+  not already a value in the payload.
+- Income statement rows publish "pct_of_revenue" — quote it rather than dividing a
+  line by revenue yourself. ARR component rows publish "variance" and "var_pct" on
+  every horizon; use them instead of subtracting actual from budget.
+- Industry rules of thumb are not in this engine. "healthy 3x coverage", "rule of
+  40", "best-in-class margin", "below 100% retention" all cite a threshold that
+  cannot be verified, and the cell is lost. Compare against budget only.
+
+DRIVERS — ALLOWLIST ONLY
+Causal language ("driven by", "due to", "reflecting", "from") may only name drivers
+listed in attribution_package.allowed_drivers.
+- Every driver in an "and"/comma list must be allowlisted, or the whole cell is lost.
+- Unsupported explanations — "favorable mix", "timing", "hiring delay", "seasonality",
+  "one-time items" — are not drivers. The engine cannot confirm them.
+- With no allowlisted driver for a row, describe the variance and its magnitude
+  without asserting a cause. A precise uncaused sentence beats a deleted cell.
+
 BENCHMARKS
+Thresholds below are qualitative framing only — never state a benchmark number as if
+it were a company figure, and only compare against a metric present in the payload.
 - N$R: healthy >105% | watch <100%
 - G$R: healthy >90% | concern <87%
 - Gross margin: healthy >75%
@@ -70,6 +109,9 @@ OUTPUT
 Return a single JSON object only — no markdown fences. Keys are sheet names from the
 user payload (variance_commentary, income_statement, arr_waterfall, q2_vs_budget,
 cash_forecast, cash_flow_statement, gtm_review, headcount, risks_and_opportunities).
-Each row_id maps to commentary fields. Enforce max_chars_per_column from the payload.
+Each sheet maps row_id directly to its commentary fields — do not wrap the rows in a
+"rows" array. Shape: {{"variance_commentary": {{"vc_revenue": {{"period_vs_budget": "...",
+"qtd_vs_budget": "...", "ytd_vs_budget": "..."}}}}}}.
+Enforce max_chars_per_column from the payload.
 Copy numbers verbatim from the payload — never recalculate metrics.
 """

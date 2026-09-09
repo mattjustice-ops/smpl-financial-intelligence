@@ -6,6 +6,7 @@ import calendar
 from decimal import Decimal
 from typing import Any
 
+from app.services.commentary.claim_verify import _to_decimal
 from app.services.reporting.export.board_metrics_snapshot import build_metrics_snapshot
 from app.services.reporting.export.board_period_ytd import rollup_waterfall_metric
 from app.services.reporting.export.board_platform_metrics import (
@@ -23,11 +24,7 @@ from app.services.reporting.export.board_slide_commentary_payload import (
 )
 from app.services.reporting.export.period_views import qtd_periods
 from app.services.reporting.export.deck_payload_enriched import build_pl_detail_block
-from app.services.reporting.export.prompt5_deck import (
-    _marketing_block,
-    _marketing_by_channel,
-    _risks_and_opportunities,
-)
+from app.services.reporting.export.prompt5_deck import _marketing_by_channel
 from app.services.reporting.export.schemas import ReportingBundle
 from app.services.reporting.period_utils import prior_period, to_period
 
@@ -49,13 +46,46 @@ def _ytd_label(period: str) -> str:
     return f"Jan–{calendar.month_name[int(month)]} {year}"
 
 
+def _var_pct_from_display(actual: str, budget: str) -> str:
+    """Variance % derived from the same rounded figures shown in the sheet.
+
+    Commentary quotes a variance percent for every row, but only period_matrix
+    metrics carried one. Deriving it from the display strings keeps the published
+    percent tied to the actual/budget the reader sees, so it round-trips through
+    claim verification instead of reading as an invented number.
+    """
+    act = _to_decimal(actual)
+    bud = _to_decimal(budget)
+    if act is None or bud is None or bud == 0:
+        return ""
+    return fmt_deck_var_pct(act, bud)
+
+
+def _display_horizon(row: dict[str, Any], horizon: str) -> dict[str, str]:
+    """One actual/budget/var/var_pct cell group for variance_commentary_display."""
+    blk = row.get(horizon) or {}
+    actual = str(blk.get("actual", "") or "")
+    budget = str(blk.get("budget", "") or "")
+    out = {
+        "actual": actual,
+        "budget": budget,
+        "var": str(blk.get("var", blk.get("variance", "")) or ""),
+    }
+    var_pct = str(blk.get("var_pct", "") or "") or _var_pct_from_display(actual, budget)
+    if var_pct:
+        out["var_pct"] = var_pct
+    return out
+
+
 def _horizon_block(row: dict[str, Any], horizon: str) -> dict[str, str]:
     blk = row.get(horizon) or {}
+    actual = str(blk.get("actual") or "")
+    budget = str(blk.get("budget") or "")
     return {
-        "actual": str(blk.get("actual") or ""),
-        "budget": str(blk.get("budget") or ""),
+        "actual": actual,
+        "budget": budget,
         "var": str(blk.get("variance") or blk.get("var") or ""),
-        "var_pct": str(blk.get("var_pct") or ""),
+        "var_pct": str(blk.get("var_pct") or "") or _var_pct_from_display(actual, budget),
     }
 
 
@@ -109,10 +139,13 @@ def _pl_horizon_blocks(pl_detail: dict[str, Any], line_key: str) -> tuple[dict[s
 
     def _blk(horizon: str) -> dict[str, str]:
         row = (pl_detail.get(horizon) or {}).get(line_key) or {}
+        actual = str(row.get("actual") or "")
+        budget = str(row.get("budget") or "")
         return {
-            "actual": str(row.get("actual") or ""),
-            "budget": str(row.get("budget") or ""),
+            "actual": actual,
+            "budget": budget,
             "var": str(row.get("variance") or row.get("var") or ""),
+            "var_pct": _var_pct_from_display(actual, budget),
         }
 
     return _blk("cm"), _blk("qtd"), _blk("ytd")
@@ -190,8 +223,6 @@ def build_mda_package_payload(
     hc_cm, hc_qtd, hc_ytd = _headcount_horizon_blocks(bundle, as_of, m)
 
     channels = _marketing_by_channel(bundle, as_of)
-    gtm_block = _marketing_block(bundle, as_of, m)
-    ro = _risks_and_opportunities(bundle, m)
 
     def vc_row(
         row_id: str,
@@ -296,11 +327,26 @@ def build_mda_package_payload(
         ),
     ]
 
+    # The QTD/YTD blocks carry variance already; the current-month block did not,
+    # so component commentary computed its own and drifted off the engine value.
+    def _arr_period_block(key: str) -> dict[str, str]:
+        actual = str(arr.get(key, "") or "")
+        budget = str(arr.get(f"{key}_budget", "") or "")
+        out = {"actual": actual, "budget": budget}
+        act_dec = _to_decimal(actual)
+        bud_dec = _to_decimal(budget)
+        if act_dec is not None and bud_dec is not None:
+            out["variance"] = fmt_deck_money(act_dec - bud_dec)
+        var_pct = _var_pct_from_display(actual, budget)
+        if var_pct:
+            out["var_pct"] = var_pct
+        return out
+
     arr_rows = [
         {
             "row_id": f"arr_{key}",
             "metric": label,
-            "period": {"actual": arr.get(key, ""), "budget": arr.get(f"{key}_budget", "")},
+            "period": _arr_period_block(key),
             "qtd": _arr_component_horizons(bundle, wf)["qtd"],
             "ytd": _arr_component_horizons(bundle, wf)["ytd"],
         }
@@ -334,41 +380,146 @@ def build_mda_package_payload(
             "spend": ch["spend"],
             "pipeline": ch["pipeline"],
             "efficiency": ch["efficiency_label"],
+            # "5.5x pipeline/spend" carries the ratio in prose, so it never became a
+            # numeric evidence value and every cited efficiency figure was stripped.
+            "efficiency_x": ch["efficiency_x"],
             "rank": str(i + 1),
         }
         for i, ch in enumerate(channels[:10])
     ]
 
-    ro_rows = []
-    risk_map = [
-        ("ro_gtm_paid_search", "RISK", "GTM", "HIGH"),
-        ("ro_retention_smb", "RISK", "Retention", "HIGH"),
-        ("ro_pipeline", "RISK", "Pipeline", "MEDIUM"),
-        ("ro_cash_h2", "RISK", "Cash", "LOW"),
-        ("ro_opp_gtm", "OPP", "GTM", "HIGH"),
-        ("ro_opp_expansion", "OPP", "ARR", "HIGH"),
-        ("ro_opp_margin", "OPP", "Margin", "MEDIUM"),
-        ("ro_opp_cash", "OPP", "Cash", "MEDIUM"),
+    # Every cash row used to receive the same aggregate current_month block, so a
+    # row asking for payroll commentary was handed the whole-month cash summary and
+    # the model supplied its own payroll figures. Each line now carries its own
+    # bridge actual/budget, which is what the commentary is asked to explain.
+    _cash_bridge_by_label = {
+        str(r.get("label") or "").strip().lower(): r
+        for r in ((cash.get("bridge_table") or {}).get("rows") or [])
+        if isinstance(r, dict)
+    }
+
+    def _cash_line_block(label: str) -> dict[str, str]:
+        row = _cash_bridge_by_label.get(label.strip().lower()) or {}
+        actual = str(row.get("actual") or "")
+        budget = str(row.get("budget") or "")
+        if not actual and not budget:
+            return {"line": label}
+        out = {"line": label, "actual": actual, "budget": budget}
+        act_dec = _to_decimal(actual)
+        bud_dec = _to_decimal(budget)
+        if act_dec is not None and bud_dec is not None:
+            out["var"] = fmt_deck_money(act_dec - bud_dec)
+        var_pct = _var_pct_from_display(actual, budget)
+        if var_pct:
+            out["var_pct"] = var_pct
+        return out
+
+    def _cfo_block() -> dict[str, str]:
+        """Cash flow from operations, the line this sheet actually reports."""
+        cm = cash.get("current_month") or {}
+        actual = str(cm.get("cfo_actual") or "")
+        budget = str(cm.get("cfo_budget") or "")
+        out = {"line": "Cash flow from operations", "actual": actual, "budget": budget}
+        act_dec = _to_decimal(actual)
+        bud_dec = _to_decimal(budget)
+        if act_dec is not None and bud_dec is not None:
+            out["var"] = fmt_deck_money(act_dec - bud_dec)
+        var_pct = _var_pct_from_display(actual, budget)
+        if var_pct:
+            out["var_pct"] = var_pct
+        return out
+
+    # Risks & Opportunities is derived from the close, not from a static card list.
+    # The seeded cards carried magnitudes that no longer matched the engine, so any
+    # figure the model copied off them failed claim verification and the cell was
+    # lost. Ranking real budget variances keeps every number citable and makes the
+    # matrix reflect the period actually being reported.
+    ro_candidates: list[tuple[str, str, str, dict[str, str], bool]] = [
+        ("revenue", "Revenue", "Revenue", _pl_horizon("ytd", "revenue"), True),
+        ("ebitda", "EBITDA", "P&L", _pl_horizon("ytd", "ebitda"), True),
+        ("arr_ending", "Ending ARR", "ARR", _horizon_block(arr_row, "ytd"), True),
+        ("net_new_arr", "Net New ARR", "ARR", nn_h["ytd"], True),
+        ("gross_margin", "Gross Margin %", "Margin", _horizon_block(gm, "ytd"), True),
+        ("cash", "Ending Cash", "Cash", _horizon_block(cash_row, "ytd"), True),
+        ("sm_spend", "S&M Spend", "GTM", sm_ytd, False),
+        ("churn", "ARR Churn", "Retention", _arr_component_horizons(bundle, "churn")["ytd"], False),
+        ("expansion", "ARR Expansion", "ARR", _arr_component_horizons(bundle, "expansion")["ytd"], True),
+        (
+            "contraction",
+            "ARR Contraction",
+            "Retention",
+            _arr_component_horizons(bundle, "contraction")["ytd"],
+            False,
+        ),
     ]
-    risks = ro.get("risks") or []
-    opps = ro.get("opportunities") or []
-    for i, (row_id, typ, cat, impact) in enumerate(risk_map):
-        src = risks[i] if typ == "RISK" and i < len(risks) else opps[max(0, i - 4)] if typ == "OPP" else {}
-        ro_rows.append(
-            {
-                "row_id": row_id,
-                "type": typ,
-                "category": cat,
-                "impact": impact,
-                "data": {
-                    "title": src.get("title", ""),
-                    "detail": src.get("detail", ""),
-                    "action": src.get("action", ""),
-                    "pipeline_coverage": arr.get("pipeline_coverage_x", ""),
-                    "blended_eff": gtm_block.get("blended_efficiency_x", ""),
+
+    revenue_ytd = _to_decimal(str((_pl_horizon("ytd", "revenue")).get("actual") or "")) or ZERO
+
+    def _impact(var_abs: Decimal) -> str:
+        """Severity scaled to YTD revenue so it travels across company sizes."""
+        if not revenue_ytd:
+            return "MEDIUM"
+        share = var_abs / revenue_ytd
+        if share >= Decimal("0.02"):
+            return "HIGH"
+        return "MEDIUM" if share >= Decimal("0.005") else "LOW"
+
+    scored: list[tuple[Decimal, str, dict[str, Any]]] = []
+    for key, label, cat, blk, higher_is_better in ro_candidates:
+        var_dec = _to_decimal(str(blk.get("var") or ""))
+        if var_dec is None or var_dec == 0:
+            continue
+        favorable = (var_dec > 0) if higher_is_better else (var_dec < 0)
+        var_abs = abs(var_dec)
+        scored.append(
+            (
+                var_abs,
+                "OPP" if favorable else "RISK",
+                {
+                    "row_id": f"ro_{'opp' if favorable else 'risk'}_{key}",
+                    "type": "OPP" if favorable else "RISK",
+                    "category": cat,
+                    "impact": _impact(var_abs),
+                    "data": {
+                        "metric": label,
+                        "actual": blk.get("actual", ""),
+                        "budget": blk.get("budget", ""),
+                        "var": blk.get("var", ""),
+                        "var_pct": blk.get("var_pct", ""),
+                        "horizon": "YTD",
+                        "direction": "favorable" if favorable else "unfavorable",
+                    },
                 },
-            }
+            )
         )
+
+    scored.sort(key=lambda t: t[0], reverse=True)
+    ro_rows = [row for _, typ, row in scored if typ == "RISK"][:4]
+    ro_rows += [row for _, typ, row in scored if typ == "OPP"][:4]
+
+    # Income-statement commentary always reasons in variance percent and percent of
+    # revenue. Publishing only actual/budget/variance left the model to divide, and
+    # every rounded result it produced missed the engine value and was stripped.
+    def _is_block(blk: dict[str, Any], revenue_blk: dict[str, Any]) -> dict[str, str]:
+        actual = str(blk.get("actual", "") or "")
+        budget = str(blk.get("budget", "") or "")
+        out = {
+            "actual": actual,
+            "budget": budget,
+            "variance": str(blk.get("variance", "") or ""),
+        }
+        var_pct = _var_pct_from_display(actual, budget)
+        if var_pct:
+            out["var_pct"] = var_pct
+        act_dec = _to_decimal(actual)
+        rev_dec = _to_decimal(str(revenue_blk.get("actual", "") or ""))
+        if act_dec is not None and rev_dec:
+            # Already scaled to percent, so suppress the ratio auto-scaling that
+            # would otherwise read a genuine 1.2%-of-revenue line as 120%.
+            out["pct_of_revenue"] = fmt_deck_pct(
+                act_dec / rev_dec * 100, as_percent=False
+            )
+        return out
 
     is_rows = []
     for key, row_id in (
@@ -385,9 +536,9 @@ def build_mda_package_payload(
         is_rows.append(
             {
                 "row_id": row_id,
-                "period": {k: cm.get(k, "") for k in ("actual", "budget", "variance")},
-                "qtd": {k: qtd.get(k, "") for k in ("actual", "budget", "variance")},
-                "ytd": {k: ytd.get(k, "") for k in ("actual", "budget", "variance")},
+                "period": _is_block(cm, (pl_detail.get("cm") or {}).get("revenue") or {}),
+                "qtd": _is_block(qtd, (pl_detail.get("qtd") or {}).get("revenue") or {}),
+                "ytd": _is_block(ytd, (pl_detail.get("ytd") or {}).get("revenue") or {}),
             }
         )
 
@@ -416,21 +567,9 @@ def build_mda_package_payload(
                     if r["row_id"] == "vc_gross_margin"
                     else "money"
                 ),
-                "cm": {
-                    "actual": r["period"].get("actual", ""),
-                    "budget": r["period"].get("budget", ""),
-                    "var": r["period"].get("var", r["period"].get("variance", "")),
-                },
-                "qtd": {
-                    "actual": r["qtd"].get("actual", ""),
-                    "budget": r["qtd"].get("budget", ""),
-                    "var": r["qtd"].get("var", r["qtd"].get("variance", "")),
-                },
-                "ytd": {
-                    "actual": r["ytd"].get("actual", ""),
-                    "budget": r["ytd"].get("budget", ""),
-                    "var": r["ytd"].get("var", r["ytd"].get("variance", "")),
-                },
+                "cm": _display_horizon(r, "period"),
+                "qtd": _display_horizon(r, "qtd"),
+                "ytd": _display_horizon(r, "ytd"),
             }
             for r in variance_rows
         ],
@@ -438,12 +577,59 @@ def build_mda_package_payload(
     # Soft list for payload inspection; Prompt 2 emit path re-runs with fail_closed=True.
     tie_out_warnings = verify_variance_commentary_tieout(variance_commentary_display, matrix)
     payload_warnings = validate_deck_payload(deck) + tie_out_warnings
+    sheets = {
+        "variance_commentary": _sheet_spec(
+            f"Board-facing Variance Commentary tab — {month} Actual/Budget/QTD/YTD. 400 chars per column.",
+            400,
+            variance_rows,
+        ),
+        "q2_vs_budget": _sheet_spec(
+            "Q2 vs Budget summary blocks — Income Statement, ARR, Cash. 300 chars per column.",
+            300,
+            [{"row_id": "qvb_income_statement", "category": "INCOME STATEMENT"}],
+        ),
+        "arr_waterfall": _sheet_spec("ARR waterfall rows. 300 chars per column.", 300, arr_rows),
+        "income_statement": _sheet_spec("Income statement GL lines. 200 chars per column.", 200, is_rows),
+        "cash_forecast": _sheet_spec(
+            "Cash bridge rows from cash_liquidity block. 200 chars per column.",
+            200,
+            [
+                {"row_id": f"cf_{line}", "period": _cash_line_block(label)}
+                for line, label in (
+                    ("collections", "Collections"),
+                    ("payroll", "Payroll"),
+                    ("vendor_payments", "Vendor payments"),
+                    ("commissions", "Commissions"),
+                    ("capex", "Capex"),
+                    ("cash_eop_actual", "Ending cash"),
+                )
+            ],
+        ),
+        "cash_flow_statement": _sheet_spec(
+            "YTD CFS lines from appendix. 200 chars per column.",
+            200,
+            [{"row_id": "cfs_cfo", "period": _cfo_block()}],
+        ),
+        "gtm_review": _sheet_spec("Marketing channel efficiency. 175 chars per column.", 175, gtm_rows),
+        "headcount": _sheet_spec("Headcount by department. 200 chars per column.", 200, []),
+        "risks_and_opportunities": {
+            "description": "Risks & Opportunities matrix. Description 350 chars, action 200 chars.",
+            "max_chars_description": 350,
+            "max_chars_action": 200,
+            "rows": ro_rows,
+        },
+    }
+
+    # Every sheet the model must write commentary for has to be citable. Scoping
+    # this to the variance_commentary rows left GTM, headcount and GL figures with
+    # no _sources key, so correct sentences quoting them were stripped as uncited.
     evidence_values_map = {
         k: str(v)
         for k, v in evidence_values_from_mda_payload(
             {
                 "variance_commentary_display": variance_commentary_display,
-                "deck_payload": {"period_matrix": matrix},
+                "deck_payload": deck,
+                "sheets": sheets,
             }
         ).items()
     }
@@ -467,44 +653,6 @@ def build_mda_package_payload(
         "period_matrix": matrix,
         "values": evidence_values_map,
         "_sources": evidence_sources,
-    }
-    sheets = {
-        "variance_commentary": _sheet_spec(
-            f"Board-facing Variance Commentary tab — {month} Actual/Budget/QTD/YTD. 400 chars per column.",
-            400,
-            variance_rows,
-        ),
-        "q2_vs_budget": _sheet_spec(
-            "Q2 vs Budget summary blocks — Income Statement, ARR, Cash. 300 chars per column.",
-            300,
-            [{"row_id": "qvb_income_statement", "category": "INCOME STATEMENT"}],
-        ),
-        "arr_waterfall": _sheet_spec("ARR waterfall rows. 300 chars per column.", 300, arr_rows),
-        "income_statement": _sheet_spec("Income statement GL lines. 200 chars per column.", 200, is_rows),
-        "cash_forecast": _sheet_spec(
-            "Cash bridge rows from cash_liquidity block. 200 chars per column.",
-            200,
-            [
-                {
-                    "row_id": f"cf_{line}",
-                    "period": cash.get("current_month", {}),
-                }
-                for line in ("collections", "payroll", "vendor_payments", "commissions", "capex", "cash_eop_actual")
-            ],
-        ),
-        "cash_flow_statement": _sheet_spec(
-            "YTD CFS lines from appendix. 200 chars per column.",
-            200,
-            [{"row_id": "cfs_cfo", "period": cash.get("current_month", {})}],
-        ),
-        "gtm_review": _sheet_spec("Marketing channel efficiency. 175 chars per column.", 175, gtm_rows),
-        "headcount": _sheet_spec("Headcount by department. 200 chars per column.", 200, []),
-        "risks_and_opportunities": {
-            "description": "Risks & Opportunities matrix. Description 350 chars, action 200 chars.",
-            "max_chars_description": 350,
-            "max_chars_action": 200,
-            "rows": ro_rows,
-        },
     }
 
     from app.services.commentary.attribution_verify import (
@@ -545,6 +693,10 @@ def build_mda_package_payload(
             "For all sheets except risks_and_opportunities, each row_id maps to an object with "
             "period_vs_budget, qtd_vs_budget, ytd_vs_budget strings. For risks_and_opportunities, "
             "each row_id maps to description and recommended_action. Enforce character limits. "
+            "risks_and_opportunities rows are engine-ranked budget variances: write the "
+            "description from that row's own metric, actual, budget, var and var_pct, and "
+            "state the recommended action for that variance. Do not introduce a risk theme "
+            "the row's figures do not support. "
             "Each column must stand alone. No bullets. No line breaks. "
             "State only dollar/percent figures present in evidence_package.values / display rows. "
             "Cite each material number with a _sources key, table.column, formula_id, or path "
