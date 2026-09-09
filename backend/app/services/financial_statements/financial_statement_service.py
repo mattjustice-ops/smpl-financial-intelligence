@@ -202,8 +202,27 @@ def ensure_balance_formulas(row: dict[str, Any]) -> dict[str, Any]:
         "fixed_assets",
     )
     out["debt"] = row_value_any(out, "debt", "total_debt", "debt_balance", "notes_payable")
-    out["total_assets"] = row_value(out, "cash") + row_value(out, "accounts_receivable") + row_value(out, "prepaids_and_other_current_assets") + row_value(out, "property_and_equipment_net")
-    out["total_liabilities"] = row_value(out, "accounts_payable") + row_value(out, "deferred_revenue") + row_value(out, "debt")
+    out["other_assets"] = row_value_any(out, "other_assets", "other_long_term_assets")
+    out["other_liabilities"] = row_value_any(
+        out, "other_liabilities", "other_long_term_liabilities"
+    )
+    # These totals are recomputed rather than trusted from the source, so every
+    # balance you carry has to appear in the sum. Dropping "other liabilities"
+    # understated total liabilities by its full amount and pushed that straight
+    # into balance_check, which then reported a balanced sheet as broken.
+    out["total_assets"] = (
+        row_value(out, "cash")
+        + row_value(out, "accounts_receivable")
+        + row_value(out, "prepaids_and_other_current_assets")
+        + row_value(out, "property_and_equipment_net")
+        + row_value(out, "other_assets")
+    )
+    out["total_liabilities"] = (
+        row_value(out, "accounts_payable")
+        + row_value(out, "deferred_revenue")
+        + row_value(out, "debt")
+        + row_value(out, "other_liabilities")
+    )
     out["total_liabilities_and_equity"] = row_value(out, "total_liabilities") + row_value(out, "equity")
     out["balance_check"] = row_value(out, "total_assets") - row_value(out, "total_liabilities_and_equity")
     return out

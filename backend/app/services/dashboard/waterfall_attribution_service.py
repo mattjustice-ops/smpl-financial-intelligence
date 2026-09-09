@@ -185,6 +185,12 @@ def cash_flow_attribution_view(db: Session, organization_id: uuid.UUID, **params
             "commission_cash_out": -abs(value_any(raw, "commission_cash_out")),
             "vendor_cash_out": -abs(value_any(raw, "vendor_cash_out_n30", "vendor_cash_out")),
             "tax_cash_out": -abs(value_any(raw, "tax_cash_out")),
+            # Interest and other operating outflows are part of the bridge's
+            # ending_cash. Leaving them unmapped kept them out of the
+            # cash_bridge_ties sum while ending_cash still reflected them, so
+            # every period reported a break equal to these two lines.
+            "interest_cash_out": -abs(value_any(raw, "interest_cash_out")),
+            "other_operating_cash_out": -abs(value_any(raw, "other_operating_cash_out")),
             "capex": -abs(value_any(raw, "capex", "capital_expenditures")),
             "financing": value_any(raw, "financing_to_maintain_cash_floor", "financing", "debt_issuance_repayment"),
             "ending_cash": value_any(raw, "ending_cash"),

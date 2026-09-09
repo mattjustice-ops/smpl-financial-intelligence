@@ -19,7 +19,7 @@ from app.services.dashboard.pipeline_opportunity_drilldown_service import (
     pipeline_movement_detail_counts,
 )
 from app.services.dashboard.cash_flow_gl_drilldown_service import (
-    CASH_BALANCE_TYPES,
+    CASH_DRILLDOWN_TYPES,
     cash_flow_gl_detail_counts,
 )
 from app.services.dashboard.waterfall_attribution_service import (
@@ -63,6 +63,8 @@ LINE_ORDER = {
     "commission_cash_out": 400,
     "vendor_cash_out": 500,
     "tax_cash_out": 600,
+    "interest_cash_out": 620,
+    "other_operating_cash_out": 640,
     "capex": 700,
     "financing": 800,
     "ending_cash": 900,
@@ -269,7 +271,20 @@ def _validate(rows: list[WaterfallSummaryRow], waterfall_name: str) -> list[Vali
                     )
                 )
         elif waterfall_name == "cash_flow":
-            expected = values["beginning_cash"] + values["cash_collections"] + values["payroll_cash_out"] + values["commission_cash_out"] + values["vendor_cash_out"] + values["tax_cash_out"] + values["capex"] + values["financing"]
+            # Must sum every flow the bridge's ending_cash reflects; omitting a
+            # line here reports a break against data that actually ties.
+            expected = (
+                values["beginning_cash"]
+                + values["cash_collections"]
+                + values["payroll_cash_out"]
+                + values["commission_cash_out"]
+                + values["vendor_cash_out"]
+                + values["tax_cash_out"]
+                + values["interest_cash_out"]
+                + values["other_operating_cash_out"]
+                + values["capex"]
+                + values["financing"]
+            )
             actual = values["ending_cash"]
             checks.append(compare_values(scenario=scenario, period=period, validation_name="cash_bridge_ties", expected_value=expected, actual_value=actual, source_tables_used=sources))
     gaap_forecast_only_types = {
@@ -285,7 +300,9 @@ def _validate(rows: list[WaterfallSummaryRow], waterfall_name: str) -> list[Vali
         ) and not (
             waterfall_name == "deferred_revenue" and row.waterfall_type in gaap_forecast_only_types
         ) and not (
-            waterfall_name == "cash_flow" and row.waterfall_type in CASH_BALANCE_TYPES
+            # Balance rows and bridge lines with no GL mapping have nothing to
+            # expand, so an empty section is expected rather than a warning.
+            waterfall_name == "cash_flow" and row.waterfall_type not in CASH_DRILLDOWN_TYPES
         ):
             checks.append(warning(scenario=row.scenario, period=row.period, validation_name="expandable_section_empty", source_tables_used=[row.source_table]))
     if waterfall_name == "arr":

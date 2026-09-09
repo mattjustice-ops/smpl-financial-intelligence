@@ -58,9 +58,9 @@ def validate_financial_statements(
         results.append(_result(scenario, period, "income_statement_net_income", net_income, inc.get((scenario, period, "Net Income"), Decimal("0")), sources))
 
         bs_sources = [f"{scenario.lower()}_balance_sheet"]
-        assets = bs.get((scenario, period, "Cash"), Decimal("0")) + bs.get((scenario, period, "Accounts Receivable"), Decimal("0")) + bs.get((scenario, period, "Prepaids and Other Current Assets"), Decimal("0")) + bs.get((scenario, period, "Property and Equipment, Net"), Decimal("0"))
+        assets = bs.get((scenario, period, "Cash"), Decimal("0")) + bs.get((scenario, period, "Accounts Receivable"), Decimal("0")) + bs.get((scenario, period, "Prepaids and Other Current Assets"), Decimal("0")) + bs.get((scenario, period, "Property and Equipment, Net"), Decimal("0")) + bs.get((scenario, period, "Other Assets"), Decimal("0"))
         results.append(_result(scenario, period, "balance_sheet_total_assets", assets, bs.get((scenario, period, "Total Assets"), Decimal("0")), bs_sources))
-        liabilities = bs.get((scenario, period, "Accounts Payable"), Decimal("0")) + bs.get((scenario, period, "Deferred Revenue"), Decimal("0")) + bs.get((scenario, period, "Debt"), Decimal("0"))
+        liabilities = bs.get((scenario, period, "Accounts Payable"), Decimal("0")) + bs.get((scenario, period, "Deferred Revenue"), Decimal("0")) + bs.get((scenario, period, "Debt"), Decimal("0")) + bs.get((scenario, period, "Other Liabilities"), Decimal("0"))
         results.append(_result(scenario, period, "balance_sheet_total_liabilities", liabilities, bs.get((scenario, period, "Total Liabilities"), Decimal("0")), bs_sources))
         lie = bs.get((scenario, period, "Total Liabilities"), Decimal("0")) + bs.get((scenario, period, "Equity"), Decimal("0"))
         results.append(_result(scenario, period, "balance_sheet_liabilities_and_equity", lie, bs.get((scenario, period, "Total Liabilities and Equity"), Decimal("0")), bs_sources))
