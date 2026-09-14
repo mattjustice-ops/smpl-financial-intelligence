@@ -39,6 +39,7 @@ export type SanityGlossaryListItem = {
   term: string;
   slug: string;
   shortDefinition: string;
+  cluster?: string | null;
 };
 
 export type SanityGlossaryTerm = SanityGlossaryListItem & {

@@ -57,7 +57,7 @@ Win durable rankings where we already have (or nearly have) content and buyer li
 2. **Board reporting / board pack** — live post + homepage theme; expand internal links  
 3. **SaaS FP&A / financial intelligence** — homepage, pricing, demo, glossary hub language  
 4. **Cash forecast + scenario / variance** — planned posts; bridge from board ARR–cash–P&L piece  
-5. **Glossary definitions** — NRR, GRR, waterfall, ARR as supporting entry points (definition → pillar)
+5. **Glossary definitions** — NRR, GRR, waterfall, ARR, billing/CRM ARR, board pack as supporting entry points (definition → pillar). See `SMPL_Glossary_Hub_IA.md`.
 
 Organic goal: impressions → qualified sessions on pillar posts and conversion pages (`/book-demo`, `/request-quote`).
 

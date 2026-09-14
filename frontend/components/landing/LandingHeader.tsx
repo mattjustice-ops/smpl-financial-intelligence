@@ -16,7 +16,7 @@ const SECTION_NAV = [
 
 const RESOURCES_LINKS = [
   { href: "/blog", label: "Blog", description: "Close, board packages, commentary" },
-  { href: "/glossary", label: "Glossary", description: "SaaS FP&A definitions" },
+  { href: "/glossary", label: "Glossary", description: "Board & close metric literacy" },
 ] as const;
 
 const navLinkClass =

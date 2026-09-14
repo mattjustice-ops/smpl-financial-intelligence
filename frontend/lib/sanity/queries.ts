@@ -41,7 +41,8 @@ export const glossaryListQuery = groq`
     _id,
     term,
     "slug": slug.current,
-    shortDefinition
+    shortDefinition,
+    cluster
   }
 `;
 

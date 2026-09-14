@@ -26,6 +26,24 @@ export const glossaryTerm = defineType({
       validation: (rule) => rule.required().max(320),
     }),
     defineField({
+      name: "cluster",
+      title: "Hub cluster",
+      type: "string",
+      description:
+        "Themed group on /glossary (ARR, retention, board, forecast, recognition, efficiency).",
+      options: {
+        list: [
+          { title: "ARR & recurring revenue", value: "arr-recurring" },
+          { title: "Retention & churn", value: "retention" },
+          { title: "Board reporting & close", value: "board-close" },
+          { title: "Forecast & planning", value: "forecast" },
+          { title: "Recognition & bridges", value: "recognition" },
+          { title: "Efficiency metrics", value: "efficiency" },
+        ],
+        layout: "radio",
+      },
+    }),
+    defineField({
       name: "body",
       title: "Full definition",
       type: "blockContent",
