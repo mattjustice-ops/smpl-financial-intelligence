@@ -1,0 +1,19 @@
+{
+  "name": "Weekly AIO pulse (12)",
+  "frozen": true,
+  "notes": "Never change wording. Same Temporary + Unpersonalized + Web Search method as the sacred baseline.",
+  "query_ids": [
+    "category_01",
+    "category_02",
+    "category_07",
+    "saas_icp_01",
+    "lean_finance_01",
+    "lean_finance_03",
+    "systems_01",
+    "systems_03",
+    "use_case_01",
+    "use_case_03",
+    "competitive_01",
+    "competitive_04"
+  ]
+}

@@ -43,18 +43,19 @@ export function HeroSection() {
       <div className="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1fr_1.05fr]">
         <div>
           <p className="mb-5 text-sm font-medium tracking-wide" style={{ color: "rgba(94, 234, 212, 0.9)" }}>
-            Make every SaaS company operate like it has a world-class CFO team.
+            SaaS FP&A software · financial intelligence for lean Finance teams
           </p>
           <h1
             className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl md:text-6xl lg:text-[3.35rem]"
             style={{ color: "#fff" }}
           >
-            The AI operating system for SaaS finance teams.
+            SaaS FP&A software for growing finance teams.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed md:text-xl" style={{ color: "#94a3b8" }}>
-            SMPL connects pipeline, ARR, revenue, cash, headcount, and financial statements into one
-            intelligent operating model so leaders can understand performance, forecast with confidence,
-            and make better decisions faster.
+            SMPL.ai is an FP&A and financial intelligence platform — the AI operating system that
+            connects pipeline, ARR, revenue, cash, headcount, and financial statements into one
+            governed model so leaders can understand performance, forecast with confidence, and make
+            better decisions faster.
           </p>
           <div className="mt-9 flex flex-wrap gap-4">
             <Link

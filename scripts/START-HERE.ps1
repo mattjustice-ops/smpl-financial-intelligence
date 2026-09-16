@@ -11,8 +11,9 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Backend  = Join-Path $RepoRoot "backend"
 $Frontend = Join-Path $RepoRoot "frontend"
-$ExpectedBuild = "management-pl-v5-workforce-inline"
-$ExpectedWorkforceBuild = "workforce-integration-v1"
+# Keep in sync with backend/app/main.py SFI_BUILD_ID / WORKFORCE_BUILD_ID
+$ExpectedBuild = "management-pl-v12-plan-entitlements"
+$ExpectedWorkforceBuild = "workforce-legacy-headcount-v6"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

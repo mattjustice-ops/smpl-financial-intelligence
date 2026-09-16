@@ -1,0 +1,55 @@
+{
+  "week": 1,
+  "goal": "Fix the foundation",
+  "as_of": "2026-09-15",
+  "checklist": [
+    {
+      "id": "publish_best_fpa",
+      "item": "Publish Best FP&A Software for SaaS Companies",
+      "status": "done",
+      "evidence": "https://www.smpl-ai.com/blog/best-fpa-software-saas-companies (200, canonical, index,follow, in sitemap)"
+    },
+    {
+      "id": "robots_oai",
+      "item": "Audit OAI-SearchBot / GPTBot / ChatGPT-User",
+      "status": "done",
+      "evidence": "frontend/public/robots.txt explicit Allow + same app disallows; deploy required for production"
+    },
+    {
+      "id": "sitemap_canonicals",
+      "item": "Sitemap, canonicals, noindex hygiene",
+      "status": "done",
+      "evidence": "Sitemap live; blog posts canonical + index,follow; app surfaces disallowed/noindexed"
+    },
+    {
+      "id": "homepage_entity",
+      "item": "Homepage explicitly identifies SMPL as FP&A + financial intelligence for SaaS",
+      "status": "done_pending_deploy",
+      "evidence": "Hero H1 + mission + Organization/SoftwareApplication JSON-LD updated in repo"
+    },
+    {
+      "id": "register_content",
+      "item": "Register current content in AIO tool with page→query hypotheses",
+      "status": "done_pending_seed",
+      "evidence": "aio_content + aio_content_query_map + seed_content.json + /api/aio/content"
+    },
+    {
+      "id": "pulse_baseline",
+      "item": "Freeze 12-query weekly pulse from sacred baseline",
+      "status": "done",
+      "evidence": "pulse_queries.json + /api/aio/pulse; baseline pulse 1/12 (use_case_03 only)"
+    },
+    {
+      "id": "gsc_request_indexing",
+      "item": "Request indexing in Google Search Console for Best FP&A + homepage after deploy",
+      "status": "manual",
+      "evidence": "Operator action after production deploy"
+    }
+  ],
+  "pulse_before_week1_changes": {
+    "source": "ChatGPT Search Baseline 2026-09-15 subset",
+    "mention_count": 1,
+    "total": 12,
+    "hit": "use_case_03"
+  }
+}
