@@ -80,7 +80,16 @@ function syncSeries() {
     return cash != null ? +(cash / 1e6).toFixed(2) : 0;
   });
 
-  const CASH_BUD = [12.75, 14.95, 22.87, 26.35, 28.64, 31.46];
+  const cfsBud = (ts.Budget && ts.Budget.cfs) || {};
+  const bsBud = (ts.Budget && ts.Budget.bs) || {};
+  // One cash spine: budget ending cash from CFS (preferred) or BS — same as board-data.js
+  const CASH_BUD = actPeriods.map((p) => {
+    const cash =
+      (cfsBud[p] && cfsBud[p].ending_cash != null && cfsBud[p].ending_cash) ||
+      (bsBud[p] && bsBud[p].cash != null && bsBud[p].cash) ||
+      null;
+    return cash != null ? +(cash / 1e6).toFixed(2) : 0;
+  });
   const COLL = [9.27, 8.67, 13.59, 10.82, 9.65, 11.18];
   const REV_ACT = actPeriods.map((p) => +((isAct[p]?.revenue || 0) / 1e6).toFixed(2));
 
@@ -111,7 +120,7 @@ const checks = [
   ["NN_BUD length", series.NN_BUD.length, ACT_N],
   ["NN chart data non-zero Jun", series.NN_ACT[idx] > 0, true],
   ["Jun ending cash ($M)", series.CASH_ACT[idx], 70.61],
-  ["Jun cash budget ($M) operational", series.CASH_BUD[idx], 31.46],
+  ["Jun cash budget ($M) from CFS/BS spine", series.CASH_BUD[idx] > 0 && series.CASH_BUD[idx] !== 31.46, true],
   ["CASH_ACT length", series.CASH_ACT.length, ACT_N],
   ["COLL Jun ($M)", series.COLL[idx], 11.18],
   ["Jun CFS net_change", junCfs.net_change, 4575000, 1],
@@ -125,7 +134,8 @@ const checks = [
   ["Jun revenue ($M)", +(junIs.revenue / 1e6).toFixed(2), 7.41],
   ["board-data exports boardFmtM", boardDataJs.includes("global.boardFmtM = boardFmtM"), true],
   ["board-data CFS bridge path", boardDataJs.includes("Net change in cash"), true],
-  ["board-data preserves CASH_BUD", boardDataJs.includes("Keep embedded operational cash budget"), true],
+  ["board-data CASH_BUD from CFS/BS spine", boardDataJs.includes("One cash spine"), true],
+  ["board-data does not preserve old bridge CASH_BUD", !boardDataJs.includes("Keep embedded operational cash budget"), true],
   ["board-data boardRevenueKpis", boardDataJs.includes("boardRevenueKpis"), true],
   ["HTML fM delegates boardFmtM", boardHtml.includes("boardFmtM"), true],
   ["HTML buildCharts refreshes series", /function buildCharts[\s\S]*?boardRefreshAllSeries/.test(boardHtml), true],
