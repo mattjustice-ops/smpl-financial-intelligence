@@ -295,7 +295,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-provenance.js?v=3"></script>
-<script src="/shared/board-data.js?v=8"></script>
+<script src="/shared/board-data.js?v=9"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
 var MO = ['Jan','Feb','Mar','Apr','May','Jun'];
@@ -583,6 +583,50 @@ function boardCloseParts() {
  * after the re-anchor brought cash back in line with plan, and claimed the strongest
  * net new month of the year regardless of which month was actually the strongest.
  */
+function boardCashContinuityHtml() {
+  var cc = (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.CASH_CONTINUITY) || null;
+  if (!cc) {
+    return '<div style="margin-bottom:24px;padding:10px 14px;border:0.5px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3)">Cash continuity checks load with live outlook.</div>';
+  }
+  var ok = !!cc.ok;
+  var fails = cc.failures || [];
+  var byCode = {};
+  fails.forEach(function (f) {
+    byCode[f.code] = (byCode[f.code] || 0) + 1;
+  });
+  var chips = [
+    { code: 'C1', label: 'CFS ↔ BS cash' },
+    { code: 'C2', label: 'CFS ↔ IS+BS spine' },
+    { code: 'C3', label: 'Bridge ↔ CFS' },
+    { code: 'C4', label: 'Bridge foots' },
+    { code: 'C5', label: 'Forecast opens on close' },
+  ].map(function (c) {
+    var n = byCode[c.code] || 0;
+    var pass = n === 0;
+    var bg = pass ? 'rgba(95,168,120,0.12)' : 'rgba(200,140,60,0.15)';
+    var fg = pass ? 'var(--teal)' : '#c48a3a';
+    var mark = pass ? '✓' : (n + '×');
+    return '<span style="font-size:10px;font-weight:600;padding:4px 9px;border-radius:14px;background:' + bg + ';color:' + fg + ';border:0.5px solid ' + fg + '">' + mark + ' ' + c.label + '</span>';
+  }).join('');
+  var headClr = ok ? 'var(--teal)' : '#c48a3a';
+  var head = ok
+    ? 'Cash continuity · all balances tie'
+    : 'Cash continuity · ' + fails.length + ' open check' + (fails.length === 1 ? '' : 's');
+  var note = '';
+  if (byCode.C4 && !byCode.C3 && !byCode.C1 && !byCode.C2 && !byCode.C5) {
+    note = '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">Bridge balances match CFS. Footing residuals mean line items (payroll/vendor/…) have not yet been rebuilt onto that spine — disclosed, not plugged.</div>';
+  } else if (!ok) {
+    note = '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">' + String(cc.summary || '').replace(/</g, '&lt;') + '</div>';
+  }
+  return (
+    '<div style="margin-bottom:24px;padding:12px 14px;border:0.5px solid var(--border);border-radius:var(--r);background:rgba(255,255,255,0.02)">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+    '<div style="font-size:11px;font-weight:600;color:' + headClr + ';letter-spacing:.02em">' + head + '</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px">' + chips + '</div>' +
+    '</div>' + note + '</div>'
+  );
+}
+
 function boardExecVerdict(k) {
   const cp = boardCloseParts();
   const frame = cp.month === 12 ? 'FY closed'
@@ -678,9 +722,11 @@ function renderExec(area) {
   </div>
 
   <!-- ── VERDICT ── -->
-  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:24px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
+  <div style="border-left:3px solid var(--accent);padding:12px 16px;margin-bottom:16px;background:rgba(255,255,255,0.03);border-radius:0 var(--r) var(--r) 0">
     <div style="font-size:13.5px;font-style:italic;color:var(--text2);line-height:1.6">${execVerdict}</div>
   </div>
+
+  ${boardCashContinuityHtml()}
 
   <!-- ── PLAN ASSURANCE LOOP — pulled, see note ──
        "Next: test whether FY can deliver the plan" handed the reader off to Budget Engine

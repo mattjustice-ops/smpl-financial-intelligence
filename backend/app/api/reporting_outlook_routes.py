@@ -41,5 +41,6 @@ def reporting_outlook_payload(
         "SRC": payload["SRC"],
         "ARR_WATERFALL": payload["ARR_WATERFALL"],
         "CASH_BRIDGE": payload.get("CASH_BRIDGE"),
+        "CASH_CONTINUITY": payload.get("CASH_CONTINUITY"),
         "baseline_engine": payload["baseline_engine"],
     }
