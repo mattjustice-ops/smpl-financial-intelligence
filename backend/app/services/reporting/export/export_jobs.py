@@ -591,6 +591,8 @@ def estimated_remaining_seconds(job: ExportJob) -> int | None:
 
 
 def job_status_payload(job: ExportJob) -> dict[str, Any]:
+    meta = job.metadata or {}
+    evidence = meta.get("evidence_pack") if isinstance(meta.get("evidence_pack"), dict) else None
     return {
         "job_id": job.job_id,
         "kind": job.kind,
@@ -599,8 +601,10 @@ def job_status_payload(job: ExportJob) -> dict[str, Any]:
         "filename": job.filename,
         "error": job.error,
         "organization_id": str(job.organization_id) if job.organization_id else None,
-        "close_session_id": job.metadata.get("close_session_id") if job.metadata else None,
-        "as_of_period": job.metadata.get("as_of_period") if job.metadata else None,
+        "close_session_id": meta.get("close_session_id") if meta else None,
+        "as_of_period": meta.get("as_of_period") if meta else None,
+        "evidence_pack": evidence,
+        "has_evidence_html": bool(meta.get("evidence_html")),
         "created_at": job.created_at,
         "updated_at": job.updated_at,
         "durable": True,

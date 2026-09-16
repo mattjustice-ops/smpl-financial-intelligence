@@ -715,6 +715,27 @@ def _run_mda_package_job(
                 "X-Context-Source": context_source,
             },
         )
+        try:
+            from app.services.reporting.export.evidence_pack import build_evidence_pack
+            from app.services.reporting.export.export_jobs import update_export_job_metadata
+
+            pack = build_evidence_pack(
+                as_of_period=bundle.as_of_period,
+                export_kind="mda_package",
+                pptx_source=None,
+                freeze_status=freeze_kwargs.get("freeze_status"),
+                freeze_as_of=freeze_kwargs.get("freeze_context_as_of"),
+                validation_status=bundle.validation.status if bundle.validation else None,
+                extra={"package_source": package_source},
+            )
+            slim = {k: v for k, v in pack.items() if k != "html"}
+            update_export_job_metadata(
+                job_id,
+                evidence_pack=slim,
+                evidence_html=pack.get("html"),
+            )
+        except Exception:
+            logger.exception("Failed to attach Evidence Pack metadata to package job %s", job_id)
     finally:
         reset_usage_context(tokens)
 
@@ -829,6 +850,20 @@ def _run_mda_deck_job(
                 "X-Freeze-Stale": "true" if freeze_stale else "false",
             },
         )
+        try:
+            from app.services.reporting.export.export_jobs import update_export_job_metadata
+            from app.services.reporting.export.prompt5_deck import pop_last_deck_evidence_pack
+
+            pack = pop_last_deck_evidence_pack()
+            if pack:
+                slim = {k: v for k, v in pack.items() if k != "html"}
+                update_export_job_metadata(
+                    job_id,
+                    evidence_pack=slim,
+                    evidence_html=pack.get("html"),
+                )
+        except Exception:
+            logger.exception("Failed to attach Evidence Pack metadata to job %s", job_id)
     finally:
         reset_usage_context(tokens)
 
@@ -1018,6 +1053,29 @@ def export_job_download(job_id: uuid.UUID) -> Response:
         **job.headers_extra,
     }
     return Response(content=job.content, media_type=job.content_type, headers=headers)
+
+
+@export_router.get("/jobs/{job_id}/evidence.html")
+def export_job_evidence_html(job_id: uuid.UUID) -> Response:
+    """Download Evidence Pack HTML companion for a completed export job."""
+    from app.services.reporting.export.export_jobs import get_export_job
+
+    job = get_export_job(str(job_id))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    if job.status != "complete":
+        raise HTTPException(status_code=409, detail=f"Export not ready (status={job.status})")
+    meta = job.metadata or {}
+    html_body = meta.get("evidence_html")
+    if not html_body:
+        raise HTTPException(status_code=404, detail="Evidence Pack not available for this job")
+    as_of = (meta.get("evidence_pack") or {}).get("as_of_period") or meta.get("as_of_period") or "close"
+    filename = f"smpl_evidence_pack_{as_of}.html"
+    return Response(
+        content=str(html_body).encode("utf-8"),
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @export_router.get("/management-review.xlsx")

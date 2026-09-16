@@ -118,12 +118,13 @@ Plan Assurance and the Budget Engine shipped **2026-09-04 → 09-07** (PRs #140/
 
 | Surface | Purpose | Ship posture |
 |---------|---------|--------------|
-| **Reconciliation status strip** | Org + period + scenario: green / warn / fail count; one click into failures | Partial APIs exist → **productize as always-visible strip** on Board / Close / Export |
-| **Validation checklist UI** | Named checks from catalog (bookings↔ARR, cash bridge↔BS, deferred rollforward, billing↔ARR when Maxio loaded) | Catalog shipped → **checklist UI** is the founder gap |
-| **Period / version stamps** | `as_of_period`, scenario, forecast_version_id, freeze pack id, loaded_at | Partial in freeze / payloads → make **visible in header of every export + board chrome** |
-| **Variance pack** | Actual vs Budget vs Forecast for ARR, bookings, cash, EBITDA — with drill to waterfall rows | Variance slides / MD&A exist → package as downloadable **Variance Evidence Pack** (xlsx/HTML) |
-| **Cite-to-calc** | Click KPI → `_sources` / table.column / formula | Overlay partial → deepen for meeting demo KPIs only first |
+| **Reconciliation status strip** | Org + period + scenario: green / warn / fail count; one click into Continuity | **Shipped** — always-visible trust strip on Board topbar |
+| **Continuity tab** | Named client A–F ties + cash spine C1–C5 + AI fidelity summary; failures-first | **Shipped** — Board nav → Continuity |
+| **Period / version stamps** | `as_of_period`, freeze status, loaded_at / `_sources` counts | **Shipped** on Continuity stamps panel |
+| **Evidence Pack** | HTML/JSON companion on MD&A deck + variance export jobs (same claim language) | **Shipped** — `/api/v1/export/jobs/{id}/evidence.html` + Continuity download |
+| **Cite-to-calc** | Click KPI → `_sources` / table.column / formula / org / loaded_at / is_final | **Shipped** for material exec/ARR/cash/P&L KPIs (catalog fallback when hydrate omits tags) |
 | **AI explain bound to pack** | Copilot answers only from freeze + validation-passed evidence | Primary paths LIVE — demo this; do not invent SOC language |
+| **Chart datapoint cite + import hard-ID** | Every chart point + ingest gate | **Phase 4** — do not claim in partner meetings yet |
 
 ### 3.2 Evidence package contents (what Claude can help draft — safely)
 
@@ -149,7 +150,9 @@ Claude / Cursor should draft **methodologies and checklists**, not fake certific
 | Say | Do not say |
 |-----|------------|
 | Automated tie-outs at $1 on closed actuals | “Audited by SMPL” |
-| Fail-closed on wired AI / export paths | “Impossible to be wrong” |
+| Click material KPIs for warehouse / computed source (Continuity + cite-to-calc) | “Every pixel / chart point is cited” |
+| Evidence Pack travels with MD&A deck / variance exports | “Impossible to be wrong” |
+| Fail-closed on wired AI / export paths (Prompt 2); Prompt 5 soft-warn + disclosed | “AI calculated your ARR” |
 | Path A / CSV today; native Maxio on partner track | “Maxio native connector GA” |
 | SOC 2 Type I in progress | “We are SOC 2 certified” |
 | Plan Assurance tests whether the plan can be delivered | “AI predicts your ARR” |

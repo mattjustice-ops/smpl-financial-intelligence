@@ -969,7 +969,8 @@
       : "WARN — tie-out failures (advisory; does not block export/promote)";
     var rows = fails
       .map(function (f) {
-        return "<tr class='fail'><td>FAIL</td><td>" + escapeHtml(f) + "</td></tr>";
+        var detail = typeof f === "string" ? f : f && f.message ? f.message : JSON.stringify(f);
+        return "<tr class='fail'><td>FAIL</td><td>" + escapeHtml(detail) + "</td></tr>";
       })
       .concat(
         soft.map(function (f) {

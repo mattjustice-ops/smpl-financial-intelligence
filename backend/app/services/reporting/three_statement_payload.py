@@ -536,16 +536,23 @@ def build_unified_outlook_payload(
         start_period=start_period,
         end_period=end_period,
     )
+    arr_wf = build_arr_waterfall_table(
+        db,
+        organization_id,
+        as_of=as_of,
+        start_period=start_period,
+        end_period=end_period,
+    )
+    sources = _outlook_material_sources(
+        ts_data=ts_data,
+        arr_waterfall=arr_wf,
+        as_of=as_of,
+        organization_id=organization_id,
+    )
     return {
         "TS_DATA": ts_data,
         "SRC": src,
-        "ARR_WATERFALL": build_arr_waterfall_table(
-            db,
-            organization_id,
-            as_of=as_of,
-            start_period=start_period,
-            end_period=end_period,
-        ),
+        "ARR_WATERFALL": arr_wf,
         "baseline_engine": build_baseline_engine(
             db,
             organization_id,
@@ -560,7 +567,68 @@ def build_unified_outlook_payload(
             end_period=end_period,
         ),
         "CASH_CONTINUITY": cash_continuity_payload(continuity),
+        "_sources": sources,
     }
+
+
+def _outlook_material_sources(
+    *,
+    ts_data: dict[str, Any],
+    arr_waterfall: dict[str, Any] | None,
+    as_of: str,
+    organization_id: uuid.UUID,
+) -> dict[str, Any]:
+    """Attach `_sources` for Phase 2 cite-to-calc KPIs (exec / ARR / cash / P&L)."""
+    from datetime import datetime, timezone
+
+    from app.services.commentary.claim_verify import attach_sources_to_values
+
+    actual = (ts_data or {}).get("Actual") or {}
+    is_rows = actual.get("is") or {}
+    bs_rows = actual.get("bs") or {}
+    cfs_rows = actual.get("cfs") or {}
+    period = as_of
+    is_row = is_rows.get(period) or {}
+    bs_row = bs_rows.get(period) or {}
+    cfs_row = cfs_rows.get(period) or {}
+
+    values: dict[str, Any] = {}
+    for key, row, field in (
+        (f"income_statement.revenue.{period}", is_row, "revenue"),
+        (f"income_statement.ebitda.{period}", is_row, "ebitda"),
+        (f"income_statement.gross_profit.{period}", is_row, "gross_profit"),
+        (f"balance_sheet.cash.{period}", bs_row, "cash"),
+        (f"cash_flow_statement.ending_cash.{period}", cfs_row, "ending_cash"),
+    ):
+        if isinstance(row, dict) and row.get(field) is not None:
+            values[key] = row.get(field)
+            values[field] = row.get(field)
+
+    wf = arr_waterfall or {}
+    ending = wf.get("Ending") or wf.get("ending")
+    if isinstance(ending, list) and ending:
+        values[f"arr_waterfall.ending_arr.{period}"] = ending[-1]
+        values["ending_arr"] = ending[-1]
+    # Net new = sum of movement components when present
+    nn_parts = []
+    for part in ("New Business", "Expansion", "Reactivation", "Contraction", "Churn"):
+        series = wf.get(part)
+        if isinstance(series, list) and series:
+            nn_parts.append(series[-1])
+    if nn_parts:
+        nn = sum(float(x or 0) for x in nn_parts)
+        values[f"arr_waterfall.net_new.{period}"] = nn
+        values["net_new"] = nn
+        values["net_new_arr"] = nn
+
+    return attach_sources_to_values(
+        values,
+        period_label=period,
+        org_id=str(organization_id),
+        loaded_at=datetime.now(timezone.utc).isoformat(),
+        is_final=False,
+        series_kind="actual",
+    )
 
 
 def _enrich_is(row: dict[str, float | None]) -> None:

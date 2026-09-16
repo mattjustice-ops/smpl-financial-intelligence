@@ -31,10 +31,47 @@ from app.services.commentary.llm_factory import build_commentary_llm_client
 from app.services.reporting.export.board_metrics_snapshot import build_metrics_snapshot
 from app.services.reporting.export.schemas import ReportingBundle
 from app.services.reporting.period_utils import to_period
-
 from app.services.reporting.export.prompt5_v3 import PROMPT5_V3_SYSTEM
 
 logger = logging.getLogger(__name__)
+
+# Last Evidence Pack produced by build_claude_deck_pptx_bytes (export job reads via pop).
+_LAST_DECK_EVIDENCE_PACK: dict[str, Any] | None = None
+
+
+def pop_last_deck_evidence_pack() -> dict[str, Any] | None:
+    global _LAST_DECK_EVIDENCE_PACK
+    pack = _LAST_DECK_EVIDENCE_PACK
+    _LAST_DECK_EVIDENCE_PACK = None
+    return pack
+
+
+def _record_deck_evidence_pack(
+    *,
+    bundle: Any,
+    payload: dict[str, Any] | None,
+    pptx_source: str,
+    freeze_status: str | None = None,
+    freeze_as_of: str | None = None,
+) -> None:
+    global _LAST_DECK_EVIDENCE_PACK
+    from app.services.reporting.export.evidence_pack import build_evidence_pack
+
+    post = (payload or {}).get("_post_render") if isinstance(payload, dict) else None
+    _LAST_DECK_EVIDENCE_PACK = build_evidence_pack(
+        as_of_period=str(getattr(bundle, "as_of_period", "") or ""),
+        export_kind="mda_deck",
+        pptx_source=pptx_source,
+        freeze_status=freeze_status,
+        freeze_as_of=freeze_as_of,
+        validation_status=(
+            getattr(getattr(bundle, "validation", None), "status", None)
+            if getattr(bundle, "validation", None)
+            else None
+        ),
+        post_render=post if isinstance(post, dict) else None,
+    )
+
 
 DECK_GEN_DIR = _BACKEND_ROOT / "scripts" / "deck-gen"
 ARCHIVE_DIR = _BACKEND_ROOT / "tmp" / "deck-archive"
@@ -1265,9 +1302,49 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             "export continues): %s",
             cite_result.summary(),
         )
+
+    from app.services.commentary.narrative_verify import (
+        apply_narrative_soft_strip_to_pptx_script,
+        evidence_close_period,
+    )
+
+    working, narr_result = apply_narrative_soft_strip_to_pptx_script(
+        working,
+        close_period=evidence_close_period(payload),
+    )
+    if narr_result.ok:
+        logger.info("P15 Prompt 5 narrative-verify passed")
+    else:
+        logger.warning(
+            "P15 Prompt 5 narrative-verify soft-warn "
+            "(filler/placeholder stripped when present; export continues): %s",
+            narr_result.summary(),
+        )
+
     # Intentionally NO seed-refill of blank/"—" takeaways. Narrative soft-warn
     # keeps unmatched $/% in takeaways; only short KPI cells soft-strip to —.
     return working
+
+
+def _post_render_fidelity(
+    pptx_bytes: bytes, payload: dict[str, Any] | None
+) -> tuple[bytes, dict[str, Any] | None]:
+    """Soft-warn post-render numeric + narrative fidelity; never block export."""
+    if not payload:
+        return pptx_bytes, None
+    try:
+        from app.services.reporting.export.deck_post_render_verify import (
+            verify_rendered_deck_soft,
+        )
+        from app.services.reporting.export.evidence_pack import post_render_to_dict
+
+        result = verify_rendered_deck_soft(pptx_bytes, payload=payload)
+        meta = post_render_to_dict(result)
+        payload["_post_render"] = meta
+        return pptx_bytes, meta
+    except Exception as exc:  # pragma: no cover — never fail the export
+        logger.warning("P15 post-render fidelity check errored (export continues): %s", exc)
+        return pptx_bytes, None
 
 
 def _try_adapt_from_reference(
@@ -1362,6 +1439,7 @@ def _try_adapt_from_reference(
     else:
         script_text = _postprocess_prompt5_script(script_text, None)
     pptx_bytes, _ = _render_prepared_script(script_text, period=period)
+    pptx_bytes, _pr = _post_render_fidelity(pptx_bytes, payload)
     return pptx_bytes, f"claude_adapt_{kind or 'bundled'}"
 
 
@@ -1402,6 +1480,13 @@ def build_claude_deck_pptx_bytes(
             freeze_stale=freeze_stale,
         )
         if adapted is not None:
+            _record_deck_evidence_pack(
+                bundle=bundle,
+                payload=payload,
+                pptx_source=adapted[1],
+                freeze_status=freeze_status,
+                freeze_as_of=freeze_context_as_of,
+            )
             return adapted
     except (RuntimeError, CommentaryIntegrityError) as adapt_exc:
         last_error = str(adapt_exc)
@@ -1453,6 +1538,14 @@ def build_claude_deck_pptx_bytes(
             script_text = _postprocess_prompt5_script(script_text, payload)
             pptx_bytes, _ = _render_prepared_script(
                 script_text, period=bundle.as_of_period
+            )
+            pptx_bytes, _pr = _post_render_fidelity(pptx_bytes, payload)
+            _record_deck_evidence_pack(
+                bundle=bundle,
+                payload=payload,
+                pptx_source="claude_prompt5",
+                freeze_status=freeze_status,
+                freeze_as_of=freeze_context_as_of,
             )
             return pptx_bytes, "claude_prompt5"
         except (RuntimeError, CommentaryIntegrityError) as exc:

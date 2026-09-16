@@ -23,6 +23,8 @@ const PLATFORM_FILES = [
   { rel: "forecast-engine/index.html", marker: "forecast-engine stability" },
   { rel: "shared/board-data.js" },
   { rel: "shared/board-hydrate.js" },
+  { rel: "shared/board-continuity.js" },
+  { rel: "shared/smpl-provenance.js" },
   { rel: "shared/smpl-skin.js" },
   { rel: "shared/smpl-outlook.js" },
   { rel: "shared/smpl-demo-seed.js" },

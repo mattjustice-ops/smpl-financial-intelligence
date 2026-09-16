@@ -292,6 +292,25 @@ def build_claude_mda_package_xlsx_bytes(
                     f"{cite_result.summary(max_failures=8)}",
                 )
 
+            from app.services.commentary.narrative_verify import (
+                evidence_close_period,
+                verify_nested_commentary_narrative,
+            )
+
+            commentary, narr_result = verify_nested_commentary_narrative(
+                commentary,
+                close_period=evidence_close_period(payload)
+                or str(bundle.as_of_period or "")[:7]
+                or None,
+                policy="strict",
+                strip=True,
+            )
+            if not narr_result.ok:
+                logger.warning(
+                    "P15 MD&A narrative-verify soft-warn / strip: %s",
+                    narr_result.summary(),
+                )
+
             payload_warnings = payload.get("payload_warnings") or []
             if payload_warnings:
                 logger.warning("MDA package payload warnings: %s", "; ".join(payload_warnings))

@@ -58,6 +58,30 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .nav-btn { padding: 11px 16px; font-size: 12px; color: var(--text3); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color .15s; font-family: var(--font); letter-spacing: 0.01em; }
 .nav-btn:hover:not(.active) { color: var(--text2); }
 .nav-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+/* TRUST STRIP + CONTINUITY + CITE-TO-CALC */
+.smpl-trust-strip { font-size: 11px; padding: 5px 12px; border: 0.5px solid var(--border); border-radius: 20px; background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 7px; font-family: var(--font); max-width: 420px; }
+.smpl-trust-strip:hover { background: var(--bg2); }
+.smpl-trust-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.smpl-trust-meta { color: var(--text3); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.smpl-cont-banner { margin-top: 8px; padding: 12px 14px; border: 0.5px solid var(--border); border-radius: var(--r); background: rgba(255,255,255,0.02); }
+.smpl-cont-grid { display: grid; gap: 6px; margin-top: 8px; }
+.smpl-cont-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text2); border-bottom: 0.5px solid var(--border); padding: 5px 0; }
+.smpl-cont-row strong { color: var(--text); font-weight: 500; text-align: right; }
+.smpl-cont-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.smpl-cont-chip { font-size: 10px; font-weight: 600; padding: 4px 9px; border-radius: 14px; border: 0.5px solid; background: rgba(255,255,255,0.02); }
+.smpl-cont-fail { margin-top: 8px; border: 0.5px solid var(--border); border-radius: var(--r); padding: 8px 10px; background: rgba(184,112,95,0.06); }
+.smpl-cont-fail summary { cursor: pointer; font-size: 12px; color: var(--text); }
+.smpl-cont-fail-body { margin-top: 8px; font-size: 11px; color: var(--text2); line-height: 1.45; }
+.smpl-cont-ok { font-size: 12px; color: var(--teal); margin-top: 6px; }
+.smpl-cite-drawer { position: fixed; top: 0; right: 0; width: min(380px, 92vw); height: 100vh; background: var(--bg); border-left: 0.5px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,0.18); z-index: 80; transform: translateX(105%); transition: transform .2s ease; display: flex; flex-direction: column; }
+.smpl-cite-drawer.open { transform: translateX(0); }
+.smpl-cite-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+.smpl-cite-close { background: none; border: none; color: var(--text2); font-size: 22px; cursor: pointer; line-height: 1; }
+.smpl-cite-body { padding: 16px; overflow: auto; }
+.smpl-cite-value { font-size: 28px; font-weight: 600; letter-spacing: -0.5px; margin-bottom: 12px; color: var(--text); }
+.smpl-cite-note { margin-top: 14px; font-size: 11px; color: var(--text3); line-height: 1.5; }
+.kpi-val[data-source], .kpi-val[data-metric] { cursor: pointer; }
+.kpi-val[data-source]:hover, .kpi-val[data-metric]:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 /* SLIDE */
 .slide { padding: 22px 24px; max-width: 100%; }
 .slide-title { font-family: var(--font); font-size: 20px; font-weight: 600; letter-spacing: -0.5px; color: var(--text); margin-bottom: 3px; }
@@ -282,6 +306,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   <button class="nav-btn" onclick="show('sales',this)">Sales</button>
   <button class="nav-btn" onclick="show('workforce',this)">Workforce</button>
   <button class="nav-btn" onclick="show('risks',this)">Risks &amp; Opps</button>
+  <button class="nav-btn" onclick="show('continuity',this)">Continuity</button>
   <button class="nav-btn copilot-btn" onclick="show('copilot',this)">&#10022; SMPL Copilot</button>
 </nav>
 
@@ -294,7 +319,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
-<script src="/shared/smpl-provenance.js?v=3"></script>
+<script src="/shared/smpl-provenance.js?v=4"></script>
+<script src="/shared/board-continuity.js?v=1"></script>
 <script src="/shared/board-data.js?v=9"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -558,11 +584,22 @@ function show(name, btn) {
   else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.substr(0,3)))b.classList.add('active');});
   const area = document.getElementById('slideArea');
   area.innerHTML = '';
-  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot};
+  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,continuity:renderContinuity,copilot:renderCopilot};
   if(renders[name]) renders[name](area);
   boardAnnotateProvenance(area);
-  if (name === 'pl' || name === 'threestmt') return;
+  if (window.SMPLContinuity && typeof SMPLContinuity.refreshTrustStrip === 'function') {
+    try { SMPLContinuity.refreshTrustStrip(); } catch (e) { /* non-fatal */ }
+  }
+  if (name === 'pl' || name === 'threestmt' || name === 'continuity') return;
   scheduleChartBuild(name, 50);
+}
+
+function renderContinuity(area) {
+  if (window.SMPLContinuity && typeof SMPLContinuity.renderContinuity === 'function') {
+    SMPLContinuity.renderContinuity(area);
+    return;
+  }
+  area.innerHTML = '<div class="slide-title">Continuity</div><div class="slide-sub">Trust module loading…</div>';
 }
 
 // ─── EXEC ──────────────────────────────────────────────────────────────────
@@ -3530,7 +3567,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=31"></script>
+<script src="/shared/board-hydrate.js?v=32"></script>
 
 </body>
 </html>
