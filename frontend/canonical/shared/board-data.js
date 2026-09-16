@@ -60,6 +60,7 @@
     var cfsAct = ts.Actual.cfs || {};
     var isBud = (ts.Budget && ts.Budget.is) || {};
     var bsBud = (ts.Budget && ts.Budget.bs) || {};
+    var cfsBud = (ts.Budget && ts.Budget.cfs) || {};
 
     if (wf && wf.Ending) {
       global.ARR_ACT = wf.Ending.slice(0, actN).map(function (v) {
@@ -138,13 +139,17 @@
         if (row && row.revenue != null) return +(row.revenue / 1e6).toFixed(2);
         return global.REV_BUD && global.REV_BUD[i] != null ? global.REV_BUD[i] : global.REV_ACT[i];
       });
-      /* Keep embedded operational cash budget series; BS budget cash ≠ liquidity plan */
-      if (!global.CASH_BUD || global.CASH_BUD.length < actN) {
-        global.CASH_BUD = actPeriods.map(function (p) {
-          var row = bsBud[p];
-          return row && row.cash != null ? +(row.cash / 1e6).toFixed(2) : 0;
-        });
-      }
+      /* One cash spine: budget ending cash from CFS (preferred) or BS — never keep
+         the embedded bridge/demo CASH_BUD series after a live hydrate. That series
+         was the liquidity-plan bridge ($31.46M Jun) that contradicted statement/BS
+         cash ($27.91M). */
+      global.CASH_BUD = actPeriods.map(function (p) {
+        var cash =
+          (cfsBud[p] && cfsBud[p].ending_cash != null && cfsBud[p].ending_cash) ||
+          (bsBud[p] && bsBud[p].cash != null && bsBud[p].cash) ||
+          null;
+        return cash != null ? +(cash / 1e6).toFixed(2) : 0;
+      });
     }
 
     global.CASH_ACT = actPeriods.map(function (p) {
