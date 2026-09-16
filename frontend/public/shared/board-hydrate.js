@@ -1117,6 +1117,34 @@
             exportSpec.label,
             true,
           );
+          try {
+            if (statusJson.evidence_pack && window.SMPLContinuity) {
+              var pack = Object.assign({}, statusJson.evidence_pack);
+              if (statusJson.has_evidence_html) {
+                // Fetch HTML companion so Continuity can re-download offline
+                boardFetchWithTimeout(
+                  boardLiveUrl(directBase, "/api/v1/export/jobs/" + jobId + "/evidence.html"),
+                  boardLiveFetchInit(directBase, { method: "GET", cache: "no-store" }),
+                  60000,
+                ).then(function (evRes) {
+                  if (!evRes || !evRes.ok) {
+                    SMPLContinuity.saveEvidencePack(pack);
+                    return;
+                  }
+                  return evRes.text().then(function (html) {
+                    pack.html = html;
+                    SMPLContinuity.saveEvidencePack(pack);
+                  });
+                }).catch(function () {
+                  SMPLContinuity.saveEvidencePack(pack);
+                });
+              } else {
+                SMPLContinuity.saveEvidencePack(pack);
+              }
+            }
+          } catch (evErr) {
+            console.warn("[board-hydrate] evidence pack save failed", evErr);
+          }
           hideExportProgressSoon();
           return "started";
         }
