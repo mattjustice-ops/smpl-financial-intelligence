@@ -117,13 +117,24 @@ def test_render_pptx_bytes_non_empty():
     assert len(raw) > 5000
 
 
-def test_mda_deck_uses_programmatic_render():
-    """Customer MD&A decks must not go through Prompt 5 / PptxGenJS."""
+def test_mda_deck_routes_to_prompt5_path(monkeypatch):
+    """Customer MD&A decks use the gold/Prompt 5 layout, not BoardPackage pptx."""
     bundle = _minimal_bundle()
+    called = {}
+
+    def _fake_claude(bundle_arg, **kwargs):
+        called["ok"] = True
+        called["kwargs"] = kwargs
+        return b"PK\x03\x04fake-pptx-bytes-xxxxxxxxxxxx", "claude_prompt5_adapt"
+
+    monkeypatch.setattr(
+        "app.services.reporting.export.prompt5_deck.build_claude_deck_pptx_bytes",
+        _fake_claude,
+    )
     raw, source = build_mda_deck_pptx_bytes(bundle, use_ai_commentary=False)
-    assert source == "programmatic"
+    assert called.get("ok") is True
+    assert source == "claude_prompt5_adapt"
     assert raw[:2] == b"PK"
-    assert len(raw) > 5000
 
 
 def test_commentary_includes_strategic_context_keywords():

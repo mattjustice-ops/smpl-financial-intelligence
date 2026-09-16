@@ -113,30 +113,30 @@ def build_mda_deck_pptx_bytes(
     freeze_status: str | None = None,
     freeze_stale: bool = False,
 ) -> tuple[bytes, str]:
-    """MD&A deck — deterministic python-pptx render from the reporting bundle.
+    """MD&A deck — adapt known-good PptxGenJS reference first; fresh Prompt 5 if needed.
 
-    Prompt 5 (Haiku-authored PptxGenJS) is retired for customer exports: the
-    model retyped figures as string literals in generated JavaScript, so slides
-    could show numbers that never passed through the engine. Every metric on
-    the deck now comes from the same bundle path as /app/board.
+    Customer exports must use the 11-slide operating-review layout (gold / Prompt 5),
+    not the generic BoardPackage programmatic renderer. Payload reinjection keeps
+    numeric cells tied to the reporting bundle after script generation.
     """
     _ = (
-        ts_data,
-        cash_bridge_data,
-        freeze_context_text,
-        freeze_context_as_of,
-        freeze_status,
-        freeze_stale,
+        include_commentary,
+        include_validation_appendix,
+        use_ai_commentary,
+        scenario_mode,
+        package_mode,
     )
-    package = build_board_package_from_bundle(
+    from app.services.reporting.export.prompt5_deck import build_claude_deck_pptx_bytes
+
+    return build_claude_deck_pptx_bytes(
         bundle,
-        include_commentary=include_commentary,
-        include_validation_appendix=include_validation_appendix,
-        use_ai_commentary=use_ai_commentary,
-        scenario_mode=scenario_mode,
-        package_mode=package_mode,
+        ts_data=ts_data,
+        cash_bridge_data=cash_bridge_data,
+        freeze_context_text=freeze_context_text,
+        freeze_context_as_of=freeze_context_as_of,
+        freeze_status=freeze_status,
+        freeze_stale=freeze_stale,
     )
-    return render_pptx_bytes(package), "programmatic"
 
 
 def build_mda_deck_smoke_result(
