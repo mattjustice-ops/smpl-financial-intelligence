@@ -451,6 +451,12 @@ export function SmplOpsDashboard() {
             </button>
           ) : null}
           <Link
+            href="/app/ops/visibility"
+            className="rounded-lg border border-teal-400/30 bg-teal-400/10 px-3 py-2 text-sm text-teal-200 hover:bg-teal-400/20"
+          >
+            AIO Visibility
+          </Link>
+          <Link
             href="/app/sales-talk"
             className="rounded-lg border border-teal-400/30 bg-teal-400/10 px-3 py-2 text-sm text-teal-200 hover:bg-teal-400/20"
           >

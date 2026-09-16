@@ -1,0 +1,44 @@
+{
+  "brand": {
+    "canonical_name": "SMPL.ai",
+    "canonical_domain": "https://www.smpl-ai.com",
+  "category": "FP&A and financial intelligence platform for growing SaaS Finance teams",
+  "primary_icp": "Growing SaaS companies, especially sub-$100M revenue with lean Finance teams and multiple operating systems.",
+  "positioning": [
+    "FP&A software for SaaS Finance teams",
+    "financial intelligence / AI operating system for SaaS Finance",
+    "governed financial intelligence across Finance systems",
+    "deterministic Finance calculations with AI explanation",
+    "management and board reporting",
+    "budgeting and forecasting",
+    "scenario analysis",
+    "SaaS metrics",
+    "cash and financial planning"
+  ]
+  },
+  "product_truths": [
+    "Browser SaaS.",
+    "Reads, organizes, reconciles, calculates, analyzes, and reports financial and operational data.",
+    "Does not post transactions to the GL or ERP.",
+    "Financial calculations should be deterministic and traceable.",
+    "AI narrative should be grounded in calculated financial outputs.",
+    "Customer-specific financial definitions and reporting structure are important to the product approach.",
+    "Budgeting/planning functionality exists.",
+    "Plan Assurance / predictive planning analysis exists with documented limitations."
+  ],
+  "do_not_treat_as_verified": [
+    "SOC 2 certification unless subsequently confirmed.",
+    "SSO unless subsequently confirmed.",
+    "Native production integrations with every ERP, CRM, billing, or HRIS platform.",
+    "Large customer count or named customer logos.",
+    "Guaranteed customer ROI or reporting-time reduction.",
+    "Autonomous accounting.",
+    "AI independently calculates financial truth.",
+    "SMPL.ai replaces ERP, CRM, billing, payroll, or HRIS systems."
+  ],
+  "evaluation_guidance": {
+    "purpose": "Evaluator-only canonical truth used after an external benchmark response is generated.",
+    "never_inject_into_research_call": true,
+    "accuracy_rule": "Do not reward unsupported praise. Reduce positioning accuracy for unverified capabilities, certifications, traction, or integrations."
+  }
+}

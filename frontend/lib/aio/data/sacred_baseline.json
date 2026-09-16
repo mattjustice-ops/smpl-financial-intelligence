@@ -1,0 +1,26 @@
+{
+  "id": "chatgpt_search_baseline_2026-09-15",
+  "name": "ChatGPT Search Baseline 2026-09-15",
+  "frozen": true,
+  "surface": "chatgpt_search",
+  "method": {
+    "temporary_chat": true,
+    "unpersonalized": true,
+    "web_search": true,
+    "evaluator_version": "rules_v1",
+    "query_count": 46,
+    "do_not_modify_queries": true
+  },
+  "scorecard": {
+    "mention_rate": 0.022,
+    "mention_count": 1,
+    "citation_rate": 0,
+    "owned_domain_citation_rate": 0,
+    "categories_with_hit": 1,
+    "categories_total": 7,
+    "priority3_commercial_visibility": 0,
+    "third_party_citations": 0,
+    "hit_query_id": "use_case_03"
+  },
+  "notes": "Sacred baseline. Do not overwrite. Compare later runs against this, never regenerate to improve score."
+}

@@ -12,8 +12,9 @@ export function MissionSection() {
             the future of the business.
           </blockquote>
           <p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-slate-600">
-            SMPL gives SaaS operators the financial intelligence layer they need to make better
-            decisions, faster — with the rigor of a world-class CFO team behind every metric.
+            SMPL.ai is FP&A and financial intelligence software for growing SaaS Finance teams —
+            reporting, forecasting, budgeting, SaaS metrics, cash planning, scenario analysis, and
+            board reporting with the rigor of a world-class CFO team behind every metric.
           </p>
         </SectionReveal>
       </div>

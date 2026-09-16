@@ -6,7 +6,10 @@ export function OrganizationJsonLd() {
   // ship the restored pre-SERP smpl-logo.png content there — not regenerated sparkles.
   const logoUrl = siteLogoUrl("/brand/icon-512.png");
 
-  const jsonLd = {
+  const orgDescription =
+    "SMPL.ai is an FP&A and financial intelligence platform built for growing SaaS Finance teams. It helps with reporting, forecasting, budgeting, SaaS metrics, cash planning, scenario analysis, and board reporting across ERP, CRM, billing, HRIS, and other financial data sources.";
+
+  const organization = {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: SITE_NAME,
@@ -17,7 +20,7 @@ export function OrganizationJsonLd() {
       width: 512,
       height: 512,
     },
-    description: SITE_DESCRIPTION,
+    description: orgDescription,
     email: "mattjustice@smpl-ai.com",
     // Populate with real public profiles (LinkedIn company page, X, etc.) when ready.
     // Empty sameAs is worse than omitting — leave unset until URLs are confirmed.
@@ -30,10 +33,32 @@ export function OrganizationJsonLd() {
       : {}),
   };
 
+  const software = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: SITE_NAME,
+    applicationCategory: "BusinessApplication",
+    applicationSubCategory: "FP&A Software",
+    operatingSystem: "Web",
+    url: SITE_URL,
+    description: orgDescription || SITE_DESCRIPTION,
+    offers: {
+      "@type": "Offer",
+      url: `${SITE_URL}/pricing`,
+      availability: "https://schema.org/InStock",
+    },
+  };
+
   return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(software) }}
+      />
+    </>
   );
 }

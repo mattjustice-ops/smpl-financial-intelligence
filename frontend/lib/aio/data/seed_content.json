@@ -1,0 +1,189 @@
+[
+  {
+    "id": "homepage",
+    "url": "https://www.smpl-ai.com/",
+    "title": "SMPL.ai homepage",
+    "content_type": "homepage",
+    "status": "live",
+    "published_at": "2026-01-01",
+    "hypothesis": "Homepage entity language should make SMPL classifiable as SaaS FP&A + financial intelligence. Expect lift on category and SaaS ICP queries after H1/entity clarity changes.",
+    "primary_query_ids": ["category_01", "category_02", "saas_icp_01", "use_case_03"],
+    "query_ids": ["category_01", "category_02", "category_04", "saas_icp_01", "saas_icp_04", "lean_finance_01", "use_case_03"]
+  },
+  {
+    "id": "best-fpa-software-saas-companies",
+    "url": "https://www.smpl-ai.com/blog/best-fpa-software-saas-companies",
+    "title": "Best FP&A Software for SaaS Companies: A 2026 Buyer's Guide",
+    "content_type": "commercial_guide",
+    "status": "live",
+    "published_at": "2026-09-09",
+    "hypothesis": "Direct commercial retrieval bait for category_01/02/04 and related SaaS ICP queries. Fair market comparison + explicit SMPL placement.",
+    "primary_query_ids": ["category_01", "category_02", "category_04"],
+    "query_ids": ["category_01", "category_02", "category_03", "category_04", "category_07", "saas_icp_01", "saas_icp_02", "saas_icp_03", "competitive_04"]
+  },
+  {
+    "id": "fpa-software-implementation",
+    "url": "https://www.smpl-ai.com/blog/fpa-software-implementation",
+    "title": "Why FP&A Software Implementations Shouldn't Take Months",
+    "content_type": "commercial_guide",
+    "status": "live",
+    "published_at": "2026-09-15",
+    "hypothesis": "Own implementation-light positioning for lean Finance and easiest-to-implement queries.",
+    "primary_query_ids": ["category_07", "lean_finance_03", "lean_finance_05", "lean_finance_06"],
+    "query_ids": ["category_07", "lean_finance_02", "lean_finance_03", "lean_finance_05", "lean_finance_06", "competitive_05"]
+  },
+  {
+    "id": "fpa-platform-saas",
+    "url": "https://www.smpl-ai.com/blog/fpa-platform-saas",
+    "title": "What an FP&A platform should do for a SaaS company",
+    "content_type": "authority",
+    "status": "live",
+    "published_at": "2026-09-01",
+    "hypothesis": "Authority/category definition page supporting FP&A entity classification.",
+    "primary_query_ids": ["authority_01", "category_01"],
+    "query_ids": ["authority_01", "category_01", "category_02", "saas_icp_05"]
+  },
+  {
+    "id": "ai-costs-saas-fpa",
+    "url": "https://www.smpl-ai.com/blog/ai-costs-saas-fpa",
+    "title": "AI Is Changing the Cost Structure FP&A Has to Understand",
+    "content_type": "thought_leadership",
+    "status": "live",
+    "published_at": "2026-09-09",
+    "hypothesis": "Thought leadership adjacency for AI-powered FP&A category queries.",
+    "primary_query_ids": ["category_03"],
+    "query_ids": ["category_03", "authority_08"]
+  },
+  {
+    "id": "saas-board-reporting-arr-cash-pl",
+    "url": "https://www.smpl-ai.com/blog/saas-board-reporting-arr-cash-pl",
+    "title": "SaaS board reporting: ARR, cash, and P&L",
+    "content_type": "use_case",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Support board reporting / SaaS metrics commercial queries until dedicated /solutions/board-reporting exists.",
+    "primary_query_ids": ["use_case_02", "use_case_07", "competitive_04"],
+    "query_ids": ["use_case_01", "use_case_02", "use_case_07", "competitive_04"]
+  },
+  {
+    "id": "saas-revenue-forecasting-arr-bookings-gaap",
+    "url": "https://www.smpl-ai.com/blog/saas-revenue-forecasting-arr-bookings-gaap",
+    "title": "SaaS revenue forecasting",
+    "content_type": "use_case",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Support ARR/revenue forecasting use-case queries.",
+    "primary_query_ids": ["use_case_05"],
+    "query_ids": ["use_case_05", "use_case_03"]
+  },
+  {
+    "id": "saas-cash-forecasting",
+    "url": "https://www.smpl-ai.com/blog/saas-cash-forecasting",
+    "title": "SaaS cash forecasting",
+    "content_type": "use_case",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Support cash + multi-metric operating model queries.",
+    "primary_query_ids": ["use_case_03"],
+    "query_ids": ["use_case_03"]
+  },
+  {
+    "id": "ai-variance-commentary-cfo-standard",
+    "url": "https://www.smpl-ai.com/blog/ai-variance-commentary-cfo-standard",
+    "title": "AI variance commentary",
+    "content_type": "use_case",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Support automated commentary / variance explanation queries.",
+    "primary_query_ids": ["use_case_01", "use_case_06"],
+    "query_ids": ["use_case_01", "use_case_06"]
+  },
+  {
+    "id": "arr-waterfall-vs-gaap-revenue",
+    "url": "https://www.smpl-ai.com/blog/arr-waterfall-vs-gaap-revenue",
+    "title": "ARR waterfall vs GAAP revenue",
+    "content_type": "use_case",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Support ARR/MRR waterfall automation queries.",
+    "primary_query_ids": ["use_case_04"],
+    "query_ids": ["use_case_04", "use_case_08"]
+  },
+  {
+    "id": "financial-data-governance-saas-finance",
+    "url": "https://www.smpl-ai.com/blog/financial-data-governance-saas-finance",
+    "title": "Financial data governance for SaaS Finance",
+    "content_type": "authority",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Authority corpus for governance / trust queries.",
+    "primary_query_ids": ["authority_02", "authority_03"],
+    "query_ids": ["authority_02", "authority_03", "authority_04", "authority_05"]
+  },
+  {
+    "id": "finance-integration-layer",
+    "url": "https://www.smpl-ai.com/blog/finance-integration-layer",
+    "title": "Finance as the integration layer",
+    "content_type": "authority",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Authority for cross-system finance data association.",
+    "primary_query_ids": ["systems_04", "systems_05"],
+    "query_ids": ["systems_04", "systems_05", "authority_06"]
+  },
+  {
+    "id": "connected-systems-financial-data",
+    "url": "https://www.smpl-ai.com/blog/connected-systems-financial-data",
+    "title": "Connected systems and financial data",
+    "content_type": "authority",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Systems association supporting NetSuite/Salesforce/HubSpot style queries without claiming native connectors.",
+    "primary_query_ids": ["systems_01", "systems_02"],
+    "query_ids": ["systems_01", "systems_02", "systems_04"]
+  },
+  {
+    "id": "ai-operating-system-for-saas-finance",
+    "url": "https://www.smpl-ai.com/blog/ai-operating-system-for-saas-finance",
+    "title": "AI operating system for SaaS Finance",
+    "content_type": "thought_leadership",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Brand/category thesis. Secondary to commercial pages for buyer-intent retrieval.",
+    "primary_query_ids": [],
+    "query_ids": ["authority_01", "authority_07"]
+  },
+  {
+    "id": "finance-os-vs-fpa-software",
+    "url": "https://www.smpl-ai.com/blog/finance-os-vs-fpa-software",
+    "title": "Finance OS vs FP&A software",
+    "content_type": "thought_leadership",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Clarify entity relationship: Finance OS approach within FP&A software category.",
+    "primary_query_ids": ["category_01"],
+    "query_ids": ["category_01", "category_05", "authority_01"]
+  },
+  {
+    "id": "pricing",
+    "url": "https://www.smpl-ai.com/pricing",
+    "title": "Pricing",
+    "content_type": "product",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Commercial entity corroboration; not a primary AIO retrieval page.",
+    "primary_query_ids": [],
+    "query_ids": []
+  },
+  {
+    "id": "book-demo",
+    "url": "https://www.smpl-ai.com/book-demo",
+    "title": "Book a demo",
+    "content_type": "product",
+    "status": "live",
+    "published_at": null,
+    "hypothesis": "Conversion surface; entity hygiene only.",
+    "primary_query_ids": [],
+    "query_ids": []
+  }
+]

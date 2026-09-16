@@ -1,25 +1,69 @@
 # https://www.smpl-ai.com/robots.txt
+# Marketing content is public. App/auth surfaces are disallowed.
+# Explicit AI search crawler allows (OpenAI recommends allowing OAI-SearchBot
+# for full discovery/citation eligibility).
+
 User-agent: *
 Allow: /
-
-# Auth / app surfaces
 Disallow: /app/
 Disallow: /account/
 Disallow: /login
 Disallow: /studio
 Disallow: /forecast-engine
 Disallow: /billing/
-
-# APIs / auth callbacks (not marketing content)
 Disallow: /api/
-
-# Demo / internal HTML that must not compete with marketing pages
 Disallow: /board/
 Disallow: /board-sample
 Disallow: /progress
 Disallow: /compliance
+Disallow: /s/
 
-# Link-only shareables (unlisted PDFs, etc.) — not marketing SEO
+# OpenAI ChatGPT Search / citation crawler
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /app/
+Disallow: /account/
+Disallow: /login
+Disallow: /studio
+Disallow: /forecast-engine
+Disallow: /billing/
+Disallow: /api/
+Disallow: /board/
+Disallow: /board-sample
+Disallow: /progress
+Disallow: /compliance
+Disallow: /s/
+
+# OpenAI training crawler
+User-agent: GPTBot
+Allow: /
+Disallow: /app/
+Disallow: /account/
+Disallow: /login
+Disallow: /studio
+Disallow: /forecast-engine
+Disallow: /billing/
+Disallow: /api/
+Disallow: /board/
+Disallow: /board-sample
+Disallow: /progress
+Disallow: /compliance
+Disallow: /s/
+
+# ChatGPT user-fetch agent
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /app/
+Disallow: /account/
+Disallow: /login
+Disallow: /studio
+Disallow: /forecast-engine
+Disallow: /billing/
+Disallow: /api/
+Disallow: /board/
+Disallow: /board-sample
+Disallow: /progress
+Disallow: /compliance
 Disallow: /s/
 
 Sitemap: https://www.smpl-ai.com/sitemap.xml
