@@ -146,9 +146,10 @@ const checks = [
   ["HTML arr table fc-col on td", boardHtml.includes('class="${colCls}"'), true],
   ["HTML skip buildCharts for pl", boardHtml.includes("name === 'pl' || name === 'threestmt'"), true],
   [
-    "HTML Validation Engine stamp (no Continuity nav)",
+    "HTML Validation Engine in-board (stamp + Validation nav)",
     boardHtml.includes("smpl-validated-stamp") &&
-      boardHtml.includes("/validation/") &&
+      boardHtml.includes("show('validation'") &&
+      boardHtml.includes("renderValidation") &&
       !boardHtml.includes("show('continuity'"),
     true,
   ],
@@ -161,18 +162,23 @@ const checks = [
     true,
   ],
   [
-    "board-continuity validated stamp",
-    fs
-      .readFileSync(path.join(__dirname, "../public/shared/board-continuity.js"), "utf8")
-      .includes("smpl-validated-stamp"),
+    "board-continuity validated stamp + in-board engine",
+    (() => {
+      const js = fs.readFileSync(path.join(__dirname, "../public/shared/board-continuity.js"), "utf8");
+      return (
+        js.includes("smpl-validated-stamp") &&
+        js.includes("renderValidationEngine") &&
+        js.includes("view=validation")
+      );
+    })(),
     true,
   ],
   [
-    "Validation Engine page ships",
+    "Validation Engine redirects into Board",
     fs.existsSync(path.join(__dirname, "../public/validation/index.html")) &&
       fs
         .readFileSync(path.join(__dirname, "../public/validation/index.html"), "utf8")
-        .includes("Validation Engine"),
+        .includes("view=validation"),
     true,
   ],
   ["board-hydrate saves Evidence Pack", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("saveEvidencePack"), true],

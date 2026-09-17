@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 
 import { AppSessionBanner } from "@/components/app/AppSessionBanner";
+import {
+  EmbeddedModuleChrome,
+  EmbeddedModuleNavLink,
+} from "@/components/app/EmbeddedModuleChrome";
 import { ApiPushPanel } from "@/components/workspace/ApiPushPanel";
 import { CloseWorkflowPanel } from "@/components/workspace/CloseWorkflowPanel";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
@@ -284,36 +288,33 @@ export function WorkspaceDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="workspace-module space-y-6">
+      <div className="workspace-module__header">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-teal-400">Workspace</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">
+          <p className="workspace-module__eyebrow">Workspace</p>
+          <h1 className="workspace-module__title">
             {summary?.organization_name ?? "Your workspace"}
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-400">
+          <p className="workspace-module__sub">
             Usage, data imports (CSV or API), and month-end close activity for your organization.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="workspace-module__actions">
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10 disabled:opacity-50"
+            className="workspace-module__btn"
           >
             {loading ? "Refreshing…" : "Refresh"}
           </button>
-          <Link
-            href="/app/board"
-            className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
-          >
+          <Link href="/app/board" className="workspace-module__link">
             Board Platform
           </Link>
         </div>
       </div>
 
-      <div className="flex gap-2 border-b border-white/10 pb-1">
+      <div className="workspace-module__tabs">
         {(
           [
             ["usage", "Usage & storage"],
@@ -325,11 +326,7 @@ export function WorkspaceDashboard() {
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
-              tab === id
-                ? "border border-b-0 border-white/15 bg-slate-900 text-white"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
+            className={`workspace-module__tab${tab === id ? " is-active" : ""}`}
           >
             {label}
           </button>
@@ -337,35 +334,33 @@ export function WorkspaceDashboard() {
       </div>
 
       {summary?._fallback ? (
-        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+        <div className="workspace-module__alert workspace-module__alert--warn">
           {summary._fallback_reason ??
             "Close ledger and imports are not available until the latest API is deployed to Railway."}
         </div>
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
-          {error}
-        </div>
+        <div className="workspace-module__alert workspace-module__alert--error">{error}</div>
       ) : null}
 
       {uploadMessage ? (
-        <div className="rounded-xl border border-teal-400/30 bg-teal-400/10 px-4 py-3 text-sm text-teal-200">
+        <div className="workspace-module__alert workspace-module__alert--ok">
           {uploadMessage}
           {uploadTrace?.warnings?.length ? (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100">
+            <ul className="mt-2 list-disc space-y-1 pl-5 workspace-module__muted">
               {uploadTrace.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}
             </ul>
           ) : null}
           {uploadTrace?.database ? (
-            <p className="mt-2 text-xs text-teal-300/80">
+            <p className="mt-2 workspace-module__muted">
               DB: {uploadTrace.database.host} / {uploadTrace.database.database} ({uploadTrace.database.provider})
             </p>
           ) : null}
           {uploadTrace?.reporting_live ? (
-            <p className="mt-1 text-xs text-teal-300/80">
+            <p className="mt-1 workspace-module__muted">
               Reporting table {uploadTrace.reporting_live.table}: {uploadTrace.reporting_live.row_count} rows
               {uploadTrace.reporting_live.periods.length
                 ? ` · periods ${uploadTrace.reporting_live.periods.join(", ")}`
@@ -375,7 +370,7 @@ export function WorkspaceDashboard() {
         </div>
       ) : null}
 
-      {loading && !summary ? <p className="text-sm text-slate-400">Loading workspace…</p> : null}
+      {loading && !summary ? <p className="workspace-module__muted">Loading workspace…</p> : null}
 
       {tab === "usage" && summary && usage ? (
         <section className="space-y-4">
@@ -390,11 +385,11 @@ export function WorkspaceDashboard() {
               ["Warehouse rows", formatInt(summary.storage.warehouse_rows), "—"],
               ["Est. storage", formatMb(summary.storage.estimated_storage_mb), "—"],
             ].map(([label, value, cap]) => (
-              <div key={label} className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-                <p className="text-xs uppercase tracking-widest text-slate-500">{label}</p>
-                <p className="mt-2 text-2xl font-semibold tabular-nums text-white">{value}</p>
+              <div key={label} className="workspace-module__card">
+                <p className="workspace-module__card-label">{label}</p>
+                <p className="workspace-module__card-value">{value}</p>
                 {cap !== "—" ? (
-                  <p className="mt-1 text-xs text-slate-500">Cap {cap}</p>
+                  <p className="mt-1 workspace-module__muted">Cap {cap}</p>
                 ) : null}
               </div>
             ))}
@@ -704,13 +699,26 @@ export function WorkspaceDashboard() {
 
 export function WorkspaceShell() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-      <div className="mx-auto max-w-6xl px-6 py-10 md:py-14">
-        <div className="mb-6 text-white [&_a]:text-slate-400">
-          <AppSessionBanner />
+    <EmbeddedModuleChrome
+      moduleTitle="Workspace"
+      links={
+        <>
+          <EmbeddedModuleNavLink href="/app/board">Board</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/app/board?view=validation">Validation</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/forecast-engine">Forecast</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/budget-engine">Budget</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/app">Operating system</EmbeddedModuleNavLink>
+        </>
+      }
+    >
+      <div className="embedded-module__scroll">
+        <div className="embedded-module__scroll-inner">
+          <div className="mb-6">
+            <AppSessionBanner />
+          </div>
+          <WorkspaceDashboard />
         </div>
-        <WorkspaceDashboard />
       </div>
-    </main>
+    </EmbeddedModuleChrome>
   );
 }

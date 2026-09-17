@@ -75,6 +75,19 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .smpl-cont-fail summary { cursor: pointer; font-size: 12px; color: var(--text); }
 .smpl-cont-fail-body { margin-top: 8px; font-size: 11px; color: var(--text2); line-height: 1.45; }
 .smpl-cont-ok { font-size: 12px; color: var(--teal); margin-top: 6px; }
+.ve-checklist { list-style: none; padding: 0; margin: 0; }
+.ve-checklist li { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+.ve-check { width: 18px; text-align: center; font-weight: 700; }
+.ve-check-meta { color: var(--text3); font-size: 12px; margin-top: 2px; }
+.ve-ok { color: var(--teal); }
+.ve-warn { color: #c48a3a; }
+.ve-bad { color: var(--red, #b8705f); }
+.ve-foot { margin-top: 20px; font-size: 11px; color: var(--text3); }
+.ve-map { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ve-map th, .ve-map td { border-bottom: 0.5px solid var(--border); padding: 8px 6px; text-align: left; vertical-align: middle; }
+.ve-map th { color: var(--text3); font-weight: 600; }
+.ve-map-sel, .ve-allow-by { background: var(--bg); color: var(--text); border: 0.5px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 12px; font-family: var(--font); }
+.ve-allow-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .smpl-cite-drawer { position: fixed; top: 0; right: 0; width: min(380px, 92vw); height: 100vh; background: var(--bg); border-left: 0.5px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,0.18); z-index: 80; transform: translateX(105%); transition: transform .2s ease; display: flex; flex-direction: column; }
 .smpl-cite-drawer.open { transform: translateX(0); }
 .smpl-cite-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
@@ -309,6 +322,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   <button class="nav-btn" onclick="show('workforce',this)">Workforce</button>
   <button class="nav-btn" onclick="show('risks',this)">Risks &amp; Opps</button>
   <button class="nav-btn copilot-btn" onclick="show('copilot',this)">&#10022; SMPL Copilot</button>
+  <button class="nav-btn" onclick="show('validation',this)">Validation</button>
 </nav>
 
 <div id="slideArea"></div>
@@ -321,7 +335,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
-<script src="/shared/board-continuity.js?v=2"></script>
+<script src="/shared/board-continuity.js?v=3"></script>
 <script src="/shared/board-data.js?v=9"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -585,7 +599,14 @@ function show(name, btn) {
   else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.substr(0,3)))b.classList.add('active');});
   const area = document.getElementById('slideArea');
   area.innerHTML = '';
-  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot};
+  window.SMPL_VALIDATION_ENGINE = (name === 'validation');
+  try {
+    var u = new URL(location.href);
+    if (name === 'validation') u.searchParams.set('view', 'validation');
+    else u.searchParams.delete('view');
+    history.replaceState({}, '', u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash);
+  } catch (e) { /* ignore */ }
+  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot,validation:renderValidation};
   if(renders[name]) renders[name](area);
   boardAnnotateProvenance(area);
   if (window.SMPLContinuity && typeof SMPLContinuity.refreshValidatedStamp === 'function') {
@@ -593,16 +614,24 @@ function show(name, btn) {
   } else if (window.SMPLContinuity && typeof SMPLContinuity.refreshTrustStrip === 'function') {
     try { SMPLContinuity.refreshTrustStrip(); } catch (e) { /* non-fatal */ }
   }
-  if (name === 'pl' || name === 'threestmt' || name === 'continuity') return;
+  if (name === 'pl' || name === 'threestmt' || name === 'continuity' || name === 'validation') return;
   scheduleChartBuild(name, 50);
 }
 
-function renderContinuity(area) {
+function renderValidation(area) {
+  if (window.SMPLContinuity && typeof SMPLContinuity.renderValidationEngine === 'function') {
+    SMPLContinuity.renderValidationEngine(area);
+    return;
+  }
   if (window.SMPLContinuity && typeof SMPLContinuity.renderContinuity === 'function') {
     SMPLContinuity.renderContinuity(area);
     return;
   }
-  area.innerHTML = '<div class="slide-title">Validation Engine</div><div class="slide-sub"><a href="/validation/">Open Validation Engine →</a></div>';
+  area.innerHTML = '<div class="slide-title">Validation Engine</div><div class="slide-sub">Loading…</div>';
+}
+
+function renderContinuity(area) {
+  renderValidation(area);
 }
 
 // ─── EXEC ──────────────────────────────────────────────────────────────────
@@ -625,13 +654,10 @@ function boardCloseParts() {
  */
 function boardCashContinuityHtml() {
   /* Cash spine detail lives in Validation Engine — Board stays outcomes-only. */
-  var href = (window.SMPLContinuity && SMPLContinuity.validationHref)
-    ? SMPLContinuity.validationHref()
-    : '/validation/';
   return (
     '<div style="margin-bottom:24px;padding:10px 14px;border:0.5px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">' +
     '<span>Cash continuity &amp; ties are owned in the Validation Engine (system owner), not on the executive Board.</span>' +
-    '<a href="' + href + '" style="color:var(--teal);text-decoration:none;font-weight:600">Open Validation Engine →</a></div>'
+    '<button type="button" class="ai-global-btn" onclick="boardExecNav(\'validation\')">Open Validation Engine →</button></div>'
   );
 }
 
@@ -3206,7 +3232,16 @@ function _sComm(el) {
 // Init
 document.getElementById('periodBadge').textContent = CLOSE_LABEL + ' \u00b7 YTD Close';
 document.getElementById('footerCloseMo').textContent = CLOSE_MO;
-show('exec');
+(function boardBootView() {
+  var q = (location.search || '');
+  var m = q.match(/[?&]view=([a-z0-9_]+)/i);
+  var view = m ? m[1].toLowerCase() : 'exec';
+  if (view === 'continuity') view = 'validation';
+  var btn = Array.from(document.querySelectorAll('.nav-btn')).find(function (b) {
+    return (b.getAttribute('onclick') || '').indexOf("show('" + view + "'") >= 0;
+  });
+  show(view, btn || null);
+})();
 
 // ── SMPL COPILOT ────────────────────────────────────────────────────────────
 // Data context injected from June actuals CSVs

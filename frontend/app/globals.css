@@ -1082,3 +1082,249 @@ body {
 .embedded-module__gate a {
   color: var(--accent);
 }
+
+.embedded-module__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px 48px;
+  width: 100%;
+}
+
+.embedded-module__scroll-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* —— Workspace (platform chrome, not website dark) —— */
+.workspace-module {
+  color: var(--text);
+}
+
+.workspace-module__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.workspace-module__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.workspace-module__title {
+  margin: 6px 0 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.workspace-module__sub {
+  margin: 8px 0 0;
+  max-width: 42rem;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.workspace-module__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workspace-module__btn {
+  border: 0.5px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.workspace-module__btn:hover {
+  background: var(--panel);
+}
+
+.workspace-module__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.workspace-module__link {
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.workspace-module__link:hover {
+  color: var(--text);
+}
+
+.workspace-module__tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 0.5px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.workspace-module__tab {
+  border: 0.5px solid transparent;
+  border-bottom: none;
+  background: none;
+  color: var(--muted);
+  border-radius: 8px 8px 0 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.workspace-module__tab.is-active {
+  border-color: var(--border);
+  background: var(--card);
+  color: var(--text);
+}
+
+.workspace-module__card {
+  background: var(--card);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.workspace-module__card-label {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.workspace-module__card-value {
+  margin: 8px 0 0;
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.workspace-module__muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workspace-module__alert {
+  border-radius: 10px;
+  border: 0.5px solid var(--border);
+  padding: 12px 14px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.workspace-module__alert--warn {
+  border-color: color-mix(in srgb, var(--watch) 45%, var(--border));
+  background: color-mix(in srgb, var(--watch) 10%, transparent);
+  color: var(--text);
+}
+
+.workspace-module__alert--error {
+  border-color: color-mix(in srgb, var(--negative) 45%, var(--border));
+  background: color-mix(in srgb, var(--negative) 10%, transparent);
+  color: var(--text);
+}
+
+.workspace-module__alert--ok {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.workspace-module table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.workspace-module thead {
+  border-bottom: 0.5px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.workspace-module th,
+.workspace-module td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.workspace-module tbody tr {
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+
+.workspace-module .text-white,
+.workspace-module .text-slate-200,
+.workspace-module .text-slate-300 {
+  color: var(--text) !important;
+}
+
+.workspace-module .text-slate-400,
+.workspace-module .text-slate-500,
+.workspace-module .text-slate-600 {
+  color: var(--muted) !important;
+}
+
+.workspace-module .text-teal-400,
+.workspace-module .text-teal-300,
+.workspace-module .text-teal-200 {
+  color: var(--accent) !important;
+}
+
+.workspace-module .bg-slate-900\/60,
+.workspace-module .bg-slate-900\/40,
+.workspace-module .bg-slate-950\/50,
+.workspace-module .bg-white\/5 {
+  background: var(--card) !important;
+}
+
+.workspace-module .border-white\/10,
+.workspace-module .border-white\/15,
+.workspace-module .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border) !important;
+}
+
+.workspace-module .bg-teal-400\/10,
+.workspace-module .border-teal-400\/30 {
+  background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border)) !important;
+  color: var(--text) !important;
+}
+
+.workspace-module .bg-amber-400\/10,
+.workspace-module .border-amber-400\/30,
+.workspace-module .text-amber-100,
+.workspace-module .text-amber-200 {
+  color: var(--text) !important;
+}
+
+.workspace-module .bg-rose-400\/10,
+.workspace-module .border-rose-400\/30,
+.workspace-module .text-rose-200 {
+  color: var(--text) !important;
+}
+

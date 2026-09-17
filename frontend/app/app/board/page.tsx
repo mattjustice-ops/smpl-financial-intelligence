@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 import {
   EmbeddedModuleChrome,
@@ -9,10 +11,12 @@ import {
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
-export default function BoardPlatformPage() {
+function BoardPlatformInner() {
   const { isLoading: orgLoading } = useActiveOrganization();
   const { hasModule, planLabel } = useEntitlements();
+  const searchParams = useSearchParams();
   const canView = hasModule("board_export");
+  const view = searchParams.get("view");
 
   if (orgLoading) {
     return <div className="embedded-module__gate">Loading session…</div>;
@@ -30,13 +34,16 @@ export default function BoardPlatformPage() {
     );
   }
 
-  const src = "/board/index.html?embedded=1&v=12";
+  const qs = new URLSearchParams({ embedded: "1", v: "13" });
+  if (view) qs.set("view", view);
+  const src = `/board/index.html?${qs.toString()}`;
 
   return (
     <EmbeddedModuleChrome
       moduleTitle="Board Platform"
       links={
         <>
+          <EmbeddedModuleNavLink href="/app/board?view=validation">Validation</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/budget-engine">Budget Engine</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/app/workspace">Workspace</EmbeddedModuleNavLink>
@@ -45,5 +52,13 @@ export default function BoardPlatformPage() {
     >
       <iframe title="SMPL Board Platform" src={src} />
     </EmbeddedModuleChrome>
+  );
+}
+
+export default function BoardPlatformPage() {
+  return (
+    <Suspense fallback={<div className="embedded-module__gate">Loading Board Platform…</div>}>
+      <BoardPlatformInner />
+    </Suspense>
   );
 }

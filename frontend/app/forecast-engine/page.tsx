@@ -32,6 +32,7 @@ export default function ForecastEnginePage() {
       links={
         <>
           <EmbeddedModuleNavLink href="/app/board">Board Platform →</EmbeddedModuleNavLink>
+          <EmbeddedModuleNavLink href="/app/board?view=validation">Validation →</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/budget-engine">Budget Engine →</EmbeddedModuleNavLink>
           <EmbeddedModuleNavLink href="/app/workspace">Workspace →</EmbeddedModuleNavLink>
         </>

@@ -1,9 +1,9 @@
 /**
  * Validation Engine + Board validated stamp.
  *
- * Board (exec): one-line stamp → /validation/ (no A–F homework).
+ * Board (exec): one-line stamp → in-Board Validation view (same skins/topbar).
  * Validation Engine (owner): Ties, cash spine, Evidence Pack, Monthly Align, mapping.
- * Cite-to-calc: owner mode only (?owner=1 or Ctrl+Shift+V).
+ * Cite-to-calc: owner mode only (?owner=1, Validation view, or Ctrl+Shift+V).
  * Not SOC 2 certified.
  */
 (function (global) {
@@ -24,8 +24,9 @@
   }
 
   function isValidationEnginePage() {
+    if (global.SMPL_VALIDATION_ENGINE === true) return true;
     var path = (global.location && global.location.pathname) || "";
-    return path.indexOf("/validation") >= 0 || global.SMPL_VALIDATION_ENGINE === true;
+    return path.indexOf("/validation") >= 0;
   }
 
   function isOwnerMode() {
@@ -51,7 +52,32 @@
 
   function validationHref() {
     var period = closeMonth();
-    return "/validation/?period=" + encodeURIComponent(period);
+    var path = (global.location && global.location.pathname) || "";
+    var base = path.indexOf("/board") >= 0 ? path.split("?")[0] : "/board/";
+    if (!/\/$/.test(base) && !/\.html$/i.test(base)) base += "/";
+    var q = "view=validation&period=" + encodeURIComponent(period);
+    var emb = (global.location && global.location.search) || "";
+    if (/[?&]embedded=1(?:&|$)/.test(emb)) q += "&embedded=1";
+    return base + (base.indexOf("?") >= 0 ? "&" : "?") + q;
+  }
+
+  function openValidationView() {
+    if (typeof global.show === "function" && document.getElementById("slideArea")) {
+      var btn = Array.from(document.querySelectorAll(".nav-btn")).find(function (b) {
+        return (b.getAttribute("onclick") || "").indexOf("show('validation'") >= 0;
+      });
+      global.show("validation", btn || null);
+      try {
+        var u = new URL(global.location.href);
+        u.searchParams.set("view", "validation");
+        u.searchParams.set("period", closeMonth());
+        global.history.replaceState({}, "", u.pathname + "?" + u.searchParams.toString() + u.hash);
+      } catch (e) {
+        /* ignore */
+      }
+      return;
+    }
+    global.location.href = validationHref();
   }
 
   function closeMonth() {
@@ -175,12 +201,22 @@
     el.className = "smpl-validated-stamp";
     el.href = validationHref();
     el.setAttribute("aria-label", "Open Validation Engine");
+    el.addEventListener("click", function (ev) {
+      if (typeof global.show === "function" && document.getElementById("slideArea")) {
+        ev.preventDefault();
+        openValidationView();
+      }
+    });
     top.insertBefore(el, top.firstChild);
     return el;
   }
 
   function refreshValidatedStamp() {
-    if (isValidationEnginePage()) return;
+    if (isValidationEnginePage()) {
+      var existing = document.getElementById(STAMP_ID);
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      return;
+    }
     var el = ensureValidatedStamp();
     if (!el) return;
     var s = trustSummary();
@@ -215,7 +251,7 @@
   }
 
   function openContinuityTab() {
-    global.location.href = validationHref();
+    openValidationView();
   }
 
   function parseFailString(f) {
@@ -333,8 +369,8 @@
       .join("");
 
     area.innerHTML =
-      '<div class="ve-panel-title">Ties</div>' +
-      '<div class="ve-panel-sub">Client A–F + cash spine · TOL_ACTUALS $1 · failures first</div>' +
+      '<div class="card-title" style="margin-bottom:12px">Ties</div>' +
+      '<div class="slide-sub" style="margin-top:0">Client A–F + cash spine · TOL_ACTUALS $1 · failures first</div>' +
       '<div class="smpl-cont-banner" style="border-color:' +
       statusColor(s.status) +
       '"><div style="font-weight:600;color:' +
@@ -396,19 +432,265 @@
       "</div></div>";
   }
 
-  /** Legacy Continuity tab renderer — redirects owners to full engine panels. */
-  function renderContinuity(area) {
-    if (!area) return;
-    if (!isValidationEnginePage()) {
-      area.innerHTML =
-        '<div class="slide-title">Validation Engine</div>' +
-        '<div class="slide-sub">Ties, mapping, and Monthly Align moved to the owner Validation Engine — leadership Board stays outcomes-only.</div>' +
-        '<p style="margin-top:16px"><a class="ai-global-btn" href="' +
-        esc(validationHref()) +
-        '">Open Validation Engine →</a></p>';
+  function money(n) {
+    var v = Number(n) || 0;
+    return "$" + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+
+  function veState(area) {
+    if (!area._veState) area._veState = { panel: "status", status: null };
+    return area._veState;
+  }
+
+  function renderStatusHtml(status, period) {
+    var s = status || {};
+    var allow = s.validation_allow || {};
+    var align = s.monthly_align || {};
+    var ready = !!align.ready_for_board;
+    return (
+      '<div class="card-title" style="margin-bottom:12px">Close status</div>' +
+      '<div class="slide-sub" style="margin-top:0">Freeze pack + last Allow. Leadership Board reads this as a one-line stamp.</div>' +
+      '<div class="card"><div class="card-title">Stamps</div><div class="smpl-cont-grid">' +
+      row("As-of", s.as_of_period || period) +
+      row("Freeze", s.freeze_status || "—") +
+      row("Built", s.freeze_built_at || "—") +
+      '<div class="smpl-cont-row"><span>Allow</span><strong class="' +
+      (allow.allowed ? "ve-ok" : "ve-warn") +
+      '">' +
+      (allow.allowed ? "Allowed by " + esc(allow.allowed_by || "owner") : "Not yet Allowed") +
+      "</strong></div>" +
+      row("Mapping open", String(s.mapping_material_open_count || 0) + " material") +
+      '<div class="smpl-cont-row"><span>Board ready</span><strong class="' +
+      (ready ? "ve-ok" : "ve-warn") +
+      '">' +
+      (ready ? "Yes — outcomes stamp green" : "No — finish Align") +
+      "</strong></div>" +
+      "</div></div>" +
+      '<p class="ve-foot">Not SOC 2 certified. Hard ID for production actuals is import/close; this Engine is where owners verify and Allow.</p>'
+    );
+  }
+
+  function renderMappingHtml(status) {
+    var s = status || {};
+    var queue = s.mapping_queue || [];
+    var lines = s.management_lines || [];
+    var rows = queue
+      .map(function (q) {
+        var open = q.status === "open";
+        var opts = lines
+          .map(function (l) {
+            return (
+              '<option value="' +
+              esc(l) +
+              '"' +
+              (q.mapped_to === l ? " selected" : "") +
+              ">" +
+              esc(l) +
+              "</option>"
+            );
+          })
+          .join("");
+        return (
+          "<tr>" +
+          "<td><code>" +
+          esc(q.account_number || q.account_id) +
+          "</code></td>" +
+          "<td>" +
+          esc(q.name) +
+          "</td>" +
+          "<td>" +
+          money(q.amount) +
+          "</td>" +
+          "<td>" +
+          esc(q.status) +
+          (q.mapped_to ? " → " + esc(q.mapped_to) : "") +
+          "</td>" +
+          "<td>" +
+          (open
+            ? '<select class="ve-map-sel" data-acct="' +
+              esc(q.account_id) +
+              '">' +
+              opts +
+              "</select> " +
+              '<button type="button" class="ai-global-btn ve-map-btn" data-acct="' +
+              esc(q.account_id) +
+              '">Map</button>'
+            : "—") +
+          "</td></tr>"
+        );
+      })
+      .join("");
+    return (
+      '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
+      '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map to management IS / BS / CFS / ARR before they distort statements.</div>' +
+      '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
+      (queue.length
+        ? '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
+          rows +
+          "</tbody></table>"
+        : '<div class="smpl-cont-ok">Queue clear — no open material accounts.</div>') +
+      "</div>" +
+      (s.import_hard_id_blocked
+        ? '<p class="ve-bad" style="margin-top:12px;font-size:12px">Import/close hard-ID: material open items will block close lock until mapped.</p>'
+        : "")
+    );
+  }
+
+  function renderAlignHtml(status) {
+    var s = status || {};
+    var align = s.monthly_align || {};
+    var ts = trustSummary();
+    var tiesOk = ts.passed;
+    var mapOk = !!align.mapping_clear;
+    var allowOk = !!align.allow;
+    var canAllow =
+      tiesOk && mapOk && (s.freeze_status === "COMPLETE" || s.freeze_status === "STALE") && !allowOk;
+    return (
+      '<div class="card-title" style="margin-bottom:12px">Monthly Align</div>' +
+      '<div class="slide-sub" style="margin-top:0">Owner ritual (~15–30 min): ties → mapping → deck fidelity → Allow. Board stamp turns green only after Allow.</div>' +
+      '<div class="card"><ul class="ve-checklist">' +
+      '<li><span class="ve-check ' +
+      (tiesOk ? "ve-ok" : "ve-bad") +
+      '">' +
+      (tiesOk ? "✓" : "!") +
+      "</span><div><strong>Ties</strong><div class=\"ve-check-meta\">" +
+      esc(statusLabel(ts)) +
+      " — review Ties panel</div></div></li>" +
+      '<li><span class="ve-check ' +
+      (mapOk ? "ve-ok" : "ve-bad") +
+      '">' +
+      (mapOk ? "✓" : "!") +
+      '</span><div><strong>Mapping queue</strong><div class="ve-check-meta">' +
+      (mapOk ? "Clear" : (s.mapping_material_open_count || 0) + " material open") +
+      "</div></div></li>" +
+      '<li><span class="ve-check ' +
+      ((ts.fidelityIssues || 0) === 0 ? "ve-ok" : "ve-warn") +
+      '">' +
+      ((ts.fidelityIssues || 0) === 0 ? "✓" : "~") +
+      '</span><div><strong>Deck fidelity</strong><div class="ve-check-meta">Evidence Pack / post-render — soft-warn OK; review before Allow</div></div></li>' +
+      '<li><span class="ve-check ' +
+      (allowOk ? "ve-ok" : "ve-warn") +
+      '">' +
+      (allowOk ? "✓" : "○") +
+      '</span><div><strong>Allow for Board</strong><div class="ve-check-meta">' +
+      (allowOk
+        ? "Recorded " + esc((s.validation_allow && s.validation_allow.allowed_at) || "")
+        : "Not recorded") +
+      "</div></div></li>" +
+      "</ul>" +
+      '<div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+      '<input type="text" class="ve-allow-by" id="veAllowBy" placeholder="Your name" value="FP&amp;A Owner" />' +
+      '<button type="button" class="ai-global-btn ve-allow-btn" id="veAllowBtn"' +
+      (canAllow ? "" : " disabled") +
+      ">Allow close for Board</button>" +
+      "</div>" +
+      (!canAllow && !allowOk
+        ? '<p class="ve-foot" style="margin-top:8px">Resolve ties + mapping + freeze COMPLETE before Allow.</p>'
+        : "") +
+      "</div>"
+    );
+  }
+
+  function paintValidationPanel(area) {
+    var st = veState(area);
+    var body = area.querySelector("#veBoardBody");
+    if (!body) return;
+    if (st.panel === "ties") {
+      renderTiesPanel(body);
       return;
     }
-    renderTiesPanel(area);
+    if (st.panel === "mapping") {
+      body.innerHTML = renderMappingHtml(st.status);
+      Array.prototype.forEach.call(body.querySelectorAll(".ve-map-btn"), function (btn) {
+        btn.onclick = function () {
+          var id = btn.getAttribute("data-acct");
+          var sel = body.querySelector('select.ve-map-sel[data-acct="' + id + '"]');
+          var line = sel && sel.value;
+          if (!line) return;
+          btn.disabled = true;
+          postMapAccount(id, line, "FP&A Owner")
+            .then(function (next) {
+              st.status = next;
+              paintValidationPanel(area);
+            })
+            .catch(function (err) {
+              alert(String(err.message || err));
+              btn.disabled = false;
+            });
+        };
+      });
+      return;
+    }
+    if (st.panel === "align") {
+      body.innerHTML = renderAlignHtml(st.status);
+      var allowBtn = body.querySelector("#veAllowBtn");
+      if (allowBtn) {
+        allowBtn.onclick = function () {
+          var who = (body.querySelector("#veAllowBy") || {}).value || "owner";
+          allowBtn.disabled = true;
+          postAllow(who, "Monthly Align")
+            .then(function (next) {
+              st.status = next;
+              paintValidationPanel(area);
+              refreshValidatedStamp();
+            })
+            .catch(function (err) {
+              alert(String(err.message || err));
+              allowBtn.disabled = false;
+            });
+        };
+      }
+      return;
+    }
+    body.innerHTML = renderStatusHtml(st.status, closeMonth());
+  }
+
+  /** Full Validation Engine inside Board chrome (owner workshop). */
+  function renderValidationEngine(area) {
+    if (!area) return;
+    global.SMPL_VALIDATION_ENGINE = true;
+    setOwnerMode(true);
+    var st = veState(area);
+    area.innerHTML =
+      '<div class="slide-title">Validation Engine</div>' +
+      '<div class="slide-sub">Owner workshop — ties, mapping, Monthly Align, and Allow. Leadership Board stays outcomes-only.</div>' +
+      '<div class="subnav" id="veBoardNav">' +
+      '<button type="button" class="snav-btn' +
+      (st.panel === "status" ? " on" : "") +
+      '" data-panel="status">1 · Close status</button>' +
+      '<button type="button" class="snav-btn' +
+      (st.panel === "ties" ? " on" : "") +
+      '" data-panel="ties">2 · Ties</button>' +
+      '<button type="button" class="snav-btn' +
+      (st.panel === "mapping" ? " on" : "") +
+      '" data-panel="mapping">3 · Mapping</button>' +
+      '<button type="button" class="snav-btn' +
+      (st.panel === "align" ? " on" : "") +
+      '" data-panel="align">4 · Monthly Align</button>' +
+      "</div>" +
+      '<div id="veBoardBody" style="margin-top:8px"></div>';
+    var nav = area.querySelector("#veBoardNav");
+    if (nav) {
+      nav.addEventListener("click", function (ev) {
+        var btn = ev.target.closest("button[data-panel]");
+        if (!btn) return;
+        st.panel = btn.getAttribute("data-panel");
+        Array.prototype.forEach.call(nav.querySelectorAll("button[data-panel]"), function (b) {
+          b.classList.toggle("on", b === btn);
+        });
+        paintValidationPanel(area);
+      });
+    }
+    paintValidationPanel(area);
+    fetchValidationStatus({ seedDemoQueue: true }).then(function (s) {
+      st.status = s || global.SMPL_VALIDATION_STATUS;
+      paintValidationPanel(area);
+    });
+  }
+
+  /** Legacy Continuity tab renderer — opens full Validation Engine panels. */
+  function renderContinuity(area) {
+    renderValidationEngine(area);
   }
 
   function ensureDrawer() {
@@ -624,10 +906,12 @@
 
   global.SMPLContinuity = {
     renderContinuity: renderContinuity,
+    renderValidationEngine: renderValidationEngine,
     renderTiesPanel: renderTiesPanel,
     refreshTrustStrip: refreshTrustStrip,
     refreshValidatedStamp: refreshValidatedStamp,
     openContinuityTab: openContinuityTab,
+    openValidationView: openValidationView,
     openCiteDrawer: openCiteDrawer,
     closeCiteDrawer: closeCiteDrawer,
     saveEvidencePack: saveEvidencePack,
