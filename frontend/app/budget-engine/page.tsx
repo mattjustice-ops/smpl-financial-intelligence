@@ -26,13 +26,12 @@ function BudgetEngineInner() {
   }
 
   const tabQ = tab ? `&tab=${encodeURIComponent(tab)}` : "";
-  const src = `/budget-engine/index.html?embedded=1&v=30${tabQ}`;
+  const src = `/budget-engine/index.html?embedded=1&v=31${tabQ}`;
 
   return (
     <EmbeddedModuleChrome
       moduleTitle="Budget Engine"
       links={<PlatformModuleNavLinks />}
-      trailing={<PlatformSkinSelect />}
     >
       <iframe title="SMPL Budget Engine" src={src} />
     </EmbeddedModuleChrome>

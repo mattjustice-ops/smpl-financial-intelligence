@@ -425,7 +425,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </nav>
 <div class="layout">
   <aside class="sidebar" id="sidebar"></aside>
-  <main class="main" id="main"></main>
+  <main class="main" id="main"><div class="slide-sub" style="padding:24px">Loading Budget Engine…</div></main>
 </div>
 <div class="footer">
   <span id="statusLine">Loading warehouse…</span>
@@ -10091,23 +10091,44 @@ function originTag(label, tab, opts) {
 async function init() {
   loadBudgetVersions();
   const restored = loadBudgetState();
-  if (window.SMPLBootstrapDemo) {
+  const setStatus = (t) => { const el = document.getElementById('statusLine'); if (el) el.textContent = t; };
+
+  // Deep-link before first paint so the correct tab shows immediately.
+  try {
+    const qTab = new URLSearchParams(location.search).get('tab');
+    if (qTab && document.querySelector(`.nav-btn[data-tab="${qTab}"]`)) curTab = qTab;
+  } catch (e) { /* ignore */ }
+  if (restored || curTab !== 'overview') {
+    document.querySelectorAll('.nav-btn[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === curTab));
+  }
+
+  // First paint with local/demo levers — do not wait on org/hydrate (that left #main blank
+  // for many seconds, and SMPLSkin.init no longer invokes refresh).
+  reseedPlanFromHistory('init');
+  seedHcDefaults();
+  seedHcOps();
+  if (window.SMPLSkin) window.SMPLSkin.init('skinSelect');
+  refresh();
+  setStatus(restored
+    ? 'Levers restored · syncing warehouse…'
+    : 'Base plan · syncing warehouse…');
+
+  if (window.SMPLBootstrapDemo && typeof window.SMPLBootstrapDemo.load === 'function') {
     try { await window.SMPLBootstrapDemo.load(); } catch (e) { console.warn(e); }
   }
-  const setStatus = (t) => { const el = document.getElementById('statusLine'); if (el) el.textContent = t; };
-  // Wait for parent shell to post smpl:org (Forecast/Board pattern).
-  // Without this, /app often stays on demo FY26 Ending $97.56M instead of lock $90.29M.
-  if (window.SMPLOutlook && typeof window.SMPLOutlook.resolveOrgId === 'function') {
-    try {
-      await window.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 6000 });
-    } catch (e) { console.warn('[budget-engine] org wait', e); }
-  }
-  await new Promise((r) => setTimeout(r, 50));
+
+  // Live warehouse in the background; refresh again when applied.
+  try {
+    if (window.SMPLOutlook && typeof window.SMPLOutlook.resolveOrgId === 'function') {
+      await window.SMPLOutlook.resolveOrgId({ waitForParent: true, parentWaitMs: 2500 });
+    }
+  } catch (e) { console.warn('[budget-engine] org wait', e); }
+
   if (window.SMPLOutlook && window.SMPLOutlook.hydrate) {
     await window.SMPLOutlook.hydrate({
       endpoint: 'reporting/outlook',
       waitForParent: true,
-      parentWaitMs: 6000,
+      parentWaitMs: 1500,
       hooks: { TS_DATA: window.SMPL_DEMO_TS_DATA, WF_TABLE: window.SMPL_DEMO_WF_TABLE },
       onStatus: setStatus,
       onApplied: function () {
@@ -10116,27 +10137,19 @@ async function init() {
       },
     });
   }
-  reseedPlanFromHistory('init');
+
+  reseedPlanFromHistory('init-after-hydrate');
   seedHcDefaults();
   seedHcOps();
-  // Deep-link: /budget-engine?tab=analytics (or iframe ?tab=) opens Plan Assurance demo home.
-  try {
-    const qTab = new URLSearchParams(location.search).get('tab');
-    if (qTab && document.querySelector(`.nav-btn[data-tab="${qTab}"]`)) curTab = qTab;
-  } catch (e) { /* ignore */ }
-  if (restored || curTab !== 'overview') {
-    document.querySelectorAll('.nav-btn[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === curTab));
-  }
   const dec26 = fy26DecEndingArr();
   if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
     setStatus('FY26 hist Dec ' + fmtM(dec26) + ' ≠ Jan lock ' + fmtM(BOP_LOCK) + ' — check outlook hydrate');
-  } else if (restored) {
-    setStatus('Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
-  } else {
-    setStatus('Base plan · mix seeded from +' + MIX_SEED_YOY_PCT + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
+  } else if (!document.getElementById('statusLine')?.textContent?.startsWith('Live')) {
+    setStatus(restored
+      ? 'Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)'
+      : 'Base plan · mix seeded from +' + MIX_SEED_YOY_PCT + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');
   }
-  if (window.SMPLSkin) window.SMPLSkin.init('skinSelect', refresh);
-  else refresh();
+  refresh();
 }
 
 init();
