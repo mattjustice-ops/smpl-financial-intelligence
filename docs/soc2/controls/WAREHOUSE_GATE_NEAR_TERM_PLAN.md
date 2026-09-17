@@ -28,7 +28,7 @@ pretending the entire integrity framework is done.
 | Layer | Role |
 |-------|------|
 | **Import / ingest / close** | Hard fail-closed for production **actuals** (identification). Do not tell customers they can freely export/review when numbers don’t tie — **fix data at import first**, then use the platform freely. |
-| **Export / FINAL promote (client A–F)** | **Advisory**: always produce the deck / promote; download companion HTML report with PASS/WARN. Forecast months after `close_month` (esp. C5 / F4 cash) are **soft** — forecast will not fully tie like actuals. |
+| **Export / FINAL promote (client A–F)** | **Advisory**: always produce the deck / promote; download companion HTML report with PASS/WARN. Forecast months after `close_month` (esp. F4 cash) are **soft** — forecast will not fully tie like actuals. |
 | **AI P15 narrative** | Remains **fail-closed** (claim / attribution / citation) on wired commentary / MD&A / Copilot paths. |
 
 ---
@@ -56,7 +56,7 @@ demo HTML, and not a CPA-grade warehouse SQL report for every cell.
 | Gate type | Near-term “live everywhere” means |
 |-----------|-----------------------------------|
 | **Calculate** | Production Board + FE hydrate from one outlook builder / warehouse tables; TS↔SRC actuals aligned within **$1**; freeze packs bind MD&A / Copilot / export context where required |
-| **Validate (tie-out)** | Hard production-actuals identification at **import/close** (near-term Phase 2 / ingest). Export-time client `runTieOut` A–F is **advisory**: MD&A export + FINAL promote **proceed**; companion HTML report on WARN; C5/F4 hard only for periods ≤ `close_month`, forecast soft. Warehouse-only checks (D2–D4 / E / B2 / F5) skipped honestly when data absent |
+| **Validate (tie-out)** | Hard production-actuals identification at **import/close** (near-term Phase 2 / ingest). Export-time client `runTieOut` A–F is **advisory**: MD&A export + FINAL promote **proceed**; companion HTML report on WARN; F4 hard only for periods ≤ `close_month`, forecast soft. Warehouse-only checks (D2–D4 / E / B2 / F5) skipped honestly when data absent |
 | **Validate (AI numeric)** | `claim_verify.py` on commentary generate, MD&A Prompt 2, Prompt 5 (string literals), board regenerate, Copilot structured packages; `TOL_ACTUALS = $1.00` non-negotiable |
 | **Validate (attribution)** | `attribution_verify.py` on the same paths; multi-driver AND; empty allowlist + causal claim → fail closed |
 | **Validate (citation)** | `citation_verify.py` on the same paths; material money/%/Nx must cite `_sources` token / table.column / formula_id / path |
@@ -87,7 +87,7 @@ Labels: **LIVE** = fail-closed on that gate for that path · **PARTIAL** = real 
 | Live MD&A export (Board) | LIVE hydrate path | **ADVISORY — client A–F + HTML** (does not block) | via package generation above | via above | via above | PARTIAL (consumes when hydrate has `_sources`) | **PARTIAL — LIVE UI KPIs** |
 | FINAL forecast promote (FE) | LIVE hydrate path | **ADVISORY — client A–F + HTML** (does not block) | N/A (UI promote) | N/A | N/A | PARTIAL | **PARTIAL — LIVE UI KPIs** |
 | Production FE ↔ Board hydrate | **LIVE** (shared outlook API/builder; residue prune) | N/A | N/A | N/A | N/A | PARTIAL (API does not always emit `_sources` for UI) | **PARTIAL** |
-| Client `runTieOut` A–F | Uses local SRC/TS/WF/engine/display | **ADVISORY at export** — hard fails still scored for actuals ≤ close; C5/F4 forecast soft; skips D2–D4 / E / B2 / F5 without data | N/A | N/A | N/A | Prefers hydrate `_sources`; catalog fallback | Tied to overlay |
+| Client `runTieOut` A–F | Uses local SRC/TS/WF/engine/display | **ADVISORY at export** — hard fails still scored for actuals ≤ close; F4 forecast soft; skips D2–D4 / E / B2 / F5 without data | N/A | N/A | N/A | Prefers hydrate `_sources`; catalog fallback | Tied to overlay |
 | Live warehouse SQL tie-out HTML | OPEN | **OPEN** | N/A | N/A | N/A | OPEN (per-cell warehouse query report) | OPEN |
 | Chart arrays / layout coords (Prompt 5) | — | — | **OPEN** (not scanned) | OPEN | OPEN | — | — |
 | Every chart datapoint cite at render | — | — | OPEN | OPEN | OPEN | OPEN | OPEN |
@@ -171,7 +171,7 @@ Move from “client structures agree” toward “we can prove warehouse agreeme
 - [x] Citation verify on those paths *(LIVE)*
 - [x] Production FE↔Board single-source + $1 TS↔SRC guard *(LIVE)*
 - [x] Client A–F `runTieOut` advisory on MD&A export + FINAL promote + HTML companion *(shipped 2026-07-31)*
-- [x] Forecast C5/F4 soft after `close_month`; actuals ≤ close remain hard in scoring *(shipped 2026-07-31)*
+- [x] forecast F4 soft after `close_month`; actuals ≤ close remain hard in scoring *(shipped 2026-07-31)*
 - [ ] Phase 1: hydrate `_sources` for UI + honest SKIP reporting + invent smoke *(open)*
 - [ ] Phase 2: **import/close** A/B/C/F warehouse-backed fail-closed for production actuals + HTML report v1 *(open — not export-time)*
 - [ ] Matt accept soft vs hard-block matrix + commentary trial *(open)*
@@ -199,7 +199,7 @@ Move from “client structures agree” toward “we can prove warehouse agreeme
 | `backend/tests/test_commentary_service.py` | Generate path embeds evidence; invent dollars → don’t-know |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | FE↔Board actuals $1 |
 | `frontend/scripts/verify-outlook-hydrate.mjs` | Replace + prune residue (no reseed) |
-| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source`; client A–F; HTML WARN advisory; export not blocked; C5/F4 forecast soft |
+| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source`; client A–F; HTML WARN advisory; export not blocked; F4 forecast soft |
 | **New (Phase 2)** | Import/close A/B/C/F FAIL → ingest/close blocked; PASS fixture green |
 
 ### Manual smoke (Phase 1 exit)

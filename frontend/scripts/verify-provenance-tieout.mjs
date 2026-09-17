@@ -239,19 +239,21 @@ sandbox.SMPL_OUTLOOK_PAYLOAD = {
 };
 sandbox.SMPL_LIVE_OUTLOOK = true;
 
-// Forecast C5 (arr_eop/12 ≠ revenue) + F4 cash miss → soft after close, not hard FAIL
+// Forecast F4 cash miss → soft after close, not hard FAIL.
+// Retired C5 (revenue ≈ arr_eop/12): ARR/12 is MRR proxy, not recognized revenue.
 sandbox.SMPL_OUTLOOK_PAYLOAD.baseline_engine["2026-07"].arr.arr_eop = 999999;
 sandbox.SMPL_OUTLOOK_PAYLOAD.TS_DATA.Forecast.cfs["2026-07"].beginning_cash = null;
 const softFc = P.runTieOut();
 check(
-  "forecast C5/F4 soft after close",
+  "forecast F4 soft after close (no ARR/12 C5)",
   softFc.passed === true &&
-    (softFc.soft || []).some((s) => s.includes("C5")) &&
+    !(softFc.soft || []).some((s) => s.includes("arr_eop/12")) &&
+    !(softFc.checksRun || []).includes("C5") &&
     (softFc.soft || []).some((s) => s.includes("F4") || s.includes("beg_cash")),
-  JSON.stringify({ failures: softFc.failures, soft: softFc.soft }),
+  JSON.stringify({ failures: softFc.failures, soft: softFc.soft, checksRun: softFc.checksRun }),
 );
 
-// Restore aligned forecast cash / C5 for pass fixture
+// Restore aligned forecast cash for pass fixture
 sandbox.SMPL_OUTLOOK_PAYLOAD.baseline_engine["2026-07"].arr.arr_eop = 14400;
 sandbox.SMPL_OUTLOOK_PAYLOAD.TS_DATA.Forecast.cfs["2026-07"].beginning_cash = 5000;
 

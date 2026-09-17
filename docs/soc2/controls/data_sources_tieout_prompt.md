@@ -2,7 +2,7 @@
 ### Cursor Prompt: Align Board Platform + Forecast Engine to Warehouse Schema
 ### Priority: Customer demo ready by Monday
 
-> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Hard identification for production **actuals** belongs at **import/ingest/close** (P15 §4.8 design). **Client A–F** at MD&A export / FINAL promote is **advisory** (WARN + HTML companion; does not block); forecast C5/F4 soft after close. Live warehouse SQL HTML report and D2–D4/E/B2/F5 without warehouse tables remain open — see [ai_claim_verify.md](./ai_claim_verify.md) / [WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./WAREHOUSE_GATE_NEAR_TERM_PLAN.md).  
+> **Repo placement:** Normative **design target** under `docs/soc2/controls/`. See [README.md](./README.md) for product posture and honest implemented-vs-roadmap labels. Hard identification for production **actuals** belongs at **import/ingest/close** (P15 §4.8 design). **Client A–F** at MD&A export / FINAL promote is **advisory** (WARN + HTML companion; does not block); forecast F4 soft after close. Live warehouse SQL HTML report and D2–D4/E/B2/F5 without warehouse tables remain open — see [ai_claim_verify.md](./ai_claim_verify.md) / [WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./WAREHOUSE_GATE_NEAR_TERM_PLAN.md).  
 > **Customer GL → statements:** Construction methodology (RE_BASE, openings, three-rollup, dept-299) is [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md) — does not change demo Board/FE seed behavior.
 
 ---
@@ -946,12 +946,12 @@ For each forecast period P:
 tolerance: $1.00 (TOL_ACTUALS; closed actuals cross-platform same bar)
 ```
 
-**C5 — Revenue computation check:**
-```
-Forecast Engine: is.revenue = arr.arr_eop / 12
-Board Platform:  TS_DATA.Forecast.is[P].revenue must equal same
-tolerance: $1.00 (TOL_ACTUALS — arr/12 cent noise ≤$0.01 may label rounding; >$1 = significant_miss)
-```
+**C5 — Revenue computation check (RETIRED):**
+
+~~`is.revenue = arr.arr_eop / 12`~~ is **not** a valid SaaS recognized-revenue identity.
+ARR/12 is an MRR run-rate proxy; GAAP / board revenue comes from the deferred +
+services / billing model. Client `runTieOut` no longer scores this check (removed
+2026-09-16). Keep **C4** (engine `is.*` ↔ `TS_DATA.Forecast.is`) as the forecast P&L tie.
 
 ---
 

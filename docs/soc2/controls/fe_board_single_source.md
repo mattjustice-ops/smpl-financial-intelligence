@@ -82,7 +82,7 @@ Board + Forecast Engine material KPIs attach `data-source` / `data-period` / `ti
 | Shared module | `frontend/public/shared/smpl-provenance.js` (+ canonical) |
 | Prefer hydrate `_sources` | `SMPLProvenance.ingestOutlook` reads `payload._sources` / `meta._sources` / `evidence_package._sources` when present; else field catalog |
 | Audit overlay | `Ctrl+Shift+A` / `Cmd+Shift+A` toggles inline source tags |
-| Client tie-out | `runTieOut()` — **client Rule Sets A–F** when SRC / TS_DATA / WF_TABLE / baseline_engine / display arrays exist; skips D2–D4 / E warehouse / B2 bank / F5 when structures absent; C5/F4 **hard** for periods ≤ `close_month`, **soft** for forecast after close |
+| Client tie-out | `runTieOut()` — **client Rule Sets A–F** when SRC / TS_DATA / WF_TABLE / baseline_engine / display arrays exist; skips D2–D4 / E warehouse / B2 bank / F5 when structures absent; F4 **hard** for periods ≤ `close_month`, **soft** for forecast after close |
 | HTML report | `renderTieOutReportHtml` / download as **advisory companion** on WARN — client checks only (not live warehouse SQL) |
 | Export / promote | Client A–F is **advisory** — MD&A export + FINAL promote proceed; UI: “deck ready + tie-out report downloaded”. Hard identification for production **actuals** belongs at **import/ingest/close**, not presentation pull |
 | Regression | `npm run verify:provenance` |

@@ -8,7 +8,7 @@
  *
  * Export / FINAL promote: client A–F is **advisory** (WARN + HTML companion report).
  * Hard identification belongs at data import / ingest (and close), not when finance
- * pulls presentations. Forecast C5/F4 are soft after close_month; actuals ≤ close stay hard
+ * pulls presentations. Forecast F4 cash is soft after close_month; actuals ≤ close stay hard
  * in runTieOut scoring. AI P15 narrative gates remain fail-closed elsewhere.
  * Not SOC 2 certified.
  */
@@ -423,7 +423,7 @@
     }
   }
 
-  /** Hard for actuals ≤ close_month; soft for forecast months after close (C5/F4). */
+  /** Hard for actuals ≤ close_month; soft for forecast months after close (F4 cash). */
   function isActualsPeriod(period, closeMo) {
     return !closeMo || period <= closeMo;
   }
@@ -773,25 +773,12 @@
       chk("C4", p, "gross_profit", num(eng.is.gross_profit), num(tsIs.gross_profit), fails, tol);
       chk("C4", p, "ebitda", num(eng.is.ebitda), num(tsIs.ebitda), fails, tol);
       chk("C4", p, "net_income", num(eng.is.net_income), num(tsIs.net_income), fails, tol);
-      // C5: revenue ≈ arr_eop / 12 — hard only for actuals ≤ close; forecast soft
-      var arrEop = eng.arr && num(eng.arr.arr_eop);
-      if (arrEop != null || num(eng.is.revenue) != null) {
-        checksRun.push("C5");
-        softOrHardChk(
-          "C5",
-          p,
-          "revenue ≈ arr_eop/12",
-          arrEop != null ? arrEop / 12 : null,
-          num(eng.is.revenue),
-          fails,
-          softs,
-          tol,
-          isActualsPeriod(p, closeMo),
-        );
-      }
+      // Retired: C5 revenue ≈ arr_eop/12. ARR/12 is an MRR run-rate proxy, not
+      // recognized revenue (deferred, services, billing timing). It only created
+      // soft-noise advisories on Continuity. Engine↔TS C4 above is the real check.
     });
     if (fcPeriods.length && !engine) {
-      skipped.push("C4/C5/F: no engineResults / baseline_engine / compute()");
+      skipped.push("C4/F: no engineResults / baseline_engine / compute()");
     }
 
     // ── Rule D: Headcount (exact) when WF_HC_ALL present ────────────────
@@ -937,7 +924,7 @@
       note:
         "Client A–F from Board/FE structures. Not live warehouse SQL. " +
         "Export/promote is advisory — hard identification at import/close. " +
-        "C5/F4 hard only for periods ≤ close_month; forecast soft. " +
+        "F4 hard only for periods ≤ close_month; forecast soft. " +
         "D2–D4 / E warehouse / B2 bank / F5 payroll remain skipped when data absent. " +
         "TOL_ACTUALS=$" +
         TOL_ACTUALS.toFixed(2) +

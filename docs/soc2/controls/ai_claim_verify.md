@@ -21,7 +21,7 @@ Use this page to confirm what shipped, what is still open, and where to open the
 | **`_sources` warehouse tags** | Every source tag includes `org_id` / `loaded_at` / `is_final` (honest nulls when unknown) | `claim_verify.build_source_record` |
 | **Post-LLM citation check** | Material money/%/Nx should cite `_sources`; **strict** on Prompt 2 (hard-block when fully wiped); Prompt 5 **warn-only** (board KPI/table cells trusted from payload); **interactive** warn only | `citation_verify.py` |
 | **DOM `data-source` overlay** | Board/FE material KPIs tagged; prefers hydrate `_sources`; catalog fallback; `Ctrl+Shift+A` audit | `smpl-provenance.js` |
-| **Client `runTieOut` advisory export** | Client Rule Sets A–F when local data exists; FAIL → **WARN** + HTML companion; MD&A export + FINAL promote **proceed** (hard actuals ID at import/close). Forecast C5/F4 soft after close | `smpl-provenance.js`, `board-hydrate.js` |
+| **Client `runTieOut` advisory export** | Client Rule Sets A–F when local data exists; FAIL → **WARN** + HTML companion; MD&A export + FINAL promote **proceed** (hard actuals ID at import/close). forecast F4 soft after close | `smpl-provenance.js`, `board-hydrate.js` |
 
 Reusable helpers: `claim_verify.py`, `citation_verify.py`, `attribution_verify.py` (`VerifyPolicy`: `strict` \| `interactive`)
 
@@ -84,7 +84,7 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | DOM `data-source` + audit overlay | **Partial — live (UI)** | Board/FE KPIs via `smpl-provenance.js`; prefers hydrate `_sources` when present; catalog fallback; `Ctrl+Shift+A` — [fe_board_single_source.md](./fe_board_single_source.md) |
 | Board Continuity + cite-to-calc | **Live (customer UX)** | Always-on trust strip; Continuity tab (A–F + C1–C5 + fidelity); click KPI cite-to-calc drawer (`board-continuity.js`). Outlook hydrate emits `_sources` for material KPIs |
 | Evidence Pack on exports | **Live (soft companion)** | MD&A deck + variance jobs attach Evidence Pack JSON/HTML; `/jobs/{id}/evidence.html`; Continuity stores last pack |
-| Client `runTieOut()` at export | **Partial — advisory (client A–F)** | A–F when SRC/TS/WF/engine/display present; skips D2–D4 / E / B2 / F5 without data; FAIL → WARN + HTML companion (does **not** block export/promote); C5/F4 forecast soft; hard production-actuals ID at import/close (roadmap) |
+| Client `runTieOut()` at export | **Partial — advisory (client A–F)** | A–F when SRC/TS/WF/engine/display present; skips D2–D4 / E / B2 / F5 without data; FAIL → WARN + HTML companion (does **not** block export/promote); F4 forecast soft; hard production-actuals ID at import/close (roadmap) |
 
 ---
 
@@ -112,7 +112,7 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | `backend/tests/test_commentary_service.py` | Sparse inputs keep numbers under interactive policy; evidence package in prompt; happy path with `_sources` cites |
 | `backend/tests/test_outlook_ts_src_actuals_alignment.py` | Production outlook `TS_DATA.Actual` ↔ `SRC.actuals` within $1; divergence / one-side-missing fail |
 | `frontend/scripts/verify-outlook-hydrate.mjs` | Partial live hydrate replaces period rows + prunes closed demo Actual residue (no reseed) |
-| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source` attrs; annotateDom; client A–F runTieOut pass/fail; HTML WARN advisory; export not blocked; C5/F4 forecast soft; `forceBlock` escape hatch |
+| `frontend/scripts/verify-provenance-tieout.mjs` | `data-source` attrs; annotateDom; client A–F runTieOut pass/fail; HTML WARN advisory; export not blocked; F4 forecast soft; `forceBlock` escape hatch |
 
 ---
 
@@ -143,7 +143,7 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 - [x] Post-LLM citation verify + warehouse tags (`org_id` / `loaded_at` / `is_final`) + multi-driver AND (on main via citation PR)
 - [x] DOM `data-source` overlay + audit hotkey on Board/FE material KPIs
 - [x] Client `runTieOut` advisory on live export / FINAL promote (HTML companion; not hard-block)
-- [x] Client Rule Sets A–F + client HTML tie-out report; forecast C5/F4 soft after close
+- [x] Client Rule Sets A–F + client HTML tie-out report; forecast F4 soft after close
 - [x] Citation verify on Prompt 5 PPTX string literals + board regenerate bullets
 
 ---
@@ -165,7 +165,7 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | DOM `data-source` / title / aria on Board + FE material KPIs; audit overlay hotkey | Every chart datapoint / commentary number tagged |
 | Client catalog fallback when hydrate omits `_sources` | Outlook API always emitting `_sources` for UI (consumes when present) |
 | Client Rule Sets A–F when SRC/TS/WF/engine/display present; FAIL → WARN + HTML; export/promote proceed | Import/close fail-closed for production actuals; live warehouse SQL HTML report |
-| Client HTML tie-out report (advisory companion); C5/F4 forecast soft after close | D2–D4 / E warehouse quota-ops / B2 bank balances / F5 payroll soft without those tables in client |
+| Client HTML tie-out report (advisory companion); F4 forecast soft after close | D2–D4 / E warehouse quota-ops / B2 bank balances / F5 payroll soft without those tables in client |
 | Prefers hydrate `_sources` when present for overlay labels | — |
 
 ---
