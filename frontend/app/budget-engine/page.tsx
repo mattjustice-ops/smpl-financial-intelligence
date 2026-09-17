@@ -6,7 +6,6 @@ import { Suspense } from "react";
 
 import { EmbeddedModuleChrome } from "@/components/app/EmbeddedModuleChrome";
 import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
-import { PlatformSkinSelect } from "@/components/app/PlatformSkinSelect";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
 function BudgetEngineInner() {

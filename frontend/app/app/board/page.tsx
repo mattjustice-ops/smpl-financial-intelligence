@@ -8,7 +8,6 @@ import {
   EmbeddedModuleChrome,
 } from "@/components/app/EmbeddedModuleChrome";
 import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
-import { PlatformSkinSelect } from "@/components/app/PlatformSkinSelect";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
@@ -44,7 +43,6 @@ function BoardPlatformInner() {
     <EmbeddedModuleChrome
       moduleTitle={title}
       links={<PlatformModuleNavLinks />}
-      trailing={<PlatformSkinSelect />}
     >
       <iframe title={title} src={src} />
     </EmbeddedModuleChrome>

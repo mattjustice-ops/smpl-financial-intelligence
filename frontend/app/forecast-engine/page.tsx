@@ -4,7 +4,6 @@ import Link from "next/link";
 
 import { EmbeddedModuleChrome } from "@/components/app/EmbeddedModuleChrome";
 import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
-import { PlatformSkinSelect } from "@/components/app/PlatformSkinSelect";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
 export default function ForecastEnginePage() {
@@ -28,7 +27,6 @@ export default function ForecastEnginePage() {
     <EmbeddedModuleChrome
       moduleTitle="Forecast Engine"
       links={<PlatformModuleNavLinks />}
-      trailing={<PlatformSkinSelect />}
     >
       <iframe title="SMPL Forecast Engine" src={src} />
     </EmbeddedModuleChrome>
