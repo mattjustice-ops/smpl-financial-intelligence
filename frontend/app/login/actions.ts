@@ -25,7 +25,7 @@ export async function requestMagicLink(
     const redirectUrl = await signIn(providerId, {
       email: normalizedEmail,
       redirect: false,
-      redirectTo: callbackUrl || "/app",
+      redirectTo: callbackUrl || "/app/board",
     });
 
     if (typeof redirectUrl === "string") {

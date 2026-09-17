@@ -48,8 +48,8 @@ export function AppSessionBanner({ showModuleLinks = false }: AppSessionBannerPr
       <span className="app-session-banner__actions">
         {showModuleLinks ? (
           <>
-            <Link href="/app/workspace">Workspace</Link>
             {showBoard ? <Link href="/app/board">Board Platform</Link> : null}
+            <Link href="/app/workspace">Workspace</Link>
             {showForecast ? <Link href="/forecast-engine">Forecast Engine</Link> : null}
             {showOps ? <Link href="/app/ops">SMPL Ops</Link> : null}
           </>

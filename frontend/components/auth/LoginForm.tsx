@@ -14,7 +14,7 @@ export function LoginForm({ emailConfigured }: LoginFormProps) {
   const searchParams = useSearchParams();
   const errorCode = searchParams.get("error");
   const accessReason = searchParams.get("reason");
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/app";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/app/board";
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

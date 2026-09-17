@@ -19,6 +19,10 @@ export default auth((req) => {
     pathname.startsWith("/forecast-engine") ||
     pathname.startsWith("/budget-engine");
 
+  if (pathname === "/app" && req.auth) {
+    return NextResponse.redirect(new URL("/app/board", req.nextUrl.origin));
+  }
+
   if (pathname === "/board" && req.auth) {
     return NextResponse.redirect(new URL("/app/board", req.nextUrl.origin));
   }
