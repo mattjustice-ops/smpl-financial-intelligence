@@ -43,4 +43,5 @@ def reporting_outlook_payload(
         "CASH_BRIDGE": payload.get("CASH_BRIDGE"),
         "CASH_CONTINUITY": payload.get("CASH_CONTINUITY"),
         "baseline_engine": payload["baseline_engine"],
+        "_sources": payload.get("_sources") or {},
     }
