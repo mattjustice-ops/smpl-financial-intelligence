@@ -144,11 +144,37 @@ const checks = [
   ["HTML PL KPIs use boardPlKpis", boardHtml.includes("boardPlKpis()"), true],
   ["HTML revenue KPIs dynamic", boardHtml.includes("boardRevenueKpis()"), true],
   ["HTML arr table fc-col on td", boardHtml.includes('class="${colCls}"'), true],
-  ["HTML skip buildCharts for pl", boardHtml.includes("name === 'pl' || name === 'threestmt' || name === 'continuity'"), true],
-  ["HTML Continuity nav tab", boardHtml.includes("show('continuity'"), true],
+  ["HTML skip buildCharts for pl", boardHtml.includes("name === 'pl' || name === 'threestmt'"), true],
+  [
+    "HTML Validation Engine stamp (no Continuity nav)",
+    boardHtml.includes("smpl-validated-stamp") &&
+      boardHtml.includes("/validation/") &&
+      !boardHtml.includes("show('continuity'"),
+    true,
+  ],
   ["HTML loads board-continuity", boardHtml.includes("board-continuity.js"), true],
-  ["board-continuity cite-to-calc drawer", fs.readFileSync(path.join(__dirname, "../public/shared/board-continuity.js"), "utf8").includes("openCiteDrawer"), true],
-  ["board-continuity trust strip", fs.readFileSync(path.join(__dirname, "../public/shared/board-continuity.js"), "utf8").includes("smpl-trust-strip"), true],
+  [
+    "board-continuity cite-to-calc drawer",
+    fs
+      .readFileSync(path.join(__dirname, "../public/shared/board-continuity.js"), "utf8")
+      .includes("openCiteDrawer"),
+    true,
+  ],
+  [
+    "board-continuity validated stamp",
+    fs
+      .readFileSync(path.join(__dirname, "../public/shared/board-continuity.js"), "utf8")
+      .includes("smpl-validated-stamp"),
+    true,
+  ],
+  [
+    "Validation Engine page ships",
+    fs.existsSync(path.join(__dirname, "../public/validation/index.html")) &&
+      fs
+        .readFileSync(path.join(__dirname, "../public/validation/index.html"), "utf8")
+        .includes("Validation Engine"),
+    true,
+  ],
   ["board-hydrate saves Evidence Pack", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("saveEvidencePack"), true],
   ["board-data operational cash bridge", boardDataJs.includes("operationalBridgeRows"), true],
   ["HTML SMPL_CASH_BRIDGE embedded", boardHtml.includes("SMPL_CASH_BRIDGE"), true],
