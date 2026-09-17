@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 
-import {
-  EmbeddedModuleChrome,
-  EmbeddedModuleNavLink,
-} from "@/components/app/EmbeddedModuleChrome";
+import { EmbeddedModuleChrome } from "@/components/app/EmbeddedModuleChrome";
+import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
+import { PlatformSkinSelect } from "@/components/app/PlatformSkinSelect";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
 export default function ForecastEnginePage() {
@@ -23,20 +22,13 @@ export default function ForecastEnginePage() {
     );
   }
 
-  // Cache-bust so /app picks up Forecast HTML after demo-cut deploy.
   const src = "/forecast-engine/index.html?embedded=1&v=3";
 
   return (
     <EmbeddedModuleChrome
       moduleTitle="Forecast Engine"
-      links={
-        <>
-          <EmbeddedModuleNavLink href="/app/board">Board Platform →</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app/board?view=validation">Validation →</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/budget-engine">Budget Engine →</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app/workspace">Workspace →</EmbeddedModuleNavLink>
-        </>
-      }
+      links={<PlatformModuleNavLinks />}
+      trailing={<PlatformSkinSelect />}
     >
       <iframe title="SMPL Forecast Engine" src={src} />
     </EmbeddedModuleChrome>

@@ -4,10 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 
 import { AppSessionBanner } from "@/components/app/AppSessionBanner";
-import {
-  EmbeddedModuleChrome,
-  EmbeddedModuleNavLink,
-} from "@/components/app/EmbeddedModuleChrome";
+import { EmbeddedModuleChrome } from "@/components/app/EmbeddedModuleChrome";
+import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
+import { PlatformSkinSelect } from "@/components/app/PlatformSkinSelect";
 import { ApiPushPanel } from "@/components/workspace/ApiPushPanel";
 import { CloseWorkflowPanel } from "@/components/workspace/CloseWorkflowPanel";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
@@ -701,15 +700,8 @@ export function WorkspaceShell() {
   return (
     <EmbeddedModuleChrome
       moduleTitle="Workspace"
-      links={
-        <>
-          <EmbeddedModuleNavLink href="/app/board">Board</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app/board?view=validation">Validation</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/forecast-engine">Forecast</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/budget-engine">Budget</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app">Operating system</EmbeddedModuleNavLink>
-        </>
-      }
+      links={<PlatformModuleNavLinks />}
+      trailing={<PlatformSkinSelect />}
     >
       <div className="embedded-module__scroll">
         <div className="embedded-module__scroll-inner">

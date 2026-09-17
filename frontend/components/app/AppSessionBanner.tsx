@@ -7,7 +7,15 @@ import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { hasModule, planLabel as formatPlanLabel } from "@/lib/entitlements/plan-modules";
 import { isSmplOpsAdminEmail } from "@/lib/ops/smpl-ops-admin";
 
-export function AppSessionBanner() {
+type AppSessionBannerProps = {
+  /**
+   * Module jump links under the identity line.
+   * Off inside EmbeddedModuleChrome (top bar already has them).
+   */
+  showModuleLinks?: boolean;
+};
+
+export function AppSessionBanner({ showModuleLinks = false }: AppSessionBannerProps) {
   const { email, organizationId, organizations, isLoading } = useActiveOrganization();
   const activeOrg = organizations.find((org) => org.id === organizationId);
   const orgName = activeOrg?.name ?? organizationId;
@@ -17,73 +25,42 @@ export function AppSessionBanner() {
   const showOps = isSmplOpsAdminEmail(email);
 
   if (isLoading) {
-    return (
-      <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>
-        Loading workspace session...
-      </div>
-    );
+    return <div className="app-session-banner">Loading workspace session…</div>;
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-        marginBottom: 8,
-        fontSize: 13,
-        color: "var(--muted)",
-      }}
-    >
+    <div className="app-session-banner">
       <span>
-        Signed in as <strong style={{ color: "var(--text)" }}>{email || "unknown"}</strong>
+        Signed in as <strong>{email || "unknown"}</strong>
         {orgName ? (
           <>
             {" "}
-            · Workspace: <strong style={{ color: "var(--text)" }}>{orgName}</strong>
+            · Workspace: <strong>{orgName}</strong>
           </>
         ) : null}
         {planName ? (
           <>
             {" "}
-            · Plan: <strong style={{ color: "var(--text)" }}>{planName}</strong>
+            · Plan: <strong>{planName}</strong>
           </>
         ) : null}
       </span>
-      <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <Link href="/app/workspace" style={{ color: "var(--muted)", fontSize: 13 }}>
-          Workspace
-        </Link>
-        {showBoard ? (
-          <Link href="/app/board" style={{ color: "var(--muted)", fontSize: 13 }}>
-            Board Platform
-          </Link>
-        ) : null}
-        {showForecast ? (
-          <Link href="/forecast-engine" style={{ color: "var(--muted)", fontSize: 13 }}>
-            Forecast Engine
-          </Link>
-        ) : null}
-        {showOps ? (
-          <Link href="/app/ops" style={{ color: "var(--muted)", fontSize: 13 }}>
-            SMPL Ops
-          </Link>
+      <span className="app-session-banner__actions">
+        {showModuleLinks ? (
+          <>
+            <Link href="/app/workspace">Workspace</Link>
+            {showBoard ? <Link href="/app/board">Board Platform</Link> : null}
+            {showForecast ? <Link href="/forecast-engine">Forecast Engine</Link> : null}
+            {showOps ? <Link href="/app/ops">SMPL Ops</Link> : null}
+          </>
         ) : null}
         <button
-        type="button"
-        onClick={() => signOut({ callbackUrl: "/login" })}
-        style={{
-          background: "none",
-          border: "none",
-          padding: 0,
-          color: "var(--muted)",
-          cursor: "pointer",
-          fontSize: 13,
-        }}
-      >
-        Sign out
-      </button>
+          type="button"
+          className="app-session-banner__signout"
+          onClick={() => signOut({ callbackUrl: "/login" })}
+        >
+          Sign out
+        </button>
       </span>
     </div>
   );

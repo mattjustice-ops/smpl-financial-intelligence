@@ -146,10 +146,10 @@ const checks = [
   ["HTML arr table fc-col on td", boardHtml.includes('class="${colCls}"'), true],
   ["HTML skip buildCharts for pl", boardHtml.includes("name === 'pl' || name === 'threestmt'"), true],
   [
-    "HTML Validation Engine in-board (stamp + Validation nav)",
+    "HTML Validation Engine via top chrome (no Board Validation tab)",
     boardHtml.includes("smpl-validated-stamp") &&
-      boardHtml.includes("show('validation'") &&
       boardHtml.includes("renderValidation") &&
+      !boardHtml.includes("show('validation',this)") &&
       !boardHtml.includes("show('continuity'"),
     true,
   ],

@@ -1033,6 +1033,13 @@ body {
   color: var(--muted);
 }
 
+.embedded-module__bar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 .embedded-module__title strong {
   color: var(--text);
   font-weight: 500;
@@ -1053,6 +1060,62 @@ body {
 
 .embedded-module__link:hover {
   text-decoration: underline;
+}
+
+.platform-skin-select {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: 0.5px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.app-session-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.app-session-banner strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.app-session-banner__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.app-session-banner__actions a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.app-session-banner__actions a:hover {
+  color: var(--text);
+}
+
+.app-session-banner__signout {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.app-session-banner__signout:hover {
+  color: var(--text);
 }
 
 .embedded-module__body {
@@ -1116,7 +1179,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--muted);
 }
 
 .workspace-module__title {
@@ -1298,21 +1361,34 @@ body {
 .workspace-module .bg-slate-900\/60,
 .workspace-module .bg-slate-900\/40,
 .workspace-module .bg-slate-950\/50,
+.workspace-module .bg-slate-950\/40,
 .workspace-module .bg-white\/5 {
-  background: var(--card) !important;
+  background: var(--panel) !important;
 }
 
 .workspace-module .border-white\/10,
 .workspace-module .border-white\/15,
+.workspace-module .border-white\/20,
 .workspace-module .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
   border-color: var(--border) !important;
 }
 
 .workspace-module .bg-teal-400\/10,
-.workspace-module .border-teal-400\/30 {
-  background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border)) !important;
+.workspace-module .bg-teal-500\/10,
+.workspace-module .border-teal-400\/30,
+.workspace-module .border-teal-500\/50 {
+  background: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border)) !important;
   color: var(--text) !important;
+}
+
+.workspace-module select,
+.workspace-module input[type="text"],
+.workspace-module input:not([type]),
+.workspace-module .bg-slate-950 {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
 }
 
 .workspace-module .bg-amber-400\/10,

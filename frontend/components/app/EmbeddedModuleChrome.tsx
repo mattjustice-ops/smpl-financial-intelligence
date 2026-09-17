@@ -11,9 +11,16 @@ type EmbeddedModuleChromeProps = {
   moduleTitle: string;
   children: ReactNode;
   links?: ReactNode;
+  /** Optional control in the chrome bar (e.g. design skin select). */
+  trailing?: ReactNode;
 };
 
-export function EmbeddedModuleChrome({ moduleTitle, children, links }: EmbeddedModuleChromeProps) {
+export function EmbeddedModuleChrome({
+  moduleTitle,
+  children,
+  links,
+  trailing,
+}: EmbeddedModuleChromeProps) {
   const { organizationId, organizations, isLoading: orgLoading } = useActiveOrganization();
   const { planLabel, isLoading: entLoading } = useEntitlements();
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -81,7 +88,10 @@ export function EmbeddedModuleChrome({ moduleTitle, children, links }: EmbeddedM
             " · Loading…"
           )}
         </span>
-        {links ? <div className="embedded-module__links">{links}</div> : null}
+        <div className="embedded-module__bar-right">
+          {links ? <div className="embedded-module__links">{links}</div> : null}
+          {trailing}
+        </div>
       </header>
       <div className="embedded-module__body" ref={bodyRef}>
         {children}

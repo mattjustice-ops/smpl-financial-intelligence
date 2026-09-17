@@ -4,10 +4,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-import {
-  EmbeddedModuleChrome,
-  EmbeddedModuleNavLink,
-} from "@/components/app/EmbeddedModuleChrome";
+import { EmbeddedModuleChrome } from "@/components/app/EmbeddedModuleChrome";
+import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
+import { PlatformSkinSelect } from "@/components/app/PlatformSkinSelect";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
 function BudgetEngineInner() {
@@ -27,21 +26,14 @@ function BudgetEngineInner() {
     );
   }
 
-  // Bust CDN/browser cache so /app picks up Budget Engine HTML after deploy.
   const tabQ = tab ? `&tab=${encodeURIComponent(tab)}` : "";
   const src = `/budget-engine/index.html?embedded=1&v=30${tabQ}`;
 
   return (
     <EmbeddedModuleChrome
       moduleTitle="Budget Engine"
-      links={
-        <>
-          <EmbeddedModuleNavLink href="/app/board">Board Platform →</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app/board?view=validation">Validation →</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine →</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app/workspace">Workspace →</EmbeddedModuleNavLink>
-        </>
-      }
+      links={<PlatformModuleNavLinks />}
+      trailing={<PlatformSkinSelect />}
     >
       <iframe title="SMPL Budget Engine" src={src} />
     </EmbeddedModuleChrome>
@@ -50,9 +42,7 @@ function BudgetEngineInner() {
 
 export default function BudgetEnginePage() {
   return (
-    <Suspense
-      fallback={<div className="embedded-module__gate">Loading Budget Engine…</div>}
-    >
+    <Suspense fallback={<div className="embedded-module__gate">Loading Budget Engine…</div>}>
       <BudgetEngineInner />
     </Suspense>
   );

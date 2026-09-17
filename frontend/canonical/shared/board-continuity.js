@@ -52,27 +52,29 @@
 
   function validationHref() {
     var period = closeMonth();
-    var path = (global.location && global.location.pathname) || "";
-    var base = path.indexOf("/board") >= 0 ? path.split("?")[0] : "/board/";
-    if (!/\/$/.test(base) && !/\.html$/i.test(base)) base += "/";
-    var q = "view=validation&period=" + encodeURIComponent(period);
-    var emb = (global.location && global.location.search) || "";
-    if (/[?&]embedded=1(?:&|$)/.test(emb)) q += "&embedded=1";
-    return base + (base.indexOf("?") >= 0 ? "&" : "?") + q;
+    return "/app/board?view=validation&period=" + encodeURIComponent(period);
   }
 
   function openValidationView() {
+    // Prefer leaving the Board iframe for the top-chrome Validation Engine route.
+    try {
+      if (global.top && global.top !== global && global.top.location) {
+        var period = closeMonth();
+        global.top.location.href =
+          "/app/board?view=validation&period=" + encodeURIComponent(period);
+        return;
+      }
+    } catch (e) {
+      /* cross-origin — fall through */
+    }
     if (typeof global.show === "function" && document.getElementById("slideArea")) {
-      var btn = Array.from(document.querySelectorAll(".nav-btn")).find(function (b) {
-        return (b.getAttribute("onclick") || "").indexOf("show('validation'") >= 0;
-      });
-      global.show("validation", btn || null);
+      global.show("validation", null);
       try {
         var u = new URL(global.location.href);
         u.searchParams.set("view", "validation");
         u.searchParams.set("period", closeMonth());
         global.history.replaceState({}, "", u.pathname + "?" + u.searchParams.toString() + u.hash);
-      } catch (e) {
+      } catch (err) {
         /* ignore */
       }
       return;

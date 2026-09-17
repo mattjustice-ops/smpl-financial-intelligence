@@ -322,7 +322,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   <button class="nav-btn" onclick="show('workforce',this)">Workforce</button>
   <button class="nav-btn" onclick="show('risks',this)">Risks &amp; Opps</button>
   <button class="nav-btn copilot-btn" onclick="show('copilot',this)">&#10022; SMPL Copilot</button>
-  <button class="nav-btn" onclick="show('validation',this)">Validation</button>
 </nav>
 
 <div id="slideArea"></div>
@@ -335,7 +334,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
-<script src="/shared/board-continuity.js?v=4"></script>
+<script src="/shared/board-continuity.js?v=5"></script>
 <script src="/shared/board-data.js?v=9"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -606,6 +605,8 @@ function show(name, btn) {
     else u.searchParams.delete('view');
     history.replaceState({}, '', u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '') + u.hash);
   } catch (e) { /* ignore */ }
+  var mainNav = document.getElementById('mainNav');
+  if (mainNav) mainNav.style.display = name === 'validation' ? 'none' : '';
   const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot,validation:renderValidation};
   if(renders[name]) renders[name](area);
   boardAnnotateProvenance(area);
@@ -657,7 +658,7 @@ function boardCashContinuityHtml() {
   return (
     '<div style="margin-bottom:24px;padding:10px 14px;border:0.5px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">' +
     '<span>Cash continuity &amp; ties are owned in the Validation Engine (system owner), not on the executive Board.</span>' +
-    '<button type="button" class="ai-global-btn" onclick="boardExecNav(\'validation\')">Open Validation Engine →</button></div>'
+    '<button type="button" class="ai-global-btn" onclick="if(window.SMPLContinuity&amp;&amp;SMPLContinuity.openValidationView){SMPLContinuity.openValidationView();}else{location.href=(window.SMPLContinuity&amp;&amp;SMPLContinuity.validationHref)?SMPLContinuity.validationHref():\'/app/board?view=validation\';}">Open Validation Engine →</button></div>'
   );
 }
 

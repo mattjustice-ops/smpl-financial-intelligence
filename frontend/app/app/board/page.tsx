@@ -6,8 +6,9 @@ import { Suspense } from "react";
 
 import {
   EmbeddedModuleChrome,
-  EmbeddedModuleNavLink,
 } from "@/components/app/EmbeddedModuleChrome";
+import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
+import { PlatformSkinSelect } from "@/components/app/PlatformSkinSelect";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
@@ -34,23 +35,18 @@ function BoardPlatformInner() {
     );
   }
 
-  const qs = new URLSearchParams({ embedded: "1", v: "13" });
+  const qs = new URLSearchParams({ embedded: "1", v: "14" });
   if (view) qs.set("view", view);
   const src = `/board/index.html?${qs.toString()}`;
+  const title = view === "validation" ? "Validation Engine" : "Board Platform";
 
   return (
     <EmbeddedModuleChrome
-      moduleTitle="Board Platform"
-      links={
-        <>
-          <EmbeddedModuleNavLink href="/app/board?view=validation">Validation</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/forecast-engine">Forecast Engine</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/budget-engine">Budget Engine</EmbeddedModuleNavLink>
-          <EmbeddedModuleNavLink href="/app/workspace">Workspace</EmbeddedModuleNavLink>
-        </>
-      }
+      moduleTitle={title}
+      links={<PlatformModuleNavLinks />}
+      trailing={<PlatformSkinSelect />}
     >
-      <iframe title="SMPL Board Platform" src={src} />
+      <iframe title={title} src={src} />
     </EmbeddedModuleChrome>
   );
 }

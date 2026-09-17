@@ -103,7 +103,7 @@ export default function ProductAppPage() {
             ← SMPL.ai home
           </Link>
         </div>
-        <AppSessionBanner />
+        <AppSessionBanner showModuleLinks />
         <details className="os-workspace-panel" open>
           <summary>Workspace · data upload &amp; API health</summary>
           <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
