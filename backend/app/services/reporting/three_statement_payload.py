@@ -621,13 +621,14 @@ def _outlook_material_sources(
         values["net_new"] = nn
         values["net_new_arr"] = nn
 
+    series_kinds = {str(k): "actual" for k in values}
     return attach_sources_to_values(
         values,
         period_label=period,
         org_id=str(organization_id),
         loaded_at=datetime.now(timezone.utc).isoformat(),
         is_final=False,
-        series_kind="actual",
+        series_kinds=series_kinds,
     )
 
 
