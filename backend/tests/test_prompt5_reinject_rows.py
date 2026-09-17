@@ -11,6 +11,8 @@ from app.services.reporting.export.prompt5_deck import (
     _postprocess_prompt5_script,
     _reinject_cash_bridge_rows,
     _reinject_gtm_channel_rows,
+    _reinject_monthly_trends_chart_series,
+    _reinject_pl_detail_rows,
 )
 
 PAYLOAD = {
@@ -142,3 +144,46 @@ def test_empty_payload_is_a_no_op():
     script = 'const r = [["Payroll", "\u2014", "\u2014"]];'
     assert _reinject_cash_bridge_rows(script, {}) == script
     assert _reinject_gtm_channel_rows(script, {}) == script
+
+
+def test_pl_detail_rows_are_restored():
+    payload = {
+        "pl_detail": {
+            "cm": {
+                "gross_profit": {
+                    "actual": "$5.14M",
+                    "budget": "$5.40M",
+                    "variance": "-$257.2K",
+                }
+            },
+            "ytd": {
+                "gross_profit": {
+                    "actual": "$14.87M",
+                    "budget": "$15.20M",
+                    "variance": "-$330.0K",
+                }
+            },
+        }
+    }
+    script = 'const r = [["Gross Profit", "$15M", "$15M", "—", "$15M", "$15M", "—"]];'
+    out = _reinject_pl_detail_rows(script, payload)
+    assert '"$5.14M"' in out and '"$14.87M"' in out
+    assert "$15M" not in out
+
+
+def test_monthly_trends_chart_series_reinjected():
+    payload = {
+        "monthly_trends": {
+            "ending_arr_m": [76.31, 77.82, 79.505, 81.385],
+            "ending_arr_outlook_m": [76.31, 77.82, 79.505, 81.385, 86.293],
+            "ending_arr_budget_m": [76.23, 77.64, 79.23],
+        }
+    }
+    script = """
+      const arrActual = [80, 81, 82, 83];
+      const arrOutlook = [80, 81, 82, 83, 88];
+      const arrBudget = [80, 81, 82];
+    """
+    out = _reinject_monthly_trends_chart_series(script, payload)
+    assert "79.505" in out
+    assert "const arrActual = [80" not in out

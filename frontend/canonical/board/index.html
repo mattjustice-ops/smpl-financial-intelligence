@@ -59,8 +59,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .nav-btn:hover:not(.active) { color: var(--text2); }
 .nav-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 /* TRUST STRIP + CONTINUITY + CITE-TO-CALC */
-.smpl-trust-strip { font-size: 11px; padding: 5px 12px; border: 0.5px solid var(--border); border-radius: 20px; background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 7px; font-family: var(--font); max-width: 420px; }
-.smpl-trust-strip:hover { background: var(--bg2); }
+.smpl-trust-strip, .smpl-validated-stamp { font-size: 11px; padding: 5px 12px; border: 0.5px solid var(--border); border-radius: 20px; background: none; cursor: pointer; color: var(--text2); display: flex; align-items: center; gap: 7px; font-family: var(--font); max-width: 460px; text-decoration: none; }
+.smpl-trust-strip:hover, .smpl-validated-stamp:hover { background: var(--bg2); }
+.smpl-trust-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.smpl-trust-meta { opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .smpl-trust-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .smpl-trust-meta { color: var(--text3); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .smpl-cont-banner { margin-top: 8px; padding: 12px 14px; border: 0.5px solid var(--border); border-radius: var(--r); background: rgba(255,255,255,0.02); }
@@ -306,7 +308,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   <button class="nav-btn" onclick="show('sales',this)">Sales</button>
   <button class="nav-btn" onclick="show('workforce',this)">Workforce</button>
   <button class="nav-btn" onclick="show('risks',this)">Risks &amp; Opps</button>
-  <button class="nav-btn" onclick="show('continuity',this)">Continuity</button>
   <button class="nav-btn copilot-btn" onclick="show('copilot',this)">&#10022; SMPL Copilot</button>
 </nav>
 
@@ -320,7 +321,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
-<script src="/shared/board-continuity.js?v=1"></script>
+<script src="/shared/board-continuity.js?v=2"></script>
 <script src="/shared/board-data.js?v=9"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -584,10 +585,12 @@ function show(name, btn) {
   else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.substr(0,3)))b.classList.add('active');});
   const area = document.getElementById('slideArea');
   area.innerHTML = '';
-  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,continuity:renderContinuity,copilot:renderCopilot};
+  const renders = {exec:renderExec,arr:renderARR,revenue:renderRevenue,cash:renderCash,threestmt:renderThreeStmt,pl:renderPL,gtm:renderGTM,sales:renderSales,workforce:renderWorkforce,risks:renderRisks,copilot:renderCopilot};
   if(renders[name]) renders[name](area);
   boardAnnotateProvenance(area);
-  if (window.SMPLContinuity && typeof SMPLContinuity.refreshTrustStrip === 'function') {
+  if (window.SMPLContinuity && typeof SMPLContinuity.refreshValidatedStamp === 'function') {
+    try { SMPLContinuity.refreshValidatedStamp(); } catch (e) { /* non-fatal */ }
+  } else if (window.SMPLContinuity && typeof SMPLContinuity.refreshTrustStrip === 'function') {
     try { SMPLContinuity.refreshTrustStrip(); } catch (e) { /* non-fatal */ }
   }
   if (name === 'pl' || name === 'threestmt' || name === 'continuity') return;
@@ -599,7 +602,7 @@ function renderContinuity(area) {
     SMPLContinuity.renderContinuity(area);
     return;
   }
-  area.innerHTML = '<div class="slide-title">Continuity</div><div class="slide-sub">Trust module loading…</div>';
+  area.innerHTML = '<div class="slide-title">Validation Engine</div><div class="slide-sub"><a href="/validation/">Open Validation Engine →</a></div>';
 }
 
 // ─── EXEC ──────────────────────────────────────────────────────────────────
@@ -621,46 +624,14 @@ function boardCloseParts() {
  * net new month of the year regardless of which month was actually the strongest.
  */
 function boardCashContinuityHtml() {
-  var cc = (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.CASH_CONTINUITY) || null;
-  if (!cc) {
-    return '<div style="margin-bottom:24px;padding:10px 14px;border:0.5px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3)">Cash continuity checks load with live outlook.</div>';
-  }
-  var ok = !!cc.ok;
-  var fails = cc.failures || [];
-  var byCode = {};
-  fails.forEach(function (f) {
-    byCode[f.code] = (byCode[f.code] || 0) + 1;
-  });
-  var chips = [
-    { code: 'C1', label: 'CFS ↔ BS cash' },
-    { code: 'C2', label: 'CFS ↔ IS+BS spine' },
-    { code: 'C3', label: 'Bridge ↔ CFS' },
-    { code: 'C4', label: 'Bridge foots' },
-    { code: 'C5', label: 'Forecast opens on close' },
-  ].map(function (c) {
-    var n = byCode[c.code] || 0;
-    var pass = n === 0;
-    var bg = pass ? 'rgba(95,168,120,0.12)' : 'rgba(200,140,60,0.15)';
-    var fg = pass ? 'var(--teal)' : '#c48a3a';
-    var mark = pass ? '✓' : (n + '×');
-    return '<span style="font-size:10px;font-weight:600;padding:4px 9px;border-radius:14px;background:' + bg + ';color:' + fg + ';border:0.5px solid ' + fg + '">' + mark + ' ' + c.label + '</span>';
-  }).join('');
-  var headClr = ok ? 'var(--teal)' : '#c48a3a';
-  var head = ok
-    ? 'Cash continuity · all balances tie'
-    : 'Cash continuity · ' + fails.length + ' open check' + (fails.length === 1 ? '' : 's');
-  var note = '';
-  if (byCode.C4 && !byCode.C3 && !byCode.C1 && !byCode.C2 && !byCode.C5) {
-    note = '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">Bridge balances match CFS. Footing residuals mean line items (payroll/vendor/…) have not yet been rebuilt onto that spine — disclosed, not plugged.</div>';
-  } else if (!ok) {
-    note = '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.45">' + String(cc.summary || '').replace(/</g, '&lt;') + '</div>';
-  }
+  /* Cash spine detail lives in Validation Engine — Board stays outcomes-only. */
+  var href = (window.SMPLContinuity && SMPLContinuity.validationHref)
+    ? SMPLContinuity.validationHref()
+    : '/validation/';
   return (
-    '<div style="margin-bottom:24px;padding:12px 14px;border:0.5px solid var(--border);border-radius:var(--r);background:rgba(255,255,255,0.02)">' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
-    '<div style="font-size:11px;font-weight:600;color:' + headClr + ';letter-spacing:.02em">' + head + '</div>' +
-    '<div style="display:flex;flex-wrap:wrap;gap:6px">' + chips + '</div>' +
-    '</div>' + note + '</div>'
+    '<div style="margin-bottom:24px;padding:10px 14px;border:0.5px solid var(--border);border-radius:var(--r);font-size:11px;color:var(--text3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">' +
+    '<span>Cash continuity &amp; ties are owned in the Validation Engine (system owner), not on the executive Board.</span>' +
+    '<a href="' + href + '" style="color:var(--teal);text-decoration:none;font-weight:600">Open Validation Engine →</a></div>'
   );
 }
 

@@ -231,6 +231,20 @@ def build_and_store_freeze_blob(
         sections["evidence_package"] = evidence_package
     if attribution_package is not None:
         sections["attribution_package"] = attribution_package
+
+    # Preserve Validation Engine owner state across freeze rebuilds.
+    existing = db.scalars(
+        select(CloseContextBlob).where(
+            CloseContextBlob.organization_id == organization_id,
+            CloseContextBlob.as_of_period == period,
+        )
+    ).first()
+    if existing is not None and isinstance(existing.sections_json, dict):
+        prior = existing.sections_json
+        for key in ("validation_allow", "mapping_queue", "mapping_decisions"):
+            if key in prior and key not in sections:
+                sections[key] = prior[key]
+
     built_at = _utcnow()
     metadata = {
         "start_period": start_period,
@@ -241,13 +255,6 @@ def build_and_store_freeze_blob(
         "has_structured_evidence": evidence_package is not None,
         "has_structured_attribution": attribution_package is not None,
     }
-
-    existing = db.scalars(
-        select(CloseContextBlob).where(
-            CloseContextBlob.organization_id == organization_id,
-            CloseContextBlob.as_of_period == period,
-        )
-    ).first()
 
     if existing is None:
         row = CloseContextBlob(

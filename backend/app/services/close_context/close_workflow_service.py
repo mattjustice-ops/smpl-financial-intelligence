@@ -409,6 +409,21 @@ def lock_close(
             "workflow_state": session.workflow_state,
         }
 
+    # Validation Engine: material unmapped GL accounts block close lock (import/close hard-ID).
+    try:
+        from app.services.validation_engine import assert_import_mapping_clear
+
+        assert_import_mapping_clear(db, organization_id, period, fail_closed=True)
+    except ValueError as exc:
+        return {
+            "ok": False,
+            "code": "validation_engine_mapping_open",
+            "message": str(exc),
+            "blockers": [str(exc)],
+            "checklist": checklist,
+            "workflow_state": session.workflow_state,
+        }
+
     next_version = int(session.current_lock_version or 0) + 1
     event = CloseLockEvent(
         close_session_id=session.id,

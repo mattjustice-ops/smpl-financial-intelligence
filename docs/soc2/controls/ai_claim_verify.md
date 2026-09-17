@@ -82,8 +82,9 @@ Callers cannot pass a looser `money_tolerance` — `verify_text_against_evidence
 | Post-render deck cell/anchor verify | **Live (soft-warn)** | `deck_post_render_verify.py` after Node PPTX render — metric cells + required anchors + narrative |
 | Production FE↔Board single-source | **Confirmed + hydrate residue fix** | Shared outlook API/builder; merge replace + prune closed Actuals — [fe_board_single_source.md](./fe_board_single_source.md) |
 | DOM `data-source` + audit overlay | **Partial — live (UI)** | Board/FE KPIs via `smpl-provenance.js`; prefers hydrate `_sources` when present; catalog fallback; `Ctrl+Shift+A` — [fe_board_single_source.md](./fe_board_single_source.md) |
-| Board Continuity + cite-to-calc | **Live (customer UX)** | Always-on trust strip; Continuity tab (A–F + C1–C5 + fidelity); click KPI cite-to-calc drawer (`board-continuity.js`). Outlook hydrate emits `_sources` for material KPIs |
-| Evidence Pack on exports | **Live (soft companion)** | MD&A deck + variance jobs attach Evidence Pack JSON/HTML; `/jobs/{id}/evidence.html`; Continuity stores last pack |
+| Board Continuity + cite-to-calc | **Relocated → Validation Engine** | Owner `/validation/`: Ties A–F + cash C1–C5 + fidelity; Board shows validated stamp + deep-link only. Cite-to-calc is owner mode (`?owner=1` / Ctrl+Shift+V) |
+| Evidence Pack on exports | **Live (soft companion)** | MD&A deck + variance jobs attach Evidence Pack JSON/HTML; `/jobs/{id}/evidence.html`; Validation Engine stores last pack |
+| Validation Engine Monthly Align / mapping | **Live (v1)** | Allow on freeze `sections.validation_allow`; mapping queue + import/close hard-ID on close lock — [validation_engine.md](./validation_engine.md) |
 | Client `runTieOut()` at export | **Partial — advisory (client A–F)** | A–F when SRC/TS/WF/engine/display present; skips D2–D4 / E / B2 / F5 without data; FAIL → WARN + HTML companion (does **not** block export/promote); F4 forecast soft; hard production-actuals ID at import/close (roadmap) |
 
 ---

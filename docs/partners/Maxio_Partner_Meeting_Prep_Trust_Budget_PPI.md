@@ -118,13 +118,15 @@ Plan Assurance and the Budget Engine shipped **2026-09-04 → 09-07** (PRs #140/
 
 | Surface | Purpose | Ship posture |
 |---------|---------|--------------|
-| **Reconciliation status strip** | Org + period + scenario: green / warn / fail count; one click into Continuity | **Shipped** — always-visible trust strip on Board topbar |
-| **Continuity tab** | Named client A–F ties + cash spine C1–C5 + AI fidelity summary; failures-first | **Shipped** — Board nav → Continuity |
-| **Period / version stamps** | `as_of_period`, freeze status, loaded_at / `_sources` counts | **Shipped** on Continuity stamps panel |
-| **Evidence Pack** | HTML/JSON companion on MD&A deck + variance export jobs (same claim language) | **Shipped** — `/api/v1/export/jobs/{id}/evidence.html` + Continuity download |
-| **Cite-to-calc** | Click KPI → `_sources` / table.column / formula / org / loaded_at / is_final | **Shipped** for material exec/ARR/cash/P&L KPIs (catalog fallback when hydrate omits tags) |
+| **Validated stamp (Board)** | One-line “Close validated · period · owner” with deep-link — no A–F homework for executives | **Shipped** — Board topbar stamp → Validation Engine |
+| **Validation Engine** | Owner workshop: Ties (A–F + cash C1–C5), Evidence Pack, Monthly Align, GL mapping queue | **Shipped** — `/validation/` (not Board Continuity tab) |
+| **Period / version stamps** | `as_of_period`, freeze status, loaded_at / `_sources` counts | **Shipped** on Validation Engine Close status |
+| **Evidence Pack** | HTML/JSON companion on MD&A deck + variance export jobs (same claim language) | **Shipped** — `/api/v1/export/jobs/{id}/evidence.html` + Engine download |
+| **Cite-to-calc** | Click KPI → `_sources` / table.column / formula / org / loaded_at / is_final | **Owner mode** on Board (`?owner=1` / Ctrl+Shift+V); default exec Board is outcomes-only |
 | **AI explain bound to pack** | Copilot answers only from freeze + validation-passed evidence | Primary paths LIVE — demo this; do not invent SOC language |
-| **Chart datapoint cite + import hard-ID** | Every chart point + ingest gate | **Phase 4** — do not claim in partner meetings yet |
+| **Chart datapoint cite + import hard-ID** | Every chart point + ingest gate | **Phase 4 / Phase 3 mapping** — do not over-claim in partner meetings |
+
+**Partner one-liner:** Leadership sees outcomes; finance owns the Validation Engine (ties, mapping, Monthly Allow). Do not put Continuity debugging in the board room.
 
 ### 3.2 Evidence package contents (what Claude can help draft — safely)
 

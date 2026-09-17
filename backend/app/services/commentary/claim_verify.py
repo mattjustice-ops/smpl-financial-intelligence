@@ -74,6 +74,59 @@ def pptx_soft_strip_literal_replacement(inner: str, *, dont_know: str) -> str:
     return PPTX_SOFT_STRIP_CELL
 
 
+def _money_rounding_repair_band(claim: NumericClaim) -> Decimal | None:
+    """Band in which a failed money claim is treated as display rounding, not invention."""
+    if claim.kind != "money":
+        return None
+    stated = claim.stated or ""
+    if re.search(r"\dM\b", stated, re.I) and not re.search(r"\.\d+M\b", stated, re.I):
+        return Decimal("1500000")
+    if re.search(r"\dK\b", stated, re.I) and not re.search(r"\.\d+K\b", stated, re.I):
+        return Decimal("1000")
+    if re.search(r"\.\d{1,2}M\b", stated, re.I):
+        return Decimal("10000")
+    if re.search(r"\.\d{1,2}K\b", stated, re.I):
+        return Decimal("50")
+    return None
+
+
+def pptx_repair_rounded_money_literal(
+    inner: str,
+    checks: Sequence[ClaimCheck],
+) -> str | None:
+    """Replace near-miss rounded $ cells with SoR-canonical fmt_deck_money strings.
+
+    Returns the repaired literal, or None if any failure is outside the rounding band
+    (caller should soft-strip to —).
+    """
+    failures = [c for c in checks if c.status != "pass"]
+    if not failures:
+        return inner
+    try:
+        from app.services.reporting.export.board_slide_commentary_payload import (
+            fmt_deck_money,
+        )
+    except Exception:  # pragma: no cover
+        return None
+    text = inner
+    for check in failures:
+        claim = check.claim
+        band = _money_rounding_repair_band(claim)
+        if (
+            claim.kind != "money"
+            or band is None
+            or check.matched_value is None
+            or check.diff is None
+            or check.diff > band
+        ):
+            return None
+        canon = fmt_deck_money(check.matched_value)
+        if not canon or canon in {"n/a", "—"} or claim.stated not in text:
+            return None
+        text = text.replace(claim.stated, canon, 1)
+    return text
+
+
 def _pptx_is_narrative_literal(inner: str) -> bool:
     """True for Key Takeaways / commentary; False for lone KPI/table cells."""
     text = (inner or "").strip()
@@ -488,6 +541,29 @@ def extract_numeric_claims(text: str) -> list[NumericClaim]:
     return claims
 
 
+def _money_display_tolerance(claim: NumericClaim) -> Decimal:
+    """Tolerance for compact $M/$K display vs absolute SoR dollars.
+
+    Board cells use 2dp $M / 1dp $K. Half-ULP of the *stated* decimals lets
+    ``$79.51M`` tie SoR ``$79,505,000`` without accepting whole-unit invention
+    (``$80M`` still fails at TOL_ACTUALS and gets repaired to ``$79.51M``).
+    """
+    if claim.kind != "money":
+        return TOL_ACTUALS
+    stated = (claim.stated or "").replace(",", "").strip()
+    m = re.search(r"(\d+)(?:\.(\d+))?\s*([KkMmBb])\b", stated)
+    if not m:
+        return TOL_ACTUALS
+    frac = m.group(2) or ""
+    places = len(frac)
+    # Whole millions/thousands ($80M, $2K) — no display band; force exact / repair.
+    if places == 0:
+        return TOL_ACTUALS
+    scale = _scale_suffix(m.group(3))
+    # Half of one unit in the last displayed decimal place.
+    return (Decimal(10) ** (-places) * scale) / Decimal("2")
+
+
 def _candidates_for_claim(claim: NumericClaim) -> list[tuple[Decimal, Decimal]]:
     """Return (candidate_value, tolerance) pairs to try against evidence.
 
@@ -497,7 +573,7 @@ def _candidates_for_claim(claim: NumericClaim) -> list[tuple[Decimal, Decimal]]:
     requiring the signed form deleted most commentary as unverifiable.
     """
     if claim.kind == "money":
-        base = [(claim.value, TOL_ACTUALS)]
+        base = [(claim.value, _money_display_tolerance(claim))]
     elif claim.kind == "percent":
         base = [
             (claim.value / Decimal("100"), TOL_RATIO),
@@ -1381,8 +1457,14 @@ def apply_fail_closed_claims_to_pptx_script(
         local = VerificationResult(checks=local_checks)
         if local.ok or _pptx_is_narrative_literal(inner_unesc):
             return raw
-        replacement = pptx_soft_strip_literal_replacement(
-            inner_unesc, dont_know=DONT_KNOW_NARRATIVE
+        # Prefer SoR repair over em-dash for Claude whole-M/K rounding ($80M→$79.505M).
+        repaired = pptx_repair_rounded_money_literal(inner_unesc, local_checks)
+        replacement = (
+            repaired
+            if repaired is not None
+            else pptx_soft_strip_literal_replacement(
+                inner_unesc, dont_know=DONT_KNOW_NARRATIVE
+            )
         )
         escaped = (
             replacement.replace("\\", "\\\\")

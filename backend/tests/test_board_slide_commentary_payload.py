@@ -48,6 +48,14 @@ def test_fmt_deck_money_millions() -> None:
     assert fmt_deck_money(Decimal("-1300000")) == "-$1.30M"
 
 
+def test_fmt_deck_money_board_decimals_not_whole_unit() -> None:
+    """2dp $M / 1dp $K — readable on slides; never whole-unit Claude rounding."""
+    assert fmt_deck_money(Decimal("79505000")) == "$79.51M"
+    assert fmt_deck_money(Decimal("2250")) == "$2.3K"
+    assert fmt_deck_money(Decimal("14870000")) == "$14.87M"
+    assert fmt_deck_money(Decimal("2474745")) == "$2.47M"
+
+
 def test_fmt_deck_var_sign() -> None:
     assert fmt_deck_var(Decimal("86100000"), Decimal("84890000")) == "+$1.21M"
 

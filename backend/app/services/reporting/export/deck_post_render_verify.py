@@ -150,16 +150,44 @@ def _flatten_payload_evidence(payload: Mapping[str, Any] | None) -> dict[str, De
         return {}
 
 
-def _select_anchors(evidence: Mapping[str, Decimal], *, limit: int = 6) -> list[tuple[str, Decimal]]:
+def _anchor_score(key: str, close_period: str | None) -> int:
+    """Score anchors that appear as on-slide KPI text, not chart-only monthly series."""
+    kl = key.lower()
+    # Monthly trend story keys (Jan–May ARR etc.) live in chart series only
+    # (showValue:false) — they never appear as $ text and create false anchor misses.
+    if close_period and "ending_arr" in kl and re.search(r"\d{4}-\d{2}", kl):
+        periods = re.findall(r"\d{4}-\d{2}", kl)
+        if periods and all(p != close_period for p in periods):
+            return 0
+    if "monthly_trends" in kl and close_period:
+        periods = re.findall(r"\d{4}-\d{2}", kl)
+        if periods and all(p != close_period for p in periods):
+            return 0
+    score = 0
+    for i, hint in enumerate(_ANCHOR_KEY_HINTS):
+        if hint.lower() in kl:
+            score = 100 - i
+            break
+    if score <= 0:
+        return 0
+    # Prefer period_matrix / executive / CM close KPIs that Claude copies into cells.
+    if "period_matrix" in kl or ".cm." in kl or "executive" in kl:
+        score += 40
+    if close_period and close_period in kl:
+        score += 50
+    return score
+
+
+def _select_anchors(
+    evidence: Mapping[str, Decimal],
+    *,
+    limit: int = 6,
+    close_period: str | None = None,
+) -> list[tuple[str, Decimal]]:
     """Pick a small set of high-priority evidence values that should appear in the deck."""
     ranked: list[tuple[int, str, Decimal]] = []
     for key, val in evidence.items():
-        kl = key.lower()
-        score = 0
-        for i, hint in enumerate(_ANCHOR_KEY_HINTS):
-            if hint in kl:
-                score = 100 - i
-                break
+        score = _anchor_score(key, close_period)
         if score <= 0:
             continue
         # Prefer absolute dollars in board display range.
@@ -179,6 +207,93 @@ def _select_anchors(evidence: Mapping[str, Decimal], *, limit: int = 6) -> list[
         if len(out) >= limit:
             break
     return out
+
+
+def _rounding_repair_band(claim: NumericClaim) -> Decimal | None:
+    """Max |claim − SoR| we will auto-correct as display rounding (not invention)."""
+    if claim.kind != "money":
+        return None
+    stated = claim.stated or ""
+    # Whole millions/thousands ($80M, $2K) are the common Claude/adapt defect.
+    if re.search(r"\dM\b", stated, re.I) and not re.search(r"\.\d+M\b", stated, re.I):
+        return Decimal("1500000")  # within $1.5M of SoR
+    if re.search(r"\dK\b", stated, re.I) and not re.search(r"\.\d+K\b", stated, re.I):
+        return Decimal("1000")
+    if re.search(r"\.\d{1,2}M\b", stated, re.I):
+        return Decimal("10000")  # 2dp M half-ulp neighborhood
+    if re.search(r"\.\d{1,2}K\b", stated, re.I):
+        return Decimal("50")
+    return Decimal("1")
+
+
+def _canonical_money_display(value: Decimal) -> str:
+    from app.services.reporting.export.board_slide_commentary_payload import fmt_deck_money
+
+    return fmt_deck_money(value)
+
+
+def repair_rendered_deck_money(
+    pptx_bytes: bytes,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    evidence: Mapping[str, Decimal] | Mapping[str, Any] | None = None,
+) -> tuple[bytes, list[str]]:
+    """Rewrite rounded KPI cells in the finished PPTX to SoR-canonical display strings.
+
+    Analysts tie prior periods to the system of record; whole-million / whole-thousand
+    Claude rounding ($80M vs $79.505M) must not ship. Only near-miss display rounding
+    inside ``_rounding_repair_band`` is corrected — distant inventions stay for verify.
+    """
+    from pptx import Presentation
+
+    evidence_map = _evidence_map(evidence) if evidence is not None else _flatten_payload_evidence(
+        payload
+    )
+    if not evidence_map:
+        return pptx_bytes, []
+
+    prs = Presentation(io.BytesIO(pptx_bytes))
+    repairs: list[str] = []
+
+    for slide in prs.slides:
+        for shape in _iter_shapes(slide.shapes):
+            if not hasattr(shape, "text_frame") or shape.text_frame is None:
+                continue
+            for para in shape.text_frame.paragraphs:
+                raw = para.text or ""
+                if not raw.strip():
+                    continue
+                # Repair short metric cells and short multi-token KPI lines; leave long narrative.
+                if _pptx_is_narrative_literal(raw) and not _METRIC_CELL_RE.match(raw.strip()):
+                    continue
+                new_text = raw
+                for claim in _pptx_material_claims(raw):
+                    if claim.kind != "money":
+                        continue
+                    check = _best_match(claim, evidence_map)
+                    if check.status == "pass":
+                        continue
+                    nearest = check.matched_value
+                    band = _rounding_repair_band(claim)
+                    if nearest is None or band is None or check.diff is None:
+                        continue
+                    if check.diff > band:
+                        continue
+                    canon = _canonical_money_display(nearest)
+                    if canon in {"n/a", "—"} or canon == claim.stated:
+                        continue
+                    if claim.stated not in new_text:
+                        continue
+                    new_text = new_text.replace(claim.stated, canon, 1)
+                    repairs.append(f"{claim.stated}→{canon}")
+                if new_text != raw:
+                    para.text = new_text
+
+    if not repairs:
+        return pptx_bytes, []
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue(), repairs
 
 
 def _money_values_in_texts(texts: Sequence[str]) -> list[Decimal]:
@@ -231,7 +346,7 @@ def verify_rendered_deck(
 
     money_values = _money_values_in_texts(texts)
     anchor_checks: list[ClaimCheck] = []
-    for key, val in _select_anchors(evidence_map):
+    for key, val in _select_anchors(evidence_map, close_period=close_period):
         fake_claim = NumericClaim(stated=f"anchor:{key}", value=val, kind="money")
         if _anchor_present(val, money_values):
             anchor_checks.append(
@@ -272,9 +387,19 @@ def verify_rendered_deck_soft(
     pptx_bytes: bytes,
     *,
     payload: Mapping[str, Any] | None = None,
-) -> DeckPostRenderResult:
-    """Prompt 5 path: always soft-warn; never raise."""
-    result = verify_rendered_deck(pptx_bytes, payload=payload, fail_closed=False)
+) -> tuple[bytes, DeckPostRenderResult]:
+    """Prompt 5 path: repair display-rounding, then soft-warn; never raise.
+
+    Returns ``(possibly_repaired_pptx_bytes, result)`` so the shipped file matches SoR.
+    """
+    repaired, repairs = repair_rendered_deck_money(pptx_bytes, payload=payload)
+    if repairs:
+        logger.info(
+            "P15 post-render money repair (%s): %s",
+            len(repairs),
+            "; ".join(repairs[:12]),
+        )
+    result = verify_rendered_deck(repaired, payload=payload, fail_closed=False)
     if result.ok:
         logger.info("P15 post-render fidelity passed: %s", result.summary())
     else:
@@ -282,4 +407,4 @@ def verify_rendered_deck_soft(
             "P15 post-render fidelity soft-warn (export continues): %s",
             result.summary(),
         )
-    return result
+    return repaired, result

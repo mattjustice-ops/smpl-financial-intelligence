@@ -134,12 +134,10 @@ def _fs_line(bundle: ReportingBundle, needle: str, period: str, scenario: str) -
 
 
 def _money_k(val: Decimal) -> str:
-    v = float(val)
-    if abs(v) >= 1_000_000:
-        return f"${v / 1_000_000:.2f}M"
-    if abs(v) >= 1_000:
-        return f"${v / 1_000:.0f}K"
-    return f"${v:,.0f}"
+    """Display money for GTM / pipeline cells — same SoR-safe formatter as the Board."""
+    from app.services.reporting.export.board_slide_commentary_payload import fmt_deck_money
+
+    return fmt_deck_money(val)
 
 
 def _marketing_by_channel(bundle: ReportingBundle, period: str) -> list[dict[str, Any]]:
@@ -1016,6 +1014,101 @@ def _reinject_gtm_channel_rows(script: str, payload: dict[str, Any]) -> str:
     return out
 
 
+_PL_DETAIL_LINE_LABELS: tuple[tuple[str, str], ...] = (
+    ("revenue", "Revenue"),
+    ("cogs", "COGS"),
+    ("gross_profit", "Gross Profit"),
+    ("sm", "S&M"),
+    ("rd", "R&D"),
+    ("ga", "G&A"),
+    ("ebitda", "EBITDA"),
+    ("da", "D&A"),
+    ("net_income", "Net Income"),
+)
+
+
+def _reinject_pl_detail_rows(script: str, payload: dict[str, Any]) -> str:
+    """Restore slide-4 P&L table cells from pl_detail (CM + YTD) after soft-strip/adapt."""
+    pl = payload.get("pl_detail") or {}
+    cm = pl.get("cm") or {}
+    ytd = pl.get("ytd") or {}
+    if not isinstance(cm, dict) or not isinstance(ytd, dict):
+        return script
+    out = script
+    restored: list[str] = []
+    for key, label in _PL_DETAIL_LINE_LABELS:
+        cm_row = cm.get(key) or {}
+        ytd_row = ytd.get(key) or {}
+        if not isinstance(cm_row, dict) or not isinstance(ytd_row, dict):
+            continue
+        cells = [
+            str(cm_row.get("actual") or "—"),
+            str(cm_row.get("budget") or "—"),
+            str(cm_row.get("variance") or "—"),
+            str(ytd_row.get("actual") or "—"),
+            str(ytd_row.get("budget") or "—"),
+            str(ytd_row.get("variance") or "—"),
+        ]
+        if all(c == "—" for c in cells):
+            continue
+        out, hit = _rewrite_row(out, label, cells)
+        if hit:
+            restored.append(label)
+    if restored:
+        logger.info("Reinjected P&L detail rows from payload: %s", ", ".join(restored))
+    return out
+
+
+def _reinject_monthly_trends_chart_series(script: str, payload: dict[str, Any]) -> str:
+    """Force slide-9 ARR chart series to monthly_trends payload (no whole-million rounding)."""
+    trends = payload.get("monthly_trends") or {}
+    if not isinstance(trends, dict):
+        return script
+
+    def _js_num_array(values: list[Any]) -> str:
+        parts: list[str] = []
+        for v in values:
+            if v is None:
+                parts.append("null")
+                continue
+            try:
+                num = float(v)
+            except (TypeError, ValueError):
+                parts.append("null")
+                continue
+            # Keep up to 3 dp — matches ending_arr_m payload precision.
+            if abs(num - round(num)) < 1e-9:
+                parts.append(str(int(round(num))))
+            else:
+                parts.append(f"{num:.3f}".rstrip("0").rstrip("."))
+        return "[" + ", ".join(parts) + "]"
+
+    out = script
+    replacements = (
+        ("ending_arr_m", r"(?:const|let|var)\s+arrActual\s*=\s*\[[^\]]*\]"),
+        ("ending_arr_outlook_m", r"(?:const|let|var)\s+arrOutlook\s*=\s*\[[^\]]*\]"),
+        ("ending_arr_budget_m", r"(?:const|let|var)\s+arrBudget\s*=\s*\[[^\]]*\]"),
+    )
+    changed: list[str] = []
+    for key, pattern in replacements:
+        series = trends.get(key)
+        if not isinstance(series, list) or not series:
+            continue
+        js_arr = _js_num_array(series)
+
+        def _repl(m: re.Match[str], _arr: str = js_arr) -> str:
+            prefix = m.group(0).split("=", 1)[0]
+            return f"{prefix}= {_arr}"
+
+        out2, n = re.subn(pattern, _repl, out, count=1)
+        if n:
+            out = out2
+            changed.append(key)
+    if changed:
+        logger.info("Reinjected monthly_trends chart series: %s", ", ".join(changed))
+    return out
+
+
 def _postprocess_prompt5_script(script: str, payload: dict[str, Any] | None = None) -> str:
     """Deterministic layout/data fixes after Claude adapt / soft-strip."""
     script = _strip_slide2_kpi_sparklines(script)
@@ -1026,6 +1119,8 @@ def _postprocess_prompt5_script(script: str, payload: dict[str, Any] | None = No
         script = _reinject_cfs_variances(script, payload)
         script = _reinject_cash_bridge_rows(script, payload)
         script = _reinject_gtm_channel_rows(script, payload)
+        script = _reinject_pl_detail_rows(script, payload)
+        script = _reinject_monthly_trends_chart_series(script, payload)
     return script
 
 
@@ -1329,7 +1424,7 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
 def _post_render_fidelity(
     pptx_bytes: bytes, payload: dict[str, Any] | None
 ) -> tuple[bytes, dict[str, Any] | None]:
-    """Soft-warn post-render numeric + narrative fidelity; never block export."""
+    """Repair display-rounding to SoR, soft-warn remaining misses; never block export."""
     if not payload:
         return pptx_bytes, None
     try:
@@ -1338,7 +1433,7 @@ def _post_render_fidelity(
         )
         from app.services.reporting.export.evidence_pack import post_render_to_dict
 
-        result = verify_rendered_deck_soft(pptx_bytes, payload=payload)
+        pptx_bytes, result = verify_rendered_deck_soft(pptx_bytes, payload=payload)
         meta = post_render_to_dict(result)
         payload["_post_render"] = meta
         return pptx_bytes, meta

@@ -85,7 +85,7 @@ def post_lock(
     )
     if not result.get("ok"):
         code = result.get("code")
-        status = 409 if code in ("not_ready_to_lock", "freeze_failed") else 400
+        status = 409 if code in ("not_ready_to_lock", "freeze_failed", "validation_engine_mapping_open") else 400
         raise HTTPException(status_code=status, detail=result)
     return result
 

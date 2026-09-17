@@ -135,6 +135,75 @@ def test_post_render_anchor_fail_soft() -> None:
     assert "anchors:" in result.summary()
 
 
+def test_post_render_skips_chart_only_prior_month_arr_anchors() -> None:
+    """Jan–Apr story.ending_arr keys are chart-series only — do not false-fail anchors."""
+    from app.services.reporting.export.deck_post_render_verify import _select_anchors
+
+    evidence = {
+        "story.actual.ending_arr.2026-01": Decimal("76310000"),
+        "story.actual.ending_arr.2026-02": Decimal("77820000"),
+        "story.actual.ending_arr.2026-03": Decimal("79505000"),
+        "story.actual.ending_arr.2026-04": Decimal("81385000"),
+        "period_matrix.ARR.cm.actual": Decimal("86100000"),
+        "period_matrix.Cash.cm.actual": Decimal("70610000"),
+    }
+    anchors = _select_anchors(evidence, close_period="2026-06", limit=6)
+    keys = [k for k, _ in anchors]
+    assert "period_matrix.ARR.cm.actual" in keys
+    assert not any("2026-01" in k or "2026-02" in k for k in keys)
+
+
+def test_repair_rendered_deck_money_whole_million_rounding() -> None:
+    from app.services.reporting.export.deck_post_render_verify import (
+        repair_rendered_deck_money,
+        verify_rendered_deck,
+    )
+
+    raw = _mini_pptx("$80M", "$15M", "$2K", "$19M")
+    evidence = {
+        "deck.monthly_trends.ending_arr_m[2]": Decimal("79505000"),
+        "deck.pl_detail.qtd.gross_profit.actual": Decimal("14870000"),
+        "deck.gtm_performance.channels[1].spend_budget_raw": Decimal("2250"),
+        "deck.cash_liquidity.current_month.cash_headroom_vs_floor": Decimal("20000000"),
+        "period_matrix.ARR.cm.actual": Decimal("86100000"),
+    }
+    repaired, repairs = repair_rendered_deck_money(raw, evidence=evidence)
+    assert repairs
+    assert any("80M" in r and "79.51" in r for r in repairs)
+    result = verify_rendered_deck(repaired, evidence=evidence, payload={"close_period": "2026-06"})
+    assert result.numeric.ok, result.summary()
+
+
+def test_pptx_script_repairs_rounded_kpi_instead_of_emdash() -> None:
+    from app.services.commentary.claim_verify import apply_fail_closed_claims_to_pptx_script
+
+    script = 'slide.addText("$80M", {x:1}); slide.addText("$2K", {x:2});'
+    evidence = {
+        "ending_arr": Decimal("79505000"),
+        "spend_budget": Decimal("2250"),
+    }
+    out, result = apply_fail_closed_claims_to_pptx_script(script, evidence)
+    assert "$79.51M" in out
+    assert "$2.3K" in out
+    assert out.count("—") == 0
+
+
+def test_two_dp_millions_ties_sor_within_display_band() -> None:
+    from app.services.commentary.claim_verify import verify_text_against_evidence
+
+    result = verify_text_against_evidence(
+        "$79.51M",
+        {"ending_arr": Decimal("79505000")},
+    )
+    assert result.ok
+    # Whole millions still fail — must be repaired, not waved through.
+    whole = verify_text_against_evidence(
+        "$80M",
+        {"ending_arr": Decimal("79505000")},
+    )
+    assert not whole.ok
+
+
 def test_post_render_narrative_filler_flagged() -> None:
     raw = _mini_pptx("ARR saw a significant expansion versus budget this quarter.")
     result = verify_rendered_deck(

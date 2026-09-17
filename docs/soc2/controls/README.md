@@ -6,13 +6,14 @@
 
 | File | Role |
 |------|------|
+| [validation_engine.md](./validation_engine.md) | **Board vs Validation Engine** — exec outcomes vs owner ties/mapping/Monthly Align |
 | [WAREHOUSE_GATE_NEAR_TERM_PLAN.md](./WAREHOUSE_GATE_NEAR_TERM_PLAN.md) | **Near-term plan (2–4 weeks)** — calculate → validate → AI explains validated evidence → fail closed; LIVE/PARTIAL/OPEN matrix; board must-haves vs nice-to-haves |
 | [ai_claim_verify.md](./ai_claim_verify.md) | **Founder review checklist** — P15 fail-closed claim-verify: what shipped, tolerances, covered vs open paths, tests |
 | [ai_attribution_verify.md](./ai_attribution_verify.md) | **Live on primary AI paths** — non-numeric driver/attribution verify (commentary, Prompt 2, Prompt 5, board regenerate, Copilot structured packages) |
 | [../../AI_SKILL_PRACTICES.md](../../AI_SKILL_PRACTICES.md) | **Internal process** — skill lifecycle + definition skills; maps clarify-before-write / thick-context routing onto existing verify gates (not SOC 2 cert) |
 | [fe_board_single_source.md](./fe_board_single_source.md) | **Production FE↔Board hydrate** — shared outlook API/builder confirmed + TS↔SRC $1 regression; demo dual-seed left alone |
 | [data_integrity_framework.md](./data_integrity_framework.md) | Provenance (`_sources`), Claude runtime rules, build-time `data-source` tags, automated tie-out report, commentary second-pass verification, close review checklist |
-| [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md) | Per-visual warehouse mapping + Rule Sets A–F + `runTieOut()` publish block |
+| [data_sources_tieout_prompt.md](./data_sources_tieout_prompt.md) | Per-visual warehouse mapping + Rule Sets A–F + `runTieOut()` publish gate |
 | [reconcile_financial_statements.md](./reconcile_financial_statements.md) | FE ↔ Board closed-actuals diff + severity bands (`rounding` / `investigate` / `significant_miss`) — honest demo `data_mismatch` inventory |
 | [financial_dashboard_cf_re_logic.md](./financial_dashboard_cf_re_logic.md) | **Customer / production** CF + RE construction methodology (`RE_BASE`, openings, three-rollup, dept-299). Does **not** change SMPL Demo Co / Board / FE demo behavior |
 
@@ -20,9 +21,11 @@
 
 ## Product posture (non-negotiable)
 
+- **Board / Platform** = validated **outcomes** for executives (stamp + deep-link only — not A–F grids).
+- **Validation Engine** = owner workshop for ties, Evidence Pack, Monthly Align, and GL→management mapping — see [validation_engine.md](./validation_engine.md).
 - **Primary controls** = backend / automated **fail-closed** gates: provenance, `_sources`, structural claim verify, freeze-ID binding, tie-out / second-pass verification.
-- **Not** human review before every send / **not** “users must re-validate.”
-- **Human role** = incident response, exceptions, **periodic control testing** (see adaptation of Part 6 below).
+- **Not** human review before every send / **not** “users must re-validate” on the executive Board.
+- **Human role** = Validation Engine ownership (Allow, mapping), incident response, exceptions, **periodic control testing** (see adaptation of Part 6 below).
 - Embellishment / wrong-context packaging must be prevented by **system design**, not hope.
 
 ## Adaptation of source Part 6 (human sign-off)
@@ -62,6 +65,7 @@ Code search / product surface as of this write-up. Labels:
 | Second-pass commentary verification (block on unverifiable) | **Partial — implemented** | Interactive: soft-warn numbers + surgical story strip; Prompt 5 soft-strip + export; Prompt 2 hard-block when variance fully wiped |
 | DOM `data-source` attributes + audit overlay | **Partial — implemented (UI)** | Board/FE KPIs via `smpl-provenance.js`; hydrate `_sources` when present; `Ctrl+Shift+A` overlay — [fe_board_single_source.md](./fe_board_single_source.md) |
 | Full `runTieOut()` Rule Sets A–F as publish gate | **Partial — advisory client A–F** | Export-time client A–F + HTML report are **advisory** (WARN; deck/promote proceed); F4 forecast soft after close; hard production-actuals ID at import/close (roadmap); Prompt 5 AI verify soft-strips + exports; Prompt 2 still harder; live SQL warehouse HTML still roadmap |
+| Validation Engine (owner) vs Board (exec) | **Implemented (v1)** | Continuity / Ties / Evidence Pack / Monthly Align / mapping queue live under `/validation/`; Board shows validated stamp + deep-link only — [validation_engine.md](./validation_engine.md) |
 | Human review before every send as primary control | **Not the control** (by design) | Rejected posture — see P15 |
 
 **Safer as gates are built:** Policy and IR language already require machine-primary fail-closed behavior. Product safety and trust rise as the roadmap layers above are implemented and fail-closed in production — not when humans re-check every package.
@@ -70,6 +74,7 @@ Code search / product surface as of this write-up. Labels:
 
 | Date | Change |
 |------|--------|
+| 2026-09-17 | **Validation Engine vs Board:** owner Continuity/Ties/Evidence Pack/Monthly Align/mapping under `/validation/`; Board stamp + deep-link only. See [validation_engine.md](./validation_engine.md). Not SOC 2 certified. |
 | 2026-07-31 | Prompt 5 narrative depth: Key Takeaways / risks / board actions require regenerate/Copilot-style 3–5 insight bullets (driver + variance, retention/pipeline, Actual vs Forecast vs Pipeline, board action); freeze + evidence wired into adapt-first path; KPI/table cells stay numbers/`—` (soft-strip unchanged). Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Prompt 5 soft-strip hotfix: citation warn-only; claim/citation/attribution PPTX soft-strip always → `—` (never multi-sentence don't-know essays in deck cells). Demo dual seeds untouched. Not SOC 2 certified. |
 | 2026-07-31 | Prompt 5 evidence package widened (actual/forecast/pipeline/bridges + `series_kind` tags) and prompts tightened so rich board narrative can use package context; invent still soft-strips; soft-export retained. Demo dual seeds untouched. Not SOC 2 certified. |

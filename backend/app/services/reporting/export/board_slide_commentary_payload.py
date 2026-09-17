@@ -117,15 +117,25 @@ _INTERACTIVE_MIN_CHARS_PER_BULLET = _DEFAULT_MAX_CHARS_PER_BULLET
 
 
 def fmt_deck_money(value: Decimal | None) -> str:
+    """Board/deck money display — 2dp $M, 1dp $K (readable; analyst-tieable).
+
+    Whole-unit rounding ($80M, $2K) is never emitted. Uses ROUND_HALF_UP so
+    $79,505,000 → $79.51M (not banker's $79.50M). Post-render verify allows a
+    half-ULP band for these compact forms.
+    """
+    from decimal import ROUND_HALF_UP
+
     if value is None:
         return "n/a"
     v = Decimal(value)
     sign = "-" if v < 0 else ""
     abs_v = abs(v)
     if abs_v >= Decimal("1000000"):
-        return f"{sign}${abs_v / Decimal('1000000'):,.2f}M"
+        m = (abs_v / Decimal("1000000")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"{sign}${m:,.2f}M"
     if abs_v >= Decimal("1000"):
-        return f"{sign}${abs_v / Decimal('1000'):,.1f}K"
+        k = (abs_v / Decimal("1000")).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        return f"{sign}${k:,.1f}K"
     return f"{sign}${abs_v:,.2f}"
 
 

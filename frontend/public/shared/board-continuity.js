@@ -1,16 +1,19 @@
 /**
- * Board Continuity / Trust UX — always-on strip, Continuity tab, cite-to-calc.
+ * Validation Engine + Board validated stamp.
  *
- * Productizes SMPLProvenance + CASH_CONTINUITY + export fidelity metadata so
- * customers can prove material numbers without Ctrl+Shift+A or Railway logs.
+ * Board (exec): one-line stamp → /validation/ (no A–F homework).
+ * Validation Engine (owner): Ties, cash spine, Evidence Pack, Monthly Align, mapping.
+ * Cite-to-calc: owner mode only (?owner=1 or Ctrl+Shift+V).
  * Not SOC 2 certified.
  */
 (function (global) {
   "use strict";
 
   var STRIP_ID = "smpl-trust-strip";
+  var STAMP_ID = "smpl-validated-stamp";
   var DRAWER_ID = "smpl-cite-drawer";
   var FIDELITY_KEY = "smpl_last_evidence_pack";
+  var OWNER_KEY = "smpl_owner_mode";
 
   function esc(s) {
     return String(s == null ? "" : s)
@@ -20,6 +23,37 @@
       .replace(/"/g, "&quot;");
   }
 
+  function isValidationEnginePage() {
+    var path = (global.location && global.location.pathname) || "";
+    return path.indexOf("/validation") >= 0 || global.SMPL_VALIDATION_ENGINE === true;
+  }
+
+  function isOwnerMode() {
+    if (global.SMPL_OWNER_MODE === true) return true;
+    try {
+      if (global.sessionStorage && global.sessionStorage.getItem(OWNER_KEY) === "1") return true;
+    } catch (e) {
+      /* ignore */
+    }
+    var q = (global.location && global.location.search) || "";
+    return /[?&]owner=1(?:&|$)/.test(q);
+  }
+
+  function setOwnerMode(on) {
+    global.SMPL_OWNER_MODE = !!on;
+    try {
+      if (on) global.sessionStorage.setItem(OWNER_KEY, "1");
+      else global.sessionStorage.removeItem(OWNER_KEY);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function validationHref() {
+    var period = closeMonth();
+    return "/validation/?period=" + encodeURIComponent(period);
+  }
+
   function closeMonth() {
     if (typeof global.CLOSE_MONTH === "string" && global.CLOSE_MONTH) return global.CLOSE_MONTH;
     var badge = document.getElementById("periodBadge");
@@ -27,7 +61,22 @@
       var m = String(badge.textContent).match(/20\d{2}-\d{2}/);
       if (m) return m[0];
     }
+    var q = (global.location && global.location.search) || "";
+    var pm = q.match(/[?&]period=(20\d{2}-\d{2})/);
+    if (pm) return pm[1];
     return "2026-06";
+  }
+
+  function apiBase() {
+    return (global.SMPL_API_BASE || "/api/v1").replace(/\/$/, "");
+  }
+
+  function orgId() {
+    return (
+      global.SMPL_ORG_ID ||
+      (global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.organization_id) ||
+      null
+    );
   }
 
   function getTieOut() {
@@ -60,13 +109,14 @@
     } catch (e) {
       /* quota */
     }
-    refreshTrustStrip();
+    refreshValidatedStamp();
   }
 
   function trustSummary() {
     var tie = getTieOut() || {};
     var cc = getCashContinuity() || {};
     var pack = getEvidencePack() || {};
+    var allow = global.SMPL_VALIDATION_STATUS && global.SMPL_VALIDATION_STATUS.validation_allow;
     var failN = (tie.failures && tie.failures.length) || 0;
     var softN = (tie.soft && tie.soft.length) || 0;
     var ccFails = (cc.failures && cc.failures.length) || 0;
@@ -76,6 +126,7 @@
       (pack.anchor_failures || 0);
     var passed = failN === 0 && ccFails === 0;
     var status = passed ? (softN || fidelityIssues ? "warn" : "ok") : "fail";
+    var allowed = !!(allow && allow.allowed);
     return {
       status: status,
       closeMonth: tie.closeMonth || cc.as_of || closeMonth(),
@@ -86,6 +137,15 @@
       fidelityIssues: fidelityIssues,
       freezeStatus: pack.freeze_status || (global.SMPL_FREEZE_STATUS || ""),
       passed: passed,
+      allowed: allowed,
+      allowedBy: allow && allow.allowed_by,
+      allowedAt: allow && allow.allowed_at,
+      mappingOpen: (global.SMPL_VALIDATION_STATUS && global.SMPL_VALIDATION_STATUS.mapping_material_open_count) || 0,
+      readyForBoard: !!(
+        global.SMPL_VALIDATION_STATUS &&
+        global.SMPL_VALIDATION_STATUS.monthly_align &&
+        global.SMPL_VALIDATION_STATUS.monthly_align.ready_for_board
+      ),
     };
   }
 
@@ -98,60 +158,64 @@
   function statusLabel(s) {
     if (s.status === "ok") return "Ties pass";
     if (s.status === "warn") return "Ties pass · advisories";
-    return s.failN + ccPart(s) + " open";
+    return s.failN + (s.ccFails ? "+" + s.ccFails + " cash" : "") + " open";
   }
 
-  function ccPart(s) {
-    return s.ccFails ? "+" + s.ccFails + " cash" : "";
-  }
-
-  function ensureStrip() {
-    var el = document.getElementById(STRIP_ID);
+  function ensureValidatedStamp() {
+    if (isValidationEnginePage()) return null;
+    var el = document.getElementById(STAMP_ID);
     if (el) return el;
     var top = document.querySelector(".topbar-right");
     if (!top) return null;
-    el = document.createElement("button");
-    el.id = STRIP_ID;
-    el.type = "button";
-    el.className = "smpl-trust-strip";
-    el.setAttribute("aria-label", "Open Continuity trust checks");
-    el.onclick = function () {
-      openContinuityTab();
-    };
+    // Remove legacy trust strip if present
+    var legacy = document.getElementById(STRIP_ID);
+    if (legacy && legacy.parentNode) legacy.parentNode.removeChild(legacy);
+    el = document.createElement("a");
+    el.id = STAMP_ID;
+    el.className = "smpl-validated-stamp";
+    el.href = validationHref();
+    el.setAttribute("aria-label", "Open Validation Engine");
     top.insertBefore(el, top.firstChild);
     return el;
   }
 
-  function refreshTrustStrip() {
-    var el = ensureStrip();
+  function refreshValidatedStamp() {
+    if (isValidationEnginePage()) return;
+    var el = ensureValidatedStamp();
     if (!el) return;
     var s = trustSummary();
-    var clr = statusColor(s.status);
+    var ready = s.readyForBoard || s.allowed;
+    var clr = ready ? statusColor("ok") : statusColor(s.status === "fail" ? "fail" : "warn");
     el.style.borderColor = clr;
     el.style.color = clr;
-    el.innerHTML =
-      '<span class="smpl-trust-dot" style="background:' +
-      clr +
-      '"></span>' +
-      "<strong>" +
-      esc(statusLabel(s)) +
-      "</strong>" +
-      '<span class="smpl-trust-meta">' +
-      esc(s.closeMonth) +
-      " · " +
-      s.checksRun +
-      " checks" +
-      (s.freezeStatus ? " · freeze " + esc(s.freezeStatus) : "") +
-      " · Continuity</span>";
+    el.href = validationHref();
+    if (ready) {
+      el.innerHTML =
+        '<span class="smpl-trust-dot" style="background:' +
+        clr +
+        '"></span><strong>Close validated</strong>' +
+        '<span class="smpl-trust-meta">' +
+        esc(s.closeMonth) +
+        (s.allowedBy ? " · by " + esc(s.allowedBy) : "") +
+        " · Validation Engine</span>";
+    } else {
+      el.innerHTML =
+        '<span class="smpl-trust-dot" style="background:' +
+        clr +
+        '"></span><strong>Validation pending</strong>' +
+        '<span class="smpl-trust-meta">' +
+        esc(s.closeMonth) +
+        " · owner Align · Validation Engine</span>";
+    }
+  }
+
+  /** @deprecated Board Continuity tab removed — use Validation Engine. */
+  function refreshTrustStrip() {
+    refreshValidatedStamp();
   }
 
   function openContinuityTab() {
-    var btn = Array.prototype.find.call(document.querySelectorAll(".nav-btn"), function (b) {
-      return (b.getAttribute("onclick") || "").indexOf("show('continuity'") >= 0;
-    });
-    if (typeof global.show === "function") {
-      global.show("continuity", btn || null);
-    }
+    global.location.href = validationHref();
   }
 
   function parseFailString(f) {
@@ -168,18 +232,6 @@
         expected: Number(m[4]),
         actual: Number(m[5]),
         diff: Number(m[6]),
-        message: s,
-      };
-    }
-    var m2 = s.match(/^\[([^\]]+)\]\s+(\d{4}-\d{2})\s+(.+):\s+missing/);
-    if (m2) {
-      return {
-        rule: m2[1],
-        period: m2[2],
-        metric: m2[3],
-        expected: null,
-        actual: null,
-        diff: null,
         message: s,
       };
     }
@@ -201,16 +253,21 @@
       { code: "C5", label: "Forecast opens on close" },
     ].map(function (c) {
       var n = byCode[c.code] || 0;
-      return {
-        code: c.code,
-        label: c.label,
-        ok: n === 0,
-        count: n,
-      };
+      return { code: c.code, label: c.label, ok: n === 0, count: n };
     });
   }
 
-  function renderContinuity(area) {
+  function row(label, value) {
+    return (
+      '<div class="smpl-cont-row"><span>' +
+      esc(label) +
+      "</span><strong>" +
+      esc(value) +
+      "</strong></div>"
+    );
+  }
+
+  function renderTiesPanel(area) {
     if (!area) return;
     if (global.SMPLProvenance && typeof global.SMPLProvenance.runTieOut === "function") {
       try {
@@ -219,8 +276,6 @@
         /* non-fatal */
       }
     }
-    refreshTrustStrip();
-
     var s = trustSummary();
     var tie = getTieOut() || {};
     var cc = getCashContinuity() || {};
@@ -236,15 +291,13 @@
             return (
               '<details class="smpl-cont-fail" ' +
               (i === 0 ? "open" : "") +
-              ">" +
-              "<summary><strong>" +
+              "><summary><strong>" +
               esc(f.rule || "FAIL") +
               "</strong> · " +
               esc(f.period || "") +
               " · " +
               esc(f.metric || f.message || "") +
-              "</summary>" +
-              '<div class="smpl-cont-fail-body">' +
+              "</summary><div class='smpl-cont-fail-body'>" +
               (f.expected != null
                 ? "<div>Expected: <code>" +
                   esc(String(f.expected)) +
@@ -252,12 +305,11 @@
                   esc(String(f.actual)) +
                   "</code> · Diff: <code>" +
                   esc(String(f.diff)) +
-                  "</code> · Tol $1.00</div>"
+                  "</code></div>"
                 : "") +
               "<div class='smpl-cont-msg'>" +
               esc(f.message || "") +
-              "</div>" +
-              "</div></details>"
+              "</div></div></details>"
             );
           })
           .join("")
@@ -280,24 +332,12 @@
       })
       .join("");
 
-    var fidelityHtml =
-      '<div class="smpl-cont-grid">' +
-      row("Last export", pack.export_kind || "—") +
-      row("Freeze", pack.freeze_status || s.freezeStatus || "—") +
-      row("PPTX source", pack.pptx_source || "—") +
-      row("Post-render cells", pack.post_render_ok === false ? "soft-warn" : pack.post_render_ok ? "pass" : "—") +
-      row("Anchor coverage", pack.anchor_failures != null ? String(pack.anchor_failures) + " miss" : "—") +
-      row("Narrative issues", pack.narrative_issues != null ? String(pack.narrative_issues) : "—") +
-      row("Summary", pack.summary || "No export Evidence Pack yet — run MD&A Deck or Variance Commentary.") +
-      "</div>";
-
     area.innerHTML =
-      '<div class="slide-title">Continuity</div>' +
-      '<div class="slide-sub">Named ties at $1 on closed actuals · material KPIs cite warehouse / computed sources · AI narrates from the evidence pack — it does not invent the dollars. Not SOC 2 certified.</div>' +
+      '<div class="ve-panel-title">Ties</div>' +
+      '<div class="ve-panel-sub">Client A–F + cash spine · TOL_ACTUALS $1 · failures first</div>' +
       '<div class="smpl-cont-banner" style="border-color:' +
       statusColor(s.status) +
-      '">' +
-      '<div style="font-size:13px;font-weight:600;color:' +
+      '"><div style="font-weight:600;color:' +
       statusColor(s.status) +
       '">' +
       esc(statusLabel(s)) +
@@ -306,25 +346,14 @@
       "</div>" +
       '<div style="font-size:11px;color:var(--text3);margin-top:4px">' +
       s.checksRun +
-      " client checks · " +
+      " checks · " +
       s.failN +
       " fail · " +
       s.softN +
       " soft · " +
       s.ccFails +
-      " cash continuity · click any KPI with a source tag to open cite-to-calc</div>" +
-      "</div>" +
-      '<div class="card" style="margin-top:18px">' +
-      '<div class="card-title">Stamps</div>' +
-      '<div class="smpl-cont-grid">' +
-      row("As-of period", s.closeMonth) +
-      row("Live hydrate", tie.live ? "yes" : "demo / offline") +
-      row("Scope", tie.scope || "client-A-F") +
-      row("Org sources", global.SMPL_OUTLOOK_SOURCES ? Object.keys(global.SMPL_OUTLOOK_SOURCES).length + " keys" : "catalog fallback") +
-      row("Tolerance", "TOL_ACTUALS = $1.00") +
-      "</div></div>" +
-      '<div class="card" style="margin-top:14px">' +
-      '<div class="card-title">Cash spine (C1–C5)</div>' +
+      " cash</div></div>" +
+      '<div class="card" style="margin-top:14px"><div class="card-title">Cash spine (C1–C5)</div>' +
       '<div class="smpl-cont-chips">' +
       chipHtml +
       "</div>" +
@@ -332,8 +361,7 @@
         ? '<div style="font-size:11px;color:var(--text3);margin-top:8px">' + esc(cc.summary) + "</div>"
         : "") +
       "</div>" +
-      '<div class="card" style="margin-top:14px">' +
-      '<div class="card-title">Failures first (client A–F)</div>' +
+      '<div class="card" style="margin-top:14px"><div class="card-title">Failures first (client A–F)</div>' +
       failHtml +
       (soft.length
         ? '<div style="margin-top:12px;font-size:11px;color:#c48a3a"><strong>Soft / advisory</strong><ul style="margin:6px 0 0 16px">' +
@@ -346,37 +374,41 @@
           "</ul></div>"
         : "") +
       (skipped.length
-        ? '<div style="margin-top:10px;font-size:10px;color:var(--text3)">Skipped when data absent: ' +
+        ? '<div style="margin-top:10px;font-size:10px;color:var(--text3)">Skipped: ' +
           esc(skipped.slice(0, 6).join(" · ")) +
           "</div>"
         : "") +
       "</div>" +
-      '<div class="card" style="margin-top:14px">' +
-      '<div class="card-title">AI fidelity (last Evidence Pack)</div>' +
-      fidelityHtml +
+      '<div class="card" style="margin-top:14px"><div class="card-title">AI fidelity (Evidence Pack)</div>' +
+      '<div class="smpl-cont-grid">' +
+      row("Last export", pack.export_kind || "—") +
+      row("Freeze", pack.freeze_status || s.freezeStatus || "—") +
+      row("Post-render", pack.post_render_ok === false ? "soft-warn" : pack.post_render_ok ? "pass" : "—") +
+      row("Anchors", pack.anchor_failures != null ? String(pack.anchor_failures) + " miss" : "—") +
+      row("Narrative", pack.narrative_issues != null ? String(pack.narrative_issues) : "—") +
+      row("Summary", pack.summary || "No Evidence Pack yet — export MD&A Deck or Variance.") +
+      "</div>" +
       '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
-      '<button type="button" class="ai-global-btn" onclick="if(window.SMPLProvenance)SMPLProvenance.downloadTieOutReport()">Download client tie-out HTML</button>' +
+      '<button type="button" class="ai-global-btn" onclick="if(window.SMPLProvenance)SMPLProvenance.downloadTieOutReport()">Download tie-out HTML</button>' +
       (pack.html
-        ? '<button type="button" class="ai-global-btn" onclick="window.SMPLContinuity.downloadStoredEvidenceHtml()">Download Evidence Pack HTML</button>'
+        ? '<button type="button" class="ai-global-btn" onclick="window.SMPLContinuity.downloadStoredEvidenceHtml()">Download Evidence Pack</button>'
         : "") +
-      "</div></div>" +
-      '<div class="card" style="margin-top:14px">' +
-      '<div class="card-title">How to prove a number</div>' +
-      '<ol style="margin:8px 0 0 18px;font-size:12px;color:var(--text2);line-height:1.55">' +
-      "<li>Click a KPI value (ending ARR, revenue, cash, EBITDA, net new) — cite-to-calc opens.</li>" +
-      "<li>Confirm period, scenario, and warehouse table.column or COMPUTED formula.</li>" +
-      "<li>Export MD&A Deck / Variance Commentary — Evidence Pack travels with the file (same check IDs).</li>" +
-      "</ol></div>";
+      "</div></div>";
   }
 
-  function row(label, value) {
-    return (
-      '<div class="smpl-cont-row"><span>' +
-      esc(label) +
-      "</span><strong>" +
-      esc(value) +
-      "</strong></div>"
-    );
+  /** Legacy Continuity tab renderer — redirects owners to full engine panels. */
+  function renderContinuity(area) {
+    if (!area) return;
+    if (!isValidationEnginePage()) {
+      area.innerHTML =
+        '<div class="slide-title">Validation Engine</div>' +
+        '<div class="slide-sub">Ties, mapping, and Monthly Align moved to the owner Validation Engine — leadership Board stays outcomes-only.</div>' +
+        '<p style="margin-top:16px"><a class="ai-global-btn" href="' +
+        esc(validationHref()) +
+        '">Open Validation Engine →</a></p>';
+      return;
+    }
+    renderTiesPanel(area);
   }
 
   function ensureDrawer() {
@@ -392,9 +424,6 @@
       '<div class="smpl-cite-body" id="smpl-cite-body"></div>';
     document.body.appendChild(el);
     el.querySelector(".smpl-cite-close").onclick = closeCiteDrawer;
-    el.addEventListener("click", function (ev) {
-      if (ev.target === el) closeCiteDrawer();
-    });
     return el;
   }
 
@@ -406,29 +435,28 @@
   }
 
   function openCiteDrawer(detail) {
+    if (!isOwnerMode() && !isValidationEnginePage()) return;
     ensureDrawer();
     var body = document.getElementById("smpl-cite-body");
     var el = document.getElementById(DRAWER_ID);
     if (!body || !el) return;
     var rec = detail.record || {};
-    var value = detail.displayValue || rec.value || "—";
     body.innerHTML =
       '<div class="smpl-cite-value">' +
-      esc(value) +
+      esc(detail.displayValue || rec.value || "—") +
       "</div>" +
       '<div class="smpl-cont-grid">' +
       row("Metric", detail.metric || rec.field || "—") +
       row("Period", detail.period || rec.period || closeMonth()) +
-      row("Scenario", detail.scenario || rec.series_kind || "Actual (closed ≤ as-of)") +
+      row("Scenario", detail.scenario || rec.series_kind || "Actual") +
       row("Source type", rec.source_type || "—") +
       row("Table.column", rec.table && rec.column ? rec.table + "." + rec.column : rec.path || "—") +
       row("Formula", rec.formula || rec.formula_id || "—") +
       row("Org", rec.org_id || "—") +
       row("Loaded at", rec.loaded_at || "—") +
       row("Final", rec.is_final == null ? "—" : String(rec.is_final)) +
-      row("Tag", detail.sourceTag || "—") +
       "</div>" +
-      '<p class="smpl-cite-note">Closed-period material KPIs are engine-computed and tagged to _sources. AI narrates from this package — it does not invent the dollars. Chart datapoints and import hard-ID are Phase 4.</p>';
+      '<p class="smpl-cite-note">Owner cite-to-calc. AI narrates from _sources — it does not invent the dollars.</p>';
     el.classList.add("open");
     el.setAttribute("aria-hidden", "false");
   }
@@ -441,6 +469,7 @@
   }
 
   function onCiteClick(ev) {
+    if (!isOwnerMode() && !isValidationEnginePage()) return;
     var t = ev.target;
     if (!t || !t.closest) return;
     var val = t.closest("[data-source], [data-metric].kpi-val, .kpi-val[data-metric]");
@@ -449,21 +478,19 @@
       if (kpi) val = kpi.querySelector(".kpi-val[data-source], .kpi-val[data-metric]");
     }
     if (!val) return;
-    // Ignore plain clicks on buttons / links inside KPIs
     if (t.closest("button, a, .nav-btn")) return;
     var metric = val.getAttribute("data-metric");
     if (!metric) return;
     ev.preventDefault();
     ev.stopPropagation();
     var period = val.getAttribute("data-period") || closeMonth();
-    var rec = resolveRecord(metric, period);
     openCiteDrawer({
       metric: metric,
       period: period,
       displayValue: (val.textContent || "").trim(),
       sourceTag: val.getAttribute("data-source") || "",
-      record: rec,
-      scenario: rec.series_kind || "Actual",
+      record: resolveRecord(metric, period),
+      scenario: "Actual",
     });
   }
 
@@ -483,20 +510,110 @@
     }, 2000);
   }
 
+  function fetchValidationStatus(opts) {
+    opts = opts || {};
+    var oid = orgId();
+    var period = closeMonth();
+    if (!oid) {
+      return Promise.resolve(null);
+    }
+    var url =
+      apiBase() +
+      "/validation-engine/status?organization_id=" +
+      encodeURIComponent(oid) +
+      "&as_of_period=" +
+      encodeURIComponent(period) +
+      (opts.seedDemoQueue ? "&seed_demo_queue=true" : "");
+    return fetch(url, { credentials: "include" })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (data) {
+        if (data) {
+          global.SMPL_VALIDATION_STATUS = data;
+          refreshValidatedStamp();
+        }
+        return data;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function postAllow(allowedBy, notes) {
+    var oid = orgId();
+    if (!oid) return Promise.reject(new Error("no_org"));
+    var url =
+      apiBase() +
+      "/validation-engine/allow?organization_id=" +
+      encodeURIComponent(oid) +
+      "&as_of_period=" +
+      encodeURIComponent(closeMonth());
+    return fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ allowed_by: allowedBy || "owner", notes: notes || null }),
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error(body.detail || body.message || "allow_failed");
+        global.SMPL_VALIDATION_STATUS = body;
+        refreshValidatedStamp();
+        return body;
+      });
+    });
+  }
+
+  function postMapAccount(accountId, mappedTo, mappedBy) {
+    var oid = orgId();
+    if (!oid) return Promise.reject(new Error("no_org"));
+    var url =
+      apiBase() +
+      "/validation-engine/mapping/map?organization_id=" +
+      encodeURIComponent(oid) +
+      "&as_of_period=" +
+      encodeURIComponent(closeMonth());
+    return fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        account_id: accountId,
+        mapped_to: mappedTo,
+        mapped_by: mappedBy || "owner",
+      }),
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error(body.detail || "map_failed");
+        global.SMPL_VALIDATION_STATUS = body;
+        return body;
+      });
+    });
+  }
+
   function install() {
     if (typeof document === "undefined") return;
     function boot() {
-      ensureStrip();
-      ensureDrawer();
-      refreshTrustStrip();
-      document.addEventListener("click", onCiteClick, true);
-      // Refresh strip after hydrate / tie-out
-      var obs = new MutationObserver(function () {
-        refreshTrustStrip();
+      var q = (global.location && global.location.search) || "";
+      if (/[?&]owner=1(?:&|$)/.test(q)) setOwnerMode(true);
+      if (!isValidationEnginePage()) {
+        ensureValidatedStamp();
+        refreshValidatedStamp();
+        fetchValidationStatus();
+      }
+      if (isOwnerMode() || isValidationEnginePage()) {
+        ensureDrawer();
+        document.addEventListener("click", onCiteClick, true);
+      }
+      document.addEventListener("keydown", function (ev) {
+        if (ev.ctrlKey && ev.shiftKey && (ev.key === "V" || ev.key === "v")) {
+          setOwnerMode(!isOwnerMode());
+          ensureDrawer();
+          if (isOwnerMode()) document.addEventListener("click", onCiteClick, true);
+          refreshValidatedStamp();
+        }
       });
-      var badge = document.getElementById("warehouseStatus");
-      if (badge) obs.observe(badge, { childList: true, characterData: true, subtree: true });
-      setInterval(refreshTrustStrip, 15000);
+      setInterval(refreshValidatedStamp, 20000);
     }
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", boot);
@@ -507,7 +624,9 @@
 
   global.SMPLContinuity = {
     renderContinuity: renderContinuity,
+    renderTiesPanel: renderTiesPanel,
     refreshTrustStrip: refreshTrustStrip,
+    refreshValidatedStamp: refreshValidatedStamp,
     openContinuityTab: openContinuityTab,
     openCiteDrawer: openCiteDrawer,
     closeCiteDrawer: closeCiteDrawer,
@@ -515,6 +634,12 @@
     getEvidencePack: getEvidencePack,
     downloadStoredEvidenceHtml: downloadStoredEvidenceHtml,
     trustSummary: trustSummary,
+    fetchValidationStatus: fetchValidationStatus,
+    postAllow: postAllow,
+    postMapAccount: postMapAccount,
+    isOwnerMode: isOwnerMode,
+    setOwnerMode: setOwnerMode,
+    validationHref: validationHref,
     install: install,
   };
 

@@ -29,6 +29,8 @@ pretending the entire integrity framework is done.
 |-------|------|
 | **Import / ingest / close** | Hard fail-closed for production **actuals** (identification). Do not tell customers they can freely export/review when numbers don’t tie — **fix data at import first**, then use the platform freely. |
 | **Export / FINAL promote (client A–F)** | **Advisory**: always produce the deck / promote; download companion HTML report with PASS/WARN. Forecast months after `close_month` (esp. F4 cash) are **soft** — forecast will not fully tie like actuals. |
+| **Validation Engine (owner)** | Where FP&A reviews Ties / Evidence Pack / GL mapping / Monthly Align and records **Allow** — not the executive Board ([validation_engine.md](./validation_engine.md)). Close lock blocks on material open mapping (alidation_engine_mapping_open). |
+| **Board / Platform (exec)** | Validated **outcomes** only — stamp + deep-link to Validation Engine; no A–F homework in the board room. |
 | **AI P15 narrative** | Remains **fail-closed** (claim / attribution / citation) on wired commentary / MD&A / Copilot paths. |
 
 ---
