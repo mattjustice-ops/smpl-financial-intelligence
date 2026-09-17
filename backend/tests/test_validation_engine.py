@@ -102,6 +102,40 @@ def test_upsert_preserves_mapped_status() -> None:
     assert row["amount"] == 12.0
 
 
+def test_unmap_reopens_mapped_account() -> None:
+    org_id = uuid.uuid4()
+    blob = _blob()
+    db = _db_with_blob(blob)
+    ve.upsert_mapping_queue(
+        db,
+        org_id,
+        "2026-06",
+        [
+            {
+                "account_id": "6105",
+                "account_number": "6105",
+                "name": "AI Infrastructure — New",
+                "amount": 42500.0,
+                "statement_hint": "ga",
+                "status": "open",
+            }
+        ],
+    )
+    ve.map_account(db, org_id, "2026-06", account_id="6105", mapped_to="rd", mapped_by="Oops")
+    mapped = ve.get_validation_status(db, org_id, "2026-06")
+    row = next(q for q in mapped["mapping_queue"] if q["account_id"] == "6105")
+    assert row["status"] == "mapped"
+    assert row["mapped_to"] == "rd"
+
+    ve.unmap_account(db, org_id, "2026-06", account_id="6105", unmapped_by="Owner")
+    opened = ve.get_validation_status(db, org_id, "2026-06")
+    row = next(q for q in opened["mapping_queue"] if q["account_id"] == "6105")
+    assert row["status"] == "open"
+    assert row.get("mapped_to") in (None, "")
+    assert opened["mapping_material_open_count"] == 1
+    assert any(d.get("action") == "unmap" for d in (blob.sections_json.get("mapping_decisions") or []))
+
+
 def test_management_lines_include_statements() -> None:
     assert "deferred_revenue" in ve.MANAGEMENT_LINES
     assert "arr_bridge" in ve.MANAGEMENT_LINES

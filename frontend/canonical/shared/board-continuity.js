@@ -477,19 +477,44 @@
     var rows = queue
       .map(function (q) {
         var open = q.status === "open";
+        var selected = open ? q.statement_hint || q.mapped_to || "ga" : q.mapped_to;
         var opts = lines
           .map(function (l) {
             return (
               '<option value="' +
               esc(l) +
               '"' +
-              (q.mapped_to === l ? " selected" : "") +
+              (selected === l ? " selected" : "") +
               ">" +
               esc(l) +
               "</option>"
             );
           })
           .join("");
+        var action = open
+          ? '<select class="ve-map-sel" data-acct="' +
+            esc(q.account_id) +
+            '">' +
+            opts +
+            "</select> " +
+            '<button type="button" class="ai-global-btn ve-map-btn" data-acct="' +
+            esc(q.account_id) +
+            '" data-name="' +
+            esc(q.name) +
+            '" data-acct-num="' +
+            esc(q.account_number || q.account_id) +
+            '" data-amount="' +
+            esc(String(q.amount || 0)) +
+            '">Map</button>'
+          : '<button type="button" class="ai-global-btn ve-unmap-btn" data-acct="' +
+            esc(q.account_id) +
+            '" data-name="' +
+            esc(q.name) +
+            '" data-acct-num="' +
+            esc(q.account_number || q.account_id) +
+            '" data-mapped-to="' +
+            esc(q.mapped_to || "") +
+            '">Undo map</button>';
         return (
           "<tr>" +
           "<td><code>" +
@@ -504,25 +529,17 @@
           "<td>" +
           esc(q.status) +
           (q.mapped_to ? " → " + esc(q.mapped_to) : "") +
+          (open && q.statement_hint ? ' <span class="ve-check-meta">(hint: ' + esc(q.statement_hint) + ")</span>" : "") +
           "</td>" +
           "<td>" +
-          (open
-            ? '<select class="ve-map-sel" data-acct="' +
-              esc(q.account_id) +
-              '">' +
-              opts +
-              "</select> " +
-              '<button type="button" class="ai-global-btn ve-map-btn" data-acct="' +
-              esc(q.account_id) +
-              '">Map</button>'
-            : "—") +
+          action +
           "</td></tr>"
         );
       })
       .join("");
     return (
       '<div class="card-title" style="margin-bottom:12px">Mapping</div>' +
-      '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map to management IS / BS / CFS / ARR before they distort statements.</div>' +
+      '<div class="slide-sub" style="margin-top:0">New GL / dimension accounts since last Allow — map each account to a management line (IS / BS / CFS / ARR). You will confirm before it saves.</div>' +
       '<div class="card"><div class="card-title">Unmapped / needs review</div>' +
       (queue.length
         ? '<table class="ve-map"><thead><tr><th>Acct</th><th>Name</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>' +
@@ -607,8 +624,51 @@
           var sel = body.querySelector('select.ve-map-sel[data-acct="' + id + '"]');
           var line = sel && sel.value;
           if (!line) return;
+          var acctNum = btn.getAttribute("data-acct-num") || id;
+          var name = btn.getAttribute("data-name") || id;
+          var amount = money(btn.getAttribute("data-amount"));
+          var ok = global.confirm(
+            "Map this GL account?\n\n" +
+              "Account: " +
+              acctNum +
+              " — " +
+              name +
+              "\nAmount: " +
+              amount +
+              "\nManagement line: " +
+              line +
+              "\n\nThis changes how the account rolls into Board statements. You can Undo map afterward."
+          );
+          if (!ok) return;
           btn.disabled = true;
           postMapAccount(id, line, "FP&A Owner")
+            .then(function (next) {
+              st.status = next;
+              paintValidationPanel(area);
+            })
+            .catch(function (err) {
+              alert(String(err.message || err));
+              btn.disabled = false;
+            });
+        };
+      });
+      Array.prototype.forEach.call(body.querySelectorAll(".ve-unmap-btn"), function (btn) {
+        btn.onclick = function () {
+          var id = btn.getAttribute("data-acct");
+          var acctNum = btn.getAttribute("data-acct-num") || id;
+          var name = btn.getAttribute("data-name") || id;
+          var mappedTo = btn.getAttribute("data-mapped-to") || "";
+          var ok = global.confirm(
+            "Undo this mapping and re-open the queue item?\n\n" +
+              "Account: " +
+              acctNum +
+              " — " +
+              name +
+              (mappedTo ? "\nCurrently mapped to: " + mappedTo : "")
+          );
+          if (!ok) return;
+          btn.disabled = true;
+          postUnmapAccount(id, "FP&A Owner")
             .then(function (next) {
               st.status = next;
               paintValidationPanel(area);
@@ -873,6 +933,32 @@
     });
   }
 
+  function postUnmapAccount(accountId, unmappedBy) {
+    var oid = orgId();
+    if (!oid) return Promise.reject(new Error("no_org"));
+    var url =
+      apiBase() +
+      "/validation-engine/mapping/unmap?organization_id=" +
+      encodeURIComponent(oid) +
+      "&as_of_period=" +
+      encodeURIComponent(closeMonth());
+    return fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        account_id: accountId,
+        unmapped_by: unmappedBy || "owner",
+      }),
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error(body.detail || "unmap_failed");
+        global.SMPL_VALIDATION_STATUS = body;
+        return body;
+      });
+    });
+  }
+
   function install() {
     if (typeof document === "undefined") return;
     function boot() {
@@ -921,6 +1007,7 @@
     fetchValidationStatus: fetchValidationStatus,
     postAllow: postAllow,
     postMapAccount: postMapAccount,
+    postUnmapAccount: postUnmapAccount,
     isOwnerMode: isOwnerMode,
     setOwnerMode: setOwnerMode,
     validationHref: validationHref,

@@ -18,6 +18,7 @@ from app.services.validation_engine import (
     record_allow,
     revoke_allow,
     seed_demo_mapping_queue_if_empty,
+    unmap_account,
     upsert_mapping_queue,
 )
 
@@ -37,6 +38,11 @@ class MapAccountRequest(BaseModel):
     account_id: str = Field(..., min_length=1, max_length=128)
     mapped_to: str = Field(..., min_length=1, max_length=64)
     mapped_by: str | None = Field(default=None, max_length=256)
+
+
+class UnmapAccountRequest(BaseModel):
+    account_id: str = Field(..., min_length=1, max_length=128)
+    unmapped_by: str | None = Field(default=None, max_length=256)
 
 
 class UpsertQueueRequest(BaseModel):
@@ -145,6 +151,26 @@ def validation_mapping_map(
             account_id=body.account_id,
             mapped_to=body.mapped_to,
             mapped_by=body.mapped_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@validation_engine_router.post("/mapping/unmap")
+def validation_mapping_unmap(
+    body: UnmapAccountRequest,
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    get_organization_or_404(db, organization_id)
+    try:
+        return unmap_account(
+            db,
+            organization_id,
+            as_of_period,
+            account_id=body.account_id,
+            unmapped_by=body.unmapped_by,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

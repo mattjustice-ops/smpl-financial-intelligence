@@ -281,6 +281,64 @@ def map_account(
     return get_validation_status(db, organization_id, as_of_period)
 
 
+def unmap_account(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+    *,
+    account_id: str,
+    unmapped_by: str | None = None,
+) -> dict[str, Any]:
+    """Re-open a mapped/excluded queue item so the owner can remap."""
+    blob = _get_blob(db, organization_id, as_of_period)
+    if blob is None:
+        raise ValueError("no_freeze_pack")
+    sections = _sections(blob)
+    queue = [q for q in (sections.get("mapping_queue") or []) if isinstance(q, dict)]
+    found = False
+    prior = None
+    for q in queue:
+        key = str(q.get("account_id") or q.get("account_number") or "")
+        if key == account_id:
+            found = True
+            prior = q.get("mapped_to")
+            q["status"] = "open"
+            q["mapped_to"] = None
+            q["unmapped_by"] = (unmapped_by or "owner").strip()[:256]
+            q["unmapped_at"] = _utcnow().isoformat()
+            q.pop("mapped_by", None)
+            q.pop("mapped_at", None)
+            break
+    if not found:
+        raise ValueError("account_not_in_queue")
+    decisions = list(sections.get("mapping_decisions") or [])
+    decisions.append(
+        {
+            "account_id": account_id,
+            "action": "unmap",
+            "prior_mapped_to": prior,
+            "unmapped_by": (unmapped_by or "owner").strip()[:256],
+            "unmapped_at": _utcnow().isoformat(),
+            "as_of_period": as_of_period,
+        }
+    )
+    sections["mapping_queue"] = queue
+    sections["mapping_decisions"] = decisions[-200:]
+    # Unmap after Allow invalidates Allow (owner must re-align).
+    if sections.get("validation_allow") and sections["validation_allow"].get("allowed"):
+        sections["validation_allow"] = {
+            "allowed": False,
+            "revoked_at": _utcnow().isoformat(),
+            "revoked_reason": "mapping_changed",
+            "as_of_period": as_of_period,
+        }
+    blob.sections_json = sections
+    blob.updated_at = _utcnow()
+    db.add(blob)
+    db.commit()
+    return get_validation_status(db, organization_id, as_of_period)
+
+
 def seed_demo_mapping_queue_if_empty(
     db: Session,
     organization_id: uuid.UUID,
