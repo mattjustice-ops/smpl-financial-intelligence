@@ -394,6 +394,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 <div class="topbar">
   <div class="logo">SMPL <span>· Budget Engine · FY2027</span></div>
   <div style="display:flex;gap:10px;align-items:center">
+    <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
     <span class="period-badge" id="planBadge">Budget Jan–Dec 2027</span>
     <select id="skinSelect" class="skin-select" onchange="SMPLSkin&&SMPLSkin.apply(this.value,function(){refresh()})" aria-label="Design skin">
       <option value="canvas">Canvas</option>
@@ -428,7 +429,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
   <main class="main" id="main"><div class="slide-sub" style="padding:24px">Loading Budget Engine…</div></main>
 </div>
 <div class="footer">
-  <span id="statusLine">Loading warehouse…</span>
+  <span id="statusLine">Base plan</span>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span id="assumeFp" style="font-size:10px;color:var(--text3);font-family:var(--mono)" title="Canonical lever fingerprint — should match on localhost and /app after hard refresh"></span>
     <button class="act-btn" id="footerResetBtn" onclick="footerReset()">↺ Reset mix from history</button>
@@ -10092,6 +10093,12 @@ async function init() {
   loadBudgetVersions();
   const restored = loadBudgetState();
   const setStatus = (t) => { const el = document.getElementById('statusLine'); if (el) el.textContent = t; };
+  const setWarehouseStatus = (text, tone) => {
+    const el = document.getElementById('warehouseStatus');
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = tone === 'ok' ? 'var(--teal)' : tone === 'warn' ? 'var(--amber)' : 'var(--text2)';
+  };
 
   // Deep-link before first paint so the correct tab shows immediately.
   try {
@@ -10109,6 +10116,7 @@ async function init() {
   seedHcOps();
   if (window.SMPLSkin) window.SMPLSkin.init('skinSelect');
   refresh();
+  setWarehouseStatus('Syncing live warehouse…', 'warn');
   setStatus(restored
     ? 'Levers restored · syncing warehouse…'
     : 'Base plan · syncing warehouse…');
@@ -10130,12 +10138,14 @@ async function init() {
       waitForParent: true,
       parentWaitMs: 1500,
       hooks: { TS_DATA: window.SMPL_DEMO_TS_DATA, WF_TABLE: window.SMPL_DEMO_WF_TABLE },
-      onStatus: setStatus,
+      onStatus: setWarehouseStatus,
       onApplied: function () {
         reseedPlanFromHistory('outlook-hydrate');
         refresh();
       },
     });
+  } else {
+    setWarehouseStatus('Demo data (offline)', 'warn');
   }
 
   reseedPlanFromHistory('init-after-hydrate');
@@ -10144,7 +10154,7 @@ async function init() {
   const dec26 = fy26DecEndingArr();
   if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
     setStatus('FY26 hist Dec ' + fmtM(dec26) + ' ≠ Jan lock ' + fmtM(BOP_LOCK) + ' — check outlook hydrate');
-  } else if (!document.getElementById('statusLine')?.textContent?.startsWith('Live')) {
+  } else {
     setStatus(restored
       ? 'Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)'
       : 'Base plan · mix seeded from +' + MIX_SEED_YOY_PCT + '% (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)');

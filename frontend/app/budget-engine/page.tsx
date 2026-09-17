@@ -26,7 +26,7 @@ function BudgetEngineInner() {
   }
 
   const tabQ = tab ? `&tab=${encodeURIComponent(tab)}` : "";
-  const src = `/budget-engine/index.html?embedded=1&v=31${tabQ}`;
+  const src = `/budget-engine/index.html?embedded=1&v=32${tabQ}`;
 
   return (
     <EmbeddedModuleChrome

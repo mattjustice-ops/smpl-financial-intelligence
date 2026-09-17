@@ -184,6 +184,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 <div class="topbar">
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· Rolling Forecast Engine</span></div>
   <div class="topbar-right">
+    <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
     <div class="hz-tabs" id="hzTabs">
       <button class="hz-tab" onclick="setHz('3p9',this)">3 + 9</button>
       <button class="hz-tab on" onclick="setHz('6p6',this)">6 + 6</button>
@@ -220,7 +221,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 <div id="slideArea" style="flex:1;overflow-y:auto;min-height:0"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Rolling Forecast Engine · <span id="warehouseStatus">Loading warehouse…</span></div>
+  <div class="footer-note">SMPL · Rolling Forecast Engine</div>
   <div style="display:flex;gap:8px">
     <button class="act-btn outline" onclick="saveVersion('draft')">💾 Save Draft</button>
     <button class="act-btn success" onclick="saveVersion('final')">✓ Promote to Final</button>

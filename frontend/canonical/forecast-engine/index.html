@@ -135,6 +135,18 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 /* gap alert */
 .gap-alert{background:var(--amber-light);border:0.5px solid var(--amber);border-radius:var(--r);padding:10px 13px;margin-top:12px;font-size:11.5px;color:var(--text2)}
 .gap-alert strong{color:var(--amber);font-family:var(--mono)}
+/* demo loop / Plan Assurance callout */
+.pa-loop{border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r) var(--r) 0;background:var(--bg2);padding:12px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.pa-loop-copy{font-size:12px;color:var(--text2);line-height:1.5;max-width:52rem}
+.pa-loop-copy strong{color:var(--text);font-weight:500}
+.pa-loop a,.pa-link{font-size:11.5px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
+.pa-loop a:hover,.pa-link:hover{opacity:.85}
+.gtm-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+@media(max-width:900px){.gtm-strip{grid-template-columns:1fr 1fr}}
+.gtm-tile{border:0.5px solid var(--border);border-radius:var(--r);background:var(--bg2);padding:10px 12px}
+.gtm-tile-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);font-weight:500;margin-bottom:4px}
+.gtm-tile-val{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--text);letter-spacing:-.02em}
+.gtm-tile-sub{font-size:10px;color:var(--text3);margin-top:3px;line-height:1.4}
 /* tie badge */
 .tie-ok{background:var(--teal-light);color:var(--teal);font-size:9.5px;padding:2px 7px;border-radius:10px;font-weight:500;margin-left:6px}
 /* sensitivity table */
@@ -172,6 +184,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 <div class="topbar">
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· Rolling Forecast Engine</span></div>
   <div class="topbar-right">
+    <span class="period-badge" id="warehouseStatus">Loading warehouse…</span>
     <div class="hz-tabs" id="hzTabs">
       <button class="hz-tab" onclick="setHz('3p9',this)">3 + 9</button>
       <button class="hz-tab on" onclick="setHz('6p6',this)">6 + 6</button>
@@ -199,7 +212,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
   <button class="nav-btn" onclick="showTab('is',this)">Income Statement</button>
   <button class="nav-btn" onclick="showTab('cashflow',this)">Cash Flow</button>
   <button class="nav-btn" onclick="showTab('bs',this)">Balance Sheet</button>
-  <button class="nav-btn" onclick="showTab('pipeline',this)">Pipeline Detail</button>
+  <button class="nav-btn" onclick="showTab('pipeline',this)">GTM / Pipeline</button>
   <button class="nav-btn" onclick="showTab('headcount',this)">Headcount</button>
   <button class="nav-btn" onclick="showTab('sensitivity',this)">Sensitivity</button>
   <button class="nav-btn" onclick="showTab('versions',this)">Versions</button>
@@ -208,7 +221,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 <div id="slideArea" style="flex:1;overflow-y:auto;min-height:0"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Rolling Forecast Engine · <span id="warehouseStatus">Loading warehouse…</span></div>
+  <div class="footer-note">SMPL · Rolling Forecast Engine</div>
   <div style="display:flex;gap:8px">
     <button class="act-btn outline" onclick="saveVersion('draft')">💾 Save Draft</button>
     <button class="act-btn success" onclick="saveVersion('final')">✓ Promote to Final</button>
@@ -276,6 +289,19 @@ function getOutlookCFS(p){
   if(!window.SMPLOutlook) return null;
   var row=window.SMPLOutlook.getWarehouseCFS(p,ALL_P,getCloseMonth());
   return outlookRowHasValues(row)?row:null;
+}
+
+/** Loaded warehouse CFS row (Actual or Forecast) with beg/end cash from CSV model. */
+function cfsFromWarehouse(p){
+  var wh=getOutlookCFS(p);
+  if(!wh||wh.end_cash==null) return null;
+  var beg=wh.beg_cash!=null?wh.beg_cash:wh.beginning_cash;
+  var end=wh.end_cash!=null?wh.end_cash:wh.ending_cash;
+  if(end==null) return null;
+  var net=wh.net_change!=null?wh.net_change:(beg!=null?end-beg:null);
+  var row=Object.assign({},wh,{beg_cash:beg,end_cash:end});
+  if(net!=null) row.net_change=net;
+  return row;
 }
 
 function getOutlookBS(p){
@@ -402,11 +428,13 @@ function getDisplayIS(p){
 }
 
 function getDisplayBS(p){
+  var wh=getOutlookBS(p);
+  if(wh) return enrichForecastBS(wh,cfsFromWarehouse(p));
   if(isForecastPeriod(p)){
     var r=getResults()[p];
     return r&&r.bs?enrichForecastBS(r.bs,r.cfs):null;
   }
-  return getOutlookBS(p)||actualBsFromDemoTs(p)||actualBsFromSrc(p);
+  return actualBsFromDemoTs(p)||actualBsFromSrc(p);
 }
 
 var _cfsChainCache=null;
@@ -786,19 +814,19 @@ function buildCFSChain(cfg, resOverride){
   var res=resOverride||getResults();
   var allP=[...cfg.act,...cfg.fc];
   var chain={};
-  var prev_end=SRC.actuals[ACT_P[0]].beginning_cash;
+  var prev_end=null;
   allP.forEach(function(p){
+    var whRow=cfsFromWarehouse(p);
+    if(whRow){
+      if(whRow.beg_cash==null&&prev_end!=null) whRow.beg_cash=prev_end;
+      if(whRow.net_change==null&&whRow.beg_cash!=null) whRow.net_change=whRow.end_cash-whRow.beg_cash;
+      chain[p]=whRow;
+      prev_end=whRow.end_cash;
+      return;
+    }
     if(p<=getCloseMonth()){
-      var wh=getOutlookCFS(p);
-      if(wh&&wh.end_cash!=null){
-        var beg=prev_end;
-        var end=wh.end_cash;
-        var net=end-beg;
-        prev_end=end;
-        chain[p]=Object.assign({},wh,{beg_cash:beg,net_change:net,end_cash:end});
-        return;
-      }
       var a=SRC.actuals[p];
+      if(!a) return;
       var eb=(a.gross_profit||0)-((a.sm||0)+(a.rd||0)+(a.ga||0));
       var pt=eb-(a.da||0)-(a.interest||0);
       var tax=pt>0?Math.round(pt*0.30):0;
@@ -808,7 +836,7 @@ function buildCFSChain(cfg, resOverride){
       var cfo=ni+a.da+sbc+car+cdr+cap+pre;
       var capex=a.cfi;
       var net=cfo+capex;
-      var beg=prev_end;
+      var beg=prev_end!=null?prev_end:(a.beginning_cash||0);
       var end=beg+net;
       prev_end=end;
       chain[p]={beg_cash:beg,ni:ni,da:a.da,sbc:sbc,chg_ar:car,chg_dr:cdr,
@@ -816,16 +844,20 @@ function buildCFSChain(cfg, resOverride){
                 cff:0,net_change:net,end_cash:end,is_actual:true};
     } else {
       var fc=res[p]&&res[p].cfs?res[p].cfs:null;
-      if(fc){
-        var beg=prev_end;
-        var net=fc.cfo+fc.cfi;
-        var end=beg+net;
-        var row={};
-        for(var k in fc) row[k]=fc[k];
-        row.beg_cash=beg; row.net_change=net; row.end_cash=end;
-        chain[p]=row;
-        prev_end=end;
+      if(!fc) return;
+      if(!_scenarioDirty&&leversAtDefault()&&fc.end_cash!=null&&fc.beg_cash!=null){
+        chain[p]=Object.assign({},fc);
+        prev_end=fc.end_cash;
+        return;
       }
+      var beg=prev_end!=null?prev_end:(fc.beg_cash||0);
+      var net=fc.cfo+(fc.cfi||0)+(fc.cff||0);
+      var end=beg+net;
+      var row={};
+      for(var k in fc) row[k]=fc[k];
+      row.beg_cash=beg; row.net_change=net; row.end_cash=end;
+      chain[p]=row;
+      prev_end=end;
     }
   });
   return chain;
@@ -855,7 +887,10 @@ function updLabels(){
   if(cap) document.getElementById('v-capex').textContent='$'+cap.value+'K';
 }
 
-function refresh(){markScenarioDirty();updLabels();showTab(curTab);}
+function refresh(opts){
+  if(!opts||!opts.skipDirty) markScenarioDirty();
+  updLabels();showTab(curTab);
+}
 
 // \u2500\u2500 TABS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function showTab(name,btn){
@@ -982,6 +1017,35 @@ function toggleReq(id){
 }
 
 // \u2500\u2500 OVERVIEW \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function paAssuranceHref(){
+  return '/budget-engine?tab=analytics';
+}
+
+function buildGtmHorizonSummary(){
+  const lv=getLevers();
+  let wtdNb=0,wtdExp=0,grossRen=0,wtdRen=0,dealN=0,renN=0;
+  FC_P.forEach(p=>{
+    const opps=SRC.opp_pipeline[p]||{};
+    const nb=opps['New Business']||{};
+    const exp=opps['Expansion']||{};
+    wtdNb+=(nb.weighted||0)*(lv.nb||1);
+    wtdExp+=(exp.weighted||0)*(lv.exp||1);
+    dealN+=(nb.count||0)+(exp.count||0);
+    const ren=SRC.renewals[p]||{};
+    grossRen+=ren.arr||0;
+    wtdRen+=(ren.weighted||0)*(1+(lv.ren_adj||0));
+    renN+=ren.count||0;
+  });
+  const closeArr=getForecastARR(getCloseMonth());
+  const bop=closeArr&&closeArr.arr_eop!=null?closeArr.arr_eop:0;
+  // Dec target = dashed "Base plan" in buildOverviewCharts: 83.445+(i+1)*2 $M.
+  const decBasePlanM=+(83.445+FC_P.length*2).toFixed(2);
+  const needNn=Math.max(0,decBasePlanM*1e6-bop);
+  const coverPool=wtdNb+wtdExp;
+  const coverX=needNn>0?coverPool/needNn:null;
+  return {wtdNb,wtdExp,grossRen,wtdRen,dealN,renN,needNn,coverX,coverPool};
+}
+
 function renderOverview(area){
   const res=getResults();
   const lv=getLevers();
@@ -990,11 +1054,18 @@ function renderOverview(area){
   const decBasePlanM=+(83.445+FC_P.length*2).toFixed(2);
   const target=decBasePlanM*1e6;
   const gap=dec.arr.arr_eop-target;
+  const gtm=buildGtmHorizonSummary();
   let gapHtml='';
+  let verdictBig='';
+  let verdictTone='var(--accent)';
   if(Math.abs(gap)>100000){
     if(gap>=0){
+      verdictBig=`Tracking <strong>${fV(gap)}</strong> ahead of Dec base plan (${fM(target,1)}).`;
+      verdictTone='var(--teal)';
       gapHtml=`<div class="gap-alert"><strong>${fV(gap)}</strong> vs base plan (${fM(target,1)}). Tracking ahead of plan.</div>`;
     } else {
+      verdictBig=`Pipeline implies <strong>${fM(dec.arr.arr_eop,1)}</strong> Dec ARR — <strong>${fV(gap)}</strong> vs base plan (${fM(target,1)}).`;
+      verdictTone='var(--amber)';
       let sumNb=0,sumGrossRen=0,sumRenW=0;
       FC_P.forEach(p=>{
         sumNb+=(res[p]?.arr?.arr_nb)||0;
@@ -1019,10 +1090,17 @@ function renderOverview(area){
       const closeLine=tips.length?` To close across remaining forecast months: ${tips.join(' or ')}.`:'';
       gapHtml=`<div class="gap-alert"><strong>${fV(gap)}</strong> vs base plan (${fM(target,1)}). Pipeline implies ${fM(dec.arr.arr_eop,1)}.${closeLine}</div>`;
     }
+  } else {
+    verdictBig=`Dec ARR tracks base plan at <strong>${fM(dec.arr.arr_eop,1)}</strong>.`;
   }
+  const coverLbl=gtm.coverX!=null?gtm.coverX.toFixed(1)+'×':'—';
   area.innerHTML=`<div class="slide">
-    <div class="slide-title">Rolling Forecast . ${hz.replace('p','+')} . ${HORIZON[hz].label}</div>
-    <div class="slide-sub">Bottom-up from Forecast_opportunities.csv (195 deals) + Forecast_renewal_pipeline.csv (385 renewals) + ${Object.values(reqActive).filter(Boolean).length}/17 open reqs</div>
+    <div class="slide-title">Overview · ${hz.replace('p','+')} · ${HORIZON[hz].label}</div>
+    <div class="slide-sub">Close path from opportunities + renewals. Stress the FY operating plan in Budget Analytics — not a second forecast.</div>
+    <div class="pa-loop" style="border-left-color:${verdictTone}">
+      <div class="pa-loop-copy">${verdictBig} Weighted NB+expansion cover ${coverLbl} of remaining net-new to Dec plan · ${Object.values(reqActive).filter(Boolean).length}/17 open reqs active.</div>
+      <a class="pa-link" href="${paAssuranceHref()}" target="_top">Plan Assurance →</a>
+    </div>
     ${buildKPIs(res)}
     <div>
         <div class="two-col" style="margin-bottom:12px">
@@ -1572,16 +1650,27 @@ function renderBS(area){
 
 // \u2500\u2500 PIPELINE DETAIL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function renderPipeline(area){
-  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
+  const gtm=buildGtmHorizonSummary();
+  const coverLbl=gtm.coverX!=null?gtm.coverX.toFixed(1)+'×':'—';
   area.innerHTML=`<div class="slide">
-    <div class="slide-title">Pipeline Detail</div>
-    <div class="slide-sub">Deal-level view from Forecast_opportunities.csv (195 deals) + Forecast_renewal_pipeline.csv (385 renewals)</div>
+    <div class="slide-title">GTM / Pipeline</div>
+    <div class="slide-sub">Deal-level coverage from opportunities + renewals — same pool that drives the Overview close path. Full FY GTM / CPL stress lives in Budget Engine.</div>
+    <div class="pa-loop">
+      <div class="pa-loop-copy"><strong>GTM read:</strong> ${fM(gtm.coverPool,1)} weighted NB+expansion vs ${fM(gtm.needNn,1)} remaining to Dec base plan (${coverLbl} cover). Renewals: ${fM(gtm.wtdRen,1)} weighted of ${fM(gtm.grossRen,1)} gross.</div>
+      <a class="pa-link" href="${paAssuranceHref()}" target="_top">Plan Assurance →</a>
+    </div>
+    <div class="gtm-strip">
+      <div class="gtm-tile"><div class="gtm-tile-lbl">Coverage vs Dec plan</div><div class="gtm-tile-val">${coverLbl}</div><div class="gtm-tile-sub">Weighted NB+exp / remaining net-new</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">Weighted NB + expansion</div><div class="gtm-tile-val">${fM(gtm.coverPool,1)}</div><div class="gtm-tile-sub">${gtm.dealN} deals · lever-adjusted</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">Renewal pipeline</div><div class="gtm-tile-val">${fM(gtm.wtdRen,1)}</div><div class="gtm-tile-sub">${gtm.renN} renewals · ${fM(gtm.grossRen,1)} gross</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">Remaining to Dec plan</div><div class="gtm-tile-val">${fM(gtm.needNn,1)}</div><div class="gtm-tile-sub">From close EOP ARR to Dec base</div></div>
+    </div>
     <div class="snav" id="pipeTabs">
       ${FC_P.map((p,i)=>`<button class="snav-btn ${i===0?'on':''}" onclick="showPipeMonth('${p}',this)">${MO12[parseInt(p.slice(5))-1]}</button>`).join('')}
     </div>
     <div id="pipeContent"></div>
   </div>`;
-  showPipeMonth('2026-06');
+  showPipeMonth(FC_P[0]||'2026-07');
 }
 
 function showPipeMonth(p, btn){
@@ -2025,7 +2114,8 @@ updLabels();
         if (window.SMPLProvenance && typeof window.SMPLProvenance.ingestOutlook === 'function') {
           window.SMPLProvenance.ingestOutlook(data);
         }
-        if (typeof refresh === 'function') refresh();
+        if (typeof invalidateCfsChain === 'function') invalidateCfsChain();
+        if (typeof refresh === 'function') refresh({ skipDirty: true });
         if (window.SMPLProvenance) {
           try {
             window.SMPLProvenance.annotateDom(document);
