@@ -714,6 +714,7 @@
     setOwnerMode(true);
     var st = veState(area);
     area.innerHTML =
+      '<div class="slide" style="padding:20px 24px 32px">' +
       '<div class="slide-title">Validation Engine</div>' +
       '<div class="slide-sub">Owner workshop — ties, mapping, Monthly Align, and Allow. Leadership Board stays outcomes-only.</div>' +
       '<div class="subnav" id="veBoardNav">' +
@@ -730,7 +731,8 @@
       (st.panel === "align" ? " on" : "") +
       '" data-panel="align">4 · Monthly Align</button>' +
       "</div>" +
-      '<div id="veBoardBody" style="margin-top:8px"></div>';
+      '<div id="veBoardBody" style="margin-top:8px"></div>' +
+      "</div>";
     var nav = area.querySelector("#veBoardNav");
     if (nav) {
       nav.addEventListener("click", function (ev) {
