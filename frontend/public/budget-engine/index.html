@@ -439,7 +439,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="/shared/smpl-skin.js?v=5"></script>
+<script src="/shared/smpl-skin.js?v=6"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-demo-seed.js?v=2"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
@@ -8244,6 +8244,11 @@ function buildBudgetAssurancePacket() {
   const fyRev = BUD_P.reduce((s, p) => s + is[p].revenue, 0);
   const fyEbitda = BUD_P.reduce((s, p) => s + is[p].ebitda, 0);
   const fyNn = BUD_P.reduce((s, p) => s + arr[p].nn, 0);
+  const fyNb = BUD_P.reduce((s, p) => s + (arr[p].nb || 0), 0);
+  const fyExp = BUD_P.reduce((s, p) => s + (arr[p].exp || 0), 0);
+  const fyReact = BUD_P.reduce((s, p) => s + (arr[p].react || 0), 0);
+  const fyCont = BUD_P.reduce((s, p) => s + (arr[p].cont || 0), 0);
+  const fyChurn = BUD_P.reduce((s, p) => s + (arr[p].churn || 0), 0);
   const fyMkt = BUD_P.reduce((s, p) => s + gtm[p].spend, 0);
   const fyMql = BUD_P.reduce((s, p) => s + gtm[p].mqls, 0);
   const fyChMql = BUD_P.reduce((s, p) => s + (gtm[p].channelMqls || 0), 0);
@@ -8277,6 +8282,11 @@ function buildBudgetAssurancePacket() {
     decArr,
     targetArr,
     fyNn,
+    fyNb,
+    fyExp,
+    fyReact,
+    fyCont,
+    fyChurn,
     fyRev,
     fyEbitda,
     endCash,
@@ -9632,9 +9642,13 @@ function assurancePacketToCommentaryInputs(packet) {
   const notes = [
     'BUDGET ENGINE Plan Assurance — FY operating plan (not rolling forecast).',
     `YoY ARR growth target ${p.yoyGrowthPct.toFixed(1)}%.`,
-    `Dec cash floor ${Math.round(p.cashFloor)}.`,
+    `ARR bridge (annual $): BOP ${Math.round(p.bopArr)} + NB ${Math.round(p.fyNb || 0)} + Exp ${Math.round(p.fyExp || 0)} + React ${Math.round(p.fyReact || 0)} − Cont ${Math.round(p.fyCont || 0)} − Churn ${Math.round(p.fyChurn || 0)} = NN ${Math.round(p.fyNn)} → Dec ${Math.round(p.decArr)}.`,
+    `Avg GRR ${p.avgGrr != null ? (p.avgGrr * 100).toFixed(1) + '%' : 'n/a'}; min month GRR ${p.minGrr != null ? (p.minGrr * 100).toFixed(1) + '%' : 'n/a'}.`,
+    `Dec ending cash ${Math.round(p.endCash)} vs floor ${Math.round(p.cashFloor)} (liquidity cushion — NOT collections).`,
+    `Do NOT say churn/expansion/contraction are zero unless the ARR bridge lines above are literally 0.`,
+    `Do NOT treat ending cash as collections or compute collections/revenue ratios from ending cash.`,
     `Risks: ${risks.filter(r => r.severity !== 'ok').map(r => `[${r.severity}] ${r.title}: ${r.detail}`).join(' | ') || 'none'}`,
-    'Write a concise CFO status of whether this plan is coherent and what threatens it. Do not invent metrics.',
+    'Write a concise CFO status of whether this plan is coherent and what threatens it. Cite only provided numbers. Do not invent metrics.',
   ].join('\n');
   return {
     period_label: p.period_label,
@@ -9642,11 +9656,16 @@ function assurancePacketToCommentaryInputs(packet) {
     currency: 'USD',
     mrr_waterfall: {
       period: `${BUDGET_YEAR}-12-01`,
+      // Schema is MRR-shaped; values are FY ARR components / 12 so the bridge stays coherent.
       beginning_mrr: p.bopArr / 12,
-      new_mrr: p.fyNn / 12,
+      new_mrr: (p.fyNb || 0) / 12,
+      expansion_mrr: (p.fyExp || 0) / 12,
+      reactivation_mrr: (p.fyReact || 0) / 12,
+      contraction_mrr: (p.fyCont || 0) / 12,
+      churn_mrr: (p.fyChurn || 0) / 12,
       ending_mrr: p.decArr / 12,
       nrr: null,
-      grr: null,
+      grr: p.avgGrr,
     },
     revenue_forecast: {
       period_start: `${BUDGET_YEAR}-01-01`,
@@ -9655,19 +9674,15 @@ function assurancePacketToCommentaryInputs(packet) {
       growth_rate: p.yoyGrowthPct / 100,
       method: 'budget_engine_revenue_bridge',
     },
-    cash_forecast: {
-      period_start: `${BUDGET_YEAR}-01-01`,
-      period_end: `${BUDGET_YEAR}-12-31`,
-      forecasted_collections: p.endCash,
-      open_ar_balance: null,
-    },
+    // Omit cash_forecast: ending cash is not collections; stuffing it here made the model invent DSO risk.
     sales_efficiency: {
-      new_bookings_arr: p.fyNn,
+      new_bookings_arr: p.fyNb || p.fyNn,
       sales_marketing_expense: p.fyMkt,
     },
     kpi_trends: [{
       period_label: `FY${BUDGET_YEAR}`,
       arr: p.decArr,
+      grr: p.avgGrr,
       pipeline_coverage: p.pipelineCoverage,
     }],
     additional_notes: notes,
