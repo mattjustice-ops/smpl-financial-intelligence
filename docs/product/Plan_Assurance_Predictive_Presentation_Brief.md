@@ -2,8 +2,24 @@
 
 > **Purpose:** Shareable inventory of what Budget Engine Plan Assurance does today, how it is presented, and open design space for **outrageous, high-trust guardrail outputs**.  
 > **Audience:** Product, design, FP&A advisors, anyone brainstorming “what should this feel like when the model warns you.”  
-> **Status:** Live in Budget Engine Overview (`/budget-engine` → Overview). Framework ambitions beyond this surface: [SMPL_Predictive_Planning_Intelligence_Framework.md](./SMPL_Predictive_Planning_Intelligence_Framework.md).  
-> **Last updated:** 2026-09-04
+> **Status:** Live in Budget Engine **Analytics** (`/budget-engine` → Analytics). Framework ambitions beyond this surface: [SMPL_Predictive_Planning_Intelligence_Framework.md](./SMPL_Predictive_Planning_Intelligence_Framework.md).  
+> **Last updated:** 2026-09-18
+
+---
+
+## Integrity (non-negotiable)
+
+Customer-facing Analytics Generate must **succeed with engine-true copy**.
+
+| Rule | Behavior |
+|------|----------|
+| Source of truth | Deterministic lane narrative from the live formula graph (Status includes FY NB / Exp / React / Cont / Churn) |
+| Generate | Constrained polish of that SoT only — no freeform analysis from thin generic schemas |
+| Verify | Every `$` / `%` / `Nx` in polished text must match the packet allowlist; structural bans block “zero churn” when the bridge has churn |
+| On miss | Keep engine SoT seamlessly (Generate still succeeds; no customer-facing rejection stamp) |
+| Guard | `npm run verify:plan-assurance` (also on `prebuild`) fails if adapters regress |
+
+Refresh always shows SoT. Generate may improve wording only when claims verify.
 
 ---
 
@@ -32,7 +48,7 @@ Layer separation (non-negotiable):
 
 | Surface | Location | Role |
 |---------|----------|------|
-| **Plan Assurance panel** | Budget Engine → **Overview** (top of tab) | Primary predictive / feasibility UX today |
+| **Plan Assurance panel** | Budget Engine → **Analytics** (also referenced from Overview) | Primary predictive / feasibility UX today |
 | **Operating visuals** | Same Overview, below Assurance | KPI strip + YoY charts (context, not the guardrail itself) |
 | **Levers** | Left sidebar across tabs | The knobs stress tests mutate (growth, CPL, attrition, pipeline, cash floor, …) |
 | **Commentary API** | `POST /api/v1/commentary/generate` | Optional LLM narration over structured packets (Anthropic if keyed; else deterministic fallback) |

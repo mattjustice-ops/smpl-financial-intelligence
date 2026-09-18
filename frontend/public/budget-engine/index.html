@@ -8447,10 +8447,18 @@ function buildDeterministicAssuranceNarrative(packet, risks) {
     `with FY net new ${fmtM(p.fyNn)}, FY revenue ${fmtM(p.fyRev)}, and FY EBITDA ${fmtM(p.fyEbitda)}.`,
   );
   lines.push(
+    `ARR bridge (FY): NB ${fmtM(p.fyNb || 0)}, expansion ${fmtM(p.fyExp || 0)}, ` +
+    `reactivation ${fmtM(p.fyReact || 0)}, contraction ${fmtM(p.fyCont || 0)}, ` +
+    `churn ${fmtM(p.fyChurn || 0)}` +
+    (p.avgGrr != null ? `; avg GRR ${(p.avgGrr * 100).toFixed(1)}%` : '') +
+    (p.minGrr != null ? ` (min month ${(p.minGrr * 100).toFixed(1)}%)` : '') +
+    '.',
+  );
+  lines.push(
     `GTM sizes ${fmtN(p.fyMql)} MQLs on ${fmtM(p.fyMkt)} program spend at ${p.pipelineCoverage.toFixed(1)}× pipeline cover. ` +
     `Sales ends at ${fmtN(p.salesEnd)} NB AEs / ${fmtN(p.csEnd)} CS ` +
     `(${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% hires). ` +
-    `HC ${fmtN(p.janHc)} → ${fmtN(p.decHc)}. Dec cash ${fmtM(p.endCash)} vs floor ${fmtM(p.cashFloor)}.`,
+    `HC ${fmtN(p.janHc)} → ${fmtN(p.decHc)}. Dec ending cash ${fmtM(p.endCash)} vs floor ${fmtM(p.cashFloor)} (liquidity cushion, not collections).`,
   );
   if (highs.length) {
     lines.push(`Priority risks: ${highs.map(x => x.title).join('; ')}.`);
@@ -8483,13 +8491,13 @@ function buildDeterministicHistoryNarrative(hist) {
   const pp = (r) => r == null ? '—' : `${(r * 100).toFixed(1)}%`;
   const lines = [];
   lines.push(
-    `Outlier review vs FY26 (${h.prior26.source}): ending ARR ${fmtM(h.prior26.decArr)} → ${fmtM(h.budget.decArr)} (${pp(d.arrYoyBudget)}), ` +
+    `Outlier review vs FY26 prior year (${h.prior26.source}): ending ARR ${fmtM(h.prior26.decArr)} → FY27B plan ${fmtM(h.budget.decArr)} (${pp(d.arrYoyBudget)}), ` +
     `net new ${fmtM(h.prior26.fyNn)} → ${fmtM(h.budget.fyNn)}, revenue ${fmtM(h.prior26.fyRev)} → ${fmtM(h.budget.fyRev)} (${pp(d.revYoyBudget)}).`,
   );
   lines.push(
     `Prior-year ARR growth was ${pp(d.arrYoyPrior)} (FY25 ${fmtM(h.prior25.decArr)} → FY26). ` +
     `Cash ${fmtM(h.prior26.decCash)} → ${fmtM(h.budget.decCash)}; EBITDA ${fmtM(h.prior26.fyEbitda)} → ${fmtM(h.budget.fyEbitda)}; ` +
-    `marketing ${fmtM(h.prior26.fyMkt)} → ${fmtM(h.budget.fyMkt)}.`,
+    `marketing ${fmtM(h.prior26.fyMkt)} → ${fmtM(h.budget.fyMkt)}. This is prior year vs plan — not actual vs forecast.`,
   );
   const flags = (h.findings || []).filter(f => f.severity === 'high' || f.severity === 'medium');
   const infos = (h.findings || []).filter(f => f.severity === 'info' && f.lens !== 'meta');
@@ -8508,13 +8516,15 @@ function historyPacketToCommentaryInputs(hist) {
   const h = hist || buildAssuranceHistoryPacket();
   const notes = [
     'BUDGET ENGINE Plan Assurance — HISTORY / outlier review lane.',
-    'Scan FY27 Budget vs FY26 and FY25 for YoY step-ups, intra-year H1/H2 and quarterly shape outliers, and cross-metric inversions. Cite only provided numbers.',
-    `FY26 Dec ARR ${Math.round(h.prior26.decArr)}, FY27B Dec ARR ${Math.round(h.budget.decArr)}, ARR YoY ${(h.deltas.arrYoyBudget * 100).toFixed(1)}%.`,
-    `Prior ARR YoY ${(h.deltas.arrYoyPrior != null ? h.deltas.arrYoyPrior * 100 : 0).toFixed(1)}%.`,
-    `FY26 rev ${Math.round(h.prior26.fyRev)}, FY27B rev ${Math.round(h.budget.fyRev)}.`,
-    `FY26 ebitda ${Math.round(h.prior26.fyEbitda)}, FY27B ebitda ${Math.round(h.budget.fyEbitda)}.`,
-    `FY26 cash ${Math.round(h.prior26.decCash)}, FY27B cash ${Math.round(h.budget.decCash)}.`,
-    `FY26 mkt ${Math.round(h.prior26.fyMkt)}, FY27B mkt ${Math.round(h.budget.fyMkt)}.`,
+    'Compare FY27B plan to FY26 and FY25 prior-year operating shape. Do NOT call FY26 "actual" or FY27B "forecast" — this is prior year vs plan.',
+    'Scan for YoY step-ups, intra-year H1/H2 and quarterly shape outliers, and cross-metric inversions. Cite only provided numbers.',
+    `FY25 prior-year Dec ARR ${Math.round(h.prior25.decArr)}.`,
+    `FY26 prior-year Dec ARR ${Math.round(h.prior26.decArr)}, FY27B plan Dec ARR ${Math.round(h.budget.decArr)}, ARR YoY plan vs FY26 ${(h.deltas.arrYoyBudget * 100).toFixed(1)}%.`,
+    `Prior-year ARR YoY (FY25→FY26) ${(h.deltas.arrYoyPrior != null ? h.deltas.arrYoyPrior * 100 : 0).toFixed(1)}%.`,
+    `FY26 prior-year rev ${Math.round(h.prior26.fyRev)}, FY27B plan rev ${Math.round(h.budget.fyRev)}.`,
+    `FY26 prior-year ebitda ${Math.round(h.prior26.fyEbitda)}, FY27B plan ebitda ${Math.round(h.budget.fyEbitda)}.`,
+    `FY26 prior-year cash ${Math.round(h.prior26.decCash)}, FY27B plan cash ${Math.round(h.budget.decCash)}.`,
+    `FY26 prior-year mkt ${Math.round(h.prior26.fyMkt)}, FY27B plan mkt ${Math.round(h.budget.fyMkt)}.`,
     `Findings: ${(h.findings || []).filter(f => f.severity !== 'ok').map(f => `[${f.severity}|${f.lens || '?'}] ${f.title}: ${f.detail}`).join(' | ')}`,
     'Explain what is unusual about this operating plan vs history and within the year. Do not invent metrics or bridges.',
   ].join('\n');
@@ -8523,27 +8533,9 @@ function historyPacketToCommentaryInputs(hist) {
     organization_name: 'SMPL',
     currency: 'USD',
     kpi_trends: [
-      { period_label: 'FY25', arr: h.prior25.decArr },
-      { period_label: 'FY26', arr: h.prior26.decArr },
-      { period_label: `FY${BUDGET_YEAR}B`, arr: h.budget.decArr, pipeline_coverage: h.plan.pipelineCoverage },
-    ],
-    actuals_vs_forecast: [
-      {
-        metric: 'ending_arr',
-        actual: h.prior26.decArr,
-        forecast: h.budget.decArr,
-        variance_absolute: h.budget.decArr - h.prior26.decArr,
-        variance_percent: h.deltas.arrYoyBudget,
-        direction: h.budget.decArr >= h.prior26.decArr ? 'favorable' : 'unfavorable',
-      },
-      {
-        metric: 'fy_revenue',
-        actual: h.prior26.fyRev,
-        forecast: h.budget.fyRev,
-        variance_absolute: h.budget.fyRev - h.prior26.fyRev,
-        variance_percent: h.deltas.revYoyBudget,
-        direction: 'neutral',
-      },
+      { period_label: 'FY25 prior year', arr: h.prior25.decArr },
+      { period_label: 'FY26 prior year', arr: h.prior26.decArr },
+      { period_label: `FY${BUDGET_YEAR}B plan`, arr: h.budget.decArr, pipeline_coverage: h.plan.pipelineCoverage },
     ],
     additional_notes: notes,
   };
@@ -8551,7 +8543,7 @@ function historyPacketToCommentaryInputs(hist) {
 
 function buildDeterministicScenarioNarrative(packet, hist, risks) {
   const suite = STATE._assureScenarioSuite;
-  if (suite && suite.narrative) return suite.narrative;
+  if (suite && suite.base) return buildScenarioNarrativeFromSuite(suite);
   const p = packet || buildBudgetAssurancePacket();
   return `Run Refresh or Generate scenarios to stress the closed formula graph against Dec ARR ${fmtM(p.decArr)}, cash floor ${fmtM(p.cashFloor)}, and sales cover.`;
 }
@@ -9549,41 +9541,14 @@ window.refreshAssuranceScenarios = async function(useLlm) {
   let text = suite.narrative;
   if (useLlm) {
     setProg('Drafting commentary from stress packet…', 94);
-    try {
-      const breakLines = suite.cases.filter(c => c.status !== 'ok').map(c =>
-        `[${c.status}] ${c.label}: ${c.explain || ''} dARR ${Math.round(c.dArr)}, dCash ${Math.round(c.dCash)}`
-      );
-      const mc = suite.mc;
-      const res = await fetch('/api/v1/commentary/generate', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          period_label: `FY${BUDGET_YEAR} Budget scenarios`,
-          organization_name: 'SMPL',
-          currency: 'USD',
-          kpi_trends: [{ period_label: `FY${BUDGET_YEAR}B`, arr: suite.base.decArr, pipeline_coverage: STATE.pipelineCoverageMult }],
-          additional_notes: [
-            'BUDGET ENGINE Plan Assurance — SCENARIO lane. Numbers are from live formula-graph stress.',
-            'Explain percentage points vs percent; translate shocks into $ ARR and cash vs floor; call out ops liquidity risk clearly.',
-            `Baseline Dec ARR ${Math.round(suite.base.decArr)}, YoY ${suite.base.yoyGrowthPct}%, cash ${Math.round(suite.base.endCash)}, floor ${Math.round(suite.base.cashFloor)}.`,
-            `Cases: ${breakLines.join(' | ') || 'all held'}`,
-            mc ? `MC n=${mc.n}: annual lever shocks drawn once per trial, propagated through the monthly formula graph (not resampled monthly). P(ARR miss)=${(mc.arr.pMiss * 100).toFixed(1)}%, P(Dec cash break)=${(mc.cash.pBreak * 100).toFixed(1)}%, P(ops liquidity)=${((mc.pOpsRisk || 0) * 100).toFixed(1)}%.` : '',
-            mc && mc.cashPath && mc.cashPath.trough ? `Monthly cash path: P(any month < floor)=${((mc.cashPath.trough.pBreachAnyMonth || 0) * 100).toFixed(1)}%, trough P10 ${Math.round(mc.cashPath.trough.p10)}, trough median ${Math.round(mc.cashPath.trough.p50)}${mc.cashPath.worstMonth ? `, tightest month ${mc.cashPath.worstMonth.period} (${((mc.cashPath.worstMonth.pBelowFloor || 0) * 100).toFixed(0)}% of draws under floor)` : ''}.` : '',
-            'Write a concise CFO scenario briefing in plain English. Cite only provided deltas. Do not apply changes.',
-          ].filter(Boolean).join('\n'),
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const exec = data.executive_summary && data.executive_summary.narrative;
-        if (exec) text = exec;
-      } else {
-        text = suite.narrative + '\n\n(LLM unavailable — deterministic stress narrative. ' + (await res.text()).slice(0, 100) + ')';
-      }
-    } catch (e) {
-      text = suite.narrative + '\n\n(LLM unreachable — deterministic stress narrative.)';
-    }
+    const soT = buildScenarioNarrativeFromSuite(suite);
+    const allow = buildAssuranceEvidenceAllowlist({
+      soT,
+      packet: buildBudgetAssurancePacket(),
+      suite,
+      lane: 'predictive',
+    });
+    text = await resolveAssuranceGenerate(soT, allow, `FY${BUDGET_YEAR} Budget scenarios`);
   }
 
   suite.at = Date.now();
@@ -9601,33 +9566,20 @@ window.refreshAssuranceScenarios = async function(useLlm) {
 
 window.refreshAssuranceHistory = async function(useLlm) {
   const hist = buildAssuranceHistoryPacket();
-  let text = buildDeterministicHistoryNarrative(hist);
+  const soT = buildDeterministicHistoryNarrative(hist);
+  let text = soT;
   const body = document.getElementById('assureHistoryBody');
-  const findingsHtml = renderAssureFindingRows(
-    (hist.findings || []).filter(f => f.severity !== 'ok' || f.id === 'in_line_summary')
-  );
 
   if (body) body.innerHTML = '<span style="color:var(--text3)">Generating history…</span>';
 
   if (useLlm) {
-    try {
-      const res = await fetch('/api/v1/commentary/generate', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(historyPacketToCommentaryInputs(hist)),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const exec = data.executive_summary && data.executive_summary.narrative;
-        if (exec) text = exec;
-      } else {
-        text = buildDeterministicHistoryNarrative(hist) +
-          '\n\n(LLM unavailable — deterministic history. ' + (await res.text()).slice(0, 100) + ')';
-      }
-    } catch (e) {
-      text = buildDeterministicHistoryNarrative(hist) + '\n\n(LLM unreachable — deterministic history.)';
-    }
+    const allow = buildAssuranceEvidenceAllowlist({
+      soT,
+      hist,
+      packet: buildBudgetAssurancePacket(),
+      lane: 'history',
+    });
+    text = await resolveAssuranceGenerate(soT, allow, `FY${BUDGET_YEAR} Budget vs history`);
   }
 
   STATE._assureHistoryNarrative = text;
@@ -9636,89 +9588,290 @@ window.refreshAssuranceHistory = async function(useLlm) {
   refresh();
 };
 
-function assurancePacketToCommentaryInputs(packet) {
-  const p = packet || buildBudgetAssurancePacket();
-  const risks = runBudgetRiskChecks(p);
+/** Plan Assurance integrity — Generate may only polish engine SoT; unverified polish is dropped silently. */
+const ASSURE_TOL_MONEY = 1.0;
+const ASSURE_TOL_RATIO = 0.0005;
+const ASSURE_TOL_PP = 0.05;
+
+function assurePushMoney(list, v) {
+  const n = Number(v);
+  if (v == null || isNaN(n)) return;
+  list.push(n);
+  list.push(Math.abs(n));
+}
+
+function assurePushPct(list, v) {
+  const n = Number(v);
+  if (v == null || isNaN(n)) return;
+  // Accept both fraction (0.20) and percent points (20).
+  if (Math.abs(n) <= 1.5) {
+    list.push(n * 100);
+    list.push(n);
+  } else {
+    list.push(n);
+    list.push(n / 100);
+  }
+}
+
+function buildAssuranceEvidenceAllowlist(opts) {
+  const money = [];
+  const pct = [];
+  const mult = [];
+  const soT = String(opts.soT || '');
+  const lane = opts.lane || 'status';
+  const packet = opts.packet || null;
+  const hist = opts.hist || null;
+  const suite = opts.suite || null;
+
+  const addFromText = (text) => {
+    const reMoney = /\$?\s*(-?\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([KkMmBb])?\b/g;
+    let m;
+    while ((m = reMoney.exec(text))) {
+      let v = parseFloat(String(m[1]).replace(/,/g, ''));
+      if (isNaN(v)) continue;
+      const u = (m[2] || '').toUpperCase();
+      if (u === 'K') v *= 1e3;
+      else if (u === 'M') v *= 1e6;
+      else if (u === 'B') v *= 1e9;
+      assurePushMoney(money, v);
+    }
+    const rePct = /(-?\d+(?:\.\d+)?)\s*%/g;
+    while ((m = rePct.exec(text))) assurePushPct(pct, parseFloat(m[1]));
+    const reNx = /(-?\d+(?:\.\d+)?)\s*[×xX]\b/g;
+    while ((m = reNx.exec(text))) {
+      const v = parseFloat(m[1]);
+      if (!isNaN(v)) mult.push(v);
+    }
+  };
+
+  addFromText(soT);
+
+  if (packet) {
+    [
+      packet.bopArr, packet.decArr, packet.targetArr, packet.fyNn, packet.fyNb, packet.fyExp,
+      packet.fyReact, packet.fyCont, packet.fyChurn, packet.fyRev, packet.fyEbitda, packet.endCash,
+      packet.cashFloor, packet.fyMkt, packet.minCash,
+    ].forEach(v => assurePushMoney(money, v));
+    assurePushPct(pct, packet.yoyGrowthPct);
+    assurePushPct(pct, packet.avgGrr != null ? packet.avgGrr * 100 : null);
+    assurePushPct(pct, packet.minGrr != null ? packet.minGrr * 100 : null);
+    assurePushPct(pct, packet.coverPct);
+    assurePushPct(pct, packet.hirePct);
+    if (packet.pipelineCoverage != null) mult.push(Number(packet.pipelineCoverage));
+    money.push(packet.fyMql, packet.salesEnd, packet.csEnd, packet.janHc, packet.decHc);
+  }
+
+  if (hist) {
+    [
+      hist.prior25 && hist.prior25.decArr, hist.prior26 && hist.prior26.decArr, hist.budget && hist.budget.decArr,
+      hist.prior26 && hist.prior26.fyNn, hist.budget && hist.budget.fyNn,
+      hist.prior26 && hist.prior26.fyRev, hist.budget && hist.budget.fyRev,
+      hist.prior26 && hist.prior26.fyEbitda, hist.budget && hist.budget.fyEbitda,
+      hist.prior26 && hist.prior26.decCash, hist.budget && hist.budget.decCash,
+      hist.prior26 && hist.prior26.fyMkt, hist.budget && hist.budget.fyMkt,
+    ].forEach(v => assurePushMoney(money, v));
+    if (hist.deltas) {
+      assurePushPct(pct, hist.deltas.arrYoyBudget != null ? hist.deltas.arrYoyBudget * 100 : null);
+      assurePushPct(pct, hist.deltas.arrYoyPrior != null ? hist.deltas.arrYoyPrior * 100 : null);
+      assurePushPct(pct, hist.deltas.revYoyBudget != null ? hist.deltas.revYoyBudget * 100 : null);
+    }
+  }
+
+  if (suite && suite.base) {
+    const b = suite.base;
+    [b.decArr, b.endCash, b.cashFloor, b.targetArr, b.fyMkt].forEach(v => assurePushMoney(money, v));
+    assurePushPct(pct, b.yoyGrowthPct);
+    (suite.cases || []).forEach(c => {
+      assurePushMoney(money, c.dArr);
+      assurePushMoney(money, c.dCash);
+      assurePushMoney(money, c.endCash);
+      assurePushMoney(money, c.decArr);
+    });
+    if (suite.mc) {
+      assurePushPct(pct, (suite.mc.arr && suite.mc.arr.pMiss) != null ? suite.mc.arr.pMiss * 100 : null);
+      assurePushPct(pct, (suite.mc.cash && suite.mc.cash.pBreak) != null ? suite.mc.cash.pBreak * 100 : null);
+      assurePushPct(pct, suite.mc.pOpsRisk != null ? suite.mc.pOpsRisk * 100 : null);
+      assurePushPct(pct, suite.mc.pAeShort != null ? suite.mc.pAeShort * 100 : null);
+      money.push(suite.mc.n);
+    }
+  }
+
+  return { lane, money: money.filter(v => v != null && !isNaN(v)), pct, mult, packet, soT };
+}
+
+function extractAssuranceMoneyClaims(text) {
+  const out = [];
+  const re = /\$\s*(-?\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*([KkMmBb])?\b/g;
+  let m;
+  while ((m = re.exec(text))) {
+    let v = parseFloat(String(m[1]).replace(/,/g, ''));
+    if (isNaN(v)) continue;
+    const u = (m[2] || '').toUpperCase();
+    if (u === 'K') v *= 1e3;
+    else if (u === 'M') v *= 1e6;
+    else if (u === 'B') v *= 1e9;
+    out.push(v);
+  }
+  return out;
+}
+
+function extractAssurancePctClaims(text) {
+  const out = [];
+  const re = /(-?\d+(?:\.\d+)?)\s*%/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const v = parseFloat(m[1]);
+    if (!isNaN(v)) out.push(v);
+  }
+  return out;
+}
+
+function extractAssuranceMultClaims(text) {
+  const out = [];
+  const re = /(-?\d+(?:\.\d+)?)\s*[×xX]\b/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const v = parseFloat(m[1]);
+    if (!isNaN(v)) out.push(v);
+  }
+  return out;
+}
+
+function assureMoneyMatches(claim, allow) {
+  for (let i = 0; i < allow.length; i++) {
+    const a = allow[i];
+    if (Math.abs(a - claim) <= ASSURE_TOL_MONEY) return true;
+    const denom = Math.max(1, Math.abs(a));
+    if (Math.abs(a - claim) / denom <= ASSURE_TOL_RATIO) return true;
+  }
+  return false;
+}
+
+function assurePctMatches(claim, allow) {
+  for (let i = 0; i < allow.length; i++) {
+    const a = allow[i];
+    if (Math.abs(a - claim) <= ASSURE_TOL_PP) return true;
+    if (Math.abs(a * 100 - claim) <= ASSURE_TOL_PP) return true;
+    if (Math.abs(a - claim * 100) <= ASSURE_TOL_PP) return true;
+  }
+  return false;
+}
+
+function assuranceStructuralOk(text, allowlist) {
+  const t = String(text || '');
+  const p = allowlist && allowlist.packet;
+  if (p) {
+    if ((p.fyChurn || 0) > 1 && /zero\s+churn|no\s+churn|churn[^.!?]{0,48}\b(zero|0(?:\.0+)?)\b/i.test(t)) return false;
+    if ((p.fyExp || 0) > 1 && /zero\s+expansion|no\s+expansion|expansion[^.!?]{0,48}\b(zero|0(?:\.0+)?)\b/i.test(t)) return false;
+    if ((p.fyCont || 0) > 1 && /zero\s+contraction|no\s+contraction|contraction[^.!?]{0,48}\b(zero|0(?:\.0+)?)\b/i.test(t)) return false;
+    if (/collections\s+of\s*\$/i.test(t) && /% of (forecasted )?revenue/i.test(t)) return false;
+  }
+  if (allowlist.lane === 'history' && /\bactual\s+vs\s+forecast\b|\bactuals\s+vs\s+forecast\b/i.test(t)) return false;
+  return true;
+}
+
+function assuranceClaimsVerified(text, allowlist) {
+  if (!text || !allowlist) return false;
+  if (!assuranceStructuralOk(text, allowlist)) return false;
+  const moneyClaims = extractAssuranceMoneyClaims(text);
+  for (let i = 0; i < moneyClaims.length; i++) {
+    if (!assureMoneyMatches(moneyClaims[i], allowlist.money)) return false;
+  }
+  const pctClaims = extractAssurancePctClaims(text);
+  for (let i = 0; i < pctClaims.length; i++) {
+    if (!assurePctMatches(pctClaims[i], allowlist.pct)) return false;
+  }
+  const multClaims = extractAssuranceMultClaims(text);
+  for (let i = 0; i < multClaims.length; i++) {
+    const claim = multClaims[i];
+    const ok = (allowlist.mult || []).some(a => Math.abs(a - claim) <= ASSURE_TOL_PP || Math.abs(a - claim) / Math.max(0.01, Math.abs(a)) <= ASSURE_TOL_RATIO);
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function polishAssuranceCommentaryInputs(soT, allowlist, laneLabel) {
   const notes = [
-    'BUDGET ENGINE Plan Assurance — FY operating plan (not rolling forecast).',
-    `YoY ARR growth target ${p.yoyGrowthPct.toFixed(1)}%.`,
-    `ARR bridge (annual $): BOP ${Math.round(p.bopArr)} + NB ${Math.round(p.fyNb || 0)} + Exp ${Math.round(p.fyExp || 0)} + React ${Math.round(p.fyReact || 0)} − Cont ${Math.round(p.fyCont || 0)} − Churn ${Math.round(p.fyChurn || 0)} = NN ${Math.round(p.fyNn)} → Dec ${Math.round(p.decArr)}.`,
-    `Avg GRR ${p.avgGrr != null ? (p.avgGrr * 100).toFixed(1) + '%' : 'n/a'}; min month GRR ${p.minGrr != null ? (p.minGrr * 100).toFixed(1) + '%' : 'n/a'}.`,
-    `Dec ending cash ${Math.round(p.endCash)} vs floor ${Math.round(p.cashFloor)} (liquidity cushion — NOT collections).`,
-    `Do NOT say churn/expansion/contraction are zero unless the ARR bridge lines above are literally 0.`,
-    `Do NOT treat ending cash as collections or compute collections/revenue ratios from ending cash.`,
-    `Risks: ${risks.filter(r => r.severity !== 'ok').map(r => `[${r.severity}] ${r.title}: ${r.detail}`).join(' | ') || 'none'}`,
-    'Write a concise CFO status of whether this plan is coherent and what threatens it. Cite only provided numbers. Do not invent metrics.',
+    `BUDGET ENGINE Plan Assurance — ${laneLabel}.`,
+    'POLISH ONLY. Rewrite ENGINE_STATUS in concise CFO English.',
+    'Every dollar, percent, and multiple in your rewrite must already appear in ENGINE_STATUS or EVIDENCE.',
+    'Do not invent metrics, bridges, collections/DSO claims, or zero churn/expansion/contraction unless ENGINE_STATUS states that.',
+    'Do not frame prior year as "actual" vs plan as "forecast".',
+    '',
+    'ENGINE_STATUS:',
+    soT,
+    '',
+    'EVIDENCE (absolute $ / % / multiples already cited above):',
+    `money_sample=${(allowlist.money || []).slice(0, 40).map(v => Math.round(v)).join(',')}`,
+    `pct_sample=${(allowlist.pct || []).slice(0, 20).map(v => Number(v).toFixed(2)).join(',')}`,
   ].join('\n');
   return {
-    period_label: p.period_label,
+    period_label: laneLabel,
     organization_name: 'SMPL',
     currency: 'USD',
-    mrr_waterfall: {
-      period: `${BUDGET_YEAR}-12-01`,
-      // Schema is MRR-shaped; values are FY ARR components / 12 so the bridge stays coherent.
-      beginning_mrr: p.bopArr / 12,
-      new_mrr: (p.fyNb || 0) / 12,
-      expansion_mrr: (p.fyExp || 0) / 12,
-      reactivation_mrr: (p.fyReact || 0) / 12,
-      contraction_mrr: (p.fyCont || 0) / 12,
-      churn_mrr: (p.fyChurn || 0) / 12,
-      ending_mrr: p.decArr / 12,
-      nrr: null,
-      grr: p.avgGrr,
-    },
-    revenue_forecast: {
-      period_start: `${BUDGET_YEAR}-01-01`,
-      period_end: `${BUDGET_YEAR}-12-31`,
-      forecasted_revenue: p.fyRev,
-      growth_rate: p.yoyGrowthPct / 100,
-      method: 'budget_engine_revenue_bridge',
-    },
-    // Omit cash_forecast: ending cash is not collections; stuffing it here made the model invent DSO risk.
-    sales_efficiency: {
-      new_bookings_arr: p.fyNb || p.fyNn,
-      sales_marketing_expense: p.fyMkt,
-    },
-    kpi_trends: [{
+    kpi_trends: allowlist.packet ? [{
       period_label: `FY${BUDGET_YEAR}`,
-      arr: p.decArr,
-      grr: p.avgGrr,
-      pipeline_coverage: p.pipelineCoverage,
-    }],
+      arr: allowlist.packet.decArr,
+      grr: allowlist.packet.avgGrr,
+      pipeline_coverage: allowlist.packet.pipelineCoverage,
+    }] : [],
     additional_notes: notes,
   };
+}
+
+async function polishAssuranceNarrative(soT, allowlist, laneLabel) {
+  const res = await fetch('/api/v1/commentary/generate', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(polishAssuranceCommentaryInputs(soT, allowlist, laneLabel)),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err.slice(0, 160) || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const exec = data.executive_summary && data.executive_summary.narrative;
+  if (exec) return exec;
+  if (data.revenue_commentary && data.revenue_commentary.narrative) return data.revenue_commentary.narrative;
+  throw new Error('empty_polish');
+}
+
+/**
+ * Generate always succeeds with engine-true text: accept verified polish, else SoT (no rejection chrome).
+ */
+async function resolveAssuranceGenerate(soT, allowlist, laneLabel) {
+  try {
+    const polished = await polishAssuranceNarrative(soT, allowlist, laneLabel);
+    if (assuranceClaimsVerified(polished, allowlist)) return polished;
+    console.warn('[plan-assurance] polish failed claim verify — keeping engine SoT', laneLabel);
+    return soT;
+  } catch (e) {
+    console.warn('[plan-assurance] polish unavailable — keeping engine SoT', laneLabel, e && e.message);
+    return soT;
+  }
+}
+
+function assurancePacketToCommentaryInputs(packet) {
+  // Legacy helper kept for verify script / debugging — Generate uses polishAssuranceCommentaryInputs.
+  const p = packet || buildBudgetAssurancePacket();
+  const risks = runBudgetRiskChecks(p);
+  const soT = buildDeterministicAssuranceNarrative(p, risks);
+  const allow = buildAssuranceEvidenceAllowlist({ soT, packet: p, lane: 'status' });
+  return polishAssuranceCommentaryInputs(soT, allow, `FY${BUDGET_YEAR} Budget status`);
 }
 
 window.refreshAssuranceNarrative = async function(useLlm) {
   const packet = buildBudgetAssurancePacket();
   const risks = runBudgetRiskChecks(packet);
-  let text = buildDeterministicAssuranceNarrative(packet, risks);
+  const soT = buildDeterministicAssuranceNarrative(packet, risks);
+  let text = soT;
   const body = document.getElementById('assureStatusBody');
   if (body) body.innerHTML = '<span style="color:var(--text3)">Generating…</span>';
 
   if (useLlm) {
-    try {
-      const res = await fetch('/api/v1/commentary/generate', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(assurancePacketToCommentaryInputs(packet)),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const exec = data.executive_summary && data.executive_summary.narrative;
-        if (exec) text = exec;
-        else if (data.revenue_commentary && data.revenue_commentary.narrative) {
-          text = data.revenue_commentary.narrative;
-        }
-      } else {
-        text = buildDeterministicAssuranceNarrative(packet, risks) +
-          '\n\n(LLM unavailable — showing deterministic status. ' + (await res.text()).slice(0, 120) + ')';
-      }
-    } catch (e) {
-      text = buildDeterministicAssuranceNarrative(packet, risks) +
-        '\n\n(LLM unreachable — showing deterministic status.)';
-    }
+    const allow = buildAssuranceEvidenceAllowlist({ soT, packet, lane: 'status' });
+    text = await resolveAssuranceGenerate(soT, allow, `FY${BUDGET_YEAR} Budget status`);
   }
 
   STATE._assureNarrative = text;
