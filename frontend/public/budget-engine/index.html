@@ -2892,23 +2892,28 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
 
 function computeSalesPlan() {
   const arrPlan = computeBudgetArr();
-  const annual = computeArrAnnualTargets();
-  const sales = buildSalesPlanFromDemand(annual.nb, annual.exp, annual.cont + annual.churn);
-  const fyExp = annual.exp || 0;
+  // Hire bridge and monthly demand must share one SoT: the live ARR path (sum of months),
+  // not computeArrAnnualTargets() alone — average-mix annual $ can drift from BOP×mix months.
+  const fyNb = BUD_P.reduce((s, p) => s + (arrPlan[p].nb || 0), 0);
+  const fyExp = BUD_P.reduce((s, p) => s + (arrPlan[p].exp || 0), 0);
+  const fyChurnCont = BUD_P.reduce(
+    (s, p) => s + (arrPlan[p].churn || 0) + (arrPlan[p].cont || 0),
+    0,
+  );
+  const sales = buildSalesPlanFromDemand(fyNb, fyExp, fyChurnCont);
   const csDemand = sales.meta.csDemand || 0;
-  for (const p of BUD_P) {
+  // Spread annual CS hire demand with weights that sum to 1 (shape from expansion months).
+  const expWeights = normalizeWeights(BUD_P.map(p => Math.max(0, arrPlan[p].exp || 0)));
+  BUD_P.forEach((p, i) => {
     const a = arrPlan[p];
     const r = sales.byPeriod[p];
     r.nb = a.nb;
     r.exp = a.exp;
     r.churnCont = (a.churn || 0) + (a.cont || 0);
-    // CS Over/Under uses the same demand we hire to (max expansion, churn floor),
-    // spread with the same monthly shape as expansion ARR.
-    const expShare = fyExp > 0 ? (a.exp || 0) / fyExp : (1 / BUD_P.length);
-    r.csDemandMonth = csDemand * expShare;
+    r.csDemandMonth = csDemand * expWeights[i];
     r.nbMonthGap = r.nbMonthQuota - a.nb;
     r.csMonthGap = r.csMonthQuota - r.csDemandMonth;
-  }
+  });
   return sales;
 }
 
@@ -5051,7 +5056,7 @@ function renderSales() {
     return `<span class="${cls}">${sign}${fmtM(v)}</span>`;
   };
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs team quota capacity (FY = sum of months) · Over/Under = capacity − demand · CS demand = max(expansion, churn cover)</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs team quota capacity (FY totals match annual hire bridge) · Over/Under = capacity − demand · CS demand = max(expansion, churn cover)</td></tr>`;
   const csDemTag = m.csDemand > m.fyExp + 1
     ? `churn cover ${STATE.csChurnCoverageMult.toFixed(2)}×`
     : 'from expansion';
