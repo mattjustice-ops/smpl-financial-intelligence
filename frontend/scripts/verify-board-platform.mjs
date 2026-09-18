@@ -197,7 +197,7 @@ const checks = [
     true,
   ],
   ["board HTML no direct Anthropic API", !boardHtml.includes("api.anthropic.com"), true],
-  ["board HTML loads board-hydrate v32", boardHtml.includes("board-hydrate.js?v=32"), true],
+  ["board HTML loads board-hydrate v33", boardHtml.includes("board-hydrate.js?v=33"), true],
   ["board-hydrate uses async export jobs", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("pollAndDownloadExport"), true],
   ["board-hydrate MDA package uses Prompt 2 endpoint", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("/api/v1/export/mda-package.xlsx"), true],
   ["board-hydrate MD&A deck uses Prompt 5 endpoint", fs.readFileSync(path.join(__dirname, "../public/shared/board-hydrate.js"), "utf8").includes("/api/v1/export/mda-deck.pptx"), true],
