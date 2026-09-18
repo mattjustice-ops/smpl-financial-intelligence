@@ -331,7 +331,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="/shared/smpl-skin.js?v=6"></script>
+<script src="/shared/smpl-skin.js?v=7"></script>
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=5"></script>
@@ -598,6 +598,7 @@ function show(name, btn) {
   else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.substr(0,3)))b.classList.add('active');});
   const area = document.getElementById('slideArea');
   area.innerHTML = '';
+  window.SMPL_BOARD_VIEW = name;
   window.SMPL_VALIDATION_ENGINE = (name === 'validation');
   try {
     var u = new URL(location.href);
@@ -3574,7 +3575,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=32"></script>
+<script src="/shared/board-hydrate.js?v=33"></script>
 
 </body>
 </html>

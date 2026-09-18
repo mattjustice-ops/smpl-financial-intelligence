@@ -179,17 +179,45 @@
   }
 
   function smplBoardRefreshView() {
-    var active = document.querySelector(".nav-btn.active");
     var tab = "exec";
-    if (active) {
-      var m = active.getAttribute("onclick");
-      if (m) {
-        var hit = m.match(/show\('(\w+)'/);
-        if (hit) tab = hit[1];
+    try {
+      if (typeof global.SMPL_BOARD_VIEW === "string" && global.SMPL_BOARD_VIEW) {
+        tab = global.SMPL_BOARD_VIEW;
+      } else if (global.SMPL_VALIDATION_ENGINE) {
+        tab = "validation";
+      } else {
+        var q = (global.location && global.location.search) || "";
+        var qm = q.match(/[?&]view=([a-z0-9_]+)/i);
+        if (qm) {
+          tab = qm[1].toLowerCase();
+          if (tab === "continuity") tab = "validation";
+        } else {
+          var active = document.querySelector(".nav-btn.active");
+          if (active) {
+            var m = active.getAttribute("onclick");
+            if (m) {
+              var hit = m.match(/show\('(\w+)'/);
+              if (hit) tab = hit[1];
+            }
+          }
+        }
+      }
+    } catch (_) {
+      /* keep default */
+    }
+    if (tab === "continuity") tab = "validation";
+    var btn = null;
+    if (tab !== "validation") {
+      btn = document.querySelector(".nav-btn.active");
+      if (!btn) {
+        btn =
+          Array.prototype.find.call(document.querySelectorAll(".nav-btn"), function (b) {
+            return (b.getAttribute("onclick") || "").indexOf("show('" + tab + "'") >= 0;
+          }) || null;
       }
     }
     if (typeof global.show === "function") {
-      global.show(tab, active);
+      global.show(tab, btn);
     }
   }
   global.smplBoardRefreshView = smplBoardRefreshView;
