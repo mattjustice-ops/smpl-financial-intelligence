@@ -923,7 +923,27 @@ def enrich_slide_with_ai(
 
     try:
         client = build_commentary_llm_client(purpose="interactive")
-        payload = build_single_slide_payload(bundle, slide_key)
+        plan_assurance = None
+        if slide_key in ("risks_opportunities", "board_actions"):
+            try:
+                import uuid as _uuid
+
+                from app.db.session import SessionLocal
+                from app.services.predictive_planning.board_citation import (
+                    board_plan_assurance_evidence,
+                )
+
+                org_id = _uuid.UUID(str(bundle.organization_id))
+                db = SessionLocal()
+                try:
+                    plan_assurance = board_plan_assurance_evidence(db, org_id)
+                finally:
+                    db.close()
+            except Exception:
+                plan_assurance = None
+        payload = build_single_slide_payload(
+            bundle, slide_key, plan_assurance=plan_assurance
+        )
         # Board regenerate / PPTX AI inject: interactive floors apply to EVERY
         # BOARD_DECK_SLIDE_KEYS entry (not only gaap_revenue). PPTX still
         # shape-fits separately; do not hard-clip mid-clause for the HTML board.
@@ -1148,7 +1168,15 @@ def _enrich_slide_with_ai_legacy(
 
 
 def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCommentary]) -> dict[str, SlideCommentary]:
-    """LLM-enrich every narrative slide (full 17-slide board deck)."""
+    """LLM-enrich every narrative slide (full 17-slide board deck).
+
+    Post-LLM claim-verify against metrics evidence. Per-field: keep deterministic
+    base text when AI invents unmatched $/%%/Nx (seamless SoT fallback).
+    """
+    from app.services.commentary.claim_verify import (
+        evidence_values_from_text_blob,
+        verify_text_against_evidence,
+    )
     from app.services.reporting.export.board_semantic_mappings import NARRATIVE_SLIDE_ORDER
 
     settings = get_settings()
@@ -1158,6 +1186,7 @@ def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCo
         client = build_commentary_llm_client(purpose="interactive")
         slide_keys = [k for k in NARRATIVE_SLIDE_ORDER if k in slides]
         metrics_blob = copilot_context_blob(bundle)[:48000]
+        evidence = evidence_values_from_text_blob(metrics_blob)
         key_list = ", ".join(slide_keys)
         prompt = (
             f"{strategic_context_for_prompt()}\n\n"
@@ -1167,9 +1196,9 @@ def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCo
             f"Organization: {bundle.organization_name or 'SMPL'}.\n\n"
             f"Live metrics:\n{metrics_blob}\n\n"
             f"Write JSON with one object per slide key ({key_list}). "
-            "Each slide object must include what_happened, why_it_happened, favorable, "
-            "unfavorable, recommended_actions — 2-3 evidence-based sentences each. "
-            "Connect cause→effect→leadership implication. No generic filler."
+            f"Each slide object must include what_happened, why_it_happened, favorable, "
+            f"unfavorable, recommended_actions — 2-3 evidence-based sentences each. "
+            f"Connect cause→effect→leadership implication. No generic filler."
         )
         raw = client.generate(
             system_prompt=(
@@ -1180,25 +1209,44 @@ def enrich_commentary_with_ai(bundle: ReportingBundle, slides: dict[str, SlideCo
         )
         if not isinstance(raw, dict):
             return slides
+        field_names = (
+            "what_happened",
+            "why_it_happened",
+            "favorable",
+            "unfavorable",
+            "recommended_actions",
+            "leadership_watch",
+            "impact",
+        )
+        out = dict(slides)
         for key in slide_keys:
             block = raw.get(key)
             if not isinstance(block, dict):
                 continue
-            sc = slides[key]
-            slides[key] = SlideCommentary(
-                what_happened=str(block.get("what_happened") or sc.what_happened or "").strip(),
-                why_it_happened=str(block.get("why_it_happened") or sc.why_it_happened or "").strip(),
-                favorable=str(block.get("favorable") or sc.favorable or "").strip(),
-                unfavorable=str(block.get("unfavorable") or sc.unfavorable or "").strip(),
-                recommended_actions=str(
-                    block.get("recommended_actions") or sc.recommended_actions or ""
-                ).strip(),
-                leadership_watch=str(block.get("leadership_watch") or sc.leadership_watch or "").strip(),
-                impact=str(block.get("impact") or sc.impact or "").strip(),
-            )
+            base = slides[key]
+            merged: dict[str, str] = {}
+            for fname in field_names:
+                ai_text = str(block.get(fname) or "").strip()
+                base_text = str(getattr(base, fname, "") or "").strip()
+                if not ai_text:
+                    merged[fname] = base_text
+                    continue
+                result = verify_text_against_evidence(ai_text, evidence)
+                if result.ok:
+                    merged[fname] = ai_text
+                else:
+                    logger.warning(
+                        "P15 bulk board AI claim-verify miss on %s.%s — keeping engine text: %s",
+                        key,
+                        fname,
+                        result.summary(max_failures=4),
+                    )
+                    merged[fname] = base_text
+            out[key] = SlideCommentary(**merged)
+        return out
     except Exception:
-        pass
-    return slides
+        logger.exception("Bulk board AI enrichment failed; keeping deterministic slides")
+        return slides
 
 
 def build_all_slide_commentary(

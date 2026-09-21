@@ -121,6 +121,38 @@ class PlanAssessmentRequest(BaseModel):
     tenant_overrides: dict[str, ConstraintOverride] = Field(default_factory=dict)
     version_overrides: dict[str, ConstraintOverride] = Field(default_factory=dict)
     include_passing_conditions: bool = False
+    #: Persist when a budget/forecast version id is present (default True).
+    persist: bool = True
+    #: Optional history series for prior fitting (Phase D).
+    history: dict[str, Any] | None = None
+    #: Optional seed echoed onto persisted assessment when simulation ran server-side.
+    mc_seed: int | None = None
+    prior_source: str | None = None
+
+
+class SimulateRequest(BaseModel):
+    """Server-side reproducible Monte Carlo over a plan packet."""
+
+    plan_ref: PlanRef
+    packet: PlanPacket
+    n_trials: int = Field(default=1000, ge=50, le=5000)
+    seed: int = 42
+    priors: dict[str, float] | None = None
+    history: dict[str, Any] | None = None
+    #: Named stress breaks/watches from the Budget scenario suite (feed WHTT later).
+    breaks: list[str] = Field(default_factory=list)
+    watches: list[str] = Field(default_factory=list)
+
+
+class SimulateOut(BaseModel):
+    plan_ref: PlanRef
+    seed: int
+    prior_source: str
+    priors: dict[str, float]
+    method_card: dict[str, Any]
+    result: dict[str, Any]
+    simulation_summary: SimulationSummaryIn
+    method_notes: list[str] = Field(default_factory=list)
 
 
 class ConstraintResultOut(BaseModel):
@@ -183,6 +215,33 @@ class PlanAssessmentOut(BaseModel):
     simulation_summary: SimulationSummaryIn | None = None
     method_notes: list[str] = Field(default_factory=list)
     persisted: bool = False
+    assessment_id: uuid.UUID | None = None
+    prior_source: str | None = None
+    method_card: dict[str, Any] | None = None
     sources: list[str] = Field(default_factory=list, alias="_sources")
 
     model_config = {"populate_by_name": True}
+
+
+class PlanAssessmentRecordOut(BaseModel):
+    """Persisted assessment row for Board citation / version lookup."""
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    budget_version_id: uuid.UUID | None = None
+    forecast_version_id: uuid.UUID | None = None
+    scenario: str
+    period_label: str | None = None
+    budget_year: int | None = None
+    as_of: datetime
+    feasibility_verdict: str
+    assessment: dict[str, Any]
+    simulation_summary: dict[str, Any] | None = None
+    method_notes: list[str] | None = None
+    prior_source: str | None = None
+    mc_seed: int | None = None
+    citation_note: str | None = None
+    citation: dict[str, Any] | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}

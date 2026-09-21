@@ -3,10 +3,10 @@
 Evaluates the constraints registry against a plan packet and returns structured
 pass / warn / fail results.
 
-Parity note: the thresholds and severities here reproduce ``runBudgetRiskChecks``
-in ``frontend/public/budget-engine/index.html``. ``tests/test_predictive_planning.py``
-pins that parity. If a rule changes on one side, change it on both or the Budget
-Engine and this API will disagree about the same plan.
+Parity note: thresholds here are the live SoT for Budget Analytics via
+``POST /api/v1/predictive-planning/assess``. ``runBudgetRiskChecks`` in the Budget
+Engine is an offline fallback only. ``tests/test_predictive_planning.py`` pins
+parity with that fallback so local demos without API still agree.
 """
 
 from __future__ import annotations

@@ -229,7 +229,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="/shared/smpl-skin.js?v=4"></script>
+<script src="/shared/smpl-skin.js?v=5"></script>
 <script src="/shared/smpl-outlook.js?v=17"></script>
 <script src="/shared/smpl-provenance.js?v=3"></script>
 <script src="/shared/smpl-pipeline.js?v=2"></script>
@@ -640,7 +640,7 @@ function computePeriod(p, bop_arr, prev_cash, prev_ar, prev_ap, prev_dr, prev_eq
   const cfg=HORIZON[hz];
   const isAct=cfg.act.includes(p);
 
-  // \u2500\u2500 ARR waterfall \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // ── ARR waterfall (forecast months → SMPLPipeline SoT; actuals from SRC) ──
   let arr={};
   if(isAct && SRC.actuals[p]){
     const a=SRC.actuals[p];
@@ -648,6 +648,10 @@ function computePeriod(p, bop_arr, prev_cash, prev_ar, prev_ap, prev_dr, prev_eq
          arr_nb:a.arr_nb,arr_exp:a.arr_exp,arr_react:a.arr_react,
          arr_cont:a.arr_cont,arr_churn:a.arr_churn,arr_nn:a.arr_nn,
          arr_eop:a.arr_eop,grr:a.grr||0,nrr:a.nrr||0,is_actual:true};
+  } else if(typeof SMPLPipeline!=='undefined' && typeof SMPLPipeline.computeForecastMonth==='function'){
+    arr=SMPLPipeline.computeForecastMonth(p,bop_arr,SRC,{
+      nb:lv.nb,exp:lv.exp,churn:lv.churn,ren_adj:lv.ren_adj
+    });
   } else {
     const opps=SRC.opp_pipeline[p]||{};
     const ren_p=SRC.renewals[p]||{arr:0,weighted:0,count:0};
@@ -2180,6 +2184,77 @@ updLabels();
   };
   window.SMPL_ON_ORG_READY=function(){void smplHydrate();};
   window.addEventListener('load',()=>{void smplHydrate();});
+
+  /**
+   * Plan Assurance Forecast adapter — same /assess engine as Budget.
+   * Builds a camelCase plan packet from current Forecast results and posts it.
+   */
+  window.buildForecastAssurancePacket = function() {
+    const res = typeof getResults === 'function' ? getResults() : null;
+    const lv = typeof getLevers === 'function' ? getLevers() : {};
+    if (!res) return null;
+    const eng = res.engine || res;
+    const bop = eng.bopArr != null ? eng.bopArr : (eng.bop_arr != null ? eng.bop_arr : null);
+    const dec = eng.decArr != null ? eng.decArr : (eng.eopArr != null ? eng.eopArr : (eng.dec_arr != null ? eng.dec_arr : null));
+    const yoy = lv.yoyEndingArrGrowthPct != null ? lv.yoyEndingArrGrowthPct : (lv.yoyGrowthPct != null ? lv.yoyGrowthPct : null);
+    const target = (bop != null && yoy != null) ? bop * (1 + yoy / 100) : (eng.targetArr != null ? eng.targetArr : dec);
+    const endCash = eng.endCash != null ? eng.endCash : (eng.ending_cash != null ? eng.ending_cash : null);
+    const cashByMonth = eng.cashByMonth || eng.cash_by_month || null;
+    let minCash = eng.minCash != null ? eng.minCash : endCash;
+    if (minCash == null && cashByMonth && cashByMonth.length) minCash = Math.min.apply(null, cashByMonth);
+    return {
+      period_label: 'Forecast plan assurance',
+      budget_year: eng.budget_year || eng.year || null,
+      yoyGrowthPct: yoy,
+      bopArr: bop,
+      decArr: dec,
+      targetArr: target,
+      fyNn: (dec != null && bop != null) ? (dec - bop) : null,
+      fyRev: eng.fyRev != null ? eng.fyRev : eng.revenue,
+      fyEbitda: eng.fyEbitda != null ? eng.fyEbitda : eng.ebitda,
+      endCash: endCash,
+      cashFloor: lv.cashFloorDec != null ? lv.cashFloorDec : 10000000,
+      minCash: minCash,
+      cashByMonth: cashByMonth,
+      salesEnd: eng.salesEnd,
+      aeNeeded: eng.aeNeeded,
+      csEnd: eng.csEnd,
+      csNeeded: eng.csNeeded,
+      pipelineCoverage: lv.pipelineCoverageMult != null ? lv.pipelineCoverageMult : 3,
+      pipelineMin: 2.5,
+      surface: 'forecast',
+    };
+  };
+
+  window.runForecastPlanAssessment = async function(opts) {
+    opts = opts || {};
+    const packet = opts.packet || window.buildForecastAssurancePacket();
+    if (!packet) { console.warn('[forecast-assurance] no packet'); return null; }
+    let orgId = opts.orgId;
+    if (!orgId && window.SMPLOutlook && window.SMPLOutlook.resolveOrgId) {
+      try { orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: true }); } catch (e) { orgId = null; }
+    }
+    if (!orgId) { console.warn('[forecast-assurance] no org'); return null; }
+    const res = await fetch('/api/v1/predictive-planning/assess', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plan_ref: {
+          organization_id: orgId,
+          forecast_version_id: opts.forecast_version_id || null,
+          scenario: 'forecast',
+          period_label: packet.period_label,
+          budget_year: packet.budget_year,
+        },
+        packet,
+        persist: !!opts.forecast_version_id,
+        include_passing_conditions: false,
+      }),
+    });
+    if (!res.ok) { console.warn('[forecast-assurance] /assess failed', res.status, await res.text()); return null; }
+    const assessment = await res.json();
+    window._forecastPlanAssessment = assessment;
+    return assessment;
+  };
 })();
 </script>
 

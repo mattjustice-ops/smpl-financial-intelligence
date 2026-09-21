@@ -1,10 +1,10 @@
 # SMPL.ai Predictive Planning Intelligence Framework
 
-> **Status:** Architecture + phased plan, **now partly implemented**. Phase 1 backend (constraints, feasibility, What Has to Be True) and a client-side Phase 3 simulation are shipped. Phases 2, 4 and 5 remain unbuilt. See §0.1.  
+> **Status:** Plan Assurance platform engine shipped for Budget (SoT `/assess`, WHTT UI, persist, server MC, priors). Forecast adapter + Board citation hooks in place. Calibrated PoA / Act loop still unbuilt. See §0.1.  
 > **Audience:** Product, eng, founder alignment — not marketing.  
 > **Related:** [SMPL_Budget_Methodology.md](./SMPL_Budget_Methodology.md) · [SMPL_Agent_and_Predictive_Analytics_Checklist.md](./SMPL_Agent_and_Predictive_Analytics_Checklist.md) · [Forecasting_Assumptions.md](../Forecasting_Assumptions.md) · [Architecture_Master.md](../Architecture_Master.md) · [AI_SKILL_PRACTICES.md](../AI_SKILL_PRACTICES.md) · [Reporting_Logic.md](../Reporting_Logic.md)
 
-**Last updated:** 2026-09-08 (was 2026-08-28 — plan-only)
+**Last updated:** 2026-09-21 (Plan Assurance platform engine: `/assess` SoT + WHTT UI + persist + server MC + priors)
 
 ---
 
@@ -23,25 +23,30 @@ This document was written plan-first on 2026-08-28 and told the team not to buil
 
 Watch-out #3 in §6 ("resist jumping to Monte Carlo for demos") was overtaken by a demo deadline. That is a real inversion, not a documentation error: **simulation is running on top of a constraint layer that was only formalized afterwards.**
 
-### The divergence that still matters: two implementations of one rule set
+### Platform engine status (2026-09-21)
 
-Plan Assurance shipped as **client-side JavaScript** in `frontend/public/budget-engine/index.html`, not as the `predictive_planning/` Python package §4.1 specifies. Consequences that are still live:
+Plan Assurance is now a **platform service** consumed by Budget (first), with Forecast adapter + Board citation hooks.
 
-- **Thresholds exist in two places.** `runBudgetRiskChecks` (JS) and `app/services/predictive_planning/feasibility.py` (Python) encode the same 15 rules. The Python defaults were extracted from the JS and are pinned by `tests/test_predictive_planning.py`. **Change one, change both** — there is no shared source yet.
-- **Assessments are not persisted.** Nothing is keyed by `(organization_id, forecast_version_id, as_of)`, so no assessment is citable in a board package or comparable across versions. The API returns `persisted: false` and flags transient assessments in `method_notes`.
-- **Not keyed to a promoted plan version.** Feasibility runs against whatever the Budget Engine currently holds in memory. The DTO accepts `forecast_version_id` / `budget_version_id`; the Budget Engine does not yet send one.
-- **Monte Carlo runs in the browser.** It cannot be reproduced server-side or attached to an export.
+- **Live SoT:** Budget Analytics posts `buildBudgetAssurancePacket()` to `POST /api/v1/predictive-planning/assess`. Feasibility severities and WHTT come from Python. `runBudgetRiskChecks` remains an offline/parity fallback only.
+- **WHTT UI:** Analytics status lane renders `must_close` / `must_confirm` / `must_hold` from the assessment artifact.
+- **Persistence:** `plan_assessments` table (`ppi_001`). `/assess` persists when `budget_version_id` or `forecast_version_id` is supplied; `GET /assessments` for Board citation.
+- **Server MC:** `POST /api/v1/predictive-planning/simulate` — seeded packet-path Monte Carlo; Budget calls it after scenario generation (browser MC remains fallback).
+- **Priors:** `fit_priors_from_history` — history-fit when series exist; otherwise honest `independent_defaults` + method card (still not PoA).
+- **Forecast adapter:** `build_forecast_plan_packet` + `scenario: "forecast"` method notes; same `/assess` engine.
+- **Board citation:** risks/board-actions slide metrics merge persisted assessment WHTT + MC stress frequencies when available.
 
-### Phase 1 objects now built (2026-09-08)
+### Phase 1 objects (updated 2026-09-21)
 
 | Deliverable | Status | Where |
 |-------------|--------|-------|
-| Constraints registry (tenant + version overlay) | **Shipped** | `app/services/predictive_planning/constraints.py` — 15 constraints, declarative params, precedence: version → tenant → packet → default |
-| Feasibility runner (pass / warn / fail) | **Shipped** | `feasibility.py` — parity with the JS checks; missing inputs report `skipped`, never `pass` |
-| What Has to Be True generator | **Shipped** | `what_has_to_be_true.py` — `must_close` / `must_confirm` / `must_hold` conditions with levers and rationale; stress breaks map to `must_hold` |
-| Assessment DTO + additive API | **Shipped** | `app/schemas/predictive_planning.py`, `app/api/predictive_planning_routes.py` — `GET /api/v1/predictive-planning/constraints`, `POST /api/v1/predictive-planning/assess` |
-| Wire to forecast version | **Partial** | DTO accepts a version id; no caller supplies one and nothing is stored |
-| Assessment persistence | **Missing** | Needs model + migration. **This is the next Phase 1 step, not a Phase 2 item.** |
+| Constraints registry (tenant + version overlay) | **Shipped** | `app/services/predictive_planning/constraints.py` |
+| Feasibility runner (pass / warn / fail) | **Shipped — live SoT** | `feasibility.py` via `/assess` |
+| What Has to Be True generator + UI | **Shipped** | `what_has_to_be_true.py` + Budget Analytics WHTT panel |
+| Assessment DTO + API | **Shipped** | `/constraints`, `/assess`, `/simulate`, `/assessments` |
+| Assessment persistence | **Shipped** | `plan_assessments` + persist on versioned `/assess` |
+| Server Monte Carlo | **Shipped (v1 packet path)** | `monte_carlo.py` — stress frequency under stated priors, not PoA |
+| History priors | **Shipped (fit or honest defaults)** | `priors.py` + method card |
+| Forecast / Board adapters | **Shipped (thin)** | `forecast_adapter.py`, `board_citation.py` |
 
 ### Naming discipline (unchanged and now load-bearing)
 
@@ -248,9 +253,9 @@ LLM may narrate **only** fields present in this object + finance evidence packag
 | Feasibility runner | **Shipped** | Emits pass/warn/fail/advisory + skipped. Currently reads a supplied plan packet rather than calling driver_forecast / bookings / workforce directly |
 | What Has to Be True generator | **Shipped** | `must_close` (fail), `must_confirm` (warn/advisory), `must_hold` (holds today, breaks under stress) with levers + rationale |
 | API + schema | **Shipped** | Assessment DTO; no LLM in the path |
-| Wire to forecast version | **Partial** | DTO accepts `forecast_version_id` / `budget_version_id`; the Budget Engine does not yet send one |
-| **Assessment persistence** | **Missing — next step** | Needs a model + migration keyed by `(organization_id, forecast_version_id, as_of)`. Until then no assessment is citable or comparable |
-| **Single source for thresholds** | **Missing — next step** | Rules are duplicated in JS and Python (§0.1). Fix by having the Budget Engine call `/assess` instead of computing checks locally |
+| Wire to forecast version | **Shipped** | Budget sends `budget_version_id` after draft/promote; Forecast adapter accepts `forecast_version_id` |
+| **Assessment persistence** | **Shipped** | `plan_assessments` (`ppi_001`); `/assess` persists when a version id is present; `GET /assessments` for citation |
+| **Single source for thresholds** | **Shipped** | Budget Analytics/Overview consume `/assess`; `runBudgetRiskChecks` is offline fallback only |
 | Checklist | See Agent checklist §7 | |
 
 **Reuse:** coverage ratio, forecast confidence inputs, workforce GTM validation, cash bridge ending cash, MRR dry-run pattern.  

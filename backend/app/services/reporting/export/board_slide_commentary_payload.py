@@ -517,7 +517,12 @@ _METRIC_BUILDERS = {
 }
 
 
-def build_single_slide_payload(bundle: ReportingBundle, slide_key: str) -> dict[str, Any]:
+def build_single_slide_payload(
+    bundle: ReportingBundle,
+    slide_key: str,
+    *,
+    plan_assurance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Dynamic Layer 2 payload for one board slide."""
     if slide_key not in _SLIDE_SPECS:
         raise KeyError(f"Unknown board deck slide key: {slide_key}")
@@ -527,6 +532,10 @@ def build_single_slide_payload(bundle: ReportingBundle, slide_key: str) -> dict[
     spec = dict(_SLIDE_SPECS[slide_key])
     builder = _METRIC_BUILDERS[slide_key]
     metrics = builder(bundle, m, as_of)
+    if slide_key in ("risks_opportunities", "board_actions") and plan_assurance:
+        from app.services.predictive_planning.board_citation import metrics_from_plan_assurance
+
+        metrics = {**metrics, **metrics_from_plan_assurance(plan_assurance)}
 
     return {
         "close_period": as_of,

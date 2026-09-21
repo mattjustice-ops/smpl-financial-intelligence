@@ -205,6 +205,12 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .assure-nerd-card p{margin:0 0 6px;font-size:10px;color:var(--text3);line-height:1.4}
 .assure-nerd-svg{width:100%;height:72px;display:block}
 
+
+.pa-whtt { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+.pa-whtt-group { display:flex; flex-direction:column; gap:6px; }
+.pa-whtt-lbl { font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text3); }
+.pa-method-card { margin-top:12px; padding:10px 12px; border:1px solid var(--border, rgba(255,255,255,0.08)); border-radius:8px; background:rgba(0,0,0,0.12); }
+
 /* Analytics tab — full-width Plan Assurance (mockup vocabulary, live packets) */
 .pa-analytics{max-width:1180px;margin:0 auto}
 .pa-head{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
@@ -3865,15 +3871,15 @@ function renderSidebar() {
         NB FY27 budget<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(m.fyNb)}</strong><br>
         FY26 NB (hist) <strong style="font-family:var(--mono)">${fmtM(m.fy26Nb)}</strong>
         <span style="font-size:9.5px"> · seed mix ${fmtM(m.seedNbBook)}</span><br>
-        Watermark book${m.quotaYoyLiftPct ? ` (+${m.quotaYoyLiftPct.toFixed(0)}%)` : ''} <strong style="font-family:var(--mono)">${fmtM(m.existingNbQuota)}</strong>
-        <span style="font-size:9.5px"> · avg ${fmtM(m.avgNbQuota)}/AE · ${m.coverPctActual.toFixed(0)}% of budget</span><br>
-        Hire gap (budget − book) <strong style="font-family:var(--mono);color:${(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget) >= 0 ? 'var(--amber)' : 'var(--teal)'}">${(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget) < 0 ? '(' + fmtM(-(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget)) + ')' : fmtM(m.hireNbTarget)}</strong>
+        Watermark book (hire sizing)${m.quotaYoyLiftPct ? ` (+${m.quotaYoyLiftPct.toFixed(0)}%)` : ''} <strong style="font-family:var(--mono)">${fmtM(m.existingNbQuota)}</strong>
+        <span style="font-size:9.5px"> · avg ${fmtM(m.avgNbQuota)}/AE · ${m.coverPctActual.toFixed(0)}% of budget · ≠ Σ mo capacity ${fmtM(m.existingCapNbFy || 0)}</span><br>
+        Hire gap (budget − watermark book) <strong style="font-family:var(--mono);color:${(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget) >= 0 ? 'var(--amber)' : 'var(--teal)'}">${(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget) < 0 ? '(' + fmtM(-(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget)) + ')' : fmtM(m.hireNbTarget)}</strong>
         → <strong>${m.nbGrowthHires}</strong> growth
         <span style="font-size:9.5px">(= max(0,gap) ÷ avg) + ${m.nbAttritionReplace} attrition = ${m.nbHiresNeed} NB · need ${fmtN(m.aeNeeded)} · Dec ${fmtN(m.decAes)}</span><br><br>
         CS demand<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(m.csDemand)}</strong><br>
-        Watermark book <strong style="font-family:var(--mono)">${fmtM(m.existingCsQuota)}</strong>
-        <span style="font-size:9.5px"> · avg ${fmtM(m.avgCsQuota)}/CS</span><br>
-        Hire gap <strong style="font-family:var(--mono);color:${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) >= 0 ? 'var(--amber)' : 'var(--teal)'}">${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) < 0 ? '(' + fmtM(-(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget)) + ')' : fmtM(m.hireCsTarget)}</strong>
+        Watermark book (hire sizing) <strong style="font-family:var(--mono)">${fmtM(m.existingCsQuota)}</strong>
+        <span style="font-size:9.5px"> · avg ${fmtM(m.avgCsQuota)}/CS · ≠ Σ mo capacity ${fmtM(m.existingCapCsFy || 0)}</span><br>
+        Hire gap (demand − watermark book) <strong style="font-family:var(--mono);color:${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) >= 0 ? 'var(--amber)' : 'var(--teal)'}">${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) < 0 ? '(' + fmtM(-(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget)) + ')' : fmtM(m.hireCsTarget)}</strong>
         → <strong>${m.csGrowthHires}</strong> growth + ${m.csAttritionReplace} attrition = ${m.csHiresNeed} CS · need ${fmtN(m.csNeeded)} · Dec ${fmtN(m.decCs)}
         <br><span style="font-size:9.5px;color:var(--text3)">Combined growth hires ${m.nbGrowthHires + m.csGrowthHires} · with attrition ${m.nbHiresNeed + m.csHiresNeed}</span>
       </div>`;
@@ -4915,7 +4921,7 @@ function renderSales() {
 
   let html = `
     <div class="slide-title">Sales · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">Hires = (budget − existing full quota book) ÷ avg $/head. Ramp ${rampTag} shapes capacity in the waterfall only — it does not multiply headcount. Quotas ${m.quotaYoyLiftPct ? `+${m.quotaYoyLiftPct.toFixed(0)}% vs FY26` : 'flat vs FY26'}.</div>
+    <div class="slide-sub">Two FY dollars on this tab: <strong>watermark book</strong> (starting bench × full per-head quota — sizes hires) vs <strong>Σ monthly capacity</strong> (after attrition + ramp — delivery view). Hires = (budget − watermark book) ÷ avg $/head. Ramp ${rampTag} shapes capacity only. Quotas ${m.quotaYoyLiftPct ? `+${m.quotaYoyLiftPct.toFixed(0)}% vs FY26` : 'flat vs FY26'}.</div>
     ${adjLegend()}
     <div class="ctx-banner tie${tieWarn ? ' warn' : ''}">
       <strong>Sales tie-out</strong> · hist <code>${tie.histSource}</code>
@@ -5027,15 +5033,15 @@ function renderSales() {
 
   // 6 —— Team quota capacity summary
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Team quota capacity summary (existing + ramped hires)</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Team quota capacity summary — FY = Σ monthly capacity after attrition + ramp (not the hire-bridge watermark book)</td></tr>`;
   const teamRows = [
-    { k: 'nb_ex', label: 'NB existing capacity ($)', f: r => r.nbExistQuota, fy: () => m.existingCapNbFy },
-    { k: 'nb_hi', label: 'NB new-hire capacity (ramped) ($)', f: r => r.nbHireQuota, fy: () => m.rampedHireNbFy },
-    { k: 'nb_q', label: 'NB quota capacity ($)', f: r => r.nbMonthQuota, fy: () => BUD_P.reduce((acc, p) => acc + sales.byPeriod[p].nbMonthQuota, 0) },
-    { k: 'cs_ex', label: 'CS existing capacity ($)', f: r => r.csExistQuota, fy: () => m.existingCapCsFy },
-    { k: 'cs_hi', label: 'CS new-hire capacity (ramped) ($)', f: r => r.csHireQuota, fy: () => m.rampedHireCsFy },
-    { k: 'cs_q', label: 'CS quota capacity ($)', f: r => r.csMonthQuota, fy: () => BUD_P.reduce((acc, p) => acc + sales.byPeriod[p].csMonthQuota, 0) },
-    { k: 'tot_q', label: 'Total team quota capacity ($)', f: r => r.totalMonthQuota, tot: true, fy: () => BUD_P.reduce((acc, p) => acc + sales.byPeriod[p].totalMonthQuota, 0) },
+    { k: 'nb_ex', label: 'NB existing capacity ($ · Σ mo after attrition)', f: r => r.nbExistQuota, fy: () => m.existingCapNbFy },
+    { k: 'nb_hi', label: 'NB new-hire capacity (ramped · Σ mo) ($)', f: r => r.nbHireQuota, fy: () => m.rampedHireNbFy },
+    { k: 'nb_q', label: 'NB quota capacity ($ · Σ mo)', f: r => r.nbMonthQuota, fy: () => BUD_P.reduce((acc, p) => acc + sales.byPeriod[p].nbMonthQuota, 0) },
+    { k: 'cs_ex', label: 'CS existing capacity ($ · Σ mo after attrition)', f: r => r.csExistQuota, fy: () => m.existingCapCsFy },
+    { k: 'cs_hi', label: 'CS new-hire capacity (ramped · Σ mo) ($)', f: r => r.csHireQuota, fy: () => m.rampedHireCsFy },
+    { k: 'cs_q', label: 'CS quota capacity ($ · Σ mo)', f: r => r.csMonthQuota, fy: () => BUD_P.reduce((acc, p) => acc + sales.byPeriod[p].csMonthQuota, 0) },
+    { k: 'tot_q', label: 'Total team quota capacity ($ · Σ mo)', f: r => r.totalMonthQuota, tot: true, fy: () => BUD_P.reduce((acc, p) => acc + sales.byPeriod[p].totalMonthQuota, 0) },
   ];
   for (const row of teamRows) {
     html += `<tr${row.tot ? ' class="tot"' : ''}><td>${row.label}</td>`;
@@ -5056,7 +5062,7 @@ function renderSales() {
     return `<span class="${cls}">${sign}${fmtM(v)}</span>`;
   };
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs team quota capacity (FY totals match annual hire bridge) · Over/Under = capacity − demand · CS demand = max(expansion, churn cover)</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Monthly ARR vs team quota capacity · Over/Under = capacity − demand · CS demand = max(expansion, churn cover) · FY capacity here is Σ months (post-attrition), while the hire bridge below uses the full watermark book</td></tr>`;
   const csDemTag = m.csDemand > m.fyExp + 1
     ? `churn cover ${STATE.csChurnCoverageMult.toFixed(2)}×`
     : 'from expansion';
@@ -5126,7 +5132,7 @@ function renderSales() {
     <th class="fy-h">FY</th>
     <th class="notes-h" style="width:140px">Notes</th>
   </tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="3">Reference · demand − existing watermark book (drives HC; not monthly shortfalls)</td></tr>`;
+  html += `<tr class="sec"><td colspan="3">Hire sizing · demand − full watermark book (starting bench × FY27 per-head). Distinct from Σ monthly capacity above, which drops as attrition clears seats before backfill ramps.</td></tr>`;
   const fmtGap = (signed, growthHires, avgQ) => {
     if (signed > 0) {
       return {
@@ -5148,12 +5154,12 @@ function renderSales() {
   const csGapUi = fmtGap(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget, m.csGrowthHires, m.avgCsQuota);
   const bridgeRows = [
     { k: 'br_nb_bud', label: 'NB budget (ARR year)', fy: m.fyNb },
-    { k: 'br_nb_book', label: 'NB existing watermark book', fy: m.existingNbQuota },
-    { k: 'br_nb_gap', label: 'NB hire gap (= budget − book)', fy: nbGapUi.fy, tip: nbGapUi.tip, style: nbGapUi.cls },
+    { k: 'br_nb_book', label: 'NB watermark book (hire sizing · full year)', fy: m.existingNbQuota },
+    { k: 'br_nb_gap', label: 'NB hire gap (= budget − watermark book)', fy: nbGapUi.fy, tip: nbGapUi.tip, style: nbGapUi.cls },
     { k: 'br_cs_exp', label: 'Expansion ARR (year)', fy: m.fyExp },
     { k: 'br_cs_dem', label: 'CS hire demand (max expansion, churn floor)', fy: m.csDemand, tip: csHireDriver },
-    { k: 'br_cs_book', label: 'CS existing watermark book', fy: m.existingCsQuota },
-    { k: 'br_cs_gap', label: 'CS hire gap (= demand − book)', fy: csGapUi.fy, tip: csGapUi.tip, style: csGapUi.cls },
+    { k: 'br_cs_book', label: 'CS watermark book (hire sizing · full year)', fy: m.existingCsQuota },
+    { k: 'br_cs_gap', label: 'CS hire gap (= demand − watermark book)', fy: csGapUi.fy, tip: csGapUi.tip, style: csGapUi.cls },
   ];
   for (const row of bridgeRows) {
     html += `<tr><td>${row.label}${row.tip ? `<span class="lock-tag">${row.tip}</span>` : ''}</td>`;
@@ -6303,7 +6309,7 @@ function renderOverview() {
   const gtmSm = BUD_P.reduce((s, p) => s + gtm[p].smTotal, 0);
   const grainQ = STATE.ovGrain !== 'm';
   const packet = buildBudgetAssurancePacket();
-  const risks = runBudgetRiskChecks(packet);
+  const risks = getAssuranceRisks(packet);
   const riskHtml = renderAssureFindingRows(risks);
   const highN = risks.filter(r => r.severity === 'high').length;
   const medN = risks.filter(r => r.severity === 'medium').length;
@@ -6312,14 +6318,14 @@ function renderOverview() {
     <div class="slide-sub">Risk checks + operating plan visuals. Outlier / Status / Predictive live on <button type="button" class="act-btn" onclick="showTab('analytics')" style="display:inline;padding:2px 8px;vertical-align:baseline">Analytics →</button></div>
 
     <div class="pa-banner">
-      Plan Assurance lanes moved to <strong>Analytics</strong> (full-width). This page keeps formula-graph <strong>risk checks</strong> and the YoY operating visuals.
+      Plan Assurance lanes live on <strong>Analytics</strong>. Risk checks here mirror the platform <code>/assess</code> SoT (local fallback only if API unavailable).
       ${highN || medN ? ` · <span style="color:${highN ? 'var(--red)' : 'var(--amber)'}">${highN ? highN + ' high' : ''}${highN && medN ? ' · ' : ''}${medN ? medN + ' med' : ''} risk</span>` : ' · risk strip clear'}
     </div>
 
     <div class="assure-panel" id="plan-assurance-risk">
       <div class="assure-wide" style="margin:0">
         <div class="assure-wide-hd">
-          <div class="assure-lane-lbl">Risk checks · formula-graph validations</div>
+          <div class="assure-lane-lbl">Risk checks · Plan Assurance /assess SoT</div>
           <div style="font-size:10px;color:var(--text3)">${risks.filter(r => r.severity === 'ok').length} clear · refreshes with the plan</div>
         </div>
         <div class="assure-risk-grid">${riskHtml || '<div style="color:var(--text3)">No checks yet.</div>'}</div>
@@ -7704,7 +7710,10 @@ function renderAnalytics() {
   const suiteInfo = getAssureScenarioSuite(packet);
   const suite = suiteInfo.suite;
   const suiteStale = suiteInfo.stale;
-  const statusHtml = (STATE._assureNarrative || buildDeterministicAssuranceNarrative(packet, runBudgetRiskChecks(packet)))
+  const risks = getAssuranceRisks(packet);
+  const whttHtml = renderWhttHtml(STATE._assureAssessment, (STATE.paMode === 'tech' ? 'tech' : 'plain'));
+  const methodHtml = renderMethodCardHtml(STATE._assureMethodCard);
+  const statusHtml = (STATE._assureNarrative || buildDeterministicAssuranceNarrative(packet, risks))
     .replace(/</g, '&lt;').replace(/\n/g, '<br>');
   const histNarrative = (STATE._assureHistoryNarrative || buildDeterministicHistoryNarrative(hist))
     .replace(/</g, '&lt;').replace(/\n/g, '<br>');
@@ -7774,6 +7783,8 @@ function renderAnalytics() {
             </div>
           </div>
           <div class="pa-body" id="assureStatusBody">${statusHtml}</div>
+          <div id="assureWhttBody" style="padding:0 14px 12px">${whttHtml}</div>
+          <div id="assureMethodBody" style="padding:0 14px 14px">${methodHtml}</div>
         </div>
 
         <div class="pa-card">
@@ -8234,6 +8245,245 @@ function buildAssuranceHistoryPacket(planPacket) {
 }
 
 /** Structured packet models may reason over — closed formula graph snapshot. */
+
+// ─── Plan Assurance platform engine (Python SoT via /assess) ───────────────
+/** Cached assessment from POST /api/v1/predictive-planning/assess — live SoT for risks/WHTT. */
+STATE._assureAssessment = STATE._assureAssessment || null;
+STATE._assureAssessmentAt = STATE._assureAssessmentAt || null;
+STATE._assureMethodCard = STATE._assureMethodCard || null;
+STATE._warehouseBudgetVersionId = STATE._warehouseBudgetVersionId || null;
+STATE._assureMcSeed = STATE._assureMcSeed || 42;
+STATE._assureServerMc = STATE._assureServerMc || null;
+
+const BUDGET_PERSIST_SKIP_EXTRA = new Set([
+  '_assureAssessment',
+  '_assureMethodCard',
+  '_assureServerMc',
+]);
+for (const k of BUDGET_PERSIST_SKIP_EXTRA) BUDGET_PERSIST_SKIP.add(k);
+
+function mapAssessmentResultsToRisks(assessment) {
+  const results = (((assessment || {}).feasibility) || {}).results || [];
+  return results
+    .filter(r => r && r.status !== 'skipped')
+    .map(r => ({
+      id: r.id,
+      severity: r.severity || 'ok',
+      title: r.title || r.label || r.id,
+      detail: r.detail || '',
+      status: r.status,
+      observed: r.observed,
+      required: r.required,
+      gap: r.gap,
+    }));
+}
+
+function getAssuranceRisks(packet) {
+  if (STATE._assureAssessment && STATE._assureAssessment.feasibility) {
+    return mapAssessmentResultsToRisks(STATE._assureAssessment);
+  }
+  // Offline / first-paint fallback only — live SoT is /assess.
+  return runBudgetRiskChecks(packet || buildBudgetAssurancePacket());
+}
+
+function buildSimulationSummaryFromSuite(suite) {
+  if (!suite) return null;
+  const breaks = [];
+  const watches = [];
+  (suite.cases || []).forEach(c => {
+    (c.breaks || []).forEach(b => breaks.push(b));
+    (c.watches || []).forEach(w => watches.push(w));
+  });
+  const mc = suite.mc || STATE._assureServerMc || null;
+  const summary = {
+    trials: mc && mc.n != null ? mc.n : null,
+    breaks: Array.from(new Set(breaks)),
+    watches: Array.from(new Set(watches)),
+    p_arr_miss: mc && mc.arr ? mc.arr.pMiss : null,
+    p_cash_below_floor: mc && mc.cash ? mc.cash.pBreak : null,
+    p_ops_liquidity: mc ? mc.pOpsRisk : null,
+    p_ae_short: mc ? mc.pAeShort : null,
+    priors: mc && mc.sig ? { ...mc.sig, source: (mc.prior_source || 'client_or_server') } : null,
+  };
+  return summary;
+}
+
+function buildAssuranceHistoryForPriors(packet) {
+  try {
+    const hist = buildAssuranceHistoryPacket(packet || buildBudgetAssurancePacket());
+    const ending = [];
+    if (hist && hist.prior25 && hist.prior25.decArr != null) ending.push(hist.prior25.decArr);
+    if (hist && hist.prior26 && hist.prior26.decArr != null) ending.push(hist.prior26.decArr);
+    if (packet && packet.decArr != null) ending.push(packet.decArr);
+    return {
+      ending_arr: ending,
+      ending_arr_yoy_pp: [],
+      cpl_log_ratios: [],
+      attrition_pp: [],
+      pipeline_cover: [],
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function resolveBudgetOrgId() {
+  if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return null;
+  try {
+    return await window.SMPLOutlook.resolveOrgId({ waitForParent: true });
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchPlanAssessment(opts) {
+  opts = opts || {};
+  const packet = opts.packet || buildBudgetAssurancePacket();
+  const orgId = opts.orgId || await resolveBudgetOrgId();
+  if (!orgId) {
+    console.warn('[plan-assurance] no org — keeping local risk fallback');
+    return null;
+  }
+  const simulation = opts.simulation !== undefined
+    ? opts.simulation
+    : buildSimulationSummaryFromSuite(STATE._assureScenarioSuite);
+  const body = {
+    plan_ref: {
+      organization_id: orgId,
+      budget_version_id: STATE._warehouseBudgetVersionId || null,
+      scenario: 'budget',
+      period_label: packet.period_label,
+      budget_year: packet.budget_year,
+    },
+    packet,
+    simulation,
+    include_passing_conditions: false,
+    persist: !!(STATE._warehouseBudgetVersionId),
+    history: buildAssuranceHistoryForPriors(packet),
+    mc_seed: STATE._assureMcSeed || 42,
+    prior_source: null,
+  };
+  const res = await fetch('/api/v1/predictive-planning/assess', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    console.warn('[plan-assurance] /assess failed', res.status, await res.text());
+    return null;
+  }
+  const assessment = await res.json();
+  STATE._assureAssessment = assessment;
+  STATE._assureAssessmentAt = Date.now();
+  STATE._assureMethodCard = assessment.method_card || null;
+  try { persistBudgetState(); } catch (e) { /* ignore */ }
+  return assessment;
+}
+
+async function fetchServerMonteCarlo(opts) {
+  opts = opts || {};
+  const packet = opts.packet || buildBudgetAssurancePacket();
+  const orgId = opts.orgId || await resolveBudgetOrgId();
+  if (!orgId) return null;
+  const n = opts.n || 1000;
+  const seed = opts.seed != null ? opts.seed : (STATE._assureMcSeed || 42);
+  const suite = STATE._assureScenarioSuite;
+  const breaks = [];
+  const watches = [];
+  if (suite && suite.cases) {
+    suite.cases.forEach(c => {
+      (c.breaks || []).forEach(b => breaks.push(b));
+      (c.watches || []).forEach(w => watches.push(w));
+    });
+  }
+  const res = await fetch('/api/v1/predictive-planning/simulate', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      plan_ref: {
+        organization_id: orgId,
+        budget_version_id: STATE._warehouseBudgetVersionId || null,
+        scenario: 'budget',
+        period_label: packet.period_label,
+        budget_year: packet.budget_year,
+      },
+      packet,
+      n_trials: n,
+      seed,
+      history: buildAssuranceHistoryForPriors(packet),
+      breaks: Array.from(new Set(breaks)),
+      watches: Array.from(new Set(watches)),
+    }),
+  });
+  if (!res.ok) {
+    console.warn('[plan-assurance] /simulate failed — browser MC fallback', res.status);
+    return null;
+  }
+  const data = await res.json();
+  STATE._assureMcSeed = seed;
+  STATE._assureServerMc = data.result;
+  STATE._assureMethodCard = data.method_card || STATE._assureMethodCard;
+  return data;
+}
+
+function renderWhttHtml(assessment, mode) {
+  const conditions = (assessment && assessment.what_has_to_be_true) || [];
+  if (!conditions.length) {
+    return '<div style="color:var(--text3);font-size:12px">No What-Has-To-Be-True conditions — plan clears feasibility (or assessment pending).</div>';
+  }
+  const order = { must_close: 0, must_confirm: 1, must_hold: 2 };
+  const sorted = conditions.slice().sort((a, b) => (order[a.verdict] ?? 9) - (order[b.verdict] ?? 9));
+  const groups = { must_close: [], must_confirm: [], must_hold: [] };
+  sorted.forEach(c => {
+    if (groups[c.verdict]) groups[c.verdict].push(c);
+  });
+  const labels = {
+    must_close: 'Must close',
+    must_confirm: 'Must confirm',
+    must_hold: 'Must hold',
+  };
+  const sevClass = { must_close: 'high', must_confirm: 'med', must_hold: 'ok' };
+  let html = '<div class="pa-whtt">';
+  for (const key of ['must_close', 'must_confirm', 'must_hold']) {
+    const rows = groups[key];
+    if (!rows.length) continue;
+    html += `<div class="pa-whtt-group"><div class="pa-whtt-lbl">${labels[key]} · ${rows.length}</div>`;
+    rows.forEach(c => {
+      const levers = (c.levers || []).slice(0, 4).join(', ');
+      const extra = mode === 'tech'
+        ? `<div class="assure-cite">${String(c.rationale || '').replace(/</g, '&lt;')}${levers ? ' · Levers: ' + levers.replace(/</g, '&lt;') : ''}</div>`
+        : (levers ? `<div class="assure-cite">Levers: ${levers.replace(/</g, '&lt;')}</div>` : '');
+      html += `<div class="assure-risk"><span class="assure-sev ${sevClass[key]}">${labels[key]}</span><div><strong>${String(c.statement || '').replace(/</g, '&lt;')}</strong>${extra}</div></div>`;
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderMethodCardHtml(card) {
+  card = card || STATE._assureMethodCard;
+  if (!card) return '';
+  const priors = card.priors || {};
+  const priorBits = Object.keys(priors).map(k => `${k}=${priors[k]}`).join(' · ');
+  const notClaimed = (card.not_claimed || []).slice(0, 3).join('; ');
+  return `<div class="pa-method-card"><div class="pa-card-lbl" style="margin-bottom:6px">Method & limits</div>
+    <div style="font-size:12px;color:var(--text2)">${String(card.source || '').replace(/</g, '&lt;')} — ${(card.notes && card.notes[0] || '').replace(/</g, '&lt;')}</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">Priors: ${priorBits.replace(/</g, '&lt;') || '—'}</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:2px">Not claimed: ${notClaimed.replace(/</g, '&lt;') || 'PoA / AutoML forecasting'}</div>
+  </div>`;
+}
+
+async function ensurePlanAssessment(force) {
+  if (!force && STATE._assureAssessment && STATE._assureAssessmentAt && (Date.now() - STATE._assureAssessmentAt) < 15000) {
+    return STATE._assureAssessment;
+  }
+  return fetchPlanAssessment({});
+}
+
+
 function buildBudgetAssurancePacket() {
   const arr = computeBudgetArr();
   const gtm = computeGtmPlan();
@@ -8323,6 +8573,8 @@ function buildBudgetAssurancePacket() {
   };
 }
 
+/** Offline/parity fallback only. Live UI must prefer getAssuranceRisks() → /assess. */
+/** Offline/parity fallback only. Live UI must prefer getAssuranceRisks() → /assess. */
 function runBudgetRiskChecks(packet) {
   const p = packet || buildBudgetAssurancePacket();
   const out = [];
@@ -9363,6 +9615,16 @@ async function runScenarioStressSuite(opts) {
     suite.narrative = buildScenarioNarrativeFromSuite(suite);
     STATE._assureScenarioSuite = suite;
     STATE._assureScenarioNarrative = suite.narrative;
+    try {
+      const sim = await fetchServerMonteCarlo({ packet: buildBudgetAssurancePacket(), n: (suite.mc && suite.mc.n) || 1000 });
+      if (sim && suite) {
+        suite.serverMc = sim.result;
+        suite.method_card = sim.method_card;
+        if (!suite.mc) suite.mc = sim.result;
+      }
+      await fetchPlanAssessment({ packet: buildBudgetAssurancePacket(), simulation: buildSimulationSummaryFromSuite(suite) });
+    } catch (e) { console.warn('[plan-assurance] post-scenario assess/simulate', e); }
+
     return suite;
   } catch (e) {
     restoreScenarioLevers(snap);
@@ -9868,10 +10130,16 @@ function assurancePacketToCommentaryInputs(packet) {
 
 window.refreshAssuranceNarrative = async function(useLlm) {
   const packet = buildBudgetAssurancePacket();
-  const risks = runBudgetRiskChecks(packet);
+  const body = document.getElementById('assureStatusBody');
+  if (body) body.innerHTML = '<span style="color:var(--text3)">Assessing plan…</span>';
+  try {
+    await fetchPlanAssessment({ packet, simulation: buildSimulationSummaryFromSuite(STATE._assureScenarioSuite) });
+  } catch (e) {
+    console.warn('[plan-assurance] assess refresh failed', e);
+  }
+  const risks = getAssuranceRisks(packet);
   const soT = buildDeterministicAssuranceNarrative(packet, risks);
   let text = soT;
-  const body = document.getElementById('assureStatusBody');
   if (body) body.innerHTML = '<span style="color:var(--text3)">Generating…</span>';
 
   if (useLlm) {
@@ -9884,6 +10152,18 @@ window.refreshAssuranceNarrative = async function(useLlm) {
   try { persistBudgetState(); } catch (e) { /* ignore */ }
   refresh();
 };
+
+/** Kick /assess when Analytics opens so WHTT + risk SoT are fresh. */
+window.ensureAnalyticsAssessment = async function() {
+  try { await ensurePlanAssessment(false); refresh(); } catch (e) { /* ignore */ }
+};
+
+
+/** Kick /assess when Analytics opens so WHTT + risk SoT are fresh. */
+window.ensureAnalyticsAssessment = async function() {
+  try { await ensurePlanAssessment(false); refresh(); } catch (e) { /* ignore */ }
+};
+
 
 // ─── PROMOTE / VERSIONS (warehouse push) ───────────────────────────────────
 const BUDGET_VERSIONS_KEY = 'smpl.budgetEngine.fy2027.versions.v1';
@@ -10050,11 +10330,14 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
   });
   if (!draftRes.ok) return { ok: false, reason: 'draft', detail: await draftRes.text() };
   const draft = await draftRes.json();
+  STATE._warehouseBudgetVersionId = draft.id;
   if (status !== 'final') return { ok: true, draft: true, id: draft.id };
   const promoteRes = await fetch('/api/v1/budget/versions/' + draft.id + '/promote?organization_id=' + encodeURIComponent(orgId), {
     method: 'POST', credentials: 'include',
   });
   if (!promoteRes.ok) return { ok: false, reason: 'promote', detail: await promoteRes.text() };
+  STATE._warehouseBudgetVersionId = draft.id;
+  try { await fetchPlanAssessment({ persist: true }); } catch (e) { /* ignore */ }
   return { ok: true, promoted: true, id: draft.id };
 }
 
@@ -10224,6 +10507,9 @@ window.showTab = function(tab) {
   curTab = tab;
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   refresh();
+  if (tab === 'analytics' && window.ensureAnalyticsAssessment) {
+    setTimeout(() => { window.ensureAnalyticsAssessment(); }, 0);
+  }
 };
 
 /** Jump to a source tab (and optional dept focus) from a provenance chip. */
