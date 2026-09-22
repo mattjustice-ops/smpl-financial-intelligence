@@ -26,7 +26,7 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .slide{padding:20px 24px;max-width:100%}
 .slide-title{font-family:var(--serif);font-size:20px;font-weight:300;font-style:italic;color:var(--text);margin-bottom:3px}
 .slide-sub{font-size:11.5px;color:var(--text2);margin-bottom:16px}
-.kpi-strip{display:grid;gap:10px;margin-bottom:16px}
+.kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin-bottom:16px}
 .ks5{grid-template-columns:repeat(5,1fr)}.ks4{grid-template-columns:repeat(4,1fr)}.ks6{grid-template-columns:repeat(6,1fr)}
 .kpi{background:var(--bg2);border-radius:var(--r2);padding:12px 15px;border:0.5px solid var(--border);box-shadow:var(--shadow)}
 .kpi-lbl{font-size:9.5px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
@@ -65,15 +65,78 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .lever-lbl{font-size:12px;color:var(--text2)}
 .lever-val{font-size:12px;font-weight:500;color:var(--text);font-family:var(--mono);min-width:48px;text-align:right}
 .lever-hint{font-size:9.5px;color:var(--text3);margin-top:1px}
+.engine-shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.engine-content{display:flex;flex:1;min-height:0;overflow:hidden}
+.lever-sidebar{width:290px;flex-shrink:0;overflow-y:auto;min-height:0;border-right:0.5px solid var(--border);background:var(--bg2);padding:14px}
+.lever-sidebar .lever-section{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:0 0 8px;border-bottom:0.5px solid var(--border);margin-bottom:8px}
+.lever-sidebar .lever-section + .lever-section{padding-top:10px;margin-top:4px}
 input[type=range]{width:100%;height:4px;appearance:none;background:var(--lgray);border-radius:2px;outline:none;cursor:pointer}
 input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer}
-/* req toggle */
-.req-row{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:11.5px}
-.req-row:last-child{border-bottom:none}
-.tog{width:32px;height:18px;border-radius:9px;border:none;cursor:pointer;position:relative;flex-shrink:0;transition:background .2s}
-.tog.on{background:var(--accent)}.tog.off{background:var(--border)}
-.tog::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;transition:left .15s}
-.tog.on::after{left:16px}.tog.off::after{left:2px}
+
+
+/* Forecast HC / GTM — Budget-inspired sticky headers + fixed col widths for alignment */
+.hc-wrap{overflow:auto;max-height:min(70vh,820px);margin:0 0 18px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg2)}
+/* GTM: no nested vertical scroll — use the main slide scrollbar; keep sticky thead vs slideArea */
+.hc-wrap.gtm-flow{overflow-x:auto;overflow-y:visible;max-height:none}
+.hc-tbl{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;margin:0;table-layout:fixed}
+.hc-tbl th,.hc-tbl td{padding:4px 7px;border-bottom:0.5px solid var(--border);text-align:right;white-space:nowrap;font-family:var(--mono);font-size:10px;color:var(--text2);box-sizing:border-box}
+.hc-tbl thead th{font-size:9px;font-weight:500;color:var(--text3);position:sticky;top:0;z-index:5;background:var(--bg);box-shadow:inset 0 -1px 0 var(--border2)}
+.hc-tbl th:first-child,.hc-tbl td:first-child{text-align:left;font-family:inherit;font-size:11px;color:var(--text);width:220px;min-width:220px;max-width:220px;white-space:normal;line-height:1.25;position:sticky;left:0;z-index:2;background:var(--bg);box-shadow:inset -1px 0 0 var(--border2)}
+.hc-tbl thead th:first-child{z-index:6;left:0;box-shadow:inset -1px 0 0 var(--border2),inset 0 -1px 0 var(--border2);background:var(--bg)}
+.hc-tbl thead th:first-child.act-h,
+.hc-tbl thead th:first-child.line-h{background:#1c281f;color:var(--text)}
+.ts-tbl thead th.line-h,
+.ts-tbl thead th.act-col{background:#1c281f;color:var(--text);border-bottom-color:var(--border2)}
+.ts-tbl thead th.fc-col{background:rgba(186,117,23,0.08)}
+.hc-tbl th.act-h,.hc-tbl th.fc-h,.hc-tbl th.fy-h{position:sticky;top:0;z-index:5}
+.hc-tbl th.act-h,.hc-tbl th.fc-h{width:64px;min-width:64px;max-width:64px;padding-top:6px;padding-bottom:6px;vertical-align:bottom}
+.hc-tbl td.act-c,.hc-tbl td.fc-c{width:64px;min-width:64px;max-width:64px}
+.hc-tbl th.act-h{color:var(--text);background:#1c281f}
+.hc-tbl th.fc-h{color:var(--amber);background:rgba(186,117,23,0.08)}
+.hc-tbl th.fy-h{color:var(--text);width:72px;min-width:72px;max-width:72px;font-weight:600;background:var(--bg)}
+.hc-tbl td.fy-c{width:72px;min-width:72px;max-width:72px}
+.hc-tbl th .hc-mo{display:block;font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.03em;line-height:1.15}
+.hc-tbl th.act-h .hc-mo{color:var(--text)}
+.hc-tbl th.fc-h .hc-mo{color:var(--amber)}
+.hc-tbl th .hc-tag{display:block;font-family:inherit;font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:2px;opacity:1}
+.hc-tbl th.act-h .hc-tag{color:var(--text2)}
+.hc-tbl th.fc-h .hc-tag{color:var(--amber)}
+.hc-tbl td.act-c{color:var(--text3)}
+.hc-tbl td.fc-c{color:var(--amber)!important;background:rgba(186,117,23,0.03)}
+.hc-tbl td.fy-c{color:var(--text);font-weight:500}
+.hc-attr-pct{width:42px;background:transparent;border:0.5px solid var(--border);border-radius:4px;color:var(--amber);font-family:var(--mono);font-size:10px;text-align:right;padding:2px 4px;margin-left:6px}
+
+.hc-tbl th.act-h,.hc-tbl th.fc-h{cursor:default}
+.hc-tbl.gtm-pipe th.act-h,.hc-tbl.gtm-pipe th.fc-h{cursor:pointer}
+.hc-tbl.gtm-pipe th.act-h:hover,.hc-tbl.gtm-pipe th.fc-h:hover{filter:brightness(1.15)}
+.hc-tbl.gtm-pipe th.sel{box-shadow:inset 0 -3px 0 var(--accent)}
+.hc-tbl.gtm-pipe th.sel .hc-mo{color:var(--accent)}
+.gtm-pa-note{font-size:11.5px;color:var(--text2);background:var(--bg2);border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:10px 12px;margin:10px 0 12px;line-height:1.45}
+.gtm-pa-note strong{color:var(--text)}
+.gtm-band{font-size:9px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:8px;margin-left:6px}
+.gtm-band.must{background:rgba(29,158,117,0.15);color:var(--teal)}
+.gtm-band.fence{background:rgba(184,144,96,0.2);color:var(--amber)}
+.gtm-band.stretch{background:rgba(184,112,95,0.15);color:var(--red)}
+.hc-tbl tr.sec td{background:var(--bg2);font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);font-weight:500;padding:7px 8px;font-family:inherit;text-align:left}
+.hc-tbl tr.sec td:first-child{background:var(--bg2)}
+.hc-tbl tr.tot td{font-weight:600;color:var(--text);border-top:1px solid var(--border2)}
+.hc-tbl tr.tot td:first-child{background:var(--bg)}
+.hc-tbl tr.adj td{background:rgba(184,144,96,0.07)}
+.hc-tbl tr.adj td:first-child{background:rgba(184,144,96,0.07);color:var(--amber)}
+.hc-tbl.bridge{width:100%;min-width:0}
+.hc-tbl.bridge th:first-child,.hc-tbl.bridge td:first-child{position:static;box-shadow:none;min-width:180px}
+.hc-hire{width:44px;background:transparent;border:0.5px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:10px;text-align:right;padding:2px 4px}
+.hc-hire.pos{color:var(--teal);border-color:rgba(95,168,120,0.45)}
+.hc-hire.neg{color:var(--red);border-color:rgba(184,112,95,0.45)}
+.hc-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center}
+.hc-tog{font-size:11px;padding:4px 11px;border-radius:20px;border:0.5px solid var(--border);background:none;color:var(--text2);cursor:pointer;font-family:inherit}
+.hc-tog.on{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
+.hc-banner{font-size:11.5px;color:var(--text2);background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.45}
+.hc-banner strong{color:var(--amber);font-family:var(--mono)}
+.hc-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);margin:0 0 12px;padding:7px 11px;border-radius:8px;border:0.5px solid rgba(184,144,96,0.4);background:rgba(184,144,96,0.1)}
+.hc-legend i{display:inline-block;width:14px;height:14px;border-radius:3px;background:rgba(184,144,96,0.35);border:1px solid rgba(184,144,96,0.7);flex:0 0 auto}
+.hc-legend strong{color:#f0d4a0;font-weight:600}
+
 /* Three-statement tables — match Board Platform 3-Statement tab */
 .ts-tbl{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
 .ts-tbl col.ts-label-col{width:240px}
@@ -139,8 +202,23 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .pa-loop{border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r) var(--r) 0;background:var(--bg2);padding:12px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
 .pa-loop-copy{font-size:12px;color:var(--text2);line-height:1.5;max-width:52rem}
 .pa-loop-copy strong{color:var(--text);font-weight:500}
-.pa-loop a,.pa-link{font-size:11.5px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
+.pa-loop a,.pa-link{font-size:11.5px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap;background:none;border:0;cursor:pointer;padding:0;font-family:inherit}
 .pa-loop a:hover,.pa-link:hover{opacity:.85}
+.pa-card{border:0.5px solid var(--border);border-radius:var(--r);background:var(--bg2);padding:14px 16px;margin-bottom:12px}
+.pa-card-hd{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
+.pa-card-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.45px;color:var(--text3);font-weight:500;margin:0}
+.assure-risk{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:12px;color:var(--text2);line-height:1.45}
+.assure-risk:last-child{border-bottom:0}
+.assure-risk strong{color:var(--text);font-weight:500}
+.assure-sev{flex:0 0 auto;font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:4px}
+.assure-sev.high,.assure-sev.must_close{background:rgba(216,90,48,.12);color:var(--red)}
+.assure-sev.medium,.assure-sev.med,.assure-sev.must_confirm{background:var(--amber-light);color:var(--amber)}
+.assure-sev.low,.assure-sev.ok,.assure-sev.must_hold{background:var(--teal-light);color:var(--teal)}
+.assure-cite{font-size:10.5px;color:var(--text3);margin-top:3px}
+.pa-whtt-group{margin-bottom:10px}
+.pa-whtt-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:6px;font-weight:500}
+.pa-verdict{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text)}
+.pa-meta{font-size:10.5px;color:var(--text3)}
 .gtm-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
 @media(max-width:900px){.gtm-strip{grid-template-columns:1fr 1fr}}
 .gtm-tile{border:0.5px solid var(--border);border-radius:var(--r);background:var(--bg2);padding:10px 12px}
@@ -161,26 +239,7 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 </style>
 </head>
 <body>
-<div style="display:flex;height:100vh;overflow:hidden">
-<div id="leverSidebar" style="width:290px;flex-shrink:0;overflow-y:auto;border-right:0.5px solid var(--border);background:var(--bg2);padding:14px">
-  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding-bottom:8px;border-bottom:0.5px solid var(--border);margin-bottom:8px">ARR — from deal pipeline</div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">New business attainment</span><span class="lever-val" id="v-nb">100%</span></div><input type="range" min="50" max="150" value="100" step="5" id="l-nb" oninput="refresh()"><div class="lever-hint">% of weighted pipeline · 195 deals</div></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">Expansion rate</span><span class="lever-val" id="v-exp">100%</span></div><input type="range" min="50" max="150" value="100" step="5" id="l-exp" oninput="refresh()"></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">Churn stress</span><span class="lever-val" id="v-churn">100%</span></div><input type="range" min="70" max="160" value="100" step="5" id="l-churn" oninput="refresh()"><div class="lever-hint">100% = base · 160% = SMB stress</div></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">Renewal rate adj.</span><span class="lever-val" id="v-ren">+0%</span></div><input type="range" min="-15" max="15" value="0" step="1" id="l-ren" oninput="refresh()"><div class="lever-hint">Commit 95% · Likely 75% · At Risk 55%</div></div>
-  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:8px">Cost ratios — % of revenue</div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">COGS %</span><span class="lever-val" id="v-cogs">29%</span></div><input type="range" min="18" max="45" value="29" step="1" id="l-cogs" oninput="refresh()"></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">S&M %</span><span class="lever-val" id="v-sm">34%</span></div><input type="range" min="20" max="60" value="34" step="1" id="l-sm" oninput="refresh()"></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">R&D %</span><span class="lever-val" id="v-rd">16%</span></div><input type="range" min="8" max="35" value="16" step="1" id="l-rd" oninput="refresh()"></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">G&A %</span><span class="lever-val" id="v-ga">11%</span></div><input type="range" min="5" max="25" value="11" step="1" id="l-ga" oninput="refresh()"></div>
-  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:8px">Working capital</div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">DSO (days)</span><span class="lever-val" id="v-dso">42d</span></div><input type="range" min="20" max="75" value="42" step="1" id="l-dso" oninput="refresh()"></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">DPO (days)</span><span class="lever-val" id="v-dpo">30d</span></div><input type="range" min="15" max="60" value="30" step="1" id="l-dpo" oninput="refresh()"></div>
-  <div class="lever"><div class="lever-row"><span class="lever-lbl">CapEx / mo</span><span class="lever-val" id="v-capex">$220K</span></div><input type="range" min="100" max="500" value="220" step="10" id="l-capex" oninput="refresh()"></div>
-  <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);font-weight:500;padding:10px 0 6px;border-bottom:0.5px solid var(--border);margin-bottom:8px">Hire-by-hire open reqs</div>
-  <div id="leverReqList"></div>
-</div>
-<div style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-width:0">
+<div class="engine-shell">
 <div class="topbar">
   <div class="logo">SMPL <span style="color:var(--text3);font-weight:300;font-size:13px">· Rolling Forecast Engine</span></div>
   <div class="topbar-right">
@@ -207,18 +266,23 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 </div>
 
 <nav class="nav" id="mainNav">
-  <button class="nav-btn active" onclick="showTab('overview',this)">Overview</button>
-  <button class="nav-btn" onclick="showTab('arr',this)">ARR Waterfall</button>
-  <button class="nav-btn" onclick="showTab('is',this)">Income Statement</button>
-  <button class="nav-btn" onclick="showTab('cashflow',this)">Cash Flow</button>
-  <button class="nav-btn" onclick="showTab('bs',this)">Balance Sheet</button>
+  <button class="nav-btn active" onclick="showTab('overview',this)">Plan Summary</button>
+  <button class="nav-btn" onclick="showTab('analytics',this)">Analytics</button>
   <button class="nav-btn" onclick="showTab('pipeline',this)">GTM / Pipeline</button>
+  <button class="nav-btn" onclick="showTab('arr',this)">ARR Waterfall</button>
   <button class="nav-btn" onclick="showTab('headcount',this)">Headcount</button>
+  <button class="nav-btn" onclick="showTab('pnl',this)">P&amp;L</button>
+  <button class="nav-btn" onclick="showTab('is',this)">Income Statement</button>
+  <button class="nav-btn" onclick="showTab('bs',this)">Balance Sheet</button>
+  <button class="nav-btn" onclick="showTab('cashflow',this)">Cash Flow</button>
   <button class="nav-btn" onclick="showTab('sensitivity',this)">Sensitivity</button>
   <button class="nav-btn" onclick="showTab('versions',this)">Versions</button>
 </nav>
 
-<div id="slideArea" style="flex:1;overflow-y:auto;min-height:0"></div>
+<div class="engine-content">
+<div id="leverSidebar" class="lever-sidebar" style="display:none" aria-hidden="true" data-tab=""></div>
+<div id="slideArea" style="flex:1;overflow-y:auto;min-height:0;min-width:0"></div>
+</div>
 
 <div class="footer">
   <div class="footer-note">SMPL · Rolling Forecast Engine</div>
@@ -275,6 +339,7 @@ function getForecastARR(p){
       grr:a.grr||0,nrr:a.nrr||0,is_actual:true
     };
   }
+  if(_computeLock) return (_resultsCache&&_resultsCache[p]&&_resultsCache[p].arr)||null;
   var r=getResults()[p];
   return r&&r.arr?r.arr:null;
 }
@@ -428,19 +493,20 @@ function getDisplayIS(p){
 }
 
 function getDisplayBS(p){
-  var wh=getOutlookBS(p);
-  if(wh) return enrichForecastBS(wh,cfsFromWarehouse(p));
+  // Forecast months: client compute (HC / P&L / WC levers). Warehouse is Act + promoted finals.
   if(isForecastPeriod(p)){
     var r=getResults()[p];
     return r&&r.bs?enrichForecastBS(r.bs,r.cfs):null;
   }
+  var wh=getOutlookBS(p);
+  if(wh) return enrichForecastBS(wh,cfsFromWarehouse(p));
   return actualBsFromDemoTs(p)||actualBsFromSrc(p);
 }
 
 var _cfsChainCache=null;
 var _scenarioDirty=false;
 function invalidateCfsChain(){_cfsChainCache=null;}
-function markScenarioDirty(){_scenarioDirty=true;invalidateCfsChain();}
+function markScenarioDirty(){_scenarioDirty=true;_resultsCache=null;invalidateCfsChain();}
 
 function getCfsChain(){
   if(_cfsChainCache) return _cfsChainCache;
@@ -549,7 +615,7 @@ function buildStmtTable(allP, cfg, rows, getPeriodData, options) {
     }
     return `<tr class="${cls}"><td>${r.lbl}</td>${vals}${fyCell}</tr>`;
   }).join('');
-  return `<div style="overflow-x:auto"><table class="ts-tbl" style="min-width:${tableMinW}px">${colgroup}<thead><tr><th>Line Item</th>${stmtColHdrs(allP, cfg)}${fyHdr}</tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div style="overflow-x:auto"><table class="ts-tbl" style="min-width:${tableMinW}px">${colgroup}<thead><tr><th class="act-col line-h" aria-hidden="true"></th>${stmtColHdrs(allP, cfg)}${fyHdr}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /** Read live skin CSS tokens at chart-build time (never cache at module load). */
@@ -620,19 +686,163 @@ function destroyAll(){Object.values(charts).forEach(c=>{try{c.destroy();}catch(e
 
 // \u2500\u2500 COMPUTE ENGINE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function getEl(id,def){const el=document.getElementById(id);return el?+el.value:def;}
+
+/** Contract attainment levers — GTM / Pipeline tab sidebar (ARR waterfall is read-only). */
+let fcArrState = { nb: 100, exp: 100, churn: 100, ren: 0 };
+function updateFcArr(field, raw) {
+  const n = Number(raw);
+  if (field === 'nb') fcArrState.nb = Math.max(50, Math.min(150, Math.round(isNaN(n) ? 100 : n)));
+  else if (field === 'exp') fcArrState.exp = Math.max(50, Math.min(150, Math.round(isNaN(n) ? 100 : n)));
+  else if (field === 'churn') fcArrState.churn = Math.max(70, Math.min(160, Math.round(isNaN(n) ? 100 : n)));
+  else if (field === 'ren') fcArrState.ren = Math.max(-15, Math.min(15, Math.round(isNaN(n) ? 0 : n)));
+  markScenarioDirty();
+  refresh({ keepSidebar: true });
+}
+function fcArrAtDefault() {
+  return fcArrState.nb === 100 && fcArrState.exp === 100 && fcArrState.churn === 100 && fcArrState.ren === 0;
+}
+function fcArrRenLabel() {
+  const v = fcArrState.ren;
+  return (v >= 0 ? '+' : '') + v + '%';
+}
+function buildArrSidebarHtml() {
+  return `
+    <div class="lever-section">Contract attainment</div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">New business attainment</span><span class="lever-val" id="v-nb">${fcArrState.nb}%</span></div>
+      <input type="range" min="50" max="150" value="${fcArrState.nb}" step="5" id="l-nb" oninput="updateFcArr('nb',this.value)">
+      <div class="lever-hint">% of weighted pipeline</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">Expansion rate</span><span class="lever-val" id="v-exp">${fcArrState.exp}%</span></div>
+      <input type="range" min="50" max="150" value="${fcArrState.exp}" step="5" id="l-exp" oninput="updateFcArr('exp',this.value)">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">Churn stress</span><span class="lever-val" id="v-churn">${fcArrState.churn}%</span></div>
+      <input type="range" min="70" max="160" value="${fcArrState.churn}" step="5" id="l-churn" oninput="updateFcArr('churn',this.value)">
+      <div class="lever-hint">100% = base · 160% = SMB stress</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">Renewal rate adj.</span><span class="lever-val" id="v-ren">${fcArrRenLabel()}</span></div>
+      <input type="range" min="-15" max="15" value="${fcArrState.ren}" step="1" id="l-ren" oninput="updateFcArr('ren',this.value)">
+      <div class="lever-hint">Commit 95% · Likely 75% · At Risk 55%</div>
+    </div>`;
+}
+
+/** Cost ratios — P&L tab sidebar. */
+let fcCostState = { cogs: 29, sm: 34, rd: 16, ga: 11, svcPct: 3.3 };
+function updateFcCost(field, raw) {
+  const n = Number(raw);
+  if (field === 'cogs') fcCostState.cogs = Math.max(18, Math.min(45, Math.round(isNaN(n) ? 29 : n)));
+  else if (field === 'sm') fcCostState.sm = Math.max(20, Math.min(60, Math.round(isNaN(n) ? 34 : n)));
+  else if (field === 'rd') fcCostState.rd = Math.max(8, Math.min(35, Math.round(isNaN(n) ? 16 : n)));
+  else if (field === 'ga') fcCostState.ga = Math.max(5, Math.min(25, Math.round(isNaN(n) ? 11 : n)));
+  else if (field === 'svcPct') fcCostState.svcPct = Math.max(0, Math.min(10, Math.round((isNaN(n) ? 3.3 : n) * 10) / 10));
+  markScenarioDirty();
+  refresh({ keepSidebar: true });
+}
+function fcCostAtDefault() {
+  return fcCostState.cogs === 29 && fcCostState.sm === 34 && fcCostState.rd === 16 && fcCostState.ga === 11
+    && fcCostState.svcPct === 3.3;
+}
+function buildCostSidebarHtml() {
+  return `
+    <div class="lever-section">Cost ratios — % of revenue</div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">COGS %</span><span class="lever-val" id="v-cogs">${fcCostState.cogs}%</span></div>
+      <input type="range" min="18" max="45" value="${fcCostState.cogs}" step="1" id="l-cogs" oninput="updateFcCost('cogs',this.value)">
+      <div class="lever-hint">Feeds forecast cost of revenue</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">S&amp;M %</span><span class="lever-val" id="v-sm">${fcCostState.sm}%</span></div>
+      <input type="range" min="20" max="60" value="${fcCostState.sm}" step="1" id="l-sm" oninput="updateFcCost('sm',this.value)">
+      <div class="lever-hint">Fallback seed · dept books drive OpEx</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">R&amp;D %</span><span class="lever-val" id="v-rd">${fcCostState.rd}%</span></div>
+      <input type="range" min="8" max="35" value="${fcCostState.rd}" step="1" id="l-rd" oninput="updateFcCost('rd',this.value)">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">G&amp;A %</span><span class="lever-val" id="v-ga">${fcCostState.ga}%</span></div>
+      <input type="range" min="5" max="25" value="${fcCostState.ga}" step="1" id="l-ga" oninput="updateFcCost('ga',this.value)">
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">Services % of sub</span><span class="lever-val" id="v-svc">${fcCostState.svcPct}%</span></div>
+      <input type="range" min="0" max="10" value="${fcCostState.svcPct}" step="0.1" id="l-svc" oninput="updateFcCost('svcPct',this.value)">
+      <div class="lever-hint">Services revenue = subscription × %</div>
+    </div>`;
+}
+
+/** Working capital / CapEx — Cash Flow tab sidebar. */
+let fcWcState = { dso: 42, dpo: 30, capexPct: 2.0 };
+function updateFcWc(field, raw) {
+  const n = Number(raw);
+  if (field === 'dso') fcWcState.dso = Math.max(20, Math.min(75, Math.round(isNaN(n) ? 42 : n)));
+  else if (field === 'dpo') fcWcState.dpo = Math.max(15, Math.min(60, Math.round(isNaN(n) ? 30 : n)));
+  else if (field === 'capexPct') fcWcState.capexPct = Math.max(0, Math.min(5, Math.round((isNaN(n) ? 2 : n) * 10) / 10));
+  markScenarioDirty();
+  refresh({ keepSidebar: true });
+}
+function fcWcAtDefault() {
+  return fcWcState.dso === 42 && fcWcState.dpo === 30 && fcWcState.capexPct === 2.0;
+}
+function buildWcSidebarHtml() {
+  return `
+    <div class="lever-section">Working capital</div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">DSO (days)</span><span class="lever-val" id="v-dso">${fcWcState.dso}d</span></div>
+      <input type="range" min="20" max="75" value="${fcWcState.dso}" step="1" id="l-dso" oninput="updateFcWc('dso',this.value)">
+      <div class="lever-hint">Drives forecast ΔAR</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">DPO (days)</span><span class="lever-val" id="v-dpo">${fcWcState.dpo}d</span></div>
+      <input type="range" min="15" max="60" value="${fcWcState.dpo}" step="1" id="l-dpo" oninput="updateFcWc('dpo',this.value)">
+      <div class="lever-hint">Drives forecast ΔAP</div>
+    </div>
+    <div class="lever">
+      <div class="lever-row"><span class="lever-lbl">CapEx % of rev</span><span class="lever-val" id="v-capex">${fcWcState.capexPct}%</span></div>
+      <input type="range" min="0" max="5" value="${fcWcState.capexPct}" step="0.1" id="l-capex" oninput="updateFcWc('capexPct',this.value)">
+      <div class="lever-hint">Monthly CapEx = revenue × %</div>
+    </div>`;
+}
+
+/** Show tab-specific levers in the left rail; hide on tabs with no levers. */
+function syncLeverSidebar(tab) {
+  const sb = document.getElementById('leverSidebar');
+  if (!sb) return;
+  let html = '';
+  if (tab === 'pipeline') html = buildArrSidebarHtml();
+  else if (tab === 'pnl') html = buildCostSidebarHtml();
+  else if (tab === 'cashflow') html = buildWcSidebarHtml();
+  if (!html) {
+    sb.style.display = 'none';
+    sb.setAttribute('aria-hidden', 'true');
+    sb.innerHTML = '';
+    sb.dataset.tab = '';
+    return;
+  }
+  sb.className = 'lever-sidebar';
+  sb.style.display = '';
+  sb.removeAttribute('aria-hidden');
+  sb.innerHTML = html;
+  sb.dataset.tab = tab;
+  updLabels();
+}
+
 function getLevers(){
   return{
-    nb:       getEl('l-nb',100)/100,
-    exp:      getEl('l-exp',100)/100,
-    churn:    getEl('l-churn',100)/100,
-    ren_adj:  getEl('l-ren',0)/100,
-    cogs:     getEl('l-cogs',29)/100,
-    sm:       getEl('l-sm',34)/100,
-    rd:       getEl('l-rd',16)/100,
-    ga:       getEl('l-ga',11)/100,
-    dso:      getEl('l-dso',42),
-    dpo:      getEl('l-dpo',30),
-    capex:    getEl('l-capex',220)*1000,
+    nb:       fcArrState.nb/100,
+    exp:      fcArrState.exp/100,
+    churn:    fcArrState.churn/100,
+    ren_adj:  fcArrState.ren/100,
+    cogs:     fcCostState.cogs/100,
+    sm:       fcCostState.sm/100,
+    rd:       fcCostState.rd/100,
+    ga:       fcCostState.ga/100,
+    svcPct:   (fcCostState.svcPct != null ? fcCostState.svcPct : 3.3) / 100,
+    dso:      fcWcState.dso,
+    dpo:      fcWcState.dpo,
+    capexPct: (fcWcState.capexPct != null ? fcWcState.capexPct : 2) / 100,
   };
 }
 
@@ -692,12 +902,18 @@ function computePeriod(p, bop_arr, prev_cash, prev_ar, prev_ap, prev_dr, prev_eq
       else req_ga+=mo;
     });
     const sub_rev=arr.arr_eop/12;
-    const svc_rev=sub_rev*0.033;
+    const svc_rev=sub_rev*(lv.svcPct != null ? lv.svcPct : 0.033);
     const revenue=sub_rev+svc_rev;
     const cogs=revenue*lv.cogs;
-    const sm=revenue*lv.sm+req_sm;
-    const rd=revenue*lv.rd+req_rd;
-    const ga=revenue*lv.ga+req_ga;
+    let sm,rd,ga;
+    if(typeof resolveFcPlOpex==='function'){
+      const plx=resolveFcPlOpex(p,revenue,lv);
+      sm=plx.sm; rd=plx.rd; ga=plx.ga;
+    } else {
+      sm=revenue*lv.sm+req_sm;
+      rd=revenue*lv.rd+req_rd;
+      ga=revenue*lv.ga+req_ga;
+    }
     const gross_profit=revenue-cogs;
     const total_opex=sm+rd+ga;
     const ebitda=gross_profit-total_opex;
@@ -729,7 +945,8 @@ function computePeriod(p, bop_arr, prev_cash, prev_ar, prev_ap, prev_dr, prev_eq
     const sbc=80000;
     const chg_pre=-15000;
     const cfo=is.net_income+is.da+sbc+chg_ar+chg_dr+chg_ap+chg_pre;
-    const capex=-(lv.capex+FC_P.indexOf(p)*3000);
+    const capexPct = lv.capexPct != null ? lv.capexPct : 0.02;
+    const capex=-(is.revenue * capexPct);
     const net_change=cfo+capex;
     const end_cash=prev_cash+net_change;
     cfs={beg_cash:prev_cash,ni:is.net_income,da:is.da,sbc,chg_ar,chg_dr,chg_ap,chg_pre,
@@ -789,28 +1006,29 @@ function compute(){
 }
 
 function leversAtDefault(){
-  const nb=+(document.getElementById('l-nb')?.value||100);
-  const exp=+(document.getElementById('l-exp')?.value||100);
-  const churn=+(document.getElementById('l-churn')?.value||100);
-  const ren=+(document.getElementById('l-ren')?.value||0);
-  const cogs=+(document.getElementById('l-cogs')?.value||29);
-  const sm=+(document.getElementById('l-sm')?.value||34);
-  const rd=+(document.getElementById('l-rd')?.value||16);
-  const ga=+(document.getElementById('l-ga')?.value||11);
-  const dso=+(document.getElementById('l-dso')?.value||42);
-  const dpo=+(document.getElementById('l-dpo')?.value||30);
-  const capex=+(document.getElementById('l-capex')?.value||220);
-  return nb===100&&exp===100&&churn===100&&ren===0&&cogs===29&&sm===34&&rd===16&&ga===11&&dso===42&&dpo===30&&capex===220;
+  return fcArrAtDefault()&&fcCostAtDefault()&&fcWcAtDefault();
 }
 
 function allReqsActive(){
   return SRC.open_reqs.every(function(r){return reqActive[r.id];});
 }
 
+var _resultsCache=null;
+var _computeLock=false;
 function getResults(){
-  var baseline=window.SMPL_BASELINE_ENGINE;
-  if(!_scenarioDirty&&baseline&&Object.keys(baseline).length&&leversAtDefault()&&allReqsActive()) return baseline;
-  return compute();
+  // Open forecast is always client-computed from levers / HC / P&L / WC.
+  // Promote-to-final is what lands in the warehouse for Board reporting.
+  // Re-entrancy guard: compute/P&L/GTM must not call getDisplayIS → getResults → compute.
+  if(_computeLock) return _resultsCache || {};
+  if(_resultsCache!=null && !_scenarioDirty) return _resultsCache;
+  _computeLock=true;
+  try{
+    _resultsCache=compute();
+    _scenarioDirty=false;
+    return _resultsCache;
+  } finally {
+    _computeLock=false;
+  }
 }
 
 // Shared sequential CFS: each month's beg_cash = prior month's end_cash
@@ -820,15 +1038,15 @@ function buildCFSChain(cfg, resOverride){
   var chain={};
   var prev_end=null;
   allP.forEach(function(p){
-    var whRow=cfsFromWarehouse(p);
-    if(whRow){
-      if(whRow.beg_cash==null&&prev_end!=null) whRow.beg_cash=prev_end;
-      if(whRow.net_change==null&&whRow.beg_cash!=null) whRow.net_change=whRow.end_cash-whRow.beg_cash;
-      chain[p]=whRow;
-      prev_end=whRow.end_cash;
-      return;
-    }
     if(p<=getCloseMonth()){
+      var whRow=cfsFromWarehouse(p);
+      if(whRow){
+        if(whRow.beg_cash==null&&prev_end!=null) whRow.beg_cash=prev_end;
+        if(whRow.net_change==null&&whRow.beg_cash!=null) whRow.net_change=whRow.end_cash-whRow.beg_cash;
+        chain[p]=whRow;
+        prev_end=whRow.end_cash;
+        return;
+      }
       var a=SRC.actuals[p];
       if(!a) return;
       var eb=(a.gross_profit||0)-((a.sm||0)+(a.rd||0)+(a.ga||0));
@@ -849,11 +1067,6 @@ function buildCFSChain(cfg, resOverride){
     } else {
       var fc=res[p]&&res[p].cfs?res[p].cfs:null;
       if(!fc) return;
-      if(!_scenarioDirty&&leversAtDefault()&&fc.end_cash!=null&&fc.beg_cash!=null){
-        chain[p]=Object.assign({},fc);
-        prev_end=fc.end_cash;
-        return;
-      }
       var beg=prev_end!=null?prev_end:(fc.beg_cash||0);
       var net=fc.cfo+(fc.cfi||0)+(fc.cff||0);
       var end=beg+net;
@@ -878,37 +1091,58 @@ function setHz(h,btn){
 
 // \u2500\u2500 LEVER LABELS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function updLabels(){
-  ['nb','exp','churn','ren','cogs','sm','rd','ga'].forEach(id=>{
+  const map = {
+    nb: fcArrState.nb+'%', exp: fcArrState.exp+'%', churn: fcArrState.churn+'%',
+    ren: fcArrRenLabel(),
+    cogs: fcCostState.cogs+'%', sm: fcCostState.sm+'%', rd: fcCostState.rd+'%', ga: fcCostState.ga+'%',
+    svc: (fcCostState.svcPct != null ? fcCostState.svcPct : 3.3)+'%',
+    dso: fcWcState.dso+'d', dpo: fcWcState.dpo+'d',
+    capex: (fcWcState.capexPct != null ? fcWcState.capexPct : 2)+'%',
+  };
+  Object.keys(map).forEach(id=>{
     const el=document.getElementById('v-'+id);
-    const val=+document.getElementById('l-'+id).value;
-    if(el) el.textContent=(id==='ren'?(val>=0?'+':'')+val:''+val)+'%';
+    if(el) el.textContent=map[id];
   });
-  const dso=document.getElementById('l-dso');
-  const dpo=document.getElementById('l-dpo');
-  const cap=document.getElementById('l-capex');
-  if(dso) document.getElementById('v-dso').textContent=dso.value+'d';
-  if(dpo) document.getElementById('v-dpo').textContent=dpo.value+'d';
-  if(cap) document.getElementById('v-capex').textContent='$'+cap.value+'K';
 }
 
 function refresh(opts){
-  if(!opts||!opts.skipDirty) markScenarioDirty();
-  updLabels();showTab(curTab);
+  opts=opts||{};
+  if(!opts.skipDirty) markScenarioDirty();
+  updLabels();
+  showTab(curTab, null, { keepSidebar: !!opts.keepSidebar });
 }
 
 // \u2500\u2500 TABS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-function showTab(name,btn){
+function showTab(name,btn,opts){
+  opts=opts||{};
   destroyAll();
+  const prev=curTab;
   curTab=name;
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  else document.querySelectorAll('.nav-btn').forEach(b=>{if(b.textContent.toLowerCase().includes(name.slice(0,3)))b.classList.add('active');});
+  else document.querySelectorAll('.nav-btn').forEach(b=>{
+    const t=b.textContent.toLowerCase().replace(/&amp;/g,'&').replace(/[^a-z0-9]/g,'');
+    const key=String(name||'').toLowerCase();
+    if((key==='overview' && (t.includes('plan')||t.includes('overview'))) ||
+       (key==='analytics' && t.includes('analytics')) ||
+       t.includes(key.slice(0,3)) || (key==='pnl' && (t.includes('pl')||t.includes('pnl'))) || (key==='pipeline' && t.includes('gtm')))
+      b.classList.add('active');
+  });
+  // Rebuild sidebar on tab change; keep it mounted while dragging levers on the same tab.
+  if(!opts.keepSidebar || prev!==name || !document.getElementById('leverSidebar') || document.getElementById('leverSidebar').dataset.tab!==name){
+    syncLeverSidebar(name);
+  } else {
+    updLabels();
+  }
   const area=document.getElementById('slideArea');
   area.innerHTML='';
-  const fn={overview:renderOverview,arr:renderARR,is:renderIS,cashflow:renderCash,
+  const fn={overview:renderOverview,analytics:renderAnalytics,arr:renderARR,pnl:renderPnL,is:renderIS,cashflow:renderCash,
              bs:renderBS,pipeline:renderPipeline,headcount:renderHC,
              sensitivity:renderSens,versions:renderVersions};
   if(fn[name]) fn[name](area);
+  if(name==='analytics' && typeof ensureForecastAssessment==='function'){
+    void ensureForecastAssessment({ render: true });
+  }
 }
 
 // \u2500\u2500 KPI STRIP \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -944,119 +1178,304 @@ function buildKPIs(results){
 
 // \u2500\u2500 LEFT PANEL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function buildLeftPanel(){
-  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
-  return `
-  <div class="lever-panel">
-    <div class="lever-section">ARR -- from deal pipeline</div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">New business attainment</span><span class="lever-val" id="v-nb">100%</span></div>
-      <input type="range" min="50" max="150" value="100" step="5" id="l-nb" oninput="refresh()">
-      <div class="lever-hint">% of weighted pipeline . 195 deals</div>
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">Expansion rate</span><span class="lever-val" id="v-exp">100%</span></div>
-      <input type="range" min="50" max="150" value="100" step="5" id="l-exp" oninput="refresh()">
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">Churn stress</span><span class="lever-val" id="v-churn">100%</span></div>
-      <input type="range" min="70" max="160" value="100" step="5" id="l-churn" oninput="refresh()">
-      <div class="lever-hint">100% = base . 160% = SMB stress</div>
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">Renewal rate adj.</span><span class="lever-val" id="v-ren">+0%</span></div>
-      <input type="range" min="-15" max="15" value="0" step="1" id="l-ren" oninput="refresh()">
-      <div class="lever-hint">Base: Commit 95% . Likely 75% . At Risk 55%</div>
-    </div>
-    <div class="lever-section">Cost ratios -- % of revenue</div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">COGS %</span><span class="lever-val" id="v-cogs">29%</span></div>
-      <input type="range" min="18" max="45" value="29" step="1" id="l-cogs" oninput="refresh()">
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">S&M %</span><span class="lever-val" id="v-sm">34%</span></div>
-      <input type="range" min="20" max="60" value="34" step="1" id="l-sm" oninput="refresh()">
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">R&D %</span><span class="lever-val" id="v-rd">16%</span></div>
-      <input type="range" min="8" max="35" value="16" step="1" id="l-rd" oninput="refresh()">
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">G&A %</span><span class="lever-val" id="v-ga">11%</span></div>
-      <input type="range" min="5" max="25" value="11" step="1" id="l-ga" oninput="refresh()">
-    </div>
-    <div class="lever-section">Working capital</div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">DSO (days)</span><span class="lever-val" id="v-dso">42d</span></div>
-      <input type="range" min="20" max="75" value="42" step="1" id="l-dso" oninput="refresh()">
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">DPO (days)</span><span class="lever-val" id="v-dpo">30d</span></div>
-      <input type="range" min="15" max="60" value="30" step="1" id="l-dpo" oninput="refresh()">
-    </div>
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">CapEx / mo</span><span class="lever-val" id="v-capex">$220K</span></div>
-      <input type="range" min="100" max="500" value="220" step="10" id="l-capex" oninput="refresh()">
-    </div>
-    <div class="lever-section">Hire-by-hire open reqs</div>
-    <div id="reqList">
-      ${SRC.open_reqs.map(r=>`<div class="req-row">
-        <button class="tog on" id="tog-${r.id}" onclick="toggleReq('${r.id}')" aria-label="Toggle ${r.role}"></button>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.role}</div>
-          <div style="font-size:9.5px;color:var(--text3)">${r.dept} . ${r.start} . ${fM(r.cash_annual/12,0)}K/mo</div>
-        </div>
-        <span class="badge ${priCls[r.priority]||'badge-lo'}">${r.priority}</span>
-      </div>`).join('')}
-    </div>`;
+  return '';
 }
 
-function toggleReq(id){
-  reqActive[id]=!reqActive[id];
-  // Update ALL toggle buttons with this id (sidebar + any rendered in tab)
-  document.querySelectorAll('[id="tog-'+id+'"]').forEach(b=>{
-    b.classList.toggle('on',reqActive[id]);
-    b.classList.toggle('off',!reqActive[id]);
-  });
-  refresh();
-}
+
+function toggleReq(id){ /* no-op: open-req toggles removed; reqActive stays all-on */ }
 
 // \u2500\u2500 OVERVIEW \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function paAssuranceHref(){
-  return '/budget-engine?tab=analytics';
+  return null; // native Analytics tab — use showTab('analytics')
+}
+function goForecastAnalytics(){
+  const btn = Array.from(document.querySelectorAll('.nav-btn')).find(b =>
+    /analytics/i.test(b.textContent || ''));
+  showTab('analytics', btn || null);
 }
 
-function buildGtmHorizonSummary(){
-  const lv=getLevers();
-  let wtdNb=0,wtdExp=0,grossRen=0,wtdRen=0,dealN=0,renN=0;
-  FC_P.forEach(p=>{
-    const opps=SRC.opp_pipeline[p]||{};
-    const nb=opps['New Business']||{};
-    const exp=opps['Expansion']||{};
-    wtdNb+=(nb.weighted||0)*(lv.nb||1);
-    wtdExp+=(exp.weighted||0)*(lv.exp||1);
-    dealN+=(nb.count||0)+(exp.count||0);
-    const ren=SRC.renewals[p]||{};
-    grossRen+=ren.arr||0;
-    wtdRen+=(ren.weighted||0)*(1+(lv.ren_adj||0));
-    renN+=ren.count||0;
+/** Dec base-plan line used on Plan Summary charts (Jun close → ~$95.44M). */
+function fcDecBasePlanArr(){
+  return +(83.445 + FC_P.length * 2).toFixed(2) * 1e6;
+}
+
+function fcArrComponent(p, key){
+  const a = getForecastARR(p);
+  if (!a) {
+    const act = (SRC.actuals && SRC.actuals[p]) || {};
+    if (key === 'churn') return Number(act.arr_churn) || 0;
+    return Number(act['arr_' + key]) || 0;
+  }
+  if (key === 'churn') return Number(a.arr_churn != null ? a.arr_churn : a.arr_nr_churn) || 0;
+  if (key === 'nn') return Number(a.arr_nn) || (
+    (Number(a.arr_nb)||0)+(Number(a.arr_exp)||0)+(Number(a.arr_react)||0)
+    -(Number(a.arr_cont)||0)-(Number(a.arr_churn != null ? a.arr_churn : a.arr_nr_churn)||0)
+  );
+  return Number(a['arr_' + key]) || 0;
+}
+
+/**
+ * Plan Assurance packet from live Forecast SoT (Budget field parity).
+ * getResults() is period-keyed — do not read res.engine.*.
+ */
+function buildFcAssurancePacket(){
+  const close = getCloseMonth();
+  const decP = ALL_P[ALL_P.length - 1];
+  const closeArr = getForecastARR(close);
+  const decArrRow = getForecastARR(decP);
+  const bopArr = closeArr && closeArr.arr_eop != null ? closeArr.arr_eop : 0;
+  const decArr = decArrRow && decArrRow.arr_eop != null ? decArrRow.arr_eop : 0;
+  const targetArr = fcDecBasePlanArr();
+  const yoyGrowthPct = bopArr > 0 ? ((targetArr / bopArr) - 1) * 100 : null;
+
+  let fyNn = 0, fyNb = 0, fyExp = 0, fyReact = 0, fyCont = 0, fyChurn = 0;
+  let fyRev = 0, fyEbitda = 0, fyIsSm = 0;
+  const cashByMonth = [];
+  let minCash = null;
+  let minCashPeriod = null;
+  const grrVals = [];
+
+  ALL_P.forEach(p => {
+    fyNb += fcArrComponent(p, 'nb');
+    fyExp += fcArrComponent(p, 'exp');
+    fyReact += fcArrComponent(p, 'react');
+    fyCont += fcArrComponent(p, 'cont');
+    fyChurn += fcArrComponent(p, 'churn');
+    fyNn += fcArrComponent(p, 'nn');
+    const is = getDisplayIS(p) || {};
+    fyRev += Number(is.revenue) || 0;
+    fyEbitda += Number(is.ebitda) || 0;
+    fyIsSm += Number(is.sm) || 0;
+    const cfs = getDisplayCFS(p) || {};
+    const cash = cfs.end_cash != null ? Number(cfs.end_cash) : null;
+    cashByMonth.push(cash != null ? cash : 0);
+    if (cash != null && (minCash == null || cash < minCash)) {
+      minCash = cash;
+      minCashPeriod = p;
+    }
+    const arr = getForecastARR(p);
+    if (arr && arr.grr != null && !isNaN(arr.grr)) grrVals.push(Number(arr.grr));
   });
-  const closeArr=getForecastARR(getCloseMonth());
-  const bop=closeArr&&closeArr.arr_eop!=null?closeArr.arr_eop:0;
-  // Dec target = dashed "Base plan" in buildOverviewCharts: 83.445+(i+1)*2 $M.
-  const decBasePlanM=+(83.445+FC_P.length*2).toFixed(2);
-  const needNn=Math.max(0,decBasePlanM*1e6-bop);
-  const coverPool=wtdNb+wtdExp;
-  const coverX=needNn>0?coverPool/needNn:null;
-  return {wtdNb,wtdExp,grossRen,wtdRen,dealN,renN,needNn,coverX,coverPool};
+
+  const endCfs = getDisplayCFS(decP) || {};
+  const endCash = endCfs.end_cash != null ? Number(endCfs.end_cash) : minCash;
+  if (minCash == null) minCash = endCash;
+
+  let salesEnd = null, csEnd = null, decHc = null, janHc = null;
+  if (typeof computeFcHcPlan === 'function') {
+    try {
+      const plan = computeFcHcPlan();
+      const decRow = plan[decP] || {};
+      salesEnd = decRow.ending && decRow.ending.sales != null ? decRow.ending.sales : null;
+      csEnd = decRow.ending && decRow.ending.cs != null ? decRow.ending.cs : null;
+      decHc = decRow.headsTotal != null ? decRow.headsTotal : null;
+      const closeRow = plan[close] || {};
+      janHc = typeof getCloseHc === 'function' ? getCloseHc() : (closeRow.headsTotal || null);
+    } catch (e) { /* HC optional */ }
+  }
+
+  let pipelineCoverage = 3;
+  let fyMkt = null, fyMql = null;
+  if (typeof buildGtmHorizonSummary === 'function') {
+    try {
+      const gtm = buildGtmHorizonSummary();
+      if (gtm && gtm.coverX != null) pipelineCoverage = gtm.coverX;
+    } catch (e) { /* optional */ }
+  }
+  if (typeof ensureFcGtmState === 'function' && typeof fcGtmAllocate === 'function') {
+    try {
+      ensureFcGtmState();
+      fyMkt = ALL_P.reduce((s, p) => s + (fcGtmAllocate(p).spendTot || 0), 0);
+      fyMql = ALL_P.reduce((s, p) => s + (fcGtmAllocate(p).mqlSum || 0), 0);
+    } catch (e) { /* optional */ }
+  }
+
+  const avgGrr = grrVals.length ? grrVals.reduce((a, b) => a + b, 0) / grrVals.length : null;
+  const minGrr = grrVals.length ? Math.min.apply(null, grrVals) : null;
+  const year = parseInt(String(decP).slice(0, 4), 10) || 2026;
+
+  return {
+    period_label: 'FY' + year + ' Forecast',
+    budget_year: year,
+    yoyGrowthPct,
+    bopArr,
+    decArr,
+    targetArr,
+    fyNn,
+    fyNb,
+    fyExp,
+    fyReact,
+    fyCont,
+    fyChurn,
+    fyRev,
+    fyEbitda,
+    endCash,
+    cashFloor: 10000000,
+    minCash,
+    minCashPeriod,
+    cashByMonth,
+    avgGrr,
+    minGrr,
+    salesEnd,
+    csEnd,
+    aeNeeded: null,
+    csNeeded: null,
+    coverPct: null,
+    hirePct: null,
+    benchTarget: null,
+    janHc,
+    janHcExpected: janHc,
+    decHc,
+    pipelineCoverage,
+    pipelineMin: 2.5,
+    fyMkt,
+    fyMql,
+    fyIsSm,
+    surface: 'forecast',
+  };
+}
+
+function mapFcAssessmentToRisks(assessment){
+  const results = (((assessment || {}).feasibility) || {}).results || [];
+  return results
+    .filter(r => r && r.status !== 'skipped')
+    .map(r => ({
+      id: r.id,
+      severity: r.severity || 'ok',
+      title: r.title || r.label || r.id,
+      detail: r.detail || '',
+    }));
+}
+
+/** Offline fallback when /assess is unavailable. */
+function runForecastRiskChecks(packet){
+  const p = packet || buildFcAssurancePacket();
+  const out = [];
+  const arrGap = (p.decArr || 0) - (p.targetArr || 0);
+  if (Math.abs(arrGap) <= Math.max(1000, (p.targetArr || 0) * 0.002)) {
+    out.push({ id: 'arr_path', severity: 'ok', title: 'Dec ARR path', detail: `Hits base plan ${fM(p.targetArr, 1)}.` });
+  } else if (arrGap < 0) {
+    out.push({ id: 'arr_path', severity: 'high', title: 'Dec ARR short of base plan', detail: `${fM(p.decArr, 1)} vs ${fM(p.targetArr, 1)} (${fV(arrGap)}).` });
+  } else {
+    out.push({ id: 'arr_path', severity: 'low', title: 'Dec ARR above base plan', detail: `${fM(p.decArr, 1)} vs ${fM(p.targetArr, 1)}.` });
+  }
+  const floor = p.cashFloor != null ? p.cashFloor : 1e7;
+  if (p.minCash != null && p.minCash < floor) {
+    out.push({ id: 'cash_floor', severity: 'high', title: 'Cash dips below floor', detail: `Min ${fM(p.minCash, 1)} in ${p.minCashPeriod || '—'} vs floor ${fM(floor, 1)}.` });
+  } else if (p.endCash != null) {
+    out.push({ id: 'cash_floor', severity: 'ok', title: 'Cash vs floor', detail: `Ending ${fM(p.endCash, 1)} · min ${fM(p.minCash, 1)} ≥ floor ${fM(floor, 1)}.` });
+  }
+  if (p.pipelineCoverage != null && p.pipelineMin != null) {
+    if (p.pipelineCoverage + 1e-9 >= p.pipelineMin) {
+      out.push({ id: 'pipeline', severity: 'ok', title: 'Pipeline / NB coverage', detail: `${Number(p.pipelineCoverage).toFixed(1)}× (min ${p.pipelineMin.toFixed(1)}×).` });
+    } else {
+      out.push({ id: 'pipeline', severity: 'medium', title: 'Pipeline / NB coverage thin', detail: `${Number(p.pipelineCoverage).toFixed(1)}× vs min ${p.pipelineMin.toFixed(1)}×.` });
+    }
+  }
+  return out;
+}
+
+function getForecastAssuranceRisks(packet){
+  if (window._forecastPlanAssessment && window._forecastPlanAssessment.feasibility) {
+    return mapFcAssessmentToRisks(window._forecastPlanAssessment);
+  }
+  return runForecastRiskChecks(packet || buildFcAssurancePacket());
+}
+
+function renderFcWhttHtml(assessment){
+  const conditions = (assessment && assessment.what_has_to_be_true) || [];
+  if (!conditions.length) {
+    return '<div class="pa-meta">No What-Has-To-Be-True conditions — plan clears feasibility (or assessment pending).</div>';
+  }
+  const order = { must_close: 0, must_confirm: 1, must_hold: 2 };
+  const labels = { must_close: 'Must close', must_confirm: 'Must confirm', must_hold: 'Must hold' };
+  const sevClass = { must_close: 'must_close', must_confirm: 'must_confirm', must_hold: 'must_hold' };
+  const groups = { must_close: [], must_confirm: [], must_hold: [] };
+  conditions.slice().sort((a, b) => (order[a.verdict] ?? 9) - (order[b.verdict] ?? 9)).forEach(c => {
+    if (groups[c.verdict]) groups[c.verdict].push(c);
+  });
+  let html = '<div class="pa-whtt">';
+  ['must_close', 'must_confirm', 'must_hold'].forEach(key => {
+    const rows = groups[key];
+    if (!rows.length) return;
+    html += `<div class="pa-whtt-group"><div class="pa-whtt-lbl">${labels[key]} · ${rows.length}</div>`;
+    rows.forEach(c => {
+      const levers = (c.levers || []).slice(0, 4).join(', ');
+      html += `<div class="assure-risk"><span class="assure-sev ${sevClass[key]}">${labels[key]}</span><div><strong>${String(c.statement || '').replace(/</g, '&lt;')}</strong>${
+        levers ? `<div class="assure-cite">Levers: ${levers.replace(/</g, '&lt;')}</div>` : ''
+      }</div></div>`;
+    });
+    html += '</div>';
+  });
+  return html + '</div>';
+}
+
+function renderFcRiskRows(risks){
+  if (!risks || !risks.length) return '<div class="pa-meta">No risk checks yet.</div>';
+  return risks.map(r => {
+    const sev = String(r.severity || 'ok');
+    return `<div class="assure-risk"><span class="assure-sev ${sev}">${sev}</span><div><strong>${String(r.title || '').replace(/</g, '&lt;')}</strong><div class="assure-cite">${String(r.detail || '').replace(/</g, '&lt;')}</div></div></div>`;
+  }).join('');
+}
+
+async function ensureForecastAssessment(opts){
+  opts = opts || {};
+  const run = window.runForecastPlanAssessment;
+  if (typeof run !== 'function') return null;
+  const assessment = await run({
+    forecast_version_id: window._warehouseForecastVersionId || opts.forecast_version_id || null,
+  });
+  if (opts.render !== false && curTab === 'analytics') {
+    const area = document.getElementById('slideArea');
+    if (area) renderAnalytics(area);
+  }
+  return assessment;
+}
+
+function renderAnalytics(area){
+  const packet = buildFcAssurancePacket();
+  const assessment = window._forecastPlanAssessment || null;
+  const risks = getForecastAssuranceRisks(packet);
+  const verdict = (assessment && assessment.feasibility && assessment.feasibility.verdict)
+    || (assessment && assessment.feasibility_verdict)
+    || null;
+  const live = !!assessment;
+  const highN = risks.filter(r => r.severity === 'high').length;
+  const medN = risks.filter(r => r.severity === 'medium' || r.severity === 'med').length;
+
+  area.innerHTML = `<div class="slide">
+    <div class="slide-title">Analytics · Plan Assurance</div>
+    <div class="slide-sub">Same platform <code>/assess</code> SoT as Budget. Forecast packet from live ARR / cash / HC / GTM. Monte Carlo Generate stays on Budget Analytics.</div>
+    <div class="pa-card">
+      <div class="pa-card-hd">
+        <div class="pa-card-lbl">Plan Assurance · status</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="pa-meta">${live ? 'Live /assess' : 'Local fallback'}${window._forecastPlanAssessmentAt ? ' · ' + new Date(window._forecastPlanAssessmentAt).toLocaleTimeString() : ''}</span>
+          <button type="button" class="act-btn" onclick="ensureForecastAssessment({render:true})">↺ Refresh</button>
+        </div>
+      </div>
+      <div class="pa-verdict" style="margin-bottom:8px">${verdict ? String(verdict).toUpperCase() : (live ? '—' : 'PENDING / OFFLINE')}</div>
+      <div class="pa-meta" style="margin-bottom:12px">
+        Dec ARR ${fM(packet.decArr,1)} vs base ${fM(packet.targetArr,1)}
+        · End cash ${fM(packet.endCash,1)} (min ${fM(packet.minCash,1)} · floor ${fM(packet.cashFloor,1)})
+        · Pipe / NB ${packet.pipelineCoverage != null ? Number(packet.pipelineCoverage).toFixed(1) + '×' : '—'}
+        · Flags: ${highN} high · ${medN} medium
+      </div>
+      <div class="pa-card-lbl" style="margin-bottom:8px">Risk checks</div>
+      ${renderFcRiskRows(risks)}
+    </div>
+    <div class="pa-card">
+      <div class="pa-card-hd"><div class="pa-card-lbl">What has to be true</div></div>
+      ${renderFcWhttHtml(assessment)}
+    </div>
+  </div>`;
 }
 
 function renderOverview(area){
   const res=getResults();
   const lv=getLevers();
   const dec=res[FC_P[FC_P.length-1]];
-  // Dec target = dashed "Base plan" in buildOverviewCharts: 83.445+(i+1)*2 $M (Jun close → ~$95.44M).
-  const decBasePlanM=+(83.445+FC_P.length*2).toFixed(2);
-  const target=decBasePlanM*1e6;
+  const target=fcDecBasePlanArr();
   const gap=dec.arr.arr_eop-target;
   const gtm=buildGtmHorizonSummary();
   let gapHtml='';
@@ -1098,31 +1517,32 @@ function renderOverview(area){
     verdictBig=`Dec ARR tracks base plan at <strong>${fM(dec.arr.arr_eop,1)}</strong>.`;
   }
   const coverLbl=gtm.coverX!=null?gtm.coverX.toFixed(1)+'×':'—';
+  const closeLbl=typeof getCloseMoLabel==='function'?getCloseMoLabel():getCloseMonth();
   area.innerHTML=`<div class="slide">
-    <div class="slide-title">Overview · ${hz.replace('p','+')} · ${HORIZON[hz].label}</div>
-    <div class="slide-sub">Close path from opportunities + renewals. Stress the FY operating plan in Budget Analytics — not a second forecast.</div>
+    <div class="slide-title">Plan Summary · ${hz.replace('p','+')} · ${HORIZON[hz].label}</div>
+    <div class="slide-sub">Actuals through ${closeLbl} hand off to open-month forecast — plan output in one place. Stress feasibility on Analytics (native Plan Assurance).</div>
     <div class="pa-loop" style="border-left-color:${verdictTone}">
-      <div class="pa-loop-copy">${verdictBig} Weighted NB+expansion cover ${coverLbl} of remaining net-new to Dec plan · ${Object.values(reqActive).filter(Boolean).length}/17 open reqs active.</div>
-      <a class="pa-link" href="${paAssuranceHref()}" target="_top">Plan Assurance →</a>
+      <div class="pa-loop-copy">${verdictBig} Pipeline / NB cover ${coverLbl} · Sales/CS hires from open reqs · edit Marketing/R&amp;D/G&amp;A in Headcount.</div>
+      <button type="button" class="pa-link" onclick="goForecastAnalytics()">Plan Assurance →</button>
     </div>
     ${buildKPIs(res)}
     <div>
         <div class="two-col" style="margin-bottom:12px">
           <div class="card">
             <div class="card-title">ARR trajectory -- Actual + Forecast</div>
-            <div class="card-sub">BOP ARR by period . teal=actual . amber=forecast . dashed=base plan</div>
+            <div class="card-sub">BOP ARR by period · teal=actual · amber=forecast · dashed=base plan</div>
             <div class="chart-wrap" style="height:195px"><canvas id="ovArrC" role="img" aria-label="ARR trajectory chart showing actual Jan-May and forecast Jun-Dec">ARR from $75M in Jan to forecast EOP in Dec.</canvas></div>
           </div>
           <div class="card">
             <div class="card-title">EBITDA &amp; Revenue -- Forecast period</div>
-            <div class="card-sub">Monthly ($M) . forecast periods only</div>
+            <div class="card-sub">Monthly ($M) · forecast periods only</div>
             <div class="chart-wrap" style="height:195px"><canvas id="ovEbitC" role="img" aria-label="EBITDA and revenue chart for forecast period">Revenue growing monthly with EBITDA positive.</canvas></div>
           </div>
         </div>
         <div class="two-col">
           <div class="card">
             <div class="card-title">Cash Position -- Full Year</div>
-            <div class="card-sub">Ending cash by period . actual + forecast</div>
+            <div class="card-sub">Ending cash by period · actual + forecast</div>
             <div class="chart-wrap" style="height:170px"><canvas id="ovCashC" role="img" aria-label="Cash position chart full year 2026">Cash trajectory from opening $48M through Dec forecast.</canvas></div>
           </div>
           <div class="card">
@@ -1135,6 +1555,28 @@ function renderOverview(area){
       </div>
     </div>`;
   setTimeout(()=>buildOverviewCharts(res),40);
+}
+
+function buildGtmHorizonSummary(){
+  const lv=getLevers();
+  let wtdNb=0,wtdExp=0,grossRen=0,wtdRen=0,dealN=0,renN=0;
+  let pipelineDollar=0; // gross NB CRM pipe — Budget: pipeline / NB ARR
+  FC_P.forEach(p=>{
+    const opps=SRC.opp_pipeline[p]||{};
+    const nb=opps['New Business']||{};
+    const exp=opps['Expansion']||{};
+    pipelineDollar+=(nb.total||0);
+    wtdNb+=(nb.weighted||0)*(lv.nb||1);
+    wtdExp+=(exp.weighted||0)*(lv.exp||1);
+    dealN+=(nb.count||0)+(exp.count||0);
+    const ren=SRC.renewals[p]||{};
+    grossRen+=ren.arr||0;
+    wtdRen+=(ren.weighted||0)*(1+(lv.ren_adj||0));
+    renN+=ren.count||0;
+  });
+  // Budget parity: coverage = Pipeline $ / New Business ARR (not vs Dec ARR gap).
+  const coverX=wtdNb>0?pipelineDollar/wtdNb:null;
+  return {wtdNb,wtdExp,grossRen,wtdRen,dealN,renN,pipelineDollar,coverX,coverPool:pipelineDollar};
 }
 
 function buildOverviewCharts(res){
@@ -1294,7 +1736,7 @@ function renderARR(area){
 
   area.innerHTML='<div class="slide">'+
     '<div class="slide-title">ARR Waterfall · '+hz.replace('p','+')+' Horizon</div>'+
-    '<div class="slide-sub">'+cfg.label+' · Pipeline forecast from opportunities + renewals</div>'+
+    '<div class="slide-sub">'+cfg.label+' · Read-only bridge from GTM / renewals — edit attainment on GTM</div>'+
     buildKPIs(res)+
     '<div>'+
     '<div class="card" style="margin-bottom:12px">'+
@@ -1433,6 +1875,538 @@ function renderARR(area){
 }
 
 
+// ── P&L (management dept books → IS S&M / R&D / G&A) ─────────────────────────
+// Comp from HC heads × loaded rates (wages, benefits, bonus, severance, OTE).
+// Discretionary flats editable in forecast months. Marketing program $ is a
+// single rollup from GTM (channel mix lives on the GTM tab).
+
+let fcPlDept = 'total';
+let fcPlSpend = null; // { deptKey: { lineKey: { period: dollars } } }
+
+const FC_PL_AVG_ANNUAL = {
+  sales: 145000, cs: 120000, marketing: 125000, rd: 165000, ga: 120000,
+};
+const FC_PL_CORP_BONUS = {
+  sales: false, cs: false, marketing: true, rd: true, ga: true,
+};
+const FC_PL_BONUS_PCT = 0.12;
+const FC_PL_TAX_PCT = 0.08;
+const FC_PL_BEN_PCT = 0.10;
+const FC_PL_K401_PCT = 0.04;
+const FC_PL_NB_OTE = 72000;
+const FC_PL_CS_OTE = 72000;
+
+const FC_PL_DEPTS = [
+  {
+    key: 'sales', label: 'Sales', isLine: 'sm', isLabel: 'S&M',
+    sections: [
+      {
+        key: 'nb', label: 'Sales - New Business', hcKey: 'sales',
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
+          { k: 'commissions', label: 'Commissions (variable OTE)', from: 'ote_nb' },
+          { k: 'te_airfare', label: 'T&E — Airfare', from: 'flat', flatMonthly: 12000 },
+          { k: 'te_lodging', label: 'T&E — Lodging', from: 'flat', flatMonthly: 10000 },
+          { k: 'te_meals', label: 'T&E — Meals & entertainment', from: 'flat', flatMonthly: 7500 },
+          { k: 'te_field', label: 'T&E — Field / customer visits', from: 'flat', flatMonthly: 7500 },
+          { k: 'crm', label: 'CRM & sales tools', from: 'flat', flatMonthly: 18000 },
+        ],
+      },
+      {
+        key: 'cs', label: 'Sales - Customer Success', hcKey: 'cs',
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
+          { k: 'variable', label: 'Expansion / retention incentive (OTE)', from: 'ote_cs' },
+          { k: 'tools', label: 'CS platform & tools', from: 'flat', flatMonthly: 9000 },
+          { k: 'programs', label: 'Customer programs', from: 'flat', flatMonthly: 5000 },
+        ],
+      },
+    ],
+  },
+  {
+    key: 'marketing', label: 'Marketing', isLine: 'sm', isLabel: 'S&M',
+    sections: [{
+      key: 'mkt', label: 'Marketing', hcKey: 'marketing',
+      lines: [
+        { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
+        { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
+        { k: 'bonus', label: 'Bonus', from: 'hc_bonus' },
+        { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
+        { k: 'program', label: 'Program spend (from GTM)', from: 'gtm_program' },
+        { k: 'software', label: 'Martech & agencies', from: 'flat', flatMonthly: 22000 },
+      ],
+    }],
+  },
+  {
+    key: 'rd', label: 'R&D', isLine: 'rd', isLabel: 'R&D',
+    sections: [{
+      key: 'rd', label: 'R&D / Product', hcKey: 'rd',
+      lines: [
+        { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
+        { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
+        { k: 'bonus', label: 'Bonus', from: 'hc_bonus' },
+        { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
+        { k: 'compute', label: 'Compute / non-prod cloud', from: 'flat', flatMonthly: 45000 },
+        { k: 'tools', label: 'Dev tools (GitHub, Jira…)', from: 'flat', flatMonthly: 12000 },
+        { k: 'contractors', label: 'Contractors & specialists', from: 'flat', flatMonthly: 25000 },
+        { k: 'product_sw', label: 'Product software & data', from: 'flat', flatMonthly: 10000 },
+      ],
+    }],
+  },
+  {
+    key: 'ga', label: 'G&A', isLine: 'ga', isLabel: 'G&A',
+    sections: [
+      {
+        key: 'exec', label: 'Executive', hcKey: 'ga', payShare: 0.22,
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
+          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
+        ],
+      },
+      {
+        key: 'finance', label: 'Finance', hcKey: 'ga', payShare: 0.25,
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
+          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
+          { k: 'consulting', label: 'FP&A / advisory', from: 'flat', flatMonthly: 8000 },
+        ],
+      },
+      {
+        key: 'accounting', label: 'Accounting', hcKey: 'ga', payShare: 0.18,
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
+          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
+          { k: 'audit', label: 'External audit & tax', from: 'flat', flatMonthly: 15000 },
+        ],
+      },
+      {
+        key: 'legal', label: 'Legal', hcKey: 'ga', payShare: 0.08,
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
+          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
+          { k: 'legal_fees', label: 'Outside counsel & filings', from: 'flat', flatMonthly: 12000 },
+        ],
+      },
+      {
+        key: 'hr', label: 'People / HR', hcKey: 'ga', payShare: 0.12,
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
+          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
+          { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
+          { k: 'recruiting', label: 'Recruiting / ATS', from: 'flat', flatMonthly: 6000 },
+        ],
+      },
+      {
+        key: 'facilities', label: 'Facilities & overhead', hcKey: 'ga', payShare: 0,
+        lines: [
+          { k: 'rent', label: 'Rent & utilities', from: 'flat', flatMonthly: 28000 },
+          { k: 'office', label: 'Office operations', from: 'flat', flatMonthly: 6000 },
+          { k: 'insurance', label: 'D&O / corporate insurance', from: 'flat', flatMonthly: 9000 },
+        ],
+      },
+      {
+        key: 'admin_it', label: 'Internal software & IT', hcKey: 'ga', payShare: 0.15,
+        lines: [
+          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
+          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
+          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
+          { k: 'erp', label: 'Finance / ERP (NetSuite…)', from: 'flat', flatMonthly: 10000 },
+          { k: 'hris', label: 'HRIS / payroll systems', from: 'flat', flatMonthly: 5000 },
+          { k: 'collab', label: 'Corp collab (Slack, M365…)', from: 'flat', flatMonthly: 6000 },
+        ],
+      },
+    ],
+  },
+];
+
+function ensureFcPlState() {
+  if (!fcPlSpend) fcPlSpend = {};
+  FC_PL_DEPTS.forEach(d => {
+    if (!fcPlSpend[d.key]) fcPlSpend[d.key] = {};
+    d.sections.forEach(sec => {
+      sec.lines.forEach(line => {
+        if (line.from === 'flat' && !fcPlSpend[d.key][line.k]) fcPlSpend[d.key][line.k] = {};
+      });
+    });
+  });
+}
+
+function fcPlFlatAmt(deptKey, lineKey, period, flatMonthly) {
+  ensureFcPlState();
+  const row = (fcPlSpend[deptKey] && fcPlSpend[deptKey][lineKey]) || {};
+  if (row[period] != null && !isNaN(Number(row[period]))) return Math.max(0, Number(row[period]));
+  return Math.max(0, Number(flatMonthly) || 0);
+}
+
+function fcPlGtmProgram(period) {
+  if (typeof ensureFcGtmState === 'function' && typeof fcGtmAllocate === 'function') {
+    ensureFcGtmState();
+    return Math.max(0, Number(fcGtmAllocate(period).spendTot) || 0);
+  }
+  return 0;
+}
+
+/**
+ * HC cost layer on top of headcount plan — wages / benefits / bonus / severance / OTE.
+ * Uses avg loaded rates (Budget-aligned) until roster-level comp is wired.
+ */
+function computeFcHcComp() {
+  if (typeof computeFcHcPlan !== 'function') return null;
+  const plan = computeFcHcPlan();
+  const loadPct = FC_PL_TAX_PCT + FC_PL_BEN_PCT + FC_PL_K401_PCT;
+  ALL_P.forEach(p => {
+    const row = plan[p];
+    if (!row) return;
+    row.wages = {};
+    row.employeeBenefits = {};
+    row.bonusAccrual = {};
+    row.severance = {};
+    row.ote = {};
+    row.payroll = {};
+    (typeof FC_HC_DEPTS !== 'undefined' ? FC_HC_DEPTS : []).forEach(d => {
+      const heads = Number(row.ending && row.ending[d.key]) || 0;
+      const annual = FC_PL_AVG_ANNUAL[d.key] || 120000;
+      const wages = heads * (annual / 12);
+      const employeeBenefits = wages * loadPct;
+      const bonusAccrual = FC_PL_CORP_BONUS[d.key] ? wages * FC_PL_BONUS_PCT : 0;
+      let ote = 0;
+      if (d.key === 'sales') ote = heads * (FC_PL_NB_OTE / 12);
+      if (d.key === 'cs') ote = heads * (FC_PL_CS_OTE / 12);
+      let sev = 0;
+      if (typeof fcHcRifsForPeriod === 'function') {
+        fcHcRifsForPeriod(p).filter(r => r.dept === d.key).forEach(r => {
+          const weekly = annual / 52;
+          sev += (Number(r.heads) || 0) * weekly * (Number(r.weeks) || 0);
+        });
+      }
+      row.wages[d.key] = wages;
+      row.employeeBenefits[d.key] = employeeBenefits;
+      row.bonusAccrual[d.key] = bonusAccrual;
+      row.severance[d.key] = sev;
+      row.ote[d.key] = ote;
+      row.payroll[d.key] = wages + employeeBenefits + bonusAccrual + ote;
+    });
+  });
+  return plan;
+}
+
+function fcPlLineAmt(spec, sec, line, period, hcRow) {
+  const hcKey = sec.hcKey;
+  const h = hcRow || {};
+  const share = (sec.payShare != null && sec.payShare > 0)
+    ? sec.payShare
+    : (sec.payShare === 0 ? 0 : 1);
+  if (line.from === 'hc_wages') return Number(h.wages && h.wages[hcKey]) || 0;
+  if (line.from === 'hc_benefits') return Number(h.employeeBenefits && h.employeeBenefits[hcKey]) || 0;
+  if (line.from === 'hc_bonus') return Number(h.bonusAccrual && h.bonusAccrual[hcKey]) || 0;
+  if (line.from === 'hc_severance') return Number(h.severance && h.severance[hcKey]) || 0;
+  if (line.from === 'hc_wages_share') return (Number(h.wages && h.wages[hcKey]) || 0) * share;
+  if (line.from === 'hc_benefits_share') return (Number(h.employeeBenefits && h.employeeBenefits[hcKey]) || 0) * share;
+  if (line.from === 'hc_bonus_share') return (Number(h.bonusAccrual && h.bonusAccrual[hcKey]) || 0) * share;
+  if (line.from === 'hc_severance_share') return (Number(h.severance && h.severance[hcKey]) || 0) * share;
+  if (line.from === 'ote_nb') return Number(h.ote && h.ote.sales) || 0;
+  if (line.from === 'ote_cs') return Number(h.ote && h.ote.cs) || 0;
+  if (line.from === 'gtm_program') return fcPlGtmProgram(period);
+  if (line.from === 'flat') return fcPlFlatAmt(spec.key, line.k, period, line.flatMonthly);
+  return 0;
+}
+
+function computeFcDeptPlPeriod(period, opts) {
+  opts = opts || {};
+  const close = getCloseMonth();
+  const isAct = period <= close;
+  let revenue = opts.revenue;
+  if (isAct && SRC.actuals && SRC.actuals[period]) {
+    revenue = SRC.actuals[period].revenue;
+  } else if (revenue == null) {
+    const arr = (typeof getForecastARR === 'function') ? getForecastARR(period) : null;
+    const sub = arr && arr.arr_eop != null ? arr.arr_eop / 12 : 0;
+    revenue = sub * 1.033;
+  }
+
+  const hcPlan = computeFcHcComp();
+  const hcRow = hcPlan && hcPlan[period] ? hcPlan[period] : {
+    wages: {}, employeeBenefits: {}, bonusAccrual: {}, severance: {}, ote: {},
+  };
+
+  const depts = {};
+  let sm = 0, rd = 0, ga = 0;
+  let salesPl = 0, mktPl = 0, salesNb = 0, salesCs = 0;
+
+  FC_PL_DEPTS.forEach(spec => {
+    const sections = {};
+    let total = 0;
+    const linesAgg = {};
+    spec.sections.forEach(sec => {
+      const secLines = {};
+      let secTot = 0;
+      sec.lines.forEach(line => {
+        const amt = fcPlLineAmt(spec, sec, line, period, hcRow);
+        secLines[line.k] = amt;
+        linesAgg[line.k] = (linesAgg[line.k] || 0) + amt;
+        secTot += amt;
+        total += amt;
+      });
+      sections[sec.key] = { label: sec.label, total: secTot, lines: secLines };
+      if (sec.key === 'nb') salesNb = secTot;
+      if (sec.key === 'cs') salesCs = secTot;
+    });
+    depts[spec.key] = { total, lines: linesAgg, sections };
+    if (spec.isLine === 'sm') sm += total;
+    else if (spec.isLine === 'rd') rd += total;
+    else if (spec.isLine === 'ga') ga += total;
+    if (spec.key === 'sales') salesPl = total;
+    if (spec.key === 'marketing') mktPl = total;
+  });
+
+  // Actual months: keep IS opex from books; dept detail is the HC/flat estimate.
+  if (isAct && SRC.actuals && SRC.actuals[period]) {
+    const a = SRC.actuals[period];
+    sm = a.sm || sm;
+    rd = a.rd || rd;
+    ga = a.ga || ga;
+  }
+
+  return {
+    revenue: revenue || 0,
+    depts,
+    sm, rd, ga,
+    opex: sm + rd + ga,
+    salesPl, mktPl, salesNb, salesCs,
+    is_actual: isAct,
+  };
+}
+
+function resolveFcPlOpex(period, revenue, lv) {
+  const pl = computeFcDeptPlPeriod(period, { revenue, lv });
+  return { sm: pl.sm, rd: pl.rd, ga: pl.ga, pl };
+}
+
+function setFcPlDept(key) {
+  fcPlDept = key || 'total';
+  showTab('pnl');
+}
+
+function updateFcPlSpend(deptKey, lineKey, period, rawM) {
+  ensureFcPlState();
+  if (!fcPlSpend[deptKey]) fcPlSpend[deptKey] = {};
+  if (!fcPlSpend[deptKey][lineKey]) fcPlSpend[deptKey][lineKey] = {};
+  fcPlSpend[deptKey][lineKey][period] = Math.max(0, Math.round((Number(rawM) || 0) * 1e6));
+  markScenarioDirty();
+  refresh();
+}
+
+function fcPlSpendInput(deptKey, lineKey, period, amt) {
+  const m = (amt || 0) / 1e6;
+  const v = m >= 10 ? m.toFixed(2) : m.toFixed(3);
+  return `<input class="hc-hire" style="width:58px;color:var(--amber)" value="${v}" title="Edit $M"
+    onchange="updateFcPlSpend('${deptKey}','${lineKey}','${period}',this.value)"
+    onclick="event.stopPropagation()">`;
+}
+
+function fcPlMonthHeaders(periods) {
+  if (typeof fcGtmMonthHeaders === 'function') return fcGtmMonthHeaders(periods, { selectable: false });
+  return periods.map(p => {
+    const mo = MO12[parseInt(p.slice(5), 10) - 1];
+    const isFc = p > getCloseMonth();
+    return `<th class="${isFc ? 'fc-h' : 'act-h'}"><span class="hc-mo">${mo}</span><span class="hc-tag">${isFc ? 'Fcst' : 'Act'}</span></th>`;
+  }).join('') + '<th class="fy-h">FY</th>';
+}
+
+function renderPnL(area) {
+  ensureFcPlState();
+  if (typeof ensureFcGtmState === 'function') ensureFcGtmState();
+  if (typeof ensureFcHcState === 'function') ensureFcHcState();
+  const cfg = HORIZON[hz];
+  const allP = [...cfg.act, ...cfg.fc];
+  const close = getCloseMonth();
+  const dept = fcPlDept || 'total';
+  const lv = getLevers();
+
+  const revenueByPeriod = {};
+  allP.forEach(p => {
+    if (p <= close && SRC.actuals && SRC.actuals[p]) {
+      revenueByPeriod[p] = SRC.actuals[p].revenue;
+    } else {
+      const arr = getForecastARR(p);
+      const sub = arr && arr.arr_eop != null ? arr.arr_eop / 12 : 0;
+      revenueByPeriod[p] = sub * 1.033;
+    }
+  });
+
+  const plAll = {};
+  allP.forEach(p => {
+    plAll[p] = computeFcDeptPlPeriod(p, { revenue: revenueByPeriod[p], lv });
+  });
+
+  const fy = (fn) => allP.reduce((s, p) => s + (fn(plAll[p], p) || 0), 0);
+  const fyRev = fy(r => r.revenue);
+  const fySm = fy(r => r.sm);
+  const fyRd = fy(r => r.rd);
+  const fyGa = fy(r => r.ga);
+  const fySales = fy(r => r.salesPl);
+  const fyMkt = fy(r => r.mktPl);
+  const fyEbitda = allP.reduce((s, p) => s + (getDisplayIS(p)?.ebitda || 0), 0);
+  const fyCogs = allP.reduce((s, p) => {
+    const is = getDisplayIS(p);
+    if (is && is.cogs != null) return s + is.cogs;
+    return s + (revenueByPeriod[p] || 0) * (lv.cogs || 0.29);
+  }, 0);
+  const fyGp = fyRev - fyCogs;
+
+  const tabs = [{ key: 'total', label: 'Total' }].concat(FC_PL_DEPTS.map(d => ({ key: d.key, label: d.label })));
+
+  let html = `<div class="slide">
+    <div class="slide-title">P&amp;L · Act + Fcst</div>
+    <div class="slide-sub">Management department books. Comp from Headcount · program spend from GTM · edit forecast discretionary to model mid-year impact.</div>
+    <div class="hc-toolbar">
+      ${tabs.map(t => `<button type="button" class="hc-tog${dept === t.key ? ' on' : ''}" onclick="setFcPlDept('${t.key}')">${t.label}</button>`).join('')}
+    </div>`;
+
+  if (dept === 'total') {
+    html += `
+    <div class="kpi-strip ks5">
+      <div class="kpi"><div class="kpi-lbl">Gross margin</div><div class="kpi-val">${fyRev ? fP(fyGp / fyRev) : '—'}</div></div>
+      <div class="kpi"><div class="kpi-lbl">S&amp;M % rev</div><div class="kpi-val">${fyRev ? fP(fySm / fyRev) : '—'}</div></div>
+      <div class="kpi"><div class="kpi-lbl">R&amp;D % rev</div><div class="kpi-val">${fyRev ? fP(fyRd / fyRev) : '—'}</div></div>
+      <div class="kpi"><div class="kpi-lbl">G&amp;A % rev</div><div class="kpi-val">${fyRev ? fP(fyGa / fyRev) : '—'}</div></div>
+      <div class="kpi"><div class="kpi-lbl">EBITDA margin</div><div class="kpi-val" style="color:${fyEbitda >= 0 ? 'var(--teal)' : 'var(--amber)'}">${fyRev ? fP(fyEbitda / fyRev) : '—'}</div></div>
+    </div>
+    <div class="hc-banner">Sales ${fM(fySales)} + Marketing ${fM(fyMkt)} = S&amp;M ${fM(fySm)} · R&amp;D ${fM(fyRd)} · G&amp;A ${fM(fyGa)}. Open a department tab for salaries, benefits, bonus, severance, and T&amp;E.</div>
+    <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
+
+    const totalRows = [
+      { sec: 'Revenue & gross profit' },
+      { k: 'revenue', label: 'Total revenue', tot: true },
+      { k: 'cogs', label: 'Cost of revenue' },
+      { k: 'gp', label: 'Gross profit', tot: true },
+      { k: 'gm', label: 'Gross margin %', pct: true },
+      { sec: 'Department opex (feeds IS)' },
+      { k: 'salesNb', label: 'Sales - New Business', open: 'sales' },
+      { k: 'salesCs', label: 'Sales - Customer Success', open: 'sales' },
+      { k: 'mktPl', label: 'Marketing', open: 'marketing' },
+      { k: 'sm', label: 'S&M', tot: true },
+      { k: 'rd', label: 'R&D / Product', open: 'rd' },
+      { k: 'ga', label: 'G&A', open: 'ga' },
+      { k: 'opex', label: 'Total OpEx', tot: true },
+      { sec: 'Bottom line' },
+      { k: 'ebitda', label: 'EBITDA', tot: true },
+      { k: 'ni', label: 'Net income', tot: true },
+    ];
+
+    totalRows.forEach(row => {
+      if (row.sec) {
+        html += `<tr class="sec"><td colspan="${allP.length + 2}">${row.sec}</td></tr>`;
+        return;
+      }
+      const openBtn = row.open
+        ? ` <button type="button" class="hc-tog" style="padding:1px 7px;font-size:9px;margin-left:6px" onclick="setFcPlDept('${row.open}')">open</button>`
+        : '';
+      html += `<tr class="${row.tot ? 'tot' : ''}"><td>${row.label}${openBtn}</td>`;
+      let fySum = 0;
+      allP.forEach(p => {
+        const is = getDisplayIS(p) || {};
+        const pl = plAll[p];
+        const isFc = p > close;
+        let val = 0;
+        if (row.k === 'revenue') val = is.revenue != null ? is.revenue : pl.revenue;
+        else if (row.k === 'cogs') val = is.cogs != null ? is.cogs : (pl.revenue * (lv.cogs || 0.29));
+        else if (row.k === 'gp') {
+          val = is.gross_profit != null ? is.gross_profit
+            : ((is.revenue != null ? is.revenue : pl.revenue) - (is.cogs != null ? is.cogs : pl.revenue * (lv.cogs || 0.29)));
+        } else if (row.k === 'gm') {
+          const rev = is.revenue != null ? is.revenue : pl.revenue;
+          const gp = is.gross_profit != null ? is.gross_profit
+            : (rev - (is.cogs != null ? is.cogs : rev * (lv.cogs || 0.29)));
+          html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${rev ? fP(gp / rev) : '—'}</td>`;
+          return;
+        } else if (row.k === 'salesNb') val = pl.salesNb;
+        else if (row.k === 'salesCs') val = pl.salesCs;
+        else if (row.k === 'mktPl') val = pl.mktPl;
+        else if (row.k === 'sm') val = is.sm != null ? is.sm : pl.sm;
+        else if (row.k === 'rd') val = is.rd != null ? is.rd : pl.rd;
+        else if (row.k === 'ga') val = is.ga != null ? is.ga : pl.ga;
+        else if (row.k === 'opex') val = is.total_opex != null ? is.total_opex : pl.opex;
+        else if (row.k === 'ebitda') val = is.ebitda != null ? is.ebitda : 0;
+        else if (row.k === 'ni') val = is.net_income != null ? is.net_income : 0;
+        fySum += val;
+        html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(val)}</td>`;
+      });
+      if (row.pct) {
+        html += `<td class="fy-c">${fyRev ? fP(fyGp / fyRev) : '—'}</td>`;
+      } else {
+        html += `<td class="fy-c">${fM(fySum)}</td>`;
+      }
+      html += '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+    area.innerHTML = html;
+    return;
+  }
+
+  const spec = FC_PL_DEPTS.find(d => d.key === dept);
+  const fyDept = fy(r => (r.depts[spec.key] && r.depts[spec.key].total) || 0);
+  html += `
+    <div class="hc-banner"><strong>${spec.label}</strong> → IS · ${spec.isLabel} · FY ${fM(fyDept)}.
+      Salaries, benefits, bonus, and severance come from ${typeof showTab === 'function' ? 'Headcount' : 'HC'} (heads × loaded rates).
+      ${spec.key === 'marketing'
+        ? 'Program spend is the GTM total (edit channels on the GTM tab). Martech is discretionary here.'
+        : 'Amber cells are forecast discretionary ($M) — use them to model spending changes for the rest of the year.'}
+    </div>
+    <div class="hc-legend"><i></i> Amber = forecast discretionary ($M). Comp lines follow Headcount. Actual months are locked.</div>
+    <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
+
+  spec.sections.forEach(sec => {
+    html += `<tr class="sec"><td colspan="${allP.length + 2}">${sec.label}</td></tr>`;
+    sec.lines.forEach(line => {
+      const editable = line.from === 'flat';
+      const tag = line.from === 'gtm_program' ? ' · from GTM'
+        : (line.from && line.from.indexOf('hc_') === 0) || line.from === 'ote_nb' || line.from === 'ote_cs' ? ' · from HC'
+        : editable ? ' · $M' : '';
+      html += `<tr class="${editable ? 'adj' : ''}"><td>${line.label}${tag}</td>`;
+      let fyLine = 0;
+      allP.forEach(p => {
+        const isFc = p > close;
+        const secRow = plAll[p].depts[spec.key].sections[sec.key];
+        const amt = (secRow && secRow.lines[line.k]) || 0;
+        fyLine += amt;
+        if (isFc && editable) {
+          html += `<td class="fc-c">${fcPlSpendInput(spec.key, line.k, p, amt)}</td>`;
+        } else {
+          html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(amt)}</td>`;
+        }
+      });
+      html += `<td class="fy-c">${fM(fyLine)}</td></tr>`;
+    });
+    html += `<tr class="tot"><td>${sec.label} total</td>`;
+    let fySec = 0;
+    allP.forEach(p => {
+      const isFc = p > close;
+      const tot = (plAll[p].depts[spec.key].sections[sec.key] && plAll[p].depts[spec.key].sections[sec.key].total) || 0;
+      fySec += tot;
+      html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(tot)}</td>`;
+    });
+    html += `<td class="fy-c">${fM(fySec)}</td></tr>`;
+  });
+
+  html += `<tr class="tot"><td>${spec.label} total → ${spec.isLabel}</td>`;
+  allP.forEach(p => {
+    const isFc = p > close;
+    const tot = (plAll[p].depts[spec.key] && plAll[p].depts[spec.key].total) || 0;
+    html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(tot)}</td>`;
+  });
+  html += `<td class="fy-c">${fM(fyDept)}</td></tr>`;
+  html += '</tbody></table></div></div>';
+  area.innerHTML = html;
+}
+
 function renderIS(area){
   const res=getResults();
   const cfg=HORIZON[hz];
@@ -1444,8 +2418,8 @@ function renderIS(area){
 
   const rows=[
     {type:'sec',lbl:'Revenue'},
-    {lbl:'Subscription Revenue',compute:r=>r.revenue*0.967,indent:true},
-    {lbl:'Services Revenue',compute:r=>r.revenue*0.033,indent:true},
+    {lbl:'Subscription Revenue',compute:r=>{const pct=(fcCostState.svcPct!=null?fcCostState.svcPct:3.3)/100;return r.revenue/(1+pct);},indent:true},
+    {lbl:'Services Revenue',compute:r=>{const pct=(fcCostState.svcPct!=null?fcCostState.svcPct:3.3)/100;return r.revenue-r.revenue/(1+pct);},indent:true},
     {lbl:'Total Revenue',key:'revenue',type:'sub',fy:true},
     {type:'sec',lbl:'Cost of Revenue'},
     {lbl:'Cost of Revenue',key:'cogs',inv:true,indent:true},
@@ -1504,7 +2478,7 @@ function renderIS(area){
 
   area.innerHTML=`<div class="slide">
     <div class="slide-title">Income Statement · ${hz.replace('p','+')} Horizon</div>
-    <div class="slide-sub">Net income ties to cash flow statement <span class="tie-ok">✓ Tied</span> · Headcount-adjusted payroll from open reqs</div>
+    <div class="slide-sub">Net income ties to cash flow statement <span class="tie-ok">✓ Tied</span> · OpEx from P&amp;L dept books + open reqs</div>
     ${buildKPIs(res)}
     <div>
         <div class="two-col" style="margin-bottom:12px">
@@ -1573,7 +2547,7 @@ function renderCash(area){
 
   area.innerHTML=`<div class="slide">
     <div class="slide-title">Cash Flow Statement · ${hz.replace('p','+')} Horizon</div>
-    <div class="slide-sub">Indirect method · Deferred revenue from Forecast_deferred_revenue_waterfall.csv · Ending cash ties to balance sheet <span class="tie-ok">✓ Tied</span></div>
+    <div class="slide-sub">Indirect method · Forecast WC from DSO/DPO · Ending cash ties to balance sheet <span class="tie-ok">✓ Tied</span></div>
     ${buildKPIs(res)}
     <div>
         <div class="card" style="margin-bottom:12px">
@@ -1653,147 +2627,1183 @@ function renderBS(area){
 }
 
 // \u2500\u2500 PIPELINE DETAIL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ── GTM / Pipeline (top-down: CRM pipe first, marketing MQLs overlay) ─────────
+const FC_MKT_SM_RATIO = 0.65;
+const FC_GTM_DEFAULT_ACV = 125000;
+const FC_GTM_DEFAULT_MQL_OPP = 0.28;
+const FC_GTM_CHANNELS = [
+  { key: 'paid_search', label: 'Paid search', defaultMix: 0.28, defaultCpl: 450 },
+  { key: 'paid_social', label: 'Paid social', defaultMix: 0.18, defaultCpl: 320 },
+  { key: 'content', label: 'Content / SEO', defaultMix: 0.14, defaultCpl: 160 },
+  { key: 'events', label: 'Events / field', defaultMix: 0.22, defaultCpl: 650 },
+  { key: 'partners', label: 'Partners', defaultMix: 0.10, defaultCpl: 280 },
+  { key: 'other', label: 'Brand / other', defaultMix: 0.08, defaultCpl: 500 },
+];
+
+let fcGtmState = {
+  spend: null,         // { period: program $ } — sum of channelSpend
+  channelSpend: null,  // { period: { channel: $ } } — primary editable by category
+  mix: null,           // { period: { channel: mix 0–1 } } — synced from channelSpend
+  cpl: null,           // { period: { channel: $/MQL } }
+  mqlOpp: FC_GTM_DEFAULT_MQL_OPP,
+  avgAcv: FC_GTM_DEFAULT_ACV,
+  seededFrom: null,
+};
+
+function fcGtmDefaultMix() {
+  const o = {};
+  FC_GTM_CHANNELS.forEach(ch => { o[ch.key] = ch.defaultMix; });
+  return o;
+}
+function fcGtmDefaultCpl() {
+  const o = {};
+  FC_GTM_CHANNELS.forEach(ch => { o[ch.key] = ch.defaultCpl; });
+  return o;
+}
+
+function ensureFcGtmState() {
+  if (!fcGtmState.spend) fcGtmState.spend = {};
+  if (!fcGtmState.channelSpend) fcGtmState.channelSpend = {};
+  if (!fcGtmState.mix) fcGtmState.mix = {};
+  if (!fcGtmState.cpl) fcGtmState.cpl = {};
+  ALL_P.forEach(p => {
+    if (fcGtmState.mix[p] == null) fcGtmState.mix[p] = fcGtmDefaultMix();
+    if (fcGtmState.cpl[p] == null) fcGtmState.cpl[p] = fcGtmDefaultCpl();
+    if (fcGtmState.spend[p] == null) {
+      // Seed program spend ≈ S&M × marketing share.
+      // Do NOT call getDisplayIS/getResults here — that re-enters compute().
+      let sm = 0;
+      if (p <= getCloseMonth()) {
+        const a = SRC.actuals && SRC.actuals[p];
+        sm = a && a.sm != null ? a.sm : 0;
+      } else {
+        const close = getCloseMonth();
+        const a = SRC.actuals && SRC.actuals[close];
+        const baseSm = a && a.sm != null ? a.sm : 0;
+        const lv = getLevers();
+        sm = baseSm > 0 ? baseSm : 0;
+        if (!sm && lv && lv.sm) {
+          const rev = a && a.revenue != null ? a.revenue : 0;
+          sm = rev * (lv.sm || 0.34);
+        }
+      }
+      fcGtmState.spend[p] = Math.round(sm * FC_MKT_SM_RATIO);
+    }
+    if (fcGtmState.channelSpend[p] == null) {
+      fcGtmSyncChannelSpendFromMix(p);
+    }
+  });
+  if (fcGtmState.mqlOpp == null) fcGtmState.mqlOpp = FC_GTM_DEFAULT_MQL_OPP;
+  if (fcGtmState.avgAcv == null) fcGtmState.avgAcv = FC_GTM_DEFAULT_ACV;
+  fcGtmState.seededFrom = 'sm×' + FC_MKT_SM_RATIO + '+' + getCloseMonth();
+}
+
+/** Spread program total across channels by current mix weights. */
+function fcGtmSyncChannelSpendFromMix(period) {
+  const tot = Math.max(0, Number(fcGtmState.spend[period]) || 0);
+  const mix = fcGtmState.mix[period] || fcGtmDefaultMix();
+  let rawSum = 0;
+  FC_GTM_CHANNELS.forEach(ch => { rawSum += Math.max(0, Number(mix[ch.key]) || 0); });
+  fcGtmState.channelSpend[period] = {};
+  let allocated = 0;
+  FC_GTM_CHANNELS.forEach((ch, i) => {
+    const w = rawSum > 0 ? Math.max(0, Number(mix[ch.key]) || 0) / rawSum : (1 / FC_GTM_CHANNELS.length);
+    const last = i === FC_GTM_CHANNELS.length - 1;
+    const amt = last ? Math.max(0, tot - allocated) : Math.round(tot * w);
+    fcGtmState.channelSpend[period][ch.key] = amt;
+    allocated += amt;
+  });
+}
+
+/** After channel $ edits: total = Σ channels, mix = share of total. */
+function fcGtmSyncMixFromChannelSpend(period) {
+  const row = fcGtmState.channelSpend[period] || {};
+  let tot = 0;
+  FC_GTM_CHANNELS.forEach(ch => { tot += Math.max(0, Number(row[ch.key]) || 0); });
+  fcGtmState.spend[period] = tot;
+  if (!fcGtmState.mix[period]) fcGtmState.mix[period] = fcGtmDefaultMix();
+  FC_GTM_CHANNELS.forEach(ch => {
+    const s = Math.max(0, Number(row[ch.key]) || 0);
+    fcGtmState.mix[period][ch.key] = tot > 0 ? s / tot : 0;
+  });
+}
+
+function updateFcGtmSpend(period, raw) {
+  ensureFcGtmState();
+  const newTot = Math.max(0, Math.round((Number(raw) || 0) * 1e6)); // input is $M
+  const oldTot = Math.max(0, Number(fcGtmState.spend[period]) || 0);
+  fcGtmState.spend[period] = newTot;
+  if (!fcGtmState.channelSpend[period]) fcGtmSyncChannelSpendFromMix(period);
+  if (oldTot > 0) {
+    const scale = newTot / oldTot;
+    FC_GTM_CHANNELS.forEach(ch => {
+      fcGtmState.channelSpend[period][ch.key] = Math.round(
+        (Number(fcGtmState.channelSpend[period][ch.key]) || 0) * scale
+      );
+    });
+    // Fix rounding drift onto last channel
+    let sum = 0;
+    FC_GTM_CHANNELS.forEach((ch, i) => {
+      if (i < FC_GTM_CHANNELS.length - 1) sum += fcGtmState.channelSpend[period][ch.key];
+      else fcGtmState.channelSpend[period][ch.key] = Math.max(0, newTot - sum);
+    });
+  } else {
+    fcGtmSyncChannelSpendFromMix(period);
+  }
+  fcGtmSyncMixFromChannelSpend(period);
+  refresh();
+}
+function updateFcGtmChannelSpend(period, channel, raw) {
+  ensureFcGtmState();
+  if (!fcGtmState.channelSpend[period]) fcGtmSyncChannelSpendFromMix(period);
+  fcGtmState.channelSpend[period][channel] = Math.max(0, Math.round((Number(raw) || 0) * 1e6)); // input is $M
+  fcGtmSyncMixFromChannelSpend(period);
+  refresh();
+}
+function updateFcGtmMix(period, channel, raw) {
+  ensureFcGtmState();
+  if (!fcGtmState.mix[period]) fcGtmState.mix[period] = fcGtmDefaultMix();
+  fcGtmState.mix[period][channel] = Math.max(0, Math.min(1, (Number(raw) || 0) / 100));
+  fcGtmSyncChannelSpendFromMix(period);
+  refresh();
+}
+function updateFcGtmCpl(period, channel, raw) {
+  ensureFcGtmState();
+  if (!fcGtmState.cpl[period]) fcGtmState.cpl[period] = fcGtmDefaultCpl();
+  fcGtmState.cpl[period][channel] = Math.max(1, Math.round(Number(raw) || 0));
+  refresh();
+}
+function updateFcGtmRate(field, raw) {
+  ensureFcGtmState();
+  if (field === 'mqlOpp') fcGtmState.mqlOpp = Math.max(0.01, Math.min(1, (Number(raw) || 0) / 100));
+  if (field === 'avgAcv') fcGtmState.avgAcv = Math.max(1000, Math.round(Number(raw) || 0) * 1000);
+  refresh();
+}
+
+function fcGtmNormalizeMix(period) {
+  ensureFcGtmState();
+  const raw = fcGtmState.mix[period] || fcGtmDefaultMix();
+  let sum = 0;
+  FC_GTM_CHANNELS.forEach(ch => { sum += Math.max(0, Number(raw[ch.key]) || 0); });
+  const weights = {};
+  FC_GTM_CHANNELS.forEach(ch => {
+    const v = Math.max(0, Number(raw[ch.key]) || 0);
+    weights[ch.key] = sum > 0 ? v / sum : (1 / FC_GTM_CHANNELS.length);
+  });
+  return { weights, rawSum: sum };
+}
+
+function fcGtmPipeMonth(p) {
+  ensureFcGtmState();
+  const close = getCloseMonth();
+  const lv = getLevers();
+  const acv = Math.max(1000, Number(fcGtmState.avgAcv) || FC_GTM_DEFAULT_ACV);
+
+  // Actual months: booked ARR waterfall (realized = 100% weighted).
+  if (p <= close) {
+    const a = (SRC.actuals && SRC.actuals[p]) || {};
+    const wtdNb = Number(a.arr_nb) || 0;
+    const wtdExp = Number(a.arr_exp) || 0;
+    const wtdReact = Number(a.arr_react) || 0;
+    const wtdCont = Number(a.arr_cont) || 0;
+    const wtdChurn = Number(a.arr_churn) || 0;
+    const logos = acv > 0 ? Math.max(0, Math.round(wtdNb / acv)) : 0;
+    const netWtd = wtdNb + wtdExp + wtdReact - wtdCont - wtdChurn;
+    return {
+      isActual: true,
+      nb: { total: wtdNb, weighted: wtdNb, count: logos },
+      exp: { total: wtdExp, weighted: wtdExp, count: 0 },
+      cont: { total: wtdCont, weighted: wtdCont, count: 0 },
+      churn: { total: wtdChurn, weighted: wtdChurn, count: 0 },
+      react: { total: wtdReact, weighted: wtdReact, count: 0 },
+      ren: { arr: 0, weighted: 0, count: 0 },
+      wtdNb, wtdExp, wtdCont, wtdChurn, wtdReact, wtdRen: 0,
+      grossRen: 0, renN: 0, dealN: logos, logos, netWtd,
+    };
+  }
+
+  const opps = SRC.opp_pipeline[p] || {};
+  const ren = SRC.renewals[p] || {};
+  const pick = (t) => opps[t] || { total: 0, weighted: 0, count: 0 };
+  const nb = pick('New Business');
+  const exp = pick('Expansion');
+  const cont = pick('Contraction');
+  const churn = pick('Churn');
+  const react = pick('Reactivation');
+  const wtdNb = (nb.weighted || 0) * (lv.nb || 1);
+  const wtdExp = (exp.weighted || 0) * (lv.exp || 1);
+  const wtdCont = (cont.weighted || 0) * (lv.churn || 1);
+  const wtdChurn = (churn.weighted || 0) * (lv.churn || 1);
+  const wtdReact = (react.weighted || 0);
+  const wtdRen = (ren.weighted || 0) * (1 + (lv.ren_adj || 0));
+  const dealN = (nb.count || 0) + (exp.count || 0) + (cont.count || 0) + (churn.count || 0) + (react.count || 0);
+  const netWtd = wtdNb + wtdExp + wtdReact - wtdCont - wtdChurn;
+  return {
+    isActual: false,
+    nb, exp, cont, churn, react, ren,
+    wtdNb, wtdExp, wtdCont, wtdChurn, wtdReact, wtdRen,
+    grossRen: ren.arr || 0, renN: ren.count || 0, dealN, logos: 0, netWtd,
+  };
+}
+
+/** CRM pipeline book: pushed / won / lost / ending open — above lever-adjusted contract events. */
+function fcGtmPipelineBook(p) {
+  ensureFcGtmHistOpps();
+  const close = getCloseMonth();
+  const opps = SRC.opp_pipeline[p] || {};
+  const types = ['New Business', 'Expansion', 'Reactivation', 'Contraction', 'Churn'];
+  let pushed = 0;
+  let wonFcst = 0;
+  let lost = 0;
+  types.forEach(t => {
+    const bucket = opps[t] || {};
+    const deals = bucket.deals || [];
+    if (deals.length) {
+      deals.forEach(d => {
+        const arr = Number(d.arr) || 0;
+        const stage = String(d.stage || '');
+        const outcome = String(d.outcome || '');
+        pushed += arr;
+        if (/lost|closed\s*lost/i.test(stage) || /lost/i.test(outcome)) lost += arr;
+        else if (/^commit$/i.test(stage) || /closed\s*won|^won$/i.test(stage) || /won/i.test(outcome)) wonFcst += arr;
+      });
+    } else {
+      pushed += Number(bucket.total) || 0;
+    }
+  });
+  let won;
+  if (p <= close) {
+    const a = (SRC.actuals && SRC.actuals[p]) || {};
+    won = (Number(a.arr_nb) || 0) + (Number(a.arr_exp) || 0) + (Number(a.arr_react) || 0);
+  } else {
+    won = wonFcst;
+  }
+  const ending = pushed - won - lost;
+  return { pushed, won, lost, ending };
+}
+
+function fcGtmAllocate(period) {
+  ensureFcGtmState();
+  if (!fcGtmState.channelSpend[period]) fcGtmSyncChannelSpendFromMix(period);
+  const cpls = fcGtmState.cpl[period] || fcGtmDefaultCpl();
+  const channels = {};
+  let spendTot = 0;
+  let mqlSum = 0;
+  FC_GTM_CHANNELS.forEach(ch => {
+    const spend = Math.max(0, Number(fcGtmState.channelSpend[period][ch.key]) || 0);
+    spendTot += spend;
+  });
+  FC_GTM_CHANNELS.forEach(ch => {
+    const spend = Math.max(0, Number(fcGtmState.channelSpend[period][ch.key]) || 0);
+    const cpl = Math.max(1, Number(cpls[ch.key]) || ch.defaultCpl);
+    const mqls = spend / cpl;
+    const mix = spendTot > 0 ? spend / spendTot : 0;
+    channels[ch.key] = {
+      spend, cpl, mqls, mix,
+      mixRaw: Number((fcGtmState.mix[period] || {})[ch.key]) || 0,
+    };
+    mqlSum += mqls;
+  });
+  fcGtmState.spend[period] = spendTot;
+  return { spendTot, channels, mqlSum, mixRawSum: spendTot > 0 ? 1 : 0 };
+}
+
+/** Pipeline coverage for Budget-aligned MQL implied (Budget default 3.0×). */
+const FC_GTM_PIPE_COV = 3.0;
+
+/**
+ * MQLs implied — aligned with Budget "MQLs required" funnel math:
+ *   pipelineOpps = (NB$ × coverage) / ACV
+ *   mqls = pipelineOpps / (MQL→Opp %)
+ * Actuals: closed logos / (mqlOpp × oppClose) — same back-solve as Budget hist.
+ * Note: Forecast "MQLs bought" = raw spend÷CPL; Budget channel MQLs are scaled
+ * to match required (not raw spend÷CPL), so bought can diverge even at same spend.
+ */
+function fcGtmImpliedMqls(pipe) {
+  const mqlOpp = Math.max(0.01, Number(fcGtmState.mqlOpp) || FC_GTM_DEFAULT_MQL_OPP);
+  const oppClose = 0.14;
+  const avgAcv = Math.max(1000, Number(fcGtmState.avgAcv) || FC_GTM_DEFAULT_ACV);
+  if (pipe && pipe.isActual) {
+    const logos = pipe.logos != null ? pipe.logos : (pipe.dealN || 0);
+    return logos / (mqlOpp * oppClose);
+  }
+  const nb = Number(pipe && pipe.wtdNb) || 0;
+  const pipelineOpps = avgAcv > 0 ? (nb * FC_GTM_PIPE_COV) / avgAcv : 0;
+  return pipelineOpps / mqlOpp;
+}
+
+let fcGtmSelectedMonth = null;
+
+function fcGtmMonthHeaders(periods, opts) {
+  opts = opts || {};
+  const selected = opts.selected || fcGtmSelectedMonth;
+  return periods.map(p => {
+    const mo = MO12[parseInt(p.slice(5), 10) - 1];
+    const isFc = p > getCloseMonth();
+    const sel = (opts.selectable && selected === p) ? ' sel' : '';
+    const click = opts.selectable
+      ? ` onclick="selectFcGtmMonth('${p}')" title="Show ${mo} deal detail"`
+      : '';
+    return `<th class="${isFc ? 'fc-h' : 'act-h'}${sel}"${click}><span class="hc-mo">${mo}</span><span class="hc-tag">${isFc ? 'Fcst' : 'Act'}</span></th>`;
+  }).join('') + '<th class="fy-h">FY</th>';
+}
+
+function selectFcGtmMonth(p) {
+  fcGtmSelectedMonth = p;
+  document.querySelectorAll('.hc-tbl.gtm-pipe th.act-h, .hc-tbl.gtm-pipe th.fc-h').forEach(th => {
+    th.classList.toggle('sel', th.getAttribute('onclick') === `selectFcGtmMonth('${p}')`);
+  });
+  showPipeMonth(p);
+}
+
+function fcGtmOppBand(prob) {
+  const n = Number(prob) || 0;
+  if (n >= 80) return { label: 'Must close', cls: 'must' };
+  if (n >= 50) return { label: 'On the fence', cls: 'fence' };
+  return { label: 'Stretch / generate', cls: 'stretch' };
+}
+
+/** Seed Jan–close historical closed-won deals from booked ARR when CRM opps are missing. */
+function ensureFcGtmHistOpps() {
+  if (SRC._fcGtmHistOppsSeeded) return;
+  const close = getCloseMonth();
+  const acv = Math.max(1000, Number(fcGtmState && fcGtmState.avgAcv) || FC_GTM_DEFAULT_ACV);
+  const cust = ['Acme','Vertex','Northstar','Pioneer','Catalyst','Summit','BlueRiver','Nimbus','Evergreen','Apex'];
+  const segs = ['SMB','Mid-Market','Enterprise'];
+  const chans = ['Paid Search','Content Syndication','Webinar','Outbound','Partner','Organic Search'];
+  const owners = ['Riley Wilson','Jordan Smith','Casey Johnson','Alex Lee','Morgan Davis'];
+  function mkDeals(totalArr, type, period, seed) {
+    const tot = Math.max(0, Number(totalArr) || 0);
+    if (!tot) return { total: 0, weighted: 0, count: 0, deals: [] };
+    const n = Math.max(2, Math.min(8, Math.round(tot / acv) || 2));
+    const deals = [];
+    let left = tot;
+    for (let i = 0; i < n; i++) {
+      const last = i === n - 1;
+      const arr = last ? left : Math.round(tot / n);
+      left -= arr;
+      const closed = period <= close;
+      const prob = closed ? 100 : (35 + ((seed + i * 17) % 50));
+      deals.push({
+        customer: `${cust[(seed + i) % cust.length]} ${type.slice(0, 3)} ${100 + seed + i}`,
+        stage: closed ? 'Closed Won' : (prob >= 80 ? 'Commit' : prob >= 50 ? 'Negotiation' : 'Discovery'),
+        segment: segs[(seed + i) % segs.length],
+        region: ['West','East','Central','South'][(seed + i) % 4],
+        arr, weighted: closed ? arr : Math.round(arr * prob / 100),
+        prob, owner: owners[(seed + i) % owners.length],
+        channel: chans[(seed + i) % chans.length], billing: 'Annual',
+        outcome: closed ? 'won' : 'open',
+      });
+    }
+    return {
+      total: tot,
+      weighted: deals.reduce((s, d) => s + d.weighted, 0),
+      count: deals.length,
+      deals,
+    };
+  }
+  if (!SRC.opp_pipeline) SRC.opp_pipeline = {};
+  ALL_P.forEach((p, idx) => {
+    if (p > close) return;
+    const existing = SRC.opp_pipeline[p];
+    // Keep real open pipe if already present (e.g. June); only fill empty months.
+    if (existing && existing['New Business'] && (existing['New Business'].deals || []).length) return;
+    const a = (SRC.actuals && SRC.actuals[p]) || {};
+    const seed = idx * 11 + 3;
+    SRC.opp_pipeline[p] = {
+      'New Business': mkDeals(a.arr_nb, 'NB', p, seed),
+      'Expansion': mkDeals(a.arr_exp, 'Exp', p, seed + 1),
+      'Reactivation': mkDeals(a.arr_react, 'Rea', p, seed + 2),
+      'Contraction': mkDeals(a.arr_cont, 'Con', p, seed + 3),
+      'Churn': mkDeals(a.arr_churn, 'Chu', p, seed + 4),
+    };
+  });
+  SRC._fcGtmHistOppsSeeded = true;
+}
+
+
+function fcGtmMoneyCells(periods, getter, { editable, onchange, cls, units } = {}) {
+  const toDisp = (v) => {
+    const n = Number(v) || 0;
+    if (units === 'm') return Math.round((n / 1e6) * 100) / 100;
+    if (units === 'k') return Math.round(n / 1000);
+    return Math.round(n);
+  };
+  const fmt = (v) => {
+    if (!v) return '—';
+    if (units === 'm') return fM(v, 2);
+    if (units === 'k') return toDisp(v).toLocaleString();
+    return fM(v, 1);
+  };
+  const cells = periods.map(p => {
+    const v = getter(p);
+    const c = cls ? cls(p) : (p > getCloseMonth() ? 'fc-c' : 'act-c');
+    if (editable && editable(p)) {
+      const step = units === 'm' ? 0.05 : (units === 'k' ? 1 : 1000);
+      const tip = units === 'm' ? 'Enter $ millions' : (units === 'k' ? 'Enter $ thousands' : 'Enter dollars');
+      return `<td class="${c}"><input class="hc-hire" style="width:52px;max-width:100%" type="number" min="0" step="${step}" value="${toDisp(v)}"
+        onchange="${onchange(p)}" title="${tip}"></td>`;
+    }
+    return `<td class="${c}">${fmt(v)}</td>`;
+  }).join('');
+  const fy = periods.reduce((s, p) => s + (Number(getter(p)) || 0), 0);
+  return cells + `<td class="fy-c">${fmt(fy)}</td>`;
+}
+
+function fcGtmNumCells(periods, getter, fmt) {
+  const cells = periods.map(p => {
+    const v = getter(p);
+    const c = p > getCloseMonth() ? 'fc-c' : 'act-c';
+    return `<td class="${c}">${fmt(v)}</td>`;
+  }).join('');
+  const fy = periods.reduce((s, p) => s + (Number(getter(p)) || 0), 0);
+  return cells + `<td class="fy-c">${fmt(fy)}</td>`;
+}
+
 function renderPipeline(area){
-  const gtm=buildGtmHorizonSummary();
-  const coverLbl=gtm.coverX!=null?gtm.coverX.toFixed(1)+'×':'—';
-  area.innerHTML=`<div class="slide">
+  ensureFcGtmState();
+  const gtm = buildGtmHorizonSummary();
+  const coverLbl = gtm.coverX != null ? gtm.coverX.toFixed(1) + '×' : '—';
+  const periods = ALL_P.slice();
+  const actP = periods.filter(p => p <= getCloseMonth());
+  const fcP = periods.filter(p => p > getCloseMonth());
+  const colSpan = periods.length + 2;
+  const pipeByP = {};
+  periods.forEach(p => { pipeByP[p] = fcGtmPipeMonth(p); });
+  const allocByP = {};
+  periods.forEach(p => { allocByP[p] = fcGtmAllocate(p); });
+
+  const fySpend = periods.reduce((s, p) => s + allocByP[p].spendTot, 0);
+  const fyMqlBought = periods.reduce((s, p) => s + allocByP[p].mqlSum, 0);
+  const fyMqlImplied = periods.reduce((s, p) => s + fcGtmImpliedMqls(pipeByP[p]), 0);
+  const mqlGap = fyMqlBought - fyMqlImplied;
+  const ytdNb = actP.reduce((s, p) => s + (pipeByP[p].wtdNb || 0), 0);
+  const ytdExp = actP.reduce((s, p) => s + (pipeByP[p].wtdExp || 0), 0);
+  const ytdNet = actP.reduce((s, p) => s + (pipeByP[p].netWtd || 0), 0);
+  const fcNb = fcP.reduce((s, p) => s + (pipeByP[p].wtdNb || 0), 0);
+  const fcExp = fcP.reduce((s, p) => s + (pipeByP[p].wtdExp || 0), 0);
+  const fcNet = fcP.reduce((s, p) => s + (pipeByP[p].netWtd || 0), 0);
+  const ytdSpend = actP.reduce((s, p) => s + allocByP[p].spendTot, 0);
+  const fcSpend = fcP.reduce((s, p) => s + allocByP[p].spendTot, 0);
+  const res = getResults();
+  const decP = ALL_P[11];
+  const decBasePlanM = +(83.445 + FC_P.length * 2).toFixed(2);
+  const decArr = (res[decP] && res[decP].arr && res[decP].arr.arr_eop) || 0;
+  const arrGap = decArr - decBasePlanM * 1e6;
+
+  let html = `<div class="slide">
     <div class="slide-title">GTM / Pipeline</div>
-    <div class="slide-sub">Deal-level coverage from opportunities + renewals — same pool that drives the Overview close path. Full FY GTM / CPL stress lives in Budget Engine.</div>
-    <div class="pa-loop">
-      <div class="pa-loop-copy"><strong>GTM read:</strong> ${fM(gtm.coverPool,1)} weighted NB+expansion vs ${fM(gtm.needNn,1)} remaining to Dec base plan (${coverLbl} cover). Renewals: ${fM(gtm.wtdRen,1)} weighted of ${fM(gtm.grossRen,1)} gross.</div>
-      <a class="pa-link" href="${paAssuranceHref()}" target="_top">Plan Assurance →</a>
+    <div class="slide-sub">Marketing → pipeline book (pushed / won / lost) → contract events (attainment levers) → month deal detail.</div>
+    <div class="hc-banner">
+      YTD net <strong>${fM(ytdNet,1)}</strong> (NB ${fM(ytdNb,1)} · Exp ${fM(ytdExp,1)})
+      · Fcst net <strong>${fM(fcNet,1)}</strong> (NB ${fM(fcNb,1)} · Exp ${fM(fcExp,1)})
+      · Pipe / NB <strong>${coverLbl}</strong>
+      · Dec ARR <strong>${fM(decArr,1)}</strong> vs base <strong>${fM(decBasePlanM*1e6,1)}</strong>
+      · FY spend <strong>${fM(fySpend,1)}</strong> (YTD ${fM(ytdSpend,1)} · Fcst ${fM(fcSpend,1)})
     </div>
+    <div class="hc-legend"><i></i><span><strong>Act</strong> columns = booked ARR / locked spend. <strong>Fcst</strong> = lever-adjusted CRM pipe + editable mix/CPL/spend. MQLs implied: actuals from closed logos; forecast from open opps ÷ MQL→Opp%.</span></div>
     <div class="gtm-strip">
-      <div class="gtm-tile"><div class="gtm-tile-lbl">Coverage vs Dec plan</div><div class="gtm-tile-val">${coverLbl}</div><div class="gtm-tile-sub">Weighted NB+exp / remaining net-new</div></div>
-      <div class="gtm-tile"><div class="gtm-tile-lbl">Weighted NB + expansion</div><div class="gtm-tile-val">${fM(gtm.coverPool,1)}</div><div class="gtm-tile-sub">${gtm.dealN} deals · lever-adjusted</div></div>
-      <div class="gtm-tile"><div class="gtm-tile-lbl">Renewal pipeline</div><div class="gtm-tile-val">${fM(gtm.wtdRen,1)}</div><div class="gtm-tile-sub">${gtm.renN} renewals · ${fM(gtm.grossRen,1)} gross</div></div>
-      <div class="gtm-tile"><div class="gtm-tile-lbl">Remaining to Dec plan</div><div class="gtm-tile-val">${fM(gtm.needNn,1)}</div><div class="gtm-tile-sub">From close EOP ARR to Dec base</div></div>
-    </div>
-    <div class="snav" id="pipeTabs">
-      ${FC_P.map((p,i)=>`<button class="snav-btn ${i===0?'on':''}" onclick="showPipeMonth('${p}',this)">${MO12[parseInt(p.slice(5))-1]}</button>`).join('')}
-    </div>
-    <div id="pipeContent"></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">YTD net ARR</div><div class="gtm-tile-val">${fM(ytdNet,1)}</div><div class="gtm-tile-sub">Booked through ${getCloseMoLabel()}</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">Fcst net (weighted)</div><div class="gtm-tile-val">${fM(fcNet,1)}</div><div class="gtm-tile-sub">NB ${fM(fcNb,1)} + Exp ${fM(fcExp,1)} · lever-adj</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">Pipeline / NB</div><div class="gtm-tile-val">${coverLbl}</div><div class="gtm-tile-sub">Gross NB pipe ÷ weighted NB (Budget parity)</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">MQL bought vs implied</div><div class="gtm-tile-val">${mqlGap>=0?'+':''}${Math.round(mqlGap).toLocaleString()}</div><div class="gtm-tile-sub">FY ${Math.round(fyMqlBought).toLocaleString()} bought · ${Math.round(fyMqlImplied).toLocaleString()} implied</div></div>
+    </div>`;
+
+  if (arrGap < -100000) {
+    html += `<div class="gap-alert"><strong>${fV(arrGap)}</strong> vs Dec base plan. Pipe is the base case — marketing mix/CPL shifts efficiency of MQLs feeding that pipe, not a second ARR build.</div>`;
+  }
+
+  // ── 1) Marketing first (spend → MQLs → CPL → check) ──
+  ensureFcGtmHistOpps();
+  if (!fcGtmSelectedMonth || !periods.includes(fcGtmSelectedMonth)) {
+    fcGtmSelectedMonth = fcP[0] || periods[periods.length - 1] || periods[0];
+  }
+  const mqlOppPct = Math.round((fcGtmState.mqlOpp || FC_GTM_DEFAULT_MQL_OPP) * 100);
+  const acvK = Math.round((fcGtmState.avgAcv || FC_GTM_DEFAULT_ACV) / 1000);
+  html += `<div class="hc-banner" style="margin-top:4px">Marketing first · then pipeline &amp; outstanding opportunities below · MQL→Opp
+    <input class="hc-attr-pct" type="number" min="1" max="100" step="1" value="${mqlOppPct}"
+      onchange="updateFcGtmRate('mqlOpp',this.value)">%
+    · Avg ACV <input class="hc-attr-pct" style="width:48px" type="number" min="10" step="5" value="${acvK}"
+      onchange="updateFcGtmRate('avgAcv',this.value)">k
+    · Spend seeded from S&amp;M × ${Math.round(FC_MKT_SM_RATIO*100)}% — reallocate channels when CPL isn't going as far.
   </div>`;
-  showPipeMonth(FC_P[0]||'2026-07');
+
+  // Marketing tables share one grid so month headers stay aligned + sticky
+  let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
+  body += `<tr class="sec"><td colspan="${colSpan}">Program spend (top-down from $) — edit category spend directly</td></tr>`;
+  FC_GTM_CHANNELS.forEach(ch => {
+    body += `<tr class="adj"><td>${ch.label} ($M)</td>${fcGtmMoneyCells(periods, p => allocByP[p].channels[ch.key].spend, {
+      editable: p => p > getCloseMonth(),
+      onchange: p => `updateFcGtmChannelSpend('${p}','${ch.key}',this.value)`,
+      units: 'm',
+    })}</tr>`;
+  });
+  body += `<tr class="tot adj"><td>Marketing program spend ($M)</td>${fcGtmMoneyCells(periods, p => allocByP[p].spendTot, {
+    editable: p => p > getCloseMonth(),
+    onchange: p => `updateFcGtmSpend('${p}',this.value)`,
+    units: 'm',
+  })}</tr>`;
+
+  body += `<tr class="sec"><td colspan="${colSpan}">Channel MQLs generated (spend ÷ CPL)</td></tr>`;
+  FC_GTM_CHANNELS.forEach(ch => {
+    body += `<tr><td>${ch.label} MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].channels[ch.key].mqls, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+  });
+  body += `<tr class="tot"><td>Total MQLs bought</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+
+  body += `<tr class="sec"><td colspan="${colSpan}">Channel CPL ($/MQL) — raise when a category isn't going as far</td></tr>`;
+  FC_GTM_CHANNELS.forEach(ch => {
+    const cells = periods.map(p => {
+      const cpl = (fcGtmState.cpl[p] && fcGtmState.cpl[p][ch.key] != null) ? fcGtmState.cpl[p][ch.key] : ch.defaultCpl;
+      const c = p > getCloseMonth() ? 'fc-c' : 'act-c';
+      if (p <= getCloseMonth()) return `<td class="${c}">$${Math.round(cpl).toLocaleString()}</td>`;
+      return `<td class="${c}"><input class="hc-hire" style="width:52px;max-width:100%" type="number" min="1" step="10" value="${Math.round(cpl)}"
+        onchange="updateFcGtmCpl('${p}','${ch.key}',this.value)"></td>`;
+    }).join('');
+    body += `<tr class="adj"><td>${ch.label} CPL</td>${cells}<td class="fy-c">—</td></tr>`;
+  });
+
+  body += `<tr class="sec"><td colspan="${colSpan}">MQL check — bought (spend÷CPL) vs implied (Budget funnel: NB$ × ${FC_GTM_PIPE_COV.toFixed(1)}× ÷ ACV ÷ MQL→Opp)</td></tr>`;
+  body += `<tr><td>MQLs bought (raw spend÷CPL)</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+  body += `<tr><td>MQLs implied (Budget-style from NB$)</td>${fcGtmNumCells(periods, p => fcGtmImpliedMqls(pipeByP[p]), v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+  body += `<tr class="tot"><td>MQL surplus / (gap)</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum - fcGtmImpliedMqls(pipeByP[p]), v => {
+    const n = Math.round(v);
+    if (!n) return '—';
+    return (n > 0 ? '+' : '') + n.toLocaleString();
+  })}</tr></tbody>`;
+  html += `<div class="hc-wrap gtm-flow gtm-mkt-wrap"><table class="hc-tbl gtm-mkt">${body}</table></div>`;
+
+  // ── 2) Pipeline book + contract events + outstanding opportunities ──
+  const bookByP = {};
+  periods.forEach(p => { bookByP[p] = fcGtmPipelineBook(p); });
+  body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods, { selectable: true, selected: fcGtmSelectedMonth })}</tr></thead><tbody>`;
+  body += `<tr class="sec"><td colspan="${colSpan}">Pipeline book — click a month for deal detail · Act won = booked NB+Exp+React · Fcst won = Commit-stage $</td></tr>`;
+  const bookRows = [
+    { label: 'Pipeline pushed', f: p => bookByP[p].pushed },
+    { label: 'Closed / Won', f: p => bookByP[p].won },
+    { label: 'Closed / Lost', f: p => bookByP[p].lost },
+    { label: 'Ending open pipe', f: p => bookByP[p].ending, tot: true },
+  ];
+  bookRows.forEach(row => {
+    const cls = row.tot ? ' tot' : '';
+    body += `<tr class="${cls}"><td>${row.label}</td>${fcGtmMoneyCells(periods, row.f)}</tr>`;
+  });
+  body += `<tr class="sec"><td colspan="${colSpan}">Contract events — lever-adjusted (attainment / churn / renewal) · Act = booked ARR · Fcst = CRM weighted $</td></tr>`;
+  const pipeRows = [
+    { label: 'New Business', f: p => pipeByP[p].wtdNb },
+    { label: 'Expansion', f: p => pipeByP[p].wtdExp },
+    { label: 'Reactivation', f: p => pipeByP[p].wtdReact },
+    { label: 'Contraction', f: p => pipeByP[p].wtdCont, neg: true },
+    { label: 'Churn', f: p => pipeByP[p].wtdChurn, neg: true },
+    { label: 'Net ARR / weighted pipe', f: p => pipeByP[p].netWtd, tot: true },
+    { label: 'Renewals gross (fcst)', f: p => pipeByP[p].grossRen },
+    { label: 'Renewals weighted (fcst)', f: p => pipeByP[p].wtdRen },
+    { label: 'Logos / open opps', f: p => pipeByP[p].dealN, count: true },
+  ];
+  pipeRows.forEach(row => {
+    const cls = row.tot ? ' tot' : '';
+    if (row.count) {
+      body += `<tr class="${cls}"><td>${row.label}</td>${fcGtmNumCells(periods, row.f, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+    } else if (row.neg) {
+      body += `<tr class="${cls}"><td>${row.label}</td>${fcGtmNumCells(periods, row.f, v => (v ? '−' + fM(v, 1) : '—'))}</tr>`;
+    } else {
+      body += `<tr class="${cls}"><td>${row.label}</td>${fcGtmMoneyCells(periods, row.f)}</tr>`;
+    }
+  });
+  body += `</tbody>`;
+  html += `<div class="hc-wrap gtm-flow"><table class="hc-tbl gtm-pipe">${body}</table></div>`;
+
+  html += `<div class="gtm-pa-note"><strong>Plan Assurance lens:</strong> click a month in the pipeline layer to review outstanding opportunities — must-close vs on-the-fence vs stretch (incl. renewals). A closed-lost in July is the kind of gap Q3 channel spend + Q4 MQL conversion can aim to backfill.</div>`;
+  html += `<div id="pipeContent"></div>`;
+
+  html += `</div>`;
+  area.innerHTML = html;
+  if (fcGtmSelectedMonth) showPipeMonth(fcGtmSelectedMonth);
+}
+
+function fcGtmDisplayCustomer(name, idx) {
+  const raw = String(name || '');
+  const m = raw.match(/^Forecast Customer\s+(\d+)/i);
+  if (!m) return raw;
+  const pool = [
+    'Harbor Logistics','Northwind Health','Cascade Analytics','Redwood Legal',
+    'Summit Works','BlueRiver Cloud','Pioneer Systems','Evergreen Group',
+    'Apex Solutions','Nimbus Labs','Vertex Partners','Catalyst Media',
+    'Lumen Retail','Oakridge Finance','Brightpath Services','Cedarline Tech',
+  ];
+  return pool[(Number(m[1]) + (idx || 0)) % pool.length];
+}
+
+/** Renewal focus band — At Risk / low health escalate; Commit+high prob = must retain. */
+function fcGtmRenewalBand(r) {
+  const stage = String(r.stage || '');
+  const prob = Number(r.prob) || 0;
+  const risk = Number(r.risk) || 0;
+  const health = Number(r.health) != null ? Number(r.health) : 100;
+  if (/at\s*risk/i.test(stage) || risk >= 70 || health <= 40) {
+    return { label: 'At risk — save', cls: 'stretch' };
+  }
+  if (/commit/i.test(stage) || prob >= 90) {
+    return { label: 'Must retain', cls: 'must' };
+  }
+  if (prob >= 70 || /likely/i.test(stage)) {
+    return { label: 'Watch', cls: 'fence' };
+  }
+  return { label: 'At risk — save', cls: 'stretch' };
 }
 
 function showPipeMonth(p, btn){
-  document.querySelectorAll('#pipeTabs .snav-btn').forEach(b=>b.classList.remove('on'));
-  if(btn) btn.classList.add('on');
-  const opps=SRC.opp_pipeline[p]||{};
-  const ren=SRC.renewals[p]||{};
-  const lv=getLevers();
-  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
-  const types=['New Business','Expansion','Reactivation','Contraction','Churn'];
-  const typeColors={'New Business':'#1D9E75','Expansion':'#185FA5','Reactivation':'#534AB7','Contraction':'#BA7517','Churn':'#D85A30'};
+  ensureFcGtmHistOpps();
+  fcGtmSelectedMonth = p;
+  document.querySelectorAll('.hc-tbl.gtm-pipe th.act-h, .hc-tbl.gtm-pipe th.fc-h').forEach(th => {
+    th.classList.toggle('sel', (th.getAttribute('onclick') || '') === `selectFcGtmMonth('${p}')`);
+  });
+  const el = document.getElementById('pipeContent');
+  if (!el) return;
+  const mo = MO12[parseInt(p.slice(5), 10) - 1];
+  const isAct = p <= getCloseMonth();
+  const opps = SRC.opp_pipeline[p] || {};
+  const ren = SRC.renewals[p] || {};
+  const lv = getLevers();
+  const alloc = fcGtmAllocate(p);
+  const pipe = fcGtmPipeMonth(p);
+  const types = ['New Business','Expansion','Reactivation','Contraction','Churn'];
+  const typeColors = {'New Business':'#1D9E75','Expansion':'#185FA5','Reactivation':'#534AB7','Contraction':'#BA7517','Churn':'#D85A30'};
+  const dealN = types.reduce((s, t) => s + ((opps[t] && opps[t].count) || 0), 0);
 
-  document.getElementById('pipeContent').innerHTML=`
-  <div class="two-col" style="margin-bottom:12px">
-    <div class="card">
-      <div class="card-title">Renewal pipeline -- ${ren.count||0} renewals</div>
-      <div class="card-sub">From Forecast_renewal_pipeline.csv . Commit 95% . Likely 75% . At Risk 55%</div>
-      <div class="var-row"><span class="var-lbl">Gross ARR at risk</span><span class="var-act">${fM(ren.arr||0)}</span></div>
-      <div class="var-row"><span class="var-lbl">Weighted (base rate)</span><span class="var-act pos">${fM(ren.weighted||0)}</span></div>
-      <div class="var-row"><span class="var-lbl">Renewal rate adj.</span><span class="var-act">${lv.ren_adj>=0?'+':''}${(lv.ren_adj*100).toFixed(0)}pp</span></div>
-      <div class="var-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:8px"><span class="var-lbl" style="font-weight:500">Implied retained ARR</span><span class="var-act pos" style="font-weight:500">${fM(Math.round((ren.weighted||0)*(1+lv.ren_adj)))}</span></div>
-      <div class="sec-lbl">Sample renewals</div>
-      ${(ren.deals||[]).slice(0,6).map(r=>`<div class="deal-row">
+  // PA bands: NB + Expansion + Renewals that need focus
+  const openDeals = [];
+  ['New Business','Expansion'].forEach(t => {
+    (opps[t] && opps[t].deals || []).forEach(d => openDeals.push({ ...d, type: t, kind: 'opp' }));
+  });
+  const renDeals = (ren.deals || []).map((r, i) => ({
+    ...r,
+    type: 'Renewal',
+    kind: 'renewal',
+    weighted: r.weighted != null ? r.weighted : Math.round((r.arr || 0) * ((r.prob || 0) / 100)),
+    _band: fcGtmRenewalBand(r),
+    _name: fcGtmDisplayCustomer(r.customer, i),
+  }));
+  const mustOpp = openDeals.filter(d => (d.prob || 0) >= 80);
+  const fenceOpp = openDeals.filter(d => (d.prob || 0) >= 50 && (d.prob || 0) < 80);
+  const stretchOpp = openDeals.filter(d => (d.prob || 0) < 50);
+  const mustRen = renDeals.filter(r => r._band.cls === 'must');
+  const fenceRen = renDeals.filter(r => r._band.cls === 'fence');
+  const stretchRen = renDeals.filter(r => r._band.cls === 'stretch');
+  const must = mustOpp.concat(mustRen);
+  const fence = fenceOpp.concat(fenceRen);
+  const stretch = stretchOpp.concat(stretchRen);
+  const sumW = (arr) => arr.reduce((s, d) => s + (Number(d.weighted != null ? d.weighted : d.arr) || 0), 0);
+  const bandChip = (label, cls, arr) => {
+    const nOpp = arr.filter(x => x.kind !== 'renewal').length;
+    const nRen = arr.filter(x => x.kind === 'renewal').length;
+    const sub = [nOpp ? `${nOpp} opp` : '', nRen ? `${nRen} ren` : ''].filter(Boolean).join(' · ');
+    return `<span class="gtm-band ${cls}">${label} ${arr.length} · ${fM(sumW(arr),1)}${sub ? ` · ${sub}` : ''}</span>`;
+  };
+
+  let leftCard = '';
+  if (isAct && !(ren.deals || []).length) {
+    const a = (SRC.actuals && SRC.actuals[p]) || {};
+    leftCard = `<div class="card">
+      <div class="card-title">Booked ARR — ${mo} actual</div>
+      <div class="card-sub">Closed waterfall · historical deals on the right reconstruct the won book</div>
+      <div class="var-row"><span class="var-lbl">New Business</span><span class="var-act pos">${fM(a.arr_nb||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Expansion</span><span class="var-act pos">${fM(a.arr_exp||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Reactivation</span><span class="var-act pos">${fM(a.arr_react||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Contraction</span><span class="var-act" style="color:var(--amber)">−${fM(a.arr_cont||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Churn</span><span class="var-act" style="color:var(--red)">−${fM(a.arr_churn||0)}</span></div>
+      <div class="var-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:8px"><span class="var-lbl" style="font-weight:500">Net new</span><span class="var-act pos" style="font-weight:500">${fM(pipe.netWtd)}</span></div>
+      <div class="var-row"><span class="var-lbl">Program spend / MQLs</span><span class="var-act">${fM(alloc.spendTot,1)} · ${Math.round(alloc.mqlSum).toLocaleString()}</span></div>
+    </div>`;
+  } else {
+    // Prefer at-risk / watch renewals first in the focus list
+    const renFocus = renDeals.slice().sort((a, b) => {
+      const rank = { stretch: 0, fence: 1, must: 2 };
+      return (rank[a._band.cls] ?? 9) - (rank[b._band.cls] ?? 9);
+    });
+    leftCard = `<div class="card">
+      <div class="card-title">Renewals — ${ren.count||0}</div>
+      <div class="card-sub">Left = renewals to retain · Right = NB / expansion / other pipe</div>
+      <div class="var-row"><span class="var-lbl">Gross ARR</span><span class="var-act">${fM(ren.arr||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Weighted</span><span class="var-act pos">${fM(ren.weighted||0)}</span></div>
+      <div class="var-row"><span class="var-lbl">Rate adj.</span><span class="var-act">${lv.ren_adj>=0?'+':''}${((lv.ren_adj||0)*100).toFixed(0)}pp</span></div>
+      <div class="sec-lbl">Accounts to focus</div>
+      ${renFocus.slice(0,8).map((r,i)=>`<div class="deal-row">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;font-weight:500;color:var(--text)">${r.customer.slice(0,32)}</span>
-          <span style="font-family:var(--mono);font-size:11px;color:${r.stage==='Commit'?'var(--teal)':r.stage==='At Risk'?'var(--red)':'var(--amber)'}">${fM(r.arr)}</span>
+          <span style="font-size:11px;font-weight:500;color:var(--text)">${(r._name||'').slice(0,28)}<span class="gtm-band ${r._band.cls}">${r._band.label}</span></span>
+          <span style="font-family:var(--mono);font-size:11px">${fM(r.arr)}</span>
         </div>
-        <div style="font-size:9.5px;color:var(--text3)">${r.stage} . ${r.prob}% . Risk ${r.risk} . Health ${r.health}</div>
-      </div>`).join('')}
-    </div>
+        <div style="font-size:9.5px;color:var(--text3)">${r.stage||''} · ${r.prob||''}% · Risk ${r.risk!=null?r.risk:'—'} · Health ${r.health!=null?r.health:'—'}</div>
+      </div>`).join('') || '<div style="font-size:11px;color:var(--text3)">No renewal deal list for this month.</div>'}
+    </div>`;
+  }
+
+  const nbDeals = (opps['New Business'] && opps['New Business'].deals) || [];
+  el.innerHTML = `
+  <div style="font-size:12px;color:var(--text2);margin:0 0 8px;line-height:1.6"><strong style="color:var(--text)">${mo}</strong> · ${isAct ? 'Actual' : 'Forecast'} · ${dealN} opps · ${ren.count||0} renewals
+    ${!isAct ? `<br>${bandChip('Must close / retain', 'must', must)}
+    ${bandChip('Fence / watch', 'fence', fence)}
+    ${bandChip('Stretch / at risk', 'stretch', stretch)}` : ''}
+  </div>
+  <div class="two-col" style="margin-bottom:12px">
+    ${leftCard}
     <div class="card">
-      <div class="card-title">Opportunity pipeline -- ${Object.values(opps).reduce((s,t)=>s+t.count,0)} deals</div>
-      <div class="card-sub">From Forecast_opportunities.csv . weighted by probability</div>
+      <div class="card-title">${isAct ? 'Historical opportunities' : 'Opportunity pipeline'} — ${dealN}</div>
+      <div class="card-sub">${isAct ? 'Closed-won reconstruction from booked ARR (demo seed for Jan–close)' : 'NB / expansion / churn risk — renewals are on the left'}</div>
       ${types.map(t=>{const d=opps[t]||{total:0,weighted:0,count:0};return`<div class="var-row">
         <span class="var-lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${typeColors[t]};margin-right:5px;vertical-align:middle"></span>${t}</span>
-        <span style="font-size:10px;color:var(--text3)">${d.count} deals</span>
-        <span class="var-act">${fM(d.total,0)}</span>
-        <span style="font-family:var(--mono);font-size:10.5px;color:var(--teal)">${fM(d.weighted,0)} wtd</span>
+        <span style="font-size:10px;color:var(--text3)">${d.count||0}</span>
+        <span class="var-act">${fM(d.total||0,0)}</span>
+        <span style="font-family:var(--mono);font-size:10.5px;color:var(--teal)">${fM(d.weighted||0,0)} wtd</span>
       </div>`;}).join('')}
       <div class="sec-lbl">New business deals</div>
-      ${(opps['New Business']?.deals||[]).slice(0,5).map(d=>`<div class="deal-row">
+      ${nbDeals.slice(0,8).map((d,i)=>{
+        const band = fcGtmOppBand(d.prob);
+        const name = fcGtmDisplayCustomer(d.customer, i);
+        return `<div class="deal-row">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;font-weight:500;color:var(--text)">${d.customer.slice(0,28)}</span>
-          <span style="font-family:var(--mono);font-size:11px;color:var(--teal)">${fM(d.weighted)}</span>
+          <span style="font-size:11px;font-weight:500;color:var(--text)">${name.slice(0,28)}<span class="gtm-band ${band.cls}">${band.label}</span></span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--teal)">${fM(d.weighted||d.arr||0)}</span>
         </div>
-        <div style="font-size:9.5px;color:var(--text3)">${d.stage} . ${d.prob}% . ${d.segment} . ${d.region} . ${d.owner}</div>
-        <div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:3px"><div style="width:${d.prob}%;height:100%;background:var(--teal);border-radius:2px"></div></div>
-      </div>`).join('')}
-    </div>`;
-}
-
-// \u2500\u2500 HEADCOUNT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-function renderHC(area){
-  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
-  const closeHc = getCloseHc();
-  let h2_cost=0, active=0;
-  SRC.open_reqs.forEach(r=>{
-    if(!reqActive[r.id]) return;
-    active++;
-    FC_P.forEach(p=>{if(p>=r.start) h2_cost+=r.cash_annual/12;});
-  });
-  area.innerHTML=`<div class="slide">
-    <div class="slide-title">Headcount Plan</div>
-    <div class="slide-sub">Hire-by-hire from Forecast_Open_Requisitions.csv . Toggle reqs on/off . Payroll flows to IS and CFS automatically</div>
-    <div class="kpi-strip ks5">
-      <div class="kpi"><div class="kpi-lbl">Current HC (${getCloseMoLabel()})</div><div class="kpi-val">${closeHc}</div><div class="kpi-delta neu">Actual</div></div>
-      <div class="kpi"><div class="kpi-lbl">Active reqs</div><div class="kpi-val">${active}/17</div><div class="kpi-delta pos">Toggled on</div></div>
-      <div class="kpi"><div class="kpi-lbl">H2 Payroll Impact</div><div class="kpi-val">${fM(h2_cost,1)}</div><div class="kpi-delta neg">From active reqs</div></div>
-      <div class="kpi"><div class="kpi-lbl">Dec Cash</div><div class="kpi-val">${fM((getDisplayCFS(ALL_P[11])||{}).end_cash,1)}</div><div class="kpi-delta neu">Scenario-adjusted</div></div>
-      <div class="kpi"><div class="kpi-lbl">Dec Headcount</div><div class="kpi-val">${closeHc+active}</div><div class="kpi-delta pos">Est. EOP</div></div>
-    </div>
-    <div class="two-col">
-      <div class="card">
-        <div class="card-title">Open requisitions -- hire-by-hire plan</div>
-        <div class="card-sub">Toggle on/off . changes flow through payroll \u2192 IS \u2192 CFS automatically</div>
-        ${SRC.open_reqs.map(r=>{
-          const on=reqActive[r.id];
-          return`<div class="req-row">
-            <button class="tog ${on?'on':'off'}" onclick="toggleReqHC('${r.id}')" aria-label="Toggle ${r.role}"></button>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:11.5px;color:${on?'var(--text)':'var(--text3)'};font-weight:${on?'500':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.role}</div>
-              <div style="font-size:9.5px;color:var(--text3)">${r.dept} . Start: ${r.start} . ${fM(r.cash_annual/12,0)}K/mo . ${r.ramp_months}mo ramp</div>
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <span class="badge ${priCls[r.priority]||'badge-lo'}">${r.priority}</span>
-              ${on?`<div style="font-size:10px;color:var(--teal);margin-top:2px">${fM(r.cash_annual/12,0)}K/mo</div>`:``}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div>
-        <div class="card" style="margin-bottom:12px">
-          <div class="card-title">Cumulative HC adds by start month</div>
-          <div class="card-sub">Active reqs only . stacked by department</div>
-          <div class="chart-wrap" style="height:200px"><canvas id="hcAddC" role="img" aria-label="Headcount adds by month">HC adds Jun-Dec from active reqs.</canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-title">Incremental payroll impact</div>
-          <div class="card-sub">Monthly cost from active reqs ($K)</div>
-          <div class="chart-wrap" style="height:160px"><canvas id="hcPayC" role="img" aria-label="Incremental payroll from reqs">Payroll adds from open reqs by month.</canvas></div>
-        </div>
-      </div>
+        <div style="font-size:9.5px;color:var(--text3)">${d.stage||''} · ${d.prob||''}% · ${d.segment||''} · ${d.channel||''}</div>
+        <div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:3px"><div style="width:${Math.min(100,d.prob||0)}%;height:100%;background:var(--teal);border-radius:2px"></div></div>
+      </div>`;
+      }).join('') || '<div style="font-size:11px;color:var(--text3)">No NB deals for this month.</div>'}
     </div>
   </div>`;
-  setTimeout(()=>{
-    const { cPos, cNeg, fade, baseScaleX, baseScaleY, bubblePalette } = chartSkinTokens();
-    const depts=['Sales','Marketing','R&D','Product','Customer Success','Support','G&A'];
-    const deptAdds=depts.map(d=>FC_P.map(p=>SRC.open_reqs.filter(r=>reqActive[r.id]&&r.dept===d&&r.start===p).length));
-    mk('hcAddC',{type:'bar',data:{labels:fcMonthLabels(),datasets:depts.map((d,i)=>({label:d,data:deptAdds[i],backgroundColor:fade(bubblePalette[i],0.6),stack:'a',borderWidth:0}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:8}}},scales:{x:{stacked:true,...baseScaleX},y:{stacked:true,...baseScaleY(v=>v),ticks:{...baseScaleY(v=>v).ticks,stepSize:1}}}}});
-    const payByMo=FC_P.map(p=>+(SRC.open_reqs.filter(r=>reqActive[r.id]&&r.start<=p).reduce((s,r)=>s+r.cash_annual/12,0)/1000).toFixed(0));
-    mk('hcPayC',{type:'bar',data:{labels:fcMonthLabels(),datasets:[{data:payByMo,backgroundColor:fade(cNeg,0.5),borderColor:cNeg,borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v+'K')}}});
-  },40);
 }
 
-function toggleReqHC(id){
-  reqActive[id]=!reqActive[id];
-  document.querySelectorAll('[id="tog-'+id+'"]').forEach(b=>{b.classList.toggle('on',reqActive[id]);b.classList.toggle('off',!reqActive[id]);});
+
+// ── Forecast HC plan (Budget-aligned tables; no operating levers / levels) ──
+const FC_HC_FY26_MONTHLY = {
+  sales:     [26, 27, 28, 28, 28, 29, 31, 31, 31, 31, 31, 31],
+  cs:        [15, 15, 15, 16, 16, 17, 17, 17, 18, 18, 18, 18],
+  marketing: [13, 13, 13, 14, 14, 15, 15, 15, 16, 16, 16, 16],
+  rd:        [54, 55, 56, 56, 58, 61, 62, 64, 64, 65, 65, 65],
+  ga:        [13, 14, 14, 14, 14, 15, 15, 15, 16, 16, 17, 17],
+};
+const FC_HC_DEPTS = [
+  { key: 'sales', label: 'Sales - New Business', fromReqs: true, srcDepts: ['Sales'] },
+  { key: 'cs', label: 'Sales - Customer Success', fromReqs: true, srcDepts: ['Customer Success', 'Support'] },
+  { key: 'marketing', label: 'Marketing', srcDepts: ['Marketing'] },
+  { key: 'rd', label: 'R&D / Product', srcDepts: ['R&D', 'Product'] },
+  { key: 'ga', label: 'G&A', srcDepts: ['G&A', 'Finance'] },
+];
+const FC_HC_EDITABLE = FC_HC_DEPTS.filter(d => !d.fromReqs);
+
+let fcHcState = {
+  focus: 'total', // total | marketing | rd | ga
+  hires: null,    // { period: { dept: netHires } }
+  rifs: [],       // { id, period, dept, heads, weeks }
+  attritionPct: null, // { dept: annual % } — exits spread across forecast months
+  freeze: { marketing: false, rd: false, ga: false },
+  seededFrom: null,
+};
+
+function fcHcMapReqDept(dept) {
+  const d = String(dept || '');
+  for (const row of FC_HC_DEPTS) {
+    if (row.srcDepts.some(x => x === d)) return row.key;
+  }
+  return null;
+}
+
+function fcHcEmptyHires() {
+  const out = {};
+  ALL_P.forEach(p => {
+    out[p] = {};
+    FC_HC_DEPTS.forEach(d => { out[p][d.key] = 0; });
+  });
+  return out;
+}
+
+function fcHcHistHires(dept, monthIdx) {
+  const series = FC_HC_FY26_MONTHLY[dept];
+  if (!series || monthIdx <= 0) return 0;
+  return (series[monthIdx] || 0) - (series[monthIdx - 1] || 0);
+}
+
+function fcHcCloseBop() {
+  const idx = parseInt(getCloseMonth().slice(5), 10) - 1;
+  const bop = {};
+  let sum = 0;
+  FC_HC_DEPTS.forEach(d => {
+    const v = (FC_HC_FY26_MONTHLY[d.key] && FC_HC_FY26_MONTHLY[d.key][idx] != null)
+      ? FC_HC_FY26_MONTHLY[d.key][idx]
+      : 0;
+    bop[d.key] = v;
+    sum += v;
+  });
+  // If board WF total differs slightly, keep dept mix and note in UI via sum.
+  bop._total = sum;
+  bop._closeHc = getCloseHc();
+  return bop;
+}
+
+function seedFcHcFromOpenReqs(force) {
+  if (fcHcState.hires && !force) return;
+  const hires = fcHcEmptyHires();
+  // Actual months: MoM change from known FY26 path
+  ALL_P.forEach((p, i) => {
+    if (p > getCloseMonth()) return;
+    FC_HC_DEPTS.forEach(d => {
+      hires[p][d.key] = fcHcHistHires(d.key, i);
+    });
+  });
+  // Forecast months: one head per active open req in start month
+  (SRC.open_reqs || []).forEach(r => {
+    if (!reqActive[r.id]) return;
+    const key = fcHcMapReqDept(r.dept);
+    if (!key || !r.start || !hires[r.start]) return;
+    if (r.start <= getCloseMonth()) return;
+    hires[r.start][key] = (hires[r.start][key] || 0) + 1;
+  });
+  fcHcState.hires = hires;
+  fcHcState.seededFrom = 'open_reqs+' + getCloseMonth();
+}
+
+function ensureFcHcState() {
+  seedFcHcFromOpenReqs(false);
+  if (!Array.isArray(fcHcState.rifs)) fcHcState.rifs = [];
+  if (!fcHcState.attritionPct || typeof fcHcState.attritionPct !== 'object') {
+    fcHcState.attritionPct = {};
+  }
+  FC_HC_DEPTS.forEach(d => {
+    if (fcHcState.attritionPct[d.key] == null) fcHcState.attritionPct[d.key] = 0;
+  });
+  if (!fcHcState.freeze || typeof fcHcState.freeze !== 'object') {
+    fcHcState.freeze = { marketing: false, rd: false, ga: false };
+  }
+  FC_HC_EDITABLE.forEach(d => {
+    if (fcHcState.freeze[d.key] == null) fcHcState.freeze[d.key] = false;
+  });
+}
+
+function setFcHcFreeze(dept, on) {
+  ensureFcHcState();
+  if (!FC_HC_EDITABLE.some(d => d.key === dept)) return;
+  fcHcState.freeze[dept] = !!on;
+  markScenarioDirty();
   refresh();
 }
+
+function updateFcHcAttritionPct(dept, raw) {
+  ensureFcHcState();
+  fcHcState.attritionPct[dept] = Math.max(0, Math.min(40, Math.round(Number(raw) || 0)));
+  refresh();
+}
+
+/** Spread ceil(BOP × annual%) across forecast months (actuals stay locked). */
+function fcHcAttritionSchedule(bop) {
+  const sched = {};
+  ALL_P.forEach(p => {
+    sched[p] = {};
+    FC_HC_DEPTS.forEach(d => { sched[p][d.key] = 0; });
+  });
+  const nFc = Math.max(1, FC_P.length);
+  FC_HC_DEPTS.forEach(d => {
+    const pct = Math.max(0, Number(fcHcState.attritionPct[d.key]) || 0) / 100;
+    const annual = Math.ceil((bop[d.key] || 0) * pct);
+    if (!annual) return;
+    const base = Math.floor(annual / nFc);
+    let rem = annual - base * nFc;
+    FC_P.forEach((p, i) => {
+      sched[p][d.key] = base + (i < rem ? 1 : 0);
+    });
+  });
+  return sched;
+}
+
+function fcHcRifsForPeriod(period) {
+  return (fcHcState.rifs || []).filter(r => r.period === period);
+}
+
+function computeFcHcPlan() {
+  ensureFcHcState();
+  const bop = fcHcCloseBop();
+  const close = getCloseMonth();
+  const closeIdx = parseInt(close.slice(5), 10) - 1;
+  const attrSched = fcHcAttritionSchedule(bop);
+  const plan = {};
+  let running = {};
+  FC_HC_DEPTS.forEach(d => { running[d.key] = bop[d.key]; });
+
+  ALL_P.forEach((p, i) => {
+    const hires = {};
+    const rifExits = {};
+    const attrition = {};
+    const ending = {};
+    let hireTot = 0;
+    let rifTot = 0;
+    let attrTot = 0;
+
+    FC_HC_DEPTS.forEach(d => {
+      let h = 0;
+      let rifH = 0;
+      let attrH = 0;
+      if (p <= close) {
+        h = fcHcHistHires(d.key, i);
+        ending[d.key] = FC_HC_FY26_MONTHLY[d.key][i];
+        if (i === closeIdx) running[d.key] = ending[d.key];
+      } else {
+        h = Number((fcHcState.hires[p] && fcHcState.hires[p][d.key]) || 0);
+        // Hire freeze: block growth hires; exits / RIF / attrition still apply
+        if (fcHcState.freeze && fcHcState.freeze[d.key] && h > 0) h = 0;
+        rifH = fcHcRifsForPeriod(p)
+          .filter(r => r.dept === d.key)
+          .reduce((s, r) => s + (Number(r.heads) || 0), 0);
+        attrH = Number((attrSched[p] && attrSched[p][d.key]) || 0);
+        running[d.key] = Math.max(0, (running[d.key] || 0) + h - rifH - attrH);
+        ending[d.key] = running[d.key];
+      }
+      hires[d.key] = h;
+      rifExits[d.key] = rifH;
+      attrition[d.key] = attrH;
+      hireTot += h;
+      rifTot += rifH;
+      attrTot += attrH;
+    });
+
+    const headsTotal = FC_HC_DEPTS.reduce((s, d) => s + (ending[d.key] || 0), 0);
+    plan[p] = { hires, rifExits, attrition, ending, hireTot, rifTot, attrTot, headsTotal, isActual: p <= close };
+  });
+  plan._bop = bop;
+  return plan;
+}
+
+function setFcHcFocus(focus) {
+  fcHcState.focus = focus || 'total';
+  refresh();
+}
+
+function updateFcHcHire(period, dept, raw) {
+  ensureFcHcState();
+  if (period <= getCloseMonth()) return;
+  const n = Math.max(-20, Math.min(20, Math.round(Number(raw) || 0)));
+  if (!fcHcState.hires[period]) fcHcState.hires[period] = {};
+  fcHcState.hires[period][dept] = n;
+  refresh();
+}
+
+function addFcHcRif() {
+  ensureFcHcState();
+  const id = 'rif_' + Date.now();
+  const period = FC_P[0] || ALL_P[ALL_P.length - 1];
+  fcHcState.rifs.push({ id, period, dept: 'rd', heads: 3, weeks: 12 });
+  refresh();
+}
+
+function updateFcHcRif(id, field, value) {
+  const rif = (fcHcState.rifs || []).find(r => r.id === id);
+  if (!rif) return;
+  if (field === 'heads' || field === 'weeks') rif[field] = Math.max(0, Math.round(Number(value) || 0));
+  else rif[field] = value;
+  refresh();
+}
+
+function removeFcHcRif(id) {
+  fcHcState.rifs = (fcHcState.rifs || []).filter(r => r.id !== id);
+  refresh();
+}
+
+function resetFcHcFromOpenReqs() {
+  seedFcHcFromOpenReqs(true);
+  refresh();
+}
+
+function fcHcHireClass(n) {
+  if (n > 0) return 'pos';
+  if (n < 0) return 'neg';
+  return '';
+}
+
+function fcHcHireInput(period, dept, value) {
+  const locked = period <= getCloseMonth();
+  const n = Number(value) || 0;
+  if (locked) {
+    return `<span class="act-c">${n ? ((n > 0 ? '+' : '') + n) : '—'}</span>`;
+  }
+  return `<input class="hc-hire ${fcHcHireClass(n)}" type="number" min="-20" max="20" step="1" value="${n}"
+    onchange="updateFcHcHire('${period}','${dept}',this.value)" title="Positive = hire, negative = exit" />`;
+}
+
+function fcHcMonthHeaders() {
+  return ALL_P.map(p => {
+    const mo = MO12[parseInt(p.slice(5), 10) - 1];
+    const isFc = p > getCloseMonth();
+    return `<th class="${isFc ? 'fc-h' : 'act-h'}"><span class="hc-mo">${mo}</span><span class="hc-tag">${isFc ? 'Fcst' : 'Act'}</span></th>`;
+  }).join('') + '<th class="fy-h">FY</th>';
+}
+
+function fcHcSum(vals) {
+  return vals.reduce((s, v) => s + (Number(v) || 0), 0);
+}
+
+function renderFcHcHireRow(label, dept, plan, editable) {
+  const cells = ALL_P.map(p => {
+    const v = plan[p].hires[dept] || 0;
+    if (editable) return `<td class="fc-c">${fcHcHireInput(p, dept, v)}</td>`;
+    const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
+    return `<td class="${cls}">${v ? ((v > 0 ? '+' : '') + v) : '—'}</td>`;
+  }).join('');
+  const fy = fcHcSum(ALL_P.map(p => plan[p].hires[dept] || 0));
+  return `<tr class="${editable ? 'adj' : ''}"><td>${label}</td>${cells}<td class="fy-c">${fy ? ((fy > 0 ? '+' : '') + fy) : '—'}</td></tr>`;
+}
+
+function fcHcTable(inner) {
+  return `<div class="hc-wrap"><table class="hc-tbl">${inner}</table></div>`;
+}
+
+function fcHcBridgeTable(inner) {
+  return `<div class="hc-wrap"><table class="hc-tbl bridge">${inner}</table></div>`;
+}
+
+function renderHC(area){
+  ensureFcHcState();
+  const plan = computeFcHcPlan();
+  const bop = plan._bop;
+  const focus = fcHcState.focus || 'total';
+  const closeHc = getCloseHc();
+  const decP = ALL_P[11];
+  const decHc = plan[decP].headsTotal;
+  const fcHireTot = fcHcSum(FC_P.map(p => plan[p].hireTot));
+  const fcAttrTot = fcHcSum(FC_P.map(p => plan[p].attrTot || 0));
+  const colSpan = ALL_P.length + 2;
+
+  let html = `<div class="slide">
+    <div class="slide-title">Headcount Plan</div>
+    <div class="slide-sub">RIF + monthly hires/(exits) + attrition % by group. Actual months are locked; forecast months are editable.</div>
+    <div class="hc-banner">
+      Close (${getCloseMoLabel()}) <strong>${closeHc}</strong>
+      · BOP NB ${bop.sales} · CS ${bop.cs} · Mkt ${bop.marketing} · R&amp;D ${bop.rd} · G&amp;A ${bop.ga}
+      · Dec ending <strong>${decHc}</strong>
+      · Jul–Dec net hires <strong>${fcHireTot >= 0 ? '+' : ''}${fcHireTot}</strong>
+      · attrition exits <strong>−${fcAttrTot}</strong>
+    </div>
+    <div class="hc-legend"><i></i><span><strong>Amber rows</strong> are adjustable — edit forecast hire cells or attrition %. Positive = hire, negative = exit.</span></div>
+    <div class="kpi-strip ks4">
+      <div class="kpi"><div class="kpi-lbl">Close HC (${getCloseMoLabel()})</div><div class="kpi-val">${closeHc}</div><div class="kpi-delta neu">Locked actual</div></div>
+      <div class="kpi"><div class="kpi-lbl">Dec ending HC</div><div class="kpi-val">${decHc}</div><div class="kpi-delta pos">After hires / attrition / RIFs</div></div>
+      <div class="kpi"><div class="kpi-lbl">Forecast net hires</div><div class="kpi-val">${fcHireTot >= 0 ? '+' : ''}${fcHireTot}</div><div class="kpi-delta neu">Jul–Dec</div></div>
+      <div class="kpi"><div class="kpi-lbl">Dec cash</div><div class="kpi-val">${fM((getDisplayCFS(decP)||{}).end_cash,1)}</div><div class="kpi-delta neu">Scenario</div></div>
+    </div>`;
+
+  // RIF
+  let rifBody = `<thead><tr>
+      <th>RIF / restructuring</th><th class="fy-h">Month</th><th class="fy-h">Dept</th><th class="fy-h">Heads</th><th class="fy-h">Sev. weeks</th><th class="fy-h"></th>
+    </tr></thead><tbody>
+    <tr class="sec"><td colspan="6">One-shot exits in forecast months</td></tr>`;
+  const rifs = fcHcState.rifs || [];
+  if (!rifs.length) {
+    rifBody += `<tr><td colspan="6" style="text-align:left;color:var(--text3)">No RIFs yet. Add one for a discrete cut — or use attrition % / negative monthly hires below.</td></tr>`;
+  }
+  rifs.forEach(rif => {
+    const moOpts = FC_P.map(p => {
+      const mo = MO12[parseInt(p.slice(5), 10) - 1];
+      return `<option value="${p}"${rif.period === p ? ' selected' : ''}>${mo}</option>`;
+    }).join('');
+    const deptOpts = FC_HC_DEPTS.map(d =>
+      `<option value="${d.key}"${rif.dept === d.key ? ' selected' : ''}>${d.label}</option>`).join('');
+    rifBody += `<tr class="adj">
+      <td>RIF event</td>
+      <td class="fy-c"><select onchange="updateFcHcRif('${rif.id}','period',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${moOpts}</select></td>
+      <td class="fy-c"><select onchange="updateFcHcRif('${rif.id}','dept',this.value)" style="background:transparent;color:var(--text);border:0.5px solid var(--border);border-radius:4px;font-size:10px">${deptOpts}</select></td>
+      <td class="fy-c"><input class="hc-hire" type="number" min="0" step="1" value="${rif.heads}" onchange="updateFcHcRif('${rif.id}','heads',this.value)"></td>
+      <td class="fy-c"><input class="hc-hire" type="number" min="0" step="1" value="${rif.weeks}" onchange="updateFcHcRif('${rif.id}','weeks',this.value)"></td>
+      <td class="fy-c"><button type="button" class="hc-tog" onclick="removeFcHcRif('${rif.id}')">Remove</button></td>
+    </tr>`;
+  });
+  rifBody += `<tr><td colspan="6" style="text-align:left"><button type="button" class="hc-tog" onclick="addFcHcRif()">+ Add RIF</button></td></tr></tbody>`;
+  html += fcHcBridgeTable(rifBody);
+
+  const freezeChecks = FC_HC_EDITABLE.map(d => {
+    const on = !!(fcHcState.freeze && fcHcState.freeze[d.key]);
+    return `<label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:11px;color:var(--text2);cursor:pointer">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="setFcHcFreeze('${d.key}',this.checked)" style="accent-color:var(--teal)">
+      ${d.label} freeze
+    </label>`;
+  }).join('');
+  html += `<div class="hc-banner" style="margin-top:8px"><strong>Hire freeze</strong> — blocks positive net hires; exits / RIF / attrition still apply.<br>${freezeChecks}</div>`;
+
+  html += `<div class="hc-toolbar">
+    <button type="button" class="hc-tog${focus === 'total' ? ' on' : ''}" onclick="setFcHcFocus('total')">Total hires</button>
+    ${FC_HC_EDITABLE.map(d =>
+      `<button type="button" class="hc-tog${focus === d.key ? ' on' : ''}" onclick="setFcHcFocus('${d.key}')">${d.label}</button>`
+    ).join('')}
+  </div>`;
+
+  if (focus === 'total') {
+    let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead><tbody>`;
+    body += `<tr class="sec"><td colspan="${colSpan}">Total hires by department</td></tr>`;
+    FC_HC_DEPTS.forEach(d => {
+      body += renderFcHcHireRow(d.label, d.key, plan, !d.fromReqs);
+    });
+    const totCells = ALL_P.map(p => {
+      const v = plan[p].hireTot || 0;
+      const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
+      return `<td class="${cls}">${v ? ((v > 0 ? '+' : '') + v) : '—'}</td>`;
+    }).join('');
+    const fy = fcHcSum(ALL_P.map(p => plan[p].hireTot || 0));
+    body += `<tr class="tot"><td>Total hires</td>${totCells}<td class="fy-c">${fy ? ((fy > 0 ? '+' : '') + fy) : '—'}</td></tr></tbody>`;
+    html += fcHcTable(body);
+  } else {
+    const dept = FC_HC_DEPTS.find(d => d.key === focus) || FC_HC_EDITABLE[0];
+    let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead><tbody>`;
+    body += `<tr class="sec"><td colspan="${colSpan}">${dept.label}</td></tr>`;
+    body += renderFcHcHireRow('Net hires / (exits)', dept.key, plan, true);
+    body += `</tbody>`;
+    html += fcHcTable(body);
+  }
+
+  FC_HC_DEPTS.forEach(d => {
+    const atrPct = Number(fcHcState.attritionPct[d.key]) || 0;
+    let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead><tbody>`;
+    body += `<tr class="sec"><td colspan="${colSpan}">${d.label}
+      <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text2);margin-left:8px">Attrition
+        <input class="hc-attr-pct" type="number" min="0" max="40" step="1" value="${atrPct}"
+          onchange="updateFcHcAttritionPct('${d.key}',this.value)" title="Annual attrition % — exits spread across forecast months">%
+      </span>
+    </td></tr>`;
+    const endCells = ALL_P.map(p => {
+      const v = plan[p].ending[d.key] || 0;
+      const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
+      return `<td class="${cls}">${v}</td>`;
+    }).join('');
+    body += `<tr class="tot"><td>Ending headcount</td>${endCells}<td class="fy-c">${plan[decP].ending[d.key]}</td></tr>`;
+    body += renderFcHcHireRow(d.fromReqs ? 'Hires' : 'Net hires / (exits)', d.key, plan, !d.fromReqs);
+
+    const attrCells = ALL_P.map(p => {
+      const v = (plan[p].attrition && plan[p].attrition[d.key]) || 0;
+      const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
+      return `<td class="${cls}">${v ? ('−' + v) : '—'}</td>`;
+    }).join('');
+    const attrFy = fcHcSum(ALL_P.map(p => (plan[p].attrition && plan[p].attrition[d.key]) || 0));
+    body += `<tr class="adj"><td>Attrition exits (${atrPct}%/yr)</td>${attrCells}<td class="fy-c">${attrFy ? ('−' + attrFy) : '—'}</td></tr>`;
+
+    const rifCells = ALL_P.map(p => {
+      const v = (plan[p].rifExits && plan[p].rifExits[d.key]) || 0;
+      const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
+      return `<td class="${cls}">${v ? ('−' + v) : '—'}</td>`;
+    }).join('');
+    const rifFy = fcHcSum(ALL_P.map(p => (plan[p].rifExits && plan[p].rifExits[d.key]) || 0));
+    body += `<tr><td>RIF exits</td>${rifCells}<td class="fy-c">${rifFy ? ('−' + rifFy) : '—'}</td></tr></tbody>`;
+    html += fcHcTable(body);
+  });
+
+  const coEnd = ALL_P.map(p => {
+    const v = plan[p].headsTotal || 0;
+    const cls = p > getCloseMonth() ? 'fc-c' : 'act-c';
+    return `<td class="${cls}">${v}</td>`;
+  }).join('');
+  html += fcHcTable(`<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcHcMonthHeaders()}</tr></thead><tbody>
+    <tr class="sec"><td colspan="${colSpan}">Company total</td></tr>
+    <tr class="tot"><td>Ending headcount</td>${coEnd}<td class="fy-c">${decHc}</td></tr>
+  </tbody>`);
+
+  html += `</div>`;
+  area.innerHTML = html;
+}
+
+function toggleReqHC(id){ /* no-op: open-req toggles removed */ }
 
 // \u2500\u2500 SENSITIVITY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function renderSens(area){
@@ -2053,20 +4063,7 @@ function deleteVersion(id){
 }
 
 // \u2500\u2500 INIT \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-function buildLeverReqs(){
-  const priCls={High:'badge-hi',Medium:'badge-med',Low:'badge-lo'};
-  const el=document.getElementById('leverReqList');
-  if(!el) return;
-  el.innerHTML=SRC.open_reqs.map(r=>`<div class="req-row">
-    <button class="tog on" id="tog-${r.id}" onclick="toggleReq('${r.id}')" aria-label="Toggle ${r.role}"></button>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.role}</div>
-      <div style="font-size:9.5px;color:var(--text3)">${r.dept} . ${r.start} . ${fM(r.cash_annual/12,0)}/mo</div>
-    </div>
-    <span class="badge ${priCls[r.priority]||'badge-lo'}">${r.priority}</span>
-  </div>`).join('');
-}
-buildLeverReqs();
+// Open-req hire toggles removed — Sales/CS hires seed from open_reqs into the Headcount grid.
 updLabels();
 
 // ─── SKIN ENGINE (shared with Board Platform) ───────────────────────────────
@@ -2085,7 +4082,6 @@ updLabels();
 })();
 
 </script>
-</div>
 </div>
 
 <script>
@@ -2118,7 +4114,10 @@ updLabels();
         if (window.SMPLProvenance && typeof window.SMPLProvenance.ingestOutlook === 'function') {
           window.SMPLProvenance.ingestOutlook(data);
         }
-        if (typeof invalidateCfsChain === 'function') invalidateCfsChain();
+        // Warehouse actuals (e.g. June ARR) land in SRC after first paint — must
+        // bust the compute cache or Overview keeps the demo-seed Dec ARR ($91.1M).
+        if (typeof markScenarioDirty === 'function') markScenarioDirty();
+        else if (typeof invalidateCfsChain === 'function') invalidateCfsChain();
         if (typeof refresh === 'function') refresh({ skipDirty: true });
         if (window.SMPLProvenance) {
           try {
@@ -2187,43 +4186,11 @@ updLabels();
 
   /**
    * Plan Assurance Forecast adapter — same /assess engine as Budget.
-   * Builds a camelCase plan packet from current Forecast results and posts it.
+   * Packet built from live Forecast SoT (see buildForecastAssurancePacket).
    */
   window.buildForecastAssurancePacket = function() {
-    const res = typeof getResults === 'function' ? getResults() : null;
-    const lv = typeof getLevers === 'function' ? getLevers() : {};
-    if (!res) return null;
-    const eng = res.engine || res;
-    const bop = eng.bopArr != null ? eng.bopArr : (eng.bop_arr != null ? eng.bop_arr : null);
-    const dec = eng.decArr != null ? eng.decArr : (eng.eopArr != null ? eng.eopArr : (eng.dec_arr != null ? eng.dec_arr : null));
-    const yoy = lv.yoyEndingArrGrowthPct != null ? lv.yoyEndingArrGrowthPct : (lv.yoyGrowthPct != null ? lv.yoyGrowthPct : null);
-    const target = (bop != null && yoy != null) ? bop * (1 + yoy / 100) : (eng.targetArr != null ? eng.targetArr : dec);
-    const endCash = eng.endCash != null ? eng.endCash : (eng.ending_cash != null ? eng.ending_cash : null);
-    const cashByMonth = eng.cashByMonth || eng.cash_by_month || null;
-    let minCash = eng.minCash != null ? eng.minCash : endCash;
-    if (minCash == null && cashByMonth && cashByMonth.length) minCash = Math.min.apply(null, cashByMonth);
-    return {
-      period_label: 'Forecast plan assurance',
-      budget_year: eng.budget_year || eng.year || null,
-      yoyGrowthPct: yoy,
-      bopArr: bop,
-      decArr: dec,
-      targetArr: target,
-      fyNn: (dec != null && bop != null) ? (dec - bop) : null,
-      fyRev: eng.fyRev != null ? eng.fyRev : eng.revenue,
-      fyEbitda: eng.fyEbitda != null ? eng.fyEbitda : eng.ebitda,
-      endCash: endCash,
-      cashFloor: lv.cashFloorDec != null ? lv.cashFloorDec : 10000000,
-      minCash: minCash,
-      cashByMonth: cashByMonth,
-      salesEnd: eng.salesEnd,
-      aeNeeded: eng.aeNeeded,
-      csEnd: eng.csEnd,
-      csNeeded: eng.csNeeded,
-      pipelineCoverage: lv.pipelineCoverageMult != null ? lv.pipelineCoverageMult : 3,
-      pipelineMin: 2.5,
-      surface: 'forecast',
-    };
+    if (typeof buildFcAssurancePacket === 'function') return buildFcAssurancePacket();
+    return null;
   };
 
   window.runForecastPlanAssessment = async function(opts) {
@@ -2235,24 +4202,28 @@ updLabels();
       try { orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: true }); } catch (e) { orgId = null; }
     }
     if (!orgId) { console.warn('[forecast-assurance] no org'); return null; }
+    const forecastVersionId = opts.forecast_version_id != null
+      ? opts.forecast_version_id
+      : (window._warehouseForecastVersionId || null);
     const res = await fetch('/api/v1/predictive-planning/assess', {
       method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         plan_ref: {
           organization_id: orgId,
-          forecast_version_id: opts.forecast_version_id || null,
+          forecast_version_id: forecastVersionId,
           scenario: 'forecast',
           period_label: packet.period_label,
           budget_year: packet.budget_year,
         },
         packet,
-        persist: !!opts.forecast_version_id,
+        persist: !!forecastVersionId,
         include_passing_conditions: false,
       }),
     });
     if (!res.ok) { console.warn('[forecast-assurance] /assess failed', res.status, await res.text()); return null; }
     const assessment = await res.json();
     window._forecastPlanAssessment = assessment;
+    window._forecastPlanAssessmentAt = Date.now();
     return assessment;
   };
 })();
