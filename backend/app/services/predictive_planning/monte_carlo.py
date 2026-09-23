@@ -22,9 +22,13 @@ DEFAULT_PRIORS: dict[str, float] = {
     "cplLog": 0.28,
     "attrPp": 2.5,
     "pipe": 0.55,
+    # Residual open-month cash-flow noise as a fraction of Dec plan cash
+    # per open month (Brownian step). Keeps the corridor fan visible when
+    # the deterministic path is nearly flat Jul→Dec.
+    "cashResidMo": 0.04,
 }
 
-METHOD = "monte_carlo_packet_lever_shocks_monthly_path_scale"
+METHOD = "monte_carlo_packet_lever_shocks_open_month_cash_flow"
 
 
 def _pctl(sorted_vals: list[float], q: float) -> float:
@@ -91,6 +95,7 @@ class MonteCarloResult:
             "watches": [],
             "p_arr_miss": self.p_arr_miss,
             "p_cash_below_floor": self.p_cash_below_floor,
+            "p_cash_watch_25": self.cash.get("pWatch25") if isinstance(self.cash, dict) else None,
             "p_ops_liquidity": self.p_ops_liquidity,
             "p_ae_short": self.p_ae_short,
             "priors": {
@@ -131,7 +136,7 @@ def run_packet_monte_carlo(
     priors: dict[str, float] | None = None,
     prior_source: str = "independent_defaults",
 ) -> MonteCarloResult:
-    """Seeded MC: shock YoY / CPL / attrition / pipeline; scale cash path."""
+    """Seeded MC: shock YoY / CPL / attrition / pipeline; open-month cash flows."""
 
     sig = {**DEFAULT_PRIORS, **(priors or {})}
     rng = random.Random(seed)
@@ -143,17 +148,33 @@ def run_packet_monte_carlo(
     cash_floor = float(packet.get("cash_floor") or packet.get("cashFloor") or 10_000_000.0)
     sales_end = float(packet.get("sales_end") or packet.get("salesEnd") or 0.0)
     ae_needed = float(packet.get("ae_needed") or packet.get("aeNeeded") or 0.0)
-    cash_by_month = list(
-        packet.get("cash_by_month") or packet.get("cashByMonth") or ([end_cash] * 12)
-    )
+    cash_by_month = [
+        float(v or 0.0)
+        for v in (
+            packet.get("cash_by_month") or packet.get("cashByMonth") or ([end_cash] * 12)
+        )
+    ]
     if len(cash_by_month) < 12:
         cash_by_month = (cash_by_month + [end_cash] * 12)[:12]
+
+    close_idx = int(
+        packet.get("close_month_idx")
+        if packet.get("close_month_idx") is not None
+        else (
+            packet.get("closeMonthIdx")
+            if packet.get("closeMonthIdx") is not None
+            else 5
+        )
+    )
+    close_idx = max(0, min(10, close_idx))
+    cash_resid_mo = float(sig.get("cashResidMo") or 0.04)
+    resid_sd = max(250_000.0, abs(end_cash) * cash_resid_mo)
 
     arr_samples: list[float] = []
     cash_samples: list[float] = []
     trough_samples: list[float] = []
     paths: list[list[float]] = []
-    p_arr = p_cash = p_ae = p_ops = p_trough = 0
+    p_arr = p_cash = p_ae = p_ops = p_trough = p_watch_25 = 0
 
     for _ in range(n):
         dy = rng.gauss(0.0, sig["yoyPp"])
@@ -175,12 +196,20 @@ def run_packet_monte_carlo(
         ae_need_shock = ae_needed * (1.0 + max(0.0, (dattr - 10.0) / 100.0) * 0.2)
         ae_short = sales_end < ae_need_shock
 
-        # Cash: scale path by YoY/CPL stress vs base
-        cash_scale = 1.0 - (dy / 100.0) * 0.4 - (dcpl - 1.0) * 0.08
-        cash_scale = max(0.35, min(1.35, cash_scale))
-        path = [float(v) * cash_scale for v in cash_by_month]
+        # Cash: pin closed months; shock open-month net change (not the whole stock).
+        # Lever elasticity on flows + residual WC/collections noise that compounds Jul→Dec.
+        flow_scale = 1.0 - (dy / 100.0) * 1.15 - (dcpl - 1.0) * 0.45
+        flow_scale = max(0.25, min(1.85, flow_scale))
+        path = list(cash_by_month)
+        for m in range(close_idx + 1, 12):
+            plan_delta = cash_by_month[m] - cash_by_month[m - 1]
+            step = rng.gauss(0.0, resid_sd)
+            path[m] = max(0.0, path[m - 1] + plan_delta * flow_scale + step)
+
         trial_end = path[-1]
-        trial_trough = min(path) if path else trial_end
+        # Trough only over open months (actuals already happened)
+        open_slice = path[close_idx:]
+        trial_trough = min(open_slice) if open_slice else trial_end
 
         arr_samples.append(dec_arr)
         cash_samples.append(trial_end)
@@ -196,6 +225,8 @@ def run_packet_monte_carlo(
         drop = (end_cash - trial_end) / max(1.0, end_cash)
         if trial_end < cash_floor or drop >= 0.50:
             p_ops += 1
+        if trial_end <= end_cash * 0.75:
+            p_watch_25 += 1
         if trial_trough < cash_floor:
             p_trough += 1
 
@@ -207,7 +238,9 @@ def run_packet_monte_carlo(
             {
                 "month_index": m,
                 "p10": _pctl(col, 0.10),
+                "p25": _pctl(col, 0.25),
                 "p50": _pctl(col, 0.50),
+                "p75": _pctl(col, 0.75),
                 "p90": _pctl(col, 0.90),
                 "pBelowFloor": below,
             }
@@ -224,14 +257,19 @@ def run_packet_monte_carlo(
         f"Server Monte Carlo n={n}, seed={seed}, method={METHOD}.",
         f"Priors source: {prior_source}. Independent lever draws unless correlations supplied.",
         "Stress frequency under stated priors — not calibrated Probability of Attainment.",
-        "v1 scales the deterministic cash path and ARR from lever shocks; "
-        "full Budget formula-graph recomputation may differ slightly and remains a client fallback.",
+        "Closed months stay pinned to the plan packet. Open months re-roll net cash change "
+        f"under lever flow shocks plus residual WC noise (cashResidMo={cash_resid_mo:.3f} of Dec cash / month) "
+        "so the Jul–Dec corridor fan opens even when the mean path is nearly flat.",
     ]
 
     return MonteCarloResult(
         n=n,
         seed=seed,
-        sig={k: float(sig[k]) for k in ("yoyPp", "cplLog", "attrPp", "pipe")},
+        sig={
+            k: float(sig[k])
+            for k in ("yoyPp", "cplLog", "attrPp", "pipe", "cashResidMo")
+            if k in sig
+        },
         method=METHOD,
         prior_source=prior_source,
         p_arr_miss=p_arr / n,
@@ -256,7 +294,10 @@ def run_packet_monte_carlo(
             "p50": _pctl(cash_sorted, 0.50),
             "p90": _pctl(cash_sorted, 0.90),
             "pBreak": p_cash / n,
+            "pWatch25": p_watch_25 / n,
         },
+        # top-level alias for clients that read flat keys
+
         trough={
             "hist": _histogram(trough_samples),
             "mean": trough_mu,

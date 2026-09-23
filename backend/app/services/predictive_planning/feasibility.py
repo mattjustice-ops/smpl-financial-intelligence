@@ -99,10 +99,35 @@ def _eval_arr_path(p: dict[str, Any], q: dict[str, Any]):
     tolerance = max(q["abs_tolerance"], target * q["rel_tolerance"])
     gap = dec - target
     growth = _get(p, "yoy_growth_pct") or 0.0
+    # Forecast surface: Dec vs base/YoY target is plan context, not a historical fail.
+    surface = str(_get(p, "surface") or "").lower()
+    forecast_surface = surface == "forecast"
     if abs(gap) <= tolerance:
-        return ("ok", "Dec ARR path", f"Hits YoY target {_m(target)} ({growth:.1f}%).", dec, target, gap, "currency")
+        title = "Dec ARR vs base plan" if forecast_surface else "Dec ARR path"
+        label = "base plan" if forecast_surface else "YoY target"
+        return ("ok", title, f"Hits {label} {_m(target)} ({growth:.1f}%).", dec, target, gap, "currency")
     if gap < 0:
+        if forecast_surface:
+            return (
+                "low",
+                "Dec ARR vs base plan",
+                f"{_m(dec)} vs base {_m(target)} ({_m(gap)}) — forecast vs plan, not a historical outlier.",
+                dec,
+                target,
+                gap,
+                "currency",
+            )
         return ("high", "Dec ARR short of YoY target", f"{_m(dec)} vs target {_m(target)} ({_m(gap)}).", dec, target, gap, "currency")
+    if forecast_surface:
+        return (
+            "low",
+            "Dec ARR vs base plan",
+            f"{_m(dec)} vs base {_m(target)} — forecast vs plan.",
+            dec,
+            target,
+            gap,
+            "currency",
+        )
     return ("low", "Dec ARR above YoY target", f"{_m(dec)} vs {_m(target)} — confirm intentional upside.", dec, target, gap, "currency")
 
 
