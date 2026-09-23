@@ -7317,25 +7317,55 @@ function renderHC(area){
 
 function toggleReqHC(id){ /* no-op: open-req toggles removed */ }
 
-// \u2500\u2500 SENSITIVITY \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// ── SENSITIVITY ──────────────────────────────────────────────────────────────
 function renderSens(area){
   const baseRes=getResults();
   const dec=FC_P[FC_P.length-1];
   const decP=ALL_P[11];
-  const base_arr=(getForecastARR(decP)||baseRes[dec]?.arr||{}).arr_eop||0;
-  const base_cash=(getDisplayCFS(decP)||baseRes[dec]?.cfs||{}).end_cash||0;
-  const base_ebitda=FC_P.reduce((s,p)=>s+(baseRes[p]?.is?.ebitda||0),0);
+  const base_arr=(baseRes[dec]&&baseRes[dec].arr&&baseRes[dec].arr.arr_eop!=null)
+    ? baseRes[dec].arr.arr_eop
+    : ((getForecastARR(decP)||{}).arr_eop||0);
+  const base_cash=(getDisplayCFS(decP)||(baseRes[dec]&&baseRes[dec].cfs)||{}).end_cash||0;
+  const base_ebitda=FC_P.reduce((s,p)=>s+((baseRes[p]&&baseRes[p].is&&baseRes[p].is.ebitda)||0),0);
 
+  /** Apply temporary lever overrides via state (sidebar DOM may be unmounted on this tab). */
   function runScenario(ovr){
-    const orig={};
-    Object.keys(ovr).forEach(k=>{const el=document.getElementById('l-'+k);if(el){orig[k]=el.value;el.value=ovr[k];}});
-    invalidateCfsChain();
-    const res=compute();
-    const chain=buildCFSChain(HORIZON[hz], res);
-    const decCash=(chain[ALL_P[11]]||res[dec]?.cfs||{}).end_cash||0;
-    Object.keys(orig).forEach(k=>{const el=document.getElementById('l-'+k);if(el)el.value=orig[k];});
-    invalidateCfsChain();
-    return{arr:res[dec].arr.arr_eop,cash:decCash,ebitda:FC_P.reduce((s,p)=>s+(res[p]?.is?.ebitda||0),0)};
+    const snapArr=Object.assign({},fcArrState);
+    const snapCost=Object.assign({},fcCostState);
+    const snapWc=Object.assign({},fcWcState);
+    try{
+      if(ovr.nb!=null) fcArrState.nb=ovr.nb;
+      if(ovr.exp!=null) fcArrState.exp=ovr.exp;
+      if(ovr.churn!=null) fcArrState.churn=ovr.churn;
+      if(ovr.ren!=null) fcArrState.ren=ovr.ren;
+      if(ovr.cogs!=null) fcCostState.cogs=ovr.cogs;
+      if(ovr.sm!=null) fcCostState.sm=ovr.sm;
+      if(ovr.rd!=null) fcCostState.rd=ovr.rd;
+      if(ovr.ga!=null) fcCostState.ga=ovr.ga;
+      if(ovr.svcPct!=null) fcCostState.svcPct=ovr.svcPct;
+      if(ovr.dso!=null) fcWcState.dso=ovr.dso;
+      if(ovr.dpo!=null) fcWcState.dpo=ovr.dpo;
+      if(ovr.capexPct!=null) fcWcState.capexPct=ovr.capexPct;
+      invalidateCfsChain();
+      _resultsCache=null;
+      _scenarioDirty=true;
+      const res=compute();
+      const chain=buildCFSChain(HORIZON[hz], res);
+      const decRow=res[dec]||res[decP]||{};
+      const decCash=(chain[decP]||chain[dec]||decRow.cfs||{}).end_cash||0;
+      return{
+        arr:(decRow.arr&&decRow.arr.arr_eop!=null)?decRow.arr.arr_eop:0,
+        cash:decCash,
+        ebitda:FC_P.reduce((s,p)=>s+((res[p]&&res[p].is&&res[p].is.ebitda)||0),0),
+      };
+    } finally {
+      Object.assign(fcArrState,snapArr);
+      Object.assign(fcCostState,snapCost);
+      Object.assign(fcWcState,snapWc);
+      invalidateCfsChain();
+      _resultsCache=null;
+      _scenarioDirty=true;
+    }
   }
 
   const scenarios=[
@@ -7357,7 +7387,7 @@ function renderSens(area){
 
   area.innerHTML=`<div class="slide">
     <div class="slide-title">Sensitivity Analysis</div>
-    <div class="slide-sub">Run scenarios on top of current assumptions without affecting saved versions . Dec 2026 outcomes</div>
+    <div class="slide-sub">Run scenarios on top of current assumptions without affecting saved versions · Dec ${String(YEAR).slice(2)} outcomes</div>
     ${buildKPIs(baseRes)}
     <div class="two-col">
       <div class="card">
