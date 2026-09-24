@@ -101,29 +101,29 @@ export default function AboutPage() {
             Matt Justice, Founder &amp; CEO
           </h2>
           <p className="mt-2 text-base text-slate-400">
-            Portland, Oregon · Corporate FP&amp;A, strategic and GTM Finance, and
-            revenue operations
+            Portland, Oregon · SaaS Finance, corporate FP&amp;A, GTM, and revenue
+            and billings operations
           </p>
           <div className="mt-8 space-y-5 text-base leading-relaxed text-slate-300 md:text-lg">
             <p>
-              I have spent my career inside SaaS Finance: corporate FP&amp;A at
-              Airship and Schrödinger, GTM Finance at CARET, and revenue and
-              billings operations at Airship. Across those roles I worked the
-              same problems growing Finance teams face every month: reporting,
-              budgeting, forecasting, SaaS revenue metrics, cash and workforce
-              planning, and connecting operational activity to financial
-              results.
+              I have spent my career inside SaaS Finance across corporate
+              FP&amp;A, GTM Finance, and revenue and billings operations. Across
+              those roles I worked the same problems growing Finance teams face
+              every month: reporting, budgeting, forecasting, SaaS revenue
+              metrics, cash and workforce planning, and connecting operational
+              activity to financial results.
             </p>
             <p>
               I also worked directly with the systems and processes behind those
               answers: spreadsheets, ERP, CRM, billing data, and planning
-              platforms. At Airship I led a team of three across revenue,
-              billings, and collections, and implemented automation that cut
-              reporting timelines by 95%. Earlier in my career at PGE I managed
-              and forecasted a $600 million capital budget. That combination
-              matters. I understand both the questions leadership needs answered
-              and the work required to assemble reliable answers from systems
-              that were never designed to speak the same language.
+              platforms. I led a team of three across revenue, billings, and
+              collections, and implemented automation that cut reporting
+              timelines by 95%. Earlier in my career I managed and forecasted a
+              $600 million capital budget and managed a billion-dollar trading
+              portfolio. That combination matters. I understand both the
+              questions leadership needs answered and the work required to
+              assemble reliable answers from systems that were never designed to
+              speak the same language.
             </p>
             <p>
               The pattern I kept seeing was simple and expensive. Finance teams
