@@ -11,6 +11,28 @@
     "query_ids": ["category_01", "category_02", "category_04", "saas_icp_01", "saas_icp_04", "lean_finance_01", "use_case_03"]
   },
   {
+    "id": "fpa-software-for-saas",
+    "url": "https://www.smpl-ai.com/fpa-software-for-saas",
+    "title": "FP&A Software for SaaS Companies",
+    "content_type": "product",
+    "status": "live",
+    "published_at": "2026-09-23",
+    "hypothesis": "Permanent category/entity page: SMPL.ai ↔ FP&A software ↔ SaaS. Primary lever for category_01/02 and SaaS ICP queries; reinforces use_case_03 connected-model language.",
+    "primary_query_ids": ["category_01", "category_02", "saas_icp_01"],
+    "query_ids": ["category_01", "category_02", "category_04", "saas_icp_01", "saas_icp_04", "saas_icp_05", "use_case_03", "lean_finance_01"]
+  },
+  {
+    "id": "about",
+    "url": "https://www.smpl-ai.com/about",
+    "title": "About SMPL.ai",
+    "content_type": "authority",
+    "status": "live",
+    "published_at": "2026-09-23",
+    "hypothesis": "Company entity page with extractable FP&A + SaaS Finance statements, founder, location, and canonical URL disambiguation from smpl.ai family office.",
+    "primary_query_ids": ["authority_01", "category_01"],
+    "query_ids": ["authority_01", "category_01", "saas_icp_01"]
+  },
+  {
     "id": "best-fpa-software-saas-companies",
     "url": "https://www.smpl-ai.com/blog/best-fpa-software-saas-companies",
     "title": "Best FP&A Software for SaaS Companies: A 2026 Buyer's Guide",

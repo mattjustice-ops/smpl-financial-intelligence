@@ -1,0 +1,54 @@
+{
+  "id": "google_genai_baseline_2026-09-14",
+  "name": "Google Generative AI Baseline 2026-09-14",
+  "frozen": true,
+  "surface": "google_generative_ai",
+  "source": {
+    "report": "Search Console \u00b7 Performance on Search Generative AI Features",
+    "property": "https://www.smpl-ai.com/",
+    "export_file": "smpl-ai.com-Performance-on-Search-Generative-AI-Features-2026-09-16.xlsx",
+    "search_type": "Web",
+    "date_range": "Last 3 months ending 2026-09-14",
+    "notes": [
+      "Impressions only \u2014 this report does not isolate AI clicks or underlying queries.",
+      "Chart is property-aggregated; page table can sum higher when multiple SMPL URLs appear in one generative response.",
+      "Newest days may still be preliminary per Google."
+    ]
+  },
+  "scorecard": {
+    "property_impressions": 155,
+    "sept_1_to_14_impressions": 110,
+    "last_7_days_impressions": 84,
+    "peak_day": "2026-09-14",
+    "peak_day_impressions": 38,
+    "pages_with_impressions": 13,
+    "us_share": 0.484,
+    "desktop_share": 0.935,
+    "top_commercial_article": "best-fpa-software-saas-companies",
+    "top_commercial_article_impressions": 50
+  },
+  "top_pages": [
+    {
+      "url": "https://www.smpl-ai.com/",
+      "impressions": 58
+    },
+    {
+      "url": "https://www.smpl-ai.com/blog/best-fpa-software-saas-companies",
+      "impressions": 50
+    },
+    {
+      "url": "https://www.smpl-ai.com/blog/finance-os-vs-fpa-software",
+      "impressions": 20
+    },
+    {
+      "url": "https://www.smpl-ai.com/blog/ai-operating-system-for-saas-finance",
+      "impressions": 15
+    },
+    {
+      "url": "https://www.smpl-ai.com/pricing",
+      "impressions": 4
+    }
+  ],
+  "interpretation": "Google is beginning to retrieve SMPL as generative source material. Buyer-intent/category pages (especially Best FP&A) outperform narrow thought leadership. Complementary to ChatGPT Search baseline (1/46), which measures shortlist classification rather than retrieval.",
+  "notes": "Sacred Google GenAI baseline through 2026-09-14. Do not overwrite; append later snapshots as new dated baselines."
+}

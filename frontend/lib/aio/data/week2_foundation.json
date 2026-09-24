@@ -1,0 +1,66 @@
+{
+  "week": 2,
+  "goal": "Establish the category entity",
+  "as_of": "2026-09-23",
+  "checklist": [
+    {
+      "id": "rules_v2",
+      "item": "Ship rules_v2 classifier (all SMPL windows; no Best-fit false top_pick; shortlist cues); preserve stored rules_v1 scores; show live rescore on Visibility",
+      "status": "done",
+      "evidence": "frontend/lib/aio/evaluate.ts EVALUATOR_VERSION=rules_v2; selftest regressions; overview.scoring_audit"
+    },
+    {
+      "id": "fpa_category_page",
+      "item": "Permanent FP&A Software for SaaS Companies solution page",
+      "status": "done_pending_deploy",
+      "evidence": "/fpa-software-for-saas in app/(marketing); sitemap + seed_content registered"
+    },
+    {
+      "id": "about_entity",
+      "item": "About/company page with extractable FP&A entity statements",
+      "status": "done_pending_deploy",
+      "evidence": "/about; Organization sameAs LinkedIn; nav + footer links"
+    },
+    {
+      "id": "structured_data",
+      "item": "Organization / SoftwareApplication / page JSON-LD where truthful",
+      "status": "done",
+      "evidence": "OrganizationJsonLd sitewide + WebPage on category page + AboutPage JSON-LD"
+    },
+    {
+      "id": "ai_cost_structure_article",
+      "item": "AI Is Changing the Cost Structure FP&A Has to Understand",
+      "status": "done",
+      "evidence": "Already live: /blog/ai-costs-saas-fpa (seed ai-costs-saas-fpa, published 2026-09-09)"
+    },
+    {
+      "id": "register_week2_content",
+      "item": "Register Week 2 pages in AIO content registry",
+      "status": "done_pending_seed",
+      "evidence": "seed_content.json entries fpa-software-for-saas + about; re-run Seed queries on Visibility after deploy"
+    },
+    {
+      "id": "gsc_request_indexing_week2",
+      "item": "Request indexing in GSC for /fpa-software-for-saas and /about after production deploy",
+      "status": "manual",
+      "evidence": "Operator action after deploy"
+    },
+    {
+      "id": "weekly_pulse_category_icp",
+      "item": "Run 12-query weekly pulse focusing on category + SaaS-ICP after new pages are indexed",
+      "status": "manual",
+      "evidence": "Temporary + unpersonalized + web search; same pulse_queries.json"
+    },
+    {
+      "id": "external_startupblink",
+      "item": "External authority: finish StartupBlink (Wave 1), then G2/Capterra (Wave 2)",
+      "status": "manual",
+      "evidence": "canvases/smpl-entity-visibility-campaign.canvas.tsx — requires Matt logged in"
+    }
+  ],
+  "notes": [
+    "Historical aio_manual_audits.evaluation_json untouched. New imports use rules_v2.",
+    "Visibility overview shows stored vs live rules_v2 rescore for latest Full 46 batch.",
+    "Week 3 content (implementation article) already live early — do not block Week 2 on it."
+  ]
+}

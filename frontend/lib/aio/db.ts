@@ -1,3 +1,4 @@
+import googleGenaiBaseline from "@/lib/aio/data/google_genai_baseline.json";
 import pulseQueries from "@/lib/aio/data/pulse_queries.json";
 import sacredBaseline from "@/lib/aio/data/sacred_baseline.json";
 import seedContent from "@/lib/aio/data/seed_content.json";
@@ -160,6 +161,12 @@ export async function seedAioConfig(): Promise<{
      VALUES ('pulse_queries', $1::jsonb, now())
      ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now()`,
     [JSON.stringify(pulseQueries)],
+  );
+  await pool.query(
+    `INSERT INTO aio_settings (key, value_json, updated_at)
+     VALUES ('google_genai_baseline', $1::jsonb, now())
+     ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now()`,
+    [JSON.stringify(googleGenaiBaseline)],
   );
 
   return {
@@ -331,6 +338,7 @@ export async function getPulseOverview() {
     owned_citation_count: owned,
     rows: out,
     sacred_baseline: sacredBaseline,
+    google_genai_baseline: googleGenaiBaseline,
   };
 }
 
@@ -527,6 +535,102 @@ export async function getOverview() {
 
   const rate = (n: number) => (total ? Number((n / total).toFixed(3)) : 0);
 
+  // Parallel rules_v2 rescore of the latest named Full-46 batch (does not overwrite stored rows).
+  const { rows: latestBatch } = await pool.query<{
+    id: string;
+    name: string;
+  }>(
+    `SELECT id, name FROM aio_batches
+     WHERE name ILIKE 'Full 46%'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+  );
+  let scoring_audit: Record<string, unknown> | null = null;
+  if (latestBatch[0]) {
+    const { rows: batchAudits } = await pool.query(
+      `SELECT query_id, query_text, raw_response, citations_json, evaluation_json, evaluator_version
+       FROM aio_manual_audits WHERE batch_id = $1`,
+      [latestBatch[0].id],
+    );
+    const { rows: compRows } = await pool.query<{ name: string }>(
+      `SELECT name FROM aio_competitors WHERE active = TRUE ORDER BY name`,
+    );
+    const competitors = compRows.length
+      ? compRows.map((r) => r.name)
+      : [...DEFAULT_COMPETITORS];
+
+    let storedMentions = 0;
+    let v2Mentions = 0;
+    let storedShortlistPlus = 0;
+    let v2ShortlistPlus = 0;
+    let storedOwned = 0;
+    let v2Owned = 0;
+    const strength_changes: Array<{
+      query_id: string | null;
+      stored: string;
+      rules_v2: string;
+    }> = [];
+
+    for (const row of batchAudits) {
+      const stored = row.evaluation_json as AioEvaluation;
+      const v2 = evaluateManualAudit({
+        query: String(row.query_text),
+        answer: String(row.raw_response),
+        citationUrls: Array.isArray(row.citations_json)
+          ? (row.citations_json as string[])
+          : [],
+        competitors,
+      });
+      if (stored.smpl_mentioned) storedMentions += 1;
+      if (v2.smpl_mentioned) v2Mentions += 1;
+      if (
+        ["shortlisted", "recommended", "top_pick"].includes(
+          stored.recommendation_strength,
+        )
+      ) {
+        storedShortlistPlus += 1;
+      }
+      if (
+        ["shortlisted", "recommended", "top_pick"].includes(
+          v2.recommendation_strength,
+        )
+      ) {
+        v2ShortlistPlus += 1;
+      }
+      if (stored.smpl_owned_domain_cited) storedOwned += 1;
+      if (v2.smpl_owned_domain_cited) v2Owned += 1;
+      if (
+        stored.recommendation_strength !== v2.recommendation_strength ||
+        stored.smpl_mentioned !== v2.smpl_mentioned
+      ) {
+        strength_changes.push({
+          query_id: row.query_id as string | null,
+          stored: stored.recommendation_strength,
+          rules_v2: v2.recommendation_strength,
+        });
+      }
+    }
+
+    scoring_audit = {
+      batch_name: latestBatch[0].name,
+      batch_id: latestBatch[0].id,
+      n: batchAudits.length,
+      current_evaluator: EVALUATOR_VERSION,
+      note: "rules_v2 is computed live from raw answers. Stored evaluation_json is preserved as historical.",
+      stored: {
+        mentions: storedMentions,
+        shortlist_plus: storedShortlistPlus,
+        owned_citations: storedOwned,
+      },
+      rules_v2: {
+        mentions: v2Mentions,
+        shortlist_plus: v2ShortlistPlus,
+        owned_citations: v2Owned,
+      },
+      strength_changes,
+    };
+  }
+
   return {
     query_count: Number(counts[0]?.query_count || 0),
     audit_count: Number(counts[0]?.audit_count || 0),
@@ -546,7 +650,12 @@ export async function getOverview() {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
     recent_gaps: gaps.slice(0, 15),
+    chatgpt_search_baseline: sacredBaseline,
+    google_genai_baseline: googleGenaiBaseline,
+    scoring_audit,
+    engine_diagnosis:
+      "Google: becoming retrievable. ChatGPT: not yet reliably classifiable/shortlisted. Track engines separately.",
     disclosure:
-      "Manual ChatGPT Search audits only. Not an OpenAI ranking score. API proxy not enabled in V1.",
+      "Dual baselines: controlled ChatGPT Search audits + frozen Google Generative AI Search Console snapshot. New imports score with rules_v2; historical evaluation_json is preserved. Not an OpenAI ranking score.",
   };
 }

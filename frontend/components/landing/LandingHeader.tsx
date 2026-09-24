@@ -15,6 +15,12 @@ const SECTION_NAV = [
 ] as const;
 
 const RESOURCES_LINKS = [
+  {
+    href: "/fpa-software-for-saas",
+    label: "FP&A for SaaS",
+    description: "Category page — what SMPL is",
+  },
+  { href: "/about", label: "About", description: "Company entity & founder" },
   { href: "/blog", label: "Blog", description: "Close, board packages, commentary" },
   { href: "/glossary", label: "Glossary", description: "Board & close metric literacy" },
 ] as const;

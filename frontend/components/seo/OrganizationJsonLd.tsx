@@ -22,15 +22,14 @@ export function OrganizationJsonLd() {
     },
     description: orgDescription,
     email: "mattjustice@smpl-ai.com",
-    // Populate with real public profiles (LinkedIn company page, X, etc.) when ready.
-    // Empty sameAs is worse than omitting — leave unset until URLs are confirmed.
-    ...(process.env.NEXT_PUBLIC_ORG_SAME_AS
-      ? {
-          sameAs: process.env.NEXT_PUBLIC_ORG_SAME_AS.split(",")
+    sameAs: [
+      "https://www.linkedin.com/company/smpl-financial-intelligence",
+      ...(process.env.NEXT_PUBLIC_ORG_SAME_AS
+        ? process.env.NEXT_PUBLIC_ORG_SAME_AS.split(",")
             .map((s) => s.trim())
-            .filter(Boolean),
-        }
-      : {}),
+            .filter(Boolean)
+        : []),
+    ],
   };
 
   const software = {

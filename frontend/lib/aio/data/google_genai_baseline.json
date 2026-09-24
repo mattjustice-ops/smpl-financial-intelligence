@@ -1,0 +1,68 @@
+{
+  "id": "google_genai_baseline_2026-09-23",
+  "name": "Google Generative AI Snapshot 2026-09-23",
+  "frozen": false,
+  "surface": "google_generative_ai",
+  "source": {
+    "report": "Search Console \u00b7 Performance on Search Generative AI Features",
+    "property": "https://www.smpl-ai.com/",
+    "export_file": "smpl-ai.com-Performance-on-Search-Generative-AI-Features-2026-09-23",
+    "search_type": "Web",
+    "date_range": "Last 3 months ending 2026-09-21 (export folder 2026-09-23; newest chart days may lag)",
+    "notes": [
+      "Impressions only \u2014 this report does not isolate AI clicks or underlying queries.",
+      "Chart is property-aggregated; page table can sum higher when multiple SMPL URLs appear in one generative response.",
+      "Newest days may still be preliminary per Google.",
+      "Appended snapshot; sacred baseline through 2026-09-14 remains in google_genai_baseline_2026-09-14.json."
+    ]
+  },
+  "scorecard": {
+    "property_impressions": 249,
+    "sept_1_to_14_impressions": 204,
+    "sept_period_label": "Sept 1\u201321",
+    "last_7_days_impressions": 94,
+    "peak_day": "2026-09-14",
+    "peak_day_impressions": 38,
+    "pages_with_impressions": 22,
+    "us_share": 0.482,
+    "desktop_share": 0.944,
+    "top_commercial_article": "best-fpa-software-saas-companies",
+    "top_commercial_article_impressions": 101
+  },
+  "top_pages": [
+    {
+      "url": "https://www.smpl-ai.com/blog/best-fpa-software-saas-companies",
+      "impressions": 101
+    },
+    {
+      "url": "https://www.smpl-ai.com/",
+      "impressions": 66
+    },
+    {
+      "url": "https://www.smpl-ai.com/blog/finance-os-vs-fpa-software",
+      "impressions": 35
+    },
+    {
+      "url": "https://www.smpl-ai.com/blog/ai-operating-system-for-saas-finance",
+      "impressions": 15
+    },
+    {
+      "url": "https://www.smpl-ai.com/blog/billing-vs-crm-arr",
+      "impressions": 9
+    },
+    {
+      "url": "https://www.smpl-ai.com/pricing",
+      "impressions": 4
+    },
+    {
+      "url": "https://www.smpl-ai.com/glossary/waterfall",
+      "impressions": 3
+    },
+    {
+      "url": "https://www.smpl-ai.com/blog/grr-vs-nrr",
+      "impressions": 2
+    }
+  ],
+  "interpretation": "Google generative retrieval continuing to grow vs sacred 2026-09-14 baseline (155\u2192249 property impressions). Best FP&A article remains the commercial leader (50\u2192101). Complementary to ChatGPT Search Full 46 (still 1/46, use_case_03 only).",
+  "notes": "Current GenAI snapshot from 2026-09-23 GSC export (chart through 2026-09-21). Sacred 2026-09-14 baseline preserved separately \u2014 do not overwrite that file."
+}
