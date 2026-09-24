@@ -78,7 +78,7 @@ Ads goal: **Submit lead form** (demo / quote). Page views only as secondary meas
 
 | Gap | Why it matters | Suggested next move |
 | --- | --- | --- |
-| Billing vs CRM ARR post | High reconciliation pain; no dedicated URL | Brief + publish P1 pillar |
+| Billing vs CRM ARR post | High reconciliation pain; dedicated URL | Live: `/blog/billing-vs-crm-arr` + glossary `billing-arr` / `crm-arr` |
 | SaaS cash forecast post | Bridges board pack → product; soft demo CTA | Brief tied to live board post |
 | Dedicated AI CFO Copilot landing | Strong ads theme; homepage/blog only today | Lightweight `/` section or feature URL for ads |
 | Scenario analysis / variance landing | Ads/SEO supporting theme under-served | Blog or feature page after cash forecast |

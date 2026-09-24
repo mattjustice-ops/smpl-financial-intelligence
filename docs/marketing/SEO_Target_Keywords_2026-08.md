@@ -24,7 +24,7 @@ Do **not** treat brand slogans as the SEO north star.
 | ARR waterfall vs GAAP revenue | Informational / comparison | `/blog/arr-waterfall-vs-gaap-revenue` | P0 | Live cornerstone. Strong internal-link hub |
 | ARR methodology / ARR governance | Informational / policy | `/blog/arr-governance` | P0 | Live (Aug 3). Link from GRR/NRR + waterfall posts |
 | SaaS board reporting / board pack | Problem / category | `/blog/saas-board-reporting-arr-cash-pl` | P0 | Live. Also supports homepage “board reporting” theme |
-| Billing vs CRM ARR | Problem / reconciliation | `/blog/billing-vs-crm-arr` *(planned)* | P1 | High buyer pain; no dedicated post yet. Interim: link from waterfall + trust posts |
+| Billing vs CRM ARR | Problem / reconciliation | `/blog/billing-vs-crm-arr` | P1 | Live Sep 2026. Glossary: `/glossary/billing-arr`, `/glossary/crm-arr` |
 | ARR sources / where ARR comes from | Informational | `/blog/arr-waterfall-vs-gaap-revenue` *(interim)* → planned `/blog/arr-sources` | P1 | Often searched as “ARR from billing vs CRM.” Clarify source-of-truth in copy |
 | SaaS cash forecast | Informational / how-to | `/blog/saas-cash-forecast` *(planned)* | P1 | Bridge from live board post (ARR–cash–P&L). Soft CTA to demo |
 | SaaS board pack | Problem / template-adjacent | `/blog/saas-board-reporting-arr-cash-pl` | P1 | Close cousin of “board reporting”; watch GSC for pack vs reporting split |

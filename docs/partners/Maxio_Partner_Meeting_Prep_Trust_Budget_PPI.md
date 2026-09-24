@@ -65,9 +65,9 @@ Plan Assurance and the Budget Engine shipped **2026-09-04 → 09-07** (PRs #140/
 |------------|--------|--------------|
 | Deterministic waterfalls + 3-statement / Combined | Warehouse `actual_*` / `budget_*` / `forecast_*`; board + FE | SoT hierarchy documented; dual demo seeds left alone by design |
 | Validation catalog + export pre-check | `GET /api/v1/export/validation`, financial-statement validation, close integrity | API + Validation tab in close package; **not** a polished “trust home” for execs |
-| Fail-closed export option | `block_on_failure` → HTTP 409 on fail | Must be turned on; not every path hard-blocks |
+| Fail-closed export (board / MDA default) | `block_on_failure` defaults **true** on board PPTX + MDA package/deck → HTTP 409 on FAIL | Override with `block_on_failure=false` for internal/demo only; other export flavors may still be advisory |
 | Freeze packs (COMPLETE / STALE) | Close-context blobs; MD&A / Copilot binding | Required on some export/MD&A paths; STALE labeled |
-| AI claim / attribution / citation verify | Commentary, Prompt 2 (stricter), Prompt 5 (soft-strip + export), board regenerate, Copilot | **Primary AI paths** — not every chart datapoint at DOM render |
+| AI claim / attribution / citation verify | Commentary, Prompt 2 (stricter), Prompt 5 (surgical $/%/Nx + attribution strip), board regenerate, Copilot | **Primary AI paths** — not every chart datapoint at DOM render |
 | Evidence packages + `_sources` (v1) | LLM payloads | Partial; honest nulls when missing |
 | DOM provenance overlay | `smpl-provenance.js`, Ctrl+Shift+A | Partial on Board/FE KPIs when hydrate has tags |
 | Forecast draft → **Promote to Final** | `forecast_version_service` / FE | Writes `forecast_*`; advisory client A–F at promote |
@@ -154,7 +154,7 @@ Claude / Cursor should draft **methodologies and checklists**, not fake certific
 | Automated tie-outs at $1 on closed actuals | “Audited by SMPL” |
 | Click material KPIs for warehouse / computed source (Continuity + cite-to-calc) | “Every pixel / chart point is cited” |
 | Evidence Pack travels with MD&A deck / variance exports | “Impossible to be wrong” |
-| Fail-closed on wired AI / export paths (Prompt 2); Prompt 5 soft-warn + disclosed | “AI calculated your ARR” |
+| Fail-closed on wired AI / export paths (Prompt 2; Prompt 5 surgical redact; board/MDA export hard-gate by default) | “AI calculated your ARR” |
 | Path A / CSV today; native Maxio on partner track | “Maxio native connector GA” |
 | SOC 2 Type I in progress | “We are SOC 2 certified” |
 | Plan Assurance tests whether the plan can be delivered | “AI predicts your ARR” |
