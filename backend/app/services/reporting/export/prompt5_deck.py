@@ -1344,11 +1344,10 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
     working, claim_result = apply_fail_closed_claims_to_pptx_script(script, evidence)
     if claim_result.ok:
         logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(claim_result.checks))
-        working = script
     else:
         logger.warning(
-            "P15 Prompt 5 claim-verify soft-warn unmatched $/%%/Nx "
-            "(narrative kept; KPI cells may soft-strip; export continues): %s",
+            "P15 Prompt 5 claim-verify stripped unmatched $/%%/Nx "
+            "(narrative tokens redacted; KPI cells → —; export continues): %s",
             claim_result.summary(max_failures=8),
         )
 
@@ -1365,8 +1364,8 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             )
     else:
         logger.warning(
-            "P15 Prompt 5 attribution-verify soft-warn off-allowlist drivers "
-            "(narrative kept; export continues): %s",
+            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers "
+            "(narrative sentences redacted; KPI cells → —; export continues): %s",
             attr_result.summary(),
         )
         working = rewritten
@@ -1416,8 +1415,9 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             narr_result.summary(),
         )
 
-    # Intentionally NO seed-refill of blank/"—" takeaways. Narrative soft-warn
-    # keeps unmatched $/% in takeaways; only short KPI cells soft-strip to —.
+    # Intentionally NO seed-refill of blank/"—" takeaways. Unmatched $/%% and
+    # off-allowlist attribution sentences are surgically redacted; short KPI
+    # cells soft-strip to —.
     return working
 
 

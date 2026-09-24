@@ -42,8 +42,8 @@ DONT_KNOW_NARRATIVE = (
 )
 
 # Prompt 5 PPTX soft-strip: never inject multi-sentence don't-know essays into
-# KPI/table cells. Em dash keeps layout intact. Narrative/takeaway literals are
-# soft-warned (kept) like interactive regenerate / Copilot.
+# KPI/table cells. Em dash keeps layout intact. Narrative/takeaway literals
+# surgically redact unmatched $/%%/Nx (prose kept) — same bar as interactive.
 PPTX_SOFT_STRIP_CELL = "—"
 # Long prose is always narrative; short multi-word takeaways are too unless they
 # look like a lone metric cell ($86.1M / 79.2% / 2.4x).
@@ -146,10 +146,10 @@ def pptx_soft_strip_failed_claims_in_literal(
     inner: str,
     failed_stated: Sequence[str],
 ) -> str:
-    """Legacy token redaction; Prompt 5 narrative path soft-warns instead.
+    """Surgical redaction of unmatched $/%%/Nx tokens inside a literal.
 
-    Kept for call-site compatibility / tests that still exercise surgical
-    redaction. Prefer keeping narrative literals intact (interactive posture).
+    Used for Key Takeaways / commentary after claim-verify fails a token.
+    Keeps surrounding prose; never leaves invented money/%/Nx in the deck.
     """
     text = inner or ""
     if not text.strip():
@@ -683,14 +683,17 @@ def fail_closed_text(
     """Apply numeric policy after verify.
 
     ``strict``: any failure → whole-text don't-know.
-    ``interactive``: keep text (caller should warn/log); board numbers trusted.
+    ``interactive``: surgically redact unmatched $/%%/Nx; keep surrounding prose.
     """
     if result is None:
         if evidence is None:
             raise ValueError("fail_closed_text requires result or evidence")
         result = verify_text_against_evidence(text, evidence)
-    if result.ok or policy == "interactive":
+    if result.ok:
         return text
+    if policy == "interactive":
+        failed = [c.claim.stated for c in result.checks if c.status != "pass"]
+        return pptx_soft_strip_failed_claims_in_literal(text, failed)
     return DONT_KNOW_NARRATIVE
 
 
@@ -731,17 +734,24 @@ def apply_fail_closed_to_commentary(
     *,
     policy: VerifyPolicy = "strict",
 ) -> tuple[CommentaryOutput, VerificationResult]:
-    """Apply numeric verify; ``strict`` don't-knows bad sections, ``interactive`` keeps text.
+    """Apply numeric verify; ``strict`` don't-knows bad sections, ``interactive`` redacts invents.
 
     Returns the (possibly rewritten) output plus the aggregate verification result.
-    Empty evidence + material claims still fail verify (callers warn); interactive
-    does not replace narrative with don't-know for unmatched $/% alone.
+    Empty evidence + material claims still fail verify (callers warn). Interactive
+    surgically strips unmatched $/%%/Nx from narrative; never ships invented dollars.
     """
     overall = verify_commentary_output(output, evidence)
-    if overall.ok or policy == "interactive":
+    if overall.ok:
         return output, overall
 
     data = output.model_dump(mode="python")
+
+    def _strip_text(text: str) -> str:
+        local = verify_text_against_evidence(text or "", evidence)
+        if local.ok:
+            return text or ""
+        failed = [c.claim.stated for c in local.checks if c.status != "pass"]
+        return pptx_soft_strip_failed_claims_in_literal(text or "", failed)
 
     def _rewrite_section(key: str) -> None:
         section = data[key]
@@ -749,9 +759,13 @@ def apply_fail_closed_to_commentary(
             c.get("value", "") for c in (section.get("citations") or [])
         )
         local = verify_text_against_evidence(text_blob, evidence)
-        if not local.ok:
-            section["narrative"] = DONT_KNOW_NARRATIVE
-            section["citations"] = []
+        if local.ok:
+            return
+        if policy == "interactive":
+            section["narrative"] = _strip_text(section.get("narrative") or "")
+            return
+        section["narrative"] = DONT_KNOW_NARRATIVE
+        section["citations"] = []
 
     for key in (
         "executive_summary",
@@ -770,6 +784,14 @@ def apply_fail_closed_to_commentary(
         )
         if local.ok:
             cleaned_risks.append(item)
+        elif policy == "interactive":
+            cleaned_risks.append(
+                {
+                    **item,
+                    "description": _strip_text(item.get("description") or ""),
+                    "evidence": _strip_text(item.get("evidence") or ""),
+                }
+            )
         else:
             cleaned_risks.append(
                 {
@@ -788,6 +810,14 @@ def apply_fail_closed_to_commentary(
         )
         if local.ok:
             cleaned_qs.append(item)
+        elif policy == "interactive":
+            cleaned_qs.append(
+                {
+                    **item,
+                    "question": _strip_text(item.get("question") or ""),
+                    "rationale": _strip_text(item.get("rationale") or ""),
+                }
+            )
         else:
             cleaned_qs.append(
                 {
@@ -1431,15 +1461,22 @@ def apply_fail_closed_claims_to_pptx_script(
     script: str,
     evidence: Mapping[str, Decimal] | Mapping[str, Any],
 ) -> tuple[str, VerificationResult]:
-    """Verify money/%/Nx in PPTX JS string literals; soft-strip metric cells only.
+    """Verify money/%/Nx in PPTX JS string literals; strip unmatched invents.
 
     Short KPI/table cells with unmatched claims become ``—``. Key Takeaways /
-    commentary literals match interactive soft-warn: keep text, record failures
-    for caller logs. Layout / chart array code outside strings is ignored.
-    Prompt 5 callers warn + export (rewritten only when cells were stripped).
+    commentary literals surgically redact unmatched $/%%/Nx (prose kept).
+    Layout / chart array code outside strings is ignored.
     """
     values = _evidence_values_map(evidence)
     all_checks: list[ClaimCheck] = []
+
+    def _escape(quote: str, replacement: str) -> str:
+        escaped = (
+            replacement.replace("\\", "\\\\")
+            .replace(quote, f"\\{quote}")
+            .replace("\n", "\\n")
+        )
+        return f"{quote}{escaped}{quote}"
 
     def _replace(match: re.Match[str]) -> str:
         quote = match.group(1)
@@ -1455,23 +1492,20 @@ def apply_fail_closed_claims_to_pptx_script(
         local_checks = [_best_match(claim, values) for claim in claims]
         all_checks.extend(local_checks)
         local = VerificationResult(checks=local_checks)
-        if local.ok or _pptx_is_narrative_literal(inner_unesc):
+        if local.ok:
             return raw
         # Prefer SoR repair over em-dash for Claude whole-M/K rounding ($80M→$79.505M).
         repaired = pptx_repair_rounded_money_literal(inner_unesc, local_checks)
-        replacement = (
-            repaired
-            if repaired is not None
-            else pptx_soft_strip_literal_replacement(
-                inner_unesc, dont_know=DONT_KNOW_NARRATIVE
-            )
+        if repaired is not None:
+            return _escape(quote, repaired)
+        if _pptx_is_narrative_literal(inner_unesc):
+            failed = [c.claim.stated for c in local_checks if c.status != "pass"]
+            stripped = pptx_soft_strip_failed_claims_in_literal(inner_unesc, failed)
+            return _escape(quote, stripped)
+        replacement = pptx_soft_strip_literal_replacement(
+            inner_unesc, dont_know=DONT_KNOW_NARRATIVE
         )
-        escaped = (
-            replacement.replace("\\", "\\\\")
-            .replace(quote, f"\\{quote}")
-            .replace("\n", "\\n")
-        )
-        return f"{quote}{escaped}{quote}"
+        return _escape(quote, replacement)
 
     rewritten = _JS_STRING_RE.sub(_replace, script or "")
     return rewritten, VerificationResult(checks=all_checks)
@@ -1483,14 +1517,21 @@ def apply_fail_closed_to_bullet_list(
     *,
     policy: VerifyPolicy = "strict",
 ) -> tuple[list[str], VerificationResult]:
-    """Per-bullet numeric policy. ``interactive`` keeps bullets (warn upstream)."""
+    """Per-bullet numeric policy.
+
+    ``strict`` replaces failed bullets with don't-know.
+    ``interactive`` surgically redacts unmatched $/%%/Nx and keeps surrounding prose.
+    """
     all_checks: list[ClaimCheck] = []
     cleaned: list[str] = []
     for bullet in bullets:
         local = verify_text_against_evidence(bullet, evidence)
         all_checks.extend(local.checks)
-        if local.ok or policy == "interactive":
+        if local.ok:
             cleaned.append(bullet)
+        elif policy == "interactive":
+            failed = [c.claim.stated for c in local.checks if c.status != "pass"]
+            cleaned.append(pptx_soft_strip_failed_claims_in_literal(bullet, failed))
         else:
             cleaned.append(DONT_KNOW_NARRATIVE)
     return cleaned, VerificationResult(checks=all_checks)

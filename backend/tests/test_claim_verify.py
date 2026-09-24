@@ -210,9 +210,9 @@ def test_generate_commentary_embeds_evidence_and_keeps_numbers_interactive() -> 
     out = generate_commentary(inputs, fake)
     assert "EVIDENCE PACKAGE" in fake.calls[0]["user"]
     assert "110,000" in out.executive_summary.narrative
-    # Interactive: unmatched $ soft-warns — section is not replaced with don't-know.
+    # Interactive: unmatched $ surgically redacted — section is not replaced with don't-know.
     assert out.revenue_commentary.narrative != DONT_KNOW_NARRATIVE
-    assert "888,000,000" in out.revenue_commentary.narrative
+    assert "888,000,000" not in out.revenue_commentary.narrative
 
 
 def test_interactive_numeric_policy_keeps_text_strict_nukes() -> None:
@@ -222,11 +222,13 @@ def test_interactive_numeric_policy_keeps_text_strict_nukes() -> None:
     text = "Phantom ARR hit $99,000,000."
     bad = verify_text_against_evidence(text, evidence)
     assert not bad.ok
-    assert fail_closed_text(text, bad, policy="interactive") == text
+    interactive = fail_closed_text(text, bad, policy="interactive")
+    assert "$99,000,000" not in interactive
+    assert "Phantom ARR hit" in interactive
     assert fail_closed_text(text, bad, policy="strict") == DONT_KNOW_NARRATIVE
 
 
-def test_interactive_bullet_list_keeps_unmatched_money() -> None:
+def test_interactive_bullet_list_strips_unmatched_money() -> None:
     from app.services.commentary.claim_verify import apply_fail_closed_to_bullet_list
 
     evidence = {"slide.metrics.arr": Decimal("110000")}
@@ -240,7 +242,8 @@ def test_interactive_bullet_list_keeps_unmatched_money() -> None:
     )
     assert not result.ok
     assert "110,000" in bullets[0]
-    assert "888,000,000" in bullets[1]
+    assert "888,000,000" not in bullets[1]
+    assert "Phantom bookings hit" in bullets[1]
 
 
 def test_variance_tieout_fail_closed_on_mismatch() -> None:
@@ -303,14 +306,14 @@ def test_pptx_script_soft_strips_unmatched_money_without_hard_block() -> None:
     rewritten, result = apply_fail_closed_claims_to_pptx_script(mixed, evidence)
     assert not result.ok
     assert "86.1" in rewritten or "86.1M" in rewritten
-    # Short KPI/table cells wipe to em dash; narrative/takeaways soft-warn (keep $).
+    # Short KPI/table cells wipe to em dash; narratives surgically redact invents.
     assert f'"{PPTX_SOFT_STRIP_CELL}"' in rewritten
     assert 'slide.addText("$99,000,000")' not in rewritten
-    assert "ARR exploded to an unverified $99,000,000 this month vs plan." in rewritten
-    assert "1. Cash hit $99,000,000 while ARR closed at $86.1M on plan." in rewritten
-    assert "Beat budget by $1.2M" in rewritten  # short takeaway soft-warn
+    assert "$99,000,000" not in rewritten
+    assert "ARR exploded to an unverified" in rewritten
+    assert "1. Cash hit" in rewritten and "while ARR closed at $86.1M on plan." in rewritten
+    assert "Beat budget by" in rewritten and "$1.2M" not in rewritten
     assert "I don't know" not in rewritten
-    # Soft-warn path never raises — Prompt 5 export continues.
     assert "failed claim" in result.summary(max_failures=8)
 
 
@@ -334,7 +337,7 @@ def test_prompt5_verify_soft_strips_and_exports() -> None:
             }
         },
     }
-    # Narrative soft-warn keeps unmatched $ / drivers; short KPI cell soft-strips.
+    # Narrative invents surgically redacted; short KPI cell soft-strips.
     script = (
         'slide.addText("ARR closed at $86,100,000 (deck.arr) driven by expansion.");'
         'slide.addText("Cash hit $99,000,000 due to three enterprise upsells.");'
@@ -344,13 +347,13 @@ def test_prompt5_verify_soft_strips_and_exports() -> None:
     out = _verify_prompt5_script_or_raise(script, payload)
     assert isinstance(out, str)
     assert len(out) > 20
-    assert "Cash hit $99,000,000 due to three enterprise upsells." in out
+    # Invented $99M is gone (claim strip and/or attribution sentence strip).
+    assert "$99,000,000" not in out
     assert "$86,100,000" in out
     assert "verifiable _sources citation" not in out
     assert "I don't know" not in out
     assert 'slide.addText("—")' in out or "slide.addText('—')" in out
-    # Lone invented KPI cell was stripped; narrative sentence still has $99M.
-    assert out.count("$99,000,000") == 1
+    assert out.count("$99,000,000") == 0
 
 
 def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:
@@ -405,7 +408,7 @@ def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:
         for s in (pkg.get("_sources") or {}).values()
     )
 
-    # Narrative soft-warn keeps invented dollars; forecast-in-package keeps; export continues.
+    # Narrative invents surgically redacted; forecast-in-package keeps; export continues.
     script = (
         'slide.addText("July ARR outlook $88.2M (story.forecast.ending_arr_outlook.2026-07).");'
         'slide.addText("Invented cash spike to $99,000,000.");'
@@ -413,7 +416,8 @@ def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:
     )
     out = _verify_prompt5_script_or_raise(script, payload)
     assert "$88.2M" in out or "88.2" in out
-    assert "Invented cash spike to $99,000,000." in out
+    assert "Invented cash spike to" in out
+    assert "$99,000,000" not in out
     assert 'slide.addText("—")' in out or "slide.addText('—')" in out
     assert "I don't know" not in out
 

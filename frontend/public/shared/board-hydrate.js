@@ -175,7 +175,7 @@
       global.SMPLBoardLive.updateCopilotContext(data);
     }
 
-    refreshExecCommentaryFromLiveMetrics();
+    refreshAllLiveCommentariesFromMetrics();
   }
 
   function smplBoardRefreshView() {
@@ -482,19 +482,197 @@
     );
   }
 
+  function boardDecArrM() {
+    try {
+      if (global.SMPLPipeline && typeof global.SMPLPipeline.computeArrSeries === "function") {
+        var periods = [];
+        var y = (boardActiveCloseMonth() || "2026-06").slice(0, 4);
+        for (var i = 1; i <= 12; i++) periods.push(y + "-" + String(i).padStart(2, "0"));
+        var r = global.SMPLPipeline.computeArrSeries(periods, boardActiveCloseMonth());
+        if (r && r.decEop != null) return r.decEop / 1e6;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function buildLiveArrCommentary() {
+    var m = boardJunMetrics();
+    var drivers = boardExecDrivers();
+    var closeLbl = global.CLOSE_LABEL || "Close";
+    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : 0;
+    var decArr = boardDecArrM();
+    var budDec = 96.1;
+    var parts = [
+      closeLbl +
+        " waterfall end ARR " +
+        fKpiM(m.arrAct) +
+        " (" +
+        fKpiVarM(arrVar) +
+        " vs bud), net new " +
+        fKpiM(drivers.nnAct) +
+        " (bud " +
+        fKpiM(drivers.nnBud) +
+        ").",
+    ];
+    drivers.drivers.forEach(function (d) {
+      if (Math.abs(d.val) < 0.01) return;
+      parts.push(d.label + " " + fKpiVarM(d.val) + " (bud " + fKpiM(d.bud) + ").");
+    });
+    if (decArr != null) {
+      var gap = decArr - budDec;
+      parts.push(
+        "H2 ARR forecast " +
+          fKpiM(decArr) +
+          " vs $" +
+          budDec.toFixed(1) +
+          "M budget (" +
+          fKpiVarM(gap) +
+          ").",
+      );
+    }
+    if (m.nrr != null) parts.push("NRR " + (m.nrr * 100).toFixed(1) + "%.");
+    return parts.join(" ");
+  }
+
+  function buildLiveCashCommentary() {
+    var m = boardJunMetrics();
+    var closeLbl = global.CLOSE_LABEL || "Close";
+    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : 0;
+    var idx = boardActualPeriods().length - 1;
+    var coll = global.COLL && global.COLL[idx] != null ? global.COLL[idx] : null;
+    var parts = [
+      closeLbl +
+        " ending cash " +
+        fKpiM(m.cashAct) +
+        " (" +
+        fKpiVarM(cashVar) +
+        " vs bud).",
+    ];
+    if (coll != null) parts.push("Collections " + fKpiM(coll) + ".");
+    return parts.join(" ");
+  }
+
+  function buildLiveRevenueCommentary() {
+    var m = boardJunMetrics();
+    var closeLbl = global.CLOSE_LABEL || "Close";
+    var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : 0;
+    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
+    var gm =
+      m.gmAct != null
+        ? (m.gmAct > 1 ? m.gmAct : m.gmAct * 100).toFixed(1) + "%"
+        : null;
+    var parts = [
+      closeLbl +
+        " revenue " +
+        fKpiM(m.revAct) +
+        " (" +
+        fKpiVarM(revVar) +
+        " vs bud), EBITDA " +
+        fKpiM(m.ebitdaAct) +
+        " (" +
+        fKpiVarM(ebitdaVar) +
+        " vs bud).",
+    ];
+    if (gm) parts.push("Gross margin " + gm + ".");
+    return parts.join(" ");
+  }
+
+  function buildLiveHeadcountCommentary() {
+    var closeHc =
+      typeof global.boardCloseHc === "function"
+        ? global.boardCloseHc()
+        : global.HC_TOTAL_JUN;
+    var arrPerEmp =
+      global.ARR_PER_EMP && global.ARR_PER_EMP.length
+        ? global.ARR_PER_EMP[global.ARR_PER_EMP.length - 1]
+        : null;
+    var arrPerEmpJan =
+      global.ARR_PER_EMP && global.ARR_PER_EMP.length ? global.ARR_PER_EMP[0] : null;
+    var closeLbl = global.CLOSE_LABEL || "Close";
+    var parts = [
+      closeLbl +
+        " headcount " +
+        (closeHc != null ? closeHc : "—") +
+        " (bud " +
+        (global.HC_TOTAL_BUD != null ? global.HC_TOTAL_BUD : "—") +
+        ").",
+    ];
+    if (arrPerEmp != null) {
+      parts.push(
+        "ARR per employee $" +
+          arrPerEmp +
+          "K" +
+          (arrPerEmpJan != null ? " (Jan $" + arrPerEmpJan + "K)" : "") +
+          ".",
+      );
+    }
+    return parts.join(" ");
+  }
+
+  function buildLiveRisksCommentary() {
+    var m = boardJunMetrics();
+    var drivers = boardExecDrivers();
+    var closeLbl = global.CLOSE_LABEL || "Close";
+    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : 0;
+    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
+    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : 0;
+    return (
+      closeLbl +
+      " confirms ARR " +
+      fKpiVarM(arrVar) +
+      " vs bud, EBITDA " +
+      fKpiVarM(ebitdaVar) +
+      ", cash " +
+      fKpiVarM(cashVar) +
+      ", net new " +
+      fKpiM(drivers.nnAct) +
+      ". Board priorities should track material unfavorable variances and H2 pipeline coverage against the live ARR forecast."
+    );
+  }
+
+  var LIVE_COMMENTARY_BUILDERS = {
+    exec: buildLiveExecCommentary,
+    arr: buildLiveArrCommentary,
+    revenue: buildLiveRevenueCommentary,
+    cash: buildLiveCashCommentary,
+    headcount: buildLiveHeadcountCommentary,
+    risks: buildLiveRisksCommentary,
+  };
+
   function buildDemoCommentary(slideKey, targetId) {
-    if (slideKey === "exec" && hasLiveBoardMetrics()) {
-      return buildLiveExecCommentary();
+    var builder = LIVE_COMMENTARY_BUILDERS[slideKey];
+    if (builder && hasLiveBoardMetrics()) {
+      return builder();
     }
     return readStaticCommentary(slideKey, targetId);
   }
 
+  function refreshLiveCommentaryFromMetrics(slideKey, targetId) {
+    if (global.aiCache && global.aiCache[slideKey]) return;
+    var builder = LIVE_COMMENTARY_BUILDERS[slideKey];
+    if (!builder || !hasLiveBoardMetrics()) return;
+    var el = document.getElementById(targetId);
+    if (!el) return;
+    var txt = el.querySelector(".commentary-text");
+    if (txt) txt.textContent = builder();
+  }
+
   function refreshExecCommentaryFromLiveMetrics() {
-    if (global.aiCache && global.aiCache.exec) return;
-    var execComm = document.getElementById("execComm");
-    if (!execComm || !hasLiveBoardMetrics()) return;
-    var txt = execComm.querySelector(".commentary-text");
-    if (txt) txt.textContent = buildLiveExecCommentary();
+    refreshLiveCommentaryFromMetrics("exec", "execComm");
+  }
+
+  function refreshAllLiveCommentariesFromMetrics() {
+    var map = {
+      exec: "execComm",
+      arr: "arrComm",
+      revenue: "revComm",
+      cash: "cashComm",
+      headcount: "hcComm",
+      risks: "riskComm",
+    };
+    Object.keys(map).forEach(function (key) {
+      refreshLiveCommentaryFromMetrics(key, map[key]);
+    });
   }
 
   function shouldFallbackToDemo(status) {
@@ -1342,6 +1520,7 @@
     updateCopilotContext: updateCopilotWelcome,
     boardJunMetrics: boardJunMetrics,
     refreshExecCommentaryFromLiveMetrics: refreshExecCommentaryFromLiveMetrics,
+    refreshAllLiveCommentariesFromMetrics: refreshAllLiveCommentariesFromMetrics,
     openBoardExport: openLiveBoardExport,
   };
 

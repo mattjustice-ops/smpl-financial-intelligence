@@ -365,10 +365,7 @@ def test_forward_looking_requires_forecast_pipeline_grounding() -> None:
 
 
 def test_pptx_script_attribution_soft_warns_narrative_and_hard_blocks_when_fully_failed() -> None:
-    """Narrative soft-warn keeps prose; raise_if still hard-blocks when all fail.
-
-    Prompt 5 export no longer calls raise_if (prefers soft-warn + export).
-    """
+    """Narrative invents are surgically stripped; raise_if hard-blocks when all fail."""
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
         raise_if_pptx_attribution_fully_unverifiable,
@@ -390,7 +387,7 @@ def test_pptx_script_attribution_soft_warns_narrative_and_hard_blocks_when_fully
     rewritten, result = apply_fail_closed_attribution_to_pptx_script(mixed, allowlist)
     assert not result.ok
     assert "expansion" in rewritten.lower()
-    assert "three enterprise upsells" in rewritten.lower()
+    assert "three enterprise upsells" not in rewritten.lower()
     assert "I don't know" not in rewritten
     # Partial failures → do not hard-block
     raise_if_pptx_attribution_fully_unverifiable(result)
@@ -401,8 +398,7 @@ def test_pptx_script_attribution_soft_warns_narrative_and_hard_blocks_when_fully
     kept, bad_result = apply_fail_closed_attribution_to_pptx_script(bad_only, allowlist)
     assert not bad_result.ok
     assert all(c.status != "pass" for c in bad_result.checks)
-    assert "enterprise upsells" in kept.lower()
-    assert "I don't know" not in kept
+    assert "enterprise upsells" not in kept.lower()
     with pytest.raises(CommentaryIntegrityError, match="failed attribution") as exc_info:
         raise_if_pptx_attribution_fully_unverifiable(bad_result)
     assert "enterprise upsells" in str(exc_info.value).lower()

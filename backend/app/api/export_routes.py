@@ -169,11 +169,19 @@ def _load_board_export_enrichment(
 
 
 def _check_validation(bundle: ReportingBundle, block_on_failure: bool) -> None:
-    if not block_on_failure:
-        return
     from app.services.reporting.validation_gate import validation_blocked
 
-    if validation_blocked(bundle.validation, strict=True):
+    blocked = validation_blocked(bundle.validation, strict=True)
+    if blocked and not block_on_failure:
+        # Advisory only — used when caller explicitly opts out of the hard gate
+        # (internal/demo). Board/MDA customer packs default block_on_failure=True.
+        logger.warning(
+            "Export proceeding with FAIL/WARN validation (advisory override). "
+            "status=%s",
+            getattr(bundle.validation, "status", None),
+        )
+        return
+    if blocked and block_on_failure:
         raise HTTPException(
             status_code=409,
             detail={
@@ -551,7 +559,10 @@ def export_mda_package(
     quarter: str | None = Query(None),
     fiscal_year: str | None = Query(None),
     as_of_period: str | None = Query(None),
-    block_on_failure: bool = Query(False),
+    block_on_failure: bool = Query(
+        True,
+        description="Hard-block download when Client A–F validation FAIL/WARN (customer pack default).",
+    ),
     include_ai_commentary: bool = Query(
         True,
         description="Generate Claude Prompt 2 variance commentary when API key is set",
@@ -879,7 +890,10 @@ def start_mda_package_job(
     quarter: str | None = Query(None),
     fiscal_year: str | None = Query(None),
     as_of_period: str | None = Query(None),
-    block_on_failure: bool = Query(False),
+    block_on_failure: bool = Query(
+        True,
+        description="Hard-block when Client A–F validation FAIL/WARN (customer pack default).",
+    ),
     include_ai_commentary: bool = Query(True),
     waterfall_type: str | None = Query(None),
     marketing_channel: str | None = Query(None),
@@ -951,7 +965,10 @@ def start_mda_deck_job(
     quarter: str | None = Query(None),
     fiscal_year: str | None = Query(None),
     as_of_period: str | None = Query(None),
-    block_on_failure: bool = Query(False),
+    block_on_failure: bool = Query(
+        True,
+        description="Hard-block when Client A–F validation FAIL/WARN (customer pack default).",
+    ),
     include_ai_commentary: bool = Query(True),
     include_commentary: bool = Query(True),
     include_appendix: bool = Query(True),
@@ -1233,6 +1250,7 @@ def _board_pptx_response(
         headers = {
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Export-Validation": validation_status,
+            "X-Export-Validation-Gate": "hard-by-default",
             "X-Board-Package-Engine": "smpl-board-v2",
             "X-Board-PPTX-Source": pptx_source,
             "X-Board-AI-Commentary": "true" if use_ai_commentary else "false",
@@ -1386,7 +1404,10 @@ def export_board_presentation(
     quarter: str | None = Query(None),
     fiscal_year: str | None = Query(None),
     as_of_period: str | None = Query(None),
-    block_on_failure: bool = Query(False),
+    block_on_failure: bool = Query(
+        True,
+        description="Hard-block download when Client A–F validation FAIL/WARN (customer pack default).",
+    ),
     include_ai_commentary: bool = Query(
         True,
         description="Generate Claude Key Takeaways per slide (API spec prompts) when API key is set",
@@ -1462,7 +1483,10 @@ def export_mda_deck(
     quarter: str | None = Query(None),
     fiscal_year: str | None = Query(None),
     as_of_period: str | None = Query(None),
-    block_on_failure: bool = Query(False),
+    block_on_failure: bool = Query(
+        True,
+        description="Hard-block download when Client A–F validation FAIL/WARN (customer pack default).",
+    ),
     include_ai_commentary: bool = Query(
         True,
         description="Generate Claude slide commentary when API key is set",
