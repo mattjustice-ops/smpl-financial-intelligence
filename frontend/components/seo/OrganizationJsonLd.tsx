@@ -24,6 +24,8 @@ export function OrganizationJsonLd() {
     email: "mattjustice@smpl-ai.com",
     sameAs: [
       "https://www.linkedin.com/company/smpl-financial-intelligence",
+      "https://www.crunchbase.com/organization/smpl-ai",
+      "https://app.dealroom.co/companies/smpl_ai_1",
       ...(process.env.NEXT_PUBLIC_ORG_SAME_AS
         ? process.env.NEXT_PUBLIC_ORG_SAME_AS.split(",")
             .map((s) => s.trim())
