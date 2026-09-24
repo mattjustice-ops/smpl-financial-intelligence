@@ -7,7 +7,7 @@ import { sitePageUrl } from "@/lib/site";
 
 const title = "About SMPL.ai | Why we built financial intelligence for SaaS Finance";
 const description =
-  "SMPL.ai is the AI operating system for SaaS Finance teams. Founded by Matt Justice to give growing companies the financial intelligence of a world-class CFO organization without having to build one.";
+  "SMPL.ai brings world-class financial intelligence to every growing SaaS company—without having to build an entire CFO organization. Founded by Matt Justice.";
 const url = sitePageUrl("/about");
 
 export const metadata: Metadata = {
@@ -71,15 +71,15 @@ export default function AboutPage() {
             About SMPL.ai
           </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white md:text-5xl md:leading-[1.15]">
-            Every growing SaaS company should be able to operate with the
-            financial intelligence of a world-class CFO organization without
-            having to build one.
+            Bring world-class financial intelligence to every growing SaaS
+            company.
           </h1>
           <div className="mt-8 space-y-5 text-lg leading-relaxed text-slate-300">
             <p>
               Financial intelligence means knowing how the business is
               performing, what is driving the results, and what today&apos;s
-              decisions mean for growth, hiring, and cash.
+              decisions mean for growth, hiring, and cash—without having to
+              build an entire CFO organization.
             </p>
             <p>
               <strong className="font-semibold text-white">
@@ -101,43 +101,39 @@ export default function AboutPage() {
             Matt Justice, Founder &amp; CEO
           </h2>
           <p className="mt-2 text-base text-slate-400">
-            Portland, Oregon · SaaS Finance, corporate FP&amp;A, GTM, and revenue
-            and billings operations
+            Portland, Oregon · Corporate FP&amp;A, GTM Finance, and revenue and
+            billing operations
           </p>
           <div className="mt-8 space-y-5 text-base leading-relaxed text-slate-300 md:text-lg">
             <p>
-              I have spent my career inside SaaS Finance across corporate
-              FP&amp;A, GTM Finance, and revenue and billings operations. Across
-              those roles I worked the same problems growing Finance teams face
-              every month: reporting, budgeting, forecasting, SaaS revenue
-              metrics, cash and workforce planning, and connecting operational
-              activity to financial results.
+              Throughout my career in Finance, I&apos;ve seen how much work sits
+              between a business question and an answer leadership can use.
+              Reporting, forecasts, and operating plans depend on information
+              spread across systems. Bringing it together, reconciling it, and
+              keeping the models current can consume much of the team&apos;s
+              time.
             </p>
             <p>
-              I also worked directly with the systems and processes behind those
-              answers: spreadsheets, ERP, CRM, billing data, and planning
-              platforms. I led a team of three across revenue, billings, and
-              collections, and implemented automation that cut reporting
-              timelines by 95%. Earlier in my career I managed and forecasted a
-              $600 million capital budget and managed a billion-dollar trading
-              portfolio. That combination matters. I understand both the
-              questions leadership needs answered and the work required to
-              assemble reliable answers from systems that were never designed to
-              speak the same language.
+              I&apos;ve been responsible for that work across corporate
+              FP&amp;A, GTM Finance, and revenue and billing operations.
+              I&apos;ve prepared the reporting, built the forecasts, and
+              developed automation to make those processes faster. Those
+              experiences shaped my view of what Finance teams need from their
+              software: reliable numbers, connected plans, and more time to
+              understand what the results mean.
+            </p>
+            <p>That is why I built SMPL.ai.</p>
+            <p>
+              Growing SaaS companies face complex financial decisions long
+              before they have the resources for a large Finance organization. A
+              hiring decision affects cash. A change in retention affects
+              revenue and the operating plan. Leadership needs to understand
+              those connections while there is still time to act.
             </p>
             <p>
-              The pattern I kept seeing was simple and expensive. Finance teams
-              spend too much capacity collecting information across systems,
-              reconciling what does not match, maintaining models, and preparing
-              reporting before they can help leadership decide. The opportunity
-              I saw was to give growing teams more room to interpret
-              performance, evaluate decisions, and guide the business.
-            </p>
-            <p>
-              In 2026 I founded SMPL.ai to make the financial capabilities of a
-              world-class CFO organization accessible to growing SaaS companies,
-              without requiring them to assemble that entire organization
-              themselves.
+              I wanted to make that level of financial understanding more
+              accessible, with software that takes on more of the preparation
+              and gives Finance more capacity to guide the business.
             </p>
           </div>
         </section>
@@ -171,9 +167,9 @@ export default function AboutPage() {
               </h3>
               <p className="mt-3 text-base leading-relaxed text-slate-300">
                 Deterministic calculations produce the numbers. AI helps analyze
-                and explain results that Finance can validate. That boundary
-                matters when a board package, forecast, or variance narrative has
-                to stand up to scrutiny.
+                and explain validated financial results. That boundary matters
+                when a board package, forecast, or variance narrative has to
+                stand up to scrutiny.
               </p>
             </div>
             <div>

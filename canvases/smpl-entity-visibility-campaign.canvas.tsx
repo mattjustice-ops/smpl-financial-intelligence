@@ -163,7 +163,7 @@ const LONG_DESC =
   "SMPL.ai is a privately held software company based in Portland, Oregon. Founded in 2026 by Matt Justice, it builds SaaS FP&A and financial intelligence software for CFOs, FP&A teams, and executive leaders at growth-stage B2B software companies. The platform ingests data from systems such as CRM, ERP/general ledger, billing, and HRIS, then reconciles that data into a governed model of pipeline, bookings, ARR, recognized revenue, profitability, cash, and workforce. Capabilities include ARR waterfall reporting, management P&L, cash forecasting, scenario analysis, workforce planning, and board packages with driver-based commentary. SMPL.ai is not a replacement for ERP, CRM, or billing systems of record.";
 
 const FOUNDER =
-  "Matt Justice is founder and CEO of SMPL.ai (Jun 2026–Present). Based in Portland, Oregon. Background in SaaS Finance, corporate FP&A, GTM Finance, and revenue and billings operations. Earlier career: managed and forecasted a $600M capital budget and a billion-dollar trading portfolio.";
+  "Matt Justice is founder and CEO of SMPL.ai (Jun 2026–Present). Based in Portland, Oregon. Career in Finance across corporate FP&A, GTM Finance, and revenue and billing operations. Built SMPL so growing SaaS companies get world-class financial intelligence without building an entire CFO organization.";
 
 const TAGLINE = "SaaS FP&A software for trusted board reporting";
 
