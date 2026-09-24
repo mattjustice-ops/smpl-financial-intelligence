@@ -1,0 +1,22 @@
+{
+  "name": "smpl-explainer-video",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "still": "remotion still src/index.ts Scene1",
+    "render:scene1": "remotion render src/index.ts Scene1 out/scene1.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.489",
+    "@remotion/media-utils": "^4.0.489",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "remotion": "^4.0.489"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.8.3"
+  }
+}

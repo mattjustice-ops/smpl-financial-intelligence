@@ -145,7 +145,7 @@ flowchart LR
 | Freeze | COMPLETE pack with as-of; STALE labeled; no partial blobs |
 | Explain | Anthropic narrates evidence only; keys on Railway |
 | Post-LLM | claim / attribution / citation verify on wired paths |
-| Export | Optional `block_on_failure` → HTTP 409; export-time client A–F advisory |
+| Export | Board/MDA paths default `block_on_failure=true` → HTTP 409; `false` remains for internal/demo override; export-time client A–F advisory |
 
 ---
 
