@@ -77,6 +77,46 @@ def _cogs_acct_sum(
     return total
 
 
+def _gl_acct_contains(
+    gl: dict[tuple[str, str, str], Decimal],
+    periods: tuple[str, ...],
+    substring: str,
+    *,
+    department: str | None = "Revenue",
+) -> Decimal:
+    """Sum GL amounts whose account name contains ``substring`` (case-insensitive)."""
+    total = Decimal("0")
+    needle = substring.lower()
+    for (p, dept, ac), amt in gl.items():
+        if p not in periods:
+            continue
+        if department is not None and dept != department:
+            continue
+        if needle in (ac or "").lower():
+            total += abs(amt)
+    return total
+
+
+def _gl_subscription_revenue(gl: dict[tuple[str, str, str], Decimal], periods: tuple[str, ...]) -> Decimal:
+    v = _gl_dept_acct_sum(gl, periods, department="Revenue", account="Subscription Revenue")
+    if v:
+        return v
+    v = _gl_acct_contains(gl, periods, "subscription", department="Revenue")
+    if v:
+        return v
+    return _gl_acct_contains(gl, periods, "subscription", department=None)
+
+
+def _gl_services_revenue(gl: dict[tuple[str, str, str], Decimal], periods: tuple[str, ...]) -> Decimal:
+    v = _gl_dept_acct_sum(gl, periods, department="Revenue", account="Services Revenue")
+    if v:
+        return v
+    v = _gl_acct_contains(gl, periods, "service", department="Revenue")
+    if v:
+        return v
+    return _gl_acct_contains(gl, periods, "service", department=None)
+
+
 def _is_metric(
     income: dict[str, dict[str, Decimal]],
     periods: tuple[str, ...],
@@ -99,6 +139,7 @@ def _build_metric(
     amount_fn: Callable[[dict[tuple[str, str, str], Decimal], tuple[str, ...]], Decimal],
     is_key_fn: Callable[[dict[str, dict[str, Decimal]], tuple[str, ...]], Decimal] | None = None,
     is_percent: bool = False,
+    prefer_is: bool = False,
 ) -> MetricSlice:
     period = ctx.current_month
     ytd = ctx.ytd_periods
@@ -110,6 +151,10 @@ def _build_metric(
         *,
         fallback: dict[str, dict[str, Decimal]] | None = None,
     ) -> Decimal:
+        if prefer_is and is_key_fn and fallback is not None:
+            is_v = is_key_fn(fallback, periods)
+            if is_v != 0:
+                return is_v
         g = amount_fn(gl, periods)
         if g != 0:
             return g
@@ -229,17 +274,6 @@ def build_spec_pl_lines(
 ) -> list[PlLine]:
     lines: list[PlLine] = []
 
-    def rev_fn(gl: dict[tuple[str, str, str], Decimal], periods: tuple[str, ...]) -> Decimal:
-        return _gl_dept_acct_sum(gl, periods, department="Revenue", account="Subscription Revenue") or _is_metric(
-            outlook, periods, "revenue"
-        )
-
-    def sub_rev_fn(_gl: dict, periods: tuple[str, ...]) -> Decimal:
-        v = _is_metric(actual_is, periods, "services_revenue")
-        if v:
-            return v
-        return max(Decimal("0"), _is_metric(outlook, periods, "revenue") - rev_fn(gl_act, periods))
-
     def metric(
         line_id: str,
         label: str,
@@ -251,6 +285,7 @@ def build_spec_pl_lines(
         is_key_fn: Callable[[dict[str, dict[str, Decimal]], tuple[str, ...]], Decimal] | None = None,
         is_bold: bool = False,
         driver: str = "",
+        prefer_is: bool = False,
     ) -> PlLine:
         m = _build_metric(
             section_key=section_key,
@@ -264,6 +299,7 @@ def build_spec_pl_lines(
             forecast_is=forecast_is,
             amount_fn=amount_fn,
             is_key_fn=is_key_fn,
+            prefer_is=prefer_is,
         )
         return _pl_line(
             line_id,
@@ -277,20 +313,24 @@ def build_spec_pl_lines(
         )
 
     # --- Revenue ---
+    # Income Statement is SoT for subscription / services. GL is fallback only.
     lines.append(_pl_line("hdr_revenue", "REVENUE", "revenue", MetricSlice(), line_type="header"))
     sub_line = metric(
         "subscription_revenue",
         "Subscription Revenue",
         "subscription_revenue",
-        lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Revenue", account="Subscription Revenue"),
-        is_key_fn=lambda src, ps: _is_metric(src, ps, "revenue"),
+        _gl_subscription_revenue,
+        is_key_fn=lambda src, ps: _is_metric(src, ps, "subscription_revenue"),
+        prefer_is=True,
+        driver="income_statement",
     )
     svc_line = metric(
         "services_revenue",
         "Services Revenue",
         "services_revenue",
-        lambda _gl, ps: sub_rev_fn(_gl, ps),
+        _gl_services_revenue,
         is_key_fn=lambda src, ps: _is_metric(src, ps, "services_revenue"),
+        prefer_is=True,
         driver="income_statement",
     )
     rev_total_m = _build_metric(
@@ -303,9 +343,17 @@ def build_spec_pl_lines(
         budget=budget,
         actual_is=actual_is,
         forecast_is=forecast_is,
-        amount_fn=lambda gl, ps: rev_fn(gl, ps) + sub_rev_fn(gl, ps),
+        amount_fn=lambda gl, ps: _gl_subscription_revenue(gl, ps) + _gl_services_revenue(gl, ps),
         is_key_fn=lambda src, ps: _is_metric(src, ps, "revenue"),
+        prefer_is=True,
     )
+
+    def total_rev_fn(gl: dict[tuple[str, str, str], Decimal], ps: tuple[str, ...]) -> Decimal:
+        v = _gl_subscription_revenue(gl, ps) + _gl_services_revenue(gl, ps)
+        if v:
+            return v
+        return _is_metric(outlook, ps, "revenue")
+
     lines.extend(
         [
             sub_line,
@@ -371,7 +419,7 @@ def build_spec_pl_lines(
     lines.append(_pl_line("gross_profit", "Gross Profit", "gross_profit", gp_m, line_type="total", is_bold=True))
 
     def gp_num(_gl: dict[tuple[str, str, str], Decimal], ps: tuple[str, ...]) -> Decimal:
-        return rev_fn(_gl, ps) + sub_rev_fn(_gl, ps) - sum(
+        return total_rev_fn(_gl, ps) - sum(
             (_cogs_acct_sum(_gl, ps, ac) for ac in COGS_ACCOUNT_NAMES), start=Decimal("0")
         )
 
@@ -381,7 +429,7 @@ def build_spec_pl_lines(
             "Gross Margin %",
             "gross_margin_pct",
             gp_num,
-            lambda gl, ps: rev_fn(gl, ps) + sub_rev_fn(gl, ps),
+            total_rev_fn,
             ctx,
             gl_act,
             gl_bud,
@@ -434,7 +482,7 @@ def build_spec_pl_lines(
             "sm_pct_rev",
             lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Sales")
             + _gl_dept_acct_sum(gl, ps, department="Marketing"),
-            lambda gl, ps: rev_fn(gl, ps) + sub_rev_fn(gl, ps),
+            lambda gl, ps: total_rev_fn(gl, ps),
             ctx,
             gl_act,
             gl_bud,
@@ -481,7 +529,7 @@ def build_spec_pl_lines(
             "rd_pct_rev",
             lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Engineering")
             + _gl_dept_acct_sum(gl, ps, department="Product"),
-            lambda gl, ps: rev_fn(gl, ps) + sub_rev_fn(gl, ps),
+            lambda gl, ps: total_rev_fn(gl, ps),
             ctx,
             gl_act,
             gl_bud,
@@ -576,7 +624,7 @@ def build_spec_pl_lines(
             "OpEx % of Revenue",
             "opex_pct_rev",
             opex_num,
-            lambda gl, ps: rev_fn(gl, ps) + sub_rev_fn(gl, ps),
+            lambda gl, ps: total_rev_fn(gl, ps),
             ctx,
             gl_act,
             gl_bud,
@@ -602,7 +650,7 @@ def build_spec_pl_lines(
             "EBITDA Margin %",
             "ebitda_margin_pct",
             lambda gl, ps: gp_num(gl, ps) - opex_num(gl, ps),
-            lambda gl, ps: rev_fn(gl, ps) + sub_rev_fn(gl, ps),
+            lambda gl, ps: total_rev_fn(gl, ps),
             ctx,
             gl_act,
             gl_bud,
