@@ -1,5 +1,7 @@
 /**
  * Headless check: forecast engine levers must change Dec cash / ARR / R&D.
+ * Drives fcArr/fcCost/fcHc state (not unmounted DOM inputs) and markScenarioDirty,
+ * matching Sensitivity / sidebar SoT after the lever-sidebar move.
  * Run: node frontend/scripts/verify-forecast-levers.mjs
  */
 import { readFileSync } from "fs";
@@ -56,7 +58,7 @@ function fakeEl(id) {
   };
   const el = {
     id,
-    value: sandbox._levers?.[id] ?? defaults[id] ?? "100",
+    value: defaults[id] ?? "100",
     textContent: "",
     innerHTML: "",
     style: {},
@@ -70,7 +72,7 @@ function fakeEl(id) {
   };
   Object.defineProperty(el, "value", {
     get() {
-      return sandbox._levers?.[id] ?? defaults[id] ?? el._value ?? "100";
+      return el._value ?? defaults[id] ?? "100";
     },
     set(v) {
       el._value = String(v);
@@ -96,13 +98,13 @@ const sandbox = {
   SMPL_LIVE_OUTLOOK: false,
   SMPLPipeline: undefined,
   CLOSE_MONTH: undefined,
-  _levers: {},
   setTimeout: (fn) => (typeof fn === "function" ? fn() : 0),
   clearTimeout: () => {},
   destroyAll: () => {},
   curTab: "overview",
   reqActive: {},
   requestAnimationFrame: (fn) => (typeof fn === "function" ? fn() : 0),
+  refresh: () => {},
 };
 
 sandbox.window = sandbox;
@@ -120,25 +122,38 @@ try {
 vm.runInContext(
   engineCode +
     `\n;Object.assign(this, {
-  compute, getLevers, getResults, getDisplayCFS, invalidateCfsChain, buildCFSChain,
-  HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl
+  compute, getLevers, getResults, getDisplayCFS, invalidateCfsChain, markScenarioDirty, buildCFSChain,
+  HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl,
+  fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromOpenReqs
 });\n`,
   sandbox,
 );
 
 const {
   compute,
-  getLevers,
   getResults,
   getDisplayCFS,
-  invalidateCfsChain,
+  markScenarioDirty,
   FC_P,
   ALL_P,
   SRC,
+  fcArrState,
+  fcCostState,
+  fcHcState,
+  ensureFcHcState,
+  seedFcHcFromOpenReqs,
 } = sandbox;
 
 if (typeof compute !== "function" || typeof getResults !== "function" || !ALL_P) {
   console.error("FAIL: forecast compute/getResults/ALL_P not available after extract");
+  process.exit(1);
+}
+if (!fcArrState || !fcCostState || typeof markScenarioDirty !== "function") {
+  console.error("FAIL: forecast lever state / markScenarioDirty not available after extract");
+  process.exit(1);
+}
+if (!fcHcState || typeof ensureFcHcState !== "function" || typeof seedFcHcFromOpenReqs !== "function") {
+  console.error("FAIL: forecast HC state helpers not available after extract");
   process.exit(1);
 }
 
@@ -148,48 +163,77 @@ if (SRC && SRC.open_reqs) {
   });
 }
 
-function syncLeverDom() {
-  // getLevers reads input values via getElementById — keep _levers authoritative.
-  for (const [id, el] of elStore.entries()) {
-    if (sandbox._levers[id] != null) el._value = String(sandbox._levers[id]);
+/** Levers live in fcArr/fcCost/fcHc state (sidebar DOM may be unmounted); bust results cache. */
+function applyScenario(mut) {
+  mut();
+  markScenarioDirty();
+}
+
+function resetLeversAndHires() {
+  fcArrState.nb = 100;
+  fcArrState.exp = 100;
+  fcArrState.churn = 100;
+  fcArrState.ren = 0;
+  fcCostState.cogs = 29;
+  fcCostState.sm = 34;
+  fcCostState.rd = 16;
+  fcCostState.ga = 11;
+  if (SRC && SRC.open_reqs) {
+    SRC.open_reqs.forEach((r) => {
+      sandbox.reqActive[r.id] = true;
+    });
   }
+  // Force open-req → HC reseed so prior hire edits / req toggles do not leak.
+  fcHcState.hires = null;
+  seedFcHcFromOpenReqs(true);
 }
 
 function decCash() {
-  syncLeverDom();
-  if (typeof invalidateCfsChain === "function") invalidateCfsChain();
   const dec = ALL_P[11];
   const cfs = getDisplayCFS(dec);
   return cfs?.end_cash ?? null;
 }
 
 function decArr() {
-  syncLeverDom();
   const res = getResults();
   const dec = FC_P[FC_P.length - 1];
   return res[dec]?.arr?.arr_eop ?? null;
 }
 
 function julRd() {
-  syncLeverDom();
   const res = getResults();
   return res["2026-07"]?.is?.rd ?? null;
 }
 
+resetLeversAndHires();
+markScenarioDirty();
 const base = {
   cash: decCash(),
   arr: decArr(),
   rd: julRd(),
 };
 
-sandbox._levers["l-nb"] = "150";
+applyScenario(() => {
+  fcArrState.nb = 150;
+});
 const nb = { cash: decCash(), arr: decArr(), rd: julRd() };
 
-sandbox._levers = { "l-rd": "25" };
+// OpEx IS is dept/HC SoT (resolveFcPlOpex) — cost-% rd no longer drives Jul R&D.
+applyScenario(() => {
+  resetLeversAndHires();
+  ensureFcHcState();
+  if (!fcHcState.hires["2026-07"]) fcHcState.hires["2026-07"] = {};
+  fcHcState.hires["2026-07"].rd = (fcHcState.hires["2026-07"].rd || 0) + 8;
+});
 const rd = { cash: decCash(), arr: decArr(), rd: julRd() };
 
-sandbox._levers = {};
-if (sandbox.reqActive) sandbox.reqActive["FREQ-001"] = false;
+// FREQ-001 starts in close month (skipped by HC seed); use Jul R&D open req instead.
+applyScenario(() => {
+  resetLeversAndHires();
+  sandbox.reqActive["FREQ-007"] = false;
+  fcHcState.hires = null;
+  seedFcHcFromOpenReqs(true);
+});
 const hc = { cash: decCash(), arr: decArr(), rd: julRd() };
 
 function fmt(n) {
@@ -200,15 +244,15 @@ function fmt(n) {
 const checks = [
   ["NB 150% changes Dec ARR", nb.arr !== base.arr],
   ["NB 150% changes Dec cash", nb.cash !== base.cash],
-  ["R&D 25% changes Jul R&D line", rd.rd !== base.rd],
-  ["R&D 25% changes Dec cash", rd.cash !== base.cash],
-  ["FREQ-001 off changes Dec cash", hc.cash !== base.cash],
+  ["HC +8 Jul R&D hires changes Jul R&D line", rd.rd !== base.rd],
+  ["HC +8 Jul R&D hires changes Dec cash", rd.cash !== base.cash],
+  ["FREQ-007 off changes Dec cash", hc.cash !== base.cash],
 ];
 
 console.log("Baseline Dec cash:", fmt(base.cash), "Dec ARR:", fmt(base.arr), "Jul R&D:", fmt(base.rd));
 console.log("NB 150%     Dec cash:", fmt(nb.cash), "Dec ARR:", fmt(nb.arr));
-console.log("R&D 25%     Dec cash:", fmt(rd.cash), "Jul R&D:", fmt(rd.rd));
-console.log("HC toggle   Dec cash:", fmt(hc.cash));
+console.log("HC R&D+8    Dec cash:", fmt(rd.cash), "Jul R&D:", fmt(rd.rd));
+console.log("FREQ-007 off Dec cash:", fmt(hc.cash));
 
 let failed = 0;
 for (const [label, ok] of checks) {
