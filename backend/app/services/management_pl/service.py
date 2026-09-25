@@ -119,7 +119,6 @@ def _income_maps_from_gl(
             row.get("sales_and_marketing", Decimal("0"))
             + row.get("research_and_development", Decimal("0"))
             + row.get("general_and_administrative", Decimal("0"))
-            + row.get("customer_success", Decimal("0"))
         )
         row["gross_profit"] = rev - cogs
         row["total_opex"] = opex
@@ -139,17 +138,53 @@ def _ensure_revenue_split(row: dict[str, Decimal]) -> None:
 
 
 def _ensure_derived_metrics(row: dict[str, Decimal]) -> None:
+    """Match Financial Statements Income Statement formulas (CS is not in OpEx)."""
     rev = row.get("revenue", Decimal("0"))
     cogs = row.get("cost_of_revenue", Decimal("0"))
     opex = (
         row.get("sales_and_marketing", Decimal("0"))
         + row.get("research_and_development", Decimal("0"))
         + row.get("general_and_administrative", Decimal("0"))
-        + row.get("customer_success", Decimal("0"))
     )
     row["gross_profit"] = rev - cogs
     row["total_opex"] = opex
     row["ebitda"] = row["gross_profit"] - opex
+
+
+# Income Statement is SoT for Management P&L actual/budget rollups. GL remains
+# the drilldown source for named accounts; these keys must match the FS IS.
+_IS_SOT_KEYS = (
+    "revenue",
+    "subscription_revenue",
+    "services_revenue",
+    "cost_of_revenue",
+    "sales_and_marketing",
+    "research_and_development",
+    "general_and_administrative",
+    "customer_success",
+    "gross_profit",
+    "total_opex",
+    "ebitda",
+    "depreciation_and_amortization",
+    "interest_expense",
+    "tax_expense",
+    "operating_income",
+    "net_income",
+)
+
+
+def _apply_income_statement_sot(row: dict[str, Decimal], is_row: dict[str, Decimal]) -> None:
+    """Overwrite rollup keys from the Income Statement when present for the period."""
+    if not is_row:
+        return
+    for key in _IS_SOT_KEYS:
+        if key in is_row:
+            row[key] = is_row[key]
+    _ensure_revenue_split(row)
+    # Recompute GP / OpEx / EBITDA from IS-aligned components when warehouse
+    # omitted derived columns (common on older CSVs).
+    if "gross_profit" not in is_row or "total_opex" not in is_row or "ebitda" not in is_row:
+        _ensure_derived_metrics(row)
 
 
 def _merge_gl_primary(
@@ -157,10 +192,11 @@ def _merge_gl_primary(
     gl_maps: dict[str, dict[str, Decimal]],
     periods: tuple[str, ...],
 ) -> dict[str, dict[str, Decimal]]:
-    """When GL has classified rows for a period, use the full GL roll-up; else income statement fallback.
+    """GL supplies period presence / drilldown shape; Income Statement wins rollups.
 
-    Subscription / services revenue prefer the income-statement split when present so
-    Management P&L stays aligned with the IS for the same org/period/scenario.
+    When GL has classified rows for a period, start from the GL roll-up then
+    overwrite SoT keys from the income statement so Management P&L actuals and
+    budget match the Financial Statements Income Statement.
     """
     merged: dict[str, dict[str, Decimal]] = {}
     for period in periods:
@@ -168,12 +204,7 @@ def _merge_gl_primary(
         is_row = is_maps.get(period, {})
         if _gl_period_has_data(gl_row):
             row = dict(gl_row)
-            for key in ("subscription_revenue", "services_revenue"):
-                is_v = is_row.get(key, Decimal("0"))
-                if is_v:
-                    row[key] = is_v
-            _ensure_revenue_split(row)
-            _ensure_derived_metrics(row)
+            _apply_income_statement_sot(row, is_row)
             merged[period] = row
         else:
             row = dict(is_row)
@@ -208,41 +239,27 @@ def _merge_gl_preferred(
     workforce_mode: bool = False,
     open_periods: set[str] | None = None,
 ) -> dict[str, dict[str, Decimal]]:
-    """Prefer GL detail per period when classified rows exist; fall back to income statement."""
+    """Start from Income Statement; fill missing GL-only detail without overriding IS SoT."""
     merged: dict[str, dict[str, Decimal]] = {p: dict(is_maps.get(p, {})) for p in periods}
-    opex_keys = (
-        "sales_and_marketing",
-        "research_and_development",
-        "general_and_administrative",
-        "customer_success",
-        "total_opex",
-        "ebitda",
-    )
     for period in periods:
         gl_row = gl_maps.get(period, {})
         if not _gl_period_has_data(gl_row):
+            row = merged.get(period, {})
+            if row:
+                _ensure_revenue_split(row)
+                _ensure_derived_metrics(row)
             continue
         row = merged.setdefault(period, {})
         skip_opex = workforce_mode and open_periods is not None and period in open_periods
-        for key in ("revenue", "cost_of_revenue"):
-            if gl_row.get(key, Decimal("0")) != 0:
-                row[key] = gl_row[key]
-        # Keep IS revenue split when present (Mgmt P&L must match Income Statement).
-        for key in ("subscription_revenue", "services_revenue"):
-            is_v = is_maps.get(period, {}).get(key, Decimal("0"))
-            gl_v = gl_row.get(key, Decimal("0"))
-            if is_v:
-                row[key] = is_v
-            elif gl_v and not row.get(key):
+        # Fill keys the IS warehouse does not carry; never clobber IS SoT rollups.
+        for key, gl_v in gl_row.items():
+            if key in _IS_SOT_KEYS:
+                continue
+            if gl_v != 0 and not row.get(key):
                 row[key] = gl_v
-        _ensure_revenue_split(row)
-        if not skip_opex:
-            for key in opex_keys:
-                if gl_row.get(key, Decimal("0")) != 0:
-                    row[key] = gl_row[key]
-            if gl_row.get("gross_profit", Decimal("0")) != 0:
-                row["gross_profit"] = gl_row["gross_profit"]
-        else:
+        _apply_income_statement_sot(row, is_maps.get(period, {}))
+        if skip_opex:
+            # Workforce overlay owns open-period OpEx; keep IS revenue/COGS/GP.
             rev = row.get("revenue", Decimal("0"))
             cogs = row.get("cost_of_revenue", Decimal("0"))
             row["gross_profit"] = rev - cogs
@@ -250,7 +267,6 @@ def _merge_gl_preferred(
                 row.get("sales_and_marketing", Decimal("0"))
                 + row.get("research_and_development", Decimal("0"))
                 + row.get("general_and_administrative", Decimal("0"))
-                + row.get("customer_success", Decimal("0"))
             )
             row["total_opex"] = opex
             row["ebitda"] = row["gross_profit"] - opex
@@ -324,7 +340,8 @@ def _load_income_maps(
             rd = row_value(raw, "research_and_development")
             ga = row_value(raw, "general_and_administrative")
             cs = row_value(raw, "customer_success") if "customer_success" in raw else Decimal("0")
-            opex = sm + rd + ga + cs
+            # Match Financial Statements ensure_income_formulas: OpEx = S&M + R&D + G&A.
+            opex = sm + rd + ga
             gp = rev - cogs
             row = out[period]
             row["revenue"] += rev
@@ -1038,10 +1055,7 @@ def _monthly_series(
         if stack_sm == 0 and stack_rd == 0 and stack_ga == 0:
             stack_sm = o.get("sales_and_marketing", Decimal("0"))
             stack_rd = o.get("research_and_development", Decimal("0"))
-            stack_ga = (
-                o.get("general_and_administrative", Decimal("0"))
-                + o.get("customer_success", Decimal("0"))
-            )
+            stack_ga = o.get("general_and_administrative", Decimal("0"))
         series.append(
             MonthlySeries(
                 period=p,
@@ -1504,8 +1518,9 @@ def build_management_pl_dashboard(
             gl_fcst=gl_fcst_agg,
             outlook=outlook,
             budget=budget,
-            actual_is=actual,
-            forecast_is=forecast,
+            # Pure warehouse IS maps so prefer_is rollups match Financial Statements.
+            actual_is=actual_is,
+            forecast_is=forecast_is,
         )
         dept_summary = [
             DepartmentSummaryRow(**row)  # type: ignore[arg-type]
@@ -1534,7 +1549,6 @@ def build_management_pl_dashboard(
             _fy_outlook_from_map(outlook, ctx, "sales_and_marketing")
             + _fy_outlook_from_map(outlook, ctx, "research_and_development")
             + _fy_outlook_from_map(outlook, ctx, "general_and_administrative")
-            + _fy_outlook_from_map(outlook, ctx, "customer_success")
         )
     gp_o = _fy_outlook_from_map(outlook, ctx, "gross_profit") or (rev_o - cogs_o)
     ebitda_o = _fy_outlook_from_map(outlook, ctx, "ebitda") or (gp_o - opex_o)
@@ -1554,13 +1568,11 @@ def build_management_pl_dashboard(
             _is_amount(outlook, kpi_periods, "sales_and_marketing")
             + _is_amount(outlook, kpi_periods, "research_and_development")
             + _is_amount(outlook, kpi_periods, "general_and_administrative")
-            + _is_amount(outlook, kpi_periods, "customer_success")
         )
     kpi_opex_b = _is_amount(budget, kpi_periods, "total_opex") or (
         _is_amount(budget, kpi_periods, "sales_and_marketing")
         + _is_amount(budget, kpi_periods, "research_and_development")
         + _is_amount(budget, kpi_periods, "general_and_administrative")
-        + _is_amount(budget, kpi_periods, "customer_success")
     )
     kpi_ebitda = _is_amount(outlook, kpi_periods, "ebitda") or (kpi_gp - kpi_opex)
     kpi_ebitda_b = _is_amount(budget, kpi_periods, "ebitda") or (kpi_gp_b - kpi_opex_b)
@@ -1629,10 +1641,7 @@ def build_management_pl_dashboard(
     if bridge_sm == 0 and bridge_rd == 0 and bridge_ga == 0:
         bridge_sm = kpi_sm
         bridge_rd = _is_amount(outlook, ctx.current_month, "research_and_development")
-        bridge_ga = (
-            _is_amount(outlook, ctx.current_month, "general_and_administrative")
-            + _is_amount(outlook, ctx.current_month, "customer_success")
-        )
+        bridge_ga = _is_amount(outlook, ctx.current_month, "general_and_administrative")
 
     outlook_label = (
         f"GL detail · {_period_scope_label(ctx, period_mode)} vs budget"
