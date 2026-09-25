@@ -60,10 +60,90 @@ def test_income_maps_from_gl_rollup() -> None:
     }
     maps = _income_maps_from_gl(gl, ("2026-01", "2026-02"))
     assert maps["2026-01"]["revenue"] == Decimal("1000")
+    assert maps["2026-01"]["subscription_revenue"] == Decimal("1000")
     assert maps["2026-01"]["cost_of_revenue"] == Decimal("200")
     assert maps["2026-01"]["sales_and_marketing"] == Decimal("300")
     assert maps["2026-01"]["gross_profit"] == Decimal("800")
     assert maps["2026-01"]["ebitda"] == Decimal("500")
+
+
+def test_income_maps_from_gl_splits_subscription_and_services() -> None:
+    gl = {
+        ("2026-06", "revenue", "Subscription Revenue", "4000 Subscription Revenue"): Decimal("7000000"),
+        ("2026-06", "revenue", "Services Revenue", "4100 Professional Services"): Decimal("350000"),
+    }
+    maps = _income_maps_from_gl(gl, ("2026-06",))
+    assert maps["2026-06"]["revenue"] == Decimal("7350000")
+    assert maps["2026-06"]["subscription_revenue"] == Decimal("7000000")
+    assert maps["2026-06"]["services_revenue"] == Decimal("350000")
+
+
+def test_merge_gl_primary_preserves_is_revenue_split() -> None:
+    is_maps = {
+        "2026-06": {
+            "revenue": Decimal("7350000"),
+            "subscription_revenue": Decimal("7000000"),
+            "services_revenue": Decimal("350000"),
+            "cost_of_revenue": Decimal("100"),
+        }
+    }
+    gl_maps = {
+        "2026-06": {
+            "revenue": Decimal("7350000"),
+            "cost_of_revenue": Decimal("2200000"),
+            "sales_and_marketing": Decimal("100"),
+            "research_and_development": Decimal("0"),
+            "general_and_administrative": Decimal("0"),
+            "customer_success": Decimal("0"),
+            "gross_profit": Decimal("5150000"),
+            "total_opex": Decimal("100"),
+            "ebitda": Decimal("5050000"),
+        }
+    }
+    merged = _merge_gl_primary(is_maps, gl_maps, ("2026-06",))
+    assert merged["2026-06"]["subscription_revenue"] == Decimal("7000000")
+    assert merged["2026-06"]["services_revenue"] == Decimal("350000")
+    assert merged["2026-06"]["revenue"] == Decimal("7350000")
+
+
+def test_spec_pl_lines_prefer_is_subscription_services() -> None:
+    from app.services.management_pl.period_engine import build_period_context
+    from app.services.management_pl.pl_builder import build_spec_pl_lines
+
+    ctx = build_period_context(fiscal_year=2026, as_of_period="2026-06", period_mode="cm")
+    outlook = {
+        "2026-06": {
+            "revenue": Decimal("7350000"),
+            "subscription_revenue": Decimal("7000000"),
+            "services_revenue": Decimal("350000"),
+        }
+    }
+    budget = {
+        "2026-06": {
+            "revenue": Decimal("7720000"),
+            "subscription_revenue": Decimal("7400000"),
+            "services_revenue": Decimal("320000"),
+        }
+    }
+    # GL wrongly names only total as subscription — must NOT override IS.
+    gl_act = {("2026-06", "Revenue", "Subscription Revenue"): Decimal("7350000")}
+    gl_bud = {("2026-06", "Revenue", "Subscription Revenue"): Decimal("7720000")}
+    lines = build_spec_pl_lines(
+        ctx=ctx,
+        gl_act=gl_act,
+        gl_bud=gl_bud,
+        gl_fcst={},
+        outlook=outlook,
+        budget=budget,
+        actual_is=outlook,
+        forecast_is={},
+    )
+    by_id = {ln.id: ln for ln in lines}
+    assert by_id["subscription_revenue"].metrics.actual == Decimal("7000000")
+    assert by_id["services_revenue"].metrics.actual == Decimal("350000")
+    assert by_id["total_revenue"].metrics.actual == Decimal("7350000")
+    assert by_id["subscription_revenue"].metrics.budget == Decimal("7400000")
+    assert by_id["services_revenue"].metrics.budget == Decimal("320000")
 
 
 def test_merge_gl_preferred_overrides_income_statement() -> None:

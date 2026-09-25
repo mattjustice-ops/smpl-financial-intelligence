@@ -96,7 +96,7 @@ def _income_maps_from_gl(
         "general_and_administrative": "general_and_administrative",
         "customer_success": "customer_success",
     }
-    for (period, sec, _ag, _ac), amt in gl.items():
+    for (period, sec, account_group, _ac), amt in gl.items():
         if period_filter is not None and period not in period_filter:
             continue
         key = section_to_key.get(sec)
@@ -104,9 +104,15 @@ def _income_maps_from_gl(
             continue
         if key == "revenue":
             out[period][key] += amt
+            ag = (account_group or "").lower()
+            if "service" in ag:
+                out[period]["services_revenue"] += amt
+            elif "subscription" in ag:
+                out[period]["subscription_revenue"] += amt
         else:
             out[period][key] += abs(amt)
     for period, row in out.items():
+        _ensure_revenue_split(row)
         rev = row.get("revenue", Decimal("0"))
         cogs = row.get("cost_of_revenue", Decimal("0"))
         opex = (
@@ -119,6 +125,17 @@ def _income_maps_from_gl(
         row["total_opex"] = opex
         row["ebitda"] = row["gross_profit"] - opex
     return {p: dict(v) for p, v in out.items()}
+
+
+def _ensure_revenue_split(row: dict[str, Decimal]) -> None:
+    """Fill missing subscription/services from total revenue when one side is present."""
+    rev = row.get("revenue", Decimal("0"))
+    sub = row.get("subscription_revenue", Decimal("0"))
+    svc = row.get("services_revenue", Decimal("0"))
+    if rev and svc and not sub:
+        row["subscription_revenue"] = rev - svc
+    elif rev and sub and not svc:
+        row["services_revenue"] = rev - sub
 
 
 def _ensure_derived_metrics(row: dict[str, Decimal]) -> None:
@@ -140,17 +157,28 @@ def _merge_gl_primary(
     gl_maps: dict[str, dict[str, Decimal]],
     periods: tuple[str, ...],
 ) -> dict[str, dict[str, Decimal]]:
-    """When GL has classified rows for a period, use the full GL roll-up; else income statement fallback."""
+    """When GL has classified rows for a period, use the full GL roll-up; else income statement fallback.
+
+    Subscription / services revenue prefer the income-statement split when present so
+    Management P&L stays aligned with the IS for the same org/period/scenario.
+    """
     merged: dict[str, dict[str, Decimal]] = {}
     for period in periods:
         gl_row = gl_maps.get(period, {})
+        is_row = is_maps.get(period, {})
         if _gl_period_has_data(gl_row):
             row = dict(gl_row)
+            for key in ("subscription_revenue", "services_revenue"):
+                is_v = is_row.get(key, Decimal("0"))
+                if is_v:
+                    row[key] = is_v
+            _ensure_revenue_split(row)
             _ensure_derived_metrics(row)
             merged[period] = row
         else:
-            row = dict(is_maps.get(period, {}))
+            row = dict(is_row)
             if row:
+                _ensure_revenue_split(row)
                 _ensure_derived_metrics(row)
             merged[period] = row
     return merged
@@ -199,6 +227,15 @@ def _merge_gl_preferred(
         for key in ("revenue", "cost_of_revenue"):
             if gl_row.get(key, Decimal("0")) != 0:
                 row[key] = gl_row[key]
+        # Keep IS revenue split when present (Mgmt P&L must match Income Statement).
+        for key in ("subscription_revenue", "services_revenue"):
+            is_v = is_maps.get(period, {}).get(key, Decimal("0"))
+            gl_v = gl_row.get(key, Decimal("0"))
+            if is_v:
+                row[key] = is_v
+            elif gl_v and not row.get(key):
+                row[key] = gl_v
+        _ensure_revenue_split(row)
         if not skip_opex:
             for key in opex_keys:
                 if gl_row.get(key, Decimal("0")) != 0:
@@ -304,7 +341,12 @@ def _load_income_maps(
             row["depreciation_and_amortization"] += row_value(raw, "depreciation_and_amortization")
             row["interest_expense"] += row_value(raw, "interest_expense")
             row["services_revenue"] += row_value(raw, "services_revenue")
-    return {p: dict(v) for p, v in out.items()}
+            if "subscription_revenue" in raw:
+                row["subscription_revenue"] += row_value(raw, "subscription_revenue")
+    result = {p: dict(v) for p, v in out.items()}
+    for row in result.values():
+        _ensure_revenue_split(row)
+    return result
 
 
 def _merge_outlook_maps(
