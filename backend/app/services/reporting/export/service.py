@@ -151,6 +151,7 @@ def build_pptx_mda_deck(
     freeze_context_as_of: str | None = None,
     freeze_status: str | None = None,
     freeze_stale: bool = False,
+    fail_closed: bool = True,
 ) -> tuple[bytes, str]:
     from app.services.reporting.export.board_export_service import build_mda_deck_pptx_bytes
 
@@ -167,4 +168,5 @@ def build_pptx_mda_deck(
         freeze_context_as_of=freeze_context_as_of,
         freeze_status=freeze_status,
         freeze_stale=freeze_stale,
+        fail_closed=fail_closed,
     )

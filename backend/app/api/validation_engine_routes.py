@@ -18,6 +18,7 @@ from app.services.validation_engine import (
     record_allow,
     revoke_allow,
     seed_demo_mapping_queue_if_empty,
+    sync_mapping_queue_from_gl_actuals,
     unmap_account,
     upsert_mapping_queue,
 )
@@ -54,6 +55,10 @@ def validation_status(
     organization_id: uuid.UUID = Query(...),
     as_of_period: str = Query(..., min_length=7, max_length=7),
     seed_demo_queue: bool = Query(default=False),
+    sync_from_gl: bool = Query(
+        default=True,
+        description="Merge unclassified gl_actuals into the mapping queue (ingest path).",
+    ),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     get_organization_or_404(db, organization_id)
@@ -80,7 +85,28 @@ def validation_status(
                     "note": "No freeze pack yet — run freeze before Monthly Align Allow.",
                 }
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if sync_from_gl:
+        try:
+            return sync_mapping_queue_from_gl_actuals(db, organization_id, as_of_period)
+        except ValueError as exc:
+            if str(exc) != "no_freeze_pack":
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
     return get_validation_status(db, organization_id, as_of_period)
+
+
+@validation_engine_router.post("/mapping/sync-from-gl")
+def validation_mapping_sync_from_gl(
+    organization_id: uuid.UUID = Query(...),
+    as_of_period: str = Query(..., min_length=7, max_length=7),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Explicit ingest sync: unclassified gl_actuals → mapping queue."""
+    get_organization_or_404(db, organization_id)
+    try:
+        return sync_mapping_queue_from_gl_actuals(db, organization_id, as_of_period)
+    except ValueError as exc:
+        status = 409 if str(exc) == "no_freeze_pack" else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @validation_engine_router.post("/allow")

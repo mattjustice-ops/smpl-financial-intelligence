@@ -72,8 +72,8 @@ Do not treat “second pass” as a human ritual before every send. SMPL posture
 
 | Check family | Where |
 |--------------|--------|
-| Numeric claim-verify | `claim_verify.py` — Prompt 2 strict; Prompt 5 soft-strip; Copilot interactive |
-| Attribution / drivers | `attribution_verify.py` |
+| Numeric claim-verify | `claim_verify.py` — Prompt 2 strict; Prompt 5 surgical $/%/Nx redact; Copilot interactive |
+| Attribution / drivers | `attribution_verify.py` — strips off-allowlist causal invent (same bar as $ invents) |
 | Citations (`_sources`) | `citation_verify.py` |
 | Close / export validation catalog | `ValidationCheck` + export validation gate |
 | Client advisory A–F tie-out | FE `runTieOut` — advisory on export; hard ID at import/close |

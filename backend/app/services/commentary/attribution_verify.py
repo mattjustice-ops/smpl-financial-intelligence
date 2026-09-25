@@ -1639,15 +1639,14 @@ def apply_fail_closed_attribution_to_pptx_script(
     script: str,
     allowlist: Sequence[AllowedDriver] | Mapping[str, Any] | None,
 ) -> tuple[str, AttributionVerificationResult]:
-    """Verify causal claims in PPTX JS literals; soft-strip metric cells only.
+    """Verify causal claims in PPTX JS literals; strip off-allowlist invents.
 
     Layout / chart array code outside strings is ignored. Key Takeaways /
-    commentary match interactive soft-warn (keep text, record failures). Short
-    KPI/table cells with failed attribution become ``—``. Prompt 5 exports the
-    (possibly rewritten) script; optional
-    ``raise_if_pptx_attribution_fully_unverifiable`` remains for strict callers.
+    commentary surgically remove sentences with failed attribution. Short
+    KPI/table cells with failed attribution become ``—``.
     """
     from app.services.commentary.claim_verify import (
+        PPTX_SOFT_STRIP_CELL,
         _JS_STRING_RE,
         _pptx_is_narrative_literal,
         pptx_soft_strip_literal_replacement,
@@ -1655,6 +1654,14 @@ def apply_fail_closed_attribution_to_pptx_script(
 
     drivers = normalize_allowlist(allowlist)
     all_checks: list[AttributionCheck] = []
+
+    def _escape(quote: str, replacement: str) -> str:
+        escaped = (
+            replacement.replace("\\", "\\\\")
+            .replace(quote, f"\\{quote}")
+            .replace("\n", "\\n")
+        )
+        return f"{quote}{escaped}{quote}"
 
     def _replace(match: re.Match[str]) -> str:
         quote = match.group(1)
@@ -1668,17 +1675,17 @@ def apply_fail_closed_attribution_to_pptx_script(
         )
         local = verify_text_attribution(inner_unesc, drivers)
         all_checks.extend(local.checks)
-        if local.ok or _pptx_is_narrative_literal(inner_unesc):
+        if local.ok:
             return raw
+        if _pptx_is_narrative_literal(inner_unesc):
+            stripped = strip_failed_attribution_sentences(
+                inner_unesc, local, empty_fallback=PPTX_SOFT_STRIP_CELL
+            )
+            return _escape(quote, stripped)
         replacement = pptx_soft_strip_literal_replacement(
             inner_unesc, dont_know=DONT_KNOW_ATTRIBUTION
         )
-        escaped = (
-            replacement.replace("\\", "\\\\")
-            .replace(quote, f"\\{quote}")
-            .replace("\n", "\\n")
-        )
-        return f"{quote}{escaped}{quote}"
+        return _escape(quote, replacement)
 
     rewritten = _JS_STRING_RE.sub(_replace, script or "")
     return rewritten, AttributionVerificationResult(

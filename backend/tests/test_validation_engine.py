@@ -139,3 +139,31 @@ def test_unmap_reopens_mapped_account() -> None:
 def test_management_lines_include_statements() -> None:
     assert "deferred_revenue" in ve.MANAGEMENT_LINES
     assert "arr_bridge" in ve.MANAGEMENT_LINES
+
+
+def test_gl_hint_and_needs_mapping_helpers() -> None:
+    assert (
+        ve._hint_management_line(
+            statement="income_statement",
+            category="Sales & Marketing",
+            account_name="Paid Search",
+        )
+        == "sm"
+    )
+    assert ve._gl_row_needs_mapping(
+        statement=None, category=None, account_name=None
+    )
+    assert not ve._gl_row_needs_mapping(
+        statement="income_statement",
+        category="revenue",
+        account_name="Subscription Revenue",
+    )
+
+
+def test_status_honesty_flags_ingest_wired() -> None:
+    org_id = uuid.uuid4()
+    blob = _blob()
+    db = _db_with_blob(blob)
+    status = ve.get_validation_status(db, org_id, "2026-06")
+    assert status["honesty"]["mapping_ingest_wired"] is True
+    assert status["mapping_queue_source"] == "empty_not_ingest_fed"

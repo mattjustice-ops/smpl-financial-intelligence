@@ -531,7 +531,7 @@ function renderARR(area) {
   </div>
   <div class="commentary" id="arrComm" style="margin-top:14px">
     <div class="commentary-lbl">ARR Narrative</div>
-    <div class="commentary-text">June net new ARR of $2.655M was the best month of H1 — $0.47M above the $2.185M budget — driven by $1.92M new business and $0.98M expansion across 14 new logos and 10 expansion accounts. Churn of $0.115M was dramatically favorable vs the $0.50M budget as the Commit-stage renewal cohort closed at 95%. NRR reached 100.8% (bud 100.0%), and the H2 ARR forecast of $97.5M is now tracking $1.4M above the $96.1M budget based on current pipeline coverage of 3.3x.</div>
+    <div class="commentary-text">June net new ARR of $2.655M was the best month of H1 — $0.47M above the $2.185M budget — driven by $1.92M new business and $0.98M expansion across 14 new logos and 10 expansion accounts. Churn of $0.115M was dramatically favorable vs the $0.50M budget as the Commit-stage renewal cohort closed at 95%. NRR reached 100.8% (bud 100.0%), and the H2 ARR forecast of $91.1M is tracking ~$5.0M behind the $96.1M budget based on current pipeline coverage of 3.3x.</div>
   </div>
   <button class="ai-btn" onclick="aiComm('arr','arrComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
@@ -942,7 +942,7 @@ function renderHC(area) {
   <div class="kpi-strip kpi-strip-5">
     <div class="kpi"><div class="kpi-lbl">Total HC (May)</div><div class="kpi-val">${totMay}</div><div class="kpi-delta ${totMay<=totBud?'pos':'neg'}">vs budget: ${totBud}</div></div>
     <div class="kpi"><div class="kpi-lbl">HC vs Jan</div><div class="kpi-val">+${totMay-totJan}</div><div class="kpi-delta pos">net adds YTD</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">$233K</div><div class="kpi-delta pos">+$19K vs Jan</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">$628K</div><div class="kpi-delta pos">-$3K vs Jan</div></div>
     <div class="kpi"><div class="kpi-lbl">Total Payroll (May)</div><div class="kpi-val">$6.09M</div><div class="kpi-delta neu">on budget</div></div>
     <div class="kpi"><div class="kpi-lbl">Attrition YTD</div><div class="kpi-val">3</div><div class="kpi-delta neu">within plan</div></div>
   </div>
@@ -964,7 +964,7 @@ function renderHC(area) {
     <div class="card">
       <div class="card-title">Total headcount &amp; ARR per employee trend</div>
       <div class="card-sub">Jan – June 2026 · dual axis</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="hcTrend" role="img" aria-label="Headcount and ARR per employee trend chart">HC grew from 350 to 358. ARR per employee improved from $218K to $233K.</canvas></div>
+      <div class="chart-wrap" style="height:200px"><canvas id="hcTrend" role="img" aria-label="Headcount and ARR per employee trend chart">HC grew from 350 to 358. ARR per employee moved from $631K to $628K.</canvas></div>
     </div>
   </div>
   <div class="two-col" style="margin-top:14px">
@@ -1160,7 +1160,7 @@ function buildCharts(slide) {
 // ─── AI COMMENTARY ─────────────────────────────────────────────────────────
 const AI_CTX = {
   exec:`June 2026 close: ARR $86.10M (bud $85.52M, +$0.58M). Revenue $7.41M (bud $7.35M, +$0.06M). Gross Margin 79.2% (bud 77.0%, +220bps from infra efficiency). EBITDA -$1.30M (bud -$0.22M, -$1.08M unfavorable). Cash $70.61M (bud $31.46M, +$39.1M from annual billing timing). NRR 100.8%. Q2 net new ARR $2.655M, best month of H1. YTD revenue $41.71M vs $41.61M budget.`,
-  arr:`June waterfall: Begin $83.44M, New Biz +$1.92M (bud $1.73M, +$0.19M), Expansion +$0.98M (bud $0.85M, +$0.13M), Reactivation +$0.095M, Contraction -$0.225M, Churn -$0.115M (bud -$0.50M, favorable), End $86.10M (+$0.58M vs budget). NRR 100.8%, GRR 98.7%. H2 ARR forecast $97.5M vs $96.1M budget. June net new $2.655M best month YTD.`,
+  arr:`June waterfall: Begin $83.44M, New Biz +$1.92M (bud $1.73M, +$0.19M), Expansion +$0.98M (bud $0.85M, +$0.13M), Reactivation +$0.095M, Contraction -$0.225M, Churn -$0.115M (bud -$0.50M, favorable), End $86.10M (+$0.58M vs budget). NRR 100.8%, GRR 98.7%. H2 ARR forecast $91.1M vs $96.1M budget (~$5.0M behind). June net new $2.655M best month YTD.`,
   revenue:`June revenue $7.41M (bud $7.35M, +$0.06M). Gross profit $5.87M, GM 79.2% (bud 77.0%, +220bps — engineering infrastructure efficiency gains). S&M $3.68M (bud $3.83M, -$0.14M favorable). R&D $1.22M on plan. G&A $0.81M on plan. EBITDA -$1.30M vs bud -$0.22M (-$1.08M — timing of Q2 variable comp accrual). YTD revenue $41.71M vs $41.61M budget. Subscription 96.7% of revenue mix.`,
   gtm:`June GTM: Partner 2.61x pipe/$, CAC 1.31x — top efficiency channel. Organic Search 2.26x at $357K spend. Customer Success 2.53x at $24K (highest ROI). Outbound 2.48x at $95K. Paid Search $429K at 1.97x (largest spend, improving). 11 active channels, total June spend ~$2.5M. Jun pipeline created $5.9M vs May $5.4M (+9%). Jun ending pipeline $27.1M, coverage 3.3x vs H2 quota.`,
   cash:`Jan-Jun cash: $46.1M → $70.61M vs budget $31.46M (+$39.1M favorable). June: collections $11.18M (above May $9.65M — strong enterprise close), CFO $4.80M, capex -$0.22M, net +$4.57M. March collections $13.6M annual billing spike remains largest single-month. Zero financing activity. 24+ months runway. H2 collections target $8-10M/month on H2 ARR billing cycle.`,
@@ -1607,7 +1607,7 @@ function wfOverview(el) {
         scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
     
     const REV_ALL = [6.59,6.71,6.85,7.01,7.18,7.36,7.54,7.73,7.93,8.13,8.33,8.54];
-    const ARR_ALL = [76.3,77.8,79.5,81.4,83.5,85.5,87.7,89.8,91.7,93.7,95.6,97.5];
+    const ARR_ALL = [76.3,77.8,79.5,81.4,83.4,86.1,87.0,87.9,88.8,89.6,90.4,91.1];
     charts.wfRevEmp = new Chart(document.getElementById('wfRevEmp'),{type:'line',data:{labels:ALL12,datasets:[
       {label:'Rev/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(REV_ALL[i]*1e6/hc/1000)),borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},
       {label:'ARR/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(ARR_ALL[i]*1e6/hc/1000)),borderColor:'#185FA5',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false},

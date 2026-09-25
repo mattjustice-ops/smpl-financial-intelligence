@@ -150,6 +150,9 @@ def run_export_validation_bundle(bundle: ReportingBundle) -> ExportValidationSum
     checks: list[ValidationCheck] = _filter_pipeline_checks(list(executive.validation))
     checks.extend(_filter_pipeline_checks(_fs_to_validation_checks(bundle.comparison_financial_statements)))
     checks.extend(_cross_source_checks(bundle))
+    from app.services.reporting.export.export_preflight import run_export_preflight_checks
+
+    checks.extend(run_export_preflight_checks(bundle))
 
     if not checks:
         checks.append(

@@ -158,12 +158,14 @@ const SKIN_VARS: Record<string, Record<string, string>> = {
   },
 };
 
-function applySkin(id: string) {
+/** Apply Board/engine skin tokens to the parent React chrome (not marketing pages). */
+export function applyPlatformSkin(id: string, { persist = true }: { persist?: boolean } = {}) {
   const vars = SKIN_VARS[id] || SKIN_VARS.canvas;
   const root = document.documentElement;
   Object.entries(vars).forEach(([key, value]) => {
     root.style.setProperty(key, value);
   });
+  if (!persist) return;
   try {
     localStorage.setItem("smpl-skin", id);
   } catch {
@@ -171,19 +173,28 @@ function applySkin(id: string) {
   }
 }
 
+export function readSavedPlatformSkin(): string {
+  let saved = "canvas";
+  try {
+    saved = localStorage.getItem("smpl-skin") || "canvas";
+  } catch {
+    /* ignore */
+  }
+  return SKIN_VARS[saved] ? saved : "canvas";
+}
+
+/** Hydrate parent chrome from localStorage (same key as iframe SMPLSkin). */
+export function hydratePlatformSkin(): string {
+  const saved = readSavedPlatformSkin();
+  applyPlatformSkin(saved, { persist: false });
+  return saved;
+}
+
 export function PlatformSkinSelect({ className }: { className?: string }) {
   const [skin, setSkin] = useState("canvas");
 
   useEffect(() => {
-    let saved = "canvas";
-    try {
-      saved = localStorage.getItem("smpl-skin") || "canvas";
-    } catch {
-      /* ignore */
-    }
-    if (!SKIN_VARS[saved]) saved = "canvas";
-    setSkin(saved);
-    applySkin(saved);
+    setSkin(hydratePlatformSkin());
   }, []);
 
   return (
@@ -194,7 +205,7 @@ export function PlatformSkinSelect({ className }: { className?: string }) {
       onChange={(e) => {
         const next = e.target.value;
         setSkin(next);
-        applySkin(next);
+        applyPlatformSkin(next);
       }}
     >
       {SKINS.map((s) => (

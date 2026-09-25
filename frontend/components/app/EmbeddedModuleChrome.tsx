@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 
+import { applyPlatformSkin, hydratePlatformSkin } from "@/components/app/PlatformSkinSelect";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { useEntitlements } from "@/hooks/useEntitlements";
 
@@ -30,6 +31,31 @@ export function EmbeddedModuleChrome({
   const loading = orgLoading || entLoading;
 
   const longRunningApiBase = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
+
+  // Keep platform chrome on the Board/engine skin (not marketing :root light defaults).
+  useEffect(() => {
+    hydratePlatformSkin();
+
+    function onSkinMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "smpl:skin") return;
+      const id = typeof event.data.skinId === "string" ? event.data.skinId : null;
+      if (!id) return;
+      applyPlatformSkin(id, { persist: false });
+    }
+
+    function onStorage(event: StorageEvent) {
+      if (event.key !== "smpl-skin") return;
+      hydratePlatformSkin();
+    }
+
+    window.addEventListener("message", onSkinMessage);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("message", onSkinMessage);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   useEffect(() => {
     if (!organizationId) return;

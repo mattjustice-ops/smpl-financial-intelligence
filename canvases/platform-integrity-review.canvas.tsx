@@ -70,10 +70,9 @@ export default function PlatformIntegrityReview() {
       </Stack>
 
       <Callout tone="success" title="Shipped — Forecast native Plan Assurance">
-        Plan Summary (ex-Overview) + Analytics tab on the same /assess SoT as Budget.
-        Packet built from live getResults / display ARR·cash·HC·GTM (not empty res.engine).
-        Persist when forecast_version_id is set. Monte Carlo Generate / history outliers remain
-        Budget-depth. No Budget Overview rename.
+        Plan Summary + Analytics on /assess. Predictive lane: Generate scenarios → server
+        /simulate Monte Carlo (corridor + P(cash&lt;floor) / P(ARR miss)). Persist when
+        forecast_version_id is set. Named lever-shock chips still next. No Budget Overview rename.
       </Callout>
 
       <Callout tone="warning" title="Tabled — Forecast GTM layer coherence">
@@ -121,7 +120,7 @@ export default function PlatformIntegrityReview() {
 
       <H3>Still deferred (completeness, not silent invent)</H3>
       <Text size="small" tone="secondary">
-        Forecast MC /simulate + history priors (Budget Analytics depth), calibrated PoA,
+        Forecast named lever-shock chips + history priors (Budget Analytics depth), calibrated PoA,
         Maxio depth, Budget BS/CF stubs, PPI persistence. ARR/Cash PPTX bridge-table cell
         refresh if a customer flags residual table ink. No Budget Plan Overview tab —
         Overview + Analytics already cover that job.

@@ -17,6 +17,58 @@ type Overview = {
   competitor_mentions: Array<{ name: string; count: number }>;
   recent_gaps: Array<{ query_id: string | null; query_text: string }>;
   disclosure: string;
+  engine_diagnosis?: string;
+  scoring_audit?: {
+    batch_name: string;
+    n: number;
+    current_evaluator: string;
+    note: string;
+    stored: {
+      mentions: number;
+      shortlist_plus: number;
+      owned_citations: number;
+    };
+    rules_v2: {
+      mentions: number;
+      shortlist_plus: number;
+      owned_citations: number;
+    };
+    strength_changes: Array<{
+      query_id: string | null;
+      stored: string;
+      rules_v2: string;
+    }>;
+  } | null;
+  chatgpt_search_baseline?: {
+    name: string;
+    scorecard: {
+      mention_rate: number;
+      mention_count: number;
+      citation_rate: number;
+      owned_domain_citation_rate: number;
+      categories_with_hit: number;
+      categories_total: number;
+      hit_query_id: string;
+    };
+  };
+  google_genai_baseline?: {
+    name: string;
+    scorecard: {
+      property_impressions: number;
+      sept_1_to_14_impressions: number;
+      sept_period_label?: string;
+      last_7_days_impressions: number;
+      peak_day: string;
+      peak_day_impressions: number;
+      pages_with_impressions: number;
+      us_share: number;
+      desktop_share: number;
+      top_commercial_article: string;
+      top_commercial_article_impressions: number;
+    };
+    top_pages: Array<{ url: string; impressions: number }>;
+    interpretation: string;
+  };
 };
 
 type QueryRow = {
@@ -284,6 +336,210 @@ export function AioVisibilityDashboard() {
 
       {overview?.disclosure ? (
         <p className="mt-3 text-xs text-slate-500">{overview.disclosure}</p>
+      ) : null}
+
+      {overview?.scoring_audit ? (
+        <section className="mt-8 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
+          <p className="text-xs uppercase tracking-wide text-amber-300/80">
+            Scoring audit · {overview.scoring_audit.current_evaluator}
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-white">
+            Stored vs live rescore — {overview.scoring_audit.batch_name}
+          </h2>
+          <p className="mt-2 text-xs text-slate-500">
+            {overview.scoring_audit.note}
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["Mentions", "mentions"],
+                ["Shortlist+", "shortlist_plus"],
+                ["Owned cites", "owned_citations"],
+              ] as const
+            ).map(([label, key]) => (
+              <div
+                key={key}
+                className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3"
+              >
+                <p className="text-xs text-slate-500">{label}</p>
+                <p className="mt-1 text-sm text-slate-300">
+                  Stored{" "}
+                  <span className="font-semibold text-white">
+                    {overview.scoring_audit!.stored[key]}
+                  </span>
+                  {" → "}
+                  <span className="font-semibold text-amber-200">
+                    v2 {overview.scoring_audit!.rules_v2[key]}
+                  </span>
+                  <span className="text-slate-500">
+                    {" "}
+                    / {overview.scoring_audit!.n}
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+          {overview.scoring_audit.strength_changes.length ? (
+            <ul className="mt-4 space-y-1 text-xs text-slate-400">
+              {overview.scoring_audit.strength_changes.map((c) => (
+                <li key={`${c.query_id}-${c.stored}-${c.rules_v2}`}>
+                  <span className="text-slate-300">{c.query_id || "?"}</span>
+                  : {c.stored} → {c.rules_v2}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">
+              No strength deltas vs stored labels for this batch.
+            </p>
+          )}
+        </section>
+      ) : null}
+
+      {overview?.chatgpt_search_baseline || overview?.google_genai_baseline ? (
+        <section className="mt-8 grid gap-4 lg:grid-cols-2">
+          {overview.chatgpt_search_baseline ? (
+            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.04] p-5">
+              <p className="text-xs uppercase tracking-wide text-rose-300/80">
+                Controlled benchmark
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-white">
+                {overview.chatgpt_search_baseline.name}
+              </h2>
+              <dl className="mt-4 space-y-2 text-sm">
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">Mentions</dt>
+                  <dd className="font-medium text-white">
+                    {overview.chatgpt_search_baseline.scorecard.mention_count}
+                    /46 ({pct(overview.chatgpt_search_baseline.scorecard.mention_rate)})
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">Citation rate</dt>
+                  <dd className="font-medium text-white">
+                    {pct(overview.chatgpt_search_baseline.scorecard.citation_rate)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">Owned-domain cite</dt>
+                  <dd className="font-medium text-white">
+                    {pct(
+                      overview.chatgpt_search_baseline.scorecard
+                        .owned_domain_citation_rate,
+                    )}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">Categories with hit</dt>
+                  <dd className="font-medium text-white">
+                    {
+                      overview.chatgpt_search_baseline.scorecard
+                        .categories_with_hit
+                    }
+                    /
+                    {
+                      overview.chatgpt_search_baseline.scorecard
+                        .categories_total
+                    }
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 py-1.5">
+                  <dt className="text-slate-400">Only hit</dt>
+                  <dd className="font-medium text-white">
+                    {overview.chatgpt_search_baseline.scorecard.hit_query_id}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-xs text-slate-500">
+                Not yet classifiable / shortlisted in ChatGPT Search.
+              </p>
+            </div>
+          ) : null}
+
+          {overview.google_genai_baseline ? (
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
+              <p className="text-xs uppercase tracking-wide text-emerald-300/80">
+                Search Console · Generative AI
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-white">
+                {overview.google_genai_baseline.name}
+              </h2>
+              <dl className="mt-4 space-y-2 text-sm">
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">Property impressions</dt>
+                  <dd className="font-medium text-white">
+                    {
+                      overview.google_genai_baseline.scorecard
+                        .property_impressions
+                    }
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">
+                    {overview.google_genai_baseline.scorecard
+                      .sept_period_label || "Sept 1–14"}
+                  </dt>
+                  <dd className="font-medium text-white">
+                    {
+                      overview.google_genai_baseline.scorecard
+                        .sept_1_to_14_impressions
+                    }
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">Last 7 days in file</dt>
+                  <dd className="font-medium text-white">
+                    {
+                      overview.google_genai_baseline.scorecard
+                        .last_7_days_impressions
+                    }
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
+                  <dt className="text-slate-400">Best FP&A article</dt>
+                  <dd className="font-medium text-white">
+                    {
+                      overview.google_genai_baseline.scorecard
+                        .top_commercial_article_impressions
+                    }{" "}
+                    impressions
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 py-1.5">
+                  <dt className="text-slate-400">US / desktop</dt>
+                  <dd className="font-medium text-white">
+                    {pct(overview.google_genai_baseline.scorecard.us_share)} /{" "}
+                    {pct(overview.google_genai_baseline.scorecard.desktop_share)}
+                  </dd>
+                </div>
+              </dl>
+              <ul className="mt-3 space-y-1 text-xs text-slate-400">
+                {overview.google_genai_baseline.top_pages
+                  .slice(0, 4)
+                  .map((p) => (
+                    <li key={p.url} className="flex justify-between gap-2">
+                      <span className="truncate">
+                        {p.url.replace("https://www.smpl-ai.com", "") || "/"}
+                      </span>
+                      <span className="shrink-0 text-slate-300">
+                        {p.impressions}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-3 text-xs text-slate-500">
+                Becoming retrievable in Google generative features. Impressions
+                only — no query or AI-click breakdown in this export.
+              </p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {overview?.engine_diagnosis ? (
+        <p className="mt-3 text-sm text-teal-200/90">
+          {overview.engine_diagnosis}
+        </p>
       ) : null}
 
       {pulse ? (

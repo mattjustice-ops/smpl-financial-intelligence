@@ -151,7 +151,7 @@ All warehouse and demo tables are keyed by `organization_id`. API routes require
 
 ### 4. Validation before export
 
-Exports aggregate `ValidationCheck` results from executive flow and financial statements. Optional `block_on_failure=true` returns HTTP 409 when checks fail.
+Exports aggregate `ValidationCheck` results from executive flow and financial statements. Board presentation and MD&A package/deck exports default to `block_on_failure=true` (HTTP 409 on FAIL). Pass `block_on_failure=false` only for internal/demo override.
 
 **Governed context (foundation):** Tie-outs assume reconciled warehouse data and tenant metric definitions loaded before validation — prompts and AI narrative sit on top of that layer, not instead of it. Pre-flight checklist: [product/SMPL_Agent_and_Predictive_Analytics_Checklist.md](./product/SMPL_Agent_and_Predictive_Analytics_Checklist.md).
 

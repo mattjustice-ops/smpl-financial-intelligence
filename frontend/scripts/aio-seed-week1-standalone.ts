@@ -27,6 +27,12 @@ const pulseQueries = JSON.parse(
 const sacredBaseline = JSON.parse(
   fs.readFileSync(path.join(root, "lib/aio/data/sacred_baseline.json"), "utf8"),
 );
+const googleGenaiBaseline = JSON.parse(
+  fs.readFileSync(
+    path.join(root, "lib/aio/data/google_genai_baseline.json"),
+    "utf8",
+  ),
+);
 
 const COMPETITORS = [
   "Abacum",
@@ -187,6 +193,12 @@ async function main() {
      VALUES ('pulse_queries', $1::jsonb, now())
      ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now()`,
     [JSON.stringify(pulseQueries)],
+  );
+  await pool.query(
+    `INSERT INTO aio_settings (key, value_json, updated_at)
+     VALUES ('google_genai_baseline', $1::jsonb, now())
+     ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = now()`,
+    [JSON.stringify(googleGenaiBaseline)],
   );
 
   const pulseHits = await pool.query(

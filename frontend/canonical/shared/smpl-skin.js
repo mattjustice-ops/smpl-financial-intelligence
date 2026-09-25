@@ -195,6 +195,13 @@
       localStorage.setItem("smpl-skin", id);
     } catch (_) {}
 
+    /* Keep parent React chrome (EmbeddedModuleChrome) in sync when skin changes inside an iframe. */
+    try {
+      if (global.parent && global.parent !== global) {
+        global.parent.postMessage({ type: "smpl:skin", skinId: id }, global.location.origin);
+      }
+    } catch (_) {}
+
     if (typeof onRefresh === "function") {
       onRefresh(id);
     }

@@ -8,55 +8,123 @@ import path from "path";
 import vm from "vm";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const html = readFileSync(path.join(root, "public/forecast-engine/index.html"), "utf8");
+const publicDir = path.join(root, "public");
+const html = readFileSync(path.join(publicDir, "forecast-engine/index.html"), "utf8");
 
-// Extract inline script block with SRC + engine functions (after smpl-bootstrap, before skin init)
-const scriptMatch = html.match(
-  /<script src="\/shared\/smpl-bootstrap-demo\.js[^"]*"><\/script>\s*<script>([\s\S]*?)<\/script>\s*<\/div>\s*<\/div>\s*\n\n<script>/,
-);
-if (!scriptMatch) {
+function extractEngineScript(source) {
+  const marker = 'src="/shared/smpl-bootstrap-demo.js';
+  const after = source.indexOf(marker);
+  if (after < 0) return null;
+  const start = source.indexOf("<script>", after);
+  if (start < 0) return null;
+  const end = source.indexOf("</script>", start);
+  if (end < 0) return null;
+  let code = source.slice(start + "<script>".length, end);
+  // Drop UI boot (DOM + skin) — keep compute / levers / CFS only.
+  const cutMarkers = ["buildLeverReqs();", "// ─── SKIN ENGINE", "SMPLSkin.init("];
+  for (const m of cutMarkers) {
+    const idx = code.indexOf(m);
+    if (idx > 0) {
+      code = code.slice(0, idx);
+      break;
+    }
+  }
+  return code;
+}
+
+const engineCode = extractEngineScript(html);
+if (!engineCode) {
   console.error("Could not extract forecast engine script");
   process.exit(1);
+}
+
+const elStore = new Map();
+function fakeEl(id) {
+  if (elStore.has(id)) return elStore.get(id);
+  const defaults = {
+    "l-nb": "100",
+    "l-exp": "100",
+    "l-churn": "100",
+    "l-ren": "0",
+    "l-cogs": "29",
+    "l-sm": "34",
+    "l-rd": "16",
+    "l-ga": "11",
+    "l-dso": "42",
+    "l-dpo": "30",
+    "l-capex": "220",
+  };
+  const el = {
+    id,
+    value: sandbox._levers?.[id] ?? defaults[id] ?? "100",
+    textContent: "",
+    innerHTML: "",
+    style: {},
+    children: [],
+    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    getAttribute() { return null; },
+    setAttribute() {},
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+  };
+  Object.defineProperty(el, "value", {
+    get() {
+      return sandbox._levers?.[id] ?? defaults[id] ?? el._value ?? "100";
+    },
+    set(v) {
+      el._value = String(v);
+    },
+  });
+  elStore.set(id, el);
+  return el;
 }
 
 const sandbox = {
   window: {},
   document: {
-    getElementById: (id) => {
-      const defaults = {
-        "l-nb": "100",
-        "l-exp": "100",
-        "l-churn": "100",
-        "l-ren": "0",
-        "l-cogs": "29",
-        "l-sm": "34",
-        "l-rd": "16",
-        "l-ga": "11",
-        "l-dso": "42",
-        "l-dpo": "30",
-        "l-capex": "220",
-      };
-      const val = sandbox._levers?.[id] ?? defaults[id] ?? "100";
-      return { value: val };
-    },
+    getElementById: (id) => fakeEl(id),
     querySelectorAll: () => [],
+    querySelector: () => null,
+    createElement: () => fakeEl("anon"),
   },
   console,
-  Chart: {},
+  Chart: function () {},
   SMPLSkin: { init: () => {} },
   SMPLOutlook: null,
   SMPL_BASELINE_ENGINE: null,
   SMPL_LIVE_OUTLOOK: false,
+  SMPLPipeline: undefined,
   CLOSE_MONTH: undefined,
   _levers: {},
-  setTimeout: (fn) => fn(),
+  setTimeout: (fn) => (typeof fn === "function" ? fn() : 0),
+  clearTimeout: () => {},
   destroyAll: () => {},
   curTab: "overview",
   reqActive: {},
+  requestAnimationFrame: (fn) => (typeof fn === "function" ? fn() : 0),
 };
 
-vm.createContext(sandbox);
-vm.runInContext(scriptMatch[1], sandbox);
+sandbox.window = sandbox;
+sandbox.globalThis = sandbox;
+
+// Load shared pipeline if present (optional for ARR path).
+try {
+  const pipe = readFileSync(path.join(publicDir, "shared/smpl-pipeline.js"), "utf8");
+  vm.createContext(sandbox);
+  vm.runInContext(pipe, sandbox);
+} catch {
+  vm.createContext(sandbox);
+}
+
+vm.runInContext(
+  engineCode +
+    `\n;Object.assign(this, {
+  compute, getLevers, getResults, getDisplayCFS, invalidateCfsChain, buildCFSChain,
+  HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl
+});\n`,
+  sandbox,
+);
 
 const {
   compute,
@@ -64,31 +132,46 @@ const {
   getResults,
   getDisplayCFS,
   invalidateCfsChain,
-  buildCFSChain,
-  HORIZON,
   FC_P,
   ALL_P,
   SRC,
 } = sandbox;
 
-SRC.open_reqs.forEach((r) => {
-  sandbox.reqActive[r.id] = true;
-});
+if (typeof compute !== "function" || typeof getResults !== "function" || !ALL_P) {
+  console.error("FAIL: forecast compute/getResults/ALL_P not available after extract");
+  process.exit(1);
+}
+
+if (SRC && SRC.open_reqs) {
+  SRC.open_reqs.forEach((r) => {
+    sandbox.reqActive[r.id] = true;
+  });
+}
+
+function syncLeverDom() {
+  // getLevers reads input values via getElementById — keep _levers authoritative.
+  for (const [id, el] of elStore.entries()) {
+    if (sandbox._levers[id] != null) el._value = String(sandbox._levers[id]);
+  }
+}
 
 function decCash() {
-  invalidateCfsChain();
+  syncLeverDom();
+  if (typeof invalidateCfsChain === "function") invalidateCfsChain();
   const dec = ALL_P[11];
   const cfs = getDisplayCFS(dec);
   return cfs?.end_cash ?? null;
 }
 
 function decArr() {
+  syncLeverDom();
   const res = getResults();
   const dec = FC_P[FC_P.length - 1];
   return res[dec]?.arr?.arr_eop ?? null;
 }
 
 function julRd() {
+  syncLeverDom();
   const res = getResults();
   return res["2026-07"]?.is?.rd ?? null;
 }
@@ -99,17 +182,14 @@ const base = {
   rd: julRd(),
 };
 
-// NB attainment 150%
 sandbox._levers["l-nb"] = "150";
 const nb = { cash: decCash(), arr: decArr(), rd: julRd() };
 
-// Reset + R&D 25%
 sandbox._levers = { "l-rd": "25" };
 const rd = { cash: decCash(), arr: decArr(), rd: julRd() };
 
-// Reset + toggle off first req
 sandbox._levers = {};
-sandbox.reqActive["FREQ-001"] = false;
+if (sandbox.reqActive) sandbox.reqActive["FREQ-001"] = false;
 const hc = { cash: decCash(), arr: decArr(), rd: julRd() };
 
 function fmt(n) {

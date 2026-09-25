@@ -268,15 +268,56 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
                 + monthly_close_requirements_prompt()
             )
             ai_raw = client.generate(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
+            from app.services.commentary.claim_verify import apply_fail_closed_to_commentary
             from app.services.commentary.schemas import CommentaryOutput
 
             ai = CommentaryOutput.model_validate({**ai_raw, "period_label": inputs.period_label})
+            evidence: dict[str, Decimal] = {}
+            if inputs.mrr_waterfall is not None:
+                mw = inputs.mrr_waterfall
+                evidence.update(
+                    {
+                        "mrr.ending": mw.ending_mrr,
+                        "mrr.beginning": mw.beginning_mrr,
+                        "mrr.new": mw.new_mrr,
+                        "mrr.expansion": mw.expansion_mrr,
+                        "mrr.churn": mw.churn_mrr,
+                    }
+                )
+            if inputs.revenue_forecast is not None:
+                rf = inputs.revenue_forecast
+                if rf.actual_revenue is not None:
+                    evidence["revenue.actual"] = rf.actual_revenue
+                if rf.budget_revenue is not None:
+                    evidence["revenue.budget"] = rf.budget_revenue
+                if rf.forecasted_revenue is not None:
+                    evidence["revenue.forecast"] = rf.forecasted_revenue
+            if inputs.cash_forecast is not None:
+                evidence["cash.forecasted_collections"] = inputs.cash_forecast.forecasted_collections
+            for i, row in enumerate(inputs.actuals_vs_forecast or []):
+                if row.actual is not None:
+                    evidence[f"variance.{i}.actual"] = row.actual
+                if row.forecast is not None:
+                    evidence[f"variance.{i}.baseline"] = row.forecast
+            for i, ch in enumerate(inputs.pipeline_changes or []):
+                evidence[f"pipeline.{i}"] = ch.delta_arr
+
+            verified, claim_result = apply_fail_closed_to_commentary(
+                ai, evidence, policy="strict"
+            )
+            if not claim_result.ok:
+                logger.warning(
+                    "P15 MDA AI claim-verify miss — using fail-closed rewrite: %s",
+                    claim_result.summary(max_failures=6),
+                )
             sections[0] = CommentaryField(
                 section="Executive Summary",
                 period=as_of,
-                what_changed=ai.executive_summary.narrative,
-                variance_driver=ai.revenue_commentary.narrative[:400],
-                leadership_attention="; ".join(r.description for r in ai.risks_and_opportunities[:4]),
+                what_changed=verified.executive_summary.narrative,
+                variance_driver=verified.revenue_commentary.narrative[:400],
+                leadership_attention="; ".join(
+                    r.description for r in verified.risks_and_opportunities[:4]
+                ),
                 source="ai",
                 metric_context=sections[0].metric_context,
             )

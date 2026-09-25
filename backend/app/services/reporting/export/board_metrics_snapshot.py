@@ -7,6 +7,13 @@ from decimal import Decimal
 
 from app.services.reporting.export.board_chart_service import _wf
 from app.services.reporting.export.is_line_resolver import ending_cash_at, fs_sum_periods
+from app.services.reporting.export.metric_registry import (
+    compute_churn_arr,
+    compute_ending_arr,
+    compute_expansion_arr,
+    compute_net_new_arr,
+    compute_new_business_arr,
+)
 from app.services.reporting.export.schemas import ReportingBundle
 from app.services.reporting.period_utils import to_period
 
@@ -47,14 +54,13 @@ def build_metrics_snapshot(bundle: ReportingBundle) -> BoardMetricsSnapshot:
     as_of = bundle.as_of_period
     snap = BoardMetricsSnapshot(as_of=as_of, currency=bundle.currency)
 
-    snap.ending_arr = _wf(bundle, "arr", "ending_arr", as_of) or _wf(bundle, "arr", "ending", as_of)
-    snap.net_new_arr = _wf(bundle, "arr", "new_arr", as_of) or _wf(bundle, "arr", "new_business", as_of)
-    snap.new_arr_actual = snap.net_new_arr
-    snap.new_arr_budget = _wf(bundle, "arr", "new_arr", as_of, "Budget") or _wf(
-        bundle, "arr", "new_business", as_of, "Budget"
-    )
-    snap.expansion = _wf(bundle, "arr", "expansion_arr", as_of) or _wf(bundle, "arr", "expansion", as_of)
-    snap.churn = abs(_wf(bundle, "arr", "churn_arr", as_of) or _wf(bundle, "arr", "churn", as_of))
+    snap.ending_arr = compute_ending_arr(bundle, as_of, "Actual")
+    # Net New ≠ New Business — canonical formula via metric_registry.
+    snap.net_new_arr = compute_net_new_arr(bundle, as_of, "Actual")
+    snap.new_arr_actual = compute_new_business_arr(bundle, as_of, "Actual")
+    snap.new_arr_budget = compute_new_business_arr(bundle, as_of, "Budget")
+    snap.expansion = compute_expansion_arr(bundle, as_of, "Actual")
+    snap.churn = compute_churn_arr(bundle, as_of, "Actual")
     if snap.ending_arr:
         snap.grr = (snap.ending_arr - snap.churn) / snap.ending_arr
 

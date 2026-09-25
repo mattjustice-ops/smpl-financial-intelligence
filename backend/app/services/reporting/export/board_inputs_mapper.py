@@ -210,14 +210,16 @@ def build_commentary_inputs(
     revenue_forecast = _revenue_input_for_period(financial, period)
 
     cash_forecast = None
-    collections = _comparison_amount(
-        cash_rows, ("cash_collections", "collections"), period, "actual"
+    # Prefer true forecast collections. Never label actual cash as forecasted_collections
+    # (same invent/mislabel class Plan Assurance fixed for history adapters).
+    forecast_collections = _comparison_amount(
+        cash_rows, ("cash_collections", "collections"), period, "forecast"
     )
-    if collections is not None:
+    if forecast_collections is not None:
         cash_forecast = CashCollectionsForecastInput(
             period_start=_period_date(period),
             period_end=_period_date(period),
-            forecasted_collections=collections,
+            forecasted_collections=forecast_collections,
         )
 
     pipeline_changes: list[PipelineChange] = []

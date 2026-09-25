@@ -69,6 +69,13 @@ def get_validation_status(
     material_open = [
         q for q in open_items if abs(float(q.get("amount") or 0)) >= 1.0
     ]
+    queue_source = sections.get("mapping_queue_source")
+    if not isinstance(queue_source, str) or not queue_source:
+        if queue:
+            queue_source = "manual_or_demo"
+        else:
+            # Empty queue is not proof of clean mapping — ingest does not auto-fill yet.
+            queue_source = "empty_not_ingest_fed"
     return {
         "organization_id": str(organization_id),
         "as_of_period": as_of_period,
@@ -77,6 +84,7 @@ def get_validation_status(
         "validation_allow": allow,
         "allowed": bool(allow and allow.get("allowed")),
         "mapping_queue": queue,
+        "mapping_queue_source": queue_source,
         "mapping_open_count": len(open_items),
         "mapping_material_open_count": len(material_open),
         "management_lines": list(MANAGEMENT_LINES),
@@ -91,6 +99,14 @@ def get_validation_status(
                 and allow
                 and allow.get("allowed")
                 and len(material_open) == 0
+            ),
+        },
+        "honesty": {
+            "mapping_ingest_wired": True,
+            "note": (
+                "Mapping queue syncs from gl_actuals when statement/category cannot "
+                "be classified into a management line. Empty queue after sync means "
+                "no unclassified material accounts for the period (or no GL rows)."
             ),
         },
     }
@@ -214,6 +230,7 @@ def upsert_mapping_queue(
         by_key[key] = entry
 
     sections["mapping_queue"] = list(by_key.values())
+    sections["mapping_queue_source"] = "manual"
     blob.sections_json = sections
     blob.updated_at = _utcnow()
     db.add(blob)
@@ -339,15 +356,202 @@ def unmap_account(
     return get_validation_status(db, organization_id, as_of_period)
 
 
+def _hint_management_line(*, statement: str | None, category: str | None, account_name: str | None) -> str:
+    """Best-effort management-line hint from GL labels (never invents a firm map)."""
+    from app.services.financial_statements.mapping import (
+        BALANCE_SHEET,
+        INCOME_STATEMENT,
+        UNKNOWN,
+        normalize_is_bucket,
+        normalize_statement,
+    )
+
+    stmt = normalize_statement(statement)
+    cat = (category or "").strip().lower()
+    name = (account_name or "").strip().lower()
+    blob = f"{cat} {name}"
+
+    if any(t in blob for t in ("deferred revenue", "deferred_revenue", "unearned")):
+        return "deferred_revenue"
+    if cat in {"cash", "cash and equivalents"} or name.startswith("cash"):
+        return "cash"
+    if "receivable" in blob or cat in {"ar", "accounts receivable"}:
+        return "ar"
+    if "payable" in blob or cat in {"ap", "accounts payable"}:
+        return "ap"
+    if stmt == INCOME_STATEMENT or cat:
+        bucket = normalize_is_bucket(category, account_name)
+        if bucket == "revenue":
+            return "revenue"
+        if bucket == "cogs":
+            return "cogs"
+        if ("sales" in blob and "marketing" in blob) or cat in {
+            "sm",
+            "s&m",
+            "sales & marketing",
+        }:
+            return "sm"
+        if "research" in blob or "r&d" in blob or cat in {"rd", "r&d"}:
+            return "rd"
+        if "admin" in blob or "g&a" in blob or cat in {"ga", "g&a"}:
+            return "ga"
+        if bucket == "operating_expense":
+            return "unassigned"
+    if stmt == BALANCE_SHEET:
+        return "unassigned"
+    if stmt == UNKNOWN and not cat and not name:
+        return "unassigned"
+    return "unassigned"
+
+
+def _gl_row_needs_mapping(*, statement: str | None, category: str | None, account_name: str | None) -> bool:
+    """True when GL labels are missing or cannot be classified into a firm line."""
+    from app.services.financial_statements.mapping import UNKNOWN, normalize_statement
+
+    stmt = normalize_statement(statement)
+    cat = (category or "").strip()
+    name = (account_name or "").strip()
+    if not cat and not name:
+        return True
+    if stmt == UNKNOWN and not cat:
+        return True
+    hint = _hint_management_line(statement=statement, category=category, account_name=account_name)
+    return hint == "unassigned" and (not cat or stmt == UNKNOWN)
+
+
+def sync_mapping_queue_from_gl_actuals(
+    db: Session,
+    organization_id: uuid.UUID,
+    as_of_period: str,
+) -> dict[str, Any]:
+    """Pull unclassified gl_actuals for the close month into the mapping queue.
+
+    Only opens new queue items for accounts not already mapped/excluded.
+    Sets mapping_queue_source=ingest when any GL-derived items are merged.
+    """
+    from calendar import monthrange
+    from datetime import date
+    from decimal import Decimal
+
+    from sqlalchemy import func
+
+    from app.models.demo_finance import GlActual
+    from app.services.dashboard.query_utils import table_exists
+
+    blob = _get_blob(db, organization_id, as_of_period)
+    if blob is None:
+        raise ValueError("no_freeze_pack")
+    if not table_exists(db, "gl_actuals"):
+        return get_validation_status(db, organization_id, as_of_period)
+
+    year, month = int(as_of_period[:4]), int(as_of_period[5:7])
+    period_start = date(year, month, 1)
+    period_end = date(year, month, monthrange(year, month)[1])
+
+    rows = db.execute(
+        select(
+            GlActual.account_number,
+            GlActual.account_name,
+            GlActual.statement,
+            GlActual.category,
+            func.coalesce(func.sum(GlActual.amount), 0),
+        )
+        .where(
+            GlActual.organization_id == organization_id,
+            GlActual.version == "Actual",
+            GlActual.period >= period_start,
+            GlActual.period <= period_end,
+        )
+        .group_by(
+            GlActual.account_number,
+            GlActual.account_name,
+            GlActual.statement,
+            GlActual.category,
+        )
+    ).all()
+
+    items: list[dict[str, Any]] = []
+    for account_number, account_name, statement, category, amount in rows:
+        acct = str(account_number or "").strip()
+        if not acct:
+            continue
+        if not _gl_row_needs_mapping(
+            statement=statement, category=category, account_name=account_name
+        ):
+            continue
+        amt = float(amount if isinstance(amount, Decimal) else (amount or 0))
+        if abs(amt) < 1.0:
+            continue
+        items.append(
+            {
+                "account_id": acct,
+                "account_number": acct,
+                "name": str(account_name or acct),
+                "amount": amt,
+                "statement_hint": _hint_management_line(
+                    statement=statement, category=category, account_name=account_name
+                ),
+                "status": "open",
+            }
+        )
+
+    if not items:
+        status = get_validation_status(db, organization_id, as_of_period)
+        # Record that ingest ran even when nothing was unclassified.
+        sections = _sections(blob)
+        if sections.get("mapping_queue_source") not in {"manual", "demo_seed", "ingest"}:
+            sections["mapping_queue_source"] = "ingest_empty"
+            blob.sections_json = sections
+            blob.updated_at = _utcnow()
+            db.add(blob)
+            db.commit()
+            return get_validation_status(db, organization_id, as_of_period)
+        return status
+
+    # Preserve mapped/excluded decisions: only merge open/new accounts.
+    sections = _sections(blob)
+    existing = [q for q in (sections.get("mapping_queue") or []) if isinstance(q, dict)]
+    decided = {
+        str(q.get("account_id") or q.get("account_number") or "")
+        for q in existing
+        if q.get("status") in ("mapped", "excluded")
+    }
+    to_upsert = [i for i in items if i["account_id"] not in decided]
+    if not to_upsert:
+        return get_validation_status(db, organization_id, as_of_period)
+
+    result = upsert_mapping_queue(db, organization_id, as_of_period, to_upsert)
+    blob = _get_blob(db, organization_id, as_of_period)
+    if blob is not None:
+        sections = _sections(blob)
+        sections["mapping_queue_source"] = "ingest"
+        blob.sections_json = sections
+        blob.updated_at = _utcnow()
+        db.add(blob)
+        db.commit()
+        return get_validation_status(db, organization_id, as_of_period)
+    return result
+
+
 def seed_demo_mapping_queue_if_empty(
     db: Session,
     organization_id: uuid.UUID,
     as_of_period: str,
 ) -> dict[str, Any]:
-    """Demo/dev helper: ensure owners see the mapping workflow without live GL ingest."""
+    """Demo/dev helper when GL ingest has nothing to show yet.
+
+    Prefer sync_mapping_queue_from_gl_actuals for production orgs.
+    """
     status = get_validation_status(db, organization_id, as_of_period)
     if status.get("mapping_queue"):
         return status
+    # Try real GL first — only fall back to canned demo accounts if empty.
+    try:
+        synced = sync_mapping_queue_from_gl_actuals(db, organization_id, as_of_period)
+        if synced.get("mapping_queue"):
+            return synced
+    except ValueError:
+        pass
     demo_items = [
         {
             "account_id": "6105",
@@ -374,7 +578,17 @@ def seed_demo_mapping_queue_if_empty(
             "status": "open",
         },
     ]
-    return upsert_mapping_queue(db, organization_id, as_of_period, demo_items)
+    result = upsert_mapping_queue(db, organization_id, as_of_period, demo_items)
+    blob = _get_blob(db, organization_id, as_of_period)
+    if blob is not None:
+        sections = _sections(blob)
+        sections["mapping_queue_source"] = "demo_seed"
+        blob.sections_json = sections
+        blob.updated_at = _utcnow()
+        db.add(blob)
+        db.commit()
+        return get_validation_status(db, organization_id, as_of_period)
+    return result
 
 
 def assert_import_mapping_clear(

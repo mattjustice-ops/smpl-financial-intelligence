@@ -182,7 +182,13 @@ def _marketing_by_channel(bundle: ReportingBundle, period: str) -> list[dict[str
             }
         )
     rows.sort(key=lambda r: r.get("spend_raw") or 0, reverse=True)
-    return rows[:5]
+    # Keep full channel list for SoT / totals; Claude may still emphasize top spenders.
+    return rows
+
+
+def _marketing_by_channel_display(bundle: ReportingBundle, period: str, *, top_n: int = 5) -> list[dict[str, Any]]:
+    """Top-N channels by spend for table display (totals use full list via _marketing_block)."""
+    return _marketing_by_channel(bundle, period)[:top_n]
 
 
 def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
@@ -265,10 +271,12 @@ def _marketing_block(bundle, as_of, m):
     )
     from app.services.reporting.period_utils import prior_period
 
-    channels = _marketing_by_channel(bundle, as_of)
-    total_spend = sum(c.get("spend_raw") or 0 for c in channels)
-    total_pipe = sum(c.get("pipeline_raw") or 0 for c in channels)
-    best_wr = max(channels, key=lambda c: c["win_rate_pct"], default=None)
+    channels_all = _marketing_by_channel(bundle, as_of)
+    channels = channels_all[:5]
+    channel_mql_sum = sum(float(c.get("mqls") or 0) for c in channels_all)
+    total_spend = sum(c.get("spend_raw") or 0 for c in channels_all)
+    total_pipe = sum(c.get("pipeline_raw") or 0 for c in channels_all)
+    best_wr = max(channels_all, key=lambda c: c["win_rate_pct"], default=None)
     closed_lost = m.closed_lost or Decimal("0")
     closed_lost_bud = abs(_wf(bundle, "pipeline", "closed_lost", as_of, "Budget"))
     slipped = m.slipped or Decimal("0")
@@ -294,9 +302,20 @@ def _marketing_block(bundle, as_of, m):
         else None
     )
     return {
-        "total_mqls": float(m.mql),
+        # Prefer channel SoT when present so KPI header ties to channel table totals.
+        "total_mqls": float(channel_mql_sum) if channels_all else float(m.mql),
+        "total_mqls_marketing_comparison": float(m.mql),
+        "total_mqls_channel_sum": float(channel_mql_sum),
+        "channels_displayed": len(channels),
+        "channels_total": len(channels_all),
+        "table_note": (
+            f"Channel table shows top {len(channels)} by spend; "
+            f"MQL/spend totals include all {len(channels_all)} channels."
+            if len(channels_all) > len(channels)
+            else "Channel table includes all channels."
+        ),
         "total_pipeline": _money_k(m.pipeline_from_marketing or m.pipeline_created),
-        "total_spend": _money_k(m.marketing_spend),
+        "total_spend": _money_k(Decimal(str(total_spend))) if total_spend else _money_k(m.marketing_spend),
         "blended_efficiency_x": round(total_pipe / total_spend, 1) if total_spend else 0,
         "best_win_rate_channel": best_wr["name"] if best_wr else "",
         "best_win_rate_pct": best_wr["win_rate_pct"] if best_wr else 0,
@@ -1306,15 +1325,20 @@ def _render_prepared_script(script_text: str, *, period: str) -> tuple[bytes, st
         return pptx_bytes, prepared
 
 
-def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str:
-    """P15 Prompt 5: soft-warn narrative; soft-strip KPI cells; always export.
+def _verify_prompt5_script_or_raise(
+    script: str,
+    payload: dict[str, Any],
+    *,
+    fail_closed: bool = False,
+) -> str:
+    """P15 Prompt 5 claim / attribution / narrative verify.
 
-    Numeric / attribution: Key Takeaways / commentary match interactive
-    soft-warn (keep unmatched $/%%/Nx and off-allowlist drivers; log only).
-    Short KPI/table/metric cells still soft-strip to ``—``. Citation:
-    **warn-only** — board KPI/table cells come from DATA PAYLOAD / evidence and
-    must not be wiped for missing ``(source.key)`` parentheses. Prefer export
-    over hard-block.
+    Default (``fail_closed=False``): soft-strip KPI cells, redact unmatched
+    narrative tokens, prefer export (smoke / internal).
+
+    Customer packs (``fail_closed=True``): after soft-strip, raise
+    ``CommentaryIntegrityError`` if any claim or attribution check failed so
+    invented $/%%/Nx cannot ship in a downloadable deck.
     """
     from app.services.commentary.attribution_verify import (
         apply_fail_closed_attribution_to_pptx_script,
@@ -1324,6 +1348,7 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
         verify_text_citations,
     )
     from app.services.commentary.claim_verify import (
+        CommentaryIntegrityError,
         apply_fail_closed_claims_to_pptx_script,
         attach_sources_to_values,
         evidence_values_from_package,
@@ -1344,13 +1369,18 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
     working, claim_result = apply_fail_closed_claims_to_pptx_script(script, evidence)
     if claim_result.ok:
         logger.info("P15 Prompt 5 claim-verify passed (%s checks)", len(claim_result.checks))
-        working = script
     else:
         logger.warning(
-            "P15 Prompt 5 claim-verify soft-warn unmatched $/%%/Nx "
-            "(narrative kept; KPI cells may soft-strip; export continues): %s",
+            "P15 Prompt 5 claim-verify stripped unmatched $/%%/Nx "
+            "(narrative tokens redacted; KPI cells → —; fail_closed=%s): %s",
+            fail_closed,
             claim_result.summary(max_failures=8),
         )
+        if fail_closed:
+            raise CommentaryIntegrityError(
+                "Prompt 5 claim-verify failed (customer fail-closed): "
+                + claim_result.summary(max_failures=12)
+            )
 
     attribution = payload.get("attribution_package") or build_attribution_package_from_deck_payload(
         payload
@@ -1365,11 +1395,17 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             )
     else:
         logger.warning(
-            "P15 Prompt 5 attribution-verify soft-warn off-allowlist drivers "
-            "(narrative kept; export continues): %s",
+            "P15 Prompt 5 attribution-verify stripped off-allowlist drivers "
+            "(narrative sentences redacted; KPI cells → —; fail_closed=%s): %s",
+            fail_closed,
             attr_result.summary(),
         )
         working = rewritten
+        if fail_closed:
+            raise CommentaryIntegrityError(
+                "Prompt 5 attribution-verify failed (customer fail-closed): "
+                + attr_result.summary()
+            )
 
     sources = payload.get("_sources")
     if not isinstance(sources, dict) or not sources:
@@ -1416,8 +1452,9 @@ def _verify_prompt5_script_or_raise(script: str, payload: dict[str, Any]) -> str
             narr_result.summary(),
         )
 
-    # Intentionally NO seed-refill of blank/"—" takeaways. Narrative soft-warn
-    # keeps unmatched $/% in takeaways; only short KPI cells soft-strip to —.
+    # Intentionally NO seed-refill of blank/"—" takeaways. Unmatched $/%% and
+    # off-allowlist attribution sentences are surgically redacted; short KPI
+    # cells soft-strip to —.
     return working
 
 
@@ -1452,6 +1489,7 @@ def _try_adapt_from_reference(
     freeze_context_as_of: str | None = None,
     freeze_status: str | None = None,
     freeze_stale: bool = False,
+    fail_closed: bool = True,
 ) -> tuple[bytes, str] | None:
     """Adapt a known-good reference script to the current payload (layout-preserving)."""
     from app.services.reporting.export.deck_gold import resolve_reference_script
@@ -1529,7 +1567,9 @@ def _try_adapt_from_reference(
             f"Adapt fallback incomplete ({len(script_text)} chars, no pptx.writeFile)"
         )
     if payload is not None:
-        script_text = _verify_prompt5_script_or_raise(script_text, payload)
+        script_text = _verify_prompt5_script_or_raise(
+            script_text, payload, fail_closed=fail_closed
+        )
         script_text = _postprocess_prompt5_script(script_text, payload)
     else:
         script_text = _postprocess_prompt5_script(script_text, None)
@@ -1548,8 +1588,13 @@ def build_claude_deck_pptx_bytes(
     freeze_context_as_of: str | None = None,
     freeze_status: str | None = None,
     freeze_stale: bool = False,
+    fail_closed: bool = True,
 ) -> tuple[bytes, str]:
-    """Prompt 5: adapt known-good layout first; fresh Claude script only if needed."""
+    """Prompt 5: adapt known-good layout first; fresh Claude script only if needed.
+
+    Customer packs default ``fail_closed=True`` so unmatched claim/attribution
+    failures raise instead of shipping a soft-stripped deck.
+    """
     from app.services.commentary.claim_verify import CommentaryIntegrityError
 
     client = build_commentary_llm_client(purpose="export")
@@ -1573,6 +1618,7 @@ def build_claude_deck_pptx_bytes(
             freeze_context_as_of=freeze_context_as_of,
             freeze_status=freeze_status,
             freeze_stale=freeze_stale,
+            fail_closed=fail_closed,
         )
         if adapted is not None:
             _record_deck_evidence_pack(
@@ -1629,7 +1675,9 @@ def build_claude_deck_pptx_bytes(
                 logger.error(last_error)
                 continue
 
-            script_text = _verify_prompt5_script_or_raise(script_text, payload)
+            script_text = _verify_prompt5_script_or_raise(
+                script_text, payload, fail_closed=fail_closed
+            )
             script_text = _postprocess_prompt5_script(script_text, payload)
             pptx_bytes, _ = _render_prepared_script(
                 script_text, period=bundle.as_of_period

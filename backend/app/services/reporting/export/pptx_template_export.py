@@ -1,7 +1,8 @@
-"""Fill an existing board PPTX template — roll period labels and inject Claude commentary.
+"""Fill an existing board PPTX template — roll period labels, inject live charts/KPIs, and Claude commentary.
 
-The reference deck (ClarityFP / SMPL Board Review) keeps layout, charts, and visuals.
-We update month/quarter labels and replace narrative text blocks per slide.
+The reference deck (ClarityFP / SMPL Board Review) keeps layout geometry.
+We update month/quarter labels, replace native chart series + scorecard/KPI ink
+from the same ReportingBundle SoT as commentary, then replace narrative text.
 """
 
 from __future__ import annotations
@@ -1181,8 +1182,13 @@ def build_pptx_from_template(
     from pptx import Presentation
 
     try:
+        from app.services.reporting.export.pptx_template_charts import apply_template_visuals
+
         prs = Presentation(str(template_path))
         roll_template_period_labels(prs, bundle)
+
+        key_to_idx = map_template_slides_to_slide_keys(prs)
+        visuals = apply_template_visuals(prs, bundle, key_to_idx)
 
         updates = _build_template_commentary_updates(
             bundle,
@@ -1196,10 +1202,11 @@ def build_pptx_from_template(
         buf = io.BytesIO()
         prs.save(buf)
         logger.info(
-            "Board PPTX from template %s (%d slides, %d commentary updates)",
+            "Board PPTX from template %s (%d slides, %d commentary updates, visuals=%s)",
             template_path.name,
             len(prs.slides),
             len(updates),
+            visuals,
         )
         return buf.getvalue()
     except Exception as exc:
