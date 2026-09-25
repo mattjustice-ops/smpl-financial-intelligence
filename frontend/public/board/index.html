@@ -335,7 +335,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
-<script src="/shared/board-data.js?v=9"></script>
+<script src="/shared/board-data.js?v=10"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
 var MO = ['Jan','Feb','Mar','Apr','May','Jun'];
@@ -522,6 +522,9 @@ function schedulePLCharts(delay) {
     buildPLTable();
     buildPLMiniCharts();
   }, delay);
+}
+if (typeof window !== 'undefined') {
+  window.schedulePLCharts = schedulePLCharts;
 }
 
 function boardChartScaleTokens() {
@@ -1264,28 +1267,103 @@ function buildPLSummary(area) {
   schedulePLCharts(30);
 }
 
+/** Scale PL_ROWS detail / GL amounts so children foot to an Income Statement total. */
+function boardScalePlAmount(gl, field, newTotal) {
+  if (!gl || !gl.length || newTotal == null || Number.isNaN(newTotal)) return;
+  var oldSum = 0;
+  for (var i = 0; i < gl.length; i++) oldSum += (gl[i][field] != null ? +gl[i][field] : 0);
+  if (Math.abs(oldSum) < 1e-9) {
+    gl[0][field] = +(+newTotal).toFixed(3);
+    for (var z = 1; z < gl.length; z++) gl[z][field] = 0;
+    return;
+  }
+  var scale = newTotal / oldSum;
+  var running = 0;
+  for (var j = 0; j < gl.length; j++) {
+    if (j === gl.length - 1) {
+      gl[j][field] = +(+((newTotal - running).toFixed(3)));
+    } else {
+      var v = +(((gl[j][field] != null ? +gl[j][field] : 0) * scale).toFixed(3));
+      gl[j][field] = v;
+      running += v;
+    }
+  }
+}
+
+function boardApplyPlLine(r, act, bud, ytdA, ytdB) {
+  if (!r) return;
+  if (act != null && !Number.isNaN(act)) {
+    r.a = +(+act).toFixed(3);
+    if (r.gl && r.gl.length) boardScalePlAmount(r.gl, 'a', r.a);
+  }
+  if (bud != null && !Number.isNaN(bud)) {
+    r.b = +(+bud).toFixed(3);
+    if (r.gl && r.gl.length) boardScalePlAmount(r.gl, 'b', r.b);
+  }
+  if (ytdA != null && !Number.isNaN(ytdA)) {
+    r.ytdA = +(+ytdA).toFixed(3);
+    if (r.gl && r.gl.length) boardScalePlAmount(r.gl, 'ytd', r.ytdA);
+  }
+  if (ytdB != null && !Number.isNaN(ytdB)) r.ytdB = +(+ytdB).toFixed(3);
+}
+
 function buildPLTable() {
   if (typeof boardRefreshAllSeries === 'function') boardRefreshAllSeries();
   var pk = typeof boardPlKpis === 'function' ? boardPlKpis() : null;
   if (pk) {
-    PL_ROWS.forEach(function (r) {
-      if (r.label === 'Total Revenue' && pk.rev != null) {
-        r.a = +pk.rev.toFixed(2);
-        if (pk.revBud != null) r.b = +pk.revBud.toFixed(2);
-      }
-      if (r.label === 'Gross Profit' && pk.gp != null) {
-        r.a = +pk.gp.toFixed(2);
-        if (pk.gpBud != null) r.b = +pk.gpBud.toFixed(2);
-      }
-      if (r.label === 'Total OpEx' && pk.opex != null) {
-        r.a = +pk.opex.toFixed(2);
-        if (pk.opexBud != null) r.b = +pk.opexBud.toFixed(2);
-      }
-      if (r.label === 'EBITDA' && pk.ebitda != null) {
-        r.a = +pk.ebitda.toFixed(2);
-        if (pk.ebitdaBud != null) r.b = +pk.ebitdaBud.toFixed(2);
-      }
-    });
+    var byLabel = {};
+    PL_ROWS.forEach(function (r) { if (r && r.label) byLabel[r.label] = r; });
+
+    // Detail + rollups must come from the same TS_DATA Income Statement as Financial Statements.
+    boardApplyPlLine(byLabel['Subscription Revenue'], pk.sub, pk.subBud, pk.ytdSub, pk.ytdSubBud);
+    boardApplyPlLine(byLabel['Services Revenue'], pk.svc, pk.svcBud, pk.ytdSvc, pk.ytdSvcBud);
+    boardApplyPlLine(byLabel['Total Revenue'], pk.rev, pk.revBud, pk.ytdRev, pk.ytdRevBud);
+
+    // COGS children (Cloud Hosting / Support / 3rd Party) keep mix; scale to IS cogs total.
+    var cogsKids = ['Cloud Hosting', 'Support Labor COGS', '3rd Party & Tools']
+      .map(function (lbl) { return byLabel[lbl]; })
+      .filter(Boolean);
+    if (pk.cogs != null && cogsKids.length) {
+      var oldCogs = cogsKids.reduce(function (s, r) { return s + (r.a || 0); }, 0);
+      var scaleA = Math.abs(oldCogs) > 1e-9 ? pk.cogs / oldCogs : 1;
+      var runA = 0;
+      cogsKids.forEach(function (r, i) {
+        var next = i === cogsKids.length - 1
+          ? +(pk.cogs - runA).toFixed(3)
+          : +(((r.a || 0) * scaleA).toFixed(3));
+        boardApplyPlLine(r, next, null, null, null);
+        runA += next;
+      });
+    }
+    if (pk.cogsBud != null && cogsKids.length) {
+      var oldCogsB = cogsKids.reduce(function (s, r) { return s + (r.b || 0); }, 0);
+      var scaleB = Math.abs(oldCogsB) > 1e-9 ? pk.cogsBud / oldCogsB : 1;
+      var runB = 0;
+      cogsKids.forEach(function (r, i) {
+        var next = i === cogsKids.length - 1
+          ? +(pk.cogsBud - runB).toFixed(3)
+          : +(((r.b || 0) * scaleB).toFixed(3));
+        boardApplyPlLine(r, null, next, null, null);
+        runB += next;
+      });
+    }
+    if (pk.ytdCogs != null && cogsKids.length) {
+      var oldCogsY = cogsKids.reduce(function (s, r) { return s + (r.ytdA || 0); }, 0);
+      var scaleY = Math.abs(oldCogsY) > 1e-9 ? pk.ytdCogs / oldCogsY : 1;
+      var runY = 0;
+      cogsKids.forEach(function (r, i) {
+        var next = i === cogsKids.length - 1
+          ? +(pk.ytdCogs - runY).toFixed(3)
+          : +(((r.ytdA || 0) * scaleY).toFixed(3));
+        boardApplyPlLine(r, null, null, next, null);
+        runY += next;
+      });
+    }
+
+    boardApplyPlLine(byLabel['Total COGS'], pk.cogs, pk.cogsBud, pk.ytdCogs, pk.ytdCogsBud);
+    boardApplyPlLine(byLabel['Gross Profit'], pk.gp, pk.gpBud, pk.ytdGp, pk.ytdGpBud);
+    boardApplyPlLine(byLabel['Total OpEx'], pk.opex, pk.opexBud, pk.ytdOpex, pk.ytdOpexBud);
+    boardApplyPlLine(byLabel['EBITDA'], pk.ebitda, pk.ebitdaBud, pk.ytdEbitda, pk.ytdEbitdaBud);
   }
   const _fh=document.getElementById('plFcHdr');if(_fh){_fh.textContent='FC '+(MO12[CLOSE_MO_IDX+1]||'Jul')+'–Dec';}
   const tb = document.getElementById('plTbody');
@@ -1330,6 +1408,10 @@ function buildPLTable() {
       });
     }
   });
+}
+if (typeof window !== 'undefined') {
+  window.buildPLTable = buildPLTable;
+  window.schedulePLCharts = schedulePLCharts;
 }
 
 function togglePLRow(ri, gl, inv) {
@@ -3584,7 +3666,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=34"></script>
+<script src="/shared/board-hydrate.js?v=35"></script>
 
 </body>
 </html>
