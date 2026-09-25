@@ -611,7 +611,10 @@ def build_cash_liquidity_block(
     floor = Decimal("10000000")
 
     _BRIDGE_LINES: tuple[tuple[str, str, tuple[str, ...], str | None, bool], ...] = (
-        ("Beginning cash", "beginning_cash", ("beginning_cash", "beginning"), None, False),
+        # bridge_field "beginning_cash" → prior-month ending_cash_at (Actual + Budget).
+        # None here skipped that path and fell through to WF beginning_cash, which is
+        # often missing for Budget while ending_cash Budget is populated.
+        ("Beginning cash", "beginning_cash", ("beginning_cash", "beginning"), "beginning_cash", False),
         ("Collections", "collections", ("cash_collections", "collections"), None, False),
         ("Payroll", "payroll", ("payroll_cash_out", "payroll"), "payroll", True),
         ("Vendor payments", "vendor_payments", ("vendor_cash_out", "vendor_cash_out_n30", "vendor_payments", "vendor"), "vendor", True),

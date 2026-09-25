@@ -19,6 +19,7 @@ import io
 import logging
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from pptx import Presentation
 from pptx.util import Emu, Pt
@@ -38,6 +39,50 @@ DEFAULT_FONT_PT = 8.5
 MIN_FONT_PT = 7.0
 
 _FOOTER_RE = re.compile(r"CONFIDENTIAL|Board Operating Review|\b\d{1,2}\s*/\s*\d{1,2}\b", re.I)
+_BOARD_ACTION_NUM_RE = re.compile(r"^0[1-4]$")
+
+
+def _boxes_overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    return not (a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1])
+
+
+def _repair_board_action_number_overlap(slide, report: LayoutRepairReport, idx: int) -> None:
+    """Shift titles that sit on top of large 01–04 watermarks (slide 10 cards)."""
+    numbers: list[tuple[tuple[float, float, float, float], Any, str]] = []
+    others: list[tuple[tuple[float, float, float, float], Any, str]] = []
+    for shape in slide.shapes:
+        box = _bounds_in(shape)
+        if box is None or not shape.has_text_frame:
+            continue
+        text = shape.text_frame.text.strip()
+        if not text:
+            continue
+        if _BOARD_ACTION_NUM_RE.match(text) and _font_pt(shape) >= 28:
+            numbers.append((box, shape, text))
+        else:
+            others.append((box, shape, text))
+
+    for nbox, _nshape, ntext in numbers:
+        for obox, oshape, otext in others:
+            if otext.upper().startswith("FOR "):
+                continue
+            if len(otext) < 12:
+                continue
+            if not _boxes_overlap(nbox, obox):
+                continue
+            # Same-column title sharing the number's left edge.
+            if abs(obox[0] - nbox[0]) > 0.2:
+                continue
+            new_left = nbox[2] + 0.08
+            old_right = obox[2]
+            new_w = max(1.5, old_right - new_left)
+            if new_left - obox[0] < 0.05:
+                continue
+            oshape.left = Emu(int(round(new_left * EMU_PER_INCH)))
+            oshape.width = Emu(int(round(new_w * EMU_PER_INCH)))
+            report.moved.append(
+                f"slide {idx}: board-action title {otext[:36]!r} cleared off {ntext}"
+            )
 
 
 @dataclass
@@ -115,6 +160,9 @@ def repair_deck_layout(pptx_bytes: bytes) -> tuple[bytes, LayoutRepairReport]:
             if not text or _is_footer(shape, text, slide_h):
                 continue
             body.append((box, shape, text))
+
+        # Slide 10 (and any 01–04 watermark cards): title must clear the number glyph.
+        _repair_board_action_number_overlap(slide, report, idx)
 
         overflowing = [e for e in body if e[0][3] > safe_bottom + 0.01]
         if not overflowing:

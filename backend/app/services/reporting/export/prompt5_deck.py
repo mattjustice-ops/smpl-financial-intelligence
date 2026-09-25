@@ -269,6 +269,9 @@ def _marketing_block(bundle, as_of, m):
     from app.services.reporting.export.board_platform_metrics import (
         build_pipeline_waterfall_chart,
     )
+    from app.services.reporting.export.board_slide_commentary_payload import (
+        fmt_deck_var,
+    )
     from app.services.reporting.period_utils import prior_period
 
     channels_all = _marketing_by_channel(bundle, as_of)
@@ -291,6 +294,10 @@ def _marketing_block(bundle, as_of, m):
         _wf(bundle, "pipeline", "beginning_pipeline", as_of, "Budget")
     ) or abs(_wf(bundle, "pipeline", "ending_pipeline", prior_period(as_of), "Budget"))
     ending_pipeline_bud = abs(_wf(bundle, "pipeline", "ending_pipeline", as_of, "Budget"))
+    created = m.pipeline_created or Decimal("0")
+    created_bud = abs(_wf(bundle, "pipeline", "pipeline_created", as_of, "Budget"))
+    closed_won = m.closed_won or Decimal("0")
+    closed_won_bud = abs(_wf(bundle, "pipeline", "closed_won", as_of, "Budget"))
     coverage_vs_arr = (
         float(ending_pipeline / m.ending_arr)
         if ending_pipeline and m.ending_arr
@@ -301,6 +308,65 @@ def _marketing_block(bundle, as_of, m):
         if closed_lost_bud
         else None
     )
+
+    def _bridge_var(act: Decimal, bud: Decimal) -> str:
+        # Em-dash when either side missing — matches cash/ARR bridge convention.
+        if not act and not bud:
+            return "—"
+        if not bud:
+            return "—"
+        return fmt_deck_var(act, bud)
+
+    def _outflow(val: Decimal) -> str:
+        if not val:
+            return "—"
+        s = _money_k(val)
+        return s if s.startswith("-") else f"-{s}"
+
+    # Structured bridge (like arr_analysis.bridge_table) so Claude + soft-strip
+    # reinject have fmt_deck_var SoT — otherwise Beginning/Lost/Slipped variance
+    # cells invent and soft-strip to —.
+    pipeline_bridge_table = {
+        "columns": ["Component", "Actual", "Budget", "Variance"],
+        "rows": [
+            {
+                "label": "Beginning Pipeline",
+                "actual": _money_k(beginning_pipeline) if beginning_pipeline else "—",
+                "budget": _money_k(beginning_pipeline_bud) if beginning_pipeline_bud else "—",
+                "variance": _bridge_var(beginning_pipeline, beginning_pipeline_bud),
+            },
+            {
+                "label": "Created",
+                "actual": _money_k(created) if created else "—",
+                "budget": _money_k(created_bud) if created_bud else "—",
+                "variance": _bridge_var(created, created_bud),
+            },
+            {
+                "label": "Closed Won",
+                "actual": _outflow(closed_won),
+                "budget": _outflow(closed_won_bud) if closed_won_bud else "—",
+                "variance": _bridge_var(closed_won, closed_won_bud),
+            },
+            {
+                "label": "Closed Lost",
+                "actual": _outflow(closed_lost),
+                "budget": _outflow(closed_lost_bud) if closed_lost_bud else "—",
+                "variance": _bridge_var(closed_lost, closed_lost_bud),
+            },
+            {
+                "label": "Slipped",
+                "actual": _outflow(slipped),
+                "budget": _outflow(slipped_bud) if slipped_bud else "—",
+                "variance": _bridge_var(slipped, slipped_bud),
+            },
+            {
+                "label": "Ending Pipeline",
+                "actual": _money_k(ending_pipeline) if ending_pipeline else "—",
+                "budget": _money_k(ending_pipeline_bud) if ending_pipeline_bud else "—",
+                "variance": _bridge_var(ending_pipeline, ending_pipeline_bud),
+            },
+        ],
+    }
     return {
         # Prefer channel SoT when present so KPI header ties to channel table totals.
         "total_mqls": float(channel_mql_sum) if channels_all else float(m.mql),
@@ -351,6 +417,8 @@ def _marketing_block(bundle, as_of, m):
         "ending_arr_raw": float(m.ending_arr or 0),
         "closed_won": _money_k(m.closed_won),
         "closed_won_raw": float(m.closed_won or 0),
+        "closed_won_budget": _money_k(closed_won_bud) if closed_won_bud else "—",
+        "closed_won_budget_raw": float(closed_won_bud),
         # Copilot-depth GTM evidence (pipeline waterfall)
         "closed_lost": _money_k(closed_lost) if closed_lost else "—",
         "closed_lost_raw": float(closed_lost),
@@ -363,7 +431,10 @@ def _marketing_block(bundle, as_of, m):
         "slipped_pipeline_budget_raw": float(slipped_bud),
         "pipeline_created": _money_k(m.pipeline_created) if m.pipeline_created else "—",
         "pipeline_created_raw": float(m.pipeline_created or 0),
+        "pipeline_created_budget": _money_k(created_bud) if created_bud else "—",
+        "pipeline_created_budget_raw": float(created_bud),
         "pipeline_waterfall_chart": pipe_wf,
+        "bridge_table": pipeline_bridge_table,
         "narrative_must_cover": [
             "closed_lost actual vs budget + variance",
             "slipped pipeline actual vs budget",
@@ -1002,6 +1073,32 @@ def _reinject_cash_bridge_rows(script: str, payload: dict[str, Any]) -> str:
     return out
 
 
+def _reinject_pipeline_bridge_rows(script: str, payload: dict[str, Any]) -> str:
+    """Restore slide-7 pipeline bridge Actual/Budget/Variance from payload SoT."""
+    gtm = payload.get("gtm_performance") or {}
+    table = gtm.get("bridge_table") or {}
+    rows = table.get("rows") or []
+    out = script
+    restored: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("label") or "").strip()
+        if not label:
+            continue
+        cells = [
+            str(row.get("actual") or "—"),
+            str(row.get("budget") or "—"),
+            str(row.get("variance") or "—"),
+        ]
+        out, hit = _rewrite_row(out, label, cells)
+        if hit:
+            restored.append(label)
+    if restored:
+        logger.info("Reinjected pipeline bridge rows from payload: %s", ", ".join(restored))
+    return out
+
+
 def _reinject_gtm_channel_rows(script: str, payload: dict[str, Any]) -> str:
     """Restore slide-6 per-channel GTM cells from the payload after soft-strip."""
     gtm = payload.get("gtm_performance") or {}
@@ -1137,6 +1234,7 @@ def _postprocess_prompt5_script(script: str, payload: dict[str, Any] | None = No
         script = _reinject_period_matrix_ending_cash_row(script, payload)
         script = _reinject_cfs_variances(script, payload)
         script = _reinject_cash_bridge_rows(script, payload)
+        script = _reinject_pipeline_bridge_rows(script, payload)
         script = _reinject_gtm_channel_rows(script, payload)
         script = _reinject_pl_detail_rows(script, payload)
         script = _reinject_monthly_trends_chart_series(script, payload)

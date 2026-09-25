@@ -160,18 +160,23 @@ def pptx_soft_strip_failed_claims_in_literal(
     cleaned = re.sub(r"\s{2,}", " ", text).strip(" ,;|")
     cleaned = re.sub(r"(?:\s*—){2,}", f" {PPTX_SOFT_STRIP_CELL}", cleaned).strip()
     # If redaction left only numbering / em dashes, collapse to a single cell dash.
-    remnant = re.sub(r"[\d\.\s—\-–|]+", "", cleaned)
+    remnant = re.sub(r"[\d\.\s—\-–|→]+", "", cleaned)
     if not remnant:
+        return PPTX_SOFT_STRIP_CELL
+    # Orphaned list marker after attribution/claim strip (e.g. "1.").
+    if re.fullmatch(r"\d+\.", cleaned):
         return PPTX_SOFT_STRIP_CELL
     return cleaned if cleaned else PPTX_SOFT_STRIP_CELL
 
 
 # Sentence ends that are not dotted identifiers (mrr_waterfall.ending_mrr).
-_SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)|\n")
+# (?<!\d) keeps "1. Beginning…" as one bullet — otherwise attribution soft-strip
+# removes the body sentence and leaves an orphaned "1." on the deck.
+_SENTENCE_END_RE = re.compile(r"(?<!\d)[.!?](?=\s|$)|\n")
 
 
 def split_sentences(text: str) -> list[str]:
-    """Split narrative into sentences without treating dotted ids as boundaries."""
+    """Split narrative into sentences without treating list markers / dotted ids as ends."""
     if not text or not text.strip():
         return []
     ends: list[int] = []

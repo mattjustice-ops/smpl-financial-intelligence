@@ -155,11 +155,13 @@ def build_monthly_trends_block(
 
     n = len(month_labels)
 
+    # monthly_ending_arr_series returns raw dollars; chart series are labeled ($M)
+    # and reinjected into pptxgenjs addChart — must be millions or lines are invisible.
     return {
         "months": month_labels,
-        "ending_arr_m": [round(v, 3) for v in act_arr[:n]],
-        "ending_arr_outlook_m": [round(v, 3) for v in out_arr[:n]],
-        "ending_arr_budget_m": [round(v, 3) for v in bud_arr[:n]],
+        "ending_arr_m": [_to_m(v) for v in act_arr[:n]],
+        "ending_arr_outlook_m": [_to_m(v) for v in out_arr[:n]],
+        "ending_arr_budget_m": [_to_m(v) for v in bud_arr[:n]],
         "revenue_outlook_m": rev_outlook_m,
         "revenue_budget_m": rev_budget_m,
         "pipeline_created_m": [

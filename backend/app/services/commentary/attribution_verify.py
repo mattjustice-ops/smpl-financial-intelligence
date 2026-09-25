@@ -611,7 +611,12 @@ def strip_failed_attribution_sentences(
         if not _sentence_touches_failed_claim(s, failures)
     ]
     joined = join_sentences(kept)
-    return joined if joined.strip() else empty_fallback
+    if not joined.strip():
+        return empty_fallback
+    # List-marker-only remnant after body sentence removal (legacy split_sentences).
+    if re.fullmatch(r"\d+\.", joined.strip()):
+        return empty_fallback
+    return joined
 
 
 def fail_closed_attribution_text(

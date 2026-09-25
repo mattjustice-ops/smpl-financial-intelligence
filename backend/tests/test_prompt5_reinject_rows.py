@@ -12,6 +12,7 @@ from app.services.reporting.export.prompt5_deck import (
     _reinject_cash_bridge_rows,
     _reinject_gtm_channel_rows,
     _reinject_monthly_trends_chart_series,
+    _reinject_pipeline_bridge_rows,
     _reinject_pl_detail_rows,
 )
 
@@ -187,3 +188,65 @@ def test_monthly_trends_chart_series_reinjected():
     out = _reinject_monthly_trends_chart_series(script, payload)
     assert "79.505" in out
     assert "const arrActual = [80" not in out
+
+
+def test_pipeline_bridge_variances_reinjected():
+    payload = {
+        "gtm_performance": {
+            "bridge_table": {
+                "columns": ["Component", "Actual", "Budget", "Variance"],
+                "rows": [
+                    {
+                        "label": "Beginning Pipeline",
+                        "actual": "$8.27M",
+                        "budget": "$8.68M",
+                        "variance": "-$410.0K",
+                    },
+                    {
+                        "label": "Closed Lost",
+                        "actual": "-$4.56M",
+                        "budget": "-$4.85M",
+                        "variance": "+$290.0K",
+                    },
+                    {
+                        "label": "Slipped",
+                        "actual": "-$1.09M",
+                        "budget": "-$1.16M",
+                        "variance": "+$70.0K",
+                    },
+                ],
+            }
+        }
+    }
+    script = """
+      const pipeBridge = [
+        ["Beginning Pipeline", "$8.27M", "$8.68M", "\u2014"],
+        ["Closed Lost", "-$4.56M", "-$4.85M", "\u2014"],
+        ["Slipped", "-$1.09M", "-$1.16M", "\u2014"],
+      ];
+    """
+    out = _reinject_pipeline_bridge_rows(script, payload)
+    assert '"-$410.0K"' in out
+    assert '"+$290.0K"' in out
+    assert '"+$70.0K"' in out
+    assert out.count("\u2014") == 0
+
+
+def test_postprocess_runs_pipeline_bridge_reinject():
+    payload = {
+        "gtm_performance": {
+            "bridge_table": {
+                "rows": [
+                    {
+                        "label": "Beginning Pipeline",
+                        "actual": "$8.27M",
+                        "budget": "$8.68M",
+                        "variance": "-$410.0K",
+                    }
+                ]
+            }
+        }
+    }
+    script = 'const r = [["Beginning Pipeline", "$8.27M", "$8.68M", "\u2014"]];'
+    out = _postprocess_prompt5_script(script, payload)
+    assert '"-$410.0K"' in out
