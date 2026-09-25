@@ -150,7 +150,13 @@ def _build_metric(
         periods: tuple[str, ...],
         *,
         fallback: dict[str, dict[str, Decimal]] | None = None,
+        is_source: dict[str, dict[str, Decimal]] | None = None,
     ) -> Decimal:
+        # Income Statement SoT for actual/budget rollups when prefer_is is set.
+        if prefer_is and is_key_fn and is_source is not None:
+            is_v = is_key_fn(is_source, periods)
+            if is_v != 0:
+                return is_v
         if prefer_is and is_key_fn and fallback is not None:
             is_v = is_key_fn(fallback, periods)
             if is_v != 0:
@@ -162,10 +168,10 @@ def _build_metric(
             return is_key_fn(fallback, periods)
         return Decimal("0")
 
-    period_a = pull(gl_act, period, fallback=outlook)
-    period_b = pull(gl_bud, period, fallback=budget)
-    ytd_a = pull(gl_act, ytd, fallback=outlook)
-    ytd_b = pull(gl_bud, ytd, fallback=budget)
+    period_a = pull(gl_act, period, fallback=outlook, is_source=actual_is)
+    period_b = pull(gl_bud, period, fallback=budget, is_source=budget)
+    ytd_a = pull(gl_act, ytd, fallback=outlook, is_source=actual_is)
+    ytd_b = pull(gl_bud, ytd, fallback=budget, is_source=budget)
     h2_f = pull(gl_fcst, h2, fallback=forecast_is)
 
     var_d, var_p = variance(period_a, period_b)
@@ -390,6 +396,7 @@ def build_spec_pl_lines(
         forecast_is=forecast_is,
         amount_fn=lambda gl, ps: sum((_cogs_acct_sum(gl, ps, ac) for ac in COGS_ACCOUNT_NAMES), start=Decimal("0")),
         is_key_fn=lambda src, ps: _is_metric(src, ps, "cost_of_revenue"),
+        prefer_is=True,
     )
     lines.append(
         _pl_line(
@@ -472,6 +479,7 @@ def build_spec_pl_lines(
         amount_fn=lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Sales")
         + _gl_dept_acct_sum(gl, ps, department="Marketing"),
         is_key_fn=lambda src, ps: _is_metric(src, ps, "sales_and_marketing"),
+        prefer_is=True,
     )
     lines.extend(sm_lines)
     lines.append(_pl_line("total_sm", "Total S&M", "sales_and_marketing", sm_total_m, line_type="total", is_bold=True))
@@ -519,6 +527,7 @@ def build_spec_pl_lines(
         amount_fn=lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Engineering")
         + _gl_dept_acct_sum(gl, ps, department="Product"),
         is_key_fn=lambda src, ps: _is_metric(src, ps, "research_and_development"),
+        prefer_is=True,
     )
     lines.extend(rd_lines)
     lines.append(_pl_line("total_rd", "Total R&D", "research_and_development", rd_total_m, line_type="total", is_bold=True))
@@ -580,8 +589,9 @@ def build_spec_pl_lines(
         + _gl_dept_acct_sum(gl, ps, department="Finance")
         + _gl_dept_acct_sum(gl, ps, department="Customer Success")
         + _gl_dept_acct_sum(gl, ps, department="Support"),
-        is_key_fn=lambda src, ps: _is_metric(src, ps, "general_and_administrative")
-        + _is_metric(src, ps, "customer_success"),
+        # Match IS OpEx: Total G&A = general_and_administrative only (CS is not in IS OpEx).
+        is_key_fn=lambda src, ps: _is_metric(src, ps, "general_and_administrative"),
+        prefer_is=True,
     )
     lines.extend([ga_dept_m, fin_recurring_m, fin_onetime_m, da_m])
     lines.append(
@@ -666,6 +676,7 @@ def build_spec_pl_lines(
         "depreciation",
         lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="G&A", account=DA_ACCOUNT),
         is_key_fn=lambda src, ps: _is_metric(src, ps, "depreciation_and_amortization"),
+        prefer_is=True,
     )
     interest_m = metric(
         "interest_expense",
@@ -673,22 +684,24 @@ def build_spec_pl_lines(
         "interest_expense",
         lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Finance", account=INTEREST_ACCOUNT),
         is_key_fn=lambda src, ps: _is_metric(src, ps, "interest_expense"),
+        prefer_is=True,
     )
+    # Match FS Income Statement: Operating Income = EBITDA − D&A (interest below OpInc).
     op_inc_m = MetricSlice(
-        actual=ebitda_m.actual - da_below.metrics.actual - interest_m.metrics.actual,
-        budget=ebitda_m.budget - da_below.metrics.budget - interest_m.metrics.budget,
-        forecast=ebitda_m.forecast - da_below.metrics.forecast - interest_m.metrics.forecast,
-        outlook=ebitda_m.outlook - da_below.metrics.outlook - interest_m.metrics.outlook,
-        variance=(ebitda_m.actual - da_below.metrics.actual - interest_m.metrics.actual)
-        - (ebitda_m.budget - da_below.metrics.budget - interest_m.metrics.budget),
+        actual=ebitda_m.actual - da_below.metrics.actual,
+        budget=ebitda_m.budget - da_below.metrics.budget,
+        forecast=ebitda_m.forecast - da_below.metrics.forecast,
+        outlook=ebitda_m.outlook - da_below.metrics.outlook,
+        variance=(ebitda_m.actual - da_below.metrics.actual)
+        - (ebitda_m.budget - da_below.metrics.budget),
         variance_pct=variance(
-            ebitda_m.actual - da_below.metrics.actual - interest_m.metrics.actual,
-            ebitda_m.budget - da_below.metrics.budget - interest_m.metrics.budget,
+            ebitda_m.actual - da_below.metrics.actual,
+            ebitda_m.budget - da_below.metrics.budget,
         )[1],
-        ytd_actual=ebitda_m.ytd_actual - da_below.metrics.ytd_actual - interest_m.metrics.ytd_actual,
-        ytd_budget=ebitda_m.ytd_budget - da_below.metrics.ytd_budget - interest_m.metrics.ytd_budget,
-        ytd_variance=(ebitda_m.ytd_actual - da_below.metrics.ytd_actual - interest_m.metrics.ytd_actual)
-        - (ebitda_m.ytd_budget - da_below.metrics.ytd_budget - interest_m.metrics.ytd_budget),
+        ytd_actual=ebitda_m.ytd_actual - da_below.metrics.ytd_actual,
+        ytd_budget=ebitda_m.ytd_budget - da_below.metrics.ytd_budget,
+        ytd_variance=(ebitda_m.ytd_actual - da_below.metrics.ytd_actual)
+        - (ebitda_m.ytd_budget - da_below.metrics.ytd_budget),
     )
     tax_m = metric(
         "tax_expense",
@@ -696,18 +709,26 @@ def build_spec_pl_lines(
         "tax_expense",
         lambda _gl, ps: Decimal("0"),
         is_key_fn=lambda src, ps: _is_metric(src, ps, "tax_expense"),
+        prefer_is=True,
         driver="income_statement",
     )
     net_m = MetricSlice(
-        actual=op_inc_m.actual - tax_m.metrics.actual,
-        budget=op_inc_m.budget - tax_m.metrics.budget,
-        forecast=op_inc_m.forecast - tax_m.metrics.forecast,
-        outlook=op_inc_m.outlook - tax_m.metrics.outlook,
-        variance=(op_inc_m.actual - tax_m.metrics.actual) - (op_inc_m.budget - tax_m.metrics.budget),
-        variance_pct=variance(op_inc_m.actual - tax_m.metrics.actual, op_inc_m.budget - tax_m.metrics.budget)[1],
-        ytd_actual=op_inc_m.ytd_actual - tax_m.metrics.ytd_actual,
-        ytd_budget=op_inc_m.ytd_budget - tax_m.metrics.ytd_budget,
-        ytd_variance=(op_inc_m.ytd_actual - tax_m.metrics.ytd_actual) - (op_inc_m.budget - tax_m.metrics.ytd_budget),
+        actual=op_inc_m.actual - interest_m.metrics.actual - tax_m.metrics.actual,
+        budget=op_inc_m.budget - interest_m.metrics.budget - tax_m.metrics.budget,
+        forecast=op_inc_m.forecast - interest_m.metrics.forecast - tax_m.metrics.forecast,
+        outlook=op_inc_m.outlook - interest_m.metrics.outlook - tax_m.metrics.outlook,
+        variance=(op_inc_m.actual - interest_m.metrics.actual - tax_m.metrics.actual)
+        - (op_inc_m.budget - interest_m.metrics.budget - tax_m.metrics.budget),
+        variance_pct=variance(
+            op_inc_m.actual - interest_m.metrics.actual - tax_m.metrics.actual,
+            op_inc_m.budget - interest_m.metrics.budget - tax_m.metrics.budget,
+        )[1],
+        ytd_actual=op_inc_m.ytd_actual - interest_m.metrics.ytd_actual - tax_m.metrics.ytd_actual,
+        ytd_budget=op_inc_m.ytd_budget - interest_m.metrics.ytd_budget - tax_m.metrics.ytd_budget,
+        ytd_variance=(
+            op_inc_m.ytd_actual - interest_m.metrics.ytd_actual - tax_m.metrics.ytd_actual
+        )
+        - (op_inc_m.ytd_budget - interest_m.metrics.ytd_budget - tax_m.metrics.ytd_budget),
     )
     lines.extend(
         [
