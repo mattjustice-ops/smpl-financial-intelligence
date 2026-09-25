@@ -186,6 +186,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .pl-summary-tbl td.vpos { color: var(--teal); font-weight: 600; }
 .pl-summary-tbl td.vneg { color: var(--red); font-weight: 600; }
 .pl-summary-tbl td.vneu { color: var(--text3); }
+/* Beat .pl-sub/.pl-tot { color: var(--text) } so variance cells keep sign colors */
+.pl-tbl tr.pl-sub td.vpos, .pl-tbl tr.pl-tot td.vpos,
+.pl-summary-tbl tr.pl-sub td.vpos, .pl-summary-tbl tr.pl-tot td.vpos { color: var(--teal); font-weight: 600; }
+.pl-tbl tr.pl-sub td.vneg, .pl-tbl tr.pl-tot td.vneg,
+.pl-summary-tbl tr.pl-sub td.vneg, .pl-summary-tbl tr.pl-tot td.vneg { color: var(--red); font-weight: 600; }
+.pl-tbl tr.pl-sub td.vneu, .pl-tbl tr.pl-tot td.vneu,
+.pl-summary-tbl tr.pl-sub td.vneu, .pl-summary-tbl tr.pl-tot td.vneu { color: var(--text3); }
 .pl-expand { display: inline-block; width: 14px; font-size: 9px; opacity: .45; }
 /* DEPT TABS */
 .dtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -565,7 +572,16 @@ const fV = v => {
   return (v>=0?'+':'-') + '$' + abs.toFixed(d) + 'M';
 };
 const fP = (v,b) => b ? ((v-b)/Math.abs(b)*100).toFixed(1)+'%' : '—';
-const vCls = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'vpos':'vneg';
+/** Signed variance % for P&L (always shows + / − from the numeric sign). */
+const fVarPct = (vd, b) => {
+  if (b == null || Number.isNaN(b) || Math.abs(b) < 1e-12) return '—';
+  const pct = (vd / Math.abs(b)) * 100;
+  if (Math.abs(pct) < 0.05) return '0.0%';
+  return (pct > 0 ? '+' : '') + pct.toFixed(1) + '%';
+};
+/** Color by numeric sign only: green = positive, red = negative (ignore expense "favorable" invert). */
+const vCls = (v, inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'vpos':'vneg';
+const vClsSign = (v) => vCls(v, false);
 const vSign = (v,inv) => Math.abs(v)<0.005?'vneu':(inv?v<0:v>0)?'pos':'neg';
 /** Provenance attrs for material metrics (data-source / title / aria). */
 function ds(metricKey) {
@@ -1372,7 +1388,8 @@ function buildPLTable() {
     const tr = document.createElement('tr');
     if(r.type==='sec'){tr.className='pl-sec';tr.innerHTML=`<td colspan="8">${r.label}</td>`;tb.appendChild(tr);return;}
     const vd=r.a-r.b, yv=r.ytdA-r.ytdB;
-    const vCl=vCls(vd,r.inv), yCl=vCls(yv,r.inv);
+    // Variance colors follow the numeric sign (green +, red −) — not expense favorable/unfavorable invert.
+    const vCl=vClsSign(vd), yCl=vClsSign(yv);
     const cls=(r.type==='tot'?'pl-tot':r.type==='sub'?'pl-sub pl-click':'pl-click')+(r.gl?' pl-click':'');
     const hasDrill=r.gl&&r.gl.length>0;
     const fcTotal = r.gl ? r.gl.reduce((s,g)=>s+(g.fc||0),0) : null;
@@ -1382,7 +1399,7 @@ function buildPLTable() {
       <td style="text-align:right;font-family:var(--mono)">${fM(r.a)}</td>
       <td style="text-align:right;font-family:var(--mono);color:var(--text3)">${fM(r.b)}</td>
       <td class="${vCl}" style="text-align:right;font-family:var(--mono)">${fV(vd)}</td>
-      <td class="${vCl}" style="text-align:right;font-family:var(--mono)">${(vd/Math.abs(r.b)*100).toFixed(1)}%</td>
+      <td class="${vCl}" style="text-align:right;font-family:var(--mono)">${fVarPct(vd,r.b)}</td>
       <td style="text-align:right;font-family:var(--mono)">${fM(r.ytdA)}</td>
       <td class="${yCl}" style="text-align:right;font-family:var(--mono)">${fV(yv)}</td>
       <td style="text-align:right;font-family:var(--mono);color:var(--amber)">${fcStr}</td>`;
@@ -1395,14 +1412,15 @@ function buildPLTable() {
         gtr.className='pl-drill';
         gtr.style.display='none';
         const gv=g.a-g.b;
-        const gvc=vCls(gv,r.inv);
+        const gvc=vClsSign(gv);
+        const gyv=g.ytd-(g.b*5);
         gtr.innerHTML=`<td style="padding-left:22px;font-size:10.5px;color:var(--text2)">${g.n}</td>
           <td style="text-align:right;font-family:var(--mono);font-size:10.5px">${fM(g.a)}</td>
           <td style="text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--text3)">${fM(g.b)}</td>
           <td class="${gvc}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${fV(gv)}</td>
-          <td class="${gvc}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${(g.b?gv/Math.abs(g.b)*100:0).toFixed(1)}%</td>
+          <td class="${gvc}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${fVarPct(gv,g.b)}</td>
           <td style="text-align:right;font-family:var(--mono);font-size:10.5px">${fM(g.ytd)}</td>
-          <td class="${vCls(g.ytd-(g.b*5),r.inv)}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${fV(g.ytd-(g.b*5))}</td>
+          <td class="${vClsSign(gyv)}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${fV(gyv)}</td>
           <td style="text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--amber)">${g.fc!=null?fM(g.fc):'—'}</td>`;
         tb.appendChild(gtr);
       });
