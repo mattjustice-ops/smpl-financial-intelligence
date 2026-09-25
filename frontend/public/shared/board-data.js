@@ -592,6 +592,12 @@
       return {
         rev: global.REV_ACT && global.REV_ACT[idx],
         revBud: global.REV_BUD && global.REV_BUD[idx],
+        sub: null,
+        subBud: null,
+        svc: null,
+        svcBud: null,
+        cogs: null,
+        cogsBud: null,
         gp: global.GP_ACT && global.GP_ACT[idx],
         gpBud: null,
         gm: null,
@@ -599,27 +605,111 @@
         opexBud: null,
         ebitda: global.EBITDA_ACT && global.EBITDA_ACT[idx],
         ebitdaBud: null,
+        ytdRev: null,
+        ytdSub: null,
+        ytdSvc: null,
+        ytdCogs: null,
+        ytdGp: null,
+        ytdOpex: null,
+        ytdEbitda: null,
+        ytdRevBud: null,
+        ytdSubBud: null,
+        ytdSvcBud: null,
+        ytdCogsBud: null,
+        ytdGpBud: null,
+        ytdOpexBud: null,
+        ytdEbitdaBud: null,
       };
     }
-    var rev = isJun.revenue / 1e6;
-    var revBud = isBud && isBud.revenue != null ? isBud.revenue / 1e6 : null;
-    var gp = isJun.gross_profit / 1e6;
+    function m1(row, key) {
+      return row && row[key] != null ? row[key] / 1e6 : null;
+    }
+    var rev = m1(isJun, "revenue");
+    var revBud = m1(isBud, "revenue");
+    var sub = m1(isJun, "sub_rev");
+    var subBud = m1(isBud, "sub_rev");
+    var svc = m1(isJun, "svc_rev");
+    var svcBud = m1(isBud, "svc_rev");
+    // Prefer Income Statement split; if missing, keep total on subscription.
+    if (rev != null && (sub == null || svc == null)) {
+      if (sub == null && svc == null) {
+        sub = rev;
+        svc = 0;
+      } else if (sub == null) {
+        sub = +(rev - (svc || 0)).toFixed(6);
+      } else {
+        svc = +(rev - sub).toFixed(6);
+      }
+    }
+    if (revBud != null && (subBud == null || svcBud == null)) {
+      if (subBud == null && svcBud == null) {
+        subBud = revBud;
+        svcBud = 0;
+      } else if (subBud == null) {
+        subBud = +(revBud - (svcBud || 0)).toFixed(6);
+      } else {
+        svcBud = +(revBud - subBud).toFixed(6);
+      }
+    }
+    var cogs = m1(isJun, "cogs");
+    var cogsBud = m1(isBud, "cogs");
+    var gp = m1(isJun, "gross_profit");
     var gm = isJun.gm_pct != null ? isJun.gm_pct * 100 : null;
-    var opex = isJun.total_opex / 1e6;
-    var opexBud = isBud && isBud.total_opex != null ? isBud.total_opex / 1e6 : null;
-    var sm = isJun.sm / 1e6;
-    var smBud = isBud && isBud.sm != null ? isBud.sm / 1e6 : null;
-    var rd = isJun.rd / 1e6;
-    var rdBud = isBud && isBud.rd != null ? isBud.rd / 1e6 : null;
-    var ga = isJun.ga / 1e6;
-    var gaBud = isBud && isBud.ga != null ? isBud.ga / 1e6 : null;
-    var ebitda = isJun.ebitda / 1e6;
-    var ebitdaBud = isBud && isBud.ebitda != null ? isBud.ebitda / 1e6 : null;
+    var opex = m1(isJun, "total_opex");
+    var opexBud = m1(isBud, "total_opex");
+    var sm = m1(isJun, "sm");
+    var smBud = m1(isBud, "sm");
+    var rd = m1(isJun, "rd");
+    var rdBud = m1(isBud, "rd");
+    var ga = m1(isJun, "ga");
+    var gaBud = m1(isBud, "ga");
+    var ebitda = m1(isJun, "ebitda");
+    var ebitdaBud = m1(isBud, "ebitda");
+
+    var ytd = {
+      rev: 0, sub: 0, svc: 0, cogs: 0, gp: 0, opex: 0, ebitda: 0,
+      revBud: 0, subBud: 0, svcBud: 0, cogsBud: 0, gpBud: 0, opexBud: 0, ebitdaBud: 0,
+    };
+    var periods = (ts.Actual.periods || []).slice(0, boardActCount());
+    periods.forEach(function (p) {
+      var a = ts.Actual.is && ts.Actual.is[p];
+      var b = ts.Budget && ts.Budget.is && ts.Budget.is[p];
+      if (a) {
+        if (a.revenue != null) ytd.rev += a.revenue;
+        if (a.sub_rev != null) ytd.sub += a.sub_rev;
+        else if (a.revenue != null && a.svc_rev == null) ytd.sub += a.revenue;
+        if (a.svc_rev != null) ytd.svc += a.svc_rev;
+        if (a.cogs != null) ytd.cogs += a.cogs;
+        if (a.gross_profit != null) ytd.gp += a.gross_profit;
+        if (a.total_opex != null) ytd.opex += a.total_opex;
+        if (a.ebitda != null) ytd.ebitda += a.ebitda;
+      }
+      if (b) {
+        if (b.revenue != null) ytd.revBud += b.revenue;
+        if (b.sub_rev != null) ytd.subBud += b.sub_rev;
+        else if (b.revenue != null && b.svc_rev == null) ytd.subBud += b.revenue;
+        if (b.svc_rev != null) ytd.svcBud += b.svc_rev;
+        if (b.cogs != null) ytd.cogsBud += b.cogs;
+        if (b.gross_profit != null) ytd.gpBud += b.gross_profit;
+        if (b.total_opex != null) ytd.opexBud += b.total_opex;
+        if (b.ebitda != null) ytd.ebitdaBud += b.ebitda;
+      }
+    });
+    function ytdM(v) {
+      return +(v / 1e6).toFixed(3);
+    }
+
     return {
       rev: rev,
       revBud: revBud,
+      sub: sub,
+      subBud: subBud,
+      svc: svc,
+      svcBud: svcBud,
+      cogs: cogs,
+      cogsBud: cogsBud,
       gp: gp,
-      gpBud: isBud ? isBud.gross_profit / 1e6 : null,
+      gpBud: m1(isBud, "gross_profit"),
       gm: gm,
       opex: opex,
       opexBud: opexBud,
@@ -631,6 +721,20 @@
       gaBud: gaBud,
       ebitda: ebitda,
       ebitdaBud: ebitdaBud,
+      ytdRev: ytdM(ytd.rev),
+      ytdSub: ytdM(ytd.sub),
+      ytdSvc: ytdM(ytd.svc),
+      ytdCogs: ytdM(ytd.cogs),
+      ytdGp: ytdM(ytd.gp),
+      ytdOpex: ytdM(ytd.opex),
+      ytdEbitda: ytdM(ytd.ebitda),
+      ytdRevBud: ytdM(ytd.revBud),
+      ytdSubBud: ytdM(ytd.subBud),
+      ytdSvcBud: ytdM(ytd.svcBud),
+      ytdCogsBud: ytdM(ytd.cogsBud),
+      ytdGpBud: ytdM(ytd.gpBud),
+      ytdOpexBud: ytdM(ytd.opexBud),
+      ytdEbitdaBud: ytdM(ytd.ebitdaBud),
     };
   }
 

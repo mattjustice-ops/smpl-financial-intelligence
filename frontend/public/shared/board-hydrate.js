@@ -151,6 +151,12 @@
     if (typeof global.boardRefreshAllSeries === "function") {
       global.boardRefreshAllSeries();
     }
+    // Rebuild Management P&L from the same TS_DATA Income Statement SoT.
+    if (typeof global.schedulePLCharts === "function") {
+      try { global.schedulePLCharts(0); } catch (_) { /* non-fatal */ }
+    } else if (typeof global.buildPLTable === "function") {
+      try { global.buildPLTable(); } catch (_) { /* non-fatal */ }
+    }
 
     if (data.CASH_BRIDGE && data.CASH_BRIDGE.Actual && global.COLL) {
       var periods = boardActualPeriods();
