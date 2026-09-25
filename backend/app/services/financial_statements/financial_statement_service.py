@@ -173,7 +173,19 @@ def row_value_any(row: dict[str, Any], *keys: str) -> Decimal:
 
 def ensure_income_formulas(row: dict[str, Any]) -> dict[str, Any]:
     out = dict(row)
-    out["gross_profit"] = row_value(out, "revenue") - row_value(out, "cost_of_revenue")
+    rev = row_value(out, "revenue")
+    sub = row_value(out, "subscription_revenue")
+    svc = row_value(out, "services_revenue")
+    # Keep Subscription + Services = Revenue when the warehouse omits the split
+    # (demo CSVs often have NULL subscription/services). Same rule as Management P&L.
+    if rev and not sub and not svc:
+        out["subscription_revenue"] = rev
+        out["services_revenue"] = Decimal("0.00")
+    elif rev and svc and not sub:
+        out["subscription_revenue"] = rev - svc
+    elif rev and sub and not svc:
+        out["services_revenue"] = rev - sub
+    out["gross_profit"] = rev - row_value(out, "cost_of_revenue")
     out["total_operating_expenses"] = row_value(out, "sales_and_marketing") + row_value(out, "research_and_development") + row_value(out, "general_and_administrative")
     out["ebitda"] = row_value(out, "gross_profit") - row_value(out, "total_operating_expenses")
     out["operating_income"] = row_value(out, "ebitda") - row_value(out, "depreciation_and_amortization")

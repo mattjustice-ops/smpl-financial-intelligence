@@ -127,15 +127,18 @@ def _income_maps_from_gl(
 
 
 def _ensure_revenue_split(row: dict[str, Decimal]) -> None:
-    """Fill missing subscription/services so the pair can reconcile to total revenue.
+    """Fill missing subscription/services so the pair reconciles to total revenue.
 
-    When only one side is present, derive the other from revenue. When both are
-    present they are left as loaded (Income Statement line SoT).
+    When the warehouse omits both split columns, assign all revenue to subscription
+    (same rule as Financial Statements ensure_income_formulas) so Mgmt and IS match.
     """
     rev = row.get("revenue", Decimal("0"))
     sub = row.get("subscription_revenue", Decimal("0"))
     svc = row.get("services_revenue", Decimal("0"))
-    if rev and svc and not sub:
+    if rev and not sub and not svc:
+        row["subscription_revenue"] = rev
+        row["services_revenue"] = Decimal("0")
+    elif rev and svc and not sub:
         row["subscription_revenue"] = rev - svc
     elif rev and sub and not svc:
         row["services_revenue"] = rev - sub

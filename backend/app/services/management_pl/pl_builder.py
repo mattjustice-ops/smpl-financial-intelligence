@@ -235,9 +235,10 @@ def _resolve_revenue_split(
 ) -> tuple[Decimal, Decimal, Decimal]:
     """Return (subscription, services, total) with Sub + Svc == Total.
 
-    Income Statement columns are SoT when present (same as Financial Statements).
-    Missing half is completed from total revenue. GL is only used when the IS has
-    no split at all — and is then scaled so the pair still equals IS total revenue.
+    Income Statement is absolute SoT. When the warehouse omits the split, assign
+    all revenue to subscription (same as Financial Statements ensure_income_formulas).
+    Never invent a GL split that the Income Statement does not show — that was the
+    $7.35M Subscription vs $0 IS mismatch.
     """
     rev = _is_metric(income, periods, "revenue")
     sub = _is_metric(income, periods, "subscription_revenue")
@@ -251,8 +252,6 @@ def _resolve_revenue_split(
         elif svc and not sub:
             sub = rev - svc
         elif sub + svc != rev and rev:
-            # Explicit IS lines disagree with IS total — keep lines, pin total to IS revenue
-            # by putting the residual on the larger component so the table still ties.
             gap = rev - (sub + svc)
             if abs(sub) >= abs(svc):
                 sub = sub + gap
@@ -260,16 +259,13 @@ def _resolve_revenue_split(
                 svc = svc + gap
         return sub, svc, rev
 
-    gl_sub = _gl_subscription_revenue(gl, periods)
-    gl_svc = _gl_services_revenue(gl, periods)
-    gl_sum = gl_sub + gl_svc
-    if rev and gl_sum:
-        sub = (gl_sub / gl_sum * rev).quantize(Decimal("0.01"))
-        svc = rev - sub
-        return sub, svc, rev
     if rev:
         return rev, Decimal("0"), rev
-    return gl_sub, gl_svc, gl_sum
+
+    # No IS revenue for these periods (e.g. open forecast without IS rows) — GL last resort.
+    gl_sub = _gl_subscription_revenue(gl, periods)
+    gl_svc = _gl_services_revenue(gl, periods)
+    return gl_sub, gl_svc, gl_sub + gl_svc
 
 
 def _revenue_metric_slice(
