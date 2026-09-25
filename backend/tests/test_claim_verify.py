@@ -344,16 +344,47 @@ def test_prompt5_verify_soft_strips_and_exports() -> None:
         'slide.addText("$99,000,000");'  # invented KPI cell — soft-strip to —
         'slide.addText("$86,100,000");'  # verified KPI cell — keep
     )
-    out = _verify_prompt5_script_or_raise(script, payload)
+    out = _verify_prompt5_script_or_raise(script, payload, fail_closed=False)
     assert isinstance(out, str)
     assert len(out) > 20
     # Invented $99M is gone (claim strip and/or attribution sentence strip).
     assert "$99,000,000" not in out
     assert "$86,100,000" in out
-    assert "verifiable _sources citation" not in out
     assert "I don't know" not in out
     assert 'slide.addText("—")' in out or "slide.addText('—')" in out
-    assert out.count("$99,000,000") == 0
+
+
+def test_prompt5_verify_fail_closed_raises_on_invented_money() -> None:
+    from app.services.commentary.claim_verify import CommentaryIntegrityError
+    from app.services.reporting.export.prompt5_deck import _verify_prompt5_script_or_raise
+
+    payload = {
+        "period_context": {"close_period": "2026-06"},
+        "period_matrix": {"arr": {"actual": 86_100_000}},
+        "attribution_package": {
+            "allowed_drivers": [
+                {"id": "expansion", "label": "Expansion", "aliases": ["expansion"]}
+            ]
+        },
+        "_sources": {
+            "deck.arr": {
+                "source_type": "WAREHOUSE",
+                "table": "arr_waterfall",
+                "column": "ending_arr",
+                "path": "deck.arr",
+            }
+        },
+    }
+    script = (
+        'slide.addText("ARR closed at $86,100,000 (deck.arr) driven by expansion.");'
+        'slide.addText("Cash hit $99,000,000 due to three enterprise upsells.");'
+        'slide.addText("$99,000,000");'
+    )
+    try:
+        _verify_prompt5_script_or_raise(script, payload, fail_closed=True)
+        raise AssertionError("expected CommentaryIntegrityError")
+    except CommentaryIntegrityError as exc:
+        assert "claim-verify failed" in str(exc).lower() or "fail-closed" in str(exc).lower()
 
 
 def test_deck_evidence_package_includes_forecast_and_pipeline() -> None:

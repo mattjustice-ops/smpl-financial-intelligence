@@ -1193,19 +1193,22 @@ def build_arr_bridge_block(bundle: ReportingBundle) -> dict[str, Any]:
     arr_act = ending_arr_at_period(bundle, as_of, "Actual")
     arr_bud = ending_arr_at_period(bundle, as_of, "Budget")
 
-    def comp(wtype: str, scenario: str = "Actual") -> Decimal:
-        for key in (wtype, f"{wtype}_arr"):
-            val = _wf(bundle, "arr", key, as_of, scenario)
-            if val:
-                return val
-        return ZERO
+    from app.services.reporting.export.metric_registry import (
+        compute_churn_arr,
+        compute_contraction_arr,
+        compute_expansion_arr,
+        compute_net_new_arr,
+        compute_new_business_arr,
+        compute_reactivation_arr,
+    )
 
-    nb = comp("new_business")
-    exp = comp("expansion")
-    churn = abs(comp("churn"))
-    react = comp("reactivation")
-    cont = abs(comp("contraction"))
-    nn = comp("new_arr") or comp("new_business")
+    nb = compute_new_business_arr(bundle, as_of, "Actual")
+    exp = compute_expansion_arr(bundle, as_of, "Actual")
+    churn = compute_churn_arr(bundle, as_of, "Actual")
+    react = compute_reactivation_arr(bundle, as_of, "Actual")
+    cont = compute_contraction_arr(bundle, as_of, "Actual")
+    nn = compute_net_new_arr(bundle, as_of, "Actual")
+    nn_bud = compute_net_new_arr(bundle, as_of, "Budget")
 
     m = build_metrics_snapshot(bundle)
     grr = float((arr_act - churn) / arr_act * 100) if arr_act else None
@@ -1215,17 +1218,17 @@ def build_arr_bridge_block(bundle: ReportingBundle) -> dict[str, Any]:
     return {
         "arr_bop": fmt_deck_money(arr_prior),
         "new_business": fmt_deck_money(nb),
-        "new_business_budget": fmt_deck_money(comp("new_business", "Budget")),
+        "new_business_budget": fmt_deck_money(compute_new_business_arr(bundle, as_of, "Budget")),
         "expansion": fmt_deck_money(exp),
-        "expansion_budget": fmt_deck_money(comp("expansion", "Budget")),
+        "expansion_budget": fmt_deck_money(compute_expansion_arr(bundle, as_of, "Budget")),
         "reactivation": fmt_deck_money(react),
-        "reactivation_budget": fmt_deck_money(comp("reactivation", "Budget")),
+        "reactivation_budget": fmt_deck_money(compute_reactivation_arr(bundle, as_of, "Budget")),
         "contraction": fmt_deck_money(cont),
-        "contraction_budget": fmt_deck_money(abs(comp("contraction", "Budget"))),
+        "contraction_budget": fmt_deck_money(compute_contraction_arr(bundle, as_of, "Budget")),
         "churn": fmt_deck_money(churn),
-        "churn_budget": fmt_deck_money(abs(comp("churn", "Budget"))),
+        "churn_budget": fmt_deck_money(compute_churn_arr(bundle, as_of, "Budget")),
         "net_new": fmt_deck_money(nn),
-        "net_new_budget": fmt_deck_money(comp("new_arr", "Budget") or comp("new_business", "Budget")),
+        "net_new_budget": fmt_deck_money(nn_bud),
         "arr_eop": fmt_deck_money(arr_act),
         "arr_eop_budget": fmt_deck_money(arr_bud),
         "gsr_pct": fmt_deck_pct(Decimal(str(grr / 100)), as_percent=False) if grr is not None else "n/a",
@@ -1236,12 +1239,48 @@ def build_arr_bridge_block(bundle: ReportingBundle) -> dict[str, Any]:
             "columns": ["Component", "Actual", "Budget", "Variance"],
             "rows": [
                 {"label": "Beginning ARR", "actual": fmt_deck_money(arr_prior), "budget": fmt_deck_money(arr_prior_bud), "variance": fmt_deck_var(arr_prior, arr_prior_bud)},
-                {"label": "New Business", "actual": fmt_deck_money(nb), "budget": fmt_deck_money(comp("new_business", "Budget")), "variance": fmt_deck_var(nb, comp("new_business", "Budget"))},
-                {"label": "Expansion", "actual": fmt_deck_money(exp), "budget": fmt_deck_money(comp("expansion", "Budget")), "variance": fmt_deck_var(exp, comp("expansion", "Budget"))},
-                {"label": "Reactivation", "actual": fmt_deck_money(react), "budget": fmt_deck_money(comp("reactivation", "Budget")), "variance": fmt_deck_var(react, comp("reactivation", "Budget"))},
-                {"label": "Contraction", "actual": fmt_deck_money(cont), "budget": fmt_deck_money(abs(comp("contraction", "Budget"))), "variance": fmt_deck_var(cont, abs(comp("contraction", "Budget")))},
-                {"label": "Churn", "actual": fmt_deck_money(churn), "budget": fmt_deck_money(abs(comp("churn", "Budget"))), "variance": fmt_deck_var(churn, abs(comp("churn", "Budget")))},
-                {"label": "Ending ARR", "actual": fmt_deck_money(arr_act), "budget": fmt_deck_money(arr_bud), "variance": fmt_deck_var(arr_act, arr_bud)},
+                {
+                    "label": "New Business",
+                    "actual": fmt_deck_money(nb),
+                    "budget": fmt_deck_money(compute_new_business_arr(bundle, as_of, "Budget")),
+                    "variance": fmt_deck_var(nb, compute_new_business_arr(bundle, as_of, "Budget")),
+                },
+                {
+                    "label": "Expansion",
+                    "actual": fmt_deck_money(exp),
+                    "budget": fmt_deck_money(compute_expansion_arr(bundle, as_of, "Budget")),
+                    "variance": fmt_deck_var(exp, compute_expansion_arr(bundle, as_of, "Budget")),
+                },
+                {
+                    "label": "Reactivation",
+                    "actual": fmt_deck_money(react),
+                    "budget": fmt_deck_money(compute_reactivation_arr(bundle, as_of, "Budget")),
+                    "variance": fmt_deck_var(react, compute_reactivation_arr(bundle, as_of, "Budget")),
+                },
+                {
+                    "label": "Contraction",
+                    "actual": fmt_deck_money(cont),
+                    "budget": fmt_deck_money(compute_contraction_arr(bundle, as_of, "Budget")),
+                    "variance": fmt_deck_var(cont, compute_contraction_arr(bundle, as_of, "Budget")),
+                },
+                {
+                    "label": "Churn",
+                    "actual": fmt_deck_money(churn),
+                    "budget": fmt_deck_money(compute_churn_arr(bundle, as_of, "Budget")),
+                    "variance": fmt_deck_var(churn, compute_churn_arr(bundle, as_of, "Budget")),
+                },
+                {
+                    "label": "Net New ARR",
+                    "actual": fmt_deck_money(nn),
+                    "budget": fmt_deck_money(nn_bud),
+                    "variance": fmt_deck_var(nn, nn_bud),
+                },
+                {
+                    "label": "Ending ARR",
+                    "actual": fmt_deck_money(arr_act),
+                    "budget": fmt_deck_money(arr_bud),
+                    "variance": fmt_deck_var(arr_act, arr_bud),
+                },
             ],
         },
     }
@@ -1259,8 +1298,8 @@ VARIANCE_ROW_SOURCES: dict[str, dict[str, str]] = {
     "vc_net_new_arr": {
         "metric": "Net New ARR",
         "table": "comparison_waterfalls",
-        "field": "arr.new_arr | arr.new_business",
-        "rollup_fn": "rollup_waterfall_metric(flow=True)",
+        "field": "metric_registry.compute_net_new_arr (nb+exp+react-cont-churn)",
+        "rollup_fn": "compute_net_new_arr",
         "deck_block": "arr_analysis.bridge_table",
     },
     "vc_revenue": {

@@ -106,24 +106,9 @@ def _fs_line(bundle: ReportingBundle, period: str, needle: str, scenario: str) -
 
 
 def _net_new_arr(bundle: ReportingBundle, period: str, scenario: str) -> Decimal:
-    direct = _wf(bundle, "arr", "new_arr", period, scenario) or _wf(
-        bundle, "arr", "net_new_arr", period, scenario
-    )
-    if direct:
-        return direct
-    nb = _wf(bundle, "arr", "new_business", period, scenario)
-    exp = _wf(bundle, "arr", "expansion_arr", period, scenario) or _wf(
-        bundle, "arr", "expansion", period, scenario
-    )
-    churn = abs(
-        _wf(bundle, "arr", "churn_arr", period, scenario)
-        or _wf(bundle, "arr", "churn", period, scenario)
-    )
-    cont = abs(
-        _wf(bundle, "arr", "contraction_arr", period, scenario)
-        or _wf(bundle, "arr", "contraction", period, scenario)
-    )
-    return nb + exp - churn - cont
+    from app.services.reporting.export.metric_registry import compute_net_new_arr
+
+    return compute_net_new_arr(bundle, period, scenario)
 
 
 def build_template_chart_series(
@@ -316,8 +301,8 @@ def _scorecard_values(bundle: ReportingBundle) -> dict[str, tuple[str, str, str,
     else:
         gm_var = "—"
 
-    nn = m.net_new_arr
-    nn_b = m.new_arr_budget
+    nn = _net_new_arr(bundle, as_of, "Actual")
+    nn_b = _net_new_arr(bundle, as_of, "Budget")
     nn_p = _net_new_arr(bundle, prior, "Actual")
     nrr_disp = fmt_deck_pct(m.nrr, as_percent=False) if m.nrr is not None else "n/a"
 

@@ -843,6 +843,7 @@ def _run_mda_deck_job(
             freeze_context_as_of=freeze_as_of,
             freeze_status=freeze_status,
             freeze_stale=freeze_stale,
+            fail_closed=block_on_failure,
         )
         complete_export_job(
             job_id,
@@ -1213,6 +1214,7 @@ def _board_pptx_response(
     freeze_context_as_of: str | None = None,
     freeze_status: str | None = None,
     freeze_stale: bool = False,
+    fail_closed: bool = True,
 ) -> Response:
     try:
         if deck_kind == "mda":
@@ -1229,6 +1231,7 @@ def _board_pptx_response(
                 freeze_context_as_of=freeze_context_as_of,
                 freeze_status=freeze_status,
                 freeze_stale=freeze_stale,
+                fail_closed=fail_closed,
             )
             filename = f"mda_deck_{bundle.as_of_period}.pptx"
         else:
@@ -1465,6 +1468,7 @@ def export_board_presentation(
         use_ai_commentary=include_ai_commentary,
         scenario_mode=scenario_mode,
         package_mode=package_mode,
+        fail_closed=block_on_failure,
     )
 
 
@@ -1553,4 +1557,5 @@ def export_mda_deck(
         freeze_context_as_of=freeze.context_as_of_iso,
         freeze_status=freeze.status,
         freeze_stale=freeze.stale,
+        fail_closed=block_on_failure,
     )
