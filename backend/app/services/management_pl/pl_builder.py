@@ -117,6 +117,94 @@ def _gl_services_revenue(gl: dict[tuple[str, str, str], Decimal], periods: tuple
     return _gl_acct_contains(gl, periods, "service", department=None)
 
 
+def _resolve_revenue_split(
+    income: dict[str, dict[str, Decimal]],
+    gl: dict[tuple[str, str, str], Decimal],
+    periods: tuple[str, ...],
+) -> tuple[Decimal, Decimal, Decimal]:
+    """Return (subscription, services, total) with Sub + Svc == Total.
+
+    Income Statement columns are SoT when present (same as Financial Statements).
+    Missing half is completed from total revenue. GL is only used when the IS has
+    no split at all — and is then scaled so the pair still equals IS total revenue.
+    """
+    rev = _is_metric(income, periods, "revenue")
+    sub = _is_metric(income, periods, "subscription_revenue")
+    svc = _is_metric(income, periods, "services_revenue")
+
+    if sub or svc:
+        if not rev:
+            rev = sub + svc
+        if sub and not svc:
+            svc = rev - sub
+        elif svc and not sub:
+            sub = rev - svc
+        elif sub + svc != rev and rev:
+            # Explicit IS lines disagree with IS total — keep lines, pin total to IS revenue
+            # by putting the residual on the larger component so the table still ties.
+            gap = rev - (sub + svc)
+            if abs(sub) >= abs(svc):
+                sub = sub + gap
+            else:
+                svc = svc + gap
+        return sub, svc, rev
+
+    gl_sub = _gl_subscription_revenue(gl, periods)
+    gl_svc = _gl_services_revenue(gl, periods)
+    gl_sum = gl_sub + gl_svc
+    if rev and gl_sum:
+        sub = (gl_sub / gl_sum * rev).quantize(Decimal("0.01"))
+        svc = rev - sub
+        return sub, svc, rev
+    if rev:
+        return rev, Decimal("0"), rev
+    return gl_sub, gl_svc, gl_sum
+
+
+def _revenue_metric_slice(
+    *,
+    ctx: PeriodContext,
+    actual_is: dict[str, dict[str, Decimal]],
+    budget_is: dict[str, dict[str, Decimal]],
+    forecast_is: dict[str, dict[str, Decimal]],
+    gl_act: dict[tuple[str, str, str], Decimal],
+    gl_bud: dict[tuple[str, str, str], Decimal],
+    gl_fcst: dict[tuple[str, str, str], Decimal],
+    which: str,
+) -> MetricSlice:
+    """Build Actual/Budget/Forecast metrics for subscription, services, or total revenue."""
+    period = ctx.current_month
+    ytd = ctx.ytd_periods
+    h2 = ctx.open_periods
+
+    def pick(triple: tuple[Decimal, Decimal, Decimal]) -> Decimal:
+        sub, svc, rev = triple
+        if which == "subscription":
+            return sub
+        if which == "services":
+            return svc
+        return rev
+
+    period_a = pick(_resolve_revenue_split(actual_is, gl_act, period))
+    period_b = pick(_resolve_revenue_split(budget_is, gl_bud, period))
+    ytd_a = pick(_resolve_revenue_split(actual_is, gl_act, ytd))
+    ytd_b = pick(_resolve_revenue_split(budget_is, gl_bud, ytd))
+    h2_f = pick(_resolve_revenue_split(forecast_is, gl_fcst, h2))
+
+    var_d, var_p = variance(period_a, period_b)
+    return MetricSlice(
+        actual=period_a,
+        budget=period_b,
+        forecast=h2_f,
+        outlook=period_a,
+        variance=var_d,
+        variance_pct=var_p,
+        ytd_actual=ytd_a,
+        ytd_budget=ytd_b,
+        ytd_variance=ytd_a - ytd_b,
+    )
+
+
 def _is_metric(
     income: dict[str, dict[str, Decimal]],
     periods: tuple[str, ...],
@@ -277,8 +365,11 @@ def build_spec_pl_lines(
     budget: dict[str, dict[str, Decimal]],
     actual_is: dict[str, dict[str, Decimal]],
     forecast_is: dict[str, dict[str, Decimal]],
+    budget_is: dict[str, dict[str, Decimal]] | None = None,
 ) -> list[PlLine]:
     lines: list[PlLine] = []
+    # Pure budget IS map when provided; merged budget still used for non-revenue prefer_is fallbacks.
+    bud_is = budget_is if budget_is is not None else budget
 
     def metric(
         line_id: str,
@@ -319,46 +410,42 @@ def build_spec_pl_lines(
         )
 
     # --- Revenue ---
-    # Income Statement is SoT for subscription / services. GL is fallback only.
+    # Subscription + Services + Total from one IS-first split so the table always ties
+    # and matches Financial Statements line items for actual and budget.
     lines.append(_pl_line("hdr_revenue", "REVENUE", "revenue", MetricSlice(), line_type="header"))
-    sub_line = metric(
-        "subscription_revenue",
-        "Subscription Revenue",
-        "subscription_revenue",
-        _gl_subscription_revenue,
-        is_key_fn=lambda src, ps: _is_metric(src, ps, "subscription_revenue"),
-        prefer_is=True,
-        driver="income_statement",
-    )
-    svc_line = metric(
-        "services_revenue",
-        "Services Revenue",
-        "services_revenue",
-        _gl_services_revenue,
-        is_key_fn=lambda src, ps: _is_metric(src, ps, "services_revenue"),
-        prefer_is=True,
-        driver="income_statement",
-    )
-    rev_total_m = _build_metric(
-        section_key="revenue",
+    rev_kwargs = dict(
         ctx=ctx,
+        actual_is=actual_is,
+        budget_is=bud_is,
+        forecast_is=forecast_is,
         gl_act=gl_act,
         gl_bud=gl_bud,
         gl_fcst=gl_fcst,
-        outlook=outlook,
-        budget=budget,
-        actual_is=actual_is,
-        forecast_is=forecast_is,
-        amount_fn=lambda gl, ps: _gl_subscription_revenue(gl, ps) + _gl_services_revenue(gl, ps),
-        is_key_fn=lambda src, ps: _is_metric(src, ps, "revenue"),
-        prefer_is=True,
+    )
+    sub_m = _revenue_metric_slice(**rev_kwargs, which="subscription")
+    svc_m = _revenue_metric_slice(**rev_kwargs, which="services")
+    rev_total_m = _revenue_metric_slice(**rev_kwargs, which="total")
+    sub_line = _pl_line(
+        "subscription_revenue",
+        "Subscription Revenue",
+        "subscription_revenue",
+        sub_m,
+        driver="income_statement",
+    )
+    svc_line = _pl_line(
+        "services_revenue",
+        "Services Revenue",
+        "services_revenue",
+        svc_m,
+        driver="income_statement",
     )
 
     def total_rev_fn(gl: dict[tuple[str, str, str], Decimal], ps: tuple[str, ...]) -> Decimal:
-        v = _gl_subscription_revenue(gl, ps) + _gl_services_revenue(gl, ps)
-        if v:
-            return v
-        return _is_metric(outlook, ps, "revenue")
+        # Margins: IS-first total from outlook map (closed actuals + open forecast).
+        _sub, _svc, rev = _resolve_revenue_split(outlook, gl, ps)
+        if rev:
+            return rev
+        return _sub + _svc
 
     lines.extend(
         [

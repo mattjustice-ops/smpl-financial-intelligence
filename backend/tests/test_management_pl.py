@@ -145,6 +145,62 @@ def test_spec_pl_lines_prefer_is_subscription_services() -> None:
         outlook=outlook,
         budget=budget,
         actual_is=outlook,
+        budget_is=budget,
+        forecast_is={},
+    )
+    by_id = {ln.id: ln for ln in lines}
+    assert by_id["subscription_revenue"].metrics.actual == Decimal("7000000")
+    assert by_id["services_revenue"].metrics.actual == Decimal("350000")
+    assert by_id["total_revenue"].metrics.actual == Decimal("7350000")
+    assert (
+        by_id["subscription_revenue"].metrics.actual + by_id["services_revenue"].metrics.actual
+        == by_id["total_revenue"].metrics.actual
+    )
+    assert by_id["subscription_revenue"].metrics.budget == Decimal("7400000")
+    assert by_id["services_revenue"].metrics.budget == Decimal("320000")
+    assert (
+        by_id["subscription_revenue"].metrics.budget + by_id["services_revenue"].metrics.budget
+        == by_id["total_revenue"].metrics.budget
+    )
+
+
+def test_spec_pl_lines_revenue_split_completes_missing_half_and_ties() -> None:
+    """When IS has total + services only, subscription = revenue − services (not GL)."""
+    from app.services.management_pl.period_engine import build_period_context
+    from app.services.management_pl.pl_builder import build_spec_pl_lines
+
+    ctx = build_period_context(fiscal_year=2026, as_of_period="2026-06", period_mode="cm")
+    actual_is = {
+        "2026-06": {
+            "revenue": Decimal("7350000"),
+            "services_revenue": Decimal("350000"),
+            # subscription missing — must be derived, not taken from GL
+        }
+    }
+    budget_is = {
+        "2026-06": {
+            "revenue": Decimal("7720000"),
+            "subscription_revenue": Decimal("7400000"),
+            # services missing
+        }
+    }
+    gl_act = {
+        ("2026-06", "Revenue", "Subscription Revenue"): Decimal("9999999"),
+        ("2026-06", "Revenue", "Services Revenue"): Decimal("1"),
+    }
+    gl_bud = {
+        ("2026-06", "Revenue", "Subscription Revenue"): Decimal("1"),
+        ("2026-06", "Revenue", "Services Revenue"): Decimal("9999999"),
+    }
+    lines = build_spec_pl_lines(
+        ctx=ctx,
+        gl_act=gl_act,
+        gl_bud=gl_bud,
+        gl_fcst={},
+        outlook=actual_is,
+        budget=budget_is,
+        actual_is=actual_is,
+        budget_is=budget_is,
         forecast_is={},
     )
     by_id = {ln.id: ln for ln in lines}
@@ -153,6 +209,7 @@ def test_spec_pl_lines_prefer_is_subscription_services() -> None:
     assert by_id["total_revenue"].metrics.actual == Decimal("7350000")
     assert by_id["subscription_revenue"].metrics.budget == Decimal("7400000")
     assert by_id["services_revenue"].metrics.budget == Decimal("320000")
+    assert by_id["total_revenue"].metrics.budget == Decimal("7720000")
 
 
 def test_spec_pl_lines_actual_budget_match_income_statement_rollups() -> None:

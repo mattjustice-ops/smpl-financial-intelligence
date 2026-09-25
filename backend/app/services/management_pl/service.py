@@ -127,7 +127,11 @@ def _income_maps_from_gl(
 
 
 def _ensure_revenue_split(row: dict[str, Decimal]) -> None:
-    """Fill missing subscription/services from total revenue when one side is present."""
+    """Fill missing subscription/services so the pair can reconcile to total revenue.
+
+    When only one side is present, derive the other from revenue. When both are
+    present they are left as loaded (Income Statement line SoT).
+    """
     rev = row.get("revenue", Decimal("0"))
     sub = row.get("subscription_revenue", Decimal("0"))
     svc = row.get("services_revenue", Decimal("0"))
@@ -357,9 +361,9 @@ def _load_income_maps(
             row["net_income"] += row_value(raw, "net_income")
             row["depreciation_and_amortization"] += row_value(raw, "depreciation_and_amortization")
             row["interest_expense"] += row_value(raw, "interest_expense")
+            # Same columns as Financial Statements mapper (always read; missing → 0).
             row["services_revenue"] += row_value(raw, "services_revenue")
-            if "subscription_revenue" in raw:
-                row["subscription_revenue"] += row_value(raw, "subscription_revenue")
+            row["subscription_revenue"] += row_value(raw, "subscription_revenue")
     result = {p: dict(v) for p, v in out.items()}
     for row in result.values():
         _ensure_revenue_split(row)
@@ -1520,6 +1524,7 @@ def build_management_pl_dashboard(
             budget=budget,
             # Pure warehouse IS maps so prefer_is rollups match Financial Statements.
             actual_is=actual_is,
+            budget_is=budget_is,
             forecast_is=forecast_is,
         )
         dept_summary = [
