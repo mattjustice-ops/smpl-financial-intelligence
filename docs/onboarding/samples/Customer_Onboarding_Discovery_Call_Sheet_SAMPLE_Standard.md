@@ -17,6 +17,8 @@
 | **CEP** | Documented Customer Environment Profile field — safe to treat as formal onboarding |
 | **Gate** | Concrete ARR / subscription decision from GPES + Billing CKR — blocks ARR until answered |
 | **Recommended** | Reconstructed from product methodology docs — **not yet a formal CEP field**; do not over-claim |
+| **Readiness gate** | Books-quality prerequisite (Section 0). If any gate fails, onboarding pauses — no Readiness Score is produced until the customer resolves it |
+| **Score input** | Accounting-policy answer that sets module status (READY / PARTIAL / UNAVAILABLE) in the Readiness Score and names the improvement path |
 
 **Do not ask on this call:** API scopes, auth methods, field mappings, custom fields, pipeline inventories, currencies, org hierarchies — those are auto-discovered after connect.
 
@@ -30,6 +32,35 @@
 | Confirmed by | Priya Shah (VP Finance) |
 | Also present | Jordan Lee (RevOps), Alex Chen (Controller) |
 | Day-1 ARR intent | Single canonical ARR (Board = Operational) |
+
+---
+
+## Data ownership — read this first
+
+> **You own your data and the process that creates it.** SMPL reports on what your books and source systems contain. We do not reconcile, reclassify, rebuild, or post entries on your behalf.
+>
+> What SMPL does:
+> - Tells you exactly what each report needs from your books and systems.
+> - Flags gaps during discovery and the systems review, along with what each gap will mean for your reporting.
+> - Recommends ways to improve your process, if you ask.
+>
+> Where a gap comes from how data is recorded, closing it is an action for your team. Reports reflect your books as recorded — gaps show up as labeled limitations, not as numbers SMPL has adjusted. If the readiness gates in Section 0 are not met, onboarding pauses until they are.
+
+---
+
+## 0. Readiness gates *(Readiness gate — Recommended)*
+
+> Ask first. A “No” on any gate means SMPL cannot produce reliable reporting from the books as they stand. Record the answer, explain why, and agree to revisit once the customer has resolved it. Do not work around a failed gate.
+
+| # | Gate question | Required | Customer answer |
+|---|---------------|----------|-----------------|
+| 0.1 | Are the books kept on an **accrual basis** (not cash or tax basis)? | Yes | **Yes — accrual**, ASC 606 revenue. Outside CPA prepares tax return from the same books. |
+| 0.2 | Which **single book of record** should SMPL report from? Who owns it? | One named book + owner | **QuickBooks Online Advanced (GAAP)** — owned by Alex Chen (Controller). No separate tax or investor copy. |
+| 0.3 | Are the books **closed monthly**, with a named close owner and a target close day? | Yes | **Yes** — Alex Chen; hard close BD+5 (see 7.1). |
+| 0.4 | Can the finance lead walk through the most recent month’s income statement and explain the material lines? | Yes | **Yes** — Priya walked Feb 2026 IS on the call. |
+| 0.5 | Does the customer accept the data-ownership terms above? | Yes | **Yes** — Priya Shah, 2026-03-12. |
+
+**Gate result: PASS.**
 
 ---
 
@@ -89,6 +120,14 @@ Customer-specific definition **or** accept SMPL standard default:
 **Also ask *(CEP + FIE intent):*** Do you report more than one ARR to different audiences (e.g. Board / Investor / Operational / Sales)? If yes, which is canonical for SMPL Day 1?
 
 **Answer:** **No.** One ARR definition for board, investors, and ops. Sales ACV in HubSpot is bookings, not a second ARR. Canonical Day 1 = SMPL ARR from Stripe. Confirmed: Priya Shah, 2026-03-12.
+
+**Also ask *(Recommended — Score input):*** Do you report **adjusted profitability metrics** (e.g. Adjusted EBITDA, contribution margin) differently by audience? For each, capture the audience, the add-backs, and who owns the definition. All versions come from the same book of record plus documented adjustments — SMPL does not keep separate P&L copies.
+
+| Audience | Metric name | Add-backs / adjustments | Definition owner |
+|----------|-------------|-------------------------|------------------|
+| Internal management | EBITDA | None — reported EBITDA | Priya Shah |
+| Investor / board | EBITDA (same) | None today; may add back stock comp in 2027 | Priya Shah |
+| Lender / covenant | N/A | No debt facility | — |
 
 ---
 
@@ -191,6 +230,20 @@ Which connected system is authoritative for each:
 | 7.5 | Validation sources for ending ARR, revenue, headcount (what do you tie to today)? | ARR: Stripe Dashboard + RevOps workbook. Revenue: QBO P&L. HC: Rippling headcount report. |
 | 7.6 | Who certifies Actual each month (Accounting / FP&A / RevOps)? | **Alex Chen (Controller)** certifies Actual; Priya signs off Forecast; Jordan signs ARR tie-out. |
 
+### Accounting policy & close practice *(Score input — Recommended)*
+
+> Each answer sets module status in the Readiness Score. The consequence column is what to tell the customer if the practice isn’t in place. **Customer action** means their team changes how data is recorded. **SMPL connector** means connecting another system closes the gap. SMPL never closes a gap by adjusting the customer’s data.
+
+| # | Question | If not in place — reporting consequence | Improvement path | Answer |
+|---|----------|------------------------------------------|------------------|--------|
+| 7.7 | **Cost of revenue policy** — which costs, who approved? | Management P&L gross margin **PARTIAL** | Customer action | **In place.** AWS hosting, Support team payroll, third-party tools embedded in the product (Auth0, Segment). Approved by Priya Shah (VP Finance), documented in close binder. |
+| 7.8 | **Payroll posted by department / cost center?** | Labor can’t be split; gross margin **PARTIAL** | Customer action | **Yes.** Rippling posts payroll JE by QBO Class (department). Support class maps to cost of revenue. |
+| 7.9 | Shared-cost **allocations** — booked as JEs or kept outside the GL? | Allocations not shown | Customer action | **None.** No allocations today; costs sit where booked. Management P&L = income statement categories. |
+| 7.10 | Expenses **accrued monthly**? | Timing swings; commentary confidence lowered | Customer action | **Mostly.** Vendor bills accrued monthly. **Exception:** contractor invoices booked when paid (see F1). |
+| 7.11 | Accruals **reverse** next period, actuals coded to the same account / department? | Missing leg reported as a data gap | Customer action | **Yes** — QBO auto-reversing JEs; Alex codes actuals to the accrual’s account and class. |
+| 7.12 | **Usage-based vendors** accrued on estimate and trued up? | True-ups show as unexplained swings | Customer action | **Yes** — AWS accrued from Cost Explorer estimate at BD+2, trued up on invoice. |
+| 7.13 | **Year-end review adjustments** — restate or book to final month? Prior commentary? | Board history **PARTIAL** | Customer action | CPA **review** (not audit). Adjustments booked to **December**; prior months not restated. Board commentary for December notes the adjustments. |
+
 ---
 
 ## 8. Desired modules *(CEP)*
@@ -225,16 +278,59 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 
 ---
 
+## 10. Platform access acknowledgment *(Recommended)*
+
+> SMPL assumes that everyone the customer gives platform access to may see the information being reported **and the detail underneath it** — including payroll-related GL lines, vendor-level transactions, and department spend. The customer decides who gets access.
+
+| # | Question | Answer |
+|---|----------|--------|
+| 10.1 | Acknowledged: platform users can see reported numbers and the underlying detail, including payroll-related lines? | **Yes** — Priya Shah, 2026-03-12. |
+| 10.2 | Who will get logins? | Finance (Priya, Alex, Morgan), CEO, RevOps (Jordan). Board members receive the exported board pack — **no board logins** Day 1. |
+| 10.3 | Who on the customer side approves new access? | Priya Shah. |
+
+---
+
+## 11. Systems & data review — findings and sign-off *(completed after connect)*
+
+> Completed by SMPL after systems connect and the first data pull, then reviewed with the customer’s finance lead. Any failed readiness gate, or any **PARTIAL / UNAVAILABLE** status on a module the customer expects Day 1, must go to SMPL leadership **before** implementation continues. That way the path forward is agreed up front and the resulting reporting limits are understood and signed off.
+
+**Readiness Score summary** *(illustrative)*
+
+| Field | Value |
+|-------|-------|
+| Readiness gates (Section 0) | **Pass** |
+| Overall Readiness Score | **~90%** |
+| Modules READY | Financial Reporting, Board Reporting, Executive Dashboards, ARR / MRR Reporting, Pipeline Analytics, Cash Forecasting |
+| Modules PARTIAL (and why) | None of the Day-1 modules. Executive Commentary (Phase 2) would be PARTIAL on contractor spend until F1 is fixed. |
+| Modules UNAVAILABLE (and why) | None |
+| Biggest next improvement and expected score change | Customer action — accrue contractor invoices monthly (F1); small lift, mainly commentary confidence |
+
+**Findings**
+
+| # | Finding | Area (question ref) | Reporting consequence | Path | Customer owner | Target date |
+|---|---------|---------------------|-----------------------|------|----------------|-------------|
+| F1 | Contractor invoices booked when paid, not accrued | 7.10 | Contractor spend is lumpy month to month; variance commentary flags it as timing rather than explaining it | **Customer action** — accrue contractors monthly from April close | Alex Chen | 2026-05-05 (April close) |
+
+**Sign-off**
+
+| Role | Name | Date |
+|------|------|------|
+| Customer finance lead (owns books and fixes) | Priya Shah | 2026-03-26 |
+| SMPL engagement lead | *(SMPL)* | 2026-03-26 |
+| SMPL leadership review | Not required — gates passed, no Day-1 module PARTIAL | — |
+
+---
+
 ## Call-time shortlist (~15 min) — how this sample maps
 
 **Must cover (CEP + gates):**  
-Covered: single-entity USD snapshot → Stripe/HubSpot/QBO/Rippling owners → one ARR/MRR/churn set → trials & past_due excluded → no usage → simple ARR methodology → rev-rec & renewal/cancel → SoA → modules → FYE Dec 31.
+Covered: data ownership accepted + readiness gates pass → single-entity USD snapshot → Stripe/HubSpot/QBO/Rippling owners → one ARR/MRR/churn set → trials & past_due excluded → no usage → simple ARR methodology → rev-rec & renewal/cancel → SoA → modules → FYE Dec 31.
 
 **Should cover if time:**  
-Pipeline stages clear; contractors out of HC; single Stripe live account.
+Pipeline stages clear; contractors out of HC; single Stripe live account; cost of revenue policy in place with payroll by class; access acknowledged.
 
 **Recommended extras (label clearly):**  
-Forecast = Budget + judgment; monthly refresh after BD+5 close; simple GL history from 2023.
+Forecast = Budget + judgment; monthly refresh after BD+5 close; simple GL history from 2023; no allocations; contractor accrual gap (F1).
 
 ---
 
@@ -247,6 +343,8 @@ Forecast = Budget + judgment; monthly refresh after BD+5 close; simple GL histor
 | Section 6 Forecasting | `docs/Forecasting_Assumptions.md` (+ reporting methodology) | **Recommended — not CEP** |
 | Section 7 Close / GL | `docs/Close_Process.md`, close/GL readiness materials | **Recommended — not CEP** |
 | Section 9 CRM / HC | GPES HubSpot + Rippling gate examples | Documented examples |
+| Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
+| Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
 ---
 
