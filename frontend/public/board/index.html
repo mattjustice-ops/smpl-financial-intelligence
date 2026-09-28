@@ -193,6 +193,23 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .pl-summary-tbl tr.pl-sub td.vneg, .pl-summary-tbl tr.pl-tot td.vneg { color: var(--red); font-weight: 600; }
 .pl-tbl tr.pl-sub td.vneu, .pl-tbl tr.pl-tot td.vneu,
 .pl-summary-tbl tr.pl-sub td.vneu, .pl-summary-tbl tr.pl-tot td.vneu { color: var(--text3); }
+/* Provenance: origin tags jump to the statement a line comes from; amounts open a source popover */
+.lock-link { display: inline-block; margin-left: 6px; padding: 0 5px; font-size: 9px; line-height: 14px; border-radius: 3px; border: 0.5px solid var(--border2); background: transparent; color: var(--text3); cursor: pointer; font-family: inherit; vertical-align: middle; }
+.lock-link:hover { color: var(--teal); border-color: var(--teal); }
+.src-amt { cursor: help; border-bottom: 1px dotted transparent; }
+.src-amt:hover { border-bottom-color: var(--text3); }
+.src-pop { position: fixed; z-index: 9999; max-width: 380px; background: var(--bg, #111); border: 0.5px solid var(--border2); border-radius: var(--r, 6px); box-shadow: 0 6px 24px rgba(0,0,0,0.35); padding: 10px 12px; font-size: 11px; color: var(--text2); }
+.src-pop h4 { margin: 0 0 4px; font-size: 11.5px; color: var(--text); font-weight: 600; }
+.src-pop .sp-meta { font-size: 10px; color: var(--text3); margin-bottom: 6px; }
+.src-pop table { width: 100%; border-collapse: collapse; }
+.src-pop td { padding: 2px 0; font-size: 10.5px; }
+.src-pop td:last-child { text-align: right; font-family: var(--mono); }
+.src-pop .sp-foot { margin-top: 6px; font-size: 10px; color: var(--text3); }
+.ts-hl td { background: rgba(95,168,120,0.14) !important; transition: background 1.2s; }
+.tie-pill { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 9.5px; font-weight: 500; }
+.tie-pill.ok { background: rgba(95,168,120,0.16); color: var(--teal); }
+.tie-pill.alloc { background: rgba(233,162,59,0.16); color: var(--amber); }
+.tie-pill.brk { background: rgba(216,90,48,0.16); color: var(--red); }
 .pl-expand { display: inline-block; width: 14px; font-size: 9px; opacity: .45; }
 /* DEPT TABS */
 .dtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -343,6 +360,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
 <script src="/shared/board-data.js?v=10"></script>
+<script src="/shared/board-ledger.js?v=1"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
 var MO = ['Jan','Feb','Mar','Apr','May','Jun'];
@@ -473,42 +491,8 @@ const GTM = {
   'Paid Search':    { spend:2.14, pipe:2.59, won:0.14, mqls:3206, eff:1.2,  wr:5.2,  color:'#A32D2D' },
   'Paid Social':    { spend:1.70, pipe:2.22, won:0.13, mqls:4608, eff:1.3,  wr:5.8,  color:'#D85A30' },
 };
-// Management P&L rows with GL drilldown
-const PL_ROWS = [
-  {type:'sec', label:'Revenue'},
-  {label:'Subscription Revenue', a:6.193, b:6.20,  ytdA:31.12, ytdB:31.00,
-   gl:[{n:'4000 Subscription Revenue',a:6.193,b:6.20,ytd:31.12,fc:50.84}]},
-  {label:'Services Revenue',     a:0.987, b:0.970, ytdA:4.82,  ytdB:4.78,
-   gl:[{n:'4100 Services Revenue',a:0.987,b:0.970,ytd:4.82,fc:4.42}]},
-  {type:'sub', label:'Total Revenue', a:7.18, b:7.17, ytdA:41.71, ytdB:41.66},
-  {type:'sec', label:'Cost of Revenue'},
-  {label:'Cloud Hosting',        a:0.656, b:0.650, ytdA:3.275, ytdB:3.20, inv:true,
-   gl:[{n:'5000 Cloud Hosting',a:0.656,b:0.650,ytd:3.275,fc:4.83}]},
-  {label:'Support Labor COGS',   a:0.437, b:0.430, ytdA:2.183, ytdB:2.15, inv:true,
-   gl:[{n:'5010 Support Payroll',a:0.437,b:0.430,ytd:2.183,fc:4.32}]},
-  {label:'3rd Party & Tools',    a:0.291, b:0.285, ytdA:1.455, ytdB:1.43, inv:true,
-   gl:[{n:'5020 Third Party Data',a:0.170,b:0.165,ytd:0.850,fc:1.27},{n:'5030 Support Tools',a:0.070,b:0.068,ytd:0.351,fc:1.02},{n:'5040 Payment Processing',a:0.051,b:0.052,ytd:0.254,fc:0.64}]},
-  {type:'sub', label:'Total COGS',       a:1.65, b:1.65, ytdA:8.37, ytdB:8.22, inv:true},
-  {type:'sub', label:'Gross Profit',     a:5.53, b:5.52, ytdA:25.93, ytdB:25.78, hi:true},
-  {type:'sec', label:'Operating Expenses'},
-  {label:'Sales',                a:1.522, b:1.460, ytdA:7.562, ytdB:7.30, inv:true,
-   gl:[{n:'6000 Sales Payroll',a:1.231,b:1.180,ytd:6.183,fc:9.77},{n:'6010 Sales Commissions',a:0.048,b:0.044,ytd:0.161,fc:3.45},{n:'6150 Sales Travel',a:0.243,b:0.236,ytd:1.218,fc:0.86}]},
-  {label:'Marketing',            a:2.228, b:2.200, ytdA:10.316,ytdB:10.18,inv:true,
-   gl:[{n:'Base Salaries',a:0.447,b:0.446,ytd:2.186,fc:null},{n:'6100 Paid Search',a:0.194,b:0.194,ytd:1.685,fc:3.45},{n:'6110 Paid Social',a:0.100,b:0.100,ytd:0.341,fc:2.30},{n:'6120 Partner Marketing',a:0.127,b:0.127,ytd:0.992,fc:2.01},{n:'6130 Events & Webinars',a:0.103,b:0.103,ytd:0.897,fc:1.72},{n:'6140 Mktg Software',a:0.257,b:0.240,ytd:1.202,fc:1.44},{n:'6190 S&M SBC',a:0.100,b:0.100,ytd:0.583,fc:2.87}]},
-  {label:'Engineering',          a:1.631, b:1.615, ytdA:8.141, ytdB:8.06, inv:true,
-   gl:[{n:'7000 Eng Payroll',a:1.220,b:1.210,ytd:6.100,fc:4.51},{n:'7020 Dev Infrastructure',a:0.259,b:0.255,ytd:1.286,fc:0.75},{n:'7030 Developer Tools',a:0.080,b:0.078,ytd:0.390,fc:0.56},{n:'7090 R&D SBC',a:0.072,b:0.072,ytd:0.365,fc:1.32}]},
-  {label:'Product',              a:0.562, b:0.545, ytdA:2.743, ytdB:2.72, inv:true,
-   gl:[{n:'7010 Product Payroll',a:0.450,b:0.436,ytd:2.186,fc:1.41},{n:'7050 Product Software',a:0.039,b:0.037,ytd:0.193,fc:0.38},{n:'7040 Eng Contractors',a:0.073,b:0.072,ytd:0.364,fc:0.47}]},
-  {label:'G&A',                  a:0.494, b:0.482, ytdA:2.395, ytdB:2.35, inv:true,
-   gl:[{n:'Base Salaries (G&A)',a:0.328,b:0.320,ytd:1.585,fc:null},{n:'8060 Corporate SW',a:0.021,b:0.025,ytd:0.425,fc:0.61},{n:'8070 Office & Facilities',a:0.071,b:0.071,ytd:0.358,fc:0.30},{n:'8050 Insurance',a:0.028,b:0.028,ytd:0.140,fc:0.37},{n:'D&A',a:0.046,b:0.038,ytd:0.237,fc:null}]},
-  {label:'Finance',              a:0.260, b:0.255, ytdA:1.283, ytdB:1.27, inv:true,
-   gl:[{n:'8000 Finance Payroll',a:0.207,b:0.200,ytd:0.988,fc:1.34},{n:'8010 HR Payroll',a:0.046,b:0.044,ytd:0.220,fc:0.61},{n:'8020 Legal Fees',a:0.007,b:0.011,ytd:0.075,fc:0.73}]},
-  {type:'sub', label:'Total OpEx',     a:5.744, b:5.557, ytdA:27.45, ytdB:26.88, inv:true},
-  {type:'tot', label:'EBITDA',         a:-0.214,b:-0.213,ytdA:-1.04, ytdB:-1.04},
-];
-
 // ─── HELPERS ──────────────────────────────────────────────────────────────
-let charts = {}, openRows = new Set(), curGLDept = 'Marketing', aiCache = {};
+let charts = {}, openRows = new Set(), curGLDept = 'Sales & Marketing', aiCache = {};
 let _chartBuildGen = 0;
 let _plChartBuildGen = 0;
 
@@ -1218,19 +1202,34 @@ function renderCash(area) {
 }
 
 // ─── MANAGEMENT P&L ───────────────────────────────────────────────────────
+function plCloseLabel() {
+  var cp = boardCloseParts();
+  return MON_FULL[cp.month - 1] + ' ' + cp.year;
+}
+
+/** Management-basis totals for the close month (same ledger as the Income Statement). */
+function plMgmtTotals() {
+  var rows = window.SMPLLedger ? SMPLLedger.managementPl() : [];
+  var by = {};
+  rows.forEach(function (r) { if (r.label) by[r.label] = r; });
+  function pick(label) { return by[label] || {}; }
+  return { rev: pick('Total Revenue'), gp: pick('Gross Profit'), opex: pick('Total OpEx'), ebitda: pick('EBITDA') };
+}
+
 function renderPL(area) {
-  var pk = typeof boardPlKpis === 'function' ? boardPlKpis() : {};
-  var revVar = pk.rev!=null && pk.revBud!=null ? pk.rev - pk.revBud : null;
-  var opexVar = pk.opex!=null && pk.opexBud!=null ? pk.opex - pk.opexBud : null;
-  var ebitdaVar = pk.ebitda!=null && pk.ebitdaBud!=null ? pk.ebitda - pk.ebitdaBud : null;
+  var t = plMgmtTotals();
+  var rev = t.rev.a, revVar = t.rev.a!=null && t.rev.b!=null ? t.rev.a - t.rev.b : null;
+  var gm = t.gp.a!=null && rev ? t.gp.a / rev * 100 : null;
+  var opexVar = t.opex.a!=null && t.opex.b!=null ? t.opex.a - t.opex.b : null;
+  var ebitdaVar = t.ebitda.a!=null && t.ebitda.b!=null ? t.ebitda.a - t.ebitda.b : null;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Management P&amp;L</div>
-  <div class="slide-sub">GL-level drilldown · Actual vs Budget vs Forecast · Click ▶ rows to expand account detail</div>
+  <div class="slide-sub">Built from the same reporting ledger as the Income Statement, plus management allocations · Actual vs Budget vs Forecast</div>
   <div class="kpi-strip kpi-strip-4">
-    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(pk.rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val" ${ds('gross_profit')}>${fM1(pk.gp)}</div><div class="kpi-delta neu">${pk.gm!=null?'Margin '+pk.gm.toFixed(1)+'%':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val" ${ds('total_opex')}>${fM1(pk.opex)}</div><div class="kpi-delta ${opexVar<=0?'pos':'neg'}">${opexVar!=null?fV1(opexVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val" ${ds('ebitda')}>${fM1(pk.ebitda)}</div><div class="kpi-delta ${ebitdaVar>=0?'pos':'neg'}">${ebitdaVar!=null?fV1(ebitdaVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val" ${ds('gross_profit')}>${fM1(t.gp.a)}</div><div class="kpi-delta neu">${gm!=null?'Margin '+gm.toFixed(1)+'%':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val" ${ds('total_opex')}>${fM1(t.opex.a)}</div><div class="kpi-delta ${opexVar<=0?'pos':'neg'}">${opexVar!=null?fV1(opexVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val" ${ds('ebitda')}>${fM1(t.ebitda.a)}</div><div class="kpi-delta ${ebitdaVar>=0?'pos':'neg'}">${ebitdaVar!=null?fV1(ebitdaVar)+' vs bud':'—'}</div></div>
   </div>
   <div class="subnav">
     <button class="snav-btn on" onclick="showPLView('summary',this)">P&L Summary</button>
@@ -1274,159 +1273,247 @@ function buildPLSummary(area) {
     </div>
   </div>
   <div class="card">
-    <div class="card-title" style="margin-bottom:8px">Management P&L — June 2026 vs Budget <span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:8px">Click ▶ to expand GL detail · Forecast (Jul–Dec) from Forecast_gl_detail.csv</span></div>
+    <div class="card-title" style="margin-bottom:8px">Management P&L — ${plCloseLabel()} vs Budget <span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:8px">Click an amount to see how it is built · <span id="plSourceNote"></span></span></div>
     <table class="pl-tbl pl-summary-tbl"><thead><tr>
       <th style="text-align:left;width:30%">Line Item</th>
       <th style="width:11%">Actual</th><th style="width:11%">Budget</th><th style="width:10%">Var $</th><th style="width:8%">Var %</th><th style="width:11%">YTD Act</th><th style="width:10%">YTD Var</th><th style="width:9%" id="plFcHdr">FC</th>
     </tr></thead><tbody id="plTbody"></tbody></table>
-  </div>`;
+  </div>
+  <div class="card" id="plBridgeCard" style="margin-top:12px"></div>`;
   schedulePLCharts(30);
 }
 
-/** Scale PL_ROWS detail / GL amounts so children foot to an Income Statement total. */
-function boardScalePlAmount(gl, field, newTotal) {
-  if (!gl || !gl.length || newTotal == null || Number.isNaN(newTotal)) return;
-  var oldSum = 0;
-  for (var i = 0; i < gl.length; i++) oldSum += (gl[i][field] != null ? +gl[i][field] : 0);
-  if (Math.abs(oldSum) < 1e-9) {
-    gl[0][field] = +(+newTotal).toFixed(3);
-    for (var z = 1; z < gl.length; z++) gl[z][field] = 0;
-    return;
-  }
-  var scale = newTotal / oldSum;
-  var running = 0;
-  for (var j = 0; j < gl.length; j++) {
-    if (j === gl.length - 1) {
-      gl[j][field] = +(+((newTotal - running).toFixed(3)));
-    } else {
-      var v = +(((gl[j][field] != null ? +gl[j][field] : 0) * scale).toFixed(3));
-      gl[j][field] = v;
-      running += v;
-    }
-  }
+/** Management P&L line → Income Statement row label (tsRender isRows). */
+const PL_TO_IS_LABEL = {
+  'Subscription Revenue': 'Subscription Revenue',
+  'Services Revenue': 'Services Revenue',
+  'Total Revenue': 'Total Revenue',
+  'Cost of Revenue': 'Cost of Revenue',
+  'Total Cost of Revenue': 'Cost of Revenue',
+  'Gross Profit': 'Gross Profit',
+  'Sales & Marketing': 'Sales & Marketing',
+  'Research & Development': 'Research & Development',
+  'General & Administrative': 'General & Administrative',
+  'Total OpEx': 'Total OpEx',
+  'EBITDA': 'EBITDA',
+};
+const PL_TOTAL_KEYS = { 'Total Revenue': 'revenue', 'Total Cost of Revenue': 'cogs', 'Gross Profit': 'gross_profit', 'Total OpEx': 'opex', 'EBITDA': 'ebitda' };
+
+function plEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function boardApplyPlLine(r, act, bud, ytdA, ytdB) {
-  if (!r) return;
-  if (act != null && !Number.isNaN(act)) {
-    r.a = +(+act).toFixed(3);
-    if (r.gl && r.gl.length) boardScalePlAmount(r.gl, 'a', r.a);
+function plColScope(col) {
+  const L = window.SMPLLedger;
+  const cp = boardCloseParts();
+  const mon = MON_ABBR[cp.month - 1];
+  if (col === 'a') return { scenario: 'Actual', periods: L.periodsFor('Actual', 'month'), label: mon + ' ' + cp.year + ' Actual' };
+  if (col === 'b') return { scenario: 'Budget', periods: L.periodsFor('Budget', 'month'), label: mon + ' ' + cp.year + ' Budget' };
+  if (col === 'ytdA') return { scenario: 'Actual', periods: L.periodsFor('Actual', 'ytd'), label: 'YTD Jan–' + mon + ' ' + cp.year + ' Actual' };
+  if (col === 'ytdB') return { scenario: 'Budget', periods: L.periodsFor('Budget', 'ytd'), label: 'YTD Jan–' + mon + ' ' + cp.year + ' Budget' };
+  const fcP = L.periodsFor('Forecast', 'rest_of_year');
+  const first = fcP.length ? MON_ABBR[parseInt(fcP[0].slice(5), 10) - 1] : '';
+  return { scenario: 'Forecast', periods: fcP, label: 'Forecast ' + first + '–Dec ' + cp.year };
+}
+
+function plAmt(label, col, v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  return `<span class="src-amt" data-pl-line="${plEsc(label)}" data-pl-col="${col}">${fM(v)}</span>`;
+}
+
+function plOriginTags(r) {
+  let html = '';
+  const isLabel = PL_TO_IS_LABEL[r.label];
+  if (isLabel) html += `<button type="button" class="lock-link" title="Open this line on the Income Statement" onclick="event.stopPropagation();boardGoToOrigin('is','${plEsc(isLabel)}')">IS</button>`;
+  if (!r.type && r.section && r.section !== 'revenue' && r.accounts && r.accounts.length) {
+    html += `<button type="button" class="lock-link" title="Open GL detail for this line" onclick="event.stopPropagation();boardGoToOrigin('gl','${plEsc(r.accounts[0].dept)}')">GL</button>`;
   }
-  if (bud != null && !Number.isNaN(bud)) {
-    r.b = +(+bud).toFixed(3);
-    if (r.gl && r.gl.length) boardScalePlAmount(r.gl, 'b', r.b);
-  }
-  if (ytdA != null && !Number.isNaN(ytdA)) {
-    r.ytdA = +(+ytdA).toFixed(3);
-    if (r.gl && r.gl.length) boardScalePlAmount(r.gl, 'ytd', r.ytdA);
-  }
-  if (ytdB != null && !Number.isNaN(ytdB)) r.ytdB = +(+ytdB).toFixed(3);
+  return html;
 }
 
 function buildPLTable() {
   if (typeof boardRefreshAllSeries === 'function') boardRefreshAllSeries();
-  var pk = typeof boardPlKpis === 'function' ? boardPlKpis() : null;
-  if (pk) {
-    var byLabel = {};
-    PL_ROWS.forEach(function (r) { if (r && r.label) byLabel[r.label] = r; });
-
-    // Detail + rollups must come from the same TS_DATA Income Statement as Financial Statements.
-    boardApplyPlLine(byLabel['Subscription Revenue'], pk.sub, pk.subBud, pk.ytdSub, pk.ytdSubBud);
-    boardApplyPlLine(byLabel['Services Revenue'], pk.svc, pk.svcBud, pk.ytdSvc, pk.ytdSvcBud);
-    boardApplyPlLine(byLabel['Total Revenue'], pk.rev, pk.revBud, pk.ytdRev, pk.ytdRevBud);
-
-    // COGS children (Cloud Hosting / Support / 3rd Party) keep mix; scale to IS cogs total.
-    var cogsKids = ['Cloud Hosting', 'Support Labor COGS', '3rd Party & Tools']
-      .map(function (lbl) { return byLabel[lbl]; })
-      .filter(Boolean);
-    if (pk.cogs != null && cogsKids.length) {
-      var oldCogs = cogsKids.reduce(function (s, r) { return s + (r.a || 0); }, 0);
-      var scaleA = Math.abs(oldCogs) > 1e-9 ? pk.cogs / oldCogs : 1;
-      var runA = 0;
-      cogsKids.forEach(function (r, i) {
-        var next = i === cogsKids.length - 1
-          ? +(pk.cogs - runA).toFixed(3)
-          : +(((r.a || 0) * scaleA).toFixed(3));
-        boardApplyPlLine(r, next, null, null, null);
-        runA += next;
-      });
-    }
-    if (pk.cogsBud != null && cogsKids.length) {
-      var oldCogsB = cogsKids.reduce(function (s, r) { return s + (r.b || 0); }, 0);
-      var scaleB = Math.abs(oldCogsB) > 1e-9 ? pk.cogsBud / oldCogsB : 1;
-      var runB = 0;
-      cogsKids.forEach(function (r, i) {
-        var next = i === cogsKids.length - 1
-          ? +(pk.cogsBud - runB).toFixed(3)
-          : +(((r.b || 0) * scaleB).toFixed(3));
-        boardApplyPlLine(r, null, next, null, null);
-        runB += next;
-      });
-    }
-    if (pk.ytdCogs != null && cogsKids.length) {
-      var oldCogsY = cogsKids.reduce(function (s, r) { return s + (r.ytdA || 0); }, 0);
-      var scaleY = Math.abs(oldCogsY) > 1e-9 ? pk.ytdCogs / oldCogsY : 1;
-      var runY = 0;
-      cogsKids.forEach(function (r, i) {
-        var next = i === cogsKids.length - 1
-          ? +(pk.ytdCogs - runY).toFixed(3)
-          : +(((r.ytdA || 0) * scaleY).toFixed(3));
-        boardApplyPlLine(r, null, null, next, null);
-        runY += next;
-      });
-    }
-
-    boardApplyPlLine(byLabel['Total COGS'], pk.cogs, pk.cogsBud, pk.ytdCogs, pk.ytdCogsBud);
-    boardApplyPlLine(byLabel['Gross Profit'], pk.gp, pk.gpBud, pk.ytdGp, pk.ytdGpBud);
-    boardApplyPlLine(byLabel['Total OpEx'], pk.opex, pk.opexBud, pk.ytdOpex, pk.ytdOpexBud);
-    boardApplyPlLine(byLabel['EBITDA'], pk.ebitda, pk.ebitdaBud, pk.ytdEbitda, pk.ytdEbitdaBud);
+  const L = window.SMPLLedger;
+  const fcScope = L ? plColScope('fc') : null;
+  const _fh = document.getElementById('plFcHdr');
+  if (_fh) _fh.textContent = fcScope && fcScope.periods.length ? 'FC ' + fcScope.label.replace('Forecast ', '').replace(/ \d{4}$/, '') : 'FC';
+  const note = document.getElementById('plSourceNote');
+  if (note && L) {
+    const n = L.allocationRules().length;
+    note.textContent = L.sourceInfo().label + ' · ' + (n ? n + ' allocation layer' + (n > 1 ? 's' : '') : 'no allocation layers');
   }
-  const _fh=document.getElementById('plFcHdr');if(_fh){_fh.textContent='FC '+(MO12[CLOSE_MO_IDX+1]||'Jul')+'–Dec';}
   const tb = document.getElementById('plTbody');
-  if(!tb) return; tb.innerHTML='';
-  PL_ROWS.forEach((r,ri)=>{
+  if (!tb) return;
+  tb.innerHTML = '';
+  const rows = L ? L.managementPl() : [];
+  rows.forEach((r, ri) => {
     const tr = document.createElement('tr');
-    if(r.type==='sec'){tr.className='pl-sec';tr.innerHTML=`<td colspan="8">${r.label}</td>`;tb.appendChild(tr);return;}
-    const vd=r.a-r.b, yv=r.ytdA-r.ytdB;
+    if (r.type === 'sec') { tr.className = 'pl-sec'; tr.innerHTML = `<td colspan="8">${r.label}</td>`; tb.appendChild(tr); return; }
+    const vd = r.a != null && r.b != null ? r.a - r.b : null;
+    const yv = r.ytdA != null && r.ytdB != null ? r.ytdA - r.ytdB : null;
     // Variance colors follow the numeric sign (green +, red −) — not expense favorable/unfavorable invert.
-    const vCl=vClsSign(vd), yCl=vClsSign(yv);
-    const cls=(r.type==='tot'?'pl-tot':r.type==='sub'?'pl-sub pl-click':'pl-click')+(r.gl?' pl-click':'');
-    const hasDrill=r.gl&&r.gl.length>0;
-    const fcTotal = r.gl ? r.gl.reduce((s,g)=>s+(g.fc||0),0) : null;
-    const fcStr = fcTotal>0 ? fM(fcTotal) : r.type==='sub'||r.type==='tot' ? '' : '—';
-    tr.className=cls;
-    tr.innerHTML=`<td><span class="pl-expand" id="exp${ri}">${hasDrill?'▶':''}</span>${r.label}</td>
-      <td style="text-align:right;font-family:var(--mono)">${fM(r.a)}</td>
-      <td style="text-align:right;font-family:var(--mono);color:var(--text3)">${fM(r.b)}</td>
-      <td class="${vCl}" style="text-align:right;font-family:var(--mono)">${fV(vd)}</td>
-      <td class="${vCl}" style="text-align:right;font-family:var(--mono)">${fVarPct(vd,r.b)}</td>
-      <td style="text-align:right;font-family:var(--mono)">${fM(r.ytdA)}</td>
-      <td class="${yCl}" style="text-align:right;font-family:var(--mono)">${fV(yv)}</td>
-      <td style="text-align:right;font-family:var(--mono);color:var(--amber)">${fcStr}</td>`;
-    if(hasDrill) tr.addEventListener('click',()=>togglePLRow(ri,r.gl,r.inv));
+    const vCl = vd == null ? 'vneu' : vClsSign(vd), yCl = yv == null ? 'vneu' : vClsSign(yv);
+    const accts = r.accounts || [];
+    const allocA = r.alloc && r.alloc.a ? r.alloc.a : 0;
+    const drill = accts.length > 1 || allocA !== 0 || (accts.length === 1 && accts[0].name.toLowerCase() !== r.label.toLowerCase())
+      ? accts.slice() : [];
+    if (drill.length && allocA !== 0) drill.push({ name: 'Allocations (net)', a: allocA, b: r.alloc.b || 0, ytdA: null, ytdB: null, fc: null, alloc: true });
+    tr.className = (r.type === 'tot' ? 'pl-tot' : r.type === 'sub' ? 'pl-sub' : '') + (drill.length ? ' pl-click' : '');
+    tr.dataset.plLabel = r.label;
+    tr.innerHTML = `<td><span class="pl-expand" id="exp${ri}">${drill.length ? '▶' : ''}</span>${r.label}${plOriginTags(r)}</td>
+      <td style="text-align:right;font-family:var(--mono)">${plAmt(r.label, 'a', r.a)}</td>
+      <td style="text-align:right;font-family:var(--mono);color:var(--text3)">${plAmt(r.label, 'b', r.b)}</td>
+      <td class="${vCl}" style="text-align:right;font-family:var(--mono)">${vd == null ? '—' : fV(vd)}</td>
+      <td class="${vCl}" style="text-align:right;font-family:var(--mono)">${vd == null ? '—' : fVarPct(vd, r.b)}</td>
+      <td style="text-align:right;font-family:var(--mono)">${plAmt(r.label, 'ytdA', r.ytdA)}</td>
+      <td class="${yCl}" style="text-align:right;font-family:var(--mono)">${yv == null ? '—' : fV(yv)}</td>
+      <td style="text-align:right;font-family:var(--mono);color:var(--amber)">${r.fc != null ? plAmt(r.label, 'fc', r.fc) : '—'}</td>`;
+    if (drill.length) tr.addEventListener('click', () => togglePLRow(ri, drill));
     tb.appendChild(tr);
-    if(hasDrill){
-      r.gl.forEach((g,gi)=>{
-        const gtr=document.createElement('tr');
-        gtr.id='drill'+ri+'_'+gi;
-        gtr.className='pl-drill';
-        gtr.style.display='none';
-        const gv=g.a-g.b;
-        const gvc=vClsSign(gv);
-        const gyv=g.ytd-(g.b*5);
-        gtr.innerHTML=`<td style="padding-left:22px;font-size:10.5px;color:var(--text2)">${g.n}</td>
-          <td style="text-align:right;font-family:var(--mono);font-size:10.5px">${fM(g.a)}</td>
-          <td style="text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--text3)">${fM(g.b)}</td>
-          <td class="${gvc}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${fV(gv)}</td>
-          <td class="${gvc}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${fVarPct(gv,g.b)}</td>
-          <td style="text-align:right;font-family:var(--mono);font-size:10.5px">${fM(g.ytd)}</td>
-          <td class="${vClsSign(gyv)}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${fV(gyv)}</td>
-          <td style="text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--amber)">${g.fc!=null?fM(g.fc):'—'}</td>`;
-        tb.appendChild(gtr);
-      });
-    }
+    drill.forEach((g, gi) => {
+      const gtr = document.createElement('tr');
+      gtr.id = 'drill' + ri + '_' + gi;
+      gtr.className = 'pl-drill';
+      gtr.style.display = 'none';
+      const gv = g.a != null && g.b != null ? g.a - g.b : null;
+      const gyv = g.ytdA != null && g.ytdB != null ? g.ytdA - g.ytdB : null;
+      const gvc = gv == null ? 'vneu' : vClsSign(gv);
+      gtr.innerHTML = `<td style="padding-left:22px;font-size:10.5px;color:var(--text2)">${plEsc(g.name)}</td>
+        <td style="text-align:right;font-family:var(--mono);font-size:10.5px">${fM(g.a)}</td>
+        <td style="text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--text3)">${fM(g.b)}</td>
+        <td class="${gvc}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${gv == null ? '—' : fV(gv)}</td>
+        <td class="${gvc}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${gv == null ? '—' : fVarPct(gv, g.b)}</td>
+        <td style="text-align:right;font-family:var(--mono);font-size:10.5px">${fM(g.ytdA)}</td>
+        <td class="${gyv == null ? 'vneu' : vClsSign(gyv)}" style="text-align:right;font-family:var(--mono);font-size:10.5px">${gyv == null ? '—' : fV(gyv)}</td>
+        <td style="text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--amber)">${g.fc != null ? fM(g.fc) : '—'}</td>`;
+      tb.appendChild(gtr);
+    });
   });
+  if (!tb.dataset.srcBound) {
+    tb.dataset.srcBound = '1';
+    tb.addEventListener('click', function (ev) {
+      const el = ev.target.closest && ev.target.closest('.src-amt');
+      if (!el) return;
+      ev.stopPropagation();
+      plShowSource(el, el.getAttribute('data-pl-line'), el.getAttribute('data-pl-col'));
+    }, true);
+  }
+  renderPLBridgeCard();
 }
+
+/** Income Statement → Management P&L bridge: both roll up from one ledger; only allocations may differ. */
+function renderPLBridgeCard() {
+  const card = document.getElementById('plBridgeCard');
+  const L = window.SMPLLedger;
+  if (!card || !L) return;
+  const month = L.bridge('Actual', L.periodsFor('Actual', 'month'));
+  const scopes = [
+    ['YTD Actual', L.bridge('Actual', L.periodsFor('Actual', 'ytd'))],
+    ['Budget', L.bridge('Budget', L.periodsFor('Budget', 'month'))],
+    ['Forecast', L.bridge('Forecast', L.periodsFor('Forecast', 'rest_of_year'))],
+  ];
+  const pill = (s) => s === 'break' ? '<span class="tie-pill brk">Not explained</span>'
+    : s === 'allocated' ? '<span class="tie-pill alloc">Explained by allocations</span>'
+    : '<span class="tie-pill ok">Identical</span>';
+  const rules = L.allocationRules();
+  const si = L.sourceInfo();
+  const summary = scopes.map(([lbl, b]) => lbl + ': ' + (b.ok ? (b.transfers.length ? 'explained by allocations' : 'identical') : 'not explained')).join(' · ');
+  card.innerHTML = `
+    <div class="card-title">Income Statement → Management P&amp;L <span style="margin-left:8px">${month.ok ? (rules.length ? '<span class="tie-pill alloc">Allocations applied</span>' : '<span class="tie-pill ok">Same source · no allocation layers</span>') : '<span class="tie-pill brk">Not explained</span>'}</span></div>
+    <div class="card-sub">Both statements roll up from the ${plEsc(si.label.toLowerCase())}. The Income Statement uses it as booked; the Management P&amp;L applies allocation layers, which can only move cost between lines — revenue, total costs and EBITDA never change. ${plCloseLabel()} Actual shown.</div>
+    <table class="pl-tbl"><thead><tr>
+      <th style="text-align:left;width:28%">Metric</th><th>Income Statement</th><th>Allocations</th><th>Management P&amp;L</th><th style="width:22%">Status</th>
+    </tr></thead><tbody>
+    ${month.rows.map(r => `<tr><td>${r.label}</td><td>${fM(r.is / 1e6)}</td><td>${Math.abs(r.alloc) < 0.5 ? '—' : fV(r.alloc / 1e6)}</td><td>${fM(r.mgmt / 1e6)}</td><td>${pill(r.status)}</td></tr>`).join('')}
+    </tbody></table>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px">${summary}${rules.length ? '' : ' · Allocation layers (e.g. compute, support or TAM cost moved into cost of revenue) plug in here once a customer’s policy is configured.'}</div>
+    ${month.transfers.length ? `<div style="font-size:10px;color:var(--text2);margin-top:6px">${month.transfers.map(t => plEsc(t.label) + ': ' + fV(t.amount / 1e6)).join(' · ')}</div>` : ''}`;
+}
+
+function plCloseSourcePop() {
+  const pop = document.getElementById('srcPop');
+  if (pop) pop.remove();
+  document.removeEventListener('click', plPopOutside, true);
+  document.removeEventListener('keydown', plPopEsc, true);
+}
+function plPopOutside(ev) { const pop = document.getElementById('srcPop'); if (pop && !pop.contains(ev.target)) plCloseSourcePop(); }
+function plPopEsc(ev) { if (ev.key === 'Escape') plCloseSourcePop(); }
+
+/** Provenance popover: which ledger rows, allocations and Income Statement line build this amount. */
+function plShowSource(el, label, col) {
+  const L = window.SMPLLedger;
+  if (!L || !label) return;
+  plCloseSourcePop();
+  const scope = plColScope(col);
+  const ex = L.explain('mgmt', label, scope.scenario, scope.periods);
+  if (!ex) return;
+  const isLabel = PL_TO_IS_LABEL[label];
+  const isRoll = L.rollup('is', scope.scenario, scope.periods);
+  const totalKey = PL_TOTAL_KEYS[label];
+  const isAmt = totalKey ? isRoll.totals[totalKey] : (isRoll.lines[label] ? isRoll.lines[label].amount : null);
+  const same = isAmt != null && Math.abs(isAmt - ex.total) < 0.5;
+  let body = '';
+  if (ex.formula) {
+    body += `<div class="sp-meta">${plEsc(ex.formula)}</div>`;
+  } else {
+    body += '<table>' + ex.accounts.map(a => `<tr><td>${plEsc(a.name)}<div style="font-size:9.5px;color:var(--text3)">${plEsc(a.source)}</div></td><td>${fM(a.amount / 1e6)}</td></tr>`).join('') + '</table>';
+    body += `<div class="sp-foot">Allocations: ${ex.transfers.length ? ex.transfers.map(t => plEsc(t.label) + ' ' + fV((t.to === label ? t.amount : -t.amount) / 1e6)).join(', ') : 'none'}</div>`;
+  }
+  const pop = document.createElement('div');
+  pop.id = 'srcPop';
+  pop.className = 'src-pop';
+  pop.innerHTML = `<h4>${plEsc(label)} · ${fM(ex.total / 1e6)}</h4>
+    <div class="sp-meta">${plEsc(scope.label)} · Management basis · ${plEsc(ex.source.label)}</div>
+    ${body}
+    ${isLabel ? `<div class="sp-foot">Income Statement “${plEsc(isLabel)}”: ${isAmt == null ? '—' : fM(isAmt / 1e6)} · ${same ? 'same amount (no allocations)' : 'differs by allocations'} <button type="button" class="lock-link" onclick="plCloseSourcePop();boardGoToOrigin('is','${plEsc(isLabel)}')">Open IS</button></div>` : ''}`;
+  document.body.appendChild(pop);
+  const rect = el.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, rect.left)) + 'px';
+  pop.style.top = (rect.bottom + h + 8 > window.innerHeight ? Math.max(8, rect.top - h - 6) : rect.bottom + 6) + 'px';
+  setTimeout(() => {
+    document.addEventListener('click', plPopOutside, true);
+    document.addEventListener('keydown', plPopEsc, true);
+  }, 0);
+}
+
+/** Jump to where a number comes from: 'is' → Income Statement row, 'pl' → Management P&L row, 'gl' → GL drilldown dept. */
+function boardGoToOrigin(target, key) {
+  function highlight(selector, match) {
+    let tries = 0;
+    const timer = setInterval(function () {
+      tries++;
+      const rows = Array.from(document.querySelectorAll(selector));
+      const hit = rows.find(function (tr) { return match(tr); });
+      if (hit || tries > 40) {
+        clearInterval(timer);
+        if (!hit) return;
+        hit.classList.add('ts-hl');
+        hit.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setTimeout(function () { hit.classList.remove('ts-hl'); }, 2400);
+      }
+    }, 50);
+  }
+  if (target === 'is') {
+    boardExecNav('threestmt');
+    highlight('#tsContent table.ts-tbl tr', function (tr) {
+      const td = tr.querySelector('td');
+      return td && td.getAttribute('data-is-label') === key;
+    });
+  } else if (target === 'pl') {
+    boardExecNav('pl');
+    highlight('#plTbody tr', function (tr) { return tr.dataset.plLabel === key; });
+  } else if (target === 'gl') {
+    curGLDept = key;
+    boardExecNav('pl');
+    setTimeout(function () {
+      const btn = Array.from(document.querySelectorAll('.snav-btn')).find(function (b) { return (b.getAttribute('onclick') || '').indexOf("'gl'") >= 0; });
+      showPLView('gl', btn || null);
+    }, 60);
+  }
+}
+if (typeof window !== 'undefined') window.boardGoToOrigin = boardGoToOrigin;
+
 if (typeof window !== 'undefined') {
   window.buildPLTable = buildPLTable;
   window.schedulePLCharts = schedulePLCharts;
@@ -1468,122 +1555,93 @@ function buildPLMiniCharts() {
 }
 
 function buildPLBridge(area) {
+  const L = window.SMPLLedger;
+  const cm = L ? L.rollup('mgmt', 'Actual', L.periodsFor('Actual', 'month')) : null;
+  const costLines = cm ? cm.order.filter(l => cm.lines[l].section !== 'revenue') : [];
   area.innerHTML=`<div class="card">
-    <div class="card-title">EBITDA bridge — June 2026</div>
-    <div class="card-sub">Revenue → COGS → Gross Profit → OpEx components → EBITDA ($M)</div>
-    <div class="chart-wrap" style="height:250px"><canvas id="bridgeC" role="img" aria-label="EBITDA waterfall chart for June 2026">Revenue $7.18M - COGS $1.65M = GP $5.53M - S&M $3.73M - R&D $1.22M - G&A $0.79M = EBITDA -$0.22M</canvas></div>
+    <div class="card-title">EBITDA bridge — ${plCloseLabel()}</div>
+    <div class="card-sub">Revenue → cost of revenue → gross profit → operating expense lines → EBITDA ($M) · Management basis</div>
+    <div class="chart-wrap" style="height:250px"><canvas id="bridgeC" role="img" aria-label="EBITDA waterfall chart"></canvas></div>
   </div>
   <div class="two-col" style="margin-top:12px">
     <div class="card">
       <div class="card-title">Gross margin trend (%)</div>
-      <div class="card-sub">Actual vs budget · Jan – Jun 2026</div>
-      <div class="chart-wrap" style="height:150px"><canvas id="gmC" role="img" aria-label="Gross margin trend 77% flat all months">77.0% every month, exactly on budget.</canvas></div>
+      <div class="card-sub">Actual vs budget · Jan – ${plCloseLabel()}</div>
+      <div class="chart-wrap" style="height:150px"><canvas id="gmC" role="img" aria-label="Gross margin trend"></canvas></div>
     </div>
     <div class="card">
       <div class="card-title">EBITDA margin trend (%)</div>
-      <div class="card-sub">Actual vs budget · Jan – June 2026</div>
-      <div class="chart-wrap" style="height:150px"><canvas id="emC" role="img" aria-label="EBITDA margin trend approx -3% each month">EBITDA margin approximately -3% each month.</canvas></div>
+      <div class="card-sub">Actual vs budget · Jan – ${plCloseLabel()}</div>
+      <div class="chart-wrap" style="height:150px"><canvas id="emC" role="img" aria-label="EBITDA margin trend"></canvas></div>
     </div>
   </div>`;
   setTimeout(()=>{
-    var ts=boardTsSource();
-    var cm=CLOSE_MONTH;
-    var isJun=ts&&ts.Actual&&ts.Actual.is&&ts.Actual.is[cm]?ts.Actual.is[cm]:null;
-    var rev=isJun?+(isJun.revenue/1e6).toFixed(2):REV_ACT[ACT_MONTHS_COUNT-1];
-    var cogs=isJun?+(isJun.cogs/1e6).toFixed(2):0;
-    var gp=isJun?+(isJun.gross_profit/1e6).toFixed(2):GP_ACT[ACT_MONTHS_COUNT-1];
-    var sm=isJun?+(isJun.sm/1e6).toFixed(2):SM_ACT[ACT_MONTHS_COUNT-1];
-    var rd=isJun?+(isJun.rd/1e6).toFixed(2):RD_ACT[ACT_MONTHS_COUNT-1];
-    var ga=isJun?+(isJun.ga/1e6).toFixed(2):GA_ACT[ACT_MONTHS_COUNT-1];
-    var ebit=isJun?+(isJun.ebitda/1e6).toFixed(2):EBITDA_ACT[ACT_MONTHS_COUNT-1];
-    var gmAct=MO.map(function(_,i){
-      var p=ts&&ts.Actual&&ts.Actual.periods?ts.Actual.periods[i]:null;
-      var row=p&&ts.Actual.is[p];
-      return row&&row.gm_pct!=null?+(row.gm_pct*100).toFixed(1):null;
-    }).filter(function(v){return v!=null;});
-    var gmBud=MO.map(function(_,i){
-      var p=ts&&ts.Budget&&ts.Budget.periods?ts.Budget.periods[i]:null;
-      var row=p&&ts.Budget.is[p];
-      return row&&row.gm_pct!=null?+(row.gm_pct*100).toFixed(1):null;
-    });
-    charts.bridge = boardMkChart(document.getElementById('bridgeC'),{type:'bar',data:{labels:['Revenue','– COGS','Gross Profit','– S&M','– Engineering','– G&A/Fin','EBITDA'],datasets:[{data:[rev,-cogs,gp,-sm,-rd,-ga,ebit],backgroundColor:['#1D9E75','#D85A30','#1a2e44','#D85A30','#D85A30','#D85A30','#BA7517'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+Math.abs(ctx.raw).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>(v<0?'-$':'$')+Math.abs(v).toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.gm = boardMkChart(document.getElementById('gmC'),{type:'line',data:{labels:MO,datasets:[{label:'Actual',data:gmAct,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:gmBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:70,max:85,ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.em = boardMkChart(document.getElementById('emC'),{type:'line',
-    data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
-      {label:'Actual',
-       data:EBITDA_ACT.slice(0,ACT_MONTHS_COUNT).map(function(e,i){return parseFloat((e/REV_ACT[i]*100).toFixed(1));}),
-       borderColor:'#BA7517',borderWidth:2,pointRadius:3,fill:false},
-      {label:'Budget',
-       data:[-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0,-3.0].slice(0,ACT_MONTHS_COUNT),
-       borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{
-        x:{ticks:{font:{size:9}},grid:{display:false}},
-        y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}
-      }}});
+    if (!cm) return;
+    const m = v => +(v / 1e6).toFixed(2);
+    const cogsLines = costLines.filter(l => cm.lines[l].section === 'cogs');
+    const opexLines = costLines.filter(l => cm.lines[l].section === 'opex');
+    const labels = ['Revenue'].concat(cogsLines.map(l => '– ' + l), ['Gross Profit'], opexLines.map(l => '– ' + l), ['EBITDA']);
+    const data = [m(cm.totals.revenue)].concat(cogsLines.map(l => -m(cm.lines[l].amount)), [m(cm.totals.gross_profit)], opexLines.map(l => -m(cm.lines[l].amount)), [m(cm.totals.ebitda)]);
+    const colors = labels.map((l, i) => i === 0 ? '#1D9E75' : l === 'Gross Profit' ? '#1a2e44' : l === 'EBITDA' ? '#BA7517' : '#D85A30');
+    const actP = L.periodsFor('Actual', 'ytd');
+    const monthRoll = (sc, p) => L.rollup('mgmt', sc, [p]).totals;
+    const pct = (num, den) => den ? +(num / den * 100).toFixed(1) : null;
+    const moLbl = actP.map(p => MON_ABBR[parseInt(p.slice(5), 10) - 1]);
+    const gmAct = actP.map(p => { const t = monthRoll('Actual', p); return pct(t.gross_profit, t.revenue); });
+    const gmBud = actP.map(p => { const t = monthRoll('Budget', p); return pct(t.gross_profit, t.revenue); });
+    const emAct = actP.map(p => { const t = monthRoll('Actual', p); return pct(t.ebitda, t.revenue); });
+    const emBud = actP.map(p => { const t = monthRoll('Budget', p); return pct(t.ebitda, t.revenue); });
+    charts.bridge = boardMkChart(document.getElementById('bridgeC'),{type:'bar',data:{labels:labels,datasets:[{data:data,backgroundColor:colors,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+Math.abs(ctx.raw).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>(v<0?'-$':'$')+Math.abs(v).toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.gm = boardMkChart(document.getElementById('gmC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:gmAct,borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:gmBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    charts.em = boardMkChart(document.getElementById('emC'),{type:'line',data:{labels:moLbl,datasets:[{label:'Actual',data:emAct,borderColor:'#BA7517',borderWidth:2,pointRadius:3,fill:false},{label:'Budget',data:emBud,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:function(v){return v.toFixed(1)+'%';},font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   },30);
 }
 
 function buildPLDept(area) {
-  const DEPTS=[
-    {n:'Sales',a:1.522,b:1.460,ytdA:7.562,ytdB:7.30},
-    {n:'Marketing',a:2.228,b:2.200,ytdA:10.316,ytdB:10.18},
-    {n:'Engineering',a:1.631,b:1.615,ytdA:8.141,ytdB:8.06},
-    {n:'Product',a:0.562,b:0.545,ytdA:2.743,ytdB:2.72},
-    {n:'G&A',a:0.494,b:0.482,ytdA:2.395,ytdB:2.35},
-    {n:'Finance',a:0.260,b:0.255,ytdA:1.283,ytdB:1.27},
-    {n:'Cust. Success',a:0.291,b:0.290,ytdA:1.455,ytdB:1.45},
-    {n:'COGS / Support',a:1.650,b:1.650,ytdA:8.368,ytdB:8.22},
-  ];
+  const DEPTS = window.SMPLLedger ? SMPLLedger.byDepartment() : [];
+  const opexDepts = DEPTS.filter(d => d.dept !== 'Cost of Revenue');
+  const opexTot = opexDepts.reduce((s, d) => s + (d.a || 0), 0);
+  const mixLabels = opexDepts.map(d => d.dept + ' ' + (opexTot ? Math.round((d.a || 0) / opexTot * 100) : 0) + '%');
   area.innerHTML=`<div class="two-col" style="margin-bottom:12px">
     <div class="card">
       <div class="card-title">Variance vs budget by department</div>
-      <div class="card-sub">Over/(under) spend · June 2026 ($M) · red = over budget</div>
-      <div class="chart-wrap" style="height:240px"><canvas id="deptVarC" role="img" aria-label="Department variance horizontal bar chart">S&M over by $0.07M. Others near budget.</canvas></div>
+      <div class="card-sub">Actual − budget · ${plCloseLabel()} ($M) · red = over budget</div>
+      <div class="chart-wrap" style="height:240px"><canvas id="deptVarC" role="img" aria-label="Department variance horizontal bar chart"></canvas></div>
     </div>
     <div class="card">
       <div class="card-title">OpEx mix</div>
-      <div class="card-sub">% of total OpEx by group</div>
-      <div class="chart-wrap" style="height:240px"><canvas id="deptMixC" role="img" aria-label="OpEx donut chart. S&M 65%, R&D 21%, G&A 14%">S&M 65%, R&D+Product 21%, G&A+Finance 14%.</canvas></div>
+      <div class="card-sub">% of total OpEx · ${plCloseLabel()}</div>
+      <div class="chart-wrap" style="height:240px"><canvas id="deptMixC" role="img" aria-label="OpEx mix donut chart"></canvas></div>
     </div>
   </div>
   <div class="card">
-    <div class="card-title" style="margin-bottom:8px">Department summary — June 2026</div>
+    <div class="card-title" style="margin-bottom:8px">Department summary — ${plCloseLabel()} <span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:8px">From the reporting ledger · ${window.SMPLLedger ? plEsc(SMPLLedger.sourceInfo().label) : ''}</span></div>
     <table class="pl-tbl"><thead><tr><th style="text-align:left;width:28%">Department</th><th>Actual</th><th>Budget</th><th>Var $</th><th>Var %</th><th>YTD Act</th><th>YTD Budget</th><th>YTD Var</th></tr></thead><tbody>
-    ${DEPTS.map((d,i)=>{const vd=d.a-d.b,yv=d.ytdA-d.ytdB;const vc2=vCls(vd,true),yvc=vCls(yv,true);return`<tr><td style="font-weight:500">${d.n}</td><td>${fM(d.a)}</td><td style="color:var(--text3)">${fM(d.b)}</td><td class="${vc2}">${fV(vd)}</td><td class="${vc2}">${(vd/d.b*100).toFixed(1)}%</td><td>${fM(d.ytdA)}</td><td style="color:var(--text3)">${fM(d.ytdB)}</td><td class="${yvc}">${fV(yv)}</td></tr>`;}).join('')}
+    ${DEPTS.map(d=>{const vd=d.a!=null&&d.b!=null?d.a-d.b:null,yv=d.ytdA!=null&&d.ytdB!=null?d.ytdA-d.ytdB:null;const vc2=vd==null?'vneu':vClsSign(vd),yvc=yv==null?'vneu':vClsSign(yv);return`<tr><td style="font-weight:500">${plEsc(d.dept)}<button type="button" class="lock-link" title="Open GL detail" onclick="boardGoToOrigin('gl','${plEsc(d.dept)}')">GL</button></td><td>${fM(d.a)}</td><td style="color:var(--text3)">${fM(d.b)}</td><td class="${vc2}">${vd==null?'—':fV(vd)}</td><td class="${vc2}">${vd==null?'—':fVarPct(vd,d.b)}</td><td>${fM(d.ytdA)}</td><td style="color:var(--text3)">${fM(d.ytdB)}</td><td class="${yvc}">${yv==null?'—':fV(yv)}</td></tr>`;}).join('')}
     </tbody></table>
   </div>`;
   setTimeout(()=>{
-    const vars=DEPTS.map(d=>d.a-d.b);
-    charts.deptVar=boardMkChart(document.getElementById('deptVarC'),{type:'bar',data:{labels:DEPTS.map(d=>d.n),datasets:[{data:vars,backgroundColor:vars.map(v=>v>0.005?'rgba(216,90,48,0.4)':v<-0.005?'rgba(29,158,117,0.4)':'rgba(136,135,128,0.3)'),borderColor:vars.map(v=>v>0.005?'#D85A30':v<-0.005?'#1D9E75':'#888780'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
-    charts.deptMix=boardMkChart(document.getElementById('deptMixC'),{type:'doughnut',data:{labels:['Sales & Mktg 65%','R&D + Product 21%','G&A + Finance 14%'],datasets:[{data:[65,21,14],backgroundColor:['#1a2e44','#1D9E75','#BA7517'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:true,position:'bottom',labels:{font:{size:10},padding:10}}}}});
+    const vars=DEPTS.map(d=>d.a!=null&&d.b!=null?+(d.a-d.b).toFixed(3):0);
+    charts.deptVar=boardMkChart(document.getElementById('deptVarC'),{type:'bar',data:{labels:DEPTS.map(d=>d.dept),datasets:[{data:vars,backgroundColor:vars.map(v=>v>0.005?'rgba(216,90,48,0.4)':v<-0.005?'rgba(29,158,117,0.4)':'rgba(136,135,128,0.3)'),borderColor:vars.map(v=>v>0.005?'#D85A30':v<-0.005?'#1D9E75':'#888780'),borderWidth:1.5,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>(v>=0?'+$':'-$')+Math.abs(v).toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    charts.deptMix=boardMkChart(document.getElementById('deptMixC'),{type:'doughnut',data:{labels:mixLabels,datasets:[{data:opexDepts.map(d=>+(d.a||0).toFixed(3)),backgroundColor:['#1a2e44','#1D9E75','#BA7517','#534AB7','#888780'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:true,position:'bottom',labels:{font:{size:10},padding:10}}}}});
   },30);
 }
 
-const GL_BY_DEPT = {
-  'Sales':[{n:'6000 Sales Payroll',a:1.231,b:1.180,ytd:6.183,fc:9.77},{n:'6010 Sales Commissions',a:0.048,b:0.044,ytd:0.161,fc:3.45},{n:'6150 Sales Travel',a:0.243,b:0.236,ytd:1.218,fc:0.86}],
-  'Marketing':[{n:'Base Salaries',a:0.447,b:0.446,ytd:2.186,fc:null},{n:'6100 Paid Search',a:0.194,b:0.194,ytd:1.685,fc:3.45},{n:'6110 Paid Social',a:0.100,b:0.100,ytd:0.341,fc:2.30},{n:'6120 Partner Marketing',a:0.127,b:0.127,ytd:0.992,fc:2.01},{n:'6130 Events & Webinars',a:0.103,b:0.103,ytd:0.897,fc:1.72},{n:'6140 Mktg Software',a:0.257,b:0.240,ytd:1.202,fc:1.44},{n:'6190 S&M SBC',a:0.100,b:0.100,ytd:0.583,fc:2.87}],
-  'Engineering':[{n:'7000 Eng Payroll',a:1.220,b:1.210,ytd:6.100,fc:4.51},{n:'7020 Dev Infrastructure',a:0.259,b:0.255,ytd:1.286,fc:0.75},{n:'7030 Developer Tools',a:0.080,b:0.078,ytd:0.390,fc:0.56},{n:'7090 R&D SBC',a:0.072,b:0.072,ytd:0.365,fc:1.32}],
-  'Product':[{n:'7010 Product Payroll',a:0.450,b:0.436,ytd:2.186,fc:1.41},{n:'7050 Product Software',a:0.039,b:0.037,ytd:0.193,fc:0.38},{n:'7040 Eng Contractors',a:0.073,b:0.072,ytd:0.364,fc:0.47}],
-  'G&A':[{n:'Base Salaries (G&A)',a:0.328,b:0.320,ytd:1.585,fc:null},{n:'8060 Corporate SW',a:0.021,b:0.025,ytd:0.425,fc:0.61},{n:'8070 Office & Facilities',a:0.071,b:0.071,ytd:0.358,fc:0.30},{n:'8050 Insurance',a:0.028,b:0.028,ytd:0.140,fc:0.37},{n:'D&A',a:0.046,b:0.038,ytd:0.237,fc:null},{n:'8090 G&A SBC',a:0,b:0,ytd:0,fc:1.22}],
-  'Finance':[{n:'8000 Finance Payroll',a:0.207,b:0.200,ytd:0.988,fc:1.34},{n:'8010 HR Payroll',a:0.046,b:0.044,ytd:0.220,fc:0.61},{n:'8020 Legal Fees',a:0.007,b:0.011,ytd:0.075,fc:0.73}],
-  'Cust. Success':[{n:'Base Salaries (CS)',a:0.521,b:0.515,ytd:2.553,fc:null},{n:'5010 CS Labor COGS',a:0.291,b:0.290,ytd:1.455,fc:4.32},{n:'Employee Benefits',a:0.060,b:0.058,ytd:0.294,fc:null}],
-  'COGS / Support':[{n:'5000 Cloud Hosting',a:0.656,b:0.650,ytd:3.275,fc:4.83},{n:'5010 Support Payroll',a:0.437,b:0.430,ytd:2.183,fc:4.32},{n:'5020 Third Party Data',a:0.170,b:0.165,ytd:0.850,fc:1.27},{n:'5030 Support Tools',a:0.070,b:0.068,ytd:0.351,fc:1.02},{n:'5040 Payment Processing',a:0.051,b:0.052,ytd:0.254,fc:0.64}],
-};
-
 function buildPLGL(area) {
-  const depts = Object.keys(GL_BY_DEPT);
+  const DEPTS = window.SMPLLedger ? SMPLLedger.byDepartment() : [];
+  const names = DEPTS.map(d => d.dept);
+  if (names.indexOf(curGLDept) < 0) curGLDept = names[0] || '';
+  const fc = window.SMPLLedger ? plColScope('fc') : null;
   area.innerHTML=`<div class="dtabs" id="glTabs"></div>
   <div class="card">
-    <div class="card-title" id="glTitle" style="margin-bottom:8px">Marketing — GL Account Detail</div>
+    <div class="card-title" id="glTitle" style="margin-bottom:4px">${plEsc(curGLDept)} — GL Account Detail</div>
+    <div class="card-sub">Accounts in the reporting ledger for this department · ${window.SMPLLedger ? plEsc(SMPLLedger.sourceInfo().label) + ' · ' + plEsc(SMPLLedger.sourceInfo().grain) + ' grain' : ''}</div>
     <table class="pl-tbl"><thead><tr>
-      <th style="text-align:left;width:35%">GL Account</th><th>May Actual</th><th>May Budget</th><th>Var $</th><th>Var %</th><th>YTD Actual</th><th>FC Jun–Dec</th>
+      <th style="text-align:left;width:35%">GL Account</th><th>${MON_ABBR[boardCloseParts().month-1]} Actual</th><th>${MON_ABBR[boardCloseParts().month-1]} Budget</th><th>Var $</th><th>Var %</th><th>YTD Actual</th><th>${fc && fc.periods.length ? 'FC ' + plEsc(fc.label.replace('Forecast ', '').replace(/ \d{4}$/, '')) : 'FC'}</th>
     </tr></thead><tbody id="glTbody"></tbody></table>
   </div>`;
   const tabs = document.getElementById('glTabs');
-  depts.forEach(d=>{
+  names.forEach(d=>{
     const btn=document.createElement('button');
     btn.className='dtab'+(d===curGLDept?' on':'');
     btn.textContent=d;
@@ -1596,19 +1654,20 @@ function buildPLGL(area) {
 function renderGLTable(dept) {
   const tb=document.getElementById('glTbody');
   if(!tb) return; tb.innerHTML='';
-  const rows=GL_BY_DEPT[dept]||[];
+  const d=(window.SMPLLedger ? SMPLLedger.byDepartment() : []).find(x=>x.dept===dept);
+  const rows=d ? d.accounts : [];
   rows.forEach((r,i)=>{
-    const vd=r.a-r.b, vc2=vCls(vd,true);
+    const vd=r.a!=null&&r.b!=null?r.a-r.b:null, vc2=vd==null?'vneu':vClsSign(vd);
     const tr=document.createElement('tr');
     tr.style.background=i%2===0?'var(--bg2)':'';
-    tr.innerHTML=`<td style="padding-left:8px">${r.n}</td><td>${fM(r.a)}</td><td style="color:var(--text3)">${fM(r.b)}</td><td class="${vc2}">${fV(vd)}</td><td class="${vc2}">${(r.b?vd/Math.abs(r.b)*100:0).toFixed(1)}%</td><td>${fM(r.ytd)}</td><td style="color:var(--amber)">${r.fc!=null?fM(r.fc):'—'}</td>`;
+    tr.innerHTML=`<td style="padding-left:8px">${plEsc(r.name)}<div style="font-size:9.5px;color:var(--text3)">${plEsc(SMPLLedger.sourceInfo().table + '.' + r.id)}</div></td><td>${fM(r.a)}</td><td style="color:var(--text3)">${fM(r.b)}</td><td class="${vc2}">${vd==null?'—':fV(vd)}</td><td class="${vc2}">${vd==null?'—':fVarPct(vd,r.b)}</td><td>${fM(r.ytdA)}</td><td style="color:var(--amber)">${r.fc!=null?fM(r.fc):'—'}</td>`;
     tb.appendChild(tr);
   });
-  const totA=rows.reduce((s,r)=>s+r.a,0),totB=rows.reduce((s,r)=>s+r.b,0),totYTD=rows.reduce((s,r)=>s+r.ytd,0),totFC=rows.reduce((s,r)=>s+(r.fc||0),0);
-  const tv=totA-totB,tvc=vCls(tv,true);
+  if(!d) return;
+  const tv=d.a!=null&&d.b!=null?d.a-d.b:null,tvc=tv==null?'vneu':vClsSign(tv);
   const ttr=document.createElement('tr');
   ttr.style.cssText='font-weight:500;border-top:1px solid var(--border2);background:var(--bg2)';
-  ttr.innerHTML=`<td style="padding-left:8px;font-weight:500">Total</td><td style="font-weight:500">${fM(totA)}</td><td style="color:var(--text3)">${fM(totB)}</td><td class="${tvc}" style="font-weight:500">${fV(tv)}</td><td class="${tvc}">${totB?((tv/Math.abs(totB))*100).toFixed(1):'0.0'}%</td><td style="font-weight:500">${fM(totYTD)}</td><td style="color:var(--amber);font-weight:500">${totFC>0?fM(totFC):'—'}</td>`;
+  ttr.innerHTML=`<td style="padding-left:8px;font-weight:500">Total</td><td style="font-weight:500">${fM(d.a)}</td><td style="color:var(--text3)">${fM(d.b)}</td><td class="${tvc}" style="font-weight:500">${tv==null?'—':fV(tv)}</td><td class="${tvc}">${tv==null?'—':fVarPct(tv,d.b)}</td><td style="font-weight:500">${fM(d.ytdA)}</td><td style="color:var(--amber);font-weight:500">${d.fc!=null?fM(d.fc):'—'}</td>`;
   tb.appendChild(ttr);
 }
 
@@ -2095,10 +2154,11 @@ function tsRender() {
   const latestSrc  = sc==='Budget' ? 'Budget' : 'Actual';
   const kpiEl = document.getElementById('tsKpis');
   if(kpiEl) {
-    const rev  = tsGet(sc,latestSrc,latestActP,'is','revenue');
-    const gp   = tsGet(sc,latestSrc,latestActP,'is','gross_profit');
-    const gm   = tsGet(sc,latestSrc,latestActP,'is','gm_pct');
-    const ebit = tsGet(sc,latestSrc,latestActP,'is','ebitda');
+    const kv = key => { const v = window.SMPLLedger ? SMPLLedger.isValue(latestSrc, latestActP, key) : undefined; return v === undefined ? tsGet(sc,latestSrc,latestActP,'is',key) : v; };
+    const rev  = kv('revenue');
+    const gp   = kv('gross_profit');
+    const gm   = kv('gm_pct');
+    const ebit = kv('ebitda');
     const cash = tsGet(sc,latestSrc,latestActP,'bs','cash');
     const ni   = tsGet(sc,latestSrc,latestActP,'is','net_income');
     const cfo  = tsGet(sc,latestSrc,latestActP,'cfs','cfo');
@@ -2148,18 +2208,32 @@ function tsRender() {
     {type:'tot', label:'Net Income', key:'net_income'},
   ];
 
+  const L = window.SMPLLedger;
+  const isVal = (src, p, key) => {
+    const v = L ? L.isValue(src, p, key) : undefined;
+    return v === undefined ? tsGet(sc, src, p, 'is', key) : v;
+  };
+  const IS_TO_PL_LABEL = {
+    'Subscription Revenue': 'Subscription Revenue', 'Services Revenue': 'Services Revenue', 'Total Revenue': 'Total Revenue',
+    'Cost of Revenue': 'Cost of Revenue', 'Gross Profit': 'Gross Profit', 'Sales & Marketing': 'Sales & Marketing',
+    'Research & Development': 'Research & Development', 'General & Administrative': 'General & Administrative',
+    'Total OpEx': 'Total OpEx', 'EBITDA': 'EBITDA',
+  };
   isRows.forEach(r => {
     if(r.type==='sec') { html += `<tr class="ts-sec"><td colspan="${periods.length+1}">${r.label}</td></tr>`; return; }
     const cls = r.type==='tot'?'ts-tot':r.type==='sub'?'ts-sub':(r.indent?'ts-indent':'');
+    const plLabel = IS_TO_PL_LABEL[r.label];
+    const tag = plLabel ? `<button type="button" class="lock-link" title="Open this line on the Management P&amp;L" onclick="boardGoToOrigin('pl','${plEsc(plLabel)}')">Mgmt P&amp;L</button>` : '';
     const vals = periods.map((p,i)=>{
-      const v = tsGet(sc, sources[i], p, 'is', r.key);
+      const v = isVal(sources[i], p, r.key);
       if(v===null) return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''}">—</td>`;
       if(r.pct) return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''}">${tsFmtPct(v)}</td>`;
       return `<td class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':''} ${tsCls(v,r.inv)}">${tsFmt(v)}</td>`;
     }).join('');
-    html += `<tr class="${cls}"><td>${r.label}</td>${vals}</tr>`;
+    html += `<tr class="${cls}"><td data-is-label="${plEsc(r.label)}">${r.label}${tag}</td>${vals}</tr>`;
   });
   html += `</tbody></table></div>`;
+  if (L) html += `<div class="card-sub" style="margin:4px 0 14px">${plEsc(L.sourceInfo().label)} · Income Statement and Management P&amp;L are built from the same ledger rows; the P&amp;L additionally applies allocation layers (${L.allocationRules().length ? L.allocationRules().length + ' active' : 'none today'}).</div>`;
 
   // ── CASH FLOW STATEMENT ───────────────────────────────────────────────
   html += `<div class="ts-stmt-hdr">

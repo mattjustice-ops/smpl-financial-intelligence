@@ -22,6 +22,7 @@ const PLATFORM_FILES = [
   { rel: "board/us_emea_basemap.svg" },
   { rel: "forecast-engine/index.html", marker: "forecast-engine stability" },
   { rel: "shared/board-data.js" },
+  { rel: "shared/board-ledger.js" },
   { rel: "shared/board-hydrate.js" },
   { rel: "shared/board-continuity.js" },
   { rel: "shared/smpl-provenance.js" },

@@ -8,10 +8,11 @@ import { EmbeddedModuleChrome } from "@/components/app/EmbeddedModuleChrome";
 import { PlatformModuleNavLinks } from "@/components/app/PlatformModuleNavLinks";
 import { ApiPushPanel } from "@/components/workspace/ApiPushPanel";
 import { CloseWorkflowPanel } from "@/components/workspace/CloseWorkflowPanel";
+import { ReadinessPanel } from "@/components/workspace/ReadinessPanel";
 import { useActiveOrganization } from "@/hooks/useActiveOrganization";
 import { DEFAULT_USAGE_LIMITS } from "@/lib/entitlements/usage-limits";
 
-type TabId = "usage" | "data" | "ledger";
+type TabId = "usage" | "data" | "ledger" | "readiness";
 
 type DataTrace = {
   database: { host: string; database: string; provider: string };
@@ -318,6 +319,7 @@ export function WorkspaceDashboard() {
             ["usage", "Usage & storage"],
             ["data", "Data imports"],
             ["ledger", "Close ledger"],
+            ["readiness", "Readiness"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -394,6 +396,8 @@ export function WorkspaceDashboard() {
           </div>
         </section>
       ) : null}
+
+      {tab === "readiness" ? <ReadinessPanel organizationId={organizationId} /> : null}
 
       {tab === "data" && summary ? (
         <section className="space-y-6">

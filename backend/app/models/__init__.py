@@ -42,6 +42,7 @@ from app.models.user import OrganizationMember, User
 from app.models.forecast_version import ForecastVersion
 from app.models.budget_version import BudgetVersion
 from app.models.plan_assessment import PlanAssessment
+from app.models.onboarding_readiness import OnboardingReadinessAnswers
 from app.models.organization import Organization
 from app.models.close_context_blob import CloseContextBlob
 from app.models.close_session import CloseSession
@@ -77,6 +78,7 @@ __all__ = [
     "ForecastVersion",
     "BudgetVersion",
     "PlanAssessment",
+    "OnboardingReadinessAnswers",
     "ForecastDriverAssumption",
     "ForecastHeadcountPlan",
     "ForecastIncomeStatement",

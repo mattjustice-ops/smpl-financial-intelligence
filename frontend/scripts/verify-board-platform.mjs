@@ -154,6 +154,13 @@ const checks = [
     true,
   ],
   ["HTML loads board-continuity", boardHtml.includes("board-continuity.js"), true],
+  ["HTML loads board-ledger (IS + Mgmt P&L single source)", boardHtml.includes("/shared/board-ledger.js"), true],
+  [
+    "Mgmt P&L built from ledger, not hardcoded rows",
+    boardHtml.includes("SMPLLedger.managementPl()") && !boardHtml.includes("const PL_ROWS"),
+    true,
+  ],
+  ["IS reads through ledger", boardHtml.includes("L.isValue(src, p, key)"), true],
   [
     "board-continuity cite-to-calc drawer",
     fs
