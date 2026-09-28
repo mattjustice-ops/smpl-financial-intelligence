@@ -32,7 +32,8 @@ export const postBySlugQuery = groq`
 export const postSlugsQuery = groq`
   *[_type == "post" && defined(slug.current) && defined(publishedAt)]{
     "slug": slug.current,
-    publishedAt
+    publishedAt,
+    "updatedAt": _updatedAt
   }
 `;
 
@@ -71,6 +72,7 @@ export const glossaryBySlugQuery = groq`
 export const glossarySlugsQuery = groq`
   *[_type == "glossaryTerm" && defined(slug.current)]{
     "slug": slug.current,
-    body
+    body,
+    "updatedAt": _updatedAt
   }
 `;
