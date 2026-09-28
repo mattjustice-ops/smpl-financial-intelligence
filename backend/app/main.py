@@ -40,6 +40,7 @@ from app.api.workspace_routes import workspace_router
 from app.api.waterfall_routes import waterfall_router
 from app.api.workforce_routes import workforce_router
 from app.api.predictive_planning_routes import predictive_planning_router
+from app.api.readiness_routes import readiness_router
 from app.api.validation_engine_routes import validation_engine_router
 from app.core.config import get_settings
 from app.db.session import get_db
@@ -163,6 +164,7 @@ app.include_router(close_workflow_router, prefix="/api/v1")
 app.include_router(validation_engine_router, prefix="/api/v1")
 app.include_router(workforce_router, prefix="/api/v1")
 app.include_router(predictive_planning_router, prefix="/api/v1")
+app.include_router(readiness_router, prefix="/api/v1")
 
 
 @app.get("/api/v1/workforce/ping", tags=["workforce"])
@@ -433,6 +435,18 @@ def _log_board_engine() -> None:
             db.close()
     except Exception as exc:
         print(f"[SFI] GL warehouse table ensure failed: {exc}")
+    try:
+        from app.db.session import SessionLocal
+        from app.services.readiness.service import ensure_readiness_table
+
+        db = SessionLocal()
+        try:
+            if ensure_readiness_table(db):
+                print("[SFI] Created onboarding_readiness_answers table")
+        finally:
+            db.close()
+    except Exception as exc:
+        print(f"[SFI] Readiness table ensure failed: {exc}")
     print(f"[SFI] Demo CSV loader build: {DEMO_CSV_BUILD_ID}")
 
 
