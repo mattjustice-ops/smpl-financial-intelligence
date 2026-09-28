@@ -103,7 +103,7 @@ Categories are more useful than rankings, because fit depends on your stack and 
 
 **Core strength:** Depth, scale, and connected planning across Finance, workforce, sales, and operations.
 
-**Consideration:** Implementation timelines and ongoing administration are substantial for a company under a few hundred people.
+**Consideration:** [Implementation timelines](/blog/fpa-software-implementation) and ongoing administration are substantial for a company under a few hundred people.
 
 ### Mid-market app-based FP&A platforms
 

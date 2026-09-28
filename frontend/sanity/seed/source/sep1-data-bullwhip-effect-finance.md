@@ -136,7 +136,7 @@ None of this removes reconciliation. It moves reconciliation from something Fina
 
 Here is where I would push back on how FP&A platforms have traditionally been positioned.
 
-Historically, FP&A software has treated data preparation as a phase that happens before planning begins. You implement, you map your data, you clean it up, and then you start modeling. Data readiness is treated as a project with an end date.
+Historically, FP&A software has [treated data preparation as a phase that happens before planning begins](/blog/fpa-software-implementation). You implement, you map your data, you clean it up, and then you start modeling. Data readiness is treated as a project with an end date.
 
 That framing made sense when a finance team pulled from one ERP. It does not survive contact with a modern SaaS stack, where the sources multiply, the definitions drift, and the upstream systems change constantly without telling anyone. The preparation never ends, because the environment never stops moving.
 
