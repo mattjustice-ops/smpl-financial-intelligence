@@ -17,6 +17,8 @@
 | **CEP** | Documented Customer Environment Profile field — safe to treat as formal onboarding |
 | **Gate** | Concrete ARR / subscription decision from GPES + Billing CKR — blocks ARR until answered |
 | **Recommended** | Reconstructed from product methodology docs — **not yet a formal CEP field**; do not over-claim |
+| **Readiness gate** | Books-quality prerequisite (Section 0). If any gate fails, onboarding pauses — no Readiness Score is produced until the customer resolves it |
+| **Score input** | Accounting-policy answer that sets module status (READY / PARTIAL / UNAVAILABLE) in the Readiness Score and names the improvement path |
 
 **Do not ask on this call:** API scopes, auth methods, field mappings, custom fields, pipeline inventories, currencies, org hierarchies — those are auto-discovered after connect.
 
@@ -30,6 +32,35 @@
 | Confirmed by | Sam Okonkwo (CFO) |
 | Also present | Riley Cho (FP&A), Casey Nguyen (RevOps), Pat Morales (Corp Controller), Drew Kim (Billing Ops) |
 | Day-1 ARR intent | **Board / Investor ARR is canonical** (excludes uncommitted usage; see §3 & §4) |
+
+---
+
+## Data ownership — read this first
+
+> **You own your data and the process that creates it.** SMPL reports on what your books and source systems contain. We do not reconcile, reclassify, rebuild, or post entries on your behalf.
+>
+> What SMPL does:
+> - Tells you exactly what each report needs from your books and systems.
+> - Flags gaps during discovery and the systems review, along with what each gap will mean for your reporting.
+> - Recommends ways to improve your process, if you ask.
+>
+> Where a gap comes from how data is recorded, closing it is an action for your team. Reports reflect your books as recorded — gaps show up as labeled limitations, not as numbers SMPL has adjusted. If the readiness gates in Section 0 are not met, onboarding pauses until they are.
+
+---
+
+## 0. Readiness gates *(Readiness gate — Recommended)*
+
+> Ask first. A “No” on any gate means SMPL cannot produce reliable reporting from the books as they stand. Record the answer, explain why, and agree to revisit once the customer has resolved it. Do not work around a failed gate.
+
+| # | Gate question | Required | Customer answer |
+|---|---------------|----------|-----------------|
+| 0.1 | Are the books kept on an **accrual basis** (not cash or tax basis)? | Yes | **Yes — accrual, US GAAP**, all three subsidiaries. |
+| 0.2 | Which **single book of record** should SMPL report from? Who owns it? | One named book + owner | NetSuite multi-book has a **primary US GAAP book** and a secondary tax book. **SMPL reports from the primary GAAP book only**, consolidated to Holdings USD. Owner: Pat Morales (Corp Controller). The Anaplan board P&L is a *view*, not a book (see 7.9). |
+| 0.3 | Are the books **closed monthly**, with a named close owner and a target close day? | Yes | **Yes** — entity close BD+5, consolidated BD+8; Pat Morales owns. |
+| 0.4 | Can the finance lead walk through the most recent month’s income statement and explain the material lines? | Yes | **Yes** — Pat walked the consolidated IS; Riley explained the bridge to the Anaplan board P&L. |
+| 0.5 | Does the customer accept the data-ownership terms above? | Yes | **Yes** — Sam Okonkwo (CFO), 2026-03-18. |
+
+**Gate result: PASS.** (Tax book explicitly excluded — confirmed not to be sent or reconciled.)
 
 ---
 
@@ -99,6 +130,14 @@ Customer-specific definition **or** accept SMPL standard default:
 | **Sales ARR / ACV** | CPQ ACV including estimated usage Year 1 | Stay in Salesforce; bridge report only |
 
 Confirmed: Sam Okonkwo + Riley Cho, 2026-03-18.
+
+**Also ask *(Recommended — Score input):*** Do you report **adjusted profitability metrics** (e.g. Adjusted EBITDA, contribution margin) differently by audience? For each, capture the audience, the add-backs, and who owns the definition. All versions come from the same book of record plus documented adjustments — SMPL does not keep separate P&L copies.
+
+| Audience | Metric name | Add-backs / adjustments | Definition owner |
+|----------|-------------|-------------------------|------------------|
+| Internal management | Management EBITDA | Reported EBITDA, presented after shared-cost allocations (see 7.9) | Riley Cho (FP&A) |
+| Investor / board | Adjusted EBITDA | Add back stock-based comp, restructuring, M&A transaction costs | Sam Okonkwo (CFO) |
+| Lender / covenant | Covenant EBITDA | Per credit agreement §1.1: SBC + non-recurring add-backs, **capped at 15%** of EBITDA; trailing 12 months | Pat Morales + Sam Okonkwo |
 
 ---
 
@@ -201,6 +240,20 @@ Which connected system is authoritative for each:
 | 7.5 | Validation sources for ending ARR, revenue, headcount (what do you tie to today)? | Board ARR: FP&A Stripe+Zuora workbook. Revenue: NetSuite consolidated P&L. HC: Workday census. Bookings: Salesforce — bridge, not tie, to ARR. |
 | 7.6 | Who certifies Actual each month (Accounting / FP&A / RevOps)? | **Pat Morales** certifies consolidated Actual; **Riley** certifies Forecast & Board ARR; **Casey** certifies pipeline; **Drew** certifies billing subledger completeness. |
 
+### Accounting policy & close practice *(Score input — Recommended)*
+
+> Each answer sets module status in the Readiness Score. The consequence column is what to tell the customer if the practice isn’t in place. **Customer action** means their team changes how data is recorded. **SMPL connector** means connecting another system closes the gap. SMPL never closes a gap by adjusting the customer’s data.
+
+| # | Question | If not in place — reporting consequence | Improvement path | Answer |
+|---|----------|------------------------------------------|------------------|--------|
+| 7.7 | **Cost of revenue policy** — which costs, who approved? | Management P&L gross margin **PARTIAL** | Customer action | **In place.** Hosting / compute (AWS, GCP), third-party API costs (Twilio), COGS-Support department, technical account managers, PS delivery labor (PS cost of revenue). Approved by Sam; reviewed annually with auditors. |
+| 7.8 | **Payroll posted by department / cost center?** | Labor can’t be split; gross margin **PARTIAL** | Customer action | **US / UK: yes** — Workday Payroll posts by NetSuite Department. **EU contractors via remote.com: no** — one summary invoice per month to “Contract Labor,” mixing support and engineering contractors (see F1). |
+| 7.9 | Shared-cost **allocations** — booked as JEs or kept outside the GL? | Allocations not shown | Customer action | **Outside the GL.** FP&A applies quarterly allocation keys in Anaplan (shared platform engineering → cost of revenue / R&D; facilities → departments). Nothing is booked in NetSuite (see F2). |
+| 7.10 | Expenses **accrued monthly**? | Timing swings; commentary confidence lowered | Customer action | **US: monthly.** **UK / DE: quarterly** for professional fees and some SaaS vendors (see F3). |
+| 7.11 | Accruals **reverse** next period, actuals coded to the same account / department? | Missing leg reported as a data gap | Customer action | **Yes** — NetSuite auto-reversing JEs. Coding matches for US; UK occasionally codes actuals to G&A when the accrual sat in the department (part of F3). |
+| 7.12 | **Usage-based vendors** accrued on estimate and trued up? | True-ups show as unexplained swings | Customer action | **Yes** — AWS / GCP / Twilio accrued from usage dashboards at BD+2 by Finance Systems (Noah Berg); trued up on invoice. Messaging-heavy months swing — commentary nets the three legs. |
+| 7.13 | **Year-end audit adjustments** — restate or book to final month? Prior commentary? | Board history **PARTIAL** | Customer action | **Big-4 audit.** Adjustments booked to NetSuite **adjustment period 13** (FYE Jan 31); prior months **not restated**. Board pack shows FY total incl. period 13; prior monthly commentary stands as reported with a note. |
+
 ---
 
 ## 8. Desired modules *(CEP)*
@@ -235,16 +288,62 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 
 ---
 
+## 10. Platform access acknowledgment *(Recommended)*
+
+> SMPL assumes that everyone the customer gives platform access to may see the information being reported **and the detail underneath it** — including payroll-related GL lines, vendor-level transactions, and department spend. The customer decides who gets access.
+
+| # | Question | Answer |
+|---|----------|--------|
+| 10.1 | Acknowledged: platform users can see reported numbers and the underlying detail, including payroll-related lines? | **Yes** — Sam Okonkwo, 2026-03-18. Noted that department payroll lines (e.g. small teams) can imply individual comp; customer accepts and will limit logins accordingly. |
+| 10.2 | Who will get logins? | Finance (Sam, Pat, Riley, Noah), RevOps (Casey), Billing Ops (Drew), CEO, department heads (read-only). **Board members: read-only logins** for the board pack. |
+| 10.3 | Who on the customer side approves new access? | Sam Okonkwo (CFO); Pat Morales as backup. |
+
+---
+
+## 11. Systems & data review — findings and sign-off *(completed after connect)*
+
+> Completed by SMPL after systems connect and the first data pull, then reviewed with the customer’s finance lead. Any failed readiness gate, or any **PARTIAL / UNAVAILABLE** status on a module the customer expects Day 1, must go to SMPL leadership **before** implementation continues. That way the path forward is agreed up front and the resulting reporting limits are understood and signed off.
+
+**Readiness Score summary** *(illustrative)*
+
+| Field | Value |
+|-------|-------|
+| Readiness gates (Section 0) | **Pass** |
+| Overall Readiness Score | **~74%** |
+| Modules READY | Financial Reporting (consolidated), Executive Dashboards, MRR Reporting, Cash Forecasting, Scenario Planning |
+| Modules PARTIAL (and why) | **Board Reporting** — Management P&L gross margin can’t reflect EU contractor labor split (F1) or Anaplan allocations (F2). **ARR Reporting** — Zuora UK bridge until sunset. **Pipeline Analytics** — “Contracting” stage split pending (9.1). **Workforce Planning** — DE cost centers (7.4). |
+| Modules UNAVAILABLE (and why) | None Day 1. Executive Commentary (Phase 2) would be PARTIAL for UK / DE lines until F3 is fixed. |
+| Biggest next improvement and expected score change | **Customer action** — book monthly allocation JEs in NetSuite (F2): Board Reporting → READY, largest single lift. **SMPL connector** — NetSuite ARM subledger lifts rev-rec detail. |
+
+**Findings**
+
+| # | Finding | Area (question ref) | Reporting consequence | Path | Customer owner | Target date |
+|---|---------|---------------------|-----------------------|------|----------------|-------------|
+| F1 | remote.com EU contractors posted as one monthly summary invoice; support and engineering mixed | 7.8 | EU support labor can’t be shown in cost of revenue; Management gross margin is overstated vs. the board pack | **Customer action** — split the remote.com JE by department at posting | Pat Morales | May close (BD+8) |
+| F2 | Allocations applied in Anaplan, not booked in NetSuite | 7.9 | SMPL Management P&L shows costs as booked; gross margin and department opex will **not** match the Anaplan board P&L until allocations are booked | **Customer action** — monthly allocation JE in NetSuite from FY27 Q2. Until then: **accept limitation**, with a labeled bridge note in the board pack | Riley Cho (keys) + Pat Morales (JE) | FY27 Q2 (May 2026 close) |
+| F3 | UK / DE accrue some vendors quarterly; UK actuals occasionally coded to G&A | 7.10–7.11 | Monthly variances on those lines are timing-driven; commentary flags them as data gaps rather than explaining them | **Customer action** — monthly accruals + coding check in UK / DE close checklist | Pat Morales | FY27 Q3 (Aug 2026 close) |
+| F4 | Zuora UK subscriptions outside Stripe until sunset | 4.5, 4.7 | Board ARR for UK enterprise relies on the FP&A bridge workbook the customer maintains | **Accept limitation** until Zuora sunset (2026 H2) | Drew Kim | 2026 H2 |
+
+**Sign-off**
+
+| Role | Name | Date |
+|------|------|------|
+| Customer finance lead (owns books and fixes) | Sam Okonkwo (CFO); Pat Morales (Corp Controller) | 2026-04-02 |
+| SMPL engagement lead | *(SMPL)* | 2026-04-02 |
+| SMPL leadership review | **Required** — Board Reporting PARTIAL on a Day-1 module. Path agreed: F2 accepted as a labeled limitation until FY27 Q2. | 2026-04-01 |
+
+---
+
 ## Call-time shortlist (~15 min) — how this sample maps
 
 **Must cover (CEP + gates):**  
-Covered: multi-entity + USD consol → Stripe/Salesforce/NetSuite/Workday (+ Zuora bridge) → **Board ARR canonical vs Sales ACV** → trials exclude / past_due exclude for Board → **committed min in ARR, overages out** → hybrid rev-rec → systems of record split CPQ vs billing → modules → FYE Jan 31.
+Covered: data ownership accepted + readiness gates pass (GAAP primary book; tax book excluded) → multi-entity + USD consol → Stripe/Salesforce/NetSuite/Workday (+ Zuora bridge) → **Board ARR canonical vs Sales ACV** → trials exclude / past_due exclude for Board → **committed min in ARR, overages out** → hybrid rev-rec → systems of record split CPQ vs billing → modules → FYE Jan 31.
 
 **Should cover if time:**  
-Pipeline stage “Contracting” ambiguity · contractors in workforce · multi Stripe accounts · invoice/ACH lag · 180-day reactivation.
+Pipeline stage “Contracting” ambiguity · contractors in workforce · multi Stripe accounts · invoice/ACH lag · 180-day reactivation · cost of revenue policy + EU contractor payroll gap · board logins acknowledged.
 
 **Recommended extras (label clearly):**  
-Driver-based forecast + four scenarios · close BD+8 · GL cutoff with **RE_BASE** for pre-OneWorld history · dual ARR intents documented.
+Driver-based forecast + four scenarios · close BD+8 · GL cutoff with **RE_BASE** for pre-OneWorld history · dual ARR intents documented · three EBITDA audiences · Anaplan allocations outside GL · quarterly UK/DE accruals · period-13 audit adjustments.
 
 ---
 
@@ -257,6 +356,8 @@ Driver-based forecast + four scenarios · close BD+8 · GL cutoff with **RE_BASE
 | Section 6 Forecasting | `docs/Forecasting_Assumptions.md` (+ reporting methodology) | **Recommended — not CEP** |
 | Section 7 Close / GL | `docs/Close_Process.md`, close/GL readiness materials | **Recommended — not CEP** |
 | Section 9 CRM / HC | GPES HubSpot + Rippling gate examples | Documented examples |
+| Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
+| Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
 ---
 
