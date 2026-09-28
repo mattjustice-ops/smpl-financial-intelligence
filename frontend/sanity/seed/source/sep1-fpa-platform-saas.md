@@ -84,7 +84,7 @@ Now the part that separates platforms.
 
 Beyond producing those outputs, a modern FP&A platform should address the **quality and consistency of the financial and operational context feeding them**. That means connecting to source systems rather than receiving uploads, standardizing definitions so a metric means one thing across every output, reconciling sources so differences are explained rather than discovered, and preserving prior periods so last quarter's report still reproduces.
 
-If a platform treats all of that as implementation work that happens once before go-live, ask what happens in month fourteen when the billing system changes its subscription model.
+If a platform treats all of that as [implementation work that happens once before go-live](/blog/fpa-software-implementation), ask what happens in month fourteen when the billing system changes its subscription model.
 
 ## What data should an FP&A platform connect?
 
