@@ -91,9 +91,9 @@ const FAQS: Faq[] = [
 export default function SaasBoardReportingPage() {
   return (
     <SolutionPage
-      eyebrow="SaaS FP&A · Board reporting"
+      crumb="Board reporting & commentary"
       h1="SaaS board reporting and financial commentary"
-      ld={solutionPageLd({ title, url, description, faqs: FAQS })}
+      ld={solutionPageLd({ title, url, description, faqs: FAQS, crumb: "Board reporting & commentary" })}
       faqs={FAQS}
       related={[
         { href: "/blog/saas-board-reporting-arr-cash-pl", label: "Why SaaS board reporting breaks down" },

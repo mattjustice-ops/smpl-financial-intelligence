@@ -20,21 +20,6 @@ const RESOURCES_LINKS = [
     label: "FP&A for SaaS",
     description: "Category page — what SMPL is",
   },
-  {
-    href: "/fpa-software-for-lean-finance-teams",
-    label: "Lean Finance teams",
-    description: "For teams of 2–5 without a systems admin",
-  },
-  {
-    href: "/saas-board-reporting",
-    label: "Board reporting",
-    description: "Close to board package, traceable",
-  },
-  {
-    href: "/arr-revenue-cash-headcount",
-    label: "ARR, revenue, cash & headcount",
-    description: "One connected SaaS model",
-  },
   { href: "/about", label: "About", description: "Company entity & founder" },
   { href: "/blog", label: "Blog", description: "Close, board packages, commentary" },
   { href: "/glossary", label: "Glossary", description: "Board & close metric literacy" },

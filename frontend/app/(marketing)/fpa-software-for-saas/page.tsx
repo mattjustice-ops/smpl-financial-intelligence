@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { LandingFooter } from "@/components/landing/LandingFooter";
+import { SolutionCards } from "@/components/landing/SolutionPage";
 import { sitePageUrl } from "@/lib/site";
 
 const title = "FP&A Software for SaaS Companies | SMPL.ai";
@@ -84,6 +85,13 @@ export default function FpaSoftwareForSaasPage() {
           revenue, profitability, cash, and workforce — so reporting, forecasting,
           and board packages stay consistent.
         </p>
+
+        <section className="mt-10">
+          <h2 className="text-sm font-medium tracking-wide text-slate-400">
+            Solutions by need
+          </h2>
+          <SolutionCards />
+        </section>
 
         <section className="mt-12 space-y-4 text-slate-300">
           <h2 className="text-2xl font-semibold text-white">
