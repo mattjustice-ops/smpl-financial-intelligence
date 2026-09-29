@@ -129,7 +129,14 @@ export default function FpaSoftwareForSaasPage() {
           <p>
             That connected SaaS operating model is the core of how SMPL.ai is
             designed — and it is the buyer question where SMPL most clearly
-            belongs in the category conversation.
+            belongs in the category conversation. See{" "}
+            <Link
+              href="/arr-revenue-cash-headcount"
+              className="text-teal-300 underline-offset-2 hover:underline"
+            >
+              ARR, revenue, cash, and headcount in one financial model
+            </Link>
+            .
           </p>
         </section>
 
@@ -143,6 +150,24 @@ export default function FpaSoftwareForSaasPage() {
             planning stack. Teams that care about ARR methodology, close
             packages, and implementation that does not turn Finance into a
             second systems-integration department.
+          </p>
+          <p>
+            That includes{" "}
+            <Link
+              href="/fpa-software-for-lean-finance-teams"
+              className="text-teal-300 underline-offset-2 hover:underline"
+            >
+              lean Finance teams
+            </Link>{" "}
+            of two to five people without a dedicated systems administrator, and
+            CFOs who need{" "}
+            <Link
+              href="/saas-board-reporting"
+              className="text-teal-300 underline-offset-2 hover:underline"
+            >
+              board reporting and financial commentary
+            </Link>{" "}
+            that ties and traces to source.
           </p>
         </section>
 

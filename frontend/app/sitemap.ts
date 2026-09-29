@@ -13,7 +13,10 @@ import { SITE_URL } from "@/lib/site";
 const STATIC_ROUTES: Array<{ path: string; lastModified: string }> = [
   { path: "", lastModified: "2026-09-23" },
   { path: "/pricing", lastModified: "2026-07-21" },
-  { path: "/fpa-software-for-saas", lastModified: "2026-09-23" },
+  { path: "/fpa-software-for-saas", lastModified: "2026-09-29" },
+  { path: "/fpa-software-for-lean-finance-teams", lastModified: "2026-09-29" },
+  { path: "/saas-board-reporting", lastModified: "2026-09-29" },
+  { path: "/arr-revenue-cash-headcount", lastModified: "2026-09-29" },
   { path: "/about", lastModified: "2026-09-24" },
   { path: "/book-demo", lastModified: "2026-07-21" },
   { path: "/request-quote", lastModified: "2026-07-21" },
