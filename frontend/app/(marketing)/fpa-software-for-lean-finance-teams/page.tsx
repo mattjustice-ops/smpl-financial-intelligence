@@ -91,9 +91,9 @@ const FAQS: Faq[] = [
 export default function FpaSoftwareForLeanFinanceTeamsPage() {
   return (
     <SolutionPage
-      eyebrow="SaaS FP&A · Lean Finance teams"
+      crumb="Lean Finance teams"
       h1="FP&A software for lean Finance teams"
-      ld={solutionPageLd({ title, url, description, faqs: FAQS })}
+      ld={solutionPageLd({ title, url, description, faqs: FAQS, crumb: "Lean Finance teams" })}
       faqs={FAQS}
       related={[
         { href: "/blog/fpa-software-implementation", label: "Why FP&A implementations shouldn't take months" },

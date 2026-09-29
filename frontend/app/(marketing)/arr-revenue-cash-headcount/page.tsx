@@ -91,9 +91,9 @@ const FAQS: Faq[] = [
 export default function ArrRevenueCashHeadcountPage() {
   return (
     <SolutionPage
-      eyebrow="SaaS FP&A · Connected financial model"
+      crumb="ARR, revenue, cash & headcount"
       h1="ARR, revenue, cash, and headcount in one financial model"
-      ld={solutionPageLd({ title, url, description, faqs: FAQS })}
+      ld={solutionPageLd({ title, url, description, faqs: FAQS, crumb: "ARR, revenue, cash & headcount" })}
       faqs={FAQS}
       related={[
         { href: "/blog/arr-waterfall-vs-gaap-revenue", label: "ARR waterfall vs GAAP revenue" },

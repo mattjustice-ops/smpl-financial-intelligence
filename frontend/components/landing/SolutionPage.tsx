@@ -6,18 +6,54 @@ import { LandingFooter } from "./LandingFooter";
 export type Faq = { q: string; a: string };
 export type RelatedLink = { href: string; label: string };
 
+export const SOLUTIONS = [
+  {
+    href: "/fpa-software-for-lean-finance-teams",
+    label: "Lean Finance teams",
+    body: "For SaaS Finance teams of two to five people without a dedicated systems administrator.",
+  },
+  {
+    href: "/saas-board-reporting",
+    label: "Board reporting & commentary",
+    body: "From close to board package, with commentary grounded in calculated results and traceable to source.",
+  },
+  {
+    href: "/arr-revenue-cash-headcount",
+    label: "ARR, revenue, cash & headcount",
+    body: "One connected model, so a change in bookings, churn, or hiring flows through every number.",
+  },
+] as const;
+
+const CATEGORY = { href: "/fpa-software-for-saas", label: "FP&A for SaaS" };
+
 export function solutionPageLd({
   title,
   url,
   description,
   faqs,
+  crumb,
 }: {
   title: string;
   url: string;
   description: string;
   faqs: Faq[];
+  crumb: string;
 }) {
   return [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "SMPL.ai", item: "https://www.smpl-ai.com/" },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: CATEGORY.label,
+          item: `https://www.smpl-ai.com${CATEGORY.href}`,
+        },
+        { "@type": "ListItem", position: 3, name: crumb, item: url },
+      ],
+    },
     {
       "@context": "https://schema.org",
       "@type": "WebPage",
@@ -46,7 +82,7 @@ export function solutionPageLd({
 }
 
 export function SolutionPage({
-  eyebrow,
+  crumb,
   h1,
   lead,
   ld,
@@ -54,7 +90,7 @@ export function SolutionPage({
   faqs,
   related,
 }: {
-  eyebrow: string;
+  crumb: string;
   h1: string;
   lead: ReactNode;
   ld: object[];
@@ -69,7 +105,13 @@ export function SolutionPage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
       />
       <main className="mx-auto max-w-3xl px-6 py-16">
-        <p className="text-sm font-medium tracking-wide text-teal-300/90">{eyebrow}</p>
+        <nav aria-label="Breadcrumb" className="text-sm font-medium tracking-wide">
+          <Link href={CATEGORY.href} className="text-teal-300/90 hover:text-teal-200">
+            {CATEGORY.label}
+          </Link>
+          <span className="mx-2 text-slate-600">›</span>
+          <span className="text-slate-400">{crumb}</span>
+        </nav>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white md:text-5xl">
           {h1}
         </h1>
@@ -87,6 +129,8 @@ export function SolutionPage({
             ))}
           </dl>
         </Section>
+
+        <OtherSolutions current={crumb} />
 
         <p className="mt-12 text-sm text-slate-400">
           Related reading:{" "}
@@ -117,6 +161,34 @@ export function SolutionPage({
       </main>
       <LandingFooter />
     </>
+  );
+}
+
+export function SolutionCards({ items = SOLUTIONS }: { items?: readonly (typeof SOLUTIONS)[number][] }) {
+  return (
+    <div className={`mt-6 grid gap-4 ${items.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+      {items.map((s) => (
+        <Link
+          key={s.href}
+          href={s.href}
+          className="group rounded-xl border border-white/10 bg-white/[0.02] p-4 transition hover:border-teal-400/40 hover:bg-white/[0.04]"
+        >
+          <span className="block text-sm font-semibold text-white group-hover:text-teal-200">
+            {s.label} <span aria-hidden>→</span>
+          </span>
+          <span className="mt-2 block text-xs leading-relaxed text-slate-400">{s.body}</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function OtherSolutions({ current }: { current: string }) {
+  return (
+    <section className="mt-12">
+      <h2 className="text-lg font-semibold text-white">More from FP&A for SaaS</h2>
+      <SolutionCards items={SOLUTIONS.filter((s) => s.label !== current)} />
+    </section>
   );
 }
 
