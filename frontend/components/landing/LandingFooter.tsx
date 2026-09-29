@@ -14,6 +14,15 @@ export function LandingFooter() {
           <Link href="/fpa-software-for-saas" className="transition hover:text-white">
             FP&A for SaaS
           </Link>
+          <Link href="/fpa-software-for-lean-finance-teams" className="transition hover:text-white">
+            Lean Finance teams
+          </Link>
+          <Link href="/saas-board-reporting" className="transition hover:text-white">
+            Board reporting
+          </Link>
+          <Link href="/arr-revenue-cash-headcount" className="transition hover:text-white">
+            ARR, cash & headcount
+          </Link>
           <Link href="/about" className="transition hover:text-white">
             About
           </Link>

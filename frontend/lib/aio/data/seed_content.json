@@ -22,6 +22,39 @@
     "query_ids": ["category_01", "category_02", "category_04", "saas_icp_01", "saas_icp_04", "saas_icp_05", "use_case_03", "lean_finance_01"]
   },
   {
+    "id": "fpa-software-for-lean-finance-teams",
+    "url": "https://www.smpl-ai.com/fpa-software-for-lean-finance-teams",
+    "title": "FP&A Software for Lean Finance Teams",
+    "content_type": "product",
+    "status": "live",
+    "published_at": "2026-09-29",
+    "hypothesis": "Week 4 buyer page (published early): SMPL.ai ↔ lean SaaS Finance teams of 2–5 without a systems administrator. Expect lift on lean_finance_01/02 and supporting implementation queries.",
+    "primary_query_ids": ["lean_finance_01", "lean_finance_02"],
+    "query_ids": ["lean_finance_01", "lean_finance_02", "lean_finance_03", "lean_finance_04", "category_04", "saas_icp_01"]
+  },
+  {
+    "id": "saas-board-reporting",
+    "url": "https://www.smpl-ai.com/saas-board-reporting",
+    "title": "SaaS Board Reporting & Financial Commentary",
+    "content_type": "product",
+    "status": "live",
+    "published_at": "2026-09-29",
+    "hypothesis": "Week 5 solution page (published early): ties close, statements, grounded variance commentary, traceability, and board output. Expect lift on use_case_01/02/07, competitive_04, and authority_08.",
+    "primary_query_ids": ["use_case_01", "use_case_02", "use_case_07"],
+    "query_ids": ["use_case_01", "use_case_02", "use_case_06", "use_case_07", "competitive_04", "authority_08"]
+  },
+  {
+    "id": "arr-revenue-cash-headcount",
+    "url": "https://www.smpl-ai.com/arr-revenue-cash-headcount",
+    "title": "ARR, Revenue, Cash & Headcount in One Financial Model",
+    "content_type": "product",
+    "status": "live",
+    "published_at": "2026-09-29",
+    "hypothesis": "Week 6 page (published early): reinforces the only baseline query where SMPL appeared. Look for owned-domain citations on use_case_03, not just mentions.",
+    "primary_query_ids": ["use_case_03"],
+    "query_ids": ["use_case_03", "use_case_04", "use_case_05", "use_case_08", "use_case_09"]
+  },
+  {
     "id": "about",
     "url": "https://www.smpl-ai.com/about",
     "title": "About SMPL.ai",
