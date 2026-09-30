@@ -38,11 +38,15 @@ const CAPABILITIES = [
   },
   {
     title: "Forecasting, budgeting, scenarios",
-    body: "Driver-based planning across the SaaS operating model, with scenarios that flow through ARR, P&L, and cash together.",
+    body: "Driver-based forecasts and an operating budget across the income statement, balance sheet, and cash flow statement, with scenarios that flow through ARR, P&L, and cash together.",
+  },
+  {
+    title: "Plan Assurance",
+    body: "The budget tested before approval against prior-year performance, 15 constraints such as cash floors and pipeline coverage, named stress cases, and a simulation of the monthly cash path.",
   },
   {
     title: "Board reporting",
-    body: "Board-ready packages with governed numbers and commentary that can be traced to the underlying records.",
+    body: "Board-ready packages with governed numbers, and AI commentary that is checked against the calculated results and traced to the underlying records.",
   },
 ];
 
@@ -153,29 +157,73 @@ export default function FpaSoftwareForSaasPage() {
             Who it is for
           </h2>
           <p>
-            Growth-stage B2B SaaS companies where Finance needs trusted board
-            reporting and planning without standing up a heavy enterprise
-            planning stack. Teams that care about ARR methodology, close
-            packages, and implementation that does not turn Finance into a
-            second systems-integration department.
+            Growing SaaS businesses whose financial and operating data is spread
+            across several systems and whose reporting and planning needs have
+            become more demanding: board reporting, revenue complexity, workforce
+            planning, cash visibility, and forecasts that have to connect. Teams
+            that care about ARR methodology, close packages, and implementation
+            that does not turn Finance into a second systems-integration
+            department.
           </p>
           <p>
-            That includes{" "}
+            That includes smaller and{" "}
             <Link
               href="/fpa-software-for-lean-finance-teams"
               className="text-teal-300 underline-offset-2 hover:underline"
             >
               lean Finance teams
             </Link>{" "}
-            of two to five people without a dedicated systems administrator, and
-            CFOs who need{" "}
+            without a dedicated systems administrator, established Finance
+            organizations that need more capacity, and CFOs who need{" "}
             <Link
               href="/saas-board-reporting"
               className="text-teal-300 underline-offset-2 hover:underline"
             >
               board reporting and financial commentary
             </Link>{" "}
-            that ties and traces to source.
+            that ties and traces to source. Finance keeps its definitions,
+            methodology, and decisions; SMPL provides the connected financial
+            foundation.
+          </p>
+        </section>
+
+        <section className="mt-12 space-y-4 text-slate-300">
+          <h2 className="text-2xl font-semibold text-white">
+            Implementation led by SMPL
+          </h2>
+          <p>
+            SMPL takes responsibility for implementation: connecting your ERP,
+            CRM, billing, and workforce systems, mapping the data, configuring
+            the model with your definitions, and reconciling the results to your
+            source systems. Your team supplies access, definitions, review, and
+            decisions. SMPL works with systems such as{" "}
+            <Link href="/integrations/netsuite" className="text-teal-300 underline-offset-2 hover:underline">
+              NetSuite
+            </Link>
+            ,{" "}
+            <Link href="/integrations/salesforce" className="text-teal-300 underline-offset-2 hover:underline">
+              Salesforce
+            </Link>
+            ,{" "}
+            <Link href="/integrations/maxio" className="text-teal-300 underline-offset-2 hover:underline">
+              Maxio
+            </Link>
+            , Sage Intacct, Xero, and HubSpot; see{" "}
+            <Link href="/integrations" className="text-teal-300 underline-offset-2 hover:underline">
+              integrations and implementation
+            </Link>
+            .
+          </p>
+          <p>
+            Once the model is connected, the same numbers feed the budget and{" "}
+            <Link
+              href="/budgeting-and-plan-assurance"
+              className="text-teal-300 underline-offset-2 hover:underline"
+            >
+              Plan Assurance
+            </Link>
+            , which tests whether the plan can be delivered before it goes to the
+            board.
           </p>
         </section>
 
@@ -205,6 +253,13 @@ export default function FpaSoftwareForSaasPage() {
               className="text-teal-300 underline-offset-2 hover:underline"
             >
               Why FP&A implementations shouldn&apos;t take months
+            </Link>
+            {" · "}
+            <Link
+              href="/platform"
+              className="text-teal-300 underline-offset-2 hover:underline"
+            >
+              The SMPL.ai platform
             </Link>
             {" · "}
             <Link

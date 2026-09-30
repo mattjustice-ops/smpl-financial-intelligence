@@ -188,7 +188,7 @@ That means the customer supplies definitions, judgment, validation, and decision
 
 **The best FP&A implementation should feel less like installing a new Finance system and more like teaching the platform how your business already works.**
 
-This is the principle SMPL.ai is being built around. It works with a customer's existing systems rather than requiring them to be reorganized, preserves company-specific financial definitions instead of imposing a standard model, handles normalization and mapping within its own layer, produces deterministic financial outputs that can be reconciled to source systems, and uses AI to explain validated results rather than to generate them. SMPL.ai is designed to materially reduce the implementation and administration burden placed on Finance. The customer still provides the definitions, the validation, and the judgment that make the output trustworthy, because those things cannot be outsourced to software.
+This is how SMPL.ai approaches implementation, and it is our product, so weigh this paragraph accordingly. SMPL leads the implementation. SMPL connects to the customer's existing ERP, CRM, billing, and workforce systems with read-only access or works from structured extracts, maps the data, configures the model, and validates the financial results against the source systems. The customer's systems are not reorganized, and company-specific financial definitions are preserved rather than replaced by a standard model. The outputs are deterministic and reconcile to source, and AI explains validated results rather than generating them. The customer provides the definitions, reviews and validates the results, and makes the decisions, because those things cannot be outsourced to software. The approach is designed to reduce implementation from months to weeks; that is a design objective, and the actual timeline still depends on the factors described above. The systems SMPL works with and how the connection is delivered are set out on the [integrations and implementation](/integrations) page.
 
 Whatever platform you choose, the question to carry into every vendor conversation is the same one:
 
@@ -220,7 +220,7 @@ No-code FP&A refers to platforms Finance can configure without writing code or r
 
 **Can FP&A software be implemented without consultants?**
 
-Sometimes, and it depends on whether the vendor performs implementation directly, whether the platform requires model construction before producing output, and how complex your environment is. Ask whether implementation is delivered by the vendor, by a partner, or by your own team, and what each option costs.
+Sometimes, and it depends on whether the vendor performs implementation directly, whether the platform requires model construction before producing output, and how complex your environment is. Ask whether implementation is delivered by the vendor, by a partner, or by your own team, and what each option costs. Some vendors, including SMPL.ai, lead the implementation themselves, taking responsibility for data integration, mapping, configuration, and validation.
 
 **How can Finance reduce FP&A implementation time?**
 

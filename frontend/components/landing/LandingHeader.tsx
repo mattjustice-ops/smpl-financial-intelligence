@@ -7,11 +7,11 @@ import { CalendarClock, ChevronDown, LogIn, Sparkles } from "lucide-react";
 import { BOOK_DEMO_URL, SAMPLE_DASHBOARD_URL } from "./constants";
 
 const SECTION_NAV = [
-  { hash: "sources", label: "Data layer" },
-  { hash: "model", label: "Operating model" },
-  { hash: "understand", label: "Insights" },
-  { hash: "modules", label: "Platform" },
-  { hash: "copilot", label: "AI Copilot" },
+  { href: { pathname: "/", hash: "sources" }, label: "Data layer" },
+  { href: { pathname: "/", hash: "model" }, label: "Operating model" },
+  { href: { pathname: "/", hash: "understand" }, label: "Insights" },
+  { href: "/platform", label: "Platform" },
+  { href: { pathname: "/", hash: "copilot" }, label: "AI Copilot" },
 ] as const;
 
 const RESOURCES_LINKS = [
@@ -19,6 +19,11 @@ const RESOURCES_LINKS = [
     href: "/fpa-software-for-saas",
     label: "FP&A for SaaS",
     description: "Category page — what SMPL is",
+  },
+  {
+    href: "/integrations",
+    label: "Integrations",
+    description: "ERP, CRM, billing & HRIS — implementation led by SMPL",
   },
   { href: "/about", label: "About", description: "Company entity & founder" },
   { href: "/blog", label: "Blog", description: "Close, board packages, commentary" },
@@ -65,11 +70,7 @@ export function LandingHeader() {
             aria-label="Page sections"
           >
             {SECTION_NAV.map((item) => (
-              <Link
-                key={item.hash}
-                href={{ pathname: "/", hash: item.hash }}
-                className={navLinkClass}
-              >
+              <Link key={item.label} href={item.href} className={navLinkClass}>
                 {item.label}
               </Link>
             ))}
@@ -150,16 +151,15 @@ export function LandingHeader() {
 
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-white/5 px-4 py-2 text-center lg:hidden">
         {SECTION_NAV.map((item) => (
-          <Link
-            key={item.hash}
-            href={{ pathname: "/", hash: item.hash }}
-            className={`${navLinkClass} text-xs`}
-          >
+          <Link key={item.label} href={item.href} className={`${navLinkClass} text-xs`}>
             {item.label}
           </Link>
         ))}
         <Link href="/pricing" className={`${navLinkClass} text-xs`}>
           Pricing
+        </Link>
+        <Link href="/integrations" className={`${navLinkClass} text-xs`}>
+          Integrations
         </Link>
         <Link href="/blog" className={`${navLinkClass} text-xs`}>
           Blog

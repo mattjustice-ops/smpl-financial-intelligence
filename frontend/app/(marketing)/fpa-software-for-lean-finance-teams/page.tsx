@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import {
   PointList,
@@ -11,7 +12,7 @@ import { sitePageUrl } from "@/lib/site";
 
 const title = "FP&A Software for Lean Finance Teams | SMPL.ai";
 const description =
-  "FP&A software for SaaS Finance teams of two to five people with no dedicated systems administrator. Board reporting, ARR, forecasting, and cash in one governed model without an implementation project.";
+  "FP&A software for lean SaaS Finance teams with no dedicated systems administrator. Board reporting, ARR, forecasting, budgeting, and cash in one governed model, with implementation led by SMPL.";
 const url = sitePageUrl("/fpa-software-for-lean-finance-teams");
 
 export const metadata: Metadata = {
@@ -68,11 +69,11 @@ const CRITERIA = [
 const FAQS: Faq[] = [
   {
     q: "What is the best FP&A software for a three-person finance team?",
-    a: "The best fit is software that does not need a dedicated administrator, calculates SaaS metrics rather than expecting them as inputs, and produces board-ready reporting from the systems you already use. Enterprise planning platforms are usually too heavy at this size. Platforms built for lean teams, such as Runway, Jirav, Drivetrain, and Centage, emphasize speed to value. SMPL.ai is built for growing SaaS Finance teams that need ARR, revenue, cash, and headcount reporting in one governed model.",
+    a: "The best fit is software that does not need a dedicated administrator, calculates SaaS metrics rather than expecting them as inputs, and produces board-ready reporting from the systems you already use. Enterprise planning platforms are usually too heavy at this size. Platforms built for lean teams, such as Runway, Jirav, Drivetrain, and Centage, emphasize speed to value. SMPL.ai is built for growing SaaS Finance teams that need ARR, revenue, cash, headcount, and budgeting in one governed model, and SMPL leads the implementation, including data integration, mapping, configuration, and validation.",
   },
   {
     q: "Do small finance teams need a systems administrator to run FP&A software?",
-    a: "They should not have to. Many planning platforms assume someone maintains models, mappings, and integrations. For a team of two to five people, look for software where normalization and mapping happen inside the product and the vendor supports the initial load.",
+    a: "They should not have to. Many planning platforms assume someone maintains models, mappings, and integrations. For a small team, look for software where normalization and mapping happen inside the product and the vendor leads the implementation, including connecting your systems.",
   },
   {
     q: "How long should FP&A implementation take for a lean team?",
@@ -83,8 +84,8 @@ const FAQS: Faq[] = [
     a: "No. SMPL.ai reads from your systems and does not post transactions to the general ledger. Your ERP, CRM, billing platform, and HRIS remain the systems of record.",
   },
   {
-    q: "How does data get into SMPL.ai today?",
-    a: "Through structured CSV ingest, a programmatic ingest API, and an assisted load during onboarding. Managed, always-on connectors are in active development rather than generally available.",
+    q: "How does our data get into SMPL.ai?",
+    a: "SMPL connects your systems as part of implementation. Depending on the system and your security requirements, SMPL connects with read-only access or works from structured extracts, and teams with their own data pipelines can use SMPL's ingest API. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
 ];
 
@@ -98,17 +99,19 @@ export default function FpaSoftwareForLeanFinanceTeamsPage() {
       related={[
         { href: "/blog/fpa-software-implementation", label: "Why FP&A implementations shouldn't take months" },
         { href: "/blog/best-fpa-software-saas-companies", label: "Best FP&A software for SaaS companies" },
+        { href: "/integrations", label: "Integrations & implementation" },
         { href: "/fpa-software-for-saas", label: "FP&A software for SaaS companies" },
       ]}
       lead={
         <p>
           <strong className="font-semibold text-white">
-            SMPL.ai is FP&A software for SaaS Finance teams of roughly two to five people
-            who do not have a dedicated planning systems administrator.
+            SMPL.ai is FP&A software for lean SaaS Finance teams that do not have a
+            dedicated planning systems administrator.
           </strong>{" "}
-          It connects billing, CRM, and general ledger data into one governed model, so a
-          small team can produce board reporting, ARR, forecasts, and cash runway without
-          running an implementation project or maintaining a model by hand.
+          It connects billing, CRM, general ledger, and workforce data into one governed
+          model, so a small team can produce board reporting, ARR, forecasts, a budget, and
+          cash runway without staffing an implementation project or maintaining a model by
+          hand. SMPL leads the implementation.
         </p>
       }
     >
@@ -133,9 +136,15 @@ export default function FpaSoftwareForLeanFinanceTeamsPage() {
       <Section title="How SMPL.ai approaches it">
         <p>
           SMPL.ai works with the systems you already have rather than asking you to
-          reorganize them. Normalization and mapping happen inside the product, and your
-          company&apos;s own definitions, such as when a contract counts toward ARR, are
-          preserved rather than replaced by a standard model.
+          reorganize them. SMPL leads the implementation: it connects your ERP, CRM, billing,
+          and workforce systems, handles normalization and mapping, configures the model, and
+          reconciles the results to your source systems. Your company&apos;s own definitions,
+          such as when a contract counts toward ARR, are preserved rather than replaced by a
+          standard model. See{" "}
+          <Link href="/integrations" className="text-teal-300 underline-offset-2 hover:underline">
+            integrations and implementation
+          </Link>{" "}
+          for the systems SMPL works with.
         </p>
         <p>
           Core figures, including the ARR waterfall, retention, recognized revenue, the
@@ -143,6 +152,18 @@ export default function FpaSoftwareForLeanFinanceTeamsPage() {
           so the same inputs produce the same numbers every period and each figure traces
           back to its source records. AI explains the results the engine calculated. It
           does not generate financial numbers of its own.
+        </p>
+        <p>
+          The same model produces a driver-based budget across the income statement, balance
+          sheet, and cash flow statement, and{" "}
+          <Link
+            href="/budgeting-and-plan-assurance"
+            className="text-teal-300 underline-offset-2 hover:underline"
+          >
+            Plan Assurance
+          </Link>{" "}
+          tests it against cash floors, coverage, and stress cases, so a small team can bring
+          a plan to the board that has already been challenged.
         </p>
         <p>
           A readiness score shows which reports the data you have loaded can support today
@@ -164,10 +185,8 @@ export default function FpaSoftwareForLeanFinanceTeamsPage() {
         <p>
           If your primary need is complex, multi-department planning across a large
           organization, an enterprise planning platform is built for that. If your models
-          live in Excel and you do not want to leave it, a spreadsheet-native tool will feel
-          more natural. And if managed, always-on connectors are a day-one requirement, ask
-          us where that work stands before you shortlist. We are early, and a serious
-          evaluation should weigh that.
+          live in Excel and you want the spreadsheet to remain the place you model, a
+          spreadsheet-native tool will feel more natural.
         </p>
       </Section>
     </SolutionPage>

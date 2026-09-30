@@ -154,13 +154,13 @@ Question five is the one most often skipped and most often regretted.
 
 ## Where SMPL.ai fits
 
-For transparency about our own position, since this is our site.
+This is our product, so read this section as vendor positioning.
 
-SMPL.ai is a browser-based, AI-powered financial intelligence platform for growing SaaS companies. It reads and reconciles financial and operational information across the systems a company already uses, applies deterministic Finance logic to produce core calculations and SaaS metrics, and uses AI on top of that foundation for analysis, explanation, and narrative. It does not post transactions to the general ledger and is not intended to replace an ERP.
+SMPL.ai is a browser-based, AI-powered financial intelligence platform for growing SaaS companies. It connects financial and operational information across the systems a company already uses into one SaaS operating model for reporting, forecasting, budgeting, and Plan Assurance. It applies deterministic Finance logic to produce core calculations, SaaS metrics, and a budget across all three financial statements, and uses AI on top of that foundation for analysis, explanation, and narrative, with commentary checked against the calculated figures. It does not post transactions to the general ledger and is not intended to replace an ERP.
+
+SMPL leads the implementation. It connects the ERP, CRM, billing platform, and HRIS, maps the data, configures the model with the company's own definitions, and validates the results against the source systems. Finance supplies the definitions, reviews the results, and makes the decisions. The systems SMPL works with are listed on the [integrations and implementation](/integrations) page.
 
 The reason we built it around that sequence is the argument in this article. The bottleneck in most growing SaaS finance teams is not modeling capability. It is that establishing a trustworthy view of the present consumes the capacity that should go into understanding it.
-
-We are early, and a company evaluating platforms should weigh that alongside everything else.
 
 ## Frequently asked questions
 
@@ -227,6 +227,6 @@ The existing Finance Operating System articles serve category-definition intent 
 - **Distinct search intent:** yes. Article 1 targets `financial data reconciliation` with diagnostic intent. Article 2 targets `FP&A platform` with commercial evaluation intent. No keyword overlap in primaries.
 - **No recreation of Finance OS content:** confirmed. Neither article defines the category; both link to the existing cornerstone instead.
 - **Keywords used naturally:** secondary terms appear where they fit the sentence. No stuffing, no repeated exact-match phrasing.
-- **No unsupported product claims:** confirmed. Named systems appear only as ecosystem examples. SMPL.ai claims are limited to the confirmed product truths, plus an explicit statement that the company is early.
+- **No unsupported product claims:** confirmed. Named systems appear only as ecosystem examples. SMPL.ai claims are limited to the confirmed product truths, including SMPL-led implementation (revised 2026-09-30; the earlier "we are early" line was removed by founder decision).
 - **No em dashes:** confirmed in both.
 - **Practitioner voice:** both articles argue from specific finance mechanics (mid-term amendments, deferred revenue schedules, ARR waterfalls that fail to tie, retroactive corrections) rather than from generic software marketing.

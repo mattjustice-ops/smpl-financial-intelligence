@@ -5,11 +5,13 @@
 
 User-agent: *
 Allow: /
+Disallow: /app$
 Disallow: /app/
 Disallow: /account/
 Disallow: /login
 Disallow: /studio
 Disallow: /forecast-engine
+Disallow: /budget-engine
 Disallow: /billing/
 Disallow: /api/
 Disallow: /board/
@@ -21,11 +23,13 @@ Disallow: /s/
 # OpenAI ChatGPT Search / citation crawler
 User-agent: OAI-SearchBot
 Allow: /
+Disallow: /app$
 Disallow: /app/
 Disallow: /account/
 Disallow: /login
 Disallow: /studio
 Disallow: /forecast-engine
+Disallow: /budget-engine
 Disallow: /billing/
 Disallow: /api/
 Disallow: /board/
@@ -37,11 +41,13 @@ Disallow: /s/
 # OpenAI training crawler
 User-agent: GPTBot
 Allow: /
+Disallow: /app$
 Disallow: /app/
 Disallow: /account/
 Disallow: /login
 Disallow: /studio
 Disallow: /forecast-engine
+Disallow: /budget-engine
 Disallow: /billing/
 Disallow: /api/
 Disallow: /board/
@@ -53,11 +59,13 @@ Disallow: /s/
 # ChatGPT user-fetch agent
 User-agent: ChatGPT-User
 Allow: /
+Disallow: /app$
 Disallow: /app/
 Disallow: /account/
 Disallow: /login
 Disallow: /studio
 Disallow: /forecast-engine
+Disallow: /budget-engine
 Disallow: /billing/
 Disallow: /api/
 Disallow: /board/
