@@ -1,0 +1,37 @@
+{
+  "createdAt": "2026-09-29T21:05:00-07:00",
+  "createdBeforeRerun": true,
+  "note": "Priority queries and query classes were fixed before any rerun result was collected or reviewed.",
+  "priorityQueries": [
+    { "id": "category_06", "theme": "evaluation criteria (required)" },
+    { "id": "use_case_03", "theme": "connected SaaS finance model (required)" },
+    { "id": "lean_finance_03", "theme": "implementation" },
+    { "id": "competitive_05", "theme": "implementation" },
+    { "id": "use_case_01", "theme": "reporting and commentary" },
+    { "id": "use_case_02", "theme": "board reporting and forecasting" },
+    { "id": "use_case_07", "theme": "board reporting" },
+    { "id": "use_case_05", "theme": "forecasting" },
+    { "id": "use_case_08", "theme": "connected SaaS finance workflow" },
+    { "id": "systems_04", "theme": "connected SaaS finance workflow" }
+  ],
+  "trialsPerPriorityQuery": 3,
+  "trialPlan": "Trial 1 is the priority query's response inside today's controlled 46-query rerun; trials 2 and 3 are additional independent runs under identical settings. The earlier Sep 29 run used the same UI settings but a less complete capture method, so it is reported separately and not counted as a trial.",
+  "queryClasses": {
+    "rule": "informational = asks what/why/how/should (criteria, explanation, or build-vs-buy); vendor_selection = asks which/best/what software, platform, tool, or alternative.",
+    "informational": [
+      "category_06",
+      "lean_finance_04",
+      "lean_finance_05",
+      "lean_finance_06",
+      "authority_01",
+      "authority_02",
+      "authority_03",
+      "authority_04",
+      "authority_05",
+      "authority_06",
+      "authority_07",
+      "authority_08"
+    ],
+    "vendor_selection": "all other 34 benchmark queries"
+  }
+}

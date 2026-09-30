@@ -1,0 +1,3606 @@
+{
+  "generatedAt": "2026-09-29T21:32:42.857Z",
+  "scorerVersion": "visibility_v1",
+  "note": "Corrected rescoring of stored answers only. No history was re-searched and no URLs were added; citation status reports what the original capture could and could not show.",
+  "runs": [
+    {
+      "runId": "2026-09-15",
+      "label": "Sep 15 baseline",
+      "sourceFile": "tmp/archive_2026-09-15_baseline/aio_audits_capture.jsonl",
+      "captureMethod": "Manual/assisted ChatGPT capture; answer innerText only. Citation URLs were not collected for any query.",
+      "modelRecorded": false,
+      "queries": 46,
+      "duplicateCapturesDropped": [
+        "saas_icp_02",
+        "saas_icp_04",
+        "use_case_08",
+        "authority_02",
+        "use_case_09"
+      ],
+      "original": {
+        "mentioned": 1,
+        "cited": 0,
+        "evaluatorVersions": [
+          "rules_v1"
+        ]
+      },
+      "corrected": {
+        "proseMentions": 1,
+        "vendorRecommendations": 1,
+        "recommendationLevels": [
+          "use_case_03:recommended"
+        ],
+        "smplCitations": 1,
+        "smplCitationsUrlVerified": 0,
+        "citationStatus": {
+          "not_collected": 1,
+          "labels_only": 45
+        },
+        "smplCitationUnknownOrIncomplete": 45
+      },
+      "changedVsOriginal": [
+        {
+          "queryId": "use_case_03",
+          "original": {
+            "mentioned": true,
+            "cited": false
+          },
+          "corrected": {
+            "proseMention": true,
+            "recommendation": "recommended",
+            "smplCitation": "yes",
+            "smplCitationUrlVerified": false
+          }
+        }
+      ],
+      "rows": [
+        {
+          "queryId": "category_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T19:47:01.822Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "unknown",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "not_collected",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 0,
+            "hiddenSourceMarkers": 0,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": null,
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T19:53:48.450Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 10,
+            "hiddenSourceMarkers": 7,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T19:57:41.661Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 9,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_07",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T19:59:25.903Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:08:23.810Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 10,
+            "hiddenSourceMarkers": 9,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:11:00.366Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 7,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:12:28.306Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 8,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:13:53.991Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:17:07.720Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:19:10.540Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_05",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T20:21:58.892Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:24:25.394Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:28:03.209Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:28:48.266Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:34:55.205Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 10,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:35:37.014Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:37:42.179Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:39:48.613Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 8,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:41:42.119Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:43:52.392Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:45:49.952Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:47:48.142Z",
+          "original": {
+            "mentioned": true,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": true,
+            "recommendation": "recommended",
+            "vendorRecommended": true,
+            "recommendationEvidence": "An interesting newer option is SMPL.ai, which is unusually explicit about the exact SaaS chain you're asking for: pipeline → bookings → ARR → GAAP revenue → EBITDA → cash → workforce.",
+            "smplCitation": "yes",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [
+              "SMPL.ai"
+            ],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": [
+              "SMPL.ai ★★★★★ ★★★★★ ★★★★★ ★★★★★ SaaS-specific operating model Mosaic ★★★★☆ ★★★★★ ★★★★★ ★★★★☆ Startup / scale-up FP&A Runway ★★★★☆ ★★★★★ ★★★★★ ★★★★★ Startups wanting easy collaborative planning",
+              "An interesting newer option is SMPL.ai, which is unusually explicit about the exact SaaS chain you're asking for: pipeline → bookings → ARR → GAAP revenue → EBITDA → cash → workforce."
+            ]
+          }
+        },
+        {
+          "queryId": "use_case_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:49:53.003Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_07",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:51:55.834Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 7,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_08",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T20:54:49.516Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 9,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_01",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T20:56:55.808Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_02",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:00:41.031Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_03",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:03:15.463Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 8,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_04",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:06:25.220Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_05",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:08:55.074Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:10:47.812Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_07",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:12:20.685Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_08",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:13:55.313Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:15:57.040Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:27:53.454Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:30:32.553Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 9,
+            "hiddenSourceMarkers": 9,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:32:15.584Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_04",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:33:29.878Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-15T21:34:46.051Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:39:02.648Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:40:00.265Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 9,
+            "hiddenSourceMarkers": 10,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_06",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:41:26.749Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 10,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:42:31.188Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_06",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:43:29.343Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_09",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-15T21:44:52.411Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        }
+      ]
+    },
+    {
+      "runId": "2026-09-23",
+      "label": "Sep 23 full 46",
+      "sourceFile": "tmp/aio_full46_2026-09-23.jsonl",
+      "captureMethod": "Browser-assisted capture; answer innerText plus visible link hrefs. The first 9 queries have no URLs; hidden '+N' sources were never expanded.",
+      "modelRecorded": false,
+      "queries": 46,
+      "duplicateCapturesDropped": [],
+      "original": {
+        "mentioned": 1,
+        "cited": 1,
+        "evaluatorVersions": [
+          "rules_v1"
+        ]
+      },
+      "corrected": {
+        "proseMentions": 1,
+        "vendorRecommendations": 1,
+        "recommendationLevels": [
+          "use_case_03:shortlisted"
+        ],
+        "smplCitations": 1,
+        "smplCitationsUrlVerified": 1,
+        "citationStatus": {
+          "labels_only": 9,
+          "partial": 37
+        },
+        "smplCitationUnknownOrIncomplete": 45
+      },
+      "changedVsOriginal": [],
+      "rows": [
+        {
+          "queryId": "category_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T19:55:34.1600146Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T19:57:36.916Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:01:07.710Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 12,
+            "hiddenSourceMarkers": 13,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:05:16.224Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_07",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:05:46.347Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:07:47.501Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:09:36.535Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 12,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:11:34.709Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:13:28.819Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 0,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:17:31.549Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:20:18.796Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_05",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T20:22:42.089Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:25:06.768Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:28:37.839Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:31:43.428Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:34:54.294Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 2,
+            "citationLabelsInText": 2,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:38:54.273Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 9,
+            "hiddenSourceMarkers": 9,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:41:24.173Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:46:46.274Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:50:32.226Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:52:54.713Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 2,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:57:09.439Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T20:59:32.258Z",
+          "original": {
+            "mentioned": true,
+            "cited": true,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": true,
+            "recommendation": "shortlisted",
+            "vendorRecommended": true,
+            "recommendationEvidence": "For a SaaS company, I'd probably start the evaluation with Drivetrain, Cube, Pigment, and SMPL.ai rather than generic budgeting tools.",
+            "smplCitation": "yes",
+            "smplCitationUrlVerified": true,
+            "smplCitationUrls": [
+              "https://www.smpl-ai.com/"
+            ],
+            "smplCitationLabels": [
+              "SMPL.ai"
+            ],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": [
+              "SMPL.ai Strong Strong Strong Strong SaaS teams wanting a unified operating model Centage ARR/MRR support Strong Strong Strong Mid-market budgeting/FP&A Workday Adaptive / Anaplan Configurable Very strong Very strong Very strong Enterprise",
+              "One newer option worth looking at is SMPL.ai, which explicitly models the chain pipeline → bookings → ARR → GAAP revenue → EBITDA → cash → workforce and ingests CRM, ERP, billing and HRIS data.",
+              "For a SaaS company, I'd probably start the evaluation with Drivetrain, Cube, Pigment, and SMPL.ai rather than generic budgeting tools."
+            ]
+          }
+        },
+        {
+          "queryId": "use_case_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:02:18.894Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_07",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:05:12.404Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_08",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:07:33.237Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_01",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:09:58.836Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_02",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:12:14.193Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_03",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:15:06.899Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_04",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:17:27.434Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_05",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:21:49.676Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:26:44.087Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_08",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:29:32.037Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 8,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:31:42.790Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 2,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:34:01.913Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:36:33.857Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:39:05.243Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 9,
+            "hiddenSourceMarkers": 8,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_04",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:41:17.392Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T21:45:00.168Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 2,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:48:44.902Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:51:45.349Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_06",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:54:28.149Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:57:03.688Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_06",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T21:59:40.596Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_09",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-23T22:02:24.600Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_07",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-23T22:05:02.796Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v1"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        }
+      ]
+    },
+    {
+      "runId": "2026-09-29-initial",
+      "label": "Sep 29 initial run",
+      "sourceFile": "tmp/aio_full46_2026-09-29.jsonl",
+      "captureMethod": "Browser-assisted capture (temporary chat, web search); answer innerText plus visible link hrefs. Hidden '+N' sources and citation titles were not collected.",
+      "modelRecorded": false,
+      "queries": 46,
+      "duplicateCapturesDropped": [],
+      "original": {
+        "mentioned": 1,
+        "cited": 1,
+        "evaluatorVersions": [
+          "rules_v2"
+        ]
+      },
+      "corrected": {
+        "proseMentions": 0,
+        "vendorRecommendations": 0,
+        "recommendationLevels": [],
+        "smplCitations": 1,
+        "smplCitationsUrlVerified": 1,
+        "citationStatus": {
+          "partial": 44,
+          "complete": 1,
+          "labels_only": 1
+        },
+        "smplCitationUnknownOrIncomplete": 44
+      },
+      "changedVsOriginal": [
+        {
+          "queryId": "category_06",
+          "original": {
+            "mentioned": true,
+            "cited": true
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "smplCitation": "yes",
+            "smplCitationUrlVerified": true
+          }
+        }
+      ],
+      "rows": [
+        {
+          "queryId": "category_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:51:15.192Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:51:55.700Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:52:27.011Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 10,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:52:58.986Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 7,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:53:22.629Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T19:53:47.006Z",
+          "original": {
+            "mentioned": true,
+            "cited": true,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "yes",
+            "smplCitationUrlVerified": true,
+            "smplCitationUrls": [
+              "https://www.smpl-ai.com/fpa-software-for-saas"
+            ],
+            "smplCitationLabels": [
+              "SMPL.ai"
+            ],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "category_07",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:54:11.931Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:54:35.963Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:55:09.458Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:55:49.050Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:56:13.545Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "saas_icp_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:56:37.916Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 2,
+            "citationLabelsInText": 2,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:56:58.419Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:57:21.894Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:57:44.298Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_04",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T19:58:06.948Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_05",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T19:58:26.231Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "lean_finance_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T19:58:47.787Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:59:07.312Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:59:26.730Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T19:59:49.591Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:00:10.262Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:00:29.534Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 7,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "systems_06",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:01:01.400Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:01:23.182Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:01:43.709Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:02:02.552Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:02:24.879Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:02:48.675Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_06",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:03:09.517Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 6,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_07",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:03:29.103Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 7,
+            "citationLabelsInText": 7,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_08",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:03:50.627Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "use_case_09",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:04:16.201Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 8,
+            "citationLabelsInText": 8,
+            "hiddenSourceMarkers": 7,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_01",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:04:39.720Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_02",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:05:06.476Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 11,
+            "hiddenSourceMarkers": 6,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_03",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:05:33.994Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_04",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:05:53.358Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 4,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "competitive_05",
+          "queryClass": "vendor_selection",
+          "capturedAt": "2026-09-29T20:06:16.503Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_01",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:06:39.229Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 5,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_02",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:07:04.698Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 4,
+            "citationLabelsInText": 6,
+            "hiddenSourceMarkers": 3,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_03",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:07:31.475Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 5,
+            "citationLabelsInText": 5,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_04",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:07:56.398Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "no",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "complete",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 4,
+            "hiddenSourceMarkers": 0,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_05",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:08:22.029Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "labels_only",
+            "capturedSourceUrls": 1,
+            "citationLabelsInText": 2,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_06",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:08:50.365Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 2,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_07",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:09:07.940Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 3,
+            "citationLabelsInText": 3,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        },
+        {
+          "queryId": "authority_08",
+          "queryClass": "informational",
+          "capturedAt": "2026-09-29T20:09:30.494Z",
+          "original": {
+            "mentioned": false,
+            "cited": false,
+            "evaluatorVersion": "rules_v2"
+          },
+          "corrected": {
+            "proseMention": false,
+            "recommendation": "none",
+            "vendorRecommended": false,
+            "recommendationEvidence": null,
+            "smplCitation": "not_in_visible_sources",
+            "smplCitationUrlVerified": false,
+            "smplCitationUrls": [],
+            "smplCitationLabels": [],
+            "citationStatus": "partial",
+            "capturedSourceUrls": 2,
+            "citationLabelsInText": 2,
+            "hiddenSourceMarkers": 1,
+            "proseSnippets": []
+          }
+        }
+      ]
+    }
+  ]
+}
