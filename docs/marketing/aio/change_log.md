@@ -4,6 +4,45 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-09-30 — Release: AIO visibility dashboard (buyer-consideration scorecard)
+
+This entry changes how visibility is measured and displayed, not the site. No new benchmark was run for it.
+
+**Dashboard (PR [#188](https://github.com/mattjustice-ops/smpl-financial-intelligence/pull/188), merge `faea42a`, deployed to production):**
+
+- `/app/ops/visibility` now leads with a buyer-consideration scorecard of three headline cards: **named as a product** (SMPL listed, shortlisted, recommended, or top pick as a vendor option), **capabilities accurately described** (shows "Not yet scored" until a manual capability checklist review is done; no number is guessed), and **shortlisted or better**. Counts come from the answer text only.
+- Citations are reported separately as visible (SMPL source shown on screen) or hidden-only (SMPL appears only behind a "+N" sources button). Hidden-only citations are diagnostic and never raise a headline count.
+- The old composite scores are removed.
+- Checkpoint history and trend: every full 46-query run is re-scored with the current scorer so checkpoints compare like for like. The Sep 29 priority queries show 3 trials each.
+- Capture v2 scripts (`frontend/scripts/aio/`) record the prose text, citation labels, and hidden "+N" sources, so citation visibility is known for new runs. Older checkpoints were captured without hidden sources, so their citation visibility is shown as unknown.
+
+**Production data copy (read from the local store, written to production Neon, 2026-09-30):** production had no AIO answers before this (0 batches, 0 answers). After: 48 batches, 204 answers.
+
+| Checkpoint | Batches | Answers |
+|---|---|---|
+| Baseline bulk, 2026-09-15 | 44 | 46 |
+| Full 46, 2026-09-23 | 1 | 46 |
+| Day-14 full 46, 2026-09-29 | 1 | 46 |
+| Full 46, 2026-09-29 controlled rerun (v2) | 1 | 46 |
+| Priority repeats, 2026-09-29 controlled rerun (v2) | 1 | 20 |
+
+The `capture_json` column was added to `aio_manual_audits` in production (66 answers carry v2 capture data). Row ids and timestamps match the local store exactly.
+
+**Headline counts under the new rules (ChatGPT, latest answer per query):**
+
+| Checkpoint | Named as product | Shortlisted or better | SMPL citations |
+|---|---|---|---|
+| 2026-09-15 baseline | 1 | 1 | 1 (visibility unknown) |
+| 2026-09-23 | 1 | 1 | 1 (visibility unknown) |
+| 2026-09-29 day-14 | 0 | 0 | 1 (visibility unknown) |
+| 2026-09-29 controlled rerun (v2) | 1 | 1 | 1 visible, plus 2 hidden-only (diagnostic) |
+
+**Do not read the citation figure as a drop.** The Sep 29 v2 rerun has **1** visible SMPL citation under the new rules. The old rules reported **3** for the same answers because they counted the 2 hidden-only "+N" sources. The answers did not change; the counting rule did. Priority queries: 10 queries × 3 trials.
+
+**Follow-up (ordering fix, branch `aio/deterministic-ordering`):** the priority-query list and the 15 "recent gaps" could appear in a different order, or with different gaps listed, depending on the order the database returned rows (local and production differed). Audit rows now load in a fixed order (captured time, then id). The latest answer per query breaks ties on id. Priority queries follow the fixed list in `runs/2026-09-29/benchmark_design.json`. Recent gaps show the most recently captured first, with query id as the tie-breaker. Counts are unchanged, and local and production now render identical lists. `frontend/tsconfig.tsbuildinfo`, a TypeScript build cache, is no longer tracked in git.
+
+---
+
 ## 2026-09-30 — Release: founder answers applied, site deployed, four posts republished
 
 **What was published:** everything in the entry below (the integrations hub and 8 system pages, `/platform`, `/budgeting-and-plan-assurance`, the changed solution pages, header/footer, sitemap, robots.txt), plus the edits in this entry. Released from `seo/implementation-led-integrations` by pull request to `main`, which triggers the Vercel production deploy. The four blog posts were then republished to Sanity from seed with `frontend/scripts/publish-sep30-integrations-refresh.mjs`, which patches only title, excerpt, SEO title/description, and body on those four documents (slug, publishedAt, author, and categories unchanged; no other drafts or posts touched). Founder approved publishing on 2026-09-30.

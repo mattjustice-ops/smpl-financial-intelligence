@@ -265,7 +265,7 @@ export async function listAioContent(): Promise<AioContentRow[]> {
             ) AS query_ids
      FROM aio_content c
      WHERE c.active = TRUE
-     ORDER BY c.content_type, c.title`,
+     ORDER BY c.content_type, c.title, c.id`,
   );
   return rows.map((r) => ({
     id: String(r.id),
@@ -311,7 +311,7 @@ export async function getPulseOverview() {
      LEFT JOIN aio_batches b ON b.id = a.batch_id
      WHERE a.query_id = ANY($1::text[])
        AND COALESCE(b.source_type, '') <> $2
-     ORDER BY a.query_id, a.observed_at DESC`,
+     ORDER BY a.query_id, a.observed_at DESC, a.id DESC`,
     [pulseIds, REPEAT_SOURCE_TYPE],
   );
 
@@ -469,7 +469,7 @@ export async function listManualAudits(limit = 50): Promise<ManualAuditRow[]> {
   await ensureAioSchema();
   const pool = getAuthPgPool();
   const { rows } = await pool.query(
-    `SELECT * FROM aio_manual_audits ORDER BY observed_at DESC LIMIT $1`,
+    `SELECT * FROM aio_manual_audits ORDER BY observed_at DESC, id DESC LIMIT $1`,
     [limit],
   );
   return rows.map(mapAudit);
@@ -480,20 +480,24 @@ type StoredAuditRow = CheckpointAuditRow & { query_text: string };
 async function loadAuditRowsForCheckpoints(): Promise<StoredAuditRow[]> {
   const pool = getAuthPgPool();
   const { rows } = await pool.query(
-    `SELECT b.name AS batch_name, b.source_type AS batch_source_type,
+    `SELECT a.id, b.name AS batch_name, b.source_type AS batch_source_type,
             a.query_id, a.query_text, a.observed_at, a.raw_response,
             a.citations_json, a.capture_json, a.evaluation_json
      FROM aio_manual_audits a
-     LEFT JOIN aio_batches b ON b.id = a.batch_id`,
+     LEFT JOIN aio_batches b ON b.id = a.batch_id
+     ORDER BY a.observed_at ASC, a.id ASC`,
   );
-  return rows as StoredAuditRow[];
+  return rows.map((r) => ({ ...r, id: String(r.id) })) as StoredAuditRow[];
+}
+
+function historyOf(rows: StoredAuditRow[]) {
+  return buildVisibilityHistory(rows, queryClasses.informational, queryClasses.priorityQueries);
 }
 
 /** Checkpoint trend, query-level appearances, and priority-trial frequency (visibility scorer). */
 export async function getVisibilityHistory() {
   await ensureAioSchema();
-  const rows = await loadAuditRowsForCheckpoints();
-  return buildVisibilityHistory(rows, queryClasses.informational);
+  return historyOf(await loadAuditRowsForCheckpoints());
 }
 
 export async function getOverview() {
@@ -513,19 +517,27 @@ export async function getOverview() {
   const rows = await loadAuditRowsForCheckpoints();
   const checkpoints = groupCheckpoints(rows);
   const current = checkpoints[checkpoints.length - 1] ?? null;
-  const history = buildVisibilityHistory(rows, queryClasses.informational);
+  const history = historyOf(rows);
   const scorecard = history.checkpoints[history.checkpoints.length - 1] ?? null;
   const audits = current ? [...current.latest.values()] : [];
 
   const competitorMentions: Record<string, number> = {};
-  const gaps: Array<{ query_id: string | null; query_text: string }> = [];
+  const gapRows: StoredAuditRow[] = [];
   for (const row of audits) {
     const e = row.evaluation_json as AioEvaluation;
     for (const c of e.competitors || []) {
       if (c.mentioned) competitorMentions[c.name] = (competitorMentions[c.name] || 0) + 1;
     }
-    if (!e.smpl_mentioned) gaps.push({ query_id: row.query_id, query_text: row.query_text });
+    if (!e.smpl_mentioned) gapRows.push(row);
   }
+  // Most recently captured first; query id breaks ties so every environment shows the same 15.
+  const gaps = gapRows
+    .sort(
+      (a, b) =>
+        new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime() ||
+        String(a.query_id).localeCompare(String(b.query_id), "en"),
+    )
+    .map((row) => ({ query_id: row.query_id, query_text: row.query_text }));
 
   return {
     query_count: Number(counts[0]?.query_count || 0),
@@ -542,7 +554,7 @@ export async function getOverview() {
         : null,
     competitor_mentions: Object.entries(competitorMentions)
       .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count),
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "en")),
     recent_gaps: gaps.slice(0, 15),
     google_genai_baseline: googleGenaiBaseline,
     engine_diagnosis:

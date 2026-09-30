@@ -14,5 +14,17 @@
     "authority_06",
     "authority_07",
     "authority_08"
+  ],
+  "priorityQueries": [
+    "category_06",
+    "use_case_03",
+    "lean_finance_03",
+    "competitive_05",
+    "use_case_01",
+    "use_case_02",
+    "use_case_07",
+    "use_case_05",
+    "use_case_08",
+    "systems_04"
   ]
 }

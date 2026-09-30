@@ -123,6 +123,31 @@ check(h.appearanceGrid.some((g) => g.queryId === "q_00") && !h.appearanceGrid.so
 const q06 = h.appearanceGrid.find((g) => g.queryId === "q_06")?.cells[1];
 check(q06?.mentioned && !q06.namedAsProduct, "grid: passing reference is a mention, not a product");
 
+// Ordering is independent of input row order: same-instant duplicates resolve by id, and priority
+// queries follow the supplied design order, not the order repeats happened to be returned in.
+const tieRows: CheckpointAuditRow[] = [
+  ...rows.map((r, i) => ({ ...r, id: `id-${String(i).padStart(3, "0")}` })),
+  row({
+    id: "id-z1",
+    query_id: "q_10",
+    raw_response: "SMPL.ai is a top pick.",
+    capture_json: capture("run-b", null, { prose: "SMPL.ai is a top pick." }),
+  }),
+  row({ id: "id-a1", query_id: "q_10", capture_json: capture("run-b", null) }),
+  ...["q_09", "q_08"].map((id, i) =>
+    row({ id: `id-r${i}`, batch_source_type: REPEAT_SOURCE_TYPE, query_id: id, capture_json: capture("run-b", 2) }),
+  ),
+];
+const order = ["q_09", "q_05", "q_08"];
+const fwd = buildVisibilityHistory(tieRows, ["q_05"], order);
+const rev = buildVisibilityHistory([...tieRows].reverse(), ["q_05"], order);
+check(JSON.stringify(fwd) === JSON.stringify(rev), "history is identical regardless of input row order");
+check(fwd.checkpoints[1]?.namedAsProduct === 2, "same-instant duplicate: highest id wins as the latest answer");
+check(
+  fwd.priority?.queries.map((q) => q.queryId).join() === "q_09,q_05,q_08",
+  `priority queries follow design order, got ${fwd.priority?.queries.map((q) => q.queryId)}`,
+);
+
 if (failures) {
   console.error(`${failures} checkpoint check(s) failed`);
   process.exit(1);

@@ -29,6 +29,8 @@ export type CaptureV2Json = {
 };
 
 export type CheckpointAuditRow = {
+  /** Audit row id; breaks ties between answers captured at the same instant. */
+  id?: string | null;
   batch_name: string | null;
   batch_source_type: string | null;
   query_id: string | null;
@@ -189,6 +191,13 @@ function outcomeOf(a: ScoredAnswer): AnswerOutcome {
 }
 
 const time = (v: string | Date) => new Date(v).getTime();
+/** Code-point comparison, so ordering never depends on the runtime locale. */
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Oldest first, ties broken by id: every order-dependent step below sees the same sequence for the same rows. */
+function chronological<T extends CheckpointAuditRow>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => time(a.observed_at) - time(b.observed_at) || cmp(a.id ?? "", b.id ?? ""));
+}
 
 function emptyCounts(): OutcomeCounts {
   return {
@@ -216,18 +225,17 @@ function addCounts(c: OutcomeCounts, a: ScoredAnswer) {
 
 /**
  * Full benchmark checkpoints (repeat batches excluded), oldest first, each holding the latest
- * answer per query.
+ * answer per query (latest by observed_at, then id), keyed in first-capture order.
  */
 export function groupCheckpoints<T extends CheckpointAuditRow>(
   rows: T[],
 ): Array<{ name: string; startedAt: number; latest: Map<string, T> }> {
   const groups = new Map<string, Map<string, T>>();
-  for (const r of rows) {
+  for (const r of chronological(rows)) {
     if (!r.query_id || r.batch_source_type === REPEAT_SOURCE_TYPE) continue;
     const name = checkpointName(r.batch_name);
     const latest = groups.get(name) ?? new Map<string, T>();
-    const prev = latest.get(r.query_id);
-    if (!prev || time(r.observed_at) >= time(prev.observed_at)) latest.set(r.query_id, r);
+    latest.set(r.query_id, r);
     groups.set(name, latest);
   }
   return [...groups.entries()]
@@ -237,12 +245,25 @@ export function groupCheckpoints<T extends CheckpointAuditRow>(
       latest,
       startedAt: Math.min(...[...latest.values()].map((r) => time(r.observed_at))),
     }))
-    .sort((a, b) => a.startedAt - b.startedAt);
+    .sort((a, b) => a.startedAt - b.startedAt || cmp(a.name, b.name));
 }
 
-export function buildVisibilityHistory(rows: CheckpointAuditRow[], informationalIds: Iterable<string>): VisibilityHistory {
+/**
+ * `priorityOrder` fixes the display order of priority queries (the benchmark design's list);
+ * queries not in it follow, sorted by id.
+ */
+export function buildVisibilityHistory(
+  allRows: CheckpointAuditRow[],
+  informationalIds: Iterable<string>,
+  priorityOrder: readonly string[] = [],
+): VisibilityHistory {
+  const rows = chronological(allRows);
   const informational = new Set(informationalIds);
   const classOf = (id: string): QueryClass => (informational.has(id) ? "informational" : "vendor_selection");
+  const priorityRank = (id: string) => {
+    const i = priorityOrder.indexOf(id);
+    return i < 0 ? priorityOrder.length : i;
+  };
   const repeats = rows.filter((r) => r.query_id && r.batch_source_type === REPEAT_SOURCE_TYPE);
   const textOf = new Map<string, string>();
   for (const r of rows) if (r.query_id && r.query_text) textOf.set(r.query_id, r.query_text);
@@ -297,7 +318,9 @@ export function buildVisibilityHistory(rows: CheckpointAuditRow[], informational
         originalMentioned: origM,
         originalCited: origC,
         byClass,
-        smplPages: [...pages.entries()].map(([url, e]) => ({ url, ...e })).sort((a, b) => b.answers - a.answers),
+        smplPages: [...pages.entries()]
+          .map(([url, e]) => ({ url, ...e }))
+          .sort((a, b) => b.answers - a.answers || cmp(a.url, b.url)),
       },
     });
   }
@@ -320,7 +343,9 @@ export function buildVisibilityHistory(rows: CheckpointAuditRow[], informational
   for (const b of [...built].reverse()) {
     if (!b.summary.runId || !repeatRunIds.includes(b.summary.runId)) continue;
     const runRepeats = repeats.filter((r) => r.capture_json?.runId === b.summary.runId);
-    const ids = [...new Set(runRepeats.map((r) => r.query_id!))];
+    const ids = [...new Set(runRepeats.map((r) => r.query_id!))].sort(
+      (x, y) => priorityRank(x) - priorityRank(y) || cmp(x, y),
+    );
     priority = {
       checkpointKey: b.summary.key,
       checkpointLabel: b.summary.label,
