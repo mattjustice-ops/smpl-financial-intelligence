@@ -99,8 +99,8 @@ const STEPS = [
     body: "SMPL ties the statements and cash to Xero and ARR to your billing source. Your team reviews the results and confirms definitions.",
   },
   {
-    title: "Run on your reporting cadence",
-    body: "Reporting data is kept current on the refresh arrangement agreed during implementation, aligned to your close and board calendar.",
+    title: "Refresh on your close calendar",
+    body: "After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
 ];
 
@@ -111,7 +111,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "How does Xero data get into SMPL.ai?",
-    a: "As part of implementation, SMPL either connects to Xero with read-only access or works from structured exports. SMPL maps and validates the data, and the reporting data is kept current on the refresh cadence agreed during implementation.",
+    a: "As part of implementation, SMPL either connects to Xero with read-only access or works from structured exports. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
   {
     q: "Can SMPL.ai calculate ARR if our ledger is Xero?",
@@ -119,7 +119,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "We run more than one Xero organisation. Does that work?",
-    a: "Yes. Each Xero organisation is mapped during implementation, and the reporting structure for entity-level and combined views is agreed with your team during scoping.",
+    a: "Yes. Each Xero organisation is mapped during implementation, with its entity and currency information retained, and organisation-level views are scoped with your team. Where you need a combined view, SMPL works from the consolidated results your team already prepares, including your currency translation and intercompany eliminations, and reconciles to them. SMPL reports and plans on that consolidated foundation rather than recreating the consolidation itself.",
   },
 ];
 

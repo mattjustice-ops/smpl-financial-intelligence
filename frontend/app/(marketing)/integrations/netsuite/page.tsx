@@ -34,6 +34,10 @@ const WORKFLOWS = [
     body: "Posted GL activity by account and period becomes the income statement, balance sheet, and cash flow statement. Closed periods are checked against statement identities before they are locked, so the board version ties to what NetSuite shows.",
   },
   {
+    title: "Built on NetSuite's consolidated results",
+    body: "For multi-subsidiary companies, SMPL uses NetSuite's consolidated financial actuals, including the currency translation and intercompany elimination adjustments NetSuite has already made. For USD-reporting companies, that means the consolidated USD results. NetSuite remains the system of record for consolidation, and SMPL builds reporting and planning on that foundation rather than recreating the consolidation engine. Entity and currency information is retained, and subsidiary views are scoped during implementation.",
+  },
+  {
     title: "A management P&L that follows your structure",
     body: "Departments, classes, locations, and subsidiaries are mapped to the management view your leadership team uses. Allocations appear as a bridge between the income statement and the management P&L, so totals stay equal while costs move between functions.",
   },
@@ -88,7 +92,7 @@ const OUTCOMES = [
 const STEPS = [
   {
     title: "Agree scope and access",
-    body: "We confirm which subsidiaries, periods, and dimensions matter. Your NetSuite administrator grants read-only access or schedules structured extracts, whichever fits your security requirements.",
+    body: "We confirm which subsidiaries, periods, and dimensions matter, and that the extraction method delivers the consolidation context you need. Your NetSuite administrator grants read-only access or sets up structured extracts, whichever fits your security requirements.",
   },
   {
     title: "SMPL maps the ledger",
@@ -100,11 +104,11 @@ const STEPS = [
   },
   {
     title: "Validate together",
-    body: "SMPL ties the statements, ARR, and cash back to NetSuite and your other systems. Your team reviews the results and confirms definitions.",
+    body: "SMPL reconciles the imported results to NetSuite's consolidated reports and ties ARR and cash back to your other systems. Your team reviews the results and confirms definitions.",
   },
   {
-    title: "Run on your reporting cadence",
-    body: "Reporting data is kept current on the refresh arrangement agreed during implementation, aligned to your close and board calendar.",
+    title: "Refresh on your close calendar",
+    body: "After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
 ];
 
@@ -115,7 +119,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "How does NetSuite data get into SMPL.ai?",
-    a: "As part of implementation, SMPL either connects to NetSuite with read-only access or works from structured extracts your team schedules, depending on your environment and security requirements. SMPL maps and validates the data, and the reporting data is kept current on the refresh cadence agreed during implementation.",
+    a: "As part of implementation, SMPL either connects to NetSuite with read-only access or works from structured extracts, depending on your environment and security requirements. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
   {
     q: "Does SMPL.ai write anything back to NetSuite?",
@@ -123,7 +127,11 @@ const FAQS: Faq[] = [
   },
   {
     q: "Can SMPL.ai report on NetSuite subsidiaries and departments?",
-    a: "Yes. Subsidiaries, departments, classes, and locations are mapped during implementation so that the financial statements, the management P&L, and the budget follow the structure your leadership team reports on.",
+    a: "Yes. Subsidiaries, departments, classes, and locations are mapped during implementation so that the financial statements, the management P&L, and the budget follow the structure your leadership team reports on. Entity and currency information is retained, and the subsidiary views you need are scoped during implementation.",
+  },
+  {
+    q: "How does SMPL.ai handle NetSuite consolidation and multiple currencies?",
+    a: "SMPL uses NetSuite's consolidated financial actuals, including NetSuite's currency translation and intercompany elimination adjustments. For USD-reporting companies, SMPL uses the consolidated USD results. NetSuite remains the system of record for consolidation: SMPL supports reporting and planning on that consolidated foundation rather than recreating NetSuite's consolidation engine. During implementation, SMPL confirms that the extraction method delivers the required consolidation context and reconciles the imported results to NetSuite's consolidated reports.",
   },
   {
     q: "What does our Finance team need to do during implementation?",

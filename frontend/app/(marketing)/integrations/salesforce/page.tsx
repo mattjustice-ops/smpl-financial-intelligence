@@ -99,8 +99,8 @@ const STEPS = [
     body: "SMPL ties closed-won bookings to new ARR in billing and pipeline totals to Salesforce reports. Your team reviews the differences and confirms the treatment.",
   },
   {
-    title: "Run on your reporting cadence",
-    body: "Reporting data is kept current on the refresh arrangement agreed during implementation, aligned to your forecast and board calendar.",
+    title: "Refresh on your close calendar",
+    body: "After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load pipeline data intra-month whenever you need a current view of bookings and coverage.",
   },
 ];
 
@@ -115,7 +115,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "How does Salesforce data get into SMPL.ai?",
-    a: "As part of implementation, SMPL either connects to Salesforce with read-only access or works from structured report exports. SMPL maps and validates the data, and the reporting data is kept current on the refresh cadence agreed during implementation.",
+    a: "As part of implementation, SMPL either connects to Salesforce with read-only access or works from structured report exports. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load pipeline data intra-month whenever you need a current view.",
   },
   {
     q: "Can SMPL.ai handle our custom stages and fields?",

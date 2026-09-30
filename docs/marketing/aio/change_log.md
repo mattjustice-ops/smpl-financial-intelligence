@@ -4,6 +4,25 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-09-30 — Release: founder answers applied, site deployed, four posts republished
+
+**What was published:** everything in the entry below (the integrations hub and 8 system pages, `/platform`, `/budgeting-and-plan-assurance`, the changed solution pages, header/footer, sitemap, robots.txt), plus the edits in this entry. Released from `seo/implementation-led-integrations` by pull request to `main`, which triggers the Vercel production deploy. The four blog posts were then republished to Sanity from seed with `frontend/scripts/publish-sep30-integrations-refresh.mjs`, which patches only title, excerpt, SEO title/description, and body on those four documents (slug, publishedAt, author, and categories unchanged; no other drafts or posts touched). Founder approved publishing on 2026-09-30.
+
+**Edits applied from Matt's answers (2026-09-30):**
+
+| Topic | Before → after | Where |
+|---|---|---|
+| Refresh ownership and cadence | "Reporting data is kept current on the refresh cadence/arrangement agreed during implementation" → "After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view." Implementation step renamed "Run on your reporting cadence" → "Refresh on your close calendar". Hub "Who does what" now lists refresh under "Your team provides". No automated/scheduled sync claimed; possible future intra-month tracking reports recorded internally only. | `/integrations` (section, ownership, FAQ), all 8 system pages (step + FAQ; Salesforce page says pipeline data only), `/fpa-software-for-lean-finance-teams` FAQ, `best-fpa-software-saas-companies` SMPL entry |
+| NetSuite / Sage Intacct consolidation | No statement (Sage Intacct: "entity structure is mapped" with "entity-level and total reporting") → SMPL uses the ERP's consolidated financial actuals, including its currency translation and intercompany elimination adjustments (consolidated USD results for USD reporters); the ERP remains the system of record for consolidation and SMPL builds reporting and planning on that foundation rather than recreating the consolidation engine. Implementation steps now confirm the extraction method delivers the consolidation context and reconcile imported results to the ERP's consolidated reports. Entity and currency information retained; subsidiary views "scoped during implementation" (a per-entity selector could not be confirmed in code, so it is not named). | `/integrations/netsuite` (new workflow item, steps, new FAQ), `/integrations/sage-intacct` (workflow item, steps, new FAQ, illustrative example now traces the variance through ledger lines), `/integrations/netsuite-salesforce` (steps, new FAQ), `/integrations` (section + new multi-entity FAQ), hub cards for NetSuite and Sage Intacct, `best-fpa-software-saas-companies` SMPL entry |
+| Xero multiple organisations | "reporting structure for entity-level and combined views is agreed" (implied SMPL consolidates) → organisation-level views scoped; combined views come from consolidated results the customer already prepares, reconciled by SMPL; SMPL does not recreate the consolidation | `/integrations/xero` FAQ |
+| Maxio | Re-checked: public copy describes committed delivery work only; no testing, validation, partnership, certification, or native-connector claim. The previously live buyer's guide line "Extract pipelines have been built and validated against … Maxio developer environments" is removed by this republish. SMPL Maxio test account deferred (not a blocker). | `/integrations/maxio`, all Maxio mentions; inventory §2 |
+
+**Leftover-phrasing sweep (public pages + the four posts):** no remaining "agreed during implementation" (refresh), "refresh cadence", "We are early", "not generally available", "before you shortlist", "native connector", Maxio "partner"/"certified"/"validated", or any claim that SMPL performs consolidation. Nothing had to be isolated or removed.
+
+**Internal:** `docs/marketing/integrations_delivery_inventory.md` §2 (Maxio, NetSuite, Sage Intacct), §3, §4, §5 updated with these decisions and the remaining open items.
+
+---
+
 ## 2026-09-30 — Implementation-led integrations, capability underselling, comparison balance
 
 **Branch:** `seo/implementation-led-integrations` (local; not pushed or deployed). Blog changes are in seed markdown only and are **not yet in Sanity**. They reach production only when the relevant publish script is run, which has not been done.

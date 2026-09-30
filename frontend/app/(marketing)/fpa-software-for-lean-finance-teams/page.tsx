@@ -85,7 +85,7 @@ const FAQS: Faq[] = [
   },
   {
     q: "How does our data get into SMPL.ai?",
-    a: "SMPL connects your systems as part of implementation. Depending on the system and your security requirements, SMPL connects with read-only access or works from structured extracts, and teams with their own data pipelines can use SMPL's ingest API. SMPL maps and validates the data, and the reporting data is kept current on the refresh cadence agreed during implementation.",
+    a: "SMPL connects your systems as part of implementation. Depending on the system and your security requirements, SMPL connects with read-only access or works from structured extracts, and teams with their own data pipelines can use SMPL's ingest API. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
 ];
 

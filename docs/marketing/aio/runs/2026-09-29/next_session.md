@@ -61,3 +61,7 @@ Items 1–4 above are implemented. The 2026-09-30 brief replaced two earlier dec
 - **Plan Assurance (item 4):** new `/budgeting-and-plan-assurance` page, with the simulation caveat. The competitor wording check was not done; the page makes no comparative claims.
 - "We are early" has been removed everywhere. The footer "Platform" link now goes to a new public `/platform` page instead of `/app`.
 - Full list of changes: `docs/marketing/aio/change_log.md`. Item 5 (scorecard reorder) has not been started.
+
+## Update 2026-09-30 (later): approved and released
+
+Matt answered the open points and approved publishing. Refresh after go-live is customer-initiated on the customer's own close calendar; NetSuite and Sage Intacct work from the ERP's consolidated results; the Maxio test account is deferred. The site changes were released to production and the four blog posts republished to Sanity. See the 2026-09-30 release entry in `docs/marketing/aio/change_log.md`.

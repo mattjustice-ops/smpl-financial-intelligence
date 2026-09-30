@@ -86,11 +86,11 @@ const OTHER_SYSTEMS: { category: string; systems: { name: string; body: string }
 const OWNERSHIP = [
   {
     title: "SMPL is responsible for",
-    body: "Connecting to your systems or working from structured extracts, mapping accounts, customers, products, and departments, configuring the model, reconciling the results to your source systems, and keeping the reporting data current on the agreed cadence.",
+    body: "Connecting to your systems or working from structured extracts, mapping accounts, customers, products, and departments, configuring the model, and reconciling the results to your source systems.",
   },
   {
     title: "Your team provides",
-    body: "Read-only access or scheduled extracts, your company's definitions for metrics such as ARR and bookings, review of the mapping decisions SMPL documents, validation of the first results, and the decisions about what goes to the board.",
+    body: "Read-only access or structured extracts, your company's definitions for metrics such as ARR and bookings, review of the mapping decisions SMPL documents, validation of the first results, and the decisions about what goes to the board. After go-live, your team initiates each refresh when your books close, on your own close calendar.",
   },
   {
     title: "Your systems keep doing their jobs",
@@ -105,7 +105,11 @@ const FAQS: Faq[] = [
   },
   {
     q: "How does data get from our systems into SMPL.ai?",
-    a: "As part of implementation, SMPL connects to each system with read-only access or works from structured extracts, a warehouse share, or secure file delivery, depending on the system and your security requirements. Teams with their own data pipelines can also send data through SMPL's ingest API. SMPL maps and validates the data, and the reporting data is kept current on the refresh cadence agreed during implementation.",
+    a: "As part of implementation, SMPL connects to each system with read-only access or works from structured extracts, a warehouse share, or secure file delivery, depending on the system and your security requirements. Teams with their own data pipelines can also send data through SMPL's ingest API. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
+  },
+  {
+    q: "Does SMPL.ai work with multi-entity, multi-currency companies?",
+    a: "Yes. For ERPs such as NetSuite and Sage Intacct, SMPL uses the ERP's consolidated financial actuals, including its currency translation and intercompany elimination adjustments, and for USD-reporting companies the consolidated USD results. The ERP remains the system of record for consolidation: SMPL supports reporting and planning on that consolidated foundation rather than recreating the consolidation engine. During implementation, SMPL confirms that the extraction method delivers the required consolidation context, reconciles the imported results to the ERP's consolidated reports, retains entity and currency information, and scopes the subsidiary views you need.",
   },
   {
     q: "Our system is not listed. Can SMPL.ai still work with it?",
@@ -176,9 +180,15 @@ export default function IntegrationsHubPage() {
         </p>
         <p>
           SMPL then maps the data into one model, applies your company&apos;s definitions,
-          and reconciles the results to your source systems. After go-live, the reporting data
-          is kept current on the refresh cadence agreed during implementation, aligned to your
-          close and board calendar.
+          and reconciles the results to your source systems. For multi-entity companies, SMPL
+          builds on your ERP&apos;s consolidated results, including its currency translation
+          and intercompany eliminations, so the ERP remains the system of record for
+          consolidation.
+        </p>
+        <p>
+          After go-live, your team initiates each refresh when your books close, on your own
+          close calendar, and can load intra-month cash or pipeline data whenever you need a
+          current view.
         </p>
       </Section>
 

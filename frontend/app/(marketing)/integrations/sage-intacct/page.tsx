@@ -34,8 +34,8 @@ const WORKFLOWS = [
     body: "Sage Intacct tags each transaction with dimensions such as department, location, class, project, customer, and vendor. SMPL maps the dimensions you report on into the management P&L, so functional and departmental views come straight from the ledger.",
   },
   {
-    title: "Entity-level and total reporting",
-    body: "For companies running several entities in Sage Intacct, the entity structure is mapped during implementation so the statements, management P&L, and budget follow the way leadership and the board look at the business.",
+    title: "Built on Sage Intacct's consolidated results",
+    body: "For companies running several entities, SMPL uses Sage Intacct's consolidated financial actuals, including the currency translation and intercompany elimination adjustments Sage Intacct has already made. For USD-reporting companies, that means the consolidated USD results. Sage Intacct remains the system of record for consolidation, and SMPL builds reporting and planning on that foundation rather than recreating the consolidation engine. Entity and currency information is retained, and entity-level views are scoped during implementation.",
   },
   {
     title: "Financial statements and cash",
@@ -88,7 +88,7 @@ const OUTCOMES = [
 const STEPS = [
   {
     title: "Agree scope and access",
-    body: "We confirm which entities, dimensions, and periods are in scope. SMPL connects to Sage Intacct with read-only access or works from structured extracts, whichever fits your security requirements.",
+    body: "We confirm which entities, dimensions, and periods are in scope, and that the extraction method delivers the consolidation context you need. SMPL connects to Sage Intacct with read-only access or works from structured extracts, whichever fits your security requirements.",
   },
   {
     title: "SMPL maps accounts and dimensions",
@@ -100,11 +100,11 @@ const STEPS = [
   },
   {
     title: "Validate together",
-    body: "SMPL ties the statements and cash to Sage Intacct and ARR to your billing source. Your team reviews the results and confirms definitions.",
+    body: "SMPL reconciles the imported results to Sage Intacct's consolidated reports and ties ARR to your billing source. Your team reviews the results and confirms definitions.",
   },
   {
-    title: "Run on your reporting cadence",
-    body: "Reporting data is kept current on the refresh arrangement agreed during implementation, aligned to your close and board calendar.",
+    title: "Refresh on your close calendar",
+    body: "After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
 ];
 
@@ -115,7 +115,11 @@ const FAQS: Faq[] = [
   },
   {
     q: "How does Sage Intacct data get into SMPL.ai?",
-    a: "As part of implementation, SMPL either connects to Sage Intacct with read-only access or works from structured extracts, depending on your environment and security requirements. SMPL maps and validates the data, and the reporting data is kept current on the refresh cadence agreed during implementation.",
+    a: "As part of implementation, SMPL either connects to Sage Intacct with read-only access or works from structured extracts, depending on your environment and security requirements. SMPL maps and validates the data. After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
+  },
+  {
+    q: "How does SMPL.ai handle Sage Intacct multi-entity consolidation and currencies?",
+    a: "SMPL uses Sage Intacct's consolidated financial actuals, including Sage Intacct's currency translation and intercompany elimination adjustments. For USD-reporting companies, SMPL uses the consolidated USD results. Sage Intacct remains the system of record for consolidation: SMPL supports reporting and planning on that consolidated foundation rather than recreating the consolidation engine. During implementation, SMPL confirms that the extraction method delivers the required consolidation context, reconciles the imported results to Sage Intacct's consolidated reports, and scopes the entity-level views you need.",
   },
   {
     q: "Does this page apply to other Sage products?",
@@ -180,8 +184,8 @@ export default function SageIntacctIntegrationPage() {
         <p className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-slate-400">
           <span className="font-semibold text-slate-200">Illustrative example.</span> A
           company runs a US and a UK entity in Sage Intacct. The management P&L shows Customer
-          Success over budget, but only in the UK location. The variance traces to two
-          contractors covering open roles in the workforce plan. The forecast replaces the
+          Success over budget. Tracing the variance to the underlying ledger lines shows it
+          sits in the UK entity: two contractors covering open roles in the workforce plan. The forecast replaces the
           contractors with the planned hires from October, and the effect on EBITDA and cash
           is visible before the next board meeting.
         </p>

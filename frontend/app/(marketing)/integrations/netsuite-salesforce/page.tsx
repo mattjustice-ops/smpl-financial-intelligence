@@ -84,7 +84,7 @@ const OUTCOMES = [
 const STEPS = [
   {
     title: "Agree scope and access",
-    body: "We confirm which NetSuite subsidiaries and which Salesforce record types are in scope. SMPL connects to each system with read-only access or works from structured extracts.",
+    body: "We confirm which NetSuite subsidiaries and which Salesforce record types are in scope, and that the NetSuite extraction delivers the consolidation context you need. SMPL connects to each system with read-only access or works from structured extracts.",
   },
   {
     title: "SMPL matches customers and products",
@@ -96,11 +96,11 @@ const STEPS = [
   },
   {
     title: "Validate together",
-    body: "SMPL ties closed-won bookings to new ARR, and revenue and cash to NetSuite. Your team reviews the differences and confirms the treatment.",
+    body: "SMPL ties closed-won bookings to new ARR and reconciles revenue and cash to NetSuite's consolidated reports. Your team reviews the differences and confirms the treatment.",
   },
   {
-    title: "Run on your reporting cadence",
-    body: "Reporting data is kept current on the refresh arrangement agreed during implementation, aligned to your close, forecast, and board calendar.",
+    title: "Refresh on your close calendar",
+    body: "After go-live, your team initiates each refresh when your books close, on your own close calendar, and can load intra-month cash or pipeline data whenever you need a current view.",
   },
 ];
 
@@ -116,6 +116,10 @@ const FAQS: Faq[] = [
   {
     q: "What if our billing is not in NetSuite?",
     a: "Many SaaS companies bill in Maxio, Stripe, or Chargebee and post summaries to NetSuite. SMPL adds the billing system as a third source for ARR and connects it to the same customers.",
+  },
+  {
+    q: "We run several NetSuite subsidiaries. Does that work?",
+    a: "Yes. SMPL uses NetSuite's consolidated financial actuals, including NetSuite's currency translation and intercompany elimination adjustments, and for USD-reporting companies the consolidated USD results. NetSuite remains the system of record for consolidation, and SMPL builds the revenue forecast and planning on that foundation rather than recreating it. Entity and currency information is retained, subsidiary views are scoped during implementation, and imported results are reconciled to NetSuite's consolidated reports.",
   },
   {
     q: "Does SMPL.ai write back to NetSuite or Salesforce?",

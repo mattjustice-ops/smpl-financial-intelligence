@@ -12,7 +12,7 @@ export const INTEGRATION_PAGES: readonly (SolutionCard & { category: string })[]
     href: "/integrations/netsuite",
     label: "NetSuite",
     category: "ERP & general ledger",
-    body: "General ledger, subsidiaries, and departments feeding financial statements, the management P&L, and the budget.",
+    body: "Consolidated general ledger results, with subsidiary and department detail, feeding financial statements, the management P&L, and the budget.",
   },
   {
     href: "/integrations/salesforce",
@@ -30,7 +30,7 @@ export const INTEGRATION_PAGES: readonly (SolutionCard & { category: string })[]
     href: "/integrations/sage-intacct",
     label: "Sage Intacct",
     category: "ERP & general ledger",
-    body: "Dimensional general ledger and multi-entity structure carried into management reporting and planning.",
+    body: "Dimensional general ledger and consolidated multi-entity results carried into management reporting and planning.",
   },
   {
     href: "/integrations/xero",
