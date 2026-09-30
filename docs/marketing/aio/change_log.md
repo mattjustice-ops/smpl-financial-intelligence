@@ -4,6 +4,18 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-09-30 — IndexNow set up; 19 URLs submitted to Bing / IndexNow
+
+This entry changes crawl notification only, not page content. No benchmark was run for it.
+
+- Added an IndexNow key file at the site root (`frontend/public/<key>.txt`, content equals the filename) and `frontend/scripts/indexnow-submit.mjs`, which POSTs a URL list to `https://api.indexnow.org/indexnow`.
+- After this release deploys, 19 URLs are submitted in one request (all checked 200 on production on 2026-09-30 before submission). The HTTP response is recorded in the release report.
+  - **New (11):** `/integrations`, `/integrations/netsuite`, `/integrations/salesforce`, `/integrations/maxio`, `/integrations/netsuite-salesforce`, `/integrations/sage-intacct`, `/integrations/xero`, `/integrations/rillet`, `/integrations/campfire`, `/platform`, `/budgeting-and-plan-assurance`.
+  - **Updated (8):** `/blog/best-fpa-software-saas-companies`, `/blog/fpa-software-implementation`, `/blog/fpa-platform-saas`, `/blog/billing-vs-crm-arr`, `/fpa-software-for-saas`, `/fpa-software-for-lean-finance-teams`, `/saas-board-reporting`, `/arr-revenue-cash-headcount`.
+- IndexNow notifies Bing, Yandex, Seznam, Naver and others. It does not notify Google.
+
+---
+
 ## 2026-09-30 — Release: AIO visibility dashboard (buyer-consideration scorecard)
 
 This entry changes how visibility is measured and displayed, not the site. No new benchmark was run for it.
