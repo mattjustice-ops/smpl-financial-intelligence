@@ -23,13 +23,19 @@ export function LandingFooter() {
           <Link href="/arr-revenue-cash-headcount" className="transition hover:text-white">
             ARR, cash & headcount
           </Link>
+          <Link href="/budgeting-and-plan-assurance" className="transition hover:text-white">
+            Budgeting & Plan Assurance
+          </Link>
+          <Link href="/integrations" className="transition hover:text-white">
+            Integrations
+          </Link>
           <Link href="/about" className="transition hover:text-white">
             About
           </Link>
           <Link href={SAMPLE_DASHBOARD_URL} className="transition hover:text-white">
             Sample dashboard
           </Link>
-          <Link href="/app" className="transition hover:text-white">
+          <Link href="/platform" className="transition hover:text-white">
             Platform
           </Link>
           <Link href="/privacy" className="transition hover:text-white">

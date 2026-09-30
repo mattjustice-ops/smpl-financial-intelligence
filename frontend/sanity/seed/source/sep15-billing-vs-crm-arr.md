@@ -95,6 +95,6 @@ That is board-ready. Two competing ARR headlines without a bridge is not.
 
 ## Where SMPL fits
 
-SMPL is built for the connected close: treat subscription/billing as the recurring-revenue foundation, reconcile CRM and ERP around it, and put one explainable ARR spine into planning and the board pack — without writing transactions back into billing.
+SMPL is built for the connected close: treat subscription/billing as the recurring-revenue foundation, reconcile CRM and ERP around it, and put one explainable ARR spine into planning and the board pack — without writing transactions back into billing. SMPL leads that integration as part of implementation, whether billing runs in [Maxio](/integrations/maxio), Stripe, or Chargebee and pipeline in [Salesforce](/integrations/salesforce) or HubSpot.
 
 If your team is tired of reconciling two ARRs the week before the board, [book a demo](/book-demo) and we can walk the billing vs CRM bridge on data that looks like yours.

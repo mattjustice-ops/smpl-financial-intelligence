@@ -63,6 +63,10 @@ const MODEL = [
     title: "Scenarios across all four",
     body: "Change new bookings, churn, or hiring in a forecast scenario and see the effect on ARR, revenue, EBITDA, cash, and runway together.",
   },
+  {
+    title: "A budget built on the same model",
+    body: "The operating budget is calculated from the same drivers across the income statement, balance sheet, and cash flow statement, and Plan Assurance tests it against cash floors, coverage, and stress cases.",
+  },
 ];
 
 const FAQS: Faq[] = [
@@ -100,6 +104,8 @@ export default function ArrRevenueCashHeadcountPage() {
         { href: "/blog/saas-cash-forecasting", label: "SaaS cash forecasting: what belongs in the model" },
         { href: "/blog/grr-vs-nrr", label: "GRR vs NRR" },
         { href: "/blog/saas-revenue-forecasting-arr-bookings-gaap", label: "SaaS revenue forecasting" },
+        { href: "/budgeting-and-plan-assurance", label: "Budgeting & Plan Assurance" },
+        { href: "/integrations", label: "Integrations & implementation" },
         { href: "/fpa-software-for-saas", label: "FP&A software for SaaS companies" },
       ]}
       lead={
@@ -146,8 +152,10 @@ export default function ArrRevenueCashHeadcountPage() {
           moved and why; it does not produce the numbers.
         </p>
         <p>
-          SMPL.ai reads from your systems and does not write back to them. Your ERP, CRM,
-          billing platform, and HRIS remain the systems of record.
+          SMPL connects those systems as part of implementation, including the data mapping,
+          configuration, and reconciliation to source. SMPL.ai reads from your systems and does
+          not write back to them. Your ERP, CRM, billing platform, and HRIS remain the systems
+          of record.
         </p>
       </Section>
     </SolutionPage>

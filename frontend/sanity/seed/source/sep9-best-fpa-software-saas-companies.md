@@ -159,21 +159,41 @@ Pricing across this market is custom-quoted rather than published. Benchmark at 
 
 ## Where does SMPL.ai fit?
 
-For transparency, since this is our site.
+SMPL.ai publishes this guide, so read this entry as vendor positioning and hold it to the same fifteen questions as every other platform above.
 
-SMPL.ai is a browser-based financial intelligence platform for growing SaaS Finance teams. It applies deterministic Finance logic to produce core calculations and SaaS metrics, and uses AI on top of that foundation for reporting, analysis, narrative, and decision support. It does not post transactions to the general ledger and is not a replacement for an ERP.
+### Connected SaaS operating model platforms
 
-Applying the same standard we have asked you to hold other vendors to, here is exactly where connectivity stands. Data reaches SMPL.ai today through structured CSV ingest, through a programmatic ingest API that accepts idempotent batches tagged by source system, and through an assisted load during onboarding. Extract pipelines have been built and validated against QuickBooks, Stripe, Salesforce, Chargebee, and Maxio developer environments. Managed, always-on connectors that authenticate and refresh on a schedule are in active development rather than generally available, so if that is a day-one requirement, ask us where the work stands before you shortlist.
+**SMPL.ai (our product)**
 
-We are early, and a team running a serious evaluation should weigh that alongside everything else in this guide.
+**Best fit:** Growing SaaS businesses whose financial and operating data is spread across several systems and whose reporting and planning requirements have become more demanding: board reporting, revenue complexity such as ramps, amendments, and multi-year contracts, workforce planning, cash visibility, and forecasts that have to connect. That includes smaller Finance teams and established Finance organizations that need more capacity, whether the company is venture-backed or bootstrapped.
 
-The reason we built it in that order is the argument running through this article. The constraint in most growing SaaS Finance teams is not modeling capability. It is that establishing a trustworthy view of the present consumes the capacity that should go into understanding it. That thinking is set out in more detail in [the AI operating system for SaaS Finance](/blog/ai-operating-system-for-saas-finance).
+**Core strength:** A unified SaaS operating model that connects ERP, CRM, billing, and workforce data for reporting, forecasting, budgeting, and Plan Assurance, in a browser-based platform where no spreadsheet is required as the modeling interface. Core calculations are deterministic and traceable to source, and AI commentary is checked against the calculated figures before it reaches a report. The operating budget covers the income statement, balance sheet, and cash flow statement, and Plan Assurance tests it against constraints, named stress cases, and a simulation of the monthly cash path before it is approved.
+
+**Working model:** Finance keeps its definitions, methodology, and decisions. SMPL leads the implementation, including data integration, mapping, configuration, and financial validation, and provides the connected financial foundation. SMPL connects to each source system with read-only access or works from structured extracts, and keeps the reporting data current on the cadence agreed during implementation. SMPL does not post transactions to the general ledger and is not a replacement for an ERP.
+
+**Consideration:** SMPL is built specifically for SaaS, around ARR, retention, bookings, and the operating model that connects them, rather than for company-wide planning across every department of a large organization. The model lives in the platform rather than in Excel. Teams that need enterprise-wide connected planning, or that want the spreadsheet to remain their modeling surface, should look first at the enterprise and spreadsheet-native categories above.
+
+The reason SMPL is built this way is the argument running through this article. The constraint in most growing SaaS Finance teams is not modeling capability. It is that establishing a trustworthy view of the present consumes the capacity that should go into understanding it. That thinking is set out in more detail in [the AI operating system for SaaS Finance](/blog/ai-operating-system-for-saas-finance), and the systems SMPL connects, and how, are described on the [integrations and implementation](/integrations) page.
+
+## How do the categories compare at a glance?
+
+The table summarizes the positioning described above. Competitor entries reflect each category's description in this guide and vendors' public positioning as of September 2026, not independent testing. Implementation arrangements vary by customer and scope, so confirm them directly with each vendor.
+
+| Platform | Core approach | Best-fit stage | Primary interface | Implementation ownership |
+|---|---|---|---|---|
+| Anaplan, Workday Adaptive Planning, OneStream | Connected enterprise planning across Finance, workforce, sales, and operations | Large organizations with complex multi-department models | Dedicated planning application | Substantial implementation project, commonly with vendor or partner services, plus ongoing model administration |
+| Abacum, Pigment, Planful | Dedicated planning application for Finance; scope ranges from Finance planning to company-wide planning to planning plus close | Mid-market Finance teams | Dedicated planning application | Vendor or partner deployment, varying by vendor and scope |
+| Cube, Vena, Aleph | Governed data layer beneath existing spreadsheet models | Teams whose models live in Excel or Google Sheets | Excel or Google Sheets | Onboarding to the data layer; Finance continues to build and maintain spreadsheet models |
+| Datarails FinanceOS | Governed finance data layer connected to reporting and external AI tools | Excel-heavy Finance teams | Excel, plus AI assistants | Onboarding to the data layer; Excel remains the working surface |
+| Bob Finance (HiBob) | FP&A integrated with the HR platform | Companies running HiBob where headcount drives the forecast | Inside the Bob platform | Delivered within the Bob platform; scope varies |
+| Runway, Jirav, Drivetrain, Centage | Lower-administration planning and reporting | Earlier-stage companies that need board-ready reporting | Dedicated planning application | Emphasis on quick setup and lower ongoing administration |
+| SMPL.ai (our product) | Unified SaaS operating model connecting financial and operating data for reporting, forecasting, budgeting, and Plan Assurance | Growing SaaS businesses with data across multiple systems and increasingly demanding reporting and planning needs | Browser-based platform; no spreadsheet required as the modeling interface | SMPL leads integration, mapping, configuration, and financial validation; Finance supplies definitions, validation, and decisions |
 
 ## Frequently asked questions
 
 **What is the best FP&A software for SaaS companies?**
 
-There is no universal best. The right platform depends on your company size, the number of systems holding your financial and operational data, your planning complexity, how much SaaS metric logic you need calculated rather than supplied, your governance requirements, and how much AI you want. Enterprise planning platforms such as Anaplan, Workday Adaptive Planning, and OneStream suit large multi-department models. Spreadsheet-native tools such as Cube, Vena, and Aleph suit teams that will not leave Excel. Mid-market applications such as Abacum, Pigment, and Planful suit Finance teams wanting a dedicated planning environment. Evaluate all of them against the same four tests: whether the platform connects to your actual stack, whether it understands SaaS metrics natively, whether core calculations are deterministic and traceable, and what happens when a source system or a business definition changes.
+There is no universal best. The right platform depends on your company size, the number of systems holding your financial and operational data, your planning complexity, how much SaaS metric logic you need calculated rather than supplied, your governance requirements, and how much AI you want. Enterprise planning platforms such as Anaplan, Workday Adaptive Planning, and OneStream suit large multi-department models. Spreadsheet-native tools such as Cube, Vena, and Aleph suit teams that will not leave Excel. Mid-market applications such as Abacum, Pigment, and Planful suit Finance teams wanting a dedicated planning environment. Connected SaaS operating model platforms such as SMPL.ai, which publishes this guide, suit growing SaaS businesses whose financial and operating data spans several systems and who want the vendor to lead implementation. Evaluate all of them against the same four tests: whether the platform connects to your actual stack, whether it understands SaaS metrics natively, whether core calculations are deterministic and traceable, and what happens when a source system or a business definition changes.
 
 **Does FP&A software replace an ERP such as NetSuite?**
 

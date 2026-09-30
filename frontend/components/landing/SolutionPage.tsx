@@ -5,12 +5,14 @@ import { LandingFooter } from "./LandingFooter";
 
 export type Faq = { q: string; a: string };
 export type RelatedLink = { href: string; label: string };
+export type Crumb = { href: string; label: string };
+export type SolutionCard = { href: string; label: string; body: string };
 
-export const SOLUTIONS = [
+export const SOLUTIONS: readonly SolutionCard[] = [
   {
     href: "/fpa-software-for-lean-finance-teams",
     label: "Lean Finance teams",
-    body: "For SaaS Finance teams of two to five people without a dedicated systems administrator.",
+    body: "For Finance teams that need board reporting and planning without adding a planning systems administrator.",
   },
   {
     href: "/saas-board-reporting",
@@ -22,9 +24,22 @@ export const SOLUTIONS = [
     label: "ARR, revenue, cash & headcount",
     body: "One connected model, so a change in bookings, churn, or hiring flows through every number.",
   },
+  {
+    href: "/budgeting-and-plan-assurance",
+    label: "Budgeting & Plan Assurance",
+    body: "A driver-based budget across all three statements, tested against constraints and stress cases before it goes to the board.",
+  },
+  {
+    href: "/integrations",
+    label: "Integrations & implementation",
+    body: "Your ERP, CRM, billing, and workforce data connected by SMPL as part of implementation.",
+  },
 ] as const;
 
-const CATEGORY = { href: "/fpa-software-for-saas", label: "FP&A for SaaS" };
+export const FPA_CATEGORY: Crumb = { href: "/fpa-software-for-saas", label: "FP&A for SaaS" };
+export const INTEGRATIONS_CATEGORY: Crumb = { href: "/integrations", label: "Integrations" };
+
+const HOME = "https://www.smpl-ai.com";
 
 export function solutionPageLd({
   title,
@@ -32,27 +47,27 @@ export function solutionPageLd({
   description,
   faqs,
   crumb,
+  category = FPA_CATEGORY,
 }: {
   title: string;
   url: string;
   description: string;
   faqs: Faq[];
   crumb: string;
+  category?: Crumb | null;
 }) {
+  const trail = [
+    { "@type": "ListItem", position: 1, name: "SMPL.ai", item: `${HOME}/` },
+    ...(category
+      ? [{ "@type": "ListItem", position: 2, name: category.label, item: `${HOME}${category.href}` }]
+      : []),
+    { "@type": "ListItem", position: category ? 3 : 2, name: crumb, item: url },
+  ];
   return [
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: "SMPL.ai", item: "https://www.smpl-ai.com/" },
-        {
-          "@type": "ListItem",
-          position: 2,
-          name: CATEGORY.label,
-          item: `https://www.smpl-ai.com${CATEGORY.href}`,
-        },
-        { "@type": "ListItem", position: 3, name: crumb, item: url },
-      ],
+      itemListElement: trail,
     },
     {
       "@context": "https://schema.org",
@@ -60,13 +75,14 @@ export function solutionPageLd({
       name: title,
       url,
       description,
-      isPartOf: { "@type": "WebSite", name: "SMPL.ai", url: "https://www.smpl-ai.com/" },
+      isPartOf: { "@type": "WebSite", name: "SMPL.ai", url: `${HOME}/` },
       about: {
         "@type": "SoftwareApplication",
         name: "SMPL.ai",
         applicationCategory: "BusinessApplication",
         applicationSubCategory: "FP&A Software",
-        url: "https://www.smpl-ai.com/",
+        operatingSystem: "Web browser",
+        url: `${HOME}/`,
       },
     },
     {
@@ -89,6 +105,10 @@ export function SolutionPage({
   children,
   faqs,
   related,
+  category = FPA_CATEGORY,
+  more,
+  secondaryCta = { href: "/pricing", label: "View pricing" },
+  footnote,
 }: {
   crumb: string;
   h1: string;
@@ -97,6 +117,10 @@ export function SolutionPage({
   children: ReactNode;
   faqs: Faq[];
   related: RelatedLink[];
+  category?: Crumb | null;
+  more?: { title: string; items: readonly SolutionCard[] };
+  secondaryCta?: RelatedLink;
+  footnote?: ReactNode;
 }) {
   return (
     <>
@@ -106,8 +130,8 @@ export function SolutionPage({
       />
       <main className="mx-auto max-w-3xl px-6 py-16">
         <nav aria-label="Breadcrumb" className="text-sm font-medium tracking-wide">
-          <Link href={CATEGORY.href} className="text-teal-300/90 hover:text-teal-200">
-            {CATEGORY.label}
+          <Link href={category?.href ?? "/"} className="text-teal-300/90 hover:text-teal-200">
+            {category?.label ?? "SMPL.ai"}
           </Link>
           <span className="mx-2 text-slate-600">›</span>
           <span className="text-slate-400">{crumb}</span>
@@ -130,7 +154,14 @@ export function SolutionPage({
           </dl>
         </Section>
 
-        <OtherSolutions current={crumb} />
+        {more ? (
+          <section className="mt-12">
+            <h2 className="text-lg font-semibold text-white">{more.title}</h2>
+            <SolutionCards items={more.items} />
+          </section>
+        ) : (
+          <OtherSolutions current={crumb} />
+        )}
 
         <p className="mt-12 text-sm text-slate-400">
           Related reading:{" "}
@@ -152,21 +183,24 @@ export function SolutionPage({
             Book a demo
           </Link>
           <Link
-            href="/pricing"
+            href={secondaryCta.href}
             className="rounded-full border border-white/15 px-5 py-2.5 text-sm text-slate-200 hover:border-teal-400/40"
           >
-            View pricing
+            {secondaryCta.label}
           </Link>
         </div>
+        {footnote ? (
+          <p className="mt-10 text-xs leading-relaxed text-slate-500">{footnote}</p>
+        ) : null}
       </main>
       <LandingFooter />
     </>
   );
 }
 
-export function SolutionCards({ items = SOLUTIONS }: { items?: readonly (typeof SOLUTIONS)[number][] }) {
+export function SolutionCards({ items = SOLUTIONS }: { items?: readonly SolutionCard[] }) {
   return (
-    <div className={`mt-6 grid gap-4 ${items.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+    <div className={`mt-6 grid gap-4 ${items.length === 2 || items.length === 4 ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
       {items.map((s) => (
         <Link
           key={s.href}
@@ -211,5 +245,23 @@ export function PointList({ items }: { items: { title: string; body: string }[] 
         </li>
       ))}
     </ul>
+  );
+}
+
+export function Steps({ items }: { items: { title: string; body: string }[] }) {
+  return (
+    <ol className="mt-6 space-y-5">
+      {items.map((c, i) => (
+        <li key={c.title} className="flex gap-4">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-teal-400/40 text-xs font-semibold text-teal-200">
+            {i + 1}
+          </span>
+          <div>
+            <h3 className="text-base font-semibold text-white">{c.title}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-slate-400">{c.body}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }

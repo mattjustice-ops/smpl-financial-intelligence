@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import {
   PointList,
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
 const WORKFLOW = [
   {
     title: "Close and lock the period",
-    body: "Data moves through Load, Validate, Lock, and Freeze. Once a period is frozen, its numbers stay stable, so a report you already issued does not quietly change when a source system is corrected later.",
+    body: "Data moves through Load, Validate, Lock, and Freeze. Closed actuals are checked against statement identities and cross-source tie-outs before the period is locked. Once a period is frozen, its numbers stay stable, so a report you already issued does not quietly change when a source system is corrected later.",
   },
   {
     title: "Build the statements from one ledger",
@@ -34,7 +35,7 @@ const WORKFLOW = [
   },
   {
     title: "Explain what moved",
-    body: "Budget versus actual variances are calculated first. Commentary is then drafted from those calculated variances, so the narrative describes the numbers rather than inventing them.",
+    body: "Budget versus actual variances are calculated first. Commentary is then drafted from those calculated variances and checked: figures it states are matched against the calculated values, causes it names must be drivers actually present in the data, and unsupported claims are flagged or removed.",
   },
   {
     title: "Trace any number to source",
@@ -73,6 +74,10 @@ const FAQS: Faq[] = [
   {
     q: "Can software automate monthly finance reporting and commentary?",
     a: "The assembly can be automated: pulling actuals, calculating variances, building the statements, and drafting commentary from the calculated results. The review cannot. Finance still validates the numbers and edits the narrative before it goes to the board.",
+  },
+  {
+    q: "How does SMPL.ai check AI commentary before it reaches the board?",
+    a: "Commentary is written only from a package of calculated results. After drafting, SMPL extracts every figure and matches it against those results, checks that each cause the text names is a driver actually present in the data, such as a specific expansion or churn movement, and checks that material figures cite their source. Unsupported numbers or causes are flagged or removed before the text reaches a report.",
   },
   {
     q: "How should AI be used in board reporting?",
@@ -130,8 +135,38 @@ export default function SaasBoardReportingPage() {
         <PointList items={WORKFLOW} />
       </Section>
 
+      <Section title="Reporting validation and Plan Assurance answer different questions">
+        <p>
+          Reporting validation asks whether the actuals in the package are correct: do the
+          statements tie, does ARR foot, does the cash bridge agree with the ledger. Plan
+          Assurance asks whether the plan the board is approving can be delivered, by testing
+          it against cash floors, pipeline coverage, and stress cases. SMPL keeps the two
+          separate, so a package that ties is never mistaken for a plan that holds. See{" "}
+          <Link
+            href="/budgeting-and-plan-assurance"
+            className="text-teal-300 underline-offset-2 hover:underline"
+          >
+            budgeting and Plan Assurance
+          </Link>
+          .
+        </p>
+      </Section>
+
       <Section title="What to ask a vendor">
         <PointList items={CRITERIA} />
+      </Section>
+
+      <Section title="Implementation led by SMPL">
+        <p>
+          The package is only as good as the data behind it. SMPL connects your ERP, CRM,
+          billing, and workforce systems as part of implementation, maps them into one model,
+          and reconciles the results to your source systems before the first package goes
+          out. See{" "}
+          <Link href="/integrations" className="text-teal-300 underline-offset-2 hover:underline">
+            integrations and implementation
+          </Link>
+          .
+        </p>
       </Section>
 
       <Section title="What SMPL.ai does not do">
