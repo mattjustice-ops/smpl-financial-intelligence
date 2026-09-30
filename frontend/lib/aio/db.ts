@@ -3,7 +3,14 @@ import pulseQueries from "@/lib/aio/data/pulse_queries.json";
 import sacredBaseline from "@/lib/aio/data/sacred_baseline.json";
 import seedContent from "@/lib/aio/data/seed_content.json";
 import seedQueries from "@/lib/aio/data/seed_queries.json";
+import queryClasses from "@/lib/aio/data/query_classes.json";
 import { getAuthPgPool } from "@/lib/auth/db";
+import {
+  REPEAT_SOURCE_TYPE,
+  buildVisibilityHistory,
+  groupCheckpoints,
+  type CheckpointAuditRow,
+} from "@/lib/aio/checkpoints";
 import {
   DEFAULT_COMPETITORS,
   EVALUATOR_VERSION,
@@ -11,6 +18,7 @@ import {
   type AioEvaluation,
 } from "@/lib/aio/evaluate";
 import { ensureAioSchema } from "@/lib/aio/schema";
+import { VISIBILITY_SCORER_VERSION } from "@/lib/aio/visibility-score";
 
 export type AioQueryRow = {
   id: string;
@@ -300,9 +308,11 @@ export async function getPulseOverview() {
     `SELECT DISTINCT ON (a.query_id)
         a.query_id, a.query_text, a.evaluation_json, a.observed_at
      FROM aio_manual_audits a
+     LEFT JOIN aio_batches b ON b.id = a.batch_id
      WHERE a.query_id = ANY($1::text[])
+       AND COALESCE(b.source_type, '') <> $2
      ORDER BY a.query_id, a.observed_at DESC`,
-    [pulseIds],
+    [pulseIds, REPEAT_SOURCE_TYPE],
   );
 
   const byId = new Map(rows.map((r) => [String(r.query_id), r]));
@@ -465,6 +475,27 @@ export async function listManualAudits(limit = 50): Promise<ManualAuditRow[]> {
   return rows.map(mapAudit);
 }
 
+type StoredAuditRow = CheckpointAuditRow & { query_text: string };
+
+async function loadAuditRowsForCheckpoints(): Promise<StoredAuditRow[]> {
+  const pool = getAuthPgPool();
+  const { rows } = await pool.query(
+    `SELECT b.name AS batch_name, b.source_type AS batch_source_type,
+            a.query_id, a.query_text, a.observed_at, a.raw_response,
+            a.citations_json, a.capture_json, a.evaluation_json
+     FROM aio_manual_audits a
+     LEFT JOIN aio_batches b ON b.id = a.batch_id`,
+  );
+  return rows as StoredAuditRow[];
+}
+
+/** Checkpoint trend, query-level appearances, and priority-trial frequency (visibility scorer). */
+export async function getVisibilityHistory() {
+  await ensureAioSchema();
+  const rows = await loadAuditRowsForCheckpoints();
+  return buildVisibilityHistory(rows, queryClasses.informational);
+}
+
 export async function getOverview() {
   await ensureAioSchema();
   const pool = getAuthPgPool();
@@ -477,185 +508,45 @@ export async function getOverview() {
       (SELECT COUNT(*)::text FROM aio_manual_audits) AS audit_count`,
   );
 
-  const { rows: audits } = await pool.query(
-    `SELECT evaluation_json, query_id, query_text, observed_at
-     FROM aio_manual_audits
-     ORDER BY observed_at DESC
-     LIMIT 500`,
-  );
+  // Current state = latest answer per query in the most recent full benchmark checkpoint,
+  // scored exactly as in the checkpoint history so the scorecard and trend agree.
+  const rows = await loadAuditRowsForCheckpoints();
+  const checkpoints = groupCheckpoints(rows);
+  const current = checkpoints[checkpoints.length - 1] ?? null;
+  const history = buildVisibilityHistory(rows, queryClasses.informational);
+  const scorecard = history.checkpoints[history.checkpoints.length - 1] ?? null;
+  const audits = current ? [...current.latest.values()] : [];
 
-  const total = audits.length;
-  let mentioned = 0;
-  let recommended = 0;
-  let strong = 0;
-  let cited = 0;
-  let owned = 0;
-  let positioningSum = 0;
   const competitorMentions: Record<string, number> = {};
-  let smplVendorMentions = 0;
-  let totalVendorMentions = 0;
   const gaps: Array<{ query_id: string | null; query_text: string }> = [];
-
   for (const row of audits) {
     const e = row.evaluation_json as AioEvaluation;
-    if (e.smpl_mentioned) {
-      mentioned += 1;
-      smplVendorMentions += 1;
-      totalVendorMentions += 1;
-    }
-    if (
-      e.recommendation_strength === "shortlisted" ||
-      e.recommendation_strength === "recommended" ||
-      e.recommendation_strength === "top_pick"
-    ) {
-      recommended += 1;
-    }
-    if (
-      e.recommendation_strength === "recommended" ||
-      e.recommendation_strength === "top_pick"
-    ) {
-      strong += 1;
-    }
-    if (e.smpl_cited) cited += 1;
-    if (e.smpl_owned_domain_cited) owned += 1;
-    positioningSum += e.positioning_accuracy || 0;
     for (const c of e.competitors || []) {
-      if (c.mentioned) {
-        competitorMentions[c.name] = (competitorMentions[c.name] || 0) + 1;
-        totalVendorMentions += 1;
-      }
+      if (c.mentioned) competitorMentions[c.name] = (competitorMentions[c.name] || 0) + 1;
     }
-    if (!e.smpl_mentioned) {
-      gaps.push({
-        query_id: row.query_id,
-        query_text: row.query_text,
-      });
-    }
-  }
-
-  const rate = (n: number) => (total ? Number((n / total).toFixed(3)) : 0);
-
-  // Parallel rules_v2 rescore of the latest named Full-46 batch (does not overwrite stored rows).
-  const { rows: latestBatch } = await pool.query<{
-    id: string;
-    name: string;
-  }>(
-    `SELECT id, name FROM aio_batches
-     WHERE name ILIKE 'Full 46%'
-     ORDER BY created_at DESC
-     LIMIT 1`,
-  );
-  let scoring_audit: Record<string, unknown> | null = null;
-  if (latestBatch[0]) {
-    const { rows: batchAudits } = await pool.query(
-      `SELECT query_id, query_text, raw_response, citations_json, evaluation_json, evaluator_version
-       FROM aio_manual_audits WHERE batch_id = $1`,
-      [latestBatch[0].id],
-    );
-    const { rows: compRows } = await pool.query<{ name: string }>(
-      `SELECT name FROM aio_competitors WHERE active = TRUE ORDER BY name`,
-    );
-    const competitors = compRows.length
-      ? compRows.map((r) => r.name)
-      : [...DEFAULT_COMPETITORS];
-
-    let storedMentions = 0;
-    let v2Mentions = 0;
-    let storedShortlistPlus = 0;
-    let v2ShortlistPlus = 0;
-    let storedOwned = 0;
-    let v2Owned = 0;
-    const strength_changes: Array<{
-      query_id: string | null;
-      stored: string;
-      rules_v2: string;
-    }> = [];
-
-    for (const row of batchAudits) {
-      const stored = row.evaluation_json as AioEvaluation;
-      const v2 = evaluateManualAudit({
-        query: String(row.query_text),
-        answer: String(row.raw_response),
-        citationUrls: Array.isArray(row.citations_json)
-          ? (row.citations_json as string[])
-          : [],
-        competitors,
-      });
-      if (stored.smpl_mentioned) storedMentions += 1;
-      if (v2.smpl_mentioned) v2Mentions += 1;
-      if (
-        ["shortlisted", "recommended", "top_pick"].includes(
-          stored.recommendation_strength,
-        )
-      ) {
-        storedShortlistPlus += 1;
-      }
-      if (
-        ["shortlisted", "recommended", "top_pick"].includes(
-          v2.recommendation_strength,
-        )
-      ) {
-        v2ShortlistPlus += 1;
-      }
-      if (stored.smpl_owned_domain_cited) storedOwned += 1;
-      if (v2.smpl_owned_domain_cited) v2Owned += 1;
-      if (
-        stored.recommendation_strength !== v2.recommendation_strength ||
-        stored.smpl_mentioned !== v2.smpl_mentioned
-      ) {
-        strength_changes.push({
-          query_id: row.query_id as string | null,
-          stored: stored.recommendation_strength,
-          rules_v2: v2.recommendation_strength,
-        });
-      }
-    }
-
-    scoring_audit = {
-      batch_name: latestBatch[0].name,
-      batch_id: latestBatch[0].id,
-      n: batchAudits.length,
-      current_evaluator: EVALUATOR_VERSION,
-      note: "rules_v2 is computed live from raw answers. Stored evaluation_json is preserved as historical.",
-      stored: {
-        mentions: storedMentions,
-        shortlist_plus: storedShortlistPlus,
-        owned_citations: storedOwned,
-      },
-      rules_v2: {
-        mentions: v2Mentions,
-        shortlist_plus: v2ShortlistPlus,
-        owned_citations: v2Owned,
-      },
-      strength_changes,
-    };
+    if (!e.smpl_mentioned) gaps.push({ query_id: row.query_id, query_text: row.query_text });
   }
 
   return {
     query_count: Number(counts[0]?.query_count || 0),
     audit_count: Number(counts[0]?.audit_count || 0),
-    scored_audits: total,
-    mention_rate: rate(mentioned),
-    recommendation_rate: rate(recommended),
-    strong_recommendation_rate: rate(strong),
-    citation_rate: rate(cited),
-    owned_domain_citation_rate: rate(owned),
-    avg_positioning_accuracy: total
-      ? Number((positioningSum / total).toFixed(3))
-      : 0,
-    share_of_voice: totalVendorMentions
-      ? Number((smplVendorMentions / totalVendorMentions).toFixed(3))
-      : 0,
+    scored_audits: audits.length,
+    current_checkpoint:
+      current && scorecard
+        ? {
+            name: current.name,
+            started_at: new Date(current.startedAt).toISOString(),
+            queries: audits.length,
+            scorecard,
+          }
+        : null,
     competitor_mentions: Object.entries(competitorMentions)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
     recent_gaps: gaps.slice(0, 15),
-    chatgpt_search_baseline: sacredBaseline,
     google_genai_baseline: googleGenaiBaseline,
-    scoring_audit,
     engine_diagnosis:
-      "Google: becoming retrievable. ChatGPT: not yet reliably classifiable/shortlisted. Track engines separately.",
-    disclosure:
-      "Dual baselines: controlled ChatGPT Search audits + frozen Google Generative AI Search Console snapshot. New imports score with rules_v2; historical evaluation_json is preserved. Not an OpenAI ranking score.",
+      "Google: becoming retrievable. ChatGPT: SMPL content is sometimes used as a source (often only behind a “+N” button), but SMPL is rarely named as a vendor option; vendor-list inclusion is the gap. Track engines separately.",
+    disclosure: `Counts use the latest answer per query in the most recent full benchmark checkpoint (${current?.name ?? "none"}), re-scored with the current visibility scorer (${VISIBILITY_SCORER_VERSION}). Repeat trials are excluded. Not an OpenAI ranking score.`,
   };
 }

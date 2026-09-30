@@ -1,0 +1,18 @@
+{
+  "source": "docs/marketing/aio/runs/2026-09-29/benchmark_design.json",
+  "rule": "informational = asks what/why/how/should (criteria, explanation, or build-vs-buy); vendor_selection = asks which/best/what software, platform, tool, or alternative.",
+  "informational": [
+    "category_06",
+    "lean_finance_04",
+    "lean_finance_05",
+    "lean_finance_06",
+    "authority_01",
+    "authority_02",
+    "authority_03",
+    "authority_04",
+    "authority_05",
+    "authority_06",
+    "authority_07",
+    "authority_08"
+  ]
+}

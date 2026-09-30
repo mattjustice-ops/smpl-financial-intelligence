@@ -91,16 +91,34 @@ CREATE INDEX IF NOT EXISTS ix_aio_content_query_map_query ON aio_content_query_m
 
 const ALTERS = `
 ALTER TABLE aio_queries ADD COLUMN IF NOT EXISTS pulse_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE aio_manual_audits ADD COLUMN IF NOT EXISTS capture_json JSONB;
 `;
+
+let ensuring: Promise<void> | null = null;
 
 export async function ensureAioSchema(): Promise<void> {
   if (ensured) return;
-  const pool = getAuthPgPool();
-  // gen_random_uuid needs pgcrypto on some Postgres installs
-  await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
-  await pool.query(DDL);
-  await pool.query(ALTERS);
-  ensured = true;
+  ensuring ??= (async () => {
+    const client = await getAuthPgPool().connect();
+    try {
+      // Routes run this concurrently (each has its own module copy in dev); concurrent DDL deadlocks.
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('smpl_aio_schema'))");
+      // gen_random_uuid needs pgcrypto on some Postgres installs
+      await client.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+      await client.query(DDL);
+      await client.query(ALTERS);
+      await client.query("COMMIT");
+      ensured = true;
+    } catch (e) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+      ensuring = null;
+    }
+  })();
+  await ensuring;
 }
 
 export function resetAioSchemaCache(): void {

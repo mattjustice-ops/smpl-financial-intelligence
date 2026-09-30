@@ -88,7 +88,28 @@ assert(
 );
 assert(full46Uc3.smpl_owned_domain_cited, "full46 owned cite");
 
-console.log("aio evaluate rules_v2 ok", {
+/** Regression: Sep 29 category_06 — citation pill label only; not a mention, still a citation. */
+const pillOnly = evaluateManualAudit({
+  query: "What should I look for in an FP&A platform for SaaS?",
+  answer: `A genuinely connected model. Those changes should propagate through one model without exporting data between modules. 
+SMPL.ai
+Strong headcount planning. For most SaaS businesses this is critical. Look for a source of truth. 
+CFO Shortlist
++1`,
+  citationUrls: ["https://www.smpl-ai.com/fpa-software-for-saas?utm_source=chatgpt.com"],
+});
+assert(!pillOnly.smpl_mentioned, "pill label must not count as a mention");
+assert(pillOnly.recommendation_strength === "none", "pill label is not a recommendation");
+assert(pillOnly.smpl_cited && pillOnly.smpl_owned_domain_cited, "pill-only answer still cites SMPL");
+
+/** Regression: the word "source" next to a mention must not fabricate a citation. */
+const noSource = evaluateManualAudit({
+  query: "Best FP&A software",
+  answer: "SMPL.ai is a newer option. Pick a single source of truth for ARR.",
+});
+assert(noSource.smpl_mentioned && !noSource.smpl_cited, "no citation without an owned URL or pill");
+
+console.log("aio evaluate rules_v3 ok", {
   sample: sample.recommendation_strength,
   baselineUc3: baselineUc3.recommendation_strength,
   full46Uc3: full46Uc3.recommendation_strength,
