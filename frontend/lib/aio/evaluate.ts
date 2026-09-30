@@ -1,4 +1,10 @@
 import brandTruth from "@/lib/aio/data/brand_truth.json";
+import {
+  findBrandMentions,
+  isBrandLabel,
+  isSmplUrl,
+  stripCitationLabelsHeuristic,
+} from "@/lib/aio/visibility-score";
 
 export type RecommendationStrength =
   | "none"
@@ -32,7 +38,7 @@ export type AioEvaluation = {
 };
 
 /** Current scorer for new imports. Historical rows keep their stored evaluator_version. */
-export const EVALUATOR_VERSION = "rules_v2";
+export const EVALUATOR_VERSION = "rules_v3";
 
 /** Frozen label for audits scored before the first-window / Best-fit fixes. */
 export const LEGACY_EVALUATOR_VERSION = "rules_v1";
@@ -67,13 +73,6 @@ export const DEFAULT_COMPETITORS = [
   "Vena",
   "Workday Adaptive Planning",
 ] as const;
-
-const SMPL_PATTERNS = [
-  /\bSMPL\.ai\b/gi,
-  /\bSMPL\b/g,
-  /\bsmpl-ai\.com\b/gi,
-  /\bwww\.smpl-ai\.com\b/gi,
-];
 
 const GOOD_POSITIONING = [
   "saas",
@@ -128,19 +127,7 @@ function windowAround(text: string, index: number, radius = 180): string {
 function findSmplMatches(
   answer: string,
 ): Array<{ match: string; index: number }> {
-  const found: Array<{ match: string; index: number }> = [];
-  const seen = new Set<number>();
-  for (const re of SMPL_PATTERNS) {
-    const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
-    const global = new RegExp(re.source, flags);
-    let m: RegExpExecArray | null;
-    while ((m = global.exec(answer))) {
-      if (seen.has(m.index)) continue;
-      seen.add(m.index);
-      found.push({ match: m[0], index: m.index });
-    }
-  }
-  return found.sort((a, b) => a.index - b.index);
+  return findBrandMentions(answer);
 }
 
 function sentenceAround(answer: string, index: number): string {
@@ -367,10 +354,16 @@ function normalizeUrl(raw: string): string | null {
 export function evaluateManualAudit(input: {
   query: string;
   answer: string;
+  /** Answer text with citation pills removed structurally; derived heuristically when absent. */
+  proseText?: string;
   citationUrls?: string[];
   competitors?: string[];
 }): AioEvaluation {
-  const answer = input.answer || "";
+  const stripped =
+    typeof input.proseText === "string"
+      ? { prose: input.proseText, labels: [] as string[] }
+      : stripCitationLabelsHeuristic(input.answer || "");
+  const answer = stripped.prose;
   const citations = unique(
     (input.citationUrls || [])
       .map(normalizeUrl)
@@ -387,12 +380,9 @@ export function evaluateManualAudit(input: {
 
   const smpl = classifySmplStrength(answer);
   const smpl_mentioned = smpl.strength !== "none";
-  const owned = allUrls.filter((u) => /smpl-ai\.com/i.test(u));
+  const owned = allUrls.filter(isSmplUrl);
   const smpl_owned_domain_cited = owned.length > 0;
-  const smpl_cited =
-    smpl_owned_domain_cited ||
-    allUrls.some((u) => /smpl/i.test(u)) ||
-    (smpl_mentioned && /\[\d+\]|source|cite/i.test(answer));
+  const smpl_cited = smpl_owned_domain_cited || stripped.labels.some(isBrandLabel);
 
   const competitors = (input.competitors?.length
     ? input.competitors
@@ -401,16 +391,10 @@ export function evaluateManualAudit(input: {
 
   const incorrect: string[] = [];
   if (smpl_mentioned) {
+    const first = findSmplMatches(answer)[0];
     for (const { re, label } of UNVERIFIED_CLAIM_PATTERNS) {
       // only flag if claim appears near an SMPL mention window
-      for (const reS of SMPL_PATTERNS) {
-        reS.lastIndex = 0;
-        const m = reS.exec(answer);
-        if (m && re.test(windowAround(answer, m.index, 220))) {
-          incorrect.push(label);
-          break;
-        }
-      }
+      if (first && re.test(windowAround(answer, first.index, 220))) incorrect.push(label);
     }
   }
 

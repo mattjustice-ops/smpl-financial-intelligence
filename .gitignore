@@ -53,3 +53,22 @@ backend/.credentials/
 # Local probe/export/catalog scratch
 backend/tmp/
 
+# Local diagnostics, patch scripts, logs and media scratch (tracked "_" scripts stay tracked; use git add -f for new ones)
+/_tmp_*
+/tmp/
+/frontend/tmp/
+/backend/_diag_*
+/backend/_backend.log
+/frontend/_frontend.log
+/backend/scripts/oauth_once.*.log
+/backend/scripts/_*
+/frontend/scripts/_*
+/scripts/_*
+/backend/scripts/deck-gen/alpha_test.pptx
+/backend/scripts/deck-gen/bad*.pptx
+/backend/scripts/deck-gen/chart_mismatch.pptx
+/backend/scripts/deck-gen/huge.pptx
+
+# Office lock files
+~$*
+

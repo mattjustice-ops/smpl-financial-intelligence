@@ -3,54 +3,23 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { SmplPagesCited, VisibilityTrend } from "@/components/ops/visibility/VisibilityTrend";
+import type { CheckpointSummary, VisibilityHistory } from "@/lib/aio/checkpoints";
+
 type Overview = {
   query_count: number;
   audit_count: number;
   scored_audits: number;
-  mention_rate: number;
-  recommendation_rate: number;
-  strong_recommendation_rate: number;
-  citation_rate: number;
-  owned_domain_citation_rate: number;
-  avg_positioning_accuracy: number;
-  share_of_voice: number;
+  current_checkpoint: {
+    name: string;
+    started_at: string;
+    queries: number;
+    scorecard: CheckpointSummary;
+  } | null;
   competitor_mentions: Array<{ name: string; count: number }>;
   recent_gaps: Array<{ query_id: string | null; query_text: string }>;
   disclosure: string;
   engine_diagnosis?: string;
-  scoring_audit?: {
-    batch_name: string;
-    n: number;
-    current_evaluator: string;
-    note: string;
-    stored: {
-      mentions: number;
-      shortlist_plus: number;
-      owned_citations: number;
-    };
-    rules_v2: {
-      mentions: number;
-      shortlist_plus: number;
-      owned_citations: number;
-    };
-    strength_changes: Array<{
-      query_id: string | null;
-      stored: string;
-      rules_v2: string;
-    }>;
-  } | null;
-  chatgpt_search_baseline?: {
-    name: string;
-    scorecard: {
-      mention_rate: number;
-      mention_count: number;
-      citation_rate: number;
-      owned_domain_citation_rate: number;
-      categories_with_hit: number;
-      categories_total: number;
-      hit_query_id: string;
-    };
-  };
   google_genai_baseline?: {
     name: string;
     scorecard: {
@@ -135,12 +104,130 @@ function pct(n: number) {
   return `${Math.round(n * 100)}%`;
 }
 
+function HeadlineTile({
+  label,
+  count,
+  of,
+  note,
+}: {
+  label: string;
+  count: number | null;
+  of: number;
+  note: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-teal-400/25 bg-teal-400/[0.05] px-5 py-5">
+      <p className="text-sm font-medium text-slate-200">{label}</p>
+      {count == null ? (
+        <p className="mt-3 text-2xl font-semibold text-slate-400">
+          Not yet scored
+        </p>
+      ) : (
+        <p className="mt-3 text-4xl font-semibold text-white">
+          {count}
+          <span className="ml-2 text-lg font-normal text-slate-400">
+            of {of}
+          </span>
+          <span className="ml-2 text-xs font-normal text-slate-500">
+            {of ? pct(count / of) : ""}
+          </span>
+        </p>
+      )}
+      <p className="mt-2 text-xs text-slate-400">{note}</p>
+    </div>
+  );
+}
+
+function DiagnosticTile({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3">
+      <p className="text-[11px] uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-lg font-medium text-slate-300">{value}</p>
+      <p className="mt-1 text-[11px] leading-snug text-slate-500">{note}</p>
+    </div>
+  );
+}
+
+function Scorecard({ c }: { c: CheckpointSummary }) {
+  const of = c.queries;
+  const unknown = !c.citationVisibilityKnown;
+  return (
+    <>
+      <section className="mt-3 grid gap-3 md:grid-cols-3">
+        <HeadlineTile
+          label="SMPL named as a relevant software product"
+          count={c.namedAsProduct}
+          of={of}
+          note="Listed, shortlisted, or recommended as a vendor option. Passing references such as “according to SMPL.ai” do not count."
+        />
+        <HeadlineTile
+          label="Capabilities accurately described"
+          count={null}
+          of={of}
+          note="A manual capability checklist review is planned; no number until it is done."
+        />
+        <HeadlineTile
+          label="Shortlisted or recommended"
+          count={c.shortlistPlus}
+          of={of}
+          note="Put on a short list, recommended, or picked as the top choice — stronger than being listed."
+        />
+      </section>
+
+      <div className="mt-4">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+          Diagnostics · do not feed the headline
+        </p>
+        <section className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <DiagnosticTile
+            label="Any mention in answer text"
+            value={`${c.mentioned} of ${of}`}
+            note="Includes passing references and SMPL named only as an information source."
+          />
+          <DiagnosticTile
+            label="SMPL cited · visible source"
+            value={unknown ? `≥${c.visibleCited}` : `${c.visibleCited} of ${of}`}
+            note={
+              unknown
+                ? `${c.citedVisibilityUnknown} more cited answer(s) from an older capture — visibility unknown.`
+                : "An SMPL source pill was on screen without expanding anything."
+            }
+          />
+          <DiagnosticTile
+            label="SMPL cited · hidden “+N” only"
+            value={unknown ? `≥${c.hiddenOnlyCited}` : `${c.hiddenOnlyCited} of ${of}`}
+            note="SMPL only appears after clicking a “+N” source button. Never counted above."
+          />
+          <DiagnosticTile
+            label="Citation capture complete"
+            value={`${c.citationComplete} of ${of}`}
+            note={Object.entries(c.citationStatus)
+              .map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`)
+              .join(" · ")}
+          />
+        </section>
+      </div>
+    </>
+  );
+}
+
 export function AioVisibilityDashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [queries, setQueries] = useState<QueryRow[]>([]);
   const [audits, setAudits] = useState<AuditRow[]>([]);
   const [content, setContent] = useState<ContentRow[]>([]);
   const [pulse, setPulse] = useState<PulseOverview | null>(null);
+  const [history, setHistory] = useState<VisibilityHistory | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -164,38 +251,24 @@ export function AioVisibilityDashboard() {
 
   const refresh = useCallback(async () => {
     setError(null);
-    const [o, q, a, c, p] = await Promise.all([
-      fetch("/api/aio/overview").then(async (r) => {
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.detail || "overview failed");
-        return j as Overview;
-      }),
-      fetch("/api/aio/queries?priorityMin=0").then(async (r) => {
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.detail || "queries failed");
-        return j.queries as QueryRow[];
-      }),
-      fetch("/api/aio/audits").then(async (r) => {
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.detail || "audits failed");
-        return j.audits as AuditRow[];
-      }),
-      fetch("/api/aio/content").then(async (r) => {
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.detail || "content failed");
-        return j.content as ContentRow[];
-      }),
-      fetch("/api/aio/pulse").then(async (r) => {
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.detail || "pulse failed");
-        return j as PulseOverview;
-      }),
+    const load = async <T,>(url: string, name: string, pick: (j: any) => T): Promise<T> => {
+      const r = await fetch(url);
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`${name}: ${j.detail || `HTTP ${r.status}`}`);
+      return pick(j);
+    };
+    const results = await Promise.allSettled([
+      load("/api/aio/overview", "overview", (j) => j as Overview).then(setOverview),
+      load("/api/aio/queries?priorityMin=0", "queries", (j) => j.queries as QueryRow[]).then(setQueries),
+      load("/api/aio/audits", "audits", (j) => j.audits as AuditRow[]).then(setAudits),
+      load("/api/aio/content", "content", (j) => j.content as ContentRow[]).then(setContent),
+      load("/api/aio/pulse", "pulse", (j) => j as PulseOverview).then(setPulse),
+      load("/api/aio/history", "history", (j) => j as VisibilityHistory).then(setHistory),
     ]);
-    setOverview(o);
-    setQueries(q);
-    setAudits(a);
-    setContent(c);
-    setPulse(p);
+    const failures = results
+      .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+      .map((r) => (r.reason instanceof Error ? r.reason.message : String(r.reason)));
+    if (failures.length) throw new Error(failures.join(" · "));
   }, []);
 
   useEffect(() => {
@@ -276,8 +349,8 @@ export function AioVisibilityDashboard() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">
             Manual ChatGPT Search audits first. Paste clean-session answers;
-            we score mention / recommendation / citations against brand truth.
-            Not an OpenAI ranking score.
+            we count how often SMPL is named as a product, shortlisted, and
+            cited. Not an OpenAI ranking score.
           </p>
         </div>
         <div className="flex gap-2">
@@ -309,154 +382,48 @@ export function AioVisibilityDashboard() {
         </p>
       ) : null}
 
-      {overview ? (
-        <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            ["Audits", String(overview.audit_count)],
-            ["Mention rate", pct(overview.mention_rate)],
-            ["Recommendation rate", pct(overview.recommendation_rate)],
-            ["Owned-domain cite", pct(overview.owned_domain_citation_rate)],
-            ["Strong recommend", pct(overview.strong_recommendation_rate)],
-            ["Positioning avg", overview.avg_positioning_accuracy.toFixed(2)],
-            ["Share of voice", pct(overview.share_of_voice)],
-            ["Query bank", String(overview.query_count)],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4"
-            >
-              <p className="text-xs uppercase tracking-wide text-slate-500">
-                {label}
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-            </div>
-          ))}
-        </section>
+      {overview?.current_checkpoint ? (
+        <>
+          <p className="mt-8 text-xs uppercase tracking-wide text-slate-500">
+            ChatGPT scorecard · current checkpoint ·{" "}
+            {overview.current_checkpoint.name} ·{" "}
+            {new Date(overview.current_checkpoint.started_at).toLocaleDateString()}{" "}
+            · {overview.current_checkpoint.queries} prompts · query bank{" "}
+            {overview.query_count}
+          </p>
+          <Scorecard c={overview.current_checkpoint.scorecard} />
+          <div className="mt-3 max-w-4xl space-y-1 text-xs text-slate-400">
+            <p>
+              <span className="text-slate-300">How to read this.</span> Each
+              number counts answers out of the prompts in the latest full
+              ChatGPT benchmark run. The three headline numbers only use what
+              the answer says: whether SMPL is offered as a software option,
+              whether its capabilities are described correctly (checklist
+              review coming), and whether it is shortlisted or recommended.
+            </p>
+            <p>
+              Citations are shown separately as diagnostics. A citation means
+              ChatGPT used an SMPL page as a source; if that page only shows up
+              after clicking a “+N” button, a reader is unlikely to see it, so
+              it never raises a headline number.
+            </p>
+          </div>
+        </>
       ) : null}
 
       {overview?.disclosure ? (
         <p className="mt-3 text-xs text-slate-500">{overview.disclosure}</p>
       ) : null}
 
-      {overview?.scoring_audit ? (
-        <section className="mt-8 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
-          <p className="text-xs uppercase tracking-wide text-amber-300/80">
-            Scoring audit · {overview.scoring_audit.current_evaluator}
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-white">
-            Stored vs live rescore — {overview.scoring_audit.batch_name}
-          </h2>
-          <p className="mt-2 text-xs text-slate-500">
-            {overview.scoring_audit.note}
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {(
-              [
-                ["Mentions", "mentions"],
-                ["Shortlist+", "shortlist_plus"],
-                ["Owned cites", "owned_citations"],
-              ] as const
-            ).map(([label, key]) => (
-              <div
-                key={key}
-                className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3"
-              >
-                <p className="text-xs text-slate-500">{label}</p>
-                <p className="mt-1 text-sm text-slate-300">
-                  Stored{" "}
-                  <span className="font-semibold text-white">
-                    {overview.scoring_audit!.stored[key]}
-                  </span>
-                  {" → "}
-                  <span className="font-semibold text-amber-200">
-                    v2 {overview.scoring_audit!.rules_v2[key]}
-                  </span>
-                  <span className="text-slate-500">
-                    {" "}
-                    / {overview.scoring_audit!.n}
-                  </span>
-                </p>
-              </div>
-            ))}
-          </div>
-          {overview.scoring_audit.strength_changes.length ? (
-            <ul className="mt-4 space-y-1 text-xs text-slate-400">
-              {overview.scoring_audit.strength_changes.map((c) => (
-                <li key={`${c.query_id}-${c.stored}-${c.rules_v2}`}>
-                  <span className="text-slate-300">{c.query_id || "?"}</span>
-                  : {c.stored} → {c.rules_v2}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-xs text-slate-500">
-              No strength deltas vs stored labels for this batch.
-            </p>
-          )}
-        </section>
-      ) : null}
+      {history ? <VisibilityTrend history={history} /> : null}
 
-      {overview?.chatgpt_search_baseline || overview?.google_genai_baseline ? (
+      {history?.checkpoints.length || overview?.google_genai_baseline ? (
         <section className="mt-8 grid gap-4 lg:grid-cols-2">
-          {overview.chatgpt_search_baseline ? (
-            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/[0.04] p-5">
-              <p className="text-xs uppercase tracking-wide text-rose-300/80">
-                Controlled benchmark
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-white">
-                {overview.chatgpt_search_baseline.name}
-              </h2>
-              <dl className="mt-4 space-y-2 text-sm">
-                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
-                  <dt className="text-slate-400">Mentions</dt>
-                  <dd className="font-medium text-white">
-                    {overview.chatgpt_search_baseline.scorecard.mention_count}
-                    /46 ({pct(overview.chatgpt_search_baseline.scorecard.mention_rate)})
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
-                  <dt className="text-slate-400">Citation rate</dt>
-                  <dd className="font-medium text-white">
-                    {pct(overview.chatgpt_search_baseline.scorecard.citation_rate)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
-                  <dt className="text-slate-400">Owned-domain cite</dt>
-                  <dd className="font-medium text-white">
-                    {pct(
-                      overview.chatgpt_search_baseline.scorecard
-                        .owned_domain_citation_rate,
-                    )}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3 border-b border-white/5 py-1.5">
-                  <dt className="text-slate-400">Categories with hit</dt>
-                  <dd className="font-medium text-white">
-                    {
-                      overview.chatgpt_search_baseline.scorecard
-                        .categories_with_hit
-                    }
-                    /
-                    {
-                      overview.chatgpt_search_baseline.scorecard
-                        .categories_total
-                    }
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3 py-1.5">
-                  <dt className="text-slate-400">Only hit</dt>
-                  <dd className="font-medium text-white">
-                    {overview.chatgpt_search_baseline.scorecard.hit_query_id}
-                  </dd>
-                </div>
-              </dl>
-              <p className="mt-3 text-xs text-slate-500">
-                Not yet classifiable / shortlisted in ChatGPT Search.
-              </p>
-            </div>
+          {history?.checkpoints.length ? (
+            <SmplPagesCited checkpoint={history.checkpoints[history.checkpoints.length - 1]} />
           ) : null}
 
-          {overview.google_genai_baseline ? (
+          {overview?.google_genai_baseline ? (
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
               <p className="text-xs uppercase tracking-wide text-emerald-300/80">
                 Search Console · Generative AI
