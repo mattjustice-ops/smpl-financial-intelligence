@@ -23,6 +23,7 @@ from app.services.predictive_planning.board_citation import (
 )
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("plan_assurance_member")
 
 PACKET = {
     "bopArr": 90e6,

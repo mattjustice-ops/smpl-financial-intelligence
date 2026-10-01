@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -14,6 +15,7 @@ from app.services.predictive_planning.board_citation import metrics_from_plan_as
 
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("plan_assurance_member")
 
 ORG = str(uuid.uuid4())
 

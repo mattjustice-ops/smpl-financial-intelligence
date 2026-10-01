@@ -4,6 +4,18 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Plan Assurance API requires a signed-in member of the organization
+
+This entry changes product behavior (predictive-planning API and its Next.js proxy), not marketing copy. No benchmark was run for it.
+
+- **Gap:** every `/api/v1/predictive-planning/*` route accepted anonymous requests for any `organization_id`, including `/assess`, which persists assessments. The `/api/v1/:path*` rewrite in `next.config.js` sent these calls straight to the API, without the session check the authenticated proxy applies.
+- **Fixed (API):** this uses the mechanism the rest of the API uses: the signed-in user forwarded by the Next.js proxy as `X-SFI-User-Id`, plus an active-membership check (`AuthService.get_member`). No user gives 401, and a user who isn't a member of the organization gives 403. `/assess`, `/simulate`, `/mc-inputs` and `GET /assessments` check the `organization_id` they act on. `GET /assessments/{id}` checks the record's organization. `/constraints` requires a signed-in user. The version checks are unchanged.
+- **Fixed (proxy):** static route handlers for `assess`, `simulate`, `mc-inputs`, `constraints` and `assessments` take precedence over the rewrite. They require a session and forward the user to the API. The Budget and Forecast engines already call these paths same-origin with cookies, so signed-in users see no change. Board reads assessments directly from the database and is unaffected.
+- **Tests:** 17 new auth tests in `test_plan_assurance_auth.py` cover anonymous rejection, another organization's id, an unknown user, nothing persisted on a rejected call, and success for a member on their own organization. Existing Plan Assurance tests run as a signed-in member. `verify:plan-assurance-mc` checks that the five handlers use the authenticated proxy.
+- **Not changed:** the `/api/v1/:path*` rewrite still bypasses the session check for other API areas, and the API trusts `X-SFI-User-Id` from any caller that reaches it directly.
+
+---
+
 ## 2026-10-01 — Plan Assurance: framework doc matches what shipped; marketing page rechecked (no copy change)
 
 This entry changes an internal product doc only. No marketing copy changed and no benchmark was run.
