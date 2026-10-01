@@ -12,7 +12,7 @@ import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "SaaS Board Reporting & Financial Commentary Software | SMPL.ai";
 const description =
-  "Board reporting software for SaaS Finance teams: governed numbers, variance commentary grounded in calculated results, and every board figure traceable to the general ledger.";
+  "Board reporting software for SaaS Finance: governed numbers, variance commentary tied to calculated results, every figure traceable to the general ledger.";
 const url = sitePageUrl("/saas-board-reporting");
 
 export const metadata: Metadata = {

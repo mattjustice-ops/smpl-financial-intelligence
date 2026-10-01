@@ -14,7 +14,7 @@ import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 const crumb = "Budgeting & Plan Assurance";
 const title = "SaaS Budgeting Software with Plan Stress Testing | SMPL.ai";
 const description =
-  "Driver-based SaaS budgeting across the income statement, balance sheet, and cash flow, tested with Plan Assurance: 15 constraints, stress cases, and a cash simulation.";
+  "Driver-based SaaS budgeting across the P&L, balance sheet, and cash flow, tested with Plan Assurance: 15 constraints, stress cases, and a cash simulation.";
 const url = sitePageUrl("/budgeting-and-plan-assurance");
 
 export const metadata: Metadata = {

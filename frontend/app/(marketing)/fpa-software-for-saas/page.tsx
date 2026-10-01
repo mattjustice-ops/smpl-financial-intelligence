@@ -7,7 +7,7 @@ import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "FP&A Software for SaaS Companies | SMPL.ai";
 const description =
-  "SMPL.ai is FP&A software for growing SaaS Finance teams. Connect ARR, revenue, cash, headcount, and financial statements in one governed model for forecasting, reporting, and board packages.";
+  "FP&A software for growing SaaS Finance teams: ARR, revenue, cash, headcount, and financial statements in one governed model for forecasts and board packs.";
 const url = sitePageUrl("/fpa-software-for-saas");
 
 export const metadata: Metadata = {

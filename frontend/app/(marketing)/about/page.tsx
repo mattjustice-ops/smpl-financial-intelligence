@@ -7,7 +7,7 @@ import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "About SMPL.ai | Why we built financial intelligence for SaaS Finance";
 const description =
-  "SMPL.ai brings world-class financial intelligence to every growing SaaS company—without having to build an entire CFO organization. Founded by Matt Justice.";
+  "SMPL.ai brings world-class financial intelligence to every growing SaaS company, without building an entire CFO organization. Founded by Matt Justice.";
 const url = sitePageUrl("/about");
 
 export const metadata: Metadata = {

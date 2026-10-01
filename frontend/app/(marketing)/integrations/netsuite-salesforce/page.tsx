@@ -16,7 +16,7 @@ const path = "/integrations/netsuite-salesforce";
 const crumb = "NetSuite + Salesforce";
 const title = "NetSuite + Salesforce Revenue Forecasting & Planning | SMPL.ai";
 const description =
-  "Connect NetSuite actuals and Salesforce pipeline in one SaaS model for revenue forecasting, budgeting, and board reporting. SMPL leads the integration and validation.";
+  "NetSuite actuals and Salesforce pipeline in one SaaS model for revenue forecasts, budgets, and board reporting. SMPL leads the integration and validation.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {

@@ -4,6 +4,18 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Meta descriptions shortened to 155 characters or fewer (Bing SEO check)
+
+This entry changes page metadata only, not visible page content. No benchmark was run for it.
+
+- **Trigger:** Bing Webmaster Tools URL Inspection for the homepage (2026-10-01) flagged "Meta Description too long or too short". Bing wants 25–160 characters; the homepage had 169.
+- **Audit (production, all 93 sitemap URLs, entities decoded):** no missing or duplicate descriptions. Code-managed pages over 160: homepage, `/fpa-software-for-saas`, `/fpa-software-for-lean-finance-teams`, `/saas-board-reporting`, `/arr-revenue-cash-headcount`, `/budgeting-and-plan-assurance`, `/glossary`, and the NetSuite, Salesforce, NetSuite + Salesforce, and Sage Intacct integration pages. At 156–160: `/integrations`, Maxio, Xero, Rillet, `/about`.
+- **Fixed:** all 16 now 150–155 characters, with minimal wording changes. Homepage `SITE_DESCRIPTION` goes from 169 to 154; it keeps SaaS FP&A, ARR, pipeline, cash, financial statements, one governed model for close, and board-ready/traceable to source. The homepage title, H1, and body copy are unchanged. og:description and twitter:description use the same constants.
+- **Not fixed here (Sanity):** 33 blog posts have descriptions over 160 characters, plus 4 more at 156–160. They need SEO description edits in Sanity and will be handled separately.
+- After deploy, the changed URLs are resubmitted through IndexNow. The HTTP response is recorded in the release report.
+
+---
+
 ## 2026-10-01 — Share image restored on marketing pages (Bing blank logo check)
 
 This entry changes page metadata only, not visible page content. No benchmark was run for it.

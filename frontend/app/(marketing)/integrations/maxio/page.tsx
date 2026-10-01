@@ -16,7 +16,7 @@ const path = "/integrations/maxio";
 const crumb = "Maxio";
 const title = "FP&A and Planning Software for Maxio Customers | SMPL.ai";
 const description =
-  "SMPL.ai combines Maxio billing, ARR, and revenue recognition data with your CRM and ledger for forecasting, budgeting, and board reporting, implemented by SMPL.";
+  "SMPL.ai combines Maxio billing, ARR, and revenue recognition data with your CRM and GL for forecasts, budgets, and board reporting, implemented by SMPL.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {

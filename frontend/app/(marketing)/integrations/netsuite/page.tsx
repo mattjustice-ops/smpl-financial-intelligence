@@ -16,7 +16,7 @@ const path = "/integrations/netsuite";
 const crumb = "NetSuite";
 const title = "NetSuite FP&A, Reporting & Planning Software | SMPL.ai";
 const description =
-  "SMPL.ai brings NetSuite GL data together with CRM, billing, and workforce data for SaaS reporting, forecasting, budgeting, and Plan Assurance, implemented by SMPL.";
+  "SMPL.ai combines NetSuite GL data with CRM, billing, and workforce data for SaaS reporting, forecasting, budgets, and Plan Assurance, implemented by SMPL.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {

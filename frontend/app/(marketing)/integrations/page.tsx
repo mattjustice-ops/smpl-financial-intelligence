@@ -15,7 +15,7 @@ import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 const crumb = "Integrations";
 const title = "Integrations for SaaS FP&A: ERP, CRM, Billing & HRIS | SMPL.ai";
 const description =
-  "SMPL.ai connects ERP, CRM, billing, and HRIS data into one SaaS financial model. SMPL leads the integration, mapping, configuration, and financial validation.";
+  "SMPL.ai connects ERP, CRM, billing, and HRIS data into one SaaS financial model. SMPL leads integration, mapping, configuration, and financial validation.";
 const url = sitePageUrl("/integrations");
 
 export const metadata: Metadata = {
