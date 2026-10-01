@@ -43,7 +43,7 @@ const GLOSSARY_CLUSTERS = [
 
 const title = `SaaS Finance Glossary | ${SITE_NAME}`;
 const description =
-  "SaaS FP&A glossary for board and close: ARR, waterfall, NRR, GRR, billing vs CRM ARR, board packs, cash forecast, and more — definitions finance leaders actually use.";
+  "SaaS FP&A glossary for board and close: ARR, waterfall, NRR, GRR, billing vs CRM ARR, board packs, cash forecast, and more—definitions finance leaders use.";
 const url = sitePageUrl("/glossary");
 
 export const metadata: Metadata = {

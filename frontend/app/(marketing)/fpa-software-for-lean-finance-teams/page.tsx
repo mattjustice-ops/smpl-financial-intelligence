@@ -12,7 +12,7 @@ import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "FP&A Software for Lean Finance Teams | SMPL.ai";
 const description =
-  "FP&A software for lean SaaS Finance teams with no dedicated systems administrator. Board reporting, ARR, forecasting, budgeting, and cash in one governed model, with implementation led by SMPL.";
+  "FP&A software for lean SaaS Finance teams with no systems admin: board reporting, ARR, forecasts, budgets, and cash in one governed model, set up by SMPL.";
 const url = sitePageUrl("/fpa-software-for-lean-finance-teams");
 
 export const metadata: Metadata = {

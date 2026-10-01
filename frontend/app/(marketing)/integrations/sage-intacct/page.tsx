@@ -16,7 +16,7 @@ const path = "/integrations/sage-intacct";
 const crumb = "Sage Intacct";
 const title = "Sage Intacct FP&A, Reporting & Planning for SaaS | SMPL.ai";
 const description =
-  "SMPL.ai brings Sage Intacct ledger and dimension data together with CRM, billing, and workforce data for SaaS reporting, budgeting, and Plan Assurance, implemented by SMPL.";
+  "SMPL.ai combines Sage Intacct GL and dimension data with CRM, billing, and HR data for SaaS reporting, budgeting, and Plan Assurance, implemented by SMPL.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {

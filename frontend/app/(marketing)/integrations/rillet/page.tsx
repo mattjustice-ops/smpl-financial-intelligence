@@ -16,7 +16,7 @@ const path = "/integrations/rillet";
 const crumb = "Rillet";
 const title = "FP&A, Forecasting & Planning for Rillet Customers | SMPL.ai";
 const description =
-  "SMPL.ai combines Rillet ledger and revenue data with CRM, billing, and workforce data for SaaS forecasting, budgeting, and board reporting, implemented by SMPL.";
+  "SMPL.ai combines Rillet GL and revenue data with CRM, billing, and workforce data for SaaS forecasts, budgets, and board reporting, implemented by SMPL.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {

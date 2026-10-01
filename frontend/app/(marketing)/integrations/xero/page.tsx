@@ -16,7 +16,7 @@ const path = "/integrations/xero";
 const crumb = "Xero";
 const title = "Xero FP&A, SaaS Reporting & Cash Planning | SMPL.ai";
 const description =
-  "SMPL.ai combines Xero with billing, CRM, and payroll data for SaaS metrics, cash planning, a three-statement budget, and board reporting, implemented by SMPL.";
+  "SMPL.ai combines Xero with billing, CRM, and payroll data for SaaS metrics, cash plans, three-statement budgets, and board reporting, implemented by SMPL.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {

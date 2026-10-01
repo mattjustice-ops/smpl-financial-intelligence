@@ -11,7 +11,7 @@ export const SITE_NAME = "SMPL.ai";
  * Keep in sync with SEO tag comparison Rev 1.0 (+ "close").
  */
 export const SITE_DESCRIPTION =
-  "FP&A for SaaS finance teams. Unify ARR, pipeline, cash, and financial statements into one governed model for close. Every number board-ready and traceable to its source.";
+  "SaaS FP&A for finance teams: ARR, pipeline, cash, and financial statements in one governed model for close. Every number board-ready, traceable to source.";
 
 /**
  * Default browser-tab / search title for the marketing homepage.

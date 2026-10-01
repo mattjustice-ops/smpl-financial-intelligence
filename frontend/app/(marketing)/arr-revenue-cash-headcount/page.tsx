@@ -11,7 +11,7 @@ import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "ARR, Revenue, Cash & Headcount in One Financial Model | SMPL.ai";
 const description =
-  "FP&A software that handles ARR, recognized revenue, cash, and headcount together in one SaaS financial model, so a change in bookings, churn, or hiring flows through every number.";
+  "FP&A software that models ARR, recognized revenue, cash, and headcount together, so a change in bookings, churn, or hiring flows through every number.";
 const url = sitePageUrl("/arr-revenue-cash-headcount");
 
 export const metadata: Metadata = {

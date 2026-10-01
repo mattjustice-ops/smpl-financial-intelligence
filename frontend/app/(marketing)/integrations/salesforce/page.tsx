@@ -16,7 +16,7 @@ const path = "/integrations/salesforce";
 const crumb = "Salesforce";
 const title = "Salesforce Pipeline for SaaS Revenue Forecasting & FP&A | SMPL.ai";
 const description =
-  "SMPL.ai combines Salesforce pipeline with billing and ledger data for bookings and revenue forecasts, GTM capacity plans, and board reporting, implemented by SMPL.";
+  "SMPL.ai pairs Salesforce pipeline with billing and GL data for bookings and revenue forecasts, GTM capacity plans, and board reports, implemented by SMPL.";
 const url = sitePageUrl(path);
 
 export const metadata: Metadata = {
