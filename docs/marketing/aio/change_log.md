@@ -4,6 +4,19 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Plan Assurance: history priors activate; correlations applied in the server Monte Carlo
+
+This entry changes product behavior (Budget and Forecast engines, predictive-planning API), not marketing copy. No benchmark was run for it. Marketing copy is reviewed after the remaining Plan Assurance fixes.
+
+- **Gap:** Budget sent three year-end ARR values (two synthetic backcasts and the plan's own December ARR) as "history". The prior fit needs at least three growth rates, so it always fell back to defaults. Forecast sent no history. Correlations were accepted by the API but never used in the simulation.
+- **Fixed (history):** Budget and Forecast now send closed-month ending ARR from the outlook (December 2025 through the close month; seven month-end values at the June 2026 close), tagged `warehouse` when the live outlook is loaded and `demo_seed` otherwise. The server fits the ARR growth volatility prior from monthly growth (sd of monthly growth × √12) when there are at least three growth rates from company data. Demo or backcast data is never fitted.
+- **Not fitted:** cost per lead, sales attrition, and pipeline coverage keep their default priors. There is no real monthly history for them in the payload yet. The method card says which priors were fitted and which kept defaults (`history_partial`), with the observation count, month span, and source.
+- **Fixed (correlations):** the server Monte Carlo draws the four levers jointly through a Cholesky factor when correlations are supplied, or fitted from at least 12 paired history observations. Inconsistent sets are shrunk until valid, and the method notes say so. With no correlations the draws are independent, and they match the previous results exactly. The method card says "Independent draws" when that applies, which is the case for all current customer and demo data.
+- **Tests:** 11 new backend tests. They cover priors activating from monthly history, the minimum-data and demo fallbacks, correlation fitting and validation, and negative versus independent versus positive correlation changing the ARR spread and miss rate.
+- **Not claimed:** company-specific behavior for any lever other than ARR growth volatility, or correlated draws on current data. Breach rates are stress frequencies under these priors, not a probability of attainment.
+
+---
+
 ## 2026-10-01 — Blog index title lengthened (Bing SEO check)
 
 This entry changes page metadata only, not visible page content. No benchmark was run for it.

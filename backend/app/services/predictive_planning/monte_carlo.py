@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -29,6 +29,90 @@ DEFAULT_PRIORS: dict[str, float] = {
 }
 
 METHOD = "monte_carlo_packet_lever_shocks_open_month_cash_flow"
+
+#: Lever order for the joint draw. Correlation keys are "<a>:<b>" pairs of these.
+LEVERS: tuple[str, ...] = ("yoyPp", "cplLog", "attrPp", "pipe")
+MAX_ABS_CORRELATION = 0.95
+
+
+def correlation_key(a: str, b: str) -> str:
+    """Canonical "<a>:<b>" key with levers in LEVERS order."""
+
+    ia, ib = LEVERS.index(a), LEVERS.index(b)
+    return f"{a}:{b}" if ia < ib else f"{b}:{a}"
+
+
+def normalize_correlations(
+    correlations: dict[str, Any] | None,
+) -> tuple[dict[str, float], list[str]]:
+    """Validate "<a>:<b>" -> rho pairs; drop anything unusable with a note."""
+
+    out: dict[str, float] = {}
+    rejected: list[str] = []
+    for raw_key, raw_val in (correlations or {}).items():
+        parts = [p.strip() for p in str(raw_key).replace("|", ":").split(":")]
+        if len(parts) != 2 or parts[0] == parts[1] or not all(p in LEVERS for p in parts):
+            rejected.append(f"{raw_key}: unknown lever pair")
+            continue
+        try:
+            rho = float(raw_val)
+        except (TypeError, ValueError):
+            rejected.append(f"{raw_key}: not a number")
+            continue
+        if math.isnan(rho) or abs(rho) > MAX_ABS_CORRELATION:
+            rejected.append(f"{raw_key}: |rho| must be <= {MAX_ABS_CORRELATION}")
+            continue
+        out[correlation_key(parts[0], parts[1])] = rho
+    return out, rejected
+
+
+def _cholesky(matrix: list[list[float]]) -> list[list[float]] | None:
+    n = len(matrix)
+    lower = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1):
+            s = sum(lower[i][k] * lower[j][k] for k in range(j))
+            if i == j:
+                d = matrix[i][i] - s
+                if d <= 1e-12:
+                    return None
+                lower[i][j] = math.sqrt(d)
+            else:
+                lower[i][j] = (matrix[i][j] - s) / lower[j][j]
+    return lower
+
+
+def correlation_cholesky(
+    correlations: dict[str, float],
+) -> tuple[list[list[float]], dict[str, float], list[str]]:
+    """Lower-triangular factor for the lever correlation matrix.
+
+    A pair set that is not jointly consistent (not positive definite) is shrunk
+    toward independence until it is, and the shrink is reported — never silently
+    altered.
+    """
+
+    notes: list[str] = []
+    applied = dict(correlations)
+    n = len(LEVERS)
+    for attempt in range(40):
+        matrix = [[1.0 if i == j else 0.0 for j in range(n)] for i in range(n)]
+        for key, rho in applied.items():
+            a, b = key.split(":")
+            i, j = LEVERS.index(a), LEVERS.index(b)
+            matrix[i][j] = matrix[j][i] = rho
+        lower = _cholesky(matrix)
+        if lower is not None:
+            if attempt:
+                notes.append(
+                    f"Supplied correlations were not jointly consistent; shrunk toward "
+                    f"independence by {(1 - 0.9 ** attempt) * 100:.0f}% to make them usable."
+                )
+            return lower, applied, notes
+        applied = {k: v * 0.9 for k, v in applied.items()}
+    notes.append("Supplied correlations could not be made consistent; drawing levers independently.")
+    identity = [[1.0 if i == j else 0.0 for j in range(n)] for i in range(n)]
+    return identity, {}, notes
 
 
 def _pctl(sorted_vals: list[float], q: float) -> float:
@@ -87,6 +171,7 @@ class MonteCarloResult:
     trough: dict[str, Any] | None
     cash_path_monthly: list[dict[str, Any]]
     method_notes: list[str]
+    correlations: dict[str, float] = field(default_factory=dict)
 
     def to_simulation_summary(self) -> dict[str, Any]:
         return {
@@ -104,6 +189,7 @@ class MonteCarloResult:
                 "seed": self.seed,
                 "method": self.method,
                 "p_trough_breach": self.p_trough_breach,
+                "correlations": dict(self.correlations),
             },
         }
 
@@ -114,6 +200,7 @@ class MonteCarloResult:
             "sig": self.sig,
             "method": self.method,
             "prior_source": self.prior_source,
+            "correlations": dict(self.correlations),
             "p_arr_miss": self.p_arr_miss,
             "p_cash_below_floor": self.p_cash_below_floor,
             "p_ops_liquidity": self.p_ops_liquidity,
@@ -135,11 +222,19 @@ def run_packet_monte_carlo(
     seed: int = 42,
     priors: dict[str, float] | None = None,
     prior_source: str = "independent_defaults",
+    correlations: dict[str, Any] | None = None,
 ) -> MonteCarloResult:
-    """Seeded MC: shock YoY / CPL / attrition / pipeline; open-month cash flows."""
+    """Seeded MC: shock YoY / CPL / attrition / pipeline; open-month cash flows.
+
+    ``correlations`` maps "<a>:<b>" lever pairs (see LEVERS) to rho. The four
+    lever shocks are drawn jointly through a Cholesky factor; with no
+    correlations the factor is the identity and draws match independent sampling.
+    """
 
     sig = {**DEFAULT_PRIORS, **(priors or {})}
     rng = random.Random(seed)
+    corr_in, corr_rejected = normalize_correlations(correlations)
+    chol, corr_applied, corr_notes = correlation_cholesky(corr_in)
 
     bop = float(packet.get("bop_arr") or packet.get("bopArr") or 0.0)
     target = float(packet.get("target_arr") or packet.get("targetArr") or 0.0)
@@ -176,15 +271,16 @@ def run_packet_monte_carlo(
     paths: list[list[float]] = []
     p_arr = p_cash = p_ae = p_ops = p_trough = p_watch_25 = 0
 
+    base_attr = float(packet.get("hire_pct") or packet.get("hirePct") or 10.0)
+    base_pipe = float(packet.get("pipeline_coverage") or packet.get("pipelineCoverage") or 3.0)
+
     for _ in range(n):
-        dy = rng.gauss(0.0, sig["yoyPp"])
-        dcpl = math.exp(rng.gauss(0.0, sig["cplLog"]))
-        dattr = max(0.0, (packet.get("hire_pct") or packet.get("hirePct") or 10.0) + rng.gauss(0.0, sig["attrPp"]))
-        dpipe = max(
-            1.0,
-            float(packet.get("pipeline_coverage") or packet.get("pipelineCoverage") or 3.0)
-            + rng.gauss(0.0, sig["pipe"]),
-        )
+        e = [rng.gauss(0.0, 1.0) for _ in LEVERS]
+        z = [sum(chol[i][k] * e[k] for k in range(i + 1)) for i in range(len(LEVERS))]
+        dy = sig["yoyPp"] * z[0]
+        dcpl = math.exp(sig["cplLog"] * z[1])
+        dattr = max(0.0, base_attr + sig["attrPp"] * z[2])
+        dpipe = max(1.0, base_pipe + sig["pipe"] * z[3])
 
         shocked_yoy = max(0.0, base_yoy + dy)
         # ARR path: BOP * (1 + shocked YoY/100), then CPL tax (~elasticity 0.15 on growth)
@@ -253,9 +349,17 @@ def run_packet_monte_carlo(
     cash_mu = _mean(cash_samples)
     trough_mu = _mean(trough_samples)
 
+    if corr_applied:
+        pairs = ", ".join(f"{k} rho={v:+.2f}" for k, v in sorted(corr_applied.items()))
+        corr_note = f"Correlated lever draws (Cholesky): {pairs}. Unlisted pairs are independent."
+    else:
+        corr_note = "Independent lever draws (no correlations supplied or fitted)."
     notes = [
         f"Server Monte Carlo n={n}, seed={seed}, method={METHOD}.",
-        f"Priors source: {prior_source}. Independent lever draws unless correlations supplied.",
+        f"Priors source: {prior_source}.",
+        corr_note,
+        *corr_notes,
+        *(f"Correlation ignored — {r}." for r in corr_rejected),
         "Stress frequency under stated priors — not calibrated Probability of Attainment.",
         "Closed months stay pinned to the plan packet. Open months re-roll net cash change "
         f"under lever flow shocks plus residual WC noise (cashResidMo={cash_resid_mo:.3f} of Dec cash / month) "
@@ -309,4 +413,5 @@ def run_packet_monte_carlo(
         },
         cash_path_monthly=monthly,
         method_notes=notes,
+        correlations=corr_applied,
     )
