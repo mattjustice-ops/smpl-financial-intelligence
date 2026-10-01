@@ -153,7 +153,7 @@ def assess_plan(
         sources.append("caller.simulation_summary")
 
     notes = list(METHOD_NOTES)
-    notes.append(prior_fit["label"])
+    notes.extend(prior_fit["method_card"]["notes"][:2])
     if plan_ref.scenario == "forecast":
         notes.extend(FORECAST_METHOD_NOTES)
 
@@ -237,6 +237,7 @@ def simulate_plan(body: SimulateRequest) -> SimulateOut:
         seed=body.seed,
         priors=priors,
         prior_source=prior_source,
+        correlations=prior_fit["correlations"],
     )
     summary = result.to_simulation_summary()
     summary["breaks"] = list(body.breaks)

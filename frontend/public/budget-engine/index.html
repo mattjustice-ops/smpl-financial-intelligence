@@ -8308,19 +8308,41 @@ function buildSimulationSummaryFromSuite(suite) {
   return summary;
 }
 
-function buildAssuranceHistoryForPriors(packet) {
+/**
+ * Closed-month ARR history for server prior fitting. Only months on or before
+ * CLOSE_MONTH (actuals) — never the plan year, and never the FY24/FY25 backcasts
+ * in buildYoyCompare, which are synthesized from FY26 shape. The server fits
+ * nothing when source is demo_seed.
+ */
+function buildAssuranceHistoryForPriors() {
   try {
-    const hist = buildAssuranceHistoryPacket(packet || buildBudgetAssurancePacket());
-    const ending = [];
-    if (hist && hist.prior25 && hist.prior25.decArr != null) ending.push(hist.prior25.decArr);
-    if (hist && hist.prior26 && hist.prior26.decArr != null) ending.push(hist.prior26.decArr);
-    if (packet && packet.decArr != null) ending.push(packet.decArr);
+    const live = !!(window.SMPLOutlook && typeof window.SMPLOutlook.isLiveOutlook === 'function'
+      && window.SMPLOutlook.isLiveOutlook());
+    const prevPeriod = (p) => {
+      const [y, m] = p.split('-').map(Number);
+      return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+    };
+    let levels = [];
+    let periods = [];
+    for (const p of allOutlookPeriods().filter(q => q <= CLOSE_MONTH)) {
+      const r = getHistRow(p);
+      const broken = periods.length && periods[periods.length - 1] !== prevPeriod(p);
+      if (!r || r._src === 'demo' || !(r.eop > 0) || broken) {
+        levels = [];
+        periods = [];
+        if (!r || r._src === 'demo' || !(r.eop > 0)) continue;
+      }
+      if (!levels.length && r.bop > 0) {
+        levels.push(r.bop);
+        periods.push(prevPeriod(p));
+      }
+      levels.push(r.eop);
+      periods.push(p);
+    }
     return {
-      ending_arr: ending,
-      ending_arr_yoy_pp: [],
-      cpl_log_ratios: [],
-      attrition_pp: [],
-      pipeline_cover: [],
+      monthly_ending_arr: levels,
+      periods,
+      source: live ? 'warehouse' : 'demo_seed',
     };
   } catch (e) {
     return null;
@@ -8359,7 +8381,7 @@ async function fetchPlanAssessment(opts) {
     simulation,
     include_passing_conditions: false,
     persist: !!(STATE._warehouseBudgetVersionId),
-    history: buildAssuranceHistoryForPriors(packet),
+    history: buildAssuranceHistoryForPriors(),
     mc_seed: STATE._assureMcSeed || 42,
     prior_source: null,
   };
@@ -8412,7 +8434,7 @@ async function fetchServerMonteCarlo(opts) {
       packet,
       n_trials: n,
       seed,
-      history: buildAssuranceHistoryForPriors(packet),
+      history: buildAssuranceHistoryForPriors(),
       breaks: Array.from(new Set(breaks)),
       watches: Array.from(new Set(watches)),
     }),
@@ -8467,11 +8489,16 @@ function renderMethodCardHtml(card) {
   card = card || STATE._assureMethodCard;
   if (!card) return '';
   const priors = card.priors || {};
-  const priorBits = Object.keys(priors).map(k => `${k}=${priors[k]}`).join(' · ');
+  const priorBits = Object.keys(priors)
+    .map(k => `${k}=${typeof priors[k] === 'number' ? +priors[k].toFixed(3) : priors[k]}`).join(' · ');
   const notClaimed = (card.not_claimed || []).slice(0, 3).join('; ');
+  const extra = (card.notes || []).slice(1, 3)
+    .map(n => `<div style="font-size:11px;color:var(--text3);margin-top:2px">${String(n).replace(/</g, '&lt;')}</div>`)
+    .join('');
   return `<div class="pa-method-card"><div class="pa-card-lbl" style="margin-bottom:6px">Method & limits</div>
     <div style="font-size:12px;color:var(--text2)">${String(card.source || '').replace(/</g, '&lt;')} — ${(card.notes && card.notes[0] || '').replace(/</g, '&lt;')}</div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">Priors: ${priorBits.replace(/</g, '&lt;') || '—'}</div>
+    ${extra}
     <div style="font-size:11px;color:var(--text3);margin-top:2px">Not claimed: ${notClaimed.replace(/</g, '&lt;') || 'PoA / AutoML forecasting'}</div>
   </div>`;
 }
