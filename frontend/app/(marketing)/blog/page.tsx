@@ -7,7 +7,7 @@ import { postsListQuery } from "@/lib/sanity/queries";
 import type { SanityPostListItem } from "@/lib/sanity/types";
 import { DEFAULT_OG_IMAGE, SITE_NAME, sitePageUrl } from "@/lib/site";
 
-const title = `Blog | ${SITE_NAME}`;
+const title = `SaaS FP&A & Board Reporting Blog | ${SITE_NAME}`;
 const description =
   "Insights on SaaS FP&A, board reporting, close workflow, and AI commentary that finance teams can sign.";
 const url = sitePageUrl("/blog");

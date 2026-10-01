@@ -4,6 +4,17 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Blog index title lengthened (Bing SEO check)
+
+This entry changes page metadata only, not visible page content. No benchmark was run for it.
+
+- **Trigger:** Bing Webmaster Tools URL Inspection for `/blog` (2026-10-01) flagged "Title too short". Bing wants at least 15 characters; the title was `Blog | SMPL.ai` (14).
+- **Fixed:** `/blog` title is now `SaaS FP&A & Board Reporting Blog | SMPL.ai` (42). og:title and twitter:title use the same constant. The H1, body copy, description, and canonical are unchanged.
+- **Audit (production, all 93 sitemap URLs, entities decoded):** only `/blog` was under 15 characters. Only `/blog/saas-cash-forecasting` is over 70 (77); it is a Sanity title and is not changed here.
+- No IndexNow submission for this change. Matt will request indexing in Bing URL Inspection.
+
+---
+
 ## 2026-10-01 — Meta descriptions shortened to 155 characters or fewer (Bing SEO check)
 
 This entry changes page metadata only, not visible page content. No benchmark was run for it.
