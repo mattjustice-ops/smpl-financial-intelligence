@@ -4,7 +4,7 @@ import "./globals.css";
 
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { OrganizationJsonLd } from "@/components/seo/OrganizationJsonLd";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL, siteLogoUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 
 /** Self-hosted brand fonts (replaces render-blocking fonts.googleapis.com CSS). */
 const fraunces = Fraunces({
@@ -49,20 +49,13 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: [
-      {
-        url: siteLogoUrl("/brand/og-image.png"),
-        width: 1200,
-        height: 630,
-        alt: SITE_NAME,
-      },
-    ],
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: [siteLogoUrl("/brand/og-image.png")],
+    images: [DEFAULT_OG_IMAGE.url],
   },
   // Do not set a global canonical here — each route should declare its own.
 };

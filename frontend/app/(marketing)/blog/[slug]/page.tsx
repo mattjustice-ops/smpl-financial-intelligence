@@ -12,7 +12,7 @@ import { extractPortableHeadings } from "@/lib/sanity/headings";
 import { urlForImage } from "@/lib/sanity/image";
 import { postBySlugQuery, postSlugsQuery } from "@/lib/sanity/queries";
 import type { SanityPost } from "@/lib/sanity/types";
-import { SITE_NAME, sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, SITE_NAME, sitePageUrl } from "@/lib/site";
 
 export const revalidate = 60;
 
@@ -55,12 +55,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       url,
       type: "article",
       siteName: SITE_NAME,
-      images: imageUrl ? [{ url: imageUrl }] : undefined,
+      images: imageUrl ? [{ url: imageUrl }] : [DEFAULT_OG_IMAGE],
     },
     twitter: {
+      card: "summary_large_image",
       title,
       description,
-      images: imageUrl ? [imageUrl] : undefined,
+      images: imageUrl ? [imageUrl] : [DEFAULT_OG_IMAGE.url],
     },
   };
 }

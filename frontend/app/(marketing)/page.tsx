@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { SmplAiLandingPage } from "@/components/landing/SmplAiLandingPage";
-import { SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, SITE_DESCRIPTION, SITE_TITLE, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: {
@@ -15,8 +15,10 @@ export const metadata: Metadata = {
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
     url: SITE_URL,
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
+    card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
   },

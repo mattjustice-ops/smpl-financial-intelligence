@@ -25,6 +25,18 @@ export function siteLogoUrl(path = "/brand/icon-512.png"): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+/**
+ * Default 1200×630 share image (og:image / twitter:image; Bing + LinkedIn previews).
+ * Next.js replaces a parent's `openGraph` wholesale when a page sets its own,
+ * so pages that override `openGraph` must pass this in `images` explicitly.
+ */
+export const DEFAULT_OG_IMAGE = {
+  url: siteLogoUrl("/brand/og-image.png"),
+  width: 1200,
+  height: 630,
+  alt: SITE_NAME,
+};
+
 /** Absolute URL for a site path (canonical / og:url). */
 export function sitePageUrl(path = "/"): string {
   if (!path || path === "/") return SITE_URL;

@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { SALES_EMAIL } from "@/components/landing/constants";
-import { sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "Privacy Policy | SMPL.ai";
 const description =
@@ -14,8 +14,8 @@ export const metadata: Metadata = {
   title: { absolute: title },
   description,
   alternates: { canonical: url },
-  openGraph: { title, description, url },
-  twitter: { title, description },
+  openGraph: { title, description, url, images: [DEFAULT_OG_IMAGE] },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 const LAST_UPDATED = "August 10, 2026";

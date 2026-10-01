@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { SolutionCards } from "@/components/landing/SolutionPage";
-import { sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "FP&A Software for SaaS Companies | SMPL.ai";
 const description =
@@ -15,8 +15,8 @@ export const metadata: Metadata = {
   description,
   alternates: { canonical: url },
   robots: { index: true, follow: true },
-  openGraph: { title, description, url, type: "website", siteName: "SMPL.ai" },
-  twitter: { title, description },
+  openGraph: { title, description, url, images: [DEFAULT_OG_IMAGE], type: "website", siteName: "SMPL.ai" },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 const CAPABILITIES = [
