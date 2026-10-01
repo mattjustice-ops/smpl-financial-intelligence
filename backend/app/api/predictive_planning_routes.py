@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps.request_context import get_request_user_id
 from app.db.session import get_db
 from app.models.budget_version import BudgetVersion
 from app.models.forecast_version import ForecastVersion
@@ -47,6 +48,7 @@ from app.services.predictive_planning.persistence import (
     list_assessments_for_forecast_version,
     persist_assessment,
 )
+from app.services.auth.service import AuthService
 from app.services.predictive_planning.priors import fit_priors_from_history
 from app.services.predictive_planning.what_has_to_be_true import generate_what_has_to_be_true
 
@@ -60,6 +62,24 @@ METHOD_NOTES = [
     "Monte Carlo output is stress frequency under stated priors, not calibrated Probability of Attainment.",
     "A constraint with missing inputs is reported as skipped, never as a pass.",
 ]
+
+
+def _require_user() -> uuid.UUID:
+    """The signed-in user forwarded by the Next.js proxy (X-SFI-User-Id)."""
+
+    user_id = get_request_user_id()
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required for Plan Assurance.")
+    return user_id
+
+
+def _require_org_member(db: Session, organization_id: uuid.UUID) -> uuid.UUID:
+    """Signed-in user who is an active member of the organization being acted on."""
+
+    user_id = _require_user()
+    if AuthService(db).get_member(user_id=user_id, organization_id=organization_id) is None:
+        raise HTTPException(status_code=403, detail="You do not have access to this organization.")
+    return user_id
 
 
 def _flatten(overrides) -> dict[str, dict]:
@@ -132,6 +152,7 @@ def _record_out(row) -> PlanAssessmentRecordOut:
 def get_constraints() -> list[ResolvedConstraintOut]:
     """Return the registry with default parameters."""
 
+    _require_user()
     return _resolved_out(resolve_constraints())
 
 
@@ -142,6 +163,7 @@ def assess_plan(
 ) -> PlanAssessmentOut:
     """Run feasibility + WHTT; persist when a plan version id is present."""
 
+    _require_org_member(db, body.plan_ref.organization_id)
     packet = body.packet.model_dump(by_alias=False)
 
     simulation_dump = body.simulation.model_dump() if body.simulation else None
@@ -256,9 +278,10 @@ def assess_plan(
 
 
 @predictive_planning_router.post("/mc-inputs", response_model=McInputsOut)
-def get_mc_inputs(body: McInputsRequest) -> McInputsOut:
+def get_mc_inputs(body: McInputsRequest, db: Session = Depends(get_db)) -> McInputsOut:
     """Seed, lever priors and correlations for a Budget full-plan Monte Carlo run."""
 
+    _require_org_member(db, body.plan_ref.organization_id)
     issued = build_mc_inputs(body.history, seed=body.seed, n_trials=body.n_trials)
     plan_ref = body.plan_ref.model_copy(
         update={"as_of": body.plan_ref.as_of or datetime.now(timezone.utc)}
@@ -278,9 +301,10 @@ def get_mc_inputs(body: McInputsRequest) -> McInputsOut:
 
 
 @predictive_planning_router.post("/simulate", response_model=SimulateOut)
-def simulate_plan(body: SimulateRequest) -> SimulateOut:
+def simulate_plan(body: SimulateRequest, db: Session = Depends(get_db)) -> SimulateOut:
     """Seeded server Monte Carlo over a plan packet (reproducible path stress)."""
 
+    _require_org_member(db, body.plan_ref.organization_id)
     packet = body.packet.model_dump(by_alias=False)
     prior_fit = fit_priors_from_history(body.history)
     priors = {**prior_fit["priors"], **(body.priors or {})}
@@ -333,9 +357,11 @@ def get_persisted_assessment(
     assessment_id: uuid.UUID,
     db: Session = Depends(get_db),
 ) -> PlanAssessmentRecordOut:
+    _require_user()
     row = get_assessment(db, assessment_id)
     if row is None:
         raise HTTPException(status_code=404, detail="assessment_not_found")
+    _require_org_member(db, row.organization_id)
     return _record_out(row)
 
 
@@ -347,6 +373,7 @@ def list_persisted_assessments(
     latest: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> list[PlanAssessmentRecordOut]:
+    _require_org_member(db, organization_id)
     if budget_version_id is None and forecast_version_id is None:
         raise HTTPException(
             status_code=400,

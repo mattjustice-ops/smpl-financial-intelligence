@@ -23,6 +23,7 @@ from app.services.predictive_planning.mc_inputs import (
 from app.services.predictive_planning.monte_carlo import DEFAULT_PRIORS, LEVERS
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("plan_assurance_member")
 ORG = str(uuid.uuid4())
 
 MONTHLY_ARR = [75_000_000, 76_310_000, 77_815_000, 79_505_000, 81_385_000, 83_445_000, 86_100_000]

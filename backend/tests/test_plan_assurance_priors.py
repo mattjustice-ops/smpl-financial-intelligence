@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -17,6 +18,7 @@ from app.services.predictive_planning.monte_carlo import (
 from app.services.predictive_planning.priors import MIN_CORRELATION_PAIRS, fit_priors_from_history
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("plan_assurance_member")
 ORG = str(uuid.uuid4())
 
 # Dec'25 BOP + Jan..Jun'26 closed month-end ARR (Forecast Engine demo actuals shape).

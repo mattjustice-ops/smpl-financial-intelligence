@@ -142,6 +142,15 @@ check('re-assessing the same version + simulation does not persist a duplicate',
   /persist: !!versionId && !prior/.test(html) && /persist: !!forecastVersionId && !prior/.test(fc));
 check('canonical Forecast Engine matches public copy', fc === fcCanonical);
 
+// Static handlers win over the /api/v1 rewrite in next.config.js, so these
+// calls carry the session user to the API instead of bypassing auth.
+for (const route of ['assess', 'simulate', 'mc-inputs', 'constraints', 'assessments']) {
+  const file = path.join(root, `app/api/v1/predictive-planning/${route}/route.ts`);
+  const src = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  check(`/predictive-planning/${route} goes through the authenticated proxy`,
+    src.includes(`proxyToBackendAuthed(request, "/api/v1/predictive-planning/${route}")`));
+}
+
 if (failed) {
   console.error(`\n${failed} check(s) failed.`);
   process.exit(1);
