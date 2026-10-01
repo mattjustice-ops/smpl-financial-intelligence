@@ -8255,6 +8255,7 @@ STATE._assureAssessment = STATE._assureAssessment || null;
 STATE._assureAssessmentAt = STATE._assureAssessmentAt || null;
 STATE._assureMethodCard = STATE._assureMethodCard || null;
 STATE._warehouseBudgetVersionId = STATE._warehouseBudgetVersionId || null;
+STATE._warehouseBudgetVersionFp = STATE._warehouseBudgetVersionFp || null;
 STATE._assureMcSeed = STATE._assureMcSeed || 42;
 STATE._assureServerMc = STATE._assureServerMc || null;
 
@@ -8367,6 +8368,28 @@ async function resolveBudgetOrgId() {
   }
 }
 
+/** FNV-1a over the packet JSON — identifies the exact plan an assessment describes. */
+function paPacketFingerprint(packet) {
+  const s = JSON.stringify(packet || {});
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return 'bp-' + h.toString(16).padStart(8, '0');
+}
+
+/**
+ * Saved budget version this packet still matches, else null. An assessment is
+ * keyed to a version only while the plan is exactly what was saved; after any
+ * edit it is transient until the plan is saved again.
+ */
+function budgetVersionBinding(packet) {
+  const id = STATE._warehouseBudgetVersionId;
+  if (!id || !STATE._warehouseBudgetVersionFp) return null;
+  return STATE._warehouseBudgetVersionFp === paPacketFingerprint(packet) ? id : null;
+}
+
 async function fetchPlanAssessment(opts) {
   opts = opts || {};
   const packet = opts.packet || buildBudgetAssurancePacket();
@@ -8375,13 +8398,20 @@ async function fetchPlanAssessment(opts) {
     console.warn('[plan-assurance] no org — keeping local risk fallback');
     return null;
   }
-  const simulation = opts.simulation !== undefined
-    ? opts.simulation
-    : buildSimulationSummaryFromSuite(STATE._assureScenarioSuite);
+  let simulation = opts.simulation;
+  if (simulation === undefined) {
+    const info = getAssureScenarioSuite(packet);
+    simulation = info.suite && !info.stale ? buildSimulationSummaryFromSuite(info.suite) : null;
+  }
+  const versionId = budgetVersionBinding(packet);
+  // One persisted row per (version, simulation): re-assessing the same saved
+  // plan with the same draws does not write a duplicate.
+  const persistKey = versionId ? versionId + '|' + JSON.stringify(simulation || null) : null;
+  const prior = STATE._paPersisted && STATE._paPersisted.key === persistKey ? STATE._paPersisted.id : null;
   const body = {
     plan_ref: {
       organization_id: orgId,
-      budget_version_id: STATE._warehouseBudgetVersionId || null,
+      budget_version_id: versionId,
       scenario: 'budget',
       period_label: packet.period_label,
       budget_year: packet.budget_year,
@@ -8389,7 +8419,8 @@ async function fetchPlanAssessment(opts) {
     packet,
     simulation,
     include_passing_conditions: false,
-    persist: !!(STATE._warehouseBudgetVersionId),
+    persist: !!versionId && !prior,
+    plan_fingerprint: paPacketFingerprint(packet),
     history: buildAssuranceHistoryForPriors(),
     mc_seed: (simulation && simulation.seed != null) ? simulation.seed : null,
     prior_source: null,
@@ -8405,6 +8436,11 @@ async function fetchPlanAssessment(opts) {
     return null;
   }
   const assessment = await res.json();
+  if (assessment.persisted && assessment.assessment_id) {
+    STATE._paPersisted = { key: persistKey, id: assessment.assessment_id };
+  } else if (prior) {
+    assessment.version_assessment_id = prior;
+  }
   STATE._assureAssessment = assessment;
   STATE._assureAssessmentAt = Date.now();
   STATE._assureMethodCard = assessment.method_card || null;
@@ -10486,6 +10522,7 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
     return { ok: false, reason: 'org' };
   }
   if (!orgId) return { ok: false, reason: 'signin' };
+  const savedPacket = buildBudgetAssurancePacket();
   const body = {
     version_name: name,
     as_of_period: CLOSE_MONTH,
@@ -10501,14 +10538,28 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
   if (!draftRes.ok) return { ok: false, reason: 'draft', detail: await draftRes.text() };
   const draft = await draftRes.json();
   STATE._warehouseBudgetVersionId = draft.id;
-  if (status !== 'final') return { ok: true, draft: true, id: draft.id };
-  const promoteRes = await fetch('/api/v1/budget/versions/' + draft.id + '/promote?organization_id=' + encodeURIComponent(orgId), {
-    method: 'POST', credentials: 'include',
-  });
-  if (!promoteRes.ok) return { ok: false, reason: 'promote', detail: await promoteRes.text() };
-  STATE._warehouseBudgetVersionId = draft.id;
-  try { await fetchPlanAssessment({ persist: true }); } catch (e) { /* ignore */ }
-  return { ok: true, promoted: true, id: draft.id };
+  STATE._warehouseBudgetVersionFp = paPacketFingerprint(savedPacket);
+  if (status === 'final') {
+    const promoteRes = await fetch('/api/v1/budget/versions/' + draft.id + '/promote?organization_id=' + encodeURIComponent(orgId), {
+      method: 'POST', credentials: 'include',
+    });
+    if (!promoteRes.ok) return { ok: false, reason: 'promote', detail: await promoteRes.text() };
+  }
+  let assessmentId = null;
+  try {
+    let info = getAssureScenarioSuite(savedPacket);
+    if (!info.suite || info.stale) {
+      await window.refreshAssuranceScenarios(false);
+      info = getAssureScenarioSuite(savedPacket);
+    }
+    const simulation = info.suite && !info.stale ? buildSimulationSummaryFromSuite(info.suite) : null;
+    const a = await fetchPlanAssessment({ packet: savedPacket, orgId, simulation });
+    assessmentId = a ? (a.persisted ? a.assessment_id : (a.version_assessment_id || null)) : null;
+  } catch (e) { /* ignore */ }
+  try { persistBudgetState(); } catch (e) { /* ignore */ }
+  return status === 'final'
+    ? { ok: true, promoted: true, id: draft.id, assessmentId }
+    : { ok: true, draft: true, id: draft.id, assessmentId };
 }
 
 window.saveBudgetVersion = async function(status) {
@@ -10541,6 +10592,7 @@ window.saveBudgetVersion = async function(status) {
     } else {
       warehouseNote = '\n\nWarehouse API unavailable — CSVs downloaded for load via Budget_* manifest.';
     }
+    if (wh.ok && wh.assessmentId) warehouseNote += '\nPlan Assurance assessment saved against this version.';
   } catch (e) {
     warehouseNote = '\n\nWarehouse push skipped — CSVs downloaded.';
   }

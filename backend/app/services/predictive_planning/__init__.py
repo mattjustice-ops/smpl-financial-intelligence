@@ -12,6 +12,7 @@ Surfaces (Budget now; Forecast/Board via adapters) post a plan packet to
 from app.services.predictive_planning.board_citation import (
     assessment_citation_block,
     board_plan_assurance_evidence,
+    board_plan_assurance_for_org,
     metrics_from_plan_assurance,
 )
 from app.services.predictive_planning.constraints import (
@@ -52,6 +53,7 @@ __all__ = [
     "FORECAST_METHOD_NOTES",
     "assessment_citation_block",
     "board_plan_assurance_evidence",
+    "board_plan_assurance_for_org",
     "build_forecast_plan_packet",
     "fit_priors_from_history",
     "generate_what_has_to_be_true",

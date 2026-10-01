@@ -136,6 +136,8 @@ class PlanAssessmentRequest(BaseModel):
     #: Optional seed echoed onto persisted assessment when simulation ran server-side.
     mc_seed: int | None = None
     prior_source: str | None = None
+    #: Engine fingerprint of the plan packet assessed (recorded for audit).
+    plan_fingerprint: str | None = None
 
 
 class SimulateRequest(BaseModel):

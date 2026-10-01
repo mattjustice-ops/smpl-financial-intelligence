@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.models.budget_version import BudgetVersion
+from app.models.forecast_version import ForecastVersion
 from app.schemas.predictive_planning import (
     ConditionOut,
     ConstraintResultOut,
@@ -86,6 +88,22 @@ def _resolved_out(constraints) -> list[ResolvedConstraintOut]:
         )
         for c in constraints
     ]
+
+
+def _version_problem(db: Session, plan_ref) -> str | None:
+    """Why an assessment cannot be keyed to the supplied version ids, if it can't."""
+
+    checks = (
+        ("budget", plan_ref.budget_version_id, BudgetVersion),
+        ("forecast", plan_ref.forecast_version_id, ForecastVersion),
+    )
+    for label, version_id, model in checks:
+        if version_id is None:
+            continue
+        version = db.get(model, version_id)
+        if version is None or version.organization_id != plan_ref.organization_id:
+            return f"{label} version {version_id} was not found for this organization."
+    return None
 
 
 def _record_out(row) -> PlanAssessmentRecordOut:
@@ -176,6 +194,9 @@ def assess_plan(
         notes.append(
             "No plan version supplied — this assessment is transient and should not be cited in a board package."
         )
+    version_problem = _version_problem(db, plan_ref) if body.persist and has_version else None
+    if version_problem:
+        notes.append(f"Not persisted: {version_problem}")
 
     feasibility_out = FeasibilityOut(
         verdict=report.verdict,
@@ -192,11 +213,12 @@ def assess_plan(
         "simulation_summary": simulation_dump,
         "simulation_inputs": prior_view["simulation_inputs"],
         "method_card": method_card,
+        "plan_fingerprint": body.plan_fingerprint,
     }
 
     persisted = False
     assessment_id = None
-    if body.persist and has_version:
+    if body.persist and has_version and not version_problem:
         row = persist_assessment(
             db,
             organization_id=plan_ref.organization_id,

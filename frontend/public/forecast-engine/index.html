@@ -1688,7 +1688,7 @@ async function ensureForecastAssessment(opts){
   const run = window.runForecastPlanAssessment;
   if (typeof run !== 'function') return null;
   const assessment = await run({
-    forecast_version_id: window._warehouseForecastVersionId || opts.forecast_version_id || null,
+    forecast_version_id: opts.forecast_version_id,
     simulation: opts.simulation,
   });
   if (opts.render !== false && curTab === 'analytics') {
@@ -1810,6 +1810,39 @@ function buildFcAssuranceHistoryForPriors(){
   } catch (e) {
     return null;
   }
+}
+
+const FC_PA_BINDING_KEY = 'smpl.forecastEngine.paVersionBinding.v1';
+
+/** FNV-1a over the packet JSON — identifies the exact forecast an assessment describes. */
+function fcPaPacketFingerprint(packet){
+  const s = JSON.stringify(packet || {});
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return 'fp-' + h.toString(16).padStart(8, '0');
+}
+
+function fcSavePaBinding(versionId, packet, orgId){
+  try {
+    localStorage.setItem(FC_PA_BINDING_KEY, JSON.stringify({
+      id: versionId, fp: fcPaPacketFingerprint(packet), orgId: orgId || null,
+    }));
+  } catch (e) { /* storage unavailable */ }
+}
+
+/**
+ * Saved forecast version this packet still matches, else null. Assessments are
+ * keyed to a version only while the forecast is exactly what was saved.
+ */
+function forecastVersionBinding(packet, orgId){
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(FC_PA_BINDING_KEY) || 'null'); } catch (e) { b = null; }
+  if (!b || !b.id || !b.fp) return null;
+  if (orgId && b.orgId && b.orgId !== orgId) return null;
+  return b.fp === fcPaPacketFingerprint(packet) ? b.id : null;
 }
 
 function runFcPacketMonteCarlo(packet, opts) {
@@ -1992,6 +2025,7 @@ async function fetchForecastMonteCarlo(opts){
     };
     window._forecastMcAt = Date.now();
     window._forecastMcSource = source || 'server';
+    window._forecastMcFp = fcPaPacketFingerprint(packet);
     return { result, method_card: window._forecastMcMethodCard, prior_source: source };
   };
 
@@ -2012,7 +2046,7 @@ async function fetchForecastMonteCarlo(opts){
       body: JSON.stringify({
         plan_ref: {
           organization_id: orgId,
-          forecast_version_id: window._warehouseForecastVersionId || null,
+          forecast_version_id: forecastVersionBinding(packet, orgId),
           scenario: 'forecast',
           period_label: packet.period_label,
           budget_year: packet.budget_year,
@@ -7737,6 +7771,7 @@ updLabels();
     if(!name) return;
     const vid='V'+Date.now();
     const asOf=window.SMPL_CLOSE_MONTH||CLOSE_MONTH;
+    const savedPacket=typeof window.buildForecastAssurancePacket==='function'?window.buildForecastAssurancePacket():null;
     const tables=typeof buildForecastTableRows==='function'?buildForecastTableRows(res,lv,vid,orgId,asOf):{};
     const body={
       version_name:name,
@@ -7751,15 +7786,32 @@ updLabels();
     });
     if(!draftRes.ok){alert('Draft save failed: '+await draftRes.text());return;}
     const draft=await draftRes.json();
+    if (savedPacket) fcSavePaBinding(draft.id, savedPacket, orgId);
     if(status==='final'){
       const promoteRes=await fetch('/api/v1/forecast/versions/'+draft.id+'/promote?organization_id='+encodeURIComponent(orgId),{
         method:'POST',credentials:'include'
       });
       if(!promoteRes.ok){alert('Promote failed: '+await promoteRes.text());return;}
-      alert('Promoted to FINAL and loaded into warehouse.');
+    }
+    // Assess the forecast exactly as saved, before hydrate reloads warehouse data.
+    let paNote = '';
+    if (savedPacket) {
+      try {
+        const sim = await fetchForecastMonteCarlo({ packet: savedPacket, orgId });
+        const a = await window.runForecastPlanAssessment({
+          packet: savedPacket,
+          orgId,
+          forecast_version_id: draft.id,
+          simulation: fcSimulationSummaryFromMc(sim && sim.result),
+        });
+        if (a && (a.persisted || a.version_assessment_id)) paNote = '\n\nPlan Assurance assessment saved against this version.';
+      } catch (e) { console.warn('[forecast-assurance] version assessment', e); }
+    }
+    if(status==='final'){
+      alert('Promoted to FINAL and loaded into warehouse.'+paNote);
       await smplHydrate();
     } else {
-      alert('Draft saved server-side.');
+      alert('Draft saved server-side.'+paNote);
     }
     if(typeof showTab==='function') showTab('versions',null);
   };
@@ -7784,14 +7836,17 @@ updLabels();
       try { orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: true }); } catch (e) { orgId = null; }
     }
     if (!orgId) { console.warn('[forecast-assurance] no org'); return null; }
+    const planFp = fcPaPacketFingerprint(packet);
     const forecastVersionId = opts.forecast_version_id != null
       ? opts.forecast_version_id
-      : (window._warehouseForecastVersionId || null);
+      : forecastVersionBinding(packet, orgId);
     const simulation = opts.simulation !== undefined
       ? opts.simulation
-      : (typeof fcSimulationSummaryFromMc === 'function'
-        ? fcSimulationSummaryFromMc(window._forecastServerMc)
-        : null);
+      : (window._forecastMcFp === planFp ? fcSimulationSummaryFromMc(window._forecastServerMc) : null);
+    // One persisted row per (version, simulation): re-assessing the same saved
+    // forecast with the same draws does not write a duplicate.
+    const persistKey = forecastVersionId ? forecastVersionId + '|' + JSON.stringify(simulation || null) : null;
+    const prior = window._fcPaPersisted && window._fcPaPersisted.key === persistKey ? window._fcPaPersisted.id : null;
     const body = {
       plan_ref: {
         organization_id: orgId,
@@ -7801,7 +7856,8 @@ updLabels();
         budget_year: packet.budget_year,
       },
       packet,
-      persist: !!forecastVersionId,
+      persist: !!forecastVersionId && !prior,
+      plan_fingerprint: planFp,
       include_passing_conditions: false,
       history: typeof buildFcAssuranceHistoryForPriors === 'function' ? buildFcAssuranceHistoryForPriors() : null,
     };
@@ -7812,6 +7868,11 @@ updLabels();
     });
     if (!res.ok) { console.warn('[forecast-assurance] /assess failed', res.status, await res.text()); return null; }
     const assessment = await res.json();
+    if (assessment.persisted && assessment.assessment_id) {
+      window._fcPaPersisted = { key: persistKey, id: assessment.assessment_id };
+    } else if (prior) {
+      assessment.version_assessment_id = prior;
+    }
     window._forecastPlanAssessment = assessment;
     window._forecastPlanAssessmentAt = Date.now();
     return assessment;
