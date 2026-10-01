@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { PricingPlanCard } from "@/components/billing/PricingPlanCard";
 import { PRICING_TIER_ORDER } from "@/lib/billing/plans";
-import { sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "SMPL.ai Pricing | SaaS FP&A Plans";
 const description =
@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   title: { absolute: title },
   description,
   alternates: { canonical: url },
-  openGraph: { title, description, url },
-  twitter: { title, description },
+  openGraph: { title, description, url, images: [DEFAULT_OG_IMAGE] },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 export default function PricingPage() {

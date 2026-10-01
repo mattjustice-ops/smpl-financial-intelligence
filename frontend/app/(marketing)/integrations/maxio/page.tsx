@@ -10,7 +10,7 @@ import {
   type Faq,
 } from "@/components/landing/SolutionPage";
 import { otherIntegrations, trademarkNote } from "@/components/landing/integrationsCatalog";
-import { sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const path = "/integrations/maxio";
 const crumb = "Maxio";
@@ -24,8 +24,8 @@ export const metadata: Metadata = {
   description,
   alternates: { canonical: url },
   robots: { index: true, follow: true },
-  openGraph: { title, description, url, type: "website", siteName: "SMPL.ai" },
-  twitter: { title, description },
+  openGraph: { title, description, url, images: [DEFAULT_OG_IMAGE], type: "website", siteName: "SMPL.ai" },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 const WORKFLOWS = [

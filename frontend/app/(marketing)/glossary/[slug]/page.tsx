@@ -7,7 +7,7 @@ import { isSanityConfigured, sanityFetch } from "@/lib/sanity/client";
 import { glossaryBySlugQuery, glossarySlugsQuery } from "@/lib/sanity/queries";
 import type { SanityGlossaryTerm } from "@/lib/sanity/types";
 import { isGlossaryTermIndexable } from "@/lib/seo/glossary";
-import { SITE_NAME, sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, SITE_NAME, sitePageUrl } from "@/lib/site";
 
 export const revalidate = 60;
 
@@ -47,8 +47,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     robots: indexable
       ? { index: true, follow: true }
       : { index: false, follow: true },
-    openGraph: { title, description, url },
-    twitter: { title, description },
+    openGraph: { title, description, url, images: [DEFAULT_OG_IMAGE] },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 

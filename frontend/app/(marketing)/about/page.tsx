@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { BOOK_DEMO_URL } from "@/components/landing/constants";
-import { sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const title = "About SMPL.ai | Why we built financial intelligence for SaaS Finance";
 const description =
@@ -15,8 +15,8 @@ export const metadata: Metadata = {
   description,
   alternates: { canonical: url },
   robots: { index: true, follow: true },
-  openGraph: { title, description, url, type: "website", siteName: "SMPL.ai" },
-  twitter: { title, description },
+  openGraph: { title, description, url, images: [DEFAULT_OG_IMAGE], type: "website", siteName: "SMPL.ai" },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 export default function AboutPage() {

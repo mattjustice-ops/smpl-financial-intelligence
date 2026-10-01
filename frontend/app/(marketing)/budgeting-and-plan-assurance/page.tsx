@@ -9,7 +9,7 @@ import {
   solutionPageLd,
   type Faq,
 } from "@/components/landing/SolutionPage";
-import { sitePageUrl } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, sitePageUrl } from "@/lib/site";
 
 const crumb = "Budgeting & Plan Assurance";
 const title = "SaaS Budgeting Software with Plan Stress Testing | SMPL.ai";
@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   description,
   alternates: { canonical: url },
   robots: { index: true, follow: true },
-  openGraph: { title, description, url, type: "website", siteName: "SMPL.ai" },
-  twitter: { title, description },
+  openGraph: { title, description, url, images: [DEFAULT_OG_IMAGE], type: "website", siteName: "SMPL.ai" },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 const DRIVERS = [

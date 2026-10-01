@@ -4,6 +4,16 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Share image restored on marketing pages (Bing blank logo check)
+
+This entry changes page metadata only, not visible page content. No benchmark was run for it.
+
+- **Trigger:** Matt saw a blank logo next to SMPL.ai on Bing. Site-side check on production (2026-10-01, also fetched as Bingbot): `/favicon.ico` 200 `image/vnd.microsoft.icon`, multi-size 16/32/48, opaque teal brand mark; the 48/96/512 PNG icons, `/apple-touch-icon.png`, and the Organization JSON-LD `logo` (`/brand/icon-512.png`, 512×512) all return 200; apex redirects to www with a 308; robots.txt does not block icon paths. The favicon and logo were already correct. Bing's result for `smpl.ai` still showed the old homepage description, so Bing had not recrawled the current homepage or favicon. Bing Webmaster Tools was only set up on 2026-09-30.
+- **Gap found and fixed:** no marketing page served `og:image` or `twitter:image`. The root layout sets the 1200×630 `/brand/og-image.png`, but each page that sets its own `openGraph` replaces the root object entirely in Next.js, which dropped the image. Bing (result thumbnails), LinkedIn, and other link previews use `og:image`. Added `DEFAULT_OG_IMAGE` in `frontend/lib/site.ts` and passed it from the homepage, the blog post fallback (used when a post has no main image), and 23 other marketing pages. Those pages also now use `twitter:card` `summary_large_image`, matching the root. `/progress` and the login pages are disallowed in robots.txt and left unchanged.
+- After deploy, the homepage is resubmitted through IndexNow. The HTTP response is recorded in the release report.
+
+---
+
 ## 2026-09-30 — IndexNow set up; 19 URLs submitted to Bing / IndexNow
 
 This entry changes crawl notification only, not page content. No benchmark was run for it.
