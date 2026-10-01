@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.organization import Organization
 from app.services.forecast_version_service import get_active_forecast_version
+from app.services.predictive_planning.board_citation import board_plan_assurance_for_org
 from app.services.organizations import get_organization_or_404
 from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 from app.services.reporting.export.board_commentary_service import build_all_slide_commentary
@@ -52,6 +53,8 @@ class BoardPlatformPayload(BaseModel):
     ARR_WATERFALL: dict[str, Any] = Field(default_factory=dict)
     baseline_engine: dict[str, Any] = Field(default_factory=dict)
     commentary: dict[str, dict[str, str]] = Field(default_factory=dict)
+    #: Persisted Plan Assurance assessment for the active forecast version, if any.
+    plan_assurance: dict[str, Any] | None = None
 
 
 def _decimal_to_json(value: Any) -> Any:
@@ -211,6 +214,12 @@ def build_board_platform_payload(
         active_forecast_version_name=active.version_name if active else None,
     )
 
+    try:
+        plan_assurance = board_plan_assurance_for_org(db, org.id)
+    except Exception:
+        db.rollback()
+        plan_assurance = None
+
     return BoardPlatformPayload(
         meta=meta,
         executive=_decimal_to_json(bundle.executive_flow.model_dump(mode="json")),
@@ -223,4 +232,5 @@ def build_board_platform_payload(
         ARR_WATERFALL=outlook.get("ARR_WATERFALL") or {},
         baseline_engine=outlook.get("baseline_engine") or {},
         commentary=commentary,
+        plan_assurance=plan_assurance,
     )

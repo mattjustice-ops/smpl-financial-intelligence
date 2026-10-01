@@ -1,6 +1,7 @@
 /**
  * Budget full-plan Monte Carlo: seeded sampler reproducibility, correlation
- * handling, and the Budget Engine wiring to server-issued inputs.
+ * handling, the Budget Engine wiring to server-issued inputs, and how Budget
+ * and Forecast bind persisted assessments to saved versions.
  *
  * Usage: node scripts/verify-plan-assurance-mc.mjs
  */
@@ -121,6 +122,25 @@ check('suite runs full-plan first and packet model only on failure',
   /mc = await runScenarioMonteCarloAsync\([\s\S]*?\} catch \(e\) \{[\s\S]*?fetchServerMonteCarlo\(/.test(html));
 check('summary records seed, correlations, engine and inputs hash',
   /seed: mc && mc\.seed != null/.test(html) && /inputs_hash: mc \?/.test(html) && /engine: mc \?/.test(html));
+
+const fc = fs.readFileSync(path.join(root, 'public/forecast-engine/index.html'), 'utf8');
+const fcCanonical = fs.readFileSync(path.join(root, 'canonical/forecast-engine/index.html'), 'utf8');
+check('Budget persists only when the plan matches the saved version',
+  /persist: !!versionId/.test(html) && /budget_version_id: versionId/.test(html)
+  && /_warehouseBudgetVersionFp === paPacketFingerprint\(packet\)/.test(html));
+check('Budget save assesses the saved packet against the new version',
+  /STATE\._warehouseBudgetVersionFp = paPacketFingerprint\(savedPacket\)/.test(html)
+  && /fetchPlanAssessment\(\{ packet: savedPacket, orgId, simulation \}\)/.test(html));
+check('Forecast persists only when the forecast matches the saved version',
+  /persist: !!forecastVersionId/.test(fc) && /b\.fp === fcPaPacketFingerprint\(packet\)/.test(fc));
+check('Forecast save assesses the saved packet against the new version',
+  /forecast_version_id: draft\.id/.test(fc) && /fcSavePaBinding\(draft\.id, savedPacket, orgId\)/.test(fc));
+check('Forecast reuses a simulation only for the same packet',
+  /window\._forecastMcFp === planFp/.test(fc));
+check('Forecast never keys assessments off an unset global version id', !/_warehouseForecastVersionId/.test(fc));
+check('re-assessing the same version + simulation does not persist a duplicate',
+  /persist: !!versionId && !prior/.test(html) && /persist: !!forecastVersionId && !prior/.test(fc));
+check('canonical Forecast Engine matches public copy', fc === fcCanonical);
 
 if (failed) {
   console.error(`\n${failed} check(s) failed.`);

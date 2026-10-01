@@ -76,6 +76,37 @@ def board_plan_assurance_evidence(
     return assessment_citation_block(row)
 
 
+def board_plan_assurance_for_org(db: Session, organization_id) -> dict[str, Any] | None:
+    """Evidence for the plan the Board shows: the org's active final forecast version.
+
+    Board figures come from the active forecast version, so only an assessment
+    persisted against that exact version is cited. Assessments for drafts, other
+    versions, or no version are never cited.
+    """
+
+    from app.models.organization import Organization
+    from app.services.forecast_version_service import get_active_forecast_version
+
+    org = db.get(Organization, organization_id)
+    if org is None:
+        return None
+    active = get_active_forecast_version(db, org)
+    if active is None:
+        return None
+    evidence = board_plan_assurance_evidence(
+        db, organization_id, forecast_version_id=active.id
+    )
+    if evidence is None:
+        return None
+    evidence["cited_for"] = {
+        "scenario": "forecast",
+        "forecast_version_id": str(active.id),
+        "forecast_version_name": active.version_name,
+        "as_of_period": active.as_of_period,
+    }
+    return evidence
+
+
 def metrics_from_plan_assurance(evidence: dict[str, Any] | None) -> dict[str, str]:
     """Flatten a citation block into board-slide metric strings (risks slide)."""
 
@@ -97,6 +128,12 @@ def metrics_from_plan_assurance(evidence: dict[str, Any] | None) -> dict[str, st
         "plan_assurance_must_hold": _stmts(must_hold),
         "plan_assurance_prior_source": str(evidence.get("prior_source") or "n/a"),
     }
+    cited_for = evidence.get("cited_for") or {}
+    if cited_for.get("forecast_version_id"):
+        out["plan_assurance_version"] = (
+            f"forecast version {cited_for.get('forecast_version_name') or ''} "
+            f"({cited_for['forecast_version_id']})"
+        ).replace("  ", " ")
     if sim.get("trials") is not None:
         out["plan_assurance_mc_trials"] = str(sim.get("trials"))
     if sim.get("p_cash_below_floor") is not None:

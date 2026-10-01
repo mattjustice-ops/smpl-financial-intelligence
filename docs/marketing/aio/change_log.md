@@ -4,6 +4,19 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Plan Assurance: assessments persist against the saved version; Board cites the active forecast's assessment
+
+This entry changes product behavior (Budget and Forecast engines, predictive-planning API, Board payload), not marketing copy. No benchmark was run for it.
+
+- **Gap:** Forecast never persisted assessments, because the version id it sent was never set. Budget persisted against the last saved version id even after the plan was edited, so an assessment of an unsaved plan could be filed under a saved version. The server accepted any version id. Board AI commentary cited the latest assessment for the organization, whatever plan or version it described.
+- **Fixed (persistence):** saving or promoting a Budget or Forecast version assesses that exact plan against the new version id, with a simulation of that plan. Budget reruns its scenario suite first if it is stale. Each engine fingerprints the plan as saved. Later assessments are filed under the version only while the plan still matches that fingerprint. Once the plan is edited, assessments are transient until it is saved again. Re-assessing the same version with the same simulation does not write a duplicate row. The save confirmation says when the assessment was saved against the version.
+- **Fixed (server):** `/assess` persists only if the version exists and belongs to the organization. Otherwise it returns the assessment with a "Not persisted: …" note. The plan fingerprint is recorded with the assessment.
+- **Fixed (Board):** Board figures come from the organization's active final forecast version. Board AI commentary (risks and board actions) now cites only the latest persisted assessment for that version, and records which version it describes. The Board platform payload exposes the same assessment as `plan_assurance`. If the active version has no persisted assessment, nothing is cited.
+- **Tests:** 6 new backend tests in `test_plan_assurance_version_citation.py`. They cover Forecast and Budget assessments persisting against their versions, unknown or other-organization versions being rejected, Board citing the active version's latest assessment while ignoring older, draft and unversioned ones, and no citation without an assessment or a final forecast. The `verify:plan-assurance-mc` script now also checks the version binding, deduplication, and the Forecast canonical copy.
+- **Not claimed:** Board does not fall back to a budget assessment. The deterministic Board commentary text does not cite Plan Assurance; only the AI-regenerated risks and board-actions slides do. Predictive-planning routes still have no per-user authorization check of their own.
+
+---
+
 ## 2026-10-01 — Plan Assurance: server-issued inputs drive the Budget full-plan Monte Carlo
 
 This entry changes product behavior (Budget and Forecast engines, predictive-planning API), not marketing copy. No benchmark was run for it.

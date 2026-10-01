@@ -930,13 +930,13 @@ def enrich_slide_with_ai(
 
                 from app.db.session import SessionLocal
                 from app.services.predictive_planning.board_citation import (
-                    board_plan_assurance_evidence,
+                    board_plan_assurance_for_org,
                 )
 
                 org_id = _uuid.UUID(str(bundle.organization_id))
                 db = SessionLocal()
                 try:
-                    plan_assurance = board_plan_assurance_evidence(db, org_id)
+                    plan_assurance = board_plan_assurance_for_org(db, org_id)
                 finally:
                     db.close()
             except Exception:

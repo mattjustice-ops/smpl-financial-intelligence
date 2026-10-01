@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.session import get_db
 from app.main import app
+from app.models.budget_version import BudgetVersion
 from app.models.plan_assessment import PlanAssessment
 from app.services.predictive_planning.mc_inputs import (
     FULL_PLAN_ENGINE,
@@ -232,6 +233,7 @@ def sqlite_db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    BudgetVersion.__table__.create(engine)
     PlanAssessment.__table__.create(engine)
     factory = sessionmaker(bind=engine)
 
@@ -250,7 +252,19 @@ def sqlite_db():
 
 
 def test_persisted_assessment_records_priors_actually_used(sqlite_db):
-    budget_version = str(uuid.uuid4())
+    db = sqlite_db()
+    version = BudgetVersion(
+        id=uuid.uuid4(),
+        organization_id=uuid.UUID(ORG),
+        version_name="FY27 Final",
+        status="final",
+        budget_year=2027,
+        as_of_period="2026-06",
+    )
+    db.add(version)
+    db.commit()
+    budget_version = str(version.id)
+    db.close()
     inputs = _inputs(WAREHOUSE, seed=1234)
     sim = _summary_from_inputs(inputs)
     out = _assess(
