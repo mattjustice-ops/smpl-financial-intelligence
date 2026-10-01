@@ -449,6 +449,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 <script src="/shared/smpl-outlook.js?v=18"></script>
 <script src="/shared/smpl-demo-seed.js?v=2"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
+<script src="/shared/smpl-plan-mc.js?v=1"></script>
 <script>
 (function(){
 'use strict';
@@ -1239,7 +1240,7 @@ const BUDGET_EPHEMERAL_SEED_KEYS = new Set([
  * rev 2: GTM spend is committed under shock (a growth miss no longer refunds it).
  * rev 3: cash watch threshold 25% -> 5%; paid-channel shock sized down from ×2.5.
  */
-const PA_STRESS_MODEL_REV = 4;
+const PA_STRESS_MODEL_REV = 5;
 
 const BUDGET_PERSIST_SKIP = new Set([
   ...BUDGET_EPHEMERAL_SEED_KEYS,
@@ -6528,7 +6529,7 @@ function buildPaLeversLivePacket() {
   const bands = approxCashBands(planCash, floorM, decSd);
   return {
     sourceLabel: suite && suite.mc
-      ? `Live · MC n=${suite.mc.n.toLocaleString()} · floor ${fmtM(packet.cashFloor)}`
+      ? `Live · MC n=${suite.mc.n.toLocaleString()} · ${suite.mc.engine === 'server_packet_fallback' ? 'fallback packet model' : 'full-plan engine'} · floor ${fmtM(packet.cashFloor)}`
       : `Live plan cash · run scenarios for MC bands`,
     plan: planCash,
     floor: floorM,
@@ -6549,7 +6550,9 @@ function buildPaLeversLivePacket() {
           ? (paAnalyticsVerdict(suite, packet).big)
           : 'Run scenarios to test what could break this plan.',
         tech: suite && suite.mc
-          ? 'Live Monte Carlo + named shocks on the FY formula graph.'
+          ? (suite.mc.engine === 'server_packet_fallback'
+            ? 'Fallback Monte Carlo on the server packet model + named shocks on the FY formula graph.'
+            : 'Live Monte Carlo + named shocks on the FY formula graph.')
           : 'Pending stress suite — corridor shows plan CFS vs cash floor only.',
       },
       vsmall: {
@@ -7801,7 +7804,7 @@ function renderAnalytics() {
             ${suite && suite.mc
               ? (suiteStale
                 ? `<strong>Saved results</strong> from ${formatAssureRunAt(suite.at) || 'earlier'} — plan has changed since. Regenerate to re-bind the corridor.`
-                : `<strong>Live-bound</strong> · last run ${formatAssureRunAt(suite.at) || '—'} · MC n=${suite.mc.n.toLocaleString()}. Click a scenario chip to draw that path on the corridor.`)
+                : `<strong>Live-bound</strong> · last run ${formatAssureRunAt(suite.at) || '—'} · MC n=${suite.mc.n.toLocaleString()} · ${mcEngineLabel(suite.mc)}. Click a scenario chip to draw that path on the corridor.`)
               : '<strong>Plan cash path live</strong> — Generate scenarios for distribution bands, case lines, and lever ranking.'}
           </div>
           <div class="pa-body" id="assurePredictiveBody">
@@ -8294,7 +8297,7 @@ function buildSimulationSummaryFromSuite(suite) {
     (c.breaks || []).forEach(b => breaks.push(b));
     (c.watches || []).forEach(w => watches.push(w));
   });
-  const mc = suite.mc || STATE._assureServerMc || null;
+  const mc = suite.mc || null;
   const summary = {
     trials: mc && mc.n != null ? mc.n : null,
     breaks: Array.from(new Set(breaks)),
@@ -8303,7 +8306,13 @@ function buildSimulationSummaryFromSuite(suite) {
     p_cash_below_floor: mc && mc.cash ? mc.cash.pBreak : null,
     p_ops_liquidity: mc ? mc.pOpsRisk : null,
     p_ae_short: mc ? mc.pAeShort : null,
-    priors: mc && mc.sig ? { ...mc.sig, source: (mc.prior_source || 'client_or_server') } : null,
+    priors: mc && mc.sig ? { ...mc.sig, source: (mc.prior_source || 'unknown') } : null,
+    seed: mc && mc.seed != null ? mc.seed : null,
+    correlations: mc ? (mc.correlations || {}) : null,
+    engine: mc ? (mc.engine || null) : null,
+    sampler: mc ? (mc.sampler || null) : null,
+    inputs_hash: mc ? (mc.inputs_hash || null) : null,
+    plan_fingerprint: suite.fp || null,
   };
   return summary;
 }
@@ -8382,7 +8391,7 @@ async function fetchPlanAssessment(opts) {
     include_passing_conditions: false,
     persist: !!(STATE._warehouseBudgetVersionId),
     history: buildAssuranceHistoryForPriors(),
-    mc_seed: STATE._assureMcSeed || 42,
+    mc_seed: (simulation && simulation.seed != null) ? simulation.seed : null,
     prior_source: null,
   };
   const res = await fetch('/api/v1/predictive-planning/assess', {
@@ -8403,6 +8412,65 @@ async function fetchPlanAssessment(opts) {
   return assessment;
 }
 
+const MC_DEFAULT_PRIORS = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
+
+/**
+ * Seed, lever priors and correlations for the full-plan Monte Carlo, issued by
+ * POST /mc-inputs. When the server cannot be reached the browser runs with its
+ * defaults and says so on the method card.
+ */
+async function fetchMcInputs(opts) {
+  opts = opts || {};
+  const n = opts.n || 1000;
+  const seed = opts.seed != null ? opts.seed : (STATE._assureMcSeed || 42);
+  const orgId = opts.orgId || await resolveBudgetOrgId();
+  if (orgId) {
+    try {
+      const res = await fetch('/api/v1/predictive-planning/mc-inputs', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan_ref: {
+            organization_id: orgId,
+            budget_version_id: STATE._warehouseBudgetVersionId || null,
+            scenario: 'budget',
+          },
+          history: buildAssuranceHistoryForPriors(),
+          seed,
+          n_trials: n,
+        }),
+      });
+      if (res.ok) return await res.json();
+      console.warn('[plan-assurance] /mc-inputs failed — browser default priors', res.status);
+    } catch (e) {
+      console.warn('[plan-assurance] /mc-inputs unreachable — browser default priors', e && e.message);
+    }
+  }
+  const sampler = (window.SMPLPlanMc && window.SMPLPlanMc.SAMPLER) || null;
+  return {
+    seed,
+    n_trials: n,
+    priors: { ...MC_DEFAULT_PRIORS },
+    prior_source: 'browser_defaults_server_unavailable',
+    correlations: {},
+    sampler,
+    engine: 'full_plan_browser',
+    inputs_hash: null,
+    method_card: {
+      source: 'browser_defaults_server_unavailable',
+      priors: { ...MC_DEFAULT_PRIORS },
+      correlations: {},
+      notes: [
+        'Default priors — the server could not be reached to issue priors, so the browser used its defaults.',
+        'Independent draws — no lever correlations.',
+      ],
+      not_claimed: ['Calibrated Probability of Attainment', 'Causal forecasts of ARR / cash', 'AutoML time-series prediction'],
+    },
+  };
+}
+
+/** Server packet model — fallback only, when the full-plan engine cannot run. */
 async function fetchServerMonteCarlo(opts) {
   opts = opts || {};
   const packet = opts.packet || buildBudgetAssurancePacket();
@@ -8410,15 +8478,12 @@ async function fetchServerMonteCarlo(opts) {
   if (!orgId) return null;
   const n = opts.n || 1000;
   const seed = opts.seed != null ? opts.seed : (STATE._assureMcSeed || 42);
-  const suite = STATE._assureScenarioSuite;
   const breaks = [];
   const watches = [];
-  if (suite && suite.cases) {
-    suite.cases.forEach(c => {
-      (c.breaks || []).forEach(b => breaks.push(b));
-      (c.watches || []).forEach(w => watches.push(w));
-    });
-  }
+  (opts.cases || []).forEach(c => {
+    (c.breaks || []).forEach(b => breaks.push(b));
+    (c.watches || []).forEach(w => watches.push(w));
+  });
   const res = await fetch('/api/v1/predictive-planning/simulate', {
     method: 'POST',
     credentials: 'include',
@@ -8440,14 +8505,97 @@ async function fetchServerMonteCarlo(opts) {
     }),
   });
   if (!res.ok) {
-    console.warn('[plan-assurance] /simulate failed — browser MC fallback', res.status);
+    console.warn('[plan-assurance] /simulate fallback failed', res.status);
     return null;
   }
   const data = await res.json();
-  STATE._assureMcSeed = seed;
   STATE._assureServerMc = data.result;
-  STATE._assureMethodCard = data.method_card || STATE._assureMethodCard;
   return data;
+}
+
+function serverHistToBudgetHist(h) {
+  const edges = (h && h.bins) || [];
+  const counts = (h && h.counts) || [];
+  const n = (h && h.n) || counts.reduce((a, b) => a + b, 0) || 1;
+  const lo = edges.length ? edges[0] : 0;
+  const hi = edges.length ? edges[edges.length - 1] : 1;
+  const width = counts.length ? (hi - lo) / counts.length : 1;
+  return {
+    edges, counts, lo, hi, width, n, mean: (h && h.mean) || 0,
+    density: counts.map(c => c / (n * (width || 1))),
+  };
+}
+
+/** Shape a /simulate packet-model result like a full-plan run, labeled as the fallback. */
+function normalizeServerPacketMc(sim, base) {
+  const r = sim && sim.result;
+  if (!r || !r.arr || !r.cash) return null;
+  const monthly = (((r.cash_path || {}).monthly) || []).map((m, i) => {
+    const idx = m.month_index != null ? m.month_index : i;
+    return {
+      period: (typeof BUD_P !== 'undefined' && BUD_P[idx]) ? BUD_P[idx] : String(idx + 1),
+      p10: m.p10, p50: m.p50, p90: m.p90, mean: m.p50, lo: m.p10, hi: m.p90,
+      pBelowFloor: m.pBelowFloor,
+    };
+  });
+  const worstMonth = monthly.reduce(
+    (w, m) => (w == null || (m.pBelowFloor || 0) > (w.pBelowFloor || 0) ? m : w),
+    null
+  );
+  const sig = r.sig || {};
+  const corr = r.correlations || {};
+  const corrKeys = Object.keys(corr).filter(k => Math.abs(corr[k]) > 1e-9);
+  return {
+    n: r.n,
+    sig,
+    seed: r.seed,
+    correlations: corr,
+    prior_source: r.prior_source || sim.prior_source,
+    engine: 'server_packet_fallback',
+    sampler: null,
+    inputs_hash: null,
+    method: r.method,
+    cashFloor: base.cashFloor,
+    whatItIs: [
+      'Fallback: the full-plan engine could not run, so these figures come from the server packet model.',
+      'It shocks the same four levers on the plan summary with simplified elasticities instead of recomputing the formula graph, so it is coarser than the full-plan run.',
+      `${r.n} seeded draws (seed ${r.seed}).`,
+    ],
+    cashPath: {
+      monthly,
+      trough: r.trough ? { ...r.trough, pBreachAnyMonth: r.p_trough_breach } : null,
+      worstMonth,
+    },
+    assumptions: [
+      `Δ YoY ARR growth ~ N(0, ${sig.yoyPp}pp)`,
+      `CPL multiplier ~ LogNormal(0, ${sig.cplLog})`,
+      `Attrition ~ N(base, ${sig.attrPp}pp) truncated ≥0`,
+      `Pipeline cover ~ N(base, ${sig.pipe}×) truncated ≥1×`,
+      corrKeys.length ? `Correlated levers: ${corrKeys.map(k => `${k} ρ=${(+corr[k]).toFixed(2)}`).join(', ')}.` : 'Levers drawn independently per sample.',
+    ],
+    arr: { hist: serverHistToBudgetHist(r.arr.hist), mean: r.arr.mean, sd: r.arr.sd, pMiss: r.arr.pMiss },
+    cash: {
+      hist: serverHistToBudgetHist(r.cash.hist), mean: r.cash.mean, sd: r.cash.sd,
+      pBreak: r.cash.pBreak, pWatch25: r.cash.pWatch25 || 0, pAlarm50: 0,
+    },
+    ebitda: { mean: base.fyEbitda },
+    pAeShort: r.p_ae_short,
+    pOpsRisk: r.p_ops_liquidity,
+    pArrMissAnalytic: 1 - normalCdf(base.targetArr * 0.995, r.arr.mean, r.arr.sd || 1),
+    pCashBreakAnalytic: normalCdf(base.cashFloor, r.cash.mean, r.cash.sd || 1),
+    method_card: sim.method_card || null,
+  };
+}
+
+function mcEngineLabel(mc) {
+  if (!mc) return '';
+  if (mc.engine === 'server_packet_fallback') {
+    return 'Fallback: server packet model (full-plan engine could not run)';
+  }
+  if (mc.prior_source === 'browser_defaults_server_unavailable') {
+    return `Full-plan engine · browser default priors (server unavailable) · seed ${mc.seed}`;
+  }
+  return `Full-plan engine · server-issued priors (${mc.prior_source || 'unknown'}) · seed ${mc.seed}`;
 }
 
 function renderWhttHtml(assessment, mode) {
@@ -8495,9 +8643,20 @@ function renderMethodCardHtml(card) {
   const extra = (card.notes || []).slice(1, 3)
     .map(n => `<div style="font-size:11px;color:var(--text3);margin-top:2px">${String(n).replace(/</g, '&lt;')}</div>`)
     .join('');
+  const sim = card.simulation || null;
+  const simBits = sim ? [
+    sim.engine === 'server_packet_fallback' ? 'Engine: server packet model (fallback)'
+      : sim.engine === 'full_plan_browser' ? 'Engine: full-plan formula graph' : (sim.engine ? `Engine: ${sim.engine}` : ''),
+    sim.seed != null ? `seed ${sim.seed}` : '',
+    sim.trials != null ? `${sim.trials} draws` : '',
+    sim.inputs_hash ? `inputs ${sim.inputs_hash}` : '',
+    sim.matches_server_fit === true ? 'priors match the server fit'
+      : sim.matches_server_fit === false ? 'priors differ from the server fit' : '',
+  ].filter(Boolean).join(' · ') : '';
   return `<div class="pa-method-card"><div class="pa-card-lbl" style="margin-bottom:6px">Method & limits</div>
     <div style="font-size:12px;color:var(--text2)">${String(card.source || '').replace(/</g, '&lt;')} — ${(card.notes && card.notes[0] || '').replace(/</g, '&lt;')}</div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">Priors: ${priorBits.replace(/</g, '&lt;') || '—'}</div>
+    ${simBits ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${simBits.replace(/</g, '&lt;')}</div>` : ''}
     ${extra}
     <div style="font-size:11px;color:var(--text3);margin-top:2px">Not claimed: ${notClaimed.replace(/</g, '&lt;') || 'PoA / AutoML forecasting'}</div>
   </div>`;
@@ -9182,14 +9341,6 @@ function buildScenarioCaseDefs(hist) {
   return defs;
 }
 
-/** Box-Muller normal sample. */
-function randn() {
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
 function normalPdf(x, mu, sigma) {
   if (sigma <= 0) return 0;
   const z = (x - mu) / sigma;
@@ -9324,51 +9475,6 @@ function svgHistogramWithNormal(hist, mu, sigma, fmtTick) {
     `<text x="${W / 2}" y="${H - 1}" text-anchor="middle" fill="rgba(170,184,162,0.75)" font-size="9" font-family="var(--mono)">${mid} · n=${hist.n}</text></svg>`;
 }
 
-function runScenarioMonteCarlo(base, snap, n) {
-  // Sync helper kept for small n; prefer runScenarioMonteCarloAsync for large n.
-  n = n || 200;
-  const arrSamples = [];
-  const cashSamples = [];
-  const ebitdaSamples = [];
-  const cashPaths = [];
-  const troughSamples = [];
-  let pTroughBreach = 0;
-  let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch25 = 0, pAlarm50 = 0;
-  const sig = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
-  for (let i = 0; i < n; i++) {
-    restoreScenarioLevers(snap);
-    const dy = randn() * sig.yoyPp;
-    const dcpl = Math.exp(randn() * sig.cplLog);
-    const dattr = Math.max(0, (snap.salesAttritionPct || 0) + randn() * sig.attrPp);
-    const dpipe = Math.max(1.0, (snap.pipelineCoverageMult || 3) + randn() * sig.pipe);
-    STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + dy);
-    rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
-    scaleAllGtmCpl(dcpl);
-    STATE.salesAttritionPct = dattr;
-    STATE.pipelineCoverageMult = dpipe;
-    const s = buildBudgetAssurancePacket();
-    arrSamples.push(s.decArr);
-    cashSamples.push(s.endCash);
-    ebitdaSamples.push(s.fyEbitda);
-    // Keep the whole monthly cash path per draw. December alone cannot show a
-    // mid-year trough, and the trough is the month that actually needs financing.
-    if (s.cashByMonth) cashPaths.push(s.cashByMonth.slice());
-    if (s.minCash != null) {
-      troughSamples.push(s.minCash);
-      if (s.minCash < base.cashFloor) pTroughBreach += 1;
-    }
-    if (s.decArr < base.targetArr * 0.995) pArrMiss += 1;
-    if (s.endCash < base.cashFloor) pCashBreak += 1;
-    if (s.salesEnd < s.aeNeeded) pAeShort += 1;
-    const drop = (base.endCash - s.endCash) / Math.max(1, base.endCash);
-    if (drop >= 0.25) pWatch25 += 1;
-    if (drop >= 0.50) pAlarm50 += 1;
-    if (s.endCash < base.cashFloor || drop >= 0.50) pOpsRisk += 1;
-  }
-  restoreScenarioLevers(snap);
-  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, { cashPaths, troughSamples, pTroughBreach });
-}
-
 function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, pathData) {
   const arrHist = histogram(arrSamples, 16);
   const cashHist = histogram(cashSamples, 16);
@@ -9436,8 +9542,20 @@ function finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples
   };
 }
 
-async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
+/**
+ * Full-plan Monte Carlo: every draw shocks the four levers and recomputes the
+ * closed formula graph. Seed, priors and correlations come from `inputs`
+ * (server-issued via fetchMcInputs), drawn with the shared seeded sampler, so
+ * the same inputs on the same plan reproduce the same summary.
+ */
+async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
   n = n || 1000;
+  if (!window.SMPLPlanMc) throw new Error('SMPLPlanMc sampler not loaded');
+  inputs = inputs || {};
+  const priors = inputs.priors || MC_DEFAULT_PRIORS;
+  const corr = inputs.correlations || {};
+  const seed = inputs.seed != null ? inputs.seed : 42;
+  const sampler = window.SMPLPlanMc.createLeverSampler({ seed, correlations: corr });
   const arrSamples = [];
   const cashSamples = [];
   const ebitdaSamples = [];
@@ -9445,14 +9563,15 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
   const troughSamples = [];
   let pTroughBreach = 0;
   let pArrMiss = 0, pCashBreak = 0, pAeShort = 0, pOpsRisk = 0, pWatch25 = 0, pAlarm50 = 0;
-  const sig = { yoyPp: 3.2, cplLog: 0.28, attrPp: 2.5, pipe: 0.55 };
+  const sig = { yoyPp: +priors.yoyPp, cplLog: +priors.cplLog, attrPp: +priors.attrPp, pipe: +priors.pipe };
   const chunk = 20;
   for (let i = 0; i < n; i++) {
     restoreScenarioLevers(snap);
-    const dy = randn() * sig.yoyPp;
-    const dcpl = Math.exp(randn() * sig.cplLog);
-    const dattr = Math.max(0, (snap.salesAttritionPct || 0) + randn() * sig.attrPp);
-    const dpipe = Math.max(1.0, (snap.pipelineCoverageMult || 3) + randn() * sig.pipe);
+    const z = sampler.next();
+    const dy = z.yoyPp * sig.yoyPp;
+    const dcpl = Math.exp(z.cplLog * sig.cplLog);
+    const dattr = Math.max(0, (snap.salesAttritionPct || 0) + z.attrPp * sig.attrPp);
+    const dpipe = Math.max(1.0, (snap.pipelineCoverageMult || 3) + z.pipe * sig.pipe);
     STATE.yoyEndingArrGrowthPct = Math.max(0, snap.yoyEndingArrGrowthPct + dy);
     rebuildMixPathForYoy(STATE.yoyEndingArrGrowthPct);
     scaleAllGtmCpl(dcpl);
@@ -9482,7 +9601,22 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress) {
     }
   }
   restoreScenarioLevers(snap);
-  return finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, { cashPaths, troughSamples, pTroughBreach });
+  const mc = finalizeMonteCarlo(base, n, sig, arrSamples, cashSamples, ebitdaSamples, pArrMiss, pCashBreak, pAeShort, pOpsRisk, pWatch25, pAlarm50, { cashPaths, troughSamples, pTroughBreach });
+  const corrKeys = Object.keys(corr).filter(k => Math.abs(corr[k]) > 1e-9);
+  mc.seed = seed;
+  mc.correlations = { ...corr };
+  mc.prior_source = inputs.prior_source || 'unknown';
+  mc.engine = 'full_plan_browser';
+  mc.sampler = window.SMPLPlanMc.SAMPLER;
+  mc.inputs_hash = inputs.inputs_hash || null;
+  mc.method_card = inputs.method_card || null;
+  mc.whatItIs[0] = `${n} seeded draws of a full-year plan (seed ${seed}).`;
+  mc.assumptions = mc.assumptions.map(a => (a === 'Levers drawn independently per sample.'
+    ? (corrKeys.length
+      ? `Correlated levers: ${corrKeys.map(k => `${k} ρ=${(+corr[k]).toFixed(2)}`).join(', ')}.`
+      : a)
+    : a));
+  return mc;
 }
 
 function runScenarioSensitivity(base, snap, leverId) {
@@ -9563,8 +9697,10 @@ function buildScenarioNarrativeFromSuite(suite) {
   if (suite.mc) {
     const mc = suite.mc;
     lines.push(
-      `Monte Carlo (${mc.n.toLocaleString()} draws): each draw shocks four annual levers once and recomputes the full plan — ` +
-      `it is a distribution estimate, not thousands of month-by-month path combinations. ` +
+      (mc.engine === 'server_packet_fallback'
+        ? `Monte Carlo fallback (${mc.n.toLocaleString()} draws, server packet model): the full-plan engine could not run, so each draw shocks four annual levers on the plan summary with simplified elasticities — coarser than the full-plan run. `
+        : `Monte Carlo (${mc.n.toLocaleString()} seeded draws, seed ${mc.seed}): each draw shocks four annual levers once and recomputes the full plan — ` +
+          `it is a distribution estimate, not thousands of month-by-month path combinations. `) +
       `P(ARR miss) ${(mc.arr.pMiss * 100).toFixed(1)}%, P(cash < floor) ${(mc.cash.pBreak * 100).toFixed(1)}%, ` +
       `P(ops liquidity risk) ${((mc.pOpsRisk || 0) * 100).toFixed(1)}%, P(AE short) ${(mc.pAeShort * 100).toFixed(1)}%.`,
     );
@@ -9605,9 +9741,18 @@ async function runScenarioStressSuite(opts) {
     let mc = null;
     let sens = null;
     if (withMc) {
-      mc = await runScenarioMonteCarloAsync(base, snap, opts.mcN || 1000, (done, total) => {
-        if (onProgress) onProgress('mc', done, total);
-      });
+      const mcN = opts.mcN || 1000;
+      const inputs = await fetchMcInputs({ n: mcN });
+      try {
+        mc = await runScenarioMonteCarloAsync(base, snap, mcN, (done, total) => {
+          if (onProgress) onProgress('mc', done, total);
+        }, inputs);
+      } catch (e) {
+        console.warn('[plan-assurance] full-plan Monte Carlo failed — server packet fallback', e);
+        restoreScenarioLevers(snap);
+        const sim = await fetchServerMonteCarlo({ packet: base, n: mcN, seed: inputs.seed, cases });
+        mc = normalizeServerPacketMc(sim, base);
+      }
       if (onProgress) onProgress('sens', 0, 2);
       sens = {
         yoy: runScenarioSensitivity(base, snap, 'yoy'),
@@ -9642,15 +9787,13 @@ async function runScenarioStressSuite(opts) {
     suite.narrative = buildScenarioNarrativeFromSuite(suite);
     STATE._assureScenarioSuite = suite;
     STATE._assureScenarioNarrative = suite.narrative;
+    if (mc) {
+      STATE._assureMcSeed = mc.seed;
+      if (mc.method_card) STATE._assureMethodCard = mc.method_card;
+    }
     try {
-      const sim = await fetchServerMonteCarlo({ packet: buildBudgetAssurancePacket(), n: (suite.mc && suite.mc.n) || 1000 });
-      if (sim && suite) {
-        suite.serverMc = sim.result;
-        suite.method_card = sim.method_card;
-        if (!suite.mc) suite.mc = sim.result;
-      }
       await fetchPlanAssessment({ packet: buildBudgetAssurancePacket(), simulation: buildSimulationSummaryFromSuite(suite) });
-    } catch (e) { console.warn('[plan-assurance] post-scenario assess/simulate', e); }
+    } catch (e) { console.warn('[plan-assurance] post-scenario assess', e); }
 
     return suite;
   } catch (e) {

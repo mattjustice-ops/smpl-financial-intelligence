@@ -18,6 +18,8 @@ from app.schemas.predictive_planning import (
     ConditionOut,
     ConstraintResultOut,
     FeasibilityOut,
+    McInputsOut,
+    McInputsRequest,
     PlanAssessmentOut,
     PlanAssessmentRecordOut,
     PlanAssessmentRequest,
@@ -30,6 +32,11 @@ from app.services.predictive_planning.board_citation import assessment_citation_
 from app.services.predictive_planning.constraints import resolve_constraints
 from app.services.predictive_planning.feasibility import run_feasibility
 from app.services.predictive_planning.forecast_adapter import FORECAST_METHOD_NOTES
+from app.services.predictive_planning.mc_inputs import (
+    PACKET_ENGINE,
+    build_mc_inputs,
+    reconcile_simulation_priors,
+)
 from app.services.predictive_planning.monte_carlo import run_packet_monte_carlo
 from app.services.predictive_planning.persistence import (
     get_assessment,
@@ -119,8 +126,15 @@ def assess_plan(
 
     packet = body.packet.model_dump(by_alias=False)
 
-    prior_fit = fit_priors_from_history(body.history)
-    prior_source = body.prior_source or prior_fit["prior_source"]
+    simulation_dump = body.simulation.model_dump() if body.simulation else None
+    prior_view = reconcile_simulation_priors(body.history, simulation_dump)
+    method_card = prior_view["method_card"]
+    prior_source = body.prior_source or prior_view["prior_source"]
+    mc_seed = (
+        body.simulation.seed
+        if body.simulation is not None and body.simulation.seed is not None
+        else body.mc_seed
+    )
 
     constraints = resolve_constraints(
         packet=packet,
@@ -153,7 +167,7 @@ def assess_plan(
         sources.append("caller.simulation_summary")
 
     notes = list(METHOD_NOTES)
-    notes.extend(prior_fit["method_card"]["notes"][:2])
+    notes.extend(prior_view["notes"])
     if plan_ref.scenario == "forecast":
         notes.extend(FORECAST_METHOD_NOTES)
 
@@ -175,8 +189,9 @@ def assess_plan(
         "feasibility": feasibility_out.model_dump(),
         "what_has_to_be_true": [c.model_dump() for c in whtt_out],
         "constraints_applied": [c.model_dump() for c in constraints_out],
-        "simulation_summary": body.simulation.model_dump() if body.simulation else None,
-        "method_card": prior_fit["method_card"],
+        "simulation_summary": simulation_dump,
+        "simulation_inputs": prior_view["simulation_inputs"],
+        "method_card": method_card,
     }
 
     persisted = False
@@ -193,10 +208,10 @@ def assess_plan(
             as_of=plan_ref.as_of or datetime.now(timezone.utc),
             feasibility_verdict=report.verdict,
             assessment=assessment_payload,
-            simulation_summary=body.simulation.model_dump() if body.simulation else None,
+            simulation_summary=simulation_dump,
             method_notes=notes,
             prior_source=prior_source,
-            mc_seed=body.mc_seed,
+            mc_seed=mc_seed,
         )
         db.commit()
         persisted = True
@@ -213,8 +228,30 @@ def assess_plan(
         persisted=persisted,
         assessment_id=assessment_id,
         prior_source=prior_source,
-        method_card=prior_fit["method_card"],
+        method_card=method_card,
         _sources=sources,
+    )
+
+
+@predictive_planning_router.post("/mc-inputs", response_model=McInputsOut)
+def get_mc_inputs(body: McInputsRequest) -> McInputsOut:
+    """Seed, lever priors and correlations for a Budget full-plan Monte Carlo run."""
+
+    issued = build_mc_inputs(body.history, seed=body.seed, n_trials=body.n_trials)
+    plan_ref = body.plan_ref.model_copy(
+        update={"as_of": body.plan_ref.as_of or datetime.now(timezone.utc)}
+    )
+    return McInputsOut(
+        plan_ref=plan_ref,
+        seed=issued["seed"],
+        n_trials=issued["n_trials"],
+        priors=issued["priors"],
+        prior_source=issued["prior_source"],
+        correlations=issued["correlations"],
+        sampler=issued["sampler"],
+        engine=issued["engine"],
+        inputs_hash=issued["inputs_hash"],
+        method_card=issued["method_card"],
     )
 
 
@@ -242,6 +279,9 @@ def simulate_plan(body: SimulateRequest) -> SimulateOut:
     summary = result.to_simulation_summary()
     summary["breaks"] = list(body.breaks)
     summary["watches"] = list(body.watches)
+    summary["seed"] = body.seed
+    summary["correlations"] = dict(result.correlations)
+    summary["engine"] = PACKET_ENGINE
 
     plan_ref = body.plan_ref.model_copy(
         update={

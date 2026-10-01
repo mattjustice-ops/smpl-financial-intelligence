@@ -5,8 +5,9 @@ calibrated Probability of Attainment.
 
 v1 propagates lever shocks onto the supplied deterministic plan packet
 (ARR / cash path / capacity) with seeded RNG so the same (packet, priors, seed)
-reproduces. Full Budget formula-graph recomputation remains available client-side
-as a fallback; server runs are the diligence-grade SoT for persisted assessments.
+reproduces. This simplified packet model is the Forecast Engine's primary
+simulation and the Budget Engine's fallback; Budget's primary run recomputes the
+full formula graph in the browser with server-issued inputs (see mc_inputs.py).
 """
 
 from __future__ import annotations
