@@ -4,6 +4,15 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Plan Assurance: framework doc matches what shipped; marketing page rechecked (no copy change)
+
+This entry changes an internal product doc only. No marketing copy changed and no benchmark was run.
+
+- **Doc:** `docs/product/SMPL_Predictive_Planning_Intelligence_Framework.md` now describes the shipped state. Budget runs its full-plan Monte Carlo in the browser on server-issued seeded inputs, with the server packet model as a labeled fallback. Forecast uses the server packet model. Only the ARR growth volatility prior is fitted from history, and current data has too few pairs for correlations. Assessments persist against the saved version. Board AI commentary cites the active forecast version's assessment. Known gaps are listed: no per-user authorization on predictive-planning routes, no server-side rebuild of a packet from a stored version, no drift alerts, and no calibrated PoA, trajectory or accuracy store.
+- **Page recheck:** each concrete claim on the live `/budgeting-and-plan-assurance` page was checked against the code. That covers the 15 constraints and their list, pass/warn/fail/advisory with skipped never counted as a pass, the What Has to Be True groups, the named stress cases, and 1,000 draws of four annual assumptions, each sampled once per draw and run through the full monthly model, with monthly P10–P90 cash bands, the cash low point and tightest month, and any-month versus December floor breaches. It also covers "stress frequency, not a calibrated probability of attainment", the assumption ranges shown on screen, and AI not computing figures. All are accurate, so the copy is unchanged. The page makes no claim about fitted priors, reproducibility or Board citation.
+
+---
+
 ## 2026-10-01 — Plan Assurance: assessments persist against the saved version; Board cites the active forecast's assessment
 
 This entry changes product behavior (Budget and Forecast engines, predictive-planning API, Board payload), not marketing copy. No benchmark was run for it.
