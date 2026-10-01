@@ -1,10 +1,10 @@
 # SMPL.ai Predictive Planning Intelligence Framework
 
-> **Status:** Plan Assurance platform engine shipped for Budget (SoT `/assess`, WHTT UI, persist, server MC, priors). Forecast adapter + Board citation hooks in place. Calibrated PoA / Act loop still unbuilt. See §0.1.  
+> **Status:** Plan Assurance runs for Budget and Forecast through `/assess` (feasibility, WHTT). Budget simulates the full plan in the browser with server-issued seeded inputs. Forecast uses the server packet model. Assessments persist against the saved version, and Board AI commentary cites the active forecast version's assessment. Calibrated PoA, trajectory, accuracy store and the Act loop are still unbuilt. See §0.1.  
 > **Audience:** Product, eng, founder alignment — not marketing.  
 > **Related:** [SMPL_Budget_Methodology.md](./SMPL_Budget_Methodology.md) · [SMPL_Agent_and_Predictive_Analytics_Checklist.md](./SMPL_Agent_and_Predictive_Analytics_Checklist.md) · [Forecasting_Assumptions.md](../Forecasting_Assumptions.md) · [Architecture_Master.md](../Architecture_Master.md) · [AI_SKILL_PRACTICES.md](../AI_SKILL_PRACTICES.md) · [Reporting_Logic.md](../Reporting_Logic.md)
 
-**Last updated:** 2026-09-21 (Plan Assurance platform engine: `/assess` SoT + WHTT UI + persist + server MC + priors)
+**Last updated:** 2026-10-01 (history priors and correlations; server-issued Monte Carlo inputs; version-keyed persistence; Board citation of the active forecast version)
 
 ---
 
@@ -23,30 +23,33 @@ This document was written plan-first on 2026-08-28 and told the team not to buil
 
 Watch-out #3 in §6 ("resist jumping to Monte Carlo for demos") was overtaken by a demo deadline. That is a real inversion, not a documentation error: **simulation is running on top of a constraint layer that was only formalized afterwards.**
 
-### Platform engine status (2026-09-21)
+### Platform engine status (2026-10-01)
 
-Plan Assurance is now a **platform service** consumed by Budget (first), with Forecast adapter + Board citation hooks.
+Plan Assurance is a **platform service** used by Budget and Forecast, with persisted assessments cited in Board AI commentary.
 
-- **Live SoT:** Budget Analytics posts `buildBudgetAssurancePacket()` to `POST /api/v1/predictive-planning/assess`. Feasibility severities and WHTT come from Python. `runBudgetRiskChecks` remains an offline/parity fallback only.
-- **WHTT UI:** Analytics status lane renders `must_close` / `must_confirm` / `must_hold` from the assessment artifact.
-- **Persistence:** `plan_assessments` table (`ppi_001`). `/assess` persists when `budget_version_id` or `forecast_version_id` is supplied; `GET /assessments` for Board citation.
-- **Server MC:** `POST /api/v1/predictive-planning/simulate` — seeded packet-path Monte Carlo; Budget calls it after scenario generation (browser MC remains fallback).
-- **Priors:** `fit_priors_from_history` — history-fit when series exist; otherwise honest `independent_defaults` + method card (still not PoA).
-- **Forecast adapter:** `build_forecast_plan_packet` + `scenario: "forecast"` method notes; same `/assess` engine.
-- **Board citation:** risks/board-actions slide metrics merge persisted assessment WHTT + MC stress frequencies when available.
+- **Live SoT:** Budget posts `buildBudgetAssurancePacket()` and Forecast posts `buildFcAssurancePacket()` to `POST /api/v1/predictive-planning/assess`. Feasibility severities and WHTT come from Python. `runBudgetRiskChecks` remains an offline fallback only.
+- **WHTT UI:** both engines render `must_close` / `must_confirm` / `must_hold` from the assessment artifact.
+- **Monte Carlo, Budget:** `POST /mc-inputs` issues the seed, lever priors, applied correlations, sampler id (`mulberry32_box_muller_cholesky_v1`) and an inputs hash. The browser runs 1,000 draws through the full Budget formula graph with exactly those inputs (`/shared/smpl-plan-mc.js`). The same seed and inputs on the same plan reproduce the same results. The server packet model (`/simulate`) runs only if the full-plan engine cannot, and is labeled as the fallback. If `/mc-inputs` is unreachable, the browser uses default priors and the method card says so.
+- **Monte Carlo, Forecast:** the server packet model (`/simulate`, seeded) is primary, with a labeled browser packet fallback. It is a simplified packet model, not the full formula graph.
+- **Card, chart and record agree:** `/assess` reconciles the priors, seed, correlations, engine and inputs hash the simulation actually used (`reconcile_simulation_priors`). The method card shows the priors used. If they differ from the server's fit, the card says so and claims nothing as fitted.
+- **Priors:** `fit_priors_from_history` fits only the ARR growth volatility prior: sd of monthly growth × √12 from closed-month warehouse ending ARR, with at least three growth rates. Cost per lead, sales attrition and pipeline coverage keep defaults (`history_partial`). Demo or backcast data is never fitted. Breach rates are still stress frequency, not PoA.
+- **Correlations:** levers are drawn jointly through a Cholesky factor when correlations are supplied, or fitted from at least 12 paired observations. Inconsistent sets are shrunk until valid. No current customer or demo data has 12 pairs, so draws are independent in practice and the card says "Independent draws".
+- **Persistence:** `plan_assessments` (`ppi_001`). Saving or promoting a Budget or Forecast version assesses that exact packet, with a fresh simulation, against the new version id. Each engine records a fingerprint of the saved packet. Later assessments are filed under the version only while the packet still matches it. After an edit they are transient until the next save. Re-assessing the same version with the same simulation does not write a duplicate. `/assess` persists only if the version exists and belongs to the organization; otherwise it notes "Not persisted: …".
+- **Board citation:** `board_plan_assurance_for_org` cites only the latest assessment persisted against the organization's active final forecast version, because Board figures come from that version. It feeds the AI-regenerated risks and board-actions slides and `BoardPlatformPayload.plan_assurance`. There is no fallback to a budget assessment, and the deterministic Board commentary does not cite Plan Assurance.
+- **Known gaps:** predictive-planning routes have no per-user authorization check of their own. The server never rebuilds a packet from a stored version; it assesses the packet the engine supplies (bound to the version by fingerprint). There are no post-lock drift alerts.
 
-### Phase 1 objects (updated 2026-09-21)
+### Phase 1 objects (updated 2026-10-01)
 
 | Deliverable | Status | Where |
 |-------------|--------|-------|
-| Constraints registry (tenant + version overlay) | **Shipped** | `app/services/predictive_planning/constraints.py` |
+| Constraints registry (tenant + version overlay) | **Shipped** | `app/services/predictive_planning/constraints.py` (15 constraints) |
 | Feasibility runner (pass / warn / fail) | **Shipped — live SoT** | `feasibility.py` via `/assess` |
-| What Has to Be True generator + UI | **Shipped** | `what_has_to_be_true.py` + Budget Analytics WHTT panel |
-| Assessment DTO + API | **Shipped** | `/constraints`, `/assess`, `/simulate`, `/assessments` |
-| Assessment persistence | **Shipped** | `plan_assessments` + persist on versioned `/assess` |
-| Server Monte Carlo | **Shipped (v1 packet path)** | `monte_carlo.py` — stress frequency under stated priors, not PoA |
-| History priors | **Shipped (fit or honest defaults)** | `priors.py` + method card |
-| Forecast / Board adapters | **Shipped (thin)** | `forecast_adapter.py`, `board_citation.py` |
+| What Has to Be True generator + UI | **Shipped** | `what_has_to_be_true.py` + Budget and Forecast WHTT panels |
+| Assessment DTO + API | **Shipped** | `/constraints`, `/assess`, `/mc-inputs`, `/simulate`, `/assessments` |
+| Assessment persistence | **Shipped — version-validated** | `plan_assessments`; persisted at save/promote and while the packet matches the saved fingerprint |
+| Monte Carlo | **Shipped** | Budget: full-plan browser engine on server-issued inputs (`mc_inputs.py`, `smpl-plan-mc.js`). Forecast and fallback: `monte_carlo.py` packet model. Stress frequency under stated priors, not PoA |
+| History priors + correlations | **Shipped (ARR growth only on current data)** | `priors.py` + method card; correlations need ≥12 pairs |
+| Forecast / Board adapters | **Shipped** | `forecast_adapter.py`; `board_citation.py` cites the active forecast version's assessment |
 
 ### Naming discipline (unchanged and now load-bearing)
 
@@ -157,22 +160,22 @@ flowchart LR
 
 ### 3.2 Missing (relative to full PPI)
 
-> **Updated 2026-09-08.** Several rows below were "Missing" on 08-28 and are now shipped. See §0.1 for the divergence between the shipped JS implementation and this module plan.
+> **Updated 2026-10-01.** Several rows below were "Missing" on 08-28 and are now shipped. See §0.1 for the divergence between the shipped JS implementation and this module plan.
 
 | Capability | Status |
 |------------|--------|
-| Plan Feasibility service (cross-domain constraint pack) | **Shipped** — `feasibility.py`, 15 constraints. **Partial:** runs on a supplied packet, not yet on a promoted forecast version |
+| Plan Feasibility service (cross-domain constraint pack) | **Shipped** — `feasibility.py`, 15 constraints. **Partial:** runs on a packet supplied by the Budget or Forecast engine. At save/promote that packet is the saved version's, but the server does not rebuild it from the stored version |
 | Probability of Attainment for plan-level KPIs (ARR, bookings, cash, EBITDA) | **Missing** (bookings confidence ≠ plan PoA; Monte Carlo breach frequency ≠ PoA) |
 | Trajectory vs Budget/Forecast path with “catch-up required” | **Missing** as first-class object (variance slides exist; not PPI trajectory) |
 | Assumption Risk / sensitivity ranking across `forecast_driver_assumptions` | **Partial** — Budget Engine renders sensitivity curves; no ranked assumption-risk object |
 | Structured **What Has to Be True** artifact | **Shipped** — `what_has_to_be_true.py` |
 | First-class **Constraints** registry (min cash, coverage floor, hiring freeze, …) | **Shipped** — `constraints.py` with tenant + version overlay |
-| Monte Carlo / stochastic simulation engine | **Shipped, client-side only** — 1,000 draws in the Budget Engine; not reproducible server-side |
+| Monte Carlo / stochastic simulation engine | **Shipped** — Budget: 1,000 seeded draws through the full formula graph in the browser, on server-issued inputs, reproducible from the recorded seed and inputs. Forecast: seeded server packet model. Not calibrated PoA |
 | Long-range (multi-year) PPI overlay | **Missing** |
 | Forecast Accuracy store (prior forecast version vs Actual by metric/horizon) | **Missing** |
-| Customer-specific learning loop (priors from accuracy) | **Missing** |
-| Dedicated PPI API namespace / schemas | **Shipped** — `/api/v1/predictive-planning/*` |
-| Assessment persistence keyed to a plan version | **Missing** — blocks citing an assessment in a board package |
+| Customer-specific learning loop (priors from accuracy) | **Missing.** Only the ARR growth volatility prior is fitted from tenant history; no accuracy-driven learning |
+| Dedicated PPI API namespace / schemas | **Shipped** — `/api/v1/predictive-planning/*` (no per-user authorization check of its own yet) |
+| Assessment persistence keyed to a plan version | **Shipped** — version-validated, fingerprint-bound; Board AI commentary cites the active forecast version's assessment |
 
 ### 3.3 Conflicts & naming traps
 
@@ -253,8 +256,8 @@ LLM may narrate **only** fields present in this object + finance evidence packag
 | Feasibility runner | **Shipped** | Emits pass/warn/fail/advisory + skipped. Currently reads a supplied plan packet rather than calling driver_forecast / bookings / workforce directly |
 | What Has to Be True generator | **Shipped** | `must_close` (fail), `must_confirm` (warn/advisory), `must_hold` (holds today, breaks under stress) with levers + rationale |
 | API + schema | **Shipped** | Assessment DTO; no LLM in the path |
-| Wire to forecast version | **Shipped** | Budget sends `budget_version_id` after draft/promote; Forecast adapter accepts `forecast_version_id` |
-| **Assessment persistence** | **Shipped** | `plan_assessments` (`ppi_001`); `/assess` persists when a version id is present; `GET /assessments` for citation |
+| Wire to forecast version | **Shipped** | Budget and Forecast assess the saved packet against the new `budget_version_id` / `forecast_version_id` at draft/promote |
+| **Assessment persistence** | **Shipped** | `plan_assessments` (`ppi_001`); `/assess` persists only for an existing version in the same org; `GET /assessments` and `board_plan_assurance_for_org` for citation |
 | **Single source for thresholds** | **Shipped** | Budget Analytics/Overview consume `/assess`; `runBudgetRiskChecks` is offline fallback only |
 | Checklist | See Agent checklist §7 | |
 
@@ -317,13 +320,13 @@ LLM may narrate **only** fields present in this object + finance evidence packag
 | LLM structured payloads only | **Yes** | Commentary/P15 already enforce |
 | Plan → Test → Observe → Reassess → Act | **Partial** | Plan/validate/export strong; **Test** now real (feasibility + WHTT + stress); **Observe** still weak — no trajectory or accuracy store |
 | Help Finance know if business can deliver | **Strategic fit** | Differentiator vs “another planning grid” |
-| Phases 1–5 | **1 shipped, 3 shipped client-side, 2/4/5 open** | Order was inverted — see §0.1 |
+| Phases 1–5 | **1 shipped, 3 shipped (Budget full-plan in the browser on server-issued inputs; Forecast packet model on the server), 2/4/5 open** | Order was inverted — see §0.1 |
 
 **Pushback / watch-outs (constructive):**
 
 1. Do not market bookings “confidence” — or Monte Carlo breach frequency — as Probability of Attainment until Phase 2 calibration exists.  
 2. Do not let simulation write alternate SoT waterfalls — trials inform bands; certified plan stays deterministic.  
-3. ~~Phase 1 should be boring and high-trust (constraints + WHTT); resist jumping to Monte Carlo for demos.~~ **This one was not heeded.** Monte Carlo shipped for a demo before the constraint layer was formalized. Phase 1 objects have since caught up, but the remaining debt — duplicated thresholds and unpersisted assessments (§0.1) — is the direct cost of that inversion. Treat it as evidence for holding the line next time, not as a reason to undo working product.  
+3. ~~Phase 1 should be boring and high-trust (constraints + WHTT); resist jumping to Monte Carlo for demos.~~ **This one was not heeded.** Monte Carlo shipped for a demo before the constraint layer was formalized. Phase 1 objects have since caught up. Assessments now persist against versions (2026-10-01); the remaining debt — the JS threshold fallback (`runBudgetRiskChecks`) and a Budget simulation that runs in the browser rather than on the server — is the direct cost of that inversion. Treat it as evidence for holding the line next time, not as a reason to undo working product.  
 4. Preserve fail-closed export: PPI warn ≠ validation pass.  
 5. **New:** a check that cannot run is not a check that passed. Missing inputs must surface as `skipped`, never as green.
 
@@ -338,8 +341,10 @@ LLM may narrate **only** fields present in this object + finance evidence packag
 | [SMPL_Agent_and_Predictive_Analytics_Checklist.md](./SMPL_Agent_and_Predictive_Analytics_Checklist.md) | Day-to-day pre-flight + Phase 1 build checklist + link here |
 | [Architecture_Master.md](../Architecture_Master.md) | Doc map entry; service-boundary hook now that the PPI module has landed |
 | [Forecasting_Assumptions.md](../Forecasting_Assumptions.md) | Remains deterministic driver SoT; PPI tests assumptions, does not redefine them |
-| `backend/app/services/predictive_planning/` | Phase 1 implementation — registry, feasibility, WHTT |
+| `backend/app/services/predictive_planning/` | Registry, feasibility, WHTT, Monte Carlo packet model, priors, Monte Carlo inputs, persistence, Forecast adapter, Board citation |
 | `backend/tests/test_predictive_planning.py` | Pins JS ↔ Python threshold parity. Treat failures here as a product discrepancy, not a flaky test |
+| `backend/tests/test_plan_assurance_*.py` | Priors and correlations, server-issued Monte Carlo inputs and card/record agreement, version-keyed persistence and Board citation |
+| `frontend/scripts/verify-plan-assurance-mc.mjs` | Seeded sampler reproducibility, correlation handling, Budget wiring to `/mc-inputs`, version binding and dedupe |
 
 ---
 
