@@ -4,6 +4,20 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — Plan Assurance: server-issued inputs drive the Budget full-plan Monte Carlo
+
+This entry changes product behavior (Budget and Forecast engines, predictive-planning API), not marketing copy. No benchmark was run for it.
+
+- **Gap:** Budget's on-screen Monte Carlo always used hard-coded default priors and unseeded random draws. The method card showed the server's priors, which for a live customer could be the fitted ARR growth prior. The chart, the card and the saved assessment could disagree. The server packet model also ran on every scenario run, even though Budget displayed the browser result.
+- **Fixed:** a new `POST /api/v1/predictive-planning/mc-inputs` issues the seed, lever priors (fitted from company history where possible) and lever correlations, with an inputs fingerprint. Budget runs its full-plan formula-graph Monte Carlo in the browser with exactly those inputs, using a shared seeded sampler (`/shared/smpl-plan-mc.js`). The same seed and inputs on the same plan give the same results.
+- **Card, chart and saved record agree:** the summary sent to `/assess` records the priors, seed, correlations, engine, sampler and inputs fingerprint actually used. `/assess` checks them against what the server issues for that history. The method card shows the priors the simulation used. If they differ from the server's fit, the card says so and claims nothing as fitted. Persisted assessments store the same values and the actual seed.
+- **Fallback:** the server packet model now runs only when the full-plan engine cannot run. The banner, narrative and method card label it as the fallback. If the server cannot issue inputs, the browser uses default priors and the card says the server was unavailable.
+- **Forecast:** unchanged behavior. It still uses the server packet model as its primary engine. Its assessment summary now also records seed, correlations and engine.
+- **Tests:** 10 new backend tests in `test_plan_assurance_mc_inputs.py` cover issued inputs, card/simulation prior agreement, mismatch labeling, fallback labeling, a tampered fingerprint, and the persisted record. A new `verify:plan-assurance-mc` script checks sampler reproducibility, correlation handling, and the Budget wiring.
+- **Not claimed:** the full-plan Monte Carlo runs in the browser, not on the server. "Reproducible" means the same seed and recorded inputs on the same plan reproduce the same results. Breach rates are stress frequencies under stated priors, not a probability of attainment.
+
+---
+
 ## 2026-10-01 — Plan Assurance: history priors activate; correlations applied in the server Monte Carlo
 
 This entry changes product behavior (Budget and Forecast engines, predictive-planning API), not marketing copy. No benchmark was run for it. Marketing copy is reviewed after the remaining Plan Assurance fixes.

@@ -1715,6 +1715,9 @@ function fcSimulationSummaryFromMc(mc){
     p_ops_liquidity: mc.p_ops_liquidity != null ? mc.p_ops_liquidity : sum.p_ops_liquidity,
     p_ae_short: mc.p_ae_short != null ? mc.p_ae_short : sum.p_ae_short,
     priors: sum.priors || (mc.sig ? { ...mc.sig, source: mc.prior_source, seed: mc.seed } : null),
+    seed: mc.seed != null ? mc.seed : null,
+    correlations: mc.correlations || {},
+    engine: window._forecastMcSource === 'client_packet_fallback' ? 'client_packet_fallback' : 'server_packet',
   };
 }
 

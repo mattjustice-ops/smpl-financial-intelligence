@@ -101,6 +101,14 @@ class SimulationSummaryIn(BaseModel):
     p_ops_liquidity: float | None = None
     p_ae_short: float | None = None
     priors: dict[str, Any] | None = None
+    #: Inputs the simulation actually ran with, so the run can be reproduced.
+    seed: int | None = None
+    correlations: dict[str, float] | None = None
+    #: "full_plan_browser" or "server_packet_fallback".
+    engine: str | None = None
+    sampler: str | None = None
+    inputs_hash: str | None = None
+    plan_fingerprint: str | None = None
 
     model_config = {"extra": "ignore"}
 
@@ -142,6 +150,28 @@ class SimulateRequest(BaseModel):
     #: Named stress breaks/watches from the Budget scenario suite (feed WHTT later).
     breaks: list[str] = Field(default_factory=list)
     watches: list[str] = Field(default_factory=list)
+
+
+class McInputsRequest(BaseModel):
+    """Ask the server for the seed, priors and correlations of a full-plan run."""
+
+    plan_ref: PlanRef
+    history: dict[str, Any] | None = None
+    seed: int = 42
+    n_trials: int = Field(default=1000, ge=50, le=5000)
+
+
+class McInputsOut(BaseModel):
+    plan_ref: PlanRef
+    seed: int
+    n_trials: int
+    priors: dict[str, float]
+    prior_source: str
+    correlations: dict[str, float] = Field(default_factory=dict)
+    sampler: str
+    engine: str
+    inputs_hash: str
+    method_card: dict[str, Any]
 
 
 class SimulateOut(BaseModel):
