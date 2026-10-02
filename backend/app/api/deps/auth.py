@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 import uuid
 
@@ -12,15 +13,23 @@ from app.models.user import OrganizationMember, User
 from app.services.auth.service import AuthService
 
 
+def internal_key_matches(provided: str | None) -> bool:
+    """True when the caller presented the proxy's internal key.
+
+    With BILLING_INTERNAL_API_KEY unset (local dev, tests) every caller matches;
+    Vercel and Railway must set the same value or leave both unset.
+    """
+    expected = os.environ.get("BILLING_INTERNAL_API_KEY", "").strip()
+    if not expected:
+        return True
+    return hmac.compare_digest((provided or "").strip().encode(), expected.encode())
+
+
 def require_internal_auth_key(
     x_billing_internal_key: str | None = Header(default=None),
     x_smpl_internal_key: str | None = Header(default=None),
 ) -> None:
-    expected = os.environ.get("BILLING_INTERNAL_API_KEY", "").strip()
-    if not expected:
-        return
-    provided = (x_smpl_internal_key or x_billing_internal_key or "").strip()
-    if provided != expected:
+    if not internal_key_matches(x_smpl_internal_key or x_billing_internal_key):
         raise HTTPException(status_code=401, detail="Invalid internal API key")
 
 

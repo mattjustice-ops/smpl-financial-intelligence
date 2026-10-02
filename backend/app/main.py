@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.board_package_routes import board_package_router
 from app.api.dashboard_routes import dashboard_router
+from app.api.deps.auth import internal_key_matches
 from app.api.deps.request_context import reset_request_user_id, set_request_user_id
 from app.api.financial_statements_routes import financial_statements_router
 from app.api.forecast_routes import forecast_router
@@ -76,9 +77,17 @@ app = FastAPI(
 
 @app.middleware("http")
 async def attach_request_user_context(request: Request, call_next):
-    """Read X-SFI-User-Id from Next.js proxy for org membership checks (poc-4)."""
+    """Read X-SFI-User-Id from Next.js proxy for org membership checks (poc-4).
+
+    The user header is only trusted alongside the proxy's internal key; otherwise
+    any caller could claim to be any user.
+    """
     header = request.headers.get("X-SFI-User-Id")
     token = None
+    if header is not None and not internal_key_matches(
+        request.headers.get("X-Smpl-Internal-Key") or request.headers.get("X-Billing-Internal-Key")
+    ):
+        return JSONResponse(status_code=401, content={"detail": "Invalid internal API key"})
     if header:
         try:
             token = set_request_user_id(uuid.UUID(header.strip()))
