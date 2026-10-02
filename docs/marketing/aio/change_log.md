@@ -4,6 +4,18 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-01 — API only trusts a claimed user when the internal key comes with it
+
+This entry changes product behavior (API request handling) and production configuration, not marketing copy. No benchmark was run for it.
+
+- **Gap:** `BILLING_INTERNAL_API_KEY` was set in neither Vercel production nor Railway `sfi-api`, so `require_internal_auth_key` allowed every caller. `/auth/session-sync` returned a user's id for any email, and the API trusted `X-SFI-User-Id` from any caller. Anyone who knew a customer's email could act as that customer.
+- **Fixed (configuration, 2026-10-01 ~16:35 PT):** the same random 64-character key was set in Vercel production (Secret) and Railway `sfi-api` production, and both were redeployed. Before: an unkeyed `GET /api/v1/auth/organizations/{random}/seats` returned 404. After: 401, both directly on Railway and through www.smpl-ai.com. A real sign-in afterwards returned `session-sync 200`, confirming the two values match.
+- **Fixed (code):** the request middleware now rejects any request that carries `X-SFI-User-Id` without a matching `X-Billing-Internal-Key` / `X-Smpl-Internal-Key`, with 401. The key comparison is now constant-time. Requests without a user header are unaffected. With the key unset (local dev, tests) behavior is unchanged.
+- **Tests:** 8 new tests in `test_internal_key_user_header.py` cover a user header with no key, a wrong key or a malformed id (401), a valid key in either header (200), requests without a user header unaffected, key-guarded routes rejecting a wrong key, and the unset-key case. The full backend suite has the same 28 pre-existing failures as `main` and no new ones.
+- **Not changed:** requests with no user header still reach routes that only check membership when a user is present (`get_organization_or_404`), both through the `/api/v1/:path*` rewrite and directly on Railway. Closing that requires routing browser calls through the authenticated proxy, then requiring the key on all non-public routes.
+
+---
+
 ## 2026-10-01 — Plan Assurance API requires a signed-in member of the organization
 
 This entry changes product behavior (predictive-planning API and its Next.js proxy), not marketing copy. No benchmark was run for it.
