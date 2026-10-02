@@ -4,6 +4,28 @@ Read the next scheduled AIO evaluation against these entries. No benchmark was r
 
 ---
 
+## 2026-10-02 — Billing portal requires sign-in; server-side API calls send the internal key
+
+This entry changes product behavior (billing and quote request handling), not marketing copy. No benchmark was run for it.
+
+- **Gap:** `POST /api/billing/create-portal-session` had no sign-in check. Anyone could get a Stripe billing portal link (invoices, payment method, cancellation) for any organization by posting its `organization_id`, its billing email or a `stripe_customer_id`.
+- **Fixed:** the route now requires a signed-in session and an `organization_id` the user belongs to (403 otherwise), and resolves the Stripe customer server-side. Email and client-supplied customer ids are no longer accepted. The billing page sends only the organization id.
+- **Fixed:** the quote form (submit and HubSpot id update), the checkout rate-limit check and the portal account lookup now call the API through `callBillingBackend`, which sends the internal key. No behavior change today; this is required before the API refuses unkeyed requests.
+- **Checks:** `tsc --noEmit` and `next lint` on changed files are clean.
+
+---
+
+## 2026-10-02 — Browser API calls go through the authenticated proxy
+
+This entry changes product behavior (request routing), not marketing copy. No benchmark was run for it.
+
+- **Gap:** `next.config.js` rewrote `/api/v1/*` straight to Railway. Next applies rewrites before dynamic routes, so browser calls skipped the session and membership check in `app/api/v1/[...path]`. Board live data and exports also called Railway directly using `NEXT_PUBLIC_API_URL`.
+- **Fixed (PR #203, 7f3a29b):** the rewrite is removed. Board live data and exports, billing and three unused dashboards use the same-origin proxy. The proxy passes binary bodies and `Content-Disposition` through, and allows 300s.
+- **Verified on production (2026-10-02):** an anonymous `GET /api/v1/predictive-planning/constraints` on www.smpl-ai.com returned 401 from the website. Matt's click-through of the Board, Budget, Forecast, billing page, the MD&A deck export and the Excel package export all returned 200 in the Railway log, and both files downloaded.
+- **Not changed:** the API on Railway still answers requests with no user header and no key (for example `reporting/outlook` and `billing/account` for a known organization id returned 200). Closing that is the next release.
+
+---
+
 ## 2026-10-01 — API only trusts a claimed user when the internal key comes with it
 
 This entry changes product behavior (API request handling) and production configuration, not marketing copy. No benchmark was run for it.

@@ -19,11 +19,9 @@ export async function POST(request: Request) {
     const stripe = getStripe();
     const baseUrl = getAppBaseUrl();
 
-    const backend = backendBaseUrl();
-    if (backend) {
-      const rateRes = await fetch(
-        `${backend.replace(/\/$/, "")}/api/v1/billing/checkout-rate-limit?email=${encodeURIComponent(input.customer_email)}`,
-        { cache: "no-store" }
+    if (backendBaseUrl()) {
+      const rateRes = await callBillingBackend(
+        `/api/v1/billing/checkout-rate-limit?email=${encodeURIComponent(input.customer_email)}`,
       );
       if (rateRes.ok) {
         const rate = (await rateRes.json()) as { allowed?: boolean };
@@ -88,7 +86,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Stripe did not return a checkout URL." }, { status: 500 });
     }
 
-    if (backend) {
+    if (backendBaseUrl()) {
       try {
         await callBillingBackend("/api/v1/billing/checkout-sessions", {
           method: "POST",

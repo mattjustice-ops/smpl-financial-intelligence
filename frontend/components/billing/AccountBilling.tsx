@@ -62,11 +62,7 @@ export function AccountBilling() {
       const res = await fetch("/api/billing/create-portal-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organization_id: account?.organization_id,
-          stripe_customer_id: account?.stripe_customer_id,
-          email: email ?? undefined,
-        }),
+        body: JSON.stringify({ organization_id: account?.organization_id }),
       });
       const data = (await res.json()) as { ok?: boolean; url?: string; error?: string };
       if (!res.ok || !data.url) {
