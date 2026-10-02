@@ -75,19 +75,35 @@ app = FastAPI(
 )
 
 
+# Reachable without the internal key: platform health checks and build pings only.
+PUBLIC_PATHS = frozenset(
+    {
+        "/health",
+        "/health/db",
+        "/health/deps",
+        "/api/v1/export/ping",
+        "/api/v1/workforce/ping",
+        "/api/v1/management-pl/ping",
+    }
+)
+
+
 @app.middleware("http")
 async def attach_request_user_context(request: Request, call_next):
-    """Read X-SFI-User-Id from Next.js proxy for org membership checks (poc-4).
+    """Require the Next.js proxy's internal key, then read X-SFI-User-Id for org checks.
 
-    The user header is only trusted alongside the proxy's internal key; otherwise
-    any caller could claim to be any user.
+    Browsers never call this API directly; every legitimate caller is server-side and
+    sends the key. Many routes only check membership when a user is present, so an
+    unkeyed request must not get that far. The user header is only trusted alongside
+    the key; otherwise any caller could claim to be any user.
     """
     header = request.headers.get("X-SFI-User-Id")
-    token = None
-    if header is not None and not internal_key_matches(
+    key_ok = internal_key_matches(
         request.headers.get("X-Smpl-Internal-Key") or request.headers.get("X-Billing-Internal-Key")
-    ):
+    )
+    if not key_ok and (header is not None or request.url.path not in PUBLIC_PATHS):
         return JSONResponse(status_code=401, content={"detail": "Invalid internal API key"})
+    token = None
     if header:
         try:
             token = set_request_user_id(uuid.UUID(header.strip()))
