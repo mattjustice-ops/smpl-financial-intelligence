@@ -108,9 +108,6 @@
         global.SMPL_ON_ORG_READY(data.organizationId);
       }
     }
-    if (data.type === "smpl:api-base" && data.apiBase) {
-      global.SMPL_LONG_RUNNING_API_BASE = String(data.apiBase).replace(/\/$/, "");
-    }
   });
 
   function outlookPayloadValid(data) {

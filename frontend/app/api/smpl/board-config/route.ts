@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { backendUrl } from "@/lib/backendProxy";
-
-/** Runtime config for static board iframe (avoids baking secrets into public HTML). */
+/**
+ * Runtime config for the static board iframe. The browser never calls Railway directly:
+ * every API call goes through the same-origin /api/v1 proxy, so the base is always empty.
+ */
 export async function GET() {
-  const longRunningApiBase = backendUrl().replace(/\/$/, "");
   return NextResponse.json(
     {
-      longRunningApiBase,
-      useDirectRailway: Boolean(longRunningApiBase && !/localhost|127\.0\.0\.1/i.test(longRunningApiBase)),
+      longRunningApiBase: "",
+      useDirectRailway: false,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

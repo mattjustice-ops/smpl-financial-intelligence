@@ -4,11 +4,10 @@ function isLocalhostUrl(url: string): boolean {
 
 /**
  * API base for browser `fetch`.
- * Management P&L uses Next.js route handlers under `/api/v1/management-pl/*` (server proxy).
- * Other calls may use direct backend URL from NEXT_PUBLIC_API_URL.
+ * Deployed browsers always get same-origin `/api/v1/*`, handled by the authenticated
+ * App Router proxy (app/api/v1/[...path]). Direct backend URLs are for local dev and server code.
  */
 export function getApiBase(): string {
-  // Deployed browser: same-origin `/api/v1/*` (Next rewrite -> Railway). Avoids CORS.
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
     if (host && !isLocalhostUrl(host)) {
@@ -33,17 +32,11 @@ export function getNextApiBase(): string {
 }
 
 /**
- * Long-running board/export calls: hit Railway directly from the browser when deployed.
- * Avoids Vercel's ~60s App Router proxy limit (board payload can take 90-120s).
+ * Long-running board/export calls. Same-origin when deployed: the browser never calls
+ * Railway directly, because only the Next proxy carries the session and internal key.
+ * The proxy routes for these calls allow up to 300s.
  */
 export function getLongRunningApiBase(): string {
-  const direct = process.env.NEXT_PUBLIC_API_URL?.trim()?.replace(/\/$/, "");
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host && !isLocalhostUrl(host) && direct && !isLocalhostUrl(direct)) {
-      return direct;
-    }
-  }
   return getApiBase();
 }
 

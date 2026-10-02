@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { getApiBase } from "@/lib/apiBase";
+
 type AccountSummary = {
   organization_id: string;
   organization_name: string;
@@ -26,8 +28,7 @@ export function AccountBilling() {
   const [error, setError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
-  const backendUrl =
-    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8001";
+  const backendUrl = getApiBase();
 
   const loadAccount = useCallback(async () => {
     const params = new URLSearchParams();

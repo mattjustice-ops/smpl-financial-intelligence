@@ -7,9 +7,9 @@ const backendUrl = (
 
 const isLocalBackend = /127\.0\.0\.1|localhost/i.test(backendUrl);
 
-// /api/v1/*, /health, and /health/db are proxied by App Router route handlers at
-// *runtime* using SFI_BACKEND_URL. Skip build-time rewrites on Vercel when the
-// API URL is not configured yet (otherwise rewrites point at localhost).
+// /api/v1/* is proxied by App Router route handlers at *runtime* using
+// SFI_BACKEND_URL. /health and /health/db are rewrites; skip them on Vercel when
+// the API URL is not configured at build time (otherwise they point at localhost).
 const nextConfig = {
   reactStrictMode: true,
   images: {
@@ -100,11 +100,9 @@ const nextConfig = {
       );
       return [];
     }
+    // /api/v1/* is deliberately not rewritten: it must go through the App Router
+    // proxy (app/api/v1/[...path]) so every call carries the session and internal key.
     return [
-      {
-        source: "/api/v1/:path*",
-        destination: `${backendUrl}/api/v1/:path*`,
-      },
       { source: "/health", destination: `${backendUrl}/health` },
       { source: "/health/db", destination: `${backendUrl}/health/db` },
     ];

@@ -2,6 +2,9 @@ import type { NextRequest } from "next/server";
 
 import { proxyToBackendAuthed } from "@/lib/backendProxy";
 
+// Board payload and export builds can take 90-120s.
+export const maxDuration = 300;
+
 type RouteContext = { params: { path: string[] } };
 
 function apiPath(segments: string[]): string {

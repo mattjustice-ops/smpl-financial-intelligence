@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { useActiveOrganization } from "../hooks/useActiveOrganization";
+import { getApiBase } from "../lib/apiBase";
 import { fetchJson } from "../lib/fetchJson";
 import {
   FinancialStatementTable,
@@ -11,8 +12,7 @@ import {
   statementPeriodParams,
 } from "./FinancialStatementTable";
 
-const apiBase =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+const apiBase = getApiBase();
 
 
 type ValidationResult = FinancialStatementsSummary["validation"][number];

@@ -3,6 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireOrganizationAccess } from "@/lib/auth/server-org-access";
 import { backendBaseUrl } from "@/lib/billing/backend-client";
 
+/** Exports are binary downloads; the browser needs the filename and cache headers intact. */
+const PASSTHROUGH_RESPONSE_HEADERS = [
+  "content-disposition",
+  "cache-control",
+  "x-board-package-engine",
+];
+
 export function backendUrl(): string {
   return backendBaseUrl() ?? "http://127.0.0.1:8000";
 }
@@ -36,14 +43,16 @@ export async function proxyToBackend(
       }
     }
     const res = await fetch(url, init);
-    const text = await res.text();
-    return new NextResponse(text, {
-      status: res.status,
-      headers: {
-        "Content-Type": res.headers.get("content-type") || "application/json",
-        "X-SFI-Proxy-Target": url,
-      },
-    });
+    const body = await res.arrayBuffer();
+    const responseHeaders: Record<string, string> = {
+      "Content-Type": res.headers.get("content-type") || "application/json",
+      "X-SFI-Proxy-Target": url,
+    };
+    for (const name of PASSTHROUGH_RESPONSE_HEADERS) {
+      const value = res.headers.get(name);
+      if (value) responseHeaders[name] = value;
+    }
+    return new NextResponse(body, { status: res.status, headers: responseHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
