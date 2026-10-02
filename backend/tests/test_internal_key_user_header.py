@@ -47,9 +47,8 @@ def test_user_header_with_valid_key_is_accepted(key_set, key_header):
     assert res.status_code == 200, res.text
 
 
-def test_requests_without_user_header_are_unaffected(key_set):
-    assert client.get("/health").status_code == 200
-    res = client.get(USER_ROUTE)
+def test_keyed_request_without_user_header_reaches_route(key_set):
+    res = client.get(USER_ROUTE, headers={"X-Billing-Internal-Key": KEY})
     assert res.status_code == 401
     assert res.json()["detail"] == "Authentication required for Plan Assurance."
 
