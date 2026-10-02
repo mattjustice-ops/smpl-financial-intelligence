@@ -1,50 +1,52 @@
 import { NextResponse } from "next/server";
 
-import { backendBaseUrl, getAppBaseUrl, getStripe } from "@/lib/billing/stripe-server";
+import { canAccessOrganization, requireAuthenticatedSession } from "@/lib/auth/server-org-access";
+import {
+  backendBaseUrl,
+  callBillingBackend,
+  getAppBaseUrl,
+  getStripe,
+} from "@/lib/billing/stripe-server";
 
 export const runtime = "nodejs";
 
+/**
+ * A portal session can change payment methods and cancel subscriptions, so the Stripe
+ * customer is always resolved server-side from an organization the signed-in user belongs to.
+ */
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {
-      organization_id?: string;
-      stripe_customer_id?: string;
-      email?: string;
-    };
-
-    let stripeCustomerId = body.stripe_customer_id?.trim();
-
-    if (!stripeCustomerId) {
-      const backend = backendBaseUrl();
-      if (!backend) {
-        return NextResponse.json(
-          { ok: false, error: "Billing backend is not configured." },
-          { status: 503 }
-        );
-      }
-
-      const params = new URLSearchParams();
-      if (body.organization_id) {
-        params.set("organization_id", body.organization_id);
-      } else if (body.email) {
-        params.set("email", body.email);
-      } else {
-        return NextResponse.json(
-          { ok: false, error: "organization_id, stripe_customer_id, or email is required." },
-          { status: 400 }
-        );
-      }
-
-      const accountRes = await fetch(
-        `${backend.replace(/\/$/, "")}/api/v1/billing/account?${params.toString()}`,
-        { cache: "no-store" }
-      );
-      if (!accountRes.ok) {
-        return NextResponse.json({ ok: false, error: "Billing account not found." }, { status: 404 });
-      }
-      const account = (await accountRes.json()) as { stripe_customer_id?: string };
-      stripeCustomerId = account.stripe_customer_id;
+    const authResult = await requireAuthenticatedSession();
+    if ("error" in authResult) {
+      return authResult.error;
     }
+
+    const body = (await request.json()) as { organization_id?: string };
+    const organizationId = body.organization_id?.trim();
+    if (!organizationId) {
+      return NextResponse.json({ ok: false, error: "organization_id is required." }, { status: 400 });
+    }
+    if (!canAccessOrganization(authResult.session, organizationId)) {
+      return NextResponse.json(
+        { ok: false, error: "You do not have access to this organization." },
+        { status: 403 }
+      );
+    }
+
+    if (!backendBaseUrl()) {
+      return NextResponse.json(
+        { ok: false, error: "Billing backend is not configured." },
+        { status: 503 }
+      );
+    }
+
+    const params = new URLSearchParams({ organization_id: organizationId });
+    const accountRes = await callBillingBackend(`/api/v1/billing/account?${params.toString()}`);
+    if (!accountRes.ok) {
+      return NextResponse.json({ ok: false, error: "Billing account not found." }, { status: 404 });
+    }
+    const account = (await accountRes.json()) as { stripe_customer_id?: string };
+    const stripeCustomerId = account.stripe_customer_id;
 
     if (!stripeCustomerId) {
       return NextResponse.json(
