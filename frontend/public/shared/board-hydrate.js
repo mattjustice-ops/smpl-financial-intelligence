@@ -1068,32 +1068,9 @@
     });
   }
 
+  /** Same-origin Next proxy on prod (session + internal key). Direct Railway only on localhost. */
   function boardExportApiBase() {
-    var host = global.location && global.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") {
-      return Promise.resolve("http://127.0.0.1:8000");
-    }
-    if (global.SMPL_LONG_RUNNING_API_BASE) {
-      return Promise.resolve(global.SMPL_LONG_RUNNING_API_BASE);
-    }
-    if (!global._boardExportApiBasePromise) {
-      global._boardExportApiBasePromise = fetch("/api/smpl/board-config", {
-        cache: "no-store",
-        credentials: "include",
-      })
-        .then(function (res) {
-          return res.ok ? res.json() : null;
-        })
-        .then(function (j) {
-          var base = j && j.longRunningApiBase ? String(j.longRunningApiBase).replace(/\/$/, "") : "";
-          if (base) global.SMPL_LONG_RUNNING_API_BASE = base;
-          return base;
-        })
-        .catch(function () {
-          return "";
-        });
-    }
-    return global._boardExportApiBasePromise;
+    return boardLiveApiBase();
   }
 
   function isExportUpstreamError(text) {
@@ -1102,7 +1079,7 @@
     );
   }
 
-  /** Cross-origin file downloads bypass CORS (unlike fetch). Railway serves Content-Disposition: attachment. */
+  /** Hidden-iframe download; the proxy passes Railway's Content-Disposition: attachment through. */
   function triggerDirectExportDownload(exportUrl, label, silent) {
     if (!silent) {
       alert(
@@ -1464,7 +1441,7 @@
       var isLocal = host === "localhost" || host === "127.0.0.1";
       var exportUrl = boardLiveUrl(directBase, exportSpec.path) + "?" + params.toString();
 
-      if (directBase && !isLocal) {
+      if (!isLocal) {
         var pollStatus = await pollAndDownloadExport(directBase, exportSpec, format, params);
         if (
           (pollStatus === "ok" || pollStatus === "started") &&
@@ -1479,15 +1456,6 @@
           );
         }
         return pollStatus;
-      }
-
-      if (!directBase && !isLocal) {
-        alert(
-          exportSpec.label +
-            " export failed: Railway API URL is not configured.\n\n" +
-            "Set SFI_BACKEND_URL and NEXT_PUBLIC_API_URL on Vercel to https://sfi-api-production.up.railway.app, redeploy, then hard refresh /app/board.",
-        );
-        return "error";
       }
 
       var exportBase = directBase || "";

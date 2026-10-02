@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { useActiveOrganization } from "../hooks/useActiveOrganization";
+import { getApiBase } from "../lib/apiBase";
 
-const apiBase =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+const apiBase = getApiBase();
 
 
 type Org = { id: string; name: string };

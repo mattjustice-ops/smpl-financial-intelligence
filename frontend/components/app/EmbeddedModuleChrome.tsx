@@ -30,8 +30,6 @@ export function EmbeddedModuleChrome({
   const orgName = activeOrg?.name ?? "—";
   const loading = orgLoading || entLoading;
 
-  const longRunningApiBase = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
-
   // Keep platform chrome on the Board/engine skin (not marketing :root light defaults).
   useEffect(() => {
     hydratePlatformSkin();
@@ -65,12 +63,6 @@ export function EmbeddedModuleChrome({
         { type: "smpl:org", organizationId },
         window.location.origin,
       );
-      if (longRunningApiBase) {
-        frame.contentWindow?.postMessage(
-          { type: "smpl:api-base", apiBase: longRunningApiBase },
-          window.location.origin,
-        );
-      }
     }
 
     const body = bodyRef.current;
@@ -98,7 +90,7 @@ export function EmbeddedModuleChrome({
       iframe.removeEventListener("load", onIframeLoad);
       window.removeEventListener("message", onMessage);
     };
-  }, [organizationId, longRunningApiBase]);
+  }, [organizationId]);
 
   return (
     <div className="embedded-module">
