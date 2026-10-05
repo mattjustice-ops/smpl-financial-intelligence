@@ -18,7 +18,10 @@ Rules (agreed with Matt, Oct 5 2026):
     month starts from June's actual rows and is sized to the forecast summary. It replaces
     the old planning-layout forecast file.
   * Amounts are debit-positive (expenses positive, revenue negative), matching the
-    rest of the GL. Balance sheet rows and months outside the rebuild are untouched.
+    rest of the GL. P&L months outside the rebuild are untouched.
+  * Balance sheet: the old month-end balance rows are replaced by opening balances at
+    Jan 2024 and monthly activity from the dataset's schedules (build_gl_balance_sheet.py).
+    gl_balance_sheet_check.csv compares the GL balances with the balance sheet files.
 
 Usage:
   python rebuild_gl_to_summary.py <source_folder> <output_folder>
@@ -31,6 +34,9 @@ import os
 import sys
 from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from build_gl_balance_sheet import balances, build_balance_sheet_rows, check_against_statements  # noqa: E402
 
 CENT = Decimal("0.01")
 
@@ -194,8 +200,18 @@ def main(src: str, dst: str) -> None:
             fieldnames = fieldnames or list(gl[0].keys())
         summary = _read(os.path.join(src, f"{version}_income_statement.csv"))
         rows, log = rebuild(version, gl, summary)
-        rebuilt[version] = rows
+        old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
+        if old_bs:
+            log.append({"version": version, "period": "", "line": "balance sheet", "action": "replaced",
+                        "detail": f"{len(old_bs)} month-end balance rows replaced by opening balances and monthly activity",
+                        "amount": ""})
+        rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"]
         all_log.extend(log)
+
+    bs_rows, bs_log = build_balance_sheet_rows(src, rebuilt)
+    all_log.extend(bs_log)
+    for version, rows in rebuilt.items():
+        rows = rows + bs_rows[version]
         rows.sort(key=lambda r: (r["period"], r["statement"], r["department"], r["account_number"], r["cost_center"]))
         with open(os.path.join(dst, f"{version}_gl_detail.csv"), "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=fieldnames)
@@ -205,6 +221,11 @@ def main(src: str, dst: str) -> None:
         w = csv.DictWriter(f, fieldnames=["version", "period", "line", "action", "detail", "amount"])
         w.writeheader()
         w.writerows(all_log)
+    check = check_against_statements(src, balances(bs_rows, rebuilt))
+    with open(os.path.join(dst, "gl_balance_sheet_check.csv"), "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["version", "period", "line", "gl", "statement", "difference"])
+        w.writeheader()
+        w.writerows(check)
 
 
 if __name__ == "__main__":
