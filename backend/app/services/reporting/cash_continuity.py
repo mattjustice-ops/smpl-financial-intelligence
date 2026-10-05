@@ -16,11 +16,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.period_utils import to_period
 from app.services.reporting.three_statement_payload import (
     BS_FIELD_SPECS,
     CFS_FIELD_SPECS,
-    IS_FIELD_SPECS,
     _calculate_cfs_row,
     _enrich_is,
     _normalize_bs_display,
@@ -104,10 +104,7 @@ def _add(
 def _load_statements(
     db: Session, organization_id: uuid.UUID, prefix: str
 ) -> tuple[dict[str, dict[str, float | None]], dict[str, dict[str, float | None]], dict[str, dict[str, float | None]]]:
-    is_data = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, f"{prefix}_income_statement"),
-        IS_FIELD_SPECS,
-    )
+    is_data = gl_income_statement_by_period(db, organization_id, prefix)
     for row in is_data.values():
         _enrich_is(row)
     bs_data = _period_dict_from_field_specs(

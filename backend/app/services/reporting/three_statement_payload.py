@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.services.dashboard.query_utils import fetch_table_rows, table_exists, value_any
 from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 from app.services.reporting.export.data_collector import collect_reporting_bundle
+from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, to_period
 from app.services.reporting.validation_gate import raise_if_validation_blocked
@@ -315,10 +316,7 @@ def build_baseline_engine(
     if not fc_periods:
         return {}
 
-    is_data = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, "forecast_income_statement"),
-        IS_FIELD_SPECS,
-    )
+    is_data = gl_income_statement_by_period(db, organization_id, "forecast")
     bs_data = _period_dict_from_field_specs(
         _read_statement_table(db, organization_id, "forecast_balance_sheet"),
         BS_FIELD_SPECS,
@@ -633,14 +631,11 @@ def _outlook_material_sources(
 
 
 def _enrich_is(row: dict[str, float | None]) -> None:
-    """Display-only IS enrichments. Amounts come from warehouse income_statement rows."""
+    """Display-only IS enrichments. Amounts come from the GL income statement."""
     rev = row.get("revenue")
     gp = row.get("gross_profit")
-    if rev and rev != 0:
-        row.setdefault("sub_rev", rev * 0.967)
-        row.setdefault("svc_rev", rev * 0.033)
-        if gp is not None:
-            row.setdefault("gm_pct", gp / rev)
+    if rev and gp is not None:
+        row.setdefault("gm_pct", gp / rev)
     opex = (row.get("sm") or 0) + (row.get("rd") or 0) + (row.get("ga") or 0)
     if row.get("total_opex") is None and opex:
         row["total_opex"] = opex
@@ -863,10 +858,9 @@ def build_ts_data(
         _normalize_bs_display(row)
 
     for scenario, prefix in (("Actual", "actual"), ("Forecast", "forecast"), ("Budget", "budget")):
-        is_rows = _read_statement_table(db, organization_id, f"{prefix}_income_statement")
         bs_rows = _read_statement_table(db, organization_id, f"{prefix}_balance_sheet")
 
-        is_data = _period_dict_from_field_specs(is_rows, IS_FIELD_SPECS)
+        is_data = gl_income_statement_by_period(db, organization_id, prefix)
         for period, row in is_data.items():
             _enrich_is(row)
 
@@ -912,11 +906,10 @@ def build_forecast_engine_src(
 ) -> dict[str, Any]:
     """Minimal SRC.actuals slice for Forecast Engine lever refresh."""
     actuals: dict[str, dict[str, float | None]] = {}
-    is_rows = _read_statement_table(db, organization_id, "actual_income_statement")
     bs_rows = _read_statement_table(db, organization_id, "actual_balance_sheet")
     mrr_rows = _read_statement_table(db, organization_id, "actual_mrr_waterfall")
 
-    is_by_period = _period_dict_from_field_specs(is_rows, IS_FIELD_SPECS)
+    is_by_period = gl_income_statement_by_period(db, organization_id, "actual")
     for period, is_row in is_by_period.items():
         _enrich_is(is_row)
     bs_by_period = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
