@@ -1,30 +1,18 @@
-"""Load, sync, and aggregate Forecast_gl_detail.csv rows."""
+"""Load and sync Forecast_gl_detail.csv rows (forecast planning layout) into gl_actuals."""
 
 from __future__ import annotations
 
 import re
 import uuid
-from collections import defaultdict
-from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models.demo_finance import ForecastGlDetail, GlActual
 from app.services.financial_statements.financial_statement_service import parse_period, table_exists
-from app.services.reporting.period_utils import to_period
-
-_OPEX_IS_KEYS = frozenset(
-    {
-        "sales_and_marketing",
-        "research_and_development",
-        "general_and_administrative",
-        "customer_success",
-    }
-)
 
 GL_WAREHOUSE_TABLE_NAMES: tuple[str, ...] = ("gl_actuals", "forecast_gl_detail")
 
@@ -70,16 +58,6 @@ def _upsert_rows(session: Session, model: type[Any], batch: list[dict[str, Any]]
         session.execute(stmt.on_conflict_do_update(index_elements=pk_cols, set_=upd))
 
 
-_STATEMENT_TO_IS_KEY: dict[str, str] = {
-    "revenue": "revenue",
-    "cost of revenue": "cost_of_revenue",
-    "sales and marketing": "sales_and_marketing",
-    "research and development": "research_and_development",
-    "general and administrative": "general_and_administrative",
-    "customer success": "customer_success",
-}
-
-
 def _parse_gl_account(gl_account: str) -> tuple[str, str]:
     raw = (gl_account or "").strip()
     match = re.match(r"^(\d+)\s+(.*)$", raw)
@@ -91,10 +69,9 @@ def _parse_gl_account(gl_account: str) -> tuple[str, str]:
 
 
 def _signed_forecast_amount(*, line_type: str | None, amount: Decimal) -> Decimal:
+    """Planning-layout amounts are positive sizes; gl_actuals is debit-positive (revenue negative)."""
     if line_type and line_type.lower() == "revenue":
-        return abs(amount)
-    if line_type and line_type.lower() == "expense":
-        return -abs(amount)
+        return -amount
     return amount
 
 
@@ -192,93 +169,6 @@ def sync_forecast_gl_detail_to_gl_actuals(
         return 0
 
     return len(payloads)
-
-
-def forecast_gl_rows_as_gl_raw(session: Session, organization_id: uuid.UUID) -> list[dict[str, Any]]:
-    """Return forecast_gl_detail ORM rows as dicts compatible with management GL classification."""
-    if not table_exists(session, "forecast_gl_detail"):
-        return []
-    out: list[dict[str, Any]] = []
-    for row in session.scalars(
-        select(ForecastGlDetail).where(ForecastGlDetail.organization_id == organization_id)
-    ).all():
-        if not _management_include(
-            {
-                "management_view_include": row.management_view_include,
-            }
-        ):
-            continue
-        out.append(
-            {
-                "period": row.period,
-                "version": row.scenario,
-                "scenario": row.scenario,
-                "line_type": row.line_type,
-                "statement_category": row.statement_category,
-                "department": row.department,
-                "sub_department": row.sub_department,
-                "account_group": row.account_group,
-                "expense_type": row.expense_type,
-                "gl_account": row.gl_account,
-                "forecast_amount": row.forecast_amount,
-                "management_view_include": row.management_view_include,
-                "sbc_flag": row.sbc_flag,
-                "one_time_flag": row.one_time_flag,
-                "non_cash_flag": row.non_cash_flag,
-                "source": row.source,
-                "notes": row.notes,
-                "amount": _signed_forecast_amount(
-                    line_type=row.line_type,
-                    amount=row.forecast_amount or Decimal("0"),
-                ),
-                "account_name": _parse_gl_account(row.gl_account)[1],
-                "account_number": _parse_gl_account(row.gl_account)[0],
-                "category": row.statement_category,
-            }
-        )
-    return out
-
-
-def aggregate_forecast_gl_to_income_maps(
-    session: Session,
-    organization_id: uuid.UUID,
-    *,
-    start: date,
-    end: date,
-) -> dict[str, dict[str, Decimal]]:
-    """Build per-period income statement totals from forecast_gl_detail when IS mart is empty."""
-    if not table_exists(session, "forecast_gl_detail"):
-        return {}
-    out: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(lambda: Decimal("0")))
-    for row in session.scalars(
-        select(ForecastGlDetail).where(ForecastGlDetail.organization_id == organization_id)
-    ).all():
-        if not _management_include({"management_view_include": row.management_view_include}):
-            continue
-        period = parse_period(row.period)
-        if period is None or period < start or period > end:
-            continue
-        ps = to_period(period)
-        key = _STATEMENT_TO_IS_KEY.get((row.statement_category or "").strip().lower())
-        if not key:
-            continue
-        amt = _signed_forecast_amount(
-            line_type=row.line_type,
-            amount=row.forecast_amount or Decimal("0"),
-        )
-        if key == "revenue":
-            out[ps][key] += abs(amt)
-        else:
-            out[ps][key] += abs(amt)
-        if key in _OPEX_IS_KEYS:
-            out[ps]["total_opex"] += abs(amt)
-    for ps, metrics in out.items():
-        rev = metrics.get("revenue", Decimal("0"))
-        cogs = metrics.get("cost_of_revenue", Decimal("0"))
-        opex = metrics.get("total_opex", Decimal("0"))
-        metrics["gross_profit"] = rev - cogs
-        metrics["ebitda"] = metrics["gross_profit"] - opex
-    return {p: dict(v) for p, v in out.items()}
 
 
 def migrate_physical_forecast_gl_table(session: Session, organization_id: uuid.UUID) -> int:

@@ -1,7 +1,8 @@
-"""Rebuild the demo GL so January–May actuals and the full-year budget add up to the P&L summary.
+"""Rebuild the demo GL so 2026 actuals, budget and forecast add up to the P&L summary.
 
 Writes new files only (never touches the database):
-  <out>/Actual_gl_detail.csv, <out>/Budget_gl_detail.csv, <out>/gl_rebuild_log.csv
+  <out>/Actual_gl_detail.csv, <out>/Budget_gl_detail.csv, <out>/Forecast_gl_detail.csv,
+  <out>/gl_rebuild_log.csv
 
 Rules (agreed with Matt, Oct 5 2026):
   * Every P&L line (revenue, cost of revenue, S&M, R&D, G&A, D&A, interest, tax) adds up
@@ -13,6 +14,9 @@ Rules (agreed with Matt, Oct 5 2026):
   * The "Accounting True-Up" plug is removed.
   * June 2026 actuals only had summary postings. Its team detail is built from May's
     accounts and teams (same rows, relabeled and noted), then sized to June's summary.
+  * The July–December forecast uses the same layout, accounts and teams as actuals: each
+    month starts from June's actual rows and is sized to the forecast summary. It replaces
+    the old planning-layout forecast file.
   * Amounts are debit-positive (expenses positive, revenue negative), matching the
     rest of the GL. Balance sheet rows and months outside the rebuild are untouched.
 
@@ -55,13 +59,17 @@ LINE_BY_CATEGORY = {
 REBUILD_PERIODS = {
     "Actual": {f"2026-{m:02d}" for m in range(1, 7)},
     "Budget": {f"2026-{m:02d}" for m in range(1, 13)},
+    "Forecast": {f"2026-{m:02d}" for m in range(7, 13)},
 }
 
 # Months whose source GL holds only summary postings: target month -> month whose detail mix is used.
 DETAIL_FROM_MONTH = {
     "Actual": {"2026-06": "2026-05"},
     "Budget": {},
+    "Forecast": {},
 }
+
+FORECAST_TEMPLATE_MONTH = "2026-06"
 
 
 def _clone_to(row: dict[str, str], target: str, template: str) -> dict[str, str]:
@@ -159,17 +167,38 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
     return out, log
 
 
+def forecast_seed(actual_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Forecast months start from the last actual month's P&L rows, in the source sign convention."""
+    seed: list[dict[str, str]] = []
+    template_rows = [r for r in actual_rows if r["period"][:7] == FORECAST_TEMPLATE_MONTH and r["statement"] != "Balance Sheet"]
+    for target in sorted(REBUILD_PERIODS["Forecast"]):
+        for r in template_rows:
+            nr = _clone_to(r, target, FORECAST_TEMPLATE_MONTH)
+            nr["version"] = "Forecast"
+            nr["amount"] = f"{-Decimal(r['amount']):.2f}"
+            nr["notes"] = f"Forecast {target} built from {FORECAST_TEMPLATE_MONTH} actual account and team mix, sized to forecast summary"
+            seed.append(nr)
+    return seed
+
+
 def main(src: str, dst: str) -> None:
     os.makedirs(dst, exist_ok=True)
     all_log: list[dict[str, str]] = []
-    for version in ("Actual", "Budget"):
-        gl = _read(os.path.join(src, f"{version}_gl_detail.csv"))
+    fieldnames: list[str] = []
+    rebuilt: dict[str, list[dict[str, str]]] = {}
+    for version in ("Actual", "Budget", "Forecast"):
+        if version == "Forecast":
+            gl = forecast_seed(rebuilt["Actual"])
+        else:
+            gl = _read(os.path.join(src, f"{version}_gl_detail.csv"))
+            fieldnames = fieldnames or list(gl[0].keys())
         summary = _read(os.path.join(src, f"{version}_income_statement.csv"))
         rows, log = rebuild(version, gl, summary)
+        rebuilt[version] = rows
         all_log.extend(log)
         rows.sort(key=lambda r: (r["period"], r["statement"], r["department"], r["account_number"], r["cost_center"]))
         with open(os.path.join(dst, f"{version}_gl_detail.csv"), "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=list(gl[0].keys()))
+            w = csv.DictWriter(f, fieldnames=fieldnames)
             w.writeheader()
             w.writerows(rows)
     with open(os.path.join(dst, "gl_rebuild_log.csv"), "w", newline="", encoding="utf-8") as f:

@@ -273,6 +273,14 @@ def _kind_from_filename(filename: Optional[str]) -> Optional[str]:
     return base if base in RAW_WAREHOUSE_KINDS else None
 
 
+def _kind_for_upload(filename: Optional[str], headers: list[str]) -> Optional[str]:
+    kind = _kind_from_filename(filename)
+    # A Forecast GL in the same layout as Actual/Budget lands in gl_actuals with them.
+    if kind == "forecast_gl_detail" and detect_csv_kind(headers) == "gl_actuals":
+        return "gl_actuals"
+    return kind
+
+
 def _version_from_filename(filename: Optional[str]) -> Optional[str]:
     version, _ = _split_versioned_filename(filename)
     return version
@@ -743,7 +751,7 @@ def load_demo_csv_core(
             header_error={"message": "empty_or_missing_header_row", "received_headers": headers},
         )
 
-    filename_kind = _kind_from_filename(filename)
+    filename_kind = _kind_for_upload(filename, headers)
     physical_table = _physical_version_table_name(filename)
     if physical_table is not None:
         try:

@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from app.schemas.demo_csv import ForecastGlDetailRow
 from app.services.demo_csv.detector import detect_csv_kind
-from app.services.demo_csv.loader import _kind_from_filename, _row_to_payload
+from app.services.demo_csv.loader import _kind_for_upload, _kind_from_filename, _row_to_payload
 from app.services.forecast_gl_detail.service import forecast_gl_payload_to_gl_actuals
 
 
@@ -76,8 +76,36 @@ def test_forecast_gl_payload_maps_account_and_amount() -> None:
     assert payload["version"] == "Forecast"
     assert payload["account_number"] == "4000"
     assert payload["account_name"] == "Subscription Revenue"
-    assert payload["amount"] == Decimal("1000")
+    assert payload["amount"] == Decimal("-1000")
     assert payload["source_system"] == "forecast_gl_detail"
+
+
+def test_forecast_gl_payload_expense_is_debit_positive() -> None:
+    payload = forecast_gl_payload_to_gl_actuals(
+        uuid.uuid4(),
+        {
+            "scenario": "Forecast",
+            "period": date(2026, 7, 1),
+            "line_type": "Expense",
+            "statement_category": "Sales and Marketing",
+            "gl_account": "6000 Sales Payroll",
+            "forecast_amount": Decimal("250"),
+        },
+        row_index=1,
+    )
+    assert payload["amount"] == Decimal("250")
+
+
+def test_forecast_gl_in_actual_layout_routes_to_gl_actuals() -> None:
+    gl_layout = [
+        "organization_id", "version", "period", "account_number", "account_name", "statement",
+        "statement_category", "account_group", "expense_type", "department", "cost_center",
+        "sub_department", "vendor_id", "vendor_name", "source_file", "source_record_id", "amount",
+        "currency", "subsidiary", "source_system", "notes",
+    ]
+    assert _kind_for_upload("Forecast_gl_detail.csv", gl_layout) == "gl_actuals"
+    planning_layout = ["scenario", "period", "line_type", "statement_category", "gl_account", "forecast_amount"]
+    assert _kind_for_upload("Forecast_gl_detail.csv", planning_layout) == "forecast_gl_detail"
 
 
 def test_gl_warehouse_table_names_include_both_marts() -> None:
