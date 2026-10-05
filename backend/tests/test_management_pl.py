@@ -164,8 +164,8 @@ def test_spec_pl_lines_prefer_is_subscription_services() -> None:
     )
 
 
-def test_spec_pl_lines_cogs_children_foot_to_is_total() -> None:
-    """IS Cost of Revenue is SoT; GL detail children must sum to that total."""
+def test_spec_pl_lines_children_keep_gl_amounts_and_foot_with_other_line() -> None:
+    """Detail keeps real GL amounts; a visible Other line makes each section add up."""
     from app.services.management_pl.period_engine import build_period_context
     from app.services.management_pl.pl_builder import build_spec_pl_lines
 
@@ -232,9 +232,16 @@ def test_spec_pl_lines_cogs_children_foot_to_is_total() -> None:
     assert sum((c.metrics.actual for c in cogs_children), Decimal("0")) == Decimal("2200000")
     assert sum((c.metrics.budget for c in cogs_children), Decimal("0")) == Decimal("2300000")
     assert by_id["gross_profit"].metrics.actual == Decimal("5150000")
+    hosting = next(c for c in cogs_children if c.id == "cogs:Cloud Hosting COGS")
+    assert hosting.metrics.actual == Decimal("800000")
+    assert next(c for c in cogs_children if c.id == "cogs_other").metrics.actual == Decimal("600000")
     assert by_id["total_sm"].metrics.actual == Decimal("2500000")
+    assert by_id["sm_sales_comp"].metrics.actual == Decimal("1000000")
+    assert by_id["sm_mkt_salary"].metrics.actual == Decimal("500000")
+    assert by_id["sm_other"].metrics.actual == Decimal("1000000")
     assert sum((c.metrics.actual for c in [
-        by_id["sm_sales_comp"], by_id["sm_mkt_salary"], by_id["sm_mkt_programs"]
+        by_id["sm_sales_comp"], by_id["sm_customer_success"], by_id["sm_mkt_salary"],
+        by_id["sm_mkt_programs"], by_id["sm_other"],
     ]), Decimal("0")) == Decimal("2500000")
     assert by_id["subscription_revenue"].metrics.actual + by_id["services_revenue"].metrics.actual == by_id[
         "total_revenue"
