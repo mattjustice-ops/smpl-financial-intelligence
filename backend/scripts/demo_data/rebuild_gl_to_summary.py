@@ -11,6 +11,8 @@ Rules (agreed with Matt, Oct 5 2026):
     there; the duplicate opex payroll for those same cost centers is removed.
   * Customer Success is part of Sales (S&M). Remaining Support stays in opex (G&A).
   * The "Accounting True-Up" plug is removed.
+  * June 2026 actuals only had summary postings. Its team detail is built from May's
+    accounts and teams (same rows, relabeled and noted), then sized to June's summary.
   * Amounts are debit-positive (expenses positive, revenue negative), matching the
     rest of the GL. Balance sheet rows and months outside the rebuild are untouched.
 
@@ -51,9 +53,24 @@ LINE_BY_CATEGORY = {
 }
 
 REBUILD_PERIODS = {
-    "Actual": {f"2026-{m:02d}" for m in range(1, 6)},
+    "Actual": {f"2026-{m:02d}" for m in range(1, 7)},
     "Budget": {f"2026-{m:02d}" for m in range(1, 13)},
 }
+
+# Months whose source GL holds only summary postings: target month -> month whose detail mix is used.
+DETAIL_FROM_MONTH = {
+    "Actual": {"2026-06": "2026-05"},
+    "Budget": {},
+}
+
+
+def _clone_to(row: dict[str, str], target: str, template: str) -> dict[str, str]:
+    nr = dict(row)
+    nr["period"] = target
+    if nr.get("source_record_id"):
+        nr["source_record_id"] = nr["source_record_id"].replace(template, target)
+    nr["notes"] = f"{target} detail built from {template} account and team mix, sized to {target} summary"
+    return nr
 
 
 def _line(row: dict[str, str]) -> str | None:
@@ -81,6 +98,7 @@ def _read(path: str) -> list[dict[str, str]]:
 def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]]):
     summary = {r["period"][:7]: r for r in summary_rows}
     periods = REBUILD_PERIODS[version]
+    fill = DETAIL_FROM_MONTH[version]
     out: list[dict[str, str]] = []
     log: list[dict[str, str]] = []
     by_period_line: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
@@ -90,12 +108,22 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
         if period not in periods or row["statement"] == "Balance Sheet":
             out.append(row)
             continue
+        if period in fill:
+            log.append({"version": version, "period": period, "line": row["account_group"], "action": "replaced",
+                        "detail": f"summary posting {row['account_name']}; detail built from {fill[period]}",
+                        "amount": row["amount"]})
+            continue
         if not _keep(row):
             log.append({"version": version, "period": period, "line": _line(row) or "", "action": "removed",
                         "detail": f"{row['department']} / {row['cost_center']} / {row['account_name']}",
                         "amount": row["amount"]})
             continue
         by_period_line[(period, _line(row))].append(row)
+
+    for target, template in fill.items():
+        for (period, line), rows in list(by_period_line.items()):
+            if period == template:
+                by_period_line[(target, line)] = [_clone_to(r, target, template) for r in rows]
 
     for (period, line), rows in sorted(by_period_line.items()):
         target = Decimal(str(summary[period][line]))
