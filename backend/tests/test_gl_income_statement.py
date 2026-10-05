@@ -115,6 +115,19 @@ def test_services_revenue_split_comes_from_accounts() -> None:
     assert is_row["svc_rev"] == 100.0
 
 
+def test_implementation_revenue_is_its_own_line_and_saas_is_subscription() -> None:
+    is_row = build_income_statement_rows(
+        [
+            _row(-900.0, category="Revenue", name="SaaS Revenue", group="Revenue"),
+            _row(-35.0, category="Revenue", name="Implementation & Onboarding Revenue", group="Revenue"),
+        ]
+    )["2026-01"]
+
+    assert is_row["revenue"] == 935.0
+    assert is_row["sub_rev"] == 900.0
+    assert is_row["svc_rev"] == 35.0
+
+
 def test_financial_statements_income_rows_come_from_gl(monkeypatch: pytest.MonkeyPatch) -> None:
     from datetime import date
     from decimal import Decimal

@@ -19,6 +19,9 @@ Rules (agreed with Matt, Oct 5 2026):
     the old planning-layout forecast file.
   * Amounts are debit-positive (expenses positive, revenue negative), matching the
     rest of the GL. P&L months outside the rebuild are untouched.
+  * Implementation & Onboarding revenue (account 4100) comes from
+    <version>_implementation_schedule.csv (add_implementation_revenue.py) and is added on
+    top of the summary, one row per month.
   * Balance sheet: the old month-end balance rows are replaced by opening balances at
     Jan 2024 and monthly activity from the dataset's schedules (build_gl_balance_sheet.py).
     gl_balance_sheet_check.csv compares the GL balances with the balance sheet files.
@@ -187,6 +190,30 @@ def forecast_seed(actual_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return seed
 
 
+def implementation_rows(src: str, version: str, template: dict[str, str]) -> list[dict[str, str]]:
+    """One 4100 revenue row per month from <version>_implementation_schedule.csv, when the file exists."""
+    path = os.path.join(src, f"{version}_implementation_schedule.csv")
+    if not os.path.exists(path):
+        return []
+    by_month: dict[str, list[Decimal]] = defaultdict(list)
+    for r in _read(path):
+        by_month[r["period"][:7]].append(Decimal(r["implementation_fee"]))
+    rows = []
+    for period, fees in sorted(by_month.items()):
+        rows.append({
+            **{k: "" for k in template},
+            "organization_id": template["organization_id"], "version": version, "period": period,
+            "account_number": "4100", "account_name": "Implementation & Onboarding Revenue",
+            "statement": "Income Statement", "statement_category": "Revenue", "account_group": "Revenue",
+            "expense_type": "Implementation & Onboarding", "department": "Revenue", "cost_center": "REV-IMPL",
+            "sub_department": "Implementation & Onboarding", "source_file": f"{version}_implementation_schedule.csv",
+            "source_record_id": f"{version}-{period}-4100", "amount": f"{-sum(fees, Decimal('0')):.2f}",
+            "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model",
+            "notes": f"{len(fees)} new customers; one-time implementation fee by segment",
+        })
+    return rows
+
+
 def main(src: str, dst: str) -> None:
     os.makedirs(dst, exist_ok=True)
     all_log: list[dict[str, str]] = []
@@ -206,6 +233,12 @@ def main(src: str, dst: str) -> None:
                         "detail": f"{len(old_bs)} month-end balance rows replaced by opening balances and monthly activity",
                         "amount": ""})
         rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"]
+        impl = implementation_rows(src, version, gl[0])
+        if impl:
+            rebuilt[version] += impl
+            log.append({"version": version, "period": "", "line": "revenue", "action": "added",
+                        "detail": f"{len(impl)} months of implementation revenue (account 4100) on top of the summary",
+                        "amount": f"{-sum(Decimal(r['amount']) for r in impl):.2f}"})
         all_log.extend(log)
 
     bs_rows, bs_log = build_balance_sheet_rows(src, rebuilt)

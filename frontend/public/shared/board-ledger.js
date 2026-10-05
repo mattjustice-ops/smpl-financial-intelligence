@@ -16,7 +16,7 @@
 
   var SOURCE_ROWS = [
     { id: "sub_rev", name: "Subscription revenue", section: "revenue", isLine: "Subscription Revenue", mgmtLine: "Subscription Revenue", dept: "Revenue" },
-    { id: "svc_rev", name: "Services revenue", section: "revenue", isLine: "Services Revenue", mgmtLine: "Services Revenue", dept: "Revenue" },
+    { id: "svc_rev", name: "Implementation & onboarding", section: "revenue", isLine: "Implementation & Onboarding", mgmtLine: "Implementation & Onboarding", dept: "Revenue" },
     { id: "cogs", name: "Cost of revenue", section: "cogs", isLine: "Cost of Revenue", mgmtLine: "Cost of Revenue", dept: "Cost of Revenue" },
     { id: "sm", name: "Sales & marketing", section: "opex", isLine: "Sales & Marketing", mgmtLine: "Sales & Marketing", dept: "Sales & Marketing" },
     { id: "rd", name: "Research & development", section: "opex", isLine: "Research & Development", mgmtLine: "Research & Development", dept: "R&D" },
