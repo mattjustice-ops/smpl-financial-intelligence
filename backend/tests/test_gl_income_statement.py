@@ -113,3 +113,44 @@ def test_services_revenue_split_comes_from_accounts() -> None:
 
     assert is_row["sub_rev"] == 900.0
     assert is_row["svc_rev"] == 100.0
+
+
+def test_financial_statements_income_rows_come_from_gl(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import date
+    from decimal import Decimal
+
+    from app.services.financial_statements import financial_statement_service as fs
+
+    built = build_income_statement_rows(
+        [
+            _row(-1_000.0, category="Revenue", name="Subscription Revenue", period="2026-01"),
+            _row(300.0, category="Cost of Revenue", period="2026-01"),
+            _row(200.0, dept="Customer Success", period="2026-01"),
+            _row(-1_100.0, category="Revenue", name="Subscription Revenue", period="2026-02"),
+        ]
+    )
+    calls: list[str] = []
+
+    def fake_gl(_db, _org, scenario):
+        calls.append(scenario)
+        return built
+
+    monkeypatch.setattr(fs, "gl_income_statement_by_period", fake_gl)
+    rows = fs.gl_income_rows(None, None, "Actual", date(2026, 1, 1), date(2026, 1, 1))
+
+    assert calls == ["Actual"]
+    assert [r["period"] for r in rows] == [date(2026, 1, 1)]
+    jan = rows[0]
+    assert jan["revenue"] == Decimal("1000.00")
+    assert jan["cost_of_revenue"] == Decimal("300.00")
+    assert jan["sales_and_marketing"] == Decimal("200.00")
+    assert jan["ebitda"] == Decimal("500.00")
+
+
+def test_readiness_source_can_name_a_gl_version() -> None:
+    from app.services.readiness.evidence import _split_source
+    from app.services.readiness.registry import OBJECTS
+
+    assert _split_source("gl_actuals#Budget") == ("gl_actuals", "Budget")
+    assert _split_source("actual_balance_sheet") == ("actual_balance_sheet", None)
+    assert OBJECTS["income_statement"].tables == ("gl_actuals#Actual",)

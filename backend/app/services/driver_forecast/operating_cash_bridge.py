@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.services.driver_forecast.common import month_range, period_type, q_money
 from app.services.driver_forecast.repository import decimal_value, fetch_period_rows
+from app.services.financial_statements.financial_statement_service import gl_income_rows
 
 
 def build_operating_cash_bridge(
@@ -20,13 +21,7 @@ def build_operating_cash_bridge(
     assumptions: dict[str, Decimal],
 ) -> list[dict[str, Decimal | date]]:
     periods = month_range(start_period, end_period)
-    income_rows = fetch_period_rows(
-        session,
-        table_name="forecast_income_statement",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    income_rows = gl_income_rows(session, organization_id, "Forecast", start_period, end_period)
     cf_rows = fetch_period_rows(
         session,
         table_name="forecast_cash_flow_statement",
@@ -36,13 +31,7 @@ def build_operating_cash_bridge(
     )
     income_by_period = {r["period"]: r for r in income_rows}
     cf_by_period = {r["period"]: r for r in cf_rows}
-    actual_income_rows = fetch_period_rows(
-        session,
-        table_name="actual_income_statement",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    actual_income_rows = gl_income_rows(session, organization_id, "Actual", start_period, end_period)
     actual_cf_rows = fetch_period_rows(
         session,
         table_name="actual_cash_flow_statement",

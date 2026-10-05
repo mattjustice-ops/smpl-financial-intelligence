@@ -121,7 +121,7 @@ def _add_total_gaap_revenue_rows(
                 line_item="Total GAAP Revenue",
                 line_item_order=LINE_ORDER["total_gaap_revenue"],
                 amount=amount,
-                source_table="actual_income_statement" if actual else "forecast_income_statement",
+                source_table="gl_actuals",
                 detail_count=0,
             )
         )

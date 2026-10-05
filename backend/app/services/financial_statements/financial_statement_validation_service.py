@@ -45,7 +45,7 @@ def validate_financial_statements(
     keys = sorted({(r.scenario, r.period) for r in [*income.rows, *balance.rows, *cash_flow.rows]})
 
     for scenario, period in keys:
-        sources = [f"{scenario.lower()}_income_statement"]
+        sources = ["gl_actuals"]
         gp = inc.get((scenario, period, "Revenue"), Decimal("0")) - inc.get((scenario, period, "Cost of Revenue"), Decimal("0"))
         results.append(_result(scenario, period, "income_statement_gross_profit", gp, inc.get((scenario, period, "Gross Profit"), Decimal("0")), sources))
         opex = inc.get((scenario, period, "Sales and Marketing"), Decimal("0")) + inc.get((scenario, period, "Research and Development"), Decimal("0")) + inc.get((scenario, period, "General and Administrative"), Decimal("0"))
