@@ -14,8 +14,6 @@ from app.services.reporting.period_utils import to_period
 _active_as_of_period: ContextVar[str | None] = ContextVar("active_as_of_period", default=None)
 
 ACTUAL_PROBE_TABLES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("actual_income_statement", "period", ("revenue",)),
-    ("actual_balance_sheet", "period", ("cash",)),
     ("actual_mrr_waterfall", "period", ("ending_arr", "ending_mrr")),
     ("actual_marketing_pipeline", "period", ("pipeline_arr_created",)),
 )
@@ -66,6 +64,18 @@ def infer_as_of_period(session: Session, organization_id: uuid.UUID) -> str | No
     """Latest period with non-empty Actual rows in core statement tables."""
     org_key = str(organization_id)
     candidates: list[str] = []
+    if _table_exists(session, "gl_actuals"):
+        gl_max = session.execute(
+            text(
+                """
+                select max(period) from gl_actuals
+                where organization_id = :organization_id and lower(version) = 'actual'
+                """
+            ),
+            {"organization_id": org_key},
+        ).scalar()
+        if gl_max is not None:
+            candidates.append(to_period(gl_max))
     for table, period_col, value_cols in ACTUAL_PROBE_TABLES:
         if not _table_exists(session, table):
             continue

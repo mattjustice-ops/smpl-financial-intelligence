@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.services.driver_forecast.common import month_range, period_type, q_money
 from app.services.driver_forecast.deferred_revenue_waterfall import build_deferred_revenue_waterfall
 from app.services.driver_forecast.forecast_cash_flow_engine import build_cash_flow_forecast
-from app.services.driver_forecast.repository import decimal_value, fetch_period_rows
+from app.services.driver_forecast.repository import decimal_value
+from app.services.financial_statements.financial_statement_service import gl_balance_rows
 
 
 def decimal_value_any(row: dict, *keys: str) -> Decimal:
@@ -30,21 +31,9 @@ def build_balance_sheet_forecast(
     assumptions: dict[str, Decimal],
 ) -> list[dict[str, Decimal | date]]:
     periods = month_range(start_period, end_period)
-    explicit = fetch_period_rows(
-        session,
-        table_name="forecast_balance_sheet",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    explicit = gl_balance_rows(session, organization_id, "Forecast", start_period, end_period)
     explicit_by_period = {r["period"]: r for r in explicit}
-    actual_rows = fetch_period_rows(
-        session,
-        table_name="actual_balance_sheet",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    actual_rows = gl_balance_rows(session, organization_id, "Actual", start_period, end_period)
     actual_by_period = {r["period"]: r for r in actual_rows}
     cash_rows = {r["period"]: r for r in build_cash_flow_forecast(session, organization_id, start_period=start_period, end_period=end_period, assumptions=assumptions)}
     deferred_rows = {r["period"]: r for r in build_deferred_revenue_waterfall(session, organization_id, start_period=start_period, end_period=end_period)}

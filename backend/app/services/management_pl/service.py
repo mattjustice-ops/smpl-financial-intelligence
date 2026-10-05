@@ -12,12 +12,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.financial_statements.financial_statement_service import (
-    fetch_rows,
     month_start,
     parse_period,
     period_range,
     q,
-    row_value,
     scenarios_for,
     table_exists,
 )
@@ -48,6 +46,7 @@ from app.services.management_pl.schemas import (
     WaterfallStep,
 )
 from app.services.mrr.repository import fetch_persisted_summary
+from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.period_utils import to_period
 
 DEPARTMENTS = [
@@ -110,7 +109,7 @@ def _income_maps_from_gl(
             elif "subscription" in ag:
                 out[period]["subscription_revenue"] += amt
         else:
-            out[period][key] += abs(amt)
+            out[period][key] -= amt
     for period, row in out.items():
         _ensure_revenue_split(row)
         rev = row.get("revenue", Decimal("0"))
@@ -329,6 +328,25 @@ def _display_amount(section_key: str, value: Decimal) -> Decimal:
     return abs(value)
 
 
+_MGMT_KEY_FROM_GL_IS: dict[str, str] = {
+    "revenue": "revenue",
+    "subscription_revenue": "sub_rev",
+    "services_revenue": "svc_rev",
+    "cost_of_revenue": "cogs",
+    "sales_and_marketing": "sm",
+    "research_and_development": "rd",
+    "general_and_administrative": "ga",
+    "gross_profit": "gross_profit",
+    "total_opex": "total_opex",
+    "ebitda": "ebitda",
+    "depreciation_and_amortization": "da",
+    "interest_expense": "interest",
+    "operating_income": "op_income",
+    "tax_expense": "tax",
+    "net_income": "net_income",
+}
+
+
 def _load_income_maps(
     session: Session,
     organization_id: uuid.UUID,
@@ -336,41 +354,18 @@ def _load_income_maps(
     start: date,
     end: date,
 ) -> dict[str, dict[str, Decimal]]:
-    out: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(lambda: Decimal("0")))
+    """Monthly income statement maps built from GL detail (same builder as the Board)."""
+    out: dict[str, dict[str, Decimal]] = {}
     for scenario_name, s, e in scenarios_for(scenario, start, end):
-        table = f"{scenario_name.lower()}_income_statement"
-        for raw in fetch_rows(session, table, organization_id, s, e):
-            period = _period_str(raw["period"])
-            rev = row_value(raw, "revenue")
-            cogs = row_value(raw, "cost_of_revenue")
-            sm = row_value(raw, "sales_and_marketing")
-            rd = row_value(raw, "research_and_development")
-            ga = row_value(raw, "general_and_administrative")
-            cs = row_value(raw, "customer_success") if "customer_success" in raw else Decimal("0")
-            # Match Financial Statements ensure_income_formulas: OpEx = S&M + R&D + G&A.
-            opex = sm + rd + ga
-            gp = rev - cogs
-            row = out[period]
-            row["revenue"] += rev
-            row["cost_of_revenue"] += cogs
-            row["sales_and_marketing"] += sm
-            row["research_and_development"] += rd
-            row["general_and_administrative"] += ga
-            row["customer_success"] += cs
-            row["gross_profit"] += gp
-            row["total_opex"] += opex
-            row["ebitda"] += gp - opex
-            row["tax_expense"] += row_value(raw, "tax_expense")
-            row["net_income"] += row_value(raw, "net_income")
-            row["depreciation_and_amortization"] += row_value(raw, "depreciation_and_amortization")
-            row["interest_expense"] += row_value(raw, "interest_expense")
-            # Same columns as Financial Statements mapper (always read; missing → 0).
-            row["services_revenue"] += row_value(raw, "services_revenue")
-            row["subscription_revenue"] += row_value(raw, "subscription_revenue")
-    result = {p: dict(v) for p, v in out.items()}
-    for row in result.values():
-        _ensure_revenue_split(row)
-    return result
+        lo, hi = _period_str(s), _period_str(e)
+        for period, row in gl_income_statement_by_period(session, organization_id, scenario_name).items():
+            if not lo <= period <= hi:
+                continue
+            out[period] = {
+                mgmt_key: q(row.get(gl_key, 0.0))
+                for mgmt_key, gl_key in _MGMT_KEY_FROM_GL_IS.items()
+            }
+    return out
 
 
 def _merge_outlook_maps(
@@ -385,51 +380,16 @@ def _merge_outlook_maps(
     return merged
 
 
-def _merge_income_maps(
-    primary: dict[str, dict[str, Decimal]],
-    fill: dict[str, dict[str, Decimal]],
-) -> dict[str, dict[str, Decimal]]:
-    merged: dict[str, dict[str, Decimal]] = {p: dict(v) for p, v in primary.items()}
-    for period, metrics in fill.items():
-        row = merged.setdefault(period, {})
-        for key, value in metrics.items():
-            if row.get(key, Decimal("0")) == 0:
-                row[key] = value
-    return merged
-
-
 def _load_gl_raw(session: Session, organization_id: uuid.UUID) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    if table_exists(session, "gl_actuals"):
-        rows.extend(
-            session.execute(
-                text('select * from "gl_actuals" where organization_id = :oid'),
-                {"oid": str(organization_id)},
-            ).mappings()
-        )
-    from app.services.forecast_gl_detail.service import forecast_gl_rows_as_gl_raw
-
-    forecast_rows = forecast_gl_rows_as_gl_raw(session, organization_id)
-    if forecast_rows:
-        existing_keys = {
-            (
-                str(r.get("version") or r.get("scenario")),
-                str(r.get("period"))[:7],
-                str(r.get("account_number") or ""),
-                str(r.get("department") or ""),
-            )
-            for r in rows
-        }
-        for raw in forecast_rows:
-            key = (
-                str(raw.get("version") or "Forecast"),
-                str(raw.get("period"))[:7],
-                str(raw.get("account_number") or ""),
-                str(raw.get("department") or ""),
-            )
-            if key not in existing_keys:
-                rows.append(raw)
-    return rows
+    if not table_exists(session, "gl_actuals"):
+        return []
+    return [
+        dict(r)
+        for r in session.execute(
+            text('select * from "gl_actuals" where organization_id = :oid'),
+            {"oid": str(organization_id)},
+        ).mappings()
+    ]
 
 
 def _gl_version_label(raw: dict[str, Any], *, default: str) -> str:
@@ -446,15 +406,9 @@ def _pick_gl_rows_for_version(
     rows: list[dict[str, Any]],
     *,
     preferred: tuple[str, ...],
-    fallback: tuple[str, ...],
 ) -> list[dict[str, Any]]:
-    if not rows:
-        return []
-    for bucket in (preferred, fallback):
-        picked = [r for r in rows if _version_in(_gl_version_label(r, default=preferred[0]), bucket)]
-        if picked:
-            return picked
-    return rows
+    """Rows for exactly this version. A missing version stays missing — never borrowed."""
+    return [r for r in rows if _version_in(_gl_version_label(r, default=preferred[0]), preferred)]
 
 
 def _gl_rows_by_fy_period(raw_rows: list[dict[str, Any]], ctx: PeriodContext) -> dict[str, list[dict[str, Any]]]:
@@ -492,7 +446,7 @@ def _gl_entries_for_outlook(
     ctx: PeriodContext,
     view_mode: str,
 ) -> list[GlEntry]:
-    """FY outlook GL: prefer Actual in closed months, Forecast in open; fall back when only one version exists."""
+    """FY outlook GL: Actual in closed months, Forecast in open months."""
     by_period = _gl_rows_by_fy_period(raw_rows, ctx)
     entries: list[GlEntry] = []
     for ps in ctx.fy_periods:
@@ -500,14 +454,10 @@ def _gl_entries_for_outlook(
         if not rows:
             continue
         if ps in ctx.closed_periods:
-            chosen = _pick_gl_rows_for_version(
-                rows, preferred=("Actual",), fallback=("Forecast", "Budget")
-            )
+            chosen = _pick_gl_rows_for_version(rows, preferred=("Actual",))
             default_version = "Actual"
         else:
-            chosen = _pick_gl_rows_for_version(
-                rows, preferred=("Forecast",), fallback=("Actual", "Budget")
-            )
+            chosen = _pick_gl_rows_for_version(rows, preferred=("Forecast",))
             default_version = "Forecast"
         _append_classified_gl_entries(
             entries, chosen, view_mode=view_mode, default_version=default_version
@@ -522,7 +472,7 @@ def _gl_entries_budget(raw_rows: list[dict[str, Any]], ctx: PeriodContext, view_
         rows = by_period.get(ps, [])
         if not rows:
             continue
-        chosen = _pick_gl_rows_for_version(rows, preferred=("Budget",), fallback=("Actual", "Forecast"))
+        chosen = _pick_gl_rows_for_version(rows, preferred=("Budget",))
         _append_classified_gl_entries(entries, chosen, view_mode=view_mode, default_version="Budget")
     return entries
 
@@ -535,7 +485,7 @@ def _gl_entries_actual(raw_rows: list[dict[str, Any]], ctx: PeriodContext, view_
         rows = by_period.get(ps, [])
         if not rows:
             continue
-        chosen = _pick_gl_rows_for_version(rows, preferred=("Actual",), fallback=("Budget", "Forecast"))
+        chosen = _pick_gl_rows_for_version(rows, preferred=("Actual",))
         _append_classified_gl_entries(entries, chosen, view_mode=view_mode, default_version="Actual")
     return entries
 
@@ -548,7 +498,7 @@ def _gl_entries_forecast(raw_rows: list[dict[str, Any]], ctx: PeriodContext, vie
         rows = by_period.get(ps, [])
         if not rows:
             continue
-        chosen = _pick_gl_rows_for_version(rows, preferred=("Forecast",), fallback=("Actual", "Budget"))
+        chosen = _pick_gl_rows_for_version(rows, preferred=("Forecast",))
         _append_classified_gl_entries(entries, chosen, view_mode=view_mode, default_version="Forecast")
     return entries
 
@@ -986,23 +936,16 @@ def _build_pl_lines(
 
 
 def _opex_stacks_for_period(entries: list[GlEntry], period: str) -> tuple[Decimal, Decimal, Decimal]:
-    from app.services.management_pl.gl_hierarchy import (
-        OPEX_STACK_GA_DEPTS,
-        OPEX_STACK_RD_DEPTS,
-        OPEX_STACK_SM_DEPTS,
-    )
-
     sm = rd = ga = Decimal("0")
     for e in entries:
-        if e.period != period or e.section_key in ("revenue", "cogs"):
+        if e.period != period:
             continue
-        amt = abs(e.amount)
-        if e.source_department in OPEX_STACK_SM_DEPTS:
-            sm += amt
-        elif e.source_department in OPEX_STACK_RD_DEPTS:
-            rd += amt
-        elif e.source_department in OPEX_STACK_GA_DEPTS:
-            ga += amt
+        if e.section_key == "sales_and_marketing":
+            sm -= e.amount
+        elif e.section_key == "research_and_development":
+            rd -= e.amount
+        elif e.section_key == "general_and_administrative":
+            ga -= e.amount
     return sm, rd, ga
 
 
@@ -1287,8 +1230,8 @@ def _validations(
             ValidationWarning(
                 code="gl_primary",
                 message=(
-                    "P&L Summary is sourced from GL detail (Actual/Budget in gl_actuals, Forecast in forecast_gl_detail). "
-                    "Income statement CSVs are fallback only for months without classified GL."
+                    "P&L is built from GL detail (gl_actuals: Actual, Budget, Forecast), the same source as the "
+                    "income statement. Months without GL rows stay empty."
                 ),
                 severity="warning",
             )
@@ -1442,15 +1385,10 @@ def build_management_pl_dashboard(
     fiscal_year = as_of.year
     ctx = build_period_context(fiscal_year=fiscal_year, as_of_period=_period_str(as_of), period_mode=period_mode)
 
-    from app.services.forecast_gl_detail.service import aggregate_forecast_gl_to_income_maps
     from app.services.workforce import integration as wf_integration
 
     actual_is = _load_income_maps(session, organization_id, "Actual", start, end)
     forecast_is = _load_income_maps(session, organization_id, "Forecast", start, end)
-    forecast_is = _merge_income_maps(
-        forecast_is,
-        aggregate_forecast_gl_to_income_maps(session, organization_id, start=start, end=end),
-    )
     budget_is = _load_income_maps(session, organization_id, "Budget", start, end)
 
     wf_active = wf_integration.workforce_source_present(session, organization_id, scenario="Forecast")

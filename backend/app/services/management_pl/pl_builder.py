@@ -22,7 +22,9 @@ ENG_ACCOUNTS = ("Base Salaries", "Cloud Infrastructure", "Employee Benefits", "P
 PRODUCT_ACCOUNTS = ("Base Salaries", "Employee Benefits", "Payroll Taxes")
 DA_ACCOUNT = "Depreciation and Amortization"
 INTEREST_ACCOUNT = "Interest Expense"
+TAX_ACCOUNT = "Tax Expense"
 TRUE_UP_ACCOUNT = "Accounting True-Up"
+BELOW_EBITDA_ACCOUNTS = frozenset({DA_ACCOUNT, INTEREST_ACCOUNT, TAX_ACCOUNT})
 
 COGS_LINE_ACCOUNTS: tuple[tuple[str, str], ...] = (
     ("Cloud Hosting", "Cloud Hosting COGS"),
@@ -91,64 +93,38 @@ def _is_rollup_slice(
     )
 
 
-def _scale_children_to_parent(children: list[PlLine], parent: MetricSlice) -> list[PlLine]:
-    """Scale GL detail lines so they foot to the Income Statement parent total.
+def _foot_children_to_parent(
+    children: list[PlLine],
+    parent: MetricSlice,
+    *,
+    line_id: str,
+    section_key: str,
+) -> list[PlLine]:
+    """Show GL lines not covered by the named detail as one visible "Other" line.
 
-    Without this, partial GL account lists never equal IS Cost of Revenue / OpEx.
+    Detail amounts are never rescaled; the remainder makes the section add up.
     """
-    if not children:
+    def remainder(getter) -> Decimal:
+        return getter(parent) - sum((getter(c.metrics) for c in children), start=Decimal("0"))
+
+    rem = {
+        "actual": remainder(lambda m: m.actual),
+        "budget": remainder(lambda m: m.budget),
+        "forecast": remainder(lambda m: m.forecast),
+        "ytd_actual": remainder(lambda m: m.ytd_actual),
+        "ytd_budget": remainder(lambda m: m.ytd_budget),
+    }
+    if all(abs(v) < Decimal("0.01") for v in rem.values()):
         return children
-
-    def scale_field(getter, target: Decimal) -> list[Decimal]:
-        raw = [getter(c) for c in children]
-        total = sum(raw, start=Decimal("0"))
-        if target == 0:
-            return [Decimal("0") for _ in raw]
-        if total == 0:
-            # Spread evenly when GL detail is missing but IS has a total.
-            n = len(raw)
-            if n == 0:
-                return raw
-            base = (target / n).quantize(Decimal("0.01"))
-            vals = [base] * n
-            vals[-1] = target - base * (n - 1)
-            return vals
-        scaled = [(v / total * target).quantize(Decimal("0.01")) for v in raw]
-        drift = target - sum(scaled, start=Decimal("0"))
-        scaled[-1] = scaled[-1] + drift
-        return scaled
-
-    acts = scale_field(lambda c: c.metrics.actual, parent.actual)
-    buds = scale_field(lambda c: c.metrics.budget, parent.budget)
-    fcsts = scale_field(lambda c: c.metrics.forecast, parent.forecast)
-    ytd_a = scale_field(lambda c: c.metrics.ytd_actual, parent.ytd_actual)
-    ytd_b = scale_field(lambda c: c.metrics.ytd_budget, parent.ytd_budget)
-
-    out: list[PlLine] = []
-    for i, child in enumerate(children):
-        m = _metric_slice_values(
-            actual=acts[i],
-            budget=buds[i],
-            forecast=fcsts[i],
-            ytd_actual=ytd_a[i],
-            ytd_budget=ytd_b[i],
+    return children + [
+        _pl_line(
+            line_id,
+            "Other (GL lines not listed above)",
+            section_key,
+            _metric_slice_values(**rem),
+            driver="gl_remainder",
         )
-        out.append(
-            _pl_line(
-                child.id,
-                child.label,
-                child.section_key,
-                m,
-                line_type=child.line_type,
-                indent=child.indent,
-                expandable=child.expandable,
-                is_bold=child.is_bold,
-                is_ebitda=child.is_ebitda,
-                children=list(child.children),
-                driver=child.driver or "gl_scaled_to_is",
-            )
-        )
-    return out
+    ]
 
 
 def _gl_dept_acct_sum(
@@ -604,7 +580,7 @@ def build_spec_pl_lines(
         if child.metrics.actual == 0 and child.metrics.budget == 0 and child.metrics.forecast == 0:
             continue
         cogs_children.append(child)
-    cogs_children = _scale_children_to_parent(cogs_children, cogs_total_m)
+    cogs_children = _foot_children_to_parent(cogs_children, cogs_total_m, line_id="cogs_other", section_key="cogs")
     lines.append(
         _pl_line(
             "cogs_section",
@@ -701,17 +677,26 @@ def build_spec_pl_lines(
             forecast_is=forecast_is,
             budget_is=bud_is,
             amount_fn=lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Sales")
-            + _gl_dept_acct_sum(gl, ps, department="Marketing"),
+            + _gl_dept_acct_sum(gl, ps, department="Marketing")
+            + _gl_dept_acct_sum(gl, ps, department="Customer Success", exclude_accounts=COGS_ACCOUNT_NAMES),
             is_key_fn=lambda src, ps: _is_metric(src, ps, "sales_and_marketing"),
             prefer_is=True,
         )
-    sm_lines = _scale_children_to_parent(
+    sm_lines = _foot_children_to_parent(
         [
             metric(
                 "sm_sales_comp",
                 "Sales — Salaries & Comp",
                 "sales_and_marketing",
                 lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Sales", accounts=SALES_COMP_ACCOUNTS),
+            ),
+            metric(
+                "sm_customer_success",
+                "Customer Success",
+                "sales_and_marketing",
+                lambda gl, ps: _gl_dept_acct_sum(
+                    gl, ps, department="Customer Success", exclude_accounts=COGS_ACCOUNT_NAMES
+                ),
             ),
             metric(
                 "sm_mkt_salary",
@@ -727,6 +712,8 @@ def build_spec_pl_lines(
             ),
         ],
         sm_total_m,
+        line_id="sm_other",
+        section_key="sales_and_marketing",
     )
     lines.extend(sm_lines)
     lines.append(
@@ -780,7 +767,7 @@ def build_spec_pl_lines(
             is_key_fn=lambda src, ps: _is_metric(src, ps, "research_and_development"),
             prefer_is=True,
         )
-    rd_lines = _scale_children_to_parent(
+    rd_lines = _foot_children_to_parent(
         [
             metric(
                 "rd_engineering",
@@ -796,6 +783,8 @@ def build_spec_pl_lines(
             ),
         ],
         rd_total_m,
+        line_id="rd_other",
+        section_key="research_and_development",
     )
     lines.extend(rd_lines)
     lines.append(
@@ -844,27 +833,26 @@ def build_spec_pl_lines(
             actual_is=actual_is,
             forecast_is=forecast_is,
             budget_is=bud_is,
-            amount_fn=lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="G&A")
-            + _gl_dept_acct_sum(gl, ps, department="Finance")
-            + _gl_dept_acct_sum(gl, ps, department="Customer Success")
-            + _gl_dept_acct_sum(gl, ps, department="Support"),
+            amount_fn=lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="G&A", exclude_accounts=BELOW_EBITDA_ACCOUNTS)
+            + _gl_dept_acct_sum(gl, ps, department="Finance", exclude_accounts=BELOW_EBITDA_ACCOUNTS)
+            + _gl_dept_acct_sum(gl, ps, department="Support", exclude_accounts=COGS_ACCOUNT_NAMES),
             is_key_fn=lambda src, ps: _is_metric(src, ps, "general_and_administrative"),
             prefer_is=True,
         )
-    ga_lines = _scale_children_to_parent(
+    ga_lines = _foot_children_to_parent(
         [
             metric(
                 "ga_dept",
                 "G&A",
                 "general_and_administrative",
-                lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="G&A"),
+                lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="G&A", exclude_accounts=BELOW_EBITDA_ACCOUNTS),
             ),
             metric(
                 "finance_recurring",
                 "Finance — Recurring",
                 "general_and_administrative",
                 lambda gl, ps: _gl_dept_acct_sum(
-                    gl, ps, department="Finance", exclude_accounts=frozenset({TRUE_UP_ACCOUNT})
+                    gl, ps, department="Finance", exclude_accounts=BELOW_EBITDA_ACCOUNTS | {TRUE_UP_ACCOUNT}
                 ),
             ),
             metric(
@@ -875,13 +863,15 @@ def build_spec_pl_lines(
                 driver="non_recurring",
             ),
             metric(
-                "da_ga",
-                "D&A",
+                "ga_support",
+                "Support",
                 "general_and_administrative",
-                lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="G&A", account=DA_ACCOUNT),
+                lambda gl, ps: _gl_dept_acct_sum(gl, ps, department="Support", exclude_accounts=COGS_ACCOUNT_NAMES),
             ),
         ],
         ga_total_m,
+        line_id="ga_other",
+        section_key="general_and_administrative",
     )
     lines.extend(ga_lines)
     lines.append(

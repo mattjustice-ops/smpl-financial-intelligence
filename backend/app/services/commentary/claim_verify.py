@@ -905,34 +905,30 @@ def evidence_values_from_text_blob(text: str) -> dict[str, Decimal]:
 # Metric-field → warehouse / COMPUTED provenance (framework Part 1).
 # Matched on the leaf field of a dotted evidence key (e.g. ts.Actual.is.2026-06.revenue).
 _SOURCE_FIELD_CATALOG: dict[str, dict[str, Any]] = {
-    "revenue": {
-        "source_type": "WAREHOUSE",
-        "table": "income_statement",
-        "column": "revenue",
-    },
-    "cogs": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "cogs"},
+    "revenue": {"source_type": "WAREHOUSE", "table": "gl_actuals", "column": "amount", "rollup": "revenue"},
+    "cogs": {"source_type": "WAREHOUSE", "table": "gl_actuals", "column": "amount", "rollup": "cogs"},
     "gross_profit": {
-        "source_type": "WAREHOUSE",
-        "table": "income_statement",
-        "column": "gross_profit",
+        "source_type": "COMPUTED",
+        "formula_id": "gross_profit_revenue_less_cogs",
+        "formula": "revenue - cogs",
     },
-    "sm": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "sm"},
-    "rd": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "rd"},
-    "ga": {"source_type": "WAREHOUSE", "table": "income_statement", "column": "ga"},
+    "sm": {"source_type": "WAREHOUSE", "table": "gl_actuals", "column": "amount", "rollup": "sm"},
+    "rd": {"source_type": "WAREHOUSE", "table": "gl_actuals", "column": "amount", "rollup": "rd"},
+    "ga": {"source_type": "WAREHOUSE", "table": "gl_actuals", "column": "amount", "rollup": "ga"},
     "total_opex": {
         "source_type": "COMPUTED",
         "formula_id": "total_opex_sm_rd_ga",
         "formula": "sm + rd + ga",
     },
     "ebitda": {
-        "source_type": "WAREHOUSE",
-        "table": "income_statement",
-        "column": "ebitda",
+        "source_type": "COMPUTED",
+        "formula_id": "ebitda_gross_profit_less_opex",
+        "formula": "gross_profit - total_opex",
     },
     "net_income": {
-        "source_type": "WAREHOUSE",
-        "table": "income_statement",
-        "column": "net_income",
+        "source_type": "COMPUTED",
+        "formula_id": "net_income_from_gl",
+        "formula": "ebitda - da - interest - other - tax",
     },
     "gross_margin_pct": {
         "source_type": "COMPUTED",

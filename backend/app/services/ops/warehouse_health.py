@@ -61,8 +61,6 @@ def _warehouse_footprint_org_ids(db: Session) -> set[uuid.UUID]:
                 UNION
                 SELECT organization_id FROM gl_actuals
                 UNION
-                SELECT organization_id FROM actual_income_statement
-                UNION
                 SELECT organization_id FROM ingest_batches WHERE rows_imported > 0
             ) AS footprint
             WHERE organization_id IS NOT NULL

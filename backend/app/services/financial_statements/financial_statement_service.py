@@ -19,7 +19,30 @@ from app.services.financial_statements.financial_statement_mapper import (
     table_name_for,
 )
 
+from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period
+from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.period_utils import period_to_date, scenario_periods, to_period
+
+GL_TABLE = "gl_actuals"
+
+# Income statement columns (mapper source_column) <- GL income statement builder keys.
+GL_INCOME_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("revenue", "revenue"),
+    ("subscription_revenue", "sub_rev"),
+    ("services_revenue", "svc_rev"),
+    ("cost_of_revenue", "cogs"),
+    ("gross_profit", "gross_profit"),
+    ("sales_and_marketing", "sm"),
+    ("research_and_development", "rd"),
+    ("general_and_administrative", "ga"),
+    ("total_operating_expenses", "total_opex"),
+    ("ebitda", "ebitda"),
+    ("depreciation_and_amortization", "da"),
+    ("operating_income", "op_income"),
+    ("interest_expense", "interest"),
+    ("tax_expense", "tax"),
+    ("net_income", "net_income"),
+)
 
 MONEY = Decimal("0.01")
 TOLERANCE = Decimal("1.00")  # Closed actuals fail-closed: |Δ|>$1 = fail. Do not loosen.
@@ -157,6 +180,65 @@ def scenarios_for(
         if periods:
             out.append((scenario_name, periods[0], periods[-1]))
     return out
+
+
+def gl_income_rows(
+    session: Session,
+    organization_id: uuid.UUID,
+    scenario: str,
+    start_period: date,
+    end_period: date,
+) -> list[dict[str, Any]]:
+    """Monthly income statement rows built from GL detail, in mapper column names."""
+    start, end = month_start(start_period), month_start(end_period)
+    out: list[dict[str, Any]] = []
+    for period_key, built in gl_income_statement_by_period(session, organization_id, scenario).items():
+        period = parse_period(period_key)
+        if period is None or period < start or period > end:
+            continue
+        out.append({"period": period, **{col: q(built.get(key)) for col, key in GL_INCOME_COLUMNS}})
+    return sorted(out, key=lambda r: r["period"])
+
+
+# Summary-table column names some readers still use for the same balance sheet lines.
+GL_BALANCE_ALIASES = {
+    "prepaids_and_other_current": "prepaids_and_other_current_assets",
+    "ppe_net": "property_and_equipment_net",
+}
+
+
+def _gl_statement_rows(
+    session: Session,
+    organization_id: uuid.UUID,
+    scenario: str,
+    start_period: date,
+    end_period: date,
+    which: Literal["balance_sheet", "cash_flow"],
+) -> list[dict[str, Any]]:
+    balance, cash_flow = gl_balance_sheet_and_cash_flow_by_period(session, organization_id, scenario)
+    built = balance if which == "balance_sheet" else cash_flow
+    start, end = month_start(start_period), month_start(end_period)
+    out: list[dict[str, Any]] = []
+    for period_key, values in built.items():
+        period = parse_period(period_key)
+        if period is None or period < start or period > end:
+            continue
+        row: dict[str, Any] = {"period": period, **{k: q(v) for k, v in values.items()}}
+        for alias, key in GL_BALANCE_ALIASES.items():
+            if key in row:
+                row[alias] = row[key]
+        out.append(row)
+    return sorted(out, key=lambda r: r["period"])
+
+
+def gl_balance_rows(session: Session, organization_id: uuid.UUID, scenario: str, start_period: date, end_period: date) -> list[dict[str, Any]]:
+    """Monthly balance sheet rows built from GL activity and opening balances."""
+    return _gl_statement_rows(session, organization_id, scenario, start_period, end_period, "balance_sheet")
+
+
+def gl_cash_flow_rows(session: Session, organization_id: uuid.UUID, scenario: str, start_period: date, end_period: date) -> list[dict[str, Any]]:
+    """Monthly indirect cash flow rows built from the GL, with the cash check."""
+    return _gl_statement_rows(session, organization_id, scenario, start_period, end_period, "cash_flow")
 
 
 def row_value(row: dict[str, Any], key: str) -> Decimal:
@@ -341,22 +423,16 @@ def statement(
     periods: set[date] = set()
     for scenario_name, s, e in scenarios_for(scenario, start_period, end_period, as_of_period=as_of_period):
         if statement_type == "income_statement":
-            table = table_name_for(scenario_name, "income_statement")
-            source = [ensure_income_formulas(r) for r in fetch_rows(session, table, organization_id, s, e)]
+            table = GL_TABLE
+            source = gl_income_rows(session, organization_id, scenario_name, s, e)
             mappings = INCOME_STATEMENT_LINES
         elif statement_type == "balance_sheet":
-            table = table_name_for(scenario_name, "balance_sheet")
-            source = [ensure_balance_formulas(r) for r in fetch_rows(session, table, organization_id, s, e)]
+            table = GL_TABLE
+            source = gl_balance_rows(session, organization_id, scenario_name, s, e)
             mappings = BALANCE_SHEET_LINES
         else:
-            table = table_name_for(scenario_name, "cash_flow_statement")
-            bs_cash = balance_sheet_cash(session, organization_id, start_period, end_period)
-            source = ensure_cash_flow_formulas(
-                fetch_rows(session, table, organization_id, s, e),
-                bs_cash,
-                scenario_name,
-                as_of_period=as_of_period,
-            )
+            table = GL_TABLE
+            source = gl_cash_flow_rows(session, organization_id, scenario_name, s, e)
             mappings = CASH_FLOW_LINES
         periods.update(r["period"] for r in source)
         rows.extend(normalize_rows(organization_id, scenario_name, table, source, mappings))
@@ -369,15 +445,6 @@ def statement(
         rows=rows,
         periods=sorted(periods),
     )
-
-
-def balance_sheet_cash(session: Session, organization_id: uuid.UUID, start_period: date, end_period: date) -> dict[tuple[str, date], Decimal]:
-    out: dict[tuple[str, date], Decimal] = {}
-    for scenario_name in ("Actual", "Budget", "Forecast"):
-        table = table_name_for(scenario_name, "balance_sheet")
-        for row in fetch_rows(session, table, organization_id, start_period, end_period):
-            out[(scenario_name, row["period"])] = row_value(row, "cash")
-    return out
 
 
 def summary(
@@ -495,11 +562,11 @@ def source_reconciliation_validations(
             actual = row_value(row, "ending_deferred_revenue")
             results.append(_validation(scenario_name, row["period"], "deferred_revenue_waterfall_ties", expected, actual, [dr_table]))
 
-        cf_table = table_name_for(scenario_name, "cash_flow_statement")
-        for row in fetch_rows(session, cf_table, organization_id, s, e):
+        for row in gl_cash_flow_rows(session, organization_id, scenario_name, s, e):
             ocf = row_value(row, "net_cash_from_operating_activities")
             if ocf == 0:
-                results.append(ValidationResult(scenario=scenario_name, period=row["period"], validation_name="operating_cash_flow_missing_or_zero", status="warning", expected_value=None, actual_value=Decimal("0"), variance=None, source_tables_used=[cf_table]))
-            results.append(ValidationResult(scenario=scenario_name, period=row["period"], validation_name="dashboard_values_sourced_from_database", status="pass", expected_value=None, actual_value=None, variance=None, source_tables_used=[cf_table, table_name_for(scenario_name, "income_statement"), table_name_for(scenario_name, "balance_sheet")]))
+                results.append(ValidationResult(scenario=scenario_name, period=row["period"], validation_name="operating_cash_flow_missing_or_zero", status="warning", expected_value=None, actual_value=Decimal("0"), variance=None, source_tables_used=[GL_TABLE]))
+            results.append(_validation(scenario_name, row["period"], "cash_flow_ending_cash_equals_balance_sheet_cash", row_value(row, "balance_sheet_cash"), row_value(row, "ending_cash"), [GL_TABLE]))
+            results.append(ValidationResult(scenario=scenario_name, period=row["period"], validation_name="dashboard_values_sourced_from_database", status="pass", expected_value=None, actual_value=None, variance=None, source_tables_used=[GL_TABLE]))
 
     return results

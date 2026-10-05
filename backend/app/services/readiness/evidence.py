@@ -39,22 +39,25 @@ def _existing_tables(db: Session, names: set[str]) -> dict[str, bool]:
     return {str(r[0]): bool(r[1]) for r in rows}
 
 
-def _table_stats(db: Session, table: str, has_period: bool, oid: uuid.UUID) -> tuple[int, set[str]]:
-    count = int(
-        db.execute(
-            text(f'SELECT count(*) FROM "{table}" WHERE organization_id = CAST(:oid AS uuid)'),
-            {"oid": str(oid)},
-        ).scalar()
-        or 0
-    )
+def _split_source(source: str) -> tuple[str, str | None]:
+    """``gl_actuals#Budget`` → (``gl_actuals``, ``Budget``): one table holding several versions."""
+    table, _, version = source.partition("#")
+    return table, version or None
+
+
+def _table_stats(db: Session, source: str, has_period: bool, oid: uuid.UUID) -> tuple[int, set[str]]:
+    table, version = _split_source(source)
+    where = "organization_id = CAST(:oid AS uuid)"
+    params: dict[str, str] = {"oid": str(oid)}
+    if version:
+        where += " AND lower(version) = lower(:version)"
+        params["version"] = version
+    count = int(db.execute(text(f'SELECT count(*) FROM "{table}" WHERE {where}'), params).scalar() or 0)
     periods: set[str] = set()
     if count and has_period:
         for (p,) in db.execute(
-            text(
-                f'SELECT DISTINCT period::text FROM "{table}" '
-                "WHERE organization_id = CAST(:oid AS uuid) AND period IS NOT NULL"
-            ),
-            {"oid": str(oid)},
+            text(f'SELECT DISTINCT period::text FROM "{table}" WHERE {where} AND period IS NOT NULL'),
+            params,
         ).all():
             try:
                 periods.add(to_period(str(p)))
@@ -77,8 +80,9 @@ def expected_periods(db: Session, org: Organization) -> dict[str, list[str]]:
 def build_evidence(db: Session, org: Organization) -> tuple[dict[str, ObjectEvidence], dict[str, Any]]:
     oid = org.id
     windows = expected_periods(db, org)
-    tables = {t for o in OBJECTS.values() for t in o.tables if not t.startswith("@")}
-    existing = _existing_tables(db, tables)
+    sources = {t for o in OBJECTS.values() for t in o.tables if not t.startswith("@")}
+    existing_tables = _existing_tables(db, {_split_source(s)[0] for s in sources})
+    existing = {s: existing_tables[_split_source(s)[0]] for s in sources if _split_source(s)[0] in existing_tables}
     stats: dict[str, tuple[int, set[str]]] = {}
     for t, has_period in existing.items():
         try:

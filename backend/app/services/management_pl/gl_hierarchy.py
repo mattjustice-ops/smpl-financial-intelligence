@@ -7,6 +7,16 @@ from decimal import Decimal
 from typing import Iterable
 
 from app.services.financial_statements.mapping import IS_COGS, IS_OPEX, IS_REVENUE, normalize_is_bucket
+from app.services.reporting.gl_income_statement import classify_gl_line
+
+SECTION_BY_IS_LINE: dict[str, str] = {
+    "revenue": "revenue",
+    "cogs": "cogs",
+    "sm": "sales_and_marketing",
+    "rd": "research_and_development",
+    "ga": "general_and_administrative",
+    "unmapped": "unmapped",
+}
 
 SBC_KEYWORDS = ("stock", "sbc", "equity comp", "share-based")
 RESTRUCT_KEYWORDS = ("restruct", "severance", "exit", "one-time", "onetime")
@@ -120,9 +130,9 @@ COGS_ACCOUNT_NAMES: frozenset[str] = frozenset(
 )
 
 # Raw CSV department → management P&L OpEx stack (Chart B)
-OPEX_STACK_SM_DEPTS: frozenset[str] = frozenset({"Sales", "Marketing"})
+OPEX_STACK_SM_DEPTS: frozenset[str] = frozenset({"Sales", "Marketing", "Customer Success"})
 OPEX_STACK_RD_DEPTS: frozenset[str] = frozenset({"Engineering", "Product"})
-OPEX_STACK_GA_DEPTS: frozenset[str] = frozenset({"G&A", "Finance", "Customer Success", "Support"})
+OPEX_STACK_GA_DEPTS: frozenset[str] = frozenset({"G&A", "Finance", "Support"})
 
 GL_DRILLDOWN_DEPARTMENTS: tuple[str, ...] = (
     "Sales",
@@ -273,8 +283,15 @@ def resolve_section_and_group(
 
 
 def classify_raw_gl_row(raw: dict) -> GlEntry | None:
-    amount = Decimal(str(raw.get("amount") or 0))
-    if amount == 0:
+    """Section comes from the income statement rules; account group is the drilldown label.
+
+    GL amounts are debit-positive. Entries carry revenue positive and expenses negative.
+    """
+    raw_amount = Decimal(str(raw.get("amount") or 0))
+    if raw_amount == 0:
+        return None
+    line = classify_gl_line(raw)
+    if line is None:
         return None
     acct_name = str(raw.get("account_name") or raw.get("account_number") or "Unknown")
     acct_num = str(raw.get("account_number") or "")
@@ -282,9 +299,6 @@ def classify_raw_gl_row(raw: dict) -> GlEntry | None:
     dept = normalize_source_department(str(raw.get("department") or ""))
     etype = str(raw.get("expense_type") or "")
     category = str(raw.get("category") or raw.get("statement_category") or "")
-    statement = str(raw.get("statement") or "").strip()
-    if statement and "income" not in statement.lower() and statement.lower() not in {"income statement", "opex"}:
-        return None
     period = raw.get("period")
     if period is None:
         return None
@@ -293,21 +307,23 @@ def classify_raw_gl_row(raw: dict) -> GlEntry | None:
     else:
         ps = str(period)[:7]
 
-    section_key, ag = resolve_section_and_group(
-        account_name=acct_name,
-        account_group=group,
-        category=category,
-        expense_type=etype,
-        department=dept,
-        amount=amount,
-    )
+    amount = -raw_amount
+    section_key = SECTION_BY_IS_LINE.get(line, "below_the_line")
+    if section_key == "cogs":
+        ag = cogs_display_group(acct_name)
+    else:
+        _section, ag = resolve_section_and_group(
+            account_name=acct_name,
+            account_group=group,
+            category=category,
+            expense_type=etype,
+            department=dept,
+            amount=amount,
+        )
     blob = f"{acct_name} {group} {etype}".lower()
     mgmt = str(raw.get("management_view_include") or "Yes").strip().lower()
     if mgmt not in ("yes", "y", "true", "1"):
         return None
-    expense_amount = abs(amount) if amount < 0 else amount
-    if section_key != "revenue":
-        amount = -expense_amount
 
     sbc_flag = str(raw.get("sbc_flag") or "").strip().lower()
     is_non_recurring = "accounting true-up" in acct_name.lower() or _match_any(blob, RESTRUCT_KEYWORDS)
@@ -325,6 +341,6 @@ def classify_raw_gl_row(raw: dict) -> GlEntry | None:
         amount=amount,
         is_sbc=sbc_flag in ("yes", "y", "true", "1") or _match_any(blob, SBC_KEYWORDS),
         is_restruct=_match_any(blob, RESTRUCT_KEYWORDS),
-        is_non_op=_match_any(blob, NON_OP_KEYWORDS),
+        is_non_op=section_key == "below_the_line",
         is_non_recurring=is_non_recurring,
     )

@@ -574,8 +574,8 @@ def test_copilot_structured_evidence_package_from_ts_and_waterfalls() -> None:
     assert rev_keys
     rev_src = sources[rev_keys[0]]
     assert rev_src.get("source_type") == "WAREHOUSE"
-    assert rev_src.get("table") == "income_statement"
-    assert rev_src.get("column") == "revenue"
+    assert rev_src.get("table") == "gl_actuals"
+    assert rev_src.get("rollup") == "revenue"
     assert rev_src.get("period") == "2026-06" or rev_src.get("path")
 
 

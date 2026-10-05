@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import fetch_scenario_rows, value_any
 from app.services.dashboard.schemas import WaterfallSummaryRow
-from app.services.reporting.period_utils import combined_scenario_for_period, period_range, to_period
+from app.services.reporting.gl_income_statement import gl_income_statement_by_period
+from app.services.reporting.period_utils import combined_scenario_for_period, period_range, scenario_periods, to_period
 
 # Forecast-only MRR source lines in section 5 (monthly recognition from MRR waterfall).
 GAAP_FORECAST_SOURCE_TYPES: tuple[str, ...] = (
@@ -102,6 +103,24 @@ def carry_forward_monthly_revenue(
     return recognized
 
 
+def _gl_revenue_rows(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    scenario: str,
+    start_period: str,
+    end_period: str,
+) -> list[tuple[str, str, Decimal]]:
+    """(source scenario, period, revenue) for the months in view, from GL detail."""
+    wanted = set(scenario_periods(scenario, start_period, end_period))
+    out: list[tuple[str, str, Decimal]] = []
+    for source_scenario in sorted({item[0] for item in wanted}):
+        for period, built in gl_income_statement_by_period(db, organization_id, source_scenario).items():
+            if (source_scenario, period) in wanted:
+                out.append((source_scenario, period, Decimal(str(built["revenue"]))))
+    return out
+
+
 def _income_statement_revenue_by_period(
     db: Session,
     organization_id: uuid.UUID,
@@ -113,18 +132,12 @@ def _income_statement_revenue_by_period(
     period_filter,
 ) -> dict[str, Decimal]:
     revenue: dict[str, Decimal] = defaultdict(Decimal)
-    for src_scenario, period, _table_name, raw in fetch_scenario_rows(
-        db,
-        organization_id,
-        scenario=scenario,
-        suffix="income_statement",
-        fallback=None,
-        start_period=start_period,
-        end_period=end_period,
+    for src_scenario, period, amount in _gl_revenue_rows(
+        db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period
     ):
         if src_scenario != source_scenario or not period_filter(period):
             continue
-        revenue[to_period(period)] += value_any(raw, "revenue")
+        revenue[period] += amount
     return revenue
 
 
@@ -174,19 +187,13 @@ def income_statement_gaap_revenue_by_period(
 ) -> dict[str, Decimal]:
     """Income statement revenue for Total GAAP (actual + forecast months in view)."""
     revenue: dict[str, Decimal] = defaultdict(Decimal)
-    for src_scenario, period, _table_name, raw in fetch_scenario_rows(
-        db,
-        organization_id,
-        scenario=scenario,
-        suffix="income_statement",
-        fallback=None,
-        start_period=start_period,
-        end_period=end_period,
+    for src_scenario, period, amount in _gl_revenue_rows(
+        db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period
     ):
         expected = _expected_income_source_scenario(scenario, period)
         if expected is None or src_scenario != expected:
             continue
-        revenue[to_period(period)] += value_any(raw, "revenue")
+        revenue[period] += amount
     return revenue
 
 
@@ -265,7 +272,7 @@ def apply_gaap_revenue_forecast_rows(
         end_period=end_period,
     )
     component_sum = _component_sum_by_period(monthly_by_type)
-    gaap_source = "forecast_income_statement, forecast_mrr_waterfall"
+    gaap_source = "gl_actuals, forecast_mrr_waterfall"
 
     updated: list[WaterfallSummaryRow] = []
     for row in rows:
