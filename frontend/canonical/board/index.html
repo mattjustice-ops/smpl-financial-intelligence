@@ -1286,7 +1286,7 @@ function buildPLSummary(area) {
 /** Management P&L line → Income Statement row label (tsRender isRows). */
 const PL_TO_IS_LABEL = {
   'Subscription Revenue': 'Subscription Revenue',
-  'Services Revenue': 'Services Revenue',
+  'Implementation & Onboarding': 'Implementation & Onboarding',
   'Total Revenue': 'Total Revenue',
   'Cost of Revenue': 'Cost of Revenue',
   'Total Cost of Revenue': 'Cost of Revenue',
@@ -2187,7 +2187,7 @@ function tsRender() {
   const isRows = [
     {type:'sec', label:'Revenue'},
     {label:'Subscription Revenue', key:'sub_rev', indent:true},
-    {label:'Services Revenue',     key:'svc_rev', indent:true},
+    {label:'Implementation & Onboarding', key:'svc_rev', indent:true},
     {type:'sub', label:'Total Revenue', key:'revenue'},
     {type:'sec', label:'Cost of Revenue'},
     {label:'Cost of Revenue',      key:'cogs', indent:true, inv:true},
@@ -2214,7 +2214,7 @@ function tsRender() {
     return v === undefined ? tsGet(sc, src, p, 'is', key) : v;
   };
   const IS_TO_PL_LABEL = {
-    'Subscription Revenue': 'Subscription Revenue', 'Services Revenue': 'Services Revenue', 'Total Revenue': 'Total Revenue',
+    'Subscription Revenue': 'Subscription Revenue', 'Implementation & Onboarding': 'Implementation & Onboarding', 'Total Revenue': 'Total Revenue',
     'Cost of Revenue': 'Cost of Revenue', 'Gross Profit': 'Gross Profit', 'Sales & Marketing': 'Sales & Marketing',
     'Research & Development': 'Research & Development', 'General & Administrative': 'General & Administrative',
     'Total OpEx': 'Total OpEx', 'EBITDA': 'EBITDA',

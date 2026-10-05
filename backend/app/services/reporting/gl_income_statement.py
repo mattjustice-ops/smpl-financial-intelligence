@@ -70,7 +70,14 @@ OPEX_LINE_BY_DEPARTMENT: dict[str, str] = {
     "support": "ga",
 }
 
-SERVICES_REVENUE_TOKENS = ("service", "professional", "implementation")
+SERVICES_REVENUE_TOKENS = ("service", "professional", "implementation", "onboarding")
+SERVICES_REVENUE_LABEL = "Implementation & Onboarding"
+
+
+def is_services_revenue(label: str) -> bool:
+    """Non-recurring revenue (implementation, onboarding, one-off services) by account text."""
+    text = label.lower()
+    return any(t in text for t in SERVICES_REVENUE_TOKENS)
 
 GL_VERSION_BY_SCENARIO = {"actual": "Actual", "budget": "Budget", "forecast": "Forecast"}
 
@@ -111,7 +118,7 @@ def build_income_statement_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dic
         if line == "revenue":
             bucket["revenue"] += -amount
             label = f"{_norm(raw.get('account_name'))} {_norm(raw.get('account_group'))}"
-            key = "svc_rev" if any(t in label for t in SERVICES_REVENUE_TOKENS) else "sub_rev"
+            key = "svc_rev" if is_services_revenue(label) else "sub_rev"
             bucket[key] += -amount
         else:
             bucket[line] += amount

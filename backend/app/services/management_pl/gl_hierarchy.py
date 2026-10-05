@@ -7,7 +7,11 @@ from decimal import Decimal
 from typing import Iterable
 
 from app.services.financial_statements.mapping import IS_COGS, IS_OPEX, IS_REVENUE, normalize_is_bucket
-from app.services.reporting.gl_income_statement import classify_gl_line
+from app.services.reporting.gl_income_statement import (
+    SERVICES_REVENUE_LABEL,
+    classify_gl_line,
+    is_services_revenue,
+)
 
 SECTION_BY_IS_LINE: dict[str, str] = {
     "revenue": "revenue",
@@ -51,7 +55,7 @@ class HierarchyTemplate:
 
 # Default CFO hierarchy when GL rows lack account_group detail.
 MANAGEMENT_HIERARCHY: tuple[HierarchyTemplate, ...] = (
-    HierarchyTemplate("revenue", "Revenue", None, ("Subscription Revenue", "Services Revenue", "Other Revenue")),
+    HierarchyTemplate("revenue", "Revenue", None, ("Subscription Revenue", SERVICES_REVENUE_LABEL, "Other Revenue")),
     HierarchyTemplate(
         "cogs",
         "COGS",
@@ -248,9 +252,9 @@ def resolve_section_and_group(
         return "cogs", cogs_display_group(acct)
 
     if bucket == IS_REVENUE or (amount > 0 and _match_any(blob, ("revenue", "subscription", "services"))):
-        if "service" in blob:
-            return "revenue", "Services Revenue"
-        if "subscription" in blob:
+        if is_services_revenue(blob):
+            return "revenue", SERVICES_REVENUE_LABEL
+        if "subscription" in blob or "saas" in blob:
             return "revenue", "Subscription Revenue"
         return "revenue", group if group != "Other" else "Other Revenue"
 

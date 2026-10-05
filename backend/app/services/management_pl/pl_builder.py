@@ -8,6 +8,7 @@ from typing import Callable
 from app.services.management_pl.gl_hierarchy import COGS_ACCOUNT_NAMES, GL_DRILLDOWN_DEPARTMENTS
 from app.services.management_pl.period_engine import PeriodContext, sum_metric, variance
 from app.services.management_pl.schemas import MetricSlice, PlLine
+from app.services.reporting.gl_income_statement import SERVICES_REVENUE_LABEL, SERVICES_REVENUE_TOKENS
 
 SALES_COMP_ACCOUNTS = ("Base Salaries", "Employee Benefits", "Payroll Taxes", "Sales Commissions")
 MKT_SALARY_ACCOUNTS = ("Base Salaries", "Employee Benefits", "Payroll Taxes")
@@ -195,13 +196,19 @@ def _gl_subscription_revenue(gl: dict[tuple[str, str, str], Decimal], periods: t
 
 
 def _gl_services_revenue(gl: dict[tuple[str, str, str], Decimal], periods: tuple[str, ...]) -> Decimal:
-    v = _gl_dept_acct_sum(gl, periods, department="Revenue", account="Services Revenue")
-    if v:
-        return v
-    v = _gl_acct_contains(gl, periods, "service", department="Revenue")
-    if v:
-        return v
-    return _gl_acct_contains(gl, periods, "service", department=None)
+    for account in (SERVICES_REVENUE_LABEL, "Services Revenue"):
+        v = _gl_dept_acct_sum(gl, periods, department="Revenue", account=account)
+        if v:
+            return v
+    for token in SERVICES_REVENUE_TOKENS:
+        v = _gl_acct_contains(gl, periods, token, department="Revenue")
+        if v:
+            return v
+    for token in SERVICES_REVENUE_TOKENS:
+        v = _gl_acct_contains(gl, periods, token, department=None)
+        if v:
+            return v
+    return Decimal("0")
 
 
 def _resolve_revenue_split(
@@ -517,7 +524,7 @@ def build_spec_pl_lines(
     )
     svc_line = _pl_line(
         "services_revenue",
-        "Services Revenue",
+        SERVICES_REVENUE_LABEL,
         "services_revenue",
         svc_m,
         driver="income_statement",

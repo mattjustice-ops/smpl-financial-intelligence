@@ -6,7 +6,9 @@ activity. Retained earnings is never posted; it is computed from GL net income.
 
 Where each balance sheet row comes from:
   * Opening balances: the cutoff month of Actual_balance_sheet.csv. Equity is one total
-    in the dataset, so it opens on account 3000 with no split.
+    in the dataset, so it opens on account 3000 with no split. Implementation revenue
+    through the cutoff (Actual_implementation_schedule.csv) is not in that balance sheet,
+    so it is added: billed to equity, collected to cash, still open to AR.
   * Accounts receivable: AR rollforward (billings, collections).
   * Accounts payable: AP rollforward (vendor accruals, vendor payments).
   * Prepaids: prepaids rollforward (additions, amortization).
@@ -16,8 +18,11 @@ Where each balance sheet row comes from:
     ("Balance Sheet Activity"). The P&L rows already include the expense.
   * Equity raises: financing in the cash flow statement that is not a change in debt.
   * Cash: the other side of the month's entries, so every month's journal balances.
-A sub-ledger is used only when it starts and ends on the balance sheet amounts; otherwise
-the balance sheet change is posted and the reason is logged.
+A sub-ledger is the source for its line. Its billings/payments are posted when it starts
+on the GL's own balance for that line; when it starts elsewhere (Budget and Forecast
+schedules that do not continue from the Actual balance), the move to its ending balance
+is posted as one net change and logged. The balance sheet file is used for the line only
+when there is no schedule row or the schedule's layout differs.
 
 Amounts are debit-positive (assets +, liabilities and equity -).
 """
@@ -104,12 +109,31 @@ class Writer:
         })
 
 
+KEY_BY_NUMBER = {v[0]: k for k, v in ACCOUNTS.items()}
+
+
+def _natural(key: str, amount: Decimal) -> Decimal:
+    return -amount if key in CREDIT_NORMAL else amount
+
+
+def _implementation_through(src: str, month: str) -> tuple[Decimal, Decimal]:
+    """(billed, collected) through ``month`` from Actual_implementation_schedule.csv."""
+    path = os.path.join(src, "Actual_implementation_schedule.csv")
+    if not os.path.exists(path):
+        return Decimal("0"), Decimal("0")
+    rows = _read(path)
+    billed = sum((num(r["implementation_fee"]) for r in rows if r["period"][:7] <= month), Decimal("0"))
+    collected = sum((num(r["implementation_fee"]) for r in rows if r["collection_period"][:7] <= month), Decimal("0"))
+    return billed, collected
+
+
 def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, str]]]):
     """Return {version: balance sheet rows} and a log of every choice made."""
     org = next(r["organization_id"] for r in gl_by_version["Actual"])
     actual_bs = _by_period(os.path.join(src, "Actual_balance_sheet.csv"))
     out: dict[str, list[dict[str, str]]] = {}
     log: list[dict[str, str]] = []
+    actual_running: dict[str, dict[str, Decimal]] = {}
 
     for version, gl_rows in gl_by_version.items():
         bs = _by_period(os.path.join(src, f"{version}_balance_sheet.csv"))
@@ -129,6 +153,7 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                     da_total[r["period"][:7]] += num(r["amount"])
 
         periods = sorted(bs)
+        running: dict[str, Decimal] = defaultdict(Decimal)
         if version == OPENING_VERSION:
             cutoff = periods[0]
             for key in BALANCE_LINES:
@@ -138,7 +163,28 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                 w.add(cutoff, key, -bal if key in CREDIT_NORMAL else bal, label="opening",
                       source_file=f"{version}_balance_sheet.csv", source_system="Opening Balance",
                       note=f"Opening balance at {cutoff} month end, from {version}_balance_sheet.csv")
+            impl_billed, impl_collected = _implementation_through(src, cutoff)
+            if impl_billed:
+                impl_file = "Actual_implementation_schedule.csv"
+                w.add(cutoff, "accounts_receivable", impl_billed - impl_collected, label="opening_implementation",
+                      source_file=impl_file, source_system="Opening Balance",
+                      note=f"implementation invoices open at {cutoff} month end")
+                w.add(cutoff, "cash", impl_collected, label="opening_implementation",
+                      source_file=impl_file, source_system="Opening Balance",
+                      note=f"implementation invoices collected by {cutoff} month end")
+                w.add(cutoff, "equity", -impl_billed, label="opening_implementation",
+                      source_file=impl_file, source_system="Opening Balance",
+                      note=f"implementation revenue in {cutoff} net income, not in {version}_balance_sheet.csv equity")
+                log.append({"version": version, "period": cutoff, "line": "equity", "action": "opening",
+                            "detail": f"implementation through the cutoff: billed {impl_billed:,.2f} (equity), "
+                                      f"collected {impl_collected:,.2f} (cash), open {impl_billed - impl_collected:,.2f} (AR)",
+                            "amount": f"{impl_billed:.2f}"})
+            for r in w.rows:
+                running[KEY_BY_NUMBER[r["account_number"]]] += _natural(KEY_BY_NUMBER[r["account_number"]], num(r["amount"]))
+            actual_running[cutoff] = dict(running)
             periods = periods[1:]
+        else:
+            running.update(actual_running.get(_prior(periods[0]), {}))
 
         for p in periods:
             before = len(w.rows)
@@ -150,7 +196,7 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
 
             def subledger(sched, key, begin_col, end_col, legs, file_label):
                 row = sched.get(p)
-                bs_begin, bs_end = num(prior.get(key)), num(cur.get(key))
+                gl_begin = running[key]
                 if row and not all(c in row for c in [begin_col, end_col, *(col for _, col, _ in legs)]):
                     reason = f"layout differs ({', '.join(k for k in row if k not in ('organization_id', 'version', 'period'))})"
                     amt = change(key)
@@ -160,19 +206,27 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                     log.append({"version": version, "period": p, "line": key, "action": "balance sheet change",
                                 "detail": f"{file_label} not used: {reason}", "amount": f"{amt:.2f}"})
                     return
-                if row and abs(num(row[begin_col]) - bs_begin) <= TIE and abs(num(row[end_col]) - bs_end) <= TIE:
+                if row and abs(num(row[begin_col]) - gl_begin) <= TIE:
                     for label, col, sign in legs:
                         w.add(p, key, sign * num(row[col]), label=label, source_file=file_label,
                               note=f"{label.replace('_', ' ')} from {file_label}")
-                    rounding = (bs_end - bs_begin) * (-1 if key in CREDIT_NORMAL else 1) - sum(
+                    rounding = _natural(key, num(row[end_col]) - gl_begin) - sum(
                         (sign * num(row[col]) for _, col, sign in legs), Decimal("0"))
                     if rounding:
                         w.add(p, key, rounding, label="rounding", source_file=file_label,
-                              note=f"cents between {file_label} and {version}_balance_sheet.csv")
+                              note=f"cents between the GL balance and {file_label}")
                     return
-                reason = "no schedule row" if not row else (
-                    f"schedule starts {num(row[begin_col]):,.2f} / ends {num(row[end_col]):,.2f}; "
-                    f"balance sheet {bs_begin:,.2f} / {bs_end:,.2f}")
+                if row:
+                    amt = num(row[end_col]) - gl_begin
+                    w.add(p, key, _natural(key, amt), label="net_change", source_file=file_label,
+                          note=f"move to the ending balance in {file_label}; it starts at "
+                               f"{num(row[begin_col]):,.2f}, not the GL balance {gl_begin:,.2f}")
+                    log.append({"version": version, "period": p, "line": key, "action": "schedule ending",
+                                "detail": f"{file_label} starts {num(row[begin_col]):,.2f}, GL balance {gl_begin:,.2f}; "
+                                          f"posted the move to its ending {num(row[end_col]):,.2f}",
+                                "amount": f"{amt:.2f}"})
+                    return
+                reason = "no schedule row"
                 amt = change(key)
                 w.add(p, key, -amt if key in CREDIT_NORMAL else amt, label="net_change",
                       source_file=f"{version}_balance_sheet.csv",
@@ -229,6 +283,11 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             other = sum((num(r["amount"]) for r in w.rows[before:]), Decimal("0")) + pl_total[p]
             w.add(p, "cash", -other, label="net_cash", source_file=f"{version}_gl_detail.csv",
                   note="cash: other side of this month's entries")
+            for r in w.rows[before:]:
+                key = KEY_BY_NUMBER[r["account_number"]]
+                running[key] += _natural(key, num(r["amount"]))
+            if version == OPENING_VERSION:
+                actual_running[p] = dict(running)
 
         out[version] = w.rows
     return out, log
