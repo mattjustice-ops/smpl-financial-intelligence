@@ -53,12 +53,13 @@ OPEX_LINE_BY_ACCOUNT_GROUP: dict[str, str] = {
     "interest": "interest",
 }
 
-# Default department → P&L line. Customer Success and Support sit in G&A until
-# the department mapping is confirmed per customer.
+# Default department → P&L line. Customer Success is part of Sales. Support stays in
+# opex (G&A) on the income statement; the Management P&L allocates it to cost of revenue.
 OPEX_LINE_BY_DEPARTMENT: dict[str, str] = {
     "sales": "sm",
     "marketing": "sm",
     "sales and marketing": "sm",
+    "customer success": "sm",
     "engineering": "rd",
     "product": "rd",
     "research and development": "rd",
@@ -66,7 +67,6 @@ OPEX_LINE_BY_DEPARTMENT: dict[str, str] = {
     "g&a": "ga",
     "general and administrative": "ga",
     "all": "ga",
-    "customer success": "ga",
     "support": "ga",
 }
 

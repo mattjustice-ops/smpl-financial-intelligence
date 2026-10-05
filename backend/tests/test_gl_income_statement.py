@@ -43,7 +43,7 @@ def test_revenue_credit_shows_positive_and_expenses_as_posted() -> None:
     assert is_row["gm_pct"] == pytest.approx(0.8)
 
 
-def test_sm_is_sales_plus_marketing_only() -> None:
+def test_customer_success_is_sales_and_support_is_ga() -> None:
     is_row = build_income_statement_rows(
         [
             _row(150.0, dept="Sales"),
@@ -53,8 +53,8 @@ def test_sm_is_sales_plus_marketing_only() -> None:
         ]
     )["2026-01"]
 
-    assert is_row["sm"] == 200.0
-    assert is_row["ga"] == 50.0
+    assert is_row["sm"] == 230.0
+    assert is_row["ga"] == 20.0
 
 
 def test_function_named_in_category_or_account_group() -> None:
