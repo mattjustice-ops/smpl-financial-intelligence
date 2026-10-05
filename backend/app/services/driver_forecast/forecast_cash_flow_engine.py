@@ -11,7 +11,7 @@ from app.services.driver_forecast.cash_collections_forecast import build_cash_co
 from app.services.driver_forecast.common import month_range, period_type, q_money
 from app.services.driver_forecast.operating_cash_bridge import build_operating_cash_bridge
 from app.services.driver_forecast.repository import decimal_value, fetch_period_rows
-from app.services.financial_statements.financial_statement_service import gl_income_rows
+from app.services.financial_statements.financial_statement_service import gl_balance_rows, gl_cash_flow_rows, gl_income_rows
 from app.services.workforce.integration import resolve_payroll_cash_out
 
 
@@ -49,21 +49,9 @@ def build_cash_flow_forecast(
     explicit_by_period = {r["period"]: r for r in explicit}
     income_rows = gl_income_rows(session, organization_id, "Forecast", start_period, end_period)
     revenue_by_period = {r["period"]: decimal_value(r, "revenue") for r in income_rows}
-    actual_rows = fetch_period_rows(
-        session,
-        table_name="actual_cash_flow_statement",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    actual_rows = gl_cash_flow_rows(session, organization_id, "Actual", start_period, end_period)
     actual_by_period = {r["period"]: r for r in actual_rows}
-    actual_bs_rows = fetch_period_rows(
-        session,
-        table_name="actual_balance_sheet",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    actual_bs_rows = gl_balance_rows(session, organization_id, "Actual", start_period, end_period)
     actual_cash_by_period = {r["period"]: decimal_value(r, "cash") for r in actual_bs_rows}
 
     beginning_cash = Decimal("0")

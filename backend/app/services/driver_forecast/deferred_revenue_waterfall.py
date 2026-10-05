@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.services.driver_forecast.billing_forecast_engine import build_billing_forecast
 from app.services.driver_forecast.common import month_range, period_type, q_money
 from app.services.driver_forecast.repository import decimal_value, fetch_period_rows
-from app.services.financial_statements.financial_statement_service import gl_income_rows
+from app.services.financial_statements.financial_statement_service import gl_balance_rows, gl_income_rows
 
 
 def build_deferred_revenue_waterfall(
@@ -29,23 +29,11 @@ def build_deferred_revenue_waterfall(
     )
     revenue_rows = gl_income_rows(session, organization_id, "Forecast", start_period, end_period)
     revenue_by_period = {r["period"]: decimal_value(r, "revenue") for r in revenue_rows}
-    balance_rows = fetch_period_rows(
-        session,
-        table_name="forecast_balance_sheet",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    balance_rows = gl_balance_rows(session, organization_id, "Forecast", start_period, end_period)
     explicit_deferred = {r["period"]: decimal_value(r, "deferred_revenue") for r in balance_rows}
     actual_income_rows = gl_income_rows(session, organization_id, "Actual", start_period, end_period)
     actual_revenue_by_period = {r["period"]: decimal_value(r, "revenue") for r in actual_income_rows}
-    actual_balance_rows = fetch_period_rows(
-        session,
-        table_name="actual_balance_sheet",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    actual_balance_rows = gl_balance_rows(session, organization_id, "Actual", start_period, end_period)
     actual_deferred = {r["period"]: decimal_value(r, "deferred_revenue") for r in actual_balance_rows}
     actual_invoice_rows = fetch_period_rows(
         session,

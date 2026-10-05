@@ -133,6 +133,35 @@ def test_budget_continues_from_actual_balances():
     assert cash_flow["2022-12"]["cash_check"] == 0
 
 
+def test_financial_statements_balance_sheet_and_cash_flow_come_from_gl(monkeypatch: pytest.MonkeyPatch):
+    from datetime import date
+    from decimal import Decimal
+
+    from app.services.financial_statements import financial_statement_service as fs
+
+    built = build_balance_sheet_and_cash_flow(*worked_example())
+    monkeypatch.setattr(fs, "gl_balance_sheet_and_cash_flow_by_period", lambda _db, _org, _scenario: built)
+    kwargs = dict(scenario="Actual", start_period=date(2022, 11, 1), end_period=date(2022, 12, 1))
+
+    balance = fs.statement(None, None, statement_type="balance_sheet", **kwargs)
+    by_line = {(r.period, r.line_item): r for r in balance.rows}
+    dec = date(2022, 12, 1)
+    assert by_line[(dec, "Cash")].amount == Decimal("670.00")
+    assert by_line[(dec, "Retained Earnings")].amount == Decimal("-430.00")
+    assert by_line[(dec, "Total Equity")].amount == Decimal("660.00")
+    assert by_line[(dec, "Balance Check")].amount == Decimal("0.00")
+    assert {r.source_table for r in balance.rows} == {"gl_actuals"}
+
+    cash = fs.statement(None, None, statement_type="cash_flow", **kwargs)
+    cf = {(r.period, r.line_item): r.amount for r in cash.rows}
+    assert cf[(dec, "Beginning Cash Balance")] == Decimal("550.00")
+    assert cf[(dec, "Stock-Based Compensation")] == Decimal("20.00")
+    assert cf[(dec, "Ending Cash Balance")] == Decimal("670.00")
+
+    rows = fs.gl_balance_rows(None, None, "Actual", date(2022, 12, 1), date(2022, 12, 1))
+    assert rows[0]["prepaids_and_other_current"] == rows[0]["prepaids_and_other_current_assets"] == Decimal("80.00")
+
+
 def test_unknown_balance_sheet_account_is_reported_not_assigned():
     assert classify_bs_line({"statement": "Balance Sheet", "expense_type": "Mystery", "account_group": ""}) == "unmapped"
     assert classify_bs_line({"statement": "Income Statement", "expense_type": "Cash"}) is None

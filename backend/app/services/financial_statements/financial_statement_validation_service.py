@@ -57,24 +57,37 @@ def validate_financial_statements(
         net_income = inc.get((scenario, period, "Operating Income"), Decimal("0")) - inc.get((scenario, period, "Interest Expense"), Decimal("0")) - inc.get((scenario, period, "Tax Expense"), Decimal("0"))
         results.append(_result(scenario, period, "income_statement_net_income", net_income, inc.get((scenario, period, "Net Income"), Decimal("0")), sources))
 
-        bs_sources = [f"{scenario.lower()}_balance_sheet"]
+        bs_sources = ["gl_actuals"]
         assets = bs.get((scenario, period, "Cash"), Decimal("0")) + bs.get((scenario, period, "Accounts Receivable"), Decimal("0")) + bs.get((scenario, period, "Prepaids and Other Current Assets"), Decimal("0")) + bs.get((scenario, period, "Property and Equipment, Net"), Decimal("0")) + bs.get((scenario, period, "Other Assets"), Decimal("0"))
         results.append(_result(scenario, period, "balance_sheet_total_assets", assets, bs.get((scenario, period, "Total Assets"), Decimal("0")), bs_sources))
         liabilities = bs.get((scenario, period, "Accounts Payable"), Decimal("0")) + bs.get((scenario, period, "Deferred Revenue"), Decimal("0")) + bs.get((scenario, period, "Debt"), Decimal("0")) + bs.get((scenario, period, "Other Liabilities"), Decimal("0"))
         results.append(_result(scenario, period, "balance_sheet_total_liabilities", liabilities, bs.get((scenario, period, "Total Liabilities"), Decimal("0")), bs_sources))
-        lie = bs.get((scenario, period, "Total Liabilities"), Decimal("0")) + bs.get((scenario, period, "Equity"), Decimal("0"))
+        equity = sum(
+            (bs.get((scenario, period, line), Decimal("0")) for line in ("Paid-in Capital", "APIC - Stock Compensation", "Retained Earnings", "Net Income (Current Period)")),
+            Decimal("0"),
+        )
+        results.append(_result(scenario, period, "balance_sheet_equity_rolls", equity, bs.get((scenario, period, "Total Equity"), Decimal("0")), bs_sources))
+        lie = bs.get((scenario, period, "Total Liabilities"), Decimal("0")) + bs.get((scenario, period, "Total Equity"), Decimal("0"))
         results.append(_result(scenario, period, "balance_sheet_liabilities_and_equity", lie, bs.get((scenario, period, "Total Liabilities and Equity"), Decimal("0")), bs_sources))
         results.append(_result(scenario, period, "balance_sheet_balances", Decimal("0"), bs.get((scenario, period, "Balance Check"), Decimal("0")), bs_sources))
 
-        cf_sources = [f"{scenario.lower()}_cash_flow_statement", f"{scenario.lower()}_balance_sheet"]
-        ocf = (
-            cf.get((scenario, period, "Net Income"), Decimal("0"))
-            + cf.get((scenario, period, "Depreciation and Amortization"), Decimal("0"))
-            + cf.get((scenario, period, "Stock-Based Compensation"), Decimal("0"))
-            + cf.get((scenario, period, "Change in Accounts Receivable"), Decimal("0"))
-            + cf.get((scenario, period, "Change in Deferred Revenue"), Decimal("0"))
-            + cf.get((scenario, period, "Change in Accounts Payable"), Decimal("0"))
-            + cf.get((scenario, period, "Change in Prepaids"), Decimal("0"))
+        cf_sources = ["gl_actuals"]
+        ocf = sum(
+            (
+                cf.get((scenario, period, line), Decimal("0"))
+                for line in (
+                    "Net Income",
+                    "Depreciation and Amortization",
+                    "Stock-Based Compensation",
+                    "Other Non-Cash Items",
+                    "Change in Accounts Receivable",
+                    "Change in Deferred Revenue",
+                    "Change in Accounts Payable",
+                    "Change in Prepaids",
+                    "Change in Other Liabilities",
+                )
+            ),
+            Decimal("0"),
         )
         results.append(_result(scenario, period, "cash_flow_operating_cash_flow", ocf, cf.get((scenario, period, "Net Cash Provided by Operating Activities"), Decimal("0")), cf_sources))
         net_change = cf.get((scenario, period, "Net Cash Provided by Operating Activities"), Decimal("0")) + cf.get((scenario, period, "Net Cash Used in Investing Activities"), Decimal("0")) + cf.get((scenario, period, "Net Cash Provided by Financing Activities"), Decimal("0"))
@@ -86,6 +99,6 @@ def validate_financial_statements(
     actual_may = cf.get(("Actual", date(2026, 5, 1), "Ending Cash Balance"))
     forecast_june = cf.get(("Forecast", date(2026, 6, 1), "Beginning Cash Balance"))
     if actual_may is not None and forecast_june is not None:
-        results.append(_result("Combined", date(2026, 6, 1), "forecast_opening_cash_equals_actual_ending_cash", actual_may, forecast_june, ["actual_cash_flow_statement", "forecast_cash_flow_statement"]))
+        results.append(_result("Combined", date(2026, 6, 1), "forecast_opening_cash_equals_actual_ending_cash", actual_may, forecast_june, ["gl_actuals"]))
 
     return results

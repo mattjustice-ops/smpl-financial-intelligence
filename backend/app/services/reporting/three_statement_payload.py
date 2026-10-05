@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.services.dashboard.query_utils import fetch_table_rows, table_exists, value_any
 from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 from app.services.reporting.export.data_collector import collect_reporting_bundle
+from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period
 from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, to_period
@@ -88,6 +89,10 @@ BS_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("deferred_rev", ("deferred_revenue", "dr", "deferred_rev")),
     ("debt", ("debt", "total_debt", "debt_balance", "notes_payable")),
     ("other_liabilities", ("other_liabilities",)),
+    ("paid_in_capital", ("paid_in_capital",)),
+    ("apic_sbc", ("apic_stock_compensation",)),
+    ("retained_earnings", ("retained_earnings",)),
+    ("current_period_net_income", ("current_period_net_income",)),
     ("equity", ("equity",)),
     ("total_assets", ("total_assets",)),
     ("total_liabilities", ("total_liabilities", "total_liab")),
@@ -99,17 +104,21 @@ CFS_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("net_income", ("net_income",)),
     ("da", ("da", "depreciation_and_amortization")),
     ("sbc", ("sbc", "stock_based_compensation")),
+    ("other_non_cash", ("other_non_cash",)),
     ("chg_ar", ("chg_ar", "change_in_accounts_receivable")),
     ("chg_dr", ("chg_dr", "change_in_deferred_revenue")),
     ("chg_ap", ("chg_ap", "change_in_accounts_payable")),
     ("chg_prepaids", ("chg_prepaids", "change_in_prepaids")),
+    ("chg_other_liab", ("change_in_other_liabilities",)),
     ("cfo", ("cfo", "net_cash_from_operating_activities")),
     ("capex", ("capex", "capital_expenditures")),
     ("cfi", ("cfi", "net_cash_from_investing_activities")),
     ("cff", ("cff", "net_cash_from_financing_activities")),
     ("debt", ("debt", "debt_issuance_repayment")),
+    ("equity_issuance", ("equity_issuance",)),
     ("net_change", ("net_change", "net_change_in_cash")),
     ("ending_cash", ("ending_cash",)),
+    ("cash_check", ("cash_check",)),
 )
 
 # Legacy maps retained for modules that import by name.
@@ -158,6 +167,19 @@ def _read_statement_table(
     if not table_exists(db, table_name):
         return []
     return fetch_table_rows(db, table_name, organization_id)
+
+
+def _gl_statement_rows(
+    db: Session,
+    organization_id: uuid.UUID,
+    prefix: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Balance sheet and cash flow rows for ``actual`` / ``budget`` / ``forecast`` from the GL."""
+    balance, cash_flow = gl_balance_sheet_and_cash_flow_by_period(db, organization_id, prefix)
+    return (
+        [{"period": p, **row} for p, row in sorted(balance.items())],
+        [{"period": p, **row} for p, row in sorted(cash_flow.items())],
+    )
 
 
 def _row_field_value(raw: dict[str, Any], *aliases: str) -> float | None:
@@ -317,28 +339,25 @@ def build_baseline_engine(
         return {}
 
     is_data = gl_income_statement_by_period(db, organization_id, "forecast")
-    bs_data = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, "forecast_balance_sheet"),
-        BS_FIELD_SPECS,
-    )
+    forecast_bs_rows, forecast_cfs_rows = _gl_statement_rows(db, organization_id, "forecast")
+    bs_data = _period_dict_from_field_specs(forecast_bs_rows, BS_FIELD_SPECS)
     for period, row in bs_data.items():
         _normalize_bs_display(row)
-    actual_bs = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, "actual_balance_sheet"),
-        BS_FIELD_SPECS,
-    )
+    actual_bs = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, "actual")[0], BS_FIELD_SPECS)
     for period, row in actual_bs.items():
         _normalize_bs_display(row)
     mrr_data = _aggregate_mrr_by_period(
         _read_statement_table(db, organization_id, "forecast_mrr_waterfall")
     )
+    loaded_cfs = _period_dict_from_field_specs(forecast_cfs_rows, CFS_FIELD_SPECS)
+    for row in loaded_cfs.values():
+        _enrich_cfs_row(row)
 
     results: dict[str, Any] = {}
     for period in fc_periods:
         is_row = dict(is_data.get(period, {}))
         _enrich_is(is_row)
         bs_row = bs_data.get(period, {})
-        loaded_cfs = _load_cfs_by_period(db, organization_id, "forecast")
         cfs_row = loaded_cfs.get(period) or build_cfs_from_statements(
             [period],
             {period: is_row},
@@ -468,8 +487,7 @@ def _align_bridge_balances_to_statement(
         bucket = scenarios.get(scenario)
         if not bucket:
             continue
-        cfs_rows = _read_statement_table(db, organization_id, f"{prefix}_cash_flow_statement")
-        bs_rows = _read_statement_table(db, organization_id, f"{prefix}_balance_sheet")
+        bs_rows, cfs_rows = _gl_statement_rows(db, organization_id, prefix)
         cfs_by = {
             to_period(str(raw.get("period") or raw.get("posting_period"))): raw
             for raw in cfs_rows
@@ -766,10 +784,7 @@ def _load_cfs_by_period(
     organization_id: uuid.UUID,
     prefix: str,
 ) -> dict[str, dict[str, float | None]]:
-    rows = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, f"{prefix}_cash_flow_statement"),
-        CFS_FIELD_SPECS,
-    )
+    rows = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, prefix)[1], CFS_FIELD_SPECS)
     for row in rows.values():
         _enrich_cfs_row(row)
     return rows
@@ -850,15 +865,12 @@ def build_ts_data(
 ) -> dict[str, Any]:
     """Board Platform 3-Statement tab shape (TS_DATA)."""
     scenarios: dict[str, Any] = {}
-    actual_bs_data = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, "actual_balance_sheet"),
-        BS_FIELD_SPECS,
-    )
+    actual_bs_data = _period_dict_from_field_specs(_gl_statement_rows(db, organization_id, "actual")[0], BS_FIELD_SPECS)
     for row in actual_bs_data.values():
         _normalize_bs_display(row)
 
     for scenario, prefix in (("Actual", "actual"), ("Forecast", "forecast"), ("Budget", "budget")):
-        bs_rows = _read_statement_table(db, organization_id, f"{prefix}_balance_sheet")
+        bs_rows = _gl_statement_rows(db, organization_id, prefix)[0]
 
         is_data = gl_income_statement_by_period(db, organization_id, prefix)
         for period, row in is_data.items():
@@ -906,7 +918,7 @@ def build_forecast_engine_src(
 ) -> dict[str, Any]:
     """Minimal SRC.actuals slice for Forecast Engine lever refresh."""
     actuals: dict[str, dict[str, float | None]] = {}
-    bs_rows = _read_statement_table(db, organization_id, "actual_balance_sheet")
+    bs_rows = _gl_statement_rows(db, organization_id, "actual")[0]
     mrr_rows = _read_statement_table(db, organization_id, "actual_mrr_waterfall")
 
     is_by_period = gl_income_statement_by_period(db, organization_id, "actual")

@@ -23,9 +23,9 @@ from app.services.reporting.three_statement_payload import (
     CFS_FIELD_SPECS,
     _calculate_cfs_row,
     _enrich_is,
+    _gl_statement_rows,
     _normalize_bs_display,
     _period_dict_from_field_specs,
-    _read_statement_table,
     _resolve_prior_bs,
     build_cash_bridge_data,
 )
@@ -107,16 +107,11 @@ def _load_statements(
     is_data = gl_income_statement_by_period(db, organization_id, prefix)
     for row in is_data.values():
         _enrich_is(row)
-    bs_data = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, f"{prefix}_balance_sheet"),
-        BS_FIELD_SPECS,
-    )
+    bs_rows, cfs_rows = _gl_statement_rows(db, organization_id, prefix)
+    bs_data = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
     for row in bs_data.values():
         _normalize_bs_display(row)
-    cfs_data = _period_dict_from_field_specs(
-        _read_statement_table(db, organization_id, f"{prefix}_cash_flow_statement"),
-        CFS_FIELD_SPECS,
-    )
+    cfs_data = _period_dict_from_field_specs(cfs_rows, CFS_FIELD_SPECS)
     return is_data, bs_data, cfs_data
 
 

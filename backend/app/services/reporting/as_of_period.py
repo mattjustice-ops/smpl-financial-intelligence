@@ -14,7 +14,6 @@ from app.services.reporting.period_utils import to_period
 _active_as_of_period: ContextVar[str | None] = ContextVar("active_as_of_period", default=None)
 
 ACTUAL_PROBE_TABLES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("actual_balance_sheet", "period", ("cash",)),
     ("actual_mrr_waterfall", "period", ("ending_arr", "ending_mrr")),
     ("actual_marketing_pipeline", "period", ("pipeline_arr_created",)),
 )

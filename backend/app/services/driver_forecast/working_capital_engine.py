@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.services.driver_forecast.cash_collections_forecast import build_cash_collections_forecast
 from app.services.driver_forecast.common import month_range, period_type, q_money
 from app.services.driver_forecast.repository import decimal_value, fetch_period_rows
+from app.services.financial_statements.financial_statement_service import gl_balance_rows
 
 
 def build_working_capital_forecast(
@@ -28,21 +29,9 @@ def build_working_capital_forecast(
         end_period=end_period,
         assumptions=assumptions,
     )
-    bs_rows = fetch_period_rows(
-        session,
-        table_name="forecast_balance_sheet",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    bs_rows = gl_balance_rows(session, organization_id, "Forecast", start_period, end_period)
     bs_by_period = {r["period"]: r for r in bs_rows}
-    actual_bs_rows = fetch_period_rows(
-        session,
-        table_name="actual_balance_sheet",
-        organization_id=organization_id,
-        start_period=start_period,
-        end_period=end_period,
-    )
+    actual_bs_rows = gl_balance_rows(session, organization_id, "Actual", start_period, end_period)
     actual_bs_by_period = {r["period"]: r for r in actual_bs_rows}
     actual_invoice_rows = fetch_period_rows(
         session,
