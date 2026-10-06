@@ -126,6 +126,25 @@ def test_implementation_revenue_is_its_own_line_and_saas_is_subscription() -> No
     assert is_row["revenue"] == 935.0
     assert is_row["sub_rev"] == 900.0
     assert is_row["svc_rev"] == 35.0
+    assert is_row["impl_rev"] == 35.0
+    assert is_row["rec_svc_rev"] == 0.0
+
+
+def test_support_and_tam_are_recurring_services_and_implementation_is_not() -> None:
+    is_row = build_income_statement_rows(
+        [
+            _row(-900.0, category="Revenue", name="Subscription Revenue", group="Revenue"),
+            _row(-60.0, category="Revenue", name="Support & Services Revenue", group="Revenue"),
+            _row(-15.0, category="Revenue", name="Technical Account Management", group="Revenue"),
+            _row(-25.0, category="Revenue", name="Implementation & Onboarding Revenue", group="Revenue"),
+        ]
+    )["2026-01"]
+
+    assert is_row["revenue"] == 1000.0
+    assert is_row["sub_rev"] == 900.0
+    assert is_row["rec_svc_rev"] == 75.0
+    assert is_row["impl_rev"] == 25.0
+    assert is_row["svc_rev"] == 100.0
 
 
 def test_financial_statements_income_rows_come_from_gl(monkeypatch: pytest.MonkeyPatch) -> None:

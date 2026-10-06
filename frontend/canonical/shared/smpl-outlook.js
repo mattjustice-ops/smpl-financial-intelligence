@@ -626,6 +626,9 @@
     if (hooks.SRC && data.SRC && data.SRC.pipeline_book && Object.keys(data.SRC.pipeline_book).length) {
       hooks.SRC.pipeline_book = JSON.parse(JSON.stringify(data.SRC.pipeline_book));
     }
+    if (hooks.SRC && data.SRC && data.SRC.implementation_fees && Object.keys(data.SRC.implementation_fees).length) {
+      hooks.SRC.implementation_fees = Object.assign({}, data.SRC.implementation_fees);
+    }
 
     if (hooks.TS_DATA && global.SMPL_DEMO_TS_DATA === hooks.TS_DATA) {
       registerDemoData(hooks.TS_DATA, global.SMPL_DEMO_WF_TABLE);

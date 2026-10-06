@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-from app.services.reporting.gl_income_statement import SERVICES_REVENUE_LABEL, is_services_revenue
+from app.services.reporting.gl_income_statement import services_revenue_label
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ def classify_gl_row(
 
     if _match(acct, "revenue", "subscription", "services"):
         stmt = "Revenue"
-        section = SERVICES_REVENUE_LABEL if is_services_revenue(acct) else "Subscription Revenue"
+        section = services_revenue_label(acct) or "Subscription Revenue"
     elif amount < 0 or _match(group, "expense", "opex", "cost"):
         stmt = "Operating Expenses"
         if _match(dept, "sales"):

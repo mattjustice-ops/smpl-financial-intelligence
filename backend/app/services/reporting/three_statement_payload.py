@@ -16,6 +16,7 @@ from app.services.reporting.gl_income_statement import gl_income_statement_by_pe
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, to_period
 from app.services.reporting.pipeline_deals import (
+    build_implementation_fees,
     build_opp_pipeline,
     build_pipeline_book,
     closed_new_business_acv,
@@ -960,6 +961,9 @@ def build_forecast_engine_src(
     pipeline_book = build_pipeline_book(db, organization_id, as_of=as_of)
     if pipeline_book:
         src["pipeline_book"] = pipeline_book
+    implementation_fees = build_implementation_fees(db, organization_id)
+    if implementation_fees:
+        src["implementation_fees"] = implementation_fees
     return src
 
 

@@ -5,9 +5,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.services.reporting.pipeline_deals import (
+    build_implementation_fees,
     build_opp_pipeline,
     build_pipeline_book,
     closed_new_business_acv,
+    implementation_fees_from_rows,
 )
 
 ORG = uuid.uuid4()
@@ -126,7 +128,19 @@ def test_pipeline_book_sums_booking_types(db):
     assert book["2026-07"] == {"created": 255.0, "lost": 92.0, "slipped": 31.0}
 
 
+def test_implementation_fees_are_latest_signed_fee_by_segment():
+    fees = implementation_fees_from_rows([
+        {"segment": "SMB", "implementation_fee": "1500.00", "invoice_date": "2025-03-04", "win_probability": "1"},
+        {"segment": "SMB", "implementation_fee": "2000.00", "invoice_date": "2026-02-10", "win_probability": "1"},
+        {"segment": "Enterprise", "implementation_fee": "5000.00", "invoice_date": "2026-05-01", "win_probability": "1"},
+        {"segment": "Enterprise", "implementation_fee": "3500.00", "invoice_date": "2026-08-01", "win_probability": "0.7"},
+        {"segment": "", "implementation_fee": "9999", "invoice_date": "2026-06-01"},
+    ])
+    assert fees == {"Enterprise": 5000.0, "SMB": 2000.0}
+
+
 def test_no_deal_tables_gives_empty_pipeline(db):
     assert build_opp_pipeline(db, ORG, as_of="2026-06") == {}
     assert build_pipeline_book(db, ORG, as_of="2026-06") == {}
+    assert build_implementation_fees(db, ORG) == {}
     assert closed_new_business_acv({}, as_of="2026-06") is None

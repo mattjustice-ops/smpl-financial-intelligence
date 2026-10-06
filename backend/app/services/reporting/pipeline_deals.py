@@ -188,3 +188,23 @@ def closed_new_business_acv(pipeline: dict[str, Any], *, as_of: str) -> float | 
             total += nb["total"]
             count += nb["count"]
     return round(total / count, 2) if count else None
+
+
+def implementation_fees_from_rows(rows: Iterable[dict[str, Any]]) -> dict[str, float]:
+    """Implementation fee per new customer by segment: the latest fee charged to a signed customer."""
+    latest: dict[str, tuple[str, float]] = {}
+    for raw in rows:
+        segment = str(raw.get("segment") or "").strip()
+        fee = _num(raw.get("implementation_fee"))
+        probability = raw.get("win_probability")
+        if not segment or fee <= 0 or (probability not in (None, "") and _num(probability) != 1):
+            continue
+        signed = str(raw.get("invoice_date") or raw.get("period") or "")
+        if segment not in latest or signed >= latest[segment][0]:
+            latest[segment] = (signed, fee)
+    return {segment: round(fee, 2) for segment, (_, fee) in sorted(latest.items())}
+
+
+def build_implementation_fees(db: Session, organization_id: uuid.UUID) -> dict[str, float]:
+    """Fee by segment from the Actual implementation schedule; empty when it is not loaded."""
+    return implementation_fees_from_rows(fetch_table_rows(db, "actual_implementation_schedule", organization_id))
