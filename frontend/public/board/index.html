@@ -359,7 +359,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <script src="/shared/smpl-outlook.js?v=22"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
-<script src="/shared/board-data.js?v=10"></script>
+<script src="/shared/board-data.js?v=11"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -409,37 +409,24 @@ window.SMPL_CASH_BRIDGE = SMPL_CASH_BRIDGE;
 //   SD.monthly  — add '2026-XX':{reps,quota,attained,pct,bud_quota}
 //   SD.pipeline — add '2026-XX':{created,won,lost,ending,coverage}
 //   TS_DATA.Actual — add period to .is / .cfs / .bs objects
-//   WF_HC_ALL   — add actual June HC counts to each department column
+//   Workforce has no arrays to edit: it reads the workforce payload (signed in) or WF_DEMO,
+//   which build_demo_workforce_from_files.py rebuilds from the files.
 //
-// STEP 3 — Mark the new month as actual in BRIDGE_DATA:
-//   Add  actual:true  is handled automatically via  b.mo <= CLOSE_MONTH
-//   (no manual change needed — BRIDGE_DATA.map() recomputes on load)
-//
-// STEP 4 — Remove filled open reqs (start month <= CLOSE_MONTH):
-//   Delete rows from WF_REQS where start <= CLOSE_MONTH
-//
-// STEP 5 — Shift scenario arrays (WF_SC_PAY / WF_SC_HC):
-//   These run from the month AFTER close through Dec.
-//   Drop the first element, add the new Dec value at the end.
-//   e.g. Jul close: base was [1.94,1.98,2.01,2.04,2.06,2.08,2.08] (Jun-Dec)
-//                   becomes   [1.98,2.01,2.04,2.06,2.08,2.08,X]   (Jul-Dec)
-//
-// STEP 6 — Update static commentary-text divs and AI_CTX with new actuals.
+// STEP 3 — Update static commentary-text divs and AI_CTX with new actuals.
 //   Six divs: exec, arr, revenue, gtm, cash, risks
 //   AI_CTX keys: exec, arr, revenue, gtm, cash, headcount, risks
 //
 // NEW YEAR ROLLOVER (Jan next year):
 //   Reset CLOSE_MONTH to 'YYYY-01', update all arrays for new year,
 //   replace TS_DATA with new Budget/Forecast files,
-//   reset BRIDGE_DATA with new Jan BOP headcount,
-//   reset WF_HC_ALL with new year's plan columns.
+//   rebuild WF_DEMO for the new year.
 //
 // NEW FORECAST/BUDGET FILES:
 //   TS_DATA.Forecast and TS_DATA.Budget objects are the only place
 //   forecast/budget data is stored. To update: re-run the Python data
 //   loader (smpl_data_loader.py) with the new CSVs and paste the output
 //   JSON into TS_DATA.Forecast / TS_DATA.Budget.
-//   Chart forecast arrays (pipe12 Jul-Dec values, WF_SC_PAY/HC) should
+//   Chart forecast arrays (pipe12 Jul-Dec values) should
 //   also be refreshed from the new forecast file.
 //
 // WHAT UPDATES AUTOMATICALLY FROM CLOSE_MONTH (no manual change needed):
@@ -452,7 +439,6 @@ window.SMPL_CASH_BRIDGE = SMPL_CASH_BRIDGE;
 //   - Monthly pipeline creation teal/amber split
 //   - Sales attainment chart period count
 //   - EBITDA margin chart period count
-//   - Scenario chart labels (forecast months)
 //   - 3-Statement actual/forecast column styling
 // ══════════════════════════════════════════════════════════════════════════════
 let CLOSE_MONTH = '2026-06';  // <-- UPDATE EACH CLOSE
@@ -474,9 +460,10 @@ const HC_DATA = {
   Finance:          { jan:14, may:15, bud:15, payroll:0.207, arr_per:'$5.56M/head', note:'On plan' },
   Support:          { jan:30, may:31, bud:31, payroll:0.277, arr_per:'$2.69M/head', note:'COGS-aligned staffing' },
 };
-var HC_TOTAL_JAN = 121, HC_TOTAL_MAY = 130, HC_TOTAL_JUN = 137, HC_TOTAL_BUD = 130;
-var HC_BY_MO = [121,124,126,128,130,137];
-var ARR_PER_EMP = [631,627,631,636,642,628];
+// Set by boardRefreshAllSeries from the workforce data (board-data.js).
+var HC_TOTAL_JAN = null, HC_TOTAL_MAY = null, HC_TOTAL_JUN = null, HC_TOTAL_BUD = null;
+var HC_BY_MO = [];
+var ARR_PER_EMP = [];
 // GTM channel volumes (demo, YTD Actual, $M). Spend is never by channel: it comes from the GL program accounts in TS_DATA gl_programs.
 const GTM = {
   'Paid Search':          { pipe:2.69, won:0.81, mqls:388, wr:30.0, color:'#1D9E75' },
@@ -2409,103 +2396,78 @@ window.tsRender = tsRender;
 
 
 // ─── WORKFORCE INTELLIGENCE ────────────────────────────────────────────────
-// Real data from Actual_Employees.csv, Forecast_Employees.csv, 
-// Forecast_Open_Requisitions.csv, Hiring_Ramp_Assumptions.csv
-
-const WF_DEPTS = ['Sales','Marketing','R&D','Product','Customer Success','Support','G&A'];
-const WF_COLORS = {Sales:'#185FA5',Marketing:'#BA7517','R&D':'#1D9E75',Product:'#534AB7','Customer Success':'#0F6E56',Support:'#888780','G&A':'#A32D2D'};
-
-// Monthly HC from real computed data (actual Jan-Jun, forecast base Jun-Dec)
-const WF_HC_ALL = {
-  Sales:            [26,27,28,28,28, 29,31,31,31,31,31,31],
-  Marketing:        [13,13,13,14,14, 15,15,15,16,16,16,16],
-  'R&D':            [34,35,35,35,36, 37,38,38,38,39,39,39],
-  Product:          [8, 8, 9, 9, 9,  10,10,11,11,11,11,11],
-  'Customer Success':[15,15,15,16,16, 17,17,17,18,18,18,18],
-  Support:          [12,12,12,12,13, 14,14,15,15,15,15,15],
-  'G&A':            [13,14,14,14,14, 15,15,15,16,16,17,17],
-};
-const WF_TOTAL_HC = window.WF_TOTAL_HC || [121,124,126,128,130, 137,140,142,145,146,147,147];
+// Signed in: SMPL_OUTLOOK_PAYLOAD.WORKFORCE; signed out: WF_DEMO (boardWorkforce in board-data.js).
+// WF_DEMO is written by backend/scripts/demo_data/build_demo_workforce_from_files.py from the sample files.
+// Heads come from the employee roster, payroll from the GL only, quota capacity from the headcount plan.
+var WF_DEMO={"months":["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11","2026-12"],"close_month":"2026-06","departments":["Sales","Marketing","R&D","Product","Customer Success","Support","G&A"],"heads":{"Sales":[26,27,28,28,28,29,31,31,31,31,31,31],"Marketing":[13,13,13,14,14,15,15,15,16,16,16,16],"R&D":[34,35,35,35,36,37,38,38,38,39,39,39],"Product":[8,8,9,9,9,10,10,11,11,11,11,11],"Customer Success":[15,15,15,16,16,17,17,17,18,18,18,18],"Support":[12,12,12,12,13,14,14,15,15,15,15,15],"G&A":[13,14,14,14,14,15,15,15,16,16,17,17]},"heads_total":[121,124,126,128,130,137,140,142,145,146,147,147],"heads_budget_total":[121,124,126,128,130,139,144,147,150,151,152,152],"heads_source":"forecast_employees","payroll":[2674777.7,2894924.01,2973496.24,3259945.66,3445258.17,3617521.08,3800551.45,3896321.31,3982010.13,4072739.46,4153387.78,4239076.6],"payroll_by_team":{"Sales":[871449.66,865531.98,892672.85,1006522.58,1065089.03,1118343.48,1181670.61,1211447.47,1238089.91,1266299.55,1291374.81,1318017.26],"Marketing":[308738.39,295406.0,304352.14,344189.21,374740.31,393477.32,415758.33,426234.99,435608.86,445534.1,454356.57,463730.41],"Product":[179075.48,188384.85,193986.7,204452.09,219421.48,230392.55,243438.73,249573.12,255061.8,260873.34,266039.13,271527.81],"Customer Success":[276865.32,263009.43,274730.05,296522.17,315811.25,331601.82,350379.06,359208.23,367108.01,375472.51,382907.6,390807.4],"Support":[100225.11,165832.49,159154.12,165728.31,173056.96,181709.8,186407.04,191104.33,195307.13,199757.18,203712.74,207915.59],"G&A":[160243.61,261903.57,256451.7,293618.26,307711.18,323096.74,331448.91,339801.06,347274.05,355186.62,362220.03,369693.0],"Engineering":[677265.35,695048.2,731221.58,768116.63,795112.43,834868.05,882143.16,904372.24,924261.4,945320.51,964039.75,983928.91],"Finance":[100914.78,159807.49,160927.1,180796.41,194315.53,204031.32,209305.61,214579.87,219298.97,224295.65,228737.15,233456.22]},"payroll_parts":{"wages":[2234567.85,2396098.73,2466844.43,2706600.44,2850025.48,2992526.78,3143756.57,3222975.92,3293856.31,3368906.21,3435617.18,3506497.61],"benefits":[440209.85,472031.46,485968.33,533200.29,561455.0,589527.76,619320.06,634926.22,648889.72,663674.51,676816.61,690780.03],"commissions":[0.0,26793.82,20683.48,20144.93,33777.69,35466.54,37474.82,38419.17,39264.1,40158.74,40953.99,41798.96]},"payroll_source":"gl_actuals","quota":[15500000.0,16300000.0,16600000.0,16600000.0,16600000.0,17700000.0,18800000.0,18800000.0,18800000.0,18800000.0,18800000.0,18800000.0],"quota_ramped":[14780000.0,15100000.0,15575000.0,16080000.0,16400000.0,16600000.0,16950000.0,17530000.0,18125000.0,18600000.0,18800000.0,18800000.0],"quota_source":"headcount_plan","reqs":[{"id":"FREQ-002","dept":"Sales","role":"Account Executive","level":"L4","pri":"High","start":"2026-07"},{"id":"FREQ-003","dept":"Sales","role":"Sales Development Rep","level":"L2","pri":"High","start":"2026-07"},{"id":"FREQ-007","dept":"R&D","role":"Software Engineer","level":"L4","pri":"High","start":"2026-07"},{"id":"FREQ-010","dept":"Product","role":"Product Designer","level":"L4","pri":"High","start":"2026-08"},{"id":"FREQ-014","dept":"Support","role":"Customer Support Specialist","level":"L2","pri":"Medium","start":"2026-08"},{"id":"FREQ-005","dept":"Marketing","role":"Marketing Operations Manager","level":"L4","pri":"Medium","start":"2026-09"},{"id":"FREQ-012","dept":"Customer Success","role":"Customer Success Manager","level":"L3","pri":"Medium","start":"2026-09"},{"id":"FREQ-016","dept":"G&A","role":"People Operations Manager","level":"L4","pri":"Medium","start":"2026-09"},{"id":"FREQ-008","dept":"R&D","role":"Security Engineer","level":"L4","pri":"High","start":"2026-10"},{"id":"FREQ-017","dept":"G&A","role":"Legal Counsel","level":"L5","pri":"Medium","start":"2026-11"}],"ramp":{"2":[50.0,100.0,100.0,100.0,100.0,100.0],"3":[25.0,60.0,100.0,100.0,100.0,100.0],"4":[0.0,25.0,50.0,75.0,100.0,100.0]},"roster":[{"id":"EMP-1001","dept":"Sales","role":"Account Executive","lvl":"L4","region":"East","status":"Active","base":125000.0,"variable":55000.0,"sbc":12000.0,"cost":212400.0,"quota":800000.0,"ramp":4},{"id":"EMP-1002","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"West","status":"Active","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1003","dept":"Sales","role":"Sales Operations Analyst","lvl":"L3","region":"East","status":"Active","base":95000.0,"variable":10000.0,"sbc":8000.0,"cost":123900.0,"quota":0.0,"ramp":2},{"id":"EMP-1004","dept":"Sales","role":"Account Executive","lvl":"L4","region":"Remote","status":"Active","base":125000.0,"variable":55000.0,"sbc":12000.0,"cost":212400.0,"quota":800000.0,"ramp":4},{"id":"EMP-1005","dept":"Sales","role":"Sales Operations Analyst","lvl":"L3","region":"West","status":"Active","base":95000.0,"variable":10000.0,"sbc":8000.0,"cost":123900.0,"quota":0.0,"ramp":2},{"id":"EMP-1006","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"East","status":"Active","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1007","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"Central","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1008","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"EMEA","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1009","dept":"Sales","role":"Account Executive","lvl":"L4","region":"Remote","status":"Active","base":125000.0,"variable":55000.0,"sbc":12000.0,"cost":212400.0,"quota":800000.0,"ramp":4},{"id":"EMP-1010","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"East","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1011","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"EMEA","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1012","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"East","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1013","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"West","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1014","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"Central","status":"Active","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1015","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"East","status":"Active","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1016","dept":"Sales","role":"Account Executive","lvl":"L4","region":"East","status":"Active","base":125000.0,"variable":55000.0,"sbc":12000.0,"cost":212400.0,"quota":800000.0,"ramp":4},{"id":"EMP-1017","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"EMEA","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1018","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"Remote","status":"Active","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1019","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"Central","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1020","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"West","status":"Active","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1021","dept":"Sales","role":"Account Executive","lvl":"L4","region":"EMEA","status":"Active","base":125000.0,"variable":55000.0,"sbc":12000.0,"cost":212400.0,"quota":800000.0,"ramp":4},{"id":"EMP-1022","dept":"Sales","role":"Account Executive","lvl":"L4","region":"Remote","status":"Active","base":125000.0,"variable":55000.0,"sbc":12000.0,"cost":212400.0,"quota":800000.0,"ramp":4},{"id":"EMP-1023","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"Remote","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1024","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"East","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"EMP-1025","dept":"Sales","role":"Sales Operations Analyst","lvl":"L3","region":"Central","status":"Active","base":95000.0,"variable":10000.0,"sbc":8000.0,"cost":123900.0,"quota":0.0,"ramp":2},{"id":"EMP-1026","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"Remote","status":"Active","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1122","dept":"Sales","role":"Account Executive","lvl":"L4","region":"West","status":"Active","base":125000.0,"variable":55000.0,"sbc":12000.0,"cost":212400.0,"quota":800000.0,"ramp":4},{"id":"EMP-1123","dept":"Sales","role":"Sales Development Rep","lvl":"L2","region":"West","status":"Active","base":70000.0,"variable":25000.0,"sbc":6000.0,"cost":112100.0,"quota":300000.0,"ramp":3},{"id":"FEMP-1131","dept":"Sales","role":"Senior Account Executive","lvl":"L5","region":"East","status":"Planned","base":150000.0,"variable":75000.0,"sbc":18000.0,"cost":265500.0,"quota":1100000.0,"ramp":4},{"id":"EMP-1027","dept":"Marketing","role":"Product Marketing Manager","lvl":"L4","region":"Remote","status":"Active","base":125000.0,"variable":12000.0,"sbc":13000.0,"cost":161660.0,"quota":0.0,"ramp":2},{"id":"EMP-1028","dept":"Marketing","role":"Demand Generation Manager","lvl":"L4","region":"Central","status":"Active","base":120000.0,"variable":15000.0,"sbc":12000.0,"cost":159300.0,"quota":0.0,"ramp":2},{"id":"EMP-1029","dept":"Marketing","role":"Content Marketing Manager","lvl":"L3","region":"West","status":"Active","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1030","dept":"Marketing","role":"Demand Generation Manager","lvl":"L4","region":"East","status":"Active","base":120000.0,"variable":15000.0,"sbc":12000.0,"cost":159300.0,"quota":0.0,"ramp":2},{"id":"EMP-1031","dept":"Marketing","role":"Product Marketing Manager","lvl":"L4","region":"Central","status":"Active","base":125000.0,"variable":12000.0,"sbc":13000.0,"cost":161660.0,"quota":0.0,"ramp":2},{"id":"EMP-1032","dept":"Marketing","role":"Marketing Operations Manager","lvl":"L4","region":"East","status":"Active","base":115000.0,"variable":10000.0,"sbc":9000.0,"cost":147500.0,"quota":0.0,"ramp":2},{"id":"EMP-1033","dept":"Marketing","role":"Content Marketing Manager","lvl":"L3","region":"Central","status":"Active","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1034","dept":"Marketing","role":"Marketing Operations Manager","lvl":"L4","region":"West","status":"Active","base":115000.0,"variable":10000.0,"sbc":9000.0,"cost":147500.0,"quota":0.0,"ramp":2},{"id":"EMP-1035","dept":"Marketing","role":"Content Marketing Manager","lvl":"L3","region":"Remote","status":"Active","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1036","dept":"Marketing","role":"Product Marketing Manager","lvl":"L4","region":"West","status":"Active","base":125000.0,"variable":12000.0,"sbc":13000.0,"cost":161660.0,"quota":0.0,"ramp":2},{"id":"EMP-1037","dept":"Marketing","role":"Product Marketing Manager","lvl":"L4","region":"West","status":"Active","base":125000.0,"variable":12000.0,"sbc":13000.0,"cost":161660.0,"quota":0.0,"ramp":2},{"id":"EMP-1038","dept":"Marketing","role":"Product Marketing Manager","lvl":"L4","region":"Remote","status":"Active","base":125000.0,"variable":12000.0,"sbc":13000.0,"cost":161660.0,"quota":0.0,"ramp":2},{"id":"EMP-1039","dept":"Marketing","role":"Product Marketing Manager","lvl":"L4","region":"EMEA","status":"Active","base":125000.0,"variable":12000.0,"sbc":13000.0,"cost":161660.0,"quota":0.0,"ramp":2},{"id":"EMP-1124","dept":"Marketing","role":"Demand Generation Manager","lvl":"L4","region":"West","status":"Active","base":120000.0,"variable":15000.0,"sbc":12000.0,"cost":159300.0,"quota":0.0,"ramp":2},{"id":"FEMP-1134","dept":"Marketing","role":"Product Marketing Manager","lvl":"L4","region":"Remote","status":"Planned","base":125000.0,"variable":12000.0,"sbc":13000.0,"cost":161660.0,"quota":0.0,"ramp":2},{"id":"EMP-1040","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"Central","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1041","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"West","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1042","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"West","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1043","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"East","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1044","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"West","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1045","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"West","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1046","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"EMEA","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1047","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"EMEA","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1048","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"Central","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1049","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"East","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1050","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"West","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1051","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"West","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1052","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"East","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1053","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"East","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1054","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"Remote","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1055","dept":"R&D","role":"Data Engineer","lvl":"L4","region":"Central","status":"Active","base":155000.0,"variable":10000.0,"sbc":25000.0,"cost":194700.0,"quota":0.0,"ramp":3},{"id":"EMP-1056","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"Central","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1057","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"West","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1058","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"Remote","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1059","dept":"R&D","role":"Data Engineer","lvl":"L4","region":"East","status":"Active","base":155000.0,"variable":10000.0,"sbc":25000.0,"cost":194700.0,"quota":0.0,"ramp":3},{"id":"EMP-1060","dept":"R&D","role":"Data Engineer","lvl":"L4","region":"Central","status":"Active","base":155000.0,"variable":10000.0,"sbc":25000.0,"cost":194700.0,"quota":0.0,"ramp":3},{"id":"EMP-1061","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"East","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1062","dept":"R&D","role":"Data Engineer","lvl":"L4","region":"Remote","status":"Active","base":155000.0,"variable":10000.0,"sbc":25000.0,"cost":194700.0,"quota":0.0,"ramp":3},{"id":"EMP-1063","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"Central","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1064","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"West","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1065","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"West","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1066","dept":"R&D","role":"Data Engineer","lvl":"L4","region":"East","status":"Active","base":155000.0,"variable":10000.0,"sbc":25000.0,"cost":194700.0,"quota":0.0,"ramp":3},{"id":"EMP-1067","dept":"R&D","role":"Security Engineer","lvl":"L4","region":"West","status":"Active","base":160000.0,"variable":10000.0,"sbc":28000.0,"cost":200600.0,"quota":0.0,"ramp":3},{"id":"EMP-1068","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"Remote","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1069","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"Central","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1070","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"West","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1071","dept":"R&D","role":"Data Engineer","lvl":"L4","region":"East","status":"Active","base":155000.0,"variable":10000.0,"sbc":25000.0,"cost":194700.0,"quota":0.0,"ramp":3},{"id":"EMP-1072","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"EMEA","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1073","dept":"R&D","role":"Software Engineer","lvl":"L4","region":"EMEA","status":"Active","base":150000.0,"variable":10000.0,"sbc":25000.0,"cost":188800.0,"quota":0.0,"ramp":3},{"id":"EMP-1125","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"East","status":"Active","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1126","dept":"R&D","role":"Data Engineer","lvl":"L4","region":"East","status":"Active","base":155000.0,"variable":10000.0,"sbc":25000.0,"cost":194700.0,"quota":0.0,"ramp":3},{"id":"FEMP-1136","dept":"R&D","role":"Senior Software Engineer","lvl":"L5","region":"EMEA","status":"Planned","base":175000.0,"variable":12000.0,"sbc":35000.0,"cost":220660.0,"quota":0.0,"ramp":3},{"id":"EMP-1074","dept":"Product","role":"Senior Product Manager","lvl":"L5","region":"West","status":"Active","base":170000.0,"variable":15000.0,"sbc":35000.0,"cost":218300.0,"quota":0.0,"ramp":3},{"id":"EMP-1075","dept":"Product","role":"Product Operations Manager","lvl":"L4","region":"East","status":"Active","base":125000.0,"variable":10000.0,"sbc":18000.0,"cost":159300.0,"quota":0.0,"ramp":2},{"id":"EMP-1076","dept":"Product","role":"Product Operations Manager","lvl":"L4","region":"East","status":"Active","base":125000.0,"variable":10000.0,"sbc":18000.0,"cost":159300.0,"quota":0.0,"ramp":2},{"id":"EMP-1077","dept":"Product","role":"Product Manager","lvl":"L4","region":"Central","status":"Active","base":145000.0,"variable":12000.0,"sbc":25000.0,"cost":185260.0,"quota":0.0,"ramp":3},{"id":"EMP-1078","dept":"Product","role":"Product Manager","lvl":"L4","region":"EMEA","status":"Active","base":145000.0,"variable":12000.0,"sbc":25000.0,"cost":185260.0,"quota":0.0,"ramp":3},{"id":"EMP-1079","dept":"Product","role":"Product Designer","lvl":"L4","region":"East","status":"Active","base":135000.0,"variable":10000.0,"sbc":22000.0,"cost":171100.0,"quota":0.0,"ramp":3},{"id":"EMP-1080","dept":"Product","role":"Product Designer","lvl":"L4","region":"Central","status":"Active","base":135000.0,"variable":10000.0,"sbc":22000.0,"cost":171100.0,"quota":0.0,"ramp":3},{"id":"EMP-1081","dept":"Product","role":"Product Designer","lvl":"L4","region":"West","status":"Active","base":135000.0,"variable":10000.0,"sbc":22000.0,"cost":171100.0,"quota":0.0,"ramp":3},{"id":"EMP-1127","dept":"Product","role":"Product Manager","lvl":"L4","region":"West","status":"Active","base":145000.0,"variable":12000.0,"sbc":25000.0,"cost":185260.0,"quota":0.0,"ramp":3},{"id":"FEMP-1139","dept":"Product","role":"Senior Product Manager","lvl":"L5","region":"East","status":"Planned","base":170000.0,"variable":15000.0,"sbc":35000.0,"cost":218300.0,"quota":0.0,"ramp":3},{"id":"EMP-1082","dept":"Customer Success","role":"Senior Customer Success Manager","lvl":"L4","region":"EMEA","status":"Active","base":125000.0,"variable":18000.0,"sbc":12000.0,"cost":168740.0,"quota":650000.0,"ramp":3},{"id":"EMP-1083","dept":"Customer Success","role":"Customer Success Manager","lvl":"L3","region":"East","status":"Active","base":105000.0,"variable":15000.0,"sbc":9000.0,"cost":141600.0,"quota":450000.0,"ramp":3},{"id":"EMP-1084","dept":"Customer Success","role":"Senior Customer Success Manager","lvl":"L4","region":"Central","status":"Active","base":125000.0,"variable":18000.0,"sbc":12000.0,"cost":168740.0,"quota":650000.0,"ramp":3},{"id":"EMP-1085","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"Central","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1086","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"EMEA","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1087","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"EMEA","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1088","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"Remote","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1089","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"Central","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1090","dept":"Customer Success","role":"Senior Customer Success Manager","lvl":"L4","region":"Remote","status":"Active","base":125000.0,"variable":18000.0,"sbc":12000.0,"cost":168740.0,"quota":650000.0,"ramp":3},{"id":"EMP-1091","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"East","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1092","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"East","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1093","dept":"Customer Success","role":"CS Operations Analyst","lvl":"L3","region":"Remote","status":"Active","base":90000.0,"variable":8000.0,"sbc":7000.0,"cost":115640.0,"quota":0.0,"ramp":2},{"id":"EMP-1094","dept":"Customer Success","role":"Senior Customer Success Manager","lvl":"L4","region":"Central","status":"Active","base":125000.0,"variable":18000.0,"sbc":12000.0,"cost":168740.0,"quota":650000.0,"ramp":3},{"id":"EMP-1095","dept":"Customer Success","role":"Customer Success Manager","lvl":"L3","region":"East","status":"Active","base":105000.0,"variable":15000.0,"sbc":9000.0,"cost":141600.0,"quota":450000.0,"ramp":3},{"id":"EMP-1096","dept":"Customer Success","role":"Senior Customer Success Manager","lvl":"L4","region":"EMEA","status":"Active","base":125000.0,"variable":18000.0,"sbc":12000.0,"cost":168740.0,"quota":650000.0,"ramp":3},{"id":"EMP-1128","dept":"Customer Success","role":"Customer Success Manager","lvl":"L3","region":"Remote","status":"Active","base":105000.0,"variable":15000.0,"sbc":9000.0,"cost":141600.0,"quota":450000.0,"ramp":3},{"id":"FEMP-1141","dept":"Customer Success","role":"Senior Customer Success Manager","lvl":"L4","region":"Remote","status":"Planned","base":125000.0,"variable":18000.0,"sbc":12000.0,"cost":168740.0,"quota":650000.0,"ramp":3},{"id":"EMP-1097","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"EMEA","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1098","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"West","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1099","dept":"Support","role":"Technical Support Engineer","lvl":"L3","region":"Remote","status":"Active","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1100","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"EMEA","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1101","dept":"Support","role":"Technical Support Engineer","lvl":"L3","region":"Remote","status":"Active","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1102","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"Remote","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1103","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"EMEA","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1104","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"Central","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1105","dept":"Support","role":"Support Operations Analyst","lvl":"L3","region":"EMEA","status":"Active","base":85000.0,"variable":7000.0,"sbc":6000.0,"cost":108560.0,"quota":0.0,"ramp":2},{"id":"EMP-1106","dept":"Support","role":"Technical Support Engineer","lvl":"L3","region":"Central","status":"Active","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1107","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"East","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1108","dept":"Support","role":"Customer Support Specialist","lvl":"L2","region":"West","status":"Active","base":70000.0,"variable":5000.0,"sbc":4000.0,"cost":88500.0,"quota":0.0,"ramp":2},{"id":"EMP-1129","dept":"Support","role":"Technical Support Engineer","lvl":"L3","region":"East","status":"Active","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"FEMP-1143","dept":"Support","role":"Technical Support Engineer","lvl":"L3","region":"East","status":"Planned","base":95000.0,"variable":8000.0,"sbc":7000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1109","dept":"G&A","role":"Legal Counsel","lvl":"L5","region":"EMEA","status":"Active","base":185000.0,"variable":15000.0,"sbc":30000.0,"cost":236000.0,"quota":0.0,"ramp":2},{"id":"EMP-1110","dept":"G&A","role":"Finance Manager","lvl":"L4","region":"Remote","status":"Active","base":135000.0,"variable":12000.0,"sbc":18000.0,"cost":173460.0,"quota":0.0,"ramp":2},{"id":"EMP-1111","dept":"G&A","role":"Finance Manager","lvl":"L4","region":"Central","status":"Active","base":135000.0,"variable":12000.0,"sbc":18000.0,"cost":173460.0,"quota":0.0,"ramp":2},{"id":"EMP-1112","dept":"G&A","role":"Legal Counsel","lvl":"L5","region":"Remote","status":"Active","base":185000.0,"variable":15000.0,"sbc":30000.0,"cost":236000.0,"quota":0.0,"ramp":2},{"id":"EMP-1113","dept":"G&A","role":"Operations Manager","lvl":"L4","region":"EMEA","status":"Active","base":120000.0,"variable":10000.0,"sbc":12000.0,"cost":153400.0,"quota":0.0,"ramp":2},{"id":"EMP-1114","dept":"G&A","role":"Legal Counsel","lvl":"L5","region":"EMEA","status":"Active","base":185000.0,"variable":15000.0,"sbc":30000.0,"cost":236000.0,"quota":0.0,"ramp":2},{"id":"EMP-1115","dept":"G&A","role":"FP&A Analyst","lvl":"L3","region":"Remote","status":"Active","base":95000.0,"variable":8000.0,"sbc":9000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"EMP-1116","dept":"G&A","role":"Finance Manager","lvl":"L4","region":"West","status":"Active","base":135000.0,"variable":12000.0,"sbc":18000.0,"cost":173460.0,"quota":0.0,"ramp":2},{"id":"EMP-1117","dept":"G&A","role":"Finance Manager","lvl":"L4","region":"East","status":"Active","base":135000.0,"variable":12000.0,"sbc":18000.0,"cost":173460.0,"quota":0.0,"ramp":2},{"id":"EMP-1118","dept":"G&A","role":"Finance Manager","lvl":"L4","region":"EMEA","status":"Active","base":135000.0,"variable":12000.0,"sbc":18000.0,"cost":173460.0,"quota":0.0,"ramp":2},{"id":"EMP-1119","dept":"G&A","role":"People Operations Manager","lvl":"L4","region":"Central","status":"Active","base":120000.0,"variable":10000.0,"sbc":12000.0,"cost":153400.0,"quota":0.0,"ramp":2},{"id":"EMP-1120","dept":"G&A","role":"Legal Counsel","lvl":"L5","region":"West","status":"Active","base":185000.0,"variable":15000.0,"sbc":30000.0,"cost":236000.0,"quota":0.0,"ramp":2},{"id":"EMP-1121","dept":"G&A","role":"Operations Manager","lvl":"L4","region":"East","status":"Active","base":120000.0,"variable":10000.0,"sbc":12000.0,"cost":153400.0,"quota":0.0,"ramp":2},{"id":"EMP-1130","dept":"G&A","role":"FP&A Analyst","lvl":"L3","region":"East","status":"Active","base":95000.0,"variable":8000.0,"sbc":9000.0,"cost":121540.0,"quota":0.0,"ramp":2},{"id":"FEMP-1145","dept":"G&A","role":"Finance Manager","lvl":"L4","region":"West","status":"Planned","base":135000.0,"variable":12000.0,"sbc":18000.0,"cost":173460.0,"quota":0.0,"ramp":2}],"payroll_check":{"span":"2026-01 to 2026-06","rows":[{"team":"Sales","roster":2460791.67,"gl":5819609.58,"variance":-3358817.91},{"team":"Marketing","roster":1027386.67,"gl":2020903.37,"variance":-993516.7},{"team":"R&D","roster":3582480.0,"gl":0.0,"variance":3582480.0},{"team":"Product","roster":790305.0,"gl":1215713.15,"variance":-425408.15},{"team":"Customer Success","roster":1075471.67,"gl":1758540.04,"variance":-683068.37},{"team":"Support","roster":620975.0,"gl":945706.79,"variance":-324731.79},{"team":"G&A","roster":1261616.67,"gl":1603025.06,"variance":-341408.39},{"team":"Engineering","roster":0.0,"gl":4501632.24,"variance":-4501632.24},{"team":"Finance","roster":0.0,"gl":1000792.63,"variance":-1000792.63}]},"summary":{"close_hc":137,"start_hc":121,"dec_hc":147,"budget_close_hc":139,"open_reqs":10,"close_payroll":3617521.08}};
 if (typeof boardRefreshAllSeries === 'function') boardRefreshAllSeries();
-// Monthly payroll cash cost ($M)
-const WF_PAYROLL  = [1.71,1.75,1.78,1.80,1.83, 1.94,1.98,2.01,2.04,2.06,2.08,2.08];
-// Quota capacity and ramped ($M/mo)
-const WF_QUOTA_TOT= [1.29,1.36,1.38,1.38,1.38, 1.48,1.57,1.57,1.57,1.57,1.57,1.57];
-const WF_QUOTA_RMP= [1.23,1.26,1.30,1.34,1.37, 1.38,1.41,1.46,1.51,1.55,1.57,1.57];
-// Scenario payroll ($M) — base / 2-month delay / G&A freeze
-// Scenario arrays run from month AFTER close through Dec
-// When rolling to Jul close: remove first element, add values at end
-const WF_SC_PAY = {
-  base:   [1.94,1.98,2.01,2.04,2.06,2.08,2.08],
-  delay2: [1.83,1.87,1.98,2.02,2.04,2.08,2.08],
-  freeze: [1.92,1.96,1.99,2.01,2.03,2.05,2.05],
-};
-// Forecast months label = months after CLOSE_MONTH
-const FC_MO_LABELS = MO12.slice(CLOSE_MO_IDX+1);
-const WF_SC_HC = {
-  base:   [137,140,142,145,146,147,147],
-  delay2: [130,133,140,143,145,147,147],
-  freeze: [136,139,141,143,144,145,145],
-};
 
-const WF_REQS = [
-  // June reqs are filled (hired during June close) — showing Jul+ open reqs only
-  {id:'FREQ-002',dept:'Sales',role:'Account Executive',level:'L4',pri:'High',start:'2026-07'},
-  {id:'FREQ-003',dept:'Sales',role:'Sales Development Rep',level:'L2',pri:'High',start:'2026-07'},
-  {id:'FREQ-005',dept:'Marketing',role:'Marketing Operations Mgr',level:'L3',pri:'Medium',start:'2026-09'},
-  {id:'FREQ-007',dept:'R&D',role:'Software Engineer',level:'L4',pri:'Medium',start:'2026-07'},
-  {id:'FREQ-008',dept:'R&D',role:'Security Engineer',level:'L4',pri:'Low',start:'2026-10'},
-  {id:'FREQ-010',dept:'Product',role:'Product Designer',level:'L4',pri:'Medium',start:'2026-08'},
-  {id:'FREQ-012',dept:'Customer Success',role:'CS Manager',level:'L4',pri:'Medium',start:'2026-09'},
-  {id:'FREQ-014',dept:'Support',role:'Customer Support Specialist',level:'L2',pri:'Low',start:'2026-08'},
-  {id:'FREQ-016',dept:'G&A',role:'People Operations Manager',level:'L4',pri:'Low',start:'2026-09'},
-  {id:'FREQ-017',dept:'G&A',role:'Legal Counsel',level:'L5',pri:'Low',start:'2026-11'},
-];
+const WF_COLORS = {Sales:'#185FA5',Marketing:'#BA7517','R&D':'#1D9E75',Engineering:'#1D9E75',Product:'#534AB7','Customer Success':'#0F6E56',Support:'#888780','G&A':'#A32D2D',Finance:'#D85A30'};
+const WF_PALETTE = ['#3B6D11','#E9A23B','#B4B2A9','#7a9fc2','#a07ab8'];
+const WF_RAMP_COLORS = ['#1D9E75','#185FA5','#BA7517','#888780','#534AB7'];
+const wfColor = (name, i) => WF_COLORS[name] || WF_PALETTE[i % WF_PALETTE.length];
+const wfMo = p => MO12[+String(p).slice(5,7)-1] || p;
+const wfM = v => v==null ? '—' : '$'+(v/1e6).toFixed(2)+'M';
+const wfSum = arr => arr.reduce((s,v)=>s+(+v||0),0);
+const pFmt = v => v==null ? '—' : '$'+Math.round(v).toLocaleString();
+const wfFmt = v => {
+  if(v===null||v===undefined) return '—';
+  const neg=v<0,abs=Math.abs(v);
+  const s=abs>=1e6?'$'+(abs/1e6).toFixed(2)+'M':abs>=1e3?'$'+(abs/1e3).toFixed(0)+'K':'$'+Math.round(abs);
+  return neg?'('+s+')':s;
+};
+const wfEmpty = msg => `<div class="card"><div class="card-sub">${msg}</div></div>`;
 
-const WF_ROSTER = [
-  // Sales
-  {id:'EMP-1001',dept:'Sales',role:'Account Executive',lvl:'L4',region:'East',base:125000,variable:55000,sbc:12000,gaap:224400,quota:800000,ramp:4},
-  {id:'EMP-1002',dept:'Sales',role:'Sr Account Executive',lvl:'L5',region:'West',base:150000,variable:75000,sbc:18000,gaap:283500,quota:1100000,ramp:4},
-  {id:'EMP-1003',dept:'Sales',role:'Sales Ops Analyst',lvl:'L3',region:'East',base:95000,variable:10000,sbc:8000,gaap:131900,quota:0,ramp:2},
-  {id:'EMP-1004',dept:'Sales',role:'Account Executive',lvl:'L4',region:'Central',base:125000,variable:55000,sbc:12000,gaap:224400,quota:800000,ramp:4},
-  {id:'EMP-1005',dept:'Sales',role:'Sr Account Executive',lvl:'L5',region:'West',base:150000,variable:75000,sbc:18000,gaap:283500,quota:1100000,ramp:4},
-  {id:'EMP-1009',dept:'Sales',role:'Sales Development Rep',lvl:'L2',region:'West',base:70000,variable:25000,sbc:6000,gaap:118100,quota:300000,ramp:3},
-  // R&D
-  {id:'EMP-2001',dept:'R&D',role:'Senior Software Engineer',lvl:'L5',region:'Remote',base:175000,variable:20000,sbc:22000,gaap:253100,quota:0,ramp:2},
-  {id:'EMP-2002',dept:'R&D',role:'Software Engineer',lvl:'L4',region:'Remote',base:140000,variable:15000,sbc:16000,gaap:200700,quota:0,ramp:2},
-  {id:'EMP-2003',dept:'R&D',role:'Principal Engineer',lvl:'L7',region:'Remote',base:220000,variable:30000,sbc:35000,gaap:321600,quota:0,ramp:2},
-  {id:'EMP-2004',dept:'R&D',role:'Software Engineer',lvl:'L4',region:'East',base:140000,variable:15000,sbc:16000,gaap:200700,quota:0,ramp:2},
-  // Marketing
-  {id:'EMP-3001',dept:'Marketing',role:'Demand Gen Manager',lvl:'L4',region:'East',base:110000,variable:20000,sbc:12000,gaap:166360,quota:0,ramp:2},
-  {id:'EMP-3002',dept:'Marketing',role:'Product Marketing Mgr',lvl:'L4',region:'West',base:120000,variable:20000,sbc:14000,gaap:179920,quota:0,ramp:2},
-  {id:'EMP-3003',dept:'Marketing',role:'Marketing Analyst',lvl:'L3',region:'Remote',base:85000,variable:10000,sbc:8000,gaap:124300,quota:0,ramp:2},
-  // Customer Success
-  {id:'EMP-4001',dept:'Customer Success',role:'Sr CS Manager',lvl:'L5',region:'West',base:115000,variable:25000,sbc:14000,gaap:181700,quota:0,ramp:3},
-  {id:'EMP-4002',dept:'Customer Success',role:'CS Manager',lvl:'L4',region:'East',base:90000,variable:15000,sbc:10000,gaap:140200,quota:0,ramp:3},
-  // G&A
-  {id:'EMP-5001',dept:'G&A',role:'Sr Financial Analyst',lvl:'L4',region:'East',base:100000,variable:12000,sbc:10000,gaap:152360,quota:0,ramp:2},
-  {id:'EMP-5002',dept:'G&A',role:'HR Business Partner',lvl:'L4',region:'Remote',base:105000,variable:10000,sbc:12000,gaap:157590,quota:0,ramp:2},
-  // Product
-  {id:'EMP-6001',dept:'Product',role:'Sr Product Manager',lvl:'L5',region:'West',base:155000,variable:25000,sbc:20000,gaap:237900,quota:0,ramp:3},
-  // Support
-  {id:'EMP-7001',dept:'Support',role:'Technical Support Eng',lvl:'L3',region:'Remote',base:80000,variable:8000,sbc:6000,gaap:110640,quota:0,ramp:2},
-];
+function boardWf() {
+  const d = (typeof boardWorkforce === 'function' ? boardWorkforce() : null) || {};
+  const months = d.months || [];
+  const close = d.close_month || CLOSE_MONTH;
+  return {
+    d, months, close,
+    closeIdx: months.indexOf(close),
+    labels: months.map(wfMo),
+    depts: d.departments || [],
+    heads: d.heads || {},
+    total: d.heads_total || [],
+    payroll: d.payroll || [],
+    teams: d.payroll_by_team || {},
+    parts: d.payroll_parts || {},
+    quota: d.quota || [],
+    quotaRamped: d.quota_ramped || [],
+    reqs: d.reqs || [],
+    ramp: d.ramp || {},
+    roster: d.roster || [],
+    check: d.payroll_check || {span:null, rows:[]},
+    s: d.summary || {},
+    loaded: (d.heads_total || []).some(v => v > 0),
+  };
+}
 
 let _wfTab = 'overview';
 
 function renderWorkforce(area) {
-  const closeHc = typeof boardCloseHc === 'function' ? boardCloseHc() : HC_TOTAL_JUN;
-  const hcBud = HC_TOTAL_BUD || 130;
-  const arrPerEmp = closeHc && ARR_ACT && ARR_ACT[ACT_MONTHS_COUNT-1] ? Math.round(ARR_ACT[ACT_MONTHS_COUNT-1]*1e6/closeHc/1000) : 628;
+  const w = boardWf();
+  const closeHc = w.s.close_hc, decHc = w.s.dec_hc, budHc = w.s.budget_close_hc;
+  const arrClose = ARR_ACT && ARR_ACT[ACT_MONTHS_COUNT-1];
+  const arrPerEmp = closeHc && arrClose ? Math.round(arrClose*1e6/closeHc/1000) : null;
+  const pay = w.closeIdx >= 0 ? w.payroll[w.closeIdx] : null;
+  const starts = w.reqs.map(r=>r.start).sort();
+  const reqSpan = !starts.length ? 'none after close'
+    : (starts[0]===starts[starts.length-1] ? wfMo(starts[0]) : `${wfMo(starts[0])}\u2013${wfMo(starts[starts.length-1])}`) + ' starts';
+  const hcVar = closeHc!=null && budHc!=null ? closeHc - budHc : null;
+  const hcAdds = closeHc!=null && decHc!=null ? decHc - closeHc : null;
+  const sub = w.loaded
+    ? `Employee roster heads · GL payroll · headcount plan quota · ${closeHc} people at ${CLOSE_LABEL} · ${w.reqs.length} open reqs`
+    : 'No workforce data loaded';
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Workforce Intelligence</div>
-  <div class="slide-sub">Employee-level planning · ${closeHc} active employees · ${WF_REQS.length} open reqs · From Actual_Employees.csv + Forecast data</div>
+  <div class="slide-sub">${sub}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">${closeHc}</div><div class="kpi-delta ${closeHc<=hcBud+7?'pos':'neg'}">On budget (${hcBud})</div></div>
-    <div class="kpi"><div class="kpi-lbl">HC — Dec Forecast</div><div class="kpi-val">147</div><div class="kpi-delta pos">+15 from Jun</div></div>
-    <div class="kpi"><div class="kpi-lbl">Open Reqs</div><div class="kpi-val">${WF_REQS.length}</div><div class="kpi-delta neu">${FC_MO_LABELS[0]}\u2013Nov starts</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">$${arrPerEmp}K</div><div class="kpi-delta pos">${CLOSE_LABEL} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">Monthly Payroll</div><div class="kpi-val">$1.94M</div><div class="kpi-delta neu">${CLOSE_MO} &middot; on budget</div></div>
+    <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">${closeHc ?? '—'}</div><div class="kpi-delta neu">${hcVar==null?'no budget heads':`${hcVar>0?'+':''}${hcVar} vs budget (${budHc})`}</div></div>
+    <div class="kpi"><div class="kpi-lbl">HC — Dec Forecast</div><div class="kpi-val">${decHc ?? '—'}</div><div class="kpi-delta neu">${hcAdds==null?'—':`${hcAdds>=0?'+':''}${hcAdds} from ${CLOSE_MO}`}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Open Reqs</div><div class="kpi-val">${w.reqs.length}</div><div class="kpi-delta neu">${reqSpan}</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">${arrPerEmp==null?'—':'$'+arrPerEmp+'K'}</div><div class="kpi-delta neu">${CLOSE_LABEL} actual</div></div>
+    <div class="kpi"><div class="kpi-lbl">Monthly Payroll</div><div class="kpi-val">${wfM(pay)}</div><div class="kpi-delta neu">${CLOSE_MO} &middot; GL payroll</div></div>
   </div>
   <div class="wf-tab-bar">
     <button class="wf-tab on"  onclick="wfTab('overview',this)">Overview</button>
@@ -2514,7 +2476,6 @@ function renderWorkforce(area) {
     <button class="wf-tab" onclick="wfTab('payroll',this)">Payroll</button>
     <button class="wf-tab" onclick="wfTab('reqs',this)">Open Reqs</button>
     <button class="wf-tab" onclick="wfTab('roster',this)">Roster</button>
-    <button class="wf-tab" onclick="wfTab('scenarios',this)">Scenarios</button>
   </div>
   <div id="wfContent"></div>
 </div>`;
@@ -2529,138 +2490,132 @@ function wfTab(name, btn) {
   wfBuildTab(name);
 }
 
-const wfFmt = v => {
-  if(v===null||v===undefined) return '—';
-  const neg=v<0,abs=Math.abs(v);
-  const s=abs>=1e6?'$'+(abs/1e6).toFixed(2)+'M':abs>=1e3?'$'+(abs/1e3).toFixed(0)+'K':'$'+Math.round(abs);
-  return neg?'('+s+')':s;
-};
-const pFmt = v => '$'+Math.round(v).toLocaleString();
-const FC6   = ['Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
 function wfBuildTab(name) {
   destroyCharts();
   const el = document.getElementById('wfContent');
   if(!el) return;
-  if(name==='overview') wfOverview(el);
-  else if(name==='bridge') wfBridge(el);
-  else if(name==='capacity') wfCapacity(el);
-  else if(name==='payroll') wfPayroll(el);
-  else if(name==='reqs') wfReqs(el);
-  else if(name==='roster') wfRoster(el);
-  else if(name==='scenarios') wfScenarios(el);
+  const w = boardWf();
+  if(!w.months.length) { el.innerHTML = wfEmpty('No workforce data loaded. Load the Employees, Headcount Plan and GL files.'); return; }
+  if(name==='overview') wfOverview(el, w);
+  else if(name==='bridge') wfBridge(el, w);
+  else if(name==='capacity') wfCapacity(el, w);
+  else if(name==='payroll') wfPayroll(el, w);
+  else if(name==='reqs') wfReqs(el, w);
+  else if(name==='roster') wfRoster(el, w);
 }
 
-function wfOverview(el) {
+/** Monthly revenue (Actual through close, Forecast after) and ending ARR for the workforce months. */
+function wfRevArr(w) {
+  const ts = boardTsSource();
+  const wf = typeof boardWfTable === 'function' ? boardWfTable() : null;
+  return w.months.map((p, i) => {
+    const sc = p <= w.close ? 'Actual' : 'Forecast';
+    const rev = ts?.[sc]?.is?.[p]?.revenue;
+    const arr = wf && wf.Ending ? wf.Ending[i] : null;
+    return { rev: rev ?? null, arr: arr ?? null };
+  });
+}
+
+function wfOverview(el, w) {
+  const ra = wfRevArr(w);
+  const first = w.total[0], last = w.total[w.total.length-1];
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
       <div class="card-title">Headcount by department — all 12 months</div>
-      <div class="card-sub">Stacked · Jan–Jun actual · Jun–Dec base forecast</div>
-      <div class="legend">${WF_DEPTS.map(d=>`<span class="li"><span class="ls" style="background:${WF_COLORS[d]}"></span>${d}</span>`).join('')}</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfHCStack" role="img" aria-label="Stacked headcount by department all 12 months 2026. Total grows from 121 in January to 147 in December.">HC grows from 121 to 147.</canvas></div>
+      <div class="card-sub">Stacked · employee roster · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
+      <div class="legend">${w.depts.map((d,i)=>`<span class="li"><span class="ls" style="background:${wfColor(d,i)}"></span>${d}</span>`).join('')}</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="wfHCStack" role="img" aria-label="Stacked headcount by department. Total ${first} in ${w.labels[0]} and ${last} in ${w.labels[w.labels.length-1]}.">Headcount ${first} to ${last}.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Revenue &amp; ARR per employee</div>
-      <div class="card-sub">Monthly efficiency · Jan–Jun actual · Jun–Dec forecast ($K)</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfRevEmp" role="img" aria-label="Revenue per employee and ARR per employee trend across 2026. Both metrics improve as ARR grows faster than headcount.">Rev/emp and ARR/emp improve throughout 2026.</canvas></div>
+      <div class="card-sub">Monthly revenue and ending ARR per head ($K) · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="wfRevEmp" role="img" aria-label="Monthly revenue per employee and ending ARR per employee by month.">Revenue and ARR per employee.</canvas></div>
     </div>
   </div>
   <div class="two-col" style="margin-top:12px">
     <div class="card">
       <div class="card-title">Payroll trend — actual + forecast</div>
-      <div class="card-sub">Monthly fully-loaded cash payroll ($M)</div>
-      <div class="chart-wrap" style="height:170px"><canvas id="wfPayTrend" role="img" aria-label="Monthly payroll trend from $1.71M in January to $2.08M in December 2026.">Payroll grows from $1.71M to $2.08M.</canvas></div>
+      <div class="card-sub">Monthly GL payroll: salaries and wages, benefits, payroll taxes, commissions ($M)</div>
+      <div class="chart-wrap" style="height:170px"><canvas id="wfPayTrend" role="img" aria-label="Monthly GL payroll from ${wfM(w.payroll[0])} in ${w.labels[0]} to ${wfM(w.payroll[w.payroll.length-1])} in ${w.labels[w.labels.length-1]}.">GL payroll by month.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Operating leverage</div>
-      <div class="card-sub">Revenue growth vs headcount growth · indexed Jan 2026 = 100</div>
-      <div class="chart-wrap" style="height:170px"><canvas id="wfOpLev" role="img" aria-label="Operating leverage chart showing revenue growing faster than headcount throughout 2026.">Revenue outpaces HC growth throughout 2026.</canvas></div>
+      <div class="card-sub">Revenue vs headcount · indexed ${w.labels[0]} = 100</div>
+      <div class="chart-wrap" style="height:170px"><canvas id="wfOpLev" role="img" aria-label="Revenue index and headcount index by month.">Revenue and headcount indexed to January.</canvas></div>
     </div>
   </div>`;
   setTimeout(()=>{
-    charts.wfHCStack = boardMkChart(document.getElementById('wfHCStack'),{type:'bar',data:{labels:ALL12,
-      datasets:WF_DEPTS.map(d=>({label:d,data:WF_HC_ALL[d],backgroundColor:WF_COLORS[d]+'cc',stack:'a',borderWidth:0}))},
+    charts.wfHCStack = boardMkChart(document.getElementById('wfHCStack'),{type:'bar',data:{labels:w.labels,
+      datasets:w.depts.map((d,i)=>({label:d,data:w.heads[d],backgroundColor:wfColor(d,i)+'cc',stack:'a',borderWidth:0}))},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    
-    const REV_ALL = [6.59,6.71,6.85,7.01,7.18,7.36,7.54,7.73,7.93,8.13,8.33,8.54];
-    // H2 ARR path: Jun close $86.1M → Dec pipeline SoT $91.08M (not stale WF_TABLE 97.5).
-    const ARR_ALL = [76.3,77.8,79.5,81.4,83.4,86.1,87.0,87.9,88.8,89.6,90.4,91.1];
-    charts.wfRevEmp = boardMkChart(document.getElementById('wfRevEmp'),{type:'line',data:{labels:ALL12,datasets:[
-      {label:'Rev/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(REV_ALL[i]*1e6/hc/1000)),borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false},
-      {label:'ARR/Emp ($K)',data:WF_TOTAL_HC.map((hc,i)=>Math.round(ARR_ALL[i]*1e6/hc/1000)),borderColor:'#185FA5',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
 
-    charts.wfPayTrend = boardMkChart(document.getElementById('wfPayTrend'),{type:'line',data:{labels:ALL12,
-      datasets:[{label:'Payroll',data:WF_PAYROLL,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,
+    const perHead = (v, i) => v!=null && w.total[i] ? Math.round(v/w.total[i]/1000) : null;
+    charts.wfRevEmp = boardMkChart(document.getElementById('wfRevEmp'),{type:'line',data:{labels:w.labels,datasets:[
+      {label:'Revenue / employee ($K, month, left)',data:ra.map((x,i)=>perHead(x.rev,i)),borderColor:'#1D9E75',borderWidth:2,pointRadius:3,fill:false,yAxisID:'y'},
+      {label:'ARR / employee ($K, right)',data:ra.map((x,i)=>perHead(x.arr,i)),borderColor:'#185FA5',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false,yAxisID:'y1'},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
+      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},
+        y:{position:'left',ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},
+        y1:{position:'right',ticks:{callback:v=>'$'+v+'K',font:{size:9}},grid:{display:false}}}}});
+
+    charts.wfPayTrend = boardMkChart(document.getElementById('wfPayTrend'),{type:'line',data:{labels:w.labels,
+      datasets:[{label:'GL payroll',data:w.payroll.map(v=>v==null?null:+(v/1e6).toFixed(3)),borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,
         backgroundColor:'rgba(24,95,165,0.06)',fill:true}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
 
-    const revIdx = [6.59,6.71,6.85,7.01,7.18,7.36,7.54,7.73,7.93,8.13,8.33,8.54].map(v=>Math.round(v/6.59*100));
-    const hcIdx  = WF_TOTAL_HC.map(v=>Math.round(v/121*100));
-    charts.wfOpLev = boardMkChart(document.getElementById('wfOpLev'),{type:'line',data:{labels:ALL12,datasets:[
-      {label:'Revenue index',data:revIdx,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'HC index',data:hcIdx,borderColor:'#D85A30',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false},
+    const rev0 = ra[0]?.rev, hc0 = w.total[0];
+    charts.wfOpLev = boardMkChart(document.getElementById('wfOpLev'),{type:'line',data:{labels:w.labels,datasets:[
+      {label:'Revenue index',data:ra.map(x=>x.rev!=null&&rev0?Math.round(x.rev/rev0*100):null),borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false},
+      {label:'HC index',data:w.total.map(v=>hc0?Math.round(v/hc0*100):null),borderColor:'#D85A30',borderWidth:2,borderDash:[4,3],pointRadius:3,fill:false},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:98,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   }, 50);
 }
 
-function wfBridge(el) {
-  // Full 13-bar waterfall: BOP, +feb, +mar, +apr, +may, +jun, +jul, +aug, +sep, +oct, +nov, +dec, EOP
-  // BRIDGE is derived from CLOSE_MONTH — actual:true up to and including close month
-const BRIDGE_DATA = [
-    {label:'Jan BOP', hc:121, adds:121, isBase:true, mo:''},
-    {label:'Feb +3',  hc:124, adds:3,  mo:'2026-02'},
-    {label:'Mar +2',  hc:126, adds:2,  mo:'2026-03'},
-    {label:'Apr +2',  hc:128, adds:2,  mo:'2026-04'},
-    {label:'May +2',  hc:130, adds:2,  mo:'2026-05'},
-    {label:'Jun +7',  hc:137, adds:7,  mo:'2026-06'},
-    {label:'Jul +3',  hc:140, adds:3,  mo:'2026-07'},
-    {label:'Aug +2',  hc:142, adds:2,  mo:'2026-08'},
-    {label:'Sep +3',  hc:145, adds:3,  mo:'2026-09'},
-    {label:'Oct +1',  hc:146, adds:1,  mo:'2026-10'},
-    {label:'Nov +1',  hc:147, adds:1,  mo:'2026-11'},
-    {label:'Dec +0',  hc:147, adds:0,  mo:'2026-12'},
-    {label:'Dec EOP', hc:147, adds:147, isBase:true, mo:''},
-  ];
-// Mark actual vs forecast based on CLOSE_MONTH
-const BRIDGE = BRIDGE_DATA.map(b => ({
-  ...b,
-  actual: b.mo ? b.mo <= CLOSE_MONTH : false
-}));
+function wfBridge(el, w) {
+  if(!w.loaded){ el.innerHTML = wfEmpty('No employee roster or headcount plan loaded.'); return; }
+  const n = w.total.length;
+  const BRIDGE = [{label:`${w.labels[0]} start`, hc:w.total[0], adds:w.total[0], isBase:true}];
+  for(let i=1;i<n;i++){
+    const adds = w.total[i]-w.total[i-1];
+    BRIDGE.push({label:`${w.labels[i]} ${adds>=0?'+':''}${adds}`, hc:w.total[i], adds, actual:w.months[i] <= w.close});
+  }
+  BRIDGE.push({label:`${w.labels[n-1]} end`, hc:w.total[n-1], adds:w.total[n-1], isBase:true});
   const offsets=[],bars=[],colors=[],borders=[];
   BRIDGE.forEach((b,i)=>{
     if(b.isBase){offsets.push(0);bars.push(b.hc);colors.push('#185FA5');borders.push('#185FA5');}
-    else{const prior=BRIDGE[i-1].hc;offsets.push(prior);bars.push(b.adds);
+    else{const prior=BRIDGE[i-1].hc;offsets.push(Math.min(prior,b.hc));bars.push(Math.abs(b.adds));
       colors.push(b.actual?'#1D9E75':'#BA7517');borders.push(b.actual?'#0F6E56':'#854F0B');}
   });
+  const lo = Math.min(...w.total), hi = Math.max(...w.total);
+  const yMin = Math.max(0, Math.floor((lo - Math.max(5,(hi-lo)*0.5))/5)*5), yMax = Math.ceil((hi + Math.max(3,(hi-lo)*0.15))/5)*5;
+  const after = w.months.map((p,i)=>i).filter(i=>w.months[i] > w.close);
+  const aria = BRIDGE.map(b=>b.isBase?`${b.label} ${b.hc}`:`${b.label}=${b.hc}`).join(', ');
   el.innerHTML = `
   <div class="card" style="margin-bottom:12px">
-    <div class="card-title">Headcount bridge — Jan 2026 BOP → Dec 2026 EOP</div>
-    <div class="card-sub">All monthly new hire increments &middot; green = actual adds (Jan–${CLOSE_MO}) &middot; amber = forecast adds &middot; blue = totals</div>
+    <div class="card-title">Headcount bridge — ${w.labels[0]} → ${w.labels[n-1]} ${w.close.slice(0,4)}</div>
+    <div class="card-sub">Monthly net change in roster heads &middot; green = actual (Jan–${CLOSE_MO}) &middot; amber = forecast &middot; blue = totals</div>
     <div class="legend">
-      <span class="li"><span class="ls" style="background:#185FA5"></span>BOP / EOP total</span>
-      <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual new hires (Jan–Jun)</span>
-      <span class="li"><span class="ls" style="background:#BA7517"></span>Forecast new hires (Jun–Dec)</span>
+      <span class="li"><span class="ls" style="background:#185FA5"></span>Start / end total</span>
+      <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual net change</span>
+      <span class="li"><span class="ls" style="background:#BA7517"></span>Forecast net change</span>
     </div>
-    <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount bridge waterfall. Jan BOP 121. Feb +3=124, Mar +2=126, Apr +2=128, May +2=130, Jun +7=137, Jul +3=140, Aug +2=142, Sep +3=145, Oct +1=146, Nov +1=147, Dec +0=147. Dec EOP 147.">HC bridge: 121 BOP grows to 147 EOP with monthly adds shown.</canvas></div>
+    <div class="chart-wrap" style="height:240px"><canvas id="wfBridgeChart" role="img" aria-label="Headcount bridge. ${aria}.">Headcount ${w.total[0]} to ${w.total[n-1]}.</canvas></div>
   </div>
   <div class="two-col">
     <div class="card">
       <div class="card-title">HC adds by department — forecast period</div>
-      <div class="card-sub">Monthly net adds Jun–Dec · from open reqs</div>
-      <div class="chart-wrap" style="height:180px"><canvas id="wfDeptAdds" role="img" aria-label="Monthly headcount adds by department June through December 2026">Department-level hiring adds across H2 2026.</canvas></div>
+      <div class="card-sub">Monthly net adds after ${CLOSE_MO} · employee roster planned starts</div>
+      ${after.length?`<div class="chart-wrap" style="height:180px"><canvas id="wfDeptAdds" role="img" aria-label="Monthly headcount adds by department after close">Department adds after close.</canvas></div>`:'<div class="card-sub">No forecast months after close.</div>'}
     </div>
     <div class="card">
-      <div class="card-title">Department mix — Jan vs Dec</div>
-      <div class="card-sub">Beginning vs ending HC by department</div>
-      <div class="sec-lbl" style="margin-bottom:4px">Jan → Dec comparison</div>
-      ${WF_DEPTS.map(d=>{const jan=WF_HC_ALL[d][0],dec=WF_HC_ALL[d][11],delta=dec-jan;
-        return `<div class="var-row"><span class="var-lbl"><span class="ls" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${WF_COLORS[d]};margin-right:5px;vertical-align:middle"></span>${d}</span><span class="var-act">${dec}</span><span class="var-bud">${jan} Jan</span><span class="var-diff pos">+${delta}</span></div>`;}).join('')}
+      <div class="card-title">Department mix — ${w.labels[0]} vs ${w.labels[n-1]}</div>
+      <div class="card-sub">Start vs end heads by department</div>
+      ${w.depts.map((d,i)=>{const a=w.heads[d][0],b=w.heads[d][n-1],delta=b-a;
+        return `<div class="var-row"><span class="var-lbl"><span class="ls" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${wfColor(d,i)};margin-right:5px;vertical-align:middle"></span>${d}</span><span class="var-act">${b}</span><span class="var-bud">${a} ${w.labels[0]}</span><span class="var-diff ${delta>0?'pos':delta<0?'neg':'neu'}">${delta>0?'+':''}${delta}</span></div>`;}).join('')}
     </div>
   </div>`;
   setTimeout(()=>{
@@ -2671,256 +2626,201 @@ const BRIDGE = BRIDGE_DATA.map(b => ({
           borderRadius:{topLeft:3,topRight:3,bottomLeft:0,bottomRight:0},stack:'b'},
       ]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
-        tooltip:{filter:item=>item.datasetIndex===1,callbacks:{label:ctx=>{const b=BRIDGE[ctx.dataIndex];return b.isBase?`Total: ${b.hc}`:`+${b.adds} → ${b.hc}`;}}},
+        tooltip:{filter:item=>item.datasetIndex===1,callbacks:{label:ctx=>{const b=BRIDGE[ctx.dataIndex];return b.isBase?`Total: ${b.hc}`:`${b.adds>=0?'+':''}${b.adds} → ${b.hc}`;}}},
       },scales:{x:{stacked:true,ticks:{font:{size:9},maxRotation:30},grid:{display:false}},
-        y:{stacked:true,min:110,max:155,ticks:{font:{size:9},stepSize:5},grid:{color:'rgba(0,0,0,0.04)'}}}},
+        y:{stacked:true,min:yMin,max:yMax,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}},
       plugins:[{id:'wfVals',afterDatasetsDraw(chart){
         const ctx2=chart.ctx,meta=chart.getDatasetMeta(1);
         ctx2.save();ctx2.textAlign='center';
         meta.data.forEach((bar,i)=>{
-          const b=BRIDGE[i];if(!bars[i]) return;
+          const b=BRIDGE[i];
           ctx2.font='bold 10px system-ui,sans-serif';
           ctx2.fillStyle=b.isBase?'#185FA5':b.actual?'#0F6E56':'#854F0B';
-          ctx2.fillText(b.isBase?String(b.hc):`+${b.adds}`,bar.x,bar.y-4);
-          if(!b.isBase&&b.adds>0){ctx2.font='9px system-ui,sans-serif';ctx2.fillStyle='rgba(100,116,139,0.8)';ctx2.fillText(String(b.hc),bar.x,bar.y-15);}
+          ctx2.fillText(b.isBase?String(b.hc):`${b.adds>=0?'+':''}${b.adds}`,bar.x,bar.y-4);
         });ctx2.restore();
       }}]
     });
-
-    const deptAddData = WF_DEPTS.map(d=>({label:d,
-      data:[6,7,8,9,10,11,12].map((mo,i)=>{
-        const prev=i===0?WF_HC_ALL[d][4]:WF_HC_ALL[d][4+i];
-        const curr=WF_HC_ALL[d][5+i];
-        return Math.max(0,curr-prev);
-      }),backgroundColor:WF_COLORS[d]+'bb',stack:'a',borderWidth:0,
-    }));
-    charts.wfDeptAdds = boardMkChart(document.getElementById('wfDeptAdds'),{type:'bar',data:{labels:FC_MO_LABELS,datasets:deptAddData},
+    if(!after.length) return;
+    charts.wfDeptAdds = boardMkChart(document.getElementById('wfDeptAdds'),{type:'bar',data:{labels:after.map(i=>w.labels[i]),
+      datasets:w.depts.map((d,di)=>({label:d,data:after.map(i=>Math.max(0,w.heads[d][i]-w.heads[d][i-1])),backgroundColor:wfColor(d,di)+'bb',stack:'a',borderWidth:0}))},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   }, 50);
 }
 
-function wfCapacity(el) {
+function wfCapacity(el, w) {
+  const curves = Object.keys(w.ramp);
+  const carriers = w.roster.filter(e=>e.quota>0);
+  const hasQuota = w.quota.some(v=>v!=null);
+  const lastQ = w.quota.filter(v=>v!=null), lastR = w.quotaRamped.filter(v=>v!=null);
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
       <div class="card-title">Quota capacity vs ramped capacity</div>
-      <div class="card-sub">Monthly ARR quota ($M) · solid = total book · dashed = productivity-adjusted</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfQuota" role="img" aria-label="Quota capacity vs ramped capacity. Total capacity grows from $1.29M to $1.57M monthly. Ramped capacity lags as new hires ramp up over 3-4 months.">Quota grows from $1.29M to $1.57M/mo. Ramped quota lags.</canvas></div>
+      <div class="card-sub">Annual ARR quota capacity ($M) · headcount plan · solid = total · dashed = ramp-adjusted</div>
+      ${hasQuota?`<div class="chart-wrap" style="height:200px"><canvas id="wfQuota" role="img" aria-label="Quota capacity ${wfM(lastQ[0])} to ${wfM(lastQ[lastQ.length-1])}; ramped capacity ${wfM(lastR[0])} to ${wfM(lastR[lastR.length-1])}.">Quota capacity by month.</canvas></div>`:'<div class="card-sub">No headcount plan loaded.</div>'}
     </div>
     <div class="card">
-      <div class="card-title">Ramp curves by role type</div>
-      <div class="card-sub">Productivity % by months after start date · from Hiring_Ramp_Assumptions.csv</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfRamps" role="img" aria-label="Ramp curves for 2-month, 3-month, 4-month, and 6-month ramp roles. AEs ramp over 4 months reaching full quota at month 5.">Ramp curves: 2mo (SDR), 3mo (CSM), 4mo (AE), 6mo (SE).</canvas></div>
+      <div class="card-title">Ramp curves</div>
+      <div class="card-sub">Productivity % by month after start · hiring ramp assumptions</div>
+      ${curves.length?`<div class="chart-wrap" style="height:200px"><canvas id="wfRamps" role="img" aria-label="Ramp curves for ${curves.join(', ')} month ramps.">Ramp curves.</canvas></div>`:'<div class="card-sub">No hiring ramp assumptions loaded.</div>'}
     </div>
   </div>
   <div class="full-card" style="margin-top:12px">
-    <div class="card-title" style="margin-bottom:8px">Quota carrier detail — Sales · from Actual_Employees.csv</div>
-    <table class="roster-tbl">
-      <thead><tr><th style="text-align:left;width:14%">Employee ID</th><th style="text-align:left;width:22%">Role</th><th style="text-align:left">Region</th><th>Annual Quota</th><th>Ramp (mo)</th><th>Base Salary</th><th>OTE</th><th>GAAP Cost/yr</th></tr></thead>
-      <tbody>${WF_ROSTER.filter(e=>e.quota>0).map((e,i)=>`<tr>
-        <td>${e.id}</td><td>${e.role}</td><td>${e.region}</td>
-        <td style="color:#1D9E75;font-weight:500">$${(e.quota/1e6).toFixed(1)}M</td>
-        <td>${e.ramp} mo</td>
-        <td>${pFmt(e.base)}</td><td>${pFmt(e.base+e.variable)}</td>
-        <td>${pFmt(e.gaap)}</td>
+    <div class="card-title" style="margin-bottom:8px">Quota carriers — ${carriers.length} on the roster at ${CLOSE_LABEL}</div>
+    ${carriers.length?`<table class="roster-tbl">
+      <thead><tr><th style="text-align:left;width:14%">Employee ID</th><th style="text-align:left;width:22%">Role</th><th style="text-align:left">Region</th><th>Annual Quota</th><th>Ramp (mo)</th><th>Base Salary</th><th>OTE</th></tr></thead>
+      <tbody>${carriers.map(e=>`<tr>
+        <td>${e.id}</td><td>${e.role}</td><td>${e.region||'—'}</td>
+        <td style="color:#1D9E75;font-weight:500">$${(e.quota/1e6).toFixed(2)}M</td>
+        <td>${e.ramp??'—'}</td>
+        <td>${pFmt(e.base)}</td><td>${pFmt((e.base||0)+(e.variable||0))}</td>
       </tr>`).join('')}</tbody>
-    </table>
+    </table>`:'<div class="card-sub">No quota carriers on the roster.</div>'}
   </div>`;
   setTimeout(()=>{
-    charts.wfQuota = boardMkChart(document.getElementById('wfQuota'),{type:'line',data:{labels:ALL12,datasets:[
-      {label:'Total quota ($M/mo)',data:WF_QUOTA_TOT,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'Ramped capacity ($M/mo)',data:WF_QUOTA_RMP,borderColor:'#1D9E75',borderWidth:2.5,borderDash:[4,3],pointRadius:3,fill:false},
+    if(hasQuota) charts.wfQuota = boardMkChart(document.getElementById('wfQuota'),{type:'line',data:{labels:w.labels,datasets:[
+      {label:'Quota capacity ($M ARR)',data:w.quota.map(v=>v==null?null:+(v/1e6).toFixed(2)),borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,fill:false},
+      {label:'Ramped capacity ($M ARR)',data:w.quotaRamped.map(v=>v==null?null:+(v/1e6).toFixed(2)),borderColor:'#1D9E75',borderWidth:2.5,borderDash:[4,3],pointRadius:3,fill:false},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:1.1,ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-
-    const rampCurves=[
-      {label:'2-mo (SDR)',color:'#1D9E75',data:[50,100,100,100,100,100]},
-      {label:'3-mo (CSM)',color:'#185FA5',data:[33,67,100,100,100,100]},
-      {label:'4-mo (AE)',color:'#BA7517',data:[0,25,50,75,100,100]},
-      {label:'6-mo (SE)',color:'#888780',data:[0,15,30,50,75,100]},
-    ];
-    charts.wfRamps = boardMkChart(document.getElementById('wfRamps'),{type:'line',data:{labels:['Mo 1','Mo 2','Mo 3','Mo 4','Mo 5','Mo 6'],
-      datasets:rampCurves.map(r=>({label:r.label,data:r.data,borderColor:r.color,borderWidth:2,pointRadius:4,fill:false}))},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-        scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:0,max:110,ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    if(curves.length){
+      const len = Math.max(...curves.map(k=>w.ramp[k].length));
+      charts.wfRamps = boardMkChart(document.getElementById('wfRamps'),{type:'line',data:{labels:Array.from({length:len},(_,i)=>'Mo '+(i+1)),
+        datasets:curves.map((k,i)=>({label:`${k}-month ramp`,data:w.ramp[k],borderColor:WF_RAMP_COLORS[i % WF_RAMP_COLORS.length],borderWidth:2,pointRadius:4,fill:false}))},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
+          scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:0,max:110,ticks:{callback:v=>v+'%',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    }
   }, 50);
 }
 
-function wfPayroll(el) {
-  const deptShares = {Sales:.24,Marketing:.11,'R&D':.34,Product:.08,'Customer Success':.11,Support:.06,'G&A':.12};
+function wfPayroll(el, w) {
+  const teams = Object.keys(w.teams);
+  const ci = w.closeIdx;
+  const ytd = key => wfSum((w.parts[key]||[]).slice(0, ci+1));
+  const mix = [['Salaries and wages','wages','#185FA5'],['Benefits and payroll taxes','benefits','#BA7517'],['Commissions','commissions','#1D9E75']]
+    .map(([label,key,color])=>({label,color,val:ytd(key)}));
+  const mixTot = wfSum(mix.map(m=>m.val));
+  const rows = w.check.rows || [];
+  const tot = {roster:wfSum(rows.map(r=>r.roster)), gl:wfSum(rows.map(r=>r.gl))};
+  const headsAt = t => w.heads[t] && ci>=0 ? w.heads[t][ci] : null;
+  const glAt = t => w.teams[t] && ci>=0 ? w.teams[t][ci] : null;
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
-      <div class="card-title">Payroll by department — full year</div>
-      <div class="card-sub">Stacked monthly ($M) · Jan–Jun actual · Jun–Dec forecast</div>
-      <div class="legend">${WF_DEPTS.map(d=>`<span class="li"><span class="ls" style="background:${WF_COLORS[d]}"></span>${d}</span>`).join('')}</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfPayStack" role="img" aria-label="Stacked monthly payroll by department all 12 months 2026. R&D is the largest component at approximately 34% of total payroll.">Payroll stacked by department. R&D leads at 34%.</canvas></div>
+      <div class="card-title">Payroll by GL department — full year</div>
+      <div class="card-sub">Stacked monthly GL payroll ($M) · Jan–${CLOSE_MO} actual · after ${CLOSE_MO} forecast</div>
+      <div class="legend">${teams.map((t,i)=>`<span class="li"><span class="ls" style="background:${wfColor(t,i)}"></span>${t}</span>`).join('')}</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="wfPayStack" role="img" aria-label="Stacked monthly GL payroll by GL department.">GL payroll by department.</canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">Compensation mix</div>
-      <div class="card-sub">Share of fully-loaded GAAP cost by component</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfCompMix" role="img" aria-label="Compensation mix donut. Base salary 55%, variable 18%, benefits 15%, SBC 12%.">Comp mix: base 55%, variable 18%, benefits 15%, SBC 12%.</canvas></div>
+      <div class="card-title">Payroll mix — YTD ${CLOSE_LABEL}</div>
+      <div class="card-sub">GL payroll by expense type</div>
+      ${mixTot?`<div class="chart-wrap" style="height:200px"><canvas id="wfCompMix" role="img" aria-label="Payroll mix: ${mix.map(m=>`${m.label} ${Math.round(m.val/mixTot*100)}%`).join(', ')}.">Payroll mix.</canvas></div>`:'<div class="card-sub">No GL payroll through close.</div>'}
     </div>
   </div>
   <div class="full-card" style="margin-top:12px">
-    <div class="card-title" style="margin-bottom:8px">Department payroll summary — June 2026 actual</div>
-    <table class="roster-tbl">
-      <thead><tr><th style="text-align:left">Department</th><th>HC</th><th>Avg Base</th><th>Monthly Cash</th><th>Monthly GAAP</th><th>SBC / mo</th><th>% of total</th></tr></thead>
-      <tbody>${WF_DEPTS.map(d=>{
-        const hc=WF_HC_ALL[d][4];
-        const share=deptShares[d]||0.1;
-        const cashMo=1.83*share;const gaapMo=cashMo*1.09;const sbcMo=cashMo*0.08;
-        const avgBase=Math.round(cashMo*1e6/hc*12*0.58/1000)*1000;
-        return `<tr><td style="font-weight:500"><span class="ls" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${WF_COLORS[d]};margin-right:5px;vertical-align:middle"></span>${d}</td>
-          <td>${hc}</td><td>${pFmt(avgBase)}</td>
-          <td>$${cashMo.toFixed(2)}M</td><td>$${gaapMo.toFixed(2)}M</td><td>$${(sbcMo*1e6/1000).toFixed(0)}K</td>
-          <td><div style="display:flex;align-items:center;gap:5px"><div style="width:${Math.round(share*120)}px;height:5px;background:${WF_COLORS[d]};border-radius:2px"></div>${Math.round(share*100)}%</div></td>
-        </tr>`;}).join('')}
+    <div class="card-title" style="margin-bottom:4px">Roster cost vs GL payroll${w.check.span?` — ${w.check.span}`:''}</div>
+    <div class="card-sub" style="margin-bottom:8px">Reports use GL payroll. Roster cost is the Employees file fully loaded cash cost, shown only as a check. Teams that appear on one side only are named differently in the GL and the roster.</div>
+    ${rows.length?`<table class="roster-tbl">
+      <thead><tr><th style="text-align:left">Team</th><th>HC (${CLOSE_MO})</th><th>GL payroll (${CLOSE_MO})</th><th>GL payroll YTD</th><th>Roster cost YTD</th><th>Roster − GL</th></tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr><td style="font-weight:500"><span class="ls" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${wfColor(r.team,i)};margin-right:5px;vertical-align:middle"></span>${r.team}</td>
+          <td>${headsAt(r.team) ?? '—'}</td><td>${wfFmt(glAt(r.team))}</td><td>${wfFmt(r.gl)}</td><td>${wfFmt(r.roster)}</td>
+          <td style="color:${Math.abs(r.variance)>1?'var(--amber)':'var(--text3)'}">${wfFmt(r.variance)}</td></tr>`).join('')}
+        <tr style="font-weight:500;border-top:1px solid var(--border2)"><td>All teams</td><td>${w.s.close_hc ?? '—'}</td><td>${wfFmt(ci>=0?w.payroll[ci]:null)}</td><td>${wfFmt(tot.gl)}</td><td>${wfFmt(tot.roster)}</td><td>${wfFmt(tot.roster-tot.gl)}</td></tr>
       </tbody>
-    </table>
+    </table>`:'<div class="card-sub">No employee roster loaded, so there is no roster cost to compare.</div>'}
   </div>`;
   setTimeout(()=>{
-    charts.wfPayStack = boardMkChart(document.getElementById('wfPayStack'),{type:'bar',data:{labels:ALL12,
-      datasets:WF_DEPTS.map(d=>({label:d,data:WF_PAYROLL.map(p=>+(p*(deptShares[d]||0.1)).toFixed(2)),
-        backgroundColor:WF_COLORS[d]+'cc',stack:'a',borderWidth:0}))},
+    charts.wfPayStack = boardMkChart(document.getElementById('wfPayStack'),{type:'bar',data:{labels:w.labels,
+      datasets:teams.map((t,i)=>({label:t,data:w.teams[t].map(v=>v==null?null:+(v/1e6).toFixed(3)),backgroundColor:wfColor(t,i)+'cc',stack:'a',borderWidth:0}))},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:{stacked:true,ticks:{font:{size:9}},grid:{display:false}},y:{stacked:true,ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.wfCompMix = boardMkChart(document.getElementById('wfCompMix'),{type:'doughnut',data:{
-      labels:['Base salary 55%','Variable comp 18%','Benefits 15%','SBC 12%'],
-      datasets:[{data:[55,18,15,12],backgroundColor:['#185FA5','#1D9E75','#BA7517','#888780'],borderWidth:2,borderColor:'#fff'}]},
+    if(mixTot) charts.wfCompMix = boardMkChart(document.getElementById('wfCompMix'),{type:'doughnut',data:{
+      labels:mix.map(m=>`${m.label} ${Math.round(m.val/mixTot*100)}%`),
+      datasets:[{data:mix.map(m=>Math.round(m.val)),backgroundColor:mix.map(m=>m.color),borderWidth:2,borderColor:'#fff'}]},
       options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:10}}}}});
   }, 50);
 }
 
-function wfReqs(el) {
+function wfReqs(el, w) {
   const priCol={'High':'#185FA5','Medium':'#BA7517','Low':'#888780'};
   const priCls={'High':'badge-blue','Medium':'badge-amber','Low':'badge-gray'};
-  const byMo={};
-  WF_REQS.forEach(r=>{byMo[r.start]=(byMo[r.start]||0)+1;});
-  const moKeys=['2026-06','2026-07','2026-08','2026-09','2026-10','2026-11'];
+  const rank = p => { const i = ['High','Medium','Low'].indexOf(p); return i < 0 ? 9 : i; };
+  const pris = [...new Set(w.reqs.map(r=>r.pri||'Unspecified'))].sort((a,b)=>rank(a)-rank(b));
+  const depts = [...new Set(w.reqs.map(r=>r.dept))];
+  const moKeys = w.months.filter(p=>p > w.close);
+  const byMo = {}; w.reqs.forEach(r=>{byMo[r.start]=(byMo[r.start]||0)+1;});
+  const byDept = depts.map(d=>`${d} ${w.reqs.filter(r=>r.dept===d).length}`).join(', ');
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
-      <div class="card-title">Open reqs by department — 17 total</div>
-      <div class="card-sub">Priority breakdown · from Forecast_Open_Requisitions.csv</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfReqDept" role="img" aria-label="Open requisitions by department. Sales has 3, R&D has 3, Marketing 2, Product 2, CS 2, Support 2, G&A 3.">17 reqs: Sales 3, R&D 3, G&A 3, Marketing 2, Product 2, CS 2, Support 2.</canvas></div>
+      <div class="card-title">Open reqs by department — ${w.reqs.length} total</div>
+      <div class="card-sub">Approved reqs starting after ${CLOSE_MO} · priority · open requisitions file</div>
+      ${w.reqs.length?`<div class="chart-wrap" style="height:200px"><canvas id="wfReqDept" role="img" aria-label="Open requisitions by department: ${byDept}.">${byDept}.</canvas></div>`:'<div class="card-sub">No open reqs after close.</div>'}
     </div>
     <div class="card">
       <div class="card-title">Hiring timeline — planned starts</div>
-      <div class="card-sub">Reqs by planned start month · base plan</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfHireTimeline" role="img" aria-label="Hiring timeline showing 8 reqs starting in June, 4 in July, 2 in August, 2 in September, 1 in October, 1 in November.">Start timing: Jun 8, Jul 4, Aug 2, Sep 2, Oct 1, Nov 1.</canvas></div>
+      <div class="card-sub">Reqs by planned start month</div>
+      ${w.reqs.length?`<div class="chart-wrap" style="height:200px"><canvas id="wfHireTimeline" role="img" aria-label="Planned starts: ${moKeys.map(m=>`${wfMo(m)} ${byMo[m]||0}`).join(', ')}.">Planned starts by month.</canvas></div>`:'<div class="card-sub">No planned starts after close.</div>'}
     </div>
   </div>
   <div class="full-card" style="margin-top:12px">
     <div class="card-title" style="margin-bottom:8px">Open requisitions detail</div>
-    ${WF_REQS.map(r=>`<div class="var-row">
+    ${w.reqs.map(r=>`<div class="var-row">
       <span style="width:90px;flex-shrink:0;font-size:10px;color:var(--text3)">${r.dept}</span>
       <span style="flex:1;color:var(--text)">${r.role} <span style="color:var(--text3);font-size:10px">${r.level}</span></span>
-      <span class="badge ${priCls[r.pri]}" style="flex-shrink:0;margin:0 8px">${r.pri}</span>
+      <span class="badge ${priCls[r.pri]||'badge-gray'}" style="flex-shrink:0;margin:0 8px">${r.pri||'—'}</span>
       <span style="font-family:var(--mono);font-size:10px;color:var(--text3);width:70px;text-align:right">${r.start}</span>
-    </div>`).join('')}
+    </div>`).join('') || '<div class="card-sub">None.</div>'}
   </div>`;
+  if(!w.reqs.length) return;
   setTimeout(()=>{
-    const deptCounts={};const deptH={},deptM={},deptL={};
-    WF_REQS.forEach(r=>{deptCounts[r.dept]=(deptCounts[r.dept]||0)+1;
-      if(r.pri==='High') deptH[r.dept]=(deptH[r.dept]||0)+1;
-      else if(r.pri==='Medium') deptM[r.dept]=(deptM[r.dept]||0)+1;
-      else deptL[r.dept]=(deptL[r.dept]||0)+1;});
-    const depts=Object.keys(deptCounts);
-    charts.wfReqDept = boardMkChart(document.getElementById('wfReqDept'),{type:'bar',data:{labels:depts,datasets:[
-      {label:'High',data:depts.map(d=>deptH[d]||0),backgroundColor:'#185FA5bb',stack:'a'},
-      {label:'Medium',data:depts.map(d=>deptM[d]||0),backgroundColor:'#BA7517bb',stack:'a'},
-      {label:'Low',data:depts.map(d=>deptL[d]||0),backgroundColor:'#888780bb',stack:'a'},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
+    charts.wfReqDept = boardMkChart(document.getElementById('wfReqDept'),{type:'bar',data:{labels:depts,
+      datasets:pris.map(p=>({label:p,data:depts.map(d=>w.reqs.filter(r=>r.dept===d&&(r.pri||'Unspecified')===p).length),backgroundColor:(priCol[p]||'#B4B2A9')+'bb',stack:'a'}))},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
       scales:{x:{stacked:true,ticks:{font:{size:9},maxRotation:30},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
     charts.wfHireTimeline = boardMkChart(document.getElementById('wfHireTimeline'),{type:'bar',
-      data:{labels:['Jun','Jul','Aug','Sep','Oct','Nov'],datasets:[{
-        data:moKeys.map(m=>byMo[m]||0),backgroundColor:moKeys.map((_,i)=>i===0?'#185FA5bb':'#1D9E7588'),borderRadius:3}]},
+      data:{labels:moKeys.map(wfMo),datasets:[{data:moKeys.map(m=>byMo[m]||0),backgroundColor:'#1D9E7588',borderRadius:3}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   }, 50);
 }
 
-function wfRoster(el) {
-  const sorted=[...WF_ROSTER].sort((a,b)=>WF_DEPTS.indexOf(a.dept)-WF_DEPTS.indexOf(b.dept));
+function wfRoster(el, w) {
+  if(!w.roster.length){ el.innerHTML = wfEmpty('No employee roster loaded. Load the Employees file.'); return; }
+  const planned = w.roster.filter(e=>String(e.status).toLowerCase()==='planned').length;
   let lastDept='';
   el.innerHTML = `
   <div class="full-card">
-    <div class="card-title" style="margin-bottom:8px">Employee roster — 130 active employees · from Actual_Employees.csv</div>
+    <div class="card-title" style="margin-bottom:8px">Employee roster — ${w.roster.length} people at ${CLOSE_LABEL}${planned?` (${planned} planned hires started)`:''} · Employees file</div>
     <div style="overflow-x:auto;max-height:420px;overflow-y:auto">
     <table class="roster-tbl">
       <thead style="position:sticky;top:0;background:var(--bg)"><tr>
         <th style="text-align:left;width:12%">ID</th>
-        <th style="text-align:left;width:22%">Role</th>
+        <th style="text-align:left;width:20%">Role</th>
         <th style="text-align:left">Dept</th>
-        <th>Level</th><th>Region</th>
+        <th>Level</th><th>Region</th><th>Status</th>
         <th>Base Salary</th><th>Variable</th><th>SBC/yr</th>
-        <th>GAAP Cost/yr</th><th>Quota ARR</th><th>Ramp</th>
+        <th>Roster Cost/yr</th><th>Quota ARR</th><th>Ramp</th>
       </tr></thead>
-      <tbody>${sorted.map(e=>{
+      <tbody>${w.roster.map(e=>{
         let hdr='';
-        if(e.dept!==lastDept){lastDept=e.dept;hdr=`<tr class="dept-sep"><td colspan="11"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${WF_COLORS[e.dept]};margin-right:6px;vertical-align:middle"></span>${e.dept}</td></tr>`;}
+        if(e.dept!==lastDept){lastDept=e.dept;hdr=`<tr class="dept-sep"><td colspan="12"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${wfColor(e.dept,w.depts.indexOf(e.dept))};margin-right:6px;vertical-align:middle"></span>${e.dept}</td></tr>`;}
         return hdr+`<tr>
           <td>${e.id}</td><td>${e.role}</td><td style="color:var(--text2)">${e.dept}</td>
-          <td style="font-family:inherit;text-align:left"><span class="badge badge-gray">${e.lvl}</span></td>
-          <td style="font-family:inherit;text-align:left;color:var(--text2)">${e.region}</td>
+          <td style="font-family:inherit;text-align:left"><span class="badge badge-gray">${e.lvl||'—'}</span></td>
+          <td style="font-family:inherit;text-align:left;color:var(--text2)">${e.region||'—'}</td>
+          <td style="font-family:inherit;text-align:left;color:var(--text2)">${e.status||'—'}</td>
           <td>${pFmt(e.base)}</td><td>${pFmt(e.variable)}</td><td>${pFmt(e.sbc)}</td>
-          <td>${pFmt(e.gaap)}</td>
-          <td style="color:${e.quota>0?'#1D9E75':'var(--text3)'};font-weight:${e.quota>0?'500':'400'}">${e.quota>0?'$'+(e.quota/1e6).toFixed(1)+'M':'—'}</td>
-          <td>${e.ramp} mo</td>
+          <td>${pFmt(e.cost)}</td>
+          <td style="color:${e.quota>0?'#1D9E75':'var(--text3)'};font-weight:${e.quota>0?'500':'400'}">${e.quota>0?'$'+(e.quota/1e6).toFixed(2)+'M':'—'}</td>
+          <td>${e.ramp!=null?e.ramp+' mo':'—'}</td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>
+    <div class="card-sub" style="margin-top:6px">Roster cost is the fully loaded cash cost in the Employees file. Payroll on this page and in the statements comes from the GL.</div>
   </div>`;
-}
-
-function wfScenarios(el) {
-  el.innerHTML = `
-  <div class="two-col">
-    <div class="card">
-      <div class="card-title">Payroll scenario comparison</div>
-      <div class="card-sub">Monthly payroll ($M) · Jun–Dec · base vs 2-mo delay vs G&A freeze</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfScPay" role="img" aria-label="Payroll comparison across three scenarios June through December 2026. 2-month delay saves most in June and July.">Payroll scenarios: base, 2-mo delay, G&A freeze.</canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Headcount trajectory by scenario</div>
-      <div class="card-sub">Total HC Jun–Dec · 3 scenarios</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="wfScHC" role="img" aria-label="Headcount trajectory by scenario June through December. Base reaches 147, 2-month delay reaches 147 by November, G&A freeze reaches 145.">HC scenarios diverge in H2, converge by year-end.</canvas></div>
-    </div>
-  </div>
-  <div class="sc-impact">
-    ${[
-      {name:'Base plan',color:'#888780',pay:WF_SC_PAY.base.reduce((s,v)=>s+v,0),hc:147,quota:'$1.57M',notes:'All 17 reqs on plan'},
-      {name:'2-month delay',color:'#185FA5',pay:WF_SC_PAY.delay2.reduce((s,v)=>s+v,0),hc:147,quota:'$1.55M',notes:'Saves $0.22M H2 payroll'},
-      {name:'G&A hiring freeze',color:'#1D9E75',pay:WF_SC_PAY.freeze.reduce((s,v)=>s+v,0),hc:145,quota:'$1.57M',notes:'Saves $0.14M · no quota impact'},
-      {name:'Enterprise AE push',color:'#BA7517',pay:WF_SC_PAY.base.reduce((s,v)=>s+v,0)*1.03,hc:150,quota:'$1.76M',notes:'+3 AEs · +$0.19M quota cap'},
-    ].map(sc=>`<div class="sc-card" style="border-left-color:${sc.color}">
-      <div class="sc-card-title">${sc.name}</div>
-      <div class="sc-stat-row"><span class="sc-stat-lbl">H2 Payroll</span><span class="sc-stat-val">$${sc.pay.toFixed(2)}M</span></div>
-      <div class="sc-stat-row"><span class="sc-stat-lbl">Dec Headcount</span><span class="sc-stat-val">${sc.hc}</span></div>
-      <div class="sc-stat-row"><span class="sc-stat-lbl">Dec Ramped Quota</span><span class="sc-stat-val">${sc.quota}/mo</span></div>
-      <div style="font-size:10px;color:var(--text3);margin-top:6px">${sc.notes}</div>
-    </div>`).join('')}
-  </div>
-  <div class="commentary" style="margin-top:12px">
-    <div class="commentary-lbl">Scenario guidance · from Workforce_Scenario_Assumptions.csv</div>
-    <div class="commentary-text">Base plan adds 10 employees Jul–Dec (June hires completed), reaching 147 total headcount. A 2-month blanket delay saves $0.14M in H2 payroll by deferring the July/August wave to September/October with no material impact on December quota capacity. A G&A-only freeze through year-end saves $0.09M and is invisible to revenue-generating capacity. The Enterprise AE acceleration scenario adds 2 senior AEs ahead of plan, increasing December ramped quota capacity by $0.13M/month at an incremental payroll cost of approximately $0.04M/month.</div>
-  </div>`;
-  setTimeout(()=>{
-    charts.wfScPay = boardMkChart(document.getElementById('wfScPay'),{type:'line',data:{labels:FC_MO_LABELS,datasets:[
-      {label:'Base',data:WF_SC_PAY.base,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:2,fill:false},
-      {label:'2-mo delay',data:WF_SC_PAY.delay2,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'G&A freeze',data:WF_SC_PAY.freeze,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(2)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-    charts.wfScHC = boardMkChart(document.getElementById('wfScHC'),{type:'line',data:{labels:FC_MO_LABELS,datasets:[
-      {label:'Base',data:WF_SC_HC.base,borderColor:'#888780',borderWidth:1.5,borderDash:[4,3],pointRadius:2,fill:false},
-      {label:'2-mo delay',data:WF_SC_HC.delay2,borderColor:'#185FA5',borderWidth:2.5,pointRadius:3,fill:false},
-      {label:'G&A freeze',data:WF_SC_HC.freeze,borderColor:'#1D9E75',borderWidth:2.5,pointRadius:3,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:128,ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
-  }, 50);
 }
 // end workforce block
 

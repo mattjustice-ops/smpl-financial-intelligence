@@ -20,7 +20,7 @@ from app.models.workforce import (
     WorkforceHiringRampAssumption,
     WorkforceOpenRequisition,
 )
-from app.services.workforce import validation_service
+from app.services.workforce import gl_payroll, validation_service
 
 
 @pytest.fixture()
@@ -62,8 +62,26 @@ def test_validation_warns_when_source_missing(db_session) -> None:
     assert any(c.validation_name == "workforce_source_data_missing" for c in result.checks)
 
 
-def test_validation_passes_with_derived_payroll(db_session) -> None:
+def test_validation_passes_with_gl_payroll(db_session, monkeypatch) -> None:
     session, org_id = db_session
+    monkeypatch.setattr(
+        gl_payroll,
+        "fetch_gl_pl_rows",
+        lambda db, org, version: [
+            {
+                "period": "2026-01",
+                "statement": "Income Statement",
+                "statement_category": "Operating Expense",
+                "account_group": "Labor",
+                "expense_type": "Salaries and Wages",
+                "account_name": "Base Salaries",
+                "department": "Sales",
+                "amount": 11000,
+            }
+        ]
+        if version == "Forecast"
+        else [],
+    )
     session.add(
         WorkforceEmployee(
             organization_id=org_id,
@@ -109,5 +127,8 @@ def test_validation_passes_with_derived_payroll(db_session) -> None:
         start_period=date(2026, 1, 1),
         end_period=date(2026, 1, 31),
     )
-    assert any(c.validation_name == "workforce_payroll_derived" and c.status == "pass" for c in result.checks)
-    assert any(c.validation_name == "workforce_pnl_overlay_ready" for c in result.checks)
+    assert any(
+        c.validation_name == "workforce_payroll_derived" and c.status == "pass" and c.actual_value == Decimal("11000.00")
+        for c in result.checks
+    )
+    assert any(c.validation_name == "roster_cost_vs_gl_payroll" for c in result.checks)

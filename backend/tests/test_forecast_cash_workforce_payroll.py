@@ -21,6 +21,7 @@ from app.models.workforce import (
     WorkforceOpenRequisition,
 )
 from app.services.driver_forecast.forecast_cash_flow_engine import build_cash_flow_forecast
+from app.services.workforce import gl_payroll
 from app.services.workforce.integration import resolve_payroll_cash_out
 
 
@@ -112,9 +113,27 @@ def test_resolve_payroll_falls_back_to_manual_csv(db_session) -> None:
     assert amount == Decimal("45000.00")
 
 
-def test_cash_flow_forecast_uses_workforce_payroll(db_session) -> None:
+def test_cash_flow_forecast_uses_gl_payroll(db_session, monkeypatch) -> None:
     session, org_id = db_session
     _seed_workforce(session, org_id)
+    monkeypatch.setattr(
+        gl_payroll,
+        "fetch_gl_pl_rows",
+        lambda db, org, version: [
+            {
+                "period": "2026-06",
+                "statement": "Income Statement",
+                "statement_category": "Operating Expense",
+                "account_group": "Labor",
+                "expense_type": "Salaries and Wages",
+                "account_name": "Base Salaries",
+                "department": "Sales",
+                "amount": 40000,
+            }
+        ]
+        if version == "Forecast"
+        else [],
+    )
     rows = build_cash_flow_forecast(
         session,
         org_id,
@@ -123,5 +142,5 @@ def test_cash_flow_forecast_uses_workforce_payroll(db_session) -> None:
         assumptions={},
     )
     assert len(rows) == 1
-    assert rows[0]["payroll_source"] == "workforce_derived"
-    assert abs(rows[0]["payroll_cash_out"]) > Decimal("0")
+    assert rows[0]["payroll_source"] == "gl_actuals"
+    assert abs(rows[0]["payroll_cash_out"]) == Decimal("40000.00")

@@ -1,21 +1,21 @@
 """
 Downstream feed adapters — workforce operating model → finance surfaces.
 
-These return structures intended for Management P&L, cash forecast, GTM capacity,
-and legacy headcount_plan compatibility without manual payroll uploads.
+Payroll dollars in every feed are GL payroll (``gl_payroll``); head counts and quota come
+from the roster and headcount plan.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import date
-from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.services.workforce.constants import PNL_LINE_MAP
 from app.services.workforce.engine import month_start, q_money
+from app.services.workforce.gl_payroll import GL_PAYROLL_SOURCE, gl_payroll_by_period
 from app.services.workforce import service as workforce_service
 
 
@@ -38,7 +38,7 @@ def payroll_by_department(
     start_period: date,
     end_period: date,
 ) -> list[dict[str, Any]]:
-    """Monthly derived people cost by department — replaces manual headcount_plan payroll."""
+    """Monthly GL payroll and roster head count by department."""
     plan = workforce_service.build_workforce_plan(
         session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, persist=False
     )
@@ -49,7 +49,7 @@ def payroll_by_department(
             "headcount_fte": row.total_headcount_fte,
             "monthly_payroll_cost": row.total_people_cost_monthly,
             "total_people_cost": row.total_people_cost_monthly,
-            "source": "workforce_derived",
+            "source": GL_PAYROLL_SOURCE,
         }
         for row in plan.period_summary
     ]
@@ -63,7 +63,7 @@ def pnl_people_cost_lines(
     start_period: date,
     end_period: date,
 ) -> list[dict[str, Any]]:
-    """Map department payroll to income statement lines via allocation rules."""
+    """GL payroll by income statement line."""
     plan = workforce_service.build_workforce_plan(
         session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, persist=False
     )
@@ -75,7 +75,7 @@ def pnl_people_cost_lines(
                 "period": row.period,
                 "pnl_line": PNL_LINE_MAP.get(key, row.pnl_line),
                 "amount": row.amount,
-                "source": "workforce_allocation_rules",
+                "source": GL_PAYROLL_SOURCE,
             }
         )
     return out
@@ -91,19 +91,22 @@ def cash_payroll_outflow(
     payroll_timing_days: int = 0,
 ) -> list[dict[str, Any]]:
     """
-    Cash payroll outflow schedule from derived people cost.
+    Cash payroll outflow schedule from GL payroll, excluding commissions (their own cash line).
     Timing shift is a simple month lag placeholder until payroll calendar rules exist.
     """
-    rows = payroll_by_department(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
-    by_period: dict[date, Decimal] = {}
-    for row in rows:
-        period = month_start(row["period"])
-        by_period[period] = by_period.get(period, Decimal("0")) + q_money(row["monthly_payroll_cost"])
+    start, end = month_start(start_period), month_start(end_period)
+    by_period = {
+        period: q_money(amount)
+        for period, amount in gl_payroll_by_period(
+            session, organization_id, _normalize_scenario(scenario), include_commissions=False
+        ).items()
+        if start <= period <= end
+    }
     return [
         {
             "period": period,
             "payroll_cash_out": amount,
-            "source": "workforce_derived",
+            "source": GL_PAYROLL_SOURCE,
             "payroll_timing_days": payroll_timing_days,
         }
         for period, amount in sorted(by_period.items())

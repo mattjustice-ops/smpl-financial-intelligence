@@ -11,9 +11,15 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
-from app.models.demo_finance import ForecastHeadcountPlan, HeadcountPlan
+from app.models.demo_finance import ForecastHeadcountPlan, ForecastIncomeStatement, ForecastQuotaCapacity, HeadcountPlan
 from app.models.organization import Organization
-from app.models.workforce import WorkforceEmployee
+from app.models.workforce import (
+    WorkforceCompensationBand,
+    WorkforceDepartmentAllocationRule,
+    WorkforceEmployee,
+    WorkforceHiringRampAssumption,
+    WorkforceOpenRequisition,
+)
 from app.services.workforce import service
 from app.services.workforce.legacy_headcount import merge_legacy_headcount, _snapshot_from_mapping
 from app.services.workforce.validation_service import run_workforce_validations
@@ -27,8 +33,14 @@ def db_session():
         tables=[
             Organization.__table__,
             WorkforceEmployee.__table__,
+            WorkforceOpenRequisition.__table__,
+            WorkforceHiringRampAssumption.__table__,
+            WorkforceCompensationBand.__table__,
+            WorkforceDepartmentAllocationRule.__table__,
             HeadcountPlan.__table__,
             ForecastHeadcountPlan.__table__,
+            ForecastIncomeStatement.__table__,
+            ForecastQuotaCapacity.__table__,
         ],
     )
     factory = sessionmaker(bind=engine)
@@ -154,7 +166,8 @@ def test_physical_actual_headcount_plan_table_is_used(db_session_with_physical) 
     assert row.department == "Sales"
     assert row.headcount_beginning_fte == Decimal("28.0000")
     assert row.filled_headcount == Decimal("28.0000")
-    assert row.total_people_cost_monthly == Decimal("437508.33")
+    assert row.total_people_cost_monthly == Decimal("0.00")
+    assert any(v.validation_name == "gl_payroll_missing" for v in plan.validations)
 
 
 def test_legacy_plan_replaces_engine_departments_for_covered_periods() -> None:
