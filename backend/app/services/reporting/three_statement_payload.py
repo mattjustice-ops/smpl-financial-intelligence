@@ -12,7 +12,14 @@ from app.services.dashboard.query_utils import fetch_table_rows, table_exists, v
 from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 from app.services.reporting.export.data_collector import collect_reporting_bundle
 from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period
-from app.services.reporting.gl_income_statement import gl_income_statement_by_period
+from app.services.reporting.gl_income_statement import (
+    GL_VERSION_BY_SCENARIO,
+    build_income_statement_rows,
+    build_marketing_program_rows,
+    build_opex_detail_rows,
+    fetch_gl_pl_rows,
+    gl_income_statement_by_period,
+)
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, to_period
 from app.services.reporting.pipeline_deals import (
@@ -878,9 +885,12 @@ def build_ts_data(
     for scenario, prefix in (("Actual", "actual"), ("Forecast", "forecast"), ("Budget", "budget")):
         bs_rows = _gl_statement_rows(db, organization_id, prefix)[0]
 
-        is_data = gl_income_statement_by_period(db, organization_id, prefix)
+        pl_rows = fetch_gl_pl_rows(db, organization_id, GL_VERSION_BY_SCENARIO[prefix])
+        is_data = build_income_statement_rows(pl_rows)
         for period, row in is_data.items():
             _enrich_is(row)
+        opex_detail = build_opex_detail_rows(pl_rows)
+        programs = build_marketing_program_rows(pl_rows)
 
         bs_data = _period_dict_from_field_specs(bs_rows, BS_FIELD_SPECS)
         for period, row in bs_data.items():
@@ -912,6 +922,8 @@ def build_ts_data(
             "is": {p: is_data.get(p, {}) for p in periods},
             "bs": {p: bs_data.get(p, {}) for p in periods},
             "cfs": {p: cfs_data.get(p, {}) for p in periods},
+            "gl_opex": {p: opex_detail.get(p, {}) for p in periods},
+            "gl_programs": {p: programs.get(p, {}) for p in periods},
         }
     return scenarios
 

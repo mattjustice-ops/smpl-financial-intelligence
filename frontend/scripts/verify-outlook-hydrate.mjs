@@ -240,6 +240,41 @@ check(
   JSON.stringify(keepPlan.Budget.is["2026-12"])
 );
 
+// Live apply (applyOutlook) is strict: no demo value survives anywhere.
+const strictTs = {
+  Actual: { periods: ["2026-05", "2026-06"], is: { "2026-05": { revenue: 1 } }, bs: {}, cfs: {} },
+  Forecast: { periods: ["2026-12"], is: { "2026-12": { revenue: 42 } }, bs: {}, cfs: {} },
+  Budget: { periods: ["2026-01"], is: { "2026-01": { revenue: 50 } }, bs: {}, cfs: {} },
+};
+const strictWf = { Ending: [1, 2], Budget_Ending: [9, 9], Demo_Only: [7] };
+const strictSrc = {
+  actuals: { "2026-01": { revenue: 1 } },
+  opp_pipeline: { "2026-07": { demo: 1 } },
+  pipeline_book: { "2024-01": { demo: 1 } },
+  implementation_fees: { SMB: 999 },
+  gtm: { avg_acv: 1 },
+};
+const strictPayload = {
+  meta: { close_month: "2026-06", start_period: "2026-01", end_period: "2026-12" },
+  ARR_WATERFALL: { Beginning: [10, 11, 12, 13, 14, 15], Ending: [11, 12, 13, 14, 15, 16] },
+  TS_DATA: { Actual: { periods: ["2026-06"], is: { "2026-06": { revenue: 7 } }, bs: {}, cfs: {} } },
+  SRC: { actuals: { "2026-06": { revenue: 7 } } },
+};
+const applied = SMPLOutlook.applyOutlook(strictPayload, { TS_DATA: strictTs, WF_TABLE: strictWf, SRC: strictSrc });
+check("Strict apply accepted payload", applied === true);
+check("Strict: live Actual row present", strictTs.Actual.is["2026-06"] && strictTs.Actual.is["2026-06"].revenue === 7);
+check("Strict: demo Actual month removed", !strictTs.Actual.is["2026-05"]);
+check("Strict: demo Forecast removed when warehouse sent none", !strictTs.Forecast.is["2026-12"]);
+check("Strict: demo closed-month Budget removed", !strictTs.Budget.is["2026-01"]);
+check("Strict: demo-only waterfall keys removed", !strictWf.Budget_Ending && !strictWf.Demo_Only);
+check("Strict: waterfall Ending is live", strictWf.Ending.length === 6 && strictWf.Ending[5] === 16);
+check("Strict: SRC demo actual month removed", !strictSrc.actuals["2026-01"] && strictSrc.actuals["2026-06"].revenue === 7);
+check("Strict: SRC pipeline/book/fees/gtm cleared when not sent",
+  !Object.keys(strictSrc.opp_pipeline).length &&
+    !Object.keys(strictSrc.pipeline_book).length &&
+    !Object.keys(strictSrc.implementation_fees).length &&
+    strictSrc.gtm === null);
+
 if (failed) {
   console.error("\n" + failed + " hydrate residue check(s) failed.");
   process.exit(1);

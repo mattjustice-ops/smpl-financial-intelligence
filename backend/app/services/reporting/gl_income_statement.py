@@ -183,6 +183,54 @@ def build_income_statement_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dic
     return out
 
 
+OPEX_DETAIL_LINES = ("sm", "rd", "ga", "unmapped")
+
+
+def opex_detail_key(line: str, department: Any, account_name: Any) -> str:
+    return f"{line}|{str(department or '').strip() or 'Unassigned'}|{str(account_name or '').strip() or 'Unassigned'}"
+
+
+def build_opex_detail_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    """Operating expense by P&L line, department and account: ``{period: {"line|dept|account": amount}}``.
+
+    Uses the same line mapping as the income statement, so each line's detail sums to
+    that line's IS value (S&M / R&D / G&A / unmapped).
+    """
+    out: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for raw in rows:
+        line = classify_gl_line(raw)
+        if line not in OPEX_DETAIL_LINES:
+            continue
+        period = str(raw.get("period") or "")[:7]
+        if not period:
+            continue
+        key = opex_detail_key(line, raw.get("department"), raw.get("account_name"))
+        out[period][key] += float(raw.get("amount") or 0.0)
+    return {p: dict(v) for p, v in out.items()}
+
+
+MARKETING_PROGRAM_TYPES = ("marketing programs",)
+
+
+def is_marketing_program(row: dict[str, Any]) -> bool:
+    """Marketing program spend (paid media, events, content, partners): expense type or account group."""
+    return _norm(row.get("expense_type")) in MARKETING_PROGRAM_TYPES or _norm(row.get("account_group")) in MARKETING_PROGRAM_TYPES
+
+
+def build_marketing_program_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    """Marketing program spend by account: ``{period: {"line|department|account": amount}}`` (subset of opex detail)."""
+    out: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for raw in rows:
+        line = classify_gl_line(raw)
+        if line not in OPEX_DETAIL_LINES or not is_marketing_program(raw):
+            continue
+        period = str(raw.get("period") or "")[:7]
+        if not period:
+            continue
+        out[period][opex_detail_key(line, raw.get("department"), raw.get("account_name"))] += float(raw.get("amount") or 0.0)
+    return {p: dict(v) for p, v in out.items()}
+
+
 def fetch_gl_pl_rows(db: Session, organization_id: uuid.UUID, version: str) -> list[dict[str, Any]]:
     if not table_exists(db, "gl_actuals"):
         return []
@@ -190,10 +238,10 @@ def fetch_gl_pl_rows(db: Session, organization_id: uuid.UUID, version: str) -> l
         text(
             """
             select to_char(period, 'YYYY-MM') as period, statement, statement_category, category,
-                   account_group, account_name, department, sum(amount) as amount
+                   account_group, expense_type, account_name, department, sum(amount) as amount
             from gl_actuals
             where organization_id = :org and lower(version) = lower(:version)
-            group by 1, 2, 3, 4, 5, 6, 7
+            group by 1, 2, 3, 4, 5, 6, 7, 8
             """
         ),
         {"org": str(organization_id), "version": version},
@@ -209,3 +257,13 @@ def gl_income_statement_by_period(
     """Monthly income statement for ``actual`` / ``budget`` / ``forecast`` from the GL."""
     version = GL_VERSION_BY_SCENARIO[scenario.lower()]
     return build_income_statement_rows(fetch_gl_pl_rows(db, organization_id, version))
+
+
+def gl_opex_detail_by_period(
+    db: Session,
+    organization_id: uuid.UUID,
+    scenario: str,
+) -> dict[str, dict[str, float]]:
+    """Monthly opex detail by line, department and account for ``actual`` / ``budget`` / ``forecast``."""
+    version = GL_VERSION_BY_SCENARIO[scenario.lower()]
+    return build_opex_detail_rows(fetch_gl_pl_rows(db, organization_id, version))

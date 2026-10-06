@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from types import SimpleNamespace
 
 from app.services.reporting.board_modules_payload import (
     _parse_quota_period,
@@ -30,7 +31,8 @@ class _FakeSession:
         if "to_regclass" in sql:
             name = (params or {}).get("name", "").replace("public.", "")
             table = name.strip('"')
-            return type("R", (), {"scalar": lambda self: table if table in self.regclass else None})()
+            found = table if table in self.regclass else None
+            return type("R", (), {"scalar": lambda _self: found})()
         if "select * from" in sql:
             table = sql.split('"')[1]
             org_id = (params or {}).get("organization_id")
@@ -44,6 +46,9 @@ class _FakeSession:
 
     def scalars(self, _statement):
         return type("S", (), {"all": lambda self: []})()
+
+    def get_bind(self):
+        return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
 
 
 def test_parse_quota_period_variants() -> None:
@@ -87,7 +92,7 @@ def test_build_gtm_payload_aggregates_channels() -> None:
     )
     assert "Paid Search" in payload
     ch = payload["Paid Search"]
-    assert ch["spend"] == 0.15
+    assert "spend" not in ch and "eff" not in ch, "channel spend is never taken from the marketing tables"
     assert ch["pipe"] == 0.4
     assert ch["mqls"] == 150
 
