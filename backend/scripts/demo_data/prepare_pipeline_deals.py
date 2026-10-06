@@ -1,21 +1,23 @@
 """Align the demo deal files with the MRR waterfall before implementation revenue is added.
 
 Writes a full copy of the source folder with these files changed (never touches the database):
-  Actual_opportunities.csv              + June 2026 closed-won New Business deals
-  Actual_opportunity_movements.csv      + the same June deals as "Closed Won" movements
-  Forecast_opportunities.csv            Jul-Dec deals in an open stage: close_status "Open"
-  Forecast_opportunity_movements.csv    same relabel
+  Actual_opportunities.csv              + June 2026 deals for every deal type
+  Actual_opportunity_movements.csv      + the same June deals
+  Forecast_opportunities.csv            Jul-Dec open deals: close_status "Open", stage from probability
+  Forecast_opportunity_movements.csv    the same deals take the same labels
   pipeline_deals_log.csv
 
 Rules (agreed with Matt, Oct 5 2026):
-  * Forecast is the open CRM pipeline. Deals keep their stage, amount and probability; only
-    the "Closed Won" label on deals that have not closed changes to "Open". Expected new
-    logos for a month = sum of New Business probabilities; weighted ARR = waterfall new ARR.
-  * Actual June 2026 had new-business ARR in the waterfall but no deals. The June deals are
-    built from May's closed-won New Business deals (same segment, channel, owner and terms),
-    new customer and deal IDs, amounts scaled to June's closed-won ARR.
-  * The script stops if June's total or any month's forecast weighted ARR does not tie to
-    the waterfall.
+  * Forecast is the open CRM pipeline. Deals keep their amount and probability, so weighted
+    ARR still equals the waterfall. Deals that have not closed are "Open", and the stage
+    follows the probability: 35% Evaluation, 50% Proposal, 65% Negotiation, 80% Commit.
+    Expected new logos for a month = sum of New Business probabilities.
+  * Actual June 2026 had waterfall ARR but no deals. June deals for each type (New Business,
+    Expansion, Reactivation, Contraction, Churn) are built from May's deals of that type
+    (same segment, channel, owner, stage and terms), new customer and deal IDs, amounts
+    scaled to June's ARR for that type.
+  * The script stops if any June type or any month's forecast weighted New Business ARR does
+    not tie to the waterfall.
 
 Usage:
   python prepare_pipeline_deals.py <source_folder> <output_folder>
@@ -35,6 +37,11 @@ NEW_BUSINESS = "New Business"
 JUNE, TEMPLATE_MONTH = "2026-06", "2026-05"
 FORECAST_START = "2026-07"
 OPEN_STAGES = {"Discovery", "Evaluation", "Proposal", "Negotiation", "Commit"}
+STAGE_BY_PROBABILITY = {Decimal("0.35"): "Evaluation", Decimal("0.5"): "Proposal",
+                        Decimal("0.65"): "Negotiation", Decimal("0.8"): "Commit"}
+DEAL_TYPES = (NEW_BUSINESS, "Expansion", "Reactivation", "Contraction", "Churn")
+WATERFALL_COLUMN = {NEW_BUSINESS: "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
+                    "Contraction": "contraction_arr", "Churn": "churn_arr"}
 TOLERANCE = Decimal("1.00")
 
 
@@ -61,12 +68,18 @@ def _waterfall_new_arr(src: str, version: str) -> dict[str, Decimal]:
     return {r["period"][:7]: _num(r["new_business_arr"]) for r in rows}
 
 
-def _june_closed_won_arr(src: str) -> Decimal:
+def _june_closed_arr(src: str, deal_type: str) -> Decimal:
     _, rows = _read(os.path.join(src, "Actual_pipeline_waterfall.csv"))
-    match = [r for r in rows if r["period"][:7] == JUNE and r["opportunity_type"] == NEW_BUSINESS]
+    match = [r for r in rows if r["period"][:7] == JUNE and r["opportunity_type"] == deal_type]
     if len(match) != 1:
-        raise ValueError(f"expected one {JUNE} New Business row in Actual_pipeline_waterfall.csv, found {len(match)}")
+        raise ValueError(f"expected one {JUNE} {deal_type} row in Actual_pipeline_waterfall.csv, found {len(match)}")
     return _num(match[0]["closed_won_arr"])
+
+
+def _june_waterfall_arr(src: str, deal_type: str) -> Decimal:
+    _, rows = _read(os.path.join(src, "Actual_MRR_Waterfall.csv"))
+    match = [r for r in rows if r["period"][:7] == JUNE]
+    return abs(_num(match[0][WATERFALL_COLUMN[deal_type]])) if match else Decimal("0")
 
 
 def _all_ids(src: str) -> tuple[int, int]:
@@ -85,47 +98,51 @@ def _all_ids(src: str) -> tuple[int, int]:
 
 
 def build_june_deals(src: str, log: list[dict[str, str]]) -> list[dict[str, str]]:
+    """June deals for every type, New Business first so its IDs stay the same as before."""
     _, opps = _read(os.path.join(src, "Actual_opportunities.csv"))
-    if any(r["period"][:7] == JUNE and r["opportunity_type"] == NEW_BUSINESS for r in opps):
-        raise ValueError(f"Actual_opportunities.csv already has {JUNE} New Business deals")
-    template = sorted((r for r in opps if r["period"][:7] == TEMPLATE_MONTH and r["opportunity_type"] == NEW_BUSINESS
-                       and r["close_status"] == "Closed Won"), key=lambda r: r["opportunity_id"])
-    if not template:
-        raise ValueError(f"no {TEMPLATE_MONTH} closed-won New Business deals to use as a template")
-    target = _june_closed_won_arr(src)
-    waterfall = _waterfall_new_arr(src, "Actual").get(JUNE, Decimal("0"))
-    if abs(target - waterfall) > TOLERANCE:
-        raise ValueError(f"{JUNE} closed-won ARR {target} does not match waterfall new ARR {waterfall}")
-    base = sum((_num(r["amount_arr"]) for r in template), Decimal("0"))
-    factor = target / base
-    deal_max, cust_max = _all_ids(src)
+    if any(r["period"][:7] == JUNE for r in opps):
+        raise ValueError(f"Actual_opportunities.csv already has {JUNE} deals")
+    deal_no, cust_no = _all_ids(src)
     deals: list[dict[str, str]] = []
-    left = target
-    for i, t in enumerate(template):
-        last = i == len(template) - 1
-        amount = left if last else (_num(t["amount_arr"]) * factor).quantize(CENT, rounding=ROUND_HALF_UP)
-        left -= amount
-        cust_no = cust_max + 1 + i
-        stem = t["customer_name"].rsplit(" ", 1)[0]
-        name = f"{stem} {cust_no}"
-        created = f"{JUNE}-{t['created_date'][8:10]}"
-        deals.append({
-            **t,
-            "period": JUNE, "opportunity_id": f"ACT-OPP-{deal_max + 1 + i}",
-            "opportunity_name": f"{name} - {NEW_BUSINESS} - {JUNE}",
-            "customer_id": f"CUST-{cust_no:05d}", "customer_name": name,
-            "created_date": created, "expected_close_date": f"{JUNE}-30", "actual_close_date": f"{JUNE}-30",
-            "contract_start_date": f"{JUNE}-01", "contract_end_date": "2027-06-01",
-            "amount_arr": f"{amount:.2f}", "weighted_arr": f"{amount:.2f}", "probability": "1.0",
-            "source_note": f"June 2026 deal built from {t['opportunity_id']} ({TEMPLATE_MONTH}); "
-                           f"amount scaled to June closed-won ARR in the waterfall",
-        })
-    total = sum((_num(d["amount_arr"]) for d in deals), Decimal("0"))
-    if total != target:
-        raise ValueError(f"June deals total {total} != {target}")
-    log.append({"version": "Actual", "period": JUNE, "file": "Actual_opportunities.csv", "action": "added",
-                "detail": f"{len(deals)} closed-won New Business deals from {TEMPLATE_MONTH} template, "
-                          f"scaled x{factor:.4f} to the waterfall", "amount": f"{total:.2f}"})
+    for deal_type in DEAL_TYPES:
+        template = sorted((r for r in opps if r["period"][:7] == TEMPLATE_MONTH and r["opportunity_type"] == deal_type),
+                          key=lambda r: r["opportunity_id"])
+        if not template:
+            raise ValueError(f"no {TEMPLATE_MONTH} {deal_type} deals to use as a template")
+        target = _june_closed_arr(src, deal_type)
+        waterfall = _june_waterfall_arr(src, deal_type)
+        if abs(target - waterfall) > TOLERANCE:
+            raise ValueError(f"{JUNE} {deal_type} closed ARR {target} does not match waterfall {waterfall}")
+        base = sum((_num(r["amount_arr"]) for r in template), Decimal("0"))
+        factor = target / base
+        left = target
+        built: list[dict[str, str]] = []
+        for i, t in enumerate(template):
+            last = i == len(template) - 1
+            amount = left if last else (_num(t["amount_arr"]) * factor).quantize(CENT, rounding=ROUND_HALF_UP)
+            left -= amount
+            deal_no += 1
+            cust_no += 1
+            name = f"{t['customer_name'].rsplit(' ', 1)[0]} {cust_no}"
+            built.append({
+                **t,
+                "period": JUNE, "opportunity_id": f"ACT-OPP-{deal_no}",
+                "opportunity_name": f"{name} - {deal_type} - {JUNE}",
+                "customer_id": f"CUST-{cust_no:05d}", "customer_name": name,
+                "created_date": f"{JUNE}-{t['created_date'][8:10]}", "expected_close_date": f"{JUNE}-30",
+                "actual_close_date": f"{JUNE}-30" if t["actual_close_date"] else "",
+                "contract_start_date": f"{JUNE}-01", "contract_end_date": "2027-06-01",
+                "amount_arr": f"{amount:.2f}", "weighted_arr": f"{amount:.2f}",
+                "source_note": f"June 2026 deal built from {t['opportunity_id']} ({TEMPLATE_MONTH}); "
+                               f"amount scaled to June {deal_type} ARR in the waterfall",
+            })
+        total = sum((_num(d["amount_arr"]) for d in built), Decimal("0"))
+        if total != target:
+            raise ValueError(f"June {deal_type} deals total {total} != {target}")
+        log.append({"version": "Actual", "period": JUNE, "file": "Actual_opportunities.csv", "action": "added",
+                    "detail": f"{len(built)} {deal_type} deals from {TEMPLATE_MONTH} template, "
+                              f"scaled x{factor:.4f} to the waterfall", "amount": f"{total:.2f}"})
+        deals += built
     return deals
 
 
@@ -137,18 +154,43 @@ def append_rows(path: str, rows: list[dict[str, str]], log: list[dict[str, str]]
 
 
 def relabel_open(path: str, log: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Open forecast deals: 'Closed Won' -> 'Open', and stage set from probability."""
     fields, rows = _read(path)
-    changed: dict[str, int] = defaultdict(int)
+    opened: dict[str, int] = defaultdict(int)
+    restaged = 0
     for r in rows:
-        if (r["period"][:7] >= FORECAST_START and r["close_status"] == "Closed Won"
-                and r["stage"] in OPEN_STAGES and not r["actual_close_date"]):
+        if r["period"][:7] < FORECAST_START or r["stage"] not in OPEN_STAGES or r["actual_close_date"]:
+            continue
+        if r["close_status"] == "Closed Won":
             r["close_status"] = "Open"
-            changed[r["period"][:7]] += 1
+            opened[r["period"][:7]] += 1
+        stage = STAGE_BY_PROBABILITY.get(_num(r["probability"]).normalize())
+        if stage is None:
+            raise ValueError(f"{r['opportunity_id']}: no stage for probability {r['probability']}")
+        if r["stage"] != stage:
+            r["stage"] = stage
+            restaged += 1
     _write(path, fields, rows)
     log.append({"version": "Forecast", "period": "", "file": os.path.basename(path), "action": "relabeled",
-                "detail": f"{sum(changed.values())} open-stage deals 'Closed Won' -> 'Open' "
-                          f"({', '.join(f'{p}: {n}' for p, n in sorted(changed.items()))})", "amount": ""})
+                "detail": f"{sum(opened.values())} open-stage deals 'Closed Won' -> 'Open' "
+                          f"({', '.join(f'{p}: {n}' for p, n in sorted(opened.items()))}); "
+                          f"{restaged} stages set from probability", "amount": ""})
     return rows
+
+
+def copy_labels(path: str, deals: list[dict[str, str]], log: list[dict[str, str]]) -> None:
+    """Movements for the same deal and month take the deal's stage and status."""
+    labels = {(d["opportunity_id"], d["period"][:7]): (d["stage"], d["close_status"]) for d in deals}
+    fields, rows = _read(path)
+    changed = 0
+    for r in rows:
+        label = labels.get((r["opportunity_id"], r["period"][:7]))
+        if label and (r["stage"], r["close_status"]) != label:
+            r["stage"], r["close_status"] = label
+            changed += 1
+    _write(path, fields, rows)
+    log.append({"version": "Forecast", "period": "", "file": os.path.basename(path), "action": "relabeled",
+                "detail": f"{changed} movement rows take the deal's stage and status", "amount": ""})
 
 
 def check_forecast_pipeline(src: str, rows: list[dict[str, str]], log: list[dict[str, str]]) -> None:
@@ -183,7 +225,7 @@ def main(src: str, dst: str) -> None:
     append_rows(os.path.join(dst, "Actual_opportunity_movements.csv"), june, log)
 
     forecast = relabel_open(os.path.join(dst, "Forecast_opportunities.csv"), log)
-    relabel_open(os.path.join(dst, "Forecast_opportunity_movements.csv"), log)
+    copy_labels(os.path.join(dst, "Forecast_opportunity_movements.csv"), forecast, log)
     check_forecast_pipeline(src, forecast, log)
 
     _write(os.path.join(dst, "pipeline_deals_log.csv"), ["version", "period", "file", "action", "detail", "amount"], log)
