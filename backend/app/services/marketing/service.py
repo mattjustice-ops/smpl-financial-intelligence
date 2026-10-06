@@ -21,6 +21,7 @@ from app.services.reporting.marketing_metrics_service import (
     calculate_win_rate_on_pipeline_created,
     q_money,
 )
+from app.services.reporting.gl_income_statement import GL_VERSION_BY_SCENARIO, build_marketing_program_rows, fetch_gl_pl_rows
 from app.services.reporting.period_utils import period_range, scenario_periods, to_period
 from app.services.reporting.validation_service import ValidationCheck, compare_values, warning
 
@@ -29,6 +30,8 @@ SCENARIO_TABLE = {
     "Budget": "budget_marketing_pipeline",
     "Forecast": "forecast_marketing_pipeline",
 }
+GL_SPEND_SOURCE = "gl_actuals"
+GL_ACCOUNT_LABEL_PREFIX = "GL: "
 
 
 def _decimal(value: Any) -> Decimal:
@@ -70,8 +73,10 @@ def _value(row: dict[str, Any], *keys: str) -> Decimal:
 
 
 def _normalize_row(organization_id: uuid.UUID, scenario: str, table_name: str, row: dict[str, Any]) -> MarketingMetricRow:
+    """Channel volumes from a marketing table; spend comes only from the GL, so the table's spend is kept for the gap check."""
     period = to_period(row.get("period") or row.get("forecast_period"))
-    marketing_spend = _value(row, "marketing_spend", "spend")
+    marketing_spend = Decimal("0")
+    marketing_table_spend = _value(row, "marketing_spend", "spend")
     mqls = _value(row, "mqls")
     sqls = _value(row, "sqls")
     sals = _value(row, "sals")
@@ -105,6 +110,37 @@ def _normalize_row(organization_id: uuid.UUID, scenario: str, table_name: str, r
         pipeline_coverage_ratio=calculate_pipeline_coverage(pipeline_arr_created, closed_won_arr),
         win_rate_on_pipeline_created=calculate_win_rate_on_pipeline_created(closed_won_arr, pipeline_arr_created),
         source_table=table_name,
+        row_kind="channel",
+        marketing_table_spend=q_money(marketing_table_spend),
+    )
+
+
+def gl_program_spend(db: Session, organization_id: uuid.UUID, scenario: str) -> dict[str, dict[str, Decimal]]:
+    """GL marketing program spend: ``{period: {account_name: amount}}`` for Actual / Budget / Forecast."""
+    info = getattr(db, "info", None)
+    cache = info.setdefault("_gl_program_spend", {}) if isinstance(info, dict) else {}
+    key = (str(organization_id), scenario)
+    if key not in cache:
+        version = GL_VERSION_BY_SCENARIO[scenario.lower()]
+        out: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+        for period, accounts in build_marketing_program_rows(fetch_gl_pl_rows(db, organization_id, version)).items():
+            for detail_key, amount in accounts.items():
+                account = detail_key.split("|", 2)[-1]
+                out[period][account] += Decimal(str(amount))
+        cache[key] = {p: dict(v) for p, v in out.items()}
+    return cache[key]
+
+
+def _gl_account_row(organization_id: uuid.UUID, scenario: str, period: str, account: str, amount: Decimal) -> MarketingMetricRow:
+    spend = q_money(amount)
+    return MarketingMetricRow(
+        organization_id=str(organization_id),
+        scenario=scenario,
+        period=period,
+        marketing_channel=f"{GL_ACCOUNT_LABEL_PREFIX}{account}",
+        marketing_spend=spend,
+        source_table=GL_SPEND_SOURCE,
+        row_kind="gl_account",
     )
 
 
@@ -130,18 +166,29 @@ def _load_marketing_rows(
             if marketing_channel and normalized.marketing_channel != marketing_channel:
                 continue
             rows.append(normalized)
+        gl_spend = gl_program_spend(db, organization_id, source_scenario)
+        for scenario_name, period in sorted(wanted):
+            if scenario_name != source_scenario:
+                continue
+            for account, amount in sorted(gl_spend.get(period, {}).items()):
+                gl_row = _gl_account_row(organization_id, source_scenario, period, account, amount)
+                if marketing_channel and gl_row.marketing_channel != marketing_channel:
+                    continue
+                rows.append(gl_row)
     return sorted(rows, key=lambda row: (row.period, row.marketing_channel or ""))
 
 
 def _aggregate(rows: list[MarketingMetricRow], *, by_channel: bool) -> list[MarketingMetricRow]:
-    grouped: dict[tuple[str, str, str | None], list[MarketingMetricRow]] = defaultdict(list)
+    grouped: dict[tuple[str, str, str | None, str], list[MarketingMetricRow]] = defaultdict(list)
     for row in rows:
         channel = row.marketing_channel if by_channel else None
-        grouped[(row.scenario, row.period, channel)].append(row)
+        kind = row.row_kind if by_channel else "total"
+        grouped[(row.scenario, row.period, channel, kind)].append(row)
 
     out: list[MarketingMetricRow] = []
-    for (scenario, period, channel), items in grouped.items():
+    for (scenario, period, channel, kind), items in grouped.items():
         marketing_spend = sum((r.marketing_spend for r in items), Decimal("0"))
+        marketing_table_spend = sum((r.marketing_table_spend for r in items), Decimal("0"))
         mqls = sum((r.mqls for r in items), Decimal("0"))
         sqls = sum((r.sqls for r in items), Decimal("0"))
         sals = sum((r.sals for r in items), Decimal("0"))
@@ -176,6 +223,8 @@ def _aggregate(rows: list[MarketingMetricRow], *, by_channel: bool) -> list[Mark
                 pipeline_coverage_ratio=calculate_pipeline_coverage(pipeline_arr_created, closed_won_arr),
                 win_rate_on_pipeline_created=calculate_win_rate_on_pipeline_created(closed_won_arr, pipeline_arr_created),
                 source_table=", ".join(sorted({r.source_table for r in items})),
+                row_kind=kind,
+                marketing_table_spend=q_money(marketing_table_spend),
             )
         )
     return sorted(out, key=lambda row: (row.period, row.marketing_channel or ""))
@@ -211,6 +260,33 @@ def _actual_closed_won_by_channel(db: Session, organization_id: uuid.UUID, start
     return out
 
 
+def _spend_gap_checks(rows: list[MarketingMetricRow]) -> list[ValidationCheck]:
+    """Marketing-table spend vs GL program spend per month; a gap is a warning, never a substitute for the GL."""
+    gl: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    table: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for row in rows:
+        gl[(row.scenario, row.period)] += row.marketing_spend
+        table[(row.scenario, row.period)] += row.marketing_table_spend
+    checks: list[ValidationCheck] = []
+    for scenario, period in sorted(set(gl) | set(table)):
+        expected = gl[(scenario, period)]
+        actual = table[(scenario, period)]
+        if not expected and not actual:
+            continue
+        check = compare_values(
+            scenario=scenario,
+            period=period,
+            validation_name="marketing_table_spend_vs_gl_program_spend",
+            expected_value=expected,
+            actual_value=actual,
+            source_tables_used=[GL_SPEND_SOURCE, SCENARIO_TABLE.get(scenario, "marketing_pipeline")],
+        )
+        if check.status == "fail":
+            check.status = "warning"
+        checks.append(check)
+    return checks
+
+
 def _validate(
     db: Session,
     organization_id: uuid.UUID,
@@ -220,10 +296,13 @@ def _validate(
     start_period: str,
     end_period: str,
     as_of_period: str | None = None,
+    marketing_channel: str | None = None,
 ) -> list[ValidationCheck]:
     checks: list[ValidationCheck] = []
     actual_closed_won = _actual_closed_won_by_channel(db, organization_id, start_period, end_period)
     for row in rows:
+        if row.row_kind == "gl_account":
+            continue
         if row.beginning_pipeline_arr or row.ending_pipeline_arr:
             expected = calculate_pipeline_waterfall(
                 row.beginning_pipeline_arr,
@@ -242,7 +321,8 @@ def _validate(
                     source_tables_used=[row.source_table],
                 )
             )
-        if row.marketing_spend == 0 or row.mqls == 0 or row.sqls == 0 or row.pipeline_arr_created == 0:
+        missing_spend = row.row_kind == "total" and row.marketing_spend == 0
+        if missing_spend or row.mqls == 0 or row.sqls == 0 or row.pipeline_arr_created == 0:
             checks.append(
                 warning(
                     scenario=row.scenario,
@@ -252,7 +332,7 @@ def _validate(
                     source_tables_used=[row.source_table],
                 )
             )
-        if row.scenario == "Actual" and row.marketing_channel and (row.period, row.marketing_channel) in actual_closed_won:
+        if row.scenario == "Actual" and row.row_kind == "channel" and row.marketing_channel and (row.period, row.marketing_channel) in actual_closed_won:
             checks.append(
                 compare_values(
                     scenario=row.scenario,
@@ -263,6 +343,8 @@ def _validate(
                     source_tables_used=[row.source_table, "actual_opportunities"],
                 )
             )
+    if not marketing_channel:
+        checks.extend(_spend_gap_checks(rows))
     if scenario.lower() == "combined":
         for source_scenario, period in scenario_periods("Combined", start_period, end_period, as_of_period=as_of_period):
             matching = [r for r in rows if r.period == period]
@@ -315,6 +397,7 @@ def performance_summary(
             start_period=start_period,
             end_period=end_period,
             as_of_period=as_of_period,
+            marketing_channel=marketing_channel,
         ),
         metadata={"grain": "period", "as_of_period": as_of_period},
     )
@@ -357,6 +440,7 @@ def channel_performance(
             start_period=start_period,
             end_period=end_period,
             as_of_period=as_of_period,
+            marketing_channel=marketing_channel,
         ),
         metadata={"grain": "period_channel", "as_of_period": as_of_period},
     )
@@ -368,12 +452,12 @@ def pipeline_waterfall(db: Session, organization_id: uuid.UUID, *, scenario: str
 
 def funnel_conversion(db: Session, organization_id: uuid.UUID, *, scenario: str, start_period: str, end_period: str, marketing_channel: str | None = None) -> MarketingResponse:
     rows = performance_summary(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, marketing_channel=marketing_channel).rows
-    return MarketingResponse(organization_id=str(organization_id), scenario=scenario, start_period=start_period, end_period=end_period, rows=rows, charts=_chart(rows, ["mqls", "sqls", "sals", "opportunities_created", "closed_won_arr"]), validation=_validate(db, organization_id, rows, scenario=scenario, start_period=start_period, end_period=end_period), metadata={"visualization": "funnel"})
+    return MarketingResponse(organization_id=str(organization_id), scenario=scenario, start_period=start_period, end_period=end_period, rows=rows, charts=_chart(rows, ["mqls", "sqls", "sals", "opportunities_created", "closed_won_arr"]), validation=_validate(db, organization_id, rows, scenario=scenario, start_period=start_period, end_period=end_period, marketing_channel=marketing_channel), metadata={"visualization": "funnel"})
 
 
 def spend_efficiency(db: Session, organization_id: uuid.UUID, *, scenario: str, start_period: str, end_period: str, marketing_channel: str | None = None) -> MarketingResponse:
     rows = channel_performance(db, organization_id, scenario=scenario, start_period=start_period, end_period=end_period, marketing_channel=marketing_channel).rows
-    return MarketingResponse(organization_id=str(organization_id), scenario=scenario, start_period=start_period, end_period=end_period, rows=rows, charts=_chart(rows, ["cost_per_mql", "cost_per_sql", "pipeline_per_dollar_spend", "marketing_cac_proxy"], series_by_channel=True), validation=_validate(db, organization_id, rows, scenario=scenario, start_period=start_period, end_period=end_period), metadata={"section": "efficiency"})
+    return MarketingResponse(organization_id=str(organization_id), scenario=scenario, start_period=start_period, end_period=end_period, rows=rows, charts=_chart(rows, ["cost_per_mql", "cost_per_sql", "pipeline_per_dollar_spend", "marketing_cac_proxy"], series_by_channel=True), validation=_validate(db, organization_id, rows, scenario=scenario, start_period=start_period, end_period=end_period, marketing_channel=marketing_channel), metadata={"section": "efficiency"})
 
 
 def actual_budget_forecast(

@@ -87,6 +87,10 @@ VALIDATION_LABEL_CATALOG: dict[str, tuple[str, str]] = {
         "Marketing channel metrics missing",
         "Active marketing channels are missing expected metric rows.",
     ),
+    "marketing_table_spend_vs_gl_program_spend": (
+        "Marketing spend vs GL",
+        "Spend in the marketing tables differs from the GL marketing program accounts. Reports use the GL amount.",
+    ),
     "export_validation_no_checks": (
         "No validation checks available",
         "There was not enough loaded data to run tie-out checks yet.",

@@ -29,10 +29,10 @@ const decCash = ts.Forecast.cfs["2026-12"].ending_cash;
 
 const checks = [
   ["Dec Ending ARR", decArr, 97560000],
-  ["Jan actual net income negative", janNi < 0, true],
-  ["Jun actual net income negative", junNi < 0, true],
-  ["Dec forecast revenue", decRev, 9147856.34],
-  ["Dec ending cash", decCash, 78162833.01],
+  ["Jan actual net income", janNi, 984200],
+  ["Jun actual net income", junNi, 1186000],
+  ["Dec forecast revenue", decRev, 9274225],
+  ["Dec ending cash", decCash, 50909651.89],
   ["Jun ending headcount", (() => {
     const m = boardHtml.match(/\[121,124,126,128,130,\s*137,/);
     return m ? 137 : null;

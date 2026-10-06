@@ -33,6 +33,9 @@ class MarketingMetricRow(BaseModel):
     pipeline_coverage_ratio: Decimal = Decimal("0")
     win_rate_on_pipeline_created: Decimal = Decimal("0")
     source_table: str
+    # "channel" rows carry volumes from the marketing tables; "gl_account" rows carry spend from the GL program accounts.
+    row_kind: str = "channel"
+    marketing_table_spend: Decimal = Decimal("0")
 
 
 class ChartSeries(BaseModel):

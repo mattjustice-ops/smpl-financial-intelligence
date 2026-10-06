@@ -114,10 +114,9 @@ def build_gtm_payload(
     start_period: str,
     as_of_period: str,
 ) -> dict[str, Any]:
-    """YTD marketing channel rollup for the board GTM tab."""
+    """YTD marketing channel volumes for the board GTM tab; spend is by GL account (TS_DATA ``gl_programs``)."""
     by_channel: dict[str, dict[str, Decimal]] = defaultdict(
         lambda: {
-            "spend": Decimal("0"),
             "pipe": Decimal("0"),
             "won": Decimal("0"),
             "mqls": Decimal("0"),
@@ -134,7 +133,6 @@ def build_gtm_payload(
     ):
         channel = str(_row_get(raw, "marketing_channel", "channel") or "Unassigned")
         bucket = by_channel[channel]
-        bucket["spend"] += value_any(raw, "marketing_spend", "spend")
         bucket["pipe"] += value_any(raw, "pipeline_arr_created")
         bucket["won"] += value_any(raw, "closed_won_arr", "expected_closed_won_arr")
         bucket["mqls"] += value_any(raw, "mqls")
@@ -144,17 +142,13 @@ def build_gtm_payload(
 
     out: dict[str, Any] = {}
     for idx, (channel, totals) in enumerate(sorted(by_channel.items(), key=lambda item: -float(item[1]["pipe"]))):
-        spend = totals["spend"]
         pipe = totals["pipe"]
         won = totals["won"]
-        eff = float(pipe / spend) if spend else 0.0
         wr = float(won / pipe * Decimal("100")) if pipe else 0.0
         out[channel] = {
-            "spend": _money_m(spend),
             "pipe": _money_m(pipe),
             "won": _money_m(won),
             "mqls": int(totals["mqls"]),
-            "eff": round(eff, 1),
             "wr": round(wr, 1),
             "color": GTM_CHANNEL_COLORS[idx % len(GTM_CHANNEL_COLORS)],
         }

@@ -140,54 +140,81 @@ def _money_k(val: Decimal) -> str:
     return fmt_deck_money(val)
 
 
+def _marketing_rows_by_name(rows, period: str, kinds: tuple[str, ...]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for row in rows:
+        if row.period != period or getattr(row, "row_kind", "channel") not in kinds:
+            continue
+        out[row.marketing_channel or "Other"] = row
+    return out
+
+
 def _marketing_by_channel(bundle: ReportingBundle, period: str) -> list[dict[str, Any]]:
+    """Attribution channels with volumes only; spend is reported by GL account (``_marketing_spend_by_gl_account``)."""
     rows: list[dict[str, Any]] = []
     mkt = bundle.marketing_channel_comparison or bundle.marketing_comparison
     if not mkt:
         return rows
-    actual_map: dict[str, Any] = {}
-    budget_map: dict[str, Any] = {}
-    for row in mkt.actual:
-        if row.period != period:
-            continue
-        ch = row.marketing_channel or "Other"
-        actual_map[ch] = row
-    for row in mkt.budget:
-        if row.period != period:
-            continue
-        ch = row.marketing_channel or "Other"
-        budget_map[ch] = row
+    kinds = ("channel", "total")
+    actual_map = _marketing_rows_by_name(mkt.actual, period, kinds)
+    budget_map = _marketing_rows_by_name(mkt.budget, period, kinds)
     for ch in sorted(set(actual_map) | set(budget_map)):
         a = actual_map.get(ch)
         b = budget_map.get(ch)
-        spend = a.marketing_spend if a else Decimal("0")
-        spend_bud = b.marketing_spend if b else Decimal("0")
+        has_spend = getattr(a or b, "row_kind", "channel") == "total"
+        spend = a.marketing_spend if a and has_spend else Decimal("0")
+        spend_bud = b.marketing_spend if b and has_spend else Decimal("0")
         pipe = a.pipeline_arr_created if a else Decimal("0")
+        closed = a.closed_won_arr if a else Decimal("0")
         mqls = a.mqls if a else Decimal("0")
-        eff = float(pipe / spend) if spend else 0.0
+        eff = float(pipe / spend) if spend else None
         wr = float(a.win_rate_on_pipeline_created) if a and a.win_rate_on_pipeline_created else 0.0
         rows.append(
             {
                 "name": ch,
+                "spend": _money_k(spend) if has_spend else "n/a",
+                "spend_budget": _money_k(spend_bud) if has_spend else "n/a",
+                "spend_raw": float(spend) if has_spend else None,
+                "spend_budget_raw": float(spend_bud) if has_spend else None,
+                "mqls": float(mqls),
+                "pipeline": _money_k(pipe),
+                "pipeline_raw": float(pipe),
+                "closed_won_raw": float(closed),
+                "efficiency_x": round(eff, 1) if eff is not None else None,
+                "efficiency_label": f"{eff:.1f}x pipeline/spend" if eff is not None else "n/a (spend is by GL account)",
+                "win_rate_pct": round(wr * 100, 1) if wr <= 1 else round(wr, 1),
+            }
+        )
+    rows.sort(key=lambda r: r.get("pipeline_raw") or 0, reverse=True)
+    return rows
+
+
+def _marketing_spend_by_gl_account(bundle: ReportingBundle, period: str) -> list[dict[str, Any]]:
+    """Marketing spend by GL program account (the only spend source)."""
+    mkt = bundle.marketing_channel_comparison
+    if not mkt:
+        return []
+    actual_map = _marketing_rows_by_name(mkt.actual, period, ("gl_account",))
+    budget_map = _marketing_rows_by_name(mkt.budget, period, ("gl_account",))
+    rows: list[dict[str, Any]] = []
+    for name in sorted(set(actual_map) | set(budget_map)):
+        spend = actual_map[name].marketing_spend if name in actual_map else Decimal("0")
+        spend_bud = budget_map[name].marketing_spend if name in budget_map else Decimal("0")
+        rows.append(
+            {
+                "name": name,
                 "spend": _money_k(spend),
                 "spend_budget": _money_k(spend_bud),
                 "spend_raw": float(spend),
                 "spend_budget_raw": float(spend_bud),
-                "mqls": float(mqls),
-                "pipeline": _money_k(pipe),
-                "pipeline_raw": float(pipe),
-                "efficiency_x": round(eff, 1),
-                "efficiency_label": f"{eff:.1f}x pipeline/spend" if spend else "n/a",
-                "win_rate_pct": round(wr * 100, 1) if wr <= 1 else round(wr, 1),
             }
         )
-    rows.sort(key=lambda r: r.get("spend_raw") or 0, reverse=True)
-    # Keep full channel list for SoT / totals; Claude may still emphasize top spenders.
+    rows.sort(key=lambda r: r["spend_raw"], reverse=True)
     return rows
 
 
 def _marketing_by_channel_display(bundle: ReportingBundle, period: str, *, top_n: int = 5) -> list[dict[str, Any]]:
-    """Top-N channels by spend for table display (totals use full list via _marketing_block)."""
+    """Top-N channels by pipeline for table display (totals use full list via _marketing_block)."""
     return _marketing_by_channel(bundle, period)[:top_n]
 
 
@@ -273,8 +300,9 @@ def _marketing_block(bundle, as_of, m):
 
     channels_all = _marketing_by_channel(bundle, as_of)
     channels = channels_all[:5]
+    spend_accounts = _marketing_spend_by_gl_account(bundle, as_of)
     channel_mql_sum = sum(float(c.get("mqls") or 0) for c in channels_all)
-    total_spend = sum(c.get("spend_raw") or 0 for c in channels_all)
+    total_spend = sum(c["spend_raw"] for c in spend_accounts) or float(m.marketing_spend or 0)
     total_pipe = sum(c.get("pipeline_raw") or 0 for c in channels_all)
     best_wr = max(channels_all, key=lambda c: c["win_rate_pct"], default=None)
     closed_lost = m.closed_lost or Decimal("0")
@@ -309,11 +337,15 @@ def _marketing_block(bundle, as_of, m):
         "channels_displayed": len(channels),
         "channels_total": len(channels_all),
         "table_note": (
-            f"Channel table shows top {len(channels)} by spend; "
-            f"MQL/spend totals include all {len(channels_all)} channels."
-            if len(channels_all) > len(channels)
-            else "Channel table includes all channels."
+            (
+                f"Channel table shows top {len(channels)} by pipeline; "
+                f"MQL totals include all {len(channels_all)} channels."
+                if len(channels_all) > len(channels)
+                else "Channel table includes all channels."
+            )
+            + " Spend is reported by GL marketing program account, not by channel."
         ),
+        "spend_by_gl_account": spend_accounts,
         "total_pipeline": _money_k(m.pipeline_from_marketing or m.pipeline_created),
         "total_spend": _money_k(Decimal(str(total_spend))) if total_spend else _money_k(m.marketing_spend),
         "blended_efficiency_x": round(total_pipe / total_spend, 1) if total_spend else 0,

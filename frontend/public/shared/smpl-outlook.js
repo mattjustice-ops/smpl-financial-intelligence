@@ -25,10 +25,12 @@
     options = options || {};
     var fromQuery = resolveOrgIdFromQuery();
     var sessionOrgs = null;
+    var signedOut = false;
     try {
       var res = await fetch("/api/auth/session", { credentials: "include" });
       if (res.ok) {
         var j = await res.json();
+        if (!j || !j.user) signedOut = true;
         if (j && j.user) {
           sessionOrgs = {
             activeId: j.user.activeOrganizationId || null,
@@ -53,6 +55,7 @@
 
     if (fromQuery) return pick(fromQuery);
     if (global.SMPL_ORG_ID) return pick(global.SMPL_ORG_ID);
+    if (signedOut) return null;
 
     if (options.waitForParent !== false) {
       var waited = await waitForParentOrg(options.parentWaitMs || 4000);
@@ -165,8 +168,18 @@
     };
   }
 
+  /**
+   * Per-scenario period blocks: statements, GL opex detail ("line|department|account" → amount) and
+   * the marketing program accounts within it (expense type "Marketing Programs").
+   */
+  var TS_BLOCKS = ["is", "cfs", "bs", "gl_opex", "gl_programs"];
+
+  /** Live replace: demo keys the warehouse did not send are removed, never kept. */
   function replaceArrWaterfallTable(WF_TABLE, incoming) {
-    if (!incoming) return;
+    if (!incoming || !WF_TABLE) return;
+    Object.keys(WF_TABLE).forEach(function (key) {
+      if (!Array.isArray(incoming[key])) delete WF_TABLE[key];
+    });
     Object.keys(incoming).forEach(function (key) {
       if (Array.isArray(incoming[key])) {
         WF_TABLE[key] = incoming[key].slice();
@@ -174,9 +187,23 @@
     });
   }
 
+  /** Live replace: every demo scenario/period is cleared before the warehouse rows land. */
   function replaceTsData(target, incoming, closeMonth) {
     if (!incoming || !target) return;
+    Object.keys(target).forEach(function (sc) {
+      delete target[sc];
+    });
+    ["Actual", "Forecast", "Budget"].forEach(function (sc) {
+      target[sc] = { periods: [], is: {}, bs: {}, cfs: {}, gl_opex: {}, gl_programs: {} };
+    });
     mergeTsData(target, incoming, closeMonth);
+  }
+
+  function replaceSrcBlock(target, incoming) {
+    Object.keys(target).forEach(function (k) {
+      delete target[k];
+    });
+    if (incoming) Object.assign(target, JSON.parse(JSON.stringify(incoming)));
   }
 
   /**
@@ -192,7 +219,7 @@
       if (Array.isArray(incoming[sc].periods) && incoming[sc].periods.length) {
         target[sc].periods = incoming[sc].periods.slice();
       }
-      ["is", "cfs", "bs"].forEach(function (stmt) {
+      TS_BLOCKS.forEach(function (stmt) {
         if (!incoming[sc][stmt]) return;
         if (!target[sc][stmt]) target[sc][stmt] = {};
         Object.keys(incoming[sc][stmt]).forEach(function (period) {
@@ -243,7 +270,7 @@
     var livePeriods = collectPopulatedScenarioPeriods(incoming.Actual);
     if (!Object.keys(livePeriods).length) return;
     if (!target.Actual) return;
-    ["is", "cfs", "bs"].forEach(function (stmt) {
+    TS_BLOCKS.forEach(function (stmt) {
       var block = target.Actual[stmt];
       if (!block) return;
       Object.keys(block).forEach(function (period) {
@@ -271,7 +298,7 @@
       var livePeriods = collectPopulatedScenarioPeriods(incoming[sc]);
       if (!Object.keys(livePeriods).length) return;
       if (!target[sc]) return;
-      ["is", "cfs", "bs"].forEach(function (stmt) {
+      TS_BLOCKS.forEach(function (stmt) {
         var block = target[sc][stmt];
         if (!block) return;
         Object.keys(block).forEach(function (period) {
@@ -361,6 +388,16 @@
     return enrichIsRow(getCombinedTsRow(period, "is", closeMonth));
   }
 
+  /** GL opex detail for the period (Actual through close, Forecast after): {"line|department|account": amount}. */
+  function getWarehouseGlOpex(period, closeMonth) {
+    return getCombinedTsRow(period, "gl_opex", closeMonth);
+  }
+
+  /** GL marketing program accounts for the period: {"line|department|account": amount}. */
+  function getWarehouseGlPrograms(period, closeMonth) {
+    return getCombinedTsRow(period, "gl_programs", closeMonth);
+  }
+
   function mapCfsForForecast(row) {
     if (!row) return null;
     return {
@@ -436,7 +473,7 @@
     if (Array.isArray(incoming.periods) && incoming.periods.length) {
       target.periods = incoming.periods.slice();
     }
-    ["is", "bs", "cfs"].forEach(function (stmt) {
+    TS_BLOCKS.forEach(function (stmt) {
       if (!incoming[stmt]) return;
       target[stmt] = target[stmt] || {};
       Object.keys(incoming[stmt]).forEach(function (period) {
@@ -614,20 +651,14 @@
       replaceArrWaterfallTable(hooks.WF_TABLE, data.ARR_WATERFALL);
     }
 
-    if (hooks.SRC && data.SRC && data.SRC.actuals) {
+    if (hooks.SRC) {
+      var src = data.SRC || {};
       hooks.SRC.actuals = hooks.SRC.actuals || {};
-      mergeActuals(hooks.SRC.actuals, data.SRC.actuals, closeMonth);
-    }
-
-    if (hooks.SRC && data.SRC && data.SRC.opp_pipeline && Object.keys(data.SRC.opp_pipeline).length) {
-      hooks.SRC.opp_pipeline = JSON.parse(JSON.stringify(data.SRC.opp_pipeline));
-      hooks.SRC.gtm = data.SRC.gtm || null;
-    }
-    if (hooks.SRC && data.SRC && data.SRC.pipeline_book && Object.keys(data.SRC.pipeline_book).length) {
-      hooks.SRC.pipeline_book = JSON.parse(JSON.stringify(data.SRC.pipeline_book));
-    }
-    if (hooks.SRC && data.SRC && data.SRC.implementation_fees && Object.keys(data.SRC.implementation_fees).length) {
-      hooks.SRC.implementation_fees = Object.assign({}, data.SRC.implementation_fees);
+      replaceSrcBlock(hooks.SRC.actuals, src.actuals);
+      hooks.SRC.opp_pipeline = src.opp_pipeline ? JSON.parse(JSON.stringify(src.opp_pipeline)) : {};
+      hooks.SRC.gtm = src.gtm || null;
+      hooks.SRC.pipeline_book = src.pipeline_book ? JSON.parse(JSON.stringify(src.pipeline_book)) : {};
+      hooks.SRC.implementation_fees = src.implementation_fees ? Object.assign({}, src.implementation_fees) : {};
     }
 
     if (hooks.TS_DATA && global.SMPL_DEMO_TS_DATA === hooks.TS_DATA) {
@@ -669,10 +700,54 @@
     return { stale: false, data: await res.json(), ok: true, url: url };
   }
 
+  /**
+   * Signed-in users must only ever see warehouse numbers. While the warehouse
+   * loads, or when it cannot be loaded, the page body is covered so embedded
+   * demo values are never visible to an organization.
+   */
+  function setLiveCover(state, detail) {
+    if (!global.document || !global.document.body) return;
+    var doc = global.document;
+    var el = doc.getElementById("smpl-live-cover");
+    if (state === "hidden") {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = doc.createElement("div");
+      el.id = "smpl-live-cover";
+      el.setAttribute("role", "status");
+      el.style.cssText =
+        "position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;" +
+        "background:var(--bg,#0b0f14);color:var(--text,#e6edf3);font:14px/1.5 system-ui,sans-serif;text-align:center;padding:24px";
+      doc.body.appendChild(el);
+    }
+    if (state === "loading") {
+      el.innerHTML = '<div><div style="font-weight:600">Loading live data…</div></div>';
+      return;
+    }
+    el.innerHTML =
+      '<div style="max-width:440px"><div style="font-weight:600;font-size:16px;margin-bottom:6px">Live data unavailable</div>' +
+      "<div>We couldn't load your organization's data from the warehouse, so no numbers are shown. " +
+      "Nothing here is estimated or filled in.</div>" +
+      (detail ? '<div style="opacity:.7;margin-top:8px;font-size:12px">' + detail + "</div>" : "") +
+      '<button type="button" style="margin-top:14px;padding:6px 14px;cursor:pointer" onclick="location.reload()">Retry</button></div>';
+  }
+
+  function liveFailed(config, statusText, detail) {
+    global.SMPL_LIVE_OUTLOOK = false;
+    global.SMPL_LIVE_FAILED = true;
+    setLiveCover("error", detail);
+    if (config.onStatus) config.onStatus(statusText, "warn");
+    return false;
+  }
+
   async function hydrate(config) {
     config = config || {};
+    setLiveCover("loading");
     var orgId = await resolveOrgId(config);
     if (!orgId) {
+      setLiveCover("hidden");
       if (config.onStatus) config.onStatus("Demo data (sign in for live)", "warn");
       return false;
     }
@@ -684,16 +759,20 @@
       if (result.stale) return false;
       if (!result.ok) {
         console.warn("[smpl-outlook] hydrate failed", result.status, result.body);
-        if (config.onStatus) {
-          config.onStatus("Demo data (API " + (result.status || "?") + ")", "warn");
-        }
-        return false;
+        return liveFailed(
+          config,
+          "Live data unavailable (API " + (result.status || "?") + ")",
+          "Warehouse request failed (HTTP " + (result.status || "?") + ").",
+        );
       }
 
       var applied = applyOutlook(result.data, config.hooks || {});
       if (!applied) {
-        if (config.onStatus) config.onStatus("Demo data (incomplete warehouse)", "warn");
-        return false;
+        return liveFailed(
+          config,
+          "Live data unavailable (incomplete warehouse)",
+          "The warehouse response was missing required data (close month or ARR waterfall).",
+        );
       }
 
       if (config.onApplied) {
@@ -715,12 +794,12 @@
           : "Live warehouse";
         config.onStatus(label, "ok");
       }
+      setLiveCover("hidden");
       return true;
     } catch (err) {
       if (err && err.name === "AbortError") return false;
       console.warn("[smpl-outlook] hydrate error", err);
-      if (config.onStatus) config.onStatus("Demo data (offline)", "warn");
-      return false;
+      return liveFailed(config, "Live data unavailable (offline)", "The warehouse could not be reached.");
     }
   }
 
@@ -750,6 +829,8 @@
     getCombinedArr: getCombinedArr,
     getCashBridgeRow: getCashBridgeRow,
     getWarehouseIS: getWarehouseIS,
+    getWarehouseGlOpex: getWarehouseGlOpex,
+    getWarehouseGlPrograms: getWarehouseGlPrograms,
     getWarehouseCFS: getWarehouseCFS,
     getWarehouseBS: getWarehouseBS,
     getDecemberSnapshot: getDecemberSnapshot,

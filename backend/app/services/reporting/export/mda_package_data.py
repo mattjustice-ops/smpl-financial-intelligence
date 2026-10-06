@@ -567,7 +567,8 @@ def refresh_gtm_review_sheet(ws, channels: list[dict[str, Any]], *, year: str) -
         _set_cell(ws, 2, c, h)
     for i, ch in enumerate(channels[:12], start=3):
         _set_cell(ws, i, 1, ch.get("name", ""))
-        _set_cell(ws, i, 2, round((ch.get("spend_raw") or 0) / 1_000_000, 2))
+        spend = ch.get("spend_raw")
+        _set_cell(ws, i, 2, "n/a" if spend is None else round(spend / 1_000_000, 2))
         _set_cell(ws, i, 3, round((ch.get("pipeline_raw") or 0) / 1_000_000, 2))
         closed = ch.get("closed_won_raw")
         if closed is not None:

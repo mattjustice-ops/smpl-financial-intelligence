@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.reporting.gl_income_statement import build_income_statement_rows, classify_gl_line
+from app.services.reporting.gl_income_statement import (
+    build_income_statement_rows,
+    build_marketing_program_rows,
+    build_opex_detail_rows,
+    classify_gl_line,
+)
 
 
 def _row(amount, *, category="Operating Expense", statement="Income Statement", group="", dept="", name="", period="2026-01"):
@@ -145,6 +150,47 @@ def test_support_and_tam_are_recurring_services_and_implementation_is_not() -> N
     assert is_row["rec_svc_rev"] == 75.0
     assert is_row["impl_rev"] == 25.0
     assert is_row["svc_rev"] == 100.0
+
+
+def test_opex_detail_sums_to_income_statement_lines() -> None:
+    rows = [
+        _row(-1_000.0, category="Revenue", name="Subscription Revenue"),
+        _row(200.0, category="Cost of Revenue", dept="Support", name="Hosting"),
+        _row(100.0, dept="Sales", name="Base Salaries"),
+        _row(40.0, dept="Sales", name="Base Salaries"),
+        _row(25.0, dept="Sales", name="Sales Commissions"),
+        _row(60.0, dept="Marketing", name="Paid Search"),
+        _row(30.0, dept="Customer Success", name="Base Salaries"),
+        _row(90.0, dept="Engineering", name="Cloud Infrastructure"),
+        _row(15.0, dept="Support", name="Base Salaries"),
+        _row(12.0, group="G&A", dept="", name="Rent and Facilities"),
+        _row(7.0, dept="Mystery Team", name="Base Salaries"),
+        _row(4.0, group="D&A", name="Depreciation"),
+    ]
+    is_row = build_income_statement_rows(rows)["2026-01"]
+    detail = build_opex_detail_rows(rows)["2026-01"]
+
+    assert detail["sm|Sales|Base Salaries"] == 140.0
+    assert detail["ga|Unassigned|Rent and Facilities"] == 12.0
+    assert detail["unmapped|Mystery Team|Base Salaries"] == 7.0
+    assert not any(k.split("|")[2] in ("Hosting", "Depreciation", "Subscription Revenue") for k in detail)
+    for line in ("sm", "rd", "ga", "unmapped"):
+        total = sum(v for k, v in detail.items() if k.split("|")[0] == line)
+        assert total == pytest.approx(is_row.get(line, 0.0))
+
+
+def test_marketing_programs_are_the_program_accounts_only() -> None:
+    rows = [
+        {**_row(150.0, dept="Marketing", name="Paid Search"), "expense_type": "Marketing Programs"},
+        {**_row(50.0, dept="Marketing", name="Partner Marketing"), "expense_type": "Marketing Programs"},
+        {**_row(400.0, dept="Marketing", name="Base Salaries"), "expense_type": "Salaries and Wages"},
+        {**_row(30.0, dept="Sales", name="Sales Commissions"), "expense_type": "Commissions"},
+    ]
+    programs = build_marketing_program_rows(rows)["2026-01"]
+    detail = build_opex_detail_rows(rows)["2026-01"]
+
+    assert programs == {"sm|Marketing|Paid Search": 150.0, "sm|Marketing|Partner Marketing": 50.0}
+    assert all(detail[k] == v for k, v in programs.items())
 
 
 def test_financial_statements_income_rows_come_from_gl(monkeypatch: pytest.MonkeyPatch) -> None:

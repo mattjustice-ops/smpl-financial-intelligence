@@ -128,6 +128,12 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 .hc-hire{width:44px;background:transparent;border:0.5px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:10px;text-align:right;padding:2px 4px}
 .hc-hire.pos{color:var(--teal);border-color:rgba(95,168,120,0.45)}
 .hc-hire.neg{color:var(--red);border-color:rgba(184,112,95,0.45)}
+.lock-tag{display:inline-block;margin-left:6px;font-size:8px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);border:0.5px solid var(--border);border-radius:4px;padding:1px 5px;vertical-align:middle}
+button.lock-tag.lock-link{cursor:pointer;font-family:inherit;background:transparent;transition:border-color .12s,color .12s,background .12s}
+button.lock-tag.lock-link:hover{color:var(--accent);border-color:var(--accent);background:rgba(196,133,90,0.1)}
+button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+@keyframes rowFlash{from{background:rgba(196,133,90,0.28)}to{background:transparent}}
+tr.row-flash td{animation:rowFlash 1.8s ease-out}
 .hc-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px;align-items:center}
 .hc-tog{font-size:11px;padding:4px 11px;border-radius:20px;border:0.5px solid var(--border);background:none;color:var(--text2);cursor:pointer;font-family:inherit}
 .hc-tog.on{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
@@ -429,10 +435,10 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;b
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=5"></script>
-<script src="/shared/smpl-outlook.js?v=19"></script>
+<script src="/shared/smpl-outlook.js?v=22"></script>
 <script src="/shared/smpl-provenance.js?v=3"></script>
 <script src="/shared/smpl-pipeline.js?v=2"></script>
-<script src="/shared/smpl-demo-seed.js?v=4"></script>
+<script src="/shared/smpl-demo-seed.js?v=7"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script>
 const SRC={"actuals":{"2026-01":{"revenue":5900000.0,"cogs":1711000.0,"gross_profit":4189000.0,"sm":2006000.0,"rd":944000.0,"ga":649000.0,"ebitda":590000.0,"da":88500.0,"interest":40000.0,"net_income":369200.0,"beginning_cash":46000000.0,"cfo":487200.0,"cfi":-118000.0,"cff":0.0,"net_change_cash":369200.0,"ending_cash":46369200.0,"cash_bs":46369200.0,"ar":708000.0,"equity":49161200.0,"dr":944000.0,"ap":472000.0,"arr_bop":75000000.0,"arr_nb":1200000.0,"arr_exp":650000.0,"arr_churn":420000.0,"arr_cont":180000.0,"arr_react":60000.0,"arr_nn":1310000.0,"arr_eop":76310000.0,"nrr":1.0007,"grr":0.992,"chg_ar":-236000,"chg_dr":118000,"chg_ap":88500},"2026-02":{"revenue":6100000.0,"cogs":1769000.0,"gross_profit":4331000.0,"sm":2074000.0,"rd":976000.0,"ga":671000.0,"ebitda":610000.0,"da":91500.0,"interest":40000.0,"net_income":382800.0,"beginning_cash":46369200.0,"cfo":504800.0,"cfi":-122000.0,"cff":0.0,"net_change_cash":382800.0,"ending_cash":46752000.0,"cash_bs":46752000.0,"ar":732000.0,"equity":49520000.0,"dr":976000.0,"ap":488000.0,"arr_bop":76310000.0,"arr_nb":1350000.0,"arr_exp":720000.0,"arr_churn":435000.0,"arr_cont":195000.0,"arr_react":65000.0,"arr_nn":1505000.0,"arr_eop":77815000.0,"nrr":1.0012,"grr":0.9917,"chg_ar":-244000,"chg_dr":122000,"chg_ap":91500},"2026-03":{"revenue":6400000.0,"cogs":1856000.0,"gross_profit":4544000.0,"sm":2176000.0,"rd":1024000.0,"ga":704000.0,"ebitda":640000.0,"da":96000.0,"interest":40000.0,"net_income":403200.0,"beginning_cash":46752000.0,"cfo":531200.0,"cfi":-128000.0,"cff":0.0,"net_change_cash":403200.0,"ending_cash":47155200.0,"cash_bs":47155200.0,"ar":768000.0,"equity":49887200.0,"dr":1024000.0,"ap":512000.0,"arr_bop":77815000.0,"arr_nb":1500000.0,"arr_exp":780000.0,"arr_churn":450000.0,"arr_cont":210000.0,"arr_react":70000.0,"arr_nn":1690000.0,"arr_eop":79505000.0,"nrr":1.0015,"grr":0.9915,"chg_ar":-256000,"chg_dr":128000,"chg_ap":96000},"2026-04":{"revenue":6700000.0,"cogs":1943000.0,"gross_profit":4757000.0,"sm":2278000.0,"rd":1072000.0,"ga":737000.0,"ebitda":670000.0,"da":100500.0,"interest":40000.0,"net_income":423600.0,"beginning_cash":47155200.0,"cfo":557600.0,"cfi":-134000.0,"cff":0.0,"net_change_cash":423600.0,"ending_cash":47578800.0,"cash_bs":47578800.0,"ar":804000.0,"equity":50274800.0,"dr":1072000.0,"ap":536000.0,"arr_bop":79505000.0,"arr_nb":1650000.0,"arr_exp":850000.0,"arr_churn":470000.0,"arr_cont":225000.0,"arr_react":75000.0,"arr_nn":1880000.0,"arr_eop":81385000.0,"nrr":1.0019,"grr":0.9913,"chg_ar":-268000,"chg_dr":134000,"chg_ap":100500},"2026-05":{"revenue":7000000.0,"cogs":2030000.0,"gross_profit":4970000.0,"sm":2380000.0,"rd":1120000.0,"ga":770000.0,"ebitda":700000.0,"da":105000.0,"interest":40000.0,"net_income":444000.0,"beginning_cash":47578800.0,"cfo":584000.0,"cfi":-140000.0,"cff":0.0,"net_change_cash":444000.0,"ending_cash":48022800.0,"cash_bs":48022800.0,"ar":840000.0,"equity":50682800.0,"dr":1120000.0,"ap":560000.0,"arr_bop":81385000.0,"arr_nb":1800000.0,"arr_exp":910000.0,"arr_churn":490000.0,"arr_cont":240000.0,"arr_react":80000.0,"arr_nn":2060000.0,"arr_eop":83445000.0,"nrr":1.0022,"grr":0.991,"chg_ar":-280000,"chg_dr":140000,"chg_ap":105000},"2026-06":{"revenue":7412000.0,"cogs":1537000.0,"gross_profit":5875000.0,"sm":3680000.0,"rd":1220000.0,"ga":810000.0,"ebitda":-1297000.0,"da":122000.0,"interest":35000.0,"net_income":-1454000.0,"beginning_cash":48022800.0,"cfo":4800000.0,"cfi":-220000.0,"cff":0.0,"net_change_cash":4580000.0,"ending_cash":70610000.0,"cash_bs":70610000.0,"ar":1040000.0,"equity":49228800.0,"dr":1120000.0,"ap":520000.0,"arr_bop":83445000.0,"arr_nb":1920000.0,"arr_exp":980000.0,"arr_churn":115000.0,"arr_cont":225000.0,"arr_react":95000.0,"arr_nn":2655000.0,"arr_eop":86100000.0,"nrr":1.0082,"grr":0.9987,"chg_ar":-200000,"chg_dr":0,"chg_ap":-40000}},"opp_pipeline":{"2026-01":{"New Business":{"total":1200000.0,"weighted":1200000.0,"count":8,"expected":8.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000003","customer":"Evergreen Cloud 495","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Alex Lee","channel":"Paid Social","billing":"Quarterly","arr":180879.68,"weighted":180879.68,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000006","customer":"Nimbus Legal 499","stage":"Closed Won","segment":"SMB","region":"East","owner":"Alex Lee","channel":"Partner","billing":"Monthly","arr":180018.32,"weighted":180018.32,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000005","customer":"Apex Health 1885","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Riley Wilson","channel":"Referral","billing":"Annual","arr":169231.7,"weighted":169231.7,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000007","customer":"Vertex Legal 674","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Cameron Clark","channel":"Outbound","billing":"Annual","arr":149339.12,"weighted":149339.12,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000001","customer":"Summit Cloud 1015","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Customer Success","billing":"Annual","arr":145103.84,"weighted":145103.84,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000004","customer":"Evergreen Legal 195","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Jordan Smith","channel":"Direct","billing":"Monthly","arr":140388.87,"weighted":140388.87,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000002","customer":"Evergreen Works 1120","stage":"Closed Won","segment":"SMB","region":"West","owner":"Taylor Brown","channel":"Referral","billing":"Quarterly","arr":131826.26,"weighted":131826.26,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000008","customer":"Nimbus Cloud 1648","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Alex Lee","channel":"Webinar","billing":"Annual","arr":103212.21,"weighted":103212.21,"prob":100,"outcome":"won"}]},"Expansion":{"total":650000.0,"weighted":650000.0,"count":5,"expected":5.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000010","customer":"Nimbus Cloud 1723","stage":"Closed Won","segment":"Enterprise","region":"South","owner":"Jordan Smith","channel":"Field Event","billing":"Annual","arr":176441.47,"weighted":176441.47,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000011","customer":"BlueRiver Cloud 1126","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Alex Lee","channel":"Webinar","billing":"Monthly","arr":170715.56,"weighted":170715.56,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000012","customer":"Evergreen Solutions 841","stage":"Closed Won","segment":"SMB","region":"East","owner":"Casey Johnson","channel":"Webinar","billing":"Annual","arr":109885.47,"weighted":109885.47,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000013","customer":"Evergreen Legal 638","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Riley Wilson","channel":"Direct","billing":"Annual","arr":97304.34,"weighted":97304.34,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000009","customer":"Nimbus Systems 2022","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Jordan Smith","channel":"Outbound","billing":"Annual","arr":95653.16,"weighted":95653.16,"prob":100,"outcome":"won"}]},"Reactivation":{"total":60000.0,"weighted":60000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000017","customer":"Catalyst Legal 386","stage":"Closed Won","segment":"SMB","region":"East","owner":"Morgan Davis","channel":"Referral","billing":"Annual","arr":60000.0,"weighted":60000.0,"prob":100,"outcome":"won"}]},"Contraction":{"total":180000.0,"weighted":180000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000014","customer":"Evergreen Health 2464","stage":"Negotiation","segment":"Mid-Market","region":"Central","owner":"Alex Lee","channel":"Field Event","billing":"Annual","arr":180000.0,"weighted":180000.0,"prob":100,"outcome":"won"}]},"Churn":{"total":420000.0,"weighted":420000.0,"count":2,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000016","customer":"Northstar Analytics 2416","stage":"Negotiation","segment":"Mid-Market","region":"West","owner":"Alex Lee","channel":"Paid Social","billing":"Quarterly","arr":225106.57,"weighted":225106.57,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000015","customer":"Northstar Solutions 2026","stage":"Discovery","segment":"SMB","region":"South","owner":"Casey Johnson","channel":"Paid Social","billing":"Annual","arr":194893.43,"weighted":194893.43,"prob":100,"outcome":"won"}]}},"2026-02":{"New Business":{"total":1349999.98,"weighted":1349999.98,"count":9,"expected":9.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000055","customer":"Apex Group 1375","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Jordan Smith","channel":"Referral","billing":"Monthly","arr":200047.3,"weighted":200047.3,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000058","customer":"Apex Health 1722","stage":"Closed Won","segment":"SMB","region":"East","owner":"Alex Lee","channel":"Webinar","billing":"Quarterly","arr":184638.96,"weighted":184638.96,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000056","customer":"Pioneer Legal 867","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Jordan Smith","channel":"Partner","billing":"Annual","arr":176111.91,"weighted":176111.91,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000054","customer":"Northstar Analytics 1238","stage":"Closed Won","segment":"SMB","region":"South","owner":"Jordan Smith","channel":"Content Syndication","billing":"Monthly","arr":167662.12,"weighted":167662.12,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000059","customer":"Pioneer Cloud 1898","stage":"Closed Won","segment":"SMB","region":"West","owner":"Morgan Davis","channel":"Outbound","billing":"Quarterly","arr":142395.84,"weighted":142395.84,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000057","customer":"Northstar Health 327","stage":"Closed Won","segment":"Enterprise","region":"East","owner":"Casey Johnson","channel":"Partner","billing":"Monthly","arr":130255.09,"weighted":130255.09,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000052","customer":"Evergreen Analytics 2137","stage":"Closed Won","segment":"SMB","region":"South","owner":"Cameron Clark","channel":"Referral","billing":"Quarterly","arr":118003.92,"weighted":118003.92,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000053","customer":"Vertex Health 2226","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Cameron Clark","channel":"Partner","billing":"Quarterly","arr":117099.8,"weighted":117099.8,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000051","customer":"BlueRiver Cloud 1536","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Avery Garcia","channel":"Outbound","billing":"Monthly","arr":113785.04,"weighted":113785.04,"prob":100,"outcome":"won"}]},"Expansion":{"total":720000.01,"weighted":720000.01,"count":5,"expected":5.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000063","customer":"BlueRiver Legal 152","stage":"Closed Won","segment":"SMB","region":"South","owner":"Cameron Clark","channel":"Direct","billing":"Monthly","arr":205885.08,"weighted":205885.08,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000061","customer":"Acme Works 66","stage":"Closed Won","segment":"SMB","region":"East","owner":"Cameron Clark","channel":"Outbound","billing":"Quarterly","arr":154974.37,"weighted":154974.37,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000064","customer":"Apex Solutions 2353","stage":"Closed Won","segment":"SMB","region":"East","owner":"Avery Garcia","channel":"Webinar","billing":"Quarterly","arr":128266.87,"weighted":128266.87,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000060","customer":"Northstar Systems 1735","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Jordan Smith","channel":"Paid Social","billing":"Monthly","arr":122309.52,"weighted":122309.52,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000062","customer":"Catalyst Systems 864","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Paid Social","billing":"Annual","arr":108564.17,"weighted":108564.17,"prob":100,"outcome":"won"}]},"Reactivation":{"total":65000.0,"weighted":65000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000068","customer":"Catalyst Cloud 1884","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Alex Lee","channel":"Webinar","billing":"Monthly","arr":65000.0,"weighted":65000.0,"prob":100,"outcome":"won"}]},"Contraction":{"total":195000.0,"weighted":195000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000065","customer":"Summit Analytics 1810","stage":"Discovery","segment":"Enterprise","region":"West","owner":"Jordan Smith","channel":"Webinar","billing":"Annual","arr":195000.0,"weighted":195000.0,"prob":100,"outcome":"won"}]},"Churn":{"total":435000.0,"weighted":435000.0,"count":2,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000067","customer":"BlueRiver Solutions 1513","stage":"Evaluation","segment":"SMB","region":"South","owner":"Avery Garcia","channel":"Webinar","billing":"Monthly","arr":265645.78,"weighted":265645.78,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000066","customer":"Northstar Works 357","stage":"Negotiation","segment":"Enterprise","region":"Central","owner":"Casey Johnson","channel":"Paid Social","billing":"Annual","arr":169354.22,"weighted":169354.22,"prob":100,"outcome":"won"}]}},"2026-03":{"New Business":{"total":1500000.0,"weighted":1500000.0,"count":10,"expected":10.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000106","customer":"BlueRiver Legal 118","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Riley Wilson","channel":"Direct","billing":"Annual","arr":184652.51,"weighted":184652.51,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000104","customer":"BlueRiver Group 145","stage":"Closed Won","segment":"SMB","region":"South","owner":"Cameron Clark","channel":"Content Syndication","billing":"Monthly","arr":182770.53,"weighted":182770.53,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000110","customer":"Vertex Works 191","stage":"Closed Won","segment":"SMB","region":"West","owner":"Taylor Brown","channel":"Outbound","billing":"Quarterly","arr":172269.33,"weighted":172269.33,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000103","customer":"BlueRiver Cloud 1983","stage":"Closed Won","segment":"SMB","region":"South","owner":"Taylor Brown","channel":"Direct","billing":"Quarterly","arr":169583.82,"weighted":169583.82,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000109","customer":"Nimbus Solutions 63","stage":"Closed Won","segment":"SMB","region":"East","owner":"Cameron Clark","channel":"Organic Search","billing":"Monthly","arr":161269.16,"weighted":161269.16,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000111","customer":"Catalyst Health 292","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Avery Garcia","channel":"Field Event","billing":"Monthly","arr":156493.88,"weighted":156493.88,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000107","customer":"Nimbus Analytics 651","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Morgan Davis","channel":"Content Syndication","billing":"Annual","arr":147819.98,"weighted":147819.98,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000108","customer":"BlueRiver Solutions 2203","stage":"Closed Won","segment":"Mid-Market","region":"Central","owner":"Jordan Smith","channel":"Direct","billing":"Quarterly","arr":120874.17,"weighted":120874.17,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000105","customer":"Pioneer Systems 716","stage":"Closed Won","segment":"Mid-Market","region":"Central","owner":"Taylor Brown","channel":"Outbound","billing":"Monthly","arr":117728.69,"weighted":117728.69,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000102","customer":"Catalyst Works 628","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Alex Lee","channel":"Content Syndication","billing":"Quarterly","arr":86537.93,"weighted":86537.93,"prob":100,"outcome":"won"}]},"Expansion":{"total":780000.0,"weighted":780000.0,"count":6,"expected":6.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000114","customer":"Acme Systems 252","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Jordan Smith","channel":"Content Syndication","billing":"Annual","arr":180335.07,"weighted":180335.07,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000112","customer":"Summit Systems 891","stage":"Closed Won","segment":"Mid-Market","region":"Central","owner":"Casey Johnson","channel":"Paid Social","billing":"Monthly","arr":154932.94,"weighted":154932.94,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000115","customer":"Vertex Group 2365","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Taylor Brown","channel":"Paid Social","billing":"Annual","arr":153748.63,"weighted":153748.63,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000117","customer":"Apex Works 52","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Field Event","billing":"Monthly","arr":105769.11,"weighted":105769.11,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000113","customer":"Evergreen Analytics 90","stage":"Closed Won","segment":"SMB","region":"South","owner":"Morgan Davis","channel":"Referral","billing":"Quarterly","arr":93337.29,"weighted":93337.29,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000116","customer":"Catalyst Legal 386","stage":"Closed Won","segment":"SMB","region":"East","owner":"Riley Wilson","channel":"Outbound","billing":"Annual","arr":91876.96,"weighted":91876.96,"prob":100,"outcome":"won"}]},"Reactivation":{"total":70000.0,"weighted":70000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000121","customer":"Nimbus Group 1232","stage":"Closed Won","segment":"SMB","region":"West","owner":"Jordan Smith","channel":"Content Syndication","billing":"Quarterly","arr":70000.0,"weighted":70000.0,"prob":100,"outcome":"won"}]},"Contraction":{"total":210000.0,"weighted":210000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000118","customer":"Northstar Solutions 2136","stage":"Evaluation","segment":"Mid-Market","region":"East","owner":"Riley Wilson","channel":"Webinar","billing":"Annual","arr":210000.0,"weighted":210000.0,"prob":100,"outcome":"won"}]},"Churn":{"total":450000.0,"weighted":450000.0,"count":2,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000119","customer":"BlueRiver Health 2325","stage":"Commit","segment":"SMB","region":"East","owner":"Riley Wilson","channel":"Referral","billing":"Quarterly","arr":233054.59,"weighted":233054.59,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000120","customer":"Summit Group 300","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Morgan Davis","channel":"Outbound","billing":"Monthly","arr":216945.41,"weighted":216945.41,"prob":100,"outcome":"won"}]}},"2026-04":{"New Business":{"total":1649999.99,"weighted":1649999.99,"count":11,"expected":11.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000155","customer":"BlueRiver Legal 1432","stage":"Closed Won","segment":"SMB","region":"South","owner":"Riley Wilson","channel":"Content Syndication","billing":"Annual","arr":211396.16,"weighted":211396.16,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000156","customer":"Acme Works 36","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Jordan Smith","channel":"Customer Success","billing":"Annual","arr":205883.77,"weighted":205883.77,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000164","customer":"Nimbus Solutions 1310","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Morgan Davis","channel":"Organic Search","billing":"Monthly","arr":176884.06,"weighted":176884.06,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000159","customer":"Vertex Legal 1811","stage":"Closed Won","segment":"SMB","region":"West","owner":"Alex Lee","channel":"Partner","billing":"Annual","arr":176460.13,"weighted":176460.13,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000160","customer":"Catalyst Works 385","stage":"Closed Won","segment":"Enterprise","region":"South","owner":"Alex Lee","channel":"Content Syndication","billing":"Monthly","arr":154802.9,"weighted":154802.9,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000161","customer":"Apex Solutions 5","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Casey Johnson","channel":"Partner","billing":"Monthly","arr":143697.73,"weighted":143697.73,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000157","customer":"Evergreen Cloud 37","stage":"Closed Won","segment":"SMB","region":"West","owner":"Riley Wilson","channel":"Outbound","billing":"Quarterly","arr":138271.04,"weighted":138271.04,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000163","customer":"Pioneer Works 313","stage":"Closed Won","segment":"Enterprise","region":"Central","owner":"Avery Garcia","channel":"Direct","billing":"Monthly","arr":131816.86,"weighted":131816.86,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000158","customer":"BlueRiver Group 2229","stage":"Closed Won","segment":"SMB","region":"West","owner":"Morgan Davis","channel":"Referral","billing":"Monthly","arr":111795.36,"weighted":111795.36,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000154","customer":"Pioneer Group 2099","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Riley Wilson","channel":"Direct","billing":"Annual","arr":103090.21,"weighted":103090.21,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000162","customer":"BlueRiver Group 1265","stage":"Closed Won","segment":"Enterprise","region":"South","owner":"Taylor Brown","channel":"Referral","billing":"Annual","arr":95901.77,"weighted":95901.77,"prob":100,"outcome":"won"}]},"Expansion":{"total":849999.99,"weighted":849999.99,"count":6,"expected":6.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000168","customer":"Summit Systems 1832","stage":"Closed Won","segment":"Enterprise","region":"South","owner":"Alex Lee","channel":"Paid Search","billing":"Quarterly","arr":164837.13,"weighted":164837.13,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000165","customer":"Pioneer Health 1193","stage":"Closed Won","segment":"SMB","region":"South","owner":"Avery Garcia","channel":"Paid Search","billing":"Monthly","arr":159871.2,"weighted":159871.2,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000170","customer":"Evergreen Health 1067","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Casey Johnson","channel":"Content Syndication","billing":"Annual","arr":159611.34,"weighted":159611.34,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000166","customer":"Catalyst Analytics 631","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Customer Success","billing":"Quarterly","arr":148846.04,"weighted":148846.04,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000167","customer":"Nimbus Works 923","stage":"Closed Won","segment":"SMB","region":"South","owner":"Morgan Davis","channel":"Partner","billing":"Annual","arr":125397.6,"weighted":125397.6,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000169","customer":"Northstar Legal 38","stage":"Closed Won","segment":"SMB","region":"West","owner":"Taylor Brown","channel":"Customer Success","billing":"Monthly","arr":91436.68,"weighted":91436.68,"prob":100,"outcome":"won"}]},"Reactivation":{"total":75000.0,"weighted":75000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000174","customer":"Northstar Analytics 2138","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Casey Johnson","channel":"Paid Search","billing":"Monthly","arr":75000.0,"weighted":75000.0,"prob":100,"outcome":"won"}]},"Contraction":{"total":225000.0,"weighted":225000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000171","customer":"Summit Works 1426","stage":"Commit","segment":"SMB","region":"East","owner":"Alex Lee","channel":"Partner","billing":"Quarterly","arr":225000.0,"weighted":225000.0,"prob":100,"outcome":"won"}]},"Churn":{"total":470000.0,"weighted":470000.0,"count":2,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000173","customer":"Vertex Analytics 1708","stage":"Commit","segment":"Enterprise","region":"South","owner":"Jordan Smith","channel":"Customer Success","billing":"Monthly","arr":263573.0,"weighted":263573.0,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000172","customer":"Apex Group 440","stage":"Discovery","segment":"SMB","region":"West","owner":"Avery Garcia","channel":"Field Event","billing":"Annual","arr":206427.0,"weighted":206427.0,"prob":100,"outcome":"won"}]}},"2026-05":{"New Business":{"total":1800000.0,"weighted":1800000.0,"count":12,"expected":12.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000217","customer":"Apex Health 374","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Webinar","billing":"Monthly","arr":209948.79,"weighted":209948.79,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000211","customer":"Summit Systems 1458","stage":"Closed Won","segment":"Enterprise","region":"Central","owner":"Cameron Clark","channel":"Direct","billing":"Quarterly","arr":202439.39,"weighted":202439.39,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000219","customer":"Acme Health 982","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Casey Johnson","channel":"Customer Success","billing":"Annual","arr":186557.66,"weighted":186557.66,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000215","customer":"Evergreen Systems 664","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Jordan Smith","channel":"Direct","billing":"Quarterly","arr":178002.71,"weighted":178002.71,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000214","customer":"BlueRiver Analytics 213","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Content Syndication","billing":"Monthly","arr":169771.99,"weighted":169771.99,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000212","customer":"Summit Solutions 2018","stage":"Closed Won","segment":"Enterprise","region":"South","owner":"Avery Garcia","channel":"Paid Social","billing":"Quarterly","arr":159598.16,"weighted":159598.16,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000213","customer":"Apex Solutions 1653","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Outbound","billing":"Monthly","arr":142055.29,"weighted":142055.29,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000221","customer":"Vertex Group 2365","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Avery Garcia","channel":"Field Event","billing":"Quarterly","arr":118763.68,"weighted":118763.68,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000210","customer":"Vertex Cloud 169","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Avery Garcia","channel":"Paid Search","billing":"Monthly","arr":112682.33,"weighted":112682.33,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000218","customer":"Evergreen Cloud 453","stage":"Closed Won","segment":"SMB","region":"West","owner":"Taylor Brown","channel":"Direct","billing":"Annual","arr":109768.82,"weighted":109768.82,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000220","customer":"BlueRiver Solutions 1611","stage":"Closed Won","segment":"Enterprise","region":"West","owner":"Alex Lee","channel":"Paid Social","billing":"Annual","arr":106023.49,"weighted":106023.49,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000216","customer":"Acme Works 955","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Jordan Smith","channel":"Partner","billing":"Quarterly","arr":104387.69,"weighted":104387.69,"prob":100,"outcome":"won"}]},"Expansion":{"total":910000.0,"weighted":910000.0,"count":7,"expected":7.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000222","customer":"BlueRiver Works 1601","stage":"Closed Won","segment":"SMB","region":"South","owner":"Taylor Brown","channel":"Webinar","billing":"Monthly","arr":172809.19,"weighted":172809.19,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000223","customer":"Apex Group 581","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Cameron Clark","channel":"Paid Search","billing":"Annual","arr":147390.14,"weighted":147390.14,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000225","customer":"Evergreen Solutions 320","stage":"Closed Won","segment":"Enterprise","region":"West","owner":"Alex Lee","channel":"Outbound","billing":"Annual","arr":135648.11,"weighted":135648.11,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000227","customer":"Evergreen Group 22","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Taylor Brown","channel":"Customer Success","billing":"Quarterly","arr":129010.35,"weighted":129010.35,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000224","customer":"Summit Cloud 2359","stage":"Closed Won","segment":"SMB","region":"South","owner":"Morgan Davis","channel":"Outbound","billing":"Annual","arr":124873.22,"weighted":124873.22,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000228","customer":"Vertex Health 649","stage":"Closed Won","segment":"Mid-Market","region":"Central","owner":"Cameron Clark","channel":"Partner","billing":"Annual","arr":105598.65,"weighted":105598.65,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000226","customer":"Summit Systems 2148","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Morgan Davis","channel":"Outbound","billing":"Quarterly","arr":94670.34,"weighted":94670.34,"prob":100,"outcome":"won"}]},"Reactivation":{"total":80000.0,"weighted":80000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000232","customer":"Vertex Group 1180","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Riley Wilson","channel":"Content Syndication","billing":"Quarterly","arr":80000.0,"weighted":80000.0,"prob":100,"outcome":"won"}]},"Contraction":{"total":240000.0,"weighted":240000.0,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000229","customer":"Evergreen Systems 664","stage":"Commit","segment":"SMB","region":"Central","owner":"Casey Johnson","channel":"Direct","billing":"Quarterly","arr":240000.0,"weighted":240000.0,"prob":100,"outcome":"won"}]},"Churn":{"total":490000.0,"weighted":490000.0,"count":2,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000230","customer":"Evergreen Health 454","stage":"Discovery","segment":"Mid-Market","region":"South","owner":"Riley Wilson","channel":"Referral","billing":"Annual","arr":302110.93,"weighted":302110.93,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000231","customer":"BlueRiver Solutions 1289","stage":"Evaluation","segment":"Enterprise","region":"Central","owner":"Taylor Brown","channel":"Referral","billing":"Monthly","arr":187889.07,"weighted":187889.07,"prob":100,"outcome":"won"}]}},"2026-06":{"New Business":{"total":1684835.66,"weighted":1684835.66,"count":12,"expected":12.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000282","customer":"Apex Health 2507","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Webinar","billing":"Monthly","arr":196516.23,"weighted":196516.23,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000276","customer":"Summit Systems 2501","stage":"Closed Won","segment":"Enterprise","region":"Central","owner":"Cameron Clark","channel":"Direct","billing":"Quarterly","arr":189487.28,"weighted":189487.28,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000284","customer":"Acme Health 2509","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Casey Johnson","channel":"Customer Success","billing":"Annual","arr":174621.67,"weighted":174621.67,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000280","customer":"Evergreen Systems 2505","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Jordan Smith","channel":"Direct","billing":"Quarterly","arr":166614.06,"weighted":166614.06,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000279","customer":"BlueRiver Analytics 2504","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Content Syndication","billing":"Monthly","arr":158909.95,"weighted":158909.95,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000277","customer":"Summit Solutions 2502","stage":"Closed Won","segment":"Enterprise","region":"South","owner":"Avery Garcia","channel":"Paid Social","billing":"Quarterly","arr":149387.04,"weighted":149387.04,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000278","customer":"Apex Solutions 2503","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Outbound","billing":"Monthly","arr":132966.57,"weighted":132966.57,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000286","customer":"Vertex Group 2511","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Avery Garcia","channel":"Field Event","billing":"Quarterly","arr":111165.14,"weighted":111165.14,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000275","customer":"Vertex Cloud 2500","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Avery Garcia","channel":"Paid Search","billing":"Monthly","arr":105472.89,"weighted":105472.89,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000283","customer":"Evergreen Cloud 2508","stage":"Closed Won","segment":"SMB","region":"West","owner":"Taylor Brown","channel":"Direct","billing":"Annual","arr":102745.79,"weighted":102745.79,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000285","customer":"BlueRiver Solutions 2510","stage":"Closed Won","segment":"Enterprise","region":"West","owner":"Alex Lee","channel":"Paid Social","billing":"Annual","arr":99240.09,"weighted":99240.09,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000281","customer":"Acme Works 2506","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Jordan Smith","channel":"Partner","billing":"Quarterly","arr":97708.95,"weighted":97708.95,"prob":100,"outcome":"won"}]},"Expansion":{"total":869136.63,"weighted":869136.63,"count":7,"expected":7.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000287","customer":"BlueRiver Works 2512","stage":"Closed Won","segment":"SMB","region":"South","owner":"Taylor Brown","channel":"Webinar","billing":"Monthly","arr":165049.23,"weighted":165049.23,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000288","customer":"Apex Group 2513","stage":"Closed Won","segment":"Mid-Market","region":"South","owner":"Cameron Clark","channel":"Paid Search","billing":"Annual","arr":140771.61,"weighted":140771.61,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000290","customer":"Evergreen Solutions 2515","stage":"Closed Won","segment":"Enterprise","region":"West","owner":"Alex Lee","channel":"Outbound","billing":"Annual","arr":129556.86,"weighted":129556.86,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000292","customer":"Evergreen Group 2517","stage":"Closed Won","segment":"Mid-Market","region":"East","owner":"Taylor Brown","channel":"Customer Success","billing":"Quarterly","arr":123217.17,"weighted":123217.17,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000289","customer":"Summit Cloud 2514","stage":"Closed Won","segment":"SMB","region":"South","owner":"Morgan Davis","channel":"Outbound","billing":"Annual","arr":119265.81,"weighted":119265.81,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000293","customer":"Vertex Health 2518","stage":"Closed Won","segment":"Mid-Market","region":"Central","owner":"Cameron Clark","channel":"Partner","billing":"Annual","arr":100856.76,"weighted":100856.76,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000291","customer":"Summit Systems 2516","stage":"Closed Won","segment":"SMB","region":"Central","owner":"Morgan Davis","channel":"Outbound","billing":"Quarterly","arr":90419.19,"weighted":90419.19,"prob":100,"outcome":"won"}]},"Reactivation":{"total":142857.14,"weighted":142857.14,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000294","customer":"Vertex Group 2519","stage":"Closed Won","segment":"Mid-Market","region":"West","owner":"Riley Wilson","channel":"Content Syndication","billing":"Quarterly","arr":142857.14,"weighted":142857.14,"prob":100,"outcome":"won"}]},"Contraction":{"total":313651.94,"weighted":313651.94,"count":1,"expected":1.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000295","customer":"Evergreen Systems 2520","stage":"Commit","segment":"SMB","region":"Central","owner":"Casey Johnson","channel":"Direct","billing":"Quarterly","arr":313651.94,"weighted":313651.94,"prob":100,"outcome":"won"}]},"Churn":{"total":520156.87,"weighted":520156.87,"count":2,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"ACT-OPP-1000296","customer":"Evergreen Health 2521","stage":"Discovery","segment":"Mid-Market","region":"South","owner":"Riley Wilson","channel":"Referral","billing":"Annual","arr":320704.24,"weighted":320704.24,"prob":100,"outcome":"won"},{"id":"ACT-OPP-1000297","customer":"BlueRiver Solutions 2522","stage":"Evaluation","segment":"Enterprise","region":"Central","owner":"Taylor Brown","channel":"Referral","billing":"Monthly","arr":199452.63,"weighted":199452.63,"prob":100,"outcome":"won"}]}},"2026-07":{"New Business":{"total":1866714.99,"weighted":1155310.33,"count":12,"expected":7.5,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000067","customer":"Summit Systems 1832","stage":"Commit","segment":"Enterprise","region":"South","owner":"Jordan Smith","channel":"Paid Social","billing":"Quarterly","arr":175446.02,"weighted":140356.82,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000073","customer":"Apex Legal 1878","stage":"Commit","segment":"Enterprise","region":"Central","owner":"Alex Lee","channel":"Referral","billing":"Monthly","arr":175066.31,"weighted":140053.05,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000064","customer":"BlueRiver Health 1637","stage":"Commit","segment":"SMB","region":"East","owner":"Avery Garcia","channel":"Content Syndication","billing":"Annual","arr":158383.28,"weighted":126706.62,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000065","customer":"Catalyst Analytics 185","stage":"Negotiation","segment":"SMB","region":"East","owner":"Riley Wilson","channel":"Partner","billing":"Quarterly","arr":172918.63,"weighted":112397.11,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000066","customer":"Northstar Group 373","stage":"Commit","segment":"SMB","region":"East","owner":"Riley Wilson","channel":"Paid Search","billing":"Annual","arr":131102.02,"weighted":104881.62,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000069","customer":"Summit Analytics 330","stage":"Commit","segment":"Mid-Market","region":"East","owner":"Morgan Davis","channel":"Direct","billing":"Quarterly","arr":130201.07,"weighted":104160.86,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000072","customer":"Pioneer Health 1197","stage":"Negotiation","segment":"Mid-Market","region":"Central","owner":"Avery Garcia","channel":"Content Syndication","billing":"Quarterly","arr":149244.96,"weighted":97009.22,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000070","customer":"BlueRiver Solutions 1289","stage":"Proposal","segment":"Enterprise","region":"Central","owner":"Casey Johnson","channel":"Content Syndication","billing":"Annual","arr":174502.06,"weighted":87251.03,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000075","customer":"Northstar Group 1966","stage":"Negotiation","segment":"SMB","region":"West","owner":"Casey Johnson","channel":"Outbound","billing":"Annual","arr":108487.62,"weighted":70516.95,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000071","customer":"Apex Health 2267","stage":"Evaluation","segment":"Mid-Market","region":"South","owner":"Taylor Brown","channel":"Direct","billing":"Monthly","arr":168029.58,"weighted":58810.35,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000068","customer":"Catalyst Group 13","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Taylor Brown","channel":"Webinar","billing":"Quarterly","arr":167679.3,"weighted":58687.75,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000074","customer":"BlueRiver Group 281","stage":"Evaluation","segment":"Enterprise","region":"South","owner":"Alex Lee","channel":"Field Event","billing":"Monthly","arr":155654.14,"weighted":54478.95,"prob":35,"outcome":"open"}]},"Expansion":{"total":995197.0,"weighted":584966.08,"count":7,"expected":4.1,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000080","customer":"Summit Solutions 221","stage":"Commit","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Partner","billing":"Monthly","arr":204915.41,"weighted":163932.33,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000082","customer":"Apex Solutions 1876","stage":"Commit","segment":"SMB","region":"East","owner":"Morgan Davis","channel":"Customer Success","billing":"Annual","arr":104066.16,"weighted":83252.93,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000079","customer":"BlueRiver Group 1225","stage":"Negotiation","segment":"SMB","region":"East","owner":"Casey Johnson","channel":"Outbound","billing":"Monthly","arr":127081.11,"weighted":82602.72,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000077","customer":"Northstar Cloud 974","stage":"Negotiation","segment":"SMB","region":"South","owner":"Riley Wilson","channel":"Organic Search","billing":"Quarterly","arr":125184.84,"weighted":81370.15,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000078","customer":"Northstar Legal 798","stage":"Proposal","segment":"SMB","region":"Central","owner":"Riley Wilson","channel":"Content Syndication","billing":"Annual","arr":146170.85,"weighted":73085.43,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000081","customer":"Summit Works 1507","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Cameron Clark","channel":"Customer Success","billing":"Quarterly","arr":145700.44,"weighted":50995.15,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000076","customer":"BlueRiver Legal 1489","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Alex Lee","channel":"Webinar","billing":"Annual","arr":142078.19,"weighted":49727.37,"prob":35,"outcome":"open"}]},"Reactivation":{"total":307478.0,"weighted":202206.9,"count":3,"expected":1.95,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000089","customer":"BlueRiver Analytics 1883","stage":"Commit","segment":"SMB","region":"Central","owner":"Jordan Smith","channel":"Direct","billing":"Annual","arr":109720.21,"weighted":87776.17,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000090","customer":"Summit Health 1075","stage":"Negotiation","segment":"SMB","region":"East","owner":"Avery Garcia","channel":"Partner","billing":"Quarterly","arr":103678.88,"weighted":67391.27,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000088","customer":"BlueRiver Solutions 2021","stage":"Proposal","segment":"SMB","region":"South","owner":"Cameron Clark","channel":"Paid Social","billing":"Quarterly","arr":94078.91,"weighted":47039.46,"prob":50,"outcome":"open"}]},"Contraction":{"total":371121.0,"weighted":218630.48,"count":2,"expected":1.15,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000083","customer":"Summit Legal 1286","stage":"Commit","segment":"Mid-Market","region":"Central","owner":"Alex Lee","channel":"Paid Social","billing":"Monthly","arr":197195.85,"weighted":157756.68,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000084","customer":"Pioneer Analytics 389","stage":"Evaluation","segment":"Mid-Market","region":"South","owner":"Taylor Brown","channel":"Direct","billing":"Monthly","arr":173925.15,"weighted":60873.8,"prob":35,"outcome":"open"}]},"Churn":{"total":612563.01,"weighted":417432.87,"count":3,"expected":1.95,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000085","customer":"Pioneer Analytics 1134","stage":"Commit","segment":"Mid-Market","region":"Central","owner":"Riley Wilson","channel":"Referral","billing":"Quarterly","arr":229209.51,"weighted":183367.61,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000087","customer":"Catalyst Systems 2352","stage":"Commit","segment":"SMB","region":"Central","owner":"Alex Lee","channel":"Paid Search","billing":"Quarterly","arr":221981.19,"weighted":177584.95,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000086","customer":"Evergreen Cloud 925","stage":"Evaluation","segment":"SMB","region":"West","owner":"Morgan Davis","channel":"Paid Search","billing":"Quarterly","arr":161372.31,"weighted":56480.31,"prob":35,"outcome":"open"}]}},"2026-08":{"New Business":{"total":1750478.02,"weighted":1002656.44,"count":11,"expected":6.4,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000139","customer":"Vertex Works 2197","stage":"Negotiation","segment":"SMB","region":"South","owner":"Morgan Davis","channel":"Webinar","billing":"Quarterly","arr":192857.55,"weighted":125357.41,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000134","customer":"Nimbus Legal 973","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Alex Lee","channel":"Paid Social","billing":"Monthly","arr":186366.45,"weighted":121138.19,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000136","customer":"Apex Group 893","stage":"Proposal","segment":"Mid-Market","region":"South","owner":"Jordan Smith","channel":"Paid Search","billing":"Monthly","arr":226159.12,"weighted":113079.56,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000133","customer":"Catalyst Analytics 631","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Cameron Clark","channel":"Webinar","billing":"Monthly","arr":162374.47,"weighted":105543.41,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000137","customer":"Summit Group 576","stage":"Commit","segment":"Enterprise","region":"Central","owner":"Casey Johnson","channel":"Field Event","billing":"Quarterly","arr":122832.71,"weighted":98266.17,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000138","customer":"Vertex Legal 1581","stage":"Commit","segment":"Enterprise","region":"South","owner":"Taylor Brown","channel":"Outbound","billing":"Annual","arr":113628.37,"weighted":90902.7,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000140","customer":"Pioneer Group 319","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Alex Lee","channel":"Organic Search","billing":"Monthly","arr":175403.49,"weighted":87701.74,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000131","customer":"Catalyst Works 189","stage":"Proposal","segment":"Mid-Market","region":"West","owner":"Alex Lee","channel":"Outbound","billing":"Quarterly","arr":172320.74,"weighted":86160.37,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000141","customer":"Catalyst Group 305","stage":"Negotiation","segment":"Mid-Market","region":"Central","owner":"Morgan Davis","channel":"Referral","billing":"Annual","arr":116731.98,"weighted":75875.79,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000132","customer":"Summit Cloud 49","stage":"Evaluation","segment":"Enterprise","region":"East","owner":"Casey Johnson","channel":"Referral","billing":"Quarterly","arr":165454.65,"weighted":57909.13,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000135","customer":"Catalyst Solutions 556","stage":"Evaluation","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Content Syndication","billing":"Quarterly","arr":116348.49,"weighted":40721.97,"prob":35,"outcome":"open"}]},"Expansion":{"total":1027047.0,"weighted":612316.02,"count":8,"expected":4.75,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000142","customer":"Pioneer Systems 1997","stage":"Commit","segment":"SMB","region":"South","owner":"Riley Wilson","channel":"Direct","billing":"Annual","arr":142301.45,"weighted":113841.16,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000146","customer":"Northstar Health 661","stage":"Commit","segment":"SMB","region":"East","owner":"Casey Johnson","channel":"Webinar","billing":"Quarterly","arr":136086.51,"weighted":108869.21,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000145","customer":"Acme Solutions 632","stage":"Negotiation","segment":"SMB","region":"Central","owner":"Morgan Davis","channel":"Customer Success","billing":"Annual","arr":165352.47,"weighted":107479.11,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000148","customer":"Northstar Health 1082","stage":"Negotiation","segment":"Mid-Market","region":"East","owner":"Jordan Smith","channel":"Webinar","billing":"Annual","arr":136954.01,"weighted":89020.11,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000147","customer":"Evergreen Systems 1146","stage":"Evaluation","segment":"SMB","region":"West","owner":"Avery Garcia","channel":"Organic Search","billing":"Annual","arr":152156.85,"weighted":53254.9,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000149","customer":"Vertex Group 546","stage":"Negotiation","segment":"SMB","region":"East","owner":"Avery Garcia","channel":"Content Syndication","billing":"Monthly","arr":77080.73,"weighted":50102.47,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000144","customer":"Vertex Systems 62","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Riley Wilson","channel":"Field Event","billing":"Quarterly","arr":91725.45,"weighted":45862.72,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000143","customer":"Pioneer Health 1109","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Jordan Smith","channel":"Direct","billing":"Monthly","arr":125389.53,"weighted":43886.34,"prob":35,"outcome":"open"}]},"Reactivation":{"total":373503.0,"weighted":258774.79,"count":3,"expected":2.1,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000158","customer":"Apex Legal 498","stage":"Negotiation","segment":"Mid-Market","region":"Central","owner":"Jordan Smith","channel":"Direct","billing":"Quarterly","arr":172362.29,"weighted":112035.49,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000156","customer":"Acme Works 2183","stage":"Commit","segment":"SMB","region":"East","owner":"Morgan Davis","channel":"Customer Success","billing":"Annual","arr":106652.24,"weighted":85321.79,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000157","customer":"Catalyst Solutions 31","stage":"Negotiation","segment":"SMB","region":"Central","owner":"Cameron Clark","channel":"Direct","billing":"Monthly","arr":94488.47,"weighted":61417.51,"prob":65,"outcome":"open"}]},"Contraction":{"total":402430.0,"weighted":287626.39,"count":3,"expected":2.1,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000152","customer":"Evergreen Legal 444","stage":"Commit","segment":"SMB","region":"South","owner":"Cameron Clark","channel":"Partner","billing":"Monthly","arr":173645.96,"weighted":138916.77,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000150","customer":"Acme Health 376","stage":"Negotiation","segment":"Mid-Market","region":"East","owner":"Alex Lee","channel":"Paid Social","billing":"Quarterly","arr":116550.9,"weighted":75758.08,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000151","customer":"Catalyst Analytics 2185","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Riley Wilson","channel":"Organic Search","billing":"Annual","arr":112233.14,"weighted":72951.54,"prob":65,"outcome":"open"}]},"Churn":{"total":662371.0,"weighted":463320.93,"count":3,"expected":2.1,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000155","customer":"Apex Group 1061","stage":"Commit","segment":"Mid-Market","region":"East","owner":"Riley Wilson","channel":"Content Syndication","billing":"Monthly","arr":218531.89,"weighted":174825.51,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000154","customer":"BlueRiver Systems 1199","stage":"Negotiation","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Organic Search","billing":"Quarterly","arr":251268.85,"weighted":163324.75,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000153","customer":"BlueRiver Cloud 1153","stage":"Negotiation","segment":"Mid-Market","region":"West","owner":"Taylor Brown","channel":"Field Event","billing":"Quarterly","arr":192570.26,"weighted":125170.67,"prob":65,"outcome":"open"}]}},"2026-09":{"New Business":{"total":1765110.0,"weighted":866261.15,"count":11,"expected":5.35,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000203","customer":"Summit Cloud 861","stage":"Negotiation","segment":"Mid-Market","region":"East","owner":"Riley Wilson","channel":"Customer Success","billing":"Quarterly","arr":217333.42,"weighted":141266.72,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000209","customer":"Vertex Health 2231","stage":"Negotiation","segment":"SMB","region":"South","owner":"Casey Johnson","channel":"Direct","billing":"Quarterly","arr":180660.9,"weighted":117429.59,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000200","customer":"Nimbus Cloud 1648","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Casey Johnson","channel":"Field Event","billing":"Annual","arr":169347.33,"weighted":84673.66,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000199","customer":"Pioneer Group 663","stage":"Proposal","segment":"SMB","region":"Central","owner":"Alex Lee","channel":"Content Syndication","billing":"Monthly","arr":159878.59,"weighted":79939.29,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000207","customer":"Vertex Works 2377","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Morgan Davis","channel":"Outbound","billing":"Quarterly","arr":150172.58,"weighted":75086.29,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000208","customer":"Evergreen Health 454","stage":"Evaluation","segment":"Mid-Market","region":"South","owner":"Taylor Brown","channel":"Field Event","billing":"Quarterly","arr":203743.55,"weighted":71310.24,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000204","customer":"Summit Cloud 1049","stage":"Evaluation","segment":"Mid-Market","region":"West","owner":"Jordan Smith","channel":"Paid Search","billing":"Quarterly","arr":195935.06,"weighted":68577.27,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000202","customer":"Catalyst Group 305","stage":"Proposal","segment":"Mid-Market","region":"Central","owner":"Morgan Davis","channel":"Content Syndication","billing":"Quarterly","arr":133323.22,"weighted":66661.61,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000201","customer":"Evergreen Works 85","stage":"Proposal","segment":"SMB","region":"South","owner":"Casey Johnson","channel":"Direct","billing":"Monthly","arr":127601.09,"weighted":63800.54,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000205","customer":"Vertex Cloud 2093","stage":"Proposal","segment":"Mid-Market","region":"Central","owner":"Taylor Brown","channel":"Content Syndication","billing":"Monthly","arr":120172.97,"weighted":60086.49,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000206","customer":"Catalyst Solutions 742","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Jordan Smith","channel":"Partner","billing":"Annual","arr":106941.29,"weighted":37429.45,"prob":35,"outcome":"open"}]},"Expansion":{"total":922213.03,"weighted":491339.35,"count":7,"expected":3.8,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000216","customer":"Apex Analytics 1326","stage":"Commit","segment":"Mid-Market","region":"East","owner":"Taylor Brown","channel":"Partner","billing":"Quarterly","arr":128402.78,"weighted":102722.22,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000214","customer":"Nimbus Solutions 845","stage":"Negotiation","segment":"Mid-Market","region":"Central","owner":"Casey Johnson","channel":"Paid Search","billing":"Annual","arr":146964.03,"weighted":95526.62,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000215","customer":"Summit Cloud 2359","stage":"Negotiation","segment":"SMB","region":"South","owner":"Alex Lee","channel":"Paid Social","billing":"Monthly","arr":131614.11,"weighted":85549.17,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000211","customer":"Northstar Health 808","stage":"Negotiation","segment":"SMB","region":"South","owner":"Morgan Davis","channel":"Organic Search","billing":"Quarterly","arr":90700.34,"weighted":58955.22,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000213","customer":"Nimbus Systems 60","stage":"Evaluation","segment":"SMB","region":"West","owner":"Riley Wilson","channel":"Content Syndication","billing":"Annual","arr":144858.42,"weighted":50700.45,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000210","customer":"Nimbus Cloud 481","stage":"Evaluation","segment":"Enterprise","region":"South","owner":"Alex Lee","channel":"Direct","billing":"Quarterly","arr":140793.69,"weighted":49277.79,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000212","customer":"Evergreen Health 39","stage":"Evaluation","segment":"SMB","region":"East","owner":"Riley Wilson","channel":"Outbound","billing":"Monthly","arr":138879.66,"weighted":48607.88,"prob":35,"outcome":"open"}]},"Reactivation":{"total":382361.0,"weighted":285692.29,"count":3,"expected":2.25,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000224","customer":"Catalyst Analytics 1756","stage":"Commit","segment":"Mid-Market","region":"Central","owner":"Cameron Clark","channel":"Content Syndication","billing":"Quarterly","arr":146313.6,"weighted":117050.88,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000226","customer":"Summit Systems 1166","stage":"Negotiation","segment":"Enterprise","region":"Central","owner":"Taylor Brown","channel":"Outbound","billing":"Annual","arr":134643.41,"weighted":87518.22,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000225","customer":"Catalyst Legal 1227","stage":"Commit","segment":"Mid-Market","region":"Central","owner":"Morgan Davis","channel":"Outbound","billing":"Annual","arr":101403.99,"weighted":81123.19,"prob":80,"outcome":"open"}]},"Contraction":{"total":424035.99,"weighted":258711.8,"count":3,"expected":1.8,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000218","customer":"Catalyst Legal 1629","stage":"Commit","segment":"Mid-Market","region":"West","owner":"Jordan Smith","channel":"Direct","billing":"Quarterly","arr":143354.61,"weighted":114683.69,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000219","customer":"Pioneer Health 2293","stage":"Negotiation","segment":"Mid-Market","region":"East","owner":"Morgan Davis","channel":"Outbound","billing":"Quarterly","arr":152632.11,"weighted":99210.87,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000217","customer":"Apex Solutions 1653","stage":"Evaluation","segment":"Mid-Market","region":"South","owner":"Alex Lee","channel":"Outbound","billing":"Monthly","arr":128049.27,"weighted":44817.24,"prob":35,"outcome":"open"}]},"Churn":{"total":705506.0,"weighted":358135.31,"count":4,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000223","customer":"Evergreen Group 2210","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Cameron Clark","channel":"Paid Social","billing":"Monthly","arr":186370.45,"weighted":121140.79,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000222","customer":"Vertex Systems 419","stage":"Negotiation","segment":"SMB","region":"East","owner":"Cameron Clark","channel":"Outbound","billing":"Quarterly","arr":184323.58,"weighted":119810.33,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000221","customer":"Pioneer Works 1019","stage":"Evaluation","segment":"SMB","region":"South","owner":"Avery Garcia","channel":"Organic Search","billing":"Annual","arr":207558.83,"weighted":72645.59,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000220","customer":"Pioneer Health 2012","stage":"Evaluation","segment":"Mid-Market","region":"West","owner":"Morgan Davis","channel":"Field Event","billing":"Quarterly","arr":127253.14,"weighted":44538.6,"prob":35,"outcome":"open"}]}},"2026-10":{"New Business":{"total":1678393.0,"weighted":919339.48,"count":11,"expected":5.8,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000273","customer":"Summit Health 99","stage":"Commit","segment":"Enterprise","region":"East","owner":"Jordan Smith","channel":"Organic Search","billing":"Annual","arr":197749.13,"weighted":158199.3,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000275","customer":"Evergreen Cloud 679","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Webinar","billing":"Quarterly","arr":173400.96,"weighted":112710.62,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000267","customer":"Evergreen Health 1060","stage":"Negotiation","segment":"Mid-Market","region":"West","owner":"Alex Lee","channel":"Content Syndication","billing":"Monthly","arr":169463.16,"weighted":110151.05,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000270","customer":"Evergreen Health 2367","stage":"Negotiation","segment":"Enterprise","region":"West","owner":"Morgan Davis","channel":"Paid Search","billing":"Quarterly","arr":166642.29,"weighted":108317.49,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000268","customer":"Nimbus Systems 369","stage":"Negotiation","segment":"SMB","region":"South","owner":"Taylor Brown","channel":"Direct","billing":"Monthly","arr":161158.88,"weighted":104753.27,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000271","customer":"Vertex Systems 409","stage":"Proposal","segment":"SMB","region":"West","owner":"Avery Garcia","channel":"Direct","billing":"Annual","arr":152583.52,"weighted":76291.76,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000272","customer":"Apex Analytics 1505","stage":"Proposal","segment":"SMB","region":"South","owner":"Alex Lee","channel":"Content Syndication","billing":"Annual","arr":125518.16,"weighted":62759.08,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000269","customer":"Summit Analytics 1740","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Casey Johnson","channel":"Partner","billing":"Annual","arr":156452.69,"weighted":54758.44,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000266","customer":"Vertex Works 222","stage":"Evaluation","segment":"Enterprise","region":"Central","owner":"Avery Garcia","channel":"Direct","billing":"Monthly","arr":153532.01,"weighted":53736.2,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000274","customer":"Pioneer Systems 658","stage":"Evaluation","segment":"SMB","region":"East","owner":"Avery Garcia","channel":"Partner","billing":"Quarterly","arr":113807.24,"weighted":39832.53,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000276","customer":"Nimbus Analytics 2009","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Casey Johnson","channel":"Customer Success","billing":"Monthly","arr":108084.96,"weighted":37829.74,"prob":35,"outcome":"open"}]},"Expansion":{"total":1058122.01,"weighted":546999.03,"count":8,"expected":4.15,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000282","customer":"Evergreen Health 728","stage":"Negotiation","segment":"Mid-Market","region":"West","owner":"Morgan Davis","channel":"Referral","billing":"Quarterly","arr":190644.95,"weighted":123919.22,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000281","customer":"Nimbus Cloud 2083","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Alex Lee","channel":"Outbound","billing":"Annual","arr":137017.53,"weighted":89061.39,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000277","customer":"Nimbus Analytics 249","stage":"Commit","segment":"Mid-Market","region":"Central","owner":"Alex Lee","channel":"Paid Search","billing":"Quarterly","arr":109551.75,"weighted":87641.4,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000280","customer":"BlueRiver Group 2010","stage":"Negotiation","segment":"Mid-Market","region":"Central","owner":"Jordan Smith","channel":"Paid Search","billing":"Quarterly","arr":96864.32,"weighted":62961.81,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000279","customer":"Vertex Analytics 1241","stage":"Evaluation","segment":"SMB","region":"West","owner":"Cameron Clark","channel":"Customer Success","billing":"Annual","arr":165496.85,"weighted":57923.9,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000278","customer":"BlueRiver Solutions 2203","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Jordan Smith","channel":"Organic Search","billing":"Quarterly","arr":156284.94,"weighted":54699.73,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000283","customer":"Summit Analytics 1991","stage":"Evaluation","segment":"SMB","region":"East","owner":"Taylor Brown","channel":"Paid Search","billing":"Monthly","arr":109779.8,"weighted":38422.93,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000284","customer":"Summit Legal 1448","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Morgan Davis","channel":"Customer Success","billing":"Annual","arr":92481.87,"weighted":32368.65,"prob":35,"outcome":"open"}]},"Reactivation":{"total":391126.02,"weighted":239049.19,"count":3,"expected":1.8,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000294","customer":"Evergreen Analytics 1829","stage":"Negotiation","segment":"SMB","region":"East","owner":"Jordan Smith","channel":"Customer Success","billing":"Annual","arr":157446.36,"weighted":102340.13,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000292","customer":"Catalyst Solutions 783","stage":"Commit","segment":"Mid-Market","region":"West","owner":"Casey Johnson","channel":"Paid Search","billing":"Annual","arr":122047.08,"weighted":97637.66,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000293","customer":"BlueRiver Legal 306","stage":"Evaluation","segment":"Mid-Market","region":"West","owner":"Morgan Davis","channel":"Partner","billing":"Monthly","arr":111632.58,"weighted":39071.4,"prob":35,"outcome":"open"}]},"Contraction":{"total":439678.99,"weighted":269280.62,"count":3,"expected":1.8,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000285","customer":"Vertex Legal 2194","stage":"Commit","segment":"Enterprise","region":"Central","owner":"Riley Wilson","channel":"Organic Search","billing":"Quarterly","arr":164803.75,"weighted":131843.0,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000286","customer":"Catalyst Cloud 626","stage":"Proposal","segment":"SMB","region":"West","owner":"Jordan Smith","channel":"Paid Search","billing":"Monthly","arr":144872.16,"weighted":72436.08,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000287","customer":"Acme Analytics 1137","stage":"Proposal","segment":"Mid-Market","region":"South","owner":"Alex Lee","channel":"Paid Social","billing":"Quarterly","arr":130003.08,"weighted":65001.54,"prob":50,"outcome":"open"}]},"Churn":{"total":707603.0,"weighted":440495.35,"count":4,"expected":2.45,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000288","customer":"Northstar Legal 1728","stage":"Commit","segment":"Mid-Market","region":"East","owner":"Alex Lee","channel":"Customer Success","billing":"Monthly","arr":189221.59,"weighted":151377.27,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000290","customer":"Apex Works 201","stage":"Negotiation","segment":"SMB","region":"West","owner":"Cameron Clark","channel":"Outbound","billing":"Monthly","arr":199515.88,"weighted":129685.32,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000289","customer":"Acme Cloud 1383","stage":"Proposal","segment":"Mid-Market","region":"Central","owner":"Casey Johnson","channel":"Webinar","billing":"Monthly","arr":205464.52,"weighted":102732.26,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000291","customer":"Acme Cloud 1721","stage":"Proposal","segment":"SMB","region":"Central","owner":"Riley Wilson","channel":"Paid Search","billing":"Annual","arr":113401.01,"weighted":56700.5,"prob":50,"outcome":"open"}]}},"2026-11":{"New Business":{"total":1652682.0,"weighted":831851.62,"count":11,"expected":5.5,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000337","customer":"Vertex Analytics 2005","stage":"Commit","segment":"Mid-Market","region":"South","owner":"Jordan Smith","channel":"Webinar","billing":"Monthly","arr":165744.04,"weighted":132595.23,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000342","customer":"BlueRiver Analytics 1418","stage":"Commit","segment":"Mid-Market","region":"South","owner":"Riley Wilson","channel":"Paid Social","billing":"Monthly","arr":164970.76,"weighted":131976.61,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000339","customer":"Apex Analytics 1775","stage":"Negotiation","segment":"Mid-Market","region":"East","owner":"Cameron Clark","channel":"Outbound","billing":"Annual","arr":132723.91,"weighted":86270.54,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000333","customer":"Vertex Group 2224","stage":"Proposal","segment":"SMB","region":"South","owner":"Jordan Smith","channel":"Paid Search","billing":"Quarterly","arr":157516.76,"weighted":78758.38,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000343","customer":"Vertex Solutions 1510","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Avery Garcia","channel":"Outbound","billing":"Quarterly","arr":152732.28,"weighted":76366.14,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000335","customer":"Northstar Analytics 526","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Riley Wilson","channel":"Field Event","billing":"Annual","arr":181236.39,"weighted":63432.74,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000336","customer":"Summit Legal 513","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Morgan Davis","channel":"Field Event","billing":"Monthly","arr":180631.2,"weighted":63220.92,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000340","customer":"Pioneer Solutions 2006","stage":"Evaluation","segment":"Enterprise","region":"East","owner":"Morgan Davis","channel":"Referral","billing":"Annual","arr":178636.31,"weighted":62522.71,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000334","customer":"Vertex Solutions 1087","stage":"Proposal","segment":"Mid-Market","region":"West","owner":"Casey Johnson","channel":"Customer Success","billing":"Annual","arr":121578.2,"weighted":60789.1,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000338","customer":"Evergreen Works 84","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Taylor Brown","channel":"Outbound","billing":"Quarterly","arr":111309.64,"weighted":38958.37,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000341","customer":"Pioneer Solutions 1168","stage":"Evaluation","segment":"Mid-Market","region":"Central","owner":"Cameron Clark","channel":"Webinar","billing":"Monthly","arr":105602.51,"weighted":36960.88,"prob":35,"outcome":"open"}]},"Expansion":{"total":982232.03,"weighted":566383.05,"count":7,"expected":4.1,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000348","customer":"Apex Legal 905","stage":"Commit","segment":"Enterprise","region":"East","owner":"Morgan Davis","channel":"Referral","billing":"Quarterly","arr":154607.51,"weighted":123686.01,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000344","customer":"Catalyst Cloud 731","stage":"Negotiation","segment":"SMB","region":"South","owner":"Riley Wilson","channel":"Direct","billing":"Monthly","arr":147926.3,"weighted":96152.1,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000346","customer":"Apex Health 2343","stage":"Proposal","segment":"SMB","region":"East","owner":"Riley Wilson","channel":"Webinar","billing":"Quarterly","arr":173133.67,"weighted":86566.84,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000347","customer":"Summit Health 1830","stage":"Commit","segment":"SMB","region":"East","owner":"Taylor Brown","channel":"Direct","billing":"Quarterly","arr":95043.65,"weighted":76034.92,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000350","customer":"Nimbus Legal 1251","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Taylor Brown","channel":"Field Event","billing":"Monthly","arr":143096.61,"weighted":71548.3,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000345","customer":"Acme Cloud 92","stage":"Proposal","segment":"Mid-Market","region":"Central","owner":"Riley Wilson","channel":"Partner","billing":"Quarterly","arr":122975.83,"weighted":61487.92,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000349","customer":"Summit Group 659","stage":"Evaluation","segment":"Enterprise","region":"West","owner":"Casey Johnson","channel":"Webinar","billing":"Quarterly","arr":145448.46,"weighted":50906.96,"prob":35,"outcome":"open"}]},"Reactivation":{"total":399891.99,"weighted":165569.11,"count":3,"expected":1.2,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000358","customer":"Summit Group 285","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Avery Garcia","channel":"Outbound","billing":"Quarterly","arr":170712.73,"weighted":85356.37,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000359","customer":"Pioneer Analytics 1521","stage":"Evaluation","segment":"Enterprise","region":"West","owner":"Morgan Davis","channel":"Content Syndication","billing":"Quarterly","arr":122294.02,"weighted":42802.91,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000360","customer":"Nimbus Systems 214","stage":"Evaluation","segment":"Mid-Market","region":"South","owner":"Riley Wilson","channel":"Direct","billing":"Quarterly","arr":106885.24,"weighted":37409.83,"prob":35,"outcome":"open"}]},"Contraction":{"total":440971.98,"weighted":218292.59,"count":3,"expected":1.5,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000353","customer":"Vertex Works 1154","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Webinar","billing":"Quarterly","arr":146031.23,"weighted":94920.3,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000351","customer":"Apex Legal 1209","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Jordan Smith","channel":"Referral","billing":"Monthly","arr":134286.86,"weighted":67143.43,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000352","customer":"Nimbus Solutions 2453","stage":"Evaluation","segment":"Mid-Market","region":"East","owner":"Taylor Brown","channel":"Partner","billing":"Monthly","arr":160653.89,"weighted":56228.86,"prob":35,"outcome":"open"}]},"Churn":{"total":718922.0,"weighted":361004.03,"count":4,"expected":2.0,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000354","customer":"Vertex Systems 1314","stage":"Commit","segment":"Mid-Market","region":"South","owner":"Morgan Davis","channel":"Direct","billing":"Monthly","arr":174784.71,"weighted":139827.77,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000357","customer":"Apex Cloud 76","stage":"Proposal","segment":"Enterprise","region":"East","owner":"Alex Lee","channel":"Field Event","billing":"Quarterly","arr":204854.67,"weighted":102427.34,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000355","customer":"Vertex Systems 670","stage":"Evaluation","segment":"Enterprise","region":"East","owner":"Cameron Clark","channel":"Webinar","billing":"Monthly","arr":190522.39,"weighted":66682.84,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000356","customer":"Catalyst Systems 2247","stage":"Evaluation","segment":"Mid-Market","region":"East","owner":"Alex Lee","channel":"Field Event","billing":"Annual","arr":148760.23,"weighted":52066.08,"prob":35,"outcome":"open"}]}},"2026-12":{"New Business":{"total":1745964.0,"weighted":1142287.61,"count":11,"expected":6.85,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000406","customer":"Pioneer Solutions 813","stage":"Commit","segment":"Enterprise","region":"Central","owner":"Morgan Davis","channel":"Field Event","billing":"Annual","arr":220036.73,"weighted":176029.38,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000399","customer":"Acme Health 1044","stage":"Commit","segment":"SMB","region":"East","owner":"Taylor Brown","channel":"Paid Search","billing":"Annual","arr":213872.22,"weighted":171097.78,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000398","customer":"Evergreen Systems 1460","stage":"Commit","segment":"Enterprise","region":"South","owner":"Avery Garcia","channel":"Direct","billing":"Quarterly","arr":182288.52,"weighted":145830.82,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000407","customer":"Catalyst Cloud 1684","stage":"Commit","segment":"SMB","region":"West","owner":"Casey Johnson","channel":"Partner","billing":"Annual","arr":180084.65,"weighted":144067.72,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000403","customer":"Northstar Legal 2053","stage":"Commit","segment":"Mid-Market","region":"West","owner":"Riley Wilson","channel":"Paid Search","billing":"Monthly","arr":157719.06,"weighted":126175.25,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000400","customer":"Evergreen Solutions 2250","stage":"Negotiation","segment":"Mid-Market","region":"East","owner":"Jordan Smith","channel":"Direct","billing":"Monthly","arr":140343.15,"weighted":91223.05,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000397","customer":"Apex Systems 2172","stage":"Proposal","segment":"SMB","region":"East","owner":"Jordan Smith","channel":"Partner","billing":"Monthly","arr":176508.88,"weighted":88254.44,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000404","customer":"Summit Group 235","stage":"Negotiation","segment":"Mid-Market","region":"West","owner":"Avery Garcia","channel":"Referral","billing":"Annual","arr":111067.97,"weighted":72194.18,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000402","customer":"Vertex Works 1589","stage":"Evaluation","segment":"Mid-Market","region":"South","owner":"Morgan Davis","channel":"Customer Success","billing":"Quarterly","arr":136679.02,"weighted":47837.66,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000405","customer":"Pioneer Group 558","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Morgan Davis","channel":"Referral","billing":"Monthly","arr":118291.14,"weighted":41401.9,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000401","customer":"Catalyst Legal 694","stage":"Evaluation","segment":"Enterprise","region":"West","owner":"Riley Wilson","channel":"Direct","billing":"Quarterly","arr":109072.66,"weighted":38175.43,"prob":35,"outcome":"open"}]},"Expansion":{"total":1034765.01,"weighted":591792.33,"count":8,"expected":4.6,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000412","customer":"Pioneer Works 2111","stage":"Commit","segment":"Mid-Market","region":"South","owner":"Jordan Smith","channel":"Organic Search","billing":"Quarterly","arr":148783.39,"weighted":119026.71,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000409","customer":"BlueRiver Group 686","stage":"Negotiation","segment":"Mid-Market","region":"South","owner":"Casey Johnson","channel":"Content Syndication","billing":"Monthly","arr":145033.25,"weighted":94271.61,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000408","customer":"Vertex Solutions 193","stage":"Commit","segment":"Mid-Market","region":"South","owner":"Morgan Davis","channel":"Organic Search","billing":"Quarterly","arr":95172.01,"weighted":76137.61,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000410","customer":"Summit Systems 1204","stage":"Proposal","segment":"Enterprise","region":"Central","owner":"Cameron Clark","channel":"Content Syndication","billing":"Quarterly","arr":147693.82,"weighted":73846.91,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000411","customer":"BlueRiver Health 1211","stage":"Proposal","segment":"SMB","region":"West","owner":"Cameron Clark","channel":"Content Syndication","billing":"Annual","arr":140404.57,"weighted":70202.29,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000415","customer":"Apex Legal 129","stage":"Proposal","segment":"Mid-Market","region":"West","owner":"Alex Lee","channel":"Paid Social","billing":"Quarterly","arr":122971.02,"weighted":61485.51,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000413","customer":"Apex Group 1046","stage":"Proposal","segment":"Mid-Market","region":"West","owner":"Morgan Davis","channel":"Content Syndication","billing":"Quarterly","arr":97828.38,"weighted":48914.19,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000414","customer":"BlueRiver Works 1575","stage":"Evaluation","segment":"Mid-Market","region":"South","owner":"Taylor Brown","channel":"Outbound","billing":"Annual","arr":136878.57,"weighted":47907.5,"prob":35,"outcome":"open"}]},"Reactivation":{"total":408658.0,"weighted":225506.7,"count":4,"expected":2.15,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000423","customer":"Acme Cloud 2392","stage":"Commit","segment":"Enterprise","region":"West","owner":"Alex Lee","channel":"Organic Search","billing":"Quarterly","arr":117835.17,"weighted":94268.14,"prob":80,"outcome":"open"},{"id":"FOR-OPP-2000425","customer":"Apex Solutions 353","stage":"Proposal","segment":"Mid-Market","region":"Central","owner":"Taylor Brown","channel":"Direct","billing":"Monthly","arr":98782.44,"weighted":49391.22,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000426","customer":"Catalyst Solutions 2410","stage":"Proposal","segment":"Mid-Market","region":"East","owner":"Taylor Brown","channel":"Paid Search","billing":"Quarterly","arr":97554.7,"weighted":48777.35,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000424","customer":"Nimbus Systems 1861","stage":"Evaluation","segment":"Enterprise","region":"South","owner":"Morgan Davis","channel":"Field Event","billing":"Quarterly","arr":94485.69,"weighted":33069.99,"prob":35,"outcome":"open"}]},"Contraction":{"total":475141.01,"weighted":210245.64,"count":3,"expected":1.35,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000418","customer":"Acme Group 1627","stage":"Proposal","segment":"Mid-Market","region":"South","owner":"Cameron Clark","channel":"Organic Search","billing":"Monthly","arr":179767.53,"weighted":89883.76,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000417","customer":"Evergreen Solutions 2114","stage":"Evaluation","segment":"SMB","region":"West","owner":"Casey Johnson","channel":"Organic Search","billing":"Monthly","arr":182165.77,"weighted":63758.02,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000416","customer":"Northstar Solutions 2462","stage":"Proposal","segment":"SMB","region":"East","owner":"Casey Johnson","channel":"Partner","billing":"Quarterly","arr":113207.71,"weighted":56603.86,"prob":50,"outcome":"open"}]},"Churn":{"total":802123.99,"weighted":350750.67,"count":4,"expected":1.85,"lost_total":0.0,"lost_count":0,"deals":[{"id":"FOR-OPP-2000419","customer":"Acme Legal 2080","stage":"Proposal","segment":"Mid-Market","region":"South","owner":"Jordan Smith","channel":"Webinar","billing":"Annual","arr":220507.38,"weighted":110253.69,"prob":50,"outcome":"open"},{"id":"FOR-OPP-2000422","customer":"Vertex Health 1908","stage":"Evaluation","segment":"Mid-Market","region":"West","owner":"Taylor Brown","channel":"Field Event","billing":"Quarterly","arr":235845.6,"weighted":82545.96,"prob":35,"outcome":"open"},{"id":"FOR-OPP-2000421","customer":"Apex Group 1167","stage":"Negotiation","segment":"Mid-Market","region":"East","owner":"Morgan Davis","channel":"Organic Search","billing":"Quarterly","arr":123103.87,"weighted":80017.52,"prob":65,"outcome":"open"},{"id":"FOR-OPP-2000420","customer":"Catalyst Group 2066","stage":"Evaluation","segment":"SMB","region":"Central","owner":"Morgan Davis","channel":"Partner","billing":"Annual","arr":222667.14,"weighted":77933.5,"prob":35,"outcome":"open"}]}}},"renewals":{"2026-06":{"count":55,"arr":5488129,"weighted":5213723,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":105709,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"Yes","csm":"Parker Garcia"},{"customer":"Forecast Customer 2","arr":52460,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"Yes","csm":"Jordan Wilson"},{"customer":"Forecast Customer 3","arr":100331,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"No","csm":"Taylor Brown"},{"customer":"Forecast Customer 4","arr":70110,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":-10.0,"auto_renew":"No","csm":"Jamie Davis"},{"customer":"Forecast Customer 5","arr":61005,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.8,"auto_renew":"Yes","csm":"Jamie Davis"},{"customer":"Forecast Customer 6","arr":96112,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.9,"auto_renew":"Yes","csm":"Jordan Miller"},{"customer":"Forecast Customer 7","arr":75111,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.0,"auto_renew":"No","csm":"Avery Garcia"},{"customer":"Forecast Customer 8","arr":83052,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":10.1,"auto_renew":"No","csm":"Drew Garcia"}]},"2026-07":{"count":55,"arr":6432772,"weighted":6111134,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":150571,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.9,"auto_renew":"No","csm":"Quinn Clark"},{"customer":"Forecast Customer 2","arr":75782,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.4,"auto_renew":"Yes","csm":"Parker Brown"},{"customer":"Forecast Customer 3","arr":143665,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Avery Garcia"},{"customer":"Forecast Customer 4","arr":79653,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.9,"auto_renew":"No","csm":"Morgan Miller"},{"customer":"Forecast Customer 5","arr":95373,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.2,"auto_renew":"Yes","csm":"Drew Garcia"},{"customer":"Forecast Customer 6","arr":105979,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":8.9,"auto_renew":"No","csm":"Jamie Lee"},{"customer":"Forecast Customer 7","arr":76091,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Parker Clark"},{"customer":"Forecast Customer 8","arr":150531,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Taylor Brown"}]},"2026-08":{"count":55,"arr":5654909,"weighted":5372163,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":140718,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Jamie Lee"},{"customer":"Forecast Customer 2","arr":119828,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":13.2,"auto_renew":"Yes","csm":"Drew Johnson"},{"customer":"Forecast Customer 3","arr":172338,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Cameron Martinez"},{"customer":"Forecast Customer 4","arr":89505,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":11.1,"auto_renew":"Yes","csm":"Jordan Lee"},{"customer":"Forecast Customer 5","arr":108688,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":9.1,"auto_renew":"Yes","csm":"Jamie Davis"},{"customer":"Forecast Customer 6","arr":171796,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":8.9,"auto_renew":"Yes","csm":"Riley Miller"},{"customer":"Forecast Customer 7","arr":74160,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.3,"auto_renew":"Yes","csm":"Taylor Garcia"},{"customer":"Forecast Customer 8","arr":89058,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.3,"auto_renew":"No","csm":"Riley Miller"}]},"2026-09":{"count":55,"arr":6610788,"weighted":6280249,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":143309,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":10.8,"auto_renew":"Yes","csm":"Parker Garcia"},{"customer":"Forecast Customer 2","arr":77379,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.6,"auto_renew":"No","csm":"Taylor Davis"},{"customer":"Forecast Customer 3","arr":97959,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.6,"auto_renew":"No","csm":"Quinn Clark"},{"customer":"Forecast Customer 4","arr":138138,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.3,"auto_renew":"Yes","csm":"Morgan Miller"},{"customer":"Forecast Customer 5","arr":120788,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":12.6,"auto_renew":"No","csm":"Quinn Johnson"},{"customer":"Forecast Customer 6","arr":124451,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.8,"auto_renew":"No","csm":"Riley Martinez"},{"customer":"Forecast Customer 7","arr":64148,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.2,"auto_renew":"Yes","csm":"Avery Garcia"},{"customer":"Forecast Customer 8","arr":175632,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":7.9,"auto_renew":"No","csm":"Drew Clark"}]},"2026-10":{"count":55,"arr":6211160,"weighted":5900602,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":48085,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":1.4,"auto_renew":"No","csm":"Taylor Brown"},{"customer":"Forecast Customer 2","arr":70857,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.6,"auto_renew":"Yes","csm":"Morgan Miller"},{"customer":"Forecast Customer 3","arr":153922,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.5,"auto_renew":"No","csm":"Avery Johnson"},{"customer":"Forecast Customer 4","arr":87080,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Parker Brown"},{"customer":"Forecast Customer 5","arr":98451,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.4,"auto_renew":"Yes","csm":"Taylor Brown"},{"customer":"Forecast Customer 6","arr":168778,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Drew Johnson"},{"customer":"Forecast Customer 7","arr":154991,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":3.7,"auto_renew":"No","csm":"Casey Johnson"},{"customer":"Forecast Customer 8","arr":102350,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":7.6,"auto_renew":"Yes","csm":"Parker Johnson"}]},"2026-11":{"count":55,"arr":6038535,"weighted":5736608,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":71042,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":12.3,"auto_renew":"Yes","csm":"Jordan Lee"},{"customer":"Forecast Customer 2","arr":102180,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.5,"auto_renew":"Yes","csm":"Taylor Davis"},{"customer":"Forecast Customer 3","arr":118674,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.8,"auto_renew":"Yes","csm":"Jordan Miller"},{"customer":"Forecast Customer 4","arr":131844,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.1,"auto_renew":"Yes","csm":"Jamie Davis"},{"customer":"Forecast Customer 5","arr":53032,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":10.1,"auto_renew":"No","csm":"Parker Garcia"},{"customer":"Forecast Customer 6","arr":164800,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.3,"auto_renew":"Yes","csm":"Drew Clark"},{"customer":"Forecast Customer 7","arr":59102,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":4.5,"auto_renew":"Yes","csm":"Parker Brown"},{"customer":"Forecast Customer 8","arr":150339,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"No","csm":"Cameron Smith"}]},"2026-12":{"count":55,"arr":6063707,"weighted":5760522,"rate":0.95,"deals":[{"customer":"Forecast Customer 1","arr":82705,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":14.3,"auto_renew":"Yes","csm":"Riley Miller"},{"customer":"Forecast Customer 2","arr":48414,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":5.2,"auto_renew":"No","csm":"Casey Johnson"},{"customer":"Forecast Customer 3","arr":153006,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":0.0,"auto_renew":"Yes","csm":"Taylor Lee"},{"customer":"Forecast Customer 4","arr":48602,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":2.3,"auto_renew":"No","csm":"Riley Martinez"},{"customer":"Forecast Customer 5","arr":70809,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":6.1,"auto_renew":"Yes","csm":"Avery Lee"},{"customer":"Forecast Customer 6","arr":91322,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":1.3,"auto_renew":"No","csm":"Drew Garcia"},{"customer":"Forecast Customer 7","arr":158706,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":3.8,"auto_renew":"No","csm":"Avery Lee"},{"customer":"Forecast Customer 8","arr":130312,"prob":95,"stage":"Commit","risk":50,"health":75,"uplift":3.7,"auto_renew":"No","csm":"Quinn Clark"}]}},"dr_waterfall":{"2026-06":{"beg_dr":46979276.0,"billings":6468420.0,"recognized":6809558.0,"end_dr":46638138.42},"2026-07":{"beg_dr":41698711.0,"billings":6676822.0,"recognized":6432830.0,"end_dr":41942702.58},"2026-08":{"beg_dr":36653387.0,"billings":6982470.0,"recognized":6042670.0,"end_dr":37593186.58},"2026-09":{"beg_dr":31501750.0,"billings":7286347.0,"recognized":5629197.0,"end_dr":33158899.58},"2026-10":{"beg_dr":26108164.0,"billings":7590222.0,"recognized":5198453.0,"end_dr":28499932.67},"2026-11":{"beg_dr":20472411.0,"billings":7894097.0,"recognized":4752998.0,"end_dr":23613509.83},"2026-12":{"beg_dr":14594491.0,"billings":8197972.0,"recognized":4291649.0,"end_dr":18500813.83}},"open_reqs":[{"id":"FREQ-001","dept":"Sales","role":"Senior Account Executive","level":"L5","status":"Open","priority":"High","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":265500,"gaap_annual":283500,"quota_arr":1100000,"ramp_months":4},{"id":"FREQ-002","dept":"Sales","role":"Account Executive","level":"L4","status":"Open","priority":"High","start":"2026-07","approved":"Yes","replacement":"New","cash_annual":212400,"gaap_annual":224400,"quota_arr":800000,"ramp_months":4},{"id":"FREQ-003","dept":"Sales","role":"Sales Development Rep","level":"L2","status":"Open","priority":"High","start":"2026-07","approved":"Yes","replacement":"New","cash_annual":112100,"gaap_annual":118100,"quota_arr":300000,"ramp_months":3},{"id":"FREQ-004","dept":"Marketing","role":"Product Marketing Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":161660,"gaap_annual":174660,"quota_arr":0,"ramp_months":2},{"id":"FREQ-005","dept":"Marketing","role":"Marketing Operations Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-09","approved":"Yes","replacement":"New","cash_annual":147500,"gaap_annual":156500,"quota_arr":0,"ramp_months":2},{"id":"FREQ-006","dept":"R&D","role":"Senior Software Engineer","level":"L5","status":"Open","priority":"High","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":220660,"gaap_annual":255660,"quota_arr":0,"ramp_months":3},{"id":"FREQ-007","dept":"R&D","role":"Software Engineer","level":"L4","status":"Open","priority":"High","start":"2026-07","approved":"Yes","replacement":"New","cash_annual":188800,"gaap_annual":213800,"quota_arr":0,"ramp_months":3},{"id":"FREQ-008","dept":"R&D","role":"Security Engineer","level":"L4","status":"Open","priority":"High","start":"2026-10","approved":"Yes","replacement":"New","cash_annual":200600,"gaap_annual":228600,"quota_arr":0,"ramp_months":3},{"id":"FREQ-009","dept":"Product","role":"Senior Product Manager","level":"L5","status":"Open","priority":"High","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":218300,"gaap_annual":253300,"quota_arr":0,"ramp_months":3},{"id":"FREQ-010","dept":"Product","role":"Product Designer","level":"L4","status":"Open","priority":"High","start":"2026-08","approved":"Yes","replacement":"New","cash_annual":171100,"gaap_annual":193100,"quota_arr":0,"ramp_months":3},{"id":"FREQ-011","dept":"Customer Success","role":"Senior Customer Success Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":168740,"gaap_annual":180740,"quota_arr":650000,"ramp_months":3},{"id":"FREQ-012","dept":"Customer Success","role":"Customer Success Manager","level":"L3","status":"Open","priority":"Medium","start":"2026-09","approved":"Yes","replacement":"New","cash_annual":141600,"gaap_annual":150600,"quota_arr":450000,"ramp_months":3},{"id":"FREQ-013","dept":"Support","role":"Technical Support Engineer","level":"L3","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":121540,"gaap_annual":128540,"quota_arr":0,"ramp_months":2},{"id":"FREQ-014","dept":"Support","role":"Customer Support Specialist","level":"L2","status":"Open","priority":"Medium","start":"2026-08","approved":"Yes","replacement":"New","cash_annual":88500,"gaap_annual":92500,"quota_arr":0,"ramp_months":2},{"id":"FREQ-015","dept":"G&A","role":"Finance Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-06","approved":"Yes","replacement":"New","cash_annual":173460,"gaap_annual":191460,"quota_arr":0,"ramp_months":2},{"id":"FREQ-016","dept":"G&A","role":"People Operations Manager","level":"L4","status":"Open","priority":"Medium","start":"2026-09","approved":"Yes","replacement":"New","cash_annual":153400,"gaap_annual":165400,"quota_arr":0,"ramp_months":2},{"id":"FREQ-017","dept":"G&A","role":"Legal Counsel","level":"L5","status":"Open","priority":"Medium","start":"2026-11","approved":"Yes","replacement":"New","cash_annual":236000,"gaap_annual":266000,"quota_arr":0,"ramp_months":2}],"ramp_lu":{"2":{"1":0.5,"2":1.0,"3":1.0,"4":1.0,"5":1.0,"6":1.0},"3":{"1":0.25,"2":0.6,"3":1.0,"4":1.0,"5":1.0,"6":1.0},"4":{"1":0.0,"2":0.25,"3":0.5,"4":0.75,"5":1.0,"6":1.0}},"opening_bs":{"cash":70610000.0,"ar":1040000.0,"other_assets":6000000.0,"ap":520000.0,"dr":1120000.0,"other_liab":2500000.0,"equity":49228800.0},"cost_ratios":{"cogs":0.29,"sm":0.34,"rd":0.16,"ga":0.11},"pipeline_book":{"2024-01":{"begin":2815340.92,"created":2550210.81,"won":1030076.54,"lost":1497880.16,"slipped":359491.24,"end":2478103.79},"2024-02":{"begin":2478103.79,"created":3218358.44,"won":928079.14,"lost":1285013.95,"slipped":308403.34,"end":3174965.8},"2024-03":{"begin":3174965.8,"created":2495565.28,"won":1147492.22,"lost":1704405.21,"slipped":409057.25,"end":2409576.4},"2024-04":{"begin":2409576.4,"created":2637180.2,"won":899206.85,"lost":1255328.01,"slipped":301278.72,"end":2590943.02},"2024-05":{"begin":2590943.02,"created":3744866.23,"won":957067.02,"lost":1357142.72,"slipped":325714.25,"end":3695885.26},"2024-06":{"begin":3695885.26,"created":3212148.36,"won":1330647.42,"lost":1997069.31,"slipped":479296.63,"end":3101020.26},"2024-07":{"begin":3101020.26,"created":3009050.61,"won":1135046.21,"lost":1643842.45,"slipped":394522.18,"end":2936660.03},"2024-08":{"begin":2936660.03,"created":3294021.76,"won":1075847.11,"lost":1552179.11,"slipped":372522.98,"end":3230132.59},"2024-09":{"begin":3230132.59,"created":3006679.63,"won":1180910.93,"lost":1713315.47,"slipped":411195.71,"end":2931390.11},"2024-10":{"begin":2931390.11,"created":4135297.7,"won":1083664.91,"lost":1542572.3,"slipped":370217.35,"end":4070233.25},"2024-11":{"begin":4070233.25,"created":4308323.58,"won":1466498.36,"lost":2195305.9,"slipped":526873.42,"end":4189879.15},"2024-12":{"begin":4189879.15,"created":2946518.31,"won":1498947.8,"lost":2284560.58,"slipped":548294.53,"end":2804594.55},"2025-01":{"begin":2804594.55,"created":3392373.32,"won":1045525.7,"lost":1462819.65,"slipped":351076.72,"end":3337545.8},"2025-02":{"begin":3337545.8,"created":3832967.47,"won":1223432.19,"lost":1762759.99,"slipped":423062.39,"end":3761258.7},"2025-03":{"begin":3761258.7,"created":3197831.34,"won":1362177.47,"lost":2020032.09,"slipped":484807.7,"end":3092072.78},"2025-04":{"begin":3092072.78,"created":3411718.72,"won":1138443.17,"lost":1633681.55,"slipped":392083.56,"end":3339583.22},"2025-05":{"begin":3339583.22,"created":4137248.05,"won":1229325.28,"lost":1759399.45,"slipped":422255.86,"end":4065850.68},"2025-06":{"begin":4065850.68,"created":3914717.05,"won":1483733.03,"lost":2172344.19,"slipped":521362.62,"end":3803127.89},"2025-07":{"begin":3803127.89,"created":3651918.48,"won":1382905.22,"lost":2038856.05,"slipped":489325.45,"end":3543959.65},"2025-08":{"begin":3543959.65,"created":4210099.68,"won":1302303.3,"lost":1877738.07,"slipped":450657.13,"end":4123360.83},"2025-09":{"begin":4123360.83,"created":3746819.09,"won":1491993.41,"lost":2215159.72,"slipped":531638.34,"end":3631388.45},"2025-10":{"begin":3631388.45,"created":4534279.96,"won":1326334.29,"lost":1928492.99,"slipped":462838.32,"end":4448002.81},"2025-11":{"begin":4448002.81,"created":4134908.59,"won":1619328.17,"lost":2381390.5,"slipped":571533.72,"end":4010659.01},"2025-12":{"begin":4010659.01,"created":5345890.42,"won":1467327.32,"lost":2123566.21,"slipped":509655.89,"end":5256000.01},"2026-01":{"begin":5256000.01,"created":6030585.7,"won":1910000.0,"lost":2818214.29,"slipped":676371.43,"end":5881999.99},"2026-02":{"begin":5881999.99,"created":6651635.72,"won":2135000.0,"lost":3156964.29,"slipped":757671.43,"end":6483999.99},"2026-03":{"begin":6483999.99,"created":7297842.87,"won":2350000.0,"lost":3485357.14,"slipped":836485.71,"end":7110000.01},"2026-04":{"begin":7110000.01,"created":7918892.85,"won":2575000.0,"lost":3824107.14,"slipped":917785.71,"end":7712000.01},"2026-05":{"begin":7712000.01,"created":7596106.3,"won":2790000.0,"lost":4152500.0,"slipped":996600.0,"end":7369006.31},"2026-06":{"begin":7369006.31,"created":7601999.71,"won":2696829.43,"lost":3955782.48,"slipped":949387.8,"end":7369006.31},"2026-07":{"created":3583444.14,"lost":995401.15,"slipped":398160.46},"2026-08":{"created":2900019.18,"lost":805560.89,"slipped":322224.35},"2026-09":{"created":3193904.73,"lost":887195.76,"slipped":354878.3},"2026-10":{"created":3033673.88,"lost":842687.19,"slipped":337074.87},"2026-11":{"created":2750026.86,"lost":763896.35,"slipped":305558.54},"2026-12":{"created":3832305.41,"lost":1064529.28,"slipped":425811.72}},"implementation_fees":{"Enterprise":5000.0,"Mid-Market":3500.0,"SMB":2000.0}};
@@ -673,12 +679,62 @@ function actualCfsFromSrc(p){
   };
 }
 
+/**
+ * Plan changes vs the loaded Forecast for a forecast month. Zero at data defaults.
+ *  - Revenue tab: recurring services (subscription × %) and implementation (new logos × fee).
+ *    Added revenue carries the COGS % lever; billed at month end, collected next month (Net 30).
+ *  - P&L by team: headcount plan changes and edited GL account cells (incl. GTM program spend edits)
+ *    (computeFcDeptPlPeriod delta vs GL). Opex changes are paid in the month.
+ */
+function fcPlanOverlay(p){
+  if(!isForecastPeriod(p)) return null;
+  var w=getOutlookIS(p);
+  if(!w) return null;
+  var dRsvc=fcRowSub(w)*fcRecSvcPct(p)-fcRowRecSvc(w);
+  var dImpl=fcImplRevenue(p)-fcRowImpl(w);
+  if(Math.abs(dRsvc)<0.5) dRsvc=0;
+  if(Math.abs(dImpl)<0.5) dImpl=0;
+  var d=computeFcDeptPlPeriod(p).delta;
+  if(!dRsvc&&!dImpl&&['sm','rd','ga','unmapped'].every(function(k){ return Math.abs(d[k])<0.5; })) return null;
+  var dOpex=d.sm+d.rd+d.ga+d.unmapped;
+  var dRev=dRsvc+dImpl;
+  var dCogs=dRev*getLevers().cogs;
+  return {dRsvc:dRsvc,dImpl:dImpl,dRev:dRev,dCogs:dCogs,dGp:dRev-dCogs,
+          dSm:d.sm,dRd:d.rd,dGa:d.ga,dUnmapped:d.unmapped,dOpex:dOpex,dNi:dRev-dCogs-dOpex};
+}
+
+function fcApplyPlanOverlayIS(is,p){
+  var o=fcPlanOverlay(p);
+  if(!o) return is;
+  var out=Object.assign({},is);
+  var add=function(k,d){ if(out[k]!=null) out[k]=Number(out[k])+d; };
+  if(o.dRsvc||o.dImpl){
+    out.rec_svc_rev=fcRowRecSvc(is)+o.dRsvc;
+    out.impl_rev=fcRowImpl(is)+o.dImpl;
+    out.svc_rev=out.rec_svc_rev+out.impl_rev;
+  }
+  add('revenue',o.dRev);
+  add('cogs',o.dCogs);
+  add('gross_profit',o.dGp);
+  add('sm',o.dSm);
+  add('rd',o.dRd);
+  add('ga',o.dGa);
+  if(o.dUnmapped) out.unmapped=(Number(out.unmapped)||0)+o.dUnmapped;
+  add('total_opex',o.dOpex);
+  ['ebitda','net_income','ni'].forEach(function(k){ add(k,o.dNi); });
+  // Loaded Forecast rows can carry 0 for operating / pretax income (not populated); leave those at 0.
+  ['op_income','pretax'].forEach(function(k){ if(Number(out[k])) add(k,o.dNi); });
+  if(out.gm_pct!=null&&out.revenue) out.gm_pct=out.gross_profit/out.revenue;
+  out._planOverlay=o;
+  return out;
+}
+
 /** Lever-aware display: warehouse actuals + client compute for open forecast months. */
 function getDisplayIS(p){
   // Prefer warehouse IS (Board / prior forecast SoT) when present — same spine as CFS.
   var cfs=getDisplayCFS(p);
   var wh=getOutlookIS(p);
-  if(wh) return tieIsNiToCfs(enrichForecastIS(wh),cfs);
+  if(wh) return tieIsNiToCfs(enrichForecastIS(fcApplyPlanOverlayIS(wh,p)),cfs);
   if(isForecastPeriod(p)){
     var r=getResults()[p];
     if(!(r&&r.is)) return null;
@@ -693,7 +749,19 @@ function getDisplayBS(p){
   // Prefer warehouse BS whenever present — statement DR / equity / PPE (Board parity).
   // Cash is still overwritten by CFS via tieBsCashToCfs.
   var wh=getOutlookBS(p);
-  if(wh) return tieBsCashToCfs(enrichForecastBS(wh,cfs),cfs);
+  if(wh){
+    // Plan overlay: receivable up by this month's added revenue; the cash line comes from the CFS,
+    // so totals and equity also take the overlay cash (equity moves by cumulative added NI).
+    var o=fcPreferWarehouseCfs()?fcPlanOverlay(p):null;
+    var dCash=(cfs&&cfs._ovCash)||0;
+    if(o||dCash){
+      var dAr=o?o.dRev:0;
+      wh=Object.assign({},wh);
+      if(wh.ar!=null) wh.ar=Number(wh.ar)+dAr;
+      ['total_assets','equity','total_le'].forEach(function(k){ if(wh[k]!=null) wh[k]=Number(wh[k])+dAr+dCash; });
+    }
+    return tieBsCashToCfs(enrichForecastBS(wh,cfs),cfs);
+  }
   if(isForecastPeriod(p)){
     var r=getResults()[p];
     if(!(r&&r.bs)) return null;
@@ -705,7 +773,8 @@ function getDisplayBS(p){
 var _cfsChainCache=null;
 var _scenarioDirty=false;
 function invalidateCfsChain(){_cfsChainCache=null;}
-function markScenarioDirty(){_scenarioDirty=true;_resultsCache=null;invalidateCfsChain();}
+var _fcPlCache=null;
+function markScenarioDirty(){_scenarioDirty=true;_resultsCache=null;_fcPlCache=null;invalidateCfsChain();}
 
 function getCfsChain(){
   if(_cfsChainCache) return _cfsChainCache;
@@ -814,7 +883,7 @@ function buildStmtTable(allP, cfg, rows, getPeriodData, options) {
       const fyColorCls = stmtColorCls(r, fyVal, colorMode);
       fyCell = `<td class="fc-col ${fyColorCls}">${fyFmt}</td>`;
     }
-    return `<tr class="${cls}"><td>${r.lbl}</td>${vals}${fyCell}</tr>`;
+    return `<tr class="${cls}"${r.id ? ` id="${r.id}"` : ''}><td>${r.lbl}${r.tag || ''}</td>${vals}${fyCell}</tr>`;
   }).join('');
   return `<div style="overflow-x:auto"><table class="ts-tbl" style="min-width:${tableMinW}px">${colgroup}<thead><tr><th class="act-col line-h" aria-hidden="true"></th>${stmtColHdrs(allP, cfg)}${fyHdr}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -964,9 +1033,47 @@ function fcRowSub(r) {
   return (Number(r.revenue) || 0) - fcRowImpl(r) - fcRowRecSvc(r);
 }
 
-/** Recurring services for a forecast month: the Forecast data line as loaded (no engine driver). */
-function fcRecurringServicesRevenue(p) {
-  return fcRowRecSvc(getOutlookIS(p));
+/** Recurring services % of subscription edits by forecast month; a month without an edit inherits the latest earlier edit. */
+let fcRecSvcPctEdits = {};
+
+/** Actual months: recurring services ÷ subscription from the loaded statements. */
+function fcRecSvcActualPct() {
+  let rec = 0, sub = 0;
+  ALL_P.filter(p => p <= getCloseMonth()).forEach(p => {
+    const r = fcActualIsRow(p);
+    rec += fcRowRecSvc(r);
+    sub += fcRowSub(r);
+  });
+  return sub ? rec / sub : 0;
+}
+
+/** Latest edit at or before p in a { period: value } map, else null. */
+function fcLatestEdit(edits, p) {
+  const ks = Object.keys(edits || {}).filter(k => k <= p).sort();
+  return ks.length ? edits[ks[ks.length - 1]] : null;
+}
+
+function fcRecSvcPct(p) {
+  const e = fcLatestEdit(fcRecSvcPctEdits, p);
+  return e != null ? e : fcRecSvcActualPct();
+}
+
+/** Recurring services for a forecast month: subscription revenue × recurring services % of subscription. */
+function fcRecurringServicesRevenue(p, sub) {
+  return (Number(sub) || 0) * fcRecSvcPct(p);
+}
+
+function updateFcRecSvcPct(p, raw) {
+  const n = Number(raw);
+  if (raw === '' || isNaN(n)) delete fcRecSvcPctEdits[p];
+  else fcRecSvcPctEdits[p] = Math.max(0, Math.min(100, n)) / 100;
+  markScenarioDirty();
+  refresh();
+}
+function resetFcRecSvcPct() {
+  fcRecSvcPctEdits = {};
+  markScenarioDirty();
+  refresh();
 }
 
 const FC_IMPL_SEGMENT_ORDER = ['SMB', 'Mid-Market', 'Enterprise'];
@@ -1021,12 +1128,10 @@ function fcImplDataFee(seg) {
   const fees = SRC.implementation_fees || {};
   return fees[seg] != null ? Number(fees[seg]) || 0 : fcImplActualAvgFee();
 }
-function fcImplFeeSource(seg) {
-  if (fcImplFeeEdits[seg] != null) return `Edited · data ${fM(fcImplDataFee(seg), 0)}`;
-  return (SRC.implementation_fees || {})[seg] != null ? 'Implementation schedule' : 'Average from actuals';
-}
-function fcImplFee(seg) {
-  return fcImplFeeEdits[seg] != null ? fcImplFeeEdits[seg] : fcImplDataFee(seg);
+/** Forecast fee for a month: the latest edit at or before p, else the data fee. */
+function fcImplFee(seg, p) {
+  const e = fcLatestEdit(fcImplFeeEdits[seg], p);
+  return e != null ? e : fcImplDataFee(seg);
 }
 
 /** Implementation by segment for a month: new logos × fee (actual months keep the data fee). */
@@ -1035,7 +1140,7 @@ function fcImplBySegment(p) {
   if (!logos) return null;
   const actual = p <= getCloseMonth();
   const out = {};
-  Object.keys(logos).forEach(seg => { out[seg] = logos[seg] * (actual ? fcImplDataFee(seg) : fcImplFee(seg)); });
+  Object.keys(logos).forEach(seg => { out[seg] = logos[seg] * (actual ? fcImplDataFee(seg) : fcImplFee(seg, p)); });
   return out;
 }
 
@@ -1053,10 +1158,13 @@ function fcImplForecastTotal() {
   return FC_P.reduce((s, p) => s + fcImplRevenue(p), 0);
 }
 
-function updateFcImplFee(seg, raw) {
+/** Sets the fee from forecast month p onward (later months inherit it until their own edit). */
+function updateFcImplFee(seg, p, raw) {
   const n = Number(raw);
-  if (raw === '' || isNaN(n) || Math.abs(n - fcImplDataFee(seg)) < 0.5) delete fcImplFeeEdits[seg];
-  else fcImplFeeEdits[seg] = Math.max(0, Math.round(n));
+  const edits = fcImplFeeEdits[seg] || (fcImplFeeEdits[seg] = {});
+  if (raw === '' || isNaN(n)) delete edits[p];
+  else edits[p] = Math.max(0, Math.round(n));
+  if (!Object.keys(edits).length) delete fcImplFeeEdits[seg];
   markScenarioDirty();
   refresh();
 }
@@ -1064,23 +1172,6 @@ function resetFcImplFees() {
   fcImplFeeEdits = {};
   markScenarioDirty();
   refresh();
-}
-
-function buildRevenueSidebarHtml() {
-  const segs = fcImplSegments();
-  const fees = segs.map(seg => `
-    <div class="lever">
-      <div class="lever-row"><span class="lever-lbl">${seg}</span><span class="lever-val">${'$' + Math.round(fcImplFee(seg)).toLocaleString()}</span></div>
-      <input class="hc-attr-pct" style="width:90px" type="number" min="0" step="250" value="${Math.round(fcImplFee(seg))}"
-        onchange="updateFcImplFee('${seg}',this.value)" aria-label="${seg} implementation fee">
-      <div class="lever-hint">${fcImplFeeSource(seg)}</div>
-    </div>`).join('');
-  const edited = Object.keys(fcImplFeeEdits).length;
-  return `
-    <div class="lever-section">Implementation fee per new logo</div>
-    ${fees || '<div class="lever-hint">No new-business deals loaded</div>'}
-    ${edited ? '<button class="hz-tab" style="margin-top:6px" onclick="resetFcImplFees()">Reset to data fees</button>' : ''}
-    <div class="lever-hint" style="margin-top:8px">Forecast months: expected new logos (win probability × New business attainment) × fee. Billed at signing, collected Net 30.</div>`;
 }
 function fcCostAtDefault() {
   return fcCostState.cogs === 29 && fcCostState.sm === 34 && fcCostState.rd === 16 && fcCostState.ga === 11;
@@ -1151,7 +1242,6 @@ function syncLeverSidebar(tab) {
   if (!sb) return;
   let html = '';
   if (tab === 'pipeline') html = buildArrSidebarHtml();
-  else if (tab === 'revenue') html = buildRevenueSidebarHtml();
   else if (tab === 'pnl') html = buildCostSidebarHtml();
   else if (tab === 'cashflow') html = buildWcSidebarHtml();
   if (!html) {
@@ -1241,27 +1331,28 @@ function computePeriod(p, bop_arr, prev_cash, prev_ar, prev_ap, prev_dr, prev_eq
       else req_ga+=mo;
     });
     const sub_rev=arr.arr_eop/12;
-    const rec_svc_rev=fcRecurringServicesRevenue(p);
+    const rec_svc_rev=fcRecurringServicesRevenue(p,sub_rev);
     const impl_rev=fcImplRevenue(p);
     const svc_rev=rec_svc_rev+impl_rev;
     const revenue=sub_rev+svc_rev;
     const cogs=revenue*lv.cogs;
-    let sm,rd,ga;
+    let sm,rd,ga,unmapped=0;
     if(typeof resolveFcPlOpex==='function'){
-      const plx=resolveFcPlOpex(p,revenue,lv);
-      sm=plx.sm; rd=plx.rd; ga=plx.ga;
+      const plx=resolveFcPlOpex(p);
+      sm=plx.sm; rd=plx.rd; ga=plx.ga; unmapped=plx.unmapped;
     } else {
       sm=revenue*lv.sm+req_sm;
       rd=revenue*lv.rd+req_rd;
       ga=revenue*lv.ga+req_ga;
     }
     const gross_profit=revenue-cogs;
-    const total_opex=sm+rd+ga;
+    const total_opex=sm+rd+ga+unmapped;
     const ebitda=gross_profit-total_opex;
     const da=125000+FC_P.indexOf(p)*4000;
     const interest=35000;
     const net_income=ebitda-da-interest;
     is={revenue,sub_rev,rec_svc_rev,impl_rev,svc_rev,cogs,gross_profit,sm,rd,ga,total_opex,ebitda,da,interest,net_income,is_actual:false};
+    if(unmapped) is.unmapped=unmapped;
   }
 
   // \u2500\u2500 Cash Flow Statement \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -1402,6 +1493,7 @@ function buildCFSChain(cfg, resOverride){
   var chain={};
   var prev_end=null;
   var preferWh = fcPreferWarehouseCfs();
+  var ovCash=0, ovPrevRev=0;
   allP.forEach(function(p){
     if(p<=getCloseMonth()){
       var whRow=cfsFromWarehouse(p);
@@ -1436,13 +1528,26 @@ function buildCFSChain(cfg, resOverride){
         var whFc=cfsFromWarehouse(p);
         if(whFc && whFc.end_cash!=null){
           var begW=prev_end!=null?prev_end:(whFc.beg_cash!=null?whFc.beg_cash:null);
-          var endW=whFc.end_cash;
           var rowW={};
           for(var kw in whFc) rowW[kw]=whFc[kw];
+          var ov=fcPlanOverlay(p);
+          var ovRev=ov?ov.dRev:0;
+          if(ov||ovPrevRev){
+            // Added revenue: NI now, receivable collected next month.
+            var ovNi=ov?ov.dNi:0;
+            var ovCfo=ovNi-ovRev+ovPrevRev;
+            rowW.ni=(Number(rowW.ni)||0)+ovNi;
+            rowW.chg_ar=(Number(rowW.chg_ar)||0)-(ovRev-ovPrevRev);
+            rowW.cfo=(Number(rowW.cfo)||0)+ovCfo;
+            ovCash+=ovCfo;
+          }
+          ovPrevRev=ovRev;
+          var endW=whFc.end_cash+ovCash;
           if(begW!=null){ rowW.beg_cash=begW; rowW.net_change=endW-begW; }
           rowW.end_cash=endW;
           rowW.is_actual=false;
           rowW._src='warehouse';
+          if(ovCash) rowW._ovCash=ovCash;
           chain[p]=rowW;
           prev_end=endW;
           return;
@@ -1497,6 +1602,31 @@ function refresh(opts){
 }
 
 // \u2500\u2500 TABS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+/** Open a tab and scroll to (and briefly highlight) the row with id opts.scrollTo. */
+function goToOrigin(tab, opts){
+  opts=opts||{};
+  if(opts.plDept!=null && typeof fcPlDept!=='undefined') fcPlDept=opts.plDept;
+  showTab(tab,document.querySelector(`.nav-btn[onclick*="showTab('${tab}'"]`));
+  const area=document.getElementById('slideArea');
+  requestAnimationFrame(()=>{
+    const el=opts.scrollTo?document.getElementById(opts.scrollTo):null;
+    if(!el){ if(area) area.scrollTop=0; return; }
+    el.scrollIntoView({behavior:'smooth',block:'center'});
+    if(el.tagName==='TR'){ el.classList.remove('row-flash'); void el.offsetWidth; el.classList.add('row-flash'); }
+  });
+}
+
+/** Clickable link chip, e.g. originTag('IS', 'is', { scrollTo: 'is-row-sub' }). */
+function originTag(label, tab, opts){
+  opts=opts||{};
+  const o=[];
+  if(opts.scrollTo!=null) o.push(`scrollTo:'${opts.scrollTo}'`);
+  if(opts.plDept!=null) o.push(`plDept:'${opts.plDept}'`);
+  const arg=o.length?`,{${o.join(',')}}`:'';
+  const title=(opts.title||('Open '+tab)).replace(/"/g,'&quot;');
+  return `<button type="button" class="lock-tag lock-link" title="${title}" onclick="event.stopPropagation();goToOrigin('${tab}'${arg})">${label}</button>`;
+}
+
 function showTab(name,btn,opts){
   opts=opts||{};
   destroyAll();
@@ -5557,14 +5687,17 @@ function renderARR(area){
 }
 
 
-// ── P&L (management dept books → IS S&M / R&D / G&A) ─────────────────────────
-// Comp from HC heads × loaded rates (wages, benefits, bonus, severance, OTE).
-// Discretionary flats editable in forecast months. Marketing program $ is a
-// single rollup from GTM (channel mix lives on the GTM tab).
+// ── P&L by team (GL detail → IS S&M / R&D / G&A) ─────────────────────────────
+// Every month starts from the GL: opex by team and account for Actual (through close) and the
+// loaded Forecast (after close). In forecast months, headcount plan changes add visible adjustment
+// lines, and edited account cells (here, or program spend on GTM / Pipeline) replace the GL amount.
+// The same totals feed the Income Statement, so S&M / R&D / G&A are one number on every tab.
 
 let fcPlDept = 'total';
-let fcPlSpend = null; // { deptKey: { lineKey: { period: dollars } } }
+let fcPlSpend = null; // { "line|department|account": { period: dollars } } — forecast account edits
 
+// Assumed loaded cost per head. Prices headcount plan changes only (zero at data defaults)
+// until head counts and comp come from the HRIS.
 const FC_PL_AVG_ANNUAL = {
   sales: 145000, cs: 120000, marketing: 125000, rd: 165000, ga: 120000,
 };
@@ -5578,167 +5711,43 @@ const FC_PL_K401_PCT = 0.04;
 const FC_PL_NB_OTE = 72000;
 const FC_PL_CS_OTE = 72000;
 
-const FC_PL_DEPTS = [
-  {
-    key: 'sales', label: 'Sales', isLine: 'sm', isLabel: 'S&M',
-    sections: [
-      {
-        key: 'nb', label: 'Sales - New Business', hcKey: 'sales',
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-          { k: 'commissions', label: 'Commissions (variable OTE)', from: 'ote_nb' },
-          { k: 'te_airfare', label: 'T&E — Airfare', from: 'flat', flatMonthly: 12000 },
-          { k: 'te_lodging', label: 'T&E — Lodging', from: 'flat', flatMonthly: 10000 },
-          { k: 'te_meals', label: 'T&E — Meals & entertainment', from: 'flat', flatMonthly: 7500 },
-          { k: 'te_field', label: 'T&E — Field / customer visits', from: 'flat', flatMonthly: 7500 },
-          { k: 'crm', label: 'CRM & sales tools', from: 'flat', flatMonthly: 18000 },
-        ],
-      },
-      {
-        key: 'cs', label: 'Sales - Customer Success', hcKey: 'cs',
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-          { k: 'variable', label: 'Expansion / retention incentive (OTE)', from: 'ote_cs' },
-          { k: 'tools', label: 'CS platform & tools', from: 'flat', flatMonthly: 9000 },
-          { k: 'programs', label: 'Customer programs', from: 'flat', flatMonthly: 5000 },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'marketing', label: 'Marketing', isLine: 'sm', isLabel: 'S&M',
-    sections: [{
-      key: 'mkt', label: 'Marketing', hcKey: 'marketing',
-      lines: [
-        { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-        { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-        { k: 'bonus', label: 'Bonus', from: 'hc_bonus' },
-        { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
-        { k: 'program', label: 'Program spend (from GTM)', from: 'gtm_program' },
-        { k: 'software', label: 'Martech & agencies', from: 'flat', flatMonthly: 22000 },
-      ],
-    }],
-  },
-  {
-    key: 'rd', label: 'R&D', isLine: 'rd', isLabel: 'R&D',
-    sections: [{
-      key: 'rd', label: 'R&D / Product', hcKey: 'rd',
-      lines: [
-        { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
-        { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-        { k: 'bonus', label: 'Bonus', from: 'hc_bonus' },
-        { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
-        { k: 'compute', label: 'Compute / non-prod cloud', from: 'flat', flatMonthly: 45000 },
-        { k: 'tools', label: 'Dev tools (GitHub, Jira…)', from: 'flat', flatMonthly: 12000 },
-        { k: 'contractors', label: 'Contractors & specialists', from: 'flat', flatMonthly: 25000 },
-        { k: 'product_sw', label: 'Product software & data', from: 'flat', flatMonthly: 10000 },
-      ],
-    }],
-  },
-  {
-    key: 'ga', label: 'G&A', isLine: 'ga', isLabel: 'G&A',
-    sections: [
-      {
-        key: 'exec', label: 'Executive', hcKey: 'ga', payShare: 0.22,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-        ],
-      },
-      {
-        key: 'finance', label: 'Finance', hcKey: 'ga', payShare: 0.25,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'consulting', label: 'FP&A / advisory', from: 'flat', flatMonthly: 8000 },
-        ],
-      },
-      {
-        key: 'accounting', label: 'Accounting', hcKey: 'ga', payShare: 0.18,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'audit', label: 'External audit & tax', from: 'flat', flatMonthly: 15000 },
-        ],
-      },
-      {
-        key: 'legal', label: 'Legal', hcKey: 'ga', payShare: 0.08,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'legal_fees', label: 'Outside counsel & filings', from: 'flat', flatMonthly: 12000 },
-        ],
-      },
-      {
-        key: 'hr', label: 'People / HR', hcKey: 'ga', payShare: 0.12,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'severance', label: 'Severance / RIF', from: 'hc_severance' },
-          { k: 'recruiting', label: 'Recruiting / ATS', from: 'flat', flatMonthly: 6000 },
-        ],
-      },
-      {
-        key: 'facilities', label: 'Facilities & overhead', hcKey: 'ga', payShare: 0,
-        lines: [
-          { k: 'rent', label: 'Rent & utilities', from: 'flat', flatMonthly: 28000 },
-          { k: 'office', label: 'Office operations', from: 'flat', flatMonthly: 6000 },
-          { k: 'insurance', label: 'D&O / corporate insurance', from: 'flat', flatMonthly: 9000 },
-        ],
-      },
-      {
-        key: 'admin_it', label: 'Internal software & IT', hcKey: 'ga', payShare: 0.15,
-        lines: [
-          { k: 'wages', label: 'Salaries & wages', from: 'hc_wages_share' },
-          { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits_share' },
-          { k: 'bonus', label: 'Bonus', from: 'hc_bonus_share' },
-          { k: 'erp', label: 'Finance / ERP (NetSuite…)', from: 'flat', flatMonthly: 10000 },
-          { k: 'hris', label: 'HRIS / payroll systems', from: 'flat', flatMonthly: 5000 },
-          { k: 'collab', label: 'Corp collab (Slack, M365…)', from: 'flat', flatMonthly: 6000 },
-        ],
-      },
-    ],
-  },
+const FC_PL_LINES = [
+  { key: 'sm', label: 'Sales &amp; Marketing', short: 'S&amp;M' },
+  { key: 'rd', label: 'Research &amp; Development', short: 'R&amp;D' },
+  { key: 'ga', label: 'General &amp; Administrative', short: 'G&amp;A' },
+  { key: 'unmapped', label: 'Unmapped opex', short: 'Unmapped' },
 ];
+const FC_PL_HC_LINE = { sales: 'sm', cs: 'sm', marketing: 'sm', rd: 'rd', ga: 'ga' };
 
 function ensureFcPlState() {
   if (!fcPlSpend) fcPlSpend = {};
-  FC_PL_DEPTS.forEach(d => {
-    if (!fcPlSpend[d.key]) fcPlSpend[d.key] = {};
-    d.sections.forEach(sec => {
-      sec.lines.forEach(line => {
-        if (line.from === 'flat' && !fcPlSpend[d.key][line.k]) fcPlSpend[d.key][line.k] = {};
-      });
-    });
-  });
 }
 
-function fcPlFlatAmt(deptKey, lineKey, period, flatMonthly) {
-  ensureFcPlState();
-  const row = (fcPlSpend[deptKey] && fcPlSpend[deptKey][lineKey]) || {};
-  if (row[period] != null && !isNaN(Number(row[period]))) return Math.max(0, Number(row[period]));
-  return Math.max(0, Number(flatMonthly) || 0);
-}
-
-function fcPlGtmProgram(period) {
-  if (typeof ensureFcGtmState === 'function' && typeof fcGtmAllocate === 'function') {
-    ensureFcGtmState();
-    return Math.max(0, Number(fcGtmAllocate(period).spendTot) || 0);
-  }
-  return 0;
+function fcPlSplitKey(key) {
+  const parts = String(key).split('|');
+  return { line: parts[0], team: parts[1] || 'Unassigned', account: parts.slice(2).join('|') || 'Unassigned' };
 }
 
 /**
- * HC cost layer on top of headcount plan — wages / benefits / bonus / severance / OTE.
- * Uses avg loaded rates (Budget-aligned) until roster-level comp is wired.
+ * GL opex detail for a month: { "line|department|account": amount }.
+ * source 'gl' = account detail; 'is' = statement line totals only (detail not loaded); null = no data.
  */
+function fcGlOpexBase(period) {
+  const SO = window.SMPLOutlook;
+  const detail = SO && typeof SO.getWarehouseGlOpex === 'function'
+    ? SO.getWarehouseGlOpex(period, getCloseMonth()) : null;
+  if (detail && Object.keys(detail).length) return { detail, source: 'gl' };
+  const is = getOutlookIS(period);
+  if (!is) return { detail: {}, source: null };
+  const out = {};
+  FC_PL_LINES.forEach(l => {
+    const v = Number(is[l.key]) || 0;
+    if (v) out[`${l.key}|All teams|Statement total (account detail not loaded)`] = v;
+  });
+  return { detail: out, source: 'is' };
+}
+
+/** Heads × assumed loaded rates per HC dept (wages, benefits, bonus, OTE, severance). */
 function computeFcHcComp() {
   if (typeof computeFcHcPlan !== 'function') return null;
   const plan = computeFcHcPlan();
@@ -5779,96 +5788,96 @@ function computeFcHcComp() {
   return plan;
 }
 
-function fcPlLineAmt(spec, sec, line, period, hcRow) {
-  const hcKey = sec.hcKey;
-  const h = hcRow || {};
-  const share = (sec.payShare != null && sec.payShare > 0)
-    ? sec.payShare
-    : (sec.payShare === 0 ? 0 : 1);
-  if (line.from === 'hc_wages') return Number(h.wages && h.wages[hcKey]) || 0;
-  if (line.from === 'hc_benefits') return Number(h.employeeBenefits && h.employeeBenefits[hcKey]) || 0;
-  if (line.from === 'hc_bonus') return Number(h.bonusAccrual && h.bonusAccrual[hcKey]) || 0;
-  if (line.from === 'hc_severance') return Number(h.severance && h.severance[hcKey]) || 0;
-  if (line.from === 'hc_wages_share') return (Number(h.wages && h.wages[hcKey]) || 0) * share;
-  if (line.from === 'hc_benefits_share') return (Number(h.employeeBenefits && h.employeeBenefits[hcKey]) || 0) * share;
-  if (line.from === 'hc_bonus_share') return (Number(h.bonusAccrual && h.bonusAccrual[hcKey]) || 0) * share;
-  if (line.from === 'hc_severance_share') return (Number(h.severance && h.severance[hcKey]) || 0) * share;
-  if (line.from === 'ote_nb') return Number(h.ote && h.ote.sales) || 0;
-  if (line.from === 'ote_cs') return Number(h.ote && h.ote.cs) || 0;
-  if (line.from === 'gtm_program') return fcPlGtmProgram(period);
-  if (line.from === 'flat') return fcPlFlatAmt(spec.key, line.k, period, line.flatMonthly);
-  return 0;
+/** Headcount plan at data defaults: seeded hires, no RIFs / attrition / freezes, all open reqs on. */
+function computeFcHcCompBaseline() {
+  const saved = fcHcState;
+  const savedReqs = {};
+  (SRC.open_reqs || []).forEach(r => { savedReqs[r.id] = reqActive[r.id]; reqActive[r.id] = true; });
+  fcHcState = {
+    focus: saved.focus, hires: null, rifs: [], attritionPct: null,
+    freeze: { marketing: false, rd: false, ga: false }, seededFrom: null,
+  };
+  try {
+    return computeFcHcComp();
+  } finally {
+    fcHcState = saved;
+    Object.keys(savedReqs).forEach(id => { reqActive[id] = savedReqs[id]; });
+  }
 }
 
-function computeFcDeptPlPeriod(period, opts) {
-  opts = opts || {};
-  const close = getCloseMonth();
-  const isAct = period <= close;
-  let revenue = opts.revenue;
-  if (isAct && SRC.actuals && SRC.actuals[period]) {
-    revenue = SRC.actuals[period].revenue;
-  } else if (revenue == null) {
-    const arr = (typeof getForecastARR === 'function') ? getForecastARR(period) : null;
-    const sub = arr && arr.arr_eop != null ? arr.arr_eop / 12 : 0;
-    revenue = sub * 1.033;
-  }
+function fcPlCache() {
+  if (!_fcPlCache) _fcPlCache = { periods: {}, hc: null, gtmChannels: null };
+  return _fcPlCache;
+}
 
-  const hcPlan = computeFcHcComp();
-  const hcRow = hcPlan && hcPlan[period] ? hcPlan[period] : {
-    wages: {}, employeeBenefits: {}, bonusAccrual: {}, severance: {}, ote: {},
-  };
+/** Cost of headcount plan changes per HC dept for a forecast month (current plan − default plan). */
+function fcPlHcDelta(period) {
+  const cache = fcPlCache();
+  if (!cache.hc) cache.hc = { cur: computeFcHcComp(), base: computeFcHcCompBaseline() };
+  const c = cache.hc.cur && cache.hc.cur[period];
+  const b = cache.hc.base && cache.hc.base[period];
+  const out = {};
+  if (!c || !b || !c.payroll || !b.payroll) return out;
+  const cost = (r, k) => (Number(r.payroll[k]) || 0) + (Number(r.severance && r.severance[k]) || 0);
+  FC_HC_DEPTS.forEach(d => { out[d.key] = cost(c, d.key) - cost(b, d.key); });
+  return out;
+}
 
-  const depts = {};
-  let sm = 0, rd = 0, ga = 0;
-  let salesPl = 0, mktPl = 0, salesNb = 0, salesCs = 0;
+/**
+ * Opex for one month by P&L line → team → account, from the GL. Forecast months apply account
+ * edits and add adjustment lines for plan changes. delta = change vs the GL (zero at defaults).
+ */
+function computeFcDeptPlPeriod(period) {
+  const cache = fcPlCache();
+  if (cache.periods[period]) return cache.periods[period];
+  ensureFcPlState();
+  const isAct = period <= getCloseMonth();
+  const base = fcGlOpexBase(period);
+  const lines = {};
+  FC_PL_LINES.forEach(l => { lines[l.key] = { teams: {}, adj: [], glTotal: 0, total: 0 }; });
+  const delta = { sm: 0, rd: 0, ga: 0, unmapped: 0 };
 
-  FC_PL_DEPTS.forEach(spec => {
-    const sections = {};
-    let total = 0;
-    const linesAgg = {};
-    spec.sections.forEach(sec => {
-      const secLines = {};
-      let secTot = 0;
-      sec.lines.forEach(line => {
-        const amt = fcPlLineAmt(spec, sec, line, period, hcRow);
-        secLines[line.k] = amt;
-        linesAgg[line.k] = (linesAgg[line.k] || 0) + amt;
-        secTot += amt;
-        total += amt;
-      });
-      sections[sec.key] = { label: sec.label, total: secTot, lines: secLines };
-      if (sec.key === 'nb') salesNb = secTot;
-      if (sec.key === 'cs') salesCs = secTot;
-    });
-    depts[spec.key] = { total, lines: linesAgg, sections };
-    if (spec.isLine === 'sm') sm += total;
-    else if (spec.isLine === 'rd') rd += total;
-    else if (spec.isLine === 'ga') ga += total;
-    if (spec.key === 'sales') salesPl = total;
-    if (spec.key === 'marketing') mktPl = total;
+  Object.keys(base.detail).forEach(key => {
+    const k = fcPlSplitKey(key);
+    const lineKey = lines[k.line] ? k.line : 'unmapped';
+    const ln = lines[lineKey];
+    const gl = Number(base.detail[key]) || 0;
+    const editRow = fcPlSpend[key];
+    const edited = !isAct && base.source === 'gl' && editRow && editRow[period] != null;
+    const amt = edited ? Number(editRow[period]) : gl;
+    if (!ln.teams[k.team]) ln.teams[k.team] = { accounts: {}, total: 0 };
+    ln.teams[k.team].accounts[k.account] = { key, gl, amt, edited };
+    ln.teams[k.team].total += amt;
+    ln.glTotal += gl;
+    ln.total += amt;
+    delta[lineKey] += amt - gl;
   });
 
-  // Actual months: keep IS opex from books; dept detail is the HC/flat estimate.
-  if (isAct && SRC.actuals && SRC.actuals[period]) {
-    const a = SRC.actuals[period];
-    sm = a.sm || sm;
-    rd = a.rd || rd;
-    ga = a.ga || ga;
+  if (!isAct) {
+    const addAdj = (lineKey, label, amt, origin) => {
+      if (Math.abs(amt) < 0.5) return;
+      lines[lineKey].adj.push({ label, amt, origin });
+      lines[lineKey].total += amt;
+      delta[lineKey] += amt;
+    };
+    const hc = fcPlHcDelta(period);
+    FC_HC_DEPTS.forEach(d => {
+      if (hc[d.key] != null) addAdj(FC_PL_HC_LINE[d.key] || 'ga', `Headcount plan changes — ${d.label}`, hc[d.key], 'headcount');
+    });
   }
 
-  return {
-    revenue: revenue || 0,
-    depts,
-    sm, rd, ga,
-    opex: sm + rd + ga,
-    salesPl, mktPl, salesNb, salesCs,
-    is_actual: isAct,
+  const out = {
+    is_actual: isAct, source: base.source, lines, delta,
+    sm: lines.sm.total, rd: lines.rd.total, ga: lines.ga.total, unmapped: lines.unmapped.total,
   };
+  out.opex = out.sm + out.rd + out.ga + out.unmapped;
+  cache.periods[period] = out;
+  return out;
 }
 
-function resolveFcPlOpex(period, revenue, lv) {
-  const pl = computeFcDeptPlPeriod(period, { revenue, lv });
-  return { sm: pl.sm, rd: pl.rd, ga: pl.ga, pl };
+function resolveFcPlOpex(period) {
+  const pl = computeFcDeptPlPeriod(period);
+  return { sm: pl.sm, rd: pl.rd, ga: pl.ga, unmapped: pl.unmapped, pl };
 }
 
 function setFcPlDept(key) {
@@ -5876,20 +5885,38 @@ function setFcPlDept(key) {
   showTab('pnl');
 }
 
-function updateFcPlSpend(deptKey, lineKey, period, rawM) {
+/** Edit one GL account for a forecast month ($M). Re-entering the GL amount clears the edit. */
+function updateFcPlSpend(key, period, rawM) {
   ensureFcPlState();
-  if (!fcPlSpend[deptKey]) fcPlSpend[deptKey] = {};
-  if (!fcPlSpend[deptKey][lineKey]) fcPlSpend[deptKey][lineKey] = {};
-  fcPlSpend[deptKey][lineKey][period] = Math.max(0, Math.round((Number(rawM) || 0) * 1e6));
-  markScenarioDirty();
+  if (period <= getCloseMonth()) return;
+  const v = Math.round((Number(rawM) || 0) * 1e6);
+  const gl = Number(fcGlOpexBase(period).detail[key]) || 0;
+  if (!fcPlSpend[key]) fcPlSpend[key] = {};
+  // Inputs show $M to 3 decimals ($1K), so anything within $500 of the GL is the GL amount.
+  if (Math.abs(v - gl) < 500) delete fcPlSpend[key][period];
+  else fcPlSpend[key][period] = v;
+  if (!Object.keys(fcPlSpend[key]).length) delete fcPlSpend[key];
   refresh();
 }
 
-function fcPlSpendInput(deptKey, lineKey, period, amt) {
-  const m = (amt || 0) / 1e6;
-  const v = m >= 10 ? m.toFixed(2) : m.toFixed(3);
-  return `<input class="hc-hire" style="width:58px;color:var(--amber)" value="${v}" title="Edit $M"
-    onchange="updateFcPlSpend('${deptKey}','${lineKey}','${period}',this.value)"
+function resetFcPlSpend() {
+  fcPlSpend = {};
+  refresh();
+}
+
+function fcPlEditCount() {
+  ensureFcPlState();
+  return Object.keys(fcPlSpend).reduce((n, k) => n + Object.keys(fcPlSpend[k]).length, 0);
+}
+
+function fcPlAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function fcPlSpendInput(key, period, amt, edited) {
+  const title = edited ? 'Edited — replaces the GL amount. Re-enter the GL amount to clear.' : 'Edit $M';
+  return `<input class="hc-hire" style="width:58px;color:var(--amber)${edited ? ';font-weight:700;text-decoration:underline' : ''}" value="${((amt || 0) / 1e6).toFixed(3)}" title="${title}"
+    data-key="${fcPlAttr(key)}" onchange="updateFcPlSpend(this.dataset.key,'${period}',this.value)"
     onclick="event.stopPropagation()">`;
 }
 
@@ -5909,182 +5936,145 @@ function renderPnL(area) {
   const cfg = HORIZON[hz];
   const allP = [...cfg.act, ...cfg.fc];
   const close = getCloseMonth();
-  const dept = fcPlDept || 'total';
-  const lv = getLevers();
-
-  const revenueByPeriod = {};
-  allP.forEach(p => {
-    if (p <= close && SRC.actuals && SRC.actuals[p]) {
-      revenueByPeriod[p] = SRC.actuals[p].revenue;
-    } else {
-      const arr = getForecastARR(p);
-      const sub = arr && arr.arr_eop != null ? arr.arr_eop / 12 : 0;
-      revenueByPeriod[p] = sub * 1.033;
-    }
-  });
-
   const plAll = {};
+  const isAll = {};
   allP.forEach(p => {
-    plAll[p] = computeFcDeptPlPeriod(p, { revenue: revenueByPeriod[p], lv });
+    plAll[p] = computeFcDeptPlPeriod(p);
+    isAll[p] = getDisplayIS(p) || {};
   });
 
-  const fy = (fn) => allP.reduce((s, p) => s + (fn(plAll[p], p) || 0), 0);
-  const fyRev = fy(r => r.revenue);
-  const fySm = fy(r => r.sm);
-  const fyRd = fy(r => r.rd);
-  const fyGa = fy(r => r.ga);
-  const fySales = fy(r => r.salesPl);
-  const fyMkt = fy(r => r.mktPl);
-  const fyEbitda = allP.reduce((s, p) => s + (getDisplayIS(p)?.ebitda || 0), 0);
-  const fyCogs = allP.reduce((s, p) => {
-    const is = getDisplayIS(p);
-    if (is && is.cogs != null) return s + is.cogs;
-    return s + (revenueByPeriod[p] || 0) * (lv.cogs || 0.29);
-  }, 0);
-  const fyGp = fyRev - fyCogs;
+  const lineDefs = FC_PL_LINES.filter(l => l.key !== 'unmapped'
+    || allP.some(p => Math.abs(plAll[p].lines.unmapped.total) >= 0.5));
+  const dept = (fcPlDept && lineDefs.some(l => l.key === fcPlDept)) ? fcPlDept : 'total';
+  const colspan = allP.length + 2;
+  const cellCls = p => (p > close ? 'fc-c' : 'act-c');
+  const fySum = fn => allP.reduce((s, p) => s + (Number(fn(p)) || 0), 0);
+  const moneyRow = (label, fn, cls, attrs) => `<tr class="${cls || ''}"${attrs || ''}><td>${label}</td>`
+    + allP.map(p => `<td class="${cellCls(p)}">${fM(Number(fn(p)) || 0)}</td>`).join('')
+    + `<td class="fy-c">${fM(fySum(fn))}</td></tr>`;
+  const secRow = label => `<tr class="sec"><td colspan="${colspan}">${label}</td></tr>`;
+  const moLabel = p => `${MO12[parseInt(p.slice(5), 10) - 1]} ${p.slice(2, 4)}`;
 
-  const tabs = [{ key: 'total', label: 'Total' }].concat(FC_PL_DEPTS.map(d => ({ key: d.key, label: d.label })));
+  const noDetail = allP.filter(p => plAll[p].source !== 'gl');
+  const offIs = allP.filter(p => isAll[p].sm != null
+    && ['sm', 'rd', 'ga'].some(k => Math.abs((Number(isAll[p][k]) || 0) - plAll[p][k]) > 1));
+  const editCount = fcPlEditCount();
+  const tabs = [{ key: 'total', label: 'Total' }].concat(lineDefs.map(l => ({ key: l.key, label: l.short })));
 
   let html = `<div class="slide">
-    <div class="slide-title">P&amp;L · Act + Fcst</div>
-    <div class="slide-sub">Management department books. Comp from Headcount · program spend from GTM · edit forecast discretionary to model mid-year impact.</div>
+    <div class="slide-title">P&amp;L by team · Act + Fcst</div>
+    <div class="slide-sub">Built from the general ledger by team and account — actual months from the Actual GL, forecast months from the loaded Forecast GL. Headcount plan changes show as adjustment lines; spend edits (here, or program spend on GTM / Pipeline) replace the GL amount and are underlined. These totals are the Income Statement's S&amp;M, R&amp;D and G&amp;A and flow to Cash Flow and the Balance Sheet.</div>
     <div class="hc-toolbar">
       ${tabs.map(t => `<button type="button" class="hc-tog${dept === t.key ? ' on' : ''}" onclick="setFcPlDept('${t.key}')">${t.label}</button>`).join('')}
+      ${editCount ? `<button type="button" class="hc-tog" onclick="resetFcPlSpend()">Clear ${editCount} account edit${editCount === 1 ? '' : 's'}</button>` : ''}
     </div>`;
+  if (noDetail.length) {
+    html += `<div class="hc-banner" style="border-left-color:var(--amber)">GL account detail is not loaded for ${noDetail.map(moLabel).join(', ')}. Those months show statement totals only; nothing is estimated.</div>`;
+  }
+  if (offIs.length) {
+    html += `<div class="hc-banner" style="border-left-color:var(--red,#c0392b)">P&amp;L and Income Statement opex differ for ${offIs.map(moLabel).join(', ')}.</div>`;
+  }
 
   if (dept === 'total') {
+    const rev = p => (isAll[p].revenue != null ? isAll[p].revenue : 0);
+    const fyRev = fySum(rev);
+    const fyGp = fySum(p => isAll[p].gross_profit);
+    const fyEbitda = fySum(p => isAll[p].ebitda);
+    const fyLine = k => fySum(p => plAll[p][k]);
     html += `
     <div class="kpi-strip ks5">
       <div class="kpi"><div class="kpi-lbl">Gross margin</div><div class="kpi-val">${fyRev ? fP(fyGp / fyRev) : '—'}</div></div>
-      <div class="kpi"><div class="kpi-lbl">S&amp;M % rev</div><div class="kpi-val">${fyRev ? fP(fySm / fyRev) : '—'}</div></div>
-      <div class="kpi"><div class="kpi-lbl">R&amp;D % rev</div><div class="kpi-val">${fyRev ? fP(fyRd / fyRev) : '—'}</div></div>
-      <div class="kpi"><div class="kpi-lbl">G&amp;A % rev</div><div class="kpi-val">${fyRev ? fP(fyGa / fyRev) : '—'}</div></div>
+      <div class="kpi"><div class="kpi-lbl">S&amp;M % rev</div><div class="kpi-val">${fyRev ? fP(fyLine('sm') / fyRev) : '—'}</div></div>
+      <div class="kpi"><div class="kpi-lbl">R&amp;D % rev</div><div class="kpi-val">${fyRev ? fP(fyLine('rd') / fyRev) : '—'}</div></div>
+      <div class="kpi"><div class="kpi-lbl">G&amp;A % rev</div><div class="kpi-val">${fyRev ? fP(fyLine('ga') / fyRev) : '—'}</div></div>
       <div class="kpi"><div class="kpi-lbl">EBITDA margin</div><div class="kpi-val" style="color:${fyEbitda >= 0 ? 'var(--teal)' : 'var(--amber)'}">${fyRev ? fP(fyEbitda / fyRev) : '—'}</div></div>
     </div>
-    <div class="hc-banner">Sales ${fM(fySales)} + Marketing ${fM(fyMkt)} = S&amp;M ${fM(fySm)} · R&amp;D ${fM(fyRd)} · G&amp;A ${fM(fyGa)}. Open a department tab for salaries, benefits, bonus, severance, and T&amp;E.</div>
     <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
 
-    const totalRows = [
-      { sec: 'Revenue & gross profit' },
-      { k: 'revenue', label: 'Total revenue', tot: true },
-      { k: 'cogs', label: 'Cost of revenue' },
-      { k: 'gp', label: 'Gross profit', tot: true },
-      { k: 'gm', label: 'Gross margin %', pct: true },
-      { sec: 'Department opex (feeds IS)' },
-      { k: 'salesNb', label: 'Sales - New Business', open: 'sales' },
-      { k: 'salesCs', label: 'Sales - Customer Success', open: 'sales' },
-      { k: 'mktPl', label: 'Marketing', open: 'marketing' },
-      { k: 'sm', label: 'S&M', tot: true },
-      { k: 'rd', label: 'R&D / Product', open: 'rd' },
-      { k: 'ga', label: 'G&A', open: 'ga' },
-      { k: 'opex', label: 'Total OpEx', tot: true },
-      { sec: 'Bottom line' },
-      { k: 'ebitda', label: 'EBITDA', tot: true },
-      { k: 'ni', label: 'Net income', tot: true },
-    ];
+    html += secRow('Revenue &amp; gross profit');
+    html += moneyRow(`Total revenue${originTag('Revenue', 'revenue', { scrollTo: 'rev-row-total', title: 'Open the Revenue tab' })}`,
+      rev, 'tot', ' id="pl-row-revenue"');
+    html += moneyRow('Cost of revenue', p => isAll[p].cogs);
+    html += moneyRow('Gross profit', p => isAll[p].gross_profit, 'tot');
+    html += `<tr><td>Gross margin %</td>${allP.map(p => `<td class="${cellCls(p)}">${rev(p) ? fP((isAll[p].gross_profit || 0) / rev(p)) : '—'}</td>`).join('')}<td class="fy-c">${fyRev ? fP(fyGp / fyRev) : '—'}</td></tr>`;
 
-    totalRows.forEach(row => {
-      if (row.sec) {
-        html += `<tr class="sec"><td colspan="${allP.length + 2}">${row.sec}</td></tr>`;
-        return;
+    html += secRow('Operating expenses (GL by function)');
+    lineDefs.forEach(l => {
+      const open = ` <button type="button" class="hc-tog" style="padding:1px 7px;font-size:9px;margin-left:6px" onclick="setFcPlDept('${l.key}')">by team</button>`;
+      html += moneyRow(`${l.label}${open}`, p => plAll[p][l.key], '', ` id="pl-row-${l.key}"`);
+      if (allP.some(p => Math.abs(plAll[p].delta[l.key]) >= 0.5)) {
+        html += moneyRow('&nbsp;&nbsp;of which plan changes vs GL', p => plAll[p].delta[l.key], 'adj');
       }
-      const openBtn = row.open
-        ? ` <button type="button" class="hc-tog" style="padding:1px 7px;font-size:9px;margin-left:6px" onclick="setFcPlDept('${row.open}')">open</button>`
-        : '';
-      html += `<tr class="${row.tot ? 'tot' : ''}"><td>${row.label}${openBtn}</td>`;
-      let fySum = 0;
-      allP.forEach(p => {
-        const is = getDisplayIS(p) || {};
-        const pl = plAll[p];
-        const isFc = p > close;
-        let val = 0;
-        if (row.k === 'revenue') val = is.revenue != null ? is.revenue : pl.revenue;
-        else if (row.k === 'cogs') val = is.cogs != null ? is.cogs : (pl.revenue * (lv.cogs || 0.29));
-        else if (row.k === 'gp') {
-          val = is.gross_profit != null ? is.gross_profit
-            : ((is.revenue != null ? is.revenue : pl.revenue) - (is.cogs != null ? is.cogs : pl.revenue * (lv.cogs || 0.29)));
-        } else if (row.k === 'gm') {
-          const rev = is.revenue != null ? is.revenue : pl.revenue;
-          const gp = is.gross_profit != null ? is.gross_profit
-            : (rev - (is.cogs != null ? is.cogs : rev * (lv.cogs || 0.29)));
-          html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${rev ? fP(gp / rev) : '—'}</td>`;
-          return;
-        } else if (row.k === 'salesNb') val = pl.salesNb;
-        else if (row.k === 'salesCs') val = pl.salesCs;
-        else if (row.k === 'mktPl') val = pl.mktPl;
-        else if (row.k === 'sm') val = is.sm != null ? is.sm : pl.sm;
-        else if (row.k === 'rd') val = is.rd != null ? is.rd : pl.rd;
-        else if (row.k === 'ga') val = is.ga != null ? is.ga : pl.ga;
-        else if (row.k === 'opex') val = is.total_opex != null ? is.total_opex : pl.opex;
-        else if (row.k === 'ebitda') val = is.ebitda != null ? is.ebitda : 0;
-        else if (row.k === 'ni') val = is.net_income != null ? is.net_income : 0;
-        fySum += val;
-        html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(val)}</td>`;
-      });
-      if (row.pct) {
-        html += `<td class="fy-c">${fyRev ? fP(fyGp / fyRev) : '—'}</td>`;
-      } else {
-        html += `<td class="fy-c">${fM(fySum)}</td>`;
-      }
-      html += '</tr>';
     });
+    html += moneyRow('Total OpEx', p => plAll[p].opex, 'tot');
+
+    html += secRow('Bottom line');
+    html += moneyRow('EBITDA', p => isAll[p].ebitda, 'tot');
+    html += moneyRow('Net income', p => isAll[p].net_income, 'tot');
     html += '</tbody></table></div></div>';
     area.innerHTML = html;
     return;
   }
 
-  const spec = FC_PL_DEPTS.find(d => d.key === dept);
-  const fyDept = fy(r => (r.depts[spec.key] && r.depts[spec.key].total) || 0);
+  const line = lineDefs.find(l => l.key === dept);
+  const teamFy = {};
+  const acctFy = {};
+  allP.forEach(p => {
+    const teams = plAll[p].lines[dept].teams;
+    Object.keys(teams).forEach(team => {
+      teamFy[team] = (teamFy[team] || 0) + teams[team].total;
+      if (!acctFy[team]) acctFy[team] = {};
+      Object.keys(teams[team].accounts).forEach(a => {
+        acctFy[team][a] = (acctFy[team][a] || 0) + teams[team].accounts[a].amt;
+      });
+    });
+  });
+  const byFyDesc = obj => Object.keys(obj).sort((a, b) => Math.abs(obj[b]) - Math.abs(obj[a]) || a.localeCompare(b));
+  const adjLabels = [];
+  allP.forEach(p => plAll[p].lines[dept].adj.forEach(a => {
+    if (!adjLabels.some(x => x.label === a.label)) adjLabels.push({ label: a.label, origin: a.origin });
+  }));
+  const fyLineTot = fySum(p => plAll[p].lines[dept].total);
+
   html += `
-    <div class="hc-banner"><strong>${spec.label}</strong> → IS · ${spec.isLabel} · FY ${fM(fyDept)}.
-      Salaries, benefits, bonus, and severance come from ${typeof showTab === 'function' ? 'Headcount' : 'HC'} (heads × loaded rates).
-      ${spec.key === 'marketing'
-        ? 'Program spend is the GTM total (edit channels on the GTM tab). Martech is discretionary here.'
-        : 'Amber cells are forecast discretionary ($M) — use them to model spending changes for the rest of the year.'}
-    </div>
-    <div class="hc-legend"><i></i> Amber = forecast discretionary ($M). Comp lines follow Headcount. Actual months are locked.</div>
+    <div class="hc-banner"><strong>${line.label}</strong> → Income Statement ${line.short} · FY ${fM(fyLineTot)}.
+      Amber cells are forecast GL accounts ($M) — edit one to change spend for the rest of the year. Marketing program accounts are the same cells as program spend on GTM / Pipeline. Headcount changes appear as adjustment lines below.</div>
+    <div class="hc-legend"><i></i> Amber = forecast GL account ($M); underlined = edited. Actual months are locked.</div>
     <div class="hc-wrap"><table class="hc-tbl"><thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcPlMonthHeaders(allP)}</tr></thead><tbody>`;
 
-  spec.sections.forEach(sec => {
-    html += `<tr class="sec"><td colspan="${allP.length + 2}">${sec.label}</td></tr>`;
-    sec.lines.forEach(line => {
-      const editable = line.from === 'flat';
-      const tag = line.from === 'gtm_program' ? ' · from GTM'
-        : (line.from && line.from.indexOf('hc_') === 0) || line.from === 'ote_nb' || line.from === 'ote_cs' ? ' · from HC'
-        : editable ? ' · $M' : '';
-      html += `<tr class="${editable ? 'adj' : ''}"><td>${line.label}${tag}</td>`;
-      let fyLine = 0;
+  byFyDesc(teamFy).forEach(team => {
+    html += secRow(fcPlAttr(team));
+    byFyDesc(acctFy[team]).forEach(acct => {
+      html += `<tr><td>${fcPlAttr(acct)}</td>`;
       allP.forEach(p => {
-        const isFc = p > close;
-        const secRow = plAll[p].depts[spec.key].sections[sec.key];
-        const amt = (secRow && secRow.lines[line.k]) || 0;
-        fyLine += amt;
-        if (isFc && editable) {
-          html += `<td class="fc-c">${fcPlSpendInput(spec.key, line.k, p, amt)}</td>`;
-        } else {
-          html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(amt)}</td>`;
-        }
+        const t = plAll[p].lines[dept].teams[team];
+        const a = t && t.accounts[acct];
+        const editable = a && p > close && plAll[p].source === 'gl';
+        html += editable
+          ? `<td class="fc-c">${fcPlSpendInput(a.key, p, a.amt, a.edited)}</td>`
+          : `<td class="${cellCls(p)}">${fM(a ? a.amt : 0)}</td>`;
       });
-      html += `<td class="fy-c">${fM(fyLine)}</td></tr>`;
+      html += `<td class="fy-c">${fM(acctFy[team][acct])}</td></tr>`;
     });
-    html += `<tr class="tot"><td>${sec.label} total</td>`;
-    let fySec = 0;
-    allP.forEach(p => {
-      const isFc = p > close;
-      const tot = (plAll[p].depts[spec.key].sections[sec.key] && plAll[p].depts[spec.key].sections[sec.key].total) || 0;
-      fySec += tot;
-      html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(tot)}</td>`;
-    });
-    html += `<td class="fy-c">${fM(fySec)}</td></tr>`;
+    html += moneyRow(`${fcPlAttr(team)} total`, p => {
+      const t = plAll[p].lines[dept].teams[team];
+      return t ? t.total : 0;
+    }, 'tot');
   });
 
-  html += `<tr class="tot"><td>${spec.label} total → ${spec.isLabel}</td>`;
-  allP.forEach(p => {
-    const isFc = p > close;
-    const tot = (plAll[p].depts[spec.key] && plAll[p].depts[spec.key].total) || 0;
-    html += `<td class="${isFc ? 'fc-c' : 'act-c'}">${fM(tot)}</td>`;
-  });
-  html += `<td class="fy-c">${fM(fyDept)}</td></tr>`;
+  if (adjLabels.length) {
+    html += secRow('Plan adjustments (forecast months)');
+    adjLabels.forEach(a => {
+      const chip = a.origin === 'headcount'
+        ? originTag('Headcount', 'headcount', { title: 'Open the Headcount tab' }) : '';
+      html += moneyRow(`${a.label}${chip}`, p => {
+        const hit = plAll[p].lines[dept].adj.find(x => x.label === a.label);
+        return hit ? hit.amt : 0;
+      }, 'adj');
+    });
+  }
+
+  html += moneyRow(`${line.label} total → Income Statement`, p => plAll[p].lines[dept].total, 'tot');
   html += '</tbody></table></div></div>';
   area.innerHTML = html;
 }
@@ -6113,12 +6103,16 @@ function renderIS(area){
 
   const rows=[
     {type:'sec',lbl:'Revenue'},
-    {lbl:'Subscription Revenue',compute:fcRowSub,indent:true},
-    {lbl:'Recurring Services (Support & TAM)',compute:fcRowRecSvc,indent:true},
-    {lbl:'Recurring Revenue',compute:r=>fcRowSub(r)+fcRowRecSvc(r),type:'sub'},
-    {lbl:'Implementation & Onboarding',compute:fcRowImpl,indent:true},
+    {lbl:'Subscription Revenue',compute:fcRowSub,indent:true,id:'is-row-sub',
+      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-sub',title:'Open the subscription section of the Revenue tab'})},
+    {lbl:'Recurring Services',compute:fcRowRecSvc,indent:true,id:'is-row-rsvc',
+      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-rsvc',title:'Open the recurring services section of the Revenue tab'})},
+    {lbl:'Recurring Revenue',compute:r=>fcRowSub(r)+fcRowRecSvc(r),type:'sub',id:'is-row-recurring'},
+    {lbl:'Implementation & Onboarding',compute:fcRowImpl,indent:true,id:'is-row-impl',
+      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-impl',title:'Open the implementation section of the Revenue tab'})},
     {lbl:'Non-recurring Revenue',compute:fcRowImpl,type:'sub'},
-    {lbl:'Total Revenue',key:'revenue',type:'sub',fy:true},
+    {lbl:'Total Revenue',key:'revenue',type:'sub',fy:true,id:'is-row-revenue',
+      tag:originTag('Revenue','revenue',{scrollTo:'rev-row-total',title:'Open total revenue on the Revenue tab'})},
     {type:'sec',lbl:'Cost of Revenue'},
     {lbl:'Cost of Revenue',key:'cogs',inv:true,indent:true},
     {lbl:'Gross Profit',key:'gross_profit',type:'sub',fy:true},
@@ -6358,26 +6352,21 @@ function renderBS(area){
 
 // \u2500\u2500 PIPELINE DETAIL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 // ── GTM / Pipeline (top-down: CRM pipe first, marketing MQLs overlay) ─────────
-const FC_MKT_SM_RATIO = 0.65;
 const FC_GTM_DEFAULT_ACV = 125000;
 const FC_GTM_DEFAULT_MQL_OPP = 0.28;
-const FC_GTM_CHANNELS = [
-  { key: 'paid_search', label: 'Paid search', defaultMix: 0.28, defaultCpl: 450 },
-  { key: 'paid_social', label: 'Paid social', defaultMix: 0.18, defaultCpl: 320 },
-  { key: 'content', label: 'Content / SEO', defaultMix: 0.14, defaultCpl: 160 },
-  { key: 'events', label: 'Events / field', defaultMix: 0.22, defaultCpl: 650 },
-  { key: 'partners', label: 'Partners', defaultMix: 0.10, defaultCpl: 280 },
-  { key: 'other', label: 'Brand / other', defaultMix: 0.08, defaultCpl: 500 },
+// Assumed cost per MQL by program account name until MQL volumes are loaded (checklist f5 / b5).
+const FC_GTM_ASSUMED_CPL = [
+  [/search/i, 450], [/social/i, 320], [/content|seo|syndication/i, 160],
+  [/event|webinar|field/i, 650], [/partner/i, 280],
 ];
+const FC_GTM_ASSUMED_CPL_OTHER = 500;
 
+// Program spend is not GTM state: it is the GL marketing program accounts on the P&L
+// (Actual GL through close, Forecast GL after, plus forecast account edits in fcPlSpend).
 let fcGtmState = {
-  spend: null,         // { period: program $ } — sum of channelSpend
-  channelSpend: null,  // { period: { channel: $ } } — primary editable by category
-  mix: null,           // { period: { channel: mix 0–1 } } — synced from channelSpend
-  cpl: null,           // { period: { channel: $/MQL } }
+  cpl: null,           // { period: { programKey: $/MQL } } — edits over the assumed CPL
   mqlOpp: FC_GTM_DEFAULT_MQL_OPP,
   avgAcv: null,        // set only when the user overrides ACV; otherwise fcGtmDataAcv()
-  seededFrom: null,
 };
 
 /** CRM buckets carry `expected`; the engine's built-in demo pipeline does not. */
@@ -6418,126 +6407,87 @@ function fcGtmAcv() {
   return Math.max(1000, Number(fcGtmState.avgAcv) || fcGtmDataAcv());
 }
 
-function fcGtmDefaultMix() {
-  const o = {};
-  FC_GTM_CHANNELS.forEach(ch => { o[ch.key] = ch.defaultMix; });
-  return o;
+function fcGtmAssumedCpl(label) {
+  const hit = FC_GTM_ASSUMED_CPL.find(([re]) => re.test(label));
+  return hit ? hit[1] : FC_GTM_ASSUMED_CPL_OTHER;
 }
-function fcGtmDefaultCpl() {
-  const o = {};
-  FC_GTM_CHANNELS.forEach(ch => { o[ch.key] = ch.defaultCpl; });
-  return o;
+
+/** GL marketing program accounts for a month (expense type "Marketing Programs"): { key: GL amount }. */
+function fcGtmGlPrograms(period) {
+  const SO = window.SMPLOutlook;
+  const row = SO && typeof SO.getWarehouseGlPrograms === 'function'
+    ? SO.getWarehouseGlPrograms(period, getCloseMonth()) : null;
+  return row || {};
+}
+
+/** Program channels = the GL program accounts across the horizon, largest first. */
+function fcGtmChannels() {
+  const cache = fcPlCache();
+  if (cache.gtmChannels) return cache.gtmChannels;
+  const fy = {};
+  ALL_P.forEach(p => {
+    const row = fcGtmGlPrograms(p);
+    Object.keys(row).forEach(k => { fy[k] = (fy[k] || 0) + (Number(row[k]) || 0); });
+  });
+  cache.gtmChannels = Object.keys(fy)
+    .sort((a, b) => fy[b] - fy[a] || a.localeCompare(b))
+    .map(key => {
+      const label = fcPlSplitKey(key).account;
+      return { key, label, defaultCpl: fcGtmAssumedCpl(label) };
+    });
+  return cache.gtmChannels;
+}
+
+/** Program spend for a month: the account's P&L amount (GL, or the forecast edit). */
+function fcGtmChannelSpend(period, key) {
+  const k = fcPlSplitKey(key);
+  const ln = computeFcDeptPlPeriod(period).lines[k.line];
+  const team = ln && ln.teams[k.team];
+  const acct = team && team.accounts[k.account];
+  return acct ? acct.amt : 0;
 }
 
 function ensureFcGtmState() {
-  if (!fcGtmState.spend) fcGtmState.spend = {};
-  if (!fcGtmState.channelSpend) fcGtmState.channelSpend = {};
-  if (!fcGtmState.mix) fcGtmState.mix = {};
   if (!fcGtmState.cpl) fcGtmState.cpl = {};
-  ALL_P.forEach(p => {
-    if (fcGtmState.mix[p] == null) fcGtmState.mix[p] = fcGtmDefaultMix();
-    if (fcGtmState.cpl[p] == null) fcGtmState.cpl[p] = fcGtmDefaultCpl();
-    if (fcGtmState.spend[p] == null) {
-      // Seed program spend ≈ S&M × marketing share.
-      // Do NOT call getDisplayIS/getResults here — that re-enters compute().
-      let sm = 0;
-      if (p <= getCloseMonth()) {
-        const a = SRC.actuals && SRC.actuals[p];
-        sm = a && a.sm != null ? a.sm : 0;
-      } else {
-        const close = getCloseMonth();
-        const a = SRC.actuals && SRC.actuals[close];
-        const baseSm = a && a.sm != null ? a.sm : 0;
-        const lv = getLevers();
-        sm = baseSm > 0 ? baseSm : 0;
-        if (!sm && lv && lv.sm) {
-          const rev = a && a.revenue != null ? a.revenue : 0;
-          sm = rev * (lv.sm || 0.34);
-        }
-      }
-      fcGtmState.spend[p] = Math.round(sm * FC_MKT_SM_RATIO);
-    }
-    if (fcGtmState.channelSpend[p] == null) {
-      fcGtmSyncChannelSpendFromMix(p);
-    }
-  });
   if (fcGtmState.mqlOpp == null) fcGtmState.mqlOpp = FC_GTM_DEFAULT_MQL_OPP;
-  fcGtmState.seededFrom = 'sm×' + FC_MKT_SM_RATIO + '+' + getCloseMonth();
 }
 
-/** Spread program total across channels by current mix weights. */
-function fcGtmSyncChannelSpendFromMix(period) {
-  const tot = Math.max(0, Number(fcGtmState.spend[period]) || 0);
-  const mix = fcGtmState.mix[period] || fcGtmDefaultMix();
-  let rawSum = 0;
-  FC_GTM_CHANNELS.forEach(ch => { rawSum += Math.max(0, Number(mix[ch.key]) || 0); });
-  fcGtmState.channelSpend[period] = {};
-  let allocated = 0;
-  FC_GTM_CHANNELS.forEach((ch, i) => {
-    const w = rawSum > 0 ? Math.max(0, Number(mix[ch.key]) || 0) / rawSum : (1 / FC_GTM_CHANNELS.length);
-    const last = i === FC_GTM_CHANNELS.length - 1;
-    const amt = last ? Math.max(0, tot - allocated) : Math.round(tot * w);
-    fcGtmState.channelSpend[period][ch.key] = amt;
-    allocated += amt;
-  });
+/** Program spend edits are P&L account edits; the GL amount (within $500) clears the edit. */
+function fcGtmSetChannelSpend(period, key, dollars) {
+  ensureFcPlState();
+  const gl = Number(fcGlOpexBase(period).detail[key]) || 0;
+  if (!fcPlSpend[key]) fcPlSpend[key] = {};
+  if (Math.abs(dollars - gl) < 500) delete fcPlSpend[key][period];
+  else fcPlSpend[key][period] = Math.round(dollars);
+  if (!Object.keys(fcPlSpend[key]).length) delete fcPlSpend[key];
 }
 
-/** After channel $ edits: total = Σ channels, mix = share of total. */
-function fcGtmSyncMixFromChannelSpend(period) {
-  const row = fcGtmState.channelSpend[period] || {};
-  let tot = 0;
-  FC_GTM_CHANNELS.forEach(ch => { tot += Math.max(0, Number(row[ch.key]) || 0); });
-  fcGtmState.spend[period] = tot;
-  if (!fcGtmState.mix[period]) fcGtmState.mix[period] = fcGtmDefaultMix();
-  FC_GTM_CHANNELS.forEach(ch => {
-    const s = Math.max(0, Number(row[ch.key]) || 0);
-    fcGtmState.mix[period][ch.key] = tot > 0 ? s / tot : 0;
-  });
+function updateFcGtmChannelSpend(period, idx, raw) {
+  const ch = fcGtmChannels()[idx];
+  if (!ch || period <= getCloseMonth()) return;
+  fcGtmSetChannelSpend(period, ch.key, Math.max(0, (Number(raw) || 0) * 1e6));
+  refresh();
 }
 
+/** Total program spend edit: scales each account in proportion (even split when all are zero). */
 function updateFcGtmSpend(period, raw) {
-  ensureFcGtmState();
-  const newTot = Math.max(0, Math.round((Number(raw) || 0) * 1e6)); // input is $M
-  const oldTot = Math.max(0, Number(fcGtmState.spend[period]) || 0);
-  fcGtmState.spend[period] = newTot;
-  if (!fcGtmState.channelSpend[period]) fcGtmSyncChannelSpendFromMix(period);
-  if (oldTot > 0) {
-    const scale = newTot / oldTot;
-    FC_GTM_CHANNELS.forEach(ch => {
-      fcGtmState.channelSpend[period][ch.key] = Math.round(
-        (Number(fcGtmState.channelSpend[period][ch.key]) || 0) * scale
-      );
-    });
-    // Fix rounding drift onto last channel
-    let sum = 0;
-    FC_GTM_CHANNELS.forEach((ch, i) => {
-      if (i < FC_GTM_CHANNELS.length - 1) sum += fcGtmState.channelSpend[period][ch.key];
-      else fcGtmState.channelSpend[period][ch.key] = Math.max(0, newTot - sum);
-    });
-  } else {
-    fcGtmSyncChannelSpendFromMix(period);
-  }
-  fcGtmSyncMixFromChannelSpend(period);
+  const chans = fcGtmChannels();
+  if (!chans.length || period <= getCloseMonth()) return;
+  const newTot = Math.max(0, (Number(raw) || 0) * 1e6);
+  const cur = chans.map(ch => fcGtmChannelSpend(period, ch.key));
+  const oldTot = cur.reduce((s, v) => s + v, 0);
+  chans.forEach((ch, i) => {
+    fcGtmSetChannelSpend(period, ch.key, oldTot > 0 ? cur[i] * newTot / oldTot : newTot / chans.length);
+  });
   refresh();
 }
-function updateFcGtmChannelSpend(period, channel, raw) {
+
+function updateFcGtmCpl(period, idx, raw) {
+  const ch = fcGtmChannels()[idx];
+  if (!ch) return;
   ensureFcGtmState();
-  if (!fcGtmState.channelSpend[period]) fcGtmSyncChannelSpendFromMix(period);
-  fcGtmState.channelSpend[period][channel] = Math.max(0, Math.round((Number(raw) || 0) * 1e6)); // input is $M
-  fcGtmSyncMixFromChannelSpend(period);
-  refresh();
-}
-function updateFcGtmMix(period, channel, raw) {
-  ensureFcGtmState();
-  if (!fcGtmState.mix[period]) fcGtmState.mix[period] = fcGtmDefaultMix();
-  fcGtmState.mix[period][channel] = Math.max(0, Math.min(1, (Number(raw) || 0) / 100));
-  fcGtmSyncChannelSpendFromMix(period);
-  refresh();
-}
-function updateFcGtmCpl(period, channel, raw) {
-  ensureFcGtmState();
-  if (!fcGtmState.cpl[period]) fcGtmState.cpl[period] = fcGtmDefaultCpl();
-  fcGtmState.cpl[period][channel] = Math.max(1, Math.round(Number(raw) || 0));
+  if (!fcGtmState.cpl[period]) fcGtmState.cpl[period] = {};
+  fcGtmState.cpl[period][ch.key] = Math.max(1, Math.round(Number(raw) || 0));
   refresh();
 }
 function updateFcGtmRate(field, raw) {
@@ -6545,19 +6495,6 @@ function updateFcGtmRate(field, raw) {
   if (field === 'mqlOpp') fcGtmState.mqlOpp = Math.max(0.01, Math.min(1, (Number(raw) || 0) / 100));
   if (field === 'avgAcv') fcGtmState.avgAcv = Math.max(1000, Math.round(Number(raw) || 0) * 1000);
   refresh();
-}
-
-function fcGtmNormalizeMix(period) {
-  ensureFcGtmState();
-  const raw = fcGtmState.mix[period] || fcGtmDefaultMix();
-  let sum = 0;
-  FC_GTM_CHANNELS.forEach(ch => { sum += Math.max(0, Number(raw[ch.key]) || 0); });
-  const weights = {};
-  FC_GTM_CHANNELS.forEach(ch => {
-    const v = Math.max(0, Number(raw[ch.key]) || 0);
-    weights[ch.key] = sum > 0 ? v / sum : (1 / FC_GTM_CHANNELS.length);
-  });
-  return { weights, rawSum: sum };
 }
 
 function fcGtmPipeMonth(p) {
@@ -6666,28 +6603,20 @@ function fcGtmPipelineBooks(periods) {
 
 function fcGtmAllocate(period) {
   ensureFcGtmState();
-  if (!fcGtmState.channelSpend[period]) fcGtmSyncChannelSpendFromMix(period);
-  const cpls = fcGtmState.cpl[period] || fcGtmDefaultCpl();
+  const cpls = fcGtmState.cpl[period] || {};
   const channels = {};
   let spendTot = 0;
   let mqlSum = 0;
-  FC_GTM_CHANNELS.forEach(ch => {
-    const spend = Math.max(0, Number(fcGtmState.channelSpend[period][ch.key]) || 0);
-    spendTot += spend;
-  });
-  FC_GTM_CHANNELS.forEach(ch => {
-    const spend = Math.max(0, Number(fcGtmState.channelSpend[period][ch.key]) || 0);
+  fcGtmChannels().forEach(ch => {
+    const spend = fcGtmChannelSpend(period, ch.key);
     const cpl = Math.max(1, Number(cpls[ch.key]) || ch.defaultCpl);
-    const mqls = spend / cpl;
-    const mix = spendTot > 0 ? spend / spendTot : 0;
-    channels[ch.key] = {
-      spend, cpl, mqls, mix,
-      mixRaw: Number((fcGtmState.mix[period] || {})[ch.key]) || 0,
-    };
+    const mqls = Math.max(0, spend) / cpl;
+    channels[ch.key] = { spend, cpl, mqls };
+    spendTot += spend;
     mqlSum += mqls;
   });
-  fcGtmState.spend[period] = spendTot;
-  return { spendTot, channels, mqlSum, mixRawSum: spendTot > 0 ? 1 : 0 };
+  Object.keys(channels).forEach(k => { channels[k].mix = spendTot > 0 ? channels[k].spend / spendTot : 0; });
+  return { spendTot, channels, mqlSum };
 }
 
 /** Pipeline coverage for Budget-aligned MQL implied (Budget default 3.0×). */
@@ -6795,7 +6724,7 @@ function fcGtmNumCells(periods, getter, fmt) {
   return cells + `<td class="fy-c">${fmt(fy)}</td>`;
 }
 
-/** Revenue tab: recurring (subscription + recurring services) and non-recurring (implementation by customer type). */
+/** Revenue tab: subscription, recurring services (% of subscription), and implementation (new logos × fee by customer type). */
 function renderRevenue(area) {
   const periods = ALL_P.slice();
   const close = getCloseMonth();
@@ -6811,61 +6740,103 @@ function renderRevenue(area) {
     implByP[p] = fcImplRevenue(p);
   });
   const sum = (ps, f) => ps.reduce((s, p) => s + (Number(f(p)) || 0), 0);
+  const cellCls = p => (p > close ? 'fc-c' : 'act-c');
+  const endArr = p => { const a = getForecastARR(p); return a && a.arr_eop != null ? a.arr_eop : null; };
   const sub = p => fcRowSub(isByP[p]);
-  const recSvc = p => fcRowRecSvc(isByP[p]);
+  const recPct = p => (p > close ? fcRecSvcPct(p) : (sub(p) ? fcRowRecSvc(isByP[p]) / sub(p) : null));
+  const recSvc = p => (p > close ? sub(p) * fcRecSvcPct(p) : fcRowRecSvc(isByP[p]));
   const recurring = p => sub(p) + recSvc(p);
   const impl = p => implByP[p] || 0;
   const total = p => recurring(p) + impl(p);
   const logos = p => (logosByP[p] ? Object.values(logosByP[p]).reduce((s, v) => s + v, 0) : null);
+  const segLogos = (p, seg) => (logosByP[p] ? logosByP[p][seg] || 0 : null);
+  const segImpl = (p, seg) => (segImplByP[p] ? segImplByP[p][seg] || 0 : null);
   const collected = p => { const i = periods.indexOf(p); return i > 0 ? impl(periods[i - 1]) : null; };
-  const fyLogos = sum(periods, logos);
-  const fyAvgFee = fyLogos ? sum(periods.filter(p => logos(p)), impl) / fyLogos : null;
+  const fySub = sum(periods, sub);
+  const fyRecSvc = sum(periods, recSvc);
   const fyRec = sum(periods, recurring);
+  const fyImpl = sum(periods, impl);
   const fyTotal = sum(periods, total);
-  const fcImplTab = sum(fcP, impl);
-  const fcImplIs = sum(fcP, p => fcRowImpl(isByP[p]));
+  const fcTab = sum(fcP, total);
+  const fcIs = sum(fcP, p => (isByP[p] && isByP[p].revenue) || 0);
+  const subFromData = fcP.length && getOutlookIS(fcP[0]);
+  const recEdited = Object.keys(fcRecSvcPctEdits).length > 0;
+  const feeEdited = Object.keys(fcImplFeeEdits).length > 0;
 
   const tile = (lbl, val, subTxt) => `<div class="gtm-tile"><div class="gtm-tile-lbl">${lbl}</div><div class="gtm-tile-val">${val}</div><div class="gtm-tile-sub">${subTxt}</div></div>`;
   let html = `<div class="slide">
     <div class="slide-title">Revenue</div>
-    <div class="slide-sub">Recurring revenue (subscription + recurring services such as support and TAMs) and non-recurring revenue (implementation &amp; onboarding). Implementation fees by customer type are set in the left panel.</div>
+    <div class="slide-sub">Three pieces build total revenue: subscription, recurring services (a % of subscription), and non-recurring implementation &amp; onboarding (new logos × fee). Amber rows are editable for forecast months; an edit carries forward to later months until you change it again, and flows to the Income Statement, P&amp;L, Cash Flow (billed month end, collected Net 30) and Balance Sheet. Added revenue carries the COGS % lever. Link chips open the matching line on the ${originTag('Income Statement', 'is', { scrollTo: 'is-row-revenue', title: 'Open Income Statement' })} or ${originTag('P&amp;L', 'pnl', { scrollTo: 'pl-row-revenue', plDept: 'total', title: 'Open P&L' })}.</div>
     <div class="gtm-strip">
       ${tile('Total revenue', fM(fyTotal, 1), `FY · Act through ${getCloseMoLabel()} + Fcst`)}
-      ${tile('Recurring revenue', fM(fyRec, 1), fyTotal ? `${(fyRec / fyTotal * 100).toFixed(1)}% of revenue` : '—')}
-      ${tile('Recurring services', fM(sum(periods, recSvc), 1), 'Support &amp; TAMs · from data')}
-      ${tile('Implementation &amp; onboarding', fM(sum(periods, impl), 0), `Act ${fM(sum(actP, impl), 0)} · Fcst ${fM(fcImplTab, 0)}`)}
-      ${tile('Avg implementation fee', fyAvgFee ? '$' + Math.round(fyAvgFee).toLocaleString() : '—', `per new logo · ${(Math.round(fyLogos * 10) / 10).toLocaleString()} logos FY`)}
+      ${tile('Subscription', fM(fySub, 1), fyTotal ? `${(fySub / fyTotal * 100).toFixed(1)}% of revenue` : '—')}
+      ${tile('Recurring services', fM(fyRecSvc, 1), fySub ? `${(fyRecSvc / fySub * 100).toFixed(1)}% of subscription · support &amp; TAMs` : '—')}
+      ${tile('Implementation &amp; onboarding', fM(fyImpl, 1), `Non-recurring · Act ${fM(sum(actP, impl), 1)} · Fcst ${fM(sum(fcP, impl), 1)}`)}
+      ${tile('Recurring % of revenue', fyTotal ? (fyRec / fyTotal * 100).toFixed(1) + '%' : '—', `Recurring ${fM(fyRec, 1)} FY`)}
     </div>`;
-  if (Math.abs(fcImplTab - fcImplIs) >= 1) {
-    html += `<div class="hc-banner">Forecast implementation here is <strong>${fM(fcImplTab, 0)}</strong>; the Income Statement shows the loaded Forecast at <strong>${fM(fcImplIs, 0)}</strong>. The difference comes from edited fees or the New business attainment lever.</div>`;
+  if (Math.abs(fcTab - fcIs) >= 1) {
+    html += `<div class="hc-banner">Forecast revenue here is <strong>${fM(fcTab, 1)}</strong>; the Income Statement shows <strong>${fM(fcIs, 1)}</strong>. They should match; check the loaded Forecast.</div>`;
   }
 
   const countFmt = v => (v ? (Math.round(v * 10) / 10).toLocaleString() : '—');
-  const pctCells = (f, fy) => periods.map(p => {
-    const v = f(p);
-    return `<td class="${p > close ? 'fc-c' : 'act-c'}">${v != null ? (v * 100).toFixed(1) + '%' : '—'}</td>`;
-  }).join('') + `<td class="fy-c">${fy != null ? (fy * 100).toFixed(1) + '%' : '—'}</td>`;
-  const row = (label, cells, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td>${cells}</tr>`;
-  const sec = label => `<tr class="sec"><td colspan="${colSpan}">${label}</td></tr>`;
+  const pctTxt = v => (v != null ? (v * 100).toFixed(1) + '%' : '—');
+  const usdTxt = v => (v ? '$' + Math.round(v).toLocaleString() : '—');
+  const row = (label, cells, opts) => {
+    opts = opts || {};
+    return `<tr${opts.id ? ` id="${opts.id}"` : ''}${opts.cls ? ` class="${opts.cls}"` : ''}><td>${label}${opts.tag || ''}</td>${cells}</tr>`;
+  };
+  const sec = (label, extra) => `<tr class="sec"><td colspan="${colSpan}">${label}${extra || ''}</td></tr>`;
+  const resetBtn = fn => `<button type="button" class="lock-tag lock-link" onclick="${fn}()" title="Clear forecast edits">Reset to data</button>`;
+  const isTag = (id, what) => originTag('IS', 'is', { scrollTo: id, title: `Open ${what} on the Income Statement` });
+  const plTag = originTag('P&amp;L', 'pnl', { scrollTo: 'pl-row-revenue', plDept: 'total', title: 'Open total revenue on the P&L' });
+
+  const recPctCells = periods.map(p => {
+    if (p <= close) return `<td class="act-c">${pctTxt(recPct(p))}</td>`;
+    const v = Math.round(fcRecSvcPct(p) * 1000) / 10;
+    const own = fcRecSvcPctEdits[p] != null ? ' pos' : '';
+    return `<td class="fc-c"><input class="hc-hire${own}" style="width:52px;max-width:100%" type="number" min="0" max="100" step="0.5" value="${v}"
+      onchange="updateFcRecSvcPct('${p}',this.value)" title="Recurring services % of subscription from this month on"></td>`;
+  }).join('') + `<td class="fy-c">${pctTxt(fySub ? fyRecSvc / fySub : null)}</td>`;
+
+  const feeCells = seg => periods.map(p => {
+    if (p <= close) return `<td class="act-c">${usdTxt(fcImplDataFee(seg))}</td>`;
+    const own = fcImplFeeEdits[seg] && fcImplFeeEdits[seg][p] != null ? ' pos' : '';
+    return `<td class="fc-c"><input class="hc-hire${own}" style="width:60px;max-width:100%" type="number" min="0" step="250" value="${Math.round(fcImplFee(seg, p))}"
+      onchange="updateFcImplFee('${seg}','${p}',this.value)" title="${seg} fee per new logo from this month on"></td>`;
+  }).join('') + (() => {
+    const n = sum(periods, p => segLogos(p, seg));
+    return `<td class="fy-c">${usdTxt(n ? sum(periods, p => segImpl(p, seg)) / n : null)}</td>`;
+  })();
 
   let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
-  body += sec('Recurring revenue');
+
+  body += sec(`1 · Subscription revenue · Act = GL · Fcst = ${subFromData ? 'loaded Forecast' : 'Ending ARR ÷ 12'}`);
+  body += row('Ending ARR', fcGtmMoneyCells(periods, endArr, { fy: 'last' }),
+    { tag: originTag('ARR', 'arr', { title: 'Open the ARR Waterfall' }) });
+  body += row('Subscription revenue', fcGtmMoneyCells(periods, sub),
+    { cls: 'tot', id: 'rev-row-sub', tag: isTag('is-row-sub', 'Subscription Revenue') });
+
+  body += sec('2 · Recurring services — support &amp; TAMs · Act = GL · Fcst = subscription × %', recEdited ? resetBtn('resetFcRecSvcPct') : '');
   body += row('Subscription revenue', fcGtmMoneyCells(periods, sub));
-  body += row('Recurring services — support &amp; TAM', fcGtmMoneyCells(periods, recSvc));
-  body += row('Total recurring revenue', fcGtmMoneyCells(periods, recurring), 'tot');
-  body += sec('Non-recurring revenue — implementation &amp; onboarding · Act = GL · Fcst = new logos × fee');
-  segs.forEach(seg => {
-    body += row(`New logos — ${seg}`, fcGtmNumCells(periods, p => (logosByP[p] ? logosByP[p][seg] || 0 : null), countFmt));
-  });
-  body += row('New logos — total', fcGtmNumCells(periods, logos, countFmt), 'tot');
-  segs.forEach(seg => {
-    body += row(`Implementation — ${seg}`, fcGtmMoneyCells(periods, p => (segImplByP[p] ? segImplByP[p][seg] || 0 : null)));
-  });
-  body += row('Total implementation &amp; onboarding', fcGtmMoneyCells(periods, impl), 'tot');
-  body += row('Avg implementation fee per new logo', fcGtmMoneyCells(periods, p => (logos(p) ? impl(p) / logos(p) : null), { units: 'usd', fy: () => fyAvgFee }));
+  body += row('Recurring services % of subscription', recPctCells, { cls: 'adj' });
+  body += row('Recurring services revenue', fcGtmMoneyCells(periods, recSvc),
+    { cls: 'tot', id: 'rev-row-rsvc', tag: isTag('is-row-rsvc', 'Recurring Services') });
+  body += row('Total recurring revenue', fcGtmMoneyCells(periods, recurring),
+    { cls: 'tot', tag: isTag('is-row-recurring', 'Recurring Revenue') });
+
+  body += sec('3 · Non-recurring — implementation &amp; onboarding · Act = GL · Fcst = new logos × fee', feeEdited ? resetBtn('resetFcImplFees') : '');
+  segs.forEach(seg => { body += row(`New logos — ${seg}`, fcGtmNumCells(periods, p => segLogos(p, seg), countFmt)); });
+  body += row('New logos — total', fcGtmNumCells(periods, logos, countFmt), { cls: 'tot' });
+  segs.forEach(seg => { body += row(`Fee per new logo — ${seg}`, feeCells(seg), { cls: 'adj' }); });
+  segs.forEach(seg => { body += row(`Implementation — ${seg}`, fcGtmMoneyCells(periods, p => segImpl(p, seg))); });
+  body += row('Implementation &amp; onboarding revenue', fcGtmMoneyCells(periods, impl),
+    { cls: 'tot', id: 'rev-row-impl', tag: isTag('is-row-impl', 'Implementation &amp; Onboarding') });
+
   body += sec('Total revenue');
-  body += row('Total revenue', fcGtmMoneyCells(periods, total), 'tot');
-  body += row('Recurring % of revenue', pctCells(p => (total(p) ? recurring(p) / total(p) : null), fyTotal ? fyRec / fyTotal : null));
+  body += row('Total revenue', fcGtmMoneyCells(periods, total),
+    { cls: 'tot', id: 'rev-row-total', tag: isTag('is-row-revenue', 'Total Revenue') + plTag });
+  body += row('Recurring % of revenue', periods.map(p => `<td class="${cellCls(p)}">${pctTxt(total(p) ? recurring(p) / total(p) : null)}</td>`).join('')
+    + `<td class="fy-c">${pctTxt(fyTotal ? fyRec / fyTotal : null)}</td>`);
   body += sec('Implementation cash — billed at signing, collected Net 30 (the following month)');
   body += row('Implementation billed', fcGtmMoneyCells(periods, impl));
   body += row('Implementation collected', fcGtmMoneyCells(periods, collected));
@@ -6942,41 +6913,45 @@ function renderPipeline(area){
       onchange="updateFcGtmRate('mqlOpp',this.value)">%
     · Avg ACV <input class="hc-attr-pct" style="width:48px" type="number" min="10" step="5" value="${acvK}"
       onchange="updateFcGtmRate('avgAcv',this.value)">k
-    · Spend seeded from S&amp;M × ${Math.round(FC_MKT_SM_RATIO*100)}% — reallocate channels when CPL isn't going as far.
+    · Spend = GL marketing program accounts (Actual GL through ${getCloseMoLabel()}, Forecast GL after); editing a forecast month changes that account on the ${originTag('P&amp;L', 'pnl', { plDept: 'sm', title: 'Open S&M by team on the P&L' })}. CPL is assumed until MQL volumes are loaded.
   </div>`;
 
   // Marketing tables share one grid so month headers stay aligned + sticky
   let body = `<thead><tr><th class="act-h line-h" aria-hidden="true"></th>${fcGtmMonthHeaders(periods)}</tr></thead><tbody>`;
-  body += `<tr class="sec"><td colspan="${colSpan}">Program spend (top-down from $) — edit category spend directly</td></tr>`;
-  FC_GTM_CHANNELS.forEach(ch => {
-    body += `<tr class="adj"><td>${ch.label} ($M)</td>${fcGtmMoneyCells(periods, p => allocByP[p].channels[ch.key].spend, {
+  const chans = fcGtmChannels();
+  body += `<tr class="sec"><td colspan="${colSpan}">Program spend — GL marketing program accounts · edit a forecast month to change that account</td></tr>`;
+  if (!chans.length) {
+    body += `<tr><td colspan="${colSpan}">No marketing program accounts in the GL (expense type “Marketing Programs”), so no program spend is shown.</td></tr>`;
+  }
+  chans.forEach((ch, i) => {
+    body += `<tr class="adj"><td>${fcPlAttr(ch.label)} ($M)</td>${fcGtmMoneyCells(periods, p => allocByP[p].channels[ch.key].spend, {
       editable: p => p > getCloseMonth(),
-      onchange: p => `updateFcGtmChannelSpend('${p}','${ch.key}',this.value)`,
+      onchange: p => `updateFcGtmChannelSpend('${p}',${i},this.value)`,
       units: 'm',
     })}</tr>`;
   });
   body += `<tr class="tot adj"><td>Marketing program spend ($M)</td>${fcGtmMoneyCells(periods, p => allocByP[p].spendTot, {
-    editable: p => p > getCloseMonth(),
+    editable: p => p > getCloseMonth() && chans.length > 0,
     onchange: p => `updateFcGtmSpend('${p}',this.value)`,
     units: 'm',
   })}</tr>`;
 
-  body += `<tr class="sec"><td colspan="${colSpan}">Channel MQLs generated (spend ÷ CPL)</td></tr>`;
-  FC_GTM_CHANNELS.forEach(ch => {
-    body += `<tr><td>${ch.label} MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].channels[ch.key].mqls, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+  body += `<tr class="sec"><td colspan="${colSpan}">MQLs generated (spend ÷ CPL)</td></tr>`;
+  chans.forEach(ch => {
+    body += `<tr><td>${fcPlAttr(ch.label)} MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].channels[ch.key].mqls, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
   });
   body += `<tr class="tot"><td>Total MQLs bought</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
 
-  body += `<tr class="sec"><td colspan="${colSpan}">Channel CPL ($/MQL) — raise when a category isn't going as far</td></tr>`;
-  FC_GTM_CHANNELS.forEach(ch => {
+  body += `<tr class="sec"><td colspan="${colSpan}">CPL ($/MQL) — assumed until MQL volumes are loaded · raise when a program isn't going as far</td></tr>`;
+  chans.forEach((ch, i) => {
     const cells = periods.map(p => {
-      const cpl = (fcGtmState.cpl[p] && fcGtmState.cpl[p][ch.key] != null) ? fcGtmState.cpl[p][ch.key] : ch.defaultCpl;
+      const cpl = allocByP[p].channels[ch.key].cpl;
       const c = p > getCloseMonth() ? 'fc-c' : 'act-c';
       if (p <= getCloseMonth()) return `<td class="${c}">$${Math.round(cpl).toLocaleString()}</td>`;
       return `<td class="${c}"><input class="hc-hire" style="width:52px;max-width:100%" type="number" min="1" step="10" value="${Math.round(cpl)}"
-        onchange="updateFcGtmCpl('${p}','${ch.key}',this.value)"></td>`;
+        onchange="updateFcGtmCpl('${p}',${i},this.value)"></td>`;
     }).join('');
-    body += `<tr class="adj"><td>${ch.label} CPL</td>${cells}<td class="fy-c">—</td></tr>`;
+    body += `<tr class="adj"><td>${fcPlAttr(ch.label)} CPL</td>${cells}<td class="fy-c">—</td></tr>`;
   });
 
   body += `<tr class="sec"><td colspan="${colSpan}">MQL check — bought (spend÷CPL) vs implied (Budget funnel: NB$ × ${FC_GTM_PIPE_COV.toFixed(1)}× ÷ ACV ÷ MQL→Opp)</td></tr>`;
