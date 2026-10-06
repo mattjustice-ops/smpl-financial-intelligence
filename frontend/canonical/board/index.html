@@ -412,9 +412,8 @@ window.SMPL_CASH_BRIDGE = SMPL_CASH_BRIDGE;
 //   Workforce has no arrays to edit: it reads the workforce payload (signed in) or WF_DEMO,
 //   which build_demo_workforce_from_files.py rebuilds from the files.
 //
-// STEP 3 — Update static commentary-text divs and AI_CTX with new actuals.
-//   Six divs: exec, arr, revenue, gtm, cash, risks
-//   AI_CTX keys: exec, arr, revenue, gtm, cash, headcount, risks
+// STEP 3 — Nothing to edit: commentary divs and AI_CTX are built from the loaded data
+//   by boardDataCommentary (board-hydrate.js).
 //
 // NEW YEAR ROLLOVER (Jan next year):
 //   Reset CLOSE_MONTH to 'YYYY-01', update all arrays for new year,
@@ -449,17 +448,6 @@ const CLOSE_MO_IDX = parseInt(CLOSE_MONTH.slice(5)) - 1; // 0-based index into M
 // Periods considered actual (Jan through CLOSE_MONTH)
 let ACT_MONTHS_COUNT = CLOSE_MO_IDX + 1; // 6 for Jun close
 
-// ── Headcount — from Actual_headcount_plan.csv
-const HC_DATA = {
-  Sales:            { jan:85, may:86, bud:86, payroll:1.231, arr_per:'$970K/rep', note:'Quota capacity expanding' },
-  Engineering:      { jan:95, may:96, bud:96, payroll:1.631, arr_per:'$869K/eng', note:'Product velocity on track' },
-  'Customer Success':{ jan:42, may:43, bud:43, payroll:0.521, arr_per:'$1.94M/CSM', note:'NRR improving monthly' },
-  Marketing:        { jan:32, may:33, bud:33, payroll:0.447, arr_per:'$2.53M/mktr', note:'Efficiency focus H2' },
-  'G&A':            { jan:24, may:25, bud:25, payroll:0.328, arr_per:'$3.34M/head', note:'Stable; no adds planned' },
-  Product:          { jan:28, may:29, bud:29, payroll:0.450, arr_per:'$2.88M/PM', note:'Roadmap expanding' },
-  Finance:          { jan:14, may:15, bud:15, payroll:0.207, arr_per:'$5.56M/head', note:'On plan' },
-  Support:          { jan:30, may:31, bud:31, payroll:0.277, arr_per:'$2.69M/head', note:'COGS-aligned staffing' },
-};
 // Set by boardRefreshAllSeries from the workforce data (board-data.js).
 var HC_TOTAL_JAN = null, HC_TOTAL_MAY = null, HC_TOTAL_JUN = null, HC_TOTAL_BUD = null;
 var HC_BY_MO = [];
@@ -768,7 +756,7 @@ function renderExec(area) {
       <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">01</span>
       <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Where We Stand</span>
     </div>
-    <span style="font-size:10px;color:var(--text3)">June 2026 actuals vs budget</span>
+    <span style="font-size:10px;color:var(--text3)">${CLOSE_LABEL} actuals vs budget</span>
   </div>
   <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
 
@@ -912,7 +900,7 @@ function renderExec(area) {
       <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">05</span>
       <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Variance Detail</span>
     </div>
-    <span style="font-size:10px;color:var(--text3)">June 2026 actuals vs budget</span>
+    <span style="font-size:10px;color:var(--text3)">${CLOSE_LABEL} actuals vs budget</span>
   </div>
   <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
 
@@ -975,7 +963,7 @@ function renderExec(area) {
 
   <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--r2) var(--r2) 0;padding:16px 20px;box-shadow:var(--shadow)" id="execComm">
     <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">AI-Generated · Claude</div>
-    <div class="commentary-text">June close marks the strongest ARR month of H1 — net new ARR of $2.655M beat budget by $0.47M, driven by $1.92M new business and $0.98M expansion across 14 new logos and 10 expansion accounts. Revenue of $7.41M exceeded plan by $60K with gross margin expanding 220bps to 79.2% from engineering infrastructure efficiency gains. Cash reached $70.61M against a $31.46M budget — the $39.1M favorable variance reflects annual billing collections and should not be interpreted as operational outperformance. EBITDA of -$1.30M trailed budget by $1.08M due to Q2 variable compensation timing; normalization is expected in Q3 and the underlying operating leverage remains intact.</div>
+    <div class="commentary-text">${boardCommentaryText('exec')}</div>
   </div>
 
 </div>`;
@@ -1031,7 +1019,7 @@ function renderARR(area) {
   </div>
   <div class="commentary" id="arrComm" style="margin-top:14px">
     <div class="commentary-lbl">ARR Narrative</div>
-    <div class="commentary-text">June net new ARR of $2.655M was the best month of H1 — $0.47M above the $2.185M budget — driven by $1.92M new business and $0.98M expansion across 14 new logos and 10 expansion accounts. Churn of $0.115M was dramatically favorable vs the $0.50M budget as the Commit-stage renewal cohort closed at 95%. NRR reached 100.8% (bud 100.0%), and the H2 ARR forecast of $91.1M is tracking ~$5.0M behind the $96.1M budget based on current pipeline coverage of 3.3x.</div>
+    <div class="commentary-text">${boardCommentaryText('arr')}</div>
   </div>
   <button class="ai-btn" onclick="aiComm('arr','arrComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
@@ -1089,7 +1077,7 @@ function renderRevenue(area) {
   </div>
   <div class="commentary" id="revComm">
     <div class="commentary-lbl">Revenue Narrative</div>
-    <div class="commentary-text">June revenue of $7.41M exceeded the $7.35M budget by $60K — the sixth consecutive month of at-or-above-plan performance — with subscription revenue comprising 96.7% of the mix. Gross margin of 79.2% expanded 220bps above the 77.0% budget, driven by engineering infrastructure optimization reducing cloud hosting costs. EBITDA of -$1.30M trailed budget by $1.08M due to Q2 variable compensation accrual timing; the underlying operating leverage is materializing with revenue up 12.6% YTD while headcount grew 9.1%, and Q3 EBITDA is expected to normalize toward plan as the variable comp timing reverses.</div>
+    <div class="commentary-text">${boardCommentaryText('revenue')}</div>
   </div>
   <button class="ai-btn" onclick="aiComm('revenue','revComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
@@ -1271,7 +1259,7 @@ function renderCash(area) {
   </div>
   <div class="commentary" id="cashComm">
     <div class="commentary-lbl">Cash &amp; Liquidity Narrative</div>
-    <div class="commentary-text">June ending cash of $70.61M is $39.15M above the $31.46M budget — the favorable variance is structural, driven by annual enterprise billing collections (March spike $13.6M) and June collections of $11.18M above the $9.65M May run rate. CFO was $4.80M in June vs $3.65M in May, reflecting the stronger billing close. Zero financing activity YTD; with 24+ months runway and a $10M cash floor, the balance sheet provides full operating flexibility for the H2 hiring plan and any opportunistic investments.</div>
+    <div class="commentary-text">${boardCommentaryText('cash')}</div>
   </div>
   <button class="ai-btn" onclick="aiComm('cash','cashComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
@@ -1748,67 +1736,6 @@ function renderGLTable(dept) {
   tb.appendChild(ttr);
 }
 
-// ─── HEADCOUNT ─────────────────────────────────────────────────────────────
-function renderHC(area) {
-  const depts = Object.keys(HC_DATA);
-  const totJan=HC_TOTAL_JAN, totJun=HC_TOTAL_JUN, totBud=HC_TOTAL_BUD;
-  const closeHc = typeof boardCloseHc === 'function' ? boardCloseHc() : totJun;
-  const arrPerEmp = (ARR_PER_EMP && ARR_PER_EMP.length)
-    ? ARR_PER_EMP[ARR_PER_EMP.length - 1]
-    : (closeHc && ARR_ACT && ARR_ACT[ACT_MONTHS_COUNT-1]
-        ? Math.round(ARR_ACT[ACT_MONTHS_COUNT-1]*1e6/closeHc/1000)
-        : 628);
-  const arrPerEmpJan = (ARR_PER_EMP && ARR_PER_EMP.length) ? ARR_PER_EMP[0] : 631;
-  const arrPerEmpDelta = arrPerEmp - arrPerEmpJan;
-  area.innerHTML = `<div class="slide">
-  <div class="slide-title">Headcount &amp; Productivity</div>
-  <div class="slide-sub">Department staffing · ARR per employee · Payroll cost · Jan–June 2026 Actuals vs Budget</div>
-  <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Total HC (${CLOSE_MO})</div><div class="kpi-val">${totJun}</div><div class="kpi-delta ${totJun<=totBud+7?'pos':'neg'}">vs budget: ${totBud}</div></div>
-    <div class="kpi"><div class="kpi-lbl">HC vs Jan</div><div class="kpi-val">+${totJun-totJan}</div><div class="kpi-delta pos">net adds YTD</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR / Employee</div><div class="kpi-val">$${arrPerEmp}K</div><div class="kpi-delta pos">${arrPerEmpDelta>=0?'+':''}$${arrPerEmpDelta}K vs Jan</div></div>
-    <div class="kpi"><div class="kpi-lbl">Total Payroll (May)</div><div class="kpi-val">$6.09M</div><div class="kpi-delta neu">on budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">Attrition YTD</div><div class="kpi-val">3</div><div class="kpi-delta neu">within plan</div></div>
-  </div>
-  <div class="hc-grid">
-    ${depts.map(d=>{const h=HC_DATA[d];const delta=h.may-h.jan;return`<div class="hc-dept">
-      <div class="hc-name">${d}</div>
-      <div class="hc-val">${h.may} <span style="font-size:13px;color:${delta>0?'#1D9E75':delta<0?'#D85A30':'var(--text3)'};">${delta>0?'+':''}${delta}</span></div>
-      <div class="hc-sub">$${(h.payroll).toFixed(2)}M/mo payroll</div>
-      <div class="hc-sub" style="color:var(--text3);font-size:9.5px;margin-top:1px">${h.arr_per}</div>
-      <div class="hc-sub" style="color:var(--text3);font-size:9.5px">${h.note}</div>
-    </div>`;}).join('')}
-  </div>
-  <div class="two-col">
-    <div class="card">
-      <div class="card-title">Headcount by department — June 2026</div>
-      <div class="card-sub">Actual vs budget headcount</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="hcBar" role="img" aria-label="Headcount bar chart by department actual vs budget June 2026">Sales 86, Engineering 96, CS 43, Marketing 33, Support 31, G&A 25, Product 29, Finance 15.</canvas></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Total headcount &amp; ARR per employee trend</div>
-      <div class="card-sub">Jan – June 2026 · dual axis</div>
-      <div class="chart-wrap" style="height:200px"><canvas id="hcTrend" role="img" aria-label="Headcount and ARR per employee trend chart">HC grew from ${totJan} to ${totJun}. ARR per employee moved from $${arrPerEmpJan}K to $${arrPerEmp}K.</canvas></div>
-    </div>
-  </div>
-  <div class="two-col" style="margin-top:14px">
-    <div>
-      <div class="sec-lbl">Department Headcount — Actual vs Budget (Jun)</div>
-      ${depts.map(d=>{const h=HC_DATA[d];const vd=h.may-h.bud;return`<div class="var-row"><span class="var-lbl">${d}</span><span class="var-act">${h.may}</span><span class="var-bud">${h.bud} bud</span><span class="var-diff ${vd===0?'neu':vd<0?'pos':'neg'}">${vd===0?'on plan':vd>0?'+'+vd+'HC':vd+'HC'}</span></div>`;}).join('')}
-    </div>
-    <div>
-      <div class="sec-lbl">Monthly Payroll Cost — Total ($M)</div>
-      ${MO.map((m,i)=>{const cost=[6.00,5.97,6.02,6.06,6.09][i];const bud=[6.04,6.04,6.04,6.10,6.10][i];const d=cost-bud;return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM(cost)}</span><span class="var-bud">${fM(bud)} bud</span><span class="var-diff ${Math.abs(d)<0.01?'neu':d<0?'pos':'neg'}">${Math.abs(d)<0.01?'on plan':fV(d)}</span></div>`;}).join('')}
-    </div>
-  </div>
-  <div class="commentary" id="hcComm">
-    <div class="commentary-lbl">Headcount Narrative</div>
-    <div class="commentary-text">Total headcount grew from 121 in January to ${closeHc} in June — on plan — with 7 net adds in June including Sales, R&D, Marketing, Product, CS, Support, and G&A reflecting disciplined hiring against approved plans. All departments are on or under budget. Engineering at 96 HC and Sales at 86 HC represent the largest groups, together accounting for 51% of total headcount. Total payroll cost of $6.09M is on budget with no material overruns. ARR per employee improved from $631K in January to $${arrPerEmp}K in June, demonstrating strong operating leverage as ARR grew 14.8% on 9.1% headcount growth. Attrition of 3 employees YTD remains within plan, preserving institutional knowledge through the H2 scaling period.</div>
-  </div>
-  <button class="ai-btn" onclick="aiComm('headcount','hcComm')">✦ Regenerate AI commentary ↗</button>
-</div>`;
-}
-
 // ─── RISKS ─────────────────────────────────────────────────────────────────
 function renderRisks(area) {
   area.innerHTML = `<div class="slide">
@@ -1826,7 +1753,7 @@ function renderRisks(area) {
   </div>
   <div class="commentary risk" id="riskComm">
     <div class="commentary-lbl">Board Recommendation</div>
-    <div class="commentary-text">June close confirms Q2 beat on ARR (+$0.58M), revenue (+$0.06M), gross margin (+220bps), and cash (+$39.1M) — with the single exception of EBITDA (-$1.08M vs budget) driven by Q2 variable comp timing expected to normalize in Q3. The two highest-priority decisions heading into H2 are: (1) reallocation of $200-300K from Paid Search to Partner/Organic channels to improve pipeline efficiency; and (2) monitoring the SMB renewal cohort entering Q3 — 78% of H1 gross churn was SMB-concentrated, and the Q3 renewal book carries $2.1M at risk. Board action: approve H2 open req plan (10 remaining reqs, $1.24M incremental H2 payroll) and ratify the Q3 GTM channel reallocation.</div>
+    <div class="commentary-text">${boardCommentaryText('risks')}</div>
   </div>
   <button class="ai-btn" onclick="aiComm('risks','riskComm')">✦ Regenerate AI commentary ↗</button>
 </div>`;
@@ -2025,42 +1952,23 @@ function buildCharts(slide) {
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:baseScaleX,y:baseScaleY(v=>'$'+v.toFixed(1)+'M')}}
     });
-  } else if(slide==='headcount') {
-    const depts=Object.keys(HC_DATA);
-    charts.hcBar=mkChart(document.getElementById('hcBar'),{
-      type:'bar',data:{labels:depts,datasets:[
-        {label:'Actual',data:depts.map(d=>HC_DATA[d].may),backgroundColor:fade(cBlue,0.6),borderColor:cBlue,borderWidth:1.5,borderRadius:3},
-        {label:'Budget',data:depts.map(d=>HC_DATA[d].bud),backgroundColor:fade(cText3,0.2),borderColor:cText3,borderWidth:1,borderRadius:3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{x:{ticks:{font:{size:8},maxRotation:30,color:tickColor},grid:{display:false}},y:baseScaleY(v=>v)}}
-    });
-    charts.hcT=mkChart(document.getElementById('hcTrend'),{
-      data:{labels:MO,datasets:[
-        {type:'line',label:'ARR/Emp ($K)',data:ARR_PER_EMP,borderColor:cPos,borderWidth:2,pointRadius:3,pointBackgroundColor:cPos,fill:false,yAxisID:'y1',tension:0.3},
-        {type:'bar', label:'Total HC',    data:HC_BY_MO,  backgroundColor:fade(cBlue,0.2),borderColor:cBlue,borderWidth:1.5,yAxisID:'y2',borderRadius:3},
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-        scales:{
-          y1:{type:'linear',position:'left', title:{display:true,text:'ARR/Emp ($K)',font:tickFont,color:tickColor},ticks:{callback:v=>'$'+v+'K',font:tickFont,color:tickColor},grid:{color:gridColor}},
-          y2:{type:'linear',position:'right',title:{display:true,text:'HC',font:tickFont,color:tickColor},ticks:{font:tickFont,color:tickColor},grid:{display:false}},
-          x:baseScaleX,
-        }
-      }
-    });
+
   }
 }
 
 
 // ─── AI COMMENTARY ─────────────────────────────────────────────────────────
+function boardCommentaryText(key) {
+  return typeof window.boardDataCommentary === 'function' ? window.boardDataCommentary(key) : '';
+}
 const AI_CTX = {
-  exec:`June 2026 close: ARR $86.10M (bud $85.52M, +$0.58M). Revenue $7.41M (bud $7.35M, +$0.06M). Gross Margin 79.2% (bud 77.0%, +220bps from infra efficiency). EBITDA -$1.30M (bud -$0.22M, -$1.08M unfavorable). Cash $70.61M (bud $31.46M, +$39.1M from annual billing timing). NRR 100.8%. Q2 net new ARR $2.655M, best month of H1. YTD revenue $41.71M vs $41.61M budget.`,
-  arr:`June waterfall: Begin $83.44M, New Biz +$1.92M (bud $1.73M, +$0.19M), Expansion +$0.98M (bud $0.85M, +$0.13M), Reactivation +$0.095M, Contraction -$0.225M, Churn -$0.115M (bud -$0.50M, favorable), End $86.10M (+$0.58M vs budget). NRR 100.8%, GRR 98.7%. H2 ARR forecast $91.1M vs $96.1M budget (~$5.0M behind). June net new $2.655M best month YTD.`,
-  revenue:`June revenue $7.41M (bud $7.35M, +$0.06M). Gross profit $5.87M, GM 79.2% (bud 77.0%, +220bps — engineering infrastructure efficiency gains). S&M $3.68M (bud $3.83M, -$0.14M favorable). R&D $1.22M on plan. G&A $0.81M on plan. EBITDA -$1.30M vs bud -$0.22M (-$1.08M — timing of Q2 variable comp accrual). YTD revenue $41.71M vs $41.61M budget. Subscription 96.7% of revenue mix.`,
+  get exec() { return boardCommentaryText('exec'); },
+  get arr() { return boardCommentaryText('arr'); },
+  get revenue() { return boardCommentaryText('revenue'); },
   get gtm() { return boardGtmNarrative(boardGtmSummary()); },
-  cash:`Jan-Jun cash: $46.1M → $70.61M vs budget $31.46M (+$39.1M favorable). June: collections $11.18M (above May $9.65M — strong enterprise close), CFO $4.80M, capex -$0.22M, net +$4.57M. March collections $13.6M annual billing spike remains largest single-month. Zero financing activity. 24+ months runway. H2 collections target $8-10M/month on H2 ARR billing cycle.`,
-  headcount:`June close: 137 active employees (bud 130, on plan). +7 net adds in June: Sales +1, R&D +1, Marketing +1, Product +1, CS +1, Support +1, G&A +1. Payroll $1.94M/mo. ARR per employee $628K (Jan $631K). 10 open reqs Jul-Nov. Sales quota attainment 98.1% (29 reps). Attrition 3 YTD.`,
-  risks:`Key risks: EBITDA -$1.08M vs budget (Q2 variable comp timing — monitor Q3 normalization); Paid Search $429K at sub-2x efficiency; SMB concentration 78% of gross churn creates GRR risk; pipeline coverage 3.3x adequate but below May 4.5x peak — needs Q3 pipeline acceleration. Opportunities: gross margin expansion 220bps above budget; NRR improvement to 100.8%; Partner + Organic channels at 2.3-2.6x efficiency warrant budget reallocation from Paid Search.`,
+  get cash() { return boardCommentaryText('cash'); },
+  get headcount() { return boardCommentaryText('headcount'); },
+  get risks() { return boardCommentaryText('risks'); },
 };
 
 window.AI_CTX = AI_CTX;
@@ -3409,30 +3317,8 @@ document.getElementById('footerCloseMo').textContent = CLOSE_MO;
 })();
 
 // ── SMPL COPILOT ────────────────────────────────────────────────────────────
-// Data context injected from June actuals CSVs
+// Source files the live Copilot answers from (numbers come from the warehouse via /board-platform/copilot).
 const CP_DATA = {
-  as_of: 'June 2026',
-  arr: { eop: 86.10, bop: 83.44, net_new: 2.655, nb: 1.92, expansion: 0.98,
-         churn: 0.115, contraction: 0.225, reactivation: 0.095,
-         nrr: 100.8, grr: 98.7, vs_budget: +0.58, budget_eop: 85.52 },
-  revenue: { actual: 7.412, budget: 7.352, var: 0.060, ytd: 41.71, ytd_bud: 41.61,
-              gross_profit: 5.874, gm_pct: 79.2, gm_bud_pct: 77.0 },
-  ebitda: { actual: -1.297, budget: -0.221, var: -1.076, ytd: -8.113 },
-  cash: { ending: 70.61, beginning: 66.04, cfo: 4.795, capex: -0.220,
-          vs_budget: 39.15, budget: 31.46 },
-  headcount: { total: 137, sales: 29, rd: 36, cs: 16, marketing: 14,
-               support: 14, ga: 14, product: 9, quota_att_pct: 98.1 },
-  gtm: { top_channel_eff: 'Partner (2.61x pipe/$)', top_channel_cac: 'Customer Success (1.09x)',
-         total_channels: 11, total_spend_k: 2500 },
-  ytd_summary: { periods: 'Jan-Jun 2026', arr_growth: '+14.8% vs Jan BOP',
-                 avg_monthly_nn: 1.84, revenue: 41.71, cash_change: '+24.51M' },
-  mda_seeds: {
-    'Executive Summary': 'Q2 actuals reflect continued ARR growth, strong annual renewal collections, and a higher ending cash balance. June ARR closed at $86.1M, driven by new business and expansion, while churn remained limited to a small number of customers.',
-    'ARR Waterfall': 'June net new ARR was $2.655M, supported by $1.92M of new business and $0.98M of expansion, partially offset by $0.34M of contraction and churn.',
-    'Cash Forecast': 'Ending cash increased to $70.6M due to $11.18M of customer collections, offset by payroll, vendor payments, commissions, other operating cash outflows, and capex.',
-    'Management P&L': 'June revenue of $7.41M was $60K above budget, with gross margin expanding 220bps to 79.2% driven by infrastructure efficiency gains in engineering.',
-    'Workforce': 'Headcount of 137 reflects quota attainment of 98.1% across 29 sales reps, with R&D at 36 headcount supporting accelerating product velocity.'
-  },
   sources: {
     arr: 'Actual_MRR_Waterfall.csv',
     revenue: 'Actual_income_statement.csv',
@@ -3443,41 +3329,20 @@ const CP_DATA = {
   }
 };
 
-const CP_SYSTEM = `You are SMPL Copilot, the AI financial intelligence layer for SMPL (formerly ClarityFP), a B2B SaaS company.
-
-SMPL is not generic AI text generation. Every answer is grounded in reconciled financial and operating data with clear lineage to source systems.
-
-For every question, structure your response in exactly three parts:
-1. PRIMARY DRIVER + VARIANCE CONTEXT: The single most important metric or movement, with the exact dollar or percentage variance vs budget or prior period.
-2. FINANCIAL AND OPERATIONAL ROOT CAUSE: What drove that number - connect the operational metric (ARR movement, headcount change, channel performance) to the financial outcome.
-3. RECOMMENDED ACTION + BOARD SUMMARY: One specific, actionable recommendation for the CFO or board, and a one-sentence board-ready summary.
-
-Always cite the source file for each data point you reference.
-
-SMPL June 2026 Actuals (as of close):
-${JSON.stringify(CP_DATA, null, 2)}
-
-Rules:
-- Use exact numbers from CP_DATA, never round differently than shown
-- Always cite source files from CP_DATA.sources
-- If asked about something not in CP_DATA, say so explicitly rather than guessing
-- Keep each section to 2-3 sentences maximum
-- Use dollar signs and percentages consistently`;
-
 window.cpHistory = window.cpHistory || [];
 window.cpSending = false;
 
 function renderCopilot(area) {
   area.innerHTML = `<div class="slide">
     <div class="slide-title">SMPL Copilot</div>
-    <div class="slide-sub">Answers grounded in reconciled financial and operating data with clear lineage to source systems &mdash; June 2026 close</div>
+    <div class="slide-sub">Answers grounded in reconciled financial and operating data with clear lineage to source systems &mdash; ${CLOSE_LABEL} close</div>
     <div class="cp-container">
       <div class="cp-messages" id="cpMessages">
         <div class="cp-msg assistant">
           <div class="cp-avatar">S</div>
           <div class="cp-bubble">
             <div class="cp-section">Ready</div>
-            I have June 2026 actuals loaded from ${Object.keys(CP_DATA.sources).length} source files. Ask me anything about ARR, revenue, cash, headcount, GTM performance, or variance vs budget.
+            I answer from your loaded ${CLOSE_LABEL} data in ${Object.keys(CP_DATA.sources).length} source files. Ask me anything about ARR, revenue, cash, headcount, GTM performance, or variance vs budget.
             <div class="cp-source">Sources: ${Object.values(CP_DATA.sources).join(' &middot; ')}</div>
           </div>
         </div>
@@ -3738,7 +3603,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=35"></script>
+<script src="/shared/board-hydrate.js?v=36"></script>
 
 </body>
 </html>

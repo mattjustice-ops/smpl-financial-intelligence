@@ -125,7 +125,7 @@ vm.runInContext(
     `\n;Object.assign(this, {
   compute, getLevers, getResults, getDisplayCFS, invalidateCfsChain, markScenarioDirty, buildCFSChain,
   HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl,
-  fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromPlan, computeFcHcPlan, fcPlHcDelta
+  fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromData, computeFcHcPlan, fcPlHcDelta, fcHcReqPlanGaps
 });\n`,
   sandbox,
 );
@@ -141,9 +141,10 @@ const {
   fcCostState,
   fcHcState,
   ensureFcHcState,
-  seedFcHcFromPlan,
+  seedFcHcFromData,
   computeFcHcPlan,
   fcPlHcDelta,
+  fcHcReqPlanGaps,
 } = sandbox;
 
 if (typeof compute !== "function" || typeof getResults !== "function" || !ALL_P) {
@@ -154,7 +155,7 @@ if (!fcArrState || !fcCostState || typeof markScenarioDirty !== "function") {
   console.error("FAIL: forecast lever state / markScenarioDirty not available after extract");
   process.exit(1);
 }
-if (!fcHcState || typeof ensureFcHcState !== "function" || typeof seedFcHcFromPlan !== "function") {
+if (!fcHcState || typeof ensureFcHcState !== "function" || typeof seedFcHcFromData !== "function") {
   console.error("FAIL: forecast HC state helpers not available after extract");
   process.exit(1);
 }
@@ -174,9 +175,9 @@ function resetLeversAndHires() {
   fcCostState.sm = 34;
   fcCostState.rd = 16;
   fcCostState.ga = 11;
-  // Reseed hires from the loaded headcount plan so prior hire edits do not leak.
+  // Reseed hires from the loaded data (reqs) so prior hire edits do not leak.
   fcHcState.hires = null;
-  seedFcHcFromPlan(true);
+  seedFcHcFromData(true);
 }
 
 function decCash() {
@@ -247,6 +248,7 @@ const checks = [
   ["HC +8 Jul R&D hires changes Dec cash", rd.cash !== base.cash],
   ["Headcount plan at defaults equals loaded heads every month", headsMatch],
   ["Headcount plan at defaults adds no payroll adjustment", defaultAdj === 0],
+  ["Open reqs tie to the loaded headcount plan", fcHcReqPlanGaps().length === 0],
 ];
 
 console.log("Baseline Dec cash:", fmt(base.cash), "Dec ARR:", fmt(base.arr), "Jul R&D:", fmt(base.rd));

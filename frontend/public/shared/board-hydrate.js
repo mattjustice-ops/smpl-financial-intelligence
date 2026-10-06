@@ -22,6 +22,11 @@
     return global.CLOSE_MONTH || global.SMPL_CLOSE_MONTH || "2026-06";
   }
 
+  function boardCloseLabel() {
+    var cm = boardActiveCloseMonth();
+    return monthNames()[parseInt(cm.slice(5), 10) - 1] + " " + cm.slice(0, 4);
+  }
+
   function boardActualPeriods() {
     var cm = boardActiveCloseMonth();
     var y = cm.slice(0, 4);
@@ -93,14 +98,14 @@
     var wf = global.SMPL_ARR_WATERFALL || {};
     var idx = boardActualPeriods().length - 1;
     function row(key, label) {
-      var act = wf[key] && wf[key][idx] != null ? wf[key][idx] / 1e6 : 0;
+      var act = wf[key] && wf[key][idx] != null ? wf[key][idx] / 1e6 : null;
       var budKey = "Budget_" + key.replace(/ /g, "_");
       var bud =
         wf[budKey] && wf[budKey][idx] != null
           ? wf[budKey][idx] / 1e6
           : wf[key + "_Budget"] && wf[key + "_Budget"][idx] != null
             ? wf[key + "_Budget"][idx] / 1e6
-            : 0;
+            : null;
       return { label: label, val: act, bud: bud };
     }
     var drivers = [
@@ -110,20 +115,22 @@
       row("Contraction", "Contraction"),
       row("Churn", "Churn"),
     ];
-    var nnAct = drivers.reduce(function (s, d) {
-      return s + d.val;
-    }, 0);
-    var nnBud = drivers.reduce(function (s, d) {
-      return s + d.bud;
-    }, 0);
+    function total(field) {
+      if (drivers.some(function (d) { return d[field] == null; })) return null;
+      return drivers.reduce(function (s, d) { return s + d[field]; }, 0);
+    }
+    var nnAct = total("val");
+    var nnBud = total("bud");
+    if (nnAct == null && global.NN_ACT && global.NN_ACT[idx] != null) nnAct = global.NN_ACT[idx];
+    if (nnBud == null && global.NN_BUD && global.NN_BUD[idx] != null) nnBud = global.NN_BUD[idx];
     var maxAbs = Math.max.apply(
       null,
       drivers.map(function (d) {
-        return Math.abs(d.val);
+        return Math.abs(d.val || 0);
       }).concat([0.01]),
     );
     drivers.forEach(function (d) {
-      d.pct = Math.round((Math.abs(d.val) / maxAbs) * 100);
+      d.pct = d.val == null ? null : Math.round((Math.abs(d.val) / maxAbs) * 100);
     });
     return { nnAct: nnAct, nnBud: nnBud, drivers: drivers };
   }
@@ -456,11 +463,11 @@
   function buildLiveExecCommentary() {
     var m = boardJunMetrics();
     var drivers = boardExecDrivers();
-    var closeLbl = global.CLOSE_LABEL || "Close";
-    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : 0;
-    var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : 0;
-    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
-    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : 0;
+    var closeLbl = boardCloseLabel();
+    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : null;
+    var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : null;
+    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : null;
+    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : null;
     var nrrPct = m.nrr != null ? (m.nrr * 100).toFixed(1) + "%" : "—";
     return (
       closeLbl +
@@ -482,7 +489,7 @@
       fKpiM(m.cashAct) +
       " (" +
       fKpiVarM(cashVar) +
-      " vs bud), N$R " +
+      " vs bud), NRR " +
       nrrPct +
       "."
     );
@@ -504,10 +511,11 @@
   function buildLiveArrCommentary() {
     var m = boardJunMetrics();
     var drivers = boardExecDrivers();
-    var closeLbl = global.CLOSE_LABEL || "Close";
-    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : 0;
+    var closeLbl = boardCloseLabel();
+    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : null;
     var decArr = boardDecArrM();
-    var budDec = 96.1;
+    var budEnding = (global.SMPL_ARR_WATERFALL || {}).Budget_Ending;
+    var budDec = budEnding && budEnding[11] != null ? budEnding[11] / 1e6 : null;
     var parts = [
       closeLbl +
         " waterfall end ARR " +
@@ -525,15 +533,10 @@
       parts.push(d.label + " " + fKpiVarM(d.val) + " (bud " + fKpiM(d.bud) + ").");
     });
     if (decArr != null) {
-      var gap = decArr - budDec;
       parts.push(
-        "H2 ARR forecast " +
+        "December ARR forecast " +
           fKpiM(decArr) +
-          " vs $" +
-          budDec.toFixed(1) +
-          "M budget (" +
-          fKpiVarM(gap) +
-          ").",
+          (budDec != null ? " vs " + fKpiM(budDec) + " budget (" + fKpiVarM(decArr - budDec) + ")." : " (no budget loaded)."),
       );
     }
     if (m.nrr != null) parts.push("NRR " + (m.nrr * 100).toFixed(1) + "%.");
@@ -542,8 +545,8 @@
 
   function buildLiveCashCommentary() {
     var m = boardJunMetrics();
-    var closeLbl = global.CLOSE_LABEL || "Close";
-    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : 0;
+    var closeLbl = boardCloseLabel();
+    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : null;
     var idx = boardActualPeriods().length - 1;
     var coll = global.COLL && global.COLL[idx] != null ? global.COLL[idx] : null;
     var parts = [
@@ -560,9 +563,9 @@
 
   function buildLiveRevenueCommentary() {
     var m = boardJunMetrics();
-    var closeLbl = global.CLOSE_LABEL || "Close";
-    var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : 0;
-    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
+    var closeLbl = boardCloseLabel();
+    var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : null;
+    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : null;
     var gm =
       m.gmAct != null
         ? (m.gmAct > 1 ? m.gmAct : m.gmAct * 100).toFixed(1) + "%"
@@ -594,7 +597,7 @@
         : null;
     var arrPerEmpJan =
       global.ARR_PER_EMP && global.ARR_PER_EMP.length ? global.ARR_PER_EMP[0] : null;
-    var closeLbl = global.CLOSE_LABEL || "Close";
+    var closeLbl = boardCloseLabel();
     var parts = [
       closeLbl +
         " headcount " +
@@ -618,10 +621,10 @@
   function buildLiveRisksCommentary() {
     var m = boardJunMetrics();
     var drivers = boardExecDrivers();
-    var closeLbl = global.CLOSE_LABEL || "Close";
-    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : 0;
-    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
-    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : 0;
+    var closeLbl = boardCloseLabel();
+    var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : null;
+    var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : null;
+    var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : null;
     return (
       closeLbl +
       " confirms ARR " +
@@ -643,6 +646,12 @@
     cash: buildLiveCashCommentary,
     headcount: buildLiveHeadcountCommentary,
     risks: buildLiveRisksCommentary,
+  };
+
+  global.boardDataCommentary = function boardDataCommentary(slideKey) {
+    var builder = LIVE_COMMENTARY_BUILDERS[slideKey];
+    if (!builder) return "";
+    return hasLiveBoardMetrics() ? builder() : "Commentary unavailable: no data loaded.";
   };
 
   function buildDemoCommentary(slideKey, targetId) {
@@ -770,12 +779,12 @@
           " Warehouse validation notes (e.g. pipeline_waterfall_ties) do not block board review — client A–F at export is advisory (HTML report companion).";
       } else if (!orgId) {
         demoText +=
-          " (Embedded narrative — sign in at /app/board for live Claude commentary from your warehouse.)";
+          " (Built from the demo dataset — sign in at /app/board for live Claude commentary from your warehouse.)";
       } else if (hasLiveBoardMetrics()) {
         demoText += " (Live warehouse metrics — Claude unavailable or API blocked; numbers above match hydrated board data.)";
       } else {
         demoText +=
-          " (Live API unavailable — showing embedded June 2026 narrative. Confirm sign-in and ANTHROPIC_API_KEY on the API server.)";
+          " (Live API unavailable and no data loaded. Confirm sign-in and ANTHROPIC_API_KEY on the API server.)";
       }
       txt.textContent = demoText;
       global.aiCache = global.aiCache || {};
@@ -938,53 +947,7 @@
       if (!global.SMPL_LIVE_OUTLOOK) {
         return demoRenderExec(area);
       }
-      var m = boardJunMetrics();
-      var drivers = boardExecDrivers();
-      var closeLbl = global.CLOSE_LABEL || "Close";
-      var cm = boardActiveCloseMonth();
-      var arrVar = m.arrAct != null && m.arrBud != null ? m.arrAct - m.arrBud : 0;
-      var revVar = m.revAct != null && m.revBud != null ? m.revAct - m.revBud : 0;
-      var ebitdaVar = m.ebitdaAct != null && m.ebitdaBud != null ? m.ebitdaAct - m.ebitdaBud : 0;
-      var cashVar = m.cashAct != null && m.cashBud != null ? m.cashAct - m.cashBud : 0;
-      var nnVar = drivers.nnAct - drivers.nnBud;
-      var nrrPct = m.nrr != null ? (m.nrr * 100).toFixed(1) + "%" : "—";
-      var gmActPct = m.gmAct != null ? fKpiPct(m.gmAct) : "—";
-      var gmBudPct = m.gmBud != null ? fKpiPct(m.gmBud) : "—";
-
-      var heroCards = [
-        {
-          lbl: "Ending ARR",
-          val: fKpiM(m.arrAct),
-          delta: fKpiVarM(arrVar) + " vs bud",
-          dir: arrVar >= 0 ? "pos" : "neg",
-          because: "Sourced from live ARR waterfall ending balance",
-          link: "show('arr',null)",
-        },
-        {
-          lbl: "Net New ARR",
-          val: fKpiM(drivers.nnAct),
-          delta: fKpiVarM(nnVar) + " vs bud",
-          dir: nnVar >= 0 ? "pos" : "neg",
-          because: "Driver decomposition from warehouse waterfall",
-          link: "show('arr',null)",
-        },
-        {
-          lbl: "EBITDA",
-          val: fKpiM(m.ebitdaAct),
-          delta: fKpiVarM(ebitdaVar) + " vs bud",
-          dir: ebitdaVar >= 0 ? "pos" : "neg",
-          because: "Income statement actual vs budget at " + cm,
-          link: "show('pl',null)",
-        },
-        {
-          lbl: "Cash Balance",
-          val: fKpiM(m.cashAct),
-          delta: fKpiVarM(cashVar) + " vs bud",
-          dir: cashVar >= 0 ? "pos" : "neg",
-          because: "Balance sheet cash ties to cash flow bridge",
-          link: "show('cash',null)",
-        },
-      ];
+      var closeLbl = boardCloseLabel();
 
       demoRenderExec(area);
 
@@ -1518,6 +1481,7 @@
       if (sel) sel.value = saved;
       global.applySkin(saved);
     }
+    refreshAllLiveCommentariesFromMetrics();
     // Defer first hydrate so embedded iframe receives smpl:org from parent (Forecast Engine pattern).
     setTimeout(function () {
       void smplBoardHydrate();
