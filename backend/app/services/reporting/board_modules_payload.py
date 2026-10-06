@@ -8,13 +8,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.workforce import WorkforceEmployee, WorkforceOpenRequisition, WorkforcePeriodSummary
 from app.services.dashboard.query_utils import fetch_scenario_rows, fetch_table_rows, preferred_table, table_exists, value_any
+from app.services.reporting.board_workforce import build_workforce_payload
 from app.services.reporting.period_utils import period_range, to_period
-from app.services.workforce.constants import APPROVED_REQ_STATUSES
 
 GTM_CHANNEL_COLORS: tuple[str, ...] = (
     "#1D9E75",
@@ -28,16 +26,6 @@ GTM_CHANNEL_COLORS: tuple[str, ...] = (
     "#B4B2A9",
     "#A32D2D",
     "#D85A30",
-)
-
-BOARD_WF_DEPARTMENTS: tuple[str, ...] = (
-    "Sales",
-    "Marketing",
-    "R&D",
-    "Product",
-    "Customer Success",
-    "Support",
-    "G&A",
 )
 
 SALES_REGIONS: tuple[str, ...] = ("West", "EMEA", "East", "Central")
@@ -382,156 +370,6 @@ def build_sales_payload(
     }
 
 
-def _year_bounds(as_of_period: str) -> tuple[str, str]:
-    year = int(as_of_period[:4])
-    return f"{year:04d}-01", f"{year:04d}-12"
-
-
-def build_workforce_payload(
-    db: Session,
-    organization_id: uuid.UUID,
-    *,
-    as_of_period: str,
-    arr_ending: float | None = None,
-) -> dict[str, Any]:
-    """Workforce block for board WF_* globals."""
-    year_start, year_end = _year_bounds(as_of_period)
-    months = period_range(year_start, year_end)
-    month_idx = {period: idx for idx, period in enumerate(months)}
-
-    hc_all: dict[str, list[int]] = {dept: [0] * 12 for dept in BOARD_WF_DEPARTMENTS}
-    total_hc = [0] * 12
-    payroll = [0.0] * 12
-    quota_tot = [0.0] * 12
-    quota_rmp = [0.0] * 12
-
-    if table_exists(db, "workforce_period_summary"):
-        rows = db.scalars(
-            select(WorkforcePeriodSummary).where(
-                WorkforcePeriodSummary.organization_id == organization_id,
-                WorkforcePeriodSummary.version == "Forecast",
-                WorkforcePeriodSummary.period >= date(int(year_start[:4]), 1, 1),
-                WorkforcePeriodSummary.period <= date(int(year_end[:4]), 12, 1),
-            )
-        ).all()
-        payroll_by_period: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-        quota_by_period: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-        prod_quota_by_period: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-        for row in rows:
-            period = to_period(row.period)
-            idx = month_idx.get(period)
-            if idx is None:
-                continue
-            dept = row.department
-            if dept in hc_all:
-                hc_all[dept][idx] = int(row.total_headcount_fte or 0)
-            total_hc[idx] += int(row.total_headcount_fte or 0)
-            payroll_by_period[period] += row.total_people_cost_monthly or Decimal("0")
-            quota_by_period[period] += row.quota_capacity_arr or Decimal("0")
-            prod_quota_by_period[period] += row.productive_quota_capacity_arr or Decimal("0")
-        for period, idx in month_idx.items():
-            payroll[idx] = round(float(payroll_by_period.get(period, Decimal("0"))) / 1_000_000, 2)
-            quota_tot[idx] = round(float(quota_by_period.get(period, Decimal("0"))) / 1_000_000, 2)
-            quota_rmp[idx] = round(float(prod_quota_by_period.get(period, Decimal("0"))) / 1_000_000, 2)
-
-    close_idx = month_idx.get(as_of_period, 0)
-    close_hc = total_hc[close_idx] if total_hc else 0
-    dec_hc = total_hc[11] if total_hc else 0
-
-    reqs_out: list[dict[str, Any]] = []
-    if table_exists(db, "workforce_open_requisitions"):
-        close_date = date(int(as_of_period[:4]), int(as_of_period[5:7]), 1)
-        req_rows = db.scalars(
-            select(WorkforceOpenRequisition).where(
-                WorkforceOpenRequisition.organization_id == organization_id,
-                WorkforceOpenRequisition.version == "Forecast",
-            )
-        ).all()
-        for req in req_rows:
-            status = (req.approved_status or "").strip().lower()
-            if status and status not in APPROVED_REQ_STATUSES:
-                continue
-            start = req.planned_start_date or req.target_hire_date
-            if start is None or start <= close_date:
-                continue
-            reqs_out.append(
-                {
-                    "id": req.req_id,
-                    "dept": req.department,
-                    "role": req.role,
-                    "level": req.level or "",
-                    "pri": (req.priority or "Medium").title(),
-                    "start": to_period(start),
-                }
-            )
-        reqs_out.sort(key=lambda item: item["start"])
-
-    roster_out: list[dict[str, Any]] = []
-    if table_exists(db, "workforce_employees"):
-        employees = db.scalars(
-            select(WorkforceEmployee).where(
-                WorkforceEmployee.organization_id == organization_id,
-                WorkforceEmployee.version == "Forecast",
-            )
-        ).all()
-        for emp in employees:
-            status = (emp.employment_status or "").strip().lower()
-            if status and status not in {"active", "on leave", "leave"}:
-                continue
-            salary = emp.salary_annual or Decimal("0")
-            bonus = emp.bonus_annual or Decimal("0")
-            comm = emp.commission_annual or Decimal("0")
-            sbc = emp.equity_sbc_annual or Decimal("0")
-            benefits = salary * (emp.benefits_load_pct or Decimal("0"))
-            gaap = salary + bonus + comm + sbc + benefits
-            roster_out.append(
-                {
-                    "id": emp.employee_id,
-                    "dept": emp.department,
-                    "role": emp.role,
-                    "lvl": emp.level or "",
-                    "region": emp.region or "Remote",
-                    "base": float(salary),
-                    "variable": float(bonus + comm),
-                    "sbc": float(sbc),
-                    "gaap": float(gaap),
-                    "quota": float(emp.quota_capacity_arr or 0),
-                    "ramp": int(emp.months_to_full_productivity or 0),
-                }
-            )
-        roster_out.sort(key=lambda item: item["gaap"], reverse=True)
-        roster_out = roster_out[:24]
-        if not close_hc:
-            close_hc = len(
-                [
-                    emp
-                    for emp in employees
-                    if (emp.employment_status or "").strip().lower() in {"active", "on leave", "leave", ""}
-                ]
-            )
-
-    arr_per_emp = None
-    if arr_ending and close_hc:
-        arr_per_emp = int(arr_ending / close_hc)
-
-    return {
-        "WF_HC_ALL": hc_all,
-        "WF_TOTAL_HC": total_hc,
-        "WF_PAYROLL": payroll,
-        "WF_QUOTA_TOT": quota_tot,
-        "WF_QUOTA_RMP": quota_rmp,
-        "WF_REQS": reqs_out,
-        "WF_ROSTER": roster_out,
-        "summary": {
-            "close_hc": close_hc,
-            "dec_hc": dec_hc,
-            "open_reqs": len(reqs_out),
-            "close_payroll_m": payroll[close_idx] if payroll else 0.0,
-            "arr_per_employee_k": arr_per_emp,
-        },
-    }
-
-
 def build_board_modules_payload(
     db: Session,
     organization_id: uuid.UUID,
@@ -539,7 +377,6 @@ def build_board_modules_payload(
     as_of_period: str,
     start_period: str,
     end_period: str,
-    arr_ending: float | None = None,
 ) -> dict[str, Any]:
     """Aggregate board tab payloads for outlook hydration."""
     gtm = build_gtm_payload(
@@ -555,12 +392,7 @@ def build_board_modules_payload(
         as_of_period=as_of_period,
         end_period=end_period,
     )
-    workforce = build_workforce_payload(
-        db,
-        organization_id,
-        as_of_period=as_of_period,
-        arr_ending=arr_ending,
-    )
+    workforce = build_workforce_payload(db, organization_id, as_of_period=as_of_period)
     return {
         "GTM": gtm,
         "SD": sd,

@@ -1006,21 +1006,12 @@ def build_outlook_api_payload(
         end_period=end_period,
     )
 
-    arr_ending: float | None = None
-    wf = outlook.get("ARR_WATERFALL") or {}
-    ending = wf.get("Ending")
-    if isinstance(ending, list):
-        idx = int(as_of[5:7]) - 1
-        if 0 <= idx < len(ending) and ending[idx] is not None:
-            arr_ending = float(ending[idx])
-
     board_modules = build_board_modules_payload(
         db,
         organization_id,
         as_of_period=as_of,
         start_period=start_period,
         end_period=end_period,
-        arr_ending=arr_ending,
     )
 
     return {

@@ -90,7 +90,8 @@ Productivity ramp comes from `workforce_hiring_ramp_assumptions` (by department/
 | GTM / ARR capacity | `feeds.gtm_quota_capacity_feed` | Wired — `forecast_quota_capacity` fallback; bookings coverage |
 | Operating leverage / Rev per FTE / Burn multiple | `operating_metrics` on plan response | Ready |
 | Scenario planning | `version` on all source tables | Ready |
-| Board / Excel headcount | `workforce_period_summary` | Wired — legacy `headcount_plan` fallback |
+| Board Workforce tab | `reporting.board_workforce.build_workforce_payload` | Roster heads (headcount plan fallback), GL payroll by GL department, plan quota, open reqs file, ramp assumptions, roster cost vs GL payroll check |
+| Excel headcount | `workforce_period_summary` | Wired — legacy `headcount_plan` fallback |
 | CSV upload | auto-recompute | Wired — `loader.py` recomputes after workforce CSV upsert |
 | Validation | `validation_service.run_workforce_validations` | Wired — `GET /workforce/validation` |
 

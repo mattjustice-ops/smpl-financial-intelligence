@@ -108,7 +108,10 @@ def gl_payroll(session: Session, organization_id: uuid.UUID, version: str) -> Gl
     primary = _version_payroll(session, organization_id, version)
     if version != "Forecast":
         return primary
-    actual = _version_payroll(session, organization_id, "Actual")
+    return with_actual_fallback(primary, _version_payroll(session, organization_id, "Actual"))
+
+
+def with_actual_fallback(primary: GlPayrollSet, actual: GlPayrollSet) -> GlPayrollSet:
     covered = primary.periods()
     merged = GlPayrollSet(dict(primary.by_department), dict(primary.by_pnl_line))
     for (period, dept), value in actual.by_department.items():

@@ -5,9 +5,14 @@
 (function (global) {
   "use strict";
 
-  /** Canonical total headcount by month (Jan–Dec). Jun close EOP = 137. */
-  var BOARD_WF_TOTAL_HC = [121, 124, 126, 128, 130, 137, 140, 142, 145, 146, 147, 147];
-  if (!global.WF_TOTAL_HC) global.WF_TOTAL_HC = BOARD_WF_TOTAL_HC;
+  /** Workforce block: live outlook payload when signed in (empty if missing), demo dataset otherwise. */
+  function boardWorkforce() {
+    if (global.SMPL_LIVE_OUTLOOK) {
+      var live = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.WORKFORCE;
+      return live && typeof live === "object" ? live : {};
+    }
+    return global.WF_DEMO || {};
+  }
 
   function boardTsSource() {
     var embedded = global.TS_DATA;
@@ -173,13 +178,19 @@
       return global.COLL && global.COLL[i] != null ? global.COLL[i] : 0;
     });
 
-    if (global.WF_TOTAL_HC && global.WF_TOTAL_HC.length >= actN) {
+    var workforce = boardWorkforce();
+    var hcBudget = workforce.heads_budget_total || [];
+    global.WF_TOTAL_HC = (workforce.heads_total || []).slice();
+    global.HC_TOTAL_BUD = hcBudget[boardCloseIdx()] != null ? hcBudget[boardCloseIdx()] : null;
+    global.HC_BY_MO = [];
+    global.HC_TOTAL_JAN = global.HC_TOTAL_MAY = global.HC_TOTAL_JUN = null;
+    global.ARR_PER_EMP = [];
+    if (global.WF_TOTAL_HC.length >= actN) {
       var hc = global.WF_TOTAL_HC;
       global.HC_BY_MO = hc.slice(0, actN);
       global.HC_TOTAL_JAN = hc[0];
       global.HC_TOTAL_MAY = hc[Math.min(4, hc.length - 1)];
       global.HC_TOTAL_JUN = hc[boardCloseIdx()];
-      if (global.HC_TOTAL_BUD == null) global.HC_TOTAL_BUD = hc[Math.min(4, hc.length - 1)];
       var arrEop = wf && wf.Ending ? wf.Ending[boardCloseIdx()] : null;
       if (arrEop && global.HC_BY_MO[boardCloseIdx()]) {
         global.ARR_PER_EMP = actPeriods.map(function (p, idx) {
@@ -363,9 +374,8 @@
 
   function boardCloseHc() {
     var idx = boardCloseIdx();
-    if (global.WF_TOTAL_HC && global.WF_TOTAL_HC[idx] != null) return global.WF_TOTAL_HC[idx];
-    if (global.HC_BY_MO && global.HC_BY_MO[idx] != null) return global.HC_BY_MO[idx];
-    return BOARD_WF_TOTAL_HC[idx] != null ? BOARD_WF_TOTAL_HC[idx] : null;
+    var hc = boardWorkforce().heads_total || [];
+    return hc[idx] != null ? hc[idx] : null;
   }
 
   function boardNnDrivers(wf, idx) {
@@ -822,7 +832,7 @@
     boardMkChart: boardMkChart,
     boardPatchChart: boardPatchChart,
     boardActCount: boardActCount,
-    BOARD_WF_TOTAL_HC: BOARD_WF_TOTAL_HC,
+    boardWorkforce: boardWorkforce,
   };
 
   global.boardRefreshAllSeries = boardRefreshAllSeries;
@@ -831,6 +841,7 @@
   global.boardJunArrKpis = boardJunArrKpis;
   global.boardExecKpis = boardExecKpis;
   global.boardCloseHc = boardCloseHc;
+  global.boardWorkforce = boardWorkforce;
   global.boardFmtM = boardFmtM;
   global.boardFmtVarM = boardFmtVarM;
   global.boardPlKpis = boardPlKpis;
