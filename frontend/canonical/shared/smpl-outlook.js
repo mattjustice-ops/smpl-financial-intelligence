@@ -152,19 +152,18 @@
     var churn = wf.Churn[i];
     var eop = wf.Ending[i];
     if (bop == null && eop == null) return null;
-    var churnMag = Math.abs(churn || 0);
-    var contMag = Math.abs(cont || 0);
+    var retained = [exp, react, cont, churn].every(function (v) { return v != null; });
     return {
       arr_bop: bop,
       arr_nb: nb,
       arr_exp: exp,
       arr_react: react,
-      arr_cont: contMag,
-      arr_nr_churn: churnMag,
-      ren_churn: 0,
+      arr_cont: cont == null ? null : Math.abs(cont),
+      arr_nr_churn: churn == null ? null : Math.abs(churn),
+      ren_churn: null,
       arr_eop: eop,
-      nrr: bop ? (bop + (exp || 0) + (react || 0) + (cont || 0) + (churn || 0)) / bop : null,
-      grr: bop ? (bop + (cont || 0) + (churn || 0)) / bop : null,
+      nrr: bop && retained ? (bop + exp + react + cont + churn) / bop : null,
+      grr: bop && cont != null && churn != null ? (bop + cont + churn) / bop : null,
     };
   }
 
@@ -377,8 +376,8 @@
   function enrichIsRow(row) {
     if (!row) return null;
     var out = Object.assign({}, row);
-    if (out.total_opex == null) {
-      out.total_opex = (out.sm || 0) + (out.rd || 0) + (out.ga || 0);
+    if (out.total_opex == null && out.sm != null && out.rd != null && out.ga != null) {
+      out.total_opex = out.sm + out.rd + out.ga;
     }
     return out;
   }
@@ -423,8 +422,11 @@
     return mapCfsForForecast(getCombinedTsRow(period, "cfs", closeMonth));
   }
 
+  /** Sum of the loaded liability lines; null when any line is missing. */
   function sumBsLiabilities(row, deferredRev, otherLiab) {
-    return (row.ap || 0) + (deferredRev || 0) + (row.debt || 0) + (otherLiab || 0);
+    var parts = [row.ap, deferredRev, row.debt, otherLiab];
+    if (parts.some(function (v) { return v == null; })) return null;
+    return parts.reduce(function (s, v) { return s + v; }, 0);
   }
 
   function getWarehouseBS(period, allPeriods, closeMonth) {
@@ -440,9 +442,6 @@
     var totalLe = row.total_le;
     if (totalLe == null && totalLiab != null && row.equity != null) {
       totalLe = totalLiab + row.equity;
-    }
-    if (totalLe == null && row.total_assets != null) {
-      totalLe = row.total_assets;
     }
     return {
       cash: row.cash,

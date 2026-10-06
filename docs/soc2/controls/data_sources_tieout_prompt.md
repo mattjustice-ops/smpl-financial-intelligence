@@ -416,7 +416,7 @@ data:    marketing_spend.win_rate per channel (YTD)
 | Open Pipeline | `SD.pipeline[CLOSE_MONTH].ending` | `SUM(opportunities.arr_value) WHERE stage NOT IN (closed_won, closed_lost)` |
 | YTD Quota | `SUM(SD.monthly[p].quota)` | `SUM(quota_assignments.quota_amount)` WHERE period<=CLOSE_MONTH |
 | YTD Attained | `SUM(SD.monthly[p].attained)` | `SUM(quota_assignments.attainment_amount)` WHERE period<=CLOSE_MONTH |
-| YTD Commission | `SUM(SD.reps[].comm)` | `SUM(quota_assignments.commission_earned)` WHERE period<=CLOSE_MONTH |
+| YTD Commission | `SUM(SD.reps[].comm)` — `null` today | Commission by rep is **not loaded**: commission payouts use `REP-xxx` rep IDs that do not match the quota roster (`ASALES-xxxx`). No rate × attainment estimate. The Commission view shows "not loaded" until payouts tie to the roster. |
 
 #### `SD.monthly` object (one entry per actual period)
 ```javascript
@@ -425,7 +425,7 @@ SD.monthly['YYYY-MM'] = {
   quota:      <total quota $>                         → SUM(quota_assignments.quota_amount)
   attained:   <total attained $>                      → SUM(quota_assignments.attainment_amount)
   pct:        <attained/quota>                        → computed
-  bud_quota:  <budgeted quota>                        → budget.arr_new_business * 0.85 (proxy)
+  bud_quota:  <budgeted quota>                        → budget quota row for the period; null when no budget row (never defaulted to actual quota)
 }
 ```
 Warehouse:
@@ -462,7 +462,7 @@ SD.reps[i] = {
   ytd_a:    SUM(quota_assignments.attainment_amount) WHERE employee=rep AND period<=CLOSE_MONTH
   pct:      ytd_a/ytd_q
   annual_q: quota_assignments.quota_amount (annualized)
-  comm:     SUM(quota_assignments.commission_earned)
+  comm:     null — commission payouts do not tie to the quota roster (REP-xxx vs ASALES-xxxx); never estimated
 }
 ```
 
@@ -483,7 +483,7 @@ SD.regions['West'] = {
 labels:  MO12.slice(0, ACT_MONTHS_COUNT)  [actual months only]
 Actual:  SD.monthly[p].attained / 1e6     → quota_assignments.attainment_amount / 1e6
 Quota:   SD.monthly[p].quota / 1e6        → quota_assignments.quota_amount / 1e6
-Budget:  SD.monthly[p].bud_quota / 1e6    → budget proxy
+Budget:  SD.monthly[p].bud_quota / 1e6    → budget quota row; gap (null) when no budget row
 ```
 
 #### Chart: `sCovC` (Pipeline coverage ratio line)

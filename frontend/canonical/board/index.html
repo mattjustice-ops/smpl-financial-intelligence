@@ -356,10 +356,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=7"></script>
-<script src="/shared/smpl-outlook.js?v=22"></script>
+<script src="/shared/smpl-outlook.js?v=23"></script>
 <script src="/shared/smpl-provenance.js?v=5"></script>
 <script src="/shared/board-continuity.js?v=6"></script>
-<script src="/shared/board-data.js?v=11"></script>
+<script src="/shared/board-data.js?v=12"></script>
 <script src="/shared/board-ledger.js?v=2"></script>
 <script>
 // ─── DATA ─────────────────────────────────────────────────────────────────
@@ -381,18 +381,6 @@ var EBITDA_ACT = [-1.77, -1.69, -1.59, -1.51, -1.51, -1.3];
 var CASH_ACT = [48.71, 51.01, 58.09, 62.57, 66.04, 70.61];
 var CASH_BUD = [12.75, 14.95, 22.87, 26.35, 28.64, 31.46];
 var COLL     = [9.27,8.67,13.59,10.82,9.65,11.18];
-/** Operational cash bridge by month — net_change ties to TS_DATA CFS */
-var SMPL_CASH_BRIDGE = {
-  Actual: {
-    '2026-01': { collections: 9270000, payroll: -3100000, vendor: -1650000, commission: -320000, capex: -180000, net_change: 2605872.52 },
-    '2026-02': { collections: 8670000, payroll: -3150000, vendor: -1680000, commission: -335000, capex: -180000, net_change: 2302430.43 },
-    '2026-03': { collections: 13590000, payroll: -3180000, vendor: -1720000, commission: -340000, capex: -180000, net_change: 7083448.71 },
-    '2026-04': { collections: 10820000, payroll: -3220000, vendor: -1750000, commission: -350000, capex: -180000, net_change: 4476057.99 },
-    '2026-05': { collections: 9650000, payroll: -3250000, vendor: -1780000, commission: -360000, capex: -180000, net_change: 3466107.42 },
-    '2026-06': { collections: 11180000, payroll: -3280000, vendor: -1820000, commission: -385000, capex: -220000, net_change: 4575000 },
-  },
-};
-window.SMPL_CASH_BRIDGE = SMPL_CASH_BRIDGE;
 // ══════════════════════════════════════════════════════════════════════════════
 // SMPL BOARD PLATFORM — MONTHLY CLOSE ROLLOVER INSTRUCTIONS
 // ══════════════════════════════════════════════════════════════════════════════
@@ -701,11 +689,50 @@ function boardExecVerdict(k) {
   return mid.length ? first + ' \u2014 ' + mid.join(' and ') + outlook + tail + '.' : first + tail + '.';
 }
 
+/**
+ * Drivers / risks / actions for the executive summary, built only from close-month
+ * actual vs budget values. Lines without a loaded budget are listed as missing, not estimated.
+ */
+function boardExecFindings(k) {
+  const amt = v => Math.abs(v) < 0.1 ? '$' + Math.round(Math.abs(v) * 1000) + 'K' : fM1(Math.abs(v));
+  const items = [
+    ['ARR', k.arrEop, k.arrBud, 'm'],
+    ['Net new ARR', k.nn, k.nnBud, 'm'],
+    ['Revenue', k.revAct, k.revBud, 'm'],
+    ['Gross margin', k.gmAct, k.gmBud, 'pp'],
+    ['EBITDA', k.ebitdaAct, k.ebitdaBud, 'm'],
+    ['Cash', k.cashAct, k.cashBud, 'm'],
+  ].concat((k.drivers || []).map(d => [d.label + ' ARR', d.val, d.bud, 'm']));
+  const good = [], bad = [], missing = [];
+  items.forEach(([label, a, b, kind]) => {
+    if (a == null) { missing.push(label + ' (actual)'); return; }
+    if (b == null) { missing.push(label + ' (budget)'); return; }
+    const v = a - b;
+    const fmtV = kind === 'pp' ? a.toFixed(1) + '%' : fM1(a);
+    const fmtB = kind === 'pp' ? b.toFixed(1) + '%' : fM1(b);
+    const varTxt = kind === 'pp' ? (v >= 0 ? '+' : '') + v.toFixed(1) + 'pp' : (v >= 0 ? '+' : '-') + amt(v);
+    const row = { label, varTxt, size: kind === 'pp' ? Math.abs(v) / 100 : Math.abs(v), text: label + ' ' + fmtV + ' vs ' + fmtB + ' budget (' + varTxt + ')' };
+    if (Math.abs(v) < 0.005) return;
+    (v > 0 ? good : bad).push(row);
+  });
+  const bySize = (x, y) => y.size - x.size;
+  good.sort(bySize); bad.sort(bySize);
+  return {
+    drivers: good.slice(0, 4).map(r => r.text),
+    risks: bad.slice(0, 4).map(r => r.text),
+    actions: bad.slice(0, 4).map(r => 'Review the ' + r.label + ' shortfall (' + r.varTxt + ' vs budget)'),
+    missing,
+  };
+}
+
+function boardExecDir(v) { return v == null ? 'neu' : v >= 0 ? 'pos' : 'neg'; }
+
 function renderExec(area) {
   const k = typeof boardExecKpis === 'function' ? boardExecKpis() : {};
   const drivers = k.drivers || [];
-  const nnVal = k.nn != null ? k.nn : 0;
-  const nnRoot = fM1(nnVal);
+  const nnRoot = fM1(k.nn);
+  const execFind = boardExecFindings(k);
+  const execWf = typeof boardWaterfallMonthM === 'function' && typeof boardWfTable === 'function' ? boardWaterfallMonthM(boardWfTable(), k.idx) : null;
   const nnVarLbl = k.nnVar != null ? fV1(k.nnVar) + ' vs bud' : '—';
   const nnVarClr = k.nnVar != null && k.nnVar < 0 ? 'var(--red)' : 'var(--teal)';
   const arrVarLbl = k.arrVar != null ? fV1(k.arrVar) + ' vs bud' : '—';
@@ -716,10 +743,10 @@ function renderExec(area) {
   const execRange = 'Jan – ' + MON_ABBR[execCp.month - 1] + ' ' + execCp.year;
   const execCloseLbl = MON_FULL[execCp.month - 1] + ' ' + execCp.year + ' Close';
   const execVerdict = boardExecVerdict(k);
-  const execAhead = k.arrVar == null || k.arrVar >= 0;
-  const execBadge = execAhead ? '▲ Ahead of Plan' : '▼ Behind Plan';
-  const execBadgeClr = execAhead ? 'var(--teal)' : 'var(--red)';
-  const execBadgeBg = execAhead ? 'rgba(95,168,120,0.15)' : 'rgba(200,80,80,0.15)';
+  const execAhead = k.arrVar == null ? null : k.arrVar >= 0;
+  const execBadge = execAhead == null ? 'Budget ARR not loaded' : execAhead ? '▲ Ahead of Plan' : '▼ Behind Plan';
+  const execBadgeClr = execAhead == null ? 'var(--text3)' : execAhead ? 'var(--teal)' : 'var(--red)';
+  const execBadgeBg = execAhead == null ? 'rgba(255,255,255,0.06)' : execAhead ? 'rgba(95,168,120,0.15)' : 'rgba(200,80,80,0.15)';
 
   area.innerHTML = `<div class="slide" style="padding:20px 24px 32px">
 
@@ -762,15 +789,15 @@ function renderExec(area) {
 
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px">
     ${[
-      {lbl:'Ending ARR',     metric:'ending_arr', val:fM1(k.arrEop),   delta:arrVarLbl, dir:k.arrVar>=0?'pos':'neg', because:'Best net new ARR month of H1 — new logos + expansion both beat plan', link:'View waterfall →', tab:'arr'},
-      {lbl:'Net New ARR',    metric:'net_new_arr', val:nnRoot,          delta:nnVarLbl, dir:k.nnVar>=0?'pos':'neg', because:'New business '+fM1(drivers[0]?.val)+' and expansion '+fM1(drivers[1]?.val)+' drove outperformance', link:'View driver tree →', tab:'arr'},
-      {lbl:'EBITDA',         metric:'ebitda', val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:(k.ebitdaAct-k.ebitdaBud)<0?'neg':'pos', because:'Q2 variable comp accrual timing — underlying operating leverage is intact; normalizes Q3', link:'View P&L →', tab:'pl'},
-      {lbl:'Cash Balance',   metric:'cash', val:fM1(k.cashAct),  delta:cashVarLbl, dir:(k.cashAct-k.cashBud)>=0?'pos':'neg', because:'Annual billing collection cycle front-loaded; favorable variance reflects billing structure', link:'View cash →', tab:'cash'},
+      {lbl:'Ending ARR',     metric:'ending_arr', val:fM1(k.arrEop),   delta:arrVarLbl, dir:boardExecDir(k.arrVar), because:execWf?'Beginning '+fM1(execWf.bop)+', net new '+fM1(k.nn)+' (ARR waterfall)':'ARR waterfall not loaded', link:'View waterfall →', tab:'arr'},
+      {lbl:'Net New ARR',    metric:'net_new_arr', val:nnRoot,          delta:nnVarLbl, dir:boardExecDir(k.nnVar), because:'New business '+fM1(drivers[0]?.val)+', expansion '+fM1(drivers[1]?.val)+', churn '+fM1(drivers[4]?.val)+' (ARR waterfall)', link:'View driver tree →', tab:'arr'},
+      {lbl:'EBITDA',         metric:'ebitda', val:fM1(k.ebitdaAct), delta:ebitdaVarLbl, dir:boardExecDir(k.ebitdaAct!=null&&k.ebitdaBud!=null?k.ebitdaAct-k.ebitdaBud:null), because:'Budget '+fM1(k.ebitdaBud)+' (income statement)', link:'View P&L →', tab:'pl'},
+      {lbl:'Cash Balance',   metric:'cash', val:fM1(k.cashAct),  delta:cashVarLbl, dir:boardExecDir(k.cashAct!=null&&k.cashBud!=null?k.cashAct-k.cashBud:null), because:'Budget '+fM1(k.cashBud)+' (balance sheet)', link:'View cash →', tab:'cash'},
     ].map(h=>`
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px">
       <div style="font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.lbl}</div>
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:10px;font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.dir==='pos'?'▲':'▼'}</span>
+        <span style="font-size:10px;font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.dir==='pos'?'▲':h.dir==='neg'?'▼':''}</span>
         <span style="font-size:10px;font-family:var(--mono);font-weight:600;color:${h.dir==='pos'?'var(--teal)':h.dir==='neg'?'var(--red)':'var(--text3)'}">${h.delta}</span>
       </div>
       <div class="kpi-val" ${ds(h.metric)} style="font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-0.5px;color:var(--text);line-height:1">${h.val}</div>
@@ -785,7 +812,7 @@ function renderExec(area) {
       <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.08em">02</span>
       <span style="font-size:11px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.06em">Why It Happened</span>
     </div>
-    <span style="font-size:10px;color:var(--text3)">Net New ARR driver decomposition · June 2026</span>
+    <span style="font-size:10px;color:var(--text3)">Net New ARR driver decomposition · ${CLOSE_LABEL}</span>
   </div>
   <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
 
@@ -800,18 +827,18 @@ function renderExec(area) {
       <!-- Drivers -->
       <div style="flex:1;display:flex;flex-direction:column;gap:8px">
         ${drivers.map(d=>{
-          const isNeg = d.val < 0;
-          const dispVal = isNeg ? '-$'+Math.abs(d.val).toFixed(1)+'M' : '+$'+Math.abs(d.val).toFixed(1)+'M';
-          const budDiff = d.val - d.bud;
-          const budLabel = budDiff >= 0 ? '+$'+Math.abs(budDiff).toFixed(1)+'M vs bud' : '-$'+Math.abs(budDiff).toFixed(1)+'M vs bud';
+          const isNeg = d.val != null && d.val < 0;
+          const dispVal = d.val == null ? '—' : isNeg ? '-$'+Math.abs(d.val).toFixed(1)+'M' : '+$'+Math.abs(d.val).toFixed(1)+'M';
+          const budDiff = d.val != null && d.bud != null ? d.val - d.bud : null;
+          const budLabel = budDiff == null ? 'no budget' : budDiff >= 0 ? '+$'+Math.abs(budDiff).toFixed(1)+'M vs bud' : '-$'+Math.abs(budDiff).toFixed(1)+'M vs bud';
           const barColor = d.dir==='pos' ? 'var(--teal)' : 'var(--red)';
           return `<div style="display:grid;grid-template-columns:110px 1fr 90px 100px;gap:10px;align-items:center">
             <span style="font-size:11px;color:var(--text2)">${d.label}</span>
             <div style="background:var(--bg3);border-radius:3px;height:7px;overflow:hidden">
-              <div style="width:${d.pct}%;height:100%;background:${barColor};border-radius:3px;opacity:${isNeg?0.5:0.75}"></div>
+              <div style="width:${d.pct||0}%;height:100%;background:${barColor};border-radius:3px;opacity:${isNeg?0.5:0.75}"></div>
             </div>
             <span style="font-size:11px;font-family:var(--mono);font-weight:600;text-align:right;color:${isNeg?'var(--red)':'var(--teal)'}">${dispVal}</span>
-            <span style="font-size:10px;font-family:var(--mono);text-align:right;color:${budDiff>=0?'var(--teal)':'var(--red)'}">${budLabel}</span>
+            <span style="font-size:10px;font-family:var(--mono);text-align:right;color:${budDiff==null?'var(--text3)':budDiff>=0?'var(--teal)':'var(--red)'}">${budLabel}</span>
           </div>`;
         }).join('')}
       </div>
@@ -832,12 +859,8 @@ function renderExec(area) {
     <!-- Key Drivers -->
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--teal);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
       <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--teal);margin-bottom:10px">Key Drivers</div>
-      ${[
-        'NRR reached 100.8% — churn dramatically favorable vs -$0.50M budget',
-        'Gross margin expanded 220bps to 79.2% from engineering infra optimization',
-        'Net new ARR $2.655M — best month of H1, 6th consecutive beat',
-        'Pipeline coverage 3.3× vs H2 ARR target — H2 forecast $91.1M tracking ~$5.0M behind $96.1M budget',
-      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
+      ${(execFind.drivers.length ? execFind.drivers : ['No favorable variances vs budget at close'])
+      .map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
         <span style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-top:4px"></span>
         <span>${t}</span>
       </div>`).join('')}
@@ -845,32 +868,20 @@ function renderExec(area) {
     <!-- Key Risks -->
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--red);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
       <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px">Key Risks</div>
-      ${[
-        'EBITDA -$1.08M vs budget — variable comp timing; confirm Q3 normalization',
-        'SMB concentration 78% of gross churn — GRR risk if SMB softens in H2',
-        'Paid Search at $429K spend and sub-2× efficiency — ROI below threshold',
-        'Pipeline coverage softened from 4.5× (May) to 3.3× — needs Q3 acceleration',
-      ].map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
+      ${(execFind.risks.length ? execFind.risks : ['No unfavorable variances vs budget at close'])
+        .concat(execFind.missing.length ? ['Not loaded: ' + execFind.missing.join(', ')] : [])
+      .map(t=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:11px;color:var(--text2);line-height:1.5">
         <span style="flex-shrink:0;width:6px;height:6px;background:var(--red);margin-top:4px"></span>
         <span>${t}</span>
       </div>`).join('')}
     </div>
     <!-- Actions -->
     <div style="background:var(--bg2);border:0.5px solid var(--border);border-left:2.5px solid var(--accent);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow)">
-      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:10px">Recommended Actions</div>
-      ${[
-        {n:1,t:'Confirm Q3 EBITDA normalization plan',owner:'CFO',impact:'High'},
-        {n:2,t:'Reallocate Paid Search budget to Partner & Organic',owner:'CMO',impact:'High'},
-        {n:3,t:'Accelerate Q3 pipeline creation — cover 3.3× gap',owner:'CRO',impact:'High'},
-        {n:4,t:'SMB churn cohort analysis — identify at-risk accounts',owner:'CS',impact:'Med'},
-      ].map(a=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px">
-        <span style="flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);font-family:var(--mono);min-width:14px">${a.n}.</span>
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:10px">Follow-ups From Variances</div>
+      ${(execFind.actions.length ? execFind.actions : ['No shortfalls vs budget at close']).map((t,i)=>`<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:9px">
+        <span style="flex-shrink:0;font-size:10px;font-weight:700;color:var(--accent);font-family:var(--mono);min-width:14px">${i+1}.</span>
         <div style="flex:1">
-          <div style="font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:3px">${a.t}</div>
-          <div style="display:flex;gap:5px">
-            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(255,255,255,0.06);color:var(--text3);border:0.5px solid var(--border)">${a.owner}</span>
-            <span style="font-size:9px;padding:1px 7px;border-radius:10px;background:${a.impact==='High'?'rgba(184,112,95,0.15)':'rgba(255,255,255,0.06)'};color:${a.impact==='High'?'var(--red)':'var(--text3)'};border:0.5px solid ${a.impact==='High'?'var(--red)':'var(--border)'}">↑ ${a.impact}</span>
-          </div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:3px">${t}</div>
         </div>
       </div>`).join('')}
     </div>
@@ -917,12 +928,11 @@ function renderExec(area) {
         ['Gross Margin',k.gmAct!=null?k.gmAct.toFixed(1)+'%':'—', k.gmBud!=null?k.gmBud.toFixed(1)+'%':'—', k.gmVarPp, false, 'pp'],
         ['EBITDA',      fM1(k.ebitdaAct), fM1(k.ebitdaBud), k.ebitdaAct!=null&&k.ebitdaBud!=null?k.ebitdaAct-k.ebitdaBud:null, false, 'm'],
         ['Cash',        fM1(k.cashAct),  fM1(k.cashBud),  k.cashAct!=null&&k.cashBud!=null?k.cashAct-k.cashBud:null, false, 'm'],
-        ['NRR',         '100.8%',        '100.0%',        0.008,      false, 'bps'],
+        ['NRR',         k.nrr!=null?(k.nrr*100).toFixed(1)+'%':'—', '—', null, false, 'pp'],
       ].map(([l,a,b,d,inv,kind])=>{
         const emph = l==='ARR'||l==='EBITDA';
         let varTxt = '—';
         if (kind==='pp' && d != null) varTxt = (d>=0?'+':'')+d.toFixed(1)+'pp';
-        else if (kind==='bps') varTxt = '+20bps';
         else if (d != null) varTxt = fV1(d);
         const dColor = kind==='pp' ? (d>0?'var(--teal)':d<0?'var(--red)':'var(--text3)') : (d>0?'var(--teal)':d<0?'var(--red)':'var(--text3)');
         return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${emph?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
@@ -939,13 +949,13 @@ function renderExec(area) {
         ${['Period','Actual','Budget','Var'].map(h=>`<span style="font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:${h==='Period'?'left':'right'};${h!=='Period'?'min-width:70px':''}">${h}</span>`).join('')}
       </div>
       ${MO.map((m,i)=>{
-        const d=NN_ACT[i]-NN_BUD[i];
-        const isJun = i===5;
+        const d=NN_ACT[i]!=null&&NN_BUD[i]!=null?NN_ACT[i]-NN_BUD[i]:null;
+        const isJun = i===k.idx;
         return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0;padding:6px 0;border-bottom:0.5px solid var(--border);align-items:center;${isJun?'background:rgba(255,255,255,0.02);margin:0 -4px;padding:6px 4px;border-radius:4px':''}">
-          <span style="font-size:11.5px;color:var(--text2);font-weight:${isJun?'600':'400'}">${m} 2026${isJun?' ✦':''}</span>
+          <span style="font-size:11.5px;color:var(--text2);font-weight:${isJun?'600':'400'}">${m} ${execCp.year}${isJun?' ✦':''}</span>
           <span style="font-size:11.5px;color:var(--text);font-family:var(--mono);font-weight:${isJun?'600':'500'};text-align:right;min-width:70px">${fM1(NN_ACT[i])}</span>
           <span style="font-size:10.5px;color:var(--text3);font-family:var(--mono);text-align:right;min-width:70px">${fM1(NN_BUD[i])}</span>
-          <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d>=0?'var(--teal)':'var(--red)'}">${fV1(d)}</span>
+          <span style="font-size:10.5px;font-family:var(--mono);font-weight:600;text-align:right;min-width:70px;color:${d==null?'var(--text3)':d>=0?'var(--teal)':'var(--red)'}">${fV1(d)}</span>
         </div>`;
       }).join('')}
     </div>
@@ -1036,13 +1046,13 @@ function renderRevenue(area) {
   var mo = (MO && MO.length) ? MO : (window.MO12 || ['Jan','Feb','Mar','Apr','May','Jun']).slice(0, ACT_MONTHS_COUNT);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Revenue &amp; ARR</div>
-  <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs Budget · Jan – June 2026</div>
+  <div class="slide-sub">GAAP Revenue · Gross Margin · ARR trend · Actual vs Budget · Jan – ${CLOSE_LABEL}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Jun Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.ytdRev)}</div><div class="kpi-delta ${ytdVar>=0?'pos':'neg'}">${ytdVar!=null?fV1(ytdVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.rev)}</div><div class="kpi-delta ${revVar==null?'neu':revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rk.ytdRev)}</div><div class="kpi-delta ${ytdVar==null?'neu':ytdVar>=0?'pos':'neg'}">${ytdVar!=null?fV1(ytdVar)+' vs bud':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">Gross Margin</div><div class="kpi-val" ${ds('gross_margin_pct')}>${rk.gm!=null?rk.gm.toFixed(1)+'%':'—'}</div><div class="kpi-delta neu">${CLOSE_MO} actual</div></div>
-    <div class="kpi"><div class="kpi-lbl">ARR (Ending)</div><div class="kpi-val" ${ds('ending_arr')}>${fM1(rk.arrEop)}</div><div class="kpi-delta ${arrVar>=0?'pos':'neg'}">${arrVar!=null?fV1(arrVar)+' vs budget':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val" ${ds('nrr')}>${rk.nrr!=null?rk.nrr.toFixed(1)+'%':'—'}</div><div class="kpi-delta pos">↑ improving</div></div>
+    <div class="kpi"><div class="kpi-lbl">ARR (Ending)</div><div class="kpi-val" ${ds('ending_arr')}>${fM1(rk.arrEop)}</div><div class="kpi-delta ${arrVar==null?'neu':arrVar>=0?'pos':'neg'}">${arrVar!=null?fV1(arrVar)+' vs budget':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">NRR</div><div class="kpi-val" ${ds('nrr')}>${rk.nrr!=null?rk.nrr.toFixed(1)+'%':'—'}</div><div class="kpi-delta neu">${rk.nrr!=null?CLOSE_MO+' actual':'Not loaded'}</div></div>
   </div>
   <div class="two-col">
     <div class="card">
@@ -1215,6 +1225,26 @@ function renderGTM(area) {
 }
 
 // ─── CASH ─────────────────────────────────────────────────────────────────
+/** Cash floor ($M) from the loaded cash bridge rows; null when not loaded. */
+function boardCashFloorM() {
+  const bridge = window.SMPL_CASH_BRIDGE || (window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE);
+  if (!bridge) return null;
+  for (const scen of Object.keys(bridge)) {
+    const rows = bridge[scen] || {};
+    for (const p of Object.keys(rows).sort()) {
+      if (rows[p] && rows[p].cash_floor != null) return Number(rows[p].cash_floor) / 1e6;
+    }
+  }
+  return null;
+}
+function boardCloseCfs(cm) {
+  const ts = typeof SMPLBoardData !== 'undefined' && SMPLBoardData.boardTsSource ? SMPLBoardData.boardTsSource() : window.TS_DATA;
+  const cfs = ts && ts.Actual && ts.Actual.cfs && ts.Actual.cfs[cm];
+  if (!cfs) return null;
+  const net = cfs.net_change != null ? cfs.net_change : cfs.net_change_cash != null ? cfs.net_change_cash
+    : cfs.ending_cash != null && cfs.beginning_cash != null ? cfs.ending_cash - cfs.beginning_cash : null;
+  return { net_change: net, cff: cfs.cff != null ? cfs.cff : null };
+}
 function renderCash(area) {
   var cm = CLOSE_MONTH;
   var idx = ACT_MONTHS_COUNT - 1;
@@ -1224,31 +1254,36 @@ function renderCash(area) {
   var collJun = COLL[idx];
   var collMay = idx > 0 ? COLL[idx-1] : null;
   var bridgeHtml = typeof boardCashBridgeHtml === 'function' ? boardCashBridgeHtml(cm) : '';
+  var cashFloor = boardCashFloorM();
+  var cfsClose = boardCloseCfs(cm);
+  var netChg = cfsClose && cfsClose.net_change != null ? cfsClose.net_change / 1e6 : null;
+  var cff = cfsClose && cfsClose.cff != null ? cfsClose.cff / 1e6 : null;
+  var cashVsBud = cashEnd != null && cashBud != null ? cashEnd - cashBud : null;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Cash Forecast &amp; Liquidity</div>
   <div class="slide-sub">Collections → Operating Outflows → Ending Cash · Actual vs Budget · Jan – ${CLOSE_MO} ${cm.slice(0,4)}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">Ending Cash</div><div class="kpi-val" ${ds('ending_cash')}>${fM1(cashEnd)}</div><div class="kpi-delta ${cashEnd>=cashBud?'pos':'neg'}">${cashBud!=null?fV1(cashEnd-cashBud):'—'} vs budget</div></div>
-    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Collections</div><div class="kpi-val">${fM1(collJun)}</div><div class="kpi-delta pos">${collMay!=null?'vs '+fM1(collMay)+' prior mo':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Cash vs Floor</div><div class="kpi-val">$56.0M</div><div class="kpi-delta pos">Floor: $10M</div></div>
-    <div class="kpi"><div class="kpi-lbl">Runway</div><div class="kpi-val">&gt;24 mo</div><div class="kpi-delta pos">well-capitalized</div></div>
-    <div class="kpi"><div class="kpi-lbl">Financing</div><div class="kpi-val">$0.0M</div><div class="kpi-delta pos">none required</div></div>
+    <div class="kpi"><div class="kpi-lbl">Ending Cash</div><div class="kpi-val" ${ds('ending_cash')}>${fM1(cashEnd)}</div><div class="kpi-delta ${cashVsBud==null?'neu':cashVsBud>=0?'pos':'neg'}">${cashVsBud!=null?fV1(cashVsBud)+' vs budget':'No budget cash loaded'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Collections</div><div class="kpi-val">${fM1(collJun)}</div><div class="kpi-delta neu">${collJun==null?'Cash bridge not loaded':collMay!=null?'vs '+fM1(collMay)+' prior mo':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Cash vs Floor</div><div class="kpi-val">${cashEnd!=null&&cashFloor!=null?fM1(cashEnd-cashFloor):'—'}</div><div class="kpi-delta neu">${cashFloor!=null?'Floor: '+fM1(cashFloor):'Cash floor not loaded'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Net Change</div><div class="kpi-val">${fV1(netChg)}</div><div class="kpi-delta neu">${netChg!=null?'Cash flow statement':'Not loaded'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Financing</div><div class="kpi-val">${fV1(cff)}</div><div class="kpi-delta neu">${cff!=null?'Cash from financing':'Not loaded'}</div></div>
   </div>
   <div class="two-col">
     <div class="card">
       <div class="card-title">Cash balance — actual vs budget</div>
       <div class="card-sub">Ending cash ($M) · Teal = actual, gray = budget</div>
-      <div class="chart-wrap" style="height:180px"><canvas id="cashTrend" role="img" aria-label="Cash balance trend Jan to June 2026 actual vs budget">Cash grew from $48.7M to $66.0M vs budget $28.6M.</canvas></div>
+      <div class="chart-wrap" style="height:180px"><canvas id="cashTrend" role="img" aria-label="Cash balance trend actual vs budget">Ending cash actual vs budget by month.</canvas></div>
       <div style="margin-top:12px">
         <div class="sec-lbl">Monthly Actual vs Budget</div>
-        ${mo.map((m,i)=>{const d=CASH_ACT[i]-CASH_BUD[i];return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM1(CASH_ACT[i])}</span><span class="var-bud">${fM1(CASH_BUD[i])} bud</span><span class="var-diff ${d>=0?'pos':'neg'}">${fV1(d)}</span></div>`}).join('')}
+        ${mo.map((m,i)=>{const d=CASH_ACT[i]!=null&&CASH_BUD[i]!=null?CASH_ACT[i]-CASH_BUD[i]:null;return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM1(CASH_ACT[i])}</span><span class="var-bud">${fM1(CASH_BUD[i])} bud</span><span class="var-diff ${d==null?'':d>=0?'pos':'neg'}">${fV1(d)}</span></div>`}).join('')}
       </div>
     </div>
     <div>
       <div class="card" style="margin-bottom:12px">
         <div class="card-title">Monthly collections</div>
-        <div class="card-sub">March $13.6M = annual enterprise billing cycle</div>
-        <div class="chart-wrap" style="height:140px"><canvas id="cashColl" role="img" aria-label="Monthly collections bar chart showing March spike from annual enterprise renewals">Collections: Jan $9.3M, Feb $8.7M, Mar $13.6M spike, Apr $10.8M, May $9.7M, Jun $11.18M.</canvas></div>
+        <div class="card-sub">${COLL.some(v=>v!=null)?'Collections from the operational cash bridge ($M)':'Cash bridge collections not loaded'}</div>
+        <div class="chart-wrap" style="height:140px"><canvas id="cashColl" role="img" aria-label="Monthly collections bar chart">Monthly collections from the cash bridge.</canvas></div>
       </div>
       <div class="card">
         <div class="card-title">${CLOSE_LABEL} cash bridge</div>
@@ -1290,7 +1325,7 @@ function renderPL(area) {
   <div class="slide-title">Management P&amp;L</div>
   <div class="slide-sub">Built from the same reporting ledger as the Income Statement, plus management allocations · Actual vs Budget vs Forecast</div>
   <div class="kpi-strip kpi-strip-4">
-    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rev)}</div><div class="kpi-delta ${revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Revenue</div><div class="kpi-val" ${ds('revenue')}>${fM1(rev)}</div><div class="kpi-delta ${revVar==null?'neu':revVar>=0?'pos':'neg'}">${revVar!=null?fV1(revVar)+' vs bud':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val" ${ds('gross_profit')}>${fM1(t.gp.a)}</div><div class="kpi-delta neu">${gm!=null?'Margin '+gm.toFixed(1)+'%':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">Total OpEx</div><div class="kpi-val" ${ds('total_opex')}>${fM1(t.opex.a)}</div><div class="kpi-delta ${opexVar<=0?'pos':'neg'}">${opexVar!=null?fV1(opexVar)+' vs bud':'—'}</div></div>
     <div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val" ${ds('ebitda')}>${fM1(t.ebitda.a)}</div><div class="kpi-delta ${ebitdaVar>=0?'pos':'neg'}">${ebitdaVar!=null?fV1(ebitdaVar)+' vs bud':'—'}</div></div>
@@ -1738,18 +1773,16 @@ function renderGLTable(dept) {
 
 // ─── RISKS ─────────────────────────────────────────────────────────────────
 function renderRisks(area) {
+  const f = boardExecFindings(typeof boardExecKpis === 'function' ? boardExecKpis() : {});
+  const card = (cls, type, text) => `<div class="risk-card ${cls}"><div class="risk-type">${type}</div><div class="risk-desc">${text}</div></div>`;
+  const cards = f.risks.map(t => card('rh', 'Risk · Behind budget', t))
+    .concat(f.drivers.map(t => card('op', 'Opportunity · Ahead of budget', t)))
+    .concat(f.missing.length ? [card('rm', 'Not loaded', f.missing.join(', '))] : []);
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Risks &amp; Opportunities</div>
-  <div class="slide-sub">Operational risk matrix · Strategic opportunities · Board-level decision items</div>
+  <div class="slide-sub">${CLOSE_LABEL} actual vs budget · built only from loaded data</div>
   <div class="risk-grid">
-    <div class="risk-card rh"><div class="risk-type">High Risk · GTM</div><div class="risk-title">Paid channel inefficiency</div><div class="risk-desc">Paid Search + Social absorb $3.84M (50% of total spend) at 1.2–1.3x pipeline efficiency and sub-6% win rates. Zero closed-won improvement. Estimated annual drag $2–3M vs high-efficiency alternatives.</div></div>
-    <div class="risk-card rh"><div class="risk-type">High Risk · Retention</div><div class="risk-title">SMB churn concentration</div><div class="risk-desc">78% of gross churn is SMB. GRR could deteriorate 30–50bps in H2, impacting ARR by ~$0.8M and pushing NRR below 100%. Targeted CSM intervention required before Q3 renewal cycle.</div></div>
-    <div class="risk-card rm"><div class="risk-type">Medium Risk · Pipeline</div><div class="risk-title">New logo $325k behind plan</div><div class="risk-desc">Deal timing slippage in 20+ seat segment. Close rates improving (Q2: 13%) but volume trailing. H2 new business revenue at risk if enterprise pipeline doesn't convert within cycle.</div></div>
-    <div class="risk-card rm"><div class="risk-type">Medium Risk · Cash</div><div class="risk-title">H2 collections moderation</div><div class="risk-desc">March's $13.6M collections spike reflects annual billing concentration. H2 monthly collections expected at $6–8M — a 40% reduction from Q1 average. Cash model needs H2 update.</div></div>
-    <div class="risk-card op"><div class="risk-type">Opportunity · GTM</div><div class="risk-title">Partner + Referral reallocation</div><div class="risk-desc">Partner (5.8x, 59.1% WR) and Referral (141x, 65.7% WR) are severely under-invested. A budget-neutral $0.96M reallocation from Paid could generate est. +$5M pipeline at 5x+ efficiency.</div></div>
-    <div class="risk-card op"><div class="risk-type">Opportunity · ARR</div><div class="risk-title">Expansion ARR momentum</div><div class="risk-desc">Expansion outperformed budget 4 of 5 months. CS-led enterprise expansion plays could add $0.5–1.0M ARR per quarter at near-zero incremental CAC.</div></div>
-    <div class="risk-card op"><div class="risk-type">Opportunity · Cash</div><div class="risk-title">Annual contract expansion</div><div class="risk-desc">Annual billing penetration in mid-market adds est. $5–8M to YE 2026 cash. Include annual terms in all mid-market renewals and new business starting Q3. Revenue recognition neutral.</div></div>
-    <div class="risk-card op"><div class="risk-type">Opportunity · Margin</div><div class="risk-title">Operating leverage improvement</div><div class="risk-desc">Revenue +9% YoY vs headcount +2.3%. If maintained through H2, EBITDA margin improvement of 150–200bps is achievable without headcount reduction — purely through GTM efficiency gains.</div></div>
+    ${cards.length ? cards.join('') : card('rm', 'No variances', 'No actual vs budget variances at close')}
   </div>
   <div class="commentary risk" id="riskComm">
     <div class="commentary-lbl">Board Recommendation</div>
@@ -2774,31 +2807,31 @@ const SD = {
     '2026-06':{created:5900000,won:2900000,lost:340000,ending:27120000, coverage:3.3},
   },
   reps:[
-    {id:'ASALES-2019',name:'Rep 2019',role:'Sales Dev Rep',    region:'Central',sub:'Sales Development',  ytd_q:124750, ytd_a:154873,pct:1.2414,annual_q:300000, comm:12390},
-    {id:'ASALES-2018',name:'Rep 2018',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:151987,pct:1.2183,annual_q:300000, comm:12159},
-    {id:'ASALES-2020',name:'Rep 2020',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:140965,pct:1.1300,annual_q:300000, comm:11277},
-    {id:'ASALES-2021',name:'Rep 2021',role:'Sales Dev Rep',    region:'West',   sub:'Sales Development',  ytd_q:124750, ytd_a:138980,pct:1.1141,annual_q:300000, comm:11118},
-    {id:'ASALES-2022',name:'Rep 2022',role:'Sales Dev Rep',    region:'APAC',   sub:'Sales Development',  ytd_q:124750, ytd_a:136842,pct:1.0969,annual_q:300000, comm:10947},
-    {id:'ASALES-2002',name:'Rep 2002',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:499120,pct:1.0891,annual_q:1100000,comm:49912},
-    {id:'ASALES-2023',name:'Rep 2023',role:'Sales Dev Rep',    region:'Central',sub:'Sales Development',  ytd_q:124750, ytd_a:135619,pct:1.0871,annual_q:300000, comm:10850},
-    {id:'ASALES-2028',name:'Rep 2028',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:134812,pct:1.0807,annual_q:300000, comm:10785},
-    {id:'ASALES-2001',name:'Rep 2001',role:'Sr Account Executive',region:'EMEA', sub:'Enterprise Sales', ytd_q:458333, ytd_a:492640,pct:1.0750,annual_q:1100000,comm:49264},
-    {id:'ASALES-2006',name:'Rep 2006',role:'Sr Account Executive',region:'West', sub:'Enterprise Sales', ytd_q:458333, ytd_a:481250,pct:1.0500,annual_q:1100000,comm:48125},
-    {id:'ASALES-2003',name:'Rep 2003',role:'Sr Account Executive',region:'Central',sub:'Enterprise Sales',ytd_q:458333,ytd_a:474080,pct:1.0343,annual_q:1100000,comm:47408},
-    {id:'ASALES-2012',name:'Rep 2012',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:341667,pct:1.0250,annual_q:800000, comm:30750},
-    {id:'ASALES-2015',name:'Rep 2015',role:'Account Executive', region:'EMEA',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:336667,pct:1.0100,annual_q:800000, comm:30300},
-    {id:'ASALES-2004',name:'Rep 2004',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:461480,pct:1.0069,annual_q:1100000,comm:46148},
-    {id:'ASALES-2007',name:'Rep 2007',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:456890,pct:.9969, annual_q:1100000,comm:45689},
-    {id:'ASALES-2009',name:'Rep 2009',role:'Account Executive', region:'West',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:331667,pct:.9950, annual_q:800000, comm:29850},
-    {id:'ASALES-2005',name:'Rep 2005',role:'Sr Account Executive',region:'West', sub:'Enterprise Sales', ytd_q:458333, ytd_a:447080,pct:.9754, annual_q:1100000,comm:44708},
-    {id:'ASALES-2010',name:'Rep 2010',role:'Account Executive', region:'APAC',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:321667,pct:.9650, annual_q:800000, comm:28950},
-    {id:'ASALES-2013',name:'Rep 2013',role:'Account Executive', region:'Central',sub:'Mid-Market Sales', ytd_q:333333, ytd_a:318333,pct:.9550, annual_q:800000, comm:28650},
-    {id:'ASALES-2008',name:'Rep 2008',role:'Sr Account Executive',region:'APAC', sub:'Enterprise Sales', ytd_q:458333, ytd_a:433480,pct:.9458, annual_q:1100000,comm:43348},
-    {id:'ASALES-2011',name:'Rep 2011',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:308333,pct:.9250, annual_q:800000, comm:27750},
-    {id:'ASALES-2014',name:'Rep 2014',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:301667,pct:.9050, annual_q:800000, comm:27150},
-    {id:'ASALES-2016',name:'Rep 2016',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:291667,pct:.8750, annual_q:800000, comm:26250},
-    {id:'ASALES-2017',name:'Rep 2017',role:'Account Executive', region:'Central',sub:'Mid-Market Sales', ytd_q:333333, ytd_a:280000,pct:.8400, annual_q:800000, comm:25200},
-    {id:'ASALES-2024',name:'Rep 2024',role:'Sales Dev Rep',     region:'EMEA',  sub:'Sales Development',  ytd_q:124750, ytd_a:100003,pct:.8016, annual_q:300000, comm:8000},
+    {id:'ASALES-2019',name:'Rep 2019',role:'Sales Dev Rep',    region:'Central',sub:'Sales Development',  ytd_q:124750, ytd_a:154873,pct:1.2414,annual_q:300000},
+    {id:'ASALES-2018',name:'Rep 2018',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:151987,pct:1.2183,annual_q:300000},
+    {id:'ASALES-2020',name:'Rep 2020',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:140965,pct:1.1300,annual_q:300000},
+    {id:'ASALES-2021',name:'Rep 2021',role:'Sales Dev Rep',    region:'West',   sub:'Sales Development',  ytd_q:124750, ytd_a:138980,pct:1.1141,annual_q:300000},
+    {id:'ASALES-2022',name:'Rep 2022',role:'Sales Dev Rep',    region:'APAC',   sub:'Sales Development',  ytd_q:124750, ytd_a:136842,pct:1.0969,annual_q:300000},
+    {id:'ASALES-2002',name:'Rep 2002',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:499120,pct:1.0891,annual_q:1100000},
+    {id:'ASALES-2023',name:'Rep 2023',role:'Sales Dev Rep',    region:'Central',sub:'Sales Development',  ytd_q:124750, ytd_a:135619,pct:1.0871,annual_q:300000},
+    {id:'ASALES-2028',name:'Rep 2028',role:'Sales Dev Rep',    region:'East',   sub:'Sales Development',  ytd_q:124750, ytd_a:134812,pct:1.0807,annual_q:300000},
+    {id:'ASALES-2001',name:'Rep 2001',role:'Sr Account Executive',region:'EMEA', sub:'Enterprise Sales', ytd_q:458333, ytd_a:492640,pct:1.0750,annual_q:1100000},
+    {id:'ASALES-2006',name:'Rep 2006',role:'Sr Account Executive',region:'West', sub:'Enterprise Sales', ytd_q:458333, ytd_a:481250,pct:1.0500,annual_q:1100000},
+    {id:'ASALES-2003',name:'Rep 2003',role:'Sr Account Executive',region:'Central',sub:'Enterprise Sales',ytd_q:458333,ytd_a:474080,pct:1.0343,annual_q:1100000},
+    {id:'ASALES-2012',name:'Rep 2012',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:341667,pct:1.0250,annual_q:800000},
+    {id:'ASALES-2015',name:'Rep 2015',role:'Account Executive', region:'EMEA',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:336667,pct:1.0100,annual_q:800000},
+    {id:'ASALES-2004',name:'Rep 2004',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:461480,pct:1.0069,annual_q:1100000},
+    {id:'ASALES-2007',name:'Rep 2007',role:'Sr Account Executive',region:'East', sub:'Enterprise Sales', ytd_q:458333, ytd_a:456890,pct:.9969, annual_q:1100000},
+    {id:'ASALES-2009',name:'Rep 2009',role:'Account Executive', region:'West',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:331667,pct:.9950, annual_q:800000},
+    {id:'ASALES-2005',name:'Rep 2005',role:'Sr Account Executive',region:'West', sub:'Enterprise Sales', ytd_q:458333, ytd_a:447080,pct:.9754, annual_q:1100000},
+    {id:'ASALES-2010',name:'Rep 2010',role:'Account Executive', region:'APAC',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:321667,pct:.9650, annual_q:800000},
+    {id:'ASALES-2013',name:'Rep 2013',role:'Account Executive', region:'Central',sub:'Mid-Market Sales', ytd_q:333333, ytd_a:318333,pct:.9550, annual_q:800000},
+    {id:'ASALES-2008',name:'Rep 2008',role:'Sr Account Executive',region:'APAC', sub:'Enterprise Sales', ytd_q:458333, ytd_a:433480,pct:.9458, annual_q:1100000},
+    {id:'ASALES-2011',name:'Rep 2011',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:308333,pct:.9250, annual_q:800000},
+    {id:'ASALES-2014',name:'Rep 2014',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:301667,pct:.9050, annual_q:800000},
+    {id:'ASALES-2016',name:'Rep 2016',role:'Account Executive', region:'East',  sub:'Mid-Market Sales',  ytd_q:333333, ytd_a:291667,pct:.8750, annual_q:800000},
+    {id:'ASALES-2017',name:'Rep 2017',role:'Account Executive', region:'Central',sub:'Mid-Market Sales', ytd_q:333333, ytd_a:280000,pct:.8400, annual_q:800000},
+    {id:'ASALES-2024',name:'Rep 2024',role:'Sales Dev Rep',     region:'EMEA',  sub:'Sales Development',  ytd_q:124750, ytd_a:100003,pct:.8016, annual_q:300000},
   ],
 };
 
@@ -3024,16 +3057,37 @@ const _sf=(v,d=2)=>{if(!v)return'—';d=Math.min(d,2);const neg=v<0,abs=Math.abs
 const _sp=v=>(v*100).toFixed(1)+'%';
 const _pill=pct=>{const p=pct*100;if(p>=100)return`<span class="badge badge-green">✓ ${_sp(pct)}</span>`;if(p>=90)return`<span class="badge badge-amber">${_sp(pct)}</span>`;return`<span class="badge badge-red">${_sp(pct)}</span>`;};
 
+function boardSalesKpis() {
+  const periods = Object.keys(SD.monthly || {}).filter(p => p <= CLOSE_MONTH).sort();
+  const sum = key => periods.length && periods.every(p => SD.monthly[p][key] != null)
+    ? periods.reduce((t, p) => t + SD.monthly[p][key], 0) : null;
+  const close = (SD.monthly || {})[CLOSE_MONTH] || null;
+  const pipe = (SD.pipeline || {})[CLOSE_MONTH] || null;
+  const comm = (SD.reps || []).filter(r => r.comm != null && isFinite(r.comm));
+  const regions = new Set((SD.reps || []).map(r => r.region).filter(Boolean));
+  const q = sum('quota'), a = sum('attained');
+  return {
+    periods, quota: q, attained: a, pct: q && a != null ? a / q : null,
+    closePct: close && close.pct != null ? close.pct : null,
+    pipeline: pipe && pipe.ending != null ? pipe.ending : null,
+    coverage: pipe && pipe.coverage != null ? pipe.coverage : null,
+    comm: comm.length ? comm.reduce((t, r) => t + r.comm, 0) : null,
+    commReps: comm.length, reps: (SD.reps || []).length, regions: regions.size,
+  };
+}
+
 function renderSales(area) {
+  const sk = boardSalesKpis();
+  const range = sk.periods.length ? MO12[parseInt(sk.periods[0].slice(5), 10) - 1] + '–' + CLOSE_LABEL : CLOSE_LABEL;
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Sales Intelligence</div>
-  <div class="slide-sub">25 quota-carrying reps · 5 regions · Jan–June 2026 actuals from Actual_Sales_Quotas.csv + Budget_Sales_Quotas.csv</div>
+  <div class="slide-sub">${sk.reps} quota-carrying reps · ${sk.regions} regions · ${range} actuals from Actual_Sales_Quotas.csv + Budget_Sales_Quotas.csv</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">$8.96M</div><div class="kpi-delta neu">Jan–Jun 2026</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">$8.45M</div><div class="kpi-delta pos">94.4% of quota</div></div>
-    <div class="kpi"><div class="kpi-lbl">Jun Attainment</div><div class="kpi-val">98.1%</div><div class="kpi-delta pos">Best H1 close</div></div>
-    <div class="kpi"><div class="kpi-lbl">Open Pipeline</div><div class="kpi-val">$27.1M</div><div class="kpi-delta pos">3.3× coverage</div></div>
-    <div class="kpi"><div class="kpi-lbl">YTD Commission</div><div class="kpi-val">$804K</div><div class="kpi-delta neu">29 carriers</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">${_sf(sk.quota)}</div><div class="kpi-delta neu">${range}</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">${_sf(sk.attained)}</div><div class="kpi-delta neu">${sk.pct!=null?_sp(sk.pct)+' of quota':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Attainment</div><div class="kpi-val">${sk.closePct!=null?_sp(sk.closePct):'—'}</div><div class="kpi-delta neu">${CLOSE_LABEL}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Open Pipeline</div><div class="kpi-val">${_sf(sk.pipeline,1)}</div><div class="kpi-delta neu">${sk.coverage!=null?sk.coverage.toFixed(1)+'× coverage':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Commission</div><div class="kpi-val">${sk.comm!=null?_sf(sk.comm):'—'}</div><div class="kpi-delta neu">${sk.comm!=null?sk.commReps+' carriers':'Not tied to quota roster'}</div></div>
   </div>
   <div class="subnav" style="margin-bottom:14px">
     <button class="snav-btn on" onclick="showSTab('overview',this)">Overview</button>
@@ -3097,7 +3151,7 @@ function _sOverview(el) {
     const actSalesPeriods=Object.keys(SD.monthly).filter(p=>p<=CLOSE_MONTH).sort();
     const attained=actSalesPeriods.map(p=>+((SD.monthly[p].attained)/1e6).toFixed(2));
     const quotas  =actSalesPeriods.map(p=>+((SD.monthly[p].quota)/1e6).toFixed(2));
-    const budQ    =actSalesPeriods.map(p=>+((SD.monthly[p].bud_quota)/1e6).toFixed(2));
+    const budQ    =actSalesPeriods.map(p=>SD.monthly[p].bud_quota==null?null:+((SD.monthly[p].bud_quota)/1e6).toFixed(2));
     _smk('sAttC',{type:'bar',data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
       {label:'Attained',data:attained,backgroundColor:'rgba(29,158,117,0.55)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:3,order:2},
       {type:'line',label:'Quota',data:quotas,borderColor:'#185FA5',borderWidth:2,pointRadius:3,fill:false,order:1},
@@ -3258,24 +3312,33 @@ function _sReps(el) {
 }
 
 function _sComm(el) {
-  const sorted=[...SD.reps].sort((a,b)=>b.comm-a.comm);
+  const withComm=SD.reps.filter(r=>r.comm!=null&&isFinite(r.comm));
+  if(!withComm.length){
+    el.innerHTML = `
+  <div class="full-card">
+    <div class="card-title" style="margin-bottom:6px">Commission by rep — not loaded</div>
+    <div class="card-sub">No commission data ties to the sales quota roster. Commission payouts use rep IDs (REP-xxx) that do not match the quota roster (ASALES-xxxx), so commission by rep, by role, and the leaderboard are not shown. Nothing is estimated.</div>
+  </div>`;
+    return;
+  }
+  const sorted=[...withComm].sort((a,b)=>b.comm-a.comm);
   const roleComms={'Sr Account Executive':0,'Account Executive':0,'Sales Dev Rep':0};
-  SD.reps.forEach(r=>{if(r.role in roleComms)roleComms[r.role]+=r.comm;});
+  withComm.forEach(r=>{if(r.role in roleComms)roleComms[r.role]+=r.comm;});
   el.innerHTML = `
   <div class="two-col" style="margin-bottom:12px">
     <div class="card">
       <div class="card-title">Commission earned YTD — by rep</div>
-      <div class="card-sub">Sr AE rate 10% · AE 9% · SDR 8% of ARR attained</div>
+      <div class="card-sub">From loaded commission payouts tied to the quota roster</div>
       <div class="chart-wrap" style="height:240px"><canvas id="sCommC" role="img" aria-label="Commission earned YTD by rep sorted from highest to lowest">Commission leaderboard by rep.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Commission pool by role</div>
       <div class="card-sub">Share of total YTD commission accrual</div>
-      <div class="chart-wrap" style="height:240px"><canvas id="sCommRoleC" role="img" aria-label="Donut chart of commission split by role. Sr AEs earn the largest share.">Sr AEs earn largest commission share due to highest rates and quotas.</canvas></div>
+      <div class="chart-wrap" style="height:240px"><canvas id="sCommRoleC" role="img" aria-label="Donut chart of commission split by role.">Commission split by role.</canvas></div>
     </div>
   </div>
   <div class="full-card">
-    <div class="card-title" style="margin-bottom:10px">Commission leaderboard — all 25 quota carriers · YTD Jan–June 2026</div>
+    <div class="card-title" style="margin-bottom:10px">Commission leaderboard — ${sorted.length} of ${SD.reps.length} quota carriers · YTD through ${CLOSE_LABEL}</div>
     <table class="pl-tbl"><thead><tr>
       <th style="text-align:left;width:5%">Rank</th>
       <th style="text-align:left;width:16%">Rep</th>
@@ -3290,7 +3353,7 @@ function _sComm(el) {
         <td class="al"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${RCOLS[r.region]};margin-right:4px;vertical-align:middle"></span>${RDISP[r.region]}</td>
         <td>${_sf(r.ytd_a,0)}</td>
         <td class="${r.pct>=1?'vpos':r.pct>=.9?'amb':'vneg'}">${_sp(r.pct)}</td>
-        <td style="color:#1D9E75;font-weight:500">$${r.comm.toLocaleString()}</td>
+        <td style="color:#1D9E75;font-weight:500">$${Math.round(r.comm).toLocaleString()}</td>
       </tr>`).join('')}
     </tbody></table>
   </div>`;

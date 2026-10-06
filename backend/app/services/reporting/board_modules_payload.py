@@ -200,7 +200,6 @@ def _aggregate_sales_rows(rows: list[dict[str, Any]], *, fallback_year: int) -> 
                 "ytd_q": Decimal("0"),
                 "ytd_a": Decimal("0"),
                 "annual_q": annual_q,
-                "comm": Decimal("0"),
             },
         )
         rep_row["ytd_q"] += quota
@@ -245,13 +244,13 @@ def build_sales_payload(
         bud = (budget or {}).get("monthly_raw", {}).get(period, {}) if budget else {}
         quota = src["quota"]
         attained = src["attained"]
-        bud_quota = bud.get("quota", quota) if bud else quota
+        bud_quota = bud.get("quota") if bud else None
         monthly_out[period] = {
             "reps": len(src["reps"]),
             "quota": float(quota),
             "attained": float(attained),
-            "pct": float(attained / quota) if quota else 0.0,
-            "bud_quota": float(bud_quota),
+            "pct": float(attained / quota) if quota else None,
+            "bud_quota": float(bud_quota) if bud_quota is not None else None,
         }
 
     regions_out: dict[str, Any] = {}
@@ -330,7 +329,6 @@ def build_sales_payload(
         ytd_q = rep["ytd_q"]
         ytd_a = rep["ytd_a"]
         pct = float(ytd_a / ytd_q) if ytd_q else 0.0
-        comm = ytd_a * Decimal("0.08") if ytd_a else Decimal("0")
         reps_out.append(
             {
                 "id": rep["id"],
@@ -342,7 +340,7 @@ def build_sales_payload(
                 "ytd_a": float(ytd_a),
                 "pct": pct,
                 "annual_q": float(rep["annual_q"]) if rep["annual_q"] else float(ytd_q),
-                "comm": float(comm),
+                "comm": None,
             }
         )
     reps_out.sort(key=lambda item: item["pct"], reverse=True)
