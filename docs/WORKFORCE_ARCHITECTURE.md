@@ -91,6 +91,7 @@ Productivity ramp comes from `workforce_hiring_ramp_assumptions` (by department/
 | Operating leverage / Rev per FTE / Burn multiple | `operating_metrics` on plan response | Ready |
 | Scenario planning | `version` on all source tables | Ready |
 | Board Workforce tab | `reporting.board_workforce.build_workforce_payload` | Roster heads (headcount plan fallback), GL payroll by GL department, plan quota, open reqs file, ramp assumptions, roster cost vs GL payroll check |
+| Forecast Engine Headcount | Same `WORKFORCE` payload (`SMPL_DEMO_WORKFORCE` signed out) | Heads by group follow the income statement line map (Support in G&A); forecast hires default to the plan; edits priced as P&L adjustment lines |
 | Excel headcount | `workforce_period_summary` | Wired — legacy `headcount_plan` fallback |
 | CSV upload | auto-recompute | Wired — `loader.py` recomputes after workforce CSV upsert |
 | Validation | `validation_service.run_workforce_validations` | Wired — `GET /workforce/validation` |
