@@ -409,94 +409,109 @@ data:    marketing_spend.win_rate per channel (YTD)
 
 ### TAB 8 — Sales
 
+Signed in, every Sales number comes from `SMPL_OUTLOOK_PAYLOAD.SD`
+(`reporting.board_modules_payload.build_sales_payload`) through `boardSalesData()`; signed out it
+reads the demo `SD_DEMO`. If `SD` is empty the tab shows "Sales quotas not loaded" and nothing else.
+Regions, roles and reps are whatever the loaded rows contain (no fixed region or role list).
+
+Loaded columns:
+- `Actual_Sales_Quotas` / `Budget_Sales_Quotas`: `period`, `employee_id`, `region`, `role`,
+  `monthly_quota_arr`, `quota_attainment_actual_arr`, `annual_quota_arr`.
+- `Actual_pipeline_waterfall` / `Forecast_pipeline_waterfall`: `period`, `opportunity_type`,
+  `beginning_pipeline_arr`, `new_pipeline_created`, `closed_won_arr`, `closed_lost_arr`,
+  `slipped_arr`, `ending_pipeline_arr`, `pipeline_coverage`.
+
 #### KPI Strip
 | KPI | JS Source | Warehouse |
 |---|---|---|
-| Jun Attainment | `SD.monthly[CLOSE_MONTH].pct` | `quota_assignments.attainment_pct` WHERE period=CLOSE_MONTH |
-| Open Pipeline | `SD.pipeline[CLOSE_MONTH].ending` | `SUM(opportunities.arr_value) WHERE stage NOT IN (closed_won, closed_lost)` |
-| YTD Quota | `SUM(SD.monthly[p].quota)` | `SUM(quota_assignments.quota_amount)` WHERE period<=CLOSE_MONTH |
-| YTD Attained | `SUM(SD.monthly[p].attained)` | `SUM(quota_assignments.attainment_amount)` WHERE period<=CLOSE_MONTH |
+| `${CLOSE_MO}` Attainment | `SD.monthly[CLOSE_MONTH].pct` | close-month quota rows; "Not loaded" when no quota rows exist for the close month |
+| `${CLOSE_MO}` Open Pipeline | `SD.pipeline[CLOSE_MONTH].ending` | `SUM(ending_pipeline_arr)` over New Business + Expansion + Reactivation rows; delta shows the loaded New Business `pipeline_coverage` |
+| YTD Quota | `SUM(SD.monthly[p].quota)` | `SUM(monthly_quota_arr)` WHERE period<=CLOSE_MONTH |
+| YTD Attained | `SUM(SD.monthly[p].attained)` | `SUM(quota_attainment_actual_arr)` WHERE period<=CLOSE_MONTH |
 | YTD Commission | `SUM(SD.reps[].comm)` — `null` today | Commission by rep is **not loaded**: commission payouts use `REP-xxx` rep IDs that do not match the quota roster (`ASALES-xxxx`). No rate × attainment estimate. The Commission view shows "not loaded" until payouts tie to the roster. |
 
-#### `SD.monthly` object (one entry per actual period)
+The slide subtitle shows the loaded quota range and adds "quotas not loaded for `${CLOSE_LABEL}`" when
+the last loaded quota month is before the close month (`SD.quota_through`).
+
+#### `SD.monthly` object (one entry per loaded actual period)
 ```javascript
 SD.monthly['YYYY-MM'] = {
-  reps:       <count of active quota-carrying reps>   → COUNT(quota_assignments)
-  quota:      <total quota $>                         → SUM(quota_assignments.quota_amount)
-  attained:   <total attained $>                      → SUM(quota_assignments.attainment_amount)
-  pct:        <attained/quota>                        → computed
-  bud_quota:  <budgeted quota>                        → budget quota row for the period; null when no budget row (never defaulted to actual quota)
+  reps:       COUNT(DISTINCT employee_id)
+  quota:      SUM(monthly_quota_arr)
+  attained:   SUM(quota_attainment_actual_arr)
+  pct:        attained / quota; null when quota is 0
+  bud_quota:  Budget_Sales_Quotas quota for the period; null when no budget row (never defaulted to actual quota)
 }
 ```
-Warehouse:
-```sql
-SELECT period,
-  COUNT(*) AS reps,
-  SUM(quota_amount) AS quota,
-  SUM(attainment_amount) AS attained,
-  SUM(attainment_amount)/NULLIF(SUM(quota_amount),0) AS pct
-FROM quota_assignments
-WHERE organization_id=$org AND period <= $CLOSE_MONTH
-GROUP BY period ORDER BY period;
-```
 
-#### `SD.pipeline` object
+#### `SD.pipeline` / `SD.pipeline_fc` objects
 ```javascript
-SD.pipeline['YYYY-MM'] = {
-  created:  <new pipeline ARR added>  → SUM(opportunities.arr_value WHERE created_date in period)
-  won:      <closed won ARR>          → SUM(opportunities.arr_value WHERE stage='closed_won' AND close_date in period)
-  lost:     <closed lost ARR>         → SUM(opportunities.arr_value WHERE stage='closed_lost' AND close_date in period)
-  ending:   <open pipeline at period end> → SUM(opportunities.arr_value WHERE stage NOT IN closed AND as_of period_end)
-  coverage: <ending / remaining_quota>    → computed
+SD.pipeline['YYYY-MM'] = {            // Actual rows through CLOSE_MONTH; pipeline_fc = Forecast rows after it
+  beginning, created, won, lost, slipped, ending:
+            SUM over SD.pipeline_types (New Business, Expansion, Reactivation as loaded);
+            null when any of those rows lacks the column
+  coverage: New Business pipeline_coverage as loaded (not computed)
+  by_type:  every loaded opportunity_type row as loaded, including Churn and Contraction
 }
 ```
+Churn and Contraction rows are retention risk, not pipeline, so they are excluded from the totals.
 
-#### `SD.reps` array (individual rep data)
+#### `SD.reps` array
 ```javascript
 SD.reps[i] = {
-  id:       employees.external_id
-  name:     employees.name
-  role:     employees.title
-  region:   employees.region  (custom field or territory table)
-  ytd_q:    SUM(quota_assignments.quota_amount)     WHERE employee=rep AND period<=CLOSE_MONTH
-  ytd_a:    SUM(quota_assignments.attainment_amount) WHERE employee=rep AND period<=CLOSE_MONTH
-  pct:      ytd_a/ytd_q
-  annual_q: quota_assignments.quota_amount (annualized)
+  id:       employee_id
+  name:     rep_name
+  role:     role as loaded
+  region:   region as loaded ("Unassigned" when blank)
+  ytd_q:    SUM(monthly_quota_arr) WHERE period<=CLOSE_MONTH
+  ytd_a:    SUM(quota_attainment_actual_arr) WHERE period<=CLOSE_MONTH
+  pct:      ytd_a / ytd_q; null when ytd_q is 0
+  annual_q: annual_quota_arr; null when not loaded (never ytd_q)
   comm:     null — commission payouts do not tie to the quota roster (REP-xxx vs ASALES-xxxx); never estimated
 }
 ```
 
 #### `SD.regions` object
 ```javascript
-SD.regions['West'] = {
-  reps:         COUNT(employees WHERE region='West' AND is_quota_carrying)
-  ytd_quota:    SUM(quota_assignments.quota_amount WHERE region='West')
-  ytd_attained: SUM(quota_assignments.attainment_amount WHERE region='West')
-  ytd_pct:      computed
-  jun_quota:    quota_assignments.quota_amount WHERE period=CLOSE_MONTH AND region='West'
-  jun_attained: quota_assignments.attainment_amount WHERE period=CLOSE_MONTH AND region='West'
+SD.regions['<loaded region>'] = {
+  reps:           COUNT(DISTINCT employee_id)
+  ytd_quota:      SUM(monthly_quota_arr)
+  ytd_attained:   SUM(quota_attainment_actual_arr)
+  ytd_pct:        ytd_attained / ytd_quota; null when ytd_quota is 0
+  close_quota:    SUM(monthly_quota_arr) WHERE period=CLOSE_MONTH; null when no close-month rows
+  close_attained: SUM(quota_attainment_actual_arr) WHERE period=CLOSE_MONTH; null when no close-month rows
 }
 ```
+Map pins are drawn only for loaded regions that have a pin position; a pin is grey with "n/a" when
+the close-month quota is not loaded.
 
 #### Chart: `sAttC` (Monthly quota attainment bar)
 ```
-labels:  MO12.slice(0, ACT_MONTHS_COUNT)  [actual months only]
-Actual:  SD.monthly[p].attained / 1e6     → quota_assignments.attainment_amount / 1e6
-Quota:   SD.monthly[p].quota / 1e6        → quota_assignments.quota_amount / 1e6
-Budget:  SD.monthly[p].bud_quota / 1e6    → budget quota row; gap (null) when no budget row
+labels:  loaded SD.monthly periods through CLOSE_MONTH
+Actual:  SD.monthly[p].attained / 1e6
+Quota:   SD.monthly[p].quota / 1e6
+Budget:  SD.monthly[p].bud_quota / 1e6     → gap (null) when no budget row
 ```
 
-#### Chart: `sCovC` (Pipeline coverage ratio line)
+#### Chart: `sCovC` (Pipeline coverage)
 ```
-labels:  MO12.slice(0, ACT_MONTHS_COUNT)
-data:    SD.pipeline[p].coverage           → computed as ending_pipeline / remaining_quota
-target:  3.0x line (static)
+bars:    SD.pipeline[p].ending / 1e6
+line:    SD.pipeline[p].coverage           → loaded New Business pipeline_coverage; gap when not loaded
+         (no target line)
 ```
 
 #### Pipeline waterfall (`sPipeWF`)
 ```
-Steps: ['Jan BOP', '+Pipeline (6-mo)', '−Closed Won', '−Closed Lost', 'Jun EOP']
-Values derived from SD.pipeline: sum created, sum won, sum lost, final ending
+Steps: first loaded month BOP, +Created, −Closed Won, −Closed Lost, −Slipped, last loaded month EOP
+Values: SD.pipeline first beginning, sums of created / won / lost / slipped, last ending.
+Not drawn unless every step is loaded. If ending ≠ beginning + created − won − lost − slipped
+(by $1 or more) the card shows the gap in red.
+```
+
+#### Chart: `sPipe12` (Monthly pipeline created)
+```
+Actual:   SD.pipeline[p].created through CLOSE_MONTH
+Forecast: SD.pipeline_fc[p].created after CLOSE_MONTH; "forecast not loaded" when empty
 ```
 
 ---
@@ -1194,6 +1209,10 @@ Same rule as the platform: loaded values only; a missing input is reported as
 | Prompt 5 Risks & Opportunities | Close-month budget variances (Revenue, EBITDA, New Business ARR) ranked by size | Fewer cards; no static risk/opportunity list |
 | Prompt 5 Key Takeaways evidence | Payload numbers only, stated as facts | No judgement or outlook text |
 | Board callouts | Loaded variances and amounts | No canned actions |
+| Board Sales tab | `SMPL_OUTLOOK_PAYLOAD.SD` (signed in) | "Sales quotas not loaded"; never the demo `SD_DEMO` |
+| Board close month | `meta.close_month` via `board-hydrate.js` (board `CLOSE_MONTH` / `CLOSE_LABEL` / `CLOSE_MO` / `CLOSE_MO_IDX` / `ACT_MONTHS_COUNT` are `var` so hydration updates them) | Demo close only on the signed-out board |
+| 3-Statement tie badges | Computed per loaded month: IS vs CFS net income, CFS ending cash vs BS cash, total assets vs total liabilities + equity | "not checked — lines not loaded"; a break shows "✗ … off in N of M months" |
+| Board export buttons (signed in, no org) | — | Message that no data is loaded; the sample deck/workbook is never opened |
 
 **Known data flag (needs owner review):** `Actual_MRR_Waterfall` 2026-06 carries
 `gross_retention_rate` 0.9938 while its own components give

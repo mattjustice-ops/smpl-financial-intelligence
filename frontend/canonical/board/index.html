@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SMPL · We make finance simple · June 2026</title>
+<title>SMPL · We make finance simple · Board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -307,6 +307,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .ts-stmt-title{font-family:var(--serif);font-size:17px;font-style:italic;font-weight:300;color:var(--text)}
 .ts-stmt-badge{font-size:9px;padding:2px 8px;border-radius:10px;font-weight:500}
 .ts-tie-ok{background:rgba(29,158,117,0.1);color:var(--teal)}
+.ts-tie-bad{background:rgba(216,90,48,0.12);color:var(--red)}
+.ts-tie-na{background:rgba(136,135,128,0.12);color:var(--text3)}
 .ts-kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
 </style>
 </head>
@@ -351,7 +353,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 <div id="slideArea"></div>
 
 <div class="footer">
-  <div class="footer-note">SMPL · Board Intelligence · Jan–<span id="footerCloseMo"></span> 2026 Actuals · AI commentary via Claude · Confidential</div>
+  <div class="footer-note">SMPL · Board Intelligence · Jan–<span id="footerCloseMo"></span> <span id="footerCloseYr"></span> Actuals · AI commentary via Claude · Confidential</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -394,8 +396,6 @@ var COLL     = [9.27,8.67,13.59,10.82,9.65,11.18];
 //   ARR_ACT, ARR_BUD, NN_ACT, NN_BUD
 //   REV_ACT, REV_BUD, GP_ACT, SM_ACT, RD_ACT, GA_ACT, EBITDA_ACT
 //   CASH_ACT, CASH_BUD, COLL
-//   SD.monthly  — add '2026-XX':{reps,quota,attained,pct,bud_quota}
-//   SD.pipeline — add '2026-XX':{created,won,lost,ending,coverage}
 //   TS_DATA.Actual — add period to .is / .cfs / .bs objects
 //   Workforce has no arrays to edit: it reads the workforce payload (signed in) or WF_DEMO,
 //   which build_demo_workforce_from_files.py rebuilds from the files.
@@ -413,8 +413,6 @@ var COLL     = [9.27,8.67,13.59,10.82,9.65,11.18];
 //   forecast/budget data is stored. To update: re-run the Python data
 //   loader (smpl_data_loader.py) with the new CSVs and paste the output
 //   JSON into TS_DATA.Forecast / TS_DATA.Budget.
-//   Chart forecast arrays (pipe12 Jul-Dec values) should
-//   also be refreshed from the new forecast file.
 //
 // WHAT UPDATES AUTOMATICALLY FROM CLOSE_MONTH (no manual change needed):
 //   - Period badge ("Jul 2026 · YTD Close")
@@ -428,13 +426,13 @@ var COLL     = [9.27,8.67,13.59,10.82,9.65,11.18];
 //   - EBITDA margin chart period count
 //   - 3-Statement actual/forecast column styling
 // ══════════════════════════════════════════════════════════════════════════════
-let CLOSE_MONTH = '2026-06';  // <-- UPDATE EACH CLOSE
-let CLOSE_LABEL = 'Jun 2026';
-let CLOSE_MO    = 'Jun';
+var CLOSE_MONTH = '2026-06';  // demo close; board-hydrate.js sets the loaded close on window
+var CLOSE_LABEL = 'Jun 2026';
+var CLOSE_MO    = 'Jun';
 // Derive actual/forecast boundary from CLOSE_MONTH
-const CLOSE_MO_IDX = parseInt(CLOSE_MONTH.slice(5)) - 1; // 0-based index into MO12
+var CLOSE_MO_IDX = parseInt(CLOSE_MONTH.slice(5)) - 1; // 0-based index into MO12
 // Periods considered actual (Jan through CLOSE_MONTH)
-let ACT_MONTHS_COUNT = CLOSE_MO_IDX + 1; // 6 for Jun close
+var ACT_MONTHS_COUNT = CLOSE_MO_IDX + 1;
 
 // Set by boardRefreshAllSeries from the workforce data (board-data.js).
 var HC_TOTAL_JAN = null, HC_TOTAL_MAY = null, HC_TOTAL_JUN = null, HC_TOTAL_BUD = null;
@@ -607,9 +605,9 @@ const MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','N
 const MON_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function boardCloseParts() {
-  const s = String(typeof CLOSE_MONTH !== 'undefined' ? CLOSE_MONTH : '2026-06');
-  const y = parseInt(s.slice(0, 4), 10) || 2026;
-  const m = parseInt(s.slice(5, 7), 10) || 6;
+  const s = String(CLOSE_MONTH);
+  const y = parseInt(s.slice(0, 4), 10);
+  const m = parseInt(s.slice(5, 7), 10);
   return { year: y, month: m };
 }
 
@@ -902,7 +900,7 @@ function renderExec(area) {
   <div style="height:0.5px;background:var(--border);margin-bottom:14px"></div>
 
   <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--r2);padding:16px 18px;box-shadow:var(--shadow);margin-bottom:28px">
-    <div class="chart-wrap" style="height:200px"><canvas id="execChart" role="img" aria-label="ARR and revenue dual-axis trend chart Jan to June 2026"></canvas></div>
+    <div class="chart-wrap" style="height:200px"><canvas id="execChart" role="img" aria-label="ARR and revenue dual-axis trend chart through ${CLOSE_LABEL}"></canvas></div>
   </div>
 
   <!-- ── 05: VARIANCE DETAIL ── -->
@@ -982,8 +980,8 @@ function renderExec(area) {
 // ─── ARR ──────────────────────────────────────────────────────────────────
 function renderARR(area) {
   var k = typeof boardJunArrKpis === 'function' ? boardJunArrKpis() : {};
-  var arrHdr = typeof boardArrTableMeta === 'function' ? boardArrTableMeta() : MO12.map(function(m,i){return{label:m+' 2026',isFc:i>=ACT_MONTHS_COUNT};});
-  var periodLbl = typeof boardArrPeriodLabel === 'function' ? boardArrPeriodLabel() : 'Jan through Jun 2026 Actual · Jul through Dec 2026 Forecast';
+  var arrHdr = typeof boardArrTableMeta === 'function' ? boardArrTableMeta() : MO12.map(function(m,i){return{label:m+' '+CLOSE_MONTH.slice(0,4),isFc:i>=ACT_MONTHS_COUNT};});
+  var periodLbl = typeof boardArrPeriodLabel === 'function' ? boardArrPeriodLabel() : 'Actual through ' + CLOSE_LABEL;
   var w = typeof boardWaterfallMonthM === 'function' && boardWfTable() ? boardWaterfallMonthM(boardWfTable(), ACT_MONTHS_COUNT-1) : null;
   var ariaEnd = w ? w.eop.toFixed(2) : (k.eop||86.1);
   area.innerHTML = `<div class="slide">
@@ -1005,7 +1003,7 @@ function renderARR(area) {
     <div class="card">
       <div class="card-title">Net new ARR — actual vs budget</div>
       <div class="card-sub">Monthly ($M) · Teal = actual, gray = budget</div>
-      <div class="chart-wrap" style="height:230px"><canvas id="arrNN" role="img" aria-label="Net new ARR bar chart actual versus budget Jan to June 2026">Net new ARR improved from $1.31M to $2.06M Jan-Jun.</canvas></div>
+      <div class="chart-wrap" style="height:230px"><canvas id="arrNN" role="img" aria-label="Net new ARR bar chart actual versus budget through ${CLOSE_LABEL}">Net new ARR, actual versus budget, through ${CLOSE_LABEL}.</canvas></div>
     </div>
   </div>
   <div style="margin-top:16px">
@@ -1063,7 +1061,7 @@ function renderRevenue(area) {
         <span class="li"><span class="ls" style="background:#1a2e44"></span>Revenue Actual</span>
         <span class="li"><span class="ls" style="background:#888780"></span>Revenue Budget</span>
       </div>
-      <div class="chart-wrap" style="height:200px"><canvas id="revChart" role="img" aria-label="Revenue and gross profit combo chart Jan to June 2026">Revenue $6.59M to $7.18M. Gross profit at 77% margin throughout.</canvas></div>
+      <div class="chart-wrap" style="height:200px"><canvas id="revChart" role="img" aria-label="Revenue and gross profit combo chart through ${CLOSE_LABEL}">Revenue and gross profit by month through ${CLOSE_LABEL}.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">ARR trend — actual vs budget</div>
@@ -1072,7 +1070,7 @@ function renderRevenue(area) {
         <span class="li"><span class="ls" style="background:#1D9E75"></span>Actual</span>
         <span class="li"><span class="ls" style="background:#888780"></span>Budget</span>
       </div>
-      <div class="chart-wrap" style="height:200px"><canvas id="revARR" role="img" aria-label="ARR trend chart actual vs budget Jan to June 2026">ARR actual $76.3M to $83.5M. Budget $76.2M to $83.3M.</canvas></div>
+      <div class="chart-wrap" style="height:200px"><canvas id="revARR" role="img" aria-label="ARR trend chart actual vs budget through ${CLOSE_LABEL}">ARR actual versus budget by month through ${CLOSE_LABEL}.</canvas></div>
     </div>
   </div>
   <div class="two-col" style="margin-top:14px">
@@ -1081,7 +1079,7 @@ function renderRevenue(area) {
       ${mo.map((m,i)=>{const d=REV_ACT[i]-REV_BUD[i];return`<div class="var-row"><span class="var-lbl">${m}</span><span class="var-act">${fM1(REV_ACT[i])}</span><span class="var-bud">${fM1(REV_BUD[i])} bud</span><span class="var-diff ${d>=0?'pos':'neg'}">${fV1(d)}</span></div>`}).join('')}
     </div>
     <div>
-      <div class="sec-lbl">P&amp;L Summary — June 2026</div>
+      <div class="sec-lbl">P&amp;L Summary — ${CLOSE_LABEL}</div>
       ${[['Revenue',rk.rev,rk.revBud,false],['Gross Profit',pk.gp,pk.gpBud,false],['Gross Margin %',rk.gm!=null?rk.gm.toFixed(1)+'%':'—',rk.gm!=null?rk.gm.toFixed(1)+'%':'—',false,true],['S&M',pk.sm,pk.smBud,true],['R&D',pk.rd,pk.rdBud,true],['G&A',pk.ga,pk.gaBud,true],['EBITDA',pk.ebitda,pk.ebitdaBud,false]].map(([l,a,b,inv,skip])=>{if(skip)return`<div class="var-row"><span class="var-lbl">${l}</span><span class="var-act">${a}</span><span class="var-bud">${b} bud</span><span class="var-diff neu">flat</span></div>`;const d=a-b;return`<div class="var-row"><span class="var-lbl">${l}</span><span class="var-act">${typeof a==='number'?fM1(a):a}</span><span class="var-bud">${b!=null?fM1(b)+' bud':'—'}</span><span class="var-diff ${typeof d==='number'?vSign(d,inv):'neu'}">${typeof d==='number'?fV1(d):'—'}</span></div>`;}).join('')}
     </div>
   </div>
@@ -1360,15 +1358,15 @@ function buildPLSummary(area) {
   <div class="two-col" style="margin-bottom:14px">
     <div class="card">
       <div class="card-title">Revenue &amp; gross profit</div>
-      <div class="card-sub">Monthly ($M) · Jan – June 2026</div>
+      <div class="card-sub">Monthly ($M) · through ${CLOSE_LABEL}</div>
       <div class="legend"><span class="li"><span class="ls" style="background:rgba(95,168,120,0.2);border:1px solid var(--teal)"></span>Gross Profit</span><span class="li"><span class="ls" style="background:var(--accent);border:1px solid var(--accent)"></span>Revenue</span></div>
-      <div class="chart-wrap" style="height:160px"><canvas id="plRevC" role="img" aria-label="Revenue and gross profit chart">Revenue $6.59M-$7.18M. GP at 77% margin.</canvas></div>
+      <div class="chart-wrap" style="height:160px"><canvas id="plRevC" role="img" aria-label="Revenue and gross profit chart">Revenue and gross profit by month.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">OpEx by department group</div>
-      <div class="card-sub">Stacked ($M) · Jan – June 2026</div>
+      <div class="card-sub">Stacked ($M) · through ${CLOSE_LABEL}</div>
       <div class="legend"><span class="li"><span class="ls" style="background:#1a2e44"></span>Sales&Mktg</span><span class="li"><span class="ls" style="background:#1D9E75"></span>R&D&Prod</span><span class="li"><span class="ls" style="background:#BA7517"></span>G&A&Fin</span></div>
-      <div class="chart-wrap" style="height:160px"><canvas id="plOpexC" role="img" aria-label="Stacked opex bar chart by department group">S&M ~$3.7M, R&D ~$1.7M, G&A ~$0.5M monthly.</canvas></div>
+      <div class="chart-wrap" style="height:160px"><canvas id="plOpexC" role="img" aria-label="Stacked opex bar chart by department group">Operating expense by department group by month.</canvas></div>
     </div>
   </div>
   <div class="card">
@@ -2029,7 +2027,7 @@ async function openMdaDeck() {
     var live = await window.SMPLBoardLive.openBoardExport("pptx");
     if (live === "ok" || live === "started") return;
     if (live === "no-org") {
-      openBoardExport(BOARD_EXPORTS.boardReview, "MD&A Deck");
+      window.alert("No organization data is loaded, so there is no MD&A deck to export.");
     }
     return;
   }
@@ -2041,7 +2039,7 @@ async function openVarianceCommentary() {
     var live = await window.SMPLBoardLive.openBoardExport("xlsx");
     if (live === "ok" || live === "started") return;
     if (live === "no-org") {
-      openBoardExport(BOARD_EXPORTS.mdaPackage, "Variance Commentary");
+      window.alert("No organization data is loaded, so there is no variance commentary to export.");
     }
     return;
   }
@@ -2058,7 +2056,7 @@ function renderThreeStmt(area) {
       <button class="ts-sc-btn" data-sc="Actual" onclick="tsSetScenario('Actual',this)">Actual</button>
       <button class="ts-sc-btn" data-sc="Budget" onclick="tsSetScenario('Budget',this)">Budget</button>
     </div>
-    <div style="font-size:10px;color:var(--text3)" id="tsScenarioLabel">${typeof boardArrPeriodLabel==='function'?boardArrPeriodLabel():'Jan-Jun Actual · Jul-Dec Forecast'}</div>
+    <div style="font-size:10px;color:var(--text3)" id="tsScenarioLabel">${typeof boardArrPeriodLabel==='function'?boardArrPeriodLabel():'Actual through '+CLOSE_LABEL}</div>
   </div>
   <div id="tsKpis" class="ts-kpi-row"></div>
   <div style="overflow-x:auto"><div id="tsContent"></div></div>
@@ -2072,7 +2070,7 @@ function tsSetScenario(sc, btn) {
   document.querySelectorAll('.ts-sc-btn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   const labels = {
-    Combined: typeof boardArrPeriodLabel === 'function' ? boardArrPeriodLabel() : 'Jan–June Actual · Jul–Dec Forecast',
+    Combined: typeof boardArrPeriodLabel === 'function' ? boardArrPeriodLabel() : 'Actual through ' + CLOSE_LABEL,
     Actual:   'Jan–'+CLOSE_MO+' '+CLOSE_MONTH.slice(0,4)+' Actuals only',
     Budget:   'Jan–Dec '+CLOSE_MONTH.slice(0,4)+' Full-Year Budget',
   };
@@ -2113,8 +2111,8 @@ function boardTsSource() {
 function tsGetPeriods(sc) {
   const ts = boardTsSource();
   if(sc === 'Combined') {
-    const act = ts.Actual?.periods || ['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06'];
-    const fc = ts.Forecast?.periods || ['2026-07','2026-08','2026-09','2026-10','2026-11','2026-12'];
+    const act = ts.Actual?.periods || [];
+    const fc = ts.Forecast?.periods || [];
     const periods = act.concat(fc);
     return {
       periods,
@@ -2143,7 +2141,7 @@ const tsFmt = (v, d=1) => {
   else s='$'+abs.toFixed(0);
   return neg?'('+s+')':s;
 };
-const tsFmtPct = v => v===null?'—':(v*100).toFixed(1)+'%';
+const tsFmtPct = v => v==null?'—':(v*100).toFixed(1)+'%';
 const tsCls = (v, inv=false) => {
   if(v===null||Math.abs(v)<1) return '';
   const good = inv ? v<0 : v>0;
@@ -2157,7 +2155,8 @@ function tsRender() {
   const moLabels = periods.map(p=>mo[parseInt(p.split('-')[1])-1]);
 
   // KPI strip (latest actual period)
-  const latestActP = sc==='Budget' ? periods[5] : periods.filter((_,i)=>!isFc[i]).slice(-1)[0];
+  const latestActP = sc==='Budget' ? (periods.includes(CLOSE_MONTH) ? CLOSE_MONTH : null) : periods.filter((_,i)=>!isFc[i]).slice(-1)[0];
+  const latestMo = latestActP ? mo[parseInt(latestActP.slice(5),10)-1] : 'Not loaded';
   const latestSrc  = sc==='Budget' ? 'Budget' : 'Actual';
   const kpiEl = document.getElementById('tsKpis');
   if(kpiEl) {
@@ -2171,9 +2170,9 @@ function tsRender() {
     const cfo  = tsGet(sc,latestSrc,latestActP,'cfs','cfo');
     const eq   = tsGet(sc,latestSrc,latestActP,'bs','equity');
     kpiEl.innerHTML = [
-      ['Revenue', tsFmt(rev), sc==='Budget'?'Jun budget':'Jun actual', ''],
+      ['Revenue', tsFmt(rev), latestMo+(sc==='Budget'?' budget':' actual'), ''],
       ['Gross Margin', tsFmtPct(gm), 'GAAP gross margin', 'pos'],
-      ['EBITDA', tsFmt(ebit), 'Jun operating income', ebit>0?'pos':'neg'],
+      ['EBITDA', tsFmt(ebit), latestMo+' EBITDA', ebit==null?'':ebit>0?'pos':'neg'],
       ['Cash', tsFmt(cash), 'Ending balance', 'pos'],
     ].map(([l,v,sub,cls])=>`<div class="kpi"><div class="kpi-lbl">${l}</div><div class="kpi-val ${cls==='pos'?'pos':cls==='neg'?'neg':''}" style="font-size:18px">${v}</div><div class="kpi-delta neu">${sub}</div></div>`).join('');
   }
@@ -2181,12 +2180,22 @@ function tsRender() {
   // Header row
   const colHdrs = periods.map((p,i)=>`<th class="${isFc[i]?'fc-col':sc==='Budget'?'bud-col':'act-col'}" style="min-width:82px">${moLabels[i]}<div style="font-size:8.5px;margin-top:1px;opacity:.7">${isFc[i]?'Fcst':sc==='Budget'?'Bdgt':'Act'}</div></th>`).join('');
 
+  const tieBadge = (pairs, okText, what) => {
+    const checked = pairs.filter(([a, b]) => a != null && b != null);
+    if (!checked.length) return `<span class="ts-stmt-badge ts-tie-na">${what} not checked — lines not loaded</span>`;
+    const off = checked.filter(([a, b]) => Math.abs(a - b) >= 1).length;
+    return off
+      ? `<span class="ts-stmt-badge ts-tie-bad">✗ ${what} off in ${off} of ${checked.length} months</span>`
+      : `<span class="ts-stmt-badge ts-tie-ok">✓ ${okText}</span>`;
+  };
+  const niIs = (src, p) => { const v = window.SMPLLedger ? SMPLLedger.isValue(src, p, 'net_income') : undefined; return v === undefined ? tsGet(sc, src, p, 'is', 'net_income') : v; };
+
   let html = '';
 
   // ── INCOME STATEMENT ──────────────────────────────────────────────────
   html += `<div class="ts-stmt-hdr">
     <div class="ts-stmt-title">Income Statement</div>
-    <span class="ts-stmt-badge ts-tie-ok">✓ Ties to Cash Flow</span>
+    ${tieBadge(periods.map((p,i)=>[niIs(sources[i],p), tsGet(sc,sources[i],p,'cfs','net_income')]), 'Ties to Cash Flow', 'Net income vs Cash Flow')}
   </div>
   <div style="overflow-x:auto"><table class="ts-tbl">
   <thead><tr><th>Line Item</th>${colHdrs}</tr></thead><tbody>`;
@@ -2246,7 +2255,7 @@ function tsRender() {
   // ── CASH FLOW STATEMENT ───────────────────────────────────────────────
   html += `<div class="ts-stmt-hdr">
     <div class="ts-stmt-title">Cash Flow Statement</div>
-    <span class="ts-stmt-badge ts-tie-ok">✓ Indirect method · Ties to Balance Sheet</span>
+    ${tieBadge(periods.map((p,i)=>[tsGet(sc,sources[i],p,'cfs','ending_cash'), tsGet(sc,sources[i],p,'bs','cash')]), 'Indirect method · Ties to Balance Sheet', 'Ending cash vs Balance Sheet')}
   </div>
   <div style="overflow-x:auto"><table class="ts-tbl">
   <thead><tr><th>Line Item</th>${colHdrs}</tr></thead><tbody>`;
@@ -2289,7 +2298,7 @@ function tsRender() {
   // ── BALANCE SHEET ─────────────────────────────────────────────────────
   html += `<div class="ts-stmt-hdr">
     <div class="ts-stmt-title">Balance Sheet</div>
-    <span class="ts-stmt-badge ts-tie-ok">✓ Assets = Liabilities + Equity</span>
+    ${tieBadge(periods.map((p,i)=>[tsGet(sc,sources[i],p,'bs','total_assets'), tsGet(sc,sources[i],p,'bs','total_le')]), 'Assets = Liabilities + Equity', 'Assets vs Liabilities + Equity')}
   </div>
   <div style="overflow-x:auto"><table class="ts-tbl">
   <thead><tr><th>Line Item</th>${colHdrs}</tr></thead><tbody>`;
@@ -2301,7 +2310,7 @@ function tsRender() {
     {label:'Prepaids & Other Current',  key:'prepaids', indent:true},
     {type:'sub', label:'Total Current Assets', compute:(p,src)=>{
       const c=tsGet(sc,src,p,'bs','cash'), ar=tsGet(sc,src,p,'bs','ar'), pr=tsGet(sc,src,p,'bs','prepaids');
-      return (c||0)+(ar||0)+(pr||0);
+      return c==null||ar==null||pr==null ? null : c+ar+pr;
     }},
     {label:'PP&E (Net)',                key:'ppe', indent:true},
     {type:'tot', label:'Total Assets',  key:'total_assets'},
@@ -2767,8 +2776,8 @@ function wfRoster(el, w) {
 
 
 // ─── SALES INTELLIGENCE ────────────────────────────────────────────────────
-// Data from Actual_Sales_Quotas.csv (137 rows) + Budget_Sales_Quotas.csv (353 rows)
-const SD = {
+// Demo sales dataset for the signed-out board. Signed in, boardSalesData() reads SMPL_OUTLOOK_PAYLOAD.SD.
+const SD_DEMO = {
   monthly:{
     '2026-01':{reps:26,quota:1479500,attained:1258320,pct:.8505,bud_quota:1479500},
     '2026-02':{reps:27,quota:1484250,attained:1344765,pct:.9060,bud_quota:1484250},
@@ -2777,21 +2786,12 @@ const SD = {
     '2026-05':{reps:28,quota:1565400,attained:1564280,pct:.9993,bud_quota:1565400},
     '2026-06':{reps:29,quota:1383000,attained:1357000,pct:.9812,bud_quota:1580000},
   },
-  budget_fc:{
-    '2026-06':{reps:30,quota:1580000},
-    '2026-07':{reps:31,quota:1622000},
-    '2026-08':{reps:32,quota:1685000},
-    '2026-09':{reps:33,quota:1750000},
-    '2026-10':{reps:34,quota:1820000},
-    '2026-11':{reps:35,quota:1890000},
-    '2026-12':{reps:36,quota:1960000},
-  },
   regions:{
-    West:   {reps:5,ytd_quota:1625000,ytd_attained:1545000,ytd_pct:.9508,jun_quota:275500,jun_attained:264375},
-    EMEA:   {reps:7,ytd_quota:2289000,ytd_attained:2157500,ytd_pct:.9426,jun_quota:382500,jun_attained:374850},
-    East:   {reps:11,ytd_quota:3534000,ytd_attained:3296000,ytd_pct:.9328,jun_quota:594000,jun_attained:603200},
-    Central:{reps:6,ytd_quota:1510500,ytd_attained:1456000,ytd_pct:.9640,jun_quota:131000,jun_attained:114575},
-    APAC:   {reps:3,ytd_quota:1150000,ytd_attained:1040000,ytd_pct:.9043,jun_quota:190000,jun_attained:168000},
+    West:   {reps:5,ytd_quota:1625000,ytd_attained:1545000,ytd_pct:.9508,close_quota:275500,close_attained:264375},
+    EMEA:   {reps:7,ytd_quota:2289000,ytd_attained:2157500,ytd_pct:.9426,close_quota:382500,close_attained:374850},
+    East:   {reps:11,ytd_quota:3534000,ytd_attained:3296000,ytd_pct:.9328,close_quota:594000,close_attained:603200},
+    Central:{reps:6,ytd_quota:1510500,ytd_attained:1456000,ytd_pct:.9640,close_quota:131000,close_attained:114575},
+    APAC:   {reps:3,ytd_quota:1150000,ytd_attained:1040000,ytd_pct:.9043,close_quota:190000,close_attained:168000},
   },
   roles:{
     'Sr Account Executive':{reps:8,ytd_quota:3668000,ytd_attained:3462792,ytd_pct:.9440},
@@ -2835,6 +2835,14 @@ const SD = {
   ],
 };
 
+function boardSalesData() {
+  if (window.SMPL_LIVE_OUTLOOK) {
+    const live = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.SD;
+    return live && typeof live === 'object' ? live : {};
+  }
+  return SD_DEMO;
+}
+
 const RCOLS={West:'#1D9E75',EMEA:'#534AB7',East:'#185FA5',Central:'#BA7517',APAC:'#0F6E56'};
 const RDISP={West:'NAM - West',East:'NAM - East',Central:'NAM - Central',EMEA:'EMEA',APAC:'APAC'};
 const SALES_TERRITORY_BASEMAP_URL = '/board/us_emea_basemap.svg';
@@ -2850,11 +2858,7 @@ const SALES_TERRITORY_APAC_NAMES = new Set([
   'Indonesia','Malaysia','Thailand','Philippines','Vietnam','Taiwan','Hong Kong',
   'Bangladesh','Sri Lanka','Pakistan','Myanmar','Cambodia','Laos'
 ]);
-// Verified basemap projection — do not change without regenerating us_emea_basemap.svg.
-const SALES_TERRITORY_PROJECTION = {
-  scale: 410,
-  translate: [855.4244561908681, 540.1364842702924],
-};
+// Pin positions match the projection used to generate us_emea_basemap.svg.
 const SALES_TERRITORY_PIN_XY = {
   West:    { x: 162.86, y: 272.43 },
   Central: { x: 295.51, y: 257.99 },
@@ -2880,24 +2884,19 @@ function _salesTerritoryMapColors() {
 function _salesTerritoryPinColor(attPct) {
   const cs = getComputedStyle(document.documentElement);
   const C = k => cs.getPropertyValue(k).trim();
+  if (attPct == null) return C('--text3') || '#888780';
   if (attPct >= 100) return C('--teal') || '#5fa878';
   if (attPct >= 90) return C('--accent') || '#c4855a';
   return C('--red') || '#b8705f';
 }
 
 function _salesTerritoryPinData() {
-  return ['West', 'Central', 'East', 'EMEA', 'APAC'].map(function(name) {
-    const d = SD.regions[name];
-    const att = d && d.jun_quota ? (d.jun_attained / d.jun_quota) * 100 : 0;
+  const regions = boardSalesData().regions || {};
+  return Object.keys(regions).filter(function(name) { return SALES_TERRITORY_PIN_XY[name]; }).map(function(name) {
+    const d = regions[name];
+    const att = d.close_quota ? (d.close_attained / d.close_quota) * 100 : null;
     const xy = SALES_TERRITORY_PIN_XY[name];
-    return {
-      name: name,
-      x: xy.x,
-      y: xy.y,
-      reps: d ? d.reps : 0,
-      att: att,
-      color: _salesTerritoryPinColor(att),
-    };
+    return { name: name, x: xy.x, y: xy.y, reps: d.reps, att: att, color: _salesTerritoryPinColor(att) };
   });
 }
 
@@ -2955,7 +2954,7 @@ function _salesTerritoryRenderPins(svgRoot, pins) {
     att.setAttribute('font-size', '13');
     att.setAttribute('font-family', 'monospace');
     att.setAttribute('fill', p.color);
-    att.textContent = p.att.toFixed(1) + '%';
+    att.textContent = p.att == null ? 'n/a' : p.att.toFixed(1) + '%';
     g.appendChild(att);
 
     layer.appendChild(g);
@@ -2973,7 +2972,7 @@ function _salesTerritoryMountBasemap(container, svgText, pins) {
   svg.setAttribute('width', '100%');
   svg.style.display = 'block';
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', 'US, EMEA, and APAC sales territory map with regional attainment pins');
+  svg.setAttribute('aria-label', 'Sales territory map with attainment pins for loaded regions');
   _salesTerritoryApplySkin(svg);
   _salesTerritoryRenderPins(svg, pins);
 }
@@ -3016,8 +3015,6 @@ function renderSalesTerritoryMap(containerId) {
     });
 }
 
-const PERIOD5=['2026-01','2026-02','2026-03','2026-04','2026-05'];
-const PERIOD6=['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06'];
 let _sCharts={}, _sTab='overview';
 
 function _smk(id,cfg){
@@ -3054,39 +3051,83 @@ function _smk(id,cfg){
   _sCharts[id]=boardMkChart(c,cfg);
 }
 const _sf=(v,d=2)=>{if(!v)return'—';d=Math.min(d,2);const neg=v<0,abs=Math.abs(v);if(abs>=1e6)return(neg?'-$':'$')+(abs/1e6).toFixed(d)+'M';if(abs>=1e3)return(neg?'-$':'$')+(abs/1e3).toFixed(0)+'K';return(neg?'-$':'$')+Math.round(abs);};
-const _sp=v=>(v*100).toFixed(1)+'%';
-const _pill=pct=>{const p=pct*100;if(p>=100)return`<span class="badge badge-green">✓ ${_sp(pct)}</span>`;if(p>=90)return`<span class="badge badge-amber">${_sp(pct)}</span>`;return`<span class="badge badge-red">${_sp(pct)}</span>`;};
+const _sp=v=>v==null||!isFinite(v)?'—':(v*100).toFixed(1)+'%';
+const _pill=pct=>{if(pct==null||!isFinite(pct))return'—';const p=pct*100;if(p>=100)return`<span class="badge badge-green">✓ ${_sp(pct)}</span>`;if(p>=90)return`<span class="badge badge-amber">${_sp(pct)}</span>`;return`<span class="badge badge-red">${_sp(pct)}</span>`;};
+
+const _sMoLbl = p => MO12[parseInt(String(p).slice(5), 10) - 1] || String(p);
+const _sRange = periods => periods.length
+  ? (periods.length > 1 ? _sMoLbl(periods[0]) + '–' : '') + _sMoLbl(periods[periods.length - 1]) + ' ' + periods[periods.length - 1].slice(0, 4)
+  : 'not loaded';
+const _sM = (v, d = 1) => v == null || !isFinite(v) ? null : +(v / 1e6).toFixed(d);
+const _sRegDisp = r => RDISP[r] || r;
+const _sRegCol = r => RCOLS[r] || '#888780';
+const _sRoleShort = r => ({'Senior Account Executive':'Sr AE','Sr Account Executive':'Sr AE','Account Executive':'AE','Sales Development Rep':'SDR','Sales Dev Rep':'SDR'}[r] || r);
+const _sRolePalette = ['#185FA5','#1D9E75','#534AB7','#BA7517','#0F6E56','#888780'];
+
+function _sBuckets(reps) {
+  const bkts = {'<80%':0,'80-90%':0,'90-100%':0,'100-110%':0,'>110%':0};
+  let missing = 0;
+  reps.forEach(r => {
+    if (r.pct == null || !isFinite(r.pct)) { missing++; return; }
+    const p = r.pct * 100;
+    if (p < 80) bkts['<80%']++; else if (p < 90) bkts['80-90%']++; else if (p < 100) bkts['90-100%']++; else if (p < 110) bkts['100-110%']++; else bkts['>110%']++;
+  });
+  return { bkts, missing };
+}
+
+function _sRank(obj) {
+  return Object.keys(obj || {}).filter(k => obj[k] && obj[k].ytd_pct != null).sort((a, b) => obj[b].ytd_pct - obj[a].ytd_pct);
+}
+
+function _sRankSub(obj, disp) {
+  const rank = _sRank(obj);
+  if (!rank.length) return 'Not loaded';
+  const top = rank[0], low = rank[rank.length - 1];
+  if (rank.length === 1) return `${disp(top)} at ${_sp(obj[top].ytd_pct)}`;
+  return `${disp(top)} highest at ${_sp(obj[top].ytd_pct)} · ${disp(low)} lowest at ${_sp(obj[low].ytd_pct)}`;
+}
 
 function boardSalesKpis() {
-  const periods = Object.keys(SD.monthly || {}).filter(p => p <= CLOSE_MONTH).sort();
-  const sum = key => periods.length && periods.every(p => SD.monthly[p][key] != null)
-    ? periods.reduce((t, p) => t + SD.monthly[p][key], 0) : null;
-  const close = (SD.monthly || {})[CLOSE_MONTH] || null;
+  const SD = boardSalesData();
+  const monthly = SD.monthly || {};
+  const periods = Object.keys(monthly).filter(p => p <= CLOSE_MONTH).sort();
+  const sum = key => periods.length && periods.every(p => monthly[p][key] != null)
+    ? periods.reduce((t, p) => t + monthly[p][key], 0) : null;
+  const close = monthly[CLOSE_MONTH] || null;
   const pipe = (SD.pipeline || {})[CLOSE_MONTH] || null;
-  const comm = (SD.reps || []).filter(r => r.comm != null && isFinite(r.comm));
-  const regions = new Set((SD.reps || []).map(r => r.region).filter(Boolean));
+  const reps = SD.reps || [];
+  const comm = reps.filter(r => r.comm != null && isFinite(r.comm));
+  const regions = new Set(reps.map(r => r.region).filter(Boolean));
   const q = sum('quota'), a = sum('attained');
   return {
-    periods, quota: q, attained: a, pct: q && a != null ? a / q : null,
+    periods, range: _sRange(periods), quota: q, attained: a, pct: q && a != null ? a / q : null,
     closePct: close && close.pct != null ? close.pct : null,
     pipeline: pipe && pipe.ending != null ? pipe.ending : null,
     coverage: pipe && pipe.coverage != null ? pipe.coverage : null,
     comm: comm.length ? comm.reduce((t, r) => t + r.comm, 0) : null,
-    commReps: comm.length, reps: (SD.reps || []).length, regions: regions.size,
+    commReps: comm.length, reps: reps.length, regions: regions.size,
   };
 }
 
 function renderSales(area) {
   const sk = boardSalesKpis();
-  const range = sk.periods.length ? MO12[parseInt(sk.periods[0].slice(5), 10) - 1] + '–' + CLOSE_LABEL : CLOSE_LABEL;
+  if (!sk.periods.length) {
+    area.innerHTML = `<div class="slide">
+  <div class="slide-title">Sales Intelligence</div>
+  <div class="full-card"><div class="card-title" style="margin-bottom:6px">Sales quotas not loaded</div>
+  <div class="card-sub">No Actual_Sales_Quotas rows are loaded through ${CLOSE_LABEL}, so quota, attainment, pipeline and rep views are not shown. Nothing is estimated.</div></div>
+</div>`;
+    return;
+  }
+  const closeGap = sk.periods[sk.periods.length - 1] < CLOSE_MONTH ? ` · quotas not loaded for ${CLOSE_LABEL}` : '';
   area.innerHTML = `<div class="slide">
   <div class="slide-title">Sales Intelligence</div>
-  <div class="slide-sub">${sk.reps} quota-carrying reps · ${sk.regions} regions · ${range} actuals from Actual_Sales_Quotas.csv + Budget_Sales_Quotas.csv</div>
+  <div class="slide-sub">${sk.reps} quota-carrying reps · ${sk.regions} regions · ${sk.range} actuals from Actual_Sales_Quotas.csv + Budget_Sales_Quotas.csv${closeGap}</div>
   <div class="kpi-strip kpi-strip-5">
-    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">${_sf(sk.quota)}</div><div class="kpi-delta neu">${range}</div></div>
+    <div class="kpi"><div class="kpi-lbl">YTD Quota</div><div class="kpi-val">${_sf(sk.quota)}</div><div class="kpi-delta neu">${sk.range}</div></div>
     <div class="kpi"><div class="kpi-lbl">YTD Attained</div><div class="kpi-val">${_sf(sk.attained)}</div><div class="kpi-delta neu">${sk.pct!=null?_sp(sk.pct)+' of quota':'—'}</div></div>
-    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Attainment</div><div class="kpi-val">${sk.closePct!=null?_sp(sk.closePct):'—'}</div><div class="kpi-delta neu">${CLOSE_LABEL}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Open Pipeline</div><div class="kpi-val">${_sf(sk.pipeline,1)}</div><div class="kpi-delta neu">${sk.coverage!=null?sk.coverage.toFixed(1)+'× coverage':'—'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Attainment</div><div class="kpi-val">${sk.closePct!=null?_sp(sk.closePct):'—'}</div><div class="kpi-delta neu">${sk.closePct!=null?CLOSE_LABEL:'Not loaded'}</div></div>
+    <div class="kpi"><div class="kpi-lbl">${CLOSE_MO} Open Pipeline</div><div class="kpi-val">${_sf(sk.pipeline,1)}</div><div class="kpi-delta neu">${sk.pipeline==null?'Not loaded':sk.coverage!=null?sk.coverage.toFixed(1)+'× New Business coverage':'Coverage not loaded'}</div></div>
     <div class="kpi"><div class="kpi-lbl">YTD Commission</div><div class="kpi-val">${sk.comm!=null?_sf(sk.comm):'—'}</div><div class="kpi-delta neu">${sk.comm!=null?sk.commReps+' carriers':'Not tied to quota roster'}</div></div>
   </div>
   <div class="subnav" style="margin-bottom:14px">
@@ -3122,130 +3163,153 @@ function _buildSTab(name) {
 }
 
 function _sOverview(el) {
+  const SD = boardSalesData();
+  const periods = Object.keys(SD.monthly || {}).filter(p=>p<=CLOSE_MONTH).sort();
+  const range = _sRange(periods);
+  const roles = Object.keys(SD.roles || {}).sort((a,b)=>(SD.roles[b].ytd_quota||0)-(SD.roles[a].ytd_quota||0));
+  const regs = Object.keys(SD.regions || {});
+  const dist = _sBuckets(SD.reps || []);
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
       <div class="card-title">Quota attainment — monthly trend</div>
-      <div class="card-sub">Attained $M (bars) vs quota and budget (lines)</div>
-      <div class="chart-wrap" style="height:190px"><canvas id="sAttC" role="img" aria-label="Monthly quota attainment Jan to Jun 2026. Improving from 85.0% in January to 98.1% in June.">Attainment: Jan 85%, Feb 90.6%, Mar 95.7%, Apr 96.7%, May 99.9%, Jun 98.1%.</canvas></div>
+      <div class="card-sub">Attained $M (bars) vs quota and budget (lines) · ${range}</div>
+      <div class="chart-wrap" style="height:190px"><canvas id="sAttC" role="img" aria-label="Monthly quota attained versus quota and budget, ${range}.">Monthly quota attainment, ${range}.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Attainment by role — YTD</div>
-      <div class="card-sub">SDRs leading at 109.7% · AEs still ramping at 88.8%</div>
-      <div class="chart-wrap" style="height:190px"><canvas id="sRoleC" role="img" aria-label="YTD attainment by role. SDRs 109.7%, Sr AEs 94.4%, AEs 88.8%.">SDRs 109.7%, Sr AEs 94.4%, AEs 88.8%.</canvas></div>
+      <div class="card-sub">${_sRankSub(SD.roles, _sRoleShort)}</div>
+      <div class="chart-wrap" style="height:190px"><canvas id="sRoleC" role="img" aria-label="YTD attained versus quota by role.">YTD attainment by role.</canvas></div>
     </div>
   </div>
   <div class="two-col" style="margin-top:12px">
     <div class="card">
       <div class="card-title">Attainment by region — YTD</div>
-      <div class="card-sub">West leads at 94.9% · Central trailing at 88.5%</div>
-      <div class="chart-wrap" style="height:170px"><canvas id="sRegC" role="img" aria-label="YTD attainment by region. West, EMEA, East, Central, and APAC.">Regional attainment by all five sales regions.</canvas></div>
+      <div class="card-sub">${_sRankSub(SD.regions, _sRegDisp)}</div>
+      <div class="chart-wrap" style="height:170px"><canvas id="sRegC" role="img" aria-label="YTD attained versus quota by loaded region.">YTD attainment by region.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Rep performance distribution</div>
-      <div class="card-sub">How many reps in each attainment tier · YTD</div>
-      <div class="chart-wrap" style="height:170px"><canvas id="sDistC" role="img" aria-label="Rep attainment distribution across performance buckets. 8 reps at or above 100%, 10 reps 90-100%, 7 below 90%.">8 reps above 100%, 10 in 90-100% range, 7 below 90%.</canvas></div>
+      <div class="card-sub">How many reps in each attainment tier · YTD${dist.missing?` · ${dist.missing} without quota loaded`:''}</div>
+      <div class="chart-wrap" style="height:170px"><canvas id="sDistC" role="img" aria-label="Count of reps in each YTD attainment tier.">Rep attainment distribution.</canvas></div>
     </div>
   </div>`;
   setTimeout(()=>{
-    const actSalesPeriods=Object.keys(SD.monthly).filter(p=>p<=CLOSE_MONTH).sort();
-    const attained=actSalesPeriods.map(p=>+((SD.monthly[p].attained)/1e6).toFixed(2));
-    const quotas  =actSalesPeriods.map(p=>+((SD.monthly[p].quota)/1e6).toFixed(2));
-    const budQ    =actSalesPeriods.map(p=>SD.monthly[p].bud_quota==null?null:+((SD.monthly[p].bud_quota)/1e6).toFixed(2));
-    _smk('sAttC',{type:'bar',data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
-      {label:'Attained',data:attained,backgroundColor:'rgba(29,158,117,0.55)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:3,order:2},
-      {type:'line',label:'Quota',data:quotas,borderColor:'#185FA5',borderWidth:2,pointRadius:3,fill:false,order:1},
-      {type:'line',label:'Budget',data:budQ,borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,order:1},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{min:1.0,ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(255,255,255,0.14)'}}}}});
-
-    const roles=['Sr Account Executive','Account Executive','Sales Dev Rep'];
-    const rLabels=['Sr AE','AE','SDR'];
-    _smk('sRoleC',{type:'bar',data:{labels:rLabels,datasets:[
-      {label:'Attained',data:roles.map(r=>+((SD.roles[r]?.ytd_attained||0)/1e6).toFixed(1)),backgroundColor:'rgba(29,158,117,0.55)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:3},
-      {label:'Quota',  data:roles.map(r=>+((SD.roles[r]?.ytd_quota||0)/1e6).toFixed(1)),backgroundColor:'rgba(136,135,128,0.28)',borderColor:'rgba(136,135,128,0.8)',borderWidth:1.5,borderRadius:3},
+    const m = SD.monthly || {};
+    _smk('sAttC',{type:'bar',data:{labels:periods.map(_sMoLbl),datasets:[
+      {label:'Attained',data:periods.map(p=>_sM(m[p].attained,2)),backgroundColor:'rgba(29,158,117,0.55)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:3,order:2},
+      {type:'line',label:'Quota',data:periods.map(p=>_sM(m[p].quota,2)),borderColor:'#185FA5',borderWidth:2,pointRadius:3,fill:false,order:1},
+      {type:'line',label:'Budget',data:periods.map(p=>_sM(m[p].bud_quota,2)),borderColor:'#888780',borderDash:[4,3],borderWidth:1.5,pointRadius:0,fill:false,order:1},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(255,255,255,0.14)'}}}}});
 
-    const regs=['East','EMEA','West','Central','APAC'];
-    _smk('sRegC',{type:'bar',data:{labels:regs.map(r=>RDISP[r]),datasets:[
-      {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(1)),backgroundColor:regs.map(r=>RCOLS[r]+'88'),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1.5,borderRadius:3},
-      {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(1)),backgroundColor:regs.map(()=>'rgba(136,135,128,0.28)'),borderColor:regs.map(()=>'rgba(136,135,128,0.8)'),borderWidth:1.5,borderRadius:3},
+    _smk('sRoleC',{type:'bar',data:{labels:roles.map(_sRoleShort),datasets:[
+      {label:'Attained',data:roles.map(r=>_sM(SD.roles[r].ytd_attained)),backgroundColor:'rgba(29,158,117,0.55)',borderColor:'#1D9E75',borderWidth:1.5,borderRadius:3},
+      {label:'Quota',  data:roles.map(r=>_sM(SD.roles[r].ytd_quota)),backgroundColor:'rgba(136,135,128,0.28)',borderColor:'rgba(136,135,128,0.8)',borderWidth:1.5,borderRadius:3},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(255,255,255,0.14)'}}}}});
+
+    _smk('sRegC',{type:'bar',data:{labels:regs.map(_sRegDisp),datasets:[
+      {label:'Attained',data:regs.map(r=>_sM(SD.regions[r].ytd_attained)),backgroundColor:regs.map(r=>_sRegCol(r)+'88'),borderColor:regs.map(_sRegCol),borderWidth:1.5,borderRadius:3},
+      {label:'Quota',  data:regs.map(r=>_sM(SD.regions[r].ytd_quota)),backgroundColor:regs.map(()=>'rgba(136,135,128,0.28)'),borderColor:regs.map(()=>'rgba(136,135,128,0.8)'),borderWidth:1.5,borderRadius:3},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(255,255,255,0.14)'}}}}});
 
-    const bkts={'<80%':0,'80-90%':0,'90-100%':0,'100-110%':0,'>110%':0};
-    SD.reps.forEach(r=>{const p=r.pct*100;if(p<80)bkts['<80%']++;else if(p<90)bkts['80-90%']++;else if(p<100)bkts['90-100%']++;else if(p<110)bkts['100-110%']++;else bkts['>110%']++;});
-    _smk('sDistC',{type:'bar',data:{labels:Object.keys(bkts),datasets:[{data:Object.values(bkts),backgroundColor:['#D85A3099','#BA751799','#185FA599','#1D9E7599','#0F6E5699'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{stepSize:1,font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'},min:0}}}});
+    _smk('sDistC',{type:'bar',data:{labels:Object.keys(dist.bkts),datasets:[{data:Object.values(dist.bkts),backgroundColor:['#D85A3099','#BA751799','#185FA599','#1D9E7599','#0F6E5699'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{stepSize:1,font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'},min:0}}}});
   },50);
 }
 
 function _sPipeline(el) {
-  const pipe12=[3.60,4.05,4.50,4.95,5.40,5.90,
-    ...Object.values(SD.budget_fc).map(d=>+((d.quota*1.15)/1e6).toFixed(2))];
-  const pipe12Cols=MO12.map((_,i)=>i<=CLOSE_MO_IDX?'#1D9E7599':'#BA751766');
+  const SD = boardSalesData();
+  const pipe = SD.pipeline || {};
+  const fc = SD.pipeline_fc || {};
+  const act = Object.keys(pipe).filter(p=>p<=CLOSE_MONTH).sort();
+  const fcP = Object.keys(fc).filter(p=>p>CLOSE_MONTH).sort();
+  const range = _sRange(act);
+  const types = (SD.pipeline_types || []).join(' + ') || 'loaded opportunity types';
+  const sumKey = k => act.length && act.every(p=>pipe[p][k]!=null) ? act.reduce((t,p)=>t+pipe[p][k],0) : null;
+  const wf = {
+    beg: act.length ? pipe[act[0]].beginning : null,
+    created: sumKey('created'), won: sumKey('won'), lost: sumKey('lost'), slipped: sumKey('slipped'),
+    end: act.length ? pipe[act[act.length-1]].ending : null,
+  };
+  const wfLoaded = Object.values(wf).every(v=>v!=null);
+  const gap = wfLoaded ? wf.end - (wf.beg + wf.created - wf.won - wf.lost - wf.slipped) : null;
+  const gapNote = gap!=null && Math.abs(gap) >= 1
+    ? `<div class="card-sub" style="color:var(--red)">Loaded waterfall does not tie: ending pipeline differs from opening + created − won − lost − slipped by ${_sf(gap)}.</div>` : '';
+  const first = act.length ? _sMoLbl(act[0]) : '', last = act.length ? _sMoLbl(act[act.length-1]) : '';
+  const fcNote = fcP.length ? ` · forecast ${_sRange(fcP)}` : ' · forecast not loaded';
   el.innerHTML = `
   <div class="two-col">
     <div class="card">
-      <div class="card-title">Pipeline waterfall — cumulative YTD</div>
-      <div class="card-sub">Jan opening → created → won → lost → Jun ending ($M)</div>
-      <div class="chart-wrap" style="height:220px"><canvas id="sPipeWF" role="img" aria-label="Pipeline waterfall from $6.5M opening to $27.1M ending by June">Pipeline grew from $6.5M open to $27.1M ending balance.</canvas></div>
+      <div class="card-title">Pipeline waterfall — ${range}</div>
+      <div class="card-sub">${first} opening → created → won → lost → slipped → ${last} ending ($M) · ${types}</div>
+      ${gapNote}
+      ${wfLoaded
+        ? `<div class="chart-wrap" style="height:220px"><canvas id="sPipeWF" role="img" aria-label="Pipeline waterfall from ${first} opening to ${last} ending, ${range}.">Pipeline waterfall, ${range}.</canvas></div>`
+        : `<div class="card-sub">Pipeline waterfall is not loaded for every month through ${CLOSE_LABEL}, so it is not shown.</div>`}
     </div>
     <div class="card">
-      <div class="card-title">Pipeline coverage ratio</div>
-      <div class="card-sub">Ending pipeline / remaining H2 quota · 3× = healthy · Jun $27.1M</div>
-      <div class="chart-wrap" style="height:220px"><canvas id="sCovC" role="img" aria-label="Coverage ratio chart showing improvement from 2.5x in January to 3.3x in June, above the 3x target line">Coverage: Jan 2.5x, Jun 3.3x. Above 3x target from Feb onward.</canvas></div>
+      <div class="card-title">Pipeline coverage — New Business</div>
+      <div class="card-sub">Ending pipeline (bars, ${types}) · New Business pipeline_coverage as loaded (line)</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="sCovC" role="img" aria-label="Ending pipeline and loaded New Business coverage by month, ${range}.">Ending pipeline and coverage, ${range}.</canvas></div>
     </div>
   </div>
   <div class="card" style="margin-top:12px">
-    <div class="card-title">Monthly pipeline creation — actual Jan–Jun · forecast Jul–Dec</div>
-    <div class="card-sub">Teal = actual · amber = budget forecast · $M created per month</div>
-    <div class="chart-wrap" style="height:180px"><canvas id="sPipe12" role="img" aria-label="Monthly pipeline creation chart. Actual grows from $3.6M to $5.9M Jun. Budget forecast continues to ~$9M by December.">Pipeline creation: Jan $3.6M growing to Jun $5.9M, forecast to ~$9M by Dec.</canvas></div>
+    <div class="card-title">Monthly pipeline created — actual ${range}${fcNote}</div>
+    <div class="card-sub">Teal = actual · amber = loaded forecast · $M created per month · ${types}</div>
+    <div class="chart-wrap" style="height:180px"><canvas id="sPipe12" role="img" aria-label="Monthly pipeline created, actual ${range}${fcNote}.">Monthly pipeline created.</canvas></div>
   </div>`;
   setTimeout(()=>{
-    _smk('sPipeWF',{type:'bar',data:{labels:['Jan\nBOP','+Pipeline\n(6-mo)','−Closed\nWon','−Closed\nLost','Jun\nEOP'],datasets:[{data:[6.5,28.4,-10.4,-2.74,27.12],backgroundColor:['#185FA5','#1D9E75','#D85A30','#D85A30','#185FA5'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+(Math.abs(ctx.raw)).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+Math.abs(v).toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    if (wfLoaded) {
+      _smk('sPipeWF',{type:'bar',data:{labels:[first+'\nBOP','+Created','−Closed\nWon','−Closed\nLost','−Slipped',last+'\nEOP'],datasets:[{data:[_sM(wf.beg,2),_sM(wf.created,2),-_sM(wf.won,2),-_sM(wf.lost,2),-_sM(wf.slipped,2),_sM(wf.end,2)],backgroundColor:['#185FA5','#1D9E75','#D85A30','#D85A30','#BA7517','#185FA5'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>(ctx.raw<0?'-$':'$')+(Math.abs(ctx.raw)).toFixed(2)+'M'}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+Math.abs(v).toFixed(0)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    }
+    _smk('sCovC',{data:{labels:act.map(_sMoLbl),datasets:[
+      {type:'bar',label:'Pipeline ($M)',data:act.map(p=>_sM(pipe[p].ending,2)),backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y1'},
+      {type:'line',label:'New Business coverage (×)',data:act.map(p=>pipe[p].coverage==null?null:pipe[p].coverage),borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false,spanGaps:false,yAxisID:'y2'},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',min:0,ticks:{callback:v=>v+'×',font:{size:9}},grid:{display:false}},x:{ticks:{font:{size:9}},grid:{display:false}}}}});
 
-    const actPeriods=Object.keys(SD.pipeline).filter(p=>p<=CLOSE_MONTH).sort();
-    const endPipe=actPeriods.map(p=>+((SD.pipeline[p].ending)/1e6).toFixed(2));
-    _smk('sCovC',{data:{labels:MO12.slice(0,ACT_MONTHS_COUNT),datasets:[
-      {type:'bar',label:'Pipeline ($M)',data:endPipe,backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:1,yAxisID:'y1'},
-      {type:'line',label:'Coverage (×)',data:actPeriods.map(p=>SD.pipeline[p].coverage||0).filter(Boolean),borderColor:'#1D9E75',borderWidth:2.5,pointRadius:4,fill:false,yAxisID:'y2'},
-      {type:'line',label:'3× target',data:actPeriods.map(()=>3),borderColor:'#D85A30',borderWidth:1.5,borderDash:[4,3],pointRadius:0,fill:false,yAxisID:'y2'},
-    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{y1:{type:'linear',position:'left',ticks:{callback:v=>'$'+v+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y2:{type:'linear',position:'right',min:0,max:6,ticks:{callback:v=>v+'×',font:{size:9}},grid:{display:false}},x:{ticks:{font:{size:9}},grid:{display:false}}}}});
-
-    _smk('sPipe12',{type:'bar',data:{labels:MO12,datasets:[{data:pipe12,backgroundColor:pipe12Cols,borderColor:pipe12Cols.map(c=>c.slice(0,7)),borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
+    const allP = act.concat(fcP);
+    const created = act.map(p=>_sM(pipe[p].created,2)).concat(fcP.map(p=>_sM(fc[p].created,2)));
+    const cols = allP.map((_,i)=>i<act.length?'#1D9E7599':'#BA751766');
+    _smk('sPipe12',{type:'bar',data:{labels:allP.map(_sMoLbl),datasets:[{data:created,backgroundColor:cols,borderColor:cols.map(c=>c.slice(0,7)),borderWidth:1,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   },50);
 }
 
 function _sMap(el) {
+  const SD = boardSalesData();
+  const regs = Object.keys(SD.regions || {});
+  const closePct = d => d && d.close_quota ? d.close_attained / d.close_quota : null;
+  const cls = p => p==null ? '' : p>=1 ? 'pos' : p>=.9 ? 'amb' : 'neg';
   el.innerHTML = `
   <div class="two-col">
     <div class="card" style="padding:16px">
       <div class="card-title">Sales territory — headcount &amp; attainment by region</div>
-      <div class="card-sub">Pin size = rep count · color = Jun attainment · US + EMEA + APAC territories</div>
+      <div class="card-sub">Pin size = rep count · color = ${CLOSE_MO} attainment · loaded regions</div>
       <div style="position:relative;background:var(--bg2);border-radius:8px;overflow:hidden;height:300px">
-        <div id="sTerritoryMap" style="width:100%;height:100%" role="img" aria-label="Map showing sales territories across the United States, Europe, and APAC with pins sized by rep headcount and colored by June attainment percentage"></div>
+        <div id="sTerritoryMap" style="width:100%;height:100%" role="img" aria-label="Map of loaded sales territories with pins sized by rep headcount and colored by ${CLOSE_MO} attainment"></div>
       </div>
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px">
         <span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--teal);display:inline-block"></span>Green = ≥100%</span>
         <span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block"></span>Amber = 90–99%</span>
         <span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block"></span>Red = &lt;90%</span>
+        <span style="font-size:10px;color:var(--text3);display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--text3);display:inline-block"></span>Grey = ${CLOSE_MO} quota not loaded</span>
         <span style="font-size:10px;color:var(--text3)">Pin size = rep count</span>
       </div>
     </div>
     <div>
       <div class="card" style="margin-bottom:12px">
-        <div class="card-title">Regional summary — Jun 2026</div>
+        <div class="card-title">Regional summary — ${CLOSE_LABEL}</div>
         <table class="pl-tbl"><thead><tr>
-          <th style="text-align:left">Region</th><th>Reps</th><th>Jun Quota</th><th>Jun Att'd</th><th>Jun %</th><th>YTD %</th>
+          <th style="text-align:left">Region</th><th>Reps</th><th>${CLOSE_MO} Quota</th><th>${CLOSE_MO} Att'd</th><th>${CLOSE_MO} %</th><th>YTD %</th>
         </tr></thead><tbody>
-          ${['West','EMEA','East','Central','APAC'].map(reg=>{
+          ${regs.map(reg=>{
             const d=SD.regions[reg];
-            const mayP=d.jun_attained/d.jun_quota;
+            const cp=closePct(d);
             return `<tr>
-              <td style="font-weight:500"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${RCOLS[reg]};margin-right:5px;vertical-align:middle"></span>${RDISP[reg]}</td>
+              <td style="font-weight:500"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${_sRegCol(reg)};margin-right:5px;vertical-align:middle"></span>${_sRegDisp(reg)}</td>
               <td>${d.reps}</td>
-              <td>${_sf(d.jun_quota,0)}</td>
-              <td>${_sf(d.jun_attained,0)}</td>
-              <td class="${mayP>=1?'pos':mayP>=.9?'amb':'neg'}">${_sp(mayP)}</td>
-              <td class="${d.ytd_pct>=1?'pos':d.ytd_pct>=.9?'amb':'neg'}">${_sp(d.ytd_pct)}</td>
+              <td>${d.close_quota==null?'Not loaded':_sf(d.close_quota,0)}</td>
+              <td>${d.close_attained==null?'Not loaded':_sf(d.close_attained,0)}</td>
+              <td class="${cls(cp)}">${_sp(cp)}</td>
+              <td class="${cls(d.ytd_pct)}">${_sp(d.ytd_pct)}</td>
             </tr>`;
           }).join('')}
         </tbody></table>
@@ -3259,31 +3323,34 @@ function _sMap(el) {
   </div>`;
   setTimeout(function() {
     renderSalesTerritoryMap('sTerritoryMap');
-    const regs=['East','EMEA','West','Central','APAC'];
-    _smk('sRegBudC',{type:'bar',data:{labels:regs.map(r=>RDISP[r]),datasets:[
-      {label:'Attained',data:regs.map(r=>+((SD.regions[r].ytd_attained)/1e6).toFixed(2)),backgroundColor:regs.map(r=>RCOLS[r]+'88'),borderColor:regs.map(r=>RCOLS[r]),borderWidth:1,borderRadius:3},
-      {label:'Quota',  data:regs.map(r=>+((SD.regions[r].ytd_quota)/1e6).toFixed(1)),backgroundColor:regs.map(()=>'rgba(136,135,128,0.28)'),borderColor:regs.map(()=>'rgba(136,135,128,0.8)'),borderWidth:1.5,borderRadius:3},
+    _smk('sRegBudC',{type:'bar',data:{labels:regs.map(_sRegDisp),datasets:[
+      {label:'Attained',data:regs.map(r=>_sM(SD.regions[r].ytd_attained,2)),backgroundColor:regs.map(r=>_sRegCol(r)+'88'),borderColor:regs.map(_sRegCol),borderWidth:1,borderRadius:3},
+      {label:'Quota',  data:regs.map(r=>_sM(SD.regions[r].ytd_quota,2)),backgroundColor:regs.map(()=>'rgba(136,135,128,0.28)'),borderColor:regs.map(()=>'rgba(136,135,128,0.8)'),borderWidth:1.5,borderRadius:3},
     ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{callback:v=>'$'+v.toFixed(1)+'M',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}}}}});
   },50);
 }
 
 function _sReps(el) {
-  const sorted=[...SD.reps].sort((a,b)=>b.pct-a.pct);
+  const SD = boardSalesData();
+  const reps = SD.reps || [];
+  const sorted=[...reps].sort((a,b)=>(b.pct==null?-Infinity:b.pct)-(a.pct==null?-Infinity:a.pct));
+  const range = _sRange(Object.keys(SD.monthly || {}).filter(p=>p<=CLOSE_MONTH).sort());
+  const dist = _sBuckets(reps);
   el.innerHTML = `
   <div class="two-col" style="margin-bottom:12px">
     <div class="card">
-      <div class="card-title">Rep YTD attainment — all 25 reps</div>
+      <div class="card-title">Rep YTD attainment — all ${sorted.length} reps</div>
       <div class="card-sub">Sorted by attainment % · green ≥100%, amber 90-99%, red &lt;90%</div>
-      <div class="chart-wrap" style="height:260px"><canvas id="sRepBarC" role="img" aria-label="Horizontal bar chart of all 25 reps sorted by YTD attainment percentage">25 reps shown by attainment. SDRs lead, AEs ramp.</canvas></div>
+      <div class="chart-wrap" style="height:260px"><canvas id="sRepBarC" role="img" aria-label="Horizontal bar chart of all ${sorted.length} reps sorted by YTD attainment percentage">${sorted.length} reps shown by attainment.</canvas></div>
     </div>
     <div class="card">
       <div class="card-title">Attainment tier breakdown</div>
-      <div class="card-sub">Count of reps in each performance bucket · YTD</div>
+      <div class="card-sub">Count of reps in each performance bucket · YTD${dist.missing?` · ${dist.missing} without quota loaded`:''}</div>
       <div class="chart-wrap" style="height:260px"><canvas id="sBktC" role="img" aria-label="Bar chart showing rep count in each attainment bucket">Performance distribution across 5 tiers.</canvas></div>
     </div>
   </div>
   <div class="full-card">
-    <div class="card-title" style="margin-bottom:8px">Individual rep detail — YTD Jan–Jun 2026 (Jun close)</div>
+    <div class="card-title" style="margin-bottom:8px">Individual rep detail — YTD ${range}</div>
     <table class="pl-tbl"><thead><tr>
       <th style="text-align:left;width:16%">Rep</th>
       <th class="al" style="width:18%">Role</th>
@@ -3293,7 +3360,7 @@ function _sReps(el) {
       ${sorted.map(r=>`<tr>
         <td style="color:var(--text);font-size:11px">${r.name.replace('Actual ','')}</td>
         <td class="al" style="font-size:10px;color:var(--text2)">${r.role}</td>
-        <td class="al"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${RCOLS[r.region]};margin-right:4px;vertical-align:middle"></span>${RDISP[r.region]}</td>
+        <td class="al"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${_sRegCol(r.region)};margin-right:4px;vertical-align:middle"></span>${_sRegDisp(r.region)}</td>
         <td>${_sf(r.annual_q,0)}</td>
         <td>${_sf(r.ytd_q,0)}</td>
         <td>${_sf(r.ytd_a,0)}</td>
@@ -3302,17 +3369,17 @@ function _sReps(el) {
     </tbody></table>
   </div>`;
   setTimeout(()=>{
-    const pcts=sorted.map(r=>+(r.pct*100).toFixed(1));
-    const cols=pcts.map(p=>p>=100?'#1D9E7599':p>=90?'#BA751799':'#D85A3099');
-    _smk('sRepBarC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:pcts,backgroundColor:cols,borderColor:cols.map(c=>c.slice(0,7)),borderWidth:1,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:70,max:130,ticks:{callback:v=>v+'%',font:{size:8}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
-    const bkts={'<80%':0,'80-90%':0,'90-100%':0,'100-110%':0,'>110%':0};
-    SD.reps.forEach(r=>{const p=r.pct*100;if(p<80)bkts['<80%']++;else if(p<90)bkts['80-90%']++;else if(p<100)bkts['90-100%']++;else if(p<110)bkts['100-110%']++;else bkts['>110%']++;});
-    _smk('sBktC',{type:'bar',data:{labels:Object.keys(bkts),datasets:[{data:Object.values(bkts),backgroundColor:['#D85A3099','#BA751799','#185FA599','#1D9E7599','#0F6E5699'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{stepSize:1,font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'},min:0}}}});
+    const pcts=sorted.map(r=>r.pct==null?null:+(r.pct*100).toFixed(1));
+    const cols=pcts.map(p=>p==null?'#88878099':p>=100?'#1D9E7599':p>=90?'#BA751799':'#D85A3099');
+    _smk('sRepBarC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:pcts,backgroundColor:cols,borderColor:cols.map(c=>c.slice(0,7)),borderWidth:1,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>v+'%',font:{size:8}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    _smk('sBktC',{type:'bar',data:{labels:Object.keys(dist.bkts),datasets:[{data:Object.values(dist.bkts),backgroundColor:['#D85A3099','#BA751799','#185FA599','#1D9E7599','#0F6E5699'],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{stepSize:1,font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'},min:0}}}});
   },50);
 }
 
 function _sComm(el) {
-  const withComm=SD.reps.filter(r=>r.comm!=null&&isFinite(r.comm));
+  const SD = boardSalesData();
+  const reps = SD.reps || [];
+  const withComm=reps.filter(r=>r.comm!=null&&isFinite(r.comm));
   if(!withComm.length){
     el.innerHTML = `
   <div class="full-card">
@@ -3322,8 +3389,10 @@ function _sComm(el) {
     return;
   }
   const sorted=[...withComm].sort((a,b)=>b.comm-a.comm);
-  const roleComms={'Sr Account Executive':0,'Account Executive':0,'Sales Dev Rep':0};
-  withComm.forEach(r=>{if(r.role in roleComms)roleComms[r.role]+=r.comm;});
+  const roleComms={};
+  withComm.forEach(r=>{roleComms[r.role]=(roleComms[r.role]||0)+r.comm;});
+  const roleKeys=Object.keys(roleComms);
+  const roleCol=r=>_sRolePalette[Math.max(0,roleKeys.indexOf(r))%_sRolePalette.length];
   el.innerHTML = `
   <div class="two-col" style="margin-bottom:12px">
     <div class="card">
@@ -3338,7 +3407,7 @@ function _sComm(el) {
     </div>
   </div>
   <div class="full-card">
-    <div class="card-title" style="margin-bottom:10px">Commission leaderboard — ${sorted.length} of ${SD.reps.length} quota carriers · YTD through ${CLOSE_LABEL}</div>
+    <div class="card-title" style="margin-bottom:10px">Commission leaderboard — ${sorted.length} of ${reps.length} quota carriers · YTD through ${CLOSE_LABEL}</div>
     <table class="pl-tbl"><thead><tr>
       <th style="text-align:left;width:5%">Rank</th>
       <th style="text-align:left;width:16%">Rep</th>
@@ -3350,17 +3419,16 @@ function _sComm(el) {
         <td style="color:var(--text3);text-align:right">${i+1}</td>
         <td class="al" style="color:var(--text);font-size:11px">${r.name.replace('Actual ','')}</td>
         <td class="al" style="font-size:10px;color:var(--text2)">${r.role}</td>
-        <td class="al"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${RCOLS[r.region]};margin-right:4px;vertical-align:middle"></span>${RDISP[r.region]}</td>
+        <td class="al"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${_sRegCol(r.region)};margin-right:4px;vertical-align:middle"></span>${_sRegDisp(r.region)}</td>
         <td>${_sf(r.ytd_a,0)}</td>
-        <td class="${r.pct>=1?'vpos':r.pct>=.9?'amb':'vneg'}">${_sp(r.pct)}</td>
+        <td class="${r.pct==null?'':r.pct>=1?'vpos':r.pct>=.9?'amb':'vneg'}">${_sp(r.pct)}</td>
         <td style="color:#1D9E75;font-weight:500">$${Math.round(r.comm).toLocaleString()}</td>
       </tr>`).join('')}
     </tbody></table>
   </div>`;
   setTimeout(()=>{
-    const commCols=sorted.map(r=>({'Sr Account Executive':'#185FA599','Account Executive':'#1D9E7599','Sales Dev Rep':'#534AB799'}[r.role]||'#88878099'));
-    _smk('sCommC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:sorted.map(r=>r.comm),backgroundColor:commCols,borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'$'+ctx.raw.toLocaleString()}}},scales:{x:{ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
-    _smk('sCommRoleC',{type:'doughnut',data:{labels:['Sr AE','AE','SDR'],datasets:[{data:Object.values(roleComms),backgroundColor:['#185FA5','#1D9E75','#534AB7'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:10}}}}});
+    _smk('sCommC',{type:'bar',data:{labels:sorted.map(r=>r.name.replace('Actual ','')),datasets:[{data:sorted.map(r=>r.comm),backgroundColor:sorted.map(r=>roleCol(r.role)+'99'),borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'$'+ctx.raw.toLocaleString()}}},scales:{x:{ticks:{callback:v=>'$'+(v/1000).toFixed(0)+'K',font:{size:9}},grid:{color:'rgba(0,0,0,0.04)'}},y:{ticks:{font:{size:9}},grid:{display:false}}}}});
+    _smk('sCommRoleC',{type:'doughnut',data:{labels:roleKeys.map(_sRoleShort),datasets:[{data:roleKeys.map(k=>roleComms[k]),backgroundColor:roleKeys.map(roleCol),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:10}}}}});
   },50);
 }
 // end Sales Intelligence block
@@ -3368,6 +3436,7 @@ function _sComm(el) {
 // Init
 document.getElementById('periodBadge').textContent = CLOSE_LABEL + ' \u00b7 YTD Close';
 document.getElementById('footerCloseMo').textContent = CLOSE_MO;
+document.getElementById('footerCloseYr').textContent = CLOSE_MONTH.slice(0, 4);
 (function boardBootView() {
   var q = (location.search || '');
   var m = q.match(/[?&]view=([a-z0-9_]+)/i);
@@ -3387,8 +3456,7 @@ const CP_DATA = {
     revenue: 'Actual_income_statement.csv',
     cash: 'Actual_cash_flow_statement.csv',
     headcount: 'Actual_Employees.csv + Actual_Sales_Quotas.csv',
-    gtm: 'Actual_marketing_spend_by_channel.csv',
-    mda: 'Actual_Q2_MDA_Commentary_Seed.csv'
+    gtm: 'Actual_marketing_spend_by_channel.csv'
   }
 };
 
@@ -3411,7 +3479,7 @@ function renderCopilot(area) {
         </div>
       </div>
       <div class="cp-chip-row">
-        ${['Why did ARR beat budget?','What drove the cash increase?','How did GTM perform in June?','Summarize Q2 for the board','What is the EBITDA variance?','Which sales reps missed quota?'].map(q =>
+        ${['How did ARR compare with budget?','What drove the change in cash?',`How did GTM perform in ${CLOSE_MO}?`,'Summarize the close for the board','What is the EBITDA variance?','Which sales reps missed quota?'].map(q =>
           `<button class="cp-chip" onclick="cpAsk('${q}')">${q}</button>`
         ).join('')}
       </div>
@@ -3666,7 +3734,7 @@ function applySkin(id) {
 
 </script>
 
-<script src="/shared/board-hydrate.js?v=36"></script>
+<script src="/shared/board-hydrate.js?v=37"></script>
 
 </body>
 </html>
