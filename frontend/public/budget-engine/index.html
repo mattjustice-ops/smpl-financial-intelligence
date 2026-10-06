@@ -456,34 +456,71 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 
 const CLOSE_MONTH = '2026-06';
 const BUDGET_YEAR = 2027;
-const BOP_LOCK = 90291801.85; // Dec 2026 Forecast ending ARR
+/** Jan BUDGET_YEAR beginning ARR = Dec (BUDGET_YEAR-1) Forecast ending ARR from the loaded waterfall; null when not loaded. */
+let BOP_LOCK = null;
 
-/**
- * Dec'26 Forecast ending HC — locked Jan'27 BOP (from board WF_HC_ALL / Forecast_Employees).
- * sales + cs = WF Sales + Customer Success; rd = R&D + Product + Support.
- */
-const HC_BOP_LOCK = {
-  sales: 31,
-  cs: 18,
-  marketing: 16,
-  rd: 65,
-  ga: 17,
-};
-const HC_BOP_TOTAL = Object.values(HC_BOP_LOCK).reduce((a, b) => a + b, 0);
+/** Workforce block: live outlook payload when signed in (empty if missing), demo seed otherwise. */
+function budgetWorkforce() {
+  if (window.SMPL_LIVE_OUTLOOK) {
+    const live = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.WORKFORCE;
+    return live && typeof live === 'object' ? live : {};
+  }
+  return window.SMPL_DEMO_WORKFORCE || {};
+}
 
-/**
- * FY26 month-end HC (Jan–Dec). H1 actual / H2 forecast from board WF_HC_ALL.
- * rd = R&D + Product + Support (same rollup as HC_BOP_LOCK).
- */
-const HC_FY26_MONTHLY = {
-  sales:     [26, 27, 28, 28, 28, 29, 31, 31, 31, 31, 31, 31],
-  cs:        [15, 15, 15, 16, 16, 17, 17, 17, 18, 18, 18, 18],
-  marketing: [13, 13, 13, 14, 14, 15, 15, 15, 16, 16, 16, 16],
-  rd:        [54, 55, 56, 56, 58, 61, 62, 64, 64, 65, 65, 65],
-  ga:        [13, 14, 14, 14, 14, 15, 15, 15, 16, 16, 17, 17],
-};
-/** FY26 monthly loaded payroll cash ($), company total — allocated to depts by head share. */
-const HC_FY26_PAYROLL = [1.71, 1.75, 1.78, 1.80, 1.83, 1.94, 1.98, 2.01, 2.04, 2.06, 2.08, 2.08].map(m => m * 1e6);
+/** Budget departments → workforce departments. rd = R&D + Product + Support. */
+const HC_ROLLUP = { sales: ['Sales'], cs: ['Customer Success'], marketing: ['Marketing'], rd: ['R&D', 'Product', 'Support'], ga: ['G&A'] };
+
+function hcWorkforceIndex(wf, period) {
+  return (wf.months || []).indexOf(period);
+}
+
+/** Month-end heads (Jan–Dec of `year`) by budget dept from the workforce data; null where not loaded. */
+function hcYearMonthly(year) {
+  const wf = budgetWorkforce();
+  const heads = wf.heads || {};
+  const out = {};
+  for (const key of Object.keys(HC_ROLLUP)) {
+    out[key] = MO.map((_, i) => {
+      const idx = hcWorkforceIndex(wf, `${year}-${String(i + 1).padStart(2, '0')}`);
+      if (idx < 0) return null;
+      let total = 0;
+      for (const dept of HC_ROLLUP[key]) {
+        const v = heads[dept] && heads[dept][idx];
+        if (v == null) return null;
+        total += Number(v);
+      }
+      return total;
+    });
+  }
+  return out;
+}
+
+/** Monthly GL payroll (Jan–Dec of `year`) from the workforce data; null where not loaded. */
+function hcYearPayroll(year) {
+  const wf = budgetWorkforce();
+  const pay = wf.payroll || [];
+  return MO.map((_, i) => {
+    const idx = hcWorkforceIndex(wf, `${year}-${String(i + 1).padStart(2, '0')}`);
+    return idx >= 0 && pay[idx] != null ? Number(pay[idx]) : null;
+  });
+}
+
+/** Jan BUDGET_YEAR beginning heads, all depts; null when any dept is not loaded. */
+function hcBopTotal() {
+  const vals = Object.keys(HC_ROLLUP).map(k => HC_BOP_LOCK[k]);
+  return vals.some(v => v == null) ? null : vals.reduce((a, b) => a + b, 0);
+}
+
+/** Dec (BUDGET_YEAR-1) Forecast ending heads by budget dept = Jan BUDGET_YEAR beginning heads. */
+const HC_BOP_LOCK = {};
+Object.keys(HC_ROLLUP).forEach((key) => {
+  Object.defineProperty(HC_BOP_LOCK, key, {
+    enumerable: true,
+    get() { return hcYearMonthly(BUDGET_YEAR - 1)[key][11]; },
+  });
+});
+
 const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const BUD_P = MO.map((_, i) => `${BUDGET_YEAR}-${String(i + 1).padStart(2, '0')}`);
@@ -510,39 +547,6 @@ const GTM_CHANNELS = [
   { key: 'events', label: 'Events / field', defaultMix: 0.22, defaultCpl: 650 },
   { key: 'partners', label: 'Partners', defaultMix: 0.10, defaultCpl: 280 },
   { key: 'other', label: 'Brand / other', defaultMix: 0.08, defaultCpl: 500 },
-];
-
-/**
- * Follow-ups (not blocking advisor review) — revisit after IS/CF/BS pass.
- * - GTM: rename/clarify MQL→Opp vs Opps-to-close vs Pipeline opps (intuitive funnel labels + check row)
- * - GTM: Board channel names (Paid Search, Paid Social, Field Event, Content Synd., etc.)
- * - Period notes UX polish
- * - Cash Flow + Balance Sheet tabs
- * - COGS delivery book (replace % of revenue)
- * - Board vs operating overlay
- */
-const BUDGET_ENGINE_BACKLOG = [
-  'GTM funnel labels: MQL→Opp vs pipeline opps vs opps-to-close',
-  'Align GTM channel names to Board GTM slide',
-  'COGS breakout on IS (Hosting / Support labor / 3rd party) — derived from P&L delivery book (eng compute + customer support), not editable %; wait for data + internal allocation rules',
-  'Board vs operating plan overlay',
-  'EBITDA / OpEx calibration vs Board (review blended CPL, COGS %, services) — needed to land Dec cash near ~$30M from Dec\'26 open',
-  'CF/BS: debt schedule + bonus payout month cash timing; prepaid delta lever in sidebar',
-  'H2 Forecast deferred is steady-state (~0.16 mo rev), not H1 annual-billing stock — keep FY27 continuous with Dec close',
-  'Revenue bridge: cohort renewal calendar for annual book (beyond NB annual-% uplift)',
-  'Definitions: pull company metric_definitions from outlook/hydrate overlay (same pattern as board _sources)',
-  'Budget promote: expand warehouse tables (HC, GTM channels, GL) beyond core statements',
-  'Plan Assurance: scenario stress sweeps (NB/CPL/attrition/churn) — DONE (Monte Carlo + nerd view)',
-  'Goals → Draft: targets packet generates draft version inside formula graph',
-  'Plan Assurance: optional dedicated tab separate from Overview visuals — DONE (Analytics tab, horizontal)',
-  'Monte Carlo: sparse draws — move k levers per draw (1–2) instead of all four every time, so a draw reads as "one or two things went wrong"',
-  'Monte Carlo: expose priors in nerd view — lever on/off, editable sigmas (yoyPp 3.2 / cplLog 0.28 / attrPp 2.5 / pipe 0.55), draw count',
-  'Monte Carlo: correlate levers (growth down ↔ CPL up) — independent draws understate the joint tail and overstate the middle',
-  'Monte Carlo: watch bar still 25% below plan while named-case chips moved to 5% (CASH_WATCH_PCT) — decide whether both should be 5%',
-  'Corridor legend reads 25% / 50% rails while chips flag at 5% — same threshold question, visible on the chart',
-  'Board AI: attribution allowlist lacks revenue/margin drivers (G&A, S&M, R&D, cost of revenue), so those causal bullets intermittently strip to "I don\'t know"',
-  'Board exec summary: "Next: test whether FY can deliver the plan" band pulled — it pointed at Budget Engine Analytics, but the post-close question is a forecast one. Restore it aimed at Forecast Engine once that carries predictive analytics + historical context + model valuation',
-  'Board UI: ~40 hardcoded "June 2026" period strings across 12 render functions (renderARR, renderRevenue, renderSales, buildPL*) plus hardcoded figures in P&L chart aria-labels — correct for this close, silently wrong at the next roll',
 ];
 
 /**
@@ -922,11 +926,11 @@ function hcMonthSelect(value, onchange, opts) {
 /** Dec'26 ending HC anchors — Jan'27 BOP locked to forecast; sales/CS driven by Sales tab.
  *  loadedLabel = HC table total (wages + employee benefits + corp bonus, or + variable OTE for Sales). */
 const HC_DEPTS = [
-  { key: 'sales', label: 'Sales - New Business', loadedLabel: 'Loaded NB Payroll', start: HC_BOP_LOCK.sales, avgCost: 145000, fromSales: true, corpBonus: false, oteKey: 'nb' },
-  { key: 'cs', label: 'Sales - Customer Success', loadedLabel: 'Loaded CS Payroll', start: HC_BOP_LOCK.cs, avgCost: 120000, fromSales: true, corpBonus: false, oteKey: 'cs' },
-  { key: 'marketing', label: 'Marketing', loadedLabel: 'Loaded Marketing Payroll', start: HC_BOP_LOCK.marketing, avgCost: 125000, corpBonus: true },
-  { key: 'rd', label: 'R&D / Product', loadedLabel: 'Loaded R&D Payroll', start: HC_BOP_LOCK.rd, avgCost: 165000, corpBonus: true },
-  { key: 'ga', label: 'G&A', loadedLabel: 'Loaded G&A Payroll', start: HC_BOP_LOCK.ga, avgCost: 120000, corpBonus: true },
+  { key: 'sales', label: 'Sales - New Business', loadedLabel: 'Loaded NB Payroll', get start() { return HC_BOP_LOCK.sales; }, avgCost: 145000, fromSales: true, corpBonus: false, oteKey: 'nb' },
+  { key: 'cs', label: 'Sales - Customer Success', loadedLabel: 'Loaded CS Payroll', get start() { return HC_BOP_LOCK.cs; }, avgCost: 120000, fromSales: true, corpBonus: false, oteKey: 'cs' },
+  { key: 'marketing', label: 'Marketing', loadedLabel: 'Loaded Marketing Payroll', get start() { return HC_BOP_LOCK.marketing; }, avgCost: 125000, corpBonus: true },
+  { key: 'rd', label: 'R&D / Product', loadedLabel: 'Loaded R&D Payroll', get start() { return HC_BOP_LOCK.rd; }, avgCost: 165000, corpBonus: true },
+  { key: 'ga', label: 'G&A', loadedLabel: 'Loaded G&A Payroll', get start() { return HC_BOP_LOCK.ga; }, avgCost: 120000, corpBonus: true },
 ];
 
 /** Dept P&Ls feed IS: Sales(NB+CS)+Marketing → S&M, R&D → R&D, G&A → G&A.
@@ -1419,7 +1423,6 @@ function salesTieOutDrivers() {
 }
 
 function reseedPlanFromHistory(reason) {
-  _budgetHistScale = null;
   STATE.histRows = {};
   STATE.gtmHistRows = {};
   STATE.mixByPeriod = {};
@@ -1428,6 +1431,7 @@ function reseedPlanFromHistory(reason) {
   STATE.gtmChannelCplByPeriod = {};
   STATE.salesHireOverride = {};
   STATE._salesHireManual = false;
+  syncPlanAnchors();
   seedMixFromHistory();
   seedGtmFromHistory();
   return reason || 'reseeding';
@@ -1534,8 +1538,8 @@ function histRowHasMovement(row) {
   return ((row.nb || 0) + (row.exp || 0)) > 0;
 }
 
-/** Raw Dec'26 ending from outlook/demo WF — never go through getHistRow (avoids cache/scale loops). */
-function peekUnscaledDecEndingArr() {
+/** Dec (BUDGET_YEAR-1) ending ARR from the loaded outlook / waterfall; null when not loaded. */
+function loadedDecEndingArr() {
   const decPeriod = `${BUDGET_YEAR - 1}-12`;
   const allP = allOutlookPeriods();
   const num = (v) => {
@@ -1560,48 +1564,13 @@ function peekUnscaledDecEndingArr() {
       if (eop != null && eop > 0) return eop;
     }
   }
-  // Embedded demo seed Dec fingerprint (what /app was stuck on).
-  return 97560000;
+  return null;
 }
 
-/**
- * Scale FY26 hist so Dec ending matches Jan BOP_LOCK ($90.29M).
- * Always recompute from raw Dec — do not trust a stale scale=1 cache after hydrate.
- */
-let _budgetHistScale = null;
-function budgetHistScaleToBopLock() {
-  const dec = peekUnscaledDecEndingArr();
-  const next = dec > 0 && Math.abs(dec - BOP_LOCK) > 1000 ? BOP_LOCK / dec : 1;
-  // If hydrate/demo flipped under us, invalidate cached hist rows so UI cannot keep $97.56M.
-  if (_budgetHistScale != null && Math.abs(_budgetHistScale - next) > 1e-9) {
-    STATE.histRows = {};
-    STATE.gtmHistRows = {};
-  }
-  _budgetHistScale = next;
-  return _budgetHistScale;
-}
-
-function applyBudgetHistScale(row) {
-  if (!row) return row;
-  const scale = budgetHistScaleToBopLock();
-  if (Math.abs(scale - 1) < 1e-12) return row;
-  if (row._budgetScaled && Math.abs((row._budgetScale || 1) - scale) < 1e-12) return row;
-  return {
-    bop: (row.bop || 0) * scale,
-    eop: (row.eop || 0) * scale,
-    nb: (row.nb || 0) * scale,
-    exp: (row.exp || 0) * scale,
-    react: (row.react || 0) * scale,
-    cont: (row.cont || 0) * scale,
-    churn: (row.churn || 0) * scale,
-    nn: (row.nn || 0) * scale,
-    grr: row.grr,
-    nrr: row.nrr,
-    _src: row._src,
-    _fallback: row._fallback,
-    _budgetScaled: true,
-    _budgetScale: scale,
-  };
+/** Re-read the Jan beginning ARR anchor from loaded data (init and after hydrate). */
+function syncPlanAnchors() {
+  BOP_LOCK = loadedDecEndingArr();
+  return BOP_LOCK;
 }
 
 /** Build a hist row from a waterfall table + period index. */
@@ -1625,10 +1594,11 @@ function histRowFromWfAt(wf, i) {
 }
 
 /**
- * Embedded demo waterfall for FY of CLOSE_MONTH (always Jan–Dec index 0..11).
- * Dollar alignment to BOP_LOCK is applied once in applyBudgetHistScale (raw demo Dec is $97.56M).
+ * Embedded demo waterfall for FY of CLOSE_MONTH (always Jan–Dec index 0..11). Demo mode only —
+ * never mixed into live warehouse rows.
  */
 function getDemoHistRow(period) {
+  if (window.SMPL_LIVE_OUTLOOK) return null;
   const wf = window.SMPL_DEMO_WF_TABLE;
   if (!wf || !wf.Beginning) return null;
   const year = CLOSE_MONTH.slice(0, 4);
@@ -1700,11 +1670,6 @@ function getHistRow(period) {
     row = mergeHistLiveAnchors(row, fallback);
   }
   if (!row) row = getDemoHistRow(period);
-  row = applyBudgetHistScale(row);
-  // Dec must land exactly on the Jan'27 lock — no $97.56M next to a $90.29M BOP.
-  if (row && period === `${BUDGET_YEAR - 1}-12` && Math.abs((row.eop || 0) - BOP_LOCK) > 1) {
-    row = { ...row, eop: BOP_LOCK, _eopForcedToBopLock: true };
-  }
   if (row) STATE.histRows[period] = row;
   return row;
 }
@@ -3504,33 +3469,28 @@ function tsStmtRow(period, stmt) {
  * Never relevel AR/AP/DR to a "steady-state %" that disagrees with the Dec balances
  * shown in the context columns — that cliffs Jan WC and plugs equity down.
  */
+/**
+ * Jan BUDGET_YEAR opening balance sheet = Dec (BUDGET_YEAR-1) Forecast balance sheet as loaded.
+ * Lines that are not loaded stay null and are listed in `missing` (no ratio or constant stand-ins).
+ */
 function bsBopLock() {
   const dec = `${BUDGET_YEAR - 1}-12`;
-  const jun = `${BUDGET_YEAR - 1}-06`;
-  const bsDec = tsStmtRow(dec, 'bs');
-  const bsJun = tsStmtRow(jun, 'bs');
-  const cfsDec = tsStmtRow(dec, 'cfs');
-  const isDec = tsIsRow(dec);
-  const decRev = isDec && isDec.revenue != null ? isDec.revenue : 8578200;
-  const decOpex = isDec && isDec.total_opex != null
-    ? isDec.total_opex
-    : (isDec && isDec.opex != null ? isDec.opex : 5389683);
-  const cash = (cfsDec && cfsDec.ending_cash != null)
-    ? cfsDec.ending_cash
-    : (bsDec && bsDec.cash != null ? bsDec.cash : 72636321);
-  // Prefer Dec BS; only fall back to June if Dec row is missing entirely
-  const wc = bsDec || bsJun || {};
-  const ar = wc.ar != null ? Number(wc.ar) : Math.round(decRev * 0.12);
-  const ap = wc.ap != null ? Number(wc.ap) : Math.round(decOpex * 0.13);
-  const deferred = wc.deferred_rev != null ? Number(wc.deferred_rev) : Math.round(decRev * 0.16);
-  const prepaids = wc.prepaids != null ? Number(wc.prepaids) : 6000000;
-  const ppe = wc.ppe != null ? Number(wc.ppe) : 2500000;
-  const debt = wc.debt != null ? Number(wc.debt) : 5000000;
-  const assets0 = cash + ar + prepaids + ppe;
-  const liab0 = ap + deferred + debt;
-  // Prefer reported Dec equity when it ties; otherwise plug from components
-  let equity0 = wc.equity != null ? Number(wc.equity) : (assets0 - liab0);
-  if (Math.abs((liab0 + equity0) - assets0) > 1) equity0 = assets0 - liab0;
+  const bsDec = tsStmtRow(dec, 'bs') || {};
+  const cfsDec = tsStmtRow(dec, 'cfs') || {};
+  const isDec = tsIsRow(dec) || {};
+  const num = v => (v == null ? null : Number(v));
+  const decRev = num(isDec.revenue);
+  const decOpex = isDec.total_opex != null ? num(isDec.total_opex) : num(isDec.opex);
+  const cash = cfsDec.ending_cash != null ? num(cfsDec.ending_cash) : num(bsDec.cash);
+  const ar = num(bsDec.ar);
+  const ap = num(bsDec.ap);
+  const deferred = bsDec.deferred_rev != null ? num(bsDec.deferred_rev) : num(bsDec.dr);
+  const prepaids = bsDec.prepaids != null ? num(bsDec.prepaids) : num(bsDec.prepaids_and_other_current_assets);
+  const ppe = bsDec.ppe != null ? num(bsDec.ppe) : num(bsDec.property_and_equipment_net);
+  const debt = num(bsDec.debt);
+  const equity0 = num(bsDec.equity);
+  const lines = { cash, ar, prepaids, ppe, ap, deferred_rev: deferred, debt, equity: equity0, revenue: decRev, opex: decOpex };
+  const missing = Object.keys(lines).filter(k => lines[k] == null);
 
   return {
     cash,
@@ -3541,11 +3501,12 @@ function bsBopLock() {
     deferred_rev: deferred,
     debt,
     equity: equity0,
+    missing,
     _decRev: decRev,
     _decOpex: decOpex,
-    _decArPct: decRev > 0 ? (ar / decRev) * 100 : 12,
-    _decApPct: decOpex > 0 ? (ap / decOpex) * 100 : 13,
-    _decDrMonths: decRev > 0 ? deferred / decRev : 0.16,
+    _decArPct: decRev > 0 && ar != null ? (ar / decRev) * 100 : null,
+    _decApPct: decOpex > 0 && ap != null ? (ap / decOpex) * 100 : null,
+    _decDrMonths: decRev > 0 && deferred != null ? deferred / decRev : null,
   };
 }
 
@@ -3872,7 +3833,7 @@ function renderSidebar() {
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">Deferred (months of rev)</span><span class="lever-val" id="v-dr">${drMo.toFixed(2)}</span></div>
         <input type="range" min="0.05" max="2" step="0.01" value="${Math.min(2, drMo)}" oninput="setDrMonths(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.deferred_rev)} · ${open._decDrMonths.toFixed(2)} mo</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.deferred_rev)} · ${open._decDrMonths != null ? open._decDrMonths.toFixed(2) + ' mo' : 'not loaded'}</div>
       </div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">AP % of OpEx</span><span class="lever-val" id="v-ap">${apPct.toFixed(0)}%</span></div>
@@ -3986,7 +3947,7 @@ function renderSidebar() {
       </div>
       <div class="panel-lbl">Plan rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
-        Jan 2027 BOP HC<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtN(HC_BOP_TOTAL)}</strong><br><span style="font-size:9.5px">Dec 2026 Forecast · locked</span><br><br>
+        Jan 2027 BOP HC<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtN(hcBopTotal())}</strong><br><span style="font-size:9.5px">Dec 2026 Forecast · locked</span><br><br>
         Sales - NB / CS<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtN(dec.ending.sales)}</strong> / <strong style="font-family:var(--mono);color:var(--teal)">${fmtN(dec.ending.cs)}</strong><br><br>
         Dec total HC<br><strong style="font-family:var(--mono);color:var(--text)">${fmtN(dec.headsTotal)}</strong><br><br>
         FY base wages<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyWages)}</strong><br>
@@ -4000,7 +3961,7 @@ function renderSidebar() {
     <div class="panel-lbl">Plan</div>
     <div style="font-size:11px;color:var(--text2);line-height:1.5">
       Jan 2027 BOP<br><strong style="color:var(--teal);font-family:var(--mono)">${fmtM(BOP_LOCK)}</strong> ARR ·
-      <strong style="color:var(--teal);font-family:var(--mono)">${fmtN(HC_BOP_TOTAL)}</strong> HC
+      <strong style="color:var(--teal);font-family:var(--mono)">${fmtN(hcBopTotal())}</strong> HC
     </div>`;
 }
 
@@ -4621,25 +4582,18 @@ function renderARR() {
   const fyBill = BUD_P.reduce((s, p) => s + bridge[p].billings, 0);
   const fySub = BUD_P.reduce((s, p) => s + bridge[p].sub, 0);
   const annualPct = planAnnualBillPct(open);
-  const dec26 = fy26DecEndingArr();
-  const histScale = budgetHistScaleToBopLock();
-  const histScaled = Math.abs(histScale - 1) > 1e-6;
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">FY ending ARR from YoY growth. Editable mix is <strong>% of beginning ARR</strong> — monthly $ = BOP × mix. Mix is seeded from the <strong>+${MIX_SEED_YOY_PCT}%</strong> base plan; moving the YoY lever <strong>rebalances the waterfall</strong> across the year (stable seasonality) so GTM / spend stay coherent — not a Dec NB dump.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan 2027 beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — locked to Dec 2026 Forecast ending. Update this anchor when FY26 closes.${
+    <div class="ctx-banner${BOP_LOCK == null ? ' warn' : ''}">${BOP_LOCK == null
+      ? `<strong>Dec ${BUDGET_YEAR - 1} Forecast ending ARR not loaded</strong> — Jan ${BUDGET_YEAR} beginning ARR is blank until the forecast dataset is loaded.`
+      : `Jan ${BUDGET_YEAR} beginning ARR is <strong>${fmtM(BOP_LOCK)}</strong> — Dec ${BUDGET_YEAR - 1} Forecast ending ARR from the loaded forecast dataset.`}${
       plan._yoYPlug != null && Math.abs(plan._yoYPlug) > 5e4
         ? ` Residual Dec NB tie-out <strong>${fmtM(plan._yoYPlug)}</strong> (should be small after rebalance).`
         : ' Waterfall is seasonally rebalanced to the YoY target.'
     }</div>`;
-  if (histScaled) {
-    html += `<div class="ctx-banner warn"><strong>FY26 hist aligned to Jan lock</strong> · context path scaled ×${histScale.toFixed(4)} so Dec '26 ends at <strong>${fmtM(BOP_LOCK)}</strong> (was demo/warehouse ~$97.56M). Live outlook hydrate should supply the board forecast series directly.</div>`;
-  } else if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
-    html += `<div class="ctx-banner warn"><strong>FY26 hist ≠ Jan lock</strong> · Dec '26 ending is <strong>${fmtM(dec26)}</strong> vs lock <strong>${fmtM(BOP_LOCK)}</strong>.</div>`;
-  }
-
   const sections = [
     { sec: 'Component mix (% of beginning ARR)', rows: [
       { k: 'mix_nb', label: 'New business % of BOP', mix: 'nb' },
@@ -5303,13 +5257,14 @@ function fyHcValue(hc, row) {
 }
 
 function fy26HcMonth(dept, moIdx) {
-  const s = HC_FY26_MONTHLY[dept];
-  if (!s || moIdx < 0 || moIdx > 11) return 0;
-  return s[moIdx] || 0;
+  const s = hcYearMonthly(BUDGET_YEAR - 1)[dept];
+  if (!s || moIdx < 0 || moIdx > 11) return null;
+  return s[moIdx];
 }
 
 function fy26HcTotalMonth(moIdx) {
-  return HC_DEPTS.reduce((s, d) => s + fy26HcMonth(d.key, moIdx), 0);
+  const vals = HC_DEPTS.map(d => fy26HcMonth(d.key, moIdx));
+  return vals.some(v => v == null) ? null : vals.reduce((a, b) => a + b, 0);
 }
 
 function fy26HcQuarterEnd(dept, qIdx) {
@@ -5322,6 +5277,7 @@ function fy26HcQuarterFlow(dept, qIdx) {
     const m = qIdx * 3 + i;
     const cur = fy26HcMonth(dept, m);
     const prev = m === 0 ? cur : fy26HcMonth(dept, m - 1);
+    if (cur == null || prev == null) return { hires: null, attr: null, net: null };
     const dlt = cur - prev;
     if (dlt > 0) hires += dlt;
     else attr += -dlt;
@@ -5329,14 +5285,28 @@ function fy26HcQuarterFlow(dept, qIdx) {
   return { hires, attr, net: hires - attr };
 }
 
+/** FY (BUDGET_YEAR-1) quarter GL payroll — company total, or the dept's teams from payroll_by_team. Null when not loaded. */
 function fy26PayrollQuarter(dept, qIdx) {
+  const year = BUDGET_YEAR - 1;
+  const wf = budgetWorkforce();
+  const byTeam = wf.payroll_by_team || {};
   let sum = 0;
   for (let i = 0; i < 3; i++) {
     const m = qIdx * 3 + i;
-    const tot = fy26HcTotalMonth(m);
-    const pay = HC_FY26_PAYROLL[m] || 0;
-    if (!dept) sum += pay;
-    else sum += tot ? pay * (fy26HcMonth(dept, m) / tot) : 0;
+    let pay;
+    if (!dept) {
+      pay = hcYearPayroll(year)[m];
+    } else {
+      const idx = hcWorkforceIndex(wf, `${year}-${String(m + 1).padStart(2, '0')}`);
+      pay = idx < 0 ? null : 0;
+      for (const team of HC_ROLLUP[dept] || []) {
+        const v = byTeam[team] && byTeam[team][idx];
+        if (v == null) { pay = null; break; }
+        pay += Number(v);
+      }
+    }
+    if (pay == null) return null;
+    sum += pay;
   }
   return sum;
 }
@@ -5422,7 +5392,7 @@ function renderHC() {
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">One operating plan. Attrition, hire freeze, net hires/(exits), and RIFs are live levers — change them and payroll, P&amp;L, and ending HC move with them. Loaded NB/CS Payroll includes variable OTE.</div>
     ${adjLegend()}
-    <div class="ctx-banner">Jan BOP <strong>${fmtN(HC_BOP_TOTAL)}</strong> locked to Dec'26. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>`;
+    <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> locked to Dec'26. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>`;
 
   // —— Comp assumptions + attrition / freeze ——
   html += `<table class="bud-tbl bridge-tbl"><thead><tr>
@@ -6008,7 +5978,7 @@ function renderCF() {
   let html = `
     <div class="slide-title">Cash Flow · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">Indirect method — same breakout as the Board platform. Ties to ${originTag('Balance Sheet', 'bs', { title: 'Open Balance Sheet' })} cash and ${originTag('IS', 'is', { title: 'Open Income Statement' })} net income.</div>
-    <div class="ctx-banner">Opening cash ${fmtM(open.cash)}. Jan WC organic vs Dec: ΔAR ${fmtM(janChgAr)} · ΔAP ${fmtM(janChgAp)} · ΔDR ${fmtM(janChgDr)} (DR ${fmtM(open.deferred_rev)} → ${fmtM(janDr)}). FY CFO ${fmtM(fyCfo)} · Dec ending cash ${fmtM(endCash)}.</div>`;
+    <div class="ctx-banner">Opening cash ${fmtM(open.cash)}. Jan WC organic vs Dec: ΔAR ${fmtM(janChgAr)} · ΔAP ${fmtM(janChgAp)} · ΔDR ${fmtM(janChgDr)} (DR ${fmtM(open.deferred_rev)} → ${fmtM(janDr)}). FY CFO ${fmtM(fyCfo)} · Dec ending cash ${fmtM(endCash)}.</div>${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}`;
 
   const rows = [
     { type: 'sec', label: 'Operating Activities' },
@@ -6066,7 +6036,7 @@ function renderBS() {
   let html = `
     <div class="slide-title">Balance Sheet · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">Same breakout as the Board platform. Cash rolls from ${originTag('Cash Flow', 'cf', { title: 'Open Cash Flow' })}; equity rolls with NI + SBC from Dec close.</div>
-    <div class="ctx-banner">BOP = Dec close (AR ${fmtM(open.ar)} · AP ${fmtM(open.ap)} · DR ${fmtM(open.deferred_rev)} · equity ${fmtM(open.equity)}). Jan ${fmtM(janDr)} DR / AR ${fmtM(bs[BUD_P[0]].ar)} / AP ${fmtM(bs[BUD_P[0]].ap)} — WC rolls with rev &amp; OpEx. Dec total assets ${fmtM(end.total_assets)} · ${tie ? '✓ balances' : '⚠ check plug'}. Ending cash ${fmtM(cfs[BUD_P[11]].ending_cash)}.</div>`;
+    <div class="ctx-banner">BOP = Dec close (AR ${fmtM(open.ar)} · AP ${fmtM(open.ap)} · DR ${fmtM(open.deferred_rev)} · equity ${fmtM(open.equity)}). Jan ${fmtM(janDr)} DR / AR ${fmtM(bs[BUD_P[0]].ar)} / AP ${fmtM(bs[BUD_P[0]].ap)} — WC rolls with rev &amp; OpEx. Dec total assets ${fmtM(end.total_assets)} · ${tie ? '✓ balances' : '⚠ check plug'}. Ending cash ${fmtM(cfs[BUD_P[11]].ending_cash)}.</div>${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}`;
 
   const rows = [
     { type: 'sec', label: 'Assets' },
@@ -6132,147 +6102,86 @@ function tsIsRow(period) {
   return null;
 }
 
-function backcastFromLater(laterEop, laterJanBop) {
-  const mom = [];
-  let prev = laterJanBop > 0 ? laterJanBop : (laterEop[0] || 1);
-  for (let i = 0; i < 12; i++) {
-    const cur = laterEop[i] != null ? laterEop[i] : prev;
-    mom.push(prev > 0 ? cur / prev : 1);
-    prev = cur;
-  }
-  let prod = mom.reduce((a, b) => a * b, 1) || 1;
-  const start = laterJanBop / prod;
-  const eop = [];
-  let x = start;
-  for (let i = 0; i < 12; i++) {
-    x *= mom[i];
-    eop.push(x);
-  }
-  eop[11] = laterJanBop;
-  const nn = eop.map((v, i) => v - (i === 0 ? start : eop[i - 1]));
-  return { eop, nn, bop0: start };
+const BUDGET_YOY_FIELDS = ['eop', 'nn', 'rev', 'ebitda', 'opex', 'mkt', 'mqls', 'cash', 'hc'];
+
+/** Prior-year series from loaded data only (null months when not loaded). MQLs are not in the dataset. */
+function budgetPriorYear(year) {
+  const ps = yearPeriods(year);
+  const loaded = new Set(allOutlookPeriods());
+  const hist = (p) => (loaded.has(p) ? getHistRow(p) : null);
+  const isVal = (p, key) => { const r = tsIsRow(p); return r && r[key] != null ? r[key] : null; };
+  const hc = (() => {
+    const wf = budgetWorkforce();
+    const total = wf.heads_total || [];
+    return ps.map((p) => { const i = hcWorkforceIndex(wf, p); return i >= 0 && total[i] != null ? total[i] : null; });
+  })();
+  const programs = (p) => {
+    const get = window.SMPLOutlook && window.SMPLOutlook.getWarehouseGlPrograms;
+    const row = typeof get === 'function' ? get(p, CLOSE_MONTH) : null;
+    if (!row || !Object.keys(row).length) return null;
+    return Object.values(row).reduce((a, b) => a + (Number(b) || 0), 0);
+  };
+  return {
+    eop: ps.map((p) => { const r = hist(p); return r && r.eop != null ? r.eop : null; }),
+    nn: ps.map((p) => { const r = hist(p); return r && r.nn != null ? r.nn : null; }),
+    rev: ps.map((p) => isVal(p, 'revenue')),
+    ebitda: ps.map((p) => isVal(p, 'ebitda')),
+    opex: ps.map((p) => isVal(p, 'total_opex')),
+    mkt: ps.map(programs),
+    mqls: ps.map(() => null),
+    cash: ps.map((p) => {
+      const cfs = tsStmtRow(p, 'cfs');
+      if (cfs && cfs.ending_cash != null) return cfs.ending_cash;
+      const bs = tsStmtRow(p, 'bs');
+      return bs && bs.cash != null ? bs.cash : null;
+    }),
+    hc,
+  };
 }
 
-function scaleSeries(base, factor) {
-  return base.map(v => v == null ? null : v * factor);
+/** Fields with no loaded months, and fields with some months missing. */
+function budgetYoyMissing(y) {
+  const none = [], partial = [];
+  for (const f of BUDGET_YOY_FIELDS) {
+    const vals = y[f] || [];
+    const n = vals.filter((v) => v != null).length;
+    if (!n) none.push(f);
+    else if (n < vals.length) partial.push(f);
+  }
+  return { none, partial, empty: none.length === BUDGET_YOY_FIELDS.length };
 }
 
 function buildYoyCompare() {
-  const fy26p = yearPeriods(BUDGET_YEAR - 1);
-  const fy26Eop = fy26p.map(p => {
-    const r = getHistRow(p);
-    return r && r.eop != null ? r.eop : null;
-  });
-  const fy26Nn = fy26p.map(p => {
-    const r = getHistRow(p);
-    return r && r.nn != null ? r.nn : null;
-  });
-  const fy26Bop0 = (getHistRow(fy26p[0]) || {}).bop || fy26Eop[0] || BOP_LOCK;
-  const fy26Rev = fy26p.map(p => {
-    const row = tsIsRow(p);
-    return row && row.revenue != null ? row.revenue : null;
-  });
-  const fy26Hc = (window.WF_TOTAL_HC || [121, 124, 126, 128, 130, 137, 140, 142, 145, 146, 147, 147]).slice(0, 12);
-
   const plan = computeBudgetArr();
   const is = computeIsPlan();
   const hc = computeHcPlan();
   const gtm = computeGtmPlan();
-  const fy27Eop = BUD_P.map(p => plan[p].eop);
-  const fy27Nn = BUD_P.map(p => plan[p].nn);
-  const fy27Rev = BUD_P.map(p => is[p].revenue);
-  const fy27Hc = BUD_P.map(p => hc[p].headsTotal);
-  const fy27Ebitda = BUD_P.map(p => is[p].ebitda);
-  const fy27Opex = BUD_P.map(p => is[p].opex);
-  const fy27Mkt = BUD_P.map(p => gtm[p].spend);
-  const fy27Mqls = BUD_P.map(p => gtm[p].mqls);
   const { cfs: fy27Cfs } = computeCfBsPlan();
-  const fy27Cash = BUD_P.map(p => fy27Cfs[p].ending_cash);
-
-  const fy26Ebitda = fy26p.map(p => {
-    const row = tsIsRow(p);
-    return row && row.ebitda != null ? row.ebitda : null;
-  });
-  const fy26Opex = fy26p.map(p => {
-    const row = tsIsRow(p);
-    return row && row.total_opex != null ? row.total_opex : null;
-  });
-  const fy26Mkt = fy26p.map(p => {
-    const r = getGtmHistRow(p);
-    return r && r.spend != null ? r.spend : null;
-  });
-  const fy26Mqls = fy26p.map(p => {
-    const r = getGtmHistRow(p);
-    return r && r.mqls != null ? r.mqls : null;
-  });
-  const fy26Cash = fy26p.map(p => {
-    const cfs = tsStmtRow(p, 'cfs');
-    if (cfs && cfs.ending_cash != null) return cfs.ending_cash;
-    const bs = tsStmtRow(p, 'bs');
-    return bs && bs.cash != null ? bs.cash : null;
-  });
-
-  const fy26Complete = fy26Eop.every(v => v != null && v > 0);
-  const fy25 = fy26Complete
-    ? backcastFromLater(fy26Eop, fy26Bop0)
-    : { eop: scaleSeries(fy27Eop, fy26Bop0 / (fy27Eop[11] || 1)), nn: scaleSeries(fy27Nn, 0.86), bop0: fy26Bop0 / 1.16 };
-  const fy24 = backcastFromLater(fy25.eop, fy25.bop0);
-
-  const fy26RevFill = fy26Rev.map((v, i) => v != null ? v : (fy27Rev[i] * (fy26Eop[i] || fy26Bop0) / (fy27Eop[i] || 1)));
-  const fy25Rev = scaleSeries(fy26RevFill, fy25.eop[11] / (fy26Eop[11] || fy25.eop[11] || 1));
-  const fy24Rev = scaleSeries(fy26RevFill, fy24.eop[11] / (fy26Eop[11] || fy24.eop[11] || 1));
-  const fy25Hc = fy26Hc.map(v => Math.max(1, Math.round(v * (fy25.bop0 / fy26Bop0))));
-  const fy24Hc = fy26Hc.map(v => Math.max(1, Math.round(v * (fy24.bop0 / fy26Bop0))));
-  fy25Hc[11] = Math.round(fy26Hc[0] || 121);
-  fy24Hc[11] = fy25Hc[0];
-
-  const scalePrior = (fy26Series, fy27Series, factor) =>
-    fy26Series.map((v, i) => (v != null ? v : (fy27Series[i] || 0)) * factor);
-
-  const fy26EbitdaFill = fy26Ebitda.map((v, i) => v != null ? v : fy27Ebitda[i]);
-  const fy26OpexFill = fy26Opex.map((v, i) => v != null ? v : fy27Opex[i]);
-  const fy26MktFill = fy26Mkt.map((v, i) => v != null ? v : fy27Mkt[i] * 0.9);
-  const fy26MqlsFill = fy26Mqls.map((v, i) => v != null ? v : fy27Mqls[i] * 0.9);
-  const openCash = bsBopLock().cash;
-  const fy26CashFill = fy26Cash.map((v, i) => v != null ? v : openCash);
-  const arrScale25 = fy25.eop[11] / (fy26Eop[11] || fy25.eop[11] || 1);
-  const arrScale24 = fy24.eop[11] / (fy26Eop[11] || fy24.eop[11] || 1);
-
+  const yy = (y) => String(y).slice(2);
   const years = [
+    { id: 'fy24', label: `FY${yy(BUDGET_YEAR - 3)}`, color: '#72826a', dash: [4, 3], width: 1.5, optional: true, ...budgetPriorYear(BUDGET_YEAR - 3) },
+    { id: 'fy25', label: `FY${yy(BUDGET_YEAR - 2)}`, color: '#5fa878', dash: [], width: 1.8, ...budgetPriorYear(BUDGET_YEAR - 2) },
+    { id: 'fy26', label: `FY${yy(BUDGET_YEAR - 1)}`, color: '#b89060', dash: [], width: 2, ...budgetPriorYear(BUDGET_YEAR - 1) },
     {
-      id: 'fy24', label: 'FY24', color: '#72826a', dash: [4, 3], width: 1.5, optional: true,
-      eop: fy24.eop, nn: fy24.nn, rev: fy24Rev, hc: fy24Hc,
-      ebitda: scalePrior(fy26EbitdaFill, fy27Ebitda, arrScale24),
-      opex: scalePrior(fy26OpexFill, fy27Opex, arrScale24),
-      mkt: scalePrior(fy26MktFill, fy27Mkt, arrScale24),
-      mqls: scalePrior(fy26MqlsFill, fy27Mqls, arrScale24),
-      cash: scalePrior(fy26CashFill, fy27Cash, arrScale24),
-    },
-    {
-      id: 'fy25', label: 'FY25', color: '#5fa878', dash: [], width: 1.8,
-      eop: fy25.eop, nn: fy25.nn, rev: fy25Rev, hc: fy25Hc,
-      ebitda: scalePrior(fy26EbitdaFill, fy27Ebitda, arrScale25),
-      opex: scalePrior(fy26OpexFill, fy27Opex, arrScale25),
-      mkt: scalePrior(fy26MktFill, fy27Mkt, arrScale25),
-      mqls: scalePrior(fy26MqlsFill, fy27Mqls, arrScale25),
-      cash: scalePrior(fy26CashFill, fy27Cash, arrScale25),
-    },
-    {
-      id: 'fy26', label: 'FY26', color: '#b89060', dash: [], width: 2,
-      eop: fy26Eop.map((v, i) => v != null ? v : fy26Bop0),
-      nn: fy26Nn.map((v, i) => v != null ? v : 0),
-      rev: fy26RevFill, hc: fy26Hc,
-      ebitda: fy26EbitdaFill, opex: fy26OpexFill, mkt: fy26MktFill, mqls: fy26MqlsFill,
-      cash: fy26CashFill,
-    },
-    {
-      id: 'fy27', label: 'FY27B', color: '#3d7ea6', dash: [], width: 2.6,
-      eop: fy27Eop, nn: fy27Nn, rev: fy27Rev, hc: fy27Hc,
-      ebitda: fy27Ebitda, opex: fy27Opex, mkt: fy27Mkt, mqls: fy27Mqls,
-      cash: fy27Cash,
+      id: 'fy27', label: `FY${yy(BUDGET_YEAR)}B`, color: '#3d7ea6', dash: [], width: 2.6,
+      eop: BUD_P.map(p => plan[p].eop), nn: BUD_P.map(p => plan[p].nn), rev: BUD_P.map(p => is[p].revenue),
+      hc: BUD_P.map(p => hc[p].headsTotal), ebitda: BUD_P.map(p => is[p].ebitda), opex: BUD_P.map(p => is[p].opex),
+      mkt: BUD_P.map(p => gtm[p].spend), mqls: BUD_P.map(p => gtm[p].mqls), cash: BUD_P.map(p => fy27Cfs[p].ending_cash),
     },
   ];
+  years.forEach((y) => { if (y.id !== 'fy27') y.missing = budgetYoyMissing(y); });
   return years;
+}
+
+/** Banner text for prior years that are not loaded (never back-cast). */
+function budgetHistoryFlags(years) {
+  const out = [];
+  for (const y of years) {
+    if (!y.missing) continue;
+    if (y.missing.empty) out.push(`No ${y.label} history loaded.`);
+    else if (y.missing.none.length) out.push(`${y.label}: ${y.missing.none.join(', ')} not loaded.`);
+  }
+  return out;
 }
 
 function grainSeries(monthly12, grain, mode) {
@@ -6280,8 +6189,8 @@ function grainSeries(monthly12, grain, mode) {
   const out = [];
   for (let q = 0; q < 4; q++) {
     const slice = monthly12.slice(q * 3, q * 3 + 3);
-    if (mode === 'end') out.push(slice[2]);
-    else out.push(slice.reduce((a, b) => a + (b || 0), 0));
+    if (mode === 'end') out.push(slice[2] != null ? slice[2] : null);
+    else out.push(slice.some(v => v == null) ? null : slice.reduce((a, b) => a + b, 0));
   }
   return out;
 }
@@ -6340,7 +6249,7 @@ function paintOverviewCharts() {
       type: 'line',
       data: {
         labels,
-        datasets: years.map(y => ({
+        datasets: years.filter(y => (y[field] || []).some(v => v != null)).map(y => ({
           label: y.label,
           data: grainSeries(y[field], grain, mode),
           borderColor: y.color,
@@ -6442,8 +6351,9 @@ function renderOverview() {
       <button class="ov-tog${grainQ ? ' on' : ''}" onclick="setOvGrain('q')">Quarterly</button>
       <button class="ov-tog${!grainQ ? ' on' : ''}" onclick="setOvGrain('m')">Monthly</button>
       <button class="ov-tog${STATE.ovShowFy24 ? ' on' : ''}" onclick="setOvShowFy24(${STATE.ovShowFy24 ? 'false' : 'true'})">FY24</button>
-      <span style="font-size:10px;color:var(--text3);margin-left:4px">FY26 = actual + H2 forecast · FY27B moves with plan levers · FY24/25 prior years scaled where hist is thin</span>
+      <span style="font-size:10px;color:var(--text3);margin-left:4px">FY${String(BUDGET_YEAR - 1).slice(2)} = actual + forecast from the loaded dataset · FY${String(BUDGET_YEAR).slice(2)}B moves with plan levers · prior years shown only where loaded</span>
     </div>
+    ${(() => { const flags = budgetHistoryFlags(buildYoyCompare()); return flags.length ? `<div class="ctx-banner warn"><strong>Missing history (not filled in):</strong> ${flags.join(' ')}</div>` : ''; })()}
     <div class="ov-charts">
       <div class="ov-card">
         <div class="ov-card-title">Ending ARR</div>
@@ -6698,11 +6608,6 @@ function paCashRails(plan, floor) {
     noiseDec: +(dec * 0.05).toFixed(2),                 // ±5% ≈ noise
   };
 }
-
-function pushPaLeversToFrame() {
-  /* iframe removed — predictive is native; keep no-op for any leftover callers */
-}
-window.pushPaLeversToFrame = pushPaLeversToFrame;
 
 window.setPaHorizon = function(h) {
   STATE.paHorizon = h === '3y' ? '3y' : '1y';
@@ -8299,7 +8204,7 @@ function buildAssuranceHistoryPacket(planPacket) {
     };
   };
 
-  const prior25 = snap(fy25, 'FY25', 'Backcast / scaled from FY26 where hist thin');
+  const prior25 = snap(fy25, fy25 ? fy25.label : 'FY25', fy25 && fy25.missing && fy25.missing.empty ? 'Not loaded' : 'Loaded history');
   const prior26 = snap(fy26, 'FY26', `Outlook hist · H1 Actual through ${CLOSE_MONTH} · H2 Forecast`);
   const budget = {
     label: `FY${BUDGET_YEAR}B`,
@@ -8840,7 +8745,7 @@ function buildBudgetAssurancePacket() {
   const endCash = cfs[dec].ending_cash;
   const cashFloor = STATE.cashFloorDec != null ? STATE.cashFloorDec : 10000000;
   const janHc = hc[jan].headsTotal;
-  const janHcExpected = HC_BOP_TOTAL;
+  const janHcExpected = hcBopTotal();
   const fyIsSm = BUD_P.reduce((s, p) => s + is[p].sm, 0);
   const fyGtmSm = BUD_P.reduce((s, p) => s + (gtm[p].smTotal || 0), 0);
   return {
@@ -10924,9 +10829,8 @@ async function init() {
   reseedPlanFromHistory('init-after-hydrate');
   seedHcDefaults();
   seedHcOps();
-  const dec26 = fy26DecEndingArr();
-  if (dec26 != null && Math.abs(dec26 - BOP_LOCK) > 5e4) {
-    setStatus('FY26 hist Dec ' + fmtM(dec26) + ' ≠ Jan lock ' + fmtM(BOP_LOCK) + ' — check outlook hydrate');
+  if (BOP_LOCK == null) {
+    setStatus('Dec ' + (BUDGET_YEAR - 1) + ' Forecast ending ARR not loaded — Jan beginning ARR is blank');
   } else {
     setStatus(restored
       ? 'Levers restored · mix seeded from +' + MIX_SEED_YOY_PCT + '% base plan (rev ' + BUDGET_PLAN_REV + '; YoY lever rebalances waterfall)'

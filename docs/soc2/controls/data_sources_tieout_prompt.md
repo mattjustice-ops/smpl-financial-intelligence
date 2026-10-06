@@ -133,7 +133,7 @@ dataset 'Forecast': FC ARR  = arr_waterfall.ending_arr for forecast periods / 1e
 | YTD Revenue | `sum(REV_ACT)` | `SUM(income_statement.revenue)` WHERE period <= CLOSE_MONTH |
 | Gross Margin | `GP_ACT[last]/REV_ACT[last]` | `income_statement.gross_profit/revenue` |
 | ARR (Ending) | `ARR_ACT[last]` | `arr_waterfall.ending_arr` |
-| NRR | hardcoded 100.8% | `arr_waterfall.net_dollar_retention_rate` |
+| NRR | `SRC.actuals[CLOSE_MONTH].nrr` (loaded with actuals); "—" / "Not loaded" when missing — never a typed-in rate | `arr_waterfall.net_dollar_retention_rate` |
 
 #### Revenue arrays
 ```
