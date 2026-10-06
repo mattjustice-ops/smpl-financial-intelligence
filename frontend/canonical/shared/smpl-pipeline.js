@@ -20,7 +20,6 @@
         renewals: g.SRC.renewals || {},
       };
     }
-    if (g.SMPL_PIPELINE_SRC) return g.SMPL_PIPELINE_SRC;
     return null;
   }
 
@@ -34,10 +33,10 @@
       arr_react: a.arr_react,
       arr_cont: a.arr_cont,
       arr_nr_churn: a.arr_churn,
-      ren_churn: 0,
+      ren_churn: null,
       arr_eop: a.arr_eop,
-      grr: a.grr || 0,
-      nrr: a.nrr || 0,
+      grr: a.grr != null ? a.grr : null,
+      nrr: a.nrr != null ? a.nrr : null,
       is_actual: true,
     };
   }
@@ -73,8 +72,8 @@
       arr_churn: ren_churn + nr_churn,
       arr_nn: arr_nn,
       arr_eop: arr_eop,
-      grr: bopArr > 0 ? (bopArr - ren_churn - nr_churn) / bopArr : 0,
-      nrr: bopArr > 0 ? (bopArr + arr_nn - nb) / bopArr : 0,
+      grr: bopArr > 0 ? (bopArr - ren_churn - nr_churn) / bopArr : null,
+      nrr: bopArr > 0 ? (bopArr + arr_nn - nb) / bopArr : null,
       is_actual: false,
     };
   }

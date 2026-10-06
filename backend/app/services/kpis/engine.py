@@ -93,7 +93,7 @@ class KpiInputs:
     sales_marketing_expense: Decimal = ZERO
     prior_period_sales_marketing_expense: Optional[Decimal] = None
     operating_expense: Optional[Decimal] = None
-    gross_margin: Decimal = Decimal("0.7")  # fallback when not provided
+    gross_margin: Optional[Decimal] = None
     net_burn: Optional[Decimal] = None  # positive = burning cash
 
     # Period length in whole months (used by LTV / CAC payback)
@@ -243,10 +243,10 @@ def calculate_cac_payback_months(
     cac: Optional[Decimal],
     new_mrr: Decimal,
     new_customers: int,
-    gross_margin: Decimal,
+    gross_margin: Optional[Decimal],
 ) -> Optional[Decimal]:
     """CAC / (new_mrr_per_customer * gross_margin)."""
-    if cac is None or new_customers == 0 or _to_decimal(gross_margin) == ZERO:
+    if cac is None or gross_margin is None or new_customers == 0 or _to_decimal(gross_margin) == ZERO:
         return None
     per_customer_mrr = _to_decimal(new_mrr) / Decimal(new_customers)
     contribution = per_customer_mrr * _to_decimal(gross_margin)
@@ -257,7 +257,7 @@ def calculate_cac_payback_months(
 
 def calculate_ltv(
     arpa: Optional[Decimal],
-    gross_margin: Decimal,
+    gross_margin: Optional[Decimal],
     gross_mrr_churn_rate: Optional[Decimal],
 ) -> Optional[Decimal]:
     """ARPA * gross_margin / monthly_gross_mrr_churn_rate.
@@ -265,7 +265,7 @@ def calculate_ltv(
     ARPA here is already monthly. The result is total contribution margin per
     customer over their expected lifetime.
     """
-    if arpa is None or gross_mrr_churn_rate is None:
+    if arpa is None or gross_margin is None or gross_mrr_churn_rate is None:
         return None
     rate = _to_decimal(gross_mrr_churn_rate)
     if rate == ZERO:

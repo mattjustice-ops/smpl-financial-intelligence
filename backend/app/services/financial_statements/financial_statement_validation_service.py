@@ -96,9 +96,13 @@ def validate_financial_statements(
         results.append(_result(scenario, period, "cash_flow_ending_cash_rolls", ending, cf.get((scenario, period, "Ending Cash Balance"), Decimal("0")), cf_sources))
         results.append(_result(scenario, period, "cash_flow_ending_cash_equals_balance_sheet_cash", bs.get((scenario, period, "Cash"), Decimal("0")), cf.get((scenario, period, "Ending Cash Balance"), Decimal("0")), cf_sources))
 
-    actual_may = cf.get(("Actual", date(2026, 5, 1), "Ending Cash Balance"))
-    forecast_june = cf.get(("Forecast", date(2026, 6, 1), "Beginning Cash Balance"))
-    if actual_may is not None and forecast_june is not None:
-        results.append(_result("Combined", date(2026, 6, 1), "forecast_opening_cash_equals_actual_ending_cash", actual_may, forecast_june, ["gl_actuals"]))
+    actual_periods = sorted({p for (s, p, _line) in cf if s == "Actual"})
+    if actual_periods:
+        close = actual_periods[-1]
+        first_forecast = date(close.year + (close.month // 12), close.month % 12 + 1, 1)
+        actual_ending = cf.get(("Actual", close, "Ending Cash Balance"))
+        forecast_opening = cf.get(("Forecast", first_forecast, "Beginning Cash Balance"))
+        if actual_ending is not None and forecast_opening is not None:
+            results.append(_result("Combined", first_forecast, "forecast_opening_cash_equals_actual_ending_cash", actual_ending, forecast_opening, ["gl_actuals"]))
 
     return results

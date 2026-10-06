@@ -435,9 +435,9 @@ tr.row-flash td{animation:rowFlash 1.8s ease-out}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=5"></script>
-<script src="/shared/smpl-outlook.js?v=22"></script>
+<script src="/shared/smpl-outlook.js?v=23"></script>
 <script src="/shared/smpl-provenance.js?v=3"></script>
-<script src="/shared/smpl-pipeline.js?v=2"></script>
+<script src="/shared/smpl-pipeline.js?v=3"></script>
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script>
@@ -570,8 +570,6 @@ function enrichForecastBS(bs,cfs){
   if(prepaids==null && bs.other_assets!=null && ppe==null){
     ppe=bs.other_assets;
   }
-  if(prepaids==null) prepaids=2100000;
-  if(ppe==null) ppe=SRC.opening_bs.other_assets!=null?SRC.opening_bs.other_assets:6000000;
   return Object.assign({},bs,{
     // Prefer CFS ending cash when provided; getDisplayBS also runs tieBsCashToCfs.
     cash:(cfs&&cfs.end_cash!=null)?cfs.end_cash:(bs.cash!=null?bs.cash:null),
@@ -646,9 +644,10 @@ function actualCfsFromDemoTs(p){
   var row=ts&&ts.Actual&&ts.Actual.cfs&&ts.Actual.cfs[p];
   if(!row) return null;
   return {
-    beg_cash:row.beginning_cash,ni:row.net_income,da:row.da,sbc:row.sbc||80000,
-    chg_ar:row.chg_ar||0,chg_dr:row.chg_dr||0,chg_ap:row.chg_ap||0,chg_pre:row.chg_prepaids||-15000,
-    cfo:row.cfo,capex:row.capex,cfi:row.cfi,cff:row.cff||0,net_change:row.net_change,
+    beg_cash:row.beginning_cash,ni:row.net_income,da:row.da,sbc:row.sbc!=null?row.sbc:null,
+    chg_ar:row.chg_ar!=null?row.chg_ar:null,chg_dr:row.chg_dr!=null?row.chg_dr:null,chg_ap:row.chg_ap!=null?row.chg_ap:null,
+    chg_pre:row.chg_prepaids!=null?row.chg_prepaids:null,
+    cfo:row.cfo,capex:row.capex,cfi:row.cfi,cff:row.cff!=null?row.cff:null,net_change:row.net_change,
     end_cash:row.ending_cash,is_actual:true
   };
 }
@@ -673,8 +672,7 @@ function actualBsFromSrc(p){
   if(!a) return null;
   return enrichForecastBS({
     cash:a.cash_bs,ar:a.ar,ap:a.ap,dr:a.dr,equity:a.equity,
-    total_assets:a.cash_bs+a.ar+(SRC.opening_bs.other_assets||0),
-    total_liab:a.ap+a.dr+5000000+(SRC.opening_bs.other_liab||0),is_actual:true
+    total_assets:null,total_liab:null,is_actual:true
   }, null);
 }
 
@@ -682,9 +680,9 @@ function actualCfsFromSrc(p){
   var a=SRC.actuals[p];
   if(!a) return null;
   return {
-    beg_cash:a.beginning_cash,ni:a.net_income,da:a.da,sbc:80000,
-    chg_ar:a.chg_ar||0,chg_dr:a.chg_dr||0,chg_ap:a.chg_ap||0,chg_pre:-15000,
-    cfo:a.cfo,capex:a.cfi,cfi:a.cfi,cff:0,net_change:a.net_change_cash,
+    beg_cash:a.beginning_cash,ni:a.net_income,da:a.da,sbc:null,
+    chg_ar:a.chg_ar!=null?a.chg_ar:null,chg_dr:a.chg_dr!=null?a.chg_dr:null,chg_ap:a.chg_ap!=null?a.chg_ap:null,chg_pre:null,
+    cfo:a.cfo,capex:a.cfi,cfi:a.cfi,cff:null,net_change:a.net_change_cash,
     end_cash:a.ending_cash,is_actual:true
   };
 }
@@ -1658,18 +1656,21 @@ function buildKPIs(results){
   const decP=ALL_P[11];
   const arr=getForecastARR(decP);
   const cfs=getDisplayCFS(decP);
-  const dec_arr=arr&&arr.arr_eop!=null?arr.arr_eop:0;
-  const dec_cash=cfs&&cfs.end_cash!=null?cfs.end_cash:0;
-  const dec_grr=arr&&arr.grr!=null?arr.grr:0;
-  const dec_nrr=arr&&arr.nrr!=null?arr.nrr:0;
+  const dec_arr=arr&&arr.arr_eop!=null?arr.arr_eop:null;
+  const dec_cash=cfs&&cfs.end_cash!=null?cfs.end_cash:null;
+  const dec_grr=arr&&arr.grr!=null?arr.grr:null;
+  const dec_nrr=arr&&arr.nrr!=null?arr.nrr:null;
+  const openCfs=getDisplayCFS(FC_P[0]);
+  const open_cash=openCfs&&openCfs.beg_cash!=null?openCfs.beg_cash:null;
+  const fPn=v=>v==null?'—':fP(v);
   const fc_ebitda=ALL_P.reduce((s,p)=>s+(getDisplayIS(p)?.ebitda||0),0);
   const fc_rev=ALL_P.reduce((s,p)=>s+(getDisplayIS(p)?.revenue||0),0);
   const items=[
     ['Dec ARR',fM(dec_arr,1),'Pipeline · opp + renewals','neu'],
     ['Forecast Revenue',fM(fc_rev,1),HORIZON[hz].fc.length+'-mo period','neu'],
     ['Forecast EBITDA',fM(fc_ebitda,1),fP(fc_ebitda/Math.max(fc_rev,1))+' margin',fc_ebitda>=0?'pos':'neg'],
-    ['Dec Cash',fM(dec_cash,1),'From opening $48.0M','pos'],
-    ['G$R / N$R',fP(dec_grr)+' / '+fP(dec_nrr),'Dec 2026 retention','pos'],
+    ['Dec Cash',fM(dec_cash,1),open_cash!=null?'From opening '+fM(open_cash,1):'No opening cash loaded','pos'],
+    ['GRR / NRR',fPn(dec_grr)+' / '+fPn(dec_nrr),'Dec '+YEAR+' retention','pos'],
   ];
   const ds = (window.SMPLProvenance && SMPLProvenance.attrString)
     ? (k) => SMPLProvenance.attrString(k)
@@ -1679,7 +1680,7 @@ function buildKPIs(results){
     'Forecast Revenue': 'revenue',
     'Forecast EBITDA': 'ebitda',
     'Dec Cash': 'ending_cash',
-    'G$R / N$R': 'nrr',
+    'GRR / NRR': 'nrr',
   };
   return `<div class="kpi-strip ks5">${items.map(([l,v,d,c])=>`<div class="kpi"><div class="kpi-lbl">${l}</div><div class="kpi-val" ${ds(metricFor[l]||'')}>${v}</div><div class="kpi-delta ${c}">${d}</div></div>`).join('')}</div>`;
 }
@@ -1702,9 +1703,29 @@ function goForecastAnalytics(){
   showTab('analytics', btn || null);
 }
 
-/** Dec base-plan line used on Plan Summary charts (Jun close → ~$95.44M). */
+function fcPctTxt(p, d) {
+  return p == null ? '—' : (p * 100).toFixed(d) + '%';
+}
+function fcFloorTxt(packet) {
+  return packet && packet.cashFloor != null ? fM(packet.cashFloor, 1) : 'not loaded';
+}
+
+/** Cash floor from the loaded Forecast cash flow bridge (`cash_floor`); null when not loaded. */
+function fcCashFloor(){
+  const getRow = window.SMPLOutlook && window.SMPLOutlook.getCashBridgeRow;
+  if (typeof getRow !== 'function') return null;
+  for (const p of FC_P) {
+    const row = getRow(p, 'Forecast');
+    if (row && row.cash_floor != null) return Number(row.cash_floor);
+  }
+  return null;
+}
+
+/** Dec ending ARR from the loaded budget waterfall; null when no budget is loaded. */
 function fcDecBasePlanArr(){
-  return +(83.445 + FC_P.length * 2).toFixed(2) * 1e6;
+  const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE || {};
+  const bud = wf.Budget_Ending;
+  return bud && bud[11] != null ? Number(bud[11]) : null;
 }
 
 function fcArrComponent(p, key){
@@ -1735,13 +1756,11 @@ function buildFcAssurancePacket(){
   const decArrRow = getForecastARR(decP);
   // Assess arr_bridge identity is Jan BOP + FY NN = Dec EOP (Budget contract).
   // Do NOT use close-month EOP here — that double-counts H1 NN and invents a fake ~$100M bridge.
-  const bopArr = janArr && janArr.arr_bop != null
-    ? Number(janArr.arr_bop)
-    : (janArr && janArr.arr_eop != null ? Number(janArr.arr_eop) : 0);
+  const bopArr = janArr && janArr.arr_bop != null ? Number(janArr.arr_bop) : null;
   const closeArrEop = closeArr && closeArr.arr_eop != null ? Number(closeArr.arr_eop) : null;
-  const decArr = decArrRow && decArrRow.arr_eop != null ? Number(decArrRow.arr_eop) : 0;
+  const decArr = decArrRow && decArrRow.arr_eop != null ? Number(decArrRow.arr_eop) : null;
   const targetArr = fcDecBasePlanArr();
-  const yoyGrowthPct = bopArr > 0 ? ((targetArr / bopArr) - 1) * 100 : null;
+  const yoyGrowthPct = bopArr > 0 && targetArr != null ? ((targetArr / bopArr) - 1) * 100 : null;
 
   let fyNn = 0, fyNb = 0, fyExp = 0, fyReact = 0, fyCont = 0, fyChurn = 0;
   let fyRev = 0, fyEbitda = 0, fyIsSm = 0;
@@ -1788,7 +1807,7 @@ function buildFcAssurancePacket(){
     } catch (e) { /* HC optional */ }
   }
 
-  let pipelineCoverage = 3;
+  let pipelineCoverage = null;
   let fyMkt = null, fyMql = null;
   if (typeof buildGtmHorizonSummary === 'function') {
     try {
@@ -1827,7 +1846,7 @@ function buildFcAssurancePacket(){
     endCash,
     cashSrc: (endCfs && endCfs._src) || (typeof fcPreferWarehouseCfs === 'function' && fcPreferWarehouseCfs() ? 'warehouse' : 'client'),
     closeMonthIdx: (typeof CLOSE_MO_IDX === 'number' ? CLOSE_MO_IDX : 5),
-    cashFloor: 10000000,
+    cashFloor: fcCashFloor(),
     minCash,
     minCashPeriod,
     cashByMonth,
@@ -1869,8 +1888,10 @@ function runForecastRiskChecks(packet){
   const p = packet || buildFcAssurancePacket();
   const out = [];
   // Forecast vs base-plan line is context (Budget/commit gap), not a historical shape risk.
-  const arrGap = (p.decArr || 0) - (p.targetArr || 0);
-  if (Math.abs(arrGap) <= Math.max(1000, (p.targetArr || 0) * 0.002)) {
+  const arrGap = p.decArr != null && p.targetArr != null ? p.decArr - p.targetArr : null;
+  if (arrGap == null) {
+    out.push({ id: 'arr_path', severity: 'medium', title: 'No budget ARR loaded', detail: 'Dec ARR vs base plan skipped: no budget December ending ARR in the loaded data.' });
+  } else if (Math.abs(arrGap) <= Math.max(1000, p.targetArr * 0.002)) {
     out.push({ id: 'arr_path', severity: 'ok', title: 'Dec ARR vs base plan', detail: `Tracks base plan ${fM(p.targetArr, 1)}.` });
   } else if (arrGap < 0) {
     out.push({ id: 'arr_path', severity: 'info', title: 'Dec ARR vs base plan', detail: `${fM(p.decArr, 1)} vs base ${fM(p.targetArr, 1)} (${fV(arrGap)}) — forecast vs plan, not a historical outlier.` });
@@ -1878,15 +1899,19 @@ function runForecastRiskChecks(packet){
     out.push({ id: 'arr_path', severity: 'info', title: 'Dec ARR vs base plan', detail: `${fM(p.decArr, 1)} vs base ${fM(p.targetArr, 1)} — forecast vs plan.` });
   }
   // ARR bridge: Jan BOP + FY NN must equal Dec EOP.
-  const bridge = (Number(p.bopArr) || 0) + (Number(p.fyNn) || 0);
-  const bridgeGap = Math.abs(bridge - (Number(p.decArr) || 0));
-  if (bridgeGap <= Math.max(500, Math.abs(Number(p.decArr) || 0) * 0.001)) {
+  const bridge = p.bopArr != null ? p.bopArr + (Number(p.fyNn) || 0) : null;
+  const bridgeGap = bridge != null && p.decArr != null ? Math.abs(bridge - p.decArr) : null;
+  if (bridgeGap == null) {
+    out.push({ id: 'arr_bridge', severity: 'medium', title: 'ARR bridge not checked', detail: `Missing ${p.bopArr == null ? 'January beginning ARR' : 'December ending ARR'} in the loaded data.` });
+  } else if (bridgeGap <= Math.max(500, Math.abs(p.decArr) * 0.001)) {
     out.push({ id: 'arr_bridge', severity: 'ok', title: 'ARR bridge identity', detail: `Jan BOP ${fM(p.bopArr, 1)} + FY NN ${fM(p.fyNn, 1)} = Dec ${fM(p.decArr, 1)}.` });
   } else {
     out.push({ id: 'arr_bridge', severity: 'high', title: 'ARR bridge broken', detail: `Jan+NN ${fM(bridge, 1)} vs Dec EOP ${fM(p.decArr, 1)} (gap ${fV(bridge - (Number(p.decArr) || 0))}).` });
   }
-  const floor = p.cashFloor != null ? p.cashFloor : 1e7;
-  if (p.minCash != null && p.minCash < floor) {
+  const floor = p.cashFloor;
+  if (floor == null) {
+    out.push({ id: 'cash_floor', severity: 'medium', title: 'No cash floor loaded', detail: 'Cash vs floor skipped: no cash_floor in the loaded Forecast cash flow bridge.' });
+  } else if (p.minCash != null && p.minCash < floor) {
     out.push({ id: 'cash_floor', severity: 'high', title: 'Cash dips below floor', detail: `Min ${fM(p.minCash, 1)} in ${p.minCashPeriod || '—'} vs floor ${fM(floor, 1)}.` });
   } else if (p.endCash != null) {
     out.push({ id: 'cash_floor', severity: 'ok', title: 'Cash vs floor', detail: `Ending ${fM(p.endCash, 1)} · min ${fM(p.minCash, 1)} ≥ floor ${fM(floor, 1)}.` });
@@ -2117,11 +2142,17 @@ function runFcPacketMonteCarlo(packet, opts) {
   const priorSource = opts.prior_source || 'client_packet_fallback';
   const rand = fcMcRng(seed);
 
-  const bop = Number(packet.bopArr) || 0;
-  const target = Number(packet.targetArr) || 0;
-  const baseYoy = Number(packet.yoyGrowthPct) || 20;
+  const bop = packet.bopArr != null ? Number(packet.bopArr) : null;
+  const target = packet.targetArr != null ? Number(packet.targetArr) : null;
+  const baseYoy = packet.yoyGrowthPct != null ? Number(packet.yoyGrowthPct) : null;
+  const arrOk = bop != null && target != null && baseYoy != null;
   const endCash = Number(packet.endCash) || 0;
-  const cashFloor = Number(packet.cashFloor) || 1e7;
+  const cashFloor = packet.cashFloor != null ? Number(packet.cashFloor) : null;
+  const floorOk = cashFloor != null;
+  const missingInputs = [];
+  if (!arrOk) missingInputs.push('budget Dec ARR / Jan beginning ARR');
+  if (!floorOk) missingInputs.push('cash floor');
+  if (packet.pipelineCoverage == null) missingInputs.push('pipeline coverage');
   const salesEnd = Number(packet.salesEnd) || 0;
   const aeNeeded = Number(packet.aeNeeded) || 0;
   let cashByMonth = (packet.cashByMonth || []).map(v => Number(v) || 0);
@@ -2139,18 +2170,14 @@ function runFcPacketMonteCarlo(packet, opts) {
   for (let i = 0; i < n; i++) {
     const dy = fcMcGauss(rand) * sig.yoyPp;
     const dcpl = Math.exp(fcMcGauss(rand) * sig.cplLog);
-    const hirePct = Number(packet.hirePct) || 10;
-    const dattr = Math.max(0, hirePct + fcMcGauss(rand) * sig.attrPp);
-    const basePipe = Number(packet.pipelineCoverage) || 3;
-    const dpipe = Math.max(1, basePipe + fcMcGauss(rand) * sig.pipe);
+    const basePipe = packet.pipelineCoverage != null ? Number(packet.pipelineCoverage) : null;
+    const dpipe = basePipe != null ? Math.max(1, basePipe + fcMcGauss(rand) * sig.pipe) : null;
 
-    const shockedYoy = Math.max(0, baseYoy + dy);
     const cplDrag = Math.min(0.25, Math.max(-0.05, (dcpl - 1) * 0.15));
-    const pipeBoost = Math.min(0.08, Math.max(-0.12, (dpipe - 3) * 0.02));
-    const decArr = bop * (1 + shockedYoy / 100) * (1 - cplDrag + pipeBoost);
+    const pipeBoost = dpipe != null ? Math.min(0.08, Math.max(-0.12, (dpipe - basePipe) * 0.02)) : 0;
+    const decArr = arrOk ? bop * (1 + Math.max(0, baseYoy + dy) / 100) * (1 - cplDrag + pipeBoost) : null;
 
-    const aeNeedShock = aeNeeded * (1 + Math.max(0, (dattr - 10) / 100) * 0.2);
-    const aeShort = salesEnd < aeNeedShock;
+    const aeShort = packet.aeNeeded != null && salesEnd < aeNeeded;
 
     // Pin closed months; shock open-month net change (not the whole cash stock).
     let flowScale = 1 - (dy / 100) * 1.15 - (dcpl - 1) * 0.45;
@@ -2169,18 +2196,18 @@ function runFcPacketMonteCarlo(packet, opts) {
     const openSlice = path.slice(closeIdx);
     const trialTrough = Math.min.apply(null, openSlice.length ? openSlice : path);
 
-    arrSamples.push(decArr);
+    if (arrOk) arrSamples.push(decArr);
     cashSamples.push(trialEnd);
     troughSamples.push(trialTrough);
     paths.push(path);
 
-    if (decArr < target * 0.995) pArr += 1;
-    if (trialEnd < cashFloor) pCash += 1;
+    if (arrOk && decArr < target * 0.995) pArr += 1;
+    if (floorOk && trialEnd < cashFloor) pCash += 1;
     if (aeShort) pAe += 1;
     const drop = (endCash - trialEnd) / Math.max(1, endCash);
-    if (trialEnd < cashFloor || drop >= 0.5) pOps += 1;
+    if ((floorOk && trialEnd < cashFloor) || drop >= 0.5) pOps += 1;
     if (trialEnd <= endCash * 0.75) pWatch25 += 1;
-    if (trialTrough < cashFloor) pTrough += 1;
+    if (floorOk && trialTrough < cashFloor) pTrough += 1;
   }
 
   const monthly = [];
@@ -2193,7 +2220,7 @@ function runFcPacketMonteCarlo(packet, opts) {
       p50: fcMcPctl(col, 0.50),
       p75: fcMcPctl(col, 0.75),
       p90: fcMcPctl(col, 0.90),
-      pBelowFloor: col.filter(v => v < cashFloor).length / n,
+      pBelowFloor: floorOk ? col.filter(v => v < cashFloor).length / n : null,
     });
   }
 
@@ -2210,12 +2237,13 @@ function runFcPacketMonteCarlo(packet, opts) {
     sig: { yoyPp: sig.yoyPp, cplLog: sig.cplLog, attrPp: sig.attrPp, pipe: sig.pipe, cashResidMo: sig.cashResidMo },
     method: FC_MC_METHOD,
     prior_source: priorSource,
-    p_arr_miss: pArr / n,
-    p_cash_below_floor: pCash / n,
+    missing_inputs: missingInputs,
+    p_arr_miss: arrOk ? pArr / n : null,
+    p_cash_below_floor: floorOk ? pCash / n : null,
     p_ops_liquidity: pOps / n,
-    p_ae_short: pAe / n,
-    p_trough_breach: pTrough / n,
-    arr: {
+    p_ae_short: packet.aeNeeded != null ? pAe / n : null,
+    p_trough_breach: floorOk ? pTrough / n : null,
+    arr: arrOk ? {
       hist: fcMcHist(arrSamples),
       mean: arrMu,
       sd: fcMcSd(arrSamples, arrMu),
@@ -2223,7 +2251,7 @@ function runFcPacketMonteCarlo(packet, opts) {
       p50: fcMcPctl(arrSorted, 0.50),
       p90: fcMcPctl(arrSorted, 0.90),
       pMiss: pArr / n,
-    },
+    } : null,
     cash: {
       hist: fcMcHist(cashSamples),
       mean: cashMu,
@@ -2231,7 +2259,7 @@ function runFcPacketMonteCarlo(packet, opts) {
       p10: fcMcPctl(cashSorted, 0.10),
       p50: fcMcPctl(cashSorted, 0.50),
       p90: fcMcPctl(cashSorted, 0.90),
-      pBreak: pCash / n,
+      pBreak: floorOk ? pCash / n : null,
       pWatch25: pWatch25 / n,
     },
     p_cash_watch_25: pWatch25 / n,
@@ -2242,7 +2270,7 @@ function runFcPacketMonteCarlo(packet, opts) {
       p10: fcMcPctl(troughSorted, 0.10),
       p50: fcMcPctl(troughSorted, 0.50),
       p90: fcMcPctl(troughSorted, 0.90),
-      pBreachAnyMonth: pTrough / n,
+      pBreachAnyMonth: floorOk ? pTrough / n : null,
     },
     cash_path: { monthly, trough: null },
     method_notes: [
@@ -2255,13 +2283,13 @@ function runFcPacketMonteCarlo(packet, opts) {
       trials: n,
       breaks: [],
       watches: [],
-      p_arr_miss: pArr / n,
-      p_cash_below_floor: pCash / n,
+      p_arr_miss: arrOk ? pArr / n : null,
+      p_cash_below_floor: floorOk ? pCash / n : null,
       p_ops_liquidity: pOps / n,
-      p_ae_short: pAe / n,
+      p_ae_short: packet.aeNeeded != null ? pAe / n : null,
       priors: {
         yoyPp: sig.yoyPp, cplLog: sig.cplLog, attrPp: sig.attrPp, pipe: sig.pipe,
-        source: priorSource, seed, method: FC_MC_METHOD, p_trough_breach: pTrough / n,
+        source: priorSource, seed, method: FC_MC_METHOD, p_trough_breach: floorOk ? pTrough / n : null,
       },
     },
   };
@@ -2343,7 +2371,7 @@ async function fetchForecastMonteCarlo(opts){
 function renderFcCorridorSvg(packet, mc){
   const plan = (packet.cashByMonth || []).map(v => Number(v) || 0);
   const monthly = (((mc || {}).cash_path || {}).monthly) || [];
-  const floor = packet.cashFloor != null ? packet.cashFloor : 1e7;
+  const floor = packet.cashFloor != null ? Number(packet.cashFloor) : null;
   if (!plan.length) return '<div class="pa-meta">No cash path on packet.</div>';
 
   const W = 900, H = 260, PL = 48, PR = 16, PT = 16, PB = 36;
@@ -2355,7 +2383,7 @@ function renderFcCorridorSvg(packet, mc){
     p50.push(m.p50 != null ? m.p50 : plan[i]);
     p90.push(m.p90 != null ? m.p90 : plan[i]);
   }
-  const all = plan.concat(p10, p90, [floor]);
+  const all = plan.concat(p10, p90, floor != null ? [floor] : []);
   let lo = Math.min.apply(null, all.filter(v => v != null));
   let hi = Math.max.apply(null, all.filter(v => v != null));
   if (!(hi > lo)) { lo = lo * 0.9; hi = hi * 1.1 || 1; }
@@ -2370,7 +2398,7 @@ function renderFcCorridorSvg(packet, mc){
       return `L${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`;
     }).join(' ') + ' Z';
   const labels = (typeof MO12 !== 'undefined' ? MO12 : ['J','F','M','A','M','J','J','A','S','O','N','D']).slice(0, n);
-  const floorY = yAt(floor);
+  const floorY = floor != null ? yAt(floor) : null;
   let ticks = '';
   labels.forEach((lab, i) => {
     ticks += `<text x="${xAt(i).toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="var(--text3)" font-size="10">${lab}</text>`;
@@ -2378,11 +2406,11 @@ function renderFcCorridorSvg(packet, mc){
   const hasMc = !!(monthly && monthly.length);
   return `<svg class="pa-corridor-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Forecast cash corridor">
     ${hasMc ? `<path d="${band}" fill="var(--accent)" opacity="0.12"></path>` : ''}
-    <line x1="${PL}" x2="${W - PR}" y1="${floorY.toFixed(1)}" y2="${floorY.toFixed(1)}" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4,3"/>
+    ${floorY != null ? `<line x1="${PL}" x2="${W - PR}" y1="${floorY.toFixed(1)}" y2="${floorY.toFixed(1)}" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4,3"/>` : ''}
     ${hasMc ? `<path d="${linePath(p50)}" fill="none" stroke="var(--text3)" stroke-width="1.25" stroke-dasharray="3,2"/>` : ''}
     <path d="${linePath(plan)}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
     ${ticks}
-    <text x="${W - PR}" y="${Math.max(PT + 10, floorY - 4).toFixed(1)}" text-anchor="end" fill="var(--red)" font-size="10">floor ${fM(floor, 1)}</text>
+    <text x="${W - PR}" y="${floorY != null ? Math.max(PT + 10, floorY - 4).toFixed(1) : PT + 10}" text-anchor="end" fill="var(--red)" font-size="10">${floor != null ? 'floor ' + fM(floor, 1) : 'no cash floor loaded'}</text>
   </svg>`;
 }
 
@@ -2809,12 +2837,12 @@ function fcClassifyScenarioOutcome(base, shock) {
   const cashDropPct = -dCash / baseCash; // positive = cash down vs plan
   const dArr = (Number(shock.decArr) || 0) - (Number(base.decArr) || 0);
   const dEbitda = (Number(shock.fyEbitda) || 0) - (Number(base.fyEbitda) || 0);
-  const floor = Number(base.cashFloor) || 1e7;
+  const floor = base.cashFloor != null ? Number(base.cashFloor) : null;
   const impact$ = Math.max(Math.abs(dCash), Math.abs(dArr), Math.abs(dEbitda));
 
-  if ((Number(shock.endCash) || 0) < floor) {
+  if (floor != null && (Number(shock.endCash) || 0) < floor) {
     breaks.push('Dec cash floor');
-  } else if (shock.minCash != null && Number(shock.minCash) < floor) {
+  } else if (floor != null && shock.minCash != null && Number(shock.minCash) < floor) {
     watches.push('Mid-year cash trough vs floor');
   }
   if (cashDropPct >= 0.50) {
@@ -2866,11 +2894,12 @@ function fcExplainScenarioCase(base, c, def) {
     bits.push(`Dec ARR ${fM(base.decArr, 1)} → ${fM(c.decArr, 1)} (${fV(c.dArr)} vs plan).`);
   }
   if (Math.abs(c.dCash || 0) >= 1000) {
-    const vsFloor = (c.endCash || 0) - (base.cashFloor || 0);
+    const vsFloor = base.cashFloor != null ? (c.endCash || 0) - base.cashFloor : null;
     const dropPct = base.endCash > 0 ? (base.endCash - c.endCash) / base.endCash : 0;
     bits.push(
       `Dec cash ${fM(base.endCash, 1)} → ${fM(c.endCash, 1)} (${fV(c.dCash)}, ${(dropPct * 100).toFixed(0)}% vs plan); ` +
-      `${vsFloor >= 0 ? fM(vsFloor, 1) + ' above' : fM(Math.abs(vsFloor), 1) + ' below'} the ${fM(base.cashFloor, 1)} floor` +
+      (vsFloor == null ? 'no cash floor loaded'
+        : `${vsFloor >= 0 ? fM(vsFloor, 1) + ' above' : fM(Math.abs(vsFloor), 1) + ' below'} the ${fM(base.cashFloor, 1)} floor`) +
       (c.minCash < c.endCash ? `; trough ${fM(c.minCash, 1)}` : '') + '.'
     );
   }
@@ -2969,8 +2998,8 @@ function buildFcScenarioNarrativeFromSuite(suite) {
     const pCash = mc.cash && mc.cash.pBreak != null ? mc.cash.pBreak : mc.p_cash_below_floor;
     lines.push(
       'Monte Carlo (' + ((mc.n || 0).toLocaleString()) + ' draws) under Forecast priors: P(ARR miss) ' +
-      (((pArr || 0) * 100).toFixed(1)) + '%, P(cash < floor) ' + (((pCash || 0) * 100).toFixed(1)) +
-      '%. Stress frequency — not calibrated PoA.'
+      fcPctTxt(pArr, 1) + ', P(cash < floor) ' + fcPctTxt(pCash, 1) +
+      '. Stress frequency — not calibrated PoA.'
     );
   }
   lines.push('Cases are diagnostic on the live Forecast packet — nothing is written into the operating forecast.');
@@ -3093,8 +3122,10 @@ function fcPaAnalyticsVerdict(suite, packet) {
   const mc = suite.mc;
   const breakN = (suite.cases || []).filter(c => c.status === 'break').length;
   const pWatch25 = mc.cash && mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0;
-  const pArr = (mc.arr && mc.arr.pMiss != null) ? mc.arr.pMiss : (mc.p_arr_miss || 0);
-  const pCash = (mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : (mc.p_cash_below_floor || 0);
+  const pArrRaw = (mc.arr && mc.arr.pMiss != null) ? mc.arr.pMiss : mc.p_arr_miss;
+  const pCashRaw = (mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : mc.p_cash_below_floor;
+  const pArr = pArrRaw || 0;
+  const pCash = pCashRaw || 0;
   const pOps = mc.pOpsRisk != null ? mc.pOpsRisk : (mc.p_ops_liquidity || 0);
   const pHold = Math.max(0, 1 - Math.max(pArr, pCash, pOps, pWatch25 * 0.5));
   let sev = 'hold';
@@ -3110,9 +3141,9 @@ function fcPaAnalyticsVerdict(suite, packet) {
       ? 'The forecast holds under stated priors — still watch the levers that swing cash.'
       : `The forecast works, but it leans on ${lean}.`,
     small: `In about ${(pHold * 100).toFixed(0)}% of tested years the main rails hold. ` +
-      `P(cash ≥25% below plan) ${(pWatch25 * 100).toFixed(0)}% · P(cash under floor) ${(pCash * 100).toFixed(0)}% · P(ARR miss) ${(pArr * 100).toFixed(0)}%` +
+      `P(cash ≥25% below plan) ${(pWatch25 * 100).toFixed(0)}% · P(cash under floor) ${fcPctTxt(pCashRaw, 0)} · P(ARR miss) ${fcPctTxt(pArrRaw, 0)}` +
       (breakN ? ` · ${breakN} named case${breakN === 1 ? '' : 's'} break` : '') +
-      `. Dec cash plan ${fM(packet.endCash, 1)} vs floor ${fM(packet.cashFloor, 1)}.`,
+      `. Dec cash plan ${fM(packet.endCash, 1)} vs floor ${fcFloorTxt(packet)}.`,
   };
 }
 
@@ -3178,7 +3209,7 @@ function fcApproxCashBands(planM, floorM, decSdM, opts) {
   opts = opts || {};
   const plan = (planM || []).map(v => Number(v) || 0);
   const n = plan.length;
-  const floor = floorM != null ? Number(floorM) : 10;
+  const floor = floorM != null ? Number(floorM) : null;
   if (!n) return { p10: [], p25: [], p75: [], p90: [], floor, illustrative: true };
   const dec = plan[n - 1];
   const sd = Math.max(0, Number(decSdM) || 0);
@@ -3219,7 +3250,7 @@ function fcCashToM(v) {
 function fcResolveCorridorBands(packet, suite) {
   const planFull$ = (packet.cashByMonth || []).map(v => Number(v) || 0);
   const planFull = planFull$.map(v => v / 1e6);
-  const floor = (packet.cashFloor != null ? Number(packet.cashFloor) : 1e7) / 1e6;
+  const floor = packet.cashFloor != null ? Number(packet.cashFloor) / 1e6 : null;
   const empty = { ok: false, planFull, floor, plan: [], p10: [], p25: [], p75: [], p90: [], usedMcPath: false, pWatch25: 0, i0: 0, n: 0, last: 0, horizon: 'fc', closeIdx: 5 };
   if (!planFull.length) return empty;
 
@@ -3295,7 +3326,7 @@ function renderFcPredictiveCorridor(packet, suite, selectedIdx) {
 
   const rails = fcCashRailsM(plan, floor);
   const W = 900, H = 320, PL = 52, PR = 168, PT = 18, PB = 30;
-  const ymax = Math.max(floor * 1.5, Math.max.apply(null, plan.concat(p90, rails.watch, [40])) * 1.08, 40);
+  const ymax = Math.max((floor || 0) * 1.5, Math.max.apply(null, plan.concat(p90, rails.watch, [40])) * 1.08, 40);
   const denom = Math.max(1, n - 1);
   const xs = (j) => PL + j * (W - PL - PR) / denom;
   const ys = (v) => PT + (1 - v / ymax) * (H - PT - PB);
@@ -3325,9 +3356,13 @@ function renderFcPredictiveCorridor(packet, suite, selectedIdx) {
   g += `<polyline points="${pts(rails.alarm)}" fill="none" stroke="${red}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"/>`;
   g += `<text x="${PL + 6}" y="${ys(rails.watch[0]) - 6}" fill="${amber}" font-size="11">25% below plan</text>`;
   g += `<text x="${PL + 6}" y="${ys(rails.alarm[0]) - 6}" fill="${red}" font-size="11">50% below plan</text>`;
-  const fy = ys(floor);
-  g += `<line x1="${PL}" y1="${fy}" x2="${W - PR}" y2="${fy}" stroke="${red}" stroke-width="2.2" stroke-dasharray="7 5"/>`;
-  g += `<text x="${W - PR}" y="${fy - 8}" fill="${red}" font-size="12" text-anchor="end">Cash floor $${floor.toFixed(1)}M</text>`;
+  if (floor != null) {
+    const fy = ys(floor);
+    g += `<line x1="${PL}" y1="${fy}" x2="${W - PR}" y2="${fy}" stroke="${red}" stroke-width="2.2" stroke-dasharray="7 5"/>`;
+    g += `<text x="${W - PR}" y="${fy - 8}" fill="${red}" font-size="12" text-anchor="end">Cash floor $${floor.toFixed(1)}M</text>`;
+  } else {
+    g += `<text x="${W - PR}" y="${PT + 12}" fill="${red}" font-size="12" text-anchor="end">No cash floor loaded</text>`;
+  }
   g += `<polyline points="${pts(plan)}" fill="none" stroke="${teal}" stroke-width="2.5" stroke-linejoin="round"/>`;
   g += `<circle cx="${xs(last)}" cy="${ys(plan[last])}" r="4" fill="${teal}"/>`;
   g += `<text x="${xs(last) + 10}" y="${ys(plan[last]) + 4}" fill="${teal}" font-size="12">Plan Dec $${plan[last].toFixed(1)}M</text>`;
@@ -3441,16 +3476,16 @@ function renderFcLeverLedger(suite, mode) {
 function renderFcPaTrips(packet, mode) {
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
   const planDec = ((packet.cashByMonth || [])[11] != null ? Number(packet.cashByMonth[11]) : Number(packet.endCash) || 0) / 1e6;
-  const floor = (Number(packet.cashFloor) || 1e7) / 1e6;
-  const cush = Math.max(0, planDec - floor);
+  const floor = packet.cashFloor != null ? Number(packet.cashFloor) / 1e6 : null;
+  const cush = floor != null ? Math.max(0, planDec - floor) : null;
   const fySpend = (Number(packet.fyMkt) || 0) / 1e6;
-  const cplBreakPct = fySpend > 0 ? Math.round((cush / (fySpend / 100))) : 24;
+  const cplBreakPct = fySpend > 0 && cush != null ? Math.max(15, Math.min(40, Math.round(cush / (fySpend / 100)))) : null;
   const trips = [
     {
       plain: 'Cost per lead', tech: 'Blended CPL',
       wp: 'Program spend ÷ qualified leads, every close', wt: 'blended CPL from the GTM packet, monthly',
-      tripP: `Runs more than ~${Math.max(15, Math.min(40, cplBreakPct))}% over plan for two closes`,
-      tripT: `CPL > +${Math.max(15, Math.min(40, cplBreakPct))}% vs plan, two consecutive periods`,
+      tripP: cplBreakPct != null ? `Runs more than ~${cplBreakPct}% over plan for two closes` : 'Threshold needs a loaded cash floor and program spend',
+      tripT: cplBreakPct != null ? `CPL > +${cplBreakPct}% vs plan, two consecutive periods` : 'Not computed: cash floor or program spend not loaded',
       seeP: 'Around the 10th, once the month closes', seeT: 'M+1 close, roughly day 10',
       actP: 'You usually have a quarter from the first signal', actT: 'Decision window ~1–2 quarters depending on burn rate',
       pullP: 'Cut program spend, or push hiring back', pullT: 'Program spend −15% and/or defer hiring cohort',
@@ -3465,7 +3500,7 @@ function renderFcPaTrips(packet, mode) {
     },
     {
       plain: 'Cash against the rails', tech: 'Dec cash vs −25% / −50% / floor',
-      wp: `Cash path vs −25% plan, −50% plan, and the ${floor.toFixed(1)}M floor`, wt: 'monthly CFS vs plan×0.75 / plan×0.50 / cashFloor',
+      wp: `Cash path vs −25% plan, −50% plan, and the ${fcFloorTxt(packet)} floor`, wt: 'monthly CFS vs plan×0.75 / plan×0.50 / cashFloor',
       tripP: 'Any month on track for ≥25% below plan Dec cash — cut then, not at the floor',
       tripT: 'endCash ≤ 75% of plan (forced response) or min(cash) < floor',
       seeP: 'In the forecast itself and at each close', seeT: 'Visible in display CFS; stress suite sharpens tails',
@@ -3482,7 +3517,7 @@ function renderFcPaTrips(packet, mode) {
     },
     {
       plain: 'Pipeline cover', tech: 'Pipeline / NB coverage',
-      wp: `Coverage vs min ${(packet.pipelineMin != null ? Number(packet.pipelineMin).toFixed(1) : '2.5')}×`, wt: 'pipeline $ / NB ARR on the GTM horizon',
+      wp: `Coverage vs min ${packet.pipelineMin != null ? Number(packet.pipelineMin).toFixed(1) + '×' : '(not set)'}`, wt: 'pipeline $ / NB ARR on the GTM horizon',
       tripP: 'Coverage slips a full turn below plan for a quarter', tripT: 'coverX < plan − 1.0× for one quarter',
       seeP: 'Weekly pipeline review', seeT: 'CRM stage rollup; lag one cycle on NB',
       actP: 'Rebuild cover before cutting growth targets', actT: '1–2 quarters to refill',
@@ -3504,31 +3539,35 @@ function renderFcPaTrips(packet, mode) {
 function renderFcPaOffsets(packet, mode) {
   const modeKey = mode === 'tech' ? 'tech' : 'plain';
   const planDec = ((packet.cashByMonth || [])[11] != null ? Number(packet.cashByMonth[11]) : Number(packet.endCash) || 0) / 1e6;
-  const floor = (Number(packet.cashFloor) || 1e7) / 1e6;
-  const cush = Math.max(0, planDec - floor);
-  const scale = Math.min(1.4, Math.max(0.55, Math.min(cush, 14) / 10));
+  const floor = packet.cashFloor != null ? Number(packet.cashFloor) / 1e6 : null;
+  const cush = floor != null ? Math.max(0, planDec - floor) : null;
+  let openSpend = null;
+  if (typeof fcGtmAllocate === 'function') {
+    try { openSpend = FC_P.reduce((s, p) => s + (Number(fcGtmAllocate(p).spendTot) || 0), 0) / 1e6; } catch (e) { openSpend = null; }
+  }
   const offsets = [
-    { plain: 'Push the next hiring wave back a quarter', tech: 'Defer hiring cohort one quarter', amt: 3.2 * scale,
+    { plain: 'Push the next hiring wave back a quarter', tech: 'Defer hiring cohort one quarter', amt: null,
       sp: 'Fastest cash lever. Costs capacity later, not cash now.', st: 'HC phasing; quota capacity impact lands later.' },
-    { plain: 'Cut program spend 15% for the rest of the year', tech: 'Program spend −15% from trip date', amt: 2.4 * scale,
+    { plain: 'Cut program spend 15% for the rest of the year', tech: 'Program spend −15% from trip date', amt: openSpend != null ? openSpend * 0.15 : null,
       sp: 'Direct and immediate, but it feeds the pipeline problem.', st: 'Reduces MQL supply; compounds coverage gaps.' },
-    { plain: 'Raise renewal pricing 3%', tech: 'Renewal uplift +3%', amt: 3.3 * scale,
+    { plain: 'Raise renewal pricing 3%', tech: 'Renewal uplift +3%', amt: null,
       sp: 'Real money, but only as accounts renew.', st: 'Partial-year realisation on the renewal cohort.' },
-    { plain: 'Collect five days faster', tech: 'DSO −5 days', amt: 1.9 * scale,
+    { plain: 'Collect five days faster', tech: 'DSO −5 days', amt: null,
       sp: 'One-off timing gain — you can only do it once.', st: 'Working capital release; non-recurring.' },
   ];
-  const total = offsets.reduce((s, o) => s + o.amt, 0);
-  const barRef = Math.max(10, Math.min(cush || 10, 20));
+  const sized = offsets.filter(o => o.amt != null);
+  const total = sized.reduce((s, o) => s + o.amt, 0);
+  const barRef = Math.max(1, total, cush || 0);
   return `<div class="pa-lever-ledger">${offsets.map(o => `
     <div class="pa-lrow">
       <div class="pa-lname">${modeKey === 'tech' ? fcEsc(o.tech) : fcEsc(o.plain)}
         <span class="meta">${modeKey === 'tech' ? fcEsc(o.st) : fcEsc(o.sp)}</span></div>
       <div class="pa-ltrack"><div class="pa-laxis"></div>
-        <div class="pa-lbar up" style="width:${Math.min(50, (o.amt / barRef) * 50)}%"></div></div>
-      <div class="pa-lval" style="color:var(--teal)">+${o.amt.toFixed(1)}M</div>
+        ${o.amt != null ? `<div class="pa-lbar up" style="width:${Math.min(50, (o.amt / barRef) * 50)}%"></div>` : ''}</div>
+      <div class="pa-lval" style="color:${o.amt != null ? 'var(--teal)' : 'var(--text3)'}">${o.amt != null ? '+' + o.amt.toFixed(1) + 'M' : 'not estimated'}</div>
     </div>`).join('')}</div>
-    <p class="pa-section-sub" style="margin-top:8px">Together these buy back roughly <strong>$${total.toFixed(1)}M</strong>
-    against a Dec cushion of <strong>$${cush.toFixed(1)}M</strong> — enough for a soft miss, not a plan rewrite.</p>`;
+    <p class="pa-section-sub" style="margin-top:8px">Program spend cut = 15% of loaded open-month program spend${sized.length ? ` (<strong>$${total.toFixed(1)}M</strong>)` : ' (not loaded)'}.
+    Other levers have no data-backed estimate yet.${cush != null ? ` Dec cushion over the floor: <strong>$${cush.toFixed(1)}M</strong>.` : ' No cash floor loaded.'}</p>`;
 }
 
 function buildFcTheRead(packet, suite, mode) {
@@ -3540,16 +3579,16 @@ function buildFcTheRead(packet, suite, mode) {
   const open0 = plan$[Math.min(closeIdx + 1, plan$.length - 1)] || plan$[0] || 0;
   const dec = (plan$[11] != null ? plan$[11] : Number(packet.endCash) || 0) / 1e6;
   const open0M = open0 / 1e6;
-  const floor = (Number(packet.cashFloor) || 1e7) / 1e6;
+  const floor = packet.cashFloor != null ? Number(packet.cashFloor) / 1e6 : null;
   const watchCush = Math.max(0.5, dec * 0.25);
   const alarmCush = Math.max(1, dec * 0.50);
   const mc = suite && suite.mc;
   const breakN = suite ? suite.cases.filter(c => c.status === 'break').length : 0;
-  const pCash = mc ? ((((mc.cash && mc.cash.pBreak) != null ? mc.cash.pBreak : mc.p_cash_below_floor) || 0) * 100).toFixed(0) : '—';
+  const pCash = mc ? fcPctTxt((mc.cash && mc.cash.pBreak) != null ? mc.cash.pBreak : mc.p_cash_below_floor, 0).replace('%', '') : '—';
   const bands = mc ? fcResolveCorridorBands(packet, suite) : null;
   const pWatchNum = bands && bands.ok ? bands.pWatch25 : (mc && mc.cash && mc.cash.pWatch25 != null ? mc.cash.pWatch25 : 0);
   const pWatch = mc ? ((pWatchNum || 0) * 100).toFixed(0) : '—';
-  const pArr = mc ? ((((mc.arr && mc.arr.pMiss) != null ? mc.arr.pMiss : mc.p_arr_miss) || 0) * 100).toFixed(1) : '—';
+  const pArr = mc ? fcPctTxt((mc.arr && mc.arr.pMiss) != null ? mc.arr.pMiss : mc.p_arr_miss, 1).replace('%', '') : '—';
   const pHold = mc
     ? ((Math.max(0, 1 - Math.max(
       (mc.arr && mc.arr.pMiss) || mc.p_arr_miss || 0,
@@ -3570,7 +3609,7 @@ function buildFcTheRead(packet, suite, mode) {
         ' · Renewals ' + fcFmtDeal$(ctx.renWtd) + ' / ' + fcFmtDeal$(ctx.renGross) +
         ' · Cover ' + ctx.coverX.toFixed(2) + '×. Peak month ' + (ctx.peakLbl || '—') + ' ' + fcFmtDeal$(ctx.peakPipe) + '.'],
       ['Plan cash',
-        'Open path ' + fM(open0, 1) + ' → Dec ' + fM(dec * 1e6, 1) + ' vs floor ' + fM(packet.cashFloor, 1) +
+        'Open path ' + fM(open0, 1) + ' → Dec ' + fM(dec * 1e6, 1) + ' vs floor ' + fcFloorTxt(packet) +
         '. Rails −25% = $' + watchCush.toFixed(1) + 'M · −50% = $' + alarmCush.toFixed(1) + 'M.'],
       ['Top miss', topDealLine],
       ['Distribution',
@@ -3586,8 +3625,8 @@ function buildFcTheRead(packet, suite, mode) {
       'Remainder-of-year ARR comes from <b>weighted open pipeline</b> (' + fcFmtDeal$(ctx.openWtdPipe) +
       ' NB+Exp) and the <b>renewal book</b> (' + fcFmtDeal$(ctx.renGross) + ' gross, ' +
       ((ctx.renRate * 100).toFixed(0)) + '% weighted). Cash rides the CFS from about <b>$' +
-      open0M.toFixed(1) + 'M</b> after close to <b>$' + dec.toFixed(1) + 'M</b> in Dec (floor <b>$' +
-      floor.toFixed(0) + 'M</b>).'],
+      open0M.toFixed(1) + 'M</b> after close to <b>$' + dec.toFixed(1) + 'M</b> in Dec (floor <b>' +
+      fcFloorTxt(packet) + '</b>).'],
     ['Where the risk sits in the book',
       top
         ? ('Biggest miss on the board is <b>' + fcEsc(top.customer) + '</b> — ' + top.type + ' in ' +
@@ -3769,7 +3808,7 @@ function renderFcPredictiveHtml(packet, suite, mode) {
     ? (() => { const v = fcPaAnalyticsVerdict(suite, packet); return { big: v.big, small: v.small, tone: v.sev || 'watch' }; })()
     : {
       big: 'Run scenarios to test what could break this forecast.',
-      small: `Plan cash ${fM(packet.endCash, 1)} vs floor ${fM(packet.cashFloor, 1)}. Generate scenarios for the corridor fan, chips, and The Read.`,
+      small: `Plan cash ${fM(packet.endCash, 1)} vs floor ${fcFloorTxt(packet)}. Generate scenarios for the corridor fan, chips, and The Read.`,
       tone: 'watch',
     };
 
@@ -3777,8 +3816,9 @@ function renderFcPredictiveHtml(packet, suite, mode) {
   if (mc) {
     // Align "Years cash falls hard" with the corridor band before we paint readouts.
     const bands = fcResolveCorridorBands(packet, suite || { mc });
-    const pCash = (mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : (mc.p_cash_below_floor || 0);
-    const pArr = (mc.arr && mc.arr.pMiss != null) ? mc.arr.pMiss : (mc.p_arr_miss || 0);
+    const pCash = ((mc.cash && mc.cash.pBreak != null) ? mc.cash.pBreak : mc.p_cash_below_floor) || 0;
+    const pArrRaw = (mc.arr && mc.arr.pMiss != null) ? mc.arr.pMiss : mc.p_arr_miss;
+    const pArr = pArrRaw || 0;
     const pWatch = bands.ok ? bands.pWatch25 : ((mc.cash && mc.cash.pWatch25 != null) ? mc.cash.pWatch25 : 0);
     const breakN = suite && suite.cases ? suite.cases.filter(c => c.status === 'break').length : 0;
     const pHold = Math.max(0, 1 - Math.max(pArr, pCash, pWatch, mc.pOpsRisk || mc.p_ops_liquidity || 0));
@@ -3795,7 +3835,7 @@ function renderFcPredictiveHtml(packet, suite, mode) {
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'P(cash ≤ 75% plan)' : 'Years cash falls hard'}</div>
         <div class="val ${cashCls}">${fcPctLbl(pWatch)}</div><div class="note">${watchNote}</div></div>
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'P(ending ARR &lt; commit)' : 'Years we miss ARR'}</div>
-        <div class="val ${arrCls}">${fcPctLbl(pArr)}</div><div class="note">Dec ARR under plan ${fM(packet.targetArr || packet.decArr, 1)}</div></div>
+        <div class="val ${arrCls}">${pArrRaw != null ? fcPctLbl(pArr) : '—'}</div><div class="note">${packet.targetArr != null ? 'Dec ARR under plan ' + fM(packet.targetArr, 1) : 'No budget ARR loaded'}</div></div>
       <div class="pa-ro"><div class="lab">${modeKey === 'tech' ? 'Break / watch / cases' : 'Named cases'}</div>
         <div class="val">${breakN}<span style="font-size:12px;font-weight:500;color:var(--text3)"> / ${watchN}</span></div>
         <div class="note">${breakN} break · ${watchN} watch · worst ${worst ? fcEsc(worst.chipPlain || worst.label) : '—'}</div></div>
@@ -3804,7 +3844,7 @@ function renderFcPredictiveHtml(packet, suite, mode) {
 
   const banner = modeKey === 'tech'
     ? `<div class="pa-banner" style="margin:12px 0 4px">Corridor rails = −25% / −50% vs plan + hard floor. Named cases shock the Forecast assurance packet. Status bands: ≥$2.5M break · ≥$1M / ≥3% cash watch · else hold — on ARR / Dec cash / FY EBITDA.</div>`
-    : `<div class="pa-banner" style="margin:12px 0 4px">We would never actually hit the $${((Number(packet.cashFloor) || 1e7) / 1e6).toFixed(0)}M floor — someone would make us cut first. The corridor still shows −25% / −50% rails. Big hits (≥$2.5M) are red breaks; ≥$1M (or ≥3% cash) are amber watches; smaller moves stay green — ranked worst to best.</div>`;
+    : `<div class="pa-banner" style="margin:12px 0 4px">${packet.cashFloor != null ? `We would never actually hit the ${fcFloorTxt(packet)} floor — someone would make us cut first.` : 'No cash floor loaded, so floor breaches are not tested.'} The corridor still shows −25% / −50% rails. Big hits (≥$2.5M) are red breaks; ≥$1M (or ≥3% cash) are amber watches; smaller moves stay green — ranked worst to best.</div>`;
 
   let chipCases = [];
   if (suite && suite.cases) {
@@ -3829,8 +3869,8 @@ function renderFcPredictiveHtml(packet, suite, mode) {
   const cashSrc = packet.cashSrc || ((packet.endCfsSrc) || 'plan');
   const corrSub = modeKey === 'tech'
     ? (cashHz === 'fc'
-      ? `Open months ${fcLbl}–Dec only (actuals through ${closeLbl}). Plan Dec $${planDecM}M (${cashSrc}). Fan = MC P10–P90 on open-month cash flows (not a flat stock scale). Rails = −25% / −50% / floor ${((Number(packet.cashFloor) || 1e7) / 1e6).toFixed(1)}M.`
-      : `Full-year path. Plan Dec $${planDecM}M (${cashSrc}). Fan = MC P10–P90 on open-month cash flows. Rails = −25% / −50% / floor ${((Number(packet.cashFloor) || 1e7) / 1e6).toFixed(1)}M.`)
+      ? `Open months ${fcLbl}–Dec only (actuals through ${closeLbl}). Plan Dec $${planDecM}M (${cashSrc}). Fan = MC P10–P90 on open-month cash flows (not a flat stock scale). Rails = −25% / −50% / floor ${fcFloorTxt(packet)}.`
+      : `Full-year path. Plan Dec $${planDecM}M (${cashSrc}). Fan = MC P10–P90 on open-month cash flows. Rails = −25% / −50% / floor ${fcFloorTxt(packet)}.`)
     : (cashHz === 'fc'
       ? `Looking at ${fcLbl}–Dec only — actuals already closed. Plan finishes Dec at $${planDecM}M. The green band is how far draws usually land around that plan (same grammar as Budget). Amber / red dashes are 25% and 50% below plan; solid red is the cash floor.`
       : `Full year shown. Plan finishes Dec at $${planDecM}M. Fan opens on open months; closed months stay near the plan. Amber / red dashes are 25% and 50% below plan; solid red is the cash floor.`);
@@ -4288,7 +4328,7 @@ function buildDeterministicFcAssuranceNarrative(packet, risks) {
     : '';
   lines.push(
     mktBit + hcBit +
-    `Dec ending cash ${fM(p.endCash, 1)} vs floor ${fM(p.cashFloor, 1)} (liquidity cushion, not collections)` +
+    `Dec ending cash ${fM(p.endCash, 1)} vs floor ${fcFloorTxt(p)} (liquidity cushion, not collections)` +
     (p.minCash != null ? `; trough ${fM(p.minCash, 1)}${p.minCashPeriod ? ' in ' + p.minCashPeriod : ''}` : '') +
     '.',
   );
@@ -4795,221 +4835,166 @@ function fcOvTsStmtRow(period, kind) {
   }
   return null;
 }
-function fcOvBackcastFromLater(laterEop, laterJanBop) {
-  const mom = [];
-  let prev = laterJanBop > 0 ? laterJanBop : (laterEop[0] || 1);
-  for (let i = 0; i < 12; i++) {
-    const cur = laterEop[i] != null ? laterEop[i] : prev;
-    mom.push(prev > 0 ? cur / prev : 1);
-    prev = cur;
-  }
-  let prod = mom.reduce((a, b) => a * b, 1) || 1;
-  const start = laterJanBop / prod;
-  const eop = [];
-  let x = start;
-  for (let i = 0; i < 12; i++) {
-    x *= mom[i];
-    eop.push(x);
-  }
-  eop[11] = laterJanBop;
-  const nn = eop.map((v, i) => v - (i === 0 ? start : eop[i - 1]));
-  return { eop, nn, bop0: start };
-}
-function fcOvScaleSeries(base, factor) {
-  return base.map(v => v == null ? null : v * factor);
-}
 function fcOvGrainSeries(monthly12, grain, mode) {
   if (grain === 'm') return monthly12;
   const out = [];
   for (let q = 0; q < 4; q++) {
     const slice = monthly12.slice(q * 3, q * 3 + 3);
+    if (slice.some(v => v == null)) { out.push(null); continue; }
     if (mode === 'end') out.push(slice[2]);
-    else out.push(slice.reduce((a, b) => a + (b || 0), 0));
+    else out.push(slice.reduce((a, b) => a + b, 0));
   }
   return out;
 }
 
 /**
- * Hist ARR for a period only when that calendar year exists in WF/outlook.
- * WF tables are indexed 0..11 for the close year — NEVER pass a prior-year
- * period list into getCombinedArr (that mis-reads FY26 as FY25 and duplicates lines).
+ * ARR for a period from loaded data. Prior years only when the loaded waterfall
+ * lists that exact period — never mapped by month index from another year.
  */
 function fcOvHistArrRow(period) {
   const y = parseInt(String(period).slice(0, 4), 10);
-  const closeY = parseInt(String(getCloseMonth()).slice(0, 4), 10) || parseInt(YEAR, 10) || 2026;
-  if (!y || y !== closeY) return null; // prior years → caller backcasts
-  try {
-    if (window.SMPLOutlook && window.SMPLOutlook.getCombinedArr) {
-      const raw = window.SMPLOutlook.getCombinedArr(period, ALL_P, getCloseMonth());
-      if (raw && (raw.arr_eop != null || raw.arr_bop != null)) {
-        const nb = raw.arr_nb || 0, exp = raw.arr_exp || 0, react = raw.arr_react || 0;
-        const cont = raw.arr_cont || 0, churn = raw.arr_nr_churn || raw.arr_churn || 0;
-        const nn = raw.arr_nn != null ? raw.arr_nn : (nb + exp + react - cont - churn);
-        return { bop: raw.arr_bop, eop: raw.arr_eop, nn };
+  const closeY = parseInt(String(getCloseMonth()).slice(0, 4), 10);
+  if (y === closeY) {
+    try {
+      if (window.SMPLOutlook && window.SMPLOutlook.getCombinedArr) {
+        const raw = window.SMPLOutlook.getCombinedArr(period, ALL_P, getCloseMonth());
+        if (raw && raw.arr_eop != null) {
+          return { bop: raw.arr_bop != null ? raw.arr_bop : null, eop: raw.arr_eop, nn: raw.arr_nn != null ? raw.arr_nn : null };
+        }
       }
-    }
-  } catch (e) { /* optional */ }
-  const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE;
-  if (wf && wf.Ending) {
-    const mo = parseInt(String(period).slice(5, 7), 10);
-    const i = (wf.periods && wf.periods.indexOf(period) >= 0)
-      ? wf.periods.indexOf(period)
-      : (mo >= 1 && mo <= 12 ? mo - 1 : -1);
-    if (i >= 0 && i < wf.Ending.length && wf.Ending[i] != null) {
-      const eop = Number(wf.Ending[i]);
-      const bop = wf.Beginning && wf.Beginning[i] != null ? Number(wf.Beginning[i]) : null;
-      const nn = bop != null ? eop - bop : null;
-      return { bop, eop, nn };
-    }
+    } catch (e) { /* fall through to the loaded waterfall */ }
   }
-  return null;
+  const wf = window.SMPL_ARR_WATERFALL || window.SMPL_DEMO_WF_TABLE || window.WF_TABLE;
+  if (!wf || !wf.Ending) return null;
+  let i = wf.periods ? wf.periods.indexOf(period) : -1;
+  if (i < 0 && !wf.periods && y === closeY) i = parseInt(String(period).slice(5, 7), 10) - 1;
+  if (i < 0 || i >= wf.Ending.length || wf.Ending[i] == null) return null;
+  const eop = Number(wf.Ending[i]);
+  const bop = wf.Beginning && wf.Beginning[i] != null ? Number(wf.Beginning[i]) : null;
+  return { bop, eop, nn: bop != null ? eop - bop : null };
+}
+
+const FC_OV_FIELDS = {
+  eop: 'ending ARR', nn: 'net new ARR', rev: 'revenue', ebitda: 'EBITDA', opex: 'OpEx',
+  mkt: 'marketing spend', mqls: 'MQLs', cash: 'cash', hc: 'headcount',
+};
+
+/** Loaded history for one prior calendar year. Missing months stay null. */
+function fcOvPriorYear(year) {
+  const periods = fcOvYearPeriods(year);
+  const arr = periods.map(fcOvHistArrRow);
+  const isRows = periods.map(fcOvTsIsRow);
+  const num = v => (v == null || v === '' ? null : Number(v));
+  return {
+    eop: arr.map(r => (r ? r.eop : null)),
+    nn: arr.map(r => (r ? r.nn : null)),
+    rev: isRows.map(r => (r ? num(r.revenue) : null)),
+    ebitda: isRows.map(r => (r ? num(r.ebitda) : null)),
+    opex: isRows.map(r => {
+      if (!r) return null;
+      if (r.total_opex != null) return Number(r.total_opex);
+      if (r.sm == null && r.rd == null && r.ga == null) return null;
+      return (Number(r.sm) || 0) + (Number(r.rd) || 0) + (Number(r.ga) || 0);
+    }),
+    mkt: periods.map(() => null),
+    mqls: periods.map(() => null),
+    cash: periods.map(p => {
+      const cfs = fcOvTsStmtRow(p, 'cfs');
+      if (cfs && cfs.ending_cash != null) return Number(cfs.ending_cash);
+      if (cfs && cfs.end_cash != null) return Number(cfs.end_cash);
+      const bs = fcOvTsStmtRow(p, 'bs');
+      return bs && bs.cash != null ? Number(bs.cash) : null;
+    }),
+    hc: periods.map(p => fcWfMonthValue(fcWorkforce().heads_total, p)),
+  };
+}
+
+/** Which metrics have no loaded months / some missing months in a year's series. */
+function fcOvMissing(series) {
+  const none = [], partial = [];
+  Object.keys(FC_OV_FIELDS).forEach(k => {
+    const vals = series[k] || [];
+    const n = vals.filter(v => v != null).length;
+    if (n === 0) none.push(FC_OV_FIELDS[k]);
+    else if (n < 12) partial.push(FC_OV_FIELDS[k]);
+  });
+  return { none, partial, empty: none.length === Object.keys(FC_OV_FIELDS).length };
 }
 
 /**
- * Same-month YoY series for Overview charts.
- * FY{year} = linked actuals+forecast path; prior years from hist or scaled backcast.
+ * Same-month YoY series for Overview charts. Every point is loaded data:
+ * FY{year} = actuals + current forecast; prior years = loaded history only.
+ * Missing history is reported in `missing`, never filled.
  */
 function buildFcYoyCompare() {
-  const year = parseInt(YEAR, 10) || 2026;
-  const fyCurId = 'fy' + String(year).slice(2);
-  const fyPrevId = 'fy' + String(year - 1).slice(2);
-  const fyPrev2Id = 'fy' + String(year - 2).slice(2);
-
-  const curEop = ALL_P.map(p => {
-    const a = getForecastARR(p);
-    return a && a.arr_eop != null ? Number(a.arr_eop) : null;
-  });
-  const curNn = ALL_P.map(p => fcArrComponent(p, 'nn'));
-  const curRev = ALL_P.map(p => Number((getDisplayIS(p) || {}).revenue) || 0);
-  const curEbitda = ALL_P.map(p => Number((getDisplayIS(p) || {}).ebitda) || 0);
-  const curOpex = ALL_P.map(p => {
-    const is = getDisplayIS(p) || {};
-    if (is.opex != null) return Number(is.opex);
-    return (Number(is.sm) || 0) + (Number(is.rd) || 0) + (Number(is.ga) || 0);
-  });
-  const curMkt = ALL_P.map(p => {
-    try {
-      if (typeof fcGtmAllocate === 'function') return Number(fcGtmAllocate(p).spendTot) || 0;
-    } catch (e) { /* optional */ }
-    return 0;
-  });
-  const curMqls = ALL_P.map(p => {
-    try {
-      if (typeof fcGtmAllocate === 'function') return Number(fcGtmAllocate(p).mqlSum) || 0;
-    } catch (e) { /* optional */ }
-    return 0;
-  });
-  const curCash = ALL_P.map(p => {
-    const cfs = getDisplayCFS(p) || {};
-    return cfs.end_cash != null ? Number(cfs.end_cash) : null;
-  });
-  let curHc = ALL_P.map(p => fcWfMonthValue(fcWorkforce().heads_total, p));
+  const year = parseInt(YEAR, 10);
+  const isOf = p => getDisplayIS(p);
+  const cur = {
+    eop: ALL_P.map(p => {
+      const a = getForecastARR(p);
+      return a && a.arr_eop != null ? Number(a.arr_eop) : null;
+    }),
+    nn: ALL_P.map(p => fcArrComponent(p, 'nn')),
+    rev: ALL_P.map(p => { const is = isOf(p); return is && is.revenue != null ? Number(is.revenue) : null; }),
+    ebitda: ALL_P.map(p => { const is = isOf(p); return is && is.ebitda != null ? Number(is.ebitda) : null; }),
+    opex: ALL_P.map(p => {
+      const is = isOf(p);
+      if (!is) return null;
+      if (is.opex != null) return Number(is.opex);
+      return (Number(is.sm) || 0) + (Number(is.rd) || 0) + (Number(is.ga) || 0);
+    }),
+    mkt: ALL_P.map(p => {
+      try { return typeof fcGtmAllocate === 'function' ? Number(fcGtmAllocate(p).spendTot) : null; } catch (e) { return null; }
+    }),
+    mqls: ALL_P.map(p => {
+      try { return typeof fcGtmAllocate === 'function' ? Number(fcGtmAllocate(p).mqlSum) : null; } catch (e) { return null; }
+    }),
+    cash: ALL_P.map(p => {
+      const cfs = getDisplayCFS(p) || {};
+      return cfs.end_cash != null ? Number(cfs.end_cash) : null;
+    }),
+    hc: ALL_P.map(p => fcWfMonthValue(fcWorkforce().heads_total, p)),
+  };
   if (typeof computeFcHcPlan === 'function' && fcHcHasData()) {
     try {
       const plan = computeFcHcPlan();
-      curHc = ALL_P.map(p => {
-        const row = plan[p];
-        return row && row.headsTotal != null ? row.headsTotal : null;
-      });
+      cur.hc = ALL_P.map(p => (plan[p] && plan[p].headsTotal != null ? plan[p].headsTotal : null));
     } catch (e) { /* keep loaded heads */ }
   }
 
-  const janBop = (() => {
-    const a = getForecastARR(ALL_P[0]);
-    return (a && a.arr_bop != null) ? Number(a.arr_bop) : (curEop[0] || 75e6);
-  })();
-
-  const prevP = fcOvYearPeriods(year - 1);
-  const prevEopRaw = prevP.map(p => {
-    const r = fcOvHistArrRow(p);
-    return r && r.eop != null ? r.eop : null;
-  });
-  const prevNnRaw = prevP.map(p => {
-    const r = fcOvHistArrRow(p);
-    return r && r.nn != null ? r.nn : null;
-  });
-  const prevComplete = prevEopRaw.every(v => v != null && v > 0);
-  const prevBop0 = (fcOvHistArrRow(prevP[0]) || {}).bop || prevEopRaw[0] || (janBop / 1.16);
-  const prev = prevComplete
-    ? {
-        eop: prevEopRaw,
-        nn: prevNnRaw.map((v, i) => v != null ? v : (prevEopRaw[i] - (i ? prevEopRaw[i - 1] : prevBop0))),
-        bop0: prevBop0,
-      }
-    : fcOvBackcastFromLater(curEop.map(v => v != null ? v : janBop), janBop);
-
-  const prev2 = fcOvBackcastFromLater(prev.eop, prev.bop0);
-
-  const prevRevRaw = prevP.map(p => {
-    const row = fcOvTsIsRow(p);
-    return row && row.revenue != null ? row.revenue : null;
-  });
-  const prevEbitdaRaw = prevP.map(p => {
-    const row = fcOvTsIsRow(p);
-    return row && row.ebitda != null ? row.ebitda : null;
-  });
-  const prevOpexRaw = prevP.map(p => {
-    const row = fcOvTsIsRow(p);
-    if (!row) return null;
-    if (row.total_opex != null) return row.total_opex;
-    return (Number(row.sm) || 0) + (Number(row.rd) || 0) + (Number(row.ga) || 0) || null;
-  });
-  const prevCashRaw = prevP.map(p => {
-    const cfs = fcOvTsStmtRow(p, 'cfs');
-    if (cfs && (cfs.ending_cash != null || cfs.end_cash != null)) return cfs.ending_cash != null ? cfs.ending_cash : cfs.end_cash;
-    const bs = fcOvTsStmtRow(p, 'bs');
-    return bs && bs.cash != null ? bs.cash : null;
-  });
-
-  const arrScalePrev = prev.eop[11] / (curEop[11] || prev.eop[11] || 1);
-  const arrScalePrev2 = prev2.eop[11] / (curEop[11] || prev2.eop[11] || 1);
-  const fillPrev = (raw, curSeries, factor) =>
-    raw.map((v, i) => (v != null ? v : (curSeries[i] || 0)) * factor);
-
-  const prevRevFill = prevRevRaw.map((v, i) => v != null ? v : curRev[i] * arrScalePrev);
-  const prevEbitdaFill = prevEbitdaRaw.map((v, i) => v != null ? v : curEbitda[i] * arrScalePrev);
-  const prevOpexFill = prevOpexRaw.map((v, i) => v != null ? v : curOpex[i] * arrScalePrev);
-  const openCash = curCash.find(v => v != null) || 46e6;
-  // Budget parity: scale the operating-year cash *shape* for priors — never fill a flat
-  // constant (openCash * scale), which flattens FY25 across all quarters.
-  const curCashFill = curCash.map(v => v != null ? v : openCash);
-  const scaleCashPrior = (factor) =>
-    prevCashRaw.map((v, i) => (v != null ? v : curCashFill[i]) * factor);
-  const prevCashFill = scaleCashPrior(arrScalePrev);
-  const prev2CashFill = scaleCashPrior(arrScalePrev2);
-  const prevMkt = fcOvScaleSeries(curMkt, arrScalePrev);
-  const prevMqls = fcOvScaleSeries(curMqls, arrScalePrev);
-  const prevHc = prevP.map(p => fcWfMonthValue(fcWorkforce().heads_total, p));
-  const prev2Hc = fcOvYearPeriods(year - 2).map(p => fcWfMonthValue(fcWorkforce().heads_total, p));
-
   const closeLbl = typeof getCloseMoLabel === 'function' ? getCloseMoLabel() : CLOSE_MO_LABEL;
-  const years = [
-    {
-      id: fyPrev2Id, label: 'FY' + String(year - 2).slice(2), color: '#72826a', dash: [4, 3], width: 1.5, optional: true,
-      eop: prev2.eop, nn: prev2.nn,
-      rev: fcOvScaleSeries(prevRevFill, arrScalePrev2 / arrScalePrev),
-      hc: prev2Hc,
-      ebitda: fillPrev(prevEbitdaRaw, curEbitda, arrScalePrev2),
-      opex: fillPrev(prevOpexRaw, curOpex, arrScalePrev2),
-      mkt: fcOvScaleSeries(curMkt, arrScalePrev2),
-      mqls: fcOvScaleSeries(curMqls, arrScalePrev2),
-      cash: prev2CashFill,
-    },
-    {
-      id: fyPrevId, label: 'FY' + String(year - 1).slice(2), color: '#5fa878', dash: [], width: 1.8,
-      eop: prev.eop, nn: prev.nn, rev: prevRevFill, hc: prevHc,
-      ebitda: prevEbitdaFill, opex: prevOpexFill, mkt: prevMkt, mqls: prevMqls, cash: prevCashFill,
-    },
-    {
-      id: fyCurId, label: 'FY' + String(year).slice(2), color: '#3d7ea6', dash: [], width: 2.6,
-      eop: curEop.map((v, i) => v != null ? v : janBop),
-      nn: curNn, rev: curRev, hc: curHc,
-      ebitda: curEbitda, opex: curOpex, mkt: curMkt, mqls: curMqls,
-      cash: curCashFill,
+  const prev = fcOvPriorYear(year - 1);
+  const prev2 = fcOvPriorYear(year - 2);
+  return [
+    Object.assign({
+      id: 'fy' + String(year - 2).slice(2), label: 'FY' + String(year - 2).slice(2), year: year - 2,
+      color: '#72826a', dash: [4, 3], width: 1.5, optional: true, missing: fcOvMissing(prev2),
+    }, prev2),
+    Object.assign({
+      id: 'fy' + String(year - 1).slice(2), label: 'FY' + String(year - 1).slice(2), year: year - 1,
+      color: '#5fa878', dash: [], width: 1.8, missing: fcOvMissing(prev),
+    }, prev),
+    Object.assign({
+      id: 'fy' + String(year).slice(2), label: 'FY' + String(year).slice(2), year,
+      color: '#3d7ea6', dash: [], width: 2.6, missing: fcOvMissing(cur), current: true,
       note: `Actuals through ${closeLbl} + open-month forecast`,
-    },
+    }, cur),
   ];
-  return years;
+}
+
+/** One line per year with no or partial loaded history, for the Overview flag. */
+function fcOvHistoryFlags(years) {
+  const out = [];
+  years.forEach(y => {
+    if (y.current && !y.missing.none.length && !y.missing.partial.length) return;
+    if (y.missing.empty) {
+      out.push(`No ${y.label} history loaded.`);
+      return;
+    }
+    if (y.missing.none.length) out.push(`${y.label}: no ${y.missing.none.join(', ')} loaded.`);
+    if (y.missing.partial.length) out.push(`${y.label}: some months missing for ${y.missing.partial.join(', ')}.`);
+  });
+  return out;
 }
 
 /** Plan/commit gaps are notes on Forecast; historical shape risks stay elevated. */
@@ -5032,71 +5017,45 @@ function fcRemapOverviewRisk(r) {
   return r;
 }
 
-/** Historical shape checks for Overview — YoY growth / funnel conversion vs prior. */
+/** Historical shape checks for Overview — run only on loaded prior-year history. */
 function buildFcHistShapeRisks(packet) {
   const out = [];
   try {
     const years = buildFcYoyCompare();
-    const cur = years.find(y => !y.optional && String(y.id).indexOf(String((packet && packet.budget_year) || YEAR).slice(2)) >= 0)
-      || years[years.length - 1];
-    const prev = years.filter(y => y !== cur && !y.optional).pop() || years.find(y => y.optional === false);
-    if (cur && prev && cur.eop && prev.eop) {
-      const curG = prev.eop[11] > 0 ? (cur.eop[11] / prev.eop[11] - 1) : null;
-      // Prior YoY ≈ growth into prev Dec from backcast start (rough): prev Dec / prev Jan
-      const prevJan = prev.eop[0] != null && prev.nn ? (prev.eop[0] - (prev.nn[0] || 0)) : null;
-      const prevG = prevJan > 0 ? (prev.eop[11] / prevJan - 1) : null;
-      if (curG != null && prevG != null) {
-        const deltaPp = (curG - prevG) * 100;
-        if (Math.abs(deltaPp) >= 12) {
-          out.push({
-            id: 'yoy_growth_shape',
-            severity: Math.abs(deltaPp) >= 20 ? 'high' : 'medium',
-            title: `YoY ARR growth ${deltaPp > 0 ? 'accelerates' : 'decelerates'} vs prior year`,
-            detail: `FY path ${(curG * 100).toFixed(1)}% vs prior ${(prevG * 100).toFixed(1)}% (${deltaPp > 0 ? '+' : ''}${deltaPp.toFixed(1)}pp).`,
-            citation: 'Same-month YoY · Ending ARR Dec / prior Dec',
-          });
-        } else {
-          out.push({
-            id: 'yoy_growth_shape',
-            severity: 'ok',
-            title: 'YoY ARR growth vs prior',
-            detail: `FY ${(curG * 100).toFixed(1)}% vs prior ${(prevG * 100).toFixed(1)}% — in line.`,
-            citation: 'Same-month YoY · Ending ARR',
-          });
-        }
-      }
-      // MQL conversion proxy: closed NB ARR / MQLs when both sides present
-      const sum = (arr) => (arr || []).reduce((s, v) => s + (Number(v) || 0), 0);
-      const curMql = sum(cur.mqls), prevMql = sum(prev.mqls);
-      const curNb = sum(cur.nn) > 0 ? (packet.fyNb != null ? Number(packet.fyNb) : sum(cur.nn) * 0.55) : null;
-      // Prefer live NB from packet for current; scale prior NB by ARR ratio
-      const liveNb = packet.fyNb != null ? Number(packet.fyNb) : null;
-      const prevNb = liveNb != null && cur.eop[11] > 0
-        ? liveNb * (prev.eop[11] / cur.eop[11])
-        : null;
-      if (liveNb != null && curMql > 0 && prevNb != null && prevMql > 0) {
-        const curCnv = liveNb / curMql;
-        const prevCnv = prevNb / prevMql;
-        const ratio = prevCnv > 0 ? curCnv / prevCnv : null;
-        if (ratio != null && (ratio < 0.7 || ratio > 1.45)) {
-          out.push({
-            id: 'mql_conversion_shape',
-            severity: (ratio < 0.55 || ratio > 1.7) ? 'high' : 'medium',
-            title: 'MQL conversion vs prior year',
-            detail: `NB/MQL $${(curCnv).toFixed(0)} vs prior $${(prevCnv).toFixed(0)} (${((ratio - 1) * 100) > 0 ? '+' : ''}${((ratio - 1) * 100).toFixed(0)}%).`,
-            citation: 'GTM MQLs · New Business ARR · same-month YoY',
-          });
-        } else if (ratio != null) {
-          out.push({
-            id: 'mql_conversion_shape',
-            severity: 'ok',
-            title: 'MQL conversion vs prior year',
-            detail: `NB/MQL in line with prior (${(ratio * 100).toFixed(0)}% of prior).`,
-            citation: 'GTM MQLs · New Business ARR',
-          });
-        }
-      }
+    const cur = years.find(y => y.current);
+    const prev = years.find(y => y.year === cur.year - 1);
+    const prevDec = prev.eop[11];
+    const prevJanBop = prev.eop[0] != null && prev.nn[0] != null ? prev.eop[0] - prev.nn[0] : null;
+    if (prevDec == null || prevJanBop == null) {
+      out.push({
+        id: 'yoy_growth_shape',
+        severity: 'medium',
+        title: `No ${prev.label} ARR history loaded`,
+        detail: `YoY ARR growth can't be checked: ${prev.label} ${prevDec == null ? 'December ending ARR' : 'January beginning ARR'} is not in the loaded data.`,
+        citation: 'Loaded ARR waterfall',
+      });
+      return out;
     }
+    const curDec = cur.eop[11];
+    const curG = curDec != null && prevDec > 0 ? curDec / prevDec - 1 : null;
+    const prevG = prevJanBop > 0 ? prevDec / prevJanBop - 1 : null;
+    if (curG == null || prevG == null) return out;
+    const deltaPp = (curG - prevG) * 100;
+    out.push(Math.abs(deltaPp) >= 12
+      ? {
+          id: 'yoy_growth_shape',
+          severity: Math.abs(deltaPp) >= 20 ? 'high' : 'medium',
+          title: `YoY ARR growth ${deltaPp > 0 ? 'accelerates' : 'decelerates'} vs prior year`,
+          detail: `FY path ${(curG * 100).toFixed(1)}% vs prior ${(prevG * 100).toFixed(1)}% (${deltaPp > 0 ? '+' : ''}${deltaPp.toFixed(1)}pp).`,
+          citation: 'Same-month YoY · Ending ARR Dec / prior Dec',
+        }
+      : {
+          id: 'yoy_growth_shape',
+          severity: 'ok',
+          title: 'YoY ARR growth vs prior',
+          detail: `FY ${(curG * 100).toFixed(1)}% vs prior ${(prevG * 100).toFixed(1)}% — in line.`,
+          citation: 'Same-month YoY · Ending ARR',
+        });
   } catch (e) { /* optional */ }
   return out;
 }
@@ -5215,7 +5174,7 @@ function paintFcOverviewCharts() {
       type: 'line',
       data: {
         labels,
-        datasets: years.map(y => ({
+        datasets: years.filter(y => (y[field] || []).some(v => v != null)).map(y => ({
           label: y.label,
           data: fcOvGrainSeries(y[field], grain, mode),
           borderColor: y.color,
@@ -5260,7 +5219,7 @@ function renderOverview(area) {
   const closeLbl = typeof getCloseMoLabel === 'function' ? getCloseMoLabel() : CLOSE_MO_LABEL;
   const year = packet.budget_year || parseInt(YEAR, 10) || 2026;
   const grainQ = window._fcOvGrain !== 'm';
-  const showPrior = window._fcOvShowPrior !== false;
+  const showPrior = !!window._fcOvShowPrior;
 
   const decArr = packet.decArr;
   const fyRev = packet.fyRev;
@@ -5270,8 +5229,9 @@ function renderOverview(area) {
     if (is.opex != null) return s + Number(is.opex);
     return s + (Number(is.sm) || 0) + (Number(is.rd) || 0) + (Number(is.ga) || 0);
   }, 0);
-  const fyMkt = packet.fyMkt != null ? packet.fyMkt : 0;
-  const fyMqls = packet.fyMql != null ? packet.fyMql : 0;
+  const fyMkt = packet.fyMkt != null ? packet.fyMkt : null;
+  const fyMqls = packet.fyMql != null ? packet.fyMql : null;
+  const histFlags = fcOvHistoryFlags(buildFcYoyCompare());
   const endCash = packet.endCash;
   const fyNn = packet.fyNn;
   let janHc = packet.janHc, decHc = packet.decHc;
@@ -5317,7 +5277,7 @@ function renderOverview(area) {
       <div class="kpi"><div class="kpi-lbl">FY EBITDA</div><div class="kpi-val" style="color:${fyEbitda >= 0 ? 'var(--teal)' : 'var(--amber)'}">${fM(fyEbitda, 1)}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY OpEx</div><div class="kpi-val">${fM(fyOpex, 1)}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY marketing</div><div class="kpi-val">${fM(fyMkt, 1)}</div></div>
-      <div class="kpi"><div class="kpi-lbl">FY MQLs</div><div class="kpi-val">${Math.round(fyMqls).toLocaleString()}</div></div>
+      <div class="kpi"><div class="kpi-lbl">FY MQLs</div><div class="kpi-val">${fyMqls != null ? Math.round(fyMqls).toLocaleString() : '—'}</div></div>
       <div class="kpi"><div class="kpi-lbl">Dec cash</div><div class="kpi-val">${fM(endCash, 1)}</div><div style="font-size:9px;color:var(--text3);margin-top:2px">from Cash Flow</div></div>
       <div class="kpi"><div class="kpi-lbl">Close → Dec HC</div><div class="kpi-val" style="font-size:15px">${janHc != null ? Math.round(janHc).toLocaleString() : '—'} → ${decHc != null ? Math.round(decHc).toLocaleString() : '—'}</div></div>
       <div class="kpi"><div class="kpi-lbl">FY net new</div><div class="kpi-val">${fM(fyNn, 1)}</div></div>
@@ -5326,8 +5286,9 @@ function renderOverview(area) {
       <button class="ov-tog${grainQ ? ' on' : ''}" onclick="setFcOvGrain('q')">Quarterly</button>
       <button class="ov-tog${!grainQ ? ' on' : ''}" onclick="setFcOvGrain('m')">Monthly</button>
       <button class="ov-tog${showPrior ? ' on' : ''}" onclick="setFcOvShowPrior(${showPrior ? 'false' : 'true'})">FY${String(year - 2).slice(2)}</button>
-      <span style="font-size:10px;color:var(--text3);margin-left:4px">FY${String(year).slice(2)} = actual through ${closeLbl} + H2 forecast · prior years from hist or scaled where thin · compare same calendar month</span>
+      <span style="font-size:10px;color:var(--text3);margin-left:4px">FY${String(year).slice(2)} = actual through ${closeLbl} + H2 forecast · prior years from loaded history only · compare same calendar month</span>
     </div>
+    ${histFlags.length ? `<div class="pa-banner" style="border-color:var(--amber);color:var(--amber)">Missing history (not filled in): ${histFlags.join(' ')}</div>` : ''}
     <div class="ov-charts">
       <div class="ov-card">
         <div class="ov-card-title">Ending ARR</div>
@@ -6861,9 +6822,8 @@ function renderPipeline(area){
   const fcSpend = fcP.reduce((s, p) => s + allocByP[p].spendTot, 0);
   const res = getResults();
   const decP = ALL_P[11];
-  const decBasePlanM = +(83.445 + FC_P.length * 2).toFixed(2);
-  const decArr = (res[decP] && res[decP].arr && res[decP].arr.arr_eop) || 0;
-  const arrGap = decArr - decBasePlanM * 1e6;
+  const decBasePlan = fcDecBasePlanArr();
+  const decArr = res[decP] && res[decP].arr && res[decP].arr.arr_eop != null ? res[decP].arr.arr_eop : null;
 
   let html = `<div class="slide">
     <div class="slide-title">GTM / Pipeline</div>
@@ -6872,7 +6832,7 @@ function renderPipeline(area){
       YTD net <strong>${fM(ytdNet,1)}</strong> (NB ${fM(ytdNb,1)} · Exp ${fM(ytdExp,1)})
       · Fcst net <strong>${fM(fcNet,1)}</strong> (NB ${fM(fcNb,1)} · Exp ${fM(fcExp,1)})
       · Pipe / NB <strong>${coverLbl}</strong>
-      · Dec ARR <strong>${fM(decArr,1)}</strong> vs base <strong>${fM(decBasePlanM*1e6,1)}</strong>
+      · Dec ARR <strong>${fM(decArr,1)}</strong> vs base <strong>${decBasePlan != null ? fM(decBasePlan,1) : 'no budget ARR loaded'}</strong>
       · FY spend <strong>${fM(fySpend,1)}</strong> (YTD ${fM(ytdSpend,1)} · Fcst ${fM(fcSpend,1)})
     </div>
     <div class="hc-legend"><i></i><span><strong>Act</strong> columns = booked ARR / locked spend. <strong>Fcst</strong> = lever-adjusted CRM pipe + editable mix/CPL/spend. MQLs implied: actuals from closed logos; forecast from open opps ÷ MQL→Opp%.</span></div>
@@ -6884,7 +6844,8 @@ function renderPipeline(area){
       <div class="gtm-tile"><div class="gtm-tile-lbl">MQL bought vs implied</div><div class="gtm-tile-val">${mqlGap>=0?'+':''}${Math.round(mqlGap).toLocaleString()}</div><div class="gtm-tile-sub">FY ${Math.round(fyMqlBought).toLocaleString()} bought · ${Math.round(fyMqlImplied).toLocaleString()} implied</div></div>
     </div>`;
 
-  if (arrGap < -100000) {
+  const arrGap = decArr != null && decBasePlan != null ? decArr - decBasePlan : null;
+  if (arrGap != null && arrGap < -100000) {
     html += `<div class="gap-alert"><strong>${fV(arrGap)}</strong> vs Dec base plan. Pipe is the base case — marketing mix/CPL shifts efficiency of MQLs feeding that pipe, not a second ARR build.</div>`;
   }
 

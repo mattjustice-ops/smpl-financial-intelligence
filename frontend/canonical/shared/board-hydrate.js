@@ -149,6 +149,10 @@
       global.CLOSE_MO_IDX = idx;
       var badge = document.getElementById("periodBadge");
       if (badge) badge.textContent = global.CLOSE_LABEL + " \u00b7 YTD Close";
+      var footMo = document.getElementById("footerCloseMo");
+      if (footMo) footMo.textContent = global.CLOSE_MO;
+      var footYr = document.getElementById("footerCloseYr");
+      if (footYr) footYr.textContent = cm.slice(0, 4);
     }
 
     if (data.ARR_WATERFALL && global.SMPL_DEMO_WF_TABLE && global.SMPLOutlook && global.SMPLOutlook.replaceArrWaterfallTable) {

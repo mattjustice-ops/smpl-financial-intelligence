@@ -87,9 +87,10 @@ def _open_reqs(reqs: list[dict[str, Any]], as_of_period: str) -> list[dict[str, 
     out = []
     for row in reqs:
         status = str(row.get("status") or row.get("approved_status") or "").strip().lower()
-        approved = str(row.get("approved_flag") or "yes").strip().lower()
         start = _req_start(row)
-        if (status and status not in APPROVED_REQ_STATUSES) or approved in {"no", "n", "false"}:
+        if status not in APPROVED_REQ_STATUSES:
+            continue
+        if "approved_flag" in row and str(row.get("approved_flag") or "").strip().lower() not in {"yes", "y", "true", "1"}:
             continue
         if start is None or start <= as_of_period:
             continue

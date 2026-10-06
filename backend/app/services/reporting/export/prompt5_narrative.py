@@ -88,8 +88,8 @@ GTM / PIPELINE TAKEAWAYS (when that slide exists — craft criteria):
 
 RISKS / OPPORTUNITIES CARDS (when Strategic Assessment includes them):
 - Author cards using BOARD R&O EVIDENCE / risks_and_opportunities payload as input
-  (board platform risk matrix). Each card keeps: severity, title, detail with
-  driver+$, action line.
+  (close budget variances). One card per listed variance; each keeps: severity,
+  title, detail with driver+$, action line. No cards beyond the evidence.
 - Do NOT emit thin fillers ("Close validation", "Deferred pipeline" one-liners, or
   detail "-"). Adapt evidence prose for PPTX brevity; keep the insight.
 

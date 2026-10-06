@@ -51,7 +51,7 @@ class DriverSummaryResponse(BaseModel):
     end_period: date
     actual_periods: list[date]
     forecast_periods: list[date]
-    kpis: dict[str, Decimal]
+    kpis: dict[str, Decimal | None]
     schedules: dict[str, ForecastScheduleResponse]
     dbt_models: list[str]
     frontend_visualizations: dict[str, list[str]]

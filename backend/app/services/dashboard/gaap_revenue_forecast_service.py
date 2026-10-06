@@ -90,19 +90,6 @@ def monthly_bookings_by_type(
     return bookings
 
 
-def carry_forward_monthly_revenue(
-    bookings_by_period: dict[str, Decimal],
-    periods: list[str],
-) -> dict[str, Decimal]:
-    """Once booked, MRR stacks and is recognized each month through the forecast window."""
-    active: list[Decimal] = []
-    recognized: dict[str, Decimal] = {}
-    for period in periods:
-        active.append(bookings_by_period.get(period, Decimal("0")))
-        recognized[period] = sum(active, Decimal("0"))
-    return recognized
-
-
 def _gl_revenue_rows(
     db: Session,
     organization_id: uuid.UUID,

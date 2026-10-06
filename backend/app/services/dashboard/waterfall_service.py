@@ -95,8 +95,6 @@ def _summarize(organization_id: uuid.UUID, waterfall_name: str, attribution: lis
                 detail_count=len(rows),
             )
         )
-    if waterfall_name == "arr":
-        _roll_arr_waterfall_balances(out, organization_id)
     return sorted(out, key=lambda r: (r.period, r.line_item_order))
 
 
@@ -125,84 +123,6 @@ def _add_total_gaap_revenue_rows(
                 detail_count=0,
             )
         )
-
-
-def _roll_arr_waterfall_balances(rows: list[WaterfallSummaryRow], organization_id: uuid.UUID) -> None:
-    """Force ARR waterfall balances to roll from movements.
-
-    Displayed ending ARR is calculated as:
-    beginning + new business + expansion - contraction - churn + reactivation.
-    Each next period's beginning ARR is then set to the prior calculated ending.
-    """
-    rows_by_key = {(row.scenario, row.period, row.waterfall_type): row for row in rows}
-    source_by_scenario_period: dict[tuple[str, str], set[str]] = defaultdict(set)
-    periods_by_scenario: dict[str, set[str]] = defaultdict(set)
-    for row in rows:
-        periods_by_scenario[row.scenario].add(row.period)
-        source_by_scenario_period[(row.scenario, row.period)].add(row.source_table)
-
-    def ensure_row(scenario: str, period: str, waterfall_type: str) -> WaterfallSummaryRow:
-        key = (scenario, period, waterfall_type)
-        if key in rows_by_key:
-            return rows_by_key[key]
-        source_table = ", ".join(sorted(source_by_scenario_period[(scenario, period)])) or "calculated"
-        row = WaterfallSummaryRow(
-            organization_id=str(organization_id),
-            scenario=scenario,
-            period=period,
-            waterfall_name="arr",
-            waterfall_type=waterfall_type,
-            line_item=_label(waterfall_type),
-            line_item_order=LINE_ORDER.get(waterfall_type, 999),
-            amount=Decimal("0"),
-            source_table=source_table,
-            detail_count=0,
-        )
-        rows_by_key[key] = row
-        rows.append(row)
-        return row
-
-    combined_actual_forecast = set(periods_by_scenario).issubset({"Actual", "Forecast"}) and len(periods_by_scenario) > 1
-    if combined_actual_forecast:
-        sequences = {
-            "Combined": sorted(
-                ((scenario, period) for scenario, periods in periods_by_scenario.items() for period in periods),
-                key=lambda item: item[1],
-            )
-        }
-    else:
-        sequences = {
-            scenario: [(scenario, period) for period in sorted(periods)]
-            for scenario, periods in periods_by_scenario.items()
-        }
-
-    for _sequence_name, sequence in sequences.items():
-        prior_ending: Decimal | None = None
-        for scenario, period in sequence:
-            beginning_row = ensure_row(scenario, period, "beginning")
-            if prior_ending is not None:
-                beginning_row.amount = prior_ending
-
-            beginning = beginning_row.amount
-            new_business = rows_by_key.get((scenario, period, "new_business"))
-            expansion = rows_by_key.get((scenario, period, "expansion"))
-            contraction = rows_by_key.get((scenario, period, "contraction"))
-            churn = rows_by_key.get((scenario, period, "churn"))
-            reactivation = rows_by_key.get((scenario, period, "reactivation"))
-
-            ending = (
-                beginning
-                + (new_business.amount if new_business else Decimal("0"))
-                + (expansion.amount if expansion else Decimal("0"))
-                + (reactivation.amount if reactivation else Decimal("0"))
-                + (contraction.amount if contraction else Decimal("0"))
-                + (churn.amount if churn else Decimal("0"))
-            )
-
-            ending_row = ensure_row(scenario, period, "ending")
-            ending_row.amount = ending
-            ending_row.source_table = f"{ending_row.source_table}, calculated_rollforward" if "calculated_rollforward" not in ending_row.source_table else ending_row.source_table
-            prior_ending = ending
 
 
 def _validate(rows: list[WaterfallSummaryRow], waterfall_name: str) -> list[ValidationCheck]:

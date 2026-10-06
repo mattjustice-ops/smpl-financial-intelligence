@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from app.services.reporting.export.board_chart_service import _wf
+from app.services.reporting.export.board_chart_service import _grr, _wf
 from app.services.reporting.export.is_line_resolver import ending_cash_at, fs_sum_periods
 from app.services.reporting.export.metric_registry import (
     compute_churn_arr,
@@ -61,8 +61,7 @@ def build_metrics_snapshot(bundle: ReportingBundle) -> BoardMetricsSnapshot:
     snap.new_arr_budget = compute_new_business_arr(bundle, as_of, "Budget")
     snap.expansion = compute_expansion_arr(bundle, as_of, "Actual")
     snap.churn = compute_churn_arr(bundle, as_of, "Actual")
-    if snap.ending_arr:
-        snap.grr = (snap.ending_arr - snap.churn) / snap.ending_arr
+    snap.grr = _grr(bundle, as_of)
 
     snap.pipeline_created = _wf(bundle, "pipeline", "pipeline_created", as_of)
     snap.closed_won = abs(_wf(bundle, "pipeline", "closed_won", as_of))

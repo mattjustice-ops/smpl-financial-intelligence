@@ -23,7 +23,6 @@ const PLATFORM_FILES = [
   "shared/smpl-demo-seed.js",
   "shared/smpl-pipeline.js",
   "shared/smpl-bootstrap-demo.js",
-  "shared/smpl-bootstrap-pipeline.js",
 ];
 
 function copy(rel) {

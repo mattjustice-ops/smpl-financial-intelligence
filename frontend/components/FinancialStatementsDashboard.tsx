@@ -43,7 +43,8 @@ const statementTabs = [
 ] as const;
 
 function money(value: string | number | null | undefined) {
-  const n = Number(value ?? 0);
+  if (value === null || value === undefined || value === "") return "Not loaded";
+  const n = Number(value);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",

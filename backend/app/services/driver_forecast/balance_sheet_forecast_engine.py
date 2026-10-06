@@ -1,4 +1,4 @@
-"""Balance sheet forecast tied to P&L, cash flow, and working capital schedules."""
+"""Balance sheet schedule from the loaded Actual and Forecast balance sheets."""
 
 from __future__ import annotations
 
@@ -7,19 +7,27 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.services.driver_forecast.common import month_range, period_type, q_money
-from app.services.driver_forecast.deferred_revenue_waterfall import build_deferred_revenue_waterfall
-from app.services.driver_forecast.forecast_cash_flow_engine import build_cash_flow_forecast
-from app.services.driver_forecast.repository import decimal_value
+from app.services.driver_forecast.common import month_range, period_type, q_opt
+from app.services.driver_forecast.repository import loaded_value
 from app.services.financial_statements.financial_statement_service import gl_balance_rows
 
-
-def decimal_value_any(row: dict, *keys: str) -> Decimal:
-    for key in keys:
-        value = row.get(key)
-        if value not in (None, ""):
-            return decimal_value(row, key)
-    return Decimal("0")
+PREPAIDS_KEYS = (
+    "prepaids_and_other_current",
+    "prepaids_and_other_current_assets",
+    "prepaid_and_other_current_assets",
+    "prepaids",
+    "prepaid_expenses",
+    "other_current_assets",
+)
+FIXED_ASSET_KEYS = (
+    "ppe_net",
+    "property_and_equipment_net",
+    "property_plant_and_equipment_net",
+    "property_plant_equipment_net",
+    "property_plant_net",
+    "fixed_assets",
+)
+DEBT_KEYS = ("debt", "total_debt", "debt_balance", "notes_payable")
 
 
 def build_balance_sheet_forecast(
@@ -28,78 +36,45 @@ def build_balance_sheet_forecast(
     *,
     start_period: date,
     end_period: date,
-    assumptions: dict[str, Decimal],
-) -> list[dict[str, Decimal | date]]:
+    assumptions: dict[str, Decimal] | None = None,
+) -> list[dict[str, Decimal | date | None]]:
+    """No carry-forwards or equity plugs: missing lines stay ``None`` and totals that need them do too."""
     periods = month_range(start_period, end_period)
-    explicit = gl_balance_rows(session, organization_id, "Forecast", start_period, end_period)
-    explicit_by_period = {r["period"]: r for r in explicit}
-    actual_rows = gl_balance_rows(session, organization_id, "Actual", start_period, end_period)
-    actual_by_period = {r["period"]: r for r in actual_rows}
-    cash_rows = {r["period"]: r for r in build_cash_flow_forecast(session, organization_id, start_period=start_period, end_period=end_period, assumptions=assumptions)}
-    deferred_rows = {r["period"]: r for r in build_deferred_revenue_waterfall(session, organization_id, start_period=start_period, end_period=end_period)}
-
-    rows: list[dict[str, Decimal | date]] = []
-    equity = Decimal("0")
-    carried_prepaids = Decimal("0")
-    carried_fixed_assets = Decimal("0")
-    carried_debt = Decimal("0")
+    by_scenario = {
+        s: {r["period"]: r for r in gl_balance_rows(session, organization_id, s, start_period, end_period)}
+        for s in ("Actual", "Forecast")
+    }
+    rows: list[dict[str, Decimal | date | None]] = []
     for period in periods:
-        row = actual_by_period.get(period, {}) if period_type(period) == "actual" else explicit_by_period.get(period, {})
-        cash = decimal_value(row, "cash") or decimal_value(cash_rows.get(period, {}), "ending_cash")
-        ar = decimal_value(row, "accounts_receivable")
-        deferred = decimal_value(row, "deferred_revenue") or decimal_value(deferred_rows.get(period, {}), "ending_deferred_revenue")
-        ap = decimal_value(row, "accounts_payable")
-        prepaids = decimal_value_any(
-            row,
-            "prepaids_and_other_current",
-            "prepaids_and_other_current_assets",
-            "prepaid_and_other_current_assets",
-            "prepaids",
-            "prepaid_expenses",
-            "other_current_assets",
-        )
-        fixed_assets = decimal_value_any(
-            row,
-            "ppe_net",
-            "property_and_equipment_net",
-            "property_plant_and_equipment_net",
-            "property_plant_equipment_net",
-            "property_plant_net",
-            "fixed_assets",
-        )
-        debt = decimal_value_any(row, "debt", "total_debt", "debt_balance", "notes_payable")
-        if prepaids:
-            carried_prepaids = prepaids
-        else:
-            prepaids = carried_prepaids
-        if fixed_assets:
-            carried_fixed_assets = fixed_assets
-        else:
-            fixed_assets = carried_fixed_assets
-        if debt:
-            carried_debt = debt
-        else:
-            debt = carried_debt
-        total_assets = cash + ar + prepaids + fixed_assets
-        total_liabilities = ap + deferred + debt
-        equity = decimal_value(row, "equity") or (total_assets - total_liabilities)
+        row = by_scenario["Actual" if period_type(period) == "actual" else "Forecast"].get(period)
+        cash = loaded_value(row, "cash")
+        ar = loaded_value(row, "accounts_receivable")
+        prepaids = loaded_value(row, *PREPAIDS_KEYS)
+        fixed_assets = loaded_value(row, *FIXED_ASSET_KEYS)
+        deferred = loaded_value(row, "deferred_revenue")
+        ap = loaded_value(row, "accounts_payable")
+        debt = loaded_value(row, *DEBT_KEYS)
+        equity = loaded_value(row, "equity", "total_equity")
+        total_assets = loaded_value(row, "total_assets")
+        total_liabilities = loaded_value(row, "total_liabilities")
+        total_le = None if total_liabilities is None or equity is None else total_liabilities + equity
         rows.append(
             {
                 "period": period,
-                "cash": q_money(cash),
-                "accounts_receivable": q_money(ar),
-                "prepaids_and_other_current_assets": q_money(prepaids),
-                "property_and_equipment_net": q_money(fixed_assets),
-                "deferred_revenue": q_money(deferred),
-                "accounts_payable": q_money(ap),
-                "prepaids": q_money(prepaids),
-                "fixed_assets": q_money(fixed_assets),
-                "debt": q_money(debt),
-                "equity": q_money(equity),
-                "total_assets": q_money(total_assets),
-                "total_liabilities": q_money(total_liabilities),
-                "total_liabilities_and_equity": q_money(total_liabilities + equity),
-                "balance_check": q_money(total_assets - total_liabilities - equity),
+                "cash": q_opt(cash),
+                "accounts_receivable": q_opt(ar),
+                "prepaids_and_other_current_assets": q_opt(prepaids),
+                "property_and_equipment_net": q_opt(fixed_assets),
+                "deferred_revenue": q_opt(deferred),
+                "accounts_payable": q_opt(ap),
+                "prepaids": q_opt(prepaids),
+                "fixed_assets": q_opt(fixed_assets),
+                "debt": q_opt(debt),
+                "equity": q_opt(equity),
+                "total_assets": q_opt(total_assets),
+                "total_liabilities": q_opt(total_liabilities),
+                "total_liabilities_and_equity": q_opt(total_le),
+                "balance_check": q_opt(None if total_assets is None or total_le is None else total_assets - total_le),
             }
         )
     return rows

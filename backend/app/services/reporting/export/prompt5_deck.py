@@ -219,19 +219,44 @@ def _marketing_by_channel_display(bundle: ReportingBundle, period: str, *, top_n
 
 
 def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
-    """Structured risks + opportunities for slide 8 — board platform R&O evidence.
+    """Slide 8 evidence: close-month budget variances ranked by size.
 
-    Prefer Board Platform Risks & Opportunities tab cards (renderRisks) as
-    authorship evidence over thin heuristic fillers so Claude can keep driver +
-    magnitude + action. Live slipped / closed-lost magnitudes are attached as
-    package cross-checks.
+    Only metrics with both an Actual and a Budget loaded produce a card, so every
+    magnitude the model can cite comes from the package.
     """
-    from app.services.reporting.export.board_platform_ro_seed import board_ro_cards_for_payload
-
-    seeded = board_ro_cards_for_payload()
-    # Cross-check magnitudes from the close package (do not displace board cards).
+    candidates = (
+        ("revenue", "Revenue", "P&L", m.revenue_actual, m.revenue_budget, True),
+        ("ebitda", "EBITDA", "P&L", m.ebitda_actual, m.ebitda_budget, True),
+        ("new_business_arr", "New Business ARR", "ARR", m.new_arr_actual, m.new_arr_budget, True),
+    )
+    revenue = abs(m.revenue_actual or Decimal("0"))
+    scored: list[tuple[Decimal, str, dict[str, str]]] = []
+    for key, label, category, actual, budget, higher_is_better in candidates:
+        if not actual or not budget:
+            continue
+        var = actual - budget
+        if var == 0:
+            continue
+        favorable = (var > 0) if higher_is_better else (var < 0)
+        share = abs(var) / revenue if revenue else None
+        level = "MEDIUM" if share is None else ("HIGH" if share >= Decimal("0.02") else "MEDIUM" if share >= Decimal("0.005") else "LOW")
+        card = {
+            "key": key,
+            "level": level,
+            "type": "OPPORTUNITY" if favorable else "RISK",
+            "category": category,
+            "title": f"{label} {'above' if var > 0 else 'below'} budget",
+            "detail": (
+                f"{label} {_money_k(actual)} vs budget {_money_k(budget)} "
+                f"({'+' if var > 0 else '-'}{_money_k(abs(var))}) for {_period_label(bundle.as_of_period)}."
+            ),
+            "evidence_amount_0": str(actual),
+            "evidence_amount_1": str(budget),
+            "evidence_amount_2": str(var),
+        }
+        scored.append((abs(var), card["type"], card))
+    scored.sort(key=lambda t: t[0], reverse=True)
     package_cross_check: dict[str, Any] = {
-        "source": "board_platform_ro_seed",
         "close_period": bundle.as_of_period,
         "slipped_pipeline": _money_k(m.slipped) if m.slipped else "—",
         "slipped_pipeline_raw": float(m.slipped or 0),
@@ -244,14 +269,13 @@ def _risks_and_opportunities(bundle: ReportingBundle, m) -> dict[str, Any]:
         "validation_status": getattr(bundle.validation, "status", None),
     }
     return {
-        "risks": seeded["risks"][:4],
-        "opportunities": seeded["opportunities"][:4],
+        "source": "close package budget variances",
+        "risks": [c for _, t, c in scored if t == "RISK"][:4],
+        "opportunities": [c for _, t, c in scored if t == "OPPORTUNITY"][:4],
         "package_cross_check": package_cross_check,
         "rewrite_policy": (
-            "Author ALL 4 risk cards and ALL 4 opportunity cards from BOARD R&O "
-            "EVIDENCE / these cards (include Paid channel inefficiency) — "
-            "keep driver, magnitude, action; PPTX-succinct; no thin stubs. "
-            "Evidence for authorship, not a blank-slot template."
+            "Author one card per listed variance (driver, magnitude, action); "
+            "PPTX-succinct. Do not add cards or magnitudes that are not in this evidence."
         ),
     }
 
@@ -592,7 +616,7 @@ def build_prompt5_package_preamble(
         format_gtm_narrative_requirements_block,
     )
 
-    ro_seed_block = format_board_ro_seed_block()
+    ro_seed_block = format_board_ro_seed_block(payload)
     gtm_seed_block = format_gtm_narrative_requirements_block()
     kt_seed_block = format_kt_seed_block(payload)
 
@@ -658,8 +682,8 @@ def build_prompt5_user_message(
         "Never emit blank or lone '—' takeaways.\n"
         "GTM/Pipeline Key Takeaways: follow GTM NARRATIVE REQUIREMENTS craft criteria "
         "(closed-lost, slipped, coverage, recommended board action) from package evidence.\n"
-        "Strategic Assessment risk/opportunity cards: author from BOARD R&O EVIDENCE "
-        "(driver + magnitude + action) — never thin stubs or empty '-'.\n"
+        "Strategic Assessment risk/opportunity cards: author only from BOARD R&O EVIDENCE "
+        "(driver + magnitude + action) — never thin stubs, empty '-', or cards it does not list.\n"
         "When a freeze block is present above, inject its drivers into takeaway narrative. "
         "Use the full package for board-ready story — do not invent outside the packages; "
         "do not keep thin one-line delta stubs.\n\n"
@@ -1565,7 +1589,7 @@ def _try_adapt_from_reference(
         "GTM/Pipeline takeaways: follow GTM NARRATIVE REQUIREMENTS craft criteria "
         "(closed-lost, slipped, coverage, recommended action) from gtm_performance + "
         "EVIDENCE PACKAGE.\n"
-        "Risks/Opportunities cards: author from BOARD R&O EVIDENCE (board risk matrix) "
+        "Risks/Opportunities cards: author only from BOARD R&O EVIDENCE (close budget variances) "
         "— keep driver, magnitude, action; PPTX-succinct; never 'Close validation' "
         "fillers or empty '-'.\n"
         "Return complete raw JavaScript ending with pptx.writeFile({ fileName: 'OUTPUT.pptx' }).\n\n"

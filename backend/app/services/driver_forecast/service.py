@@ -114,8 +114,8 @@ def assumptions_schedule(session: Session, organization_id: uuid.UUID, *, scenar
             "period": a.effective_period,
             "assumption_name": a.assumption_name,
             "assumption_category": a.assumption_category,
-            "actual_value": a.actual_value or Decimal("0"),
-            "forecast_value": a.forecast_value or Decimal("0"),
+            "actual_value": a.actual_value,
+            "forecast_value": a.forecast_value,
         }
         for a in assumptions
     ]
@@ -129,8 +129,7 @@ def driver_summary(session: Session, organization_id: uuid.UUID, *, scenario: st
     bridge = operating_cash_bridge_schedule(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
     bs = balance_sheet_schedule(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
     assumptions = assumptions_schedule(session, organization_id, scenario=scenario, start_period=start_period, end_period=end_period)
-    ending_cash = cash.rows[-1].values.get("ending_cash", Decimal("0")) if cash.rows else Decimal("0")
-    ending_arr = Decimal("0")
+    ending_cash = cash.rows[-1].values.get("ending_cash") if cash.rows else None
     return DriverSummaryResponse(
         organization_id=str(organization_id),
         scenario=scenario,
@@ -138,7 +137,7 @@ def driver_summary(session: Session, organization_id: uuid.UUID, *, scenario: st
         end_period=end_period,
         actual_periods=cash.actual_periods,
         forecast_periods=cash.forecast_periods,
-        kpis={"ending_cash": ending_cash if isinstance(ending_cash, Decimal) else Decimal("0"), "ending_arr": ending_arr},
+        kpis={"ending_cash": ending_cash if isinstance(ending_cash, Decimal) else None},
         schedules={"cash_flow": cash, "deferred_revenue_waterfall": deferred, "working_capital": working_capital, "operating_cash_bridge": bridge, "balance_sheet": bs, "assumptions": assumptions},
         dbt_models=["stg_actual_income_statement", "stg_forecast_opportunities", "int_billings_forecast", "int_deferred_revenue_waterfall", "fct_driver_cash_flow", "fct_forecast_balance_sheet"],
         frontend_visualizations={"line_charts": ["ending_cash", "accounts_receivable", "deferred_revenue"], "waterfalls": ["deferred_revenue_waterfall"], "bridges": ["operating_cash_bridge"], "tables": ["assumptions", "balance_sheet"]},

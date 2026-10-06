@@ -183,8 +183,8 @@ WIDTH below the waterfall, label at y=5.05, 3 bullets — not overlapping the br
 the bars, or the category labels.
 
 Slide 8 — STRATEGIC ASSESSMENT: 2 columns — RISKS left (red border), OPPORTUNITIES right
-(green border). Author 4 cards each from BOARD R&O EVIDENCE /
-risks_and_opportunities (board platform risk matrix — keep driver+$+action).
+(green border). Author up to 4 cards each, one per variance in BOARD R&O EVIDENCE /
+risks_and_opportunities (close budget variances — keep driver+$+action; no extra cards).
 Each card: level badge, title, detail with $, action line, impact/upside field.
 Never thin stubs or empty "-" details.
 

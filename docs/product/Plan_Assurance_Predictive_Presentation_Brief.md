@@ -336,8 +336,7 @@ See also: [SMPL_Agent_and_Predictive_Analytics_Checklist.md](./SMPL_Agent_and_Pr
 |---------|----------|
 | Overview (risk + YoY visuals) | `frontend/public/budget-engine/index.html` → `renderOverview` |
 | Analytics tab | `renderAnalytics` · nav `data-tab="analytics"` |
-| Predictive craft (Claude HTML) | `frontend/public/budget-engine/plan-assurance-levers.html` (iframe + `smpl:pa-levers` live packet) |
-| Live packet bridge | `buildPaLeversLivePacket` / `pushPaLeversToFrame` |
+| Live packet | `buildPaLeversLivePacket` (native Analytics tab; the iframe page was removed) |
 | Outlier engine | `runHistoryOutlierReview` |
 | Risk checks | `runBudgetRiskChecks` (Overview) |
 | Stress + MC | `runScenarioStressSuite`, `runScenarioMonteCarlo*` |
