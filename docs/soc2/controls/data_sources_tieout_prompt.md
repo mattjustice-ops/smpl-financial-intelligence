@@ -164,9 +164,9 @@ ORDER BY period;
 | KPI | JS Source | Warehouse |
 |---|---|---|
 | Ending Cash | `CASH_ACT[last]` | `bank_account_balances.ending_balance` WHERE balance_date=last day of CLOSE_MONTH |
-| June Collections | `COLL[last]` | `cash_flow_statement.cash_collections` WHERE period=CLOSE_MONTH |
-| Cash vs Floor | `CASH_ACT[last] - 10.0` | `ending_cash - cash_floor` |
-| Runway | derived from cash/burn | computed |
+| `${CLOSE_MO}` Net Change | `CASH_BRIDGE` net change for CLOSE_MONTH | `cash_flow_statement.net_change_in_cash` WHERE period=CLOSE_MONTH |
+| Cash vs Floor | `CASH_ACT[last] - boardCashFloorM()` | `ending_cash - cash_flow.cash_floor` (loaded); "Cash floor not loaded" when the dataset has no floor — never a typed-in $10M |
+| `${CLOSE_MO}` Financing | `CASH_BRIDGE` financing for CLOSE_MONTH | `cash_flow.financing_to_maintain_cash_floor` |
 
 #### Arrays
 ```
@@ -1172,6 +1172,35 @@ Returns all data needed to populate `SRC` in the Forecast Engine:
 
 ---
 
+## Part 6 — Backend Exports, Forecast Schedules & Plan Assurance (no fill-ins)
+
+Same rule as the platform: loaded values only; a missing input is reported as
+"n/a" / "Not loaded" / `null`, never a default.
+
+| Area | Source | When not loaded |
+|---|---|---|
+| Actual vs forecast split (`/api/v1/forecast/*`) | Last closed Actual month in the warehouse (`infer_as_of_period`) | Every month is treated as forecast |
+| Forecast cash flow, working capital, operating bridge, balance sheet, deferred revenue schedules | GL Actual / Forecast statements, paid invoices, `forecast_cash_collections`, `forecast_revenue_schedule` billings | Line is `null` — no modeled collections (DSO lag), capex % of revenue, SBC % of S&M, zero financing, carried-forward balances, equity plug or back-solved deferred revenue |
+| Driver assumptions (DSO, DPO, …) | `forecast_driver_assumptions` | Not shown — no default assumption set |
+| ARR waterfall balances (dashboard) | Loaded `beginning_arr` / `ending_arr` | Not rolled forward from movements; `arr_waterfall_ties` and ending = next beginning checks flag any break |
+| Pipeline waterfall (marketing fallback) | Loaded beginning / ending pipeline | No running-balance or Actual-to-Budget fills |
+| Deferred revenue recognized (attribution) | Loaded `deferred_revenue_recognized` / `revenue_recognized` | No triangular run-off of the opening balance |
+| GRR (board exports, metrics snapshot) | Loaded `gross_retention_rate`; else (BOP − churn − contraction) / BOP from loaded components | "n/a" when beginning ARR is not loaded |
+| Net New ARR (board exports) | Loaded `net_new_arr`; else NB + expansion + reactivation − contraction − churn | — |
+| Cash floor (deck commentary, cash liquidity block, cash chart, Plan Assurance) | `cash_flow.cash_floor` / cash bridge `cash_floor` | Floor, headroom and floor-breach probabilities are "n/a" / `null`; the cash chart shows ending cash only |
+| Plan Assurance forecast packet | Values passed by the surface | Missing inputs stay missing (no min cash = end cash, Jan HC expected = Jan HC, channel MQL = MQL, mix deviation = 0) — the constraint reports `missing_inputs` |
+| KPI CAC payback / LTV | `gross_margin` passed by the caller | `null` — no 70% default |
+| Open reqs (board workforce) | Status in the approved set and, when the column exists, `approved_flag` = Yes | Not counted |
+| Prompt 5 Risks & Opportunities | Close-month budget variances (Revenue, EBITDA, New Business ARR) ranked by size | Fewer cards; no static risk/opportunity list |
+| Prompt 5 Key Takeaways evidence | Payload numbers only, stated as facts | No judgement or outlook text |
+| Board callouts | Loaded variances and amounts | No canned actions |
+
+**Known data flag (needs owner review):** `Actual_MRR_Waterfall` 2026-06 carries
+`gross_retention_rate` 0.9938 while its own components give
+(83,445,000 − 313,651.94 − 520,156.87) / 83,445,000 = 0.9900. The loaded rate is
+displayed; the mismatch should be fixed in the dataset.
+
+---
 
 *SMPL.ai — We make finance simple.*
 *Data sources, warehouse alignment & tie-out specification — June 2026*

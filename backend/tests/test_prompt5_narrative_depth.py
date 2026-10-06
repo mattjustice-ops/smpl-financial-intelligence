@@ -5,10 +5,8 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from app.services.reporting.export.board_platform_ro_seed import (
-    BOARD_PLATFORM_RISKS_OPPORTUNITIES,
     BOARD_RO_SEED_MARKER,
     GTM_NARRATIVE_SEED_MARKER,
-    board_ro_cards_for_payload,
     format_board_ro_seed_block,
     format_gtm_narrative_requirements_block,
 )
@@ -74,27 +72,29 @@ def test_prompt5_v3_and_adapt_systems_embed_narrative_rules() -> None:
     assert "max 22 words" not in PROMPT5_ADAPT_SYSTEM
 
 
-def test_board_ro_seed_matches_board_platform_tab_cards() -> None:
-    cards = BOARD_PLATFORM_RISKS_OPPORTUNITIES
-    assert len(cards["risks"]) == 4
-    assert len(cards["opportunities"]) == 4
-    titles = {c["title"] for c in cards["risks"]} | {c["title"] for c in cards["opportunities"]}
-    assert "Paid channel inefficiency" in titles
-    assert "SMB churn concentration" in titles
-    assert "New logo $325k behind plan" in titles
-    assert "H2 collections moderation" in titles
-    assert "Partner + Referral reallocation" in titles
-    assert "Expansion ARR momentum" in titles
-    assert "Annual contract expansion" in titles
-    assert "Operating leverage improvement" in titles
-    payload = board_ro_cards_for_payload()
-    assert all(c.get("detail") and c.get("action") for c in payload["risks"])
-    assert all(c.get("detail") and c.get("action") for c in payload["opportunities"])
-    seed = format_board_ro_seed_block()
+_RO_PAYLOAD = {
+    "source": "close package budget variances",
+    "risks": [
+        {
+            "level": "MEDIUM",
+            "type": "RISK",
+            "category": "P&L",
+            "title": "Revenue below budget",
+            "detail": "Revenue $7.1M vs budget $7.3M (-$200.0K) for June 2026.",
+        }
+    ],
+    "opportunities": [],
+}
+
+
+def test_board_ro_seed_is_built_from_close_payload_only() -> None:
+    seed = format_board_ro_seed_block({"risks_and_opportunities": _RO_PAYLOAD})
     assert BOARD_RO_SEED_MARKER in seed
-    assert "Paid channel inefficiency" in seed
-    assert "AUTHORSHIP" in BOARD_RO_SEED_MARKER or "evidence" in seed.lower()
-    assert "slot-fill" in seed.lower() or "blank-slot" in seed.lower() or "author" in seed.lower()
+    assert "Revenue below budget" in seed
+    assert "never invent" in seed.lower()
+    empty = format_board_ro_seed_block({})
+    assert '"risks":[]' in empty and '"opportunities":[]' in empty
+    assert "Paid channel inefficiency" not in empty
     gtm = format_gtm_narrative_requirements_block()
     assert GTM_NARRATIVE_SEED_MARKER in gtm
     assert "CRAFT" in GTM_NARRATIVE_SEED_MARKER or "craft" in gtm.lower()
@@ -118,7 +118,7 @@ def test_prompt5_preamble_and_user_message_inject_ro_and_gtm_seeds() -> None:
             "months": ["Jun", "Jul"],
             "ending_arr_outlook_m": [86.1, 88.2],
         },
-        "risks_and_opportunities": board_ro_cards_for_payload(),
+        "risks_and_opportunities": _RO_PAYLOAD,
         "gtm_performance": {
             "closed_lost_raw": 7_910_000,
             "slipped_pipeline_raw": 9_870_000,
@@ -128,8 +128,8 @@ def test_prompt5_preamble_and_user_message_inject_ro_and_gtm_seeds() -> None:
     preamble = build_prompt5_package_preamble(fake_payload)
     assert BOARD_RO_SEED_MARKER in preamble
     assert GTM_NARRATIVE_SEED_MARKER in preamble
-    assert "Paid channel inefficiency" in preamble
-    assert "SMB churn concentration" in preamble
+    assert "Revenue below budget" in preamble
+    assert "SMB churn concentration" not in preamble
     assert "closed-lost" in preamble.lower()
 
     with patch(

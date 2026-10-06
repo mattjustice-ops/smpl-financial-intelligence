@@ -28,6 +28,30 @@ def _wf(bundle: ReportingBundle, key: str, wtype: str, period: str, scenario: st
     return Decimal("0")
 
 
+def _grr(bundle: ReportingBundle, period: str) -> Decimal | None:
+    loaded = _wf(bundle, "arr", "gross_retention_rate", period) or _wf(bundle, "arr", "grr", period)
+    if loaded:
+        return loaded
+    bop = _wf(bundle, "arr", "beginning_arr", period) or _wf(bundle, "arr", "beginning", period)
+    if not bop:
+        return None
+    churn = abs(_wf(bundle, "arr", "churn_arr", period) or _wf(bundle, "arr", "churn", period))
+    cont = abs(_wf(bundle, "arr", "contraction_arr", period) or _wf(bundle, "arr", "contraction", period))
+    return (bop - churn - cont) / bop
+
+
+def _net_new(bundle: ReportingBundle, period: str) -> Decimal:
+    loaded = _wf(bundle, "arr", "net_new_arr", period)
+    if loaded:
+        return loaded
+    nb = _wf(bundle, "arr", "new_business", period) or _wf(bundle, "arr", "new_arr", period)
+    exp = _wf(bundle, "arr", "expansion_arr", period) or _wf(bundle, "arr", "expansion", period)
+    react = _wf(bundle, "arr", "reactivation_arr", period) or _wf(bundle, "arr", "reactivation", period)
+    cont = abs(_wf(bundle, "arr", "contraction_arr", period) or _wf(bundle, "arr", "contraction", period))
+    churn = abs(_wf(bundle, "arr", "churn_arr", period) or _wf(bundle, "arr", "churn", period))
+    return nb + exp + react - cont - churn
+
+
 def _kpi(
     label: str,
     value: str,
@@ -79,9 +103,8 @@ def executive_scorecard_kpis(bundle: ReportingBundle) -> list[KpiCard]:
     cur = bundle.currency
     arr = _wf(bundle, "arr", "ending_arr", as_of) or _wf(bundle, "arr", "ending", as_of)
     arr_b = _wf(bundle, "arr", "ending_arr", as_of, "Budget") or _wf(bundle, "arr", "ending", as_of, "Budget")
-    new_arr = _wf(bundle, "arr", "new_arr", as_of) or _wf(bundle, "arr", "new_business", as_of)
-    churn = abs(_wf(bundle, "arr", "churn_arr", as_of) or _wf(bundle, "arr", "churn", as_of))
-    grr = ((arr - churn) / arr) if arr else None
+    new_arr = _net_new(bundle, as_of)
+    grr = _grr(bundle, as_of)
 
     revenue = ebitda = Decimal("0")
     rev_b = ebitda_b = Decimal("0")
@@ -175,20 +198,19 @@ def executive_callouts(bundle: ReportingBundle) -> list:
     m = build_metrics_snapshot(bundle)
     wins: list[CalloutBlock] = []
     risks: list[CalloutBlock] = []
-    actions: list[CalloutBlock] = []
 
     if m.new_arr_actual > m.new_arr_budget and m.new_arr_budget:
         wins.append(
             CalloutBlock(
                 kind="win",
-                text=f"Net new ARR beat budget by {fmt_money(m.new_arr_actual - m.new_arr_budget, m.currency)}.",
+                text=f"New business ARR beat budget by {fmt_money(m.new_arr_actual - m.new_arr_budget, m.currency)}.",
             )
         )
     if m.expansion > m.churn:
         wins.append(
             CalloutBlock(
                 kind="win",
-                text="Expansion ARR exceeded churn, supporting net retention momentum.",
+                text=f"Expansion ARR ({fmt_money(m.expansion, m.currency)}) exceeded churn ({fmt_money(m.churn, m.currency)}).",
             )
         )
     if m.pipeline_from_marketing and m.marketing_spend:
@@ -197,7 +219,7 @@ def executive_callouts(bundle: ReportingBundle) -> list:
             wins.append(
                 CalloutBlock(
                     kind="win",
-                    text=f"GTM efficiency improved with pipeline/spend at {float(ratio):.1f}x.",
+                    text=f"Marketing-sourced pipeline / marketing spend at {float(ratio):.1f}x.",
                 )
             )
 
@@ -222,21 +244,7 @@ def executive_callouts(bundle: ReportingBundle) -> list:
             )
         )
 
-    actions.append(
-        CalloutBlock(
-            kind="action",
-            text="Reconcile MRR waterfall to closed-won opportunities and refresh forecast confidence by segment.",
-            owner="CFO",
-        )
-    )
-    actions.append(
-        CalloutBlock(
-            kind="action",
-            text="Double down on top-performing channels; pause or restructure bottom-quartile spend.",
-            owner="CMO",
-        )
-    )
-    return (wins[:3] + risks[:3] + actions[:3])[:9]
+    return wins[:3] + risks[:3]
 
 
 # ---------------------------------------------------------------------------
@@ -278,18 +286,18 @@ def arr_waterfall_chart(bundle: ReportingBundle) -> ChartSpec | None:
 def arr_retention_kpis(bundle: ReportingBundle) -> list[KpiCard]:
     as_of = bundle.as_of_period
     cur = bundle.currency
-    arr = _wf(bundle, "arr", "ending_arr", as_of) or _wf(bundle, "arr", "ending", as_of)
+    bop = _wf(bundle, "arr", "beginning_arr", as_of) or _wf(bundle, "arr", "beginning", as_of)
     churn = abs(_wf(bundle, "arr", "churn_arr", as_of) or _wf(bundle, "arr", "churn", as_of))
     expansion = _wf(bundle, "arr", "expansion_arr", as_of) or _wf(bundle, "arr", "expansion", as_of)
-    new_arr = _wf(bundle, "arr", "new_arr", as_of) or _wf(bundle, "arr", "new_business", as_of)
-    grr = ((arr - churn) / arr) if arr else None
-    churn_pct = (churn / arr) if arr else None
-    exp_pct = (expansion / arr) if arr else None
+    new_arr = _net_new(bundle, as_of)
+    grr = _grr(bundle, as_of)
+    churn_pct = (churn / bop) if bop else None
+    exp_pct = (expansion / bop) if bop else None
     return [
         _kpi("Net New ARR", fmt_money(new_arr, cur), group="growth"),
-        _kpi("GRR", fmt_pct(grr) if grr else "n/a", group="growth"),
-        _kpi("Churn %", fmt_pct(churn_pct) if churn_pct else "n/a", tone="unfavorable", group="growth"),
-        _kpi("Expansion %", fmt_pct(exp_pct) if exp_pct else "n/a", tone="favorable", group="growth"),
+        _kpi("GRR", fmt_pct(grr) if grr is not None else "n/a", group="growth"),
+        _kpi("Churn %", fmt_pct(churn_pct) if churn_pct is not None else "n/a", tone="unfavorable", group="growth"),
+        _kpi("Expansion %", fmt_pct(exp_pct) if exp_pct is not None else "n/a", tone="favorable", group="growth"),
     ]
 
 
@@ -395,28 +403,29 @@ def cash_forecast_line_chart(bundle: ReportingBundle) -> ChartSpec | None:
     year = int(as_of[:4])
     periods: list[str] = []
     cash_vals: list[float] = []
+    floor_vals: list[float] = []
     for m in range(1, 13):
         p = f"{year:04d}-{m:02d}"
         if p > as_of and bundle.scenario != "Forecast":
             break
         v = float(_wf(bundle, "cash_flow", "ending_cash", p, "Actual") or _wf(bundle, "cash_flow", "ending_cash", p, "Forecast"))
-        if v == 0 and p != as_of:
+        if v == 0:
             continue
         periods.append(p[5:7] + "/" + p[2:4])
         cash_vals.append(v)
+        floor_vals.append(
+            float(_wf(bundle, "cash_flow", "cash_floor", p, "Actual") or _wf(bundle, "cash_flow", "cash_floor", p, "Forecast"))
+        )
     if len(periods) < 2:
-        end = float(_wf(bundle, "cash_flow", "ending_cash", as_of))
-        if end == 0:
-            return cash_operating_chart(bundle)
-        periods = ["Prior", as_of[5:7]]
-        cash_vals = [end * 0.9, end]
-    floor = min(cash_vals) * 0.4 if cash_vals else 0.0
-    covenant = [floor] * len(periods)
+        return cash_operating_chart(bundle)
+    series = {"Ending Cash": cash_vals}
+    if all(floor_vals):
+        series["Cash Floor"] = floor_vals
     return ChartSpec(
         chart_type="line",
-        title="Cash vs Liquidity Floor",
+        title="Cash vs Liquidity Floor" if "Cash Floor" in series else "Ending Cash",
         categories=periods,
-        series={"Ending Cash": cash_vals, "Min Floor (proxy)": covenant},
+        series=series,
         y_axis_label="USD",
     )
 
@@ -469,7 +478,7 @@ def deferred_revenue_chart(bundle: ReportingBundle) -> ChartSpec | None:
 
 def revenue_story_chart(bundle: ReportingBundle) -> ChartSpec | None:
     as_of = bundle.as_of_period
-    net_new = float(_wf(bundle, "arr", "new_arr", as_of) or _wf(bundle, "arr", "new_business", as_of))
+    net_new = float(_net_new(bundle, as_of))
     bill = float(
         _wf(bundle, "deferred_revenue", "new_billings", as_of)
         or _wf(bundle, "deferred_revenue", "billings", as_of)

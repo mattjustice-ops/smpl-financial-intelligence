@@ -316,7 +316,7 @@ def _metrics_executive(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]
         **pct_trio("gross_margin", gm_act, gm_bud),
         **money_trio("ebitda", m.ebitda_actual, m.ebitda_budget),
         **money_trio("cash", cash.current_month, cash_bud or cash.budget_cm),
-        **_cash_floor_fields(cash.current_month),
+        **_cash_floor_fields(bundle, as_of, cash.current_month),
         "n_dollar_r_actual": fmt_deck_pct(ndr) if ndr is not None else "n/a",
         "n_dollar_r_budget": "n/a",
         **money_trio("ytd_revenue", rev.ytd, rev.budget_ytd),
@@ -378,29 +378,34 @@ def _metrics_pl(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
     }
 
 
-CASH_FLOOR = Decimal("10000000")
+def _loaded_cash_floor(bundle: ReportingBundle, as_of: str) -> Decimal | None:
+    floor = _wf(bundle, "cash_flow", "cash_floor", as_of, "Actual") or _wf(
+        bundle, "cash_flow", "cash_floor", as_of, "Forecast"
+    )
+    return floor or None
 
 
-def _cash_floor_fields(cash_actual: Decimal | None) -> dict[str, str]:
+def _cash_floor_fields(bundle: ReportingBundle, as_of: str, cash_actual: Decimal | None) -> dict[str, str]:
     """Publish the floor and headroom on every slide whose bullets discuss cash.
 
     Both are deterministic, but they used to live only on the cash slides, so the
     same accurate liquidity sentence verified there and was deleted on the summary
     slides for quoting figures that slide never published.
     """
+    floor = _loaded_cash_floor(bundle, as_of)
+    if floor is None:
+        return {"cash_floor": "n/a"}
     if cash_actual is None:
-        return {}
+        return {"cash_floor": fmt_deck_money(floor)}
     return {
-        "cash_floor": fmt_deck_money(CASH_FLOOR),
-        "cash_headroom": fmt_deck_money(cash_actual - CASH_FLOOR),
+        "cash_floor": fmt_deck_money(floor),
+        "cash_headroom": fmt_deck_money(cash_actual - floor),
         # Liquidity bullets reach for a coverage multiple, and cash over floor is a
         # real quotient of two published figures. Leaving it unpublished meant the
         # model divided them itself and the bullet was deleted for a number the
         # engine could have stated exactly.
-        **ratio_fields("cash_floor_coverage", cash_actual / CASH_FLOOR),
-        **ratio_fields(
-            "cash_headroom_coverage", (cash_actual - CASH_FLOOR) / CASH_FLOOR
-        ),
+        **ratio_fields("cash_floor_coverage", cash_actual / floor),
+        **ratio_fields("cash_headroom_coverage", (cash_actual - floor) / floor),
     }
 
 
@@ -416,7 +421,7 @@ def _metrics_cash(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
         **money_trio("cash", cash.current_month, cash_bud or cash.budget_cm),
         "collections_actual": fmt_deck_money(collections),
         **money_trio("cfo", cfo_a, cfo_b),
-        **_cash_floor_fields(cash.current_month),
+        **_cash_floor_fields(bundle, as_of, cash.current_month),
         "h2_cash_forecast": fmt_deck_money(cash.fy_outlook),
     }
 
@@ -498,7 +503,7 @@ def _metrics_risks(bundle: ReportingBundle, m, as_of: str) -> dict[str, str]:
         "deferred_pipeline": fmt_deck_money(m.slipped),
         "pipeline_created": fmt_deck_money(m.pipeline_created),
         "cash_actual": fmt_deck_money(m.cash_actual),
-        **_cash_floor_fields(m.cash_actual),
+        **_cash_floor_fields(bundle, as_of, m.cash_actual),
         "data_gaps": gaps or "none",
     }
 

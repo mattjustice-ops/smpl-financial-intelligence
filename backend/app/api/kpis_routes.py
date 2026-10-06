@@ -59,7 +59,7 @@ def run_kpis_endpoint(
     period_start: date = Query(..., description="Inclusive start date"),
     period_end: date = Query(..., description="Inclusive end date"),
     target_bookings: Optional[Decimal] = Query(None, description="Target ARR bookings for pipeline coverage"),
-    gross_margin: Decimal = Query(Decimal("0.7"), ge=Decimal("0"), le=Decimal("1")),
+    gross_margin: Optional[Decimal] = Query(None, ge=Decimal("0"), le=Decimal("1")),
     net_burn: Optional[Decimal] = Query(None, description="Net burn for the period; positive = burning cash"),
     prior_period_revenue: Optional[Decimal] = Query(None),
     prior_period_sales_marketing_expense: Optional[Decimal] = Query(None),
@@ -99,7 +99,7 @@ def preview_kpis(
     period_start: date = Query(...),
     period_end: date = Query(...),
     target_bookings: Optional[Decimal] = Query(None),
-    gross_margin: Decimal = Query(Decimal("0.7")),
+    gross_margin: Optional[Decimal] = Query(None),
     net_burn: Optional[Decimal] = Query(None),
     db: Session = Depends(get_db),
 ) -> KpiRunResponse:

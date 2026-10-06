@@ -39,7 +39,7 @@ def run_kpis(
     period_start: date,
     period_end: date,
     target_bookings: Optional[Decimal] = None,
-    gross_margin: Decimal = Decimal("0.7"),
+    gross_margin: Optional[Decimal] = None,
     net_burn: Optional[Decimal] = None,
     prior_period_revenue: Optional[Decimal] = None,
     prior_period_sales_marketing_expense: Optional[Decimal] = None,

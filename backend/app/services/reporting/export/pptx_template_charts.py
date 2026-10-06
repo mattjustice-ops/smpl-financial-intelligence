@@ -495,7 +495,7 @@ def apply_slide_kpi_cards(prs, bundle: ReportingBundle, key_to_idx: dict[str, in
                 changed += _update_kpi_card(
                     group,
                     value=str(cm.get("cash_headroom_vs_floor") or "n/a"),
-                    subtext=f"Floor: {cm.get('cash_floor') or '$10.0M'}",
+                    subtext=f"Floor: {cm.get('cash_floor') or 'not loaded'}",
                 )
             elif "cfo" in label or "operating" in label:
                 changed += _update_kpi_card(

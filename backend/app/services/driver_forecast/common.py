@@ -45,8 +45,24 @@ def month_range(start_period: date, end_period: date) -> list[date]:
     return out
 
 
-def period_type(period: date, actual_cutoff: date = date(2026, 5, 1)) -> str:
+def period_type(period: date, actual_cutoff: date | None = None) -> str:
+    """Actual through the loaded close month bound for the request; forecast after it.
+
+    With no close month bound (no actuals loaded), every period is forecast.
+    """
+    if actual_cutoff is None:
+        from app.services.reporting.as_of_period import active_as_of_period
+
+        try:
+            as_of = active_as_of_period()
+        except ValueError:
+            return "forecast"
+        actual_cutoff = date(int(as_of[:4]), int(as_of[5:7]), 1)
     return "actual" if month_start(period) <= actual_cutoff else "forecast"
+
+
+def q_opt(value: Decimal | None) -> Decimal | None:
+    return None if value is None else q_money(value)
 
 
 def sum_decimal(values: Iterable[Decimal | None]) -> Decimal:

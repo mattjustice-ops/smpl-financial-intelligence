@@ -155,10 +155,9 @@ def _eval_grr_floor(p: dict[str, Any], q: dict[str, Any]):
 
 
 def _eval_cash_floor(p: dict[str, Any], q: dict[str, Any]):
-    end = _get(p, "end_cash")
-    if end is None:
+    end, floor = _get(p, "end_cash"), q.get("floor")
+    if end is None or floor is None:
         return None
-    floor = q["floor"]
     gap = end - floor
     if end >= floor:
         return ("ok", "Dec cash floor", f"{_m(end)} ≥ floor {_m(floor)}.", end, floor, gap, "currency")
@@ -167,10 +166,9 @@ def _eval_cash_floor(p: dict[str, Any], q: dict[str, Any]):
 
 
 def _eval_cash_path(p: dict[str, Any], q: dict[str, Any]):
-    low, end = _get(p, "min_cash"), _get(p, "end_cash")
-    if low is None:
+    low, end, floor = _get(p, "min_cash"), _get(p, "end_cash"), q.get("floor")
+    if low is None or floor is None:
         return None
-    floor = q["floor"]
     period = _get(p, "min_cash_period") or "trough"
     gap = low - floor
     if low >= floor:

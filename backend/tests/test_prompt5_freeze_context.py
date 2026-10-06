@@ -49,7 +49,7 @@ def test_prompt5_user_message_includes_freeze_context_and_stale_label() -> None:
     assert "BOARD R&O EVIDENCE" in msg
     assert "GTM NARRATIVE REQUIREMENTS" in msg
     assert "CRAFT CRITERIA" in msg
-    assert "Paid channel inefficiency" in msg
+    assert "Paid channel inefficiency" not in msg
 
 
 def test_prompt5_user_message_omits_freeze_block_when_absent() -> None:

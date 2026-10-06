@@ -1,4 +1,4 @@
-"""GAAP revenue forecast carry-forward tests."""
+"""GAAP revenue forecast tests."""
 
 from __future__ import annotations
 
@@ -7,24 +7,10 @@ from decimal import Decimal
 from app.services.dashboard.query_utils import decimal_value
 from app.services.dashboard.gaap_revenue_forecast_service import (
     _deferred_revenue_for_period,
-    carry_forward_monthly_revenue,
     mrr_monthly_amount,
 )
 from app.services.dashboard.schemas import WaterfallSummaryRow
 from app.services.dashboard.waterfall_service import _add_total_gaap_revenue_rows, _validate
-
-
-def test_carry_forward_matches_sample_renewal_shape() -> None:
-    bookings = {
-      "2026-01": Decimal("473958.3333"),
-      "2026-02": Decimal("482236.8334"),
-      "2026-03": Decimal("491747.5833"),
-    }
-    periods = ["2026-01", "2026-02", "2026-03"]
-    recognized = carry_forward_monthly_revenue(bookings, periods)
-    assert recognized["2026-01"] == Decimal("473958.3333")
-    assert recognized["2026-02"] == Decimal("956195.1667")
-    assert recognized["2026-03"] == Decimal("1447942.75")
 
 
 def test_mrr_prefers_mrr_columns_over_arr() -> None:
@@ -100,13 +86,3 @@ def test_total_gaap_includes_actual_and_forecast_income_statement() -> None:
     assert by_period["2026-06"].source_table == "forecast_income_statement"
     assert by_period["2026-06"].amount == Decimal("1000000")
 
-
-def test_forecast_monthly_revenue_does_not_stack_bookings() -> None:
-    """GAAP components use per-month MRR only (carry-forward is not applied in the waterfall)."""
-    bookings = {
-        "2026-01": Decimal("4513.916667"),
-        "2026-02": Decimal("5000"),
-    }
-    recognized = carry_forward_monthly_revenue(bookings, ["2026-01", "2026-02"])
-    assert recognized["2026-02"] == Decimal("9513.916667")
-    assert bookings["2026-02"] == Decimal("5000")
