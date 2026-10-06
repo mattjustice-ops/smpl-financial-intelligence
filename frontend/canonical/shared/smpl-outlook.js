@@ -620,12 +620,11 @@
     }
 
     if (hooks.SRC && data.SRC && data.SRC.opp_pipeline && Object.keys(data.SRC.opp_pipeline).length) {
-      hooks.SRC.opp_pipeline = hooks.SRC.opp_pipeline || {};
-      Object.keys(data.SRC.opp_pipeline).forEach(function (period) {
-        hooks.SRC.opp_pipeline[period] = JSON.parse(JSON.stringify(data.SRC.opp_pipeline[period]));
-      });
+      hooks.SRC.opp_pipeline = JSON.parse(JSON.stringify(data.SRC.opp_pipeline));
       hooks.SRC.gtm = data.SRC.gtm || null;
-      hooks.SRC._fcGtmHistOppsSeeded = false;
+    }
+    if (hooks.SRC && data.SRC && data.SRC.pipeline_book && Object.keys(data.SRC.pipeline_book).length) {
+      hooks.SRC.pipeline_book = JSON.parse(JSON.stringify(data.SRC.pipeline_book));
     }
 
     if (hooks.TS_DATA && global.SMPL_DEMO_TS_DATA === hooks.TS_DATA) {

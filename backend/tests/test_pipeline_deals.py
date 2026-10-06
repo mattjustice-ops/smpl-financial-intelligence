@@ -4,7 +4,11 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from app.services.reporting.pipeline_deals import build_opp_pipeline, closed_new_business_acv
+from app.services.reporting.pipeline_deals import (
+    build_opp_pipeline,
+    build_pipeline_book,
+    closed_new_business_acv,
+)
 
 ORG = uuid.uuid4()
 COLUMNS = (
@@ -75,6 +79,54 @@ def test_acv_is_closed_new_business_average(db):
     assert closed_new_business_acv(pipe, as_of="2026-06") == 125000.0
 
 
+def test_closed_lost_deals_are_listed_but_not_booked(db):
+    _table(db, "actual_opportunities", [
+        _deal("2026-06", "A1", "New Business", "150000"),
+        _deal("2026-06", "A2", "New Business", "90000", stage="Closed Lost"),
+    ])
+    pipe = build_opp_pipeline(db, ORG, as_of="2026-06")
+    nb = pipe["2026-06"]["New Business"]
+    assert (nb["count"], nb["total"], nb["expected"]) == (1, 150000.0, 1.0)
+    assert (nb["lost_count"], nb["lost_total"]) == (1, 90000.0)
+    assert {d["id"]: d["outcome"] for d in nb["deals"]} == {"A1": "won", "A2": "lost"}
+    assert closed_new_business_acv(pipe, as_of="2026-06") == 150000.0
+
+
+WATERFALL_COLUMNS = (
+    "organization_id", "period", "opportunity_type", "beginning_pipeline_arr", "pipeline_arr_created",
+    "closed_won_arr", "closed_lost_arr", "slipped_pipeline_arr", "ending_pipeline_arr", "version",
+)
+
+
+def _waterfall(db: Session, name: str, rows: list[tuple]) -> None:
+    db.execute(text(f'create table "{name}" ({", ".join(f"{c} text" for c in WATERFALL_COLUMNS)})'))
+    for r in rows:
+        values = dict(zip(WATERFALL_COLUMNS[1:], r)) | {"organization_id": str(ORG)}
+        db.execute(
+            text(f'insert into "{name}" ({", ".join(WATERFALL_COLUMNS)}) '
+                 f'values ({", ".join(":" + c for c in WATERFALL_COLUMNS)})'),
+            {c: values.get(c, "") for c in WATERFALL_COLUMNS},
+        )
+
+
+def test_pipeline_book_sums_booking_types(db):
+    _waterfall(db, "actual_pipeline_waterfall", [
+        ("2026-06", "New Business", "500", "300", "100", "200", "50", "450", "Actual"),
+        ("2026-06", "Expansion", "100", "60", "40", "20", "10", "90", "Actual"),
+        ("2026-06", "Churn", "999", "999", "999", "999", "999", "999", "Actual"),
+    ])
+    _waterfall(db, "forecast_pipeline_waterfall", [
+        ("2026-06", "New Business", "1", "1", "1", "1", "1", "1", "Forecast"),
+        ("2026-07", "New Business", "700", "250", "120", "90", "30", "710", "Forecast"),
+        ("2026-07", "Reactivation", "10", "5", "4", "2", "1", "8", "Forecast"),
+    ])
+    book = build_pipeline_book(db, ORG, as_of="2026-06")
+    assert book["2026-06"] == {"begin": 600.0, "created": 360.0, "won": 140.0, "lost": 220.0,
+                               "slipped": 60.0, "end": 540.0}
+    assert book["2026-07"] == {"created": 255.0, "lost": 92.0, "slipped": 31.0}
+
+
 def test_no_deal_tables_gives_empty_pipeline(db):
     assert build_opp_pipeline(db, ORG, as_of="2026-06") == {}
+    assert build_pipeline_book(db, ORG, as_of="2026-06") == {}
     assert closed_new_business_acv({}, as_of="2026-06") is None
