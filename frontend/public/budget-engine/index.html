@@ -446,8 +446,8 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=18"></script>
-<script src="/shared/smpl-demo-seed.js?v=2"></script>
+<script src="/shared/smpl-outlook.js?v=19"></script>
+<script src="/shared/smpl-demo-seed.js?v=4"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
 <script>
@@ -693,13 +693,17 @@ const BUDGET_METRIC_DEFS = [
     description: 'Dept book = HC-linked comp + discretionary spend (editable $k) + GTM channels (Marketing).',
     formula: 'Comp (from HC) + discretionary lines + (Marketing: GTM channel $)',
     formula_id: 'pnl_dept_rollup' },
-  { id: 'services_revenue', domain: 'Income Statement', label: 'Services revenue', source_type: 'COMPUTED', tab: 'is',
-    description: 'Non-subscription services attached to the subscription book.',
-    formula: 'Subscription revenue × Services % of sub (lever)',
-    formula_id: 'is_services_pct_sub' },
+  { id: 'recurring_services_revenue', domain: 'Income Statement', label: 'Recurring services', source_type: 'COMPUTED', tab: 'is',
+    description: 'Recurring services revenue such as support and technical account managers (TAMs). The rate defaults to prior-year recurring services ÷ prior-year subscription revenue (GL actual + forecast).',
+    formula: 'Subscription revenue × Recurring services % of subscription',
+    formula_id: 'is_recurring_services_pct_sub' },
+  { id: 'services_revenue', domain: 'Income Statement', label: 'Implementation & onboarding', source_type: 'COMPUTED', tab: 'is',
+    description: 'Non-recurring implementation fees on new customers. The rate defaults to prior-year implementation revenue ÷ prior-year new-business ARR (GL actual + forecast).',
+    formula: 'New-business ARR × Implementation % of NB ARR',
+    formula_id: 'is_implementation_pct_nb' },
   { id: 'total_revenue', domain: 'Income Statement', label: 'Total revenue', source_type: 'COMPUTED', tab: 'is',
-    description: 'Company revenue for the period.',
-    formula: 'Subscription revenue + Services revenue',
+    description: 'Company revenue for the period: recurring (subscription + recurring services) plus non-recurring (implementation & onboarding).',
+    formula: 'Subscription revenue + Recurring services + Implementation & onboarding',
     formula_id: 'is_total_revenue' },
   { id: 'cogs', domain: 'Income Statement', label: 'Cost of revenue', source_type: 'ASSUMPTION', tab: 'is',
     description: 'Single COGS line until a delivery book exists (hosting / support / 3rd party later).',
@@ -1146,7 +1150,10 @@ const STATE = {
   /** @deprecated — kept for any leftover refs; load is now tax+benefits+401k. */
   benefitsLoadPct: 22,
   cogsPctRev: 28,
-  svcPctSub: 3.3,
+  /** Implementation & onboarding revenue as % of new-business ARR. null = prior-year actual + forecast data. */
+  implPctNb: null,
+  /** Recurring services (support, TAMs) as % of subscription revenue. null = prior-year actual + forecast data. */
+  recSvcPctSub: null,
   /**
    * % of new ARR billed annually in advance (rest monthly).
    * null = calibrate from Dec deferred / (Dec ARR÷12).
@@ -3351,16 +3358,96 @@ function computeRevenueBridge() {
   return out;
 }
 
+/**
+ * Revenue lines from a statement row. Recurring services = support, TAMs; implementation is
+ * non-recurring. Rows from before the split carry svc_rev only, which was implementation.
+ */
+function tsRowImpl(r) {
+  if (!r) return null;
+  if (r.impl_rev != null) return Number(r.impl_rev) || 0;
+  if (r.svc_rev == null) return null;
+  return (Number(r.svc_rev) || 0) - (Number(r.rec_svc_rev) || 0);
+}
+function tsRowRecSvc(r) {
+  if (!r) return null;
+  if (r.rec_svc_rev != null) return Number(r.rec_svc_rev) || 0;
+  if (r.impl_rev != null && r.svc_rev != null) return (Number(r.svc_rev) || 0) - (Number(r.impl_rev) || 0);
+  return r.svc_rev != null ? 0 : null;
+}
+
+/** Prior-year implementation & onboarding revenue ÷ prior-year new-business ARR, in % (GL actual → forecast). */
+function priorYearImplPctNb() {
+  let impl = 0, nb = 0;
+  for (let m = 1; m <= 12; m++) {
+    const p = `${BUDGET_YEAR - 1}-${String(m).padStart(2, '0')}`;
+    const is = tsIsRow(p);
+    const hist = getHistRow(p);
+    if (tsRowImpl(is) == null || !hist) continue;
+    impl += tsRowImpl(is);
+    nb += hist.nb || 0;
+  }
+  return nb > 0 ? (impl / nb) * 100 : 0;
+}
+
+/** Prior-year recurring services ÷ prior-year subscription revenue, in % (GL actual → forecast). */
+function priorYearRecSvcPctSub() {
+  let rec = 0, sub = 0;
+  for (let m = 1; m <= 12; m++) {
+    const is = tsIsRow(`${BUDGET_YEAR - 1}-${String(m).padStart(2, '0')}`);
+    if (tsRowRecSvc(is) == null || is.sub_rev == null) continue;
+    rec += tsRowRecSvc(is);
+    sub += Number(is.sub_rev) || 0;
+  }
+  return sub > 0 ? (rec / sub) * 100 : 0;
+}
+
+function recSvcPctSub() {
+  return STATE.recSvcPctSub != null ? STATE.recSvcPctSub : priorYearRecSvcPctSub();
+}
+
+function recSvcLeverHtml() {
+  const pct = recSvcPctSub();
+  const max = Math.max(10, Math.ceil(pct * 2));
+  const src = STATE.recSvcPctSub != null ? 'edited' : `${BUDGET_YEAR - 1} recurring services ÷ subscription`;
+  return `
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">Recurring services % of subscription</span><span class="lever-val" id="v-recsvc">${pct.toFixed(1)}%</span></div>
+        <input type="range" min="0" max="${max}" step="0.1" value="${pct.toFixed(1)}" oninput="setRecSvcPct(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${src}</div>
+      </div>`;
+}
+
+function implPctNb() {
+  return STATE.implPctNb != null ? STATE.implPctNb : priorYearImplPctNb();
+}
+
+function implLeverHtml() {
+  const pct = implPctNb();
+  const max = Math.max(10, Math.ceil(pct * 2));
+  const src = STATE.implPctNb != null ? 'edited' : `${BUDGET_YEAR - 1} implementation ÷ NB ARR`;
+  return `
+      <div class="lever">
+        <div class="lever-row"><span class="lever-lbl">Implementation % of NB ARR</span><span class="lever-val" id="v-svc">${pct.toFixed(1)}%</span></div>
+        <input type="range" min="0" max="${max}" step="0.1" value="${pct.toFixed(1)}" oninput="setImplPct(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${src}</div>
+      </div>`;
+}
+
 /** IS: subscription from revenue bridge; opex from department P&Ls. */
 function computeIsPlan() {
   const bridge = computeRevenueBridge();
   const hc = computeHcPlan();
   const gtm = computeGtmPlan();
   const pl = computeDeptPl();
+  const implPct = implPctNb();
+  const recSvcPct = recSvcPctSub();
   const out = {};
   for (const p of BUD_P) {
     const sub = bridge[p].sub;
-    const svc = sub * (STATE.svcPctSub / 100);
+    const recSvc = sub * (recSvcPct / 100);
+    const impl = bridge[p].nb * (implPct / 100);
+    const recurring = sub + recSvc;
+    const svc = recSvc + impl;
     const revenue = sub + svc;
     const cogs = revenue * (STATE.cogsPctRev / 100);
     const gp = revenue - cogs;
@@ -3383,7 +3470,7 @@ function computeIsPlan() {
     const csPl = pl[p].depts.sales.csTotal;
     const mktPl = pl[p].depts.marketing.total;
     out[p] = {
-      sub, svc, revenue, cogs, gp, gm: revenue > 0 ? gp / revenue : null,
+      sub, recSvc, recurring, impl, svc, revenue, cogs, gp, gm: revenue > 0 ? gp / revenue : null,
       billings: bridge[p].billings,
       chg_dr: bridge[p].chg_dr,
       begDR: bridge[p].begDR,
@@ -3746,11 +3833,7 @@ function renderSidebar() {
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">COGS % of revenue</span><span class="lever-val" id="v-cogs">${STATE.cogsPctRev.toFixed(0)}%</span></div>
         <input type="range" min="15" max="40" step="1" value="${STATE.cogsPctRev}" oninput="setCogsPct(+this.value)">
-      </div>
-      <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">Services % of sub</span><span class="lever-val" id="v-svc">${STATE.svcPctSub.toFixed(1)}%</span></div>
-        <input type="range" min="0" max="10" step="0.1" value="${STATE.svcPctSub}" oninput="setSvcPct(+this.value)">
-      </div>
+      </div>${recSvcLeverHtml()}${implLeverHtml()}
       <div class="panel-lbl">FY rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         FY revenue<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyRev)}</strong><br><br>
@@ -3828,11 +3911,7 @@ function renderSidebar() {
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">COGS % of revenue</span><span class="lever-val" id="v-cogs">${STATE.cogsPctRev.toFixed(0)}%</span></div>
         <input type="range" min="15" max="40" step="1" value="${STATE.cogsPctRev}" oninput="setCogsPct(+this.value)">
-      </div>
-      <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">Services % of sub</span><span class="lever-val" id="v-svc">${STATE.svcPctSub.toFixed(1)}%</span></div>
-        <input type="range" min="0" max="10" step="0.1" value="${STATE.svcPctSub}" oninput="setSvcPct(+this.value)">
-      </div>` : ''}
+      </div>${recSvcLeverHtml()}${implLeverHtml()}` : ''}
       <div class="panel-lbl">FY rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         FY revenue<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyRev)}</strong><br><br>
@@ -4214,8 +4293,15 @@ window.setCogsPct = function(v) {
   refresh();
 };
 
-window.setSvcPct = function(v) {
-  STATE.svcPctSub = v;
+window.setRecSvcPct = function(v) {
+  STATE.recSvcPctSub = v;
+  const el = document.getElementById('v-recsvc');
+  if (el) el.textContent = v.toFixed(1) + '%';
+  refresh();
+};
+
+window.setImplPct = function(v) {
+  STATE.implPctNb = v;
   const el = document.getElementById('v-svc');
   if (el) el.textContent = v.toFixed(1) + '%';
   refresh();
@@ -5603,7 +5689,10 @@ function quarterIsCtxCell(q, row) {
       last = isRow && isRow.gm_pct != null ? isRow.gm_pct : null;
       continue;
     }
-    if (isRow && isRow[tsKey] != null) sum += Number(isRow[tsKey]) || 0;
+    const revLine = { recSvc: tsRowRecSvc, impl: tsRowImpl, nonrec: tsRowImpl,
+      recurring: r => (r.sub_rev != null ? (Number(r.sub_rev) || 0) + (tsRowRecSvc(r) || 0) : null) }[row.k];
+    if (revLine) sum += (isRow && revLine(isRow)) || 0;
+    else if (isRow && isRow[tsKey] != null) sum += Number(isRow[tsKey]) || 0;
     else if (row.k === 'revenue') sum += arr ? arr.eop / 12 : 0;
     else if (row.k === 'sm') sum += sm || 0;
   }
@@ -5804,7 +5893,10 @@ function renderIS() {
   const rows = [
     { type: 'sec', label: 'Revenue' },
     { k: 'sub', label: 'Subscription Revenue', fKey: 'sub', indent: true, origin: { tab: 'arr', scrollTo: 'rev-bridge', title: 'Open ARR → revenue bridge', chip: 'ARR → Rev bridge' } },
-    { k: 'svc', label: 'Services Revenue', fKey: 'svc', indent: true },
+    { k: 'recSvc', label: 'Recurring Services (Support & TAM)', fKey: 'recSvc', indent: true },
+    { k: 'recurring', label: 'Recurring Revenue', fKey: 'recurring', sub: true },
+    { k: 'impl', label: 'Implementation & Onboarding', fKey: 'impl', indent: true },
+    { k: 'nonrec', label: 'Non-recurring Revenue', fKey: 'impl', sub: true },
     { k: 'revenue', label: 'Total Revenue', fKey: 'revenue', sub: true },
     { type: 'sec', label: 'Cost of Revenue' },
     { k: 'cogs', label: 'Cost of Revenue', fKey: 'cogs', indent: true },

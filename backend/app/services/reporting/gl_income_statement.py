@@ -70,14 +70,29 @@ OPEX_LINE_BY_DEPARTMENT: dict[str, str] = {
     "support": "ga",
 }
 
-SERVICES_REVENUE_TOKENS = ("service", "professional", "implementation", "onboarding")
+SERVICES_REVENUE_TOKENS = ("service", "professional", "implementation", "onboarding", "support", "technical account")
+IMPLEMENTATION_REVENUE_TOKENS = ("implementation", "onboarding", "professional")
 SERVICES_REVENUE_LABEL = "Implementation & Onboarding"
+RECURRING_SERVICES_LABEL = "Recurring Services"
 
 
 def is_services_revenue(label: str) -> bool:
-    """Non-recurring revenue (implementation, onboarding, one-off services) by account text."""
+    """Any services revenue (recurring support/TAM or non-recurring implementation) by account text."""
     text = label.lower()
     return any(t in text for t in SERVICES_REVENUE_TOKENS)
+
+
+def is_implementation_revenue(label: str) -> bool:
+    """Non-recurring services: implementation, onboarding, professional services."""
+    text = label.lower()
+    return any(t in text for t in IMPLEMENTATION_REVENUE_TOKENS)
+
+
+def services_revenue_label(label: str) -> str | None:
+    """Revenue line for a services account; ``None`` when the account is not services."""
+    if not is_services_revenue(label):
+        return None
+    return SERVICES_REVENUE_LABEL if is_implementation_revenue(label) else RECURRING_SERVICES_LABEL
 
 GL_VERSION_BY_SCENARIO = {"actual": "Actual", "budget": "Budget", "forecast": "Forecast"}
 
@@ -118,8 +133,12 @@ def build_income_statement_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dic
         if line == "revenue":
             bucket["revenue"] += -amount
             label = f"{_norm(raw.get('account_name'))} {_norm(raw.get('account_group'))}"
-            key = "svc_rev" if is_services_revenue(label) else "sub_rev"
-            bucket[key] += -amount
+            if is_implementation_revenue(label):
+                bucket["impl_rev"] += -amount
+            elif is_services_revenue(label):
+                bucket["rec_svc_rev"] += -amount
+            else:
+                bucket["sub_rev"] += -amount
         else:
             bucket[line] += amount
 
@@ -138,7 +157,9 @@ def build_income_statement_rows(rows: Iterable[dict[str, Any]]) -> dict[str, dic
         row = {
             "revenue": revenue,
             "sub_rev": b.get("sub_rev", 0.0),
-            "svc_rev": b.get("svc_rev", 0.0),
+            "rec_svc_rev": b.get("rec_svc_rev", 0.0),
+            "impl_rev": b.get("impl_rev", 0.0),
+            "svc_rev": b.get("rec_svc_rev", 0.0) + b.get("impl_rev", 0.0),
             "cogs": cogs,
             "gross_profit": gross_profit,
             "sm": sm,

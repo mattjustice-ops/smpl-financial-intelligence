@@ -30,6 +30,8 @@ GL_INCOME_COLUMNS: tuple[tuple[str, str], ...] = (
     ("revenue", "revenue"),
     ("subscription_revenue", "sub_rev"),
     ("services_revenue", "svc_rev"),
+    ("recurring_services_revenue", "rec_svc_rev"),
+    ("implementation_revenue", "impl_rev"),
     ("cost_of_revenue", "cogs"),
     ("gross_profit", "gross_profit"),
     ("sales_and_marketing", "sm"),

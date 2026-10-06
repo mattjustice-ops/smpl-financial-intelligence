@@ -70,12 +70,15 @@ def test_income_maps_from_gl_rollup() -> None:
 def test_income_maps_from_gl_splits_subscription_and_services() -> None:
     gl = {
         ("2026-06", "revenue", "Subscription Revenue", "4000 Subscription Revenue"): Decimal("7000000"),
-        ("2026-06", "revenue", "Services Revenue", "4100 Professional Services"): Decimal("350000"),
+        ("2026-06", "revenue", "Services Revenue", "4200 Recurring Services Revenue"): Decimal("350000"),
+        ("2026-06", "revenue", "Implementation & Onboarding", "4100 Implementation & Onboarding Revenue"): Decimal("40000"),
     }
     maps = _income_maps_from_gl(gl, ("2026-06",))
-    assert maps["2026-06"]["revenue"] == Decimal("7350000")
+    assert maps["2026-06"]["revenue"] == Decimal("7390000")
     assert maps["2026-06"]["subscription_revenue"] == Decimal("7000000")
-    assert maps["2026-06"]["services_revenue"] == Decimal("350000")
+    assert maps["2026-06"]["services_revenue"] == Decimal("390000")
+    assert maps["2026-06"]["recurring_services_revenue"] == Decimal("350000")
+    assert maps["2026-06"]["implementation_revenue"] == Decimal("40000")
 
 
 def test_merge_gl_primary_preserves_is_revenue_split() -> None:
@@ -125,6 +128,8 @@ def test_spec_pl_lines_prefer_is_subscription_services() -> None:
             "revenue": Decimal("7350000"),
             "subscription_revenue": Decimal("7000000"),
             "services_revenue": Decimal("350000"),
+            "recurring_services_revenue": Decimal("300000"),
+            "implementation_revenue": Decimal("50000"),
         }
     }
     budget = {
@@ -132,6 +137,8 @@ def test_spec_pl_lines_prefer_is_subscription_services() -> None:
             "revenue": Decimal("7720000"),
             "subscription_revenue": Decimal("7400000"),
             "services_revenue": Decimal("320000"),
+            "recurring_services_revenue": Decimal("300000"),
+            "implementation_revenue": Decimal("20000"),
         }
     }
     # GL wrongly names only total as subscription — must NOT override IS.
@@ -149,19 +156,21 @@ def test_spec_pl_lines_prefer_is_subscription_services() -> None:
         forecast_is={},
     )
     by_id = {ln.id: ln for ln in lines}
+    assert "services_revenue" not in by_id
     assert by_id["subscription_revenue"].metrics.actual == Decimal("7000000")
-    assert by_id["services_revenue"].metrics.actual == Decimal("350000")
+    assert by_id["recurring_services_revenue"].metrics.actual == Decimal("300000")
+    assert by_id["implementation_revenue"].metrics.actual == Decimal("50000")
+    assert by_id["recurring_services_revenue"].label == "Recurring Services"
+    assert by_id["implementation_revenue"].label == "Implementation & Onboarding"
     assert by_id["total_revenue"].metrics.actual == Decimal("7350000")
-    assert (
-        by_id["subscription_revenue"].metrics.actual + by_id["services_revenue"].metrics.actual
-        == by_id["total_revenue"].metrics.actual
-    )
+    for side in ("actual", "budget"):
+        assert sum(
+            (getattr(by_id[k].metrics, side) for k in ("subscription_revenue", "recurring_services_revenue", "implementation_revenue")),
+            Decimal("0"),
+        ) == getattr(by_id["total_revenue"].metrics, side)
     assert by_id["subscription_revenue"].metrics.budget == Decimal("7400000")
-    assert by_id["services_revenue"].metrics.budget == Decimal("320000")
-    assert (
-        by_id["subscription_revenue"].metrics.budget + by_id["services_revenue"].metrics.budget
-        == by_id["total_revenue"].metrics.budget
-    )
+    assert by_id["recurring_services_revenue"].metrics.budget == Decimal("300000")
+    assert by_id["implementation_revenue"].metrics.budget == Decimal("20000")
 
 
 def test_spec_pl_lines_children_keep_gl_amounts_and_foot_with_other_line() -> None:
@@ -243,9 +252,12 @@ def test_spec_pl_lines_children_keep_gl_amounts_and_foot_with_other_line() -> No
         by_id["sm_sales_comp"], by_id["sm_customer_success"], by_id["sm_mkt_salary"],
         by_id["sm_mkt_programs"], by_id["sm_other"],
     ]), Decimal("0")) == Decimal("2500000")
-    assert by_id["subscription_revenue"].metrics.actual + by_id["services_revenue"].metrics.actual == by_id[
-        "total_revenue"
-    ].metrics.actual
+    assert (
+        by_id["subscription_revenue"].metrics.actual
+        + by_id["recurring_services_revenue"].metrics.actual
+        + by_id["implementation_revenue"].metrics.actual
+        == by_id["total_revenue"].metrics.actual
+    )
 
 
 def test_spec_pl_lines_revenue_split_completes_missing_half_and_ties() -> None:
@@ -289,10 +301,11 @@ def test_spec_pl_lines_revenue_split_completes_missing_half_and_ties() -> None:
     )
     by_id = {ln.id: ln for ln in lines}
     assert by_id["subscription_revenue"].metrics.actual == Decimal("7000000")
-    assert by_id["services_revenue"].metrics.actual == Decimal("350000")
+    assert by_id["recurring_services_revenue"].metrics.actual == Decimal("350000")
+    assert by_id["implementation_revenue"].metrics.actual == Decimal("0")
     assert by_id["total_revenue"].metrics.actual == Decimal("7350000")
     assert by_id["subscription_revenue"].metrics.budget == Decimal("7400000")
-    assert by_id["services_revenue"].metrics.budget == Decimal("320000")
+    assert by_id["recurring_services_revenue"].metrics.budget == Decimal("320000")
     assert by_id["total_revenue"].metrics.budget == Decimal("7720000")
 
 

@@ -8,7 +8,11 @@ from typing import Callable
 from app.services.management_pl.gl_hierarchy import COGS_ACCOUNT_NAMES, GL_DRILLDOWN_DEPARTMENTS
 from app.services.management_pl.period_engine import PeriodContext, sum_metric, variance
 from app.services.management_pl.schemas import MetricSlice, PlLine
-from app.services.reporting.gl_income_statement import SERVICES_REVENUE_LABEL, SERVICES_REVENUE_TOKENS
+from app.services.reporting.gl_income_statement import (
+    RECURRING_SERVICES_LABEL,
+    SERVICES_REVENUE_LABEL,
+    SERVICES_REVENUE_TOKENS,
+)
 
 SALES_COMP_ACCOUNTS = ("Base Salaries", "Employee Benefits", "Payroll Taxes", "Sales Commissions")
 MKT_SALARY_ACCOUNTS = ("Base Salaries", "Employee Benefits", "Payroll Taxes")
@@ -36,7 +40,17 @@ COGS_LINE_ACCOUNTS: tuple[tuple[str, str], ...] = (
 )
 
 REVENUE_FAVORABLE_KEYS = frozenset(
-    {"revenue", "gross_profit", "ebitda", "operating_income", "net_income", "subscription_revenue", "services_revenue"}
+    {
+        "revenue",
+        "gross_profit",
+        "ebitda",
+        "operating_income",
+        "net_income",
+        "subscription_revenue",
+        "services_revenue",
+        "recurring_services_revenue",
+        "implementation_revenue",
+    }
 )
 
 
@@ -515,6 +529,22 @@ def build_spec_pl_lines(
     sub_m = _revenue_metric_slice(**rev_kwargs, which="subscription")
     svc_m = _revenue_metric_slice(**rev_kwargs, which="services")
     rev_total_m = _revenue_metric_slice(**rev_kwargs, which="total")
+    # Services split: implementation from the Income Statement, recurring services is the rest,
+    # so Subscription + Recurring Services + Implementation = Total Revenue.
+    impl_m = _is_rollup_slice(
+        ctx=ctx,
+        actual_is=actual_is,
+        budget_is=bud_is,
+        forecast_is=forecast_is,
+        key="implementation_revenue",
+    )
+    rec_svc_m = _metric_slice_values(
+        actual=svc_m.actual - impl_m.actual,
+        budget=svc_m.budget - impl_m.budget,
+        forecast=svc_m.forecast - impl_m.forecast,
+        ytd_actual=svc_m.ytd_actual - impl_m.ytd_actual,
+        ytd_budget=svc_m.ytd_budget - impl_m.ytd_budget,
+    )
     sub_line = _pl_line(
         "subscription_revenue",
         "Subscription Revenue",
@@ -522,11 +552,18 @@ def build_spec_pl_lines(
         sub_m,
         driver="income_statement",
     )
-    svc_line = _pl_line(
-        "services_revenue",
+    rec_svc_line = _pl_line(
+        "recurring_services_revenue",
+        RECURRING_SERVICES_LABEL,
+        "recurring_services_revenue",
+        rec_svc_m,
+        driver="income_statement",
+    )
+    impl_line = _pl_line(
+        "implementation_revenue",
         SERVICES_REVENUE_LABEL,
-        "services_revenue",
-        svc_m,
+        "implementation_revenue",
+        impl_m,
         driver="income_statement",
     )
 
@@ -540,7 +577,8 @@ def build_spec_pl_lines(
     lines.extend(
         [
             sub_line,
-            svc_line,
+            rec_svc_line,
+            impl_line,
             _pl_line("total_revenue", "Total Revenue", "revenue", rev_total_m, line_type="total", is_bold=True),
         ]
     )

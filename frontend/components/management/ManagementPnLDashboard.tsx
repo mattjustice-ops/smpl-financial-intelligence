@@ -178,7 +178,17 @@ function num(v: string | number | null | undefined) {
   return Number(v ?? 0);
 }
 
-const REVENUE_FAVORABLE_KEYS = ["revenue", "gross_profit", "ebitda", "operating_income", "net_income", "subscription_revenue", "services_revenue"];
+const REVENUE_FAVORABLE_KEYS = [
+  "revenue",
+  "gross_profit",
+  "ebitda",
+  "operating_income",
+  "net_income",
+  "subscription_revenue",
+  "services_revenue",
+  "recurring_services_revenue",
+  "implementation_revenue",
+];
 
 function fM(v: string | number | null | undefined, d = 2) {
   if (v === null || v === undefined) return "—";

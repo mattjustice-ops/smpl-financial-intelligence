@@ -31,8 +31,8 @@ const checks = [
   ["Dec Ending ARR", decArr, 97560000],
   ["Jan actual net income negative", janNi < 0, true],
   ["Jun actual net income negative", junNi < 0, true],
-  ["Dec forecast revenue", decRev, 8578200],
-  ["Dec ending cash", decCash, 72636320.96],
+  ["Dec forecast revenue", decRev, 9147856.34],
+  ["Dec ending cash", decCash, 78162833.01],
   ["Jun ending headcount", (() => {
     const m = boardHtml.match(/\[121,124,126,128,130,\s*137,/);
     return m ? 137 : null;

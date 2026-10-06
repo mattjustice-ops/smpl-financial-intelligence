@@ -15,7 +15,8 @@ class LineMapping:
 
 INCOME_STATEMENT_LINES: list[LineMapping] = [
     LineMapping("subscription_revenue", "Subscription Revenue", 90, "Revenue"),
-    LineMapping("services_revenue", "Implementation & Onboarding", 95, "Revenue"),
+    LineMapping("recurring_services_revenue", "Recurring Services", 93, "Revenue"),
+    LineMapping("implementation_revenue", "Implementation & Onboarding", 95, "Revenue"),
     LineMapping("revenue", "Revenue", 100, "Revenue"),
     LineMapping("cost_of_revenue", "Cost of Revenue", 200, "Gross Profit"),
     LineMapping("gross_profit", "Gross Profit", 300, "Gross Profit"),
