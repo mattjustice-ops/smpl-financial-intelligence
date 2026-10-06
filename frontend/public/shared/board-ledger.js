@@ -16,7 +16,8 @@
 
   var SOURCE_ROWS = [
     { id: "sub_rev", name: "Subscription revenue", section: "revenue", isLine: "Subscription Revenue", mgmtLine: "Subscription Revenue", dept: "Revenue" },
-    { id: "svc_rev", name: "Implementation & onboarding", section: "revenue", isLine: "Implementation & Onboarding", mgmtLine: "Implementation & Onboarding", dept: "Revenue" },
+    { id: "rec_svc_rev", name: "Recurring services", section: "revenue", isLine: "Recurring Services", mgmtLine: "Recurring Services", dept: "Revenue" },
+    { id: "impl_rev", name: "Implementation & onboarding", section: "revenue", isLine: "Implementation & Onboarding", mgmtLine: "Implementation & Onboarding", dept: "Revenue" },
     { id: "cogs", name: "Cost of revenue", section: "cogs", isLine: "Cost of Revenue", mgmtLine: "Cost of Revenue", dept: "Cost of Revenue" },
     { id: "sm", name: "Sales & marketing", section: "opex", isLine: "Sales & Marketing", mgmtLine: "Sales & Marketing", dept: "Sales & Marketing" },
     { id: "rd", name: "Research & development", section: "opex", isLine: "Research & Development", mgmtLine: "Research & Development", dept: "R&D" },
@@ -76,7 +77,18 @@
     } else if (svc == null) {
       svc = rev == null ? 0 : rev - sub;
     }
-    return { sub_rev: sub, svc_rev: svc, cogs: num(is.cogs), sm: num(is.sm), rd: num(is.rd), ga: num(is.ga) };
+    // Rows from before the recurring / implementation split carry svc_rev only, which was implementation.
+    var rec = num(is.rec_svc_rev);
+    var impl = num(is.impl_rev);
+    if (rec == null && impl == null) {
+      impl = svc;
+      rec = svc == null ? null : 0;
+    } else if (impl == null) {
+      impl = svc == null ? null : svc - rec;
+    } else if (rec == null) {
+      rec = svc == null ? 0 : svc - impl;
+    }
+    return { sub_rev: sub, rec_svc_rev: rec, impl_rev: impl, cogs: num(is.cogs), sm: num(is.sm), rd: num(is.rd), ga: num(is.ga) };
   }
 
   function periodsFor(scenario, which) {
@@ -193,7 +205,9 @@
     var r = rollup("is", scenario, [period]).totals;
     switch (key) {
       case "sub_rev": return amts.sub_rev;
-      case "svc_rev": return amts.svc_rev;
+      case "rec_svc_rev": return amts.rec_svc_rev;
+      case "impl_rev": return amts.impl_rev;
+      case "svc_rev": return amts.rec_svc_rev == null && amts.impl_rev == null ? null : (amts.rec_svc_rev || 0) + (amts.impl_rev || 0);
       case "cogs": return amts.cogs;
       case "sm": return amts.sm;
       case "rd": return amts.rd;

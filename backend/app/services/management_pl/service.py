@@ -46,7 +46,11 @@ from app.services.management_pl.schemas import (
     WaterfallStep,
 )
 from app.services.mrr.repository import fetch_persisted_summary
-from app.services.reporting.gl_income_statement import gl_income_statement_by_period, is_services_revenue
+from app.services.reporting.gl_income_statement import (
+    gl_income_statement_by_period,
+    is_implementation_revenue,
+    is_services_revenue,
+)
 from app.services.reporting.period_utils import to_period
 
 DEPARTMENTS = [
@@ -106,6 +110,8 @@ def _income_maps_from_gl(
             ag = (account_group or "").lower()
             if is_services_revenue(ag):
                 out[period]["services_revenue"] += amt
+                split = "implementation_revenue" if is_implementation_revenue(ag) else "recurring_services_revenue"
+                out[period][split] += amt
             elif "subscription" in ag:
                 out[period]["subscription_revenue"] += amt
         else:
@@ -163,6 +169,8 @@ _IS_SOT_KEYS = (
     "revenue",
     "subscription_revenue",
     "services_revenue",
+    "recurring_services_revenue",
+    "implementation_revenue",
     "cost_of_revenue",
     "sales_and_marketing",
     "research_and_development",
@@ -332,6 +340,8 @@ _MGMT_KEY_FROM_GL_IS: dict[str, str] = {
     "revenue": "revenue",
     "subscription_revenue": "sub_rev",
     "services_revenue": "svc_rev",
+    "recurring_services_revenue": "rec_svc_rev",
+    "implementation_revenue": "impl_rev",
     "cost_of_revenue": "cogs",
     "sales_and_marketing": "sm",
     "research_and_development": "rd",

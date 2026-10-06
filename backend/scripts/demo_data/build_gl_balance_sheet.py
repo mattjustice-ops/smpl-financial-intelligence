@@ -1,14 +1,15 @@
 """Balance sheet GL activity for the demo, built from the dataset's own files.
 
 Method (financial_dashboard_cf_re_logic.md): the GL holds an opening trial balance at the
-cutoff (Jan 31, 2024) and monthly activity after it. Balances are opening + cumulative
-activity. Retained earnings is never posted; it is computed from GL net income.
+    cutoff (Jan 31, 2024) and monthly activity after it. Balances are opening + cumulative
+    activity. Retained earnings is never posted; it is computed from GL net income.
 
 Where each balance sheet row comes from:
   * Opening balances: the cutoff month of Actual_balance_sheet.csv. Equity is one total
-    in the dataset, so it opens on account 3000 with no split. Implementation revenue
-    through the cutoff (Actual_implementation_schedule.csv) is not in that balance sheet,
-    so it is added: billed to equity, collected to cash, still open to AR.
+    in the dataset, so it opens on account 3000 with no split. Implementation and
+    recurring services revenue through the cutoff (Actual_implementation_schedule.csv,
+    Actual_recurring_services_schedule.csv) is not in that balance sheet, so it is added:
+    billed to equity, collected to cash, still open to AR.
   * Accounts receivable: AR rollforward (billings, collections).
   * Accounts payable: AP rollforward (vendor accruals, vendor payments).
   * Prepaids: prepaids rollforward (additions, amortization).
@@ -116,14 +117,21 @@ def _natural(key: str, amount: Decimal) -> Decimal:
     return -amount if key in CREDIT_NORMAL else amount
 
 
-def _implementation_through(src: str, month: str) -> tuple[Decimal, Decimal]:
-    """(billed, collected) through ``month`` from Actual_implementation_schedule.csv."""
-    path = os.path.join(src, "Actual_implementation_schedule.csv")
+# Revenue added on top of the dataset's summary: (schedule file, amount column, label).
+ADDED_REVENUE_SCHEDULES = (
+    ("Actual_implementation_schedule.csv", "implementation_fee", "implementation"),
+    ("Actual_recurring_services_schedule.csv", "recurring_services_revenue", "recurring_services"),
+)
+
+
+def _schedule_through(src: str, file_name: str, column: str, month: str) -> tuple[Decimal, Decimal]:
+    """(billed, collected) through ``month`` from an Actual revenue schedule."""
+    path = os.path.join(src, file_name)
     if not os.path.exists(path):
         return Decimal("0"), Decimal("0")
     rows = _read(path)
-    billed = sum((num(r["implementation_fee"]) for r in rows if r["period"][:7] <= month), Decimal("0"))
-    collected = sum((num(r["implementation_fee"]) for r in rows if r["collection_period"][:7] <= month), Decimal("0"))
+    billed = sum((num(r[column]) for r in rows if r["period"][:7] <= month), Decimal("0"))
+    collected = sum((num(r[column]) for r in rows if r["collection_period"][:7] <= month), Decimal("0"))
     return billed, collected
 
 
@@ -163,22 +171,24 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                 w.add(cutoff, key, -bal if key in CREDIT_NORMAL else bal, label="opening",
                       source_file=f"{version}_balance_sheet.csv", source_system="Opening Balance",
                       note=f"Opening balance at {cutoff} month end, from {version}_balance_sheet.csv")
-            impl_billed, impl_collected = _implementation_through(src, cutoff)
-            if impl_billed:
-                impl_file = "Actual_implementation_schedule.csv"
-                w.add(cutoff, "accounts_receivable", impl_billed - impl_collected, label="opening_implementation",
-                      source_file=impl_file, source_system="Opening Balance",
-                      note=f"implementation invoices open at {cutoff} month end")
-                w.add(cutoff, "cash", impl_collected, label="opening_implementation",
-                      source_file=impl_file, source_system="Opening Balance",
-                      note=f"implementation invoices collected by {cutoff} month end")
-                w.add(cutoff, "equity", -impl_billed, label="opening_implementation",
-                      source_file=impl_file, source_system="Opening Balance",
-                      note=f"implementation revenue in {cutoff} net income, not in {version}_balance_sheet.csv equity")
+            for sched_file, column, name in ADDED_REVENUE_SCHEDULES:
+                billed, collected = _schedule_through(src, sched_file, column, cutoff)
+                if not billed:
+                    continue
+                words = name.replace("_", " ")
+                w.add(cutoff, "accounts_receivable", billed - collected, label=f"opening_{name}",
+                      source_file=sched_file, source_system="Opening Balance",
+                      note=f"{words} invoices open at {cutoff} month end")
+                w.add(cutoff, "cash", collected, label=f"opening_{name}",
+                      source_file=sched_file, source_system="Opening Balance",
+                      note=f"{words} invoices collected by {cutoff} month end")
+                w.add(cutoff, "equity", -billed, label=f"opening_{name}",
+                      source_file=sched_file, source_system="Opening Balance",
+                      note=f"{words} revenue in {cutoff} net income, not in {version}_balance_sheet.csv equity")
                 log.append({"version": version, "period": cutoff, "line": "equity", "action": "opening",
-                            "detail": f"implementation through the cutoff: billed {impl_billed:,.2f} (equity), "
-                                      f"collected {impl_collected:,.2f} (cash), open {impl_billed - impl_collected:,.2f} (AR)",
-                            "amount": f"{impl_billed:.2f}"})
+                            "detail": f"{words} through the cutoff: billed {billed:,.2f} (equity), "
+                                      f"collected {collected:,.2f} (cash), open {billed - collected:,.2f} (AR)",
+                            "amount": f"{billed:.2f}"})
             for r in w.rows:
                 running[KEY_BY_NUMBER[r["account_number"]]] += _natural(KEY_BY_NUMBER[r["account_number"]], num(r["amount"]))
             actual_running[cutoff] = dict(running)

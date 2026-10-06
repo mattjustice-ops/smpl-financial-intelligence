@@ -22,6 +22,9 @@ Rules (agreed with Matt, Oct 5 2026):
   * Implementation & Onboarding revenue (account 4100) comes from
     <version>_implementation_schedule.csv (add_implementation_revenue.py) and is added on
     top of the summary, one row per month.
+  * Recurring Services revenue (account 4200) comes from
+    <version>_recurring_services_schedule.csv (add_recurring_services_revenue.py) and is
+    added on top of the summary, one row per month.
   * Balance sheet: the old month-end balance rows are replaced by opening balances at
     Jan 2024 and monthly activity from the dataset's schedules (build_gl_balance_sheet.py).
     gl_balance_sheet_check.csv compares the GL balances with the balance sheet files.
@@ -80,6 +83,8 @@ DETAIL_FROM_MONTH = {
 
 FORECAST_TEMPLATE_MONTH = "2026-06"
 IMPLEMENTATION_ACCOUNT = "4100"
+RECURRING_SERVICES_ACCOUNT = "4200"
+ADDED_REVENUE_ACCOUNTS = {IMPLEMENTATION_ACCOUNT, RECURRING_SERVICES_ACCOUNT}
 
 
 def _clone_to(row: dict[str, str], target: str, template: str) -> dict[str, str]:
@@ -181,7 +186,7 @@ def forecast_seed(actual_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     """Forecast months start from the last actual month's P&L rows, in the source sign convention."""
     seed: list[dict[str, str]] = []
     template_rows = [r for r in actual_rows if r["period"][:7] == FORECAST_TEMPLATE_MONTH and r["statement"] != "Balance Sheet"
-                     and r["account_number"] != IMPLEMENTATION_ACCOUNT]
+                     and r["account_number"] not in ADDED_REVENUE_ACCOUNTS]
     for target in sorted(REBUILD_PERIODS["Forecast"]):
         for r in template_rows:
             nr = _clone_to(r, target, FORECAST_TEMPLATE_MONTH)
@@ -219,6 +224,33 @@ def implementation_rows(src: str, version: str, template: dict[str, str]) -> lis
     return rows
 
 
+def recurring_services_rows(src: str, version: str, template: dict[str, str]) -> list[dict[str, str]]:
+    """One 4200 revenue row per month from <version>_recurring_services_schedule.csv, when the file exists."""
+    path = os.path.join(src, f"{version}_recurring_services_schedule.csv")
+    if not os.path.exists(path):
+        return []
+    by_month: dict[str, Decimal] = defaultdict(Decimal)
+    customers: dict[str, int] = defaultdict(int)
+    for r in _read(path):
+        by_month[r["period"][:7]] += Decimal(r["recurring_services_revenue"])
+        customers[r["period"][:7]] += 1
+    rows = []
+    for period, amount in sorted(by_month.items()):
+        rows.append({
+            **{k: "" for k in template},
+            "organization_id": template["organization_id"], "version": version, "period": period,
+            "account_number": RECURRING_SERVICES_ACCOUNT, "account_name": "Recurring Services Revenue",
+            "statement": "Income Statement", "statement_category": "Revenue", "account_group": "Revenue",
+            "expense_type": "Recurring Services", "department": "Revenue", "cost_center": "REV-RSVC",
+            "sub_department": "Recurring Services", "source_file": f"{version}_recurring_services_schedule.csv",
+            "source_record_id": f"{version}-{period}-{RECURRING_SERVICES_ACCOUNT}", "amount": f"{-amount:.2f}",
+            "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model",
+            "notes": f"{customers[period]} customers; support and technical account management, "
+                     f"10% of subscription revenue",
+        })
+    return rows
+
+
 def main(src: str, dst: str) -> None:
     os.makedirs(dst, exist_ok=True)
     all_log: list[dict[str, str]] = []
@@ -244,6 +276,12 @@ def main(src: str, dst: str) -> None:
             log.append({"version": version, "period": "", "line": "revenue", "action": "added",
                         "detail": f"{len(impl)} months of implementation revenue (account 4100) on top of the summary",
                         "amount": f"{-sum(Decimal(r['amount']) for r in impl):.2f}"})
+        rsvc = recurring_services_rows(src, version, gl[0])
+        if rsvc:
+            rebuilt[version] += rsvc
+            log.append({"version": version, "period": "", "line": "revenue", "action": "added",
+                        "detail": f"{len(rsvc)} months of recurring services revenue (account 4200) on top of the summary",
+                        "amount": f"{-sum(Decimal(r['amount']) for r in rsvc):.2f}"})
         all_log.extend(log)
 
     bs_rows, bs_log = build_balance_sheet_rows(src, rebuilt)

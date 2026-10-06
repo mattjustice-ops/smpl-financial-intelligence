@@ -33,6 +33,21 @@ def test_income_statement_formulas_calculate_correctly() -> None:
     assert row["net_income"] == Decimal("410.00")
 
 
+def test_income_statement_shows_recurring_services_and_implementation_lines() -> None:
+    import uuid
+
+    from app.services.financial_statements.financial_statement_mapper import INCOME_STATEMENT_LINES
+    from app.services.financial_statements.financial_statement_service import GL_INCOME_COLUMNS, normalize_rows
+
+    built = {"revenue": 1150.0, "sub_rev": 1000.0, "svc_rev": 150.0, "rec_svc_rev": 100.0, "impl_rev": 50.0}
+    row = {"period": date(2026, 6, 1), **{col: built.get(key) for col, key in GL_INCOME_COLUMNS}}
+    lines = {r.line_item: r.amount for r in normalize_rows(uuid.uuid4(), "actual", "gl_actuals", [row], INCOME_STATEMENT_LINES)}
+    assert lines["Subscription Revenue"] == Decimal("1000.00")
+    assert lines["Recurring Services"] == Decimal("100.00")
+    assert lines["Implementation & Onboarding"] == Decimal("50.00")
+    assert lines["Revenue"] == Decimal("1150.00")
+
+
 def test_balance_sheet_balances_when_components_tie() -> None:
     row = ensure_balance_formulas(
         {
