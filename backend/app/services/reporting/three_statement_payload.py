@@ -459,6 +459,7 @@ def build_cash_bridge_data(
         ("other_operating", ("other_operating_cash_out",)),
         ("capex", ("capex",)),
         ("financing", ("financing_to_maintain_cash_floor", "financing")),
+        ("cash_floor", ("cash_floor",)),
     )
     allowed = set(period_range(start_period, end_period))
     for scenario, prefix in (("Actual", "actual"), ("Forecast", "forecast"), ("Budget", "budget")):
