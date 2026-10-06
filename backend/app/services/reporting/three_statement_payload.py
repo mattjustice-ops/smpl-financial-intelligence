@@ -15,6 +15,7 @@ from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_fl
 from app.services.reporting.gl_income_statement import gl_income_statement_by_period
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
 from app.services.reporting.period_utils import period_range, to_period
+from app.services.reporting.pipeline_deals import build_opp_pipeline, closed_new_business_acv
 from app.services.reporting.validation_gate import raise_if_validation_blocked
 
 IS_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -916,7 +917,7 @@ def build_forecast_engine_src(
     *,
     as_of: str,
 ) -> dict[str, Any]:
-    """Minimal SRC.actuals slice for Forecast Engine lever refresh."""
+    """SRC for the Forecast Engine: actuals, plus CRM deals (opp_pipeline) when the deal tables are loaded."""
     actuals: dict[str, dict[str, float | None]] = {}
     bs_rows = _gl_statement_rows(db, organization_id, "actual")[0]
     mrr_rows = _read_statement_table(db, organization_id, "actual_mrr_waterfall")
@@ -947,7 +948,12 @@ def build_forecast_engine_src(
         _merge_mrr_into_row(row, _normalize_mrr_metrics(mrr_by_period.get(period, {})))
         if row:
             actuals[period] = row
-    return {"actuals": actuals}
+    src: dict[str, Any] = {"actuals": actuals}
+    opp_pipeline = build_opp_pipeline(db, organization_id, as_of=as_of)
+    if opp_pipeline:
+        src["opp_pipeline"] = opp_pipeline
+        src["gtm"] = {"avg_acv": closed_new_business_acv(opp_pipeline, as_of=as_of)}
+    return src
 
 
 OUTLOOK_API_BUILD = "light-v2"

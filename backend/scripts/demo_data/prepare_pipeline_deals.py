@@ -3,7 +3,8 @@
 Writes a full copy of the source folder with these files changed (never touches the database):
   Actual_opportunities.csv              + June 2026 deals for every deal type
   Actual_opportunity_movements.csv      + the same June deals
-  Forecast_opportunities.csv            Jul-Dec open deals: close_status "Open", stage from probability
+  Forecast_opportunities.csv            Jul-Dec open deals: close_status "Open", stage from probability,
+                                        non-New Business amounts tied to the waterfall
   Forecast_opportunity_movements.csv    the same deals take the same labels
   pipeline_deals_log.csv
 
@@ -12,6 +13,9 @@ Rules (agreed with Matt, Oct 5 2026):
     ARR still equals the waterfall. Deals that have not closed are "Open", and the stage
     follows the probability: 35% Evaluation, 50% Proposal, 65% Negotiation, 80% Commit.
     Expected new logos for a month = sum of New Business probabilities.
+  * Expansion, Reactivation and Contraction amounts are scaled per month so weighted ARR
+    equals the waterfall; Churn equals waterfall churn less renewals expected to lapse
+    (Forecast_renewal_pipeline.csv). This is the same pipeline the Forecast Engine uses.
   * Actual June 2026 had waterfall ARR but no deals. June deals for each type (New Business,
     Expansion, Reactivation, Contraction, Churn) are built from May's deals of that type
     (same segment, channel, owner, stage and terms), new customer and deal IDs, amounts
@@ -178,6 +182,46 @@ def relabel_open(path: str, log: list[dict[str, str]]) -> list[dict[str, str]]:
     return rows
 
 
+def _renewal_shortfall(src: str) -> dict[str, Decimal]:
+    """Renewal ARR not expected to renew, by month (renewal ARR x (1 - probability))."""
+    _, rows = _read(os.path.join(src, "Forecast_renewal_pipeline.csv"))
+    out: dict[str, Decimal] = defaultdict(Decimal)
+    for r in rows:
+        out[r["renewal_period"][:7]] += _num(r["renewal_arr"]) * (1 - _num(r["renewal_probability"]))
+    return out
+
+
+def align_forecast_amounts(src: str, rows: list[dict[str, str]], log: list[dict[str, str]]) -> None:
+    """Scale each month's non-New Business deal amounts so weighted ARR equals the waterfall.
+
+    Churn deals carry the waterfall churn not already explained by renewals expected to lapse.
+    """
+    _, wf_rows = _read(os.path.join(src, "Forecast_MRR_Waterfall.csv"))
+    waterfall = {r["period"][:7]: r for r in wf_rows}
+    shortfall = _renewal_shortfall(src)
+    groups: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    for r in rows:
+        if r["period"][:7] >= FORECAST_START and r["opportunity_type"] in WATERFALL_COLUMN and r["opportunity_type"] != NEW_BUSINESS:
+            groups[(r["period"][:7], r["opportunity_type"])].append(r)
+    for (period, deal_type), deals in sorted(groups.items()):
+        target = abs(_num(waterfall[period][WATERFALL_COLUMN[deal_type]]))
+        if deal_type == "Churn":
+            target -= shortfall.get(period, Decimal("0"))
+        weighted = sum((_num(d["amount_arr"]) * _num(d["probability"]) for d in deals), Decimal("0"))
+        factor = target / weighted
+        for d in deals:
+            amount = (_num(d["amount_arr"]) * factor).quantize(CENT, rounding=ROUND_HALF_UP)
+            d["amount_arr"] = f"{amount:.2f}"
+            d["weighted_arr"] = f"{(amount * _num(d['probability'])).quantize(CENT, rounding=ROUND_HALF_UP):.2f}"
+        after = sum((_num(d["weighted_arr"]) for d in deals), Decimal("0"))
+        if abs(after - target) > TOLERANCE:
+            raise ValueError(f"Forecast {period} {deal_type}: weighted {after} != target {target}")
+        log.append({"version": "Forecast", "period": period, "file": "Forecast_opportunities.csv", "action": "scaled",
+                    "detail": f"{len(deals)} {deal_type} deals x{factor:.4f}; weighted ARR = waterfall"
+                              + (" less renewals expected to lapse" if deal_type == "Churn" else ""),
+                    "amount": f"{after:.2f}"})
+
+
 def copy_labels(path: str, deals: list[dict[str, str]], log: list[dict[str, str]]) -> None:
     """Movements for the same deal and month take the deal's stage and status."""
     labels = {(d["opportunity_id"], d["period"][:7]): (d["stage"], d["close_status"]) for d in deals}
@@ -225,6 +269,9 @@ def main(src: str, dst: str) -> None:
     append_rows(os.path.join(dst, "Actual_opportunity_movements.csv"), june, log)
 
     forecast = relabel_open(os.path.join(dst, "Forecast_opportunities.csv"), log)
+    align_forecast_amounts(src, forecast, log)
+    fields, _ = _read(os.path.join(dst, "Forecast_opportunities.csv"))
+    _write(os.path.join(dst, "Forecast_opportunities.csv"), fields, forecast)
     copy_labels(os.path.join(dst, "Forecast_opportunity_movements.csv"), forecast, log)
     check_forecast_pipeline(src, forecast, log)
 

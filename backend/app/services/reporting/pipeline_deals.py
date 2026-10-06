@@ -1,0 +1,103 @@
+"""CRM deals for the Forecast Engine GTM tab, read from the deal tables.
+
+Closed months come from ``actual_opportunities`` (the deals behind the booked waterfall);
+later months come from ``forecast_opportunities`` (the open pipeline). Each month and deal
+type carries the same shape the engine's built-in pipeline uses, plus ``expected``: deals
+expected to close (closed deals count 1, open deals count their probability).
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections import defaultdict
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.services.dashboard.query_utils import fetch_table_rows
+from app.services.reporting.period_utils import to_period
+
+DEAL_TYPES = ("New Business", "Expansion", "Reactivation", "Contraction", "Churn")
+NEW_BUSINESS = "New Business"
+
+
+def _num(value: Any) -> float:
+    try:
+        return float(str(value).replace(",", "").strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _deal_period(raw: dict[str, Any]) -> str | None:
+    value = raw.get("period") or raw.get("forecast_period")
+    if value in (None, ""):
+        return None
+    try:
+        return to_period(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _deal(raw: dict[str, Any], *, closed: bool) -> dict[str, Any]:
+    arr = _num(raw.get("amount_arr"))
+    prob = 1.0 if closed else _num(raw.get("probability"))
+    return {
+        "id": raw.get("opportunity_id"),
+        "customer": raw.get("customer_name") or raw.get("customer_id") or "",
+        "stage": raw.get("stage") or "",
+        "segment": raw.get("segment") or "",
+        "region": raw.get("region") or "",
+        "owner": raw.get("owner") or "",
+        "channel": raw.get("marketing_channel") or "",
+        "billing": raw.get("billing_cadence") or "",
+        "arr": round(arr, 2),
+        "weighted": round(arr * prob, 2),
+        "prob": round(prob * 100),
+        "probability": prob,
+        "outcome": "won" if closed else "open",
+    }
+
+
+def _add(buckets: dict[str, dict[str, dict[str, Any]]], period: str, deal_type: str, deal: dict[str, Any]) -> None:
+    bucket = buckets[period].setdefault(
+        deal_type, {"total": 0.0, "weighted": 0.0, "count": 0, "expected": 0.0, "deals": []}
+    )
+    bucket["total"] += deal["arr"]
+    bucket["weighted"] += deal["weighted"]
+    bucket["count"] += 1
+    bucket["expected"] += deal.pop("probability")
+    bucket["deals"].append(deal)
+
+
+def build_opp_pipeline(db: Session, organization_id: uuid.UUID, *, as_of: str) -> dict[str, Any]:
+    """``{period: {deal_type: {total, weighted, count, expected, deals}}}``; empty when no deal tables."""
+    buckets: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for raw in fetch_table_rows(db, "actual_opportunities", organization_id):
+        period, deal_type = _deal_period(raw), raw.get("opportunity_type")
+        if period and period <= as_of and deal_type in DEAL_TYPES:
+            _add(buckets, period, deal_type, _deal(raw, closed=True))
+    for raw in fetch_table_rows(db, "forecast_opportunities", organization_id):
+        period, deal_type = _deal_period(raw), raw.get("opportunity_type")
+        if period and period > as_of and deal_type in DEAL_TYPES:
+            _add(buckets, period, deal_type, _deal(raw, closed=False))
+    out: dict[str, Any] = {}
+    for period in sorted(buckets):
+        out[period] = {}
+        for deal_type, bucket in buckets[period].items():
+            bucket["deals"].sort(key=lambda d: -d["weighted"])
+            bucket["total"] = round(bucket["total"], 2)
+            bucket["weighted"] = round(bucket["weighted"], 2)
+            bucket["expected"] = round(bucket["expected"], 4)
+            out[period][deal_type] = bucket
+    return out
+
+
+def closed_new_business_acv(pipeline: dict[str, Any], *, as_of: str) -> float | None:
+    """Average ARR of closed New Business deals through ``as_of``; None without closed deals."""
+    total, count = 0.0, 0
+    for period, by_type in pipeline.items():
+        nb = by_type.get(NEW_BUSINESS) if period <= as_of else None
+        if nb:
+            total += nb["total"]
+            count += nb["count"]
+    return round(total / count, 2) if count else None
