@@ -619,6 +619,15 @@
       mergeActuals(hooks.SRC.actuals, data.SRC.actuals, closeMonth);
     }
 
+    if (hooks.SRC && data.SRC && data.SRC.opp_pipeline && Object.keys(data.SRC.opp_pipeline).length) {
+      hooks.SRC.opp_pipeline = hooks.SRC.opp_pipeline || {};
+      Object.keys(data.SRC.opp_pipeline).forEach(function (period) {
+        hooks.SRC.opp_pipeline[period] = JSON.parse(JSON.stringify(data.SRC.opp_pipeline[period]));
+      });
+      hooks.SRC.gtm = data.SRC.gtm || null;
+      hooks.SRC._fcGtmHistOppsSeeded = false;
+    }
+
     if (hooks.TS_DATA && global.SMPL_DEMO_TS_DATA === hooks.TS_DATA) {
       registerDemoData(hooks.TS_DATA, global.SMPL_DEMO_WF_TABLE);
     }

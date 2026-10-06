@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -69,27 +70,44 @@ def _add(buckets: dict[str, dict[str, dict[str, Any]]], period: str, deal_type: 
     bucket["deals"].append(deal)
 
 
-def build_opp_pipeline(db: Session, organization_id: uuid.UUID, *, as_of: str) -> dict[str, Any]:
-    """``{period: {deal_type: {total, weighted, count, expected, deals}}}``; empty when no deal tables."""
+def pipeline_from_rows(
+    actual_rows: Iterable[dict[str, Any]],
+    forecast_rows: Iterable[dict[str, Any]],
+    *,
+    as_of: str,
+) -> dict[str, Any]:
+    """``{period: {deal_type: {total, weighted, count, expected, deals}}}`` from deal rows."""
     buckets: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
-    for raw in fetch_table_rows(db, "actual_opportunities", organization_id):
+    for raw in actual_rows:
         period, deal_type = _deal_period(raw), raw.get("opportunity_type")
         if period and period <= as_of and deal_type in DEAL_TYPES:
             _add(buckets, period, deal_type, _deal(raw, closed=True))
-    for raw in fetch_table_rows(db, "forecast_opportunities", organization_id):
+    for raw in forecast_rows:
         period, deal_type = _deal_period(raw), raw.get("opportunity_type")
         if period and period > as_of and deal_type in DEAL_TYPES:
             _add(buckets, period, deal_type, _deal(raw, closed=False))
     out: dict[str, Any] = {}
     for period in sorted(buckets):
         out[period] = {}
-        for deal_type, bucket in buckets[period].items():
+        for deal_type in DEAL_TYPES:
+            bucket = buckets[period].get(deal_type)
+            if not bucket:
+                continue
             bucket["deals"].sort(key=lambda d: -d["weighted"])
             bucket["total"] = round(bucket["total"], 2)
             bucket["weighted"] = round(bucket["weighted"], 2)
             bucket["expected"] = round(bucket["expected"], 4)
             out[period][deal_type] = bucket
     return out
+
+
+def build_opp_pipeline(db: Session, organization_id: uuid.UUID, *, as_of: str) -> dict[str, Any]:
+    """CRM pipeline from the deal tables; empty when they are not loaded."""
+    return pipeline_from_rows(
+        fetch_table_rows(db, "actual_opportunities", organization_id),
+        fetch_table_rows(db, "forecast_opportunities", organization_id),
+        as_of=as_of,
+    )
 
 
 def closed_new_business_acv(pipeline: dict[str, Any], *, as_of: str) -> float | None:
