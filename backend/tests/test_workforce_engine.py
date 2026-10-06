@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
+from app.models.demo_finance import ForecastHeadcountPlan, ForecastIncomeStatement
 from app.models.organization import Organization
 from app.models.workforce import (
     WorkforceCompensationBand,
@@ -34,6 +35,8 @@ def db_session():
             WorkforceHiringRampAssumption.__table__,
             WorkforceCompensationBand.__table__,
             WorkforceDepartmentAllocationRule.__table__,
+            ForecastHeadcountPlan.__table__,
+            ForecastIncomeStatement.__table__,
         ],
     )
     factory = sessionmaker(bind=engine)

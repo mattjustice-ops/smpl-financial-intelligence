@@ -104,16 +104,16 @@ VALIDATION_LABEL_CATALOG: dict[str, tuple[str, str]] = {
         "Payroll appears as zero — confirm workforce cost inputs.",
     ),
     "workforce_payroll_derived": (
-        "Workforce payroll derived",
-        "Payroll was derived from headcount plan rather than payroll file.",
+        "Workforce payroll from GL",
+        "Payroll dollars come from the GL payroll accounts (salaries, benefits, payroll taxes, commissions).",
     ),
-    "workforce_pnl_overlay_ready": (
-        "Workforce P&L overlay ready",
-        "Workforce costs are available to overlay onto the P&L.",
+    "roster_cost_vs_gl_payroll": (
+        "Roster cost vs GL payroll",
+        "Fully loaded cash cost on the employee roster differs from GL payroll for this team. Reports use GL payroll.",
     ),
-    "workforce_cash_payroll_vs_people_cost": (
-        "Payroll vs people cost",
-        "Cash payroll and people-cost views are within expected tolerance.",
+    "gl_payroll_missing": (
+        "GL payroll missing",
+        "Some months have employees on the roster but no GL payroll; payroll shows as zero for those months.",
     ),
     "gtm_quota_capacity_source": (
         "GTM quota capacity sourced",
@@ -152,6 +152,10 @@ CHECK_COMPARISON_SIDES: dict[str, tuple[str, str]] = {
     "closed_won_arr_ties_mrr_new_business_arr": (
         "ARR waterfall new business / new_arr",
         "Pipeline waterfall closed_won",
+    ),
+    "roster_cost_vs_gl_payroll": (
+        "GL payroll",
+        "Employee roster fully loaded cash cost",
     ),
 }
 
