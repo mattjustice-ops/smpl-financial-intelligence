@@ -79,6 +79,7 @@ DETAIL_FROM_MONTH = {
 }
 
 FORECAST_TEMPLATE_MONTH = "2026-06"
+IMPLEMENTATION_ACCOUNT = "4100"
 
 
 def _clone_to(row: dict[str, str], target: str, template: str) -> dict[str, str]:
@@ -179,7 +180,8 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
 def forecast_seed(actual_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     """Forecast months start from the last actual month's P&L rows, in the source sign convention."""
     seed: list[dict[str, str]] = []
-    template_rows = [r for r in actual_rows if r["period"][:7] == FORECAST_TEMPLATE_MONTH and r["statement"] != "Balance Sheet"]
+    template_rows = [r for r in actual_rows if r["period"][:7] == FORECAST_TEMPLATE_MONTH and r["statement"] != "Balance Sheet"
+                     and r["account_number"] != IMPLEMENTATION_ACCOUNT]
     for target in sorted(REBUILD_PERIODS["Forecast"]):
         for r in template_rows:
             nr = _clone_to(r, target, FORECAST_TEMPLATE_MONTH)
@@ -196,20 +198,23 @@ def implementation_rows(src: str, version: str, template: dict[str, str]) -> lis
     if not os.path.exists(path):
         return []
     by_month: dict[str, list[Decimal]] = defaultdict(list)
+    customers: dict[str, Decimal] = defaultdict(Decimal)
     for r in _read(path):
         by_month[r["period"][:7]].append(Decimal(r["implementation_fee"]))
+        customers[r["period"][:7]] += Decimal(r.get("win_probability") or "1")
     rows = []
     for period, fees in sorted(by_month.items()):
         rows.append({
             **{k: "" for k in template},
             "organization_id": template["organization_id"], "version": version, "period": period,
-            "account_number": "4100", "account_name": "Implementation & Onboarding Revenue",
+            "account_number": IMPLEMENTATION_ACCOUNT, "account_name": "Implementation & Onboarding Revenue",
             "statement": "Income Statement", "statement_category": "Revenue", "account_group": "Revenue",
             "expense_type": "Implementation & Onboarding", "department": "Revenue", "cost_center": "REV-IMPL",
             "sub_department": "Implementation & Onboarding", "source_file": f"{version}_implementation_schedule.csv",
-            "source_record_id": f"{version}-{period}-4100", "amount": f"{-sum(fees, Decimal('0')):.2f}",
+            "source_record_id": f"{version}-{period}-{IMPLEMENTATION_ACCOUNT}", "amount": f"{-sum(fees, Decimal('0')):.2f}",
             "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model",
-            "notes": f"{len(fees)} new customers; one-time implementation fee by segment",
+            "notes": f"{customers[period]:g} expected new customers from {len(fees)} deals; "
+                     f"one-time implementation fee by segment",
         })
     return rows
 

@@ -15,6 +15,9 @@ Rules (agreed with Matt, Oct 5 2026):
   * One fee per new customer by segment: SMB 2,000; Mid-Market 3,500; Enterprise 5,000.
   * New customers: customer start dates for 2024-2025 (Actual_customers.csv) and closed-won
     "New Business" deals for 2026 (<v>_opportunities.csv).
+  * Budget counts every planned New Business deal as a new customer. Forecast uses the open
+    pipeline: each open New Business deal adds probability x fee (expected new customers),
+    so the forecast fee follows the CRM, not a target.
   * Invoiced and recognized when the customer signs, Net 30; collected in the month the
     invoice is due.
   * Budget and Forecast continue from Actual: the months before their first month come
@@ -48,9 +51,12 @@ ACCOUNT = {
 VERSION_START = {"Actual": "2024-01", "Budget": "2026-01", "Forecast": "2026-07"}
 VERSION_END = {"Actual": "2026-06", "Budget": "2026-12", "Forecast": "2026-12"}
 CUSTOMER_START_YEARS = ("2024", "2025")
+DEAL_STATUSES = {"Actual": {"Closed Won"}, "Budget": {"Closed Won"}, "Forecast": {"Open"}}
+PROBABILITY_WEIGHTED = {"Forecast"}
 SCHEDULE_FIELDS = [
     "organization_id", "version", "period", "customer_id", "customer_name", "segment", "source",
-    "source_record_id", "implementation_fee", "invoice_id", "invoice_date", "due_date", "collection_period",
+    "source_record_id", "win_probability", "implementation_fee", "invoice_id", "invoice_date", "due_date",
+    "collection_period",
 ]
 
 
@@ -77,12 +83,13 @@ def _num(value) -> Decimal:
 
 
 def _entry(org: str, version: str, signed: date, customer_id: str, customer_name: str, segment: str,
-           source: str, record_id: str, seq: int) -> dict[str, str]:
+           source: str, record_id: str, seq: int, probability: Decimal = Decimal("1")) -> dict[str, str]:
     due = signed + timedelta(days=TERMS_DAYS)
     return {
         "organization_id": org, "version": version, "period": signed.strftime("%Y-%m"),
         "customer_id": customer_id, "customer_name": customer_name, "segment": segment, "source": source,
-        "source_record_id": record_id, "implementation_fee": _money(FEE_BY_SEGMENT[segment]),
+        "source_record_id": record_id, "win_probability": f"{probability}",
+        "implementation_fee": _money(FEE_BY_SEGMENT[segment] * probability),
         "invoice_id": f"IMP-{version[0]}-{seq:05d}", "invoice_date": signed.isoformat(),
         "due_date": due.isoformat(), "collection_period": due.strftime("%Y-%m"),
     }
@@ -103,7 +110,7 @@ def build_schedule(src: str, version: str) -> tuple[list[dict[str, str]], list[d
     _, opps = _read(os.path.join(src, f"{version}_opportunities.csv"))
     skipped: dict[str, int] = defaultdict(int)
     for o in sorted(opps, key=lambda r: (r["actual_close_date"] or r["expected_close_date"], r["opportunity_id"])):
-        if o["opportunity_type"] != "New Business" or o["close_status"] != "Closed Won":
+        if o["opportunity_type"] != "New Business" or o["close_status"] not in DEAL_STATUSES[version]:
             continue
         closed = (o["actual_close_date"] or o["expected_close_date"])[:10]
         month = closed[:7]
@@ -112,12 +119,13 @@ def build_schedule(src: str, version: str) -> tuple[list[dict[str, str]], list[d
         if not (start <= month <= end):
             skipped[month] += 1
             continue
+        probability = _num(o["probability"]) if version in PROBABILITY_WEIGHTED else Decimal("1")
         rows.append(_entry(o["organization_id"], version, date.fromisoformat(closed), o["customer_id"],
                            o["customer_name"], o["segment"], f"{version}_opportunities.csv",
-                           o["opportunity_id"], len(rows) + 1))
+                           o["opportunity_id"], len(rows) + 1, probability))
     for month, n in sorted(skipped.items()):
         log.append({"version": version, "period": month, "file": f"{version}_opportunities.csv", "action": "not used",
-                    "detail": f"{n} closed-won New Business deals fall outside {version} months {start}..{end}"})
+                    "detail": f"{n} New Business deals fall outside {version} months {start}..{end}"})
     return rows, log
 
 
@@ -251,7 +259,8 @@ def main(src: str, dst: str) -> None:
         chain = chain_schedule(schedules, version)
         _write(os.path.join(dst, f"{version}_implementation_schedule.csv"), SCHEDULE_FIELDS, schedule)
         log.append({"version": version, "period": "", "file": f"{version}_implementation_schedule.csv", "action": "created",
-                    "detail": f"{len(schedule)} new customers", "amount": _money(sum((_num(r['implementation_fee']) for r in schedule), Decimal('0')))})
+                    "detail": f"{len(schedule)} deals; expected new customers "
+                              f"{sum((_num(r['win_probability']) for r in schedule), Decimal('0'))}", "amount": _money(sum((_num(r['implementation_fee']) for r in schedule), Decimal('0')))})
         update_chart_of_accounts(os.path.join(dst, f"{version}_chart_of_accounts.csv"), log, version)
         update_invoices(os.path.join(dst, f"{version}_invoices.csv"), schedule, VERSION_END[version], log, version)
         rr = os.path.join(dst, f"{version}_revenue_recognition.csv")
