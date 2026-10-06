@@ -446,7 +446,7 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="/shared/smpl-skin.js?v=6"></script>
-<script src="/shared/smpl-outlook.js?v=23"></script>
+<script src="/shared/smpl-outlook.js?v=24"></script>
 <script src="/shared/smpl-demo-seed.js?v=8"></script>
 <script src="/shared/smpl-bootstrap-demo.js?v=6"></script>
 <script src="/shared/smpl-plan-mc.js?v=1"></script>
@@ -454,7 +454,8 @@ button.lock-tag.lock-link:focus-visible{outline:1px solid var(--accent);outline-
 (function(){
 'use strict';
 
-const CLOSE_MONTH = '2026-06';
+/** Last closed month: the loaded close once the outlook hydrates; the demo seed's close before. */
+let CLOSE_MONTH = (window.SMPL_DEMO_WORKFORCE && window.SMPL_DEMO_WORKFORCE.close_month) || window.CLOSE_MONTH || '2026-06';
 const BUDGET_YEAR = 2027;
 /** Jan BUDGET_YEAR beginning ARR = Dec (BUDGET_YEAR-1) Forecast ending ARR from the loaded waterfall; null when not loaded. */
 let BOP_LOCK = null;
@@ -535,8 +536,7 @@ const CTX_QUARTERS = [
 
 const MIX_KEYS = ['nb', 'exp', 'react', 'cont', 'churn'];
 
-/** Share of S&M line attributed to marketing spend (remainder ≈ sales payroll). */
-const MKT_SM_RATIO = 0.65;
+/** Editable plan rates used only where no loaded funnel month exists (see gtmRatesFromHist). */
 const DEFAULT_GTM_RATES = { cpl: 380, mqlOpp: 0.28, oppClose: 0.14, avgAcv: 125000 };
 
 /** Marketing channels — mix % of total program spend; CPL drives MQLs per channel. */
@@ -625,8 +625,8 @@ const BUDGET_METRIC_DEFS = [
     formula: 'Program spend = MQLs required × blended CPL',
     formula_id: 'gtm_blended_cpl' },
   { id: 'gtm_sm_implied', domain: 'GTM', label: 'Implied S&M (from marketing)', source_type: 'COMPUTED', tab: 'gtm',
-    description: 'Marketing spend grossed up to S&M using the marketing share of S&M.',
-    formula: 'Marketing spend / MKT_SM_RATIO (default 65%)',
+    description: 'Marketing spend grossed up to S&M using the GL program share of S&M in the year before the budget.',
+    formula: 'Marketing spend / (Σ GL program spend ÷ Σ IS S&M, prior FY loaded months)',
     formula_id: 'gtm_sm_implied' },
 
   // Sales
@@ -1939,18 +1939,38 @@ function getIsSm(period) {
   return null;
 }
 
+/**
+ * Funnel rates for a closed or forecast month from loaded data: cost per MQL = GL program spend ÷
+ * loaded MQLs, MQL→opp = opportunities ÷ MQLs, win rate = closed-won ÷ pipeline created, ACV from
+ * closed new-business deals. A rate with no loaded inputs keeps the editable plan default and is
+ * listed in ``assumed``.
+ */
 function gtmRatesFromHist(period) {
-  const arr = getHistRow(period);
-  const sm = getIsSm(period);
-  const nb = arr ? arr.nb : 0;
-  const spend = sm ? sm * MKT_SM_RATIO : 0;
-  const rates = { ...DEFAULT_GTM_RATES };
-  if (nb > 0) {
-    const probe = computeGtmFromNb(nb, rates, STATE.pipelineCoverageMult);
-    if (probe.closedLogos > 0) rates.avgAcv = nb / probe.closedLogos;
-    if (probe.mqls > 0 && spend > 0) rates.cpl = spend / probe.mqls;
-  }
+  const rates = { ...DEFAULT_GTM_RATES, assumed: [] };
+  const spend = loadedProgramSpend(period);
+  const f = loadedFunnel(period) || {};
+  const mqls = Number(f.mqls) || 0;
+  if (spend != null && mqls > 0) rates.cpl = spend / mqls; else rates.assumed.push('cpl');
+  if (mqls > 0 && Number(f.opportunities_created) > 0) rates.mqlOpp = f.opportunities_created / mqls; else rates.assumed.push('mqlOpp');
+  if (Number(f.pipeline_arr_created) > 0 && f.closed_won_arr != null) rates.oppClose = f.closed_won_arr / f.pipeline_arr_created; else rates.assumed.push('oppClose');
+  const src = window.SMPL_OUTLOOK_PAYLOAD && window.SMPL_OUTLOOK_PAYLOAD.SRC;
+  const acv = src && src.gtm && Number(src.gtm.avg_acv);
+  if (acv > 0) rates.avgAcv = acv; else rates.assumed.push('avgAcv');
   return rates;
+}
+
+/** Marketing program share of S&M over the loaded months of the year before the budget; null when not loaded. */
+function mktSmShare() {
+  let prog = 0, sm = 0;
+  for (let m = 1; m <= 12; m++) {
+    const p = `${BUDGET_YEAR - 1}-${padMo(m)}`;
+    const s = loadedProgramSpend(p);
+    const t = getIsSm(p);
+    if (s == null || t == null) continue;
+    prog += s;
+    sm += t;
+  }
+  return sm > 0 ? prog / sm : null;
 }
 
 /** Top-down funnel to MQL demand. Spend is applied later from channel mix × CPL (see allocateGtmChannels). */
@@ -1967,7 +1987,8 @@ function computeGtmFromNb(nb, rates, coverageMult) {
   const mqls = mqlOpp > 0 ? pipelineOpps / mqlOpp : 0;
   // Placeholder spend from blended CPL — overwritten for FY plan by channel allocation.
   const spend = mqls * cpl;
-  const smTotal = MKT_SM_RATIO > 0 ? spend / MKT_SM_RATIO : spend;
+  const share = mktSmShare();
+  const smTotal = share ? spend / share : null;
   return {
     nb, closedLogos, oppsToClose, pipelineDollar, pipelineOpps, mqls, spend, smTotal,
     rates: { avgAcv, oppClose, mqlOpp, cpl },
@@ -1981,12 +2002,11 @@ function getGtmHistRow(period) {
   const nb = arr.nb || 0;
   const rates = gtmRatesFromHist(period);
   const row = computeGtmFromNb(nb, rates, STATE.pipelineCoverageMult);
-  const sm = getIsSm(period);
-  if (sm && row.mqls > 0) {
-    row.spend = sm * MKT_SM_RATIO;
-    row.smTotal = sm;
-    row.rates = { ...row.rates, cpl: row.spend / row.mqls };
-  }
+  // History shows what was loaded: GL program spend, loaded MQLs and IS S&M.
+  const f = loadedFunnel(period);
+  row.spend = loadedProgramSpend(period);
+  row.mqls = f && f.mqls != null ? Number(f.mqls) : null;
+  row.smTotal = getIsSm(period);
   STATE.gtmHistRows[period] = row;
   return row;
 }
@@ -2111,16 +2131,12 @@ function computeGtmPlan() {
     row.channelMqlsRaw = alloc.mqlsRawSum;
     row.mixRawSum = alloc.mixRawSum;
     row.spend = alloc.totalSpend;
-    row.smTotal = MKT_SM_RATIO > 0 ? row.spend / MKT_SM_RATIO : row.spend;
+    const share = mktSmShare();
+    row.smTotal = share ? row.spend / share : null;
     row.rates = { ...row.rates, cpl: blendedCpl };
     out[p] = row;
   }
   return out;
-}
-
-function getBudgetSm(period) {
-  const plan = computeGtmPlan();
-  return plan[period] ? plan[period].smTotal : 0;
 }
 
 function seedGtmFromHistory() {
@@ -3650,9 +3666,9 @@ function buildQuarterGtm(q) {
     if (!r && !arr) continue;
     if (arr) nb += arr.nb || 0;
     if (!r) continue;
-    spend += r.spend;
-    smTotal += r.smTotal;
-    mqls += r.mqls;
+    spend = spend == null || r.spend == null ? null : spend + r.spend;
+    smTotal = smTotal == null || r.smTotal == null ? null : smTotal + r.smTotal;
+    mqls = mqls == null || r.mqls == null ? null : mqls + r.mqls;
     pipelineDollar += r.pipelineDollar;
     oppsToClose += r.oppsToClose;
     pipelineOpps += r.pipelineOpps;
@@ -3767,7 +3783,8 @@ function renderSidebar() {
   if (curTab === 'gtm') {
     const plan = computeGtmPlan();
     const fySpend = BUD_P.reduce((s, p) => s + plan[p].spend, 0);
-    const fySm = BUD_P.reduce((s, p) => s + plan[p].smTotal, 0);
+    const smShare = mktSmShare();
+    const fySm = smShare ? BUD_P.reduce((s, p) => s + plan[p].smTotal, 0) : null;
     const arrPlan = computeBudgetArr();
     const fyNb = BUD_P.reduce((s, p) => s + arrPlan[p].nb, 0);
     el.innerHTML = `
@@ -3781,7 +3798,7 @@ function renderSidebar() {
       <div class="panel-lbl">Derived cost (→ IS)</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         FY marketing spend<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fySpend)}</strong><br><span style="font-size:9.5px">MQLs × blended CPL · split by channel mix</span><br><br>
-        FY S&amp;M (implied)<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtM(fySm)}</strong><br><span style="font-size:9.5px">marketing ÷ ${(MKT_SM_RATIO * 100).toFixed(0)}% · channel $ → P&amp;L</span>
+        FY S&amp;M (implied)<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtM(fySm)}</strong><br><span style="font-size:9.5px">${smShare ? `marketing ÷ ${(smShare * 100).toFixed(0)}% (GL program share of S&amp;M, FY${String(BUDGET_YEAR - 1).slice(2)})` : `GL program spend or S&amp;M for FY${String(BUDGET_YEAR - 1).slice(2)} not loaded`}</span>
       </div>`;
     return;
   }
@@ -6104,8 +6121,33 @@ function tsIsRow(period) {
 
 const BUDGET_YOY_FIELDS = ['eop', 'nn', 'rev', 'ebitda', 'opex', 'mkt', 'mqls', 'cash', 'hc'];
 
-/** Prior-year series from loaded data only (null months when not loaded). MQLs are not in the dataset. */
+/** Loaded marketing funnel totals for a month; null when not loaded. */
+function loadedFunnel(p) {
+  const get = window.SMPLOutlook && window.SMPLOutlook.getLoadedFunnel;
+  return typeof get === 'function' ? get(p, CLOSE_MONTH) : null;
+}
+
+/** GL marketing program spend for a month; null when not loaded. */
+function loadedProgramSpend(p) {
+  const get = window.SMPLOutlook && window.SMPLOutlook.getLoadedProgramSpend;
+  return typeof get === 'function' ? get(p, CLOSE_MONTH) : null;
+}
+
+function outlookMqls(p) {
+  const f = loadedFunnel(p);
+  return f && f.mqls != null ? Number(f.mqls) : null;
+}
+
+/** Prior-year series from loaded data only (null months when not loaded). */
 function budgetPriorYear(year) {
+  const loadedHist = window.SMPLOutlook && window.SMPLOutlook.getHistoryYear
+    ? window.SMPLOutlook.getHistoryYear(year)
+    : null;
+  if (loadedHist) {
+    const out = Object.assign({}, loadedHist);
+    delete out.periods;
+    return out;
+  }
   const ps = yearPeriods(year);
   const loaded = new Set(allOutlookPeriods());
   const hist = (p) => (loaded.has(p) ? getHistRow(p) : null);
@@ -6128,7 +6170,7 @@ function budgetPriorYear(year) {
     ebitda: ps.map((p) => isVal(p, 'ebitda')),
     opex: ps.map((p) => isVal(p, 'total_opex')),
     mkt: ps.map(programs),
-    mqls: ps.map(() => null),
+    mqls: ps.map(outlookMqls),
     cash: ps.map((p) => {
       const cfs = tsStmtRow(p, 'cfs');
       if (cfs && cfs.ending_cash != null) return cfs.ending_cash;
@@ -8905,7 +8947,7 @@ function runBudgetRiskChecks(packet) {
   if (p.fyGtmSm <= p.fyIsSm * 1.02) {
     out.push({ id: 'sm_tie', severity: 'ok', title: 'GTM inside IS S&M', detail: `Implied GTM S&M ${fmtM(p.fyGtmSm)} ≤ IS S&M ${fmtM(p.fyIsSm)}.` });
   } else {
-    out.push({ id: 'sm_tie', severity: 'medium', title: 'GTM S&M exceeds IS S&M', detail: `GTM implied ${fmtM(p.fyGtmSm)} vs IS ${fmtM(p.fyIsSm)} — check MKT_SM_RATIO / dept P&L.` });
+    out.push({ id: 'sm_tie', severity: 'medium', title: 'GTM S&M exceeds IS S&M', detail: `GTM implied ${fmtM(p.fyGtmSm)} vs IS ${fmtM(p.fyIsSm)} — check GL program share of S&M / dept P&L.` });
   }
 
   return out;
@@ -10408,7 +10450,7 @@ function budgetVersionSnapshot() {
 }
 
 function buildBudgetTableRows(vid, orgId) {
-  const org = orgId || '8571e520-0687-4516-bdee-379f37c58c1f';
+  const org = orgId || null;
   const asOf = CLOSE_MONTH;
   const arr = computeBudgetArr();
   const is = computeIsPlan();
@@ -10422,7 +10464,7 @@ function buildBudgetTableRows(vid, orgId) {
       beginning_arr: a.bop, renewal_arr: 0, new_business_arr: a.nb, expansion_arr: a.exp,
       reactivation_arr: a.react, contraction_arr: a.cont, churn_arr: a.churn,
       net_new_arr: a.nn, ending_arr: a.eop,
-      gross_retention_rate: a.grr || 0, net_dollar_retention_rate: a.nrr || 0,
+      gross_retention_rate: a.grr != null ? a.grr : null, net_dollar_retention_rate: a.nrr != null ? a.nrr : null,
     };
   });
   const income = BUD_P.map(p => {
@@ -10520,13 +10562,17 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
   }
   if (!orgId) return { ok: false, reason: 'signin' };
   const savedPacket = buildBudgetAssurancePacket();
+  const orgTables = {};
+  Object.keys(tables || {}).forEach(k => {
+    orgTables[k] = (tables[k] || []).map(r => Object.assign({}, r, { organization_id: orgId }));
+  });
   const body = {
     version_name: name,
     as_of_period: CLOSE_MONTH,
     budget_year: BUDGET_YEAR,
     levers: JSON.parse(JSON.stringify(STATE)),
     results: { engine: 'budget', year: BUDGET_YEAR },
-    tables,
+    tables: orgTables,
   };
   const draftRes = await fetch('/api/v1/budget/versions/draft?organization_id=' + encodeURIComponent(orgId), {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
@@ -10817,7 +10863,8 @@ async function init() {
       parentWaitMs: 1500,
       hooks: { TS_DATA: window.SMPL_DEMO_TS_DATA, WF_TABLE: window.SMPL_DEMO_WF_TABLE },
       onStatus: setWarehouseStatus,
-      onApplied: function () {
+      onApplied: function (data) {
+        if (data && data.meta && data.meta.close_month) CLOSE_MONTH = data.meta.close_month;
         reseedPlanFromHistory('outlook-hydrate');
         refresh();
       },

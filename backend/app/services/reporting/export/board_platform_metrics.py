@@ -1217,7 +1217,7 @@ def build_arr_bridge_block(bundle: ReportingBundle) -> dict[str, Any]:
     nn_bud = compute_net_new_arr(bundle, as_of, "Budget")
 
     m = build_metrics_snapshot(bundle)
-    grr = float((arr_act - churn) / arr_act * 100) if arr_act else None
+    grr = float(m.grr * 100) if m.grr is not None else None
 
     arr_prior_bud = ending_arr_at_period(bundle, prior, "Budget")
 

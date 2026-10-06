@@ -28,28 +28,38 @@ def _wf(bundle: ReportingBundle, key: str, wtype: str, period: str, scenario: st
     return Decimal("0")
 
 
+def _arr_parts(bundle: ReportingBundle, period: str) -> dict[str, Decimal]:
+    return {
+        "bop": _wf(bundle, "arr", "beginning_arr", period) or _wf(bundle, "arr", "beginning", period),
+        "nb": _wf(bundle, "arr", "new_business", period) or _wf(bundle, "arr", "new_arr", period),
+        "exp": _wf(bundle, "arr", "expansion_arr", period) or _wf(bundle, "arr", "expansion", period),
+        "react": _wf(bundle, "arr", "reactivation_arr", period) or _wf(bundle, "arr", "reactivation", period),
+        "cont": abs(_wf(bundle, "arr", "contraction_arr", period) or _wf(bundle, "arr", "contraction", period)),
+        "churn": abs(_wf(bundle, "arr", "churn_arr", period) or _wf(bundle, "arr", "churn", period)),
+    }
+
+
 def _grr(bundle: ReportingBundle, period: str) -> Decimal | None:
-    loaded = _wf(bundle, "arr", "gross_retention_rate", period) or _wf(bundle, "arr", "grr", period)
-    if loaded:
-        return loaded
-    bop = _wf(bundle, "arr", "beginning_arr", period) or _wf(bundle, "arr", "beginning", period)
-    if not bop:
+    """(beginning - contraction - churn) / beginning, from the loaded components."""
+    p = _arr_parts(bundle, period)
+    if not p["bop"]:
         return None
-    churn = abs(_wf(bundle, "arr", "churn_arr", period) or _wf(bundle, "arr", "churn", period))
-    cont = abs(_wf(bundle, "arr", "contraction_arr", period) or _wf(bundle, "arr", "contraction", period))
-    return (bop - churn - cont) / bop
+    return (p["bop"] - p["churn"] - p["cont"]) / p["bop"]
+
+
+def _nrr(bundle: ReportingBundle, period: str) -> Decimal | None:
+    """(beginning + expansion + reactivation - contraction - churn) / beginning."""
+    p = _arr_parts(bundle, period)
+    if not p["bop"]:
+        return None
+    return (p["bop"] + p["exp"] + p["react"] - p["churn"] - p["cont"]) / p["bop"]
 
 
 def _net_new(bundle: ReportingBundle, period: str) -> Decimal:
-    loaded = _wf(bundle, "arr", "net_new_arr", period)
-    if loaded:
-        return loaded
-    nb = _wf(bundle, "arr", "new_business", period) or _wf(bundle, "arr", "new_arr", period)
-    exp = _wf(bundle, "arr", "expansion_arr", period) or _wf(bundle, "arr", "expansion", period)
-    react = _wf(bundle, "arr", "reactivation_arr", period) or _wf(bundle, "arr", "reactivation", period)
-    cont = abs(_wf(bundle, "arr", "contraction_arr", period) or _wf(bundle, "arr", "contraction", period))
-    churn = abs(_wf(bundle, "arr", "churn_arr", period) or _wf(bundle, "arr", "churn", period))
-    return nb + exp + react - cont - churn
+    p = _arr_parts(bundle, period)
+    if any(p[k] for k in ("nb", "exp", "react", "cont", "churn")):
+        return p["nb"] + p["exp"] + p["react"] - p["cont"] - p["churn"]
+    return _wf(bundle, "arr", "net_new_arr", period)
 
 
 def _kpi(

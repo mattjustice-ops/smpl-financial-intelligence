@@ -300,6 +300,24 @@ def _load_ramp(db: Session, organization_id: uuid.UUID) -> list[dict[str, Any]]:
     ]
 
 
+def history_heads(db: Session, organization_id: uuid.UUID, periods: list[str]) -> dict[str, int]:
+    """Total heads per closed month: actual roster when loaded, otherwise actual headcount plan."""
+    if not periods:
+        return {}
+    months = [period_to_date(p) for p in periods]
+    roster, _ = load_roster(db, organization_id, "Actual")
+    has_roster = any(e.counted for e in roster)
+    plan = [] if has_roster else load_legacy_headcount_rows(
+        db, organization_id, scenario="Actual", start_period=months[0], end_period=months[-1]
+    )
+    heads, _ = _heads(roster, plan, months)
+    if not heads:
+        return {}
+    covered = set(months) if has_roster else {row.period.replace(day=1) for row in plan}
+    total = _totals(heads, len(months))
+    return {p: total[i] for i, p in enumerate(periods) if months[i] in covered}
+
+
 def build_workforce_payload(db: Session, organization_id: uuid.UUID, *, as_of_period: str) -> dict[str, Any]:
     year = int(as_of_period[:4])
     start, end = date(year, 1, 1), date(year, 12, 1)

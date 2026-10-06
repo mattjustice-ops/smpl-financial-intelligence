@@ -105,6 +105,9 @@ const sandbox = {
   reqActive: {},
   requestAnimationFrame: (fn) => (typeof fn === "function" ? fn() : 0),
   refresh: () => {},
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  location: { origin: "http://localhost", pathname: "/forecast-engine/", search: "" },
 };
 
 sandbox.window = sandbox;
@@ -118,6 +121,8 @@ try {
 } catch {
   vm.createContext(sandbox);
 }
+// Loaded statements come through SMPLOutlook (demo seed when signed out), as on the page.
+vm.runInContext(readFileSync(path.join(publicDir, "shared/smpl-outlook.js"), "utf8"), sandbox);
 vm.runInContext(readFileSync(path.join(publicDir, "shared/smpl-demo-seed.js"), "utf8"), sandbox);
 
 vm.runInContext(
@@ -125,7 +130,8 @@ vm.runInContext(
     `\n;Object.assign(this, {
   compute, getLevers, getResults, getDisplayCFS, invalidateCfsChain, markScenarioDirty, buildCFSChain,
   HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl,
-  fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromData, computeFcHcPlan, fcPlHcDelta, fcHcReqPlanGaps
+  fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromData, computeFcHcPlan, fcPlHcDelta, fcHcReqPlanGaps,
+  fcSeedLevers, getOutlookCFS
 });\n`,
   sandbox,
 );
@@ -145,6 +151,8 @@ const {
   computeFcHcPlan,
   fcPlHcDelta,
   fcHcReqPlanGaps,
+  fcSeedLevers,
+  getOutlookCFS,
 } = sandbox;
 
 if (typeof compute !== "function" || typeof getResults !== "function" || !ALL_P) {
@@ -171,10 +179,7 @@ function resetLeversAndHires() {
   fcArrState.exp = 100;
   fcArrState.churn = 100;
   fcArrState.ren = 0;
-  fcCostState.cogs = 29;
-  fcCostState.sm = 34;
-  fcCostState.rd = 16;
-  fcCostState.ga = 11;
+  fcSeedLevers();
   // Reseed hires from the loaded data (reqs) so prior hire edits do not leak.
   fcHcState.hires = null;
   seedFcHcFromData(true);
@@ -241,7 +246,10 @@ function fmt(n) {
   return "$" + (n / 1e6).toFixed(3) + "M";
 }
 
+const loadedDecCash = getOutlookCFS(ALL_P[11])?.end_cash ?? null;
+
 const checks = [
+  ["Default levers show the loaded Dec cash", base.cash != null && base.cash === loadedDecCash],
   ["NB 150% changes Dec ARR", nb.arr !== base.arr],
   ["NB 150% changes Dec cash", nb.cash !== base.cash],
   ["HC +8 Jul R&D hires changes Jul R&D line", rd.rd !== base.rd],

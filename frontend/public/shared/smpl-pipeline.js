@@ -41,10 +41,52 @@
     };
   }
 
+  /** Loaded forecast ARR movements for a month (warehouse forecast MRR waterfall), when present. */
+  function loadedForecastArr(period, src) {
+    var base = (src && src.baseline) || g.SMPL_BASELINE_ENGINE;
+    var row = base && base[period] && base[period].arr;
+    return row && row.arr_eop != null && row.arr_nb != null ? row : null;
+  }
+
+  /**
+   * Loaded forecast month with levers applied as changes to its movements. At default levers this
+   * is the loaded month. Renewal-rate changes need a loaded renewal pipeline (``src.renewals``).
+   */
+  function leveredLoadedMonth(period, bopArr, base, src, levers) {
+    var ren = src.renewals && src.renewals[period];
+    var renShift = ren && ren.arr ? ren.arr * (levers.ren_adj || 0) : 0;
+    var nb = Number(base.arr_nb) * (levers.nb != null ? levers.nb : 1);
+    var exp = Number(base.arr_exp || 0) * (levers.exp != null ? levers.exp : 1);
+    var react = Number(base.arr_react || 0);
+    var cont = Math.abs(Number(base.arr_cont || 0));
+    var churn = Math.max(0, Math.abs(Number(base.arr_churn != null ? base.arr_churn : base.arr_nr_churn || 0)) * (levers.churn != null ? levers.churn : 1) - renShift);
+    var arr_nn = nb + exp + react - cont - churn;
+    return {
+      arr_bop: bopArr,
+      gross_ren: ren && ren.arr ? ren.arr : null,
+      arr_ren: null,
+      ren_churn: null,
+      arr_nb: nb,
+      arr_exp: exp,
+      arr_react: react,
+      arr_cont: cont,
+      arr_nr_churn: churn,
+      arr_churn: churn,
+      arr_nn: arr_nn,
+      arr_eop: bopArr + arr_nn,
+      grr: bopArr > 0 ? (bopArr - cont - churn) / bopArr : null,
+      nrr: bopArr > 0 ? (bopArr + exp + react - cont - churn) / bopArr : null,
+      is_actual: false,
+      _src: "loaded_forecast",
+    };
+  }
+
   function computeForecastMonth(period, bopArr, src, levers) {
     levers = levers || DEFAULT_LEVERS;
+    var loaded = loadedForecastArr(period, src);
+    if (loaded) return leveredLoadedMonth(period, bopArr, loaded, src, levers);
     var opps = src.opp_pipeline[period] || {};
-    var ren_p = src.renewals[period] || { arr: 0, weighted: 0, count: 0 };
+    var ren_p = (src.renewals && src.renewals[period]) || { arr: 0, weighted: 0, count: 0 };
     var gross_ren = ren_p.arr || 0;
     var ren_rate = Math.min(
       1,
@@ -72,7 +114,7 @@
       arr_churn: ren_churn + nr_churn,
       arr_nn: arr_nn,
       arr_eop: arr_eop,
-      grr: bopArr > 0 ? (bopArr - ren_churn - nr_churn) / bopArr : null,
+      grr: bopArr > 0 ? (bopArr - cont - ren_churn - nr_churn) / bopArr : null,
       nrr: bopArr > 0 ? (bopArr + arr_nn - nb) / bopArr : null,
       is_actual: false,
     };
@@ -123,6 +165,7 @@
     getSrc: getSrc,
     arrFromActuals: arrFromActuals,
     computeForecastMonth: computeForecastMonth,
+    loadedForecastArr: loadedForecastArr,
     computeArrSeries: computeArrSeries,
     getArr: getArr,
   };
