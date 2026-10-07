@@ -244,6 +244,12 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.18 | **When are commissions paid?** Drives forecast commission cash and whether an accrued commissions liability is expected. | month of booking / month after booking / quarter after booking / on customer payment | |
 | 7.19 | **Employer payroll taxes on commissions:** expensed or capitalized with the commission? | expensed / capitalized | |
 | 7.20 | **System of record for commission payouts** (comp tool such as CaptivateIQ, Spiff or Xactly; payroll export; spreadsheet; none)? Without payout detail, commission cash can be estimated but not checked. | comp tool / payroll export / spreadsheet / none | |
+| 7.21 | **Winbacks** (a customer who ended their contract returns within the winback window, 4.10): commission only on ARR above what the customer paid before leaving, on all returned ARR, or none? A return after the window is new business and paid as new business. | above prior ARR / full amount / not paid | |
+| 7.22 | **Restarts after a pause** (no time limit): commission only on ARR above the customer's ARR before the pause, on all of it, or none? | above prior ARR / full amount / not paid | |
+| 7.23 | **Rate** on commissionable winback and restart ARR: the new-business rate or the expansion rate? | new business rate / expansion rate | |
+| 7.24 | **Expansion after a contraction:** commission only on ARR above the customer's level before the contraction, or on all expansion? | above prior level / all expansion | |
+
+> **How SMPL uses 7.21–7.24:** "above prior" rules need each customer's history. SMPL measures the share of returned and expansion ARR above the prior level from CRM Churn and Contraction opportunities and applies it to planned ARR; if the history isn't there, that commission is left out of the plan and named, not assumed. The engines' plan has one reactivation line, so winbacks and restarts must be paid the same way for reactivation commission to be computed. Answers are also checked against loaded payouts (for example, "not paid" while Reactivation payouts exist is a conflict).
 
 ---
 

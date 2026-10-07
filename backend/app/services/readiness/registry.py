@@ -171,6 +171,8 @@ CRM_STAGE_GATE: tuple[Question, ...] = (
 )
 
 AMORTIZATION_MONTHS = ("12", "24", "36", "48", "60", "72", "84", "not_applicable")
+# Customer returns: on ARR above the customer's ARR before leaving, on all returned ARR, or none.
+RETURN_COMMISSION = ("above_prior_arr", "full_amount", "not_paid")
 
 # ASC 340-40: the engines read this policy (they never let a user change it) and the
 # readiness checks compare it with the GL.
@@ -191,6 +193,15 @@ COMMISSION_POLICY_GATE: tuple[Question, ...] = (
     Question("7.19", "commission_policy", "Employer payroll taxes on commissions", ("expensed", "capitalized")),
     Question("7.20", "commission_policy", "System of record for commission payouts",
              ("comp_tool", "payroll_export", "spreadsheet", "none")),
+    Question("7.21", "commission_policy",
+             "Commissions on winbacks (a customer who ended their contract returns within the winback window)",
+             RETURN_COMMISSION),
+    Question("7.22", "commission_policy", "Commissions on restarts after a pause", RETURN_COMMISSION),
+    Question("7.23", "commission_policy", "Rate paid on commissionable winback and restart ARR",
+             ("new_business_rate", "expansion_rate")),
+    Question("7.24", "commission_policy",
+             "Commissions on expansion after a contraction (only above the customer's prior level, or all of it)",
+             ("above_prior_level", "all_expansion")),
 )
 
 SCORE_INPUTS: tuple[Question, ...] = (
@@ -252,6 +263,10 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
             "7.18": ("7.14", ("capitalized", "expensed")),
             "7.19": ("7.14", ("capitalized", "expensed")),
             "7.20": ("7.14", ("capitalized", "expensed")),
+            "7.21": ("7.14", ("capitalized", "expensed")),
+            "7.22": ("7.14", ("capitalized", "expensed")),
+            "7.23": ("7.14", ("capitalized", "expensed")),
+            "7.24": ("7.14", ("capitalized", "expensed")),
         },
     },
 }

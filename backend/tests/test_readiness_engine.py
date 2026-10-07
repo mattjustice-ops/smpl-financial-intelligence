@@ -7,7 +7,9 @@ from app.services.readiness.registry import MODULES, OBJECTS, ObjectEvidence
 
 ALL_GATES_YES = {"0.1": "yes", "0.2": "yes", "0.3": "yes", "0.4": "yes", "0.5": "yes"}
 COMMISSION = {"7.14": "capitalized", "7.15": "60", "7.16": "60", "7.17": "expensed",
-              "7.18": "month_of_booking", "7.19": "expensed", "7.20": "comp_tool"}
+              "7.18": "month_of_booking", "7.19": "expensed", "7.20": "comp_tool",
+              "7.21": "above_prior_arr", "7.22": "above_prior_arr", "7.23": "new_business_rate",
+              "7.24": "above_prior_level"}
 NORMALIZED = {"4.1": "exclude", "4.2": "exclude", "4.3": "not_applicable", "9.1": "resolved", **COMMISSION}
 POLICIES_YES = {q: "yes" for q in ("7.7", "7.8", "7.9", "7.10", "7.11", "7.12", "7.13")}
 # Shaped like the v6 demo GL at the June 2026 close.
@@ -159,6 +161,7 @@ def test_commission_gate_requirements_follow_the_policy_answer():
     assert unresolved({**without("7.15", "7.16")}) == ["7.15", "7.16"]
     assert unresolved({**BASE, "7.15": "not_applicable"}) == ["7.15"]
     assert unresolved({**without("7.15", "7.16"), "7.14": "expensed"}) == []
+    assert unresolved({**without("7.21", "7.24"), "7.14": "expensed"}) == ["7.21", "7.24"]
     assert unresolved({**without(*COMMISSION), "7.14": "no_commissions"}) == []
 
 
