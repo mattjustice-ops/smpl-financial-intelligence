@@ -19,7 +19,10 @@ Rules (agreed with Matt, Oct 7 2026; docs/COMMISSION_CAPITALIZATION_DESIGN.md):
     plan's effective rate in the 2026 payout detail; expansion = waterfall expansion x
     its effective rate; renewal = beginning ARR x the share of beginning ARR renewed in the
     Jan-May 2026 renewal detail x the renewal plan rate. Budget and Forecast use their own
-    ARR waterfalls.
+    ARR waterfalls. When Actual_customer_arr_history.csv exists, Actual new business and
+    expansion use the commission base of each movement in that history (the return policy),
+    and Budget and Forecast scale reactivation and expansion by the commissionable shares in
+    the Actual history.
   * Opening asset (Jan 2024 month end): the 60 monthly cohorts paid through Jan 2024. Pre-2024
     payouts are Jan 2024's payout discounted by the ARR growth rate from Jan 2024 to Dec 2025.
   * Employer payroll tax rate = GL payroll taxes / base salaries (Actual).
@@ -38,6 +41,9 @@ import shutil
 import sys
 from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from build_v5_dataset import HISTORY_FILE, commission_bases  # noqa: E402
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -175,9 +181,10 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
     detail: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     detail_arr: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for r in read(os.path.join(src, "Actual_commission_payouts.csv"))[1]:
+        base = num(r.get("commission_base_arr") or r["booked_arr"])
         detail[(r["period"][:7], r["plan_id"])] += num(r["commission_amount"])
-        detail_arr[(r["period"][:7], r["plan_id"])] += num(r["booked_arr"])
-        detail_base[r["plan_id"]] += num(r["booked_arr"])
+        detail_arr[(r["period"][:7], r["plan_id"])] += base
+        detail_base[r["plan_id"]] += base
         detail_paid[r["plan_id"]] += num(r["commission_amount"])
     renewal_months = set()
     renewal_booked = ZERO
@@ -201,14 +208,38 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
     tax_rate = ptax / wages
     notes.append(f"employer payroll tax on commissions: {tax_rate:.4%} (Actual GL 6110 / 6100)")
 
+    hist_path = os.path.join(src, HISTORY_FILE)
+    hist_new: dict[str, Decimal] = defaultdict(Decimal)
+    hist_exp: dict[str, Decimal] = defaultdict(Decimal)
+    share = {}
+    if os.path.exists(hist_path):
+        tot = defaultdict(Decimal)
+        for b in commission_bases(read(hist_path)[1]):
+            (hist_exp if b["movement_type"] == "Expansion" else hist_new)[b["period"]] += b["base"]
+            tot[(b["movement_type"], "arr")] += b["arr"]
+            tot[(b["movement_type"], "base")] += b["base"]
+        share = {k: tot[(k, "base")] / tot[(k, "arr")] for k in ("Reactivation", "Expansion")}
+        notes.append(f"commissionable share in {HISTORY_FILE}: reactivation {share['Reactivation']:.2%} "
+                     f"(above the ARR customers left with), expansion {share['Expansion']:.2%} (above their prior level)")
+
     def estimate(v: str, p: str) -> dict[str, tuple[Decimal, Decimal, str]]:
         w = wf[v][p]
-        new_arr = num(w["new_business_arr"]) + num(w["reactivation_arr"])
-        exp_arr = num(w["expansion_arr"])
         ren_arr = num(w["beginning_arr"]) * renew_share
-        return {NEW: (new_arr, eff[NEW], "ARR waterfall new + reactivation x 2026 effective rate"),
-                EXP: (exp_arr, eff[EXP], "ARR waterfall expansion x 2026 effective rate"),
-                REN: (ren_arr, ren_rate, "beginning ARR x Jan-May 2026 renewal share x renewal rate")}
+        ren = (ren_arr, ren_rate, "beginning ARR x Jan-May 2026 renewal share x renewal rate")
+        if not share:
+            new_arr = num(w["new_business_arr"]) + num(w["reactivation_arr"])
+            exp_arr = num(w["expansion_arr"])
+            return {NEW: (new_arr, eff[NEW], "ARR waterfall new + reactivation x 2026 effective rate"),
+                    EXP: (exp_arr, eff[EXP], "ARR waterfall expansion x 2026 effective rate"), REN: ren}
+        if v == "Actual":
+            return {NEW: (hist_new[p], eff[NEW], f"{HISTORY_FILE}: new + reactivation above prior ARR x 2026 effective rate"),
+                    EXP: (hist_exp[p], eff[EXP], f"{HISTORY_FILE}: expansion above prior level x 2026 effective rate"),
+                    REN: ren}
+        new_arr = num(w["new_business_arr"]) + num(w["reactivation_arr"]) * share["Reactivation"]
+        exp_arr = num(w["expansion_arr"]) * share["Expansion"]
+        return {NEW: (new_arr, eff[NEW], "ARR waterfall new + reactivation x Actual share above prior ARR x 2026 effective rate"),
+                EXP: (exp_arr, eff[EXP], "ARR waterfall expansion x Actual share above prior level x 2026 effective rate"),
+                REN: ren}
 
     schedule: dict[str, list[dict]] = defaultdict(list)
     payouts: dict[str, dict[str, dict[str, Decimal]]] = {v: defaultdict(lambda: defaultdict(Decimal)) for v in VERSION_MONTHS}

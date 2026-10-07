@@ -26,7 +26,11 @@ Rules (agreed with Matt, Oct 6 2026):
   * June close: ARR waterfall rates and renewal ARR are calculated from the movements;
     quotas run through June; quota attainment is the closed-won new business each rep owns;
     commission payouts are rebuilt from closed-won deals at the plan rates and paid to
-    roster reps; the 7 forecast hires that were due to start in June move to July because
+    roster reps. When Actual_customer_arr_history.csv exists (build_customer_history.py), the
+    commission base follows the return policy (onboarding 7.21-7.24): a winback or restart
+    earns only on ARR above what the customer left with, expansion first recovers earlier
+    contraction, and a customer back more than 6 months after churning is new business.
+    Revenue weights and the customer master then come from that history. The 7 forecast hires that were due to start in June move to July because
     the June roster has no June hires.
 """
 
@@ -122,6 +126,44 @@ def stable_unit(key: str) -> Decimal:
     return Decimal(h % 10000) / Decimal(10000)
 
 
+HISTORY_FILE = "Actual_customer_arr_history.csv"
+HISTORY_ORDER = {"Opening balance": 0, "Churn": 1, "Pause": 1, "Contraction": 2, "Reactivation": 3,
+                 "New Business": 3, "Expansion": 4}
+
+
+def commission_bases(history: list[dict[str, str]]) -> list[dict]:
+    """Each movement's commissionable ARR under the commission policy (onboarding 7.21-7.24, agreed with Matt):
+    a return (winback or restart) earns only on ARR above what the customer left with; expansion earns only
+    above the customer's prior level (it first recovers earlier contractions or a return below the prior
+    ARR); new business, including a customer back more than 6 months after churning, earns on all of it."""
+    out = []
+    state: dict[str, dict] = defaultdict(lambda: {"left_with": None, "unrecovered": ZERO})
+    for r in sorted(history, key=lambda r: (r["customer_id"], r["period"], HISTORY_ORDER[r["movement_type"]])):
+        s, kind = state[r["customer_id"]], r["movement_type"]
+        amount = abs(num(r["movement_arr"]))
+        base = None
+        if kind in ("Churn", "Pause"):
+            s["left_with"], s["unrecovered"] = num(r["beginning_arr"]), ZERO
+        elif kind == "Contraction":
+            s["unrecovered"] += amount
+        elif kind == "Reactivation":
+            if s["left_with"] is None:
+                raise ValueError(f"{r['period']} {r['customer_id']}: return without a recorded departure")
+            base = max(ZERO, amount - s["left_with"])
+            s["unrecovered"], s["left_with"] = max(ZERO, s["left_with"] - amount), None
+        elif kind == "Expansion":
+            recovered = min(s["unrecovered"], amount)
+            s["unrecovered"] -= recovered
+            base = amount - recovered
+        elif kind == "New Business":
+            s["left_with"], s["unrecovered"] = None, ZERO
+            base = amount
+        if base is not None:
+            out.append({"period": r["period"], "customer_id": r["customer_id"], "movement_type": kind,
+                        "opportunity_id": r["opportunity_id"], "arr": amount, "base": base})
+    return out
+
+
 class Dataset:
     def __init__(self, src: str):
         self.src = src
@@ -210,7 +252,7 @@ class Revenue:
                       for cid, r in members[p].items()}
             if version in ("Actual", "Forecast"):
                 for cid, o in logos.items():
-                    if o["period"][:7] <= p:
+                    if o["period"][:7] <= p and cid not in people:
                         people[cid] = {"customer_name": o["customer_name"], "segment": o["segment"],
                                        "weight_source": "Actual_opportunities.csv (closed-won new business ARR)",
                                        "customer_arr": num(o["amount_arr"])}
@@ -266,8 +308,20 @@ def bill_customers(version: str, issue_months: list[str], customers: list[str], 
             else:
                 start = padd(i, 1)
                 if (int(start[5:7]) - anniv[cid]) % 3:
-                    continue
-                service = [start, padd(start, 1), padd(start, 2)]
+                    # A restart mid-quarter is billed from the restart month to the end of its quarter.
+                    if not recurring(cid, start) or recurring(cid, i):
+                        continue
+                    service = [start]
+                    while (int(padd(service[-1], 1)[5:7]) - anniv[cid]) % 3:
+                        service.append(padd(service[-1], 1))
+                else:
+                    service = [start, padd(start, 1), padd(start, 2)]
+                run = []
+                for s in service:
+                    if not recurring(cid, s):
+                        break
+                    run.append(s)
+                service = run
             amounts = {s: recurring(cid, s) for s in service}
             amounts = {s: a for s, a in amounts.items() if a}
             if not amounts:
@@ -451,7 +505,10 @@ def write_customers(ds, dst, fields, master, logos, cadence, org):
         nr = dict(r)
         nr["billing_cadence"] = cadence[r["customer_id"]]
         rows.append(nr)
+    in_master = {r["customer_id"] for r in master}
     for cid, o in sorted(logos.items()):
+        if cid in in_master:
+            continue
         digits = "".join(ch for ch in cid if ch.isdigit())
         rows.append({
             "organization_id": org, "customer_id": cid, "customer_name": o["customer_name"], "segment": o["segment"],
@@ -737,7 +794,11 @@ def write_commissions(ds, dst, roster, notes):
     fields = ds.fields("Actual_commission_payouts.csv")
     pct = {(r["period"], r["employee_id"]): num(r["quota_attainment_pct"]) for p in roster["by_period"]
            for r in roster["by_period"][p] if r["quota_attainment_pct"]}
-    rows, n = [], 0
+    base_of = None
+    if ds.exists(HISTORY_FILE):
+        base_of = {b["opportunity_id"]: b["base"] for b in commission_bases(ds.rows(HISTORY_FILE)) if b["opportunity_id"]}
+        fields = fields[:fields.index("booked_arr") + 1] + ["commission_base_arr"] + fields[fields.index("booked_arr") + 1:]
+    rows, n, skipped = [], 0, []
     plan_for = {"New Business": "PLAN-AE-NEW", "Reactivation": "PLAN-AE-NEW", "Expansion": "PLAN-AM-EXP"}
     for o in sorted(roster["actual_opps"], key=lambda x: (x["period"], x["opportunity_id"])):
         if o["close_status"] != "Closed Won" or o["opportunity_type"] not in plan_for:
@@ -747,13 +808,27 @@ def write_commissions(ds, dst, roster, notes):
         rep = roster["actual_owner"][o["opportunity_id"]]
         hit = pct.get((p, rep), ZERO) >= num(plan["accelerator_threshold"])
         rate = num(plan["accelerated_rate"] if hit else plan["base_commission_rate"])
+        booked = num(o["amount_arr"])
+        if base_of is None:
+            base = booked
+        elif o["opportunity_id"] not in base_of:
+            raise ValueError(f"{o['opportunity_id']} is not in {HISTORY_FILE}")
+        else:
+            base = base_of[o["opportunity_id"]]
+        if base <= 0:
+            skipped.append(o["opportunity_id"])
+            continue
         n += 1
         rows.append({"organization_id": o["organization_id"], "version": "Actual", "commission_id": f"COMM-{n:06d}",
                      "period": p, "rep_id": rep, "rep_name": roster["names"][rep], "opportunity_id": o["opportunity_id"],
-                     "customer_id": o["customer_id"], "booked_arr": num(o["amount_arr"]), "commission_rate": f"{rate}",
-                     "commission_amount": q(num(o["amount_arr"]) * rate), "payout_date": last_day(p).isoformat(),
-                     "clawback_flag": "No", "plan_id": plan["plan_id"]})
+                     "customer_id": o["customer_id"], "booked_arr": booked, "commission_base_arr": base,
+                     "commission_rate": f"{rate}", "commission_amount": q(base * rate),
+                     "payout_date": last_day(p).isoformat(), "clawback_flag": "No", "plan_id": plan["plan_id"]})
     write(os.path.join(dst, "Actual_commission_payouts.csv"), fields, rows)
+    if base_of is not None:
+        reduced = sum(1 for r in rows if r["commission_base_arr"] < r["booked_arr"])
+        notes.append(f"commission payouts follow {HISTORY_FILE}: {reduced} paid on less than booked ARR "
+                     f"(return or expansion above the customer's prior level only); no payout for {skipped or 'none'}")
     by_p: dict[str, Decimal] = defaultdict(Decimal)
     for r in rows:
         by_p[r["period"]] += r["commission_amount"]

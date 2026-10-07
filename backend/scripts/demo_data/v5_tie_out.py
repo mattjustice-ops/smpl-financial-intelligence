@@ -35,7 +35,10 @@ ADDED_COLUMNS = {
                               "capitalize_payroll_taxes"),
     "_balance_sheet.csv": ("deferred_commissions_current", "deferred_commissions_noncurrent"),
     "_cash_flow_statement.csv": ("change_in_deferred_commissions",),
+    "_commission_payouts.csv": ("commission_base_arr",),
 }
+HISTORY_FILE = "Actual_customer_arr_history.csv"
+WINBACK_WINDOW = 6
 COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
 
 
@@ -471,10 +474,11 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             diffs.append(f"{r['commission_id']}: rep {r['rep_id']} {r['rep_name']}")
         elif o is None or o["owner"] != r["rep_name"] or abs(num(o["amount_arr"]) - num(r["booked_arr"])) > CENTS:
             diffs.append(f"{r['commission_id']}: opportunity owner or amount")
-        elif abs(num(r["booked_arr"]) * num(r["commission_rate"]) - num(r["commission_amount"])) > CENTS:
-            diffs.append(f"{r['commission_id']}: amount != booked x rate")
+        elif abs(num(r.get("commission_base_arr") or r["booked_arr"]) * num(r["commission_rate"]) - num(r["commission_amount"])) > CENTS:
+            diffs.append(f"{r['commission_id']}: amount != commission base x rate")
     by_p = sums(pay, "period", "commission_amount")
-    rep.check("commission payouts: rep IDs on the roster, owner and amount from the opportunity, amount = ARR x rate", diffs,
+    rep.check("commission payouts: rep IDs on the roster, owner and amount from the opportunity, "
+              "amount = commission base x rate", diffs,
               f"{len(pay)} payouts, " + ", ".join(f"{p} {money(a)}" for p, a in sorted(by_p.items())))
     plans = {r["plan_id"]: r for r in f("Actual_commission_plans.csv")}
     diffs = [f"{r['commission_id']}: rate {r['commission_rate']} not the plan's base or accelerated rate"
@@ -483,8 +487,11 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
              (num(plans[r["plan_id"]]["base_commission_rate"]), num(plans[r["plan_id"]]["accelerated_rate"]))]
     rep.check("every payout rate is its plan's base or accelerated rate", diffs)
 
+    hist = f(HISTORY_FILE) if os.path.exists(os.path.join(v5, HISTORY_FILE)) else None
+    if hist is not None:
+        history_section(rep, f, hist, a_mrr)
     if os.path.exists(os.path.join(v5, "Actual_commission_schedule.csv")):
-        commission_section(rep, f, gl, months, chain_months, source, bs_line, a_mrr)
+        commission_section(rep, f, gl, months, chain_months, source, bs_line, a_mrr, hist)
         if not os.path.exists(os.path.join(v4, "Actual_commission_schedule.csv")):
             change_scope_section(rep, v4, v5, gl_dir, prior_gl)
     else:
@@ -566,7 +573,225 @@ def _cum_amortization(cohorts: dict[str, list[tuple[Decimal, int]]], through: st
     return total.quantize(Decimal("0.01"))
 
 
-def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line, a_mrr) -> None:
+HISTORY_ORDER = {"Opening balance": 0, "Churn": 1, "Pause": 1, "Contraction": 2, "Reactivation": 3,
+                 "New Business": 3, "Expansion": 4}
+OPP_TYPE = {"New Business": ("New Business", "Closed Won"), "Expansion": ("Expansion", "Closed Won"),
+            "Reactivation": ("Reactivation", "Closed Won"), "Contraction": ("Contraction", "Contraction"),
+            "Churn": ("Churn", "Churn")}
+
+
+def history_bases(hist: list[dict[str, str]]) -> list[dict]:
+    """Commissionable ARR per movement, recomputed as a high-water level per customer: reset to the ARR a
+    customer leaves with, raised by every increase; a return or expansion earns only above it."""
+    level: dict[str, Decimal] = {}
+    out = []
+    for r in sorted(hist, key=lambda r: (r["customer_id"], r["period"], HISTORY_ORDER[r["movement_type"]])):
+        c, kind = r["customer_id"], r["movement_type"]
+        old, new = num(r["beginning_arr"]), num(r["ending_arr"])
+        hw = level.get(c, ZERO)
+        base = None
+        if kind == "Opening balance":
+            level[c] = new
+        elif kind in ("Churn", "Pause"):
+            level[c] = old
+        elif kind == "Contraction":
+            level[c] = max(hw, old)
+        elif kind == "New Business":
+            base, level[c] = new, new
+        else:
+            base = max(ZERO, new - max(hw, old))
+            level[c] = max(hw, new)
+        if base is not None:
+            out.append({"period": r["period"], "kind": kind, "opportunity_id": r["opportunity_id"],
+                        "arr": new - old, "base": base})
+    return out
+
+
+def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
+    """Customer ARR history: ties to the waterfall, the opportunities, the master, revenue, invoices and payouts."""
+    rep.section("Customer ARR history (every waterfall movement on a customer)")
+    first = min(a_mrr)
+    cols = ("new_business_arr", "expansion_arr", "reactivation_arr", "contraction_arr", "churn_arr")
+    by = defaultdict(lambda: defaultdict(Decimal))
+    arr: dict[str, Decimal] = defaultdict(Decimal)
+    eop: dict[str, dict[str, Decimal]] = {}
+    diffs, chain = [], []
+    rows = sorted(hist, key=lambda r: (r["period"], r["customer_id"], HISTORY_ORDER[r["movement_type"]]))
+    seen = set()
+    for r in rows:
+        c, p, kind = r["customer_id"], r["period"], r["movement_type"]
+        b, m, e = num(r["beginning_arr"]), num(r["movement_arr"]), num(r["ending_arr"])
+        if (p, c) in seen:
+            chain.append(f"{p} {c}: two movements in a month")
+        seen.add((p, c))
+        if b + m != e or e < 0 or (kind in ("Churn", "Pause") and e) or (kind in ("New Business", "Reactivation") and b):
+            chain.append(f"{p} {c} {kind}: {b} + {m} = {e}")
+        if kind != "Opening balance" and p >= first and arr[c] != b:
+            chain.append(f"{p} {c}: begins {b}, prior ending {arr[c]}")
+        if p >= first or kind == "Opening balance":
+            arr[c] = e
+        if r["waterfall_column"]:
+            by[p][r["waterfall_column"]] += abs(m)
+    arr = defaultdict(Decimal)
+    by_period = defaultdict(list)
+    for r in rows:
+        by_period[r["period"]].append(r)
+    for p in sorted(set(by_period) | set(a_mrr)):
+        for r in by_period[p]:
+            if p >= first or r["movement_type"] == "Opening balance":
+                arr[r["customer_id"]] = num(r["ending_arr"])
+        eop[p] = {c: a for c, a in arr.items() if a > 0}
+    opening = sum((num(r["ending_arr"]) for r in rows if r["movement_type"] == "Opening balance"), ZERO)
+    if opening != num(a_mrr[first]["beginning_arr"]):
+        diffs.append(f"opening {money(opening)} vs {money(num(a_mrr[first]['beginning_arr']))}")
+    worst = ZERO
+    for p, w in sorted(a_mrr.items()):
+        for col in cols:
+            if by[p][col] != num(w[col]):
+                diffs.append(f"{p} {col} {money(by[p][col])} vs {money(num(w[col]))}")
+        d = abs(sum(eop[p].values(), ZERO) - num(w["ending_arr"]))
+        worst = max(worst, d)
+        if d > Decimal("0.05"):
+            diffs.append(f"{p} ending ARR {money(sum(eop[p].values(), ZERO))} vs {money(num(w['ending_arr']))}")
+    rep.check("history = Actual ARR waterfall: opening ARR, each movement column every month (to the cent), ending ARR",
+              diffs, f"{len(a_mrr)} months; ending ARR within {money(worst)} (the waterfall's own rounding)")
+    rep.check("each customer's history chains: beginning = prior ending, ending = beginning + movement, never negative; "
+              "churn and pause end at zero; new business and returns start from zero; one movement a month", chain,
+              f"{len({r['customer_id'] for r in rows})} customers, {len(rows)} rows")
+
+    diffs, kinds = [], defaultdict(int)
+    last: dict[str, tuple[str, str]] = {}
+    for r in sorted(rows, key=lambda r: (r["customer_id"], r["period"], HISTORY_ORDER[r["movement_type"]])):
+        c, p, kind = r["customer_id"], r["period"], r["movement_type"]
+        if kind in ("Churn", "Pause"):
+            last[c] = (kind, p)
+        elif kind in ("Reactivation", "New Business") and c in last:
+            dep, when = last.pop(c)
+            away = _pidx(p) - _pidx(when)
+            if kind == "Reactivation":
+                kinds["restart" if dep == "Pause" else "winback"] += 1
+                if dep == "Churn" and away > WINBACK_WINDOW:
+                    diffs.append(f"{p} {c}: reactivation {away} months after churning (new business after {WINBACK_WINDOW})")
+            else:
+                kinds["back as new business"] += 1
+                if dep != "Churn" or away <= WINBACK_WINDOW:
+                    diffs.append(f"{p} {c}: new business {away} months after a {dep.lower()}")
+        elif kind == "Reactivation":
+            diffs.append(f"{p} {c}: reactivation without a departure")
+    rep.check(f"returns follow the policy: restart after a pause (any time), winback within {WINBACK_WINDOW} months of "
+              f"churning, later than that is new business", diffs, ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
+
+    opps = f("Actual_opportunities.csv")
+    want = {}
+    for o in opps:
+        for kind, (t, status) in OPP_TYPE.items():
+            if o["opportunity_type"] == t and o["close_status"] == status:
+                want[o["opportunity_id"]] = (o["period"][:7], o["customer_id"], kind, num(o["amount_arr"]))
+    got = {r["opportunity_id"]: (r["period"], r["customer_id"], r["movement_type"], abs(num(r["movement_arr"])))
+           for r in rows if r["opportunity_id"]}
+    diffs = [f"{oid}: opportunity {want.get(oid)} vs history {got.get(oid)}" for oid in sorted(set(want) | set(got))
+             if want.get(oid) != got.get(oid)]
+    diffs += [f"{r['period']} {r['customer_id']} {r['movement_type']}: no opportunity" for r in rows
+              if r["period"] in {p for p in a_mrr if p >= "2026-01"} and not r["opportunity_id"]]
+    rep.check("every booked Actual opportunity is one history movement (customer, month, type, amount) and every "
+              "2026 movement has its opportunity", diffs, f"{len(want)} opportunities")
+
+    master = {r["customer_id"]: r for r in f("Actual_customers.csv")}
+    diffs, region_of = [], defaultdict(set)
+    for o in opps:
+        region_of[o["customer_state"]].add(o["region"])
+        m = master.get(o["customer_id"])
+        if m is None:
+            continue
+        for of, mf in (("customer_name", "customer_name"), ("segment", "segment"), ("industry", "industry"),
+                       ("customer_state", "billing_state")):
+            if o[of] != m[mf]:
+                diffs.append(f"{o['opportunity_id']} {o['customer_id']}: {of} {o[of]} vs master {m[mf]}")
+    diffs += [f"state {s} in regions {sorted(r)}" for s, r in sorted(region_of.items()) if len(r) > 1]
+    rep.check("Actual opportunities on master customers carry the customer's name, segment, industry and state; "
+              "each state is in one region (owners are assigned by region)", diffs,
+              f"{sum(1 for o in opps if o['customer_id'] in master)} of {len(opps)} opportunities on master customers")
+    close = max(a_mrr)
+    dec = eop["2025-12"]
+    diffs = [c for c in {r["customer_id"] for r in rows} if c not in master]
+    for c, m in master.items():
+        status = "Active" if eop[close].get(c, ZERO) > 0 else ("Paused" if last.get(c, ("",))[0] == "Pause" else "Churned")
+        if c in arr and m["status"] != status:
+            diffs.append(f"{c}: status {m['status']} vs history {status}")
+        if c in arr and abs(num(m["starting_arr_jan_2026"]) - dec.get(c, ZERO)) > CENTS:
+            diffs.append(f"{c}: Jan 2026 ARR {m['starting_arr_jan_2026']} vs history {dec.get(c, ZERO)}")
+    summary = {r["metric"]: num(r["value"]) for r in f("Actual_dataset_summary.csv")
+               if r["metric"] in ("Customers", "Starting January 2026 ARR")}
+    active = [c for c in master if dec.get(c, ZERO) > 0]
+    if len(active) != summary.get("Customers") or sum((dec[c] for c in active), ZERO) != summary.get("Starting January 2026 ARR"):
+        diffs.append(f"Dec 2025: {len(active)} customers {money(sum((dec[c] for c in active), ZERO))} vs dataset summary")
+    rep.check("customer master: every history customer present; status at the close and Jan 2026 ARR from the history; "
+              "dataset summary customers and Jan 2026 ARR", diffs,
+              ", ".join(f"{k} {n}" for k, n in sorted(defaultdict(int, {s: sum(1 for m in master.values() if m['status'] == s)
+                                                                          for s in {m['status'] for m in master.values()}}).items())))
+
+    sched = defaultdict(dict)
+    for r in f("Actual_recurring_services_schedule.csv"):
+        sched[r["period"]][r["customer_id"]] = num(r["customer_arr"])
+    diffs = [f"{p}: revenue weights differ from history ARR" for p in sorted(a_mrr) if sched.get(p) != eop[p]]
+    rep.check("Actual revenue weights (recurring services schedule) = history ARR each month", diffs)
+    billed, quarterly = defaultdict(set), set()
+    for r in f("Actual_invoices.csv"):
+        if r["billing_cadence"] in ("Monthly", "Quarterly"):
+            if r["billing_cadence"] == "Quarterly":
+                quarterly.add(r["customer_id"])
+            s, e = r["service_period_start"][:7], r["service_period_end"][:7]
+            p = s
+            while p <= e:
+                billed[r["customer_id"]].add(p)
+                p = _padd(p, 1)
+    first_quarter = sorted(a_mrr)[:3]
+    diffs, pre_billed = [], 0
+    for p in sorted(a_mrr):
+        for c in billed:
+            if p in billed[c] and eop[p].get(c, ZERO) <= 0:
+                diffs.append(f"{p} {c}: billed without ARR")
+        for c in eop[p]:
+            if p in billed.get(c, set()):
+                continue
+            # Quarterly invoices issued before the first Actual month are not in the invoice file; they are
+            # the opening AR and deferred revenue.
+            if c in quarterly and p in first_quarter and p < min(billed[c]):
+                pre_billed += 1
+                continue
+            diffs.append(f"{p} {c}: ARR without a subscription invoice")
+    rep.check("subscription invoices cover exactly the months each customer has ARR", diffs,
+              f"{pre_billed} customer-months in {first_quarter[0]} to {first_quarter[-1]} billed quarterly before "
+              f"{first_quarter[0]} (opening deferred revenue)")
+    diffs = [f"{r['renewal_period']} {r['customer_id']}: renewal with no ARR" for r in f("Actual_renewal_pipeline.csv")
+             if eop.get(r["renewal_period"][:7], {}).get(r["customer_id"], ZERO) <= 0]
+    rep.check("no Actual renewal for a customer without ARR that month", diffs)
+
+    bases = history_bases(hist)
+    base_of = {b["opportunity_id"]: b["base"] for b in bases if b["opportunity_id"]}
+    diffs = []
+    paid = {r["opportunity_id"]: r for r in f("Actual_commission_payouts.csv")}
+    for oid, base in sorted(base_of.items()):
+        r = paid.get(oid)
+        if base > 0 and (r is None or abs(num(r["commission_base_arr"]) - base) > CENTS):
+            diffs.append(f"{oid}: commission base {r['commission_base_arr'] if r else 'no payout'} vs {money(base)}")
+        if base <= 0 and r is not None:
+            diffs.append(f"{oid}: paid {r['commission_amount']} on no ARR above the prior level")
+    tot = defaultdict(Decimal)
+    for b in bases:
+        tot[(b["kind"], "arr")] += b["arr"]
+        tot[(b["kind"], "base")] += b["base"]
+    rep.check("commission base on each payout = ARR above the customer's prior level (returns: above the ARR they left "
+              "with; expansion: above their level before contractions), recomputed as a high-water level", diffs,
+              f"reactivation {tot[('Reactivation', 'base')] / tot[('Reactivation', 'arr')]:.2%} commissionable, "
+              f"expansion {tot[('Expansion', 'base')] / tot[('Expansion', 'arr')]:.2%}")
+    wb = sum((num(r["movement_arr"]) for r in rows if r["movement_type"] == "Reactivation"
+              and r["note"].startswith("winback")), ZERO)
+    re_ = sum((num(r["movement_arr"]) for r in rows if r["movement_type"] == "Reactivation"), ZERO)
+    rep.info(f"winbacks {money(wb)} of {money(re_)} reactivation ARR ({wb / re_:.1%}); the rest are restarts after a pause")
+
+
+def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line, a_mrr, hist=None) -> None:
     """ASC 340-40: plans -> schedule -> rollforward -> GL -> statements -> cash bridge, each recomputed."""
     rep.section("Sales commissions (ASC 340-40)")
     detail_files = {"Actual_commission_payouts.csv": "commission_amount", "Actual_renewal_commissions.csv": "commission_amount"}
@@ -575,13 +800,20 @@ def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line
     for name in detail_files:
         for r in f(name):
             detail[(r["period"][:7], r["plan_id"])] += num(r["commission_amount"])
-            detail_base[r["plan_id"]] += num(r["booked_arr"])
+            detail_base[r["plan_id"]] += num(r.get("commission_base_arr") or r["booked_arr"])
             detail_paid[r["plan_id"]] += num(r["commission_amount"])
             if "renewal" in name:
                 renewal_booked += num(r["booked_arr"])
                 renewal_months.add(r["period"][:7])
     renew_share = renewal_booked / sum((num(a_mrr[p]["beginning_arr"]) for p in renewal_months), ZERO)
     eff = {plan: (detail_paid[plan] / detail_base[plan]) for plan in detail_base}
+    hb = history_bases(hist) if hist is not None else None
+    hb_new, hb_exp, hb_tot = defaultdict(Decimal), defaultdict(Decimal), defaultdict(Decimal)
+    for b in hb or []:
+        (hb_exp if b["kind"] == "Expansion" else hb_new)[b["period"]] += b["base"]
+        hb_tot[(b["kind"], "arr")] += b["arr"]
+        hb_tot[(b["kind"], "base")] += b["base"]
+    hb_share = {k: hb_tot[(k, "base")] / hb_tot[(k, "arr")] for k in ("Reactivation", "Expansion")} if hb else {}
 
     plans_by_v, sched, roll = {}, {}, {}
     for v in VERSIONS:
@@ -643,9 +875,14 @@ def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line
                 continue
             est_months[v].add(p)
             w = wf[p]
-            base = {"PLAN-AE-NEW": num(w["new_business_arr"]) + num(w["reactivation_arr"]),
-                    "PLAN-AM-EXP": num(w["expansion_arr"]),
-                    "PLAN-RENEWAL": num(w["beginning_arr"]) * renew_share}[pid]
+            if hb is None:
+                new, exp = num(w["new_business_arr"]) + num(w["reactivation_arr"]), num(w["expansion_arr"])
+            elif v == "Actual":
+                new, exp = hb_new[p], hb_exp[p]
+            else:
+                new = num(w["new_business_arr"]) + num(w["reactivation_arr"]) * hb_share["Reactivation"]
+                exp = num(w["expansion_arr"]) * hb_share["Expansion"]
+            base = {"PLAN-AE-NEW": new, "PLAN-AM-EXP": exp, "PLAN-RENEWAL": num(w["beginning_arr"]) * renew_share}[pid]
             rate = eff[pid] if pid != "PLAN-RENEWAL" else num(plans[pid]["base_commission_rate"])
             if abs(num(r["commission_base_arr"]) - base) > CENTS or abs(amt - (base * rate).quantize(Decimal("0.01"))) > CENTS:
                 diffs.append(f"{v} {p} {pid}: {money(amt)} vs base {money(base)} x {rate:.5f}")
@@ -821,7 +1058,13 @@ KNOWN_GAPS = [
     "Budget and Forecast 2026 new logos are not in the customer master; Budget implementation invoices reference them.",
     "Roster region EMEA renamed South; renewal_arr redefined as beginning ARR less contraction and churn.",
     "Commission payout detail exists only for Actual Jan-Jun 2026 (renewals Jan-May); every other month is estimated "
-    "from the ARR waterfall at the 2026 effective rates, and pre-2024 cohorts are an opening ladder.",
+    "at the 2026 effective rates (Actual from the customer ARR history; Budget and Forecast from their ARR waterfalls "
+    "x the Actual commissionable shares), and pre-2024 cohorts are an opening ladder.",
+    "Budget and Forecast customer movements are not modeled: revenue weights hold Dec 2025 (Budget) and Jun 2026 "
+    "(Forecast) customer ARR, and their churn, contraction, expansion and reactivation opportunities still point at "
+    "customer IDs that are not in the master. Budget opportunities do not tie to the Budget ARR waterfall.",
+    "Renewal pipeline ARR is not tied to customer ARR (Actual renewals are on customers with ARR that month).",
+    "Customer segment does not follow customer ARR.",
     "Commissions are paid in the booking month (payout lag 0), so there is no accrued commissions liability.",
     "Deferred tax on deferred commissions (book/tax difference) is not modeled.",
     "Budget and Forecast bookings_summary does not tie to their ARR waterfalls; commissions use the waterfall.",
