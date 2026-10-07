@@ -3318,7 +3318,8 @@ const RETURN_BASIS_LABEL = {
 /**
  * Share of planned reactivation and expansion ARR that earns commission, and at which rate (7.21–7.24).
  * The plan has one reactivation line, so winbacks (7.21) and restarts (7.22) must be paid alike for it
- * to be computed. "Above prior level" shares are measured from loaded CRM opportunities; when they
+ * to be computed. "Above prior level" shares are measured from the loaded customer ARR history (CRM
+ * opportunities when it isn't loaded); when they
  * can't be measured the commission is left out of the plan and named, never assumed.
  */
 function returnsPolicy(inp, warnings, notes) {
@@ -3327,7 +3328,10 @@ function returnsPolicy(inp, warnings, notes) {
   const hist = r.history || {};
   const react = hist.reactivation || {};
   const practice = r.loaded_practice || {};
-  const span = hist.from ? `${hist.from}–${hist.to} opportunities` : 'the loaded opportunities';
+  const fromHistory = hist.source === 'customer_arr_history';
+  const span = !hist.from ? 'the loaded opportunities'
+    : fromHistory ? `the customer ARR history ${hist.from}–${hist.to}` : `${hist.from}–${hist.to} opportunities`;
+  const departure = fromHistory ? 'churn or pause' : 'churn';
   const pct1 = v => (v * 100).toFixed(1) + '%';
   const words = v => String(v).replace(/_/g, ' ');
   const out = {
@@ -3356,9 +3360,9 @@ function returnsPolicy(inp, warnings, notes) {
   else if (out.basis === 'above_prior_arr') {
     if (react.above_baseline_share != null) {
       out.reactShare = react.above_baseline_share;
-      notes.push(`Reactivation earns commission on ${pct1(out.reactShare)} of returned ARR: the share above customers’ ARR before leaving in ${span} (${react.with_departure} of ${react.count} returns have a recorded churn).`);
+      notes.push(`Reactivation earns commission on ${pct1(out.reactShare)} of returned ARR: the share above customers’ ARR before leaving in ${span} (${react.with_departure} of ${react.count} returns have a recorded ${departure}).`);
     } else {
-      out.reactReason = `no returned customer in ${span} has a recorded churn to measure ARR above their prior level (${react.count || 0} returns, none with a prior Churn row)`;
+      out.reactReason = `no returned customer in ${span} has a recorded ${departure} to measure ARR above their prior level (${react.count || 0} returns, none with a prior departure)`;
     }
   }
   if (out.reactShare > 0) {
@@ -6496,7 +6500,19 @@ function returnPolicyRows(pol, shown, pct) {
     <tr><td>7.21 / 7.22 Winbacks / restarts</td><td>${shown(ans['7.21'])} / ${shown(ans['7.22'])}</td><td>Plan: ${basis(ret.basis) ? basis(ret.basis) + '; ' : ''}${reactPlan}</td></tr>
     <tr><td>7.23 Rate on winbacks and restarts</td><td>${shown(ans['7.23'])}</td><td>Loaded Reactivation payouts: ${(COMMISSION_INPUTS.returns.loaded_practice || {}).payouts || 0} (${fmtM((COMMISSION_INPUTS.returns.loaded_practice || {}).commission || 0)})</td></tr>
     <tr><td>7.24 Expansion after a contraction</td><td>${shown(ans['7.24'])}</td><td>Plan: ${expPlan}</td></tr>
-    <tr><td>History behind the shares</td><td colspan="2">${hist.from ? `Opportunities ${hist.from}–${hist.to}` : 'No opportunities loaded'}: ${react.count || 0} returns (${fmtM(react.arr || 0)}), ${react.with_departure || 0} with a recorded churn; expansion ${fmtM(exp.arr || 0)}, of which ${fmtM(exp.above_prior_level_arr || 0)} above customers’ prior level.</td></tr>`;
+    <tr><td>History behind the shares</td><td colspan="2">${historyBehindShares(hist, react, exp)}</td></tr>`;
+}
+
+function historyBehindShares(hist, react, exp) {
+  const expansion = `expansion ${fmtM(exp.arr || 0)}, of which ${fmtM(exp.above_prior_level_arr || 0)} above customers’ prior level`;
+  if (hist.source === 'customer_arr_history') {
+    const wb = react.winbacks || {}, rs = react.restarts || {};
+    return `Customer ARR history ${hist.from}–${hist.to}: ${react.count || 0} returns (${fmtM(react.arr || 0)}) — `
+      + `${wb.count || 0} winbacks (${fmtM(wb.arr || 0)}) and ${rs.count || 0} restarts after a pause (${fmtM(rs.arr || 0)}), `
+      + `${fmtM(react.above_baseline_arr || 0)} above the ARR customers left with; `
+      + `${react.back_as_new_business || 0} customers back past the winback window booked as new business; ${expansion}.`;
+  }
+  return `${hist.from ? `Opportunities ${hist.from}–${hist.to}` : 'No opportunities loaded'}: ${react.count || 0} returns (${fmtM(react.arr || 0)}), ${react.with_departure || 0} with a recorded churn; ${expansion}.`;
 }
 
 /** Deferred commissions roll-forward, payouts and the read-only policy behind them. */

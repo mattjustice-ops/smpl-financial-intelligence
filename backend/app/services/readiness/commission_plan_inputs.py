@@ -10,8 +10,9 @@
   amortization rounded to the cent — the convention of the deferred commissions roll-forward. The
   schedule balance is checked against the loaded roll-forward at ``as_of``.
 - Returns (7.21–7.24): how winbacks, restarts and expansion after a contraction are paid, the share of
-  returned / expansion ARR above the customer's prior level measured from CRM opportunities, and what
-  the loaded payouts did with Reactivation opportunities.
+  returned / expansion ARR above the customer's prior level measured from the customer ARR history
+  (``actual_customer_arr_history``; CRM opportunities when it isn't loaded), and what the loaded payouts
+  did with Reactivation opportunities.
 
 Nothing is filled in: a missing table or field is reported in ``missing``.
 """
@@ -179,7 +180,8 @@ def _kind(value: Any) -> str:
 def customer_return_history(opportunities: list[dict[str, Any]]) -> dict[str, Any]:
     """From CRM opportunity rows: how much returned ARR was above the ARR the customer left with
     (their last Churn row), and how much expansion ARR was above the level before their
-    contractions (Contraction rows not yet recovered by later expansion).
+    contractions (Contraction rows, or a return below the ARR left with, not yet recovered by later
+    expansion).
     """
     order = {"churn": 0, "contraction": 0}
     by_customer: dict[str, list[tuple[str, int, str, Decimal, bool]]] = defaultdict(list)
@@ -208,7 +210,7 @@ def customer_return_history(opportunities: list[dict[str, Any]]) -> dict[str, An
                     returns_with_departure += 1
                     with_departure += amount
                     above_baseline += max(ZERO, amount - left_with)
-                    left_with = None
+                    unrecovered, left_with = max(ZERO, left_with - amount), None
             elif kind == "expansion" and won:
                 recovered = min(amount, unrecovered)
                 unrecovered -= recovered
@@ -216,6 +218,7 @@ def customer_return_history(opportunities: list[dict[str, Any]]) -> dict[str, An
                 expansion_above += amount - recovered
     periods = sorted(to_period(str(o["period"])) for o in opportunities if o.get("period"))
     return {
+        "source": "opportunities",
         "from": periods[0] if periods else None,
         "to": periods[-1] if periods else None,
         "reactivation": {
@@ -234,34 +237,136 @@ def customer_return_history(opportunities: list[dict[str, Any]]) -> dict[str, An
     }
 
 
+HISTORY_ORDER = {"opening balance": 0, "churn": 1, "pause": 1, "contraction": 2, "reactivation": 3,
+                 "new business": 3, "expansion": 4}
+
+
+def customer_arr_history_returns(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """From the customer ARR history (one row per customer movement): the same measures as
+    ``customer_return_history``, with every departure on record. A Churn or Pause row is the ARR the
+    customer left with; a Reactivation after a Churn is a winback, after a Pause a restart. A return
+    below the ARR left with leaves the shortfall for later expansion to recover, like a contraction.
+    New Business after a departure (back past the winback window) starts the customer over.
+    Each return's commissionable ARR is in ``bases`` by opportunity ID.
+    """
+    by_customer: dict[str, list[tuple[str, int, str, Decimal, Decimal, str]]] = defaultdict(list)
+    for r in rows:
+        kind = _kind(r.get("movement_type"))
+        if not r.get("period") or not r.get("customer_id") or kind not in HISTORY_ORDER:
+            continue
+        by_customer[str(r["customer_id"])].append(
+            (to_period(str(r["period"])), HISTORY_ORDER[kind], kind, abs(_num(r.get("movement_arr")) or ZERO),
+             _num(r.get("beginning_arr")) or ZERO, str(r.get("opportunity_id") or "")))
+
+    returned = with_departure = above_baseline = expansion = expansion_above = ZERO
+    returns = returns_with_departure = back_as_new = 0
+    split = {"churn": [0, ZERO], "pause": [0, ZERO]}
+    bases: dict[str, float] = {}
+    for events in by_customer.values():
+        left_with: Decimal | None = None
+        departed = ""
+        unrecovered = ZERO
+        for _, _, kind, amount, beginning, opp in sorted(events):
+            if kind in ("churn", "pause"):
+                left_with, departed, unrecovered = beginning, kind, ZERO
+            elif kind == "contraction":
+                unrecovered += amount
+            elif kind == "reactivation":
+                returns += 1
+                returned += amount
+                if left_with is not None:
+                    returns_with_departure += 1
+                    with_departure += amount
+                    split[departed][0] += 1
+                    split[departed][1] += amount
+                    base = max(ZERO, amount - left_with)
+                    above_baseline += base
+                    if opp:
+                        bases[opp] = float(base)
+                    unrecovered, left_with = max(ZERO, left_with - amount), None
+            elif kind == "expansion":
+                recovered = min(amount, unrecovered)
+                unrecovered -= recovered
+                expansion += amount
+                expansion_above += amount - recovered
+                if opp:
+                    bases[opp] = float(amount - recovered)
+            elif kind == "new business":
+                back_as_new += left_with is not None
+                left_with, unrecovered = None, ZERO
+    periods = sorted(e[0] for events in by_customer.values() for e in events)
+    return {
+        "source": "customer_arr_history",
+        "from": periods[0] if periods else None,
+        "to": periods[-1] if periods else None,
+        "reactivation": {
+            "count": returns,
+            "arr": float(returned),
+            "with_departure": returns_with_departure,
+            "arr_with_departure": float(with_departure),
+            "above_baseline_arr": float(above_baseline),
+            "above_baseline_share": float(above_baseline / with_departure) if with_departure else None,
+            "winbacks": {"count": split["churn"][0], "arr": float(split["churn"][1])},
+            "restarts": {"count": split["pause"][0], "arr": float(split["pause"][1])},
+            "back_as_new_business": back_as_new,
+        },
+        "expansion": {
+            "arr": float(expansion),
+            "above_prior_level_arr": float(expansion_above),
+            "above_prior_level_share": float(expansion_above / expansion) if expansion else None,
+        },
+        "bases": bases,
+    }
+
+
 def _returns(db: Session, org_id: uuid.UUID, answers: dict[str, str], plans: dict[str, dict[str, Any]],
              as_of: str, missing: list[str]) -> dict[str, Any]:
     """Commission policy for customer returns and expansion after contraction (7.21–7.24), the history
     that measures it, what the loaded payouts did, and checks of the answers against those payouts."""
     opps = [o for o in (_rows(db, "actual_opportunities", org_id) or [])
             if o.get("period") and to_period(str(o["period"])) <= as_of]
-    if not opps:
-        missing.append("actual_opportunities is not loaded: returns and expansion after contraction can't be measured")
-    history = customer_return_history(opps)
+    arr_history = [r for r in (_rows(db, "actual_customer_arr_history", org_id) or [])
+                   if r.get("period") and to_period(str(r["period"])) <= as_of]
+    if arr_history:
+        history = customer_arr_history_returns(arr_history)
+    else:
+        if not opps:
+            missing.append("Neither actual_customer_arr_history nor actual_opportunities is loaded: returns and "
+                           "expansion after contraction can't be measured")
+        history = customer_return_history(opps)
+    bases = history.pop("bases", {})
 
     opp_by_id = {str(o.get("opportunity_id")): o for o in opps}
-    paid = {"count": 0, "booked_arr": ZERO, "opportunity_arr": ZERO, "commission": ZERO, "plan_types": set()}
+    paid = {"count": 0, "booked_arr": ZERO, "opportunity_arr": ZERO, "base_arr": ZERO, "commission": ZERO,
+            "plan_types": set(), "off_policy": 0, "unmatched": 0}
     for p in _rows(db, "actual_commission_payouts", org_id) or []:
         o = opp_by_id.get(str(p.get("opportunity_id")))
         if not o or _kind(o.get("opportunity_type")) != "reactivation":
             continue
+        booked = _num(p.get("booked_arr")) or ZERO
+        base = _num(p.get("commission_base_arr"))
+        base = booked if base is None else base
         paid["count"] += 1
-        paid["booked_arr"] += _num(p.get("booked_arr")) or ZERO
+        paid["booked_arr"] += booked
+        paid["base_arr"] += base
         paid["opportunity_arr"] += _num(o.get("amount_arr")) or ZERO
         paid["commission"] += _num(p.get("commission_amount")) or ZERO
         plan = plans.get(str(p.get("plan_id") or ""))
         paid["plan_types"].add(plan["opportunity_type"] if plan else None)
+        policy_base = bases.get(str(p.get("opportunity_id")))
+        if policy_base is None:
+            paid["unmatched"] += 1
+        elif abs(Decimal(str(policy_base)) - base) >= 1:
+            paid["off_policy"] += 1
     rate_types = sorted(t for t in paid["plan_types"] if t)
     practice = {
         "payouts": paid["count"],
         "booked_arr": float(paid["booked_arr"]),
+        "commission_base_arr": float(paid["base_arr"]),
         "commission": float(paid["commission"]),
-        "paid_on_full_amount": paid["count"] > 0 and abs(paid["booked_arr"] - paid["opportunity_arr"]) < 1,
+        "paid_on_full_amount": paid["count"] > 0 and abs(paid["base_arr"] - paid["opportunity_arr"]) < 1,
+        "paid_above_prior_arr": (paid["count"] > 0 and not paid["off_policy"] and not paid["unmatched"])
+        if history["source"] == "customer_arr_history" else None,
         "rate_type": rate_types[0] if len(rate_types) == 1 else None,
     }
 
@@ -277,6 +382,17 @@ def _returns(db: Session, org_id: uuid.UUID, answers: dict[str, str], plans: dic
             checks.append({"id": f"{label}_above_prior_arr_vs_payouts", "questions": q, "status": "conflict",
                            "finding": f"{q} pays {label} only above the customer's prior ARR, but the {n} loaded "
                                       f"Reactivation payouts ({amount}) were paid on the full returned ARR"})
+        elif a == "above_prior_arr" and practice["paid_above_prior_arr"] is False and n:
+            checks.append({"id": f"{label}_above_prior_arr_vs_payouts", "questions": q, "status": "conflict",
+                           "finding": f"{q} pays {label} only above the customer's prior ARR, but "
+                                      f"{paid['off_policy'] + paid['unmatched']} of the {n} loaded Reactivation payouts "
+                                      f"have a commission base that isn't the ARR above the customer's prior level in "
+                                      f"the customer ARR history"})
+        elif a == "full_amount" and n and not practice["paid_on_full_amount"]:
+            checks.append({"id": f"{label}_full_amount_vs_payouts", "questions": q, "status": "conflict",
+                           "finding": f"{q} pays {label} on the full returned ARR, but the {n} loaded Reactivation "
+                                      f"payouts ({amount}) were paid on ${practice['commission_base_arr']:,.0f} of "
+                                      f"${float(paid['opportunity_arr']):,.0f} returned ARR"})
     rate_answer = answers.get("7.23")
     if rate_answer and practice["rate_type"] and rate_answer != f"{practice['rate_type']}_rate":
         checks.append({"id": "return_rate_vs_payouts", "questions": "7.23", "status": "conflict",
