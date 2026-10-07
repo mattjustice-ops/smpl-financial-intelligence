@@ -31,7 +31,8 @@ Rules (agreed with Matt, Oct 5-6 2026):
   * Sales commissions (when <version>_deferred_commissions_rollforward.csv exists): the source
     6200 rows are removed; 6200 is the month's amortization of deferred commissions, 6210 the
     commissions expensed when paid, and 6110 rows carry employer payroll tax on the payouts.
-    They are part of the summary's S&M: the other S&M accounts are sized to the rest.
+    They are part of the summary's S&M: the other S&M accounts are sized to the rest, with the
+    source 6200 rows scaled alongside them before removal, so no other account moves.
 
 Usage:
   python rebuild_gl_to_summary.py <source_folder> <output_folder>
@@ -113,14 +114,21 @@ def _line(row: dict[str, str]) -> str | None:
     return LINE_BY_CATEGORY[category]
 
 
-def _keep(row: dict[str, str], drop_commissions: bool = False) -> bool:
+def _keep(row: dict[str, str]) -> bool:
     if row["account_name"] in DROP_ACCOUNTS:
-        return False
-    if drop_commissions and row["account_number"] == COMMISSION_ACCOUNT:
         return False
     if row["statement_category"] == "Operating Expense" and row["cost_center"] in DUPLICATE_OPEX_COST_CENTERS:
         return False
     return True
+
+
+def _scale(rows: list[dict[str, str]], factor: Decimal, want: Decimal) -> list[Decimal]:
+    """Scale source rows (credit-positive) by ``factor`` into debit-positive cents that add up to ``want``;
+    the rounding drift goes to the largest row."""
+    new_amounts = [(Decimal(r["amount"]) * factor * Decimal("-1")).quantize(CENT, ROUND_HALF_UP) for r in rows]
+    largest = max(range(len(rows)), key=lambda i: abs(new_amounts[i]))
+    new_amounts[largest] += want - sum(new_amounts, Decimal("0"))
+    return new_amounts
 
 
 def _read(path: str) -> list[dict[str, str]]:
@@ -129,9 +137,11 @@ def _read(path: str) -> list[dict[str, str]]:
 
 
 def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
-            added_revenue: dict[str, Decimal], added_sm: dict[str, Decimal] | None = None):
+            added_revenue: dict[str, Decimal], added_sm: dict[str, Decimal] | None = None,
+            replaced_out: list[dict[str, str]] | None = None):
     """``added_revenue``: implementation + recurring services by month, carved out of the summary revenue.
-    ``added_sm``: commission rows by month, carved out of the summary S&M (source 6200 rows are dropped)."""
+    ``added_sm``: commission rows by month, carved out of the summary S&M (source 6200 rows are scaled, then
+    dropped; the scaled rows go to ``replaced_out`` so the forecast seed can keep the same mix)."""
     added_sm = added_sm or {}
     summary = {r["period"][:7]: r for r in summary_rows}
     periods = REBUILD_PERIODS[version]
@@ -150,7 +160,7 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
                         "detail": f"summary posting {row['account_name']}; detail built from {fill[period]}",
                         "amount": row["amount"]})
             continue
-        if not _keep(row, drop_commissions=bool(added_sm)):
+        if not _keep(row):
             log.append({"version": version, "period": period, "line": _line(row) or "", "action": "removed",
                         "detail": f"{row['department']} / {row['cost_center']} / {row['account_name']}",
                         "amount": row["amount"]})
@@ -181,13 +191,36 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
             log.append({"version": version, "period": period, "line": line, "action": "set",
                         "detail": "single account was 0; set to summary", "amount": f"{target:.2f}"})
             continue
-        factor = target / current
-        sign = Decimal("-1")
-        new_amounts = [(Decimal(r["amount"]) * factor * sign).quantize(CENT, ROUND_HALF_UP) for r in rows]
-        drift = want - sum(new_amounts, Decimal("0"))
-        largest = max(range(len(rows)), key=lambda i: abs(new_amounts[i]))
-        new_amounts[largest] += drift
-        for r, amt in zip(rows, new_amounts):
+        replaced = [i for i, r in enumerate(rows) if line == "sales_and_marketing" and added_sm
+                    and r["account_number"] == COMMISSION_ACCOUNT]
+        if replaced:
+            # The source 6200 rows are scaled with the other S&M rows, as when they were kept, and
+            # then dropped, so every other S&M account gets exactly the amounts it had before the
+            # commission rows were carved out.
+            others = target
+            for _ in range(10):
+                new_amounts = _scale(rows, target / current, want=target)
+                nxt = others + sum((new_amounts[i] for i in replaced), Decimal("0"))
+                if nxt == target:
+                    break
+                target = nxt
+            else:
+                raise ValueError(f"{version} {period}: S&M scaling with the replaced 6200 rows did not settle")
+            factor = target / current
+            for i in replaced:
+                log.append({"version": version, "period": period, "line": line, "action": "removed",
+                            "detail": f"{rows[i]['department']} / {rows[i]['cost_center']} / {rows[i]['account_name']} "
+                                      "(replaced by the deferred commissions rollforward)",
+                            "amount": f"{new_amounts[i]:.2f}"})
+                if replaced_out is not None:
+                    replaced_out.append({**rows[i], "amount": f"{new_amounts[i]:.2f}"})
+            target = others
+        else:
+            factor = target / current
+            new_amounts = _scale(rows, factor, want)
+        for i, (r, amt) in enumerate(zip(rows, new_amounts)):
+            if i in replaced:
+                continue
             nr = dict(r)
             nr["amount"] = f"{amt:.2f}"
             out.append(nr)
@@ -309,9 +342,10 @@ def main(src: str, dst: str) -> None:
     all_log: list[dict[str, str]] = []
     fieldnames: list[str] = []
     rebuilt: dict[str, list[dict[str, str]]] = {}
+    replaced: dict[str, list[dict[str, str]]] = defaultdict(list)
     for version in ("Actual", "Budget", "Forecast"):
         if version == "Forecast":
-            gl = forecast_seed(rebuilt["Actual"])
+            gl = forecast_seed(rebuilt["Actual"] + replaced["Actual"])
         else:
             gl = _read(os.path.join(src, f"{version}_gl_detail.csv"))
             fieldnames = fieldnames or list(gl[0].keys())
@@ -325,7 +359,7 @@ def main(src: str, dst: str) -> None:
         added_sm: dict[str, Decimal] = defaultdict(Decimal)
         for r in comm:
             added_sm[r["period"]] += Decimal(r["amount"])
-        rows, log = rebuild(version, gl, summary, added, added_sm)
+        rows, log = rebuild(version, gl, summary, added, added_sm, replaced[version])
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
         if old_bs:
             log.append({"version": version, "period": "", "line": "balance sheet", "action": "replaced",

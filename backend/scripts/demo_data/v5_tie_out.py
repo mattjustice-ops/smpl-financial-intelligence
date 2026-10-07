@@ -1,11 +1,12 @@
 """Tie-out report for the v5/v6 dataset: every file against the GL and against each other.
 
-  python v5_tie_out.py <prior_folder> <dataset_folder> <gl_folder> [report.md]
+  python v5_tie_out.py <prior_folder> <dataset_folder> <gl_folder> [report.md] [--prior-gl <prior_gl_folder>]
 
 Each check is PASS or FAIL; gaps that are known and accepted are listed as FLAG with the number.
 Columns added on purpose (ADDED_COLUMNS) are allowed in the schema check. When the dataset has
 <version>_commission_schedule.csv, the ASC 340-40 commission section recomputes the schedule,
-rollforward, amortization and GL postings independently.
+rollforward, amortization and GL postings independently. When the prior dataset has no commission
+schedule, a change-scope section checks that nothing else moved (GL accounts need --prior-gl).
 Exit code 1 if any check fails.
 """
 
@@ -94,7 +95,7 @@ def sums(rows, key: str, value: str, where=lambda r: True) -> dict[str, Decimal]
     return out
 
 
-def main(v4: str, v5: str, gl_dir: str) -> Report:
+def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
     rep = Report()
 
     def f(name: str) -> list[dict[str, str]]:
@@ -484,6 +485,8 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
 
     if os.path.exists(os.path.join(v5, "Actual_commission_schedule.csv")):
         commission_section(rep, f, gl, months, chain_months, source, bs_line, a_mrr)
+        if not os.path.exists(os.path.join(v4, "Actual_commission_schedule.csv")):
+            change_scope_section(rep, v4, v5, gl_dir, prior_gl)
     else:
         gl6200 = defaultdict(Decimal)
         for r in gl["Actual"]:
@@ -755,6 +758,59 @@ def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line
                  + f"; deferred commissions {last} {money(num(roll[v][last]['ending_deferred_commissions']))}")
 
 
+COMMISSION_BUILD_ACCOUNTS = {"1000", "1250", "1550", "3000", "6110", "6200", "6210"}
+COMMISSION_BUILD_FILES = ("_balance_sheet.csv", "_cash_collections.csv", "_cash_flow_bridge.csv",
+                          "_cash_flow_statement.csv", "_commission_plans.csv", "_income_statement.csv",
+                          "_commission_schedule.csv", COMMISSION_SOURCE_SUFFIX)
+
+
+def change_scope_section(rep: Report, prior_dir: str, data_dir: str, gl_dir: str, prior_gl_dir: str | None) -> None:
+    """The commission build may only change commission, payroll tax, cash and equity: every other GL
+    account and every other file must be identical to the prior dataset, to the cent."""
+    rep.section("Change scope vs the prior dataset (the commission build touches nothing else)")
+    changed = []
+    for n in sorted(os.listdir(data_dir)):
+        if not n.endswith(".csv"):
+            continue
+        old = os.path.join(prior_dir, n)
+        with open(os.path.join(data_dir, n), "rb") as fh:
+            new_bytes = fh.read()
+        if os.path.exists(old):
+            with open(old, "rb") as fh:
+                if fh.read() == new_bytes:
+                    continue
+        if not n.endswith(COMMISSION_BUILD_FILES):
+            changed.append(n)
+    rep.check("only statement, cash and commission files differ from the prior dataset", changed)
+
+    if not prior_gl_dir:
+        rep.flag("prior GL folder not given (--prior-gl); GL account scope not checked")
+        return
+    for v in VERSIONS:
+        def by_key(folder: str) -> dict[tuple[str, str], Decimal]:
+            out: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+            for r in read(os.path.join(folder, f"{v}_gl_detail.csv"))[1]:
+                out[(r["period"][:7], r["account_number"])] += num(r["amount"])
+            return out
+
+        old, new = by_key(prior_gl_dir), by_key(gl_dir)
+        delta = {k: new.get(k, ZERO) - old.get(k, ZERO) for k in set(old) | set(new)}
+        stray = [f"{p} {a} {money(d)}" for (p, a), d in sorted(delta.items()) if d and a not in COMMISSION_BUILD_ACCOUNTS]
+        rep.check(f"{v} GL: no account outside {', '.join(sorted(COMMISSION_BUILD_ACCOUNTS))} changed", stray)
+
+        roll = {r["period"][:7]: r for r in read(os.path.join(data_dir, f"{v}{COMMISSION_SOURCE_SUFFIX}"))[1]}
+        diffs = []
+        for p, r in sorted(roll.items()):
+            if delta.get((p, "6110"), ZERO) != num(r["payroll_tax_on_commissions"]):
+                diffs.append(f"{p}: 6110 change {money(delta.get((p, '6110'), ZERO))} vs payroll tax on payouts "
+                             f"{money(num(r['payroll_tax_on_commissions']))}")
+            want = num(r["commission_amortization"]) + num(r["expensed_commissions"]) - old.get((p, "6200"), ZERO)
+            got = delta.get((p, "6200"), ZERO) + delta.get((p, "6210"), ZERO)
+            if got != want:
+                diffs.append(f"{p}: 6200+6210 change {money(got)} vs amortization + expensed - prior 6200 {money(want)}")
+        rep.check(f"{v} GL: payroll tax and commission accounts changed by exactly the rollforward, to the cent", diffs)
+
+
 KNOWN_GAPS = [
     "Implementation fees are billed and recognized at signing (not spread over the implementation period).",
     "Budget deferred revenue differs from the unrecognized amount on its invoices (see the build check line above): "
@@ -773,11 +829,18 @@ KNOWN_GAPS = [
 
 
 if __name__ == "__main__":
-    v4_dir, v5_dir, gl = sys.argv[1:4]
+    argv = sys.argv[1:]
+    prior_gl = None
+    if "--prior-gl" in argv:
+        i = argv.index("--prior-gl")
+        prior_gl = argv[i + 1]
+        del argv[i:i + 2]
+    v4_dir, v5_dir, gl = argv[:3]
     name = os.path.basename(os.path.normpath(v5_dir))
-    out = sys.argv[4] if len(sys.argv) > 4 else os.path.join(v5_dir, "tie_out_report.md")
-    report = main(v4_dir, v5_dir, gl)
+    out = argv[3] if len(argv) > 3 else os.path.join(v5_dir, "tie_out_report.md")
+    report = main(v4_dir, v5_dir, gl, prior_gl)
     text = [f"# {name} tie-out", "", f"prior dataset: {v4_dir}", f"dataset: {v5_dir}", f"GL: {gl}",
+            f"prior GL: {prior_gl or 'not given'}",
             "", f"**{report.failures} failing checks**"] + report.lines + ["\n## Known gaps (not fixed in this dataset)\n"] + \
            [f"- {g}" for g in KNOWN_GAPS]
     with open(out, "w", encoding="utf-8") as fh:
