@@ -28,6 +28,10 @@ Rules (agreed with Matt, Oct 5-6 2026):
   * Balance sheet: the old month-end balance rows are replaced by opening balances at
     Jan 2024 and monthly activity from the dataset's schedules (build_gl_balance_sheet.py).
     gl_balance_sheet_check.csv compares the GL balances with the balance sheet files.
+  * Sales commissions (when <version>_deferred_commissions_rollforward.csv exists): the source
+    6200 rows are removed; 6200 is the month's amortization of deferred commissions, 6210 the
+    commissions expensed when paid, and 6110 rows carry employer payroll tax on the payouts.
+    They are part of the summary's S&M: the other S&M accounts are sized to the rest.
 
 Usage:
   python rebuild_gl_to_summary.py <source_folder> <output_folder>
@@ -87,6 +91,8 @@ FORECAST_TEMPLATE_MONTH = "2026-06"
 IMPLEMENTATION_ACCOUNT = "4100"
 RECURRING_SERVICES_ACCOUNT = "4200"
 ADDED_REVENUE_ACCOUNTS = {IMPLEMENTATION_ACCOUNT, RECURRING_SERVICES_ACCOUNT}
+COMMISSION_ACCOUNT = "6200"
+COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
 
 
 def _clone_to(row: dict[str, str], target: str, template: str) -> dict[str, str]:
@@ -107,8 +113,10 @@ def _line(row: dict[str, str]) -> str | None:
     return LINE_BY_CATEGORY[category]
 
 
-def _keep(row: dict[str, str]) -> bool:
+def _keep(row: dict[str, str], drop_commissions: bool = False) -> bool:
     if row["account_name"] in DROP_ACCOUNTS:
+        return False
+    if drop_commissions and row["account_number"] == COMMISSION_ACCOUNT:
         return False
     if row["statement_category"] == "Operating Expense" and row["cost_center"] in DUPLICATE_OPEX_COST_CENTERS:
         return False
@@ -121,8 +129,10 @@ def _read(path: str) -> list[dict[str, str]]:
 
 
 def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
-            added_revenue: dict[str, Decimal]):
-    """``added_revenue``: implementation + recurring services by month, carved out of the summary revenue."""
+            added_revenue: dict[str, Decimal], added_sm: dict[str, Decimal] | None = None):
+    """``added_revenue``: implementation + recurring services by month, carved out of the summary revenue.
+    ``added_sm``: commission rows by month, carved out of the summary S&M (source 6200 rows are dropped)."""
+    added_sm = added_sm or {}
     summary = {r["period"][:7]: r for r in summary_rows}
     periods = REBUILD_PERIODS[version]
     fill = DETAIL_FROM_MONTH[version]
@@ -140,7 +150,7 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
                         "detail": f"summary posting {row['account_name']}; detail built from {fill[period]}",
                         "amount": row["amount"]})
             continue
-        if not _keep(row):
+        if not _keep(row, drop_commissions=bool(added_sm)):
             log.append({"version": version, "period": period, "line": _line(row) or "", "action": "removed",
                         "detail": f"{row['department']} / {row['cost_center']} / {row['account_name']}",
                         "amount": row["amount"]})
@@ -156,6 +166,8 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
         target = Decimal(str(summary[period][line]))
         if line == "revenue":
             target -= added_revenue.get(period, Decimal("0"))
+        elif line == "sales_and_marketing":
+            target -= added_sm.get(period, Decimal("0"))
         posted = sum((Decimal(r["amount"]) for r in rows), Decimal("0"))
         # Source P&L rows are credit-positive: revenue +, expenses -.
         current = posted if line == "revenue" else -posted
@@ -192,7 +204,8 @@ def forecast_seed(actual_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     """Forecast months start from the last actual month's P&L rows, in the source sign convention."""
     seed: list[dict[str, str]] = []
     template_rows = [r for r in actual_rows if r["period"][:7] == FORECAST_TEMPLATE_MONTH and r["statement"] != "Balance Sheet"
-                     and r["account_number"] not in ADDED_REVENUE_ACCOUNTS]
+                     and r["account_number"] not in ADDED_REVENUE_ACCOUNTS
+                     and not r["source_file"].endswith(COMMISSION_SOURCE_SUFFIX)]
     for target in sorted(REBUILD_PERIODS["Forecast"]):
         for r in template_rows:
             nr = _clone_to(r, target, FORECAST_TEMPLATE_MONTH)
@@ -257,6 +270,40 @@ def recurring_services_rows(src: str, version: str, template: dict[str, str]) ->
     return rows
 
 
+def commission_rows(src: str, version: str, template: dict[str, str]) -> list[dict[str, str]]:
+    """6200 amortization, 6210 expensed commissions and 6110 payroll tax on payouts, from the
+    version's deferred commissions rollforward, when the file exists."""
+    source = f"{version}{COMMISSION_SOURCE_SUFFIX}"
+    path = os.path.join(src, source)
+    if not os.path.exists(path):
+        return []
+    lines = (
+        ("commission_amortization", "6200", "Sales Commissions", "Sales Expense", "Commissions", "Sales", "SALES-AE",
+         "Account Executives", "amortization of deferred commissions (ASC 340-40, straight-line from the payout month)"),
+        ("expensed_commissions", "6210", "Sales Commissions - Expensed", "Sales Expense", "Commissions",
+         "Customer Success", "CS-RENEW", "Renewals", "renewal commissions expensed when paid (12-month term)"),
+        ("payroll_tax_on_commissions", "6110", "Payroll Taxes", "Labor", "Payroll Taxes", "Sales", "SALES-AE",
+         "Account Executives", "employer payroll tax on commission payouts, expensed when paid"),
+    )
+    rows = []
+    for r in _read(path):
+        period = r["period"][:7]
+        for col, number, name, group, etype, dept, cc, sub, note in lines:
+            amount = Decimal(r[col] or "0")
+            if not amount:
+                continue
+            rows.append({
+                **{k: "" for k in template},
+                "organization_id": template["organization_id"], "version": version, "period": period,
+                "account_number": number, "account_name": name, "statement": "Income Statement",
+                "statement_category": "Operating Expense", "account_group": group, "expense_type": etype,
+                "department": dept, "cost_center": cc, "sub_department": sub, "source_file": source,
+                "source_record_id": f"{version}-{period}-{number}-{col}", "amount": f"{amount:.2f}",
+                "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model", "notes": note,
+            })
+    return rows
+
+
 def main(src: str, dst: str) -> None:
     os.makedirs(dst, exist_ok=True)
     all_log: list[dict[str, str]] = []
@@ -271,16 +318,26 @@ def main(src: str, dst: str) -> None:
         summary = _read(os.path.join(src, f"{version}_income_statement.csv"))
         impl = implementation_rows(src, version, gl[0])
         rsvc = recurring_services_rows(src, version, gl[0])
+        comm = commission_rows(src, version, gl[0])
         added: dict[str, Decimal] = defaultdict(Decimal)
         for r in impl + rsvc:
             added[r["period"]] -= Decimal(r["amount"])
-        rows, log = rebuild(version, gl, summary, added)
+        added_sm: dict[str, Decimal] = defaultdict(Decimal)
+        for r in comm:
+            added_sm[r["period"]] += Decimal(r["amount"])
+        rows, log = rebuild(version, gl, summary, added, added_sm)
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
         if old_bs:
             log.append({"version": version, "period": "", "line": "balance sheet", "action": "replaced",
                         "detail": f"{len(old_bs)} month-end balance rows replaced by opening balances and monthly activity",
                         "amount": ""})
-        rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"] + impl + rsvc
+        rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"] + impl + rsvc + comm
+        if comm:
+            log.append({"version": version, "period": "", "line": "sales_and_marketing", "action": "carved out",
+                        "detail": f"{len(comm)} commission rows (6200 amortization, 6210 expensed, 6110 payroll tax) "
+                                  f"from {version}{COMMISSION_SOURCE_SUFFIX}; source 6200 rows removed; other S&M is "
+                                  f"the summary S&M less this",
+                        "amount": f"{sum(Decimal(r['amount']) for r in comm):.2f}"})
         for name, account, added_rows in (("implementation", IMPLEMENTATION_ACCOUNT, impl),
                                           ("recurring services", RECURRING_SERVICES_ACCOUNT, rsvc)):
             if added_rows:

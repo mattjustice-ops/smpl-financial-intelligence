@@ -1,8 +1,11 @@
-"""Tie-out report for the v5 dataset: every file against the GL and against each other.
+"""Tie-out report for the v5/v6 dataset: every file against the GL and against each other.
 
-  python v5_tie_out.py <v4_folder> <v5_folder> <gl_folder> [report.md]
+  python v5_tie_out.py <prior_folder> <dataset_folder> <gl_folder> [report.md]
 
 Each check is PASS or FAIL; gaps that are known and accepted are listed as FLAG with the number.
+Columns added on purpose (ADDED_COLUMNS) are allowed in the schema check. When the dataset has
+<version>_commission_schedule.csv, the ASC 340-40 commission section recomputes the schedule,
+rollforward, amortization and GL postings independently.
 Exit code 1 if any check fails.
 """
 
@@ -23,8 +26,16 @@ DEFERRED_REVENUE_CAP = Decimal("10000000")
 CENTS = Decimal("0.02")
 REVENUE_ACCOUNTS = {"4000": "Subscription", "4100": "Implementation & Onboarding", "4200": "Recurring Services"}
 BS_ACCOUNTS = {"1000": ("cash", 1), "1100": ("accounts_receivable", 1), "1200": ("prepaids_and_other_current", 1),
-               "1500": ("ppe_net", 1), "2000": ("accounts_payable", -1), "2100": ("deferred_revenue", -1),
-               "2500": ("debt", -1), "2600": ("other_liabilities", -1)}
+               "1250": ("deferred_commissions_current", 1), "1500": ("ppe_net", 1),
+               "1550": ("deferred_commissions_noncurrent", 1), "2000": ("accounts_payable", -1),
+               "2100": ("deferred_revenue", -1), "2500": ("debt", -1), "2600": ("other_liabilities", -1)}
+ADDED_COLUMNS = {
+    "_commission_plans.csv": ("capitalize", "amortization_months", "payout_basis", "payout_lag_months",
+                              "capitalize_payroll_taxes"),
+    "_balance_sheet.csv": ("deferred_commissions_current", "deferred_commissions_noncurrent"),
+    "_cash_flow_statement.csv": ("change_in_deferred_commissions",),
+}
+COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
 
 
 def num(value) -> Decimal:
@@ -137,21 +148,27 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
         raise KeyError(field)
 
     # ------------------------------------------------------------------ schema
-    rep.section("Warehouse schema (v5 columns = v4 columns)")
+    rep.section("Warehouse schema (columns = prior dataset, plus columns added on purpose)")
     v4_files = {n for n in os.listdir(v4) if n.endswith(".csv")}
     v5_files = {n for n in os.listdir(v5) if n.endswith(".csv")}
-    header_diffs, blank_org = [], []
+    header_diffs, blank_org, added = [], [], []
     for n in sorted(v4_files & v5_files):
         h4, r4 = read(os.path.join(v4, n))
         h5, r5 = read(os.path.join(v5, n))
-        if h4 != h5:
+        allowed = next((cols for suffix, cols in ADDED_COLUMNS.items() if n.endswith(suffix)), ())
+        new_cols = [c for c in h5 if c not in h4]
+        if [c for c in h5 if c not in allowed] != [c for c in h4 if c not in allowed] or any(c not in allowed for c in new_cols):
             header_diffs.append(n)
+        elif new_cols:
+            added.append(f"{n} (+{', '.join(new_cols)})")
         if "organization_id" in h5 and all(r.get("organization_id") for r in r4) and any(not r.get("organization_id") for r in r5):
             blank_org.append(n)
     rep.check("same columns in every file", header_diffs, f"{len(v4_files & v5_files)} files")
-    rep.check("organization_id filled wherever v4 had it", blank_org)
-    rep.info(f"removed in v5: {sorted(v4_files - v5_files) or 'none'}")
-    rep.info(f"new in v5: {sorted(v5_files - v4_files) or 'none'}")
+    rep.check("organization_id filled wherever the prior dataset had it", blank_org)
+    if added:
+        rep.info(f"columns added on purpose: {'; '.join(added)}")
+    rep.info(f"removed: {sorted(v4_files - v5_files) or 'none'}")
+    rep.info(f"new files: {sorted(v5_files - v4_files) or 'none'}")
 
     # ------------------------------------------------------------------ double entry + balance sheet
     rep.section("General ledger and balance sheet")
@@ -168,8 +185,13 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
                 diffs.append(f"{p}: missing from balance sheet file")
                 continue
             for _, (name, _) in BS_ACCOUNTS.items():
-                if abs(num(r[name]) - bs_line(v, p, name)) > CENTS:
-                    diffs.append(f"{p} {name}: file {money(num(r[name]))} vs GL {money(bs_line(v, p, name))}")
+                if name not in r and bs_line(v, p, name) == 0:
+                    continue
+                if abs(num(r.get(name)) - bs_line(v, p, name)) > CENTS:
+                    diffs.append(f"{p} {name}: file {money(num(r.get(name)))} vs GL {money(bs_line(v, p, name))}")
+            listed = sum((num(r.get(name)) for _, (name, sign) in BS_ACCOUNTS.items() if sign > 0), ZERO)
+            if abs(listed - num(r["total_assets"])) > CENTS:
+                diffs.append(f"{p}: asset lines add to {money(listed)}, total assets {money(num(r['total_assets']))}")
             if abs(num(r["total_assets"]) - num(r["total_liabilities"]) - num(r["equity"])) > CENTS:
                 diffs.append(f"{p}: assets != liabilities + equity")
         rep.check(f"{v} balance sheet file = GL balances and balances every month", diffs)
@@ -284,6 +306,11 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
                 d_ar = bs_line(v, p, "accounts_receivable") - bs_line(v, prior(p), "accounts_receivable")
                 if abs(num(r["change_in_deferred_revenue"]) - d_dr) > CENTS or abs(num(r["change_in_accounts_receivable"]) + d_ar) > CENTS:
                     diffs.append(f"{p}: working capital changes vs GL")
+                d_dc = sum((bs_line(v, p, k) - bs_line(v, prior(p), k)
+                            for k in ("deferred_commissions_current", "deferred_commissions_noncurrent")), ZERO)
+                if abs(num(r.get("change_in_deferred_commissions")) + d_dc) > CENTS:
+                    diffs.append(f"{p}: change in deferred commissions {money(num(r.get('change_in_deferred_commissions')))} "
+                                 f"vs GL {money(-d_dc)}")
         rep.check(f"{v} cash flow statement adds up and ties to GL cash, net income and working capital", diffs)
 
         cc = {r["period"][:7]: r for r in f(f"{v}_cash_collections.csv")}
@@ -311,8 +338,8 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
             neg = [o for o in others if o < 0]
             if neg:
                 rep.flag(f"{v} cash bridge other operating cash out is negative in {len(neg)} of {len(others)} months "
-                         f"({money(min(others))} to {money(max(others))}): payroll and commission lines are larger than "
-                         f"the GL implies (headcount-plan payroll and commission payouts do not tie to GL expense)")
+                         f"({money(min(others))} to {money(max(others))}): the payroll line is larger than the GL "
+                         f"implies (headcount-plan payroll does not tie to GL payroll)")
 
     # ------------------------------------------------------------------ cash path and caps
     rep.section("Cash path and deferred revenue level")
@@ -320,12 +347,13 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
                  ("Budget", "2026-12"), ("Forecast", "2026-12")):
         rep.info(f"{v} {p}: cash {money(bs_line(v, p, 'cash'))}, AR {money(bs_line(v, p, 'accounts_receivable'))}, "
                  f"deferred revenue {money(bs_line(v, p, 'deferred_revenue'))}")
-    notes_path = os.path.join(v5, "v5_build_notes.txt")
-    if os.path.exists(notes_path):
-        with open(notes_path, encoding="utf-8") as fh:
+    for notes_name in sorted(n for n in os.listdir(v5) if n.endswith("_build_notes.txt")):
+        with open(os.path.join(v5, notes_name), encoding="utf-8") as fh:
             for line in fh:
                 if "unrecognized invoice amounts" in line:
                     rep.info("build check, rollforward vs open invoices: " + line.strip())
+                elif notes_name.startswith("v6") and line.strip():
+                    rep.info(f"{notes_name}: {line.strip()}")
     for v in VERSIONS:
         low = min(months[v], key=lambda p: bs_line(v, p, "cash"))
         rep.check(f"{v} cash stays above the {money(CASH_FLOOR)} floor",
@@ -447,13 +475,23 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
     by_p = sums(pay, "period", "commission_amount")
     rep.check("commission payouts: rep IDs on the roster, owner and amount from the opportunity, amount = ARR x rate", diffs,
               f"{len(pay)} payouts, " + ", ".join(f"{p} {money(a)}" for p, a in sorted(by_p.items())))
-    gl6200 = defaultdict(Decimal)
-    for r in gl["Actual"]:
-        if r["account_number"] == "6200":
-            gl6200[r["period"][:7]] += num(r["amount"])
-    rep.flag("GL 6200 Sales Commissions vs payouts: " + ", ".join(
-        f"{p} {money(gl6200[p])} vs {money(by_p.get(p, ZERO))}" for p in q_months)
-             + " (capitalized commissions are not modeled; the GL expense is not the cash paid)")
+    plans = {r["plan_id"]: r for r in f("Actual_commission_plans.csv")}
+    diffs = [f"{r['commission_id']}: rate {r['commission_rate']} not the plan's base or accelerated rate"
+             for r in pay + f("Actual_renewal_commissions.csv")
+             if r["plan_id"] in plans and num(r["commission_rate"]) not in
+             (num(plans[r["plan_id"]]["base_commission_rate"]), num(plans[r["plan_id"]]["accelerated_rate"]))]
+    rep.check("every payout rate is its plan's base or accelerated rate", diffs)
+
+    if os.path.exists(os.path.join(v5, "Actual_commission_schedule.csv")):
+        commission_section(rep, f, gl, months, chain_months, source, bs_line, a_mrr)
+    else:
+        gl6200 = defaultdict(Decimal)
+        for r in gl["Actual"]:
+            if r["account_number"] == "6200":
+                gl6200[r["period"][:7]] += num(r["amount"])
+        rep.flag("GL 6200 Sales Commissions vs payouts: " + ", ".join(
+            f"{p} {money(gl6200[p])} vs {money(by_p.get(p, ZERO))}" for p in q_months)
+                 + " (commission expense is not in the GL; the GL expense is not the cash paid)")
 
     stray = defaultdict(set)
     for n in sorted(v5_files):
@@ -503,6 +541,220 @@ def main(v4: str, v5: str, gl_dir: str) -> Report:
     return rep
 
 
+def _pidx(p: str) -> int:
+    return int(p[:4]) * 12 + int(p[5:7]) - 1
+
+
+def _padd(p: str, n: int) -> str:
+    i = _pidx(p) + n
+    return f"{i // 12}-{i % 12 + 1:02d}"
+
+
+def _cum_amortization(cohorts: dict[str, list[tuple[Decimal, int]]], through: str, paid_through: str | None = None) -> Decimal:
+    total = ZERO
+    for p, layers in cohorts.items():
+        if paid_through and p > paid_through:
+            continue
+        age = _pidx(through) - _pidx(p) + 1
+        if age <= 0:
+            continue
+        for amt, n in layers:
+            total += amt * min(age, n) / n
+    return total.quantize(Decimal("0.01"))
+
+
+def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line, a_mrr) -> None:
+    """ASC 340-40: plans -> schedule -> rollforward -> GL -> statements -> cash bridge, each recomputed."""
+    rep.section("Sales commissions (ASC 340-40)")
+    detail_files = {"Actual_commission_payouts.csv": "commission_amount", "Actual_renewal_commissions.csv": "commission_amount"}
+    detail, detail_base, detail_paid = defaultdict(Decimal), defaultdict(Decimal), defaultdict(Decimal)
+    renewal_booked, renewal_months = ZERO, set()
+    for name in detail_files:
+        for r in f(name):
+            detail[(r["period"][:7], r["plan_id"])] += num(r["commission_amount"])
+            detail_base[r["plan_id"]] += num(r["booked_arr"])
+            detail_paid[r["plan_id"]] += num(r["commission_amount"])
+            if "renewal" in name:
+                renewal_booked += num(r["booked_arr"])
+                renewal_months.add(r["period"][:7])
+    renew_share = renewal_booked / sum((num(a_mrr[p]["beginning_arr"]) for p in renewal_months), ZERO)
+    eff = {plan: (detail_paid[plan] / detail_base[plan]) for plan in detail_base}
+
+    plans_by_v, sched, roll = {}, {}, {}
+    for v in VERSIONS:
+        plans_by_v[v] = {r["plan_id"]: r for r in f(f"{v}_commission_plans.csv")}
+        sched[v] = f(f"{v}_commission_schedule.csv")
+        roll[v] = {r["period"][:7]: r for r in f(f"{v}{COMMISSION_SOURCE_SUFFIX}")}
+
+    diffs = []
+    for v, plans in plans_by_v.items():
+        for pid, r in plans.items():
+            cap, months_ = r.get("capitalize"), r.get("amortization_months")
+            if cap not in ("Y", "N") or not months_ or not r.get("payout_basis") or r.get("payout_lag_months") in (None, "") \
+                    or r.get("capitalize_payroll_taxes") not in ("Y", "N"):
+                diffs.append(f"{v} {pid}: policy columns incomplete")
+            elif (cap == "Y") != (int(months_) > 0):
+                diffs.append(f"{v} {pid}: capitalize {cap} with amortization_months {months_}")
+            elif r.get("payout_lag_months") != "0":
+                diffs.append(f"{v} {pid}: payout lag {r['payout_lag_months']} needs an accrued commissions liability (not modeled)")
+        used = {r["plan_id"] for r in sched[v]} | ({k[1] for k in detail} if v == "Actual" else set())
+        diffs += [f"{v}: plan {pid} used but not in {v}_commission_plans.csv" for pid in sorted(used - set(plans))]
+    rep.check("commission plans carry a complete policy (capitalize, amortization months, payout basis and lag, "
+              "payroll tax treatment) and cover every plan paid", diffs,
+              "; ".join(f"{pid} capitalize {r['capitalize']} over {r['amortization_months']} months"
+                        for pid, r in plans_by_v["Actual"].items()))
+
+    diffs, est_months = [], defaultdict(set)
+    scheduled = {(r["period"][:7], r["plan_id"]) for r in sched["Actual"]}
+    diffs += [f"Actual {p} {pid}: payout detail {money(a)} has no schedule row" for (p, pid), a in sorted(detail.items())
+              if (p, pid) not in scheduled]
+    first = min(a_mrr)
+    growth = (num(a_mrr["2025-12"]["ending_arr"]) / num(a_mrr[first]["beginning_arr"])) ** (
+        Decimal(12) / Decimal(_pidx("2025-12") - _pidx(first) + 1))
+    first_pay = {r["plan_id"]: num(r["commission_payout"]) for r in sched["Actual"] if r["period"][:7] == first}
+    ladder = 0
+    for v in VERSIONS:
+        wf = {r["period"][:7]: r for r in f(f"{v}_MRR_Waterfall.csv")}
+        plans = plans_by_v[v]
+        for r in sched[v]:
+            p, pid, amt = r["period"][:7], r["plan_id"], num(r["commission_payout"])
+            if p < first:
+                ladder += 1
+                k = _pidx(first) - _pidx(p)
+                want = (first_pay.get(pid, ZERO) / growth ** (Decimal(k) / 12)).quantize(Decimal("0.01"))
+                if v != "Actual" or r["capitalize"] != "Y" or abs(amt - want) > CENTS \
+                        or num(r["capitalized_amount"]) != amt:
+                    diffs.append(f"{v} {p} {pid}: opening ladder {money(amt)} vs {money(want)}")
+                continue
+            cap_flag = plans[pid]["capitalize"] if pid in plans else "?"
+            if r["capitalize"] != cap_flag:
+                diffs.append(f"{v} {p} {pid}: schedule capitalize {r['capitalize']} vs plan {cap_flag}")
+            if abs(num(r["capitalized_amount"]) + num(r["expensed_amount"]) - amt) > CENTS or \
+                    (r["capitalize"] == "Y" and num(r["expensed_amount"])) or (r["capitalize"] == "N" and num(r["capitalized_amount"])):
+                diffs.append(f"{v} {p} {pid}: capitalized + expensed != payout, or split against policy")
+            if v == "Actual" and (p, pid) in detail:
+                if abs(detail[(p, pid)] - amt) > CENTS:
+                    diffs.append(f"Actual {p} {pid}: schedule {money(amt)} vs payout detail {money(detail[(p, pid)])}")
+                continue
+            if r["commission_base_arr"] == "":
+                continue
+            est_months[v].add(p)
+            w = wf[p]
+            base = {"PLAN-AE-NEW": num(w["new_business_arr"]) + num(w["reactivation_arr"]),
+                    "PLAN-AM-EXP": num(w["expansion_arr"]),
+                    "PLAN-RENEWAL": num(w["beginning_arr"]) * renew_share}[pid]
+            rate = eff[pid] if pid != "PLAN-RENEWAL" else num(plans[pid]["base_commission_rate"])
+            if abs(num(r["commission_base_arr"]) - base) > CENTS or abs(amt - (base * rate).quantize(Decimal("0.01"))) > CENTS:
+                diffs.append(f"{v} {p} {pid}: {money(amt)} vs base {money(base)} x {rate:.5f}")
+    rep.check("commission schedule = payout detail where it exists (every detail line scheduled), else ARR waterfall x "
+              "the 2026 effective rate (renewals: beginning ARR x the Jan-May 2026 renewal share x plan rate); "
+              "capitalized/expensed per plan; opening ladder recomputes", diffs,
+              f"effective rates {', '.join(f'{k} {e:.5f}' for k, e in sorted(eff.items()))}; renewal share {renew_share:.4%}; "
+              f"{ladder} pre-{first} opening-ladder rows = {first} payout / {growth:.4f} annual ARR growth")
+    rep.flag("payout detail exists only for Actual Jan-Jun 2026 (renewals Jan-May); estimated months: "
+             + "; ".join(f"{v} {min(ms)}..{max(ms)} ({len(ms)})" for v, ms in est_months.items() if ms))
+
+    diffs = []
+    for v in VERSIONS:
+        cohorts: dict[str, list[tuple[Decimal, int]]] = defaultdict(list)
+        start = CHAIN_FROM_ACTUAL.get(v)
+        rows = [r for r in sched["Actual"] if not start or r["period"][:7] < start] + (sched[v] if v != "Actual" else [])
+        for r in rows:
+            if num(r["capitalized_amount"]):
+                cohorts[r["period"][:7]].append((num(r["capitalized_amount"]), int(r["amortization_months"])))
+        cap_by = sums(rows, "period", "capitalized_amount")
+        exp_by = sums(rows, "period", "expensed_amount")
+        prev_end = num(roll["Actual"][_padd(start, -1)]["ending_deferred_commissions"]) if start else None
+        tax_rates = set()
+        for p in sorted(roll[v]):
+            r = roll[v][p]
+            begin, cap, amort, end = (num(r[k]) for k in ("beginning_deferred_commissions", "capitalized_commissions",
+                                                          "commission_amortization", "ending_deferred_commissions"))
+            if abs(begin + cap - amort - end) > CENTS:
+                diffs.append(f"{v} {p}: rollforward does not roll")
+            if prev_end is not None and abs(begin - prev_end) > CENTS:
+                diffs.append(f"{v} {p}: beginning {money(begin)} vs prior ending {money(prev_end)}")
+            prev_end = end
+            if abs(cap - cap_by.get(p, ZERO)) > CENTS or abs(num(r["expensed_commissions"]) - exp_by.get(p, ZERO)) > CENTS:
+                diffs.append(f"{v} {p}: rollforward capitalized/expensed vs schedule")
+            if abs(cap + num(r["expensed_commissions"]) - num(r["total_commission_payouts"])) > CENTS:
+                diffs.append(f"{v} {p}: total payouts != capitalized + expensed")
+            if abs(num(r["current_portion"]) + num(r["noncurrent_portion"]) - end) > CENTS:
+                diffs.append(f"{v} {p}: current + noncurrent != ending")
+            want_amort = _cum_amortization(cohorts, p) - _cum_amortization(cohorts, _padd(p, -1))
+            want_end = sum((a for q_, layers in cohorts.items() if q_ <= p for a, _ in layers), ZERO) - _cum_amortization(cohorts, p)
+            want_cur = _cum_amortization(cohorts, _padd(p, 12), paid_through=p) - _cum_amortization(cohorts, p)
+            if abs(amort - want_amort) > CENTS or abs(end - want_end) > CENTS or abs(num(r["current_portion"]) - want_cur) > CENTS:
+                diffs.append(f"{v} {p}: amortization {money(amort)} / ending {money(end)} / current "
+                             f"{money(num(r['current_portion']))} vs recomputed {money(want_amort)} / {money(want_end)} / {money(want_cur)}")
+            total = num(r["total_commission_payouts"])
+            if total:
+                tax_rates.add((num(r["payroll_tax_on_commissions"]) / total).quantize(Decimal("0.0001")))
+        if len(tax_rates) > 1:
+            diffs.append(f"{v}: payroll tax on commissions is not one rate ({sorted(tax_rates)})")
+    rep.check("deferred commissions rollforward rolls, chains (Budget from Actual Dec 2025, Forecast from Jun 2026), "
+              "matches the schedule, and amortization / ending / current portion recompute from the payout cohorts", diffs)
+
+    diffs = []
+    for v in VERSIONS:
+        gl_by = defaultdict(lambda: defaultdict(Decimal))
+        for r in gl[v]:
+            p = r["period"][:7]
+            if r["account_number"] == "6200":
+                gl_by[p]["6200"] += num(r["amount"])
+                if not r["source_file"].endswith(COMMISSION_SOURCE_SUFFIX):
+                    gl_by[p]["stray"] += num(r["amount"])
+            elif r["account_number"] == "6210":
+                gl_by[p]["6210"] += num(r["amount"])
+            elif r["account_number"] == "6110" and r["source_file"].endswith(COMMISSION_SOURCE_SUFFIX):
+                gl_by[p]["tax"] += num(r["amount"])
+        for p in months[v]:
+            r = roll[v][p]
+            for key, col in (("6200", "commission_amortization"), ("6210", "expensed_commissions"),
+                             ("tax", "payroll_tax_on_commissions")):
+                if abs(gl_by[p][key] - num(r[col])) > CENTS:
+                    diffs.append(f"{v} {p} GL {key} {money(gl_by[p][key])} vs rollforward {col} {money(num(r[col]))}")
+            if gl_by[p]["stray"]:
+                diffs.append(f"{v} {p}: 6200 rows not from the rollforward {money(gl_by[p]['stray'])}")
+            for k, col in (("deferred_commissions_current", "current_portion"),
+                           ("deferred_commissions_noncurrent", "noncurrent_portion")):
+                if abs(bs_line(v, p, k) - num(r[col])) > CENTS:
+                    diffs.append(f"{v} {p} GL {k} {money(bs_line(v, p, k))} vs rollforward {money(num(r[col]))}")
+    rep.check("GL 6200 = amortization, 6210 = expensed commissions, 6110 commission rows = payroll tax on payouts, "
+              "1250/1550 = current/noncurrent deferred commissions, every month", diffs)
+
+    diffs = []
+    for v in VERSIONS:
+        br = {r["period"][:7]: r for r in f(f"{v}_cash_flow_bridge.csv")}
+        for p in months[v]:
+            if p in br and abs(num(br[p]["commission_cash_out"]) - num(roll[v][p]["total_commission_payouts"])) > CENTS:
+                diffs.append(f"{v} {p}: bridge {money(num(br[p]['commission_cash_out']))} vs payouts "
+                             f"{money(num(roll[v][p]['total_commission_payouts']))}")
+    rep.check("cash bridge commission cash = total commission payouts (all plans)", diffs)
+
+    diffs = []
+    for v in VERSIONS:
+        capitalizes = any(r["capitalize"] == "Y" for r in plans_by_v[v].values())
+        has_asset = all(bs_line(v, p, "deferred_commissions_current") + bs_line(v, p, "deferred_commissions_noncurrent") > 0
+                        for p in months[v])
+        if capitalizes != has_asset:
+            diffs.append(f"{v}: policy capitalize={capitalizes} but GL deferred commissions asset present={has_asset}")
+    rep.check("policy and books agree: plans that capitalize have a deferred commissions asset in the GL every month", diffs)
+
+    for v in VERSIONS:
+        tot = defaultdict(lambda: defaultdict(Decimal))
+        for p, r in roll[v].items():
+            for k in ("total_commission_payouts", "capitalized_commissions", "commission_amortization",
+                      "expensed_commissions", "payroll_tax_on_commissions"):
+                tot[p[:4]][k] += num(r[k])
+        last = max(roll[v])
+        rep.info(f"{v}: " + "; ".join(
+            f"{y} paid {money(t['total_commission_payouts'])} (capitalized {money(t['capitalized_commissions'])}, "
+            f"renewals expensed {money(t['expensed_commissions'])}), amortized {money(t['commission_amortization'])}, "
+            f"payroll tax {money(t['payroll_tax_on_commissions'])}" for y, t in sorted(tot.items()))
+                 + f"; deferred commissions {last} {money(num(roll[v][last]['ending_deferred_commissions']))}")
+
+
 KNOWN_GAPS = [
     "Implementation fees are billed and recognized at signing (not spread over the implementation period).",
     "Budget deferred revenue differs from the unrecognized amount on its invoices (see the build check line above): "
@@ -512,16 +764,21 @@ KNOWN_GAPS = [
     "FY24/FY25 headcount-plan payroll does not tie to GL payroll (GL detail for those months is cloned from Jan 2026).",
     "Budget and Forecast 2026 new logos are not in the customer master; Budget implementation invoices reference them.",
     "Roster region EMEA renamed South; renewal_arr redefined as beginning ARR less contraction and churn.",
-    "Budget Engine still assumes 0.16 months of revenue deferred; reading it from data is a later code change.",
+    "Commission payout detail exists only for Actual Jan-Jun 2026 (renewals Jan-May); every other month is estimated "
+    "from the ARR waterfall at the 2026 effective rates, and pre-2024 cohorts are an opening ladder.",
+    "Commissions are paid in the booking month (payout lag 0), so there is no accrued commissions liability.",
+    "Deferred tax on deferred commissions (book/tax difference) is not modeled.",
+    "Budget and Forecast bookings_summary does not tie to their ARR waterfalls; commissions use the waterfall.",
 ]
 
 
 if __name__ == "__main__":
     v4_dir, v5_dir, gl = sys.argv[1:4]
-    out = sys.argv[4] if len(sys.argv) > 4 else os.path.join(v5_dir, "v5_tie_out_report.md")
+    name = os.path.basename(os.path.normpath(v5_dir))
+    out = sys.argv[4] if len(sys.argv) > 4 else os.path.join(v5_dir, "tie_out_report.md")
     report = main(v4_dir, v5_dir, gl)
-    text = ["# v5 dataset tie-out", "", f"source v4: {v4_dir}", f"v5: {v5_dir}", f"GL: {gl}",
-            "", f"**{report.failures} failing checks**"] + report.lines + ["\n## Known gaps (not fixed in v5)\n"] + \
+    text = [f"# {name} tie-out", "", f"prior dataset: {v4_dir}", f"dataset: {v5_dir}", f"GL: {gl}",
+            "", f"**{report.failures} failing checks**"] + report.lines + ["\n## Known gaps (not fixed in this dataset)\n"] + \
            [f"- {g}" for g in KNOWN_GAPS]
     with open(out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(text) + "\n")
