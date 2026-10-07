@@ -6,6 +6,7 @@ Responsibilities:
     each subscription's lifetime — a reasonable demo simplification).
   - Determine which customers had positive MRR in any month *before* a given
     cutoff (used to distinguish NEW from REACTIVATION).
+  - Find when a returning customer left, their MRR then, and whether it was a pause.
   - Persist computed customer-level rows back into `mrr_waterfall`.
 """
 
@@ -22,7 +23,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models.demo_finance import MrrWaterfall, Subscription
-from app.services.mrr.engine import CustomerMrrMovement, quantize_money
+from app.services.mrr.engine import CustomerMrrMovement, Departure, quantize_money
 
 ZERO = Decimal("0")
 
@@ -40,6 +41,12 @@ def previous_month_start(d: date) -> date:
     if d.month == 1:
         return date(d.year - 1, 12, 1)
     return date(d.year, d.month - 1, 1)
+
+
+def next_month_start(d: date) -> date:
+    if d.month == 12:
+        return date(d.year + 1, 1, 1)
+    return date(d.year, d.month + 1, 1)
 
 
 def customer_mrr_for_month(
@@ -88,6 +95,36 @@ def historical_active_customers(
         .distinct()
     )
     return {row[0] for row in session.execute(stmt).all()}
+
+
+def customer_departures(
+    session: Session, organization_id: uuid.UUID, before_period_start: date, customer_ids: Iterable[str]
+) -> dict[str, Departure]:
+    """When each customer last left before `before_period_start`, their MRR then, and whether the
+    subscriptions that ended were paused or canceled (status as stored; anything else is unknown).
+    """
+    ids = set(customer_ids)
+    if not ids:
+        return {}
+    stmt = select(Subscription.customer_id, Subscription.end_date, Subscription.status).where(
+        Subscription.organization_id == organization_id,
+        Subscription.customer_id.in_(ids),
+        Subscription.end_date.isnot(None),
+        Subscription.end_date < before_period_start,
+    )
+    ended: dict[str, list[tuple[date, str | None]]] = {}
+    for cid, end, status in session.execute(stmt).all():
+        ended.setdefault(cid, []).append((end, (status or "").strip().lower() or None))
+
+    out: dict[str, Departure] = {}
+    for cid, items in ended.items():
+        last_end = max(e for e, _ in items)
+        last_month = month_start(last_end)
+        statuses = {s for e, s in items if month_start(e) == last_month}
+        paused = True if statuses == {"paused"} else False if statuses == {"canceled"} else None
+        prior = customer_mrr_for_month(session, organization_id, last_month).get(cid, ZERO)
+        out[cid] = Departure(churn_period=next_month_start(last_month), prior_mrr=prior, paused=paused)
+    return out
 
 
 def upsert_mrr_waterfall_rows(

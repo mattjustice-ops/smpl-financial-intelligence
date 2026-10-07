@@ -29,6 +29,12 @@ class CustomerRowOut(BaseModel):
     reactivation_mrr: Decimal
     ending_mrr: Decimal
     movement_type: str
+    return_type: Optional[str] = None
+    months_away: Optional[int] = None
+    baseline_mrr: Optional[Decimal] = None
+    restored_mrr: Optional[Decimal] = None
+    above_baseline_mrr: Optional[Decimal] = None
+    return_note: Optional[str] = None
 
 
 class SummaryOut(BaseModel):
@@ -45,6 +51,13 @@ class SummaryOut(BaseModel):
     new_customers: int
     churned_customers: int
     reactivated_customers: int
+    winback_customers: int
+    restarted_customers: int
+    unknown_return_customers: int
+    returning_new_customers: int
+    returning_new_mrr: Decimal
+    reactivation_above_baseline_mrr: Decimal
+    reactivation_without_baseline_mrr: Decimal
 
 
 class ArrBridgeOut(BaseModel):

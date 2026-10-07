@@ -151,7 +151,8 @@ These come from the **Subscription Normalization Gate** (GPES Stripe reference +
 | 4.7 | Multiple billing accounts / sites (regional / product) — consolidation strategy? | **Single Stripe account**, live mode only. One consolidation = company total. |
 | 4.8 | Non-card methods (ACH / invoice) present? Settlement lag / banking pairing needed? | Mostly card; ~20% ACH / invoice for mid-market. Settlement lag accepted in cash forecast defaults; no special banking pairing required Day 1. |
 | 4.9 | Live-only data confirmed (exclude test / sandbox)? | **Yes — live only.** Sandbox never used for reporting. Expect Stripe `livemode` filter. |
-| 4.10 | Reactivation vs New Business dormancy window? | **Accept SCBM default 90 days.** Return within 90 days = reactivation; after 90 = new logo. |
+| 4.10 | Winback window? | **3 months.** A customer who cancels and returns within 3 months is a winback (Reactivation); after that, new business flagged as a returning customer. |
+| 4.11 | Paused subscriptions in ARR? | **Not offered.** Stripe pause-collection is not used; any gap in ARR is a cancellation. |
 
 ---
 

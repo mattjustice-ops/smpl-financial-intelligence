@@ -161,7 +161,8 @@ These come from the **Subscription Normalization Gate** (GPES Stripe reference +
 | 4.7 | Multiple billing accounts / sites (regional / product) — consolidation strategy? | **Two live Stripe accounts** (US platform, EU platform) + Zuora UK. Consolidate to USD Board ARR. Same ultimate parent across accounts = one logo; ARR sums across billing accounts. |
 | 4.8 | Non-card methods (ACH / invoice) present? Settlement lag / banking pairing needed? | Heavy **invoice / ACH / wire** for enterprise (~60%). Net-30/45 common. Cash forecast needs DSO by channel; banking pairing for large wires **yes** (NetSuite cash + bank feeds) — flag for cash module. |
 | 4.9 | Live-only data confirmed (exclude test / sandbox)? | **Yes.** Both Stripe accounts livemode only. Zuora production tenant only. Sandbox / test customers tagged and excluded. |
-| 4.10 | Reactivation vs New Business dormancy window? | **Override SCBM default → 180 days** (enterprise sales cycles / seasonal API customers). Return within 180 days = reactivation; after = new logo. Confirmed: Casey / Riley. |
+| 4.10 | Winback window? | **6 months** (enterprise sales cycles / seasonal API customers). A customer who cancels and returns within 6 months is a winback (Reactivation); after that, new business flagged as a returning customer. Confirmed: Casey / Riley. |
+| 4.11 | Paused subscriptions in ARR? | **Removes ARR.** Seasonal API customers pause in Zuora; ARR drops to zero until they restart, and a restart is never new business. Zuora carries the pause status, so restarts can be told apart from winbacks. |
 
 ---
 
