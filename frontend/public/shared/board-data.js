@@ -323,6 +323,7 @@
         if (c.chg_dr != null) rows.push({ label: "Δ Deferred revenue", value: c.chg_dr, inflow: c.chg_dr >= 0 });
         if (c.chg_ap != null) rows.push({ label: "Δ Accounts payable", value: c.chg_ap, inflow: c.chg_ap >= 0 });
         if (c.chg_prepaids != null) rows.push({ label: "Δ Prepaids", value: c.chg_prepaids, inflow: c.chg_prepaids >= 0 });
+        if (c.chg_deferred_commissions != null) rows.push({ label: "Δ Deferred commissions", value: c.chg_deferred_commissions, inflow: c.chg_deferred_commissions >= 0 });
       }
       var capex = c.capex != null ? c.capex : c.cfi;
       if (capex != null) rows.push({ label: "Investing (CapEx)", value: capex, inflow: capex >= 0 });

@@ -926,6 +926,7 @@ _CFS_VARIANCE_KEYS: tuple[tuple[str, str], ...] = (
     ("Change in Deferred Revenue", "change_in_deferred_revenue"),
     ("Change in Accounts Payable", "change_in_ap"),
     ("Change in Prepaids", "change_in_prepaids"),
+    ("Change in Deferred Commissions", "change_in_deferred_commissions"),
     ("Cash from Operations (CFO)", "cfo"),
     ("Capex", "capex"),
     ("Cash from Investing (CFI)", "cfi"),

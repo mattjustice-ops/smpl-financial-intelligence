@@ -50,6 +50,7 @@ _CFS_YTD_SUM_KEYS = (
     "chg_dr",
     "chg_ap",
     "chg_prepaids",
+    "chg_deferred_commissions",
     "cfo",
     "capex",
     "cfi",
@@ -387,6 +388,7 @@ def _sum_cfs_from_fs(
         ("change in deferred revenue", "chg_dr"),
         ("change in accounts payable", "chg_ap"),
         ("change in prepaids", "chg_prepaids"),
+        ("change in deferred commissions", "chg_deferred_commissions"),
         ("net cash provided by operating activities", "cfo"),
         ("capital expenditures", "capex"),
         ("net cash used in investing activities", "cfi"),
@@ -541,6 +543,7 @@ def build_ytd_cash_flow_statement(
             "change_in_deferred_revenue": fmt("chg_dr"),
             "change_in_ap": fmt("chg_ap"),
             "change_in_prepaids": fmt("chg_prepaids"),
+            "change_in_deferred_commissions": fmt("chg_deferred_commissions"),
             "cfo": fmt("cfo"),
             "capex": fmt("capex"),
             "cfi": fmt("cfi"),
@@ -578,6 +581,9 @@ def build_ytd_cash_flow_statement(
         "change_in_deferred_revenue": _var(a_raw.get("chg_dr"), b_raw.get("chg_dr")),
         "change_in_ap": _var(a_raw.get("chg_ap"), b_raw.get("chg_ap")),
         "change_in_prepaids": _var(a_raw.get("chg_prepaids"), b_raw.get("chg_prepaids")),
+        "change_in_deferred_commissions": _var(
+            a_raw.get("chg_deferred_commissions"), b_raw.get("chg_deferred_commissions")
+        ),
         "cfo": _var(a_raw.get("cfo"), b_raw.get("cfo")),
         "capex": _var(a_raw.get("capex"), b_raw.get("capex")),
         "cfi": _var(a_raw.get("cfi"), b_raw.get("cfi")),

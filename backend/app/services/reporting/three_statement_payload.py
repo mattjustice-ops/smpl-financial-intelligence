@@ -72,6 +72,8 @@ BS_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("other_current", ("other_current_assets", "other_current")),
+    ("deferred_commissions_current", ("deferred_commissions_current",)),
+    ("deferred_commissions_noncurrent", ("deferred_commissions_noncurrent",)),
     (
         "ppe",
         (
@@ -122,6 +124,7 @@ CFS_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("chg_dr", ("chg_dr", "change_in_deferred_revenue")),
     ("chg_ap", ("chg_ap", "change_in_accounts_payable")),
     ("chg_prepaids", ("chg_prepaids", "change_in_prepaids")),
+    ("chg_deferred_commissions", ("chg_deferred_commissions", "change_in_deferred_commissions")),
     ("chg_other_liab", ("change_in_other_liabilities",)),
     ("cfo", ("cfo", "net_cash_from_operating_activities")),
     ("capex", ("capex", "capital_expenditures")),
@@ -410,6 +413,7 @@ def build_baseline_engine(
             "chg_dr": cfs_row.get("chg_dr"),
             "chg_ap": cfs_row.get("chg_ap"),
             "chg_pre": cfs_row.get("chg_prepaids"),
+            "chg_dc": cfs_row.get("chg_deferred_commissions"),
             "cfo": cfs_row.get("cfo"),
             "capex": cfs_row.get("capex"),
             "cfi": cfs_row.get("cfi"),
@@ -429,6 +433,8 @@ def build_baseline_engine(
             "dr": bs_row.get("dr"),
             "deferred_rev": bs_row.get("deferred_rev"),
             "prepaids": bs_row.get("prepaids"),
+            "deferred_commissions_current": bs_row.get("deferred_commissions_current"),
+            "deferred_commissions_noncurrent": bs_row.get("deferred_commissions_noncurrent"),
             "ppe": bs_row.get("ppe"),
             "debt": bs_row.get("debt"),
             "total_assets": bs_row.get("total_assets"),
@@ -849,6 +855,12 @@ def _calculate_cfs_row(
         if prior_pre is not None and pre is not None:
             cfs["chg_prepaids"] = prior_pre - pre
 
+        dc_keys = ("deferred_commissions_current", "deferred_commissions_noncurrent")
+        if any(prior_bs.get(k) is not None or bs_row.get(k) is not None for k in dc_keys):
+            cfs["chg_deferred_commissions"] = sum(prior_bs.get(k) or 0.0 for k in dc_keys) - sum(
+                bs_row.get(k) or 0.0 for k in dc_keys
+            )
+
         prior_ppe, ppe = prior_bs.get("ppe"), bs_row.get("ppe")
         if prior_ppe is not None and ppe is not None and da is not None:
             cfs["capex"] = ppe - prior_ppe - da
@@ -869,7 +881,7 @@ def _calculate_cfs_row(
     if ni is not None:
         cfs["cfo"] = ni + (da or 0.0) + sbc + sum(
             cfs.get(key) or 0.0
-            for key in ("chg_ar", "chg_ap", "chg_dr", "chg_prepaids")
+            for key in ("chg_ar", "chg_ap", "chg_dr", "chg_prepaids", "chg_deferred_commissions")
         )
 
     if cfs.get("cfo") is not None:

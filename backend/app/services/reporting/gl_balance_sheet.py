@@ -46,6 +46,8 @@ BS_LINE_BY_TYPE: dict[str, str] = {
     "ar": "accounts_receivable",
     "prepaids": "prepaids_and_other_current_assets",
     "current assets": "prepaids_and_other_current_assets",
+    "deferred commissions": "deferred_commissions_current",
+    "deferred commissions noncurrent": "deferred_commissions_noncurrent",
     "fixed assets": "property_and_equipment_net",
     "pp&e": "property_and_equipment_net",
     "other assets": "other_assets",
@@ -57,13 +59,25 @@ BS_LINE_BY_TYPE: dict[str, str] = {
     "equity": "equity",
 }
 
-ASSET_LINES = ("cash", "accounts_receivable", "prepaids_and_other_current_assets", "property_and_equipment_net", "other_assets")
+ASSET_LINES = (
+    "cash",
+    "accounts_receivable",
+    "prepaids_and_other_current_assets",
+    "deferred_commissions_current",
+    "property_and_equipment_net",
+    "deferred_commissions_noncurrent",
+    "other_assets",
+)
 LIABILITY_LINES = ("accounts_payable", "deferred_revenue", "debt", "other_liabilities")
 EQUITY_LINES = ("paid_in_capital", "apic_stock_compensation", "retained_earnings_account")
 
+# Capitalized contract costs (ASC 340-40) are operating: payouts are operating cash out and
+# amortization is in the P&L, so both portions move through working capital, not investing.
 WORKING_CAPITAL = {
     "accounts_receivable": "change_in_accounts_receivable",
     "prepaids_and_other_current_assets": "change_in_prepaids",
+    "deferred_commissions_current": "change_in_deferred_commissions",
+    "deferred_commissions_noncurrent": "change_in_deferred_commissions",
     "accounts_payable": "change_in_accounts_payable",
     "deferred_revenue": "change_in_deferred_revenue",
     "other_liabilities": "change_in_other_liabilities",
@@ -188,7 +202,7 @@ def _cash_flow_month(
         elif line not in ("cash",):
             cf["unclassified"] += cash_effect
     cf["non_cash_total"] = non_cash_total
-    cf["working_capital_total"] = sum(cf[k] for k in WORKING_CAPITAL.values())
+    cf["working_capital_total"] = sum(cf[k] for k in set(WORKING_CAPITAL.values()))
     cf["net_cash_from_operating_activities"] = net_income + cf["non_cash_total"] + cf["working_capital_total"] + cf["unclassified"]
     cf["net_cash_from_investing_activities"] = sum(cf[k] for k in INVESTING.values())
     cf["net_cash_from_financing_activities"] = sum(cf[k] for k in FINANCING.values())

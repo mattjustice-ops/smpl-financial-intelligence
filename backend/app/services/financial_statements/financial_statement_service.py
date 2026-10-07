@@ -310,7 +310,9 @@ def ensure_balance_formulas(row: dict[str, Any]) -> dict[str, Any]:
         row_value(out, "cash")
         + row_value(out, "accounts_receivable")
         + row_value(out, "prepaids_and_other_current_assets")
+        + row_value(out, "deferred_commissions_current")
         + row_value(out, "property_and_equipment_net")
+        + row_value(out, "deferred_commissions_noncurrent")
         + row_value(out, "other_assets")
     )
     out["total_liabilities"] = (
@@ -372,6 +374,7 @@ def ensure_cash_flow_formulas(
             + row_value(out, "change_in_deferred_revenue")
             + row_value(out, "change_in_accounts_payable")
             + row_value(out, "change_in_prepaids")
+            + row_value(out, "change_in_deferred_commissions")
         )
         out["net_cash_from_investing_activities"] = row_value(out, "capital_expenditures")
         out["net_cash_from_financing_activities"] = row_value(out, "debt_issuance_repayment")
@@ -564,7 +567,15 @@ def source_reconciliation_validations(
             actual = row_value(row, "ending_deferred_revenue")
             results.append(_validation(scenario_name, row["period"], "deferred_revenue_waterfall_ties", expected, actual, [dr_table]))
 
+        # A GL balance sheet account the statements cannot classify is left out of every line,
+        # so it would surface only as an unexplained balance check or cash flow difference.
+        for row in gl_balance_rows(session, organization_id, scenario_name, s, e):
+            if row_value(row, "unmapped"):
+                results.append(_validation(scenario_name, row["period"], "gl_balance_sheet_accounts_classified", Decimal("0"), row_value(row, "unmapped"), [GL_TABLE]))
+
         for row in gl_cash_flow_rows(session, organization_id, scenario_name, s, e):
+            if row_value(row, "unclassified"):
+                results.append(_validation(scenario_name, row["period"], "gl_cash_flow_activity_classified", Decimal("0"), row_value(row, "unclassified"), [GL_TABLE]))
             ocf = row_value(row, "net_cash_from_operating_activities")
             if ocf == 0:
                 results.append(ValidationResult(scenario=scenario_name, period=row["period"], validation_name="operating_cash_flow_missing_or_zero", status="warning", expected_value=None, actual_value=Decimal("0"), variance=None, source_tables_used=[GL_TABLE]))
