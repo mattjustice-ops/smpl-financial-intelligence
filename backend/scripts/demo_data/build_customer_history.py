@@ -26,6 +26,8 @@ Rules (agreed with Matt, Oct 7 2026):
     from (Dec 2025, Jun 2026). Budget churn customers hold flat Actual ARR through Dec 2025.
   * Renewal pipelines (Actual Jan-Jun 2026, Forecast Jul-Dec 2026) are the customers due in their anniversary
     month at their ARR; Actual renewal commissions are 2% of each renewal, paid to its CSM.
+  * The sales and customer success team is the employee files (sales_team.py): employees are named, Sales and
+    Customer Success work CRM territories, and each customer's CSM is an employee CSM in its territory.
   * Revenue weights (recurring services schedule) follow each version's history: a customer is billed only
     while it has ARR (Forecast: expected ARR).
   * Segment is the customer's ARR at signing (Enterprise $500k+, Mid-Market $100k-$500k, SMB below $100k) in
@@ -48,6 +50,7 @@ from customer_history_plans import (EXPECTED_FIELDS, HISTORY_FIELDS, WINBACK_SHA
                                     prospect_segments, renewal_commissions, renewal_rows, segment_for, signing_arr,
                                     simulate_budget, simulate_forecast, tie, tie_budget_deals, u, waterfall)
 from add_implementation_revenue import FEE_BY_SEGMENT  # noqa: E402
+from sales_team import VERSIONS, assign_csms, team_employees  # noqa: E402
 
 FIRST = "2024-01"
 LAST_PRE_2026 = "2025-12"
@@ -83,6 +86,11 @@ def build(src: str, dst: str) -> list[str]:
     for v in ("Actual", "Budget", "Forecast"):
         for r in ds.rows(f"{v}_opportunities.csv"):
             region_of[r["customer_state"]] = r["region"]
+    team = team_employees({v: ds.rows(f"{v}_Employees.csv") for v in VERSIONS}, Counter(o["region"] for o in opps))
+    notes.append("team: " + "; ".join(
+        f"{v} " + ", ".join(f"{t} {n}" for t, n in sorted(Counter(e["region"] for e in team[v]
+                                                                    if e["department"] in ("Sales", "Customer Success")).items()))
+        for v in VERSIONS) + " (Sales and Customer Success by territory)")
     booked = {"New Business": "Closed Won", "Expansion": "Closed Won", "Reactivation": "Closed Won",
               "Contraction": "Contraction", "Churn": "Churn"}
     col_of = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
@@ -456,12 +464,18 @@ def build(src: str, dst: str) -> list[str]:
     by_customer.update({c: r for c, r in old_by_customer.items() if c not in by_customer})
     f_ren = renewal_rows(org, "Forecast", f_due, old_ren, by_customer, h.info,
                          {"renewal_probability": f"{FORECAST_RENEWAL_PROBABILITY}", "renewal_stage": "Commit"})
-    com_fields, old_com = ds.get("Actual_renewal_commissions.csv")
-    rep_of = {r["rep_name"]: r["rep_id"] for r in old_com}
-    missing_rep = sorted({r["customer_success_manager"] for r in a_ren} - set(rep_of))
-    if missing_rep:
-        raise ValueError(f"CSMs without a rep ID in the renewal commissions: {missing_rep}")
+    csm_of = assign_csms([{"customer_id": r["customer_id"], "period": r["renewal_period"]} for r in a_ren],
+                         team["Actual"], plan_region, {})
+    assign_csms([{"customer_id": r["customer_id"], "period": r["renewal_period"]} for r in f_ren],
+                team["Forecast"], plan_region, csm_of)
+    name_of = {e["employee_id"]: e["employee_name"] for v in VERSIONS for e in team[v]}
+    for r in a_ren + f_ren:
+        r["customer_success_manager"] = name_of[csm_of[r["customer_id"]]]
+    com_fields = ds.fields("Actual_renewal_commissions.csv")
+    rep_of = {name_of[i]: i for i in set(csm_of.values())}
     a_com = renewal_commissions(org, a_ren, rep_of, RENEWAL_RATE, last_day)
+    notes.append(f"renewal CSMs: {len(set(csm_of.values()))} employee CSMs for {len(csm_of)} customers "
+                 + "(" + ", ".join(f"{name_of[i]} {n}" for i, n in sorted(Counter(csm_of.values()).items())) + ")")
     notes.append(f"renewal pipeline: Actual {len(a_ren)} renewals Jan-Jun 2026 (renewal ARR "
                  f"{sum((num(r['renewal_arr']) for r in a_ren), ZERO):,.2f}), Forecast {len(f_ren)} Jul-Dec 2026; "
                  f"renewal commissions {len(a_com)} at {RENEWAL_RATE} "
@@ -516,6 +530,8 @@ def build(src: str, dst: str) -> list[str]:
                 "starting_mrr_jan_2026": "0", "starting_arr_jan_2026": "0", "currency": "USD"}
 
     shutil.copytree(src, dst)
+    for v in VERSIONS:
+        write(os.path.join(dst, f"{v}_Employees.csv"), ds.fields(f"{v}_Employees.csv"), team[v])
     write(os.path.join(dst, "Actual_customers.csv"), master_fields, out_master)
     for v in ("Budget", "Forecast"):
         extra = [logo_row(v, o) for cid, o in sorted(plan_logos[v].items()) if cid not in logos]
