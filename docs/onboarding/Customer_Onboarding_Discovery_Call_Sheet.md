@@ -220,6 +220,31 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.12 | **Usage-based vendors** (cloud, messaging, API, data): accrued on estimate and trued up? Who owns the estimate? | Same as 7.11 — true-ups show as unexplained swings until all legs are present | Customer action: documented estimate + true-up practice | |
 | 7.13 | **Year-end audit / review adjustments:** restate prior months, book to the final month / adjustment period, or both? How is prior board commentary handled once numbers change? | Board history is **PARTIAL** — previously reported periods may change without an agreed treatment | Customer action: choose and document a policy | |
 
+### Sales commissions — capitalized contract costs, ASC 340-40 *(Normalization gate — Recommended)*
+
+> Under GAAP (ASC 340-40), commissions that are incremental costs of obtaining a contract are capitalized and amortized over the period of benefit, including expected renewals when renewal commissions are not commensurate. Contracts with a benefit period of a year or less may be expensed (practical expedient). Companies choose and document the amortization period, so the answers differ from company to company.
+>
+> **How SMPL uses the answers:** the Forecast and Budget engines read this policy; it is shown read-only and is not a lever. In the engines, commission **cash** follows payout timing (7.18), and commission **expense** follows amortization (7.15–7.17). Actuals come from the GL as booked.
+>
+> **How SMPL checks them:** after connect, each answer is compared with the GL and the payout export:
+> - a deferred commissions asset exists if and only if commissions are capitalized;
+> - commission expense is present;
+> - the deferred balance is no larger than the stated amortization period allows;
+> - an accrued commissions liability exists when payouts lag bookings;
+> - payouts = commission expense + change in deferred commissions − change in accrued commissions, within 1% or $1,000.
+>
+> A conflict keeps Cash Forecasting, Scenario Planning and Board Reporting at **PARTIAL** until the customer corrects the books or the answer. Unanswered or "not sure" leaves the gate unresolved.
+
+| # | Question | Choices | Answer |
+|---|----------|---------|--------|
+| 7.14 | **Sales commissions** on new and expansion contracts: capitalized and amortized, expensed as incurred, or no commissions? If unsure, confirm with the controller or auditor before go-live. | capitalized / expensed / no commissions / not sure | |
+| 7.15 | If capitalized: **amortization period for new-business commissions**, in months, including expected renewals? | 12 / 24 / 36 / 48 / 60 / 72 / 84 | |
+| 7.16 | If capitalized: **amortization period for expansion commissions**, in months? | 12 / 24 / 36 / 48 / 60 / 72 / 84 | |
+| 7.17 | **Renewal commissions:** expensed under the 12-month practical expedient, capitalized, or not paid? | expensed / capitalized / not paid | |
+| 7.18 | **When are commissions paid?** Drives forecast commission cash and whether an accrued commissions liability is expected. | month of booking / month after booking / quarter after booking / on customer payment | |
+| 7.19 | **Employer payroll taxes on commissions:** expensed or capitalized with the commission? | expensed / capitalized | |
+| 7.20 | **System of record for commission payouts** (comp tool such as CaptivateIQ, Spiff or Xactly; payroll export; spreadsheet; none)? Without payout detail, commission cash can be estimated but not checked. | comp tool / payroll export / spreadsheet / none | |
+
 ---
 
 ## 8. Desired modules *(CEP)*
@@ -304,7 +329,7 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 Data ownership + readiness gates (Section 0) → company snapshot → systems & owners → ARR/MRR/churn definitions → trials / past_due / usage min-vs-overage → ARR methodology → rev-rec & renewal/cancel → systems of record → modules → FYE/currency/entities.
 
 **Should cover if time:**  
-Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · access acknowledgment (Section 10).
+Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · access acknowledgment (Section 10).
 
 **Recommended extras (label clearly):**  
 How Forecast is built today · trusted drivers · multiple ARR intents · adjusted metrics by audience · close calendar + GL cutoff artifacts · allocations, accrual / reversal practice, audit adjustments (7.9–7.13).
@@ -321,6 +346,7 @@ How Forecast is built today · trusted drivers · multiple ARR intents · adjust
 | Section 7 Close / GL | `docs/Close_Process.md`, close/GL readiness materials | **Recommended — not CEP** |
 | Section 9 CRM / HC | GPES HubSpot + Rippling gate examples | Documented examples |
 | Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
+| 7.14–7.20 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
 | Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
 ---

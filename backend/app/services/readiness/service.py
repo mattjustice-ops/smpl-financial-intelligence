@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.onboarding_readiness import OnboardingReadinessAnswers
 from app.models.organization import Organization
 from app.services.readiness.engine import assess, normalize_answers
-from app.services.readiness.evidence import build_evidence
+from app.services.readiness.evidence import build_commission_facts, build_evidence
 from app.services.readiness.registry import catalog
 
 
@@ -60,7 +60,8 @@ def readiness_payload(db: Session, org: Organization) -> dict[str, Any]:
     row = get_answers(db, org)
     answers = dict(row.answers) if row else {}
     evidence, meta = build_evidence(db, org)
-    result = assess(evidence, answers)
+    facts = build_commission_facts(db, org)
+    result = assess(evidence, answers, facts)
     return {
         "organization_id": str(org.id),
         "organization_name": org.name,
@@ -69,6 +70,7 @@ def readiness_payload(db: Session, org: Organization) -> dict[str, Any]:
         "answers_updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
         "answers_updated_by": row.updated_by if row else None,
         **meta,
+        "commission_facts": facts,
         **result,
         "questions": catalog(),
     }

@@ -44,6 +44,13 @@ type ReadinessPayload = {
   normalization_gates: Array<{ id: string; name: string; resolved: boolean; unresolved_questions: string[] }>;
   summary: { ready: number; partial: number; unavailable: number; modules: number };
   modules: ModuleRow[];
+  policy_checks: Array<{
+    id: string;
+    questions: string;
+    status: "pass" | "conflict" | "review";
+    finding: string;
+    customer_action: string;
+  }>;
   recommended_next: Array<{
     kind: string;
     ref: string;
@@ -73,6 +80,13 @@ const REASON_LABEL: Record<string, string> = {
   INSUFFICIENT_CONFIDENCE: "Insufficient confidence",
   GATE_UNRESOLVED: "Normalization gate unresolved",
   POLICY_GAP: "Accounting policy gap",
+  POLICY_CONFLICT: "Questionnaire and books disagree",
+};
+
+const CHECK_CLASS: Record<string, string> = {
+  pass: "text-teal-300",
+  review: "text-amber-300",
+  conflict: "text-rose-300",
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -251,6 +265,26 @@ export function ReadinessPanel({ organizationId }: { organizationId: string }) {
                 <span className="text-xs uppercase tracking-wide text-slate-600">{KIND_LABEL[r.kind] ?? r.kind}</span>
                 {r.modules_to_ready.length ? (
                   <span className="text-xs text-slate-500">→ READY: {r.modules_to_ready.join(", ")}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {data && data.policy_checks?.length ? (
+        <div className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Commission policy vs the books (7.14–7.20)
+          </h3>
+          <ul className="mt-2 divide-y divide-white/5">
+            {data.policy_checks.map((c) => (
+              <li key={c.id} className="py-2 text-sm">
+                <span className={`mr-2 text-xs font-semibold uppercase ${CHECK_CLASS[c.status] ?? ""}`}>{c.status}</span>
+                <span className="mr-2 font-mono text-xs text-slate-500">{c.questions}</span>
+                <span className="text-slate-200">{c.finding}</span>
+                {c.customer_action ? (
+                  <span className="ml-2 text-xs text-slate-400">Customer action: {c.customer_action}.</span>
                 ) : null}
               </li>
             ))}

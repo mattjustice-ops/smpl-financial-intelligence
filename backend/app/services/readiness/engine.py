@@ -9,6 +9,7 @@ Rules carried from the spec:
   * ARR-related modules cannot be READY with an unresolved Subscription Normalization Gate;
     CRM pipeline modules cannot be READY with unresolved stage normalization.
   * If any readiness gate (questionnaire Section 0) fails, no score is produced.
+  * Commission policy answers that the GL contradicts cap the modules that use them at PARTIAL.
   * SMPL never closes a gap by adjusting customer data — every path is a customer action,
     a connector, or a questionnaire decision.
 """
@@ -82,14 +83,139 @@ def _normalization_status(answers: dict[str, str]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for gid, g in NORMALIZATION_GATES.items():
         resolved_values = g["resolved_values"]
+        unresolved_values = g.get("unresolved_values", ())
+        required_if: dict[str, tuple[str, tuple[str, ...]]] = g.get("required_if", {})  # type: ignore[assignment]
         unresolved = []
         for q in g["questions"]:  # type: ignore[union-attr]
+            condition = required_if.get(q.id)
+            if condition and answers.get(condition[0]) not in condition[1]:
+                continue
             a = answers.get(q.id)
-            ok = a is not None and (resolved_values is None or a in resolved_values)  # type: ignore[operator]
+            ok = (
+                a is not None
+                and (resolved_values is None or a in resolved_values)  # type: ignore[operator]
+                and a not in unresolved_values  # type: ignore[operator]
+                and not (condition and a == "not_applicable")
+            )
             if not ok:
                 unresolved.append(q.id)
         out[gid] = {"id": gid, "name": g["name"], "resolved": not unresolved, "unresolved_questions": unresolved}
     return out
+
+
+PAYOUT_TOLERANCE_ABS = 1_000.0
+PAYOUT_TOLERANCE_PCT = 0.01
+
+
+def _money(x: float) -> str:
+    whole = int(round(x))
+    return f"-${-whole:,}" if whole < 0 else f"${whole:,}"
+
+
+def commission_policy_checks(answers: dict[str, str], facts: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    """Questionnaire answers (7.14–7.20) against what the GL and payout data show.
+
+    ``facts`` (from ``evidence.build_commission_facts``): ``as_of``, ``deferred_commissions`` (asset at
+    close), ``accrued_commissions`` (liability at close), ``commission_expense_12m`` and
+    ``commission_expense_months`` (P&L accounts named "commission"), ``commission_payout_rows``, and
+    ``payout_reconciliation`` (payouts vs expense + Δ deferred − Δ accrued over the months every
+    payout file covers).
+    ``None`` means the fact could not be read; that check is skipped, never assumed.
+    Status: ``pass``, ``conflict`` (caps gated modules at PARTIAL) or ``review`` (shown, no cap).
+    """
+    if not facts:
+        return []
+    policy = answers.get("7.14")
+    if policy not in ("capitalized", "expensed", "no_commissions"):
+        return []
+    as_of = facts.get("as_of") or "close"
+    dc, accrued = facts.get("deferred_commissions"), facts.get("accrued_commissions")
+    expense, months = facts.get("commission_expense_12m"), facts.get("commission_expense_months") or 0
+    checks: list[dict[str, Any]] = []
+
+    def add(cid: str, questions: str, status: str, finding: str, action: str = "") -> None:
+        checks.append({"id": cid, "questions": questions, "status": status, "finding": finding,
+                       "customer_action": action})
+
+    if dc is not None:
+        has_asset = dc > 0.5
+        if policy == "capitalized":
+            add("deferred_commissions_in_gl", "7.14", "pass" if has_asset else "conflict",
+                f"Deferred commissions in the GL at {as_of}: {_money(dc)}"
+                + ("" if has_asset else " — the questionnaire says commissions are capitalized"),
+                "" if has_asset else "Book the deferred commissions asset, or correct answer 7.14")
+        else:
+            add("deferred_commissions_in_gl", "7.14", "conflict" if has_asset else "pass",
+                f"Deferred commissions in the GL at {as_of}: {_money(dc)}"
+                + (f" — the questionnaire says commissions are {policy.replace('_', ' ')}" if has_asset else ""),
+                "Correct answer 7.14, or explain the deferred commissions balance" if has_asset else "")
+
+    if expense is not None:
+        has_expense = expense > 0.5
+        if policy == "no_commissions" and has_expense:
+            add("commission_expense_in_gl", "7.14", "conflict",
+                f"Commission expense of {_money(expense)} in the 12 months to {as_of}, but 7.14 says no commissions",
+                "Correct answer 7.14")
+        elif policy != "no_commissions":
+            add("commission_expense_in_gl", "7.14", "pass" if has_expense else "conflict",
+                f"Commission expense in the 12 months to {as_of}: {_money(expense)}" if has_expense else
+                f"No P&L account named 'commission' has activity in the 12 months to {as_of}",
+                "" if has_expense else "Tell us which GL accounts carry commission expense")
+
+    periods = [answers.get(q) for q in ("7.15", "7.16")]
+    numeric = [int(p) for p in periods if p and p.isdigit()]
+    if policy == "capitalized" and dc and dc > 0.5 and expense and months and numeric:
+        longest = max(numeric)
+        implied = dc / (expense / months)
+        ok = implied <= longest + 1
+        add("amortization_period_vs_gl", "7.15, 7.16", "pass" if ok else "conflict",
+            f"Deferred commissions are {implied:.1f} months of commission expense; with straight-line "
+            f"amortization over {longest} months the balance cannot exceed {longest} months of expense"
+            + ("" if ok else " — the GL amortizes more slowly than the stated period, or the asset holds other costs"),
+            "" if ok else "Confirm the amortization period (7.15/7.16) with the GL amortization schedule")
+
+    timing = answers.get("7.18")
+    if policy in ("capitalized", "expensed") and timing and accrued is not None:
+        lagged = timing != "month_of_booking"
+        if lagged and accrued <= 0.5:
+            add("accrued_commissions_in_gl", "7.18", "conflict",
+                f"Commissions are paid {timing.replace('_', ' ')}, but the GL has no accrued commissions at {as_of}",
+                "Accrue earned, unpaid commissions each month, or correct answer 7.18")
+        elif not lagged and accrued > 0.5:
+            add("accrued_commissions_in_gl", "7.18", "review",
+                f"Accrued commissions of {_money(accrued)} at {as_of} although commissions are paid in the booking month",
+                "Confirm payout timing (7.18)")
+        else:
+            add("accrued_commissions_in_gl", "7.18", "pass",
+                f"Accrued commissions at {as_of}: {_money(accrued)}; payout timing {timing.replace('_', ' ')}")
+
+    rec = facts.get("payout_reconciliation")
+    if policy in ("capitalized", "expensed") and rec:
+        booked = rec["commission_expense"] + rec["change_in_deferred_commissions"] - rec["change_in_accrued_commissions"]
+        gap = rec["payouts"] - booked
+        tolerance = max(PAYOUT_TOLERANCE_ABS, PAYOUT_TOLERANCE_PCT * abs(rec["payouts"]))
+        ok = abs(gap) <= tolerance
+        add("commission_payouts_tie_to_gl", "7.14, 7.18, 7.20", "pass" if ok else "conflict",
+            f"{rec['first']}–{rec['last']}: payouts {_money(rec['payouts'])} vs commission expense "
+            f"{_money(rec['commission_expense'])} + change in deferred commissions "
+            f"{_money(rec['change_in_deferred_commissions'])} − change in accrued commissions "
+            f"{_money(rec['change_in_accrued_commissions'])} = {_money(booked)}; difference {_money(gap)}",
+            "" if ok else "Book every commission payout to commission expense, deferred commissions or accrued "
+                          "commissions (or tell us which accounts carry them)")
+
+    source, rows = answers.get("7.20"), facts.get("commission_payout_rows")
+    if policy in ("capitalized", "expensed") and source:
+        if source == "none":
+            add("commission_payout_detail", "7.20", "review",
+                "No payout system of record: forecast commission cash is estimated from bookings × plan rate "
+                "and cannot be checked against payouts",
+                "Export payouts from payroll or a comp tool each month")
+        elif rows is not None:
+            add("commission_payout_detail", "7.20", "pass" if rows else "conflict",
+                f"{rows} commission payout rows loaded" if rows else
+                f"Payouts are kept in a {source.replace('_', ' ')}, but no payout detail is loaded",
+                "" if rows else "Load the commission payout export")
+    return checks
 
 
 def _policy_effects(module: Module, answers: dict[str, str]) -> tuple[float, list[dict[str, Any]]]:
@@ -111,6 +237,7 @@ def _assess_module(
     evidence: Mapping[str, ObjectEvidence],
     answers: dict[str, str],
     normalization: dict[str, dict[str, Any]],
+    conflicts: list[dict[str, Any]] = (),  # type: ignore[assignment]
 ) -> dict[str, Any]:
     objs = []
     for oid in module.required_objects:
@@ -181,6 +308,13 @@ def _assess_module(
         if lim["effect"] == "cap_partial" and status == READY:
             status = PARTIAL
 
+    if "commission_policy" in module.gates:
+        for c in conflicts:
+            reasons.append("POLICY_CONFLICT")
+            paths.append({"kind": "customer_action", "text": f"Customer action: {c['customer_action']} ({c['finding']})"})
+            if status == READY:
+                status = PARTIAL
+
     contribution = confidence * module.weight * STATUS_FACTOR[status]
     return {
         "id": module.id,
@@ -206,9 +340,16 @@ def _score(modules: list[dict[str, Any]]) -> float:
     return round(sum(m["contribution"] for m in modules) / total_w * 100, 1)
 
 
-def _core(evidence: Mapping[str, ObjectEvidence], answers: dict[str, str]) -> tuple[list[dict[str, Any]], float]:
+def _core(
+    evidence: Mapping[str, ObjectEvidence],
+    answers: dict[str, str],
+    facts: Mapping[str, Any] | None = None,
+    resolved_checks: frozenset[str] = frozenset(),
+) -> tuple[list[dict[str, Any]], float]:
     normalization = _normalization_status(answers)
-    modules = [_assess_module(m, evidence, answers, normalization) for m in MODULES]
+    conflicts = [c for c in commission_policy_checks(answers, facts)
+                 if c["status"] == "conflict" and c["id"] not in resolved_checks]
+    modules = [_assess_module(m, evidence, answers, normalization, conflicts) for m in MODULES]
     return modules, _score(modules)
 
 
@@ -217,10 +358,12 @@ def _recommendations(
     answers: dict[str, str],
     modules: list[dict[str, Any]],
     base_score: float,
+    facts: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """CAL.6 — simulate each next step and rank by Readiness Score delta."""
     base_status = {m["id"]: m["status"] for m in modules}
     candidates: list[tuple[str, str, str, dict[str, ObjectEvidence], dict[str, str]]] = []
+    conflict_ids = frozenset(c["id"] for c in commission_policy_checks(answers, facts) if c["status"] == "conflict")
 
     missing_by_conn: dict[str, list[str]] = {}
     for oid, spec in OBJECTS.items():
@@ -245,9 +388,11 @@ def _recommendations(
         if g["resolved"]:
             continue
         sim_answers = dict(answers)
-        for qid in g["unresolved_questions"]:
-            q = ALL_QUESTIONS[qid]
-            sim_answers[qid] = "resolved" if "resolved" in q.choices else q.choices[0]
+        for _ in range(3):  # answering one question can make conditional ones required
+            pending = _normalization_status(sim_answers)[gid]["unresolved_questions"]
+            for qid in pending:
+                q = ALL_QUESTIONS[qid]
+                sim_answers[qid] = "resolved" if "resolved" in q.choices else q.choices[0]
         candidates.append(("questionnaire", gid, f"Resolve the {g['name']}", evidence, sim_answers))
 
     for q in SCORE_INPUTS:
@@ -255,9 +400,15 @@ def _recommendations(
             candidates.append(("customer_action", q.id, f"Customer action: {q.customer_action}",
                                evidence, {**answers, q.id: "yes"}))
 
+    for c in commission_policy_checks(answers, facts):
+        if c["status"] == "conflict":
+            candidates.append(("customer_action", c["id"], f"Customer action: {c['customer_action']}", evidence, answers))
+
     out = []
     for kind, ref, label, sim_ev, sim_ans in candidates:
-        sim_modules, sim_score = _core(sim_ev, sim_ans)
+        # Simulating a gate answer measures the gate itself; simulating a fix clears that one conflict.
+        resolved = conflict_ids if kind == "questionnaire" else frozenset({ref}) & conflict_ids
+        sim_modules, sim_score = _core(sim_ev, sim_ans, facts, resolved)
         delta = round(sim_score - base_score, 1)
         if delta <= 0:
             continue
@@ -268,11 +419,16 @@ def _recommendations(
     return out
 
 
-def assess(evidence: Mapping[str, ObjectEvidence], raw_answers: Mapping[str, Any] | None) -> dict[str, Any]:
+def assess(
+    evidence: Mapping[str, ObjectEvidence],
+    raw_answers: Mapping[str, Any] | None,
+    facts: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     answers = normalize_answers(raw_answers)
     gates = _gate_status(answers)
     normalization = _normalization_status(answers)
-    modules, score = _core(evidence, answers)
+    modules, score = _core(evidence, answers, facts)
+    policy_checks = commission_policy_checks(answers, facts)
     counts = {s: sum(1 for m in modules if m["status"] == s) for s in (READY, PARTIAL, UNAVAILABLE)}
     gate_failed = gates["status"] == "fail"
     score_inputs = [
@@ -290,12 +446,16 @@ def assess(evidence: Mapping[str, ObjectEvidence], raw_answers: Mapping[str, Any
         "summary": {"ready": counts[READY], "partial": counts[PARTIAL], "unavailable": counts[UNAVAILABLE],
                     "modules": len(modules)},
         "modules": modules,
-        "recommended_next": [] if gate_failed else _recommendations(evidence, answers, modules, score),
+        "policy_checks": policy_checks,
+        "recommended_next": [] if gate_failed else _recommendations(evidence, answers, modules, score, facts),
         "method": {
             "formula": "Σ(confidence × weight × {READY 1.0, PARTIAL 0.5, UNAVAILABLE 0}) ÷ Σ(weight) × 100",
             "confidence": "Module confidence = lowest required-object confidence × policy penalties; "
                           "object confidence = share of expected reporting periods loaded",
             "weights": "SMPL default module weights (SOF 7.2 defines the formula, not the weights)",
             "gates": "Any failed readiness gate (Section 0) stops scoring until the customer resolves it",
+            "policy_checks": "Commission policy answers (7.14–7.20) are checked against the GL and payout data; "
+                             "a conflict keeps Cash Forecasting, Scenario Planning and Board Reporting at PARTIAL "
+                             "until the customer corrects the books or the answer",
         },
     }
