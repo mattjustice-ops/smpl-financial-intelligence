@@ -219,6 +219,48 @@ def test_statement_validations_include_deferred_commissions(monkeypatch: pytest.
     assert results["cash_flow_operating_cash_flow"] == "pass"
 
 
+def _forecast_schedules(monkeypatch: pytest.MonkeyPatch, rows, income):
+    from datetime import date
+
+    from app.services.driver_forecast import balance_sheet_forecast_engine as bse
+    from app.services.driver_forecast import operating_cash_bridge as ocb
+    from app.services.financial_statements import financial_statement_service as fs
+
+    built = build_balance_sheet_and_cash_flow(rows, income)
+    monkeypatch.setattr(fs, "gl_balance_sheet_and_cash_flow_by_period", lambda _db, _org, _scenario: built)
+    monkeypatch.setattr(fs, "gl_income_statement_by_period", lambda _db, _org, _scenario: {})
+    monkeypatch.setattr(ocb, "gl_income_rows", lambda *_args: [])
+    for module in (bse, ocb):
+        monkeypatch.setattr(module, "period_type", lambda _p: "actual")
+    window = dict(start_period=date(2022, 11, 1), end_period=date(2022, 12, 1))
+    bridge = {r["period"]: r for r in ocb.build_operating_cash_bridge(None, None, **window)}
+    balance = {r["period"]: r for r in bse.build_balance_sheet_forecast(None, None, **window)}
+    return bridge, balance, date(2022, 12, 1)
+
+
+def test_forecast_schedules_carry_deferred_commissions_and_foot(monkeypatch: pytest.MonkeyPatch):
+    from app.services.driver_forecast.operating_cash_bridge import BRIDGE_LINES
+
+    bridge, balance, dec = _forecast_schedules(monkeypatch, *deferred_commission_rows())
+    row = bridge[dec]
+    assert all(row[line] is not None for line in BRIDGE_LINES)
+    assert row["change_in_deferred_commissions"] == -59
+    assert row["net_cash_from_operating_activities"] == 60
+    assert row["bridge_check"] == 0
+    bs_row = balance[dec]
+    assert (bs_row["deferred_commissions_current"], bs_row["deferred_commissions_noncurrent"]) == (12, 107)
+    assert bs_row["assets_footing_check"] == 0
+    assert bs_row["liabilities_footing_check"] == 0
+    assert bs_row["balance_check"] == 0
+
+
+def test_forecast_bridge_shows_unclassified_cash_instead_of_hiding_it(monkeypatch: pytest.MonkeyPatch):
+    rows, income = worked_example()
+    rows += [bs("2022-12", "Mystery Asset", 25), bs("2022-12", "Cash", -25)]
+    bridge, balance, dec = _forecast_schedules(monkeypatch, rows, income)
+    assert bridge[dec]["unclassified"] == -25
+    assert bridge[dec]["bridge_check"] == 0
+    assert balance[dec]["balance_check"] != 0
 def test_opening_month_has_no_cash_flow_and_its_cash_is_checked_next_month(monkeypatch: pytest.MonkeyPatch):
     from datetime import date
 
