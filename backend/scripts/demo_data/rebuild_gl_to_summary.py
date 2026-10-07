@@ -1,10 +1,10 @@
-"""Rebuild the demo GL so 2026 actuals, budget and forecast add up to the P&L summary.
+"""Rebuild the demo GL so actuals, budget and forecast add up to the P&L summary.
 
 Writes new files only (never touches the database):
   <out>/Actual_gl_detail.csv, <out>/Budget_gl_detail.csv, <out>/Forecast_gl_detail.csv,
   <out>/gl_rebuild_log.csv
 
-Rules (agreed with Matt, Oct 5 2026):
+Rules (agreed with Matt, Oct 5-6 2026):
   * Every P&L line (revenue, cost of revenue, S&M, R&D, G&A, D&A, interest, tax) adds up
     to the summary total for that month. Within a line, accounts keep their mix and
     are scaled by one factor, logged per month and line.
@@ -12,19 +12,19 @@ Rules (agreed with Matt, Oct 5 2026):
     there; the duplicate opex payroll for those same cost centers is removed.
   * Customer Success is part of Sales (S&M). Remaining Support stays in opex (G&A).
   * The "Accounting True-Up" plug is removed.
-  * June 2026 actuals only had summary postings. Its team detail is built from May's
-    accounts and teams (same rows, relabeled and noted), then sized to June's summary.
+  * Months whose source GL holds only summary postings get team detail from a month that
+    has it (same rows, relabeled and noted), then sized to the month's summary: June 2026
+    from May 2026, and every 2024 and 2025 month from January 2026.
   * The July–December forecast uses the same layout, accounts and teams as actuals: each
     month starts from June's actual rows and is sized to the forecast summary. It replaces
     the old planning-layout forecast file.
   * Amounts are debit-positive (expenses positive, revenue negative), matching the
-    rest of the GL. P&L months outside the rebuild are untouched.
+    rest of the GL.
   * Implementation & Onboarding revenue (account 4100) comes from
-    <version>_implementation_schedule.csv (add_implementation_revenue.py) and is added on
-    top of the summary, one row per month.
-  * Recurring Services revenue (account 4200) comes from
-    <version>_recurring_services_schedule.csv (add_recurring_services_revenue.py) and is
-    added on top of the summary, one row per month.
+    <version>_implementation_schedule.csv and Recurring Services revenue (account 4200)
+    from <version>_recurring_services_schedule.csv, one row per month each. They are part
+    of the summary's revenue: subscription revenue is the summary revenue less those two,
+    so total revenue and net income equal the summary.
   * Balance sheet: the old month-end balance rows are replaced by opening balances at
     Jan 2024 and monthly activity from the dataset's schedules (build_gl_balance_sheet.py).
     gl_balance_sheet_check.csv compares the GL balances with the balance sheet files.
@@ -68,15 +68,17 @@ LINE_BY_CATEGORY = {
     "Taxes": "tax_expense",
 }
 
+HISTORY_MONTHS = [f"{y}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
+
 REBUILD_PERIODS = {
-    "Actual": {f"2026-{m:02d}" for m in range(1, 7)},
+    "Actual": set(HISTORY_MONTHS) | {f"2026-{m:02d}" for m in range(1, 7)},
     "Budget": {f"2026-{m:02d}" for m in range(1, 13)},
     "Forecast": {f"2026-{m:02d}" for m in range(7, 13)},
 }
 
 # Months whose source GL holds only summary postings: target month -> month whose detail mix is used.
 DETAIL_FROM_MONTH = {
-    "Actual": {"2026-06": "2026-05"},
+    "Actual": {**{p: "2026-01" for p in HISTORY_MONTHS}, "2026-06": "2026-05"},
     "Budget": {},
     "Forecast": {},
 }
@@ -118,7 +120,9 @@ def _read(path: str) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]]):
+def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
+            added_revenue: dict[str, Decimal]):
+    """``added_revenue``: implementation + recurring services by month, carved out of the summary revenue."""
     summary = {r["period"][:7]: r for r in summary_rows}
     periods = REBUILD_PERIODS[version]
     fill = DETAIL_FROM_MONTH[version]
@@ -150,6 +154,8 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
 
     for (period, line), rows in sorted(by_period_line.items()):
         target = Decimal(str(summary[period][line]))
+        if line == "revenue":
+            target -= added_revenue.get(period, Decimal("0"))
         posted = sum((Decimal(r["amount"]) for r in rows), Decimal("0"))
         # Source P&L rows are credit-positive: revenue +, expenses -.
         current = posted if line == "revenue" else -posted
@@ -263,25 +269,25 @@ def main(src: str, dst: str) -> None:
             gl = _read(os.path.join(src, f"{version}_gl_detail.csv"))
             fieldnames = fieldnames or list(gl[0].keys())
         summary = _read(os.path.join(src, f"{version}_income_statement.csv"))
-        rows, log = rebuild(version, gl, summary)
+        impl = implementation_rows(src, version, gl[0])
+        rsvc = recurring_services_rows(src, version, gl[0])
+        added: dict[str, Decimal] = defaultdict(Decimal)
+        for r in impl + rsvc:
+            added[r["period"]] -= Decimal(r["amount"])
+        rows, log = rebuild(version, gl, summary, added)
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
         if old_bs:
             log.append({"version": version, "period": "", "line": "balance sheet", "action": "replaced",
                         "detail": f"{len(old_bs)} month-end balance rows replaced by opening balances and monthly activity",
                         "amount": ""})
-        rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"]
-        impl = implementation_rows(src, version, gl[0])
-        if impl:
-            rebuilt[version] += impl
-            log.append({"version": version, "period": "", "line": "revenue", "action": "added",
-                        "detail": f"{len(impl)} months of implementation revenue (account 4100) on top of the summary",
-                        "amount": f"{-sum(Decimal(r['amount']) for r in impl):.2f}"})
-        rsvc = recurring_services_rows(src, version, gl[0])
-        if rsvc:
-            rebuilt[version] += rsvc
-            log.append({"version": version, "period": "", "line": "revenue", "action": "added",
-                        "detail": f"{len(rsvc)} months of recurring services revenue (account 4200) on top of the summary",
-                        "amount": f"{-sum(Decimal(r['amount']) for r in rsvc):.2f}"})
+        rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"] + impl + rsvc
+        for name, account, added_rows in (("implementation", IMPLEMENTATION_ACCOUNT, impl),
+                                          ("recurring services", RECURRING_SERVICES_ACCOUNT, rsvc)):
+            if added_rows:
+                log.append({"version": version, "period": "", "line": "revenue", "action": "carved out",
+                            "detail": f"{len(added_rows)} months of {name} revenue (account {account}); "
+                                      f"subscription revenue is the summary revenue less this",
+                            "amount": f"{-sum(Decimal(r['amount']) for r in added_rows):.2f}"})
         all_log.extend(log)
 
     bs_rows, bs_log = build_balance_sheet_rows(src, rebuilt)
