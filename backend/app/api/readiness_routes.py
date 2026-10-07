@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
+from app.services.readiness.commission_plan_inputs import build_plan_inputs
 from app.services.readiness.engine import validate_answers
 from app.services.readiness.registry import catalog
 from app.services.readiness.service import readiness_payload, save_answers
@@ -29,6 +30,17 @@ def get_readiness(
 @readiness_router.get("/questions")
 def get_readiness_questions() -> dict[str, Any]:
     return catalog()
+
+
+@readiness_router.get("/commission-plan-inputs")
+def get_commission_plan_inputs(
+    organization_id: uuid.UUID = Query(...),
+    as_of: str = Query(..., pattern=r"^\d{4}-\d{2}$", description="Close the plan opens from, YYYY-MM"),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Commission policy (read-only), plan rates and the deferred commissions opening runoff for the engines."""
+    org = get_organization_or_404(db, organization_id)
+    return build_plan_inputs(db, org, as_of)
 
 
 @readiness_router.put("/answers")

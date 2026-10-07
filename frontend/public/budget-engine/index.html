@@ -949,7 +949,8 @@ const PL_DEPTS = [
         lines: [
           { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
           { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-          { k: 'commissions', label: 'Commissions (variable OTE × attain)', from: 'ote_nb' },
+          { k: 'commissions', label: 'Commissions — new & expansion (amortization + expensed)', from: 'comm_nb' },
+          { k: 'comm_tax', label: 'Payroll tax on commissions', from: 'comm_tax' },
           { k: 'te_airfare', label: 'T&E — Airfare', from: 'flat', flatMonthly: 12000 },
           { k: 'te_lodging', label: 'T&E — Lodging', from: 'flat', flatMonthly: 10000 },
           { k: 'te_meals', label: 'T&E — Meals & entertainment', from: 'flat', flatMonthly: 7500 },
@@ -964,7 +965,7 @@ const PL_DEPTS = [
         lines: [
           { k: 'wages', label: 'Salaries & wages', from: 'hc_wages' },
           { k: 'benefits', label: 'Employee benefits', from: 'hc_benefits' },
-          { k: 'variable', label: 'Expansion / retention incentive (OTE × attain)', from: 'ote_cs' },
+          { k: 'variable', label: 'Renewal commissions (expensed)', from: 'comm_ren' },
           { k: 'tools', label: 'CS platform & tools', from: 'flat', flatMonthly: 9000 },
           { k: 'programs', label: 'Customer programs', from: 'flat', flatMonthly: 5000 },
         ],
@@ -3181,22 +3182,293 @@ function plAttainFactor() {
   return Math.max(0, Math.min(120, STATE.existingBenchCoverPct)) / 100;
 }
 
+/* ---------- Sales commissions (ASC 340-40) ---------- */
+/** GET /readiness/commission-plan-inputs: policy (read-only), plan rates, opening cohort runoff. */
+let COMMISSION_INPUTS = null;
+let COMMISSION_INPUTS_STATE = 'pending';
+
+async function loadCommissionInputs() {
+  const orgId = await resolveBudgetOrgId();
+  if (!orgId) { COMMISSION_INPUTS_STATE = 'signin'; return; }
+  try {
+    const res = await fetch('/api/v1/readiness/commission-plan-inputs?organization_id=' + encodeURIComponent(orgId)
+      + '&as_of=' + (BUDGET_YEAR - 1) + '-12', { credentials: 'include' });
+    if (!res.ok) {
+      COMMISSION_INPUTS_STATE = 'error';
+      console.warn('[commissions] plan inputs failed', res.status);
+      return;
+    }
+    COMMISSION_INPUTS = await res.json();
+    COMMISSION_INPUTS_STATE = 'ok';
+  } catch (e) {
+    COMMISSION_INPUTS_STATE = 'error';
+    console.warn('[commissions] plan inputs failed', e);
+  }
+}
+
+const COMMISSION_TIMING_LABEL = {
+  month_of_booking: 'in the month of booking',
+  month_after_booking: 'the month after booking',
+  quarter_after_booking: 'the month after quarter end',
+  on_customer_payment: 'on customer payment',
+};
+
+/**
+ * Policy the plan applies. Onboarding answers 7.14–7.20 are read-only here; where a question is
+ * unanswered, the loaded commission plans' own treatment is used and labeled as such.
+ */
+function commissionPolicy() {
+  const inp = COMMISSION_INPUTS;
+  const warnings = [];
+  const notes = [];
+  const pol = {
+    loaded: !!inp, warnings, notes, source: null,
+    noNewExp: false, capNew: false, capExp: false, monthsNew: null, monthsExp: null,
+    renewalPaid: true, timing: 'month_of_booking', lagMonths: 0, taxCapitalized: false,
+  };
+  if (!inp) {
+    warnings.push(COMMISSION_INPUTS_STATE === 'signin'
+      ? 'Sign in to load the commission policy, plan rates and deferred commissions schedule.'
+      : COMMISSION_INPUTS_STATE === 'pending'
+        ? 'Loading the commission policy, plan rates and deferred commissions schedule…'
+        : 'Commission policy, plan rates and deferred commissions schedule did not load.');
+    warnings.push('Until they load, commissions are the variable OTE lever (heads × OTE × attainment), expensed when earned, with no deferred commissions roll-forward.');
+    return pol;
+  }
+  const a = (inp.policy && inp.policy.answers) || {};
+  const plans = inp.plans || [];
+  const planOf = kind => plans.find(p => p.opportunity_type === kind) || null;
+  const answered = ['capitalized', 'expensed', 'no_commissions'].includes(a['7.14']);
+  pol.source = answered ? 'onboarding' : 'loaded_plans';
+  if (!inp.policy.gate_resolved) {
+    warnings.push(`Commission Policy Gate unresolved (question${(inp.policy.unresolved_questions || []).length > 1 ? 's' : ''} ${(inp.policy.unresolved_questions || []).join(', ')}). `
+      + 'Answer 7.14–7.20 in onboarding; until then the plan uses the loaded commission plans’ treatment.');
+  }
+  (inp.policy.checks || []).filter(c => c.status === 'conflict').forEach(c => {
+    warnings.push(`Policy check conflict (${c.questions}): ${c.finding}.${c.customer_action ? ' ' + c.customer_action + '.' : ''}`);
+  });
+
+  const months = v => (v != null && /^\d+$/.test(String(v)) ? Number(v) : null);
+  const treat = (kind, qMonths) => {
+    const plan = planOf(kind);
+    if (answered) {
+      const cap = a['7.14'] === 'capitalized';
+      let n = cap ? months(a[qMonths]) : null;
+      if (cap && n == null) {
+        n = plan ? plan.amortization_months : null;
+        warnings.push(`${qMonths} (amortization months) is unanswered; using the loaded plan’s ${n != null ? n + ' months' : '— none loaded'}.`);
+      }
+      if (cap && plan && plan.amortization_months && n !== plan.amortization_months) {
+        notes.push(`${qMonths} says ${n} months; loaded plan ${plan.plan_id} amortizes over ${plan.amortization_months}. Plan cohorts use ${n}; the opening balance runs off on its loaded schedule.`);
+      }
+      return { cap: cap && n > 0, months: n };
+    }
+    if (!plan) return { cap: false, months: null };
+    return { cap: plan.capitalize === true && plan.amortization_months > 0, months: plan.amortization_months };
+  };
+  pol.noNewExp = a['7.14'] === 'no_commissions';
+  const tn = treat('new_business', '7.15');
+  const te = treat('expansion', '7.16');
+  pol.capNew = tn.cap; pol.monthsNew = tn.months;
+  pol.capExp = te.cap; pol.monthsExp = te.months;
+
+  const ren = planOf('renewal');
+  const renAnswer = a['7.17'];
+  if (renAnswer === 'not_paid') pol.renewalPaid = false;
+  else if (renAnswer == null && !ren) pol.renewalPaid = false;
+  if (renAnswer === 'capitalized' || (renAnswer == null && ren && ren.capitalize === true)) {
+    warnings.push('Renewal commissions are capitalized, but onboarding has no renewal amortization period; the plan expenses them until one is given.');
+  }
+
+  const newPlan = planOf('new_business');
+  const decArMonths = (() => {
+    const o = bsBopLock();
+    return o && o._decArPct != null ? Math.max(0, Math.round(o._decArPct / 100)) : null;
+  })();
+  if (a['7.18']) {
+    pol.timing = a['7.18'];
+    pol.lagMonths = a['7.18'] === 'month_after_booking' ? 1 : a['7.18'] === 'on_customer_payment' ? decArMonths : 0;
+    if (a['7.18'] === 'on_customer_payment') {
+      if (decArMonths == null) {
+        pol.lagMonths = 0;
+        warnings.push('Commissions are paid on customer payment, but the Dec close has no AR to time collections; payouts are shown in the month earned.');
+      } else {
+        notes.push(`Paid on customer payment: ${decArMonths} month${decArMonths === 1 ? '' : 's'} after booking (Dec close AR ÷ Dec revenue).`);
+      }
+    }
+  } else {
+    pol.timing = null;
+    pol.lagMonths = newPlan && newPlan.payout_lag_months != null ? newPlan.payout_lag_months : 0;
+  }
+  if (pol.lagMonths > 0 || pol.timing === 'quarter_after_booking') {
+    warnings.push(`Commissions earned in ${BUDGET_YEAR - 1} and paid in ${BUDGET_YEAR} are not in the plan: the Dec close has no accrued commissions line.`);
+  }
+  pol.taxCapitalized = a['7.19'] ? a['7.19'] === 'capitalized' : !!(newPlan && newPlan.capitalize_payroll_taxes);
+  (inp.missing || []).forEach(m => warnings.push('Not loaded: ' + m + '.'));
+  return pol;
+}
+
+/** Renewing ARR as a share of beginning ARR, from the loaded schedule's renewal base and ARR history. */
+function renewalShareOfBop() {
+  const r = COMMISSION_INPUTS && COMMISSION_INPUTS.rates && COMMISSION_INPUTS.rates.renewal;
+  if (!r || !r.base_by_period) return null;
+  let base = 0, bop = 0;
+  const months = [];
+  for (const [p, b] of Object.entries(r.base_by_period)) {
+    const h = getHistRow(p);
+    if (!h || h.bop == null || !(h.bop > 0)) continue;
+    base += b;
+    bop += h.bop;
+    months.push(p);
+  }
+  return bop > 0 ? { share: base / bop, months } : null;
+}
+
+/**
+ * Commissions earned (planned bookings × trailing plan rate), paid (policy timing), capitalized and
+ * amortized straight-line from the month incurred (1/n that month), expensed, and the deferred
+ * commissions roll-forward from the Dec close. The opening balance runs off on its loaded cohorts.
+ */
+function computeCommissionPlan() {
+  const pol = commissionPolicy();
+  const inp = COMMISSION_INPUTS;
+  const arr = computeBudgetArr();
+  const open = bsBopLock();
+  const n = BUD_P.length;
+  const hc = pol.loaded ? null : computeHcPlan();
+  const attain = plAttainFactor();
+  const rate = k => (inp && inp.rates && inp.rates[k] && inp.rates[k].rate != null ? inp.rates[k].rate : null);
+  const renShare = pol.loaded ? renewalShareOfBop() : null;
+  if (pol.loaded) {
+    if (!pol.noNewExp && rate('new_business') == null) pol.warnings.push('No loaded new business commission rate; new business commissions are not in the plan.');
+    if (!pol.noNewExp && rate('expansion') == null) pol.warnings.push('No loaded expansion commission rate; expansion commissions are not in the plan.');
+    if (pol.renewalPaid && (rate('renewal') == null || !renShare)) pol.warnings.push('No loaded renewal commission rate or renewal base; renewal commissions are not in the plan.');
+  }
+  const taxRate = inp && inp.payroll_tax_rate != null ? inp.payroll_tax_rate : (STATE.payrollTaxPct || 0) / 100;
+
+  const earned = BUD_P.map(p => {
+    const a = arr[p] || {};
+    if (!pol.loaded) {
+      return {
+        nb: (hc[p].ending.sales || 0) * ((STATE.nbOteVarAnnual || 0) / 12) * attain,
+        exp: 0,
+        ren: (hc[p].ending.cs || 0) * ((STATE.csOteVarAnnual || 0) / 12) * attain,
+        nbBase: null, expBase: null, renBase: null,
+      };
+    }
+    const nbBase = (a.nb || 0) + (a.react || 0);
+    const expBase = a.exp || 0;
+    const renBase = renShare ? (a.bop || 0) * renShare.share : 0;
+    return {
+      nb: pol.noNewExp ? 0 : nbBase * (rate('new_business') || 0),
+      exp: pol.noNewExp ? 0 : expBase * (rate('expansion') || 0),
+      ren: pol.renewalPaid ? renBase * (rate('renewal') || 0) : 0,
+      nbBase, expBase, renBase,
+    };
+  });
+
+  const paidIndex = i => {
+    if (pol.timing === 'quarter_after_booking') return (Math.floor(i / 3) + 1) * 3;
+    return i + (pol.lagMonths || 0);
+  };
+  const paid = BUD_P.map(() => ({ nb: 0, exp: 0, ren: 0 }));
+  earned.forEach((e, i) => {
+    const j = paidIndex(i);
+    if (j < n) { paid[j].nb += e.nb; paid[j].exp += e.exp; paid[j].ren += e.ren; }
+  });
+
+  const cohorts = [];
+  const capitalized = new Array(n).fill(0);
+  const expensedNewExp = new Array(n).fill(0);
+  const taxExpensed = new Array(n).fill(0);
+  const tax = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const e = earned[i];
+    if (pol.capNew && e.nb) { cohorts.push({ start: i, amount: e.nb, months: pol.monthsNew }); capitalized[i] += e.nb; }
+    else expensedNewExp[i] += e.nb;
+    if (pol.capExp && e.exp) { cohorts.push({ start: i, amount: e.exp, months: pol.monthsExp }); capitalized[i] += e.exp; }
+    else expensedNewExp[i] += e.exp;
+    const pd = paid[i];
+    tax[i] = (pd.nb + pd.exp + pd.ren) * taxRate;
+    let taxCap = 0;
+    if (pol.taxCapitalized && pol.capNew && pd.nb) { cohorts.push({ start: i, amount: pd.nb * taxRate, months: pol.monthsNew }); taxCap += pd.nb * taxRate; }
+    if (pol.taxCapitalized && pol.capExp && pd.exp) { cohorts.push({ start: i, amount: pd.exp * taxRate, months: pol.monthsExp }); taxCap += pd.exp * taxRate; }
+    capitalized[i] += taxCap;
+    taxExpensed[i] = tax[i] - taxCap;
+  }
+  const cohortAmort = (c, k) => (k >= c.start && k < c.start + c.months ? c.amount / c.months : 0);
+
+  const runoff = inp && inp.opening && Array.isArray(inp.opening.runoff) ? inp.opening.runoff : null;
+  const runoffBy = {};
+  if (runoff) runoff.forEach(r => { runoffBy[r.period] = r.amortization; });
+  const runoffAfter = j => (runoff ? runoff.slice(j + 1, j + 13).reduce((s, r) => s + r.amortization, 0) : 0);
+  const dcOpen = open.dc_current != null && open.dc_noncurrent != null ? open.dc_current + open.dc_noncurrent : null;
+  const scheduleBalance = inp && inp.opening ? inp.opening.balance : null;
+  const tie = {
+    bs: dcOpen,
+    schedule: scheduleBalance,
+    diff: dcOpen != null && scheduleBalance != null ? dcOpen - scheduleBalance : null,
+    currentBs: open.dc_current,
+    currentSchedule: inp && inp.opening ? inp.opening.current_portion : null,
+  };
+  if (dcOpen != null && dcOpen > 0.5 && !runoff) {
+    pol.warnings.push(`Dec ${BUDGET_YEAR - 1} deferred commissions ${fmtM(dcOpen)} have no loaded cohort schedule; the opening balance is held flat (no amortization).`);
+  }
+  if (tie.diff != null && Math.abs(tie.diff) >= 0.01) {
+    pol.warnings.push(`Dec ${BUDGET_YEAR - 1} deferred commissions on the balance sheet (${fmtM(dcOpen)}) ≠ the commission schedule balance (${fmtM(scheduleBalance)}); difference ${fmtM(tie.diff)}.`);
+  }
+
+  const out = { policy: pol, tie, taxRate, renShare, rates: { nb: rate('new_business'), exp: rate('expansion'), ren: rate('renewal') }, months: {} };
+  let dc = dcOpen != null ? dcOpen : 0;
+  let accrued = 0;
+  for (let j = 0; j < n; j++) {
+    const p = BUD_P[j];
+    const amortOpen = runoff ? (runoffBy[p] || 0) : 0;
+    const amortPlan = cohorts.reduce((s, c) => s + cohortAmort(c, j), 0);
+    const amort = amortOpen + amortPlan;
+    const dcBeg = dc;
+    dc = dcBeg + capitalized[j] - amort;
+    let curPlan = 0;
+    for (const c of cohorts) {
+      if (c.start > j) continue;
+      for (let k = j + 1; k <= j + 12; k++) curPlan += cohortAmort(c, k);
+    }
+    const current = Math.min(dc, runoffAfter(j) + curPlan);
+    const earnedTot = earned[j].nb + earned[j].exp + earned[j].ren;
+    const paidTot = paid[j].nb + paid[j].exp + paid[j].ren;
+    const accBeg = accrued;
+    accrued = accBeg + earnedTot - paidTot;
+    const expNewExp = amort + expensedNewExp[j];
+    const expRen = earned[j].ren;
+    const payouts = paidTot + tax[j];
+    const expense = expNewExp + expRen + taxExpensed[j];
+    out.months[p] = {
+      earned: earned[j], paid: paid[j], earnedTot, paidTot, tax: tax[j], payouts,
+      capitalized: capitalized[j], amortOpen, amortPlan, amort,
+      expensedNewExp: expensedNewExp[j], expNewExp, expRen, taxExpensed: taxExpensed[j], expense,
+      dcBeg, dcEnd: dc, dcCurrent: current, dcNoncurrent: dc - current,
+      accruedBeg: accBeg, accruedEnd: accrued,
+      chg_dc: dcBeg - dc, chg_accrued: accrued - accBeg,
+      payout_check: payouts - (expense + (dc - dcBeg) - (accrued - accBeg)),
+    };
+  }
+  return out;
+}
+
 /**
  * Department books.
- * Comp from HC breakouts (wages, employee benefits, bonus); NB/CS OTE × attain;
- * discretionary spend per month (seeded flat YoY; edit cells for seasonality).
+ * Comp from HC breakouts (wages, employee benefits, bonus); commissions from the
+ * ASC 340-40 roll-forward; discretionary spend per month (seeded flat YoY; edit cells for seasonality).
  */
 function computeDeptPl() {
   seedPlRates();
   const hc = computeHcPlan();
   const gtm = computeGtmPlan();
-  const attain = plAttainFactor();
+  const comm = computeCommissionPlan();
   const out = {};
   for (const p of BUD_P) {
     const depts = {};
     let sm = 0, rd = 0, ga = 0;
-    const headsNb = hc[p].ending.sales || 0;
-    const headsCs = hc[p].ending.cs || 0;
     const hcRow = hc[p];
     for (const d of PL_DEPTS) {
       const lines = {};
@@ -3231,11 +3503,10 @@ function computeDeptPl() {
           else if (line.from === 'gtm_channel') {
             const ch = line.channel && gtm[p].channels && gtm[p].channels[line.channel];
             amt = ch ? (ch.spend || 0) : 0;
-          } else if (line.from === 'ote_nb') {
-            amt = headsNb * ((STATE.nbOteVarAnnual || 0) / 12) * attain;
-          } else if (line.from === 'ote_cs') {
-            amt = headsCs * ((STATE.csOteVarAnnual || 0) / 12) * attain;
-          } else if (line.from === 'flat') {
+          } else if (line.from === 'comm_nb') amt = comm.months[p].expNewExp;
+          else if (line.from === 'comm_ren') amt = comm.months[p].expRen;
+          else if (line.from === 'comm_tax') amt = comm.months[p].taxExpensed;
+          else if (line.from === 'flat') {
             amt = plFlatPeriod(d.key, line.k, p, line.flatMonthly);
           } else {
             amt = payFull * (plLineRate(d.key, line.k, line.pctPay || 0) / 100);
@@ -3500,8 +3771,19 @@ function bsBopLock() {
   const ppe = bsDec.ppe != null ? num(bsDec.ppe) : num(bsDec.property_and_equipment_net);
   const debt = num(bsDec.debt);
   const equity0 = num(bsDec.equity);
-  const lines = { cash, ar, prepaids, ppe, ap, deferred_rev: deferred, debt, equity: equity0, revenue: decRev, opex: decOpex };
+  const dcCurrent = num(bsDec.deferred_commissions_current);
+  const dcNoncurrent = num(bsDec.deferred_commissions_noncurrent);
+  const otherAssets = num(bsDec.other_assets);
+  const otherLiabilities = num(bsDec.other_liabilities);
+  const lines = {
+    cash, ar, prepaids, ppe, ap, deferred_rev: deferred, debt, equity: equity0, revenue: decRev, opex: decOpex,
+    deferred_commissions_current: dcCurrent, deferred_commissions_noncurrent: dcNoncurrent,
+    other_assets: otherAssets, other_liabilities: otherLiabilities,
+  };
   const missing = Object.keys(lines).filter(k => lines[k] == null);
+  const v = x => x || 0;
+  const totalAssets = v(cash) + v(ar) + v(prepaids) + v(dcCurrent) + v(dcNoncurrent) + v(ppe) + v(otherAssets);
+  const totalLe = v(ap) + v(deferred) + v(debt) + v(otherLiabilities) + v(equity0);
 
   return {
     cash,
@@ -3512,6 +3794,11 @@ function bsBopLock() {
     deferred_rev: deferred,
     debt,
     equity: equity0,
+    dc_current: dcCurrent,
+    dc_noncurrent: dcNoncurrent,
+    other_assets: otherAssets,
+    other_liabilities: otherLiabilities,
+    balance_check: totalAssets - totalLe,
     missing,
     _decRev: decRev,
     _decOpex: decOpex,
@@ -3551,6 +3838,9 @@ function computeCfBsPlan() {
   const is = computeIsPlan();
   const bridge = computeRevenueBridge();
   const open = bsBopLock();
+  const comm = computeCommissionPlan();
+  const otherAssets = open.other_assets || 0;
+  const otherLiabilities = open.other_liabilities || 0;
   let cash = open.cash;
   let ar = open.ar;
   let prepaids = open.prepaids;
@@ -3589,8 +3879,11 @@ function computeCfBsPlan() {
     const chg_dr = br.chg_dr; // = Billings − Sub revenue (bridge identity)
     const chg_ap = apEnd - ap;
     const chg_prepaids = prepaids - prepaidEnd;
+    const cm = comm.months[p];
+    const chg_dc = cm.chg_dc;
+    const chg_accrued_comm = cm.chg_accrued;
 
-    const cfo = ni + da + sbc + chg_ar + chg_dr + chg_ap + chg_prepaids;
+    const cfo = ni + da + sbc + chg_ar + chg_dr + chg_ap + chg_prepaids + chg_dc + chg_accrued_comm;
     const capex = -(rev * capexPct);
     const cfi = capex;
     const debtFlow = 0;
@@ -3610,26 +3903,28 @@ function computeCfBsPlan() {
     prevRev = rev;
     prevOpex = opex;
 
-    const current_assets = cash + ar + prepaids;
-    const total_assets = current_assets + ppe;
-    const total_liabilities = ap + deferred + debt;
+    const dc_current = cm.dcCurrent;
+    const dc_noncurrent = cm.dcNoncurrent;
+    const accrued_comm = cm.accruedEnd;
+    const current_assets = cash + ar + prepaids + dc_current;
+    const total_assets = current_assets + dc_noncurrent + ppe + otherAssets;
+    const total_liabilities = ap + deferred + accrued_comm + debt + otherLiabilities;
     const total_le = total_liabilities + equity;
-    const imbalance = total_assets - total_le;
-    if (Math.abs(imbalance) > 0.01) equity += imbalance;
 
     cfs[p] = {
       beginning_cash, net_income: ni, da, sbc,
-      chg_ar, chg_dr, chg_ap, chg_prepaids,
+      chg_ar, chg_dr, chg_ap, chg_prepaids, chg_dc, chg_accrued_comm,
       billings: br.billings, sub_rev: br.sub,
       cfo, capex, cfi, debt: debtFlow, cff, net_change, ending_cash,
     };
     bs[p] = {
-      cash, ar, prepaids, current_assets, ppe, total_assets,
-      ap, deferred_rev: deferred, debt, total_liabilities,
-      equity, total_le: total_liabilities + equity,
+      cash, ar, prepaids, dc_current, current_assets, dc_noncurrent, ppe, other_assets: otherAssets, total_assets,
+      ap, deferred_rev: deferred, accrued_comm, debt, other_liabilities: otherLiabilities, total_liabilities,
+      equity, total_le,
+      balance_check: total_assets - total_le,
     };
   }
-  return { cfs, bs, open };
+  return { cfs, bs, open, comm };
 }
 
 function computeCashFlowPlan() {
@@ -5692,12 +5987,11 @@ function plLineTag(spec, line, sec) {
   if (line.from === 'gtm' || line.from === 'gtm_channel') {
     return originTag('from GTM', 'gtm', { title: 'Open GTM / Pipeline' });
   }
-  if (line.from === 'ote_nb' || line.from === 'ote_cs') {
-    const ote = line.from === 'ote_nb' ? STATE.nbOteVarAnnual : STATE.csOteVarAnnual;
+  if (line.from === 'comm_nb' || line.from === 'comm_ren' || line.from === 'comm_tax') {
     return originTag(
-      `$${Math.round(ote / 1000)}k OTE × ${(plAttainFactor() * 100).toFixed(0)}% attain`,
-      'hc',
-      { hcFocus: 'total', title: 'Open Headcount (OTE / attain)' }
+      COMMISSION_INPUTS ? 'from commissions roll-forward' : 'OTE × attain — inputs not loaded',
+      'bs',
+      { scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' }
     );
   }
   if (line.from === 'flat') return '';
@@ -5919,9 +6213,9 @@ function quarterCfCtxCell(q, row) {
   for (const p of q.months) {
     const r = tsStmtRow(p, 'cfs');
     if (!r) continue;
-    n += 1;
-    if (row.k === 'ending_cash' || row.k === 'beginning_cash') last = r[row.k];
-    else if (r[row.k] != null) sum += Number(r[row.k]) || 0;
+    const key = r[row.k] == null && row.ctxKey ? row.ctxKey : row.k;
+    if (row.k === 'ending_cash' || row.k === 'beginning_cash') { n += 1; last = r[key]; }
+    else if (r[key] != null) { n += 1; sum += Number(r[key]) || 0; }
   }
   if (row.k === 'ending_cash' || row.k === 'beginning_cash') {
     return last != null ? fmtM(last) : '<span style="color:var(--text3)">—</span>';
@@ -5935,9 +6229,12 @@ function quarterBsCtxCell(q, row) {
   for (const p of q.months) {
     const r = tsStmtRow(p, 'bs');
     if (!r) continue;
+    const key = r[row.k] == null && row.ctxKey ? row.ctxKey : row.k;
     if (row.k === 'current_assets') {
-      last = (r.cash || 0) + (r.ar || 0) + (r.prepaids || 0);
-    } else if (r[row.k] != null) last = r[row.k];
+      last = (r.cash || 0) + (r.ar || 0) + (r.prepaids || 0) + (r.deferred_commissions_current || 0);
+    } else if (row.k === 'balance_check') {
+      last = r.total_assets != null && r.total_le != null ? r.total_assets - r.total_le : null;
+    } else if (r[key] != null) last = r[key];
   }
   return last != null ? fmtM(last) : '<span style="color:var(--text3)">—</span>';
 }
@@ -5949,13 +6246,13 @@ function fyCfValue(cfs, row) {
 }
 
 function fyBsValue(bs, row) {
-  const last = bs[BUD_P[11]];
-  if (row.k === 'current_assets') return fmtM(last.current_assets);
-  return fmtM(last[row.k] || 0);
+  return fmtM(bs[BUD_P[11]][row.k] || 0);
 }
 
 function renderCF() {
-  const { cfs, open } = computeCfBsPlan();
+  const { cfs, open, comm } = computeCfBsPlan();
+  const fyPayouts = BUD_P.reduce((s, p) => s + comm.months[p].payouts, 0);
+  const fyCommExpense = BUD_P.reduce((s, p) => s + comm.months[p].expense, 0);
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
   const fyCfo = BUD_P.reduce((s, p) => s + cfs[p].cfo, 0);
   const endCash = cfs[BUD_P[11]].ending_cash;
@@ -5967,7 +6264,8 @@ function renderCF() {
   let html = `
     <div class="slide-title">Cash Flow · FY${BUDGET_YEAR} Plan</div>
     <div class="slide-sub">Indirect method — same breakout as the Board platform. Ties to ${originTag('Balance Sheet', 'bs', { title: 'Open Balance Sheet' })} cash and ${originTag('IS', 'is', { title: 'Open Income Statement' })} net income.</div>
-    <div class="ctx-banner">Opening cash ${fmtM(open.cash)}. Jan WC organic vs Dec: ΔAR ${fmtM(janChgAr)} · ΔAP ${fmtM(janChgAp)} · ΔDR ${fmtM(janChgDr)} (DR ${fmtM(open.deferred_rev)} → ${fmtM(janDr)}). FY CFO ${fmtM(fyCfo)} · Dec ending cash ${fmtM(endCash)}.</div>${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}`;
+    <div class="ctx-banner">Opening cash ${fmtM(open.cash)}. Jan WC organic vs Dec: ΔAR ${fmtM(janChgAr)} · ΔAP ${fmtM(janChgAp)} · ΔDR ${fmtM(janChgDr)} (DR ${fmtM(open.deferred_rev)} → ${fmtM(janDr)}). FY CFO ${fmtM(fyCfo)} · Dec ending cash ${fmtM(endCash)}.</div>
+    <div class="ctx-banner">Commissions: FY cash payouts incl. payroll tax ${fmtM(fyPayouts)} vs P&amp;L expense ${fmtM(fyCommExpense)} — the difference is the change in deferred and accrued commissions. ${originTag('Roll-forward', 'bs', { scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' })}</div>${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}`;
 
   const rows = [
     { type: 'sec', label: 'Operating Activities' },
@@ -5978,6 +6276,8 @@ function renderCF() {
     { k: 'chg_dr', label: 'Change in Deferred Revenue', indent: true, origin: { tab: 'arr', scrollTo: 'rev-bridge', title: 'Open ARR revenue bridge' } },
     { k: 'chg_ap', label: 'Change in Accounts Payable', indent: true },
     { k: 'chg_prepaids', label: 'Change in Prepaids', indent: true },
+    { k: 'chg_dc', ctxKey: 'chg_deferred_commissions', label: 'Change in Deferred Commissions', indent: true, origin: { tab: 'bs', scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' } },
+    { k: 'chg_accrued_comm', label: 'Change in Accrued Commissions', indent: true, origin: { tab: 'bs', scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' } },
     { k: 'cfo', label: 'Cash from Operations (CFO)', sub: true },
     { type: 'sec', label: 'Investing Activities' },
     { k: 'capex', label: 'Capital Expenditures', indent: true },
@@ -6000,7 +6300,7 @@ function renderCF() {
     const cls = [row.indent ? 'is-indent' : '', row.sub ? 'is-sub' : '', row.ni ? 'is-ni' : ''].filter(Boolean).join(' ');
     const tag = row.origin
       ? originTag(
-          row.origin.tab === 'arr' ? 'from bridge' : 'from IS',
+          row.origin.tab === 'arr' ? 'from bridge' : row.origin.tab === 'bs' ? 'from roll-forward' : 'from IS',
           row.origin.tab,
           { scrollTo: row.origin.scrollTo, title: row.origin.title }
         )
@@ -6016,33 +6316,41 @@ function renderCF() {
 }
 
 function renderBS() {
-  const { bs, cfs, open } = computeCfBsPlan();
+  const { bs, cfs, open, comm } = computeCfBsPlan();
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
   const end = bs[BUD_P[11]];
-  const tie = Math.abs((end.total_assets || 0) - (end.total_le || 0)) < 1;
+  const worst = BUD_P.reduce((m, p) => (Math.abs(bs[p].balance_check) > Math.abs(m.v) ? { p, v: bs[p].balance_check } : m), { p: null, v: 0 });
+  const balances = Math.abs(worst.v) < 1 && Math.abs(open.balance_check || 0) < 1;
   const janDr = bs[BUD_P[0]].deferred_rev;
 
   let html = `
     <div class="slide-title">Balance Sheet · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">Same breakout as the Board platform. Cash rolls from ${originTag('Cash Flow', 'cf', { title: 'Open Cash Flow' })}; equity rolls with NI + SBC from Dec close.</div>
-    <div class="ctx-banner">BOP = Dec close (AR ${fmtM(open.ar)} · AP ${fmtM(open.ap)} · DR ${fmtM(open.deferred_rev)} · equity ${fmtM(open.equity)}). Jan ${fmtM(janDr)} DR / AR ${fmtM(bs[BUD_P[0]].ar)} / AP ${fmtM(bs[BUD_P[0]].ap)} — WC rolls with rev &amp; OpEx. Dec total assets ${fmtM(end.total_assets)} · ${tie ? '✓ balances' : '⚠ check plug'}. Ending cash ${fmtM(cfs[BUD_P[11]].ending_cash)}.</div>${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}`;
+    <div class="slide-sub">Same breakout as the Board platform. Cash rolls from ${originTag('Cash Flow', 'cf', { title: 'Open Cash Flow' })}; equity rolls with NI + SBC from Dec close; deferred commissions roll from the ${originTag('roll-forward', 'bs', { scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' })}.</div>
+    <div class="ctx-banner">BOP = Dec close (AR ${fmtM(open.ar)} · AP ${fmtM(open.ap)} · DR ${fmtM(open.deferred_rev)} · deferred commissions ${fmtM((open.dc_current || 0) + (open.dc_noncurrent || 0))} · equity ${fmtM(open.equity)}). Jan ${fmtM(janDr)} DR / AR ${fmtM(bs[BUD_P[0]].ar)} / AP ${fmtM(bs[BUD_P[0]].ap)} — WC rolls with rev &amp; OpEx. Dec total assets ${fmtM(end.total_assets)} · ${balances ? '✓ balances every month (no plug)' : '⚠ does not balance'}. Ending cash ${fmtM(cfs[BUD_P[11]].ending_cash)}.</div>${balances ? '' : `<div class="ctx-banner warn"><strong>Balance check failed (assets − liabilities − equity):</strong> Dec ${BUDGET_YEAR - 1} close ${fmtM(open.balance_check || 0)}${worst.p ? `; largest plan month ${worst.p} ${fmtM(worst.v)}` : ''}. Nothing is plugged to equity — the difference is shown in the Balance check row.</div>`}${open.missing && open.missing.length ? `<div class="ctx-banner warn"><strong>Dec ${BUDGET_YEAR - 1} opening lines not loaded (not filled in):</strong> ${open.missing.join(', ')}. Plan rows that start from these lines are incomplete until the forecast dataset includes them.</div>` : ''}`;
 
+  const rfOrigin = { tab: 'bs', scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward', chip: 'from roll-forward' };
   const rows = [
     { type: 'sec', label: 'Assets' },
     { k: 'cash', label: 'Cash & Equivalents', indent: true, origin: { tab: 'cf', title: 'Open Cash Flow' } },
     { k: 'ar', label: 'Accounts Receivable', indent: true },
     { k: 'prepaids', label: 'Prepaids & Other Current', indent: true },
+    { k: 'dc_current', ctxKey: 'deferred_commissions_current', label: 'Deferred Commissions — Current', indent: true, origin: rfOrigin },
     { k: 'current_assets', label: 'Total Current Assets', sub: true },
+    { k: 'dc_noncurrent', ctxKey: 'deferred_commissions_noncurrent', label: 'Deferred Commissions — Noncurrent', indent: true, origin: rfOrigin },
     { k: 'ppe', label: 'PP&E (Net)', indent: true },
+    { k: 'other_assets', label: 'Other Assets', indent: true },
     { k: 'total_assets', label: 'Total Assets', ni: true },
     { type: 'sec', label: 'Liabilities' },
     { k: 'ap', label: 'Accounts Payable', indent: true },
     { k: 'deferred_rev', label: 'Deferred Revenue', indent: true, origin: { tab: 'arr', scrollTo: 'rev-bridge', title: 'Open ARR revenue bridge' } },
+    { k: 'accrued_comm', label: 'Accrued Commissions', indent: true, origin: rfOrigin },
     { k: 'debt', label: 'Debt', indent: true },
+    { k: 'other_liabilities', label: 'Other Liabilities', indent: true },
     { k: 'total_liabilities', label: 'Total Liabilities', sub: true },
     { type: 'sec', label: "Shareholders' Equity" },
     { k: 'equity', label: 'Total Equity', indent: true },
     { k: 'total_le', label: 'Total Liabilities & Equity', ni: true },
+    { k: 'balance_check', label: 'Balance check (assets − liabilities − equity)', indent: true },
   ];
 
   html += `<table class="bud-tbl"><thead><tr>${buildTableHeaders()}</tr></thead><tbody>`;
@@ -6054,7 +6362,7 @@ function renderBS() {
     const cls = [row.indent ? 'is-indent' : '', row.sub ? 'is-sub' : '', row.ni ? 'is-ni' : ''].filter(Boolean).join(' ');
     const tag = row.origin
       ? originTag(
-          row.origin.tab === 'arr' ? 'from bridge' : 'from CF',
+          row.origin.chip || (row.origin.tab === 'arr' ? 'from bridge' : 'from CF'),
           row.origin.tab,
           { scrollTo: row.origin.scrollTo, title: row.origin.title }
         )
@@ -6067,6 +6375,115 @@ function renderBS() {
     }
     html += `<td class="fy-c">${fyBsValue(bs, row)}</td>`;
     html += `<td class="notes-c">${noteInput('bs_' + row.k)}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  html += renderCommissionRollforward(comm);
+  return html;
+}
+
+/** Deferred commissions roll-forward, payouts and the read-only policy behind them. */
+function renderCommissionRollforward(comm) {
+  const pol = comm.policy;
+  const inp = COMMISSION_INPUTS;
+  const colSpan = 1 + BUD_P.length + 2;
+  const m = comm.months;
+  const fy = k => BUD_P.reduce((s, p) => s + (m[p][k] || 0), 0);
+  const pct = v => (v == null ? '—' : (v * 100).toFixed(2) + '%');
+  const ans = (inp && inp.policy && inp.policy.answers) || {};
+  const shown = v => (v == null ? '<span style="color:var(--text3)">unanswered</span>' : String(v).replace(/_/g, ' '));
+  const months = n => (n ? n + ' months' : '—');
+  const treatment = (cap, n) => (cap ? `capitalized, ${months(n)} straight-line from the month incurred` : 'expensed when earned');
+  const timing = pol.timing ? COMMISSION_TIMING_LABEL[pol.timing] : (pol.lagMonths ? `${pol.lagMonths} month(s) after booking` : 'in the month of booking');
+  const sourceLabel = !pol.loaded ? 'not loaded'
+    : pol.source === 'onboarding' ? 'onboarding answers 7.14–7.20 (read-only)'
+    : 'loaded commission plans (onboarding 7.14–7.20 unanswered)';
+  const tie = comm.tie;
+  const tieOk = tie.diff != null && Math.abs(tie.diff) < 0.01;
+  const curTie = tie.currentBs != null && tie.currentSchedule != null ? tie.currentBs - tie.currentSchedule : null;
+  const payoutWorst = BUD_P.reduce((mx, p) => Math.max(mx, Math.abs(m[p].payout_check)), 0);
+  const checks = [
+    { label: `Dec ${BUDGET_YEAR - 1} deferred commissions: balance sheet vs commission schedule`, ok: tieOk,
+      detail: tie.diff == null ? 'not checked — ' + (tie.bs == null ? 'balance sheet line not loaded' : 'schedule not loaded') : `${fmtM(tie.bs)} vs ${fmtM(tie.schedule)} (difference ${fmtM(tie.diff)})` },
+    { label: `Dec ${BUDGET_YEAR - 1} current portion: balance sheet vs schedule (next 12 months of amortization)`, ok: curTie != null && Math.abs(curTie) < 0.01,
+      detail: curTie == null ? 'not checked' : `${fmtM(tie.currentBs)} vs ${fmtM(tie.currentSchedule)} (difference ${fmtM(curTie)})` },
+    { label: 'Each month: payouts = expense + Δ deferred commissions − Δ accrued commissions', ok: payoutWorst < 0.01,
+      detail: `largest difference ${fmtM(payoutWorst)}` },
+  ];
+  (inp && inp.checks || []).forEach(c => checks.push({ label: 'Server: ' + c.id.replace(/_/g, ' '), ok: c.status === 'pass', detail: c.finding }));
+  (inp && inp.policy && inp.policy.checks || []).forEach(c => checks.push({ label: `Policy vs books (${c.questions})`, ok: c.status === 'pass', review: c.status === 'review', detail: c.finding }));
+
+  let html = `
+    <div class="slide-title" id="comm-rf" style="margin-top:28px">Deferred Commissions · ASC 340-40</div>
+    <div class="slide-sub">P&amp;L carries amortization + expensed commissions; cash carries payouts; the balance sheet carries the unamortized asset. Policy source: ${sourceLabel}.</div>`;
+  if (pol.warnings.length) {
+    html += `<div class="ctx-banner warn"><strong>Commission inputs need attention:</strong><ul style="margin:6px 0 0 18px;padding:0">${pol.warnings.map(w => `<li>${w}</li>`).join('')}</ul></div>`;
+  }
+  if (pol.notes.length) html += `<div class="ctx-banner">${pol.notes.join(' ')}</div>`;
+
+  html += `<table class="bud-tbl" style="max-width:980px"><tbody>
+    <tr class="sec"><td colspan="3">Policy (read-only — change it in onboarding, not here)</td></tr>
+    <tr><td>7.14 New &amp; expansion commissions</td><td>${shown(ans['7.14'])}</td><td>Plan: new business ${pol.noNewExp ? 'none' : treatment(pol.capNew, pol.monthsNew)}; expansion ${pol.noNewExp ? 'none' : treatment(pol.capExp, pol.monthsExp)}</td></tr>
+    <tr><td>7.15 / 7.16 Amortization months</td><td>${shown(ans['7.15'])} / ${shown(ans['7.16'])}</td><td>Opening balance runs off on its loaded cohorts (${inp && inp.opening ? (inp.opening.amortization_months || []).join(', ') || '—' : '—'} months; first cohort ${inp && inp.opening && inp.opening.first_cohort ? inp.opening.first_cohort : '—'})</td></tr>
+    <tr><td>7.17 Renewal commissions</td><td>${shown(ans['7.17'])}</td><td>Plan: ${pol.renewalPaid ? 'expensed when earned' : 'none'}</td></tr>
+    <tr><td>7.18 When paid</td><td>${shown(ans['7.18'])}</td><td>Plan: paid ${timing}</td></tr>
+    <tr><td>7.19 Payroll tax on commissions</td><td>${shown(ans['7.19'])}</td><td>Plan: ${pol.taxCapitalized ? 'capitalized with the commission' : 'expensed when paid'} at ${pct(comm.taxRate)} of payouts (${inp && inp.payroll_tax_rate != null ? 'loaded roll-forward, trailing 12 months' : 'plan payroll tax lever'})</td></tr>
+    <tr><td>7.20 Payout system of record</td><td>${shown(ans['7.20'])}</td><td></td></tr>
+    <tr class="sec"><td colspan="3">Rates (forward levers come from data: trailing 12 months of the loaded commission schedule, payouts ÷ base)</td></tr>
+    <tr><td>New business</td><td>${pct(comm.rates.nb)}</td><td>× planned new + reactivation ARR</td></tr>
+    <tr><td>Expansion</td><td>${pct(comm.rates.exp)}</td><td>× planned expansion ARR</td></tr>
+    <tr><td>Renewal</td><td>${pct(comm.rates.ren)}</td><td>× renewing ARR = beginning ARR × ${comm.renShare ? pct(comm.renShare.share) : '—'} (loaded renewal base ÷ beginning ARR${comm.renShare ? ', ' + comm.renShare.months.length + ' months' : ''})</td></tr>
+  </tbody></table>`;
+
+  const rfRows = [
+    { type: 'sec', label: 'Commissions earned (planned bookings × rate)' },
+    { label: 'New business', get: p => m[p].earned.nb, indent: true },
+    { label: 'Expansion', get: p => m[p].earned.exp, indent: true },
+    { label: 'Renewal', get: p => m[p].earned.ren, indent: true },
+    { label: 'Total earned', get: p => m[p].earnedTot, sub: true },
+    { type: 'sec', label: 'Cash payouts' },
+    { label: 'Commissions paid', get: p => m[p].paidTot, indent: true },
+    { label: 'Payroll tax on commissions', get: p => m[p].tax, indent: true },
+    { label: 'Total payouts (cash)', get: p => m[p].payouts, sub: true },
+    { type: 'sec', label: 'Deferred commissions roll-forward' },
+    { label: 'Beginning balance', get: p => m[p].dcBeg, indent: true, bal: true },
+    { label: '+ Capitalized', get: p => m[p].capitalized, indent: true },
+    { label: '− Amortization of Dec close balance (loaded cohorts)', get: p => -m[p].amortOpen, indent: true },
+    { label: `− Amortization of ${BUDGET_YEAR} cohorts`, get: p => -m[p].amortPlan, indent: true },
+    { label: 'Ending balance', get: p => m[p].dcEnd, sub: true, bal: true },
+    { label: 'Current portion (next 12 months of amortization)', get: p => m[p].dcCurrent, indent: true, bal: true },
+    { label: 'Noncurrent portion', get: p => m[p].dcNoncurrent, indent: true, bal: true },
+    { type: 'sec', label: 'P&L expense' },
+    { label: 'Amortization', get: p => m[p].amort, indent: true },
+    { label: 'New & expansion expensed', get: p => m[p].expensedNewExp, indent: true },
+    { label: 'Renewal commissions expensed', get: p => m[p].expRen, indent: true },
+    { label: 'Payroll tax expensed', get: p => m[p].taxExpensed, indent: true },
+    { label: 'Total commission expense', get: p => m[p].expense, sub: true },
+    { type: 'sec', label: 'Accrued commissions (earned, not yet paid)' },
+    { label: 'Ending balance', get: p => m[p].accruedEnd, indent: true, bal: true },
+  ];
+  html += `<table class="bud-tbl"><thead><tr><th></th>${BUD_P.map(p => `<th>${p}</th>`).join('')}<th>FY</th><th></th></tr></thead><tbody>`;
+  for (const r of rfRows) {
+    if (r.type === 'sec') { html += `<tr class="sec"><td colspan="${colSpan}">${r.label}</td></tr>`; continue; }
+    const cls = [r.indent ? 'is-indent' : '', r.sub ? 'is-sub' : ''].filter(Boolean).join(' ');
+    html += `<tr${cls ? ` class="${cls}"` : ''}><td>${r.label}</td>`;
+    for (const p of BUD_P) html += `<td class="bud-c">${fmtM(r.get(p))}</td>`;
+    const fyVal = r.bal ? (r.label === 'Beginning balance' ? r.get(BUD_P[0]) : r.get(BUD_P[11])) : BUD_P.reduce((s, p) => s + r.get(p), 0);
+    html += `<td class="fy-c">${fmtM(fyVal)}</td><td></td></tr>`;
+  }
+  html += '</tbody></table>';
+
+  const oteFy = (() => {
+    const hc = computeHcPlan();
+    const attain = plAttainFactor();
+    return BUD_P.reduce((s, p) => s + (hc[p].ending.sales || 0) * ((STATE.nbOteVarAnnual || 0) / 12) * attain
+      + (hc[p].ending.cs || 0) * ((STATE.csOteVarAnnual || 0) / 12) * attain, 0);
+  })();
+  html += `<div class="ctx-banner">Reconciliation to variable OTE: heads × OTE × attainment ${fmtM(oteFy)} vs commissions earned on planned bookings ${fmtM(fy('earnedTot'))} (difference ${fmtM(fy('earnedTot') - oteFy)}). The OTE lever sets loaded payroll on ${originTag('Headcount', 'hc', { hcFocus: 'total', title: 'Open Headcount' })}; the P&amp;L and cash use bookings × rate.</div>`;
+
+  html += `<table class="bud-tbl" style="max-width:980px"><tbody><tr class="sec"><td colspan="3">Checks</td></tr>`;
+  for (const c of checks) {
+    const mark = c.ok ? '<span style="color:var(--teal)">✓ pass</span>' : c.review ? '<span style="color:var(--amber)">review</span>' : '<span style="color:var(--amber)">⚠ fail</span>';
+    html += `<tr><td>${c.label}</td><td>${mark}</td><td>${c.detail || ''}</td></tr>`;
   }
   html += '</tbody></table>';
   return html;
@@ -10456,6 +10873,7 @@ function buildBudgetTableRows(vid, orgId) {
       depreciation_and_amortization: c.da, stock_based_compensation: c.sbc,
       change_in_accounts_receivable: c.chg_ar, change_in_deferred_revenue: c.chg_dr,
       change_in_accounts_payable: c.chg_ap, change_in_prepaids: c.chg_prepaids,
+      change_in_deferred_commissions: c.chg_dc, change_in_accrued_commissions: c.chg_accrued_comm,
       net_cash_from_operating_activities: c.cfo, capital_expenditures: c.capex,
       net_cash_from_investing_activities: c.cfi, net_cash_from_financing_activities: c.cff,
       net_change_in_cash: c.net_change, ending_cash: c.ending_cash,
@@ -10466,8 +10884,12 @@ function buildBudgetTableRows(vid, orgId) {
     return {
       budget_version_id: vid, organization_id: org, version: 'Budget', period: p, as_of_period: asOf,
       cash: b.cash, accounts_receivable: b.ar, prepaid_expenses: b.prepaids,
-      accounts_payable: b.ap, deferred_revenue: b.deferred_rev, equity: b.equity,
+      deferred_commissions_current: b.dc_current, deferred_commissions_noncurrent: b.dc_noncurrent,
+      ppe_net: b.ppe, other_assets: b.other_assets,
+      accounts_payable: b.ap, deferred_revenue: b.deferred_rev, accrued_commissions: b.accrued_comm,
+      debt: b.debt, other_liabilities: b.other_liabilities, equity: b.equity,
       total_assets: b.total_assets, total_liabilities: b.total_liabilities,
+      total_liabilities_and_equity: b.total_le, balance_check: b.balance_check,
     };
   });
   const bookings = BUD_P.map(p => {
@@ -10844,6 +11266,7 @@ async function init() {
   } else {
     setWarehouseStatus('Demo data (offline)', 'warn');
   }
+  await loadCommissionInputs();
 
   reseedPlanFromHistory('init-after-hydrate');
   seedHcDefaults();
