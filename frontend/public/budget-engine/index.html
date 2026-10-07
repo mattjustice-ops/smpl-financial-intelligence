@@ -586,7 +586,7 @@ const BUDGET_METRIC_DEFS = [
     description: 'Invoiced subscription amounts in the period. Not the same as ARR or recognized revenue.',
     formula: 'Recurring (BOP ARR ÷ 12)\n+ NB monthly × (1 − annual%) ÷ 12\n+ NB annual × annual%',
     formula_id: 'saas_billings',
-    notes: 'Annual % defaults from Dec deferred depth; override on ARR sidebar.' },
+    notes: 'Annual % is 0 unless set on the ARR sidebar; the Dec deferred balance carries the loaded billing mix.' },
   { id: 'deferred_rev', domain: 'Revenue bridge', label: 'Deferred revenue (ending)', source_type: 'COMPUTED', tab: 'arr', scrollTo: 'rev-bridge',
     description: 'Unearned subscription balance. Opens at Dec\'26 close; rolls with ARR and annual NB unearned.',
     formula: 'End DR = Beg DR × (EOP ARR / prior EOP ARR)\n+ (NB annual billings × 11/12)',
@@ -602,8 +602,8 @@ const BUDGET_METRIC_DEFS = [
     notes: 'Feeds Income Statement Subscription Revenue. Do not use Ending ARR ÷ 12 as revenue.' },
   { id: 'annual_bill_pct', domain: 'Revenue bridge', label: 'NB annual billing %', source_type: 'ASSUMPTION', tab: 'arr', scrollTo: 'rev-bridge',
     description: 'Share of new ARR billed annually in advance (remainder monthly).',
-    formula: 'If unset: calibrate from Dec DR months of run-rate\n0.16 mo ≈ 0% annual · 6 mo ≈ 100% annual',
-    formula_id: 'annual_bill_pct_calibrate' },
+    formula: 'If unset: 0% (Dec deferred opens from the loaded balance sheet and rolls with ARR)',
+    formula_id: 'annual_bill_pct' },
 
   // GTM
   { id: 'mqls_required', domain: 'GTM', label: 'MQLs required', source_type: 'COMPUTED', tab: 'gtm',
@@ -1166,7 +1166,6 @@ const STATE = {
   /** Cash flow / BS planning ratios (Board-style indirect method). */
   sbcPctRev: 1.0,
   arPctRev: 12,
-  drMonthsRev: 0.16,
   apPctOpex: 13,
   prepaidMonthlyDelta: -15000,
   capexPctRev: 2.0,
@@ -1314,9 +1313,6 @@ function loadBudgetState() {
       STATE._assureScenarioSuite = null;
       STATE._assureScenarioNarrative = null;
       STATE._paCaseSel = null;
-    }
-    if (STATE.drMonthsRev != null && STATE.drMonthsRev >= 2) {
-      STATE.drMonthsRev = STATE_DEFAULTS.drMonthsRev;
     }
     if (STATE.apPctOpex != null && Math.abs(STATE.apPctOpex - 18) < 0.05) {
       STATE.apPctOpex = STATE_DEFAULTS.apPctOpex;
@@ -3279,17 +3275,16 @@ function computeDeptPl() {
  * SaaS revenue bridge: ARR → Billings → Δ Deferred → Subscription revenue.
  * Identity: Sub revenue = Beg DR + Billings − End DR (ARR ≠ revenue).
  */
-function planAnnualBillPct(open) {
+function planAnnualBillPct() {
   if (STATE.annualBillPct != null && !isNaN(STATE.annualBillPct)) return STATE.annualBillPct;
-  const mo = open && open._decDrMonths != null ? open._decDrMonths : 0.16;
-  // Dec deferred months of run-rate: ~0.16 ≈ monthly book; ~6 ≈ annual-in-advance
-  return Math.max(0, Math.min(100, ((mo - 0.16) / (6 - 0.16)) * 100));
+  // Unset = 0: the Dec close deferred balance already carries the book's billing mix and rolls with ARR.
+  return 0;
 }
 
 function computeRevenueBridge() {
   const arr = computeBudgetArr();
   const open = bsBopLock();
-  const annualPct = planAnnualBillPct(open) / 100;
+  const annualPct = planAnnualBillPct() / 100;
   let deferred = open.deferred_rev;
   let prevEopArr = BOP_LOCK; // Dec'26 ending ARR
   const out = {};
@@ -3528,19 +3523,8 @@ function bsBopLock() {
 
 /**
  * WC policy ratios — must follow Dec close implied ratios.
- * Legacy levers (AR 12%, AP 13–18%, DR 0.16–6.5) are ignored when Dec book is elevated.
+ * Legacy levers (AR 12%, AP 13–18%) are ignored when Dec book is elevated.
  */
-function planDrMonths(open) {
-  const decRatio = open && open._decDrMonths > 0 ? open._decDrMonths : 0.16;
-  const lever = STATE.drMonthsRev;
-  if (lever == null) return decRatio;
-  // Legacy annual-billing (6+) or thin H2 default (≤0.25) while Dec differs → follow Dec
-  if (lever >= 2 && Math.abs(lever - decRatio) > 0.5) return decRatio;
-  if (decRatio > 0.5 && lever < 1) return decRatio;
-  if (lever > 0) return lever;
-  return decRatio;
-}
-
 function planArPct(open) {
   const dec = open && open._decArPct > 0 ? open._decArPct : 12;
   const lever = STATE.arPctRev;
@@ -3753,7 +3737,7 @@ function renderSidebar() {
   if (curTab === 'arr') {
     const bridge = computeRevenueBridge();
     const open = bsBopLock();
-    const annualPct = planAnnualBillPct(open);
+    const annualPct = planAnnualBillPct();
     const fyBill = BUD_P.reduce((s, p) => s + bridge[p].billings, 0);
     const fySub = BUD_P.reduce((s, p) => s + bridge[p].sub, 0);
     const decTarget = BOP_LOCK * (1 + STATE.yoyEndingArrGrowthPct / 100);
@@ -3769,7 +3753,7 @@ function renderSidebar() {
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">NB annual billing %</span><span class="lever-val" id="v-annual">${annualPct.toFixed(0)}%</span></div>
         <input type="range" min="0" max="100" step="5" value="${annualPct}" oninput="setAnnualBillPct(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${STATE.annualBillPct == null ? 'Auto from Dec DR depth · ' : ''}rest of NB bills monthly</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${STATE.annualBillPct == null ? 'Not set: the Dec deferred balance carries the billing mix · ' : ''}rest of NB bills monthly</div>
       </div>
       <div class="panel-lbl">FY rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
@@ -3825,14 +3809,10 @@ function renderSidebar() {
     const fyCfo = BUD_P.reduce((s, p) => s + cfs[p].cfo, 0);
     const endCash = cfs[BUD_P[11]].ending_cash;
     const endEq = bs[BUD_P[11]].equity;
-    const drMo = planDrMonths(open);
     const arPct = planArPct(open);
     const apPct = planApPct(open);
     const jan = cfs[BUD_P[0]];
     // Keep STATE in sync when migrating off legacy levers
-    if (STATE.drMonthsRev != null && STATE.drMonthsRev >= 2 && drMo < 1) {
-      STATE.drMonthsRev = Math.round(drMo * 100) / 100;
-    }
     if (STATE.apPctOpex != null && Math.abs(STATE.apPctOpex - 18) < 0.05 && Math.abs(apPct - 18) > 2) {
       STATE.apPctOpex = Math.round(apPct * 10) / 10;
     }
@@ -3848,9 +3828,8 @@ function renderSidebar() {
         <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.ar)} · rolls with revenue (no % relevel)</div>
       </div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">Deferred (months of rev)</span><span class="lever-val" id="v-dr">${drMo.toFixed(2)}</span></div>
-        <input type="range" min="0.05" max="2" step="0.01" value="${Math.min(2, drMo)}" oninput="setDrMonths(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.deferred_rev)} · ${open._decDrMonths != null ? open._decDrMonths.toFixed(2) + ' mo' : 'not loaded'}</div>
+        <div class="lever-row"><span class="lever-lbl">Deferred (months of rev)</span><span class="lever-val">${open._decDrMonths != null ? open._decDrMonths.toFixed(2) : 'not loaded'}</span></div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">Dec BOP ${fmtM(open.deferred_rev)} from the loaded balance sheet · rolls with ARR in the revenue bridge (ARR tab)</div>
       </div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">AP % of OpEx</span><span class="lever-val" id="v-ap">${apPct.toFixed(0)}%</span></div>
@@ -4304,12 +4283,6 @@ window.setArPct = function(v) {
   if (el) el.textContent = v.toFixed(0) + '%';
   refresh();
 };
-window.setDrMonths = function(v) {
-  STATE.drMonthsRev = v;
-  const el = document.getElementById('v-dr');
-  if (el) el.textContent = v.toFixed(2);
-  refresh();
-};
 window.setApPct = function(v) {
   STATE.apPctOpex = v;
   const el = document.getElementById('v-ap');
@@ -4492,7 +4465,6 @@ window.footerReset = function() {
 window.resetWcDrivers = function() {
   STATE.sbcPctRev = STATE_DEFAULTS.sbcPctRev;
   STATE.arPctRev = STATE_DEFAULTS.arPctRev;
-  STATE.drMonthsRev = STATE_DEFAULTS.drMonthsRev;
   STATE.apPctOpex = STATE_DEFAULTS.apPctOpex;
   STATE.prepaidMonthlyDelta = STATE_DEFAULTS.prepaidMonthlyDelta;
   STATE.capexPctRev = STATE_DEFAULTS.capexPctRev;
@@ -4598,7 +4570,7 @@ function renderARR() {
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
   const fyBill = BUD_P.reduce((s, p) => s + bridge[p].billings, 0);
   const fySub = BUD_P.reduce((s, p) => s + bridge[p].sub, 0);
-  const annualPct = planAnnualBillPct(open);
+  const annualPct = planAnnualBillPct();
 
   let html = `
     <div class="slide-title">ARR · FY${BUDGET_YEAR} Plan</div>
@@ -4662,8 +4634,8 @@ function renderARR() {
   html += `<div id="rev-bridge" style="margin-top:22px"></div>`;
   html += `
     <div class="slide-title" style="font-size:18px;margin-top:8px">Revenue bridge · ARR ≠ subscription revenue</div>
-    <div class="slide-sub">Billings from the ARR book (monthly run-rate + annual NB upfront). Deferred rolls from Dec close with ARR, plus unearned annual NB. <strong>Subscription revenue = Beg DR + Billings − End DR</strong> → ${originTag('Income Statement', 'is', { title: 'Open Income Statement' })}.</div>
-    <div class="ctx-banner">FY billings ${fmtM(fyBill)} · FY subscription ${fmtM(fySub)} · Δ (billings − sub) ${fmtM(fyBill - fySub)} = FY Δ deferred. Annual NB billing ${annualPct.toFixed(0)}%${STATE.annualBillPct == null ? ' (from Dec DR depth)' : ''}.</div>`;
+    <div class="slide-sub">Billings from the ARR book (monthly run-rate, plus annual NB upfront if set). Deferred opens at the loaded Dec close${open._decDrMonths != null ? ` (${open._decDrMonths.toFixed(2)} months of revenue)` : ''} and rolls with ARR, plus unearned annual NB. <strong>Subscription revenue = Beg DR + Billings − End DR</strong> → ${originTag('Income Statement', 'is', { title: 'Open Income Statement' })}.</div>
+    <div class="ctx-banner${open.deferred_rev == null ? ' warn' : ''}">${open.deferred_rev == null ? `<strong>Dec ${BUDGET_YEAR - 1} deferred revenue not loaded</strong> — the bridge has no opening balance. ` : ''}FY billings ${fmtM(fyBill)} · FY subscription ${fmtM(fySub)} · Δ (billings − sub) ${fmtM(fyBill - fySub)} = FY Δ deferred. Annual NB billing ${annualPct.toFixed(0)}%${STATE.annualBillPct == null ? ' (not set)' : ''}.</div>`;
 
   const bridgeRows = [
     { type: 'sec', label: 'From ARR book' },
