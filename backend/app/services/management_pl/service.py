@@ -249,9 +249,6 @@ def _merge_gl_preferred(
     is_maps: dict[str, dict[str, Decimal]],
     gl_maps: dict[str, dict[str, Decimal]],
     periods: tuple[str, ...],
-    *,
-    workforce_mode: bool = False,
-    open_periods: set[str] | None = None,
 ) -> dict[str, dict[str, Decimal]]:
     """Start from Income Statement; fill missing GL-only detail without overriding IS SoT."""
     merged: dict[str, dict[str, Decimal]] = {p: dict(is_maps.get(p, {})) for p in periods}
@@ -264,7 +261,6 @@ def _merge_gl_preferred(
                 _ensure_derived_metrics(row)
             continue
         row = merged.setdefault(period, {})
-        skip_opex = workforce_mode and open_periods is not None and period in open_periods
         # Fill keys the IS warehouse does not carry; never clobber IS SoT rollups.
         for key, gl_v in gl_row.items():
             if key in _IS_SOT_KEYS:
@@ -272,18 +268,6 @@ def _merge_gl_preferred(
             if gl_v != 0 and not row.get(key):
                 row[key] = gl_v
         _apply_income_statement_sot(row, is_maps.get(period, {}))
-        if skip_opex:
-            # Workforce overlay owns open-period OpEx; keep IS revenue/COGS/GP.
-            rev = row.get("revenue", Decimal("0"))
-            cogs = row.get("cost_of_revenue", Decimal("0"))
-            row["gross_profit"] = rev - cogs
-            opex = (
-                row.get("sales_and_marketing", Decimal("0"))
-                + row.get("research_and_development", Decimal("0"))
-                + row.get("general_and_administrative", Decimal("0"))
-            )
-            row["total_opex"] = opex
-            row["ebitda"] = row["gross_profit"] - opex
     return merged
 
 
@@ -580,7 +564,6 @@ def _metric_slice(
     ctx: PeriodContext,
     account_group: str | None = None,
     account: str | None = None,
-    workforce_mode: bool = False,
 ) -> MetricSlice:
     def pull_is(src: dict[str, dict[str, Decimal]], periods: tuple[str, ...]) -> Decimal:
         if account or account_group:
@@ -636,8 +619,6 @@ def _build_section_children(
     gl_bud: dict[tuple[str, str, str, str], Decimal],
     ctx: PeriodContext,
     department_filter: str,
-    *,
-    workforce_mode: bool = False,
 ) -> list[PlLine]:
     discovered: dict[str, set[str]] = defaultdict(set)
     for (_p, sec, ag, ac) in gl_out:
@@ -724,7 +705,6 @@ def _build_section_children(
                     gl_out=gl_out,
                     gl_bud=gl_bud,
                     ctx=ctx,
-                    workforce_mode=workforce_mode,
                 ),
                 driver="income_statement",
             )
@@ -749,8 +729,6 @@ def _append_section(
     gl_bud: dict[tuple[str, str, str, str], Decimal],
     ctx: PeriodContext,
     department_filter: str,
-    *,
-    workforce_mode: bool = False,
 ) -> None:
     tmpl = next((t for t in MANAGEMENT_HIERARCHY if t.section_key == tmpl_key), None)
     if not tmpl or not _section_visible(tmpl.section_key, department_filter):
@@ -766,7 +744,6 @@ def _append_section(
         gl_bud,
         ctx,
         department_filter,
-        workforce_mode=workforce_mode,
     )
     metrics = _metric_slice(
         section=tmpl.section_key,
@@ -777,7 +754,6 @@ def _append_section(
         gl_out=gl_out,
         gl_bud=gl_bud,
         ctx=ctx,
-        workforce_mode=workforce_mode,
     )
     lines.append(
         PlLine(
@@ -828,18 +804,14 @@ def _build_pl_lines(
     gl_bud: dict[tuple[str, str, str, str], Decimal],
     ctx: PeriodContext,
     department_filter: str,
-    *,
-    workforce_mode: bool = False,
 ) -> list[PlLine]:
     lines: list[PlLine] = []
     for key in ("revenue", "cogs"):
-        _append_section(
-            lines, key, outlook, budget, actual, forecast, gl_out, gl_bud, ctx, department_filter, workforce_mode=workforce_mode
-        )
+        _append_section(lines, key, outlook, budget, actual, forecast, gl_out, gl_bud, ctx, department_filter)
     _sync_pl_section_fy(lines, "revenue", outlook, budget, ctx)
     _sync_pl_section_fy(lines, "cogs", outlook, budget, ctx)
 
-    rev = _metric_slice(section="revenue", outlook=outlook, budget=budget, actual=actual, forecast=forecast, gl_out=gl_out, gl_bud=gl_bud, ctx=ctx, workforce_mode=workforce_mode)
+    rev = _metric_slice(section="revenue", outlook=outlook, budget=budget, actual=actual, forecast=forecast, gl_out=gl_out, gl_bud=gl_bud, ctx=ctx)
     cogs = _metric_slice(
         section="cogs",
         outlook=outlook,
@@ -849,7 +821,6 @@ def _build_pl_lines(
         gl_out=gl_out,
         gl_bud=gl_bud,
         ctx=ctx,
-        workforce_mode=workforce_mode,
     )
     gp_val_o = _fy_outlook_from_map(outlook, ctx, "gross_profit") or (rev.outlook - cogs.outlook)
     gp_val_b = sum_metric(budget, ctx.fy_periods, "gross_profit") or (rev.budget - cogs.budget)
@@ -895,9 +866,7 @@ def _build_pl_lines(
         "general_and_administrative",
         "customer_success",
     ):
-        _append_section(
-            lines, key, outlook, budget, actual, forecast, gl_out, gl_bud, ctx, department_filter, workforce_mode=workforce_mode
-        )
+        _append_section(lines, key, outlook, budget, actual, forecast, gl_out, gl_bud, ctx, department_filter)
 
     opex_sections = [l for l in lines if l.section_key in DEPT_TO_SECTION.values()]
     opex_o = _fy_outlook_from_map(outlook, ctx, "total_opex") or sum((l.metrics.outlook for l in opex_sections), Decimal("0"))
@@ -1231,7 +1200,6 @@ def _validations(
     raw_gl_count: int = 0,
     gl_outlook_entry_count: int = 0,
     gl_outlook_maps: dict[str, dict[str, Decimal]] | None = None,
-    workforce_mode: bool = False,
     gl_primary: bool = False,
 ) -> list[ValidationWarning]:
     warnings: list[ValidationWarning] = []
@@ -1242,16 +1210,6 @@ def _validations(
                 message=(
                     "P&L is built from GL detail (gl_actuals: Actual, Budget, Forecast), the same source as the "
                     "income statement. Months without GL rows stay empty."
-                ),
-                severity="warning",
-            )
-        )
-    if workforce_mode:
-        warnings.append(
-            ValidationWarning(
-                code="workforce_pnl_overlay",
-                message=(
-                    "Open-month people costs use workforce pnl_people_cost_lines; GL payroll rows excluded to prevent double-count."
                 ),
                 severity="warning",
             )
@@ -1395,26 +1353,12 @@ def build_management_pl_dashboard(
     fiscal_year = as_of.year
     ctx = build_period_context(fiscal_year=fiscal_year, as_of_period=_period_str(as_of), period_mode=period_mode)
 
-    from app.services.workforce import integration as wf_integration
-
     actual_is = _load_income_maps(session, organization_id, "Actual", start, end)
     forecast_is = _load_income_maps(session, organization_id, "Forecast", start, end)
     budget_is = _load_income_maps(session, organization_id, "Budget", start, end)
 
-    wf_active = wf_integration.workforce_source_present(session, organization_id, scenario="Forecast")
-    open_periods: set[str] = set()
     raw_gl = _load_gl_raw(session, organization_id)
     gl_out_entries = _gl_entries_for_outlook(raw_gl, ctx, view_mode)
-
-    overlay: dict[str, dict[str, Decimal]] = {}
-    non_payroll: dict[str, dict[str, Decimal]] | None = None
-    if wf_active:
-        open_periods = {p for p in ctx.fy_periods if p not in ctx.closed_periods}
-        overlay = wf_integration.pnl_overlay_by_period(
-            session, organization_id, scenario="Forecast", start_period=start, end_period=end
-        )
-        non_payroll = wf_integration.non_payroll_gl_by_period_section(gl_out_entries, open_periods)
-        gl_out_entries = wf_integration.exclude_payroll_gl_entries(gl_out_entries, open_periods)
 
     gl_bud_entries = _gl_entries_budget(raw_gl, ctx, view_mode)
     gl_act_entries = _gl_entries_actual(raw_gl, ctx, view_mode)
@@ -1436,29 +1380,15 @@ def build_management_pl_dashboard(
         outlook = _merge_gl_primary(is_outlook, gl_outlook_maps, tuple(ctx.fy_periods))
         budget = _merge_gl_primary(budget_is, gl_budget_maps, tuple(ctx.fy_periods))
         actual = _merge_gl_primary(actual_is, gl_actual_maps, tuple(ctx.closed_periods))
-        if wf_active:
-            outlook = wf_integration.apply_workforce_pnl_to_income_map(
-                outlook, overlay, open_periods, non_payroll_gl=non_payroll
-            )
         forecast = forecast_is
     else:
-        if wf_active:
-            forecast_is = wf_integration.apply_workforce_pnl_to_income_map(
-                forecast_is, overlay, open_periods, non_payroll_gl=non_payroll
-            )
         outlook = _merge_outlook_maps(actual_is, forecast_is, ctx)
-        outlook = _merge_gl_preferred(
-            outlook,
-            gl_outlook_maps,
-            tuple(ctx.fy_periods),
-            workforce_mode=wf_active,
-            open_periods=open_periods,
-        )
+        outlook = _merge_gl_preferred(outlook, gl_outlook_maps, tuple(ctx.fy_periods))
         budget = _merge_gl_preferred(budget_is, gl_budget_maps, tuple(ctx.fy_periods))
         actual = _merge_gl_preferred(actual_is, gl_actual_maps, tuple(ctx.closed_periods))
         forecast = forecast_is
 
-    pl_lines = _build_pl_lines(outlook, budget, actual, forecast, gl_out, gl_bud, ctx, department, workforce_mode=wf_active)
+    pl_lines = _build_pl_lines(outlook, budget, actual, forecast, gl_out, gl_bud, ctx, department)
     gl_act_agg = _aggregate_gl_by_department(gl_act_entries)
     gl_bud_agg = _aggregate_gl_by_department(gl_bud_entries)
     gl_fcst_agg = _aggregate_gl_by_department(gl_fcst_entries)
@@ -1644,7 +1574,6 @@ def build_management_pl_dashboard(
             raw_gl_count=len(raw_gl),
             gl_outlook_entry_count=len(gl_out_entries),
             gl_outlook_maps=gl_outlook_maps,
-            workforce_mode=wf_active,
             gl_primary=gl_primary,
         ),
         metadata={
@@ -1657,7 +1586,6 @@ def build_management_pl_dashboard(
             "closed_through": ctx.as_of_period,
             "gl_actuals_row_count": len(raw_gl),
             "gl_outlook_entry_count": len(gl_out_entries),
-            "workforce_pnl_overlay": wf_active,
             "outlook_gl_periods": sum(1 for p in ctx.fy_periods if _gl_period_has_data(gl_outlook_maps.get(p, {}))),
             "budget_gl_periods": sum(1 for p in ctx.fy_periods if _gl_period_has_data(gl_budget_maps.get(p, {}))),
             "gl_revenue_periods": sum(
@@ -1673,7 +1601,6 @@ def build_management_pl_dashboard(
                     "mrr_waterfall",
                 ]
                 + (["income_statement_fallback"] if not gl_primary else [])
-                + (["workforce_pnl_people_cost_lines"] if wf_active else [])
             ),
         },
     )

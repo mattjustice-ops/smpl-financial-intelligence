@@ -18,8 +18,7 @@
     "shared/smpl-outlook.js",
     "shared/smpl-demo-seed.js",
     "shared/smpl-pipeline.js",
-    "shared/smpl-bootstrap-demo.js",
-    "shared/smpl-bootstrap-pipeline.js"
+    "shared/smpl-bootstrap-demo.js"
   ],
   "resetCommand": "npm run reset:platform",
   "snapshotCommand": "npm run snapshot:platform"

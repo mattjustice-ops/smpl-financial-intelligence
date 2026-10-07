@@ -1,11 +1,14 @@
 """
 Derive workforce period plans from HRIS-style source datasets.
 
-Payroll is computed as:
+Roster-priced people cost is computed as:
   (base + bonus) × productivity_ramp × (1 + benefits_load) + commission + equity_sbc
-per active FTE-month, summed by department.
+per active FTE-month, summed by department. ``service.build_workforce_plan`` replaces it
+with GL payroll; the roster cost is kept only for the roster vs GL check.
 
-Open requisitions contribute planned hire FTE with the same ramp logic from planned_start_date.
+With the loaded roster (``{version}_employees``), Planned rows are the planned hires and the
+``workforce_*`` requisition, band and ramp upload tables are not mixed in. With the upload
+roster, open requisitions contribute planned hire FTE from planned_start_date.
 """
 
 from __future__ import annotations
@@ -22,7 +25,6 @@ from sqlalchemy.orm import Session
 from app.models.workforce import (
     WorkforceCompensationBand,
     WorkforceDepartmentAllocationRule,
-    WorkforceEmployee,
     WorkforceHiringRampAssumption,
     WorkforceOpenRequisition,
     WorkforcePeriodSummary,
@@ -34,6 +36,7 @@ from app.services.workforce.constants import (
     GTM_DEPARTMENTS,
     WORKFORCE_DEPARTMENTS,
 )
+from app.services.workforce.roster import UPLOAD_ROSTER_TABLE, RosterEmployee, load_roster
 
 MONEY = Decimal("0.01")
 FTE = Decimal("0.0001")
@@ -161,21 +164,16 @@ class WorkforcePlanningEngine:
         self.session = session
         self.organization_id = organization_id
         self.version = version
-        self.employees = self._load_employees()
-        self.requisitions = self._load_requisitions()
-        self.ramps = self._load_ramps()
-        self.bands = self._load_bands()
+        self.employees, self.roster_source = load_roster(session, organization_id, version)
+        if self.roster_source == UPLOAD_ROSTER_TABLE:
+            self.requisitions = self._load_requisitions()
+            self.ramps = self._load_ramps()
+            self.bands = self._load_bands()
+        else:
+            self.requisitions = []
+            self.ramps = {}
+            self.bands = {}
         self.allocation_rules = self._load_allocation_rules()
-
-    def _load_employees(self) -> list[WorkforceEmployee]:
-        return list(
-            self.session.scalars(
-                select(WorkforceEmployee).where(
-                    WorkforceEmployee.organization_id == self.organization_id,
-                    WorkforceEmployee.version == self.version,
-                )
-            )
-        )
 
     def _load_requisitions(self) -> list[WorkforceOpenRequisition]:
         return list(
@@ -244,7 +242,7 @@ class WorkforcePlanningEngine:
         region: str | None,
         salary_override: Decimal | None = None,
         quota_override: Decimal | None = None,
-        employee: WorkforceEmployee | None = None,
+        employee: RosterEmployee | None = None,
     ) -> tuple[CompPackage, Decimal]:
         band = self.bands.get(self._band_key(department, role, level, region))
         salary = q_money(salary_override or (employee.salary_annual if employee else None) or (band.salary_annual if band else 0))
@@ -278,7 +276,7 @@ class WorkforcePlanningEngine:
         level: str | None,
         hire_or_start: date | None,
         period: date,
-        employee: WorkforceEmployee | None = None,
+        employee: RosterEmployee | None = None,
     ) -> Decimal:
         if employee and employee.productivity_ramp_pct is not None:
             return q_money(employee.productivity_ramp_pct)
@@ -301,9 +299,16 @@ class WorkforcePlanningEngine:
             return q_money(min(Decimal("1"), Decimal(offset + 1) / Decimal(months_full)))
         return Decimal("1")
 
-    def _employee_active(self, employee: WorkforceEmployee, period: date) -> bool:
+    def _employee_active(self, employee: RosterEmployee, period: date) -> bool:
         if not _status_active(employee.employment_status):
             return False
+        return self._employed_in(employee, period)
+
+    def _employee_planned_start(self, employee: RosterEmployee, period: date) -> bool:
+        return employee.planned and self._employed_in(employee, period)
+
+    @staticmethod
+    def _employed_in(employee: RosterEmployee, period: date) -> bool:
         if employee.hire_date and month_start(employee.hire_date) > period:
             return False
         if employee.termination_date and month_start(employee.termination_date) < period:
@@ -318,12 +323,16 @@ class WorkforcePlanningEngine:
         for employee in self.employees:
             departments.add(_norm(employee.department))
             for period in periods:
-                if not self._employee_active(employee, period):
+                active = self._employee_active(employee, period)
+                if not active and not self._employee_planned_start(employee, period):
                     continue
                 dept = _norm(employee.department)
                 key = (period, dept)
                 acc = accum.setdefault(key, PeriodDeptAccumulator())
-                acc.filled_headcount += Decimal("1")
+                if active:
+                    acc.filled_headcount += Decimal("1")
+                else:
+                    acc.planned_hire_headcount += Decimal("1")
                 comp, quota = self._resolve_comp(
                     department=dept,
                     role=employee.role,
@@ -423,18 +432,7 @@ class WorkforcePlanningEngine:
                     "period": start_period,
                     "validation_name": "workforce_source_data_missing",
                     "status": "warning",
-                    "message": "Upload workforce_employees and/or workforce_open_requisitions to derive payroll.",
-                }
-            )
-        legacy_manual = self._legacy_manual_payroll_flag()
-        if legacy_manual:
-            validations.append(
-                {
-                    "scenario": self.version,
-                    "period": start_period,
-                    "validation_name": "legacy_manual_payroll_detected",
-                    "status": "warning",
-                    "message": "forecast_headcount_plan still has manual monthly_payroll_cost; derived payroll should be authoritative.",
+                    "message": "No employee roster for this version; load the Employees file to count heads.",
                 }
             )
 
@@ -444,22 +442,6 @@ class WorkforcePlanningEngine:
             gtm_capacity=gtm_rows,
             validations=validations,
         )
-
-    def _legacy_manual_payroll_flag(self) -> bool:
-        if self.version != "Forecast":
-            return False
-        from app.models.demo_finance import ForecastHeadcountPlan
-
-        row = self.session.scalar(
-            select(ForecastHeadcountPlan.monthly_payroll_cost)
-            .where(
-                ForecastHeadcountPlan.organization_id == self.organization_id,
-                ForecastHeadcountPlan.monthly_payroll_cost.isnot(None),
-                ForecastHeadcountPlan.monthly_payroll_cost != 0,
-            )
-            .limit(1)
-        )
-        return row is not None
 
     def persist_summary(self, result: WorkforceEngineResult) -> int:
         self.session.execute(

@@ -177,11 +177,9 @@ Declaration order is critical: `MO` → `MO12` → `ALL12` → `CLOSE_MONTH` →
 3. Add to `SD.monthly` (sales quota attainment)
 4. Add to `SD.pipeline` (pipeline by month)
 5. Add to `TS_DATA.Actual` — `.is`, `.cfs`, `.bs` for the new period
-6. Update `WF_HC_ALL` with actual HC counts
-7. Remove filled `WF_REQS` entries (start month ≤ `CLOSE_MONTH`)
-8. Shift `WF_SC_PAY` / `WF_SC_HC` scenario arrays (drop first element, add Dec value)
-9. Update `AI_CTX` and commentary-text divs with new actuals
-10. Update `CP_DATA` in the Copilot tab
+6. Workforce needs no edits: it reads the `WORKFORCE` payload when signed in, and `WF_DEMO` (rebuilt by `backend/scripts/demo_data/build_demo_workforce_from_files.py`) when signed out
+7. Update `AI_CTX` and commentary-text divs with new actuals
+8. Update `CP_DATA` in the Copilot tab
 
 ### TS_DATA structure
 

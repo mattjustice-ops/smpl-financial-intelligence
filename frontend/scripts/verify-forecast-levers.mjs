@@ -105,6 +105,9 @@ const sandbox = {
   reqActive: {},
   requestAnimationFrame: (fn) => (typeof fn === "function" ? fn() : 0),
   refresh: () => {},
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  location: { origin: "http://localhost", pathname: "/forecast-engine/", search: "" },
 };
 
 sandbox.window = sandbox;
@@ -118,13 +121,17 @@ try {
 } catch {
   vm.createContext(sandbox);
 }
+// Loaded statements come through SMPLOutlook (demo seed when signed out), as on the page.
+vm.runInContext(readFileSync(path.join(publicDir, "shared/smpl-outlook.js"), "utf8"), sandbox);
+vm.runInContext(readFileSync(path.join(publicDir, "shared/smpl-demo-seed.js"), "utf8"), sandbox);
 
 vm.runInContext(
   engineCode +
     `\n;Object.assign(this, {
   compute, getLevers, getResults, getDisplayCFS, invalidateCfsChain, markScenarioDirty, buildCFSChain,
   HORIZON, FC_P, ALL_P, SRC, hz, reqActive, getEl,
-  fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromOpenReqs
+  fcArrState, fcCostState, fcWcState, fcHcState, ensureFcHcState, seedFcHcFromData, computeFcHcPlan, fcPlHcDelta, fcHcReqPlanGaps,
+  fcSeedLevers, getOutlookCFS
 });\n`,
   sandbox,
 );
@@ -136,12 +143,16 @@ const {
   markScenarioDirty,
   FC_P,
   ALL_P,
-  SRC,
   fcArrState,
   fcCostState,
   fcHcState,
   ensureFcHcState,
-  seedFcHcFromOpenReqs,
+  seedFcHcFromData,
+  computeFcHcPlan,
+  fcPlHcDelta,
+  fcHcReqPlanGaps,
+  fcSeedLevers,
+  getOutlookCFS,
 } = sandbox;
 
 if (typeof compute !== "function" || typeof getResults !== "function" || !ALL_P) {
@@ -152,15 +163,9 @@ if (!fcArrState || !fcCostState || typeof markScenarioDirty !== "function") {
   console.error("FAIL: forecast lever state / markScenarioDirty not available after extract");
   process.exit(1);
 }
-if (!fcHcState || typeof ensureFcHcState !== "function" || typeof seedFcHcFromOpenReqs !== "function") {
+if (!fcHcState || typeof ensureFcHcState !== "function" || typeof seedFcHcFromData !== "function") {
   console.error("FAIL: forecast HC state helpers not available after extract");
   process.exit(1);
-}
-
-if (SRC && SRC.open_reqs) {
-  SRC.open_reqs.forEach((r) => {
-    sandbox.reqActive[r.id] = true;
-  });
 }
 
 /** Levers live in fcArr/fcCost/fcHc state (sidebar DOM may be unmounted); bust results cache. */
@@ -174,18 +179,10 @@ function resetLeversAndHires() {
   fcArrState.exp = 100;
   fcArrState.churn = 100;
   fcArrState.ren = 0;
-  fcCostState.cogs = 29;
-  fcCostState.sm = 34;
-  fcCostState.rd = 16;
-  fcCostState.ga = 11;
-  if (SRC && SRC.open_reqs) {
-    SRC.open_reqs.forEach((r) => {
-      sandbox.reqActive[r.id] = true;
-    });
-  }
-  // Force open-req → HC reseed so prior hire edits / req toggles do not leak.
+  fcSeedLevers();
+  // Reseed hires from the loaded data (reqs) so prior hire edits do not leak.
   fcHcState.hires = null;
-  seedFcHcFromOpenReqs(true);
+  seedFcHcFromData(true);
 }
 
 function decCash() {
@@ -227,32 +224,45 @@ applyScenario(() => {
 });
 const rd = { cash: decCash(), arr: decArr(), rd: julRd() };
 
-// FREQ-001 starts in close month (skipped by HC seed); use Jul R&D open req instead.
 applyScenario(() => {
   resetLeversAndHires();
-  sandbox.reqActive["FREQ-007"] = false;
-  fcHcState.hires = null;
-  seedFcHcFromOpenReqs(true);
 });
-const hc = { cash: decCash(), arr: decArr(), rd: julRd() };
+const loadedHeads = (sandbox.SMPL_DEMO_WORKFORCE || {}).heads_total || [];
+const loadedMonths = (sandbox.SMPL_DEMO_WORKFORCE || {}).months || [];
+const plan = computeFcHcPlan();
+const headsMatch =
+  loadedHeads.length > 0 &&
+  ALL_P.every((p) => {
+    const i = loadedMonths.indexOf(p);
+    return i >= 0 && plan[p] && plan[p].headsTotal === loadedHeads[i];
+  });
+const defaultAdj = FC_P.reduce(
+  (s, p) => s + Object.values(fcPlHcDelta(p)).reduce((a, v) => a + Math.abs(Number(v) || 0), 0),
+  0,
+);
 
 function fmt(n) {
   if (n == null) return "null";
   return "$" + (n / 1e6).toFixed(3) + "M";
 }
 
+const loadedDecCash = getOutlookCFS(ALL_P[11])?.end_cash ?? null;
+
 const checks = [
+  ["Default levers show the loaded Dec cash", base.cash != null && base.cash === loadedDecCash],
   ["NB 150% changes Dec ARR", nb.arr !== base.arr],
   ["NB 150% changes Dec cash", nb.cash !== base.cash],
   ["HC +8 Jul R&D hires changes Jul R&D line", rd.rd !== base.rd],
   ["HC +8 Jul R&D hires changes Dec cash", rd.cash !== base.cash],
-  ["FREQ-007 off changes Dec cash", hc.cash !== base.cash],
+  ["Headcount plan at defaults equals loaded heads every month", headsMatch],
+  ["Headcount plan at defaults adds no payroll adjustment", defaultAdj === 0],
+  ["Open reqs tie to the loaded headcount plan", fcHcReqPlanGaps().length === 0],
 ];
 
 console.log("Baseline Dec cash:", fmt(base.cash), "Dec ARR:", fmt(base.arr), "Jul R&D:", fmt(base.rd));
 console.log("NB 150%     Dec cash:", fmt(nb.cash), "Dec ARR:", fmt(nb.arr));
 console.log("HC R&D+8    Dec cash:", fmt(rd.cash), "Jul R&D:", fmt(rd.rd));
-console.log("FREQ-007 off Dec cash:", fmt(hc.cash));
+console.log("Plan heads by month:", ALL_P.map((p) => plan[p] && plan[p].headsTotal).join(","));
 
 let failed = 0;
 for (const [label, ok] of checks) {

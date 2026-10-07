@@ -94,6 +94,14 @@ def decimal_value(row: dict[str, Any], key: str) -> Decimal:
     return _to_decimal(row.get(key))
 
 
+def loaded_value(row: dict[str, Any] | None, *keys: str) -> Decimal | None:
+    """First loaded value among ``keys``; ``None`` when none is loaded."""
+    for key in keys:
+        if row and row.get(key) not in (None, ""):
+            return _to_decimal(row.get(key))
+    return None
+
+
 def latest_period_value(rows: list[dict[str, Any]], key: str, period_key: str = "period") -> Decimal:
     if not rows:
         return Decimal("0")

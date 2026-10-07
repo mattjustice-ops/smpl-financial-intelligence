@@ -14,6 +14,8 @@ from app.models.demo_finance import ForecastIncomeStatement
 from app.models.workforce import WorkforceOpenRequisition, WorkforcePeriodSummary
 from app.services.workforce.constants import APPROVED_REQ_STATUSES, WORKFORCE_DEPARTMENTS
 from app.services.workforce.engine import WorkforcePlanningEngine, month_start, period_range, q_fte, q_money
+from app.services.workforce.gl_payroll import GL_PAYROLL_SOURCE, apply_gl_payroll, gl_payroll, payroll_checks
+from app.services.workforce.roster import UPLOAD_ROSTER_TABLE, roster_cost_by_department
 from app.services.workforce.legacy_headcount import (
     legacy_headcount_present,
     load_legacy_headcount_rows,
@@ -73,7 +75,14 @@ def build_workforce_plan(
         legacy_rows = []
         using_legacy_headcount = False
 
-    merged_period_rows = merge_legacy_headcount(result.period_rows, legacy_rows)
+    periods = period_range(start_period, end_period)
+    payroll = gl_payroll(session, organization_id, version)
+    merged_period_rows = apply_gl_payroll(merge_legacy_headcount(result.period_rows, legacy_rows), payroll, periods)
+    gl_pnl_allocations = [
+        {"period": period, "pnl_line": line, "amount": q_money(amount)}
+        for (period, line), amount in sorted(payroll.by_pnl_line.items())
+        if period in periods
+    ]
 
     if persist:
         from app.services.workforce.engine import WorkforceEngineResult
@@ -81,7 +90,7 @@ def build_workforce_plan(
         engine.persist_summary(
             WorkforceEngineResult(
                 period_rows=merged_period_rows,
-                pnl_allocations=result.pnl_allocations,
+                pnl_allocations=gl_pnl_allocations,
                 gtm_capacity=result.gtm_capacity,
                 validations=result.validations,
             )
@@ -96,7 +105,7 @@ def build_workforce_plan(
             period_summary.append(WorkforcePeriodDepartmentRow(**row))
         except Exception as exc:
             raise ValueError(f"Invalid workforce period row for {row.get('department')} @ {row.get('period')}: {exc}") from exc
-    pnl_allocations = [WorkforcePnlAllocationRow(**row, departments=[]) for row in result.pnl_allocations]
+    pnl_allocations = [WorkforcePnlAllocationRow(**row, departments=[]) for row in gl_pnl_allocations]
     gtm_capacity = [WorkforceCapacityRow(**row) for row in result.gtm_capacity]
 
     operating_metrics: list[WorkforceOperatingMetrics] = []
@@ -115,6 +124,11 @@ def build_workforce_plan(
     planned_starts: dict[date, Decimal] = {}
     if using_legacy_headcount and new_hires_by_period:
         planned_starts = new_hires_by_period
+    elif engine.roster_source != UPLOAD_ROSTER_TABLE:
+        for employee in engine.employees:
+            if employee.planned and employee.hire_date and month_start(employee.hire_date) in periods:
+                start = month_start(employee.hire_date)
+                planned_starts[start] = planned_starts.get(start, Decimal("0")) + Decimal("1")
     else:
         try:
             planned_starts = _planned_starts_by_period(
@@ -123,7 +137,7 @@ def build_workforce_plan(
         except Exception:
             planned_starts = {}
 
-    for period in period_range(start_period, end_period):
+    for period in periods:
         filled = filled_by_period.get(period, Decimal("0"))
         planned = planned_by_period.get(period, Decimal("0"))
         hc = hc_by_period.get(period, Decimal("0"))
@@ -163,6 +177,10 @@ def build_workforce_plan(
                 message="Filled FTE sourced from headcount plan (beginning + hires − attrition = ending).",
             )
         )
+    validations.extend(
+        WorkforceValidationRow(scenario=version, **row)
+        for row in payroll_checks(merged_period_rows, roster_cost_by_department(engine.employees, periods), payroll, periods)
+    )
 
     departments = sorted({d for d in WORKFORCE_DEPARTMENTS} | {r.department for r in period_summary})
 
@@ -178,12 +196,18 @@ def build_workforce_plan(
         operating_metrics=operating_metrics,
         validations=validations,
         data_sources=[
-            "workforce_employees",
-            "workforce_open_requisitions",
-            "workforce_hiring_ramp_assumptions",
-            "workforce_compensation_bands",
-            "workforce_department_allocation_rules",
+            engine.roster_source,
+            *(
+                [
+                    "workforce_open_requisitions",
+                    "workforce_hiring_ramp_assumptions",
+                    "workforce_compensation_bands",
+                ]
+                if engine.roster_source == UPLOAD_ROSTER_TABLE
+                else []
+            ),
             *(["headcount_plan", "forecast_headcount_plan"] if using_legacy_headcount else []),
+            GL_PAYROLL_SOURCE,
         ],
     )
     try:

@@ -1,4 +1,4 @@
-"""Cash waterfall GL / workforce drilldown (click a bridge cell to see composition)."""
+"""Cash waterfall GL drilldown (click a bridge cell to see composition)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from app.services.management_pl.gl_hierarchy import GlEntry, classify_raw_gl_row
 from app.services.management_pl.service import _gl_version_label, _load_gl_raw
 from app.services.reporting.period_utils import combined_scenario_for_period, to_period
 from app.services.reporting.validation_service import ValidationCheck, compare_values
-from app.services.workforce import feeds, integration
+from app.services.workforce import integration
 from app.services.driver_forecast.common import month_range
 
 CASH_DRILLDOWN_TYPES = frozenset(
@@ -143,43 +143,6 @@ def _load_gl_entries_for_cell(
     return matched
 
 
-def _workforce_payroll_lines(
-    session: Session,
-    organization_id: uuid.UUID,
-    *,
-    period: str,
-    source_scenario: str,
-) -> list[CashFlowDrilldownLine]:
-    if not integration.workforce_source_present(session, organization_id, scenario=source_scenario):
-        return []
-    year, month = int(period[:4]), int(period[5:7])
-    period_date = date(year, month, 1)
-    rows = feeds.payroll_by_department(
-        session,
-        organization_id,
-        scenario=source_scenario,
-        start_period=period_date,
-        end_period=period_date,
-    )
-    lines: list[CashFlowDrilldownLine] = []
-    for row in rows:
-        amount = value_any(row, "monthly_payroll_cost", "total_people_cost")
-        if amount == 0:
-            continue
-        lines.append(
-            CashFlowDrilldownLine(
-                department=str(row.get("department") or ""),
-                account_name="Workforce payroll",
-                account_group="Payroll",
-                amount=-abs(amount),
-                source_table="workforce_derived",
-                detail_type="workforce",
-                notes=f"{row.get('headcount_fte', '')} FTE",
-            )
-        )
-    return lines
-
-
 def _invoice_collection_lines(
     session: Session,
     organization_id: uuid.UUID,
@@ -249,12 +212,6 @@ def cash_flow_drilldown_lines(
     source_scenario: str,
     waterfall_type: str,
 ) -> list[CashFlowDrilldownLine]:
-    if waterfall_type == "payroll_cash_out":
-        workforce = _workforce_payroll_lines(
-            session, organization_id, period=period, source_scenario=source_scenario
-        )
-        if workforce:
-            return workforce
     if waterfall_type == "cash_collections":
         invoices = _invoice_collection_lines(session, organization_id, period=period)
         if invoices:
@@ -366,7 +323,7 @@ def cash_flow_drilldown(
     if not lines:
         message = (
             "No GL detail rows matched this cell. Upload Actual_gl_detail.csv / Forecast_gl_detail.csv "
-            "(or workforce headcount for payroll cash out, paid invoices for collections)."
+            "(or paid invoices for collections)."
         )
 
     return CashFlowDrilldownResponse(

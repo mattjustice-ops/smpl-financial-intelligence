@@ -27,6 +27,7 @@ from app.services.reporting.export.service import (
     collect_bundle,
     run_export_validation,
 )
+from app.services.reporting.as_of_period import infer_as_of_period
 from app.services.reporting.period_utils import to_period
 
 export_router = APIRouter(prefix="/export", tags=["export"])
@@ -1279,7 +1280,7 @@ def _board_pptx_response(
 @export_router.get("/mda-deck-smoke")
 def export_mda_deck_smoke(
     organization_id: uuid.UUID = Query(...),
-    as_of_period: str = Query("2026-06"),
+    as_of_period: str | None = Query(None),
     level: str = Query(
         "ping",
         description="ping (~2s) | bundle (~2min) | assemble | render (full PPTX, slow)",
@@ -1290,6 +1291,9 @@ def export_mda_deck_smoke(
     from app.services.reporting.export.board_export_service import build_mda_deck_smoke_result
 
     org = get_organization_or_404(db, organization_id)
+    as_of_period = as_of_period or infer_as_of_period(db, organization_id)
+    if not as_of_period:
+        raise HTTPException(status_code=422, detail="No closed Actual month is loaded; pass as_of_period.")
     normalized = (level or "ping").strip().lower()
     if normalized not in {"ping", "bundle", "assemble", "render"}:
         raise HTTPException(
@@ -1351,11 +1355,14 @@ def export_mda_deck_smoke(
 @export_router.get("/board-presentation-smoke")
 def export_board_presentation_smoke(
     organization_id: uuid.UUID = Query(...),
-    as_of_period: str = Query("2026-06"),
+    as_of_period: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> dict:
     """JSON smoke test for board PPTX pipeline (no file download)."""
     get_organization_or_404(db, organization_id)
+    as_of_period = as_of_period or infer_as_of_period(db, organization_id)
+    if not as_of_period:
+        raise HTTPException(status_code=422, detail="No closed Actual month is loaded; pass as_of_period.")
     year = as_of_period[:4]
     try:
         bundle = collect_bundle(

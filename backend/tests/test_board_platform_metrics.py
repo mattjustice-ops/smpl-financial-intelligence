@@ -145,13 +145,10 @@ def test_enriched_prompt5_payload_has_v3_blocks():
     assert "mom_context" in payload
     ro = payload["risks_and_opportunities"]
     assert "risks" in ro and "opportunities" in ro
-    assert len(ro["risks"]) == 4
-    assert len(ro["opportunities"]) == 4
-    # Board Platform R&O tab seed (not thin Close-validation fillers).
-    risk_titles = {c["title"] for c in ro["risks"]}
-    assert "Paid channel inefficiency" in risk_titles
-    assert "SMB churn concentration" in risk_titles
-    assert all(c.get("detail") and c.get("action") for c in ro["risks"])
+    assert len(ro["risks"]) <= 4 and len(ro["opportunities"]) <= 4
+    cards = ro["risks"] + ro["opportunities"]
+    assert all(c["title"].endswith("budget") and c.get("detail") for c in cards)
+    assert "Paid channel inefficiency" not in {c["title"] for c in cards}
     assert "closed_lost" in payload["gtm_performance"]
     assert "narrative_must_cover" in payload["gtm_performance"]
     assert "bridge_table" in payload["arr_analysis"]

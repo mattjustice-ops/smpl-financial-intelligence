@@ -56,7 +56,8 @@ const scheduleLabels: Record<string, string> = {
 
 
 function money(value: string | number | null | undefined) {
-  const n = Number(value ?? 0);
+  if (value === null || value === undefined || value === "") return "Not loaded";
+  const n = Number(value);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -166,7 +167,7 @@ function ScheduleTable({ schedule }: { schedule: ScheduleResponse }) {
 }
 
 function formatScheduleCell(metric: string, value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") return "";
+  if (value === null || value === undefined || value === "") return "Not loaded";
   const n = Number(value);
   if (Number.isNaN(n)) return String(value);
   if (metric === "dso" || metric === "dpo" || metric === "dio") return n.toFixed(0);

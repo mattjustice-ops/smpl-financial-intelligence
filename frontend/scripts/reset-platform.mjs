@@ -31,7 +31,6 @@ const PLATFORM_FILES = [
   { rel: "shared/smpl-demo-seed.js" },
   { rel: "shared/smpl-pipeline.js" },
   { rel: "shared/smpl-bootstrap-demo.js" },
-  { rel: "shared/smpl-bootstrap-pipeline.js" },
 ];
 
 function log(msg) {

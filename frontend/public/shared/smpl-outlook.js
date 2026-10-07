@@ -152,19 +152,18 @@
     var churn = wf.Churn[i];
     var eop = wf.Ending[i];
     if (bop == null && eop == null) return null;
-    var churnMag = Math.abs(churn || 0);
-    var contMag = Math.abs(cont || 0);
+    var retained = [exp, react, cont, churn].every(function (v) { return v != null; });
     return {
       arr_bop: bop,
       arr_nb: nb,
       arr_exp: exp,
       arr_react: react,
-      arr_cont: contMag,
-      arr_nr_churn: churnMag,
-      ren_churn: 0,
+      arr_cont: cont == null ? null : Math.abs(cont),
+      arr_nr_churn: churn == null ? null : Math.abs(churn),
+      ren_churn: null,
       arr_eop: eop,
-      nrr: bop ? (bop + (exp || 0) + (react || 0) + (cont || 0) + (churn || 0)) / bop : null,
-      grr: bop ? (bop + (cont || 0) + (churn || 0)) / bop : null,
+      nrr: bop && retained ? (bop + exp + react + cont + churn) / bop : null,
+      grr: bop && cont != null && churn != null ? (bop + cont + churn) / bop : null,
     };
   }
 
@@ -377,8 +376,8 @@
   function enrichIsRow(row) {
     if (!row) return null;
     var out = Object.assign({}, row);
-    if (out.total_opex == null) {
-      out.total_opex = (out.sm || 0) + (out.rd || 0) + (out.ga || 0);
+    if (out.total_opex == null && out.sm != null && out.rd != null && out.ga != null) {
+      out.total_opex = out.sm + out.rd + out.ga;
     }
     return out;
   }
@@ -423,8 +422,11 @@
     return mapCfsForForecast(getCombinedTsRow(period, "cfs", closeMonth));
   }
 
+  /** Sum of the loaded liability lines; null when any line is missing. */
   function sumBsLiabilities(row, deferredRev, otherLiab) {
-    return (row.ap || 0) + (deferredRev || 0) + (row.debt || 0) + (otherLiab || 0);
+    var parts = [row.ap, deferredRev, row.debt, otherLiab];
+    if (parts.some(function (v) { return v == null; })) return null;
+    return parts.reduce(function (s, v) { return s + v; }, 0);
   }
 
   function getWarehouseBS(period, allPeriods, closeMonth) {
@@ -440,9 +442,6 @@
     var totalLe = row.total_le;
     if (totalLe == null && totalLiab != null && row.equity != null) {
       totalLe = totalLiab + row.equity;
-    }
-    if (totalLe == null && row.total_assets != null) {
-      totalLe = row.total_assets;
     }
     return {
       cash: row.cash,
@@ -636,6 +635,7 @@
       }
     }
     global.SMPL_BASELINE_ENGINE = data.baseline_engine || null;
+    global.SMPL_HISTORY = data.HISTORY || null;
     global.SMPL_TS_DATA = data.TS_DATA || null;
     global.SMPL_CASH_BRIDGE = data.CASH_BRIDGE || null;
     global.SMPL_LIVE_OUTLOOK = true;
@@ -659,6 +659,10 @@
       hooks.SRC.gtm = src.gtm || null;
       hooks.SRC.pipeline_book = src.pipeline_book ? JSON.parse(JSON.stringify(src.pipeline_book)) : {};
       hooks.SRC.implementation_fees = src.implementation_fees ? Object.assign({}, src.implementation_fees) : {};
+      // Signed-out demo blocks must not survive a live load.
+      ["renewals", "dr_waterfall", "opening_bs"].forEach(function (key) {
+        hooks.SRC[key] = src[key] ? JSON.parse(JSON.stringify(src[key])) : {};
+      });
     }
 
     if (hooks.TS_DATA && global.SMPL_DEMO_TS_DATA === hooks.TS_DATA) {
@@ -803,7 +807,85 @@
     }
   }
 
+  /**
+   * One prior calendar year from the loaded HISTORY block: twelve monthly values per metric,
+   * null where nothing is loaded. Null when the year is outside the block.
+   */
+  function getHistoryYear(year) {
+    var h = global.SMPL_HISTORY;
+    if (!h || !h.start_period || !h.end_period) return null;
+    var periods = [];
+    for (var i = 1; i <= 12; i++) periods.push(year + "-" + String(i).padStart(2, "0"));
+    if (periods[11] < h.start_period || periods[0] > h.end_period) return null;
+    function row(block, p) {
+      return h[block] && h[block][p] ? h[block][p] : null;
+    }
+    function num(v) {
+      return v == null || v === "" ? null : Number(v);
+    }
+    function field(block, key) {
+      return periods.map(function (p) {
+        var r = row(block, p);
+        return r ? num(r[key]) : null;
+      });
+    }
+    return {
+      periods: periods,
+      eop: field("arr", "arr_eop"),
+      nn: field("arr", "arr_nn"),
+      rev: field("is", "revenue"),
+      ebitda: field("is", "ebitda"),
+      opex: periods.map(function (p) {
+        var r = row("is", p);
+        if (!r) return null;
+        if (r.total_opex != null) return Number(r.total_opex);
+        if (r.sm == null && r.rd == null && r.ga == null) return null;
+        return (Number(r.sm) || 0) + (Number(r.rd) || 0) + (Number(r.ga) || 0);
+      }),
+      mkt: periods.map(function (p) {
+        var r = row("gl_programs", p);
+        var keys = r ? Object.keys(r) : [];
+        if (!keys.length) return null;
+        return keys.reduce(function (s, k) { return s + (Number(r[k]) || 0); }, 0);
+      }),
+      mqls: field("funnel", "mqls"),
+      cash: periods.map(function (p) {
+        var cfs = row("cfs", p);
+        if (cfs && cfs.ending_cash != null) return Number(cfs.ending_cash);
+        var bs = row("bs", p);
+        return bs && bs.cash != null ? Number(bs.cash) : null;
+      }),
+      hc: periods.map(function (p) {
+        return h.heads && h.heads[p] != null ? Number(h.heads[p]) : null;
+      }),
+    };
+  }
+
+  /** Loaded marketing funnel totals for a month (history block, then outlook Actual / Forecast). */
+  function getLoadedFunnel(period, closeMonth) {
+    var h = global.SMPL_HISTORY;
+    if (h && h.funnel && h.funnel[period]) return h.funnel[period];
+    var f = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.FUNNEL;
+    if (!f) return null;
+    var asOf = closeMonth || getActiveCloseMonth(null);
+    var block = asOf && period > asOf ? f.Forecast : f.Actual;
+    return (block && block[period]) || null;
+  }
+
+  /** GL marketing program spend for a month (history block, then outlook); null when not loaded. */
+  function getLoadedProgramSpend(period, closeMonth) {
+    var h = global.SMPL_HISTORY;
+    var row = h && h.gl_programs && h.gl_programs[period];
+    if (!row || !Object.keys(row).length) row = getWarehouseGlPrograms(period, closeMonth);
+    var keys = row ? Object.keys(row) : [];
+    if (!keys.length) return null;
+    return keys.reduce(function (s, k) { return s + (Number(row[k]) || 0); }, 0);
+  }
+
   global.SMPLOutlook = {
+    getHistoryYear: getHistoryYear,
+    getLoadedFunnel: getLoadedFunnel,
+    getLoadedProgramSpend: getLoadedProgramSpend,
     monthLabel: monthLabel,
     resolveOrgId: resolveOrgId,
     applyOutlook: applyOutlook,

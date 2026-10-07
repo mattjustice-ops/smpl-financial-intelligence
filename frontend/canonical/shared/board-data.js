@@ -5,9 +5,14 @@
 (function (global) {
   "use strict";
 
-  /** Canonical total headcount by month (Jan–Dec). Jun close EOP = 137. */
-  var BOARD_WF_TOTAL_HC = [121, 124, 126, 128, 130, 137, 140, 142, 145, 146, 147, 147];
-  if (!global.WF_TOTAL_HC) global.WF_TOTAL_HC = BOARD_WF_TOTAL_HC;
+  /** Workforce block: live outlook payload when signed in (empty if missing), demo dataset otherwise. */
+  function boardWorkforce() {
+    if (global.SMPL_LIVE_OUTLOOK) {
+      var live = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.WORKFORCE;
+      return live && typeof live === "object" ? live : {};
+    }
+    return global.WF_DEMO || {};
+  }
 
   function boardTsSource() {
     var embedded = global.TS_DATA;
@@ -48,6 +53,30 @@
     return wf[key];
   }
 
+  var NN_COMPONENTS = ["New Business", "Expansion", "Reactivation", "Contraction", "Churn"];
+
+  /** Sum of loaded values; null when any part is missing. */
+  function sumOrNull(vals) {
+    if (!vals.length) return null;
+    var total = 0;
+    for (var i = 0; i < vals.length; i++) {
+      if (vals[i] == null || Number.isNaN(vals[i])) return null;
+      total += vals[i];
+    }
+    return total;
+  }
+
+  function isM(row, key) {
+    return row && row[key] != null ? +(row[key] / 1e6).toFixed(2) : null;
+  }
+
+  /** Close-month NRR as loaded with the actuals (SRC.actuals[month].nrr); null when not loaded. */
+  function boardLoadedNrr(period) {
+    var src = global.SMPL_OUTLOOK_PAYLOAD && global.SMPL_OUTLOOK_PAYLOAD.SRC;
+    var row = src && src.actuals && src.actuals[period];
+    return row && row.nrr != null ? Number(row.nrr) : null;
+  }
+
   function boardRefreshAllSeries() {
     var ts = boardTsSource();
     var wf = boardWfTable();
@@ -67,45 +96,31 @@
         return +(v / 1e6).toFixed(2);
       });
       var budEnd = wf.Budget_Ending || wf.budget_ending;
-      if (budEnd) {
-        global.ARR_BUD = budEnd.slice(0, actN).map(function (v) {
-          return +(v / 1e6).toFixed(2);
-        });
-      } else if (global.ARR_BUD && global.ARR_BUD.length >= actN) {
-        /* keep embedded budget ARR */
-      } else {
-        global.ARR_BUD = global.ARR_ACT.map(function (v, i) {
-          return +(v * 0.99).toFixed(2);
-        });
-      }
+      global.ARR_BUD = global.ARR_ACT.map(function (_, i) {
+        return budEnd && budEnd[i] != null ? +(budEnd[i] / 1e6).toFixed(2) : null;
+      });
 
       global.NN_ACT = [];
       for (var i = 0; i < actN; i++) {
-        var nn =
-          (wfRow(wf, "New Business")[i] || 0) +
-          (wfRow(wf, "Expansion")[i] || 0) +
-          (wfRow(wf, "Reactivation")[i] || 0) +
-          (wfRow(wf, "Contraction")[i] || 0) +
-          (wfRow(wf, "Churn")[i] || 0);
-        global.NN_ACT.push(+(nn / 1e6).toFixed(3));
+        var nn = sumOrNull(NN_COMPONENTS.map(function (key) {
+          var row = wfRow(wf, key);
+          return row && row[i] != null ? row[i] : null;
+        }));
+        global.NN_ACT.push(nn == null ? null : +(nn / 1e6).toFixed(3));
       }
 
-      if (global.ARR_BUD && global.ARR_BUD.length >= actN) {
-        global.NN_BUD = [];
-        for (var j = 0; j < actN; j++) {
-          var dr = boardNnDrivers(wf, j);
-          var budSum = dr.reduce(function (s, d) {
-            return s + d.bud;
-          }, 0);
-          global.NN_BUD.push(+(budSum.toFixed(3)));
-        }
-      } else if (!global.NN_BUD || global.NN_BUD.length < actN) {
-        global.NN_BUD = [];
-        for (var k = 0; k < actN; k++) {
-          var prevArr = k > 0 ? global.ARR_ACT[k - 1] : wfRow(wf, "Beginning")[0] / 1e6;
-          global.NN_BUD.push(+((global.ARR_ACT[k] - prevArr).toFixed(3)));
-        }
+      global.NN_BUD = [];
+      for (var j = 0; j < actN; j++) {
+        var budSum = sumOrNull(boardNnDrivers(wf, j).map(function (d) {
+          return d.bud;
+        }));
+        global.NN_BUD.push(budSum == null ? null : +budSum.toFixed(3));
       }
+    } else {
+      global.ARR_ACT = [];
+      global.ARR_BUD = [];
+      global.NN_ACT = [];
+      global.NN_BUD = [];
     }
 
     var mo12 =
@@ -114,31 +129,15 @@
     global.MO12 = mo12;
     global.MO = mo12.slice(0, actN);
 
-    global.REV_ACT = actPeriods.map(function (p) {
-      return +((isAct[p] && isAct[p].revenue ? isAct[p].revenue : 0) / 1e6).toFixed(2);
-    });
-    global.GP_ACT = actPeriods.map(function (p) {
-      return +((isAct[p] && isAct[p].gross_profit ? isAct[p].gross_profit : 0) / 1e6).toFixed(2);
-    });
-    global.SM_ACT = actPeriods.map(function (p) {
-      return +((isAct[p] && isAct[p].sm ? isAct[p].sm : 0) / 1e6).toFixed(2);
-    });
-    global.RD_ACT = actPeriods.map(function (p) {
-      return +((isAct[p] && isAct[p].rd ? isAct[p].rd : 0) / 1e6).toFixed(2);
-    });
-    global.GA_ACT = actPeriods.map(function (p) {
-      return +((isAct[p] && isAct[p].ga ? isAct[p].ga : 0) / 1e6).toFixed(2);
-    });
-    global.EBITDA_ACT = actPeriods.map(function (p) {
-      return +((isAct[p] && isAct[p].ebitda != null ? isAct[p].ebitda : 0) / 1e6).toFixed(2);
-    });
+    global.REV_ACT = actPeriods.map(function (p) { return isM(isAct[p], "revenue"); });
+    global.GP_ACT = actPeriods.map(function (p) { return isM(isAct[p], "gross_profit"); });
+    global.SM_ACT = actPeriods.map(function (p) { return isM(isAct[p], "sm"); });
+    global.RD_ACT = actPeriods.map(function (p) { return isM(isAct[p], "rd"); });
+    global.GA_ACT = actPeriods.map(function (p) { return isM(isAct[p], "ga"); });
+    global.EBITDA_ACT = actPeriods.map(function (p) { return isM(isAct[p], "ebitda"); });
 
     if (actPeriods.length) {
-      global.REV_BUD = actPeriods.map(function (p, i) {
-        var row = isBud[p];
-        if (row && row.revenue != null) return +(row.revenue / 1e6).toFixed(2);
-        return global.REV_BUD && global.REV_BUD[i] != null ? global.REV_BUD[i] : global.REV_ACT[i];
-      });
+      global.REV_BUD = actPeriods.map(function (p) { return isM(isBud[p], "revenue"); });
       /* One cash spine: budget ending cash from CFS (preferred) or BS — never keep
          the embedded bridge/demo CASH_BUD series after a live hydrate. That series
          was the liquidity-plan bridge ($31.46M Jun) that contradicted statement/BS
@@ -148,44 +147,45 @@
           (cfsBud[p] && cfsBud[p].ending_cash != null && cfsBud[p].ending_cash) ||
           (bsBud[p] && bsBud[p].cash != null && bsBud[p].cash) ||
           null;
-        return cash != null ? +(cash / 1e6).toFixed(2) : 0;
+        return cash != null ? +(cash / 1e6).toFixed(2) : null;
       });
     }
 
     global.CASH_ACT = actPeriods.map(function (p) {
       var cash = bsAct[p] && bsAct[p].cash;
       if (cash == null && cfsAct[p]) cash = cfsAct[p].ending_cash;
-      return cash != null ? +(cash / 1e6).toFixed(2) : 0;
+      return cash != null ? +(cash / 1e6).toFixed(2) : null;
     });
 
-    global.COLL = actPeriods.map(function (p, i) {
+    global.COLL = actPeriods.map(function (p) {
       var bridge =
         (global.SMPL_CASH_BRIDGE && global.SMPL_CASH_BRIDGE.Actual && global.SMPL_CASH_BRIDGE.Actual[p]) ||
         (global.SMPL_OUTLOOK_PAYLOAD &&
           global.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE &&
           global.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE.Actual &&
           global.SMPL_OUTLOOK_PAYLOAD.CASH_BRIDGE.Actual[p]);
-      if (bridge && bridge.collections != null) {
-        return +(bridge.collections / 1e6).toFixed(2);
-      }
-      var cfs = cfsAct[p];
-      if (cfs && cfs.cfo != null && cfs.cfo > 0) return +(cfs.cfo / 1e6).toFixed(2);
-      return global.COLL && global.COLL[i] != null ? global.COLL[i] : 0;
+      return bridge && bridge.collections != null ? +(bridge.collections / 1e6).toFixed(2) : null;
     });
 
-    if (global.WF_TOTAL_HC && global.WF_TOTAL_HC.length >= actN) {
+    var workforce = boardWorkforce();
+    var hcBudget = workforce.heads_budget_total || [];
+    global.WF_TOTAL_HC = (workforce.heads_total || []).slice();
+    global.HC_TOTAL_BUD = hcBudget[boardCloseIdx()] != null ? hcBudget[boardCloseIdx()] : null;
+    global.HC_BY_MO = [];
+    global.HC_TOTAL_JAN = global.HC_TOTAL_MAY = global.HC_TOTAL_JUN = null;
+    global.ARR_PER_EMP = [];
+    if (global.WF_TOTAL_HC.length >= actN) {
       var hc = global.WF_TOTAL_HC;
       global.HC_BY_MO = hc.slice(0, actN);
       global.HC_TOTAL_JAN = hc[0];
       global.HC_TOTAL_MAY = hc[Math.min(4, hc.length - 1)];
       global.HC_TOTAL_JUN = hc[boardCloseIdx()];
-      if (global.HC_TOTAL_BUD == null) global.HC_TOTAL_BUD = hc[Math.min(4, hc.length - 1)];
       var arrEop = wf && wf.Ending ? wf.Ending[boardCloseIdx()] : null;
       if (arrEop && global.HC_BY_MO[boardCloseIdx()]) {
         global.ARR_PER_EMP = actPeriods.map(function (p, idx) {
           var h = hc[idx] || global.HC_BY_MO[idx];
           var arr = wf && wf.Ending ? wf.Ending[idx] : null;
-          return h && arr ? Math.round(arr / h / 1000) : 0;
+          return h && arr ? Math.round(arr / h / 1000) : null;
         });
       }
     }
@@ -210,7 +210,8 @@
   function boardWaterfallMonthM(wf, monthIdx) {
     if (!wf) return null;
     var m = function (key) {
-      return (wfRow(wf, key)[monthIdx] || 0) / 1e6;
+      var row = wfRow(wf, key);
+      return row && row[monthIdx] != null ? row[monthIdx] / 1e6 : null;
     };
     var bop = m("Beginning");
     var nb = m("New Business");
@@ -219,11 +220,14 @@
     var con = m("Contraction");
     var churn = m("Churn");
     var eop = m("Ending");
-    var afterNB = bop + nb;
-    var afterExp = afterNB + exp;
-    var afterReact = afterExp + react;
-    var afterCon = afterReact + con;
-    var afterChurn = afterCon + churn;
+    var afterNB = sumOrNull([bop, nb]);
+    var afterExp = sumOrNull([afterNB, exp]);
+    var afterReact = sumOrNull([afterExp, react]);
+    var afterCon = sumOrNull([afterReact, con]);
+    var afterChurn = sumOrNull([afterCon, churn]);
+    var abs = function (v) {
+      return v == null ? null : Math.abs(v);
+    };
     return {
       bop: bop,
       nb: nb,
@@ -238,7 +242,7 @@
       afterCon: afterCon,
       afterChurn: afterChurn,
       wfOffsets: [0, bop, afterNB, afterExp, afterCon, afterChurn, 0],
-      wfHeights: [bop, nb, exp, react, Math.abs(con), Math.abs(churn), afterChurn],
+      wfHeights: [bop, nb, exp, react, abs(con), abs(churn), afterChurn],
       wfLabelsTop: [bop, nb, exp, react, con, churn, afterChurn],
     };
   }
@@ -363,47 +367,28 @@
 
   function boardCloseHc() {
     var idx = boardCloseIdx();
-    if (global.WF_TOTAL_HC && global.WF_TOTAL_HC[idx] != null) return global.WF_TOTAL_HC[idx];
-    if (global.HC_BY_MO && global.HC_BY_MO[idx] != null) return global.HC_BY_MO[idx];
-    return BOARD_WF_TOTAL_HC[idx] != null ? BOARD_WF_TOTAL_HC[idx] : null;
+    var hc = boardWorkforce().heads_total || [];
+    return hc[idx] != null ? hc[idx] : null;
   }
 
   function boardNnDrivers(wf, idx) {
     idx = idx == null ? boardCloseIdx() : idx;
     var w = wf ? boardWaterfallMonthM(wf, idx) : null;
-    var budByLabel = {
-      "New Business": 1.73,
-      Expansion: 0.85,
-      Reactivation: 0.07,
-      Contraction: -0.28,
-      Churn: -0.5,
-    };
-    if (!w) {
-      return [
-        { label: "New Business", val: 1.92, bud: 1.73, dir: "pos", pct: 72 },
-        { label: "Expansion", val: 0.98, bud: 0.85, dir: "pos", pct: 37 },
-        { label: "Reactivation", val: 0.095, bud: 0.07, dir: "pos", pct: 10 },
-        { label: "Contraction", val: -0.225, bud: -0.28, dir: "pos", pct: 18 },
-        { label: "Churn", val: -0.115, bud: -0.5, dir: "pos", pct: 9 },
-      ];
-    }
-    var rows = [
-      { label: "New Business", val: w.nb, bud: wfBudgetComponent(wf, "New Business", idx) },
-      { label: "Expansion", val: w.exp, bud: wfBudgetComponent(wf, "Expansion", idx) },
-      { label: "Reactivation", val: w.react, bud: wfBudgetComponent(wf, "Reactivation", idx) },
-      { label: "Contraction", val: w.con, bud: wfBudgetComponent(wf, "Contraction", idx) },
-      { label: "Churn", val: w.churn, bud: wfBudgetComponent(wf, "Churn", idx) },
-    ];
-    rows.forEach(function (r) {
-      if (r.bud == null) r.bud = budByLabel[r.label];
-      r.dir = "pos";
+    var vals = { "New Business": "nb", Expansion: "exp", Reactivation: "react", Contraction: "con", Churn: "churn" };
+    var rows = NN_COMPONENTS.map(function (label) {
+      return {
+        label: label,
+        val: w ? w[vals[label]] : null,
+        bud: wf ? wfBudgetComponent(wf, label, idx) : null,
+        dir: "pos",
+      };
     });
     var maxPos = 0.01;
     rows.forEach(function (r) {
       if (r.val > 0) maxPos = Math.max(maxPos, Math.abs(r.val));
     });
     rows.forEach(function (r) {
-      r.pct = Math.min(100, Math.round((Math.abs(r.val) / maxPos) * 100));
+      r.pct = r.val == null ? null : Math.min(100, Math.round((Math.abs(r.val) / maxPos) * 100));
     });
     return rows;
   }
@@ -419,15 +404,14 @@
     var bsBud = ts && ts.Budget && ts.Budget.bs && ts.Budget.bs[cm];
 
     var drivers = boardNnDrivers(wf, idx);
-    var nnFromDrivers = drivers.reduce(function (s, d) {
-      return s + d.val;
-    }, 0);
-    var nnBudFromDrivers = drivers.reduce(function (s, d) {
-      return s + d.bud;
-    }, 0);
+    var nnFromDrivers = sumOrNull(drivers.map(function (d) {
+      return d.val;
+    }));
+    var nnBud = sumOrNull(drivers.map(function (d) {
+      return d.bud;
+    }));
     var nn = global.NN_ACT && global.NN_ACT[idx] != null ? global.NN_ACT[idx] : nnFromDrivers;
-    var nnBud = nnBudFromDrivers;
-    var nnVar = +(nn - nnBud).toFixed(3);
+    var nnVar = nn != null && nnBud != null ? +(nn - nnBud).toFixed(3) : null;
 
     var arrEop = global.ARR_ACT && global.ARR_ACT[idx];
     var arrBud = global.ARR_BUD && global.ARR_BUD[idx];
@@ -475,6 +459,7 @@
       cashAct: cashAct,
       cashBud: cashBud,
       drivers: drivers,
+      nrr: boardLoadedNrr(cm),
       closeHc: boardCloseHc(),
       hcBud: global.HC_TOTAL_BUD,
     };
@@ -553,18 +538,20 @@
     var rev = isJun && isJun.revenue != null ? isJun.revenue / 1e6 : global.REV_ACT && global.REV_ACT[idx];
     var revBud = isBud && isBud.revenue != null ? isBud.revenue / 1e6 : global.REV_BUD && global.REV_BUD[idx];
     var gm = isJun && isJun.gm_pct != null ? isJun.gm_pct * 100 : null;
-    var ytdRev = 0;
-    var ytdBud = 0;
+    var revParts = [];
+    var budParts = [];
     if (ts && ts.Actual && ts.Actual.periods) {
       ts.Actual.periods.slice(0, boardActCount()).forEach(function (p) {
-        var a = ts.Actual.is[p];
-        var b = ts.Budget.is[p];
-        if (a && a.revenue != null) ytdRev += a.revenue;
-        if (b && b.revenue != null) ytdBud += b.revenue;
+        var a = ts.Actual.is && ts.Actual.is[p];
+        var b = ts.Budget && ts.Budget.is && ts.Budget.is[p];
+        revParts.push(a && a.revenue != null ? a.revenue : null);
+        budParts.push(b && b.revenue != null ? b.revenue : null);
       });
     }
-    ytdRev = +(ytdRev / 1e6).toFixed(1);
-    ytdBud = +(ytdBud / 1e6).toFixed(1);
+    var ytdRev = sumOrNull(revParts);
+    var ytdBud = sumOrNull(budParts);
+    ytdRev = ytdRev == null ? null : +(ytdRev / 1e6).toFixed(1);
+    ytdBud = ytdBud == null ? null : +(ytdBud / 1e6).toFixed(1);
     var arrEop = global.ARR_ACT && global.ARR_ACT[idx];
     var arrBud = global.ARR_BUD && global.ARR_BUD[idx];
     return {
@@ -573,12 +560,15 @@
       revVar: rev != null && revBud != null ? rev - revBud : null,
       ytdRev: ytdRev,
       ytdBud: ytdBud,
-      ytdVar: +(ytdRev - ytdBud).toFixed(1),
+      ytdVar: ytdRev != null && ytdBud != null ? +(ytdRev - ytdBud).toFixed(1) : null,
       gm: gm,
       arrEop: arrEop,
       arrBud: arrBud,
       arrVar: arrEop != null && arrBud != null ? arrEop - arrBud : null,
-      nrr: 100.8,
+      nrr: (function () {
+        var n = boardLoadedNrr(cm);
+        return n == null ? null : n * 100;
+      })(),
     };
   }
 
@@ -630,27 +620,6 @@
     var subBud = m1(isBud, "sub_rev");
     var svc = m1(isJun, "svc_rev");
     var svcBud = m1(isBud, "svc_rev");
-    // Prefer Income Statement split; if missing, keep total on subscription.
-    if (rev != null && (sub == null || svc == null)) {
-      if (sub == null && svc == null) {
-        sub = rev;
-        svc = 0;
-      } else if (sub == null) {
-        sub = +(rev - (svc || 0)).toFixed(6);
-      } else {
-        svc = +(rev - sub).toFixed(6);
-      }
-    }
-    if (revBud != null && (subBud == null || svcBud == null)) {
-      if (subBud == null && svcBud == null) {
-        subBud = revBud;
-        svcBud = 0;
-      } else if (subBud == null) {
-        subBud = +(revBud - (svcBud || 0)).toFixed(6);
-      } else {
-        svcBud = +(revBud - subBud).toFixed(6);
-      }
-    }
     var cogs = m1(isJun, "cogs");
     var cogsBud = m1(isBud, "cogs");
     var gp = m1(isJun, "gross_profit");
@@ -666,37 +635,22 @@
     var ebitda = m1(isJun, "ebitda");
     var ebitdaBud = m1(isBud, "ebitda");
 
-    var ytd = {
-      rev: 0, sub: 0, svc: 0, cogs: 0, gp: 0, opex: 0, ebitda: 0,
-      revBud: 0, subBud: 0, svcBud: 0, cogsBud: 0, gpBud: 0, opexBud: 0, ebitdaBud: 0,
-    };
     var periods = (ts.Actual.periods || []).slice(0, boardActCount());
-    periods.forEach(function (p) {
-      var a = ts.Actual.is && ts.Actual.is[p];
-      var b = ts.Budget && ts.Budget.is && ts.Budget.is[p];
-      if (a) {
-        if (a.revenue != null) ytd.rev += a.revenue;
-        if (a.sub_rev != null) ytd.sub += a.sub_rev;
-        else if (a.revenue != null && a.svc_rev == null) ytd.sub += a.revenue;
-        if (a.svc_rev != null) ytd.svc += a.svc_rev;
-        if (a.cogs != null) ytd.cogs += a.cogs;
-        if (a.gross_profit != null) ytd.gp += a.gross_profit;
-        if (a.total_opex != null) ytd.opex += a.total_opex;
-        if (a.ebitda != null) ytd.ebitda += a.ebitda;
-      }
-      if (b) {
-        if (b.revenue != null) ytd.revBud += b.revenue;
-        if (b.sub_rev != null) ytd.subBud += b.sub_rev;
-        else if (b.revenue != null && b.svc_rev == null) ytd.subBud += b.revenue;
-        if (b.svc_rev != null) ytd.svcBud += b.svc_rev;
-        if (b.cogs != null) ytd.cogsBud += b.cogs;
-        if (b.gross_profit != null) ytd.gpBud += b.gross_profit;
-        if (b.total_opex != null) ytd.opexBud += b.total_opex;
-        if (b.ebitda != null) ytd.ebitdaBud += b.ebitda;
-      }
+    var YTD_KEYS = { rev: "revenue", sub: "sub_rev", svc: "svc_rev", cogs: "cogs", gp: "gross_profit", opex: "total_opex", ebitda: "ebitda" };
+    var ytd = {};
+    Object.keys(YTD_KEYS).forEach(function (k) {
+      var field = YTD_KEYS[k];
+      ytd[k] = sumOrNull(periods.map(function (p) {
+        var a = ts.Actual.is && ts.Actual.is[p];
+        return a && a[field] != null ? a[field] : null;
+      }));
+      ytd[k + "Bud"] = sumOrNull(periods.map(function (p) {
+        var b = ts.Budget && ts.Budget.is && ts.Budget.is[p];
+        return b && b[field] != null ? b[field] : null;
+      }));
     });
     function ytdM(v) {
-      return +(v / 1e6).toFixed(3);
+      return v == null ? null : +(v / 1e6).toFixed(3);
     }
 
     return {
@@ -822,7 +776,7 @@
     boardMkChart: boardMkChart,
     boardPatchChart: boardPatchChart,
     boardActCount: boardActCount,
-    BOARD_WF_TOTAL_HC: BOARD_WF_TOTAL_HC,
+    boardWorkforce: boardWorkforce,
   };
 
   global.boardRefreshAllSeries = boardRefreshAllSeries;
@@ -831,6 +785,7 @@
   global.boardJunArrKpis = boardJunArrKpis;
   global.boardExecKpis = boardExecKpis;
   global.boardCloseHc = boardCloseHc;
+  global.boardWorkforce = boardWorkforce;
   global.boardFmtM = boardFmtM;
   global.boardFmtVarM = boardFmtVarM;
   global.boardPlKpis = boardPlKpis;

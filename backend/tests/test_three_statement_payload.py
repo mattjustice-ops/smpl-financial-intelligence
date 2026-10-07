@@ -26,7 +26,7 @@ def test_normalize_mrr_metrics_derives_net_new_and_retention() -> None:
 
     assert metrics["arr_nn"] == 1_300_000.0
     assert round(metrics["grr"], 4) == round((86_100_000 - 200_000 - 300_000) / 86_100_000, 4)
-    assert round(metrics["nrr"], 4) == round((86_100_000 + 1_300_000) / 86_100_000, 4)
+    assert round(metrics["nrr"], 4) == round((86_100_000 + 500_000 + 100_000 - 200_000 - 300_000) / 86_100_000, 4)
 
 
 def test_build_arr_waterfall_table_uses_actual_through_close() -> None:

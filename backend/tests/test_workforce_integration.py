@@ -27,7 +27,7 @@ from app.models.workforce import (
     WorkforcePeriodSummary,
 )
 from app.services.management_pl.gl_hierarchy import GlEntry
-from app.services.workforce import integration
+from app.services.workforce import gl_payroll, integration
 
 
 @pytest.fixture()
@@ -107,14 +107,7 @@ def _seed_workforce(session: Session, org_id: uuid.UUID) -> None:
     session.commit()
 
 
-def test_pnl_overlay_and_payroll_gl_filter(db_session) -> None:
-    session, org_id = db_session
-    _seed_workforce(session, org_id)
-    overlay = integration.pnl_overlay_by_period(
-        session, org_id, scenario="Forecast", start_period=date(2026, 1, 1), end_period=date(2026, 1, 1)
-    )
-    assert overlay["2026-01"]["sales_and_marketing"] > Decimal("10000")
-
+def test_payroll_gl_entry_detection() -> None:
     entry = GlEntry(
         period="2026-06",
         version="Forecast",
@@ -128,11 +121,46 @@ def test_pnl_overlay_and_payroll_gl_filter(db_session) -> None:
         amount=Decimal("-50000"),
     )
     assert integration.is_payroll_gl_entry(entry)
-    filtered = integration.exclude_payroll_gl_entries([entry], {"2026-06"})
-    assert filtered == []
 
 
-def test_resolve_payroll_cash_out_prefers_workforce(db_session) -> None:
+def _gl_row(period: str, expense_type: str, amount: float, department: str = "Sales") -> dict:
+    return {
+        "period": period,
+        "statement": "Income Statement",
+        "statement_category": "Operating Expense",
+        "account_group": "Labor",
+        "expense_type": expense_type,
+        "account_name": expense_type,
+        "department": department,
+        "amount": amount,
+    }
+
+
+def test_resolve_payroll_cash_out_uses_gl_payroll(db_session, monkeypatch) -> None:
+    session, org_id = db_session
+    _seed_workforce(session, org_id)
+    monkeypatch.setattr(
+        gl_payroll,
+        "fetch_gl_pl_rows",
+        lambda db, org, version: [
+            _gl_row("2026-01", "Salaries and Wages", 30000),
+            _gl_row("2026-01", "Payroll Taxes", 2000),
+            _gl_row("2026-01", "Commissions", 5000),
+        ]
+        if version == "Forecast"
+        else [],
+    )
+    amount, source = integration.resolve_payroll_cash_out(
+        session,
+        org_id,
+        period=date(2026, 1, 1),
+        manual_value=Decimal("999"),
+    )
+    assert source == "gl_actuals"
+    assert amount == Decimal("32000.00")
+
+
+def test_resolve_payroll_cash_out_ignores_roster_without_gl(db_session) -> None:
     session, org_id = db_session
     _seed_workforce(session, org_id)
     amount, source = integration.resolve_payroll_cash_out(
@@ -141,9 +169,8 @@ def test_resolve_payroll_cash_out_prefers_workforce(db_session) -> None:
         period=date(2026, 1, 1),
         manual_value=Decimal("999"),
     )
-    assert source == "workforce_derived"
-    assert amount > Decimal("10000")
-    assert amount != Decimal("999")
+    assert source == "forecast_cash_collections"
+    assert amount == Decimal("999.00")
 
 
 def test_gtm_capacity_falls_back_to_forecast_quota(db_session) -> None:

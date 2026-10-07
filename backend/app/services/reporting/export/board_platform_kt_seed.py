@@ -31,11 +31,11 @@ def _period_label(payload: dict[str, Any]) -> str:
 
 
 def build_seed_key_takeaways(payload: dict[str, Any]) -> dict[str, list[str]]:
-    """Build board-platform takeaway *evidence* bullets from payload metrics.
+    """Build takeaway *evidence* bullets from payload metrics.
 
-    Numbers are copied from the deck payload (already evidence-backed). Injected
-    into the prompt as authorship context only. Do not use for post-export
-    slot refill.
+    Facts only: numbers are copied from the deck payload and no judgement or
+    outlook is asserted. Injected into the prompt as authorship context only.
+    Do not use for post-export slot refill.
     """
     label = _period_label(payload)
     pm = payload.get("period_matrix") or {}
@@ -88,50 +88,42 @@ def build_seed_key_takeaways(payload: dict[str, Any]) -> dict[str, list[str]]:
 
     return {
         "slide_2_executive": [
-            f"1. ARR {arr_act} vs budget variance {arr_var} in {label}; track net-new timing vs plan.",
-            f"2. Revenue {rev_cm} CM ({rev_cm_var}); YTD {rev_ytd} ({rev_ytd_var}) — manage expansion/new mix.",
-            f"3. EBITDA {ebitda_cm} ({ebitda_var}); opex discipline holding despite revenue headwind.",
-            f"4. Cash {cash_act} ({cash_var}); YTD collections {ytd_coll} support liquidity into H2.",
-            f"5. Pipeline coverage {coverage}; slipped {slipped} needs next-quarter re-staging.",
+            f"1. ARR {arr_act} in {label}; variance vs budget {arr_var}.",
+            f"2. Revenue {rev_cm} CM ({rev_cm_var} vs budget); YTD {rev_ytd} ({rev_ytd_var}).",
+            f"3. EBITDA {ebitda_cm} CM ({ebitda_var} vs budget).",
+            f"4. Ending cash {cash_act} ({cash_var} vs budget); YTD collections {ytd_coll}.",
+            f"5. Pipeline coverage {coverage}; slipped pipeline {slipped}.",
         ],
         "slide_3_arr": [
-            f"1. Ending ARR {arr_act} ({arr_var}) in {label}; MoM bridge shows component mix vs budget.",
-            f"2. Retention: churn/contraction vs plan — keep G$R discipline while expanding.",
-            f"3. Net-new vs budget; expansion/new timing drives the bridge residual.",
-            f"4. FY ARR outlook {fy_arr} vs {fy_arr_bud}; pipeline coverage {coverage} supports H2 ramp.",
+            f"1. Ending ARR {arr_act} ({arr_var} vs budget) in {label}.",
+            f"2. FY ARR outlook {fy_arr} vs budget {fy_arr_bud}; pipeline coverage {coverage}.",
         ],
         "slide_4_pl": [
-            f"1. Revenue {rev_cm} CM ({rev_cm_var}); YTD {rev_ytd} ({rev_ytd_var}) — close the gap via conversion.",
-            f"2. Gross margin {gm_cm} CM / {gm_ytd} YTD on plan; COGS discipline intact.",
-            f"3. EBITDA {ebitda_cm} ({ebitda_var}); sustain opex control through H2.",
-            f"4. Net income {ni_cm} ({ni_var}); profitability trajectory remains intact.",
-            f"5. Board action: certify P&L tie-out and approve H2 revenue acceleration plan.",
+            f"1. Revenue {rev_cm} CM ({rev_cm_var} vs budget); YTD {rev_ytd} ({rev_ytd_var}).",
+            f"2. Gross margin {gm_cm} CM / {gm_ytd} YTD.",
+            f"3. EBITDA {ebitda_cm} CM ({ebitda_var} vs budget).",
+            f"4. Net income {ni_cm} CM ({ni_var} vs budget).",
         ],
         "slide_5_cash": [
-            f"1. Ending cash {cash_act} in {label}; vs budget {cash_var}.",
-            f"2. YTD collections {ytd_coll}; YTD ending cash {ytd_cash} — primary liquidity read.",
-            f"3. Monthly bridge: collections vs payroll/vendor/commission outflows drive MoM change.",
-            f"4. FY cash outlook {fy_cash} vs {fy_cash_bud}; update H2 collections model.",
-            f"5. Maintain cash floor discipline; deploy excess only against board-approved bets.",
+            f"1. Ending cash {cash_act} in {label}; {cash_var} vs budget.",
+            f"2. YTD collections {ytd_coll}; YTD ending cash {ytd_cash}.",
+            f"3. FY cash outlook {fy_cash} vs budget {fy_cash_bud}.",
         ],
         "slide_6_gtm": [
-            f"1. Closed-lost {closed_lost} vs budget {closed_lost_bud}; run loss review before H2 push.",
-            f"2. Slipped pipeline {slipped} vs {slipped_bud}; re-stage with owners and next steps.",
-            f"3. Coverage {coverage} vs ending ARR; YTD closed won {closed_won}.",
-            f"4. Pipeline created {pipe_created}; reallocate spend toward efficient channels.",
-            f"5. Board action: approve channel reallocation and slipped-deal validation checklist.",
+            f"1. Closed-lost {closed_lost} vs budget {closed_lost_bud}.",
+            f"2. Slipped pipeline {slipped} vs budget {slipped_bud}.",
+            f"3. Pipeline coverage {coverage}; closed won {closed_won}.",
+            f"4. Pipeline created {pipe_created}.",
         ],
         "slide_7_pipeline": [
-            f"1. Beginning pipeline {begin_pipe} → ending {ending_pipe} (additive waterfall for {label}).",
+            f"1. Beginning pipeline {begin_pipe}; ending pipeline {ending_pipe} ({label}).",
             f"2. Created {pipe_created}; closed won {closed_won}; closed lost {closed_lost}.",
-            f"3. Slipped {slipped} vs {slipped_bud}; clear the slip backlog before forecasting H2.",
-            f"4. Coverage {coverage} supports ramp; prioritize enterprise conversion velocity.",
+            f"3. Slipped {slipped} vs budget {slipped_bud}; coverage {coverage}.",
         ],
         "slide_9_outlook": [
-            f"1. FY ARR outlook {fy_arr} vs {fy_arr_bud}; coverage {coverage} supports H2 acceleration.",
-            f"2. FY revenue {fy_rev} vs {fy_rev_bud}; conversion of ending pipeline {ending_pipe} is the lever.",
-            f"3. Cash outlook {fy_cash} vs {fy_cash_bud}; collections moderation expected in H2.",
-            f"4. Board action: approve updated FY outlook and H2 pipeline acceleration plan.",
+            f"1. FY ARR outlook {fy_arr} vs budget {fy_arr_bud}; coverage {coverage}.",
+            f"2. FY revenue outlook {fy_rev} vs budget {fy_rev_bud}; ending pipeline {ending_pipe}.",
+            f"3. FY cash outlook {fy_cash} vs budget {fy_cash_bud}.",
         ],
     }
 

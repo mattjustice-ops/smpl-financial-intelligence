@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Replace the simplified `Forecast_Headcount_Plan.csv` (department × period × manual payroll) with an **HRIS-style workforce operating intelligence layer** that derives payroll from people data, not uploaded totals.
+Replace the simplified `Forecast_Headcount_Plan.csv` (department × period × manual payroll) with an **HRIS-style workforce operating intelligence layer**: head counts, hires and quota from people data; payroll dollars from the GL.
 
 ## Design principles
 
@@ -10,7 +10,7 @@ Replace the simplified `Forecast_Headcount_Plan.csv` (department × period × ma
 2. **Pipeline grain** — open requisitions with hiring timing and approval status.
 3. **Assumption grain** — compensation bands and productivity ramps by role.
 4. **Allocation grain** — department → P&L line mapping for downstream finance surfaces.
-5. **Derived payroll** — `headcount × compensation × ramp × benefits`; never authoritative manual payroll on the workforce path.
+5. **GL payroll** — payroll dollars come only from the GL (Salaries and Wages, Benefits, Payroll Taxes, Commissions) by department (`gl_payroll.py`). The roster and headcount plan supply head counts only. Roster cost (fully loaded cash cost) vs GL payroll by team is shown as a check (`roster_cost_vs_gl_payroll`); it is never used in reports.
 
 ## Source datasets (upload CSVs)
 
@@ -25,6 +25,8 @@ Upload uses **header matching**, not a `workforce_` filename prefix. These names
 | Department allocation rules | `workforce_department_allocation_rules` | `Department_Allocation_Rules.csv` |
 
 `scenario` column (or `Actual_` / `Forecast_` / `Budget_` filename prefix) sets the planning version.
+
+The engine reads the loaded roster tables `actual_employees` / `budget_employees` / `forecast_employees` first (`roster.py`); `workforce_employees` is used only when no loaded roster exists for the version. With the loaded roster, `Planned` rows are the planned hires (they are the open requisitions), so requisitions, bands and ramps from the `workforce_*` upload tables are not added.
 
 All tables include `version` (`Actual`, `Budget`, `Forecast`) and `organization_id`.
 
@@ -48,9 +50,9 @@ Sales, Marketing, R&D, Product, Customer Success, Support, G&A, Finance, HR / Pe
 - `base_payroll_monthly`, `bonus_monthly`, `commission_monthly`, `equity_sbc_monthly`, `benefits_load_monthly`, `total_people_cost_monthly`
 - `quota_capacity_arr`, `productive_quota_capacity_arr` (quota × productivity ramp)
 
-## Payroll formula
+## Roster-priced cost (engine only, not reported)
 
-For each active FTE-month:
+`build_workforce_plan` replaces these amounts with GL payroll. For each active FTE-month:
 
 ```
 base_monthly = salary_annual / 12
@@ -82,21 +84,23 @@ Productivity ramp comes from `workforce_hiring_ramp_assumptions` (by department/
 
 | Consumer | Feed | Status |
 |----------|------|--------|
-| Management P&L | `feeds.pnl_people_cost_lines` | Wired — open months overlay; GL payroll excluded |
-| Cash Forecast | `feeds.cash_payroll_outflow` | Wired — `forecast_cash_collections` manual fallback |
-| Department spend | `feeds.payroll_by_department` | Wired |
+| Management P&L | GL detail directly | No workforce overlay — payroll stays as posted in the GL |
+| Cash Forecast | `integration.resolve_payroll_cash_out` | GL payroll excluding commissions; `forecast_cash_collections` fallback when the GL has none |
+| Department spend | `feeds.payroll_by_department` | GL payroll by department with roster head count |
 | GTM / ARR capacity | `feeds.gtm_quota_capacity_feed` | Wired — `forecast_quota_capacity` fallback; bookings coverage |
 | Operating leverage / Rev per FTE / Burn multiple | `operating_metrics` on plan response | Ready |
 | Scenario planning | `version` on all source tables | Ready |
-| Board / Excel headcount | `workforce_period_summary` | Wired — legacy `headcount_plan` fallback |
+| Board Workforce tab | `reporting.board_workforce.build_workforce_payload` | Roster heads (headcount plan fallback), GL payroll by GL department, plan quota, open reqs file, ramp assumptions, roster cost vs GL payroll check |
+| Forecast Engine Headcount | Same `WORKFORCE` payload (`SMPL_DEMO_WORKFORCE` signed out) | Heads by group follow the income statement line map (Support in G&A); actual-month hires are the net change in loaded heads; forecast hires are the loaded open reqs in their start month (Sales and Customer Success locked to the reqs); team-months where close heads plus reqs don't match the loaded plan are flagged; edits priced as P&L adjustment lines |
+| Excel headcount | `workforce_period_summary` | Wired — legacy `headcount_plan` fallback |
 | CSV upload | auto-recompute | Wired — `loader.py` recomputes after workforce CSV upsert |
 | Validation | `validation_service.run_workforce_validations` | Wired — `GET /workforce/validation` |
 
 ## Legacy compatibility
 
 - `forecast_headcount_plan` / `headcount_plan` remain for existing board exports.
-- `POST /workforce/recompute?sync_legacy_headcount=true` overwrites derived `monthly_payroll_cost` from the engine.
-- Manual payroll on legacy tables triggers validation warning `legacy_manual_payroll_detected`.
+- `POST /workforce/recompute?sync_legacy_headcount=true` writes GL payroll into `monthly_payroll_cost`.
+- Payroll on the headcount plan tables is not read; head counts are.
 
 ## Migration
 
@@ -172,7 +176,7 @@ Expect: `PASS: workforce baseline OK` and non-zero `total_people_cost_monthly` r
 |-------|----------|
 | `GET /workforce/plan` | `period_summary` array with rows |
 | `POST /workforce/recompute` | `"status": "ok"`, `periods_computed` > 0 |
-| `workforce_period_summary` | Non-zero `total_people_cost_monthly` for active months |
+| `workforce_period_summary` | `total_people_cost_monthly` equals GL payroll for months with GL rows |
 | Validations | Warnings OK; fix fails before integration work |
 
 **Note:** Paste implementation prompts into **Cursor Agent chat**, not PowerShell. Use `Invoke-RestMethod` for HTTP calls — PowerShell does not support `GET http://...` as a command.
@@ -190,5 +194,5 @@ POST /api/v1/workforce/recompute?organization_id=...&scenario=Forecast&start_per
 
 ## What not to use
 
-- **Do not** use `Forecast_Headcount_Plan.csv` `monthly_payroll_cost` as source of truth for forecast payroll.
-- **Do not** manually maintain `forecast_cash_collections.payroll_cash_out` when workforce data exists — derive from `feeds.cash_payroll_outflow`.
+- **Do not** use `Forecast_Headcount_Plan.csv` `monthly_payroll_cost` or roster cost as payroll dollars — payroll comes from the GL.
+- **Do not** replace GL payroll in the Management P&L or cash forecast with workforce-derived amounts.

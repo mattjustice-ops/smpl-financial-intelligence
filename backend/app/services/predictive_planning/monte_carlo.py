@@ -163,10 +163,10 @@ class MonteCarloResult:
     method: str
     prior_source: str
     p_arr_miss: float
-    p_cash_below_floor: float
-    p_ops_liquidity: float
+    p_cash_below_floor: float | None
+    p_ops_liquidity: float | None
     p_ae_short: float
-    p_trough_breach: float
+    p_trough_breach: float | None
     arr: dict[str, Any]
     cash: dict[str, Any]
     trough: dict[str, Any] | None
@@ -241,7 +241,8 @@ def run_packet_monte_carlo(
     target = float(packet.get("target_arr") or packet.get("targetArr") or 0.0)
     base_yoy = float(packet.get("yoy_growth_pct") or packet.get("yoyGrowthPct") or 20.0)
     end_cash = float(packet.get("end_cash") or packet.get("endCash") or 0.0)
-    cash_floor = float(packet.get("cash_floor") or packet.get("cashFloor") or 10_000_000.0)
+    floor_raw = packet.get("cash_floor") if packet.get("cash_floor") is not None else packet.get("cashFloor")
+    cash_floor = float(floor_raw) if floor_raw is not None else None
     sales_end = float(packet.get("sales_end") or packet.get("salesEnd") or 0.0)
     ae_needed = float(packet.get("ae_needed") or packet.get("aeNeeded") or 0.0)
     cash_by_month = [
@@ -315,22 +316,23 @@ def run_packet_monte_carlo(
 
         if dec_arr < target * 0.995:
             p_arr += 1
-        if trial_end < cash_floor:
-            p_cash += 1
         if ae_short:
             p_ae += 1
-        drop = (end_cash - trial_end) / max(1.0, end_cash)
-        if trial_end < cash_floor or drop >= 0.50:
-            p_ops += 1
         if trial_end <= end_cash * 0.75:
             p_watch_25 += 1
-        if trial_trough < cash_floor:
-            p_trough += 1
+        if cash_floor is not None:
+            drop = (end_cash - trial_end) / max(1.0, end_cash)
+            if trial_end < cash_floor:
+                p_cash += 1
+            if trial_end < cash_floor or drop >= 0.50:
+                p_ops += 1
+            if trial_trough < cash_floor:
+                p_trough += 1
 
     monthly: list[dict[str, Any]] = []
     for m in range(12):
         col = sorted(p[m] for p in paths)
-        below = sum(1 for v in col if v < cash_floor) / n
+        below = sum(1 for v in col if v < cash_floor) / n if cash_floor is not None else None
         monthly.append(
             {
                 "month_index": m,
@@ -366,6 +368,8 @@ def run_packet_monte_carlo(
         f"under lever flow shocks plus residual WC noise (cashResidMo={cash_resid_mo:.3f} of Dec cash / month) "
         "so the Jul–Dec corridor fan opens even when the mean path is nearly flat.",
     ]
+    if cash_floor is None:
+        notes.append("Cash floor not loaded — floor breach and liquidity probabilities are not reported.")
 
     return MonteCarloResult(
         n=n,
@@ -378,10 +382,10 @@ def run_packet_monte_carlo(
         method=METHOD,
         prior_source=prior_source,
         p_arr_miss=p_arr / n,
-        p_cash_below_floor=p_cash / n,
-        p_ops_liquidity=p_ops / n,
+        p_cash_below_floor=p_cash / n if cash_floor is not None else None,
+        p_ops_liquidity=p_ops / n if cash_floor is not None else None,
         p_ae_short=p_ae / n,
-        p_trough_breach=p_trough / n,
+        p_trough_breach=p_trough / n if cash_floor is not None else None,
         arr={
             "hist": _histogram(arr_samples),
             "mean": arr_mu,
@@ -398,7 +402,7 @@ def run_packet_monte_carlo(
             "p10": _pctl(cash_sorted, 0.10),
             "p50": _pctl(cash_sorted, 0.50),
             "p90": _pctl(cash_sorted, 0.90),
-            "pBreak": p_cash / n,
+            "pBreak": p_cash / n if cash_floor is not None else None,
             "pWatch25": p_watch_25 / n,
         },
         # top-level alias for clients that read flat keys
@@ -410,7 +414,7 @@ def run_packet_monte_carlo(
             "p10": _pctl(trough_sorted, 0.10),
             "p50": _pctl(trough_sorted, 0.50),
             "p90": _pctl(trough_sorted, 0.90),
-            "pBreachAnyMonth": p_trough / n,
+            "pBreachAnyMonth": p_trough / n if cash_floor is not None else None,
         },
         cash_path_monthly=monthly,
         method_notes=notes,

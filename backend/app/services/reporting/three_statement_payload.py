@@ -21,7 +21,7 @@ from app.services.reporting.gl_income_statement import (
     gl_income_statement_by_period,
 )
 from app.services.reporting.org_reporting_settings import ensure_org_reporting_defaults, resolve_org_reporting_window
-from app.services.reporting.period_utils import period_range, to_period
+from app.services.reporting.period_utils import period_range, prior_period, to_period
 from app.services.reporting.pipeline_deals import (
     build_implementation_fees,
     build_opp_pipeline,
@@ -148,8 +148,6 @@ MRR_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("arr_react", ("reactivation_arr", "reactivation_mrr")),
     ("arr_nn", ("net_new_arr", "net_new_mrr")),
     ("arr_eop", ("ending_arr", "ending_mrr")),
-    ("nrr", ("net_dollar_retention_rate", "nrr", "forecasted_nrr")),
-    ("grr", ("gross_retention_rate", "grr")),
 )
 
 ARR_WATERFALL_ROW_KEYS: tuple[str, ...] = (
@@ -256,27 +254,32 @@ def _aggregate_mrr_by_period(rows: list[dict[str, Any]]) -> dict[str, dict[str, 
 
 
 def _normalize_mrr_metrics(raw: dict[str, float | None]) -> dict[str, float | None]:
-    """Fill derived ARR metrics when warehouse rows omit them."""
+    """Net new, GRR and NRR are always calculated from the loaded movement components.
+
+    GRR = (beginning - contraction - churn) / beginning
+    NRR = (beginning + expansion + reactivation - contraction - churn) / beginning
+    A rate is ``None`` when a component it needs is not loaded.
+    """
     metrics = dict(raw)
     bop = metrics.get("arr_bop")
     eop = metrics.get("arr_eop")
-    cont = metrics.get("arr_cont") or 0.0
-    churn = metrics.get("arr_churn") or 0.0
-    nb = metrics.get("arr_nb") or 0.0
-    exp = metrics.get("arr_exp") or 0.0
-    react = metrics.get("arr_react") or 0.0
+    nb, exp, react = metrics.get("arr_nb"), metrics.get("arr_exp"), metrics.get("arr_react")
+    cont = abs(metrics["arr_cont"]) if metrics.get("arr_cont") is not None else None
+    churn = abs(metrics["arr_churn"]) if metrics.get("arr_churn") is not None else None
 
-    if metrics.get("arr_nn") is None:
-        if bop is not None and eop is not None:
-            metrics["arr_nn"] = eop - bop
-        else:
-            metrics["arr_nn"] = nb + exp + react - cont - churn
+    if None not in (nb, exp, react, cont, churn):
+        metrics["arr_nn"] = nb + exp + react - cont - churn
+    elif bop is not None and eop is not None:
+        metrics["arr_nn"] = eop - bop
+    else:
+        metrics["arr_nn"] = None
 
-    if bop and bop > 0:
-        if metrics.get("grr") is None:
-            metrics["grr"] = (bop - cont - churn) / bop
-        if metrics.get("nrr") is None and metrics.get("arr_nn") is not None:
-            metrics["nrr"] = (bop + metrics["arr_nn"]) / bop
+    metrics["grr"] = None
+    metrics["nrr"] = None
+    if bop and bop > 0 and cont is not None and churn is not None:
+        metrics["grr"] = (bop - cont - churn) / bop
+        if exp is not None and react is not None:
+            metrics["nrr"] = (bop + exp + react - cont - churn) / bop
     return metrics
 
 
@@ -459,6 +462,7 @@ def build_cash_bridge_data(
         ("other_operating", ("other_operating_cash_out",)),
         ("capex", ("capex",)),
         ("financing", ("financing_to_maintain_cash_floor", "financing")),
+        ("cash_floor", ("cash_floor",)),
     )
     allowed = set(period_range(start_period, end_period))
     for scenario, prefix in (("Actual", "actual"), ("Forecast", "forecast"), ("Budget", "budget")):
@@ -596,8 +600,110 @@ def build_unified_outlook_payload(
             end_period=end_period,
         ),
         "CASH_CONTINUITY": cash_continuity_payload(continuity),
+        "HISTORY": build_history_block(db, organization_id, start_period=start_period),
+        "FUNNEL": {
+            "Actual": _scenario_funnel(db, organization_id, "Actual", start_period, as_of),
+            "Forecast": _scenario_funnel(db, organization_id, "Forecast", start_period, end_period, after=as_of),
+        },
         "_sources": sources,
     }
+
+
+HISTORY_YEARS = 2
+_HISTORY_ARR_KEYS = ("arr_bop", "arr_nb", "arr_exp", "arr_react", "arr_cont", "arr_churn", "arr_nn", "arr_eop", "grr", "nrr")
+
+
+def build_history_block(
+    db: Session,
+    organization_id: uuid.UUID,
+    *,
+    start_period: str,
+) -> dict[str, Any]:
+    """Loaded actuals for the fiscal years before ``start_period`` (year-over-year views).
+
+    Statements and GL program spend from the GL, ARR from the actual MRR waterfall (rates
+    calculated from its movements), MQLs from the actual marketing pipeline and heads from the
+    roster. A month with nothing loaded is left out so the page can flag it.
+    """
+    from app.services.reporting.board_workforce import history_heads
+
+    start = to_period(start_period)
+    first = f"{int(start[:4]) - HISTORY_YEARS:04d}{start[4:]}"
+    last = prior_period(start)
+    periods = period_range(first, last)
+    actual = build_ts_data(
+        db,
+        organization_id,
+        as_of=last,
+        start_period=first,
+        end_period=last,
+        only=("Actual",),
+    ).get("Actual") or {}
+
+    mrr = _aggregate_mrr_by_period(_read_statement_table(db, organization_id, "actual_mrr_waterfall"))
+    arr: dict[str, dict[str, float | None]] = {}
+    for period in periods:
+        if period not in mrr:
+            continue
+        metrics = _normalize_mrr_metrics(mrr[period])
+        if metrics.get("arr_eop") is not None:
+            arr[period] = {k: metrics.get(k) for k in _HISTORY_ARR_KEYS}
+
+    return {
+        "start_period": first,
+        "end_period": last,
+        "periods": periods,
+        "is": actual.get("is") or {},
+        "bs": actual.get("bs") or {},
+        "cfs": actual.get("cfs") or {},
+        "gl_programs": actual.get("gl_programs") or {},
+        "arr": arr,
+        "funnel": _scenario_funnel(db, organization_id, "Actual", first, last),
+        "heads": history_heads(db, organization_id, periods),
+    }
+
+
+_FUNNEL_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("mqls", ("mqls",)),
+    ("opportunities_created", ("opportunities_created",)),
+    ("pipeline_arr_created", ("pipeline_arr_created",)),
+    ("closed_won_arr", ("closed_won_arr", "expected_closed_won_arr")),
+)
+
+
+def _scenario_funnel(
+    db: Session,
+    organization_id: uuid.UUID,
+    scenario: str,
+    first: str,
+    last: str,
+    *,
+    after: str | None = None,
+) -> dict[str, dict[str, float]]:
+    """Marketing funnel totals by month from the scenario's marketing pipeline table.
+
+    Only fields present in the loaded rows are returned; nothing is filled in.
+    """
+    from app.services.dashboard.query_utils import fetch_scenario_rows
+
+    out: dict[str, dict[str, float]] = {}
+    for _scenario, period, _table, raw in fetch_scenario_rows(
+        db,
+        organization_id,
+        scenario=scenario,
+        suffix="marketing_pipeline",
+        start_period=first,
+        end_period=last,
+        as_of_period=after or last,
+    ):
+        if after and period <= after:
+            continue
+        for dst, aliases in _FUNNEL_FIELDS:
+            if all(raw.get(k) in (None, "") for k in aliases):
+                continue
+            bucket = out.setdefault(period, {})
+            bucket[dst] = bucket.get(dst, 0.0) + float(value_any(raw, *aliases))
+    return out
 
 
 def _outlook_material_sources(
@@ -875,6 +981,7 @@ def build_ts_data(
     as_of: str,
     start_period: str,
     end_period: str,
+    only: tuple[str, ...] = ("Actual", "Forecast", "Budget"),
 ) -> dict[str, Any]:
     """Board Platform 3-Statement tab shape (TS_DATA)."""
     scenarios: dict[str, Any] = {}
@@ -883,6 +990,8 @@ def build_ts_data(
         _normalize_bs_display(row)
 
     for scenario, prefix in (("Actual", "actual"), ("Forecast", "forecast"), ("Budget", "budget")):
+        if scenario not in only:
+            continue
         bs_rows = _gl_statement_rows(db, organization_id, prefix)[0]
 
         pl_rows = fetch_gl_pl_rows(db, organization_id, GL_VERSION_BY_SCENARIO[prefix])
@@ -1006,21 +1115,12 @@ def build_outlook_api_payload(
         end_period=end_period,
     )
 
-    arr_ending: float | None = None
-    wf = outlook.get("ARR_WATERFALL") or {}
-    ending = wf.get("Ending")
-    if isinstance(ending, list):
-        idx = int(as_of[5:7]) - 1
-        if 0 <= idx < len(ending) and ending[idx] is not None:
-            arr_ending = float(ending[idx])
-
     board_modules = build_board_modules_payload(
         db,
         organization_id,
         as_of_period=as_of,
         start_period=start_period,
         end_period=end_period,
-        arr_ending=arr_ending,
     )
 
     return {

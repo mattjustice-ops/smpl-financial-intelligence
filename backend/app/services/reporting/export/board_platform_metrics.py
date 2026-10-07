@@ -608,7 +608,13 @@ def build_cash_liquidity_block(
     as_of = bundle.as_of_period
     cash_r = rollup_cash(bundle)
     cur = bundle.currency
-    floor = Decimal("10000000")
+    floor = (
+        _cash_bridge_table_amount(cash_bridge_data, "Actual", as_of, "cash_floor")
+        or _cash_bridge_table_amount(cash_bridge_data, "Forecast", as_of, "cash_floor")
+        or _cash_wf_amount(bundle, as_of, "Actual", "cash_floor")
+        or _cash_wf_amount(bundle, as_of, "Forecast", "cash_floor")
+        or None
+    )
 
     _BRIDGE_LINES: tuple[tuple[str, str, tuple[str, ...], str | None, bool], ...] = (
         ("Beginning cash", "beginning_cash", ("beginning_cash", "beginning"), None, False),
@@ -675,8 +681,8 @@ def build_cash_liquidity_block(
             "cash_eop_budget": cash_bud_cm and fmt_deck_money(cash_bud_cm) or bridge_rows[-1]["budget"],
             "cfo_actual": fmt_deck_money(cfo_a) if cfo_a else "—",
             "cfo_budget": fmt_deck_money(cfo_b) if cfo_b else "—",
-            "cash_headroom_vs_floor": fmt_deck_money(cash_r.current_month - floor),
-            "cash_floor": fmt_deck_money(floor),
+            "cash_headroom_vs_floor": fmt_deck_money(cash_r.current_month - floor) if floor is not None else "n/a",
+            "cash_floor": fmt_deck_money(floor) if floor is not None else "n/a",
         },
         "bridge_table": {
             "columns": ["Line Item", "Actual", "Budget"],
@@ -1211,7 +1217,7 @@ def build_arr_bridge_block(bundle: ReportingBundle) -> dict[str, Any]:
     nn_bud = compute_net_new_arr(bundle, as_of, "Budget")
 
     m = build_metrics_snapshot(bundle)
-    grr = float((arr_act - churn) / arr_act * 100) if arr_act else None
+    grr = float(m.grr * 100) if m.grr is not None else None
 
     arr_prior_bud = ending_arr_at_period(bundle, prior, "Budget")
 
