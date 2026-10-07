@@ -30,6 +30,13 @@ FIXED_ASSET_KEYS = (
 DEBT_KEYS = ("debt", "total_debt", "debt_balance", "notes_payable")
 
 
+def _footing(total: Decimal | None, lines: list[Decimal | None]) -> Decimal | None:
+    """Total less its lines; ``None`` when the total or any line is not loaded."""
+    if total is None or any(v is None for v in lines):
+        return None
+    return total - sum(lines, Decimal("0"))
+
+
 def build_balance_sheet_forecast(
     session: Session,
     organization_id,
@@ -50,10 +57,14 @@ def build_balance_sheet_forecast(
         cash = loaded_value(row, "cash")
         ar = loaded_value(row, "accounts_receivable")
         prepaids = loaded_value(row, *PREPAIDS_KEYS)
+        dc_current = loaded_value(row, "deferred_commissions_current")
         fixed_assets = loaded_value(row, *FIXED_ASSET_KEYS)
+        dc_noncurrent = loaded_value(row, "deferred_commissions_noncurrent")
+        other_assets = loaded_value(row, "other_assets")
         deferred = loaded_value(row, "deferred_revenue")
         ap = loaded_value(row, "accounts_payable")
         debt = loaded_value(row, *DEBT_KEYS)
+        other_liabilities = loaded_value(row, "other_liabilities")
         equity = loaded_value(row, "equity", "total_equity")
         total_assets = loaded_value(row, "total_assets")
         total_liabilities = loaded_value(row, "total_liabilities")
@@ -64,17 +75,25 @@ def build_balance_sheet_forecast(
                 "cash": q_opt(cash),
                 "accounts_receivable": q_opt(ar),
                 "prepaids_and_other_current_assets": q_opt(prepaids),
+                "deferred_commissions_current": q_opt(dc_current),
                 "property_and_equipment_net": q_opt(fixed_assets),
+                "deferred_commissions_noncurrent": q_opt(dc_noncurrent),
+                "other_assets": q_opt(other_assets),
                 "deferred_revenue": q_opt(deferred),
                 "accounts_payable": q_opt(ap),
                 "prepaids": q_opt(prepaids),
                 "fixed_assets": q_opt(fixed_assets),
                 "debt": q_opt(debt),
+                "other_liabilities": q_opt(other_liabilities),
                 "equity": q_opt(equity),
                 "total_assets": q_opt(total_assets),
                 "total_liabilities": q_opt(total_liabilities),
                 "total_liabilities_and_equity": q_opt(total_le),
                 "balance_check": q_opt(None if total_assets is None or total_le is None else total_assets - total_le),
+                "assets_footing_check": q_opt(_footing(
+                    total_assets, [cash, ar, prepaids, dc_current, fixed_assets, dc_noncurrent, other_assets]
+                )),
+                "liabilities_footing_check": q_opt(_footing(total_liabilities, [ap, deferred, debt, other_liabilities])),
             }
         )
     return rows
