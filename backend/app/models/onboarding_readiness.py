@@ -14,7 +14,8 @@ from app.db.base import Base
 
 
 class OnboardingReadinessAnswers(Base):
-    """Answers keyed by questionnaire id (``0.1``–``0.5``, ``4.1``–``4.3``, ``7.7``–``7.13``, ``9.1``)."""
+    """Answers keyed by questionnaire id (``0.1``–``0.5``, ``4.1``–``4.3``, ``4.10``–``4.11``, ``7.7``–``7.20``,
+    ``9.1``)."""
 
     __tablename__ = "onboarding_readiness_answers"
 

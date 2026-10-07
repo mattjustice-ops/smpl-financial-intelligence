@@ -165,6 +165,17 @@ SUBSCRIPTION_GATE: tuple[Question, ...] = (
              ("not_applicable", "committed_minimums_only", "committed_and_overages")),
 )
 
+# The ARR engine reads these to label returning customers. No module is gated on them yet;
+# unanswered, every return stays Reactivation with an unknown return type.
+CUSTOMER_RETURNS: tuple[Question, ...] = (
+    Question("4.10", "customer_returns",
+             "Winback window: a customer who ended their contract and returns within this many months is a "
+             "winback (Reactivation); a later return is new business",
+             ("3", "6", "12", "no_window")),
+    Question("4.11", "customer_returns", "Paused subscriptions in ARR",
+             ("removes_arr", "keeps_arr", "not_offered")),
+)
+
 CRM_STAGE_GATE: tuple[Question, ...] = (
     Question("9.1", "crm_stage", "CRM stage normalization (ambiguous stages mapped)",
              ("resolved", "not_applicable", "unresolved")),
@@ -225,7 +236,9 @@ SCORE_INPUTS: tuple[Question, ...] = (
 )
 
 ALL_QUESTIONS: dict[str, Question] = {
-    q.id: q for q in (*READINESS_GATES, *SUBSCRIPTION_GATE, *CRM_STAGE_GATE, *COMMISSION_POLICY_GATE, *SCORE_INPUTS)
+    q.id: q
+    for q in (*READINESS_GATES, *SUBSCRIPTION_GATE, *CUSTOMER_RETURNS, *CRM_STAGE_GATE, *COMMISSION_POLICY_GATE,
+              *SCORE_INPUTS)
 }
 
 NORMALIZATION_GATES: dict[str, dict[str, object]] = {
@@ -233,6 +246,11 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
         "name": "Subscription Normalization Gate",
         "questions": SUBSCRIPTION_GATE,
         "resolved_values": None,  # any answer resolves each question
+    },
+    "customer_returns": {
+        "name": "Customer Returns (winbacks and restarts)",
+        "questions": CUSTOMER_RETURNS,
+        "resolved_values": None,
     },
     "crm_stage": {
         "name": "CRM Stage Normalization Gate",

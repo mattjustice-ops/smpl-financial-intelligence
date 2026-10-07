@@ -132,7 +132,10 @@ These come from the **Subscription Normalization Gate** (GPES Stripe reference +
 | 4.7 | Multiple billing accounts / sites (regional / product) — consolidation strategy? | |
 | 4.8 | Non-card methods (ACH / invoice) present? Settlement lag / banking pairing needed? | |
 | 4.9 | Live-only data confirmed (exclude test / sandbox)? | Enforced automatically for Stripe (`livemode`); still confirm expectation |
-| 4.10 | Reactivation vs New Business dormancy window? | SCBM default **90 days** unless overridden |
+| 4.10 | **Winback window:** a customer who ended their contract and comes back within how many months is a winback (stays in Reactivation)? After the window the return is new business. Counted in calendar months from the first month without ARR to the month they return, inclusive. | 3 / 6 / 12 / no window (every return is a winback). No default: until answered, returns stay in Reactivation as "unknown return". |
+| 4.11 | **Paused subscriptions:** does a pause take the customer's ARR to zero until they restart, keep it in ARR, or are pauses not offered? A restart after a pause is never new business, however long the pause. | removes ARR / keeps ARR / not offered |
+
+> **How SMPL uses 4.10–4.11:** the ARR waterfall keeps every return in Reactivation and labels it winback, restart after pause, or unknown; a terminated customer back after the winback window moves to New Business, flagged as a returning customer so new-logo counts can show them separately. A return is only moved to New Business when the source records a termination (not a pause) and 4.10 is answered. Each return also carries the customer's ARR before leaving and the part of the returned ARR above it; commission rules for returns are separate questions (Section 7).
 
 ---
 
