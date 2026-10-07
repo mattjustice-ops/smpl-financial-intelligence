@@ -494,7 +494,8 @@ def legacy_row_to_period_dict(row: LegacyHeadcountSnapshot) -> dict[str, Any]:
         "headcount_ending_fte": filled,
         "filled_headcount": filled,
         "planned_hire_headcount": planned,
-        "total_headcount_fte": q_fte(filled + planned),
+        # headcount_ending already counts hires that have started; open reqs are roles not yet filled.
+        "total_headcount_fte": filled,
         "base_payroll_monthly": base_payroll,
         "bonus_monthly": Decimal("0"),
         "commission_monthly": Decimal("0"),
