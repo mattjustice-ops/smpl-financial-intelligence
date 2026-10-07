@@ -149,6 +149,10 @@ CHECK_COMPARISON_SIDES: dict[str, tuple[str, str]] = {
         "beginning cash + net change (cash flow statement)",
         "Ending Cash Balance (cash flow statement)",
     ),
+    "cash_flow_beginning_cash_equals_prior_balance_sheet_cash": (
+        "balance_sheet Cash, prior month",
+        "cash_flow_statement Beginning Cash Balance",
+    ),
     "closed_won_arr_ties_mrr_new_business_arr": (
         "ARR waterfall new business / new_arr",
         "Pipeline waterfall closed_won",
