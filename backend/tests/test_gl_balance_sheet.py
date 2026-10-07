@@ -219,6 +219,42 @@ def test_statement_validations_include_deferred_commissions(monkeypatch: pytest.
     assert results["cash_flow_operating_cash_flow"] == "pass"
 
 
+def test_opening_month_has_no_cash_flow_and_its_cash_is_checked_next_month(monkeypatch: pytest.MonkeyPatch):
+    from datetime import date
+
+    from app.services.financial_statements import financial_statement_service as fs
+    from app.services.financial_statements.financial_statement_validation_service import validate_financial_statements
+
+    built = build_balance_sheet_and_cash_flow(*deferred_commission_rows())
+    monkeypatch.setattr(fs, "gl_balance_sheet_and_cash_flow_by_period", lambda _db, _org, _scenario: built)
+    monkeypatch.setattr(fs, "gl_income_statement_by_period", lambda _db, _org, _scenario: {})
+    kwargs = dict(scenario="Actual", start_period=date(2022, 10, 1), end_period=date(2022, 12, 1))
+    balance = fs.statement(None, None, statement_type="balance_sheet", **kwargs)
+    cash = fs.statement(None, None, statement_type="cash_flow", **kwargs)
+    income = fs.statement(None, None, statement_type="income_statement", **kwargs)
+    oct_, nov, dec = date(2022, 10, 1), date(2022, 11, 1), date(2022, 12, 1)
+    assert oct_ not in {r.period for r in cash.rows}
+
+    results = validate_financial_statements(income, balance, cash)
+    assert not [(r.validation_name, r.period) for r in results if r.status == "fail"]
+    assert not [r for r in results if r.period == oct_ and r.validation_name.startswith("cash_flow")]
+    beginning = {r.period: r for r in results if r.validation_name == "cash_flow_beginning_cash_equals_prior_balance_sheet_cash"}
+    assert set(beginning) == {nov, dec} and beginning[nov].status == "pass"
+
+    # A month after the opening without a cash flow still fails.
+    missing = cash.model_copy(update={"rows": [r for r in cash.rows if r.period != nov]})
+    failed = {(r.validation_name, r.period) for r in validate_financial_statements(income, balance, missing) if r.status == "fail"}
+    assert ("cash_flow_ending_cash_equals_balance_sheet_cash", nov) in failed
+
+    # Beginning cash that does not pick up the prior month's balance sheet cash fails.
+    off = cash.model_copy(update={"rows": [
+        r.model_copy(update={"amount": r.amount + 5}) if (r.period, r.line_item) == (dec, "Beginning Cash Balance") else r
+        for r in cash.rows
+    ]})
+    failed = {(r.validation_name, r.period) for r in validate_financial_statements(income, balance, off) if r.status == "fail"}
+    assert ("cash_flow_beginning_cash_equals_prior_balance_sheet_cash", dec) in failed
+
+
 def test_unclassified_gl_balance_sheet_account_fails_validation(monkeypatch: pytest.MonkeyPatch):
     from datetime import date
 

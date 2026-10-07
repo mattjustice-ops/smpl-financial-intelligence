@@ -52,6 +52,11 @@ def validate_financial_statements(
     bs = _index(balance)
     cf = _index(cash_flow)
     keys = sorted({(r.scenario, r.period) for r in [*income.rows, *balance.rows, *cash_flow.rows]})
+    cf_keys = {(r.scenario, r.period) for r in cash_flow.rows}
+    opening: dict[str, date] = {}
+    for r in balance.rows:
+        if r.scenario not in opening or r.period < opening[r.scenario]:
+            opening[r.scenario] = r.period
 
     for scenario, period in keys:
         sources = ["gl_actuals"]
@@ -83,7 +88,15 @@ def validate_financial_statements(
         results.append(_result(scenario, period, "balance_sheet_liabilities_and_equity", lie, bs.get((scenario, period, "Total Liabilities and Equity"), Decimal("0")), bs_sources))
         results.append(_result(scenario, period, "balance_sheet_balances", Decimal("0"), bs.get((scenario, period, "Balance Check"), Decimal("0")), bs_sources))
 
+        # The month that carries the opening balances has no prior cash, so no cash flow; its cash
+        # is checked as the next month's beginning cash. Any other month without a cash flow fails below.
+        if (scenario, period) not in cf_keys and period == opening.get(scenario):
+            continue
         cf_sources = ["gl_actuals"]
+        prior = date(period.year - (period.month == 1), (period.month - 2) % 12 + 1, 1)
+        prior_cash = bs.get((scenario, prior, "Cash"))
+        if prior_cash is not None:
+            results.append(_result(scenario, period, "cash_flow_beginning_cash_equals_prior_balance_sheet_cash", prior_cash, cf.get((scenario, period, "Beginning Cash Balance"), Decimal("0")), cf_sources))
         ocf = sum(
             (
                 cf.get((scenario, period, line), Decimal("0"))
