@@ -205,6 +205,24 @@ def test_legacy_plan_replaces_engine_departments_for_covered_periods() -> None:
     assert merged[0]["filled_headcount"] == Decimal("36.0000")
 
 
+def test_legacy_open_reqs_are_not_added_to_headcount() -> None:
+    snap = _snapshot_from_mapping(
+        {
+            "period": "2026-01",
+            "department": "Sales",
+            "headcount_beginning": "40",
+            "new_hires": "0",
+            "attrition": "0",
+            "headcount_ending": "40",
+            "open_requisitions": "6",
+        }
+    )
+    assert snap is not None
+    [row] = merge_legacy_headcount([], [snap])
+    assert row["total_headcount_fte"] == Decimal("40.0000")
+    assert row["planned_hire_headcount"] == Decimal("6.0000")
+
+
 def test_legacy_headcount_overlays_employee_row_count(db_session) -> None:
     session, org_id = db_session
     session.add(
