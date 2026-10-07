@@ -215,6 +215,26 @@ COMMISSION_POLICY_GATE: tuple[Question, ...] = (
              ("above_prior_level", "all_expansion")),
 )
 
+ATTAINMENT_PCT = tuple(str(p) for p in range(50, 125, 5))
+
+# Sales hiring and commission planning inputs; checked against the loaded quotas, opportunities, payouts
+# and employees (sales_plan_inputs.py). No module is gated on them.
+SALES_PLAN: tuple[Question, ...] = (
+    Question("7.25", "sales_plan",
+             "Expected quota attainment used to plan sales hiring, as a percent of ramped quota",
+             ATTAINMENT_PCT),
+    Question("7.26", "sales_plan", "What counts toward a closer's quota",
+             ("new_business_arr", "new_and_expansion_arr", "net_new_arr")),
+    Question("7.27", "sales_plan", "Period over which quota attainment and accelerators are measured",
+             ("monthly", "quarterly", "annual")),
+    Question("7.28", "sales_plan", "Who owns and is paid on expansion deals",
+             ("account_executives", "account_managers", "customer_success", "not_paid")),
+    Question("7.29", "sales_plan",
+             "Sales variable pay in the HRIS (commission target): paid through the commission plan, or a bonus in "
+             "addition to commissions",
+             ("through_commission_plan", "bonus_in_addition")),
+)
+
 SCORE_INPUTS: tuple[Question, ...] = (
     Question("7.7", "score_input", "Cost of revenue policy documented and approved",
              effect="cap_partial",
@@ -249,7 +269,7 @@ SCORE_INPUTS: tuple[Question, ...] = (
 ALL_QUESTIONS: dict[str, Question] = {
     q.id: q
     for q in (*READINESS_GATES, *SUBSCRIPTION_GATE, *CUSTOMER_RETURNS, *CRM_STAGE_GATE, *COMMISSION_POLICY_GATE,
-              *SCORE_INPUTS)
+              *SALES_PLAN, *SCORE_INPUTS)
 }
 
 NORMALIZATION_GATES: dict[str, dict[str, object]] = {
@@ -285,6 +305,16 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
             "7.22": ("7.14", ("capitalized", "expensed")),
             "7.23": ("7.14", ("capitalized", "expensed")),
             "7.24": ("7.14", ("capitalized", "expensed")),
+        },
+    },
+    "sales_plan": {
+        "name": "Sales Quota and Comp Plan",
+        "questions": SALES_PLAN,
+        "resolved_values": None,
+        "required_if": {
+            "7.27": ("7.14", ("capitalized", "expensed")),
+            "7.28": ("7.14", ("capitalized", "expensed")),
+            "7.29": ("7.14", ("capitalized", "expensed")),
         },
     },
 }
