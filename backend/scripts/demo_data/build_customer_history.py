@@ -1,4 +1,5 @@
-"""Customer ARR history for the demo company: every movement in the Actual ARR waterfall lands on a customer.
+"""Customer ARR history for the demo company: every movement in the Actual, Budget and Forecast ARR waterfalls
+lands on a customer.
 
 Writes a new folder only (never touches the database):
   python build_customer_history.py <v4_folder> <out_folder>
@@ -19,9 +20,14 @@ Rules (agreed with Matt, Oct 7 2026):
     is new business. About 20% of reactivation ARR is winbacks and 80% restarts.
   * Some returns come back above the ARR they left with, some below, some equal; some customers contract and
     later expand. That is what the commission policy (7.21-7.24) measures.
-  * Revenue weights (recurring services schedule) follow the history: a customer is billed only while it
-    has ARR. Budget weights hold Dec 2025 ARR and Forecast weights hold Jun 2026 ARR (their own customer
-    movements are not modeled yet).
+  * Customers leave at renewal: a former customer's anniversary (start month) is the month it left, and churn
+    deals go to customers whose anniversary is that month where one fits.
+  * Budget and Forecast customer histories (customer_history_plans.py) start from the Actual close they plan
+    from (Dec 2025, Jun 2026). Budget churn customers hold flat Actual ARR through Dec 2025.
+  * Renewal pipelines (Actual Jan-Jun 2026, Forecast Jul-Dec 2026) are the customers due in their anniversary
+    month at their ARR; Actual renewal commissions are 2% of each renewal, paid to its CSM.
+  * Revenue weights (recurring services schedule) follow each version's history: a customer is billed only
+    while it has ARR (Forecast: expected ARR).
 """
 
 from __future__ import annotations
@@ -34,76 +40,26 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from build_v5_dataset import ZERO, Dataset, allocate, num, padd, pidx, prange, q, stable_unit, write  # noqa: E402
+from build_v5_dataset import ZERO, Dataset, allocate, last_day, num, padd, pidx, prange, q, write  # noqa: E402
+from customer_history_plans import (EXPECTED_FIELDS, HISTORY_FIELDS, WINBACK_SHARE, WINBACK_WINDOW,  # noqa: E402
+                                    FORECAST_RENEWAL_PROBABILITY, History, actual_renewals, forecast_deals, pick,
+                                    renewal_commissions, renewal_rows, simulate_budget, simulate_forecast, tie,
+                                    tie_budget_deals, u, waterfall)
 
 FIRST = "2024-01"
 LAST_PRE_2026 = "2025-12"
 CLOSE = "2026-06"
 PRE_FROM = "2023-07"
-WINBACK_WINDOW = 6
-WINBACK_SHARE = Decimal("0.20")
 RETURNING_NEW = 2
+PAUSE_FROM = "2024-04"
+PAUSE_SHARE = Decimal("0.5")
+RENEWAL_RATE = Decimal("0.02")
 HISTORY_FILE = "Actual_customer_arr_history.csv"
-HISTORY_FIELDS = ["organization_id", "version", "period", "customer_id", "customer_name", "segment", "movement_type",
-                  "beginning_arr", "movement_arr", "ending_arr", "waterfall_column", "opportunity_id", "note"]
-COLUMN = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
-          "Contraction": "contraction_arr", "Churn": "churn_arr", "Pause": "churn_arr", "Opening balance": ""}
-WF_COLUMNS = ("new_business_arr", "expansion_arr", "reactivation_arr", "contraction_arr", "churn_arr")
-WEIGHT_SOURCE = "Actual_customer_arr_history.csv (ARR after the month's movements)"
 
 
-def u(key: str) -> Decimal:
-    return stable_unit(key)
-
-
-def pick(cands: list[str], n: int, key: str, weight) -> list[str]:
-    """Deterministic weighted sample without replacement (Efraimidis-Spirakis)."""
-    def score(c: str) -> float:
-        w = float(weight(c)) or 1e-9
-        return (float(u(f"{key}|{c}")) + 1e-6) ** (1.0 / w)
-    return sorted(cands, key=lambda c: (-score(c), c))[:n]
-
-
-class History:
-    def __init__(self, org: str):
-        self.org = org
-        self.arr: dict[str, Decimal] = defaultdict(lambda: ZERO)
-        self.rows: list[dict] = []
-        self.info: dict[str, dict[str, str]] = {}
-        self.eop: dict[str, dict[str, Decimal]] = {}
-        self.moved: dict[str, set[str]] = defaultdict(set)
-
-    def move(self, p: str, cid: str, kind: str, amount: Decimal, opp: str = "", note: str = "") -> None:
-        begin = self.arr[cid]
-        delta = -amount if kind in ("Contraction", "Churn", "Pause") else amount
-        end = begin + delta
-        if amount <= 0 or end < 0:
-            raise ValueError(f"{p} {cid} {kind} {amount}: ARR {begin} would become {end}")
-        if kind in ("Churn", "Pause") and end != 0:
-            raise ValueError(f"{p} {cid} {kind} leaves {end}")
-        if kind in ("New Business", "Reactivation") and begin != 0:
-            raise ValueError(f"{p} {cid} {kind} while active ({begin})")
-        if cid in self.moved[p]:
-            raise ValueError(f"{p} {cid}: second movement in the month")
-        self.moved[p].add(cid)
-        self.arr[cid] = end
-        i = self.info[cid]
-        self.rows.append({"organization_id": self.org, "version": "Actual", "period": p, "customer_id": cid,
-                          "customer_name": i["customer_name"], "segment": i["segment"], "movement_type": kind,
-                          "beginning_arr": begin, "movement_arr": delta, "ending_arr": end,
-                          "waterfall_column": COLUMN[kind], "opportunity_id": opp, "note": note})
-
-    def open(self, cid: str, amount: Decimal) -> None:
-        self.arr[cid] = amount
-        i = self.info[cid]
-        self.rows.append({"organization_id": self.org, "version": "Actual", "period": padd(FIRST, -1), "customer_id": cid,
-                          "customer_name": i["customer_name"], "segment": i["segment"],
-                          "movement_type": "Opening balance", "beginning_arr": amount, "movement_arr": ZERO,
-                          "ending_arr": amount, "waterfall_column": "", "opportunity_id": "",
-                          "note": f"ARR at the start of the ARR waterfall ({FIRST})"})
-
-    def close_month(self, p: str) -> None:
-        self.eop[p] = {c: a for c, a in self.arr.items() if a > 0}
+def weight_source(v: str) -> str:
+    what = "expected ARR" if v == "Forecast" else "ARR"
+    return f"{v}_customer_arr_history.csv ({what} after the month's movements)"
 
 
 def build(src: str, dst: str) -> list[str]:
@@ -113,18 +69,16 @@ def build(src: str, dst: str) -> list[str]:
     notes: list[str] = []
     master_fields, master = ds.get("Actual_customers.csv")
     org = master[0]["organization_id"]
-    wf = {r["period"][:7]: r for r in ds.rows("Actual_MRR_Waterfall.csv")}
-    months = sorted(wf)
+    W = waterfall(ds.rows("Actual_MRR_Waterfall.csv"))
+    months = sorted(W)
     if months[0] != FIRST or months[-1] != CLOSE:
         raise ValueError(f"Actual waterfall runs {months[0]}..{months[-1]}, expected {FIRST}..{CLOSE}")
-    W = {p: {k: num(wf[p][k]) for k in (*WF_COLUMNS, "beginning_arr", "ending_arr")} for p in months}
     opp_fields, opps = ds.get("Actual_opportunities.csv")
     opp_of = {o["opportunity_id"]: o for o in opps}
     region_of = {}
     for v in ("Actual", "Budget", "Forecast"):
         for r in ds.rows(f"{v}_opportunities.csv"):
             region_of[r["customer_state"]] = r["region"]
-    renewal_ids = {r["customer_id"] for r in ds.rows("Actual_renewal_pipeline.csv")}
     booked = {"New Business": "Closed Won", "Expansion": "Closed Won", "Reactivation": "Closed Won",
               "Contraction": "Contraction", "Churn": "Churn"}
     col_of = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
@@ -145,6 +99,13 @@ def build(src: str, dst: str) -> list[str]:
             raise ValueError(f"{p} {t}: opportunities differ from the waterfall by {diff}")
     notes.append("opportunity cents moved to the waterfall (largest deal of the type and month): " + (", ".join(cents) or "none"))
 
+    b_fields, b_opps = ds.get("Budget_opportunities.csv")
+    WB = waterfall(ds.rows("Budget_MRR_Waterfall.csv"))
+    tie_budget_deals(b_opps, WB, notes)
+    f_fields, f_all = ds.get("Forecast_opportunities.csv")
+    WF = waterfall(ds.rows("Forecast_MRR_Waterfall.csv"))
+    f_opps = forecast_deals(f_all, WF, padd(CLOSE, 1), notes)
+
     h = History(org)
     mrow = {r["customer_id"]: r for r in master}
     for r in master:
@@ -154,6 +115,10 @@ def build(src: str, dst: str) -> list[str]:
     logos = {o["customer_id"]: o for o in opps if o["opportunity_type"] == "New Business" and o["close_status"] == "Closed Won"}
     for cid, o in logos.items():
         h.info[cid] = {"customer_name": o["customer_name"], "segment": o["segment"]}
+        start[cid] = o["period"][:7]
+
+    def anniv(c: str) -> str:
+        return start[c][5:7]
 
     # ---- former customers (not in the master): new records
     prefixes = sorted({re.sub(r"\s+\d+$", "", r["customer_name"]) for r in master})
@@ -165,8 +130,9 @@ def build(src: str, dst: str) -> list[str]:
     new_rows: list[dict] = []
 
     def new_customer(tag: str, arr_hint: Decimal, departs: str, like: dict | None = None) -> str:
-        """A former customer. ``like`` is the 2026 opportunity it will carry: the customer takes the deal's
-        segment, industry, state, cadence and terms so the deal keeps its region (and so its owner)."""
+        """A former customer whose anniversary is the month it leaves. ``like`` is the 2026 opportunity it will
+        carry: the customer takes the deal's segment, industry, state, cadence and terms so the deal keeps its
+        region (and so its owner)."""
         nonlocal next_no
         cid = f"CUST-{next_no:04d}"
         next_no += 1
@@ -174,6 +140,9 @@ def build(src: str, dst: str) -> list[str]:
         seg = "SMB" if arr_hint < 50000 else "Mid-Market" if arr_hint < 150000 else "Enterprise"
         latest = min(pidx(departs) - 7, pidx("2023-06"))
         s = padd("2019-01", int(u(k + "|start") * (latest - pidx("2019-01") + 1)))
+        s = f"{s[:4]}-{departs[5:7]}"
+        if pidx(s) > latest:
+            s = padd(s, -12)
         row = {"organization_id": org, "customer_id": cid,
                "customer_name": f"{prefixes[int(u(k + '|name') * len(prefixes))]} {next_no - 1}",
                "segment": seg, "industry": industries[int(u(k + "|ind") * len(industries))], "status": "",
@@ -241,22 +210,23 @@ def build(src: str, dst: str) -> list[str]:
     def in_region(cands: list[str], o: dict) -> list[str]:
         return [c for c in cands if region(c) == o["region"]] or cands
 
-    flagged = sorted(c for c in opening_masters if mrow[c]["status"] == "Churned" and c not in renewal_ids)
-    no_renewal = [c for c in opening_masters if c not in renewal_ids and c not in flagged]
+    def at_renewal(cands: list[str], o: dict) -> list[str]:
+        return [c for c in cands if anniv(c) == o["period"][5:7]] or cands
+
+    flagged = sorted(c for c in opening_masters if mrow[c]["status"] == "Churned")
     if len(flagged) > len(churn_opps):
         raise ValueError("more churned customers in the master than 2026 churn opportunities")
     pinned: dict[str, Decimal] = {}
     assign: dict[str, str] = {}
     for c in flagged:
-        o = next((o for o in churn_opps if o["opportunity_id"] not in assign and o["region"] == region(c)),
-                 next(o for o in churn_opps if o["opportunity_id"] not in assign))
+        free_opps = [o for o in churn_opps if o["opportunity_id"] not in assign]
+        local = [o for o in free_opps if o["region"] == region(c)] or free_opps
+        o = next((o for o in local if o["period"][5:7] == anniv(c)), local[0])
         assign[o["opportunity_id"]] = c
     for o in churn_opps:
         if o["opportunity_id"] not in assign:
-            cands = [c for c in no_renewal if c not in assign.values()]
-            if not cands:
-                raise ValueError("not enough customers without renewals to carry the 2026 churn")
-            assign[o["opportunity_id"]] = pick(in_region(cands, o), 1, f"churn2026|{o['opportunity_id']}",
+            cands = [c for c in opening_masters if c not in assign.values()]
+            assign[o["opportunity_id"]] = pick(at_renewal(in_region(cands, o), o), 1, f"churn2026|{o['opportunity_id']}",
                                                lambda c: jan26[c])[0]
     churners = [assign[o["opportunity_id"]] for o in churn_opps]
     for o, c in zip(churn_opps, churners):
@@ -272,6 +242,15 @@ def build(src: str, dst: str) -> list[str]:
         assign[o["opportunity_id"]] = c
         pinned[c] = q(num(o["amount_arr"]) / share)
         used.add(c)
+    # Budget churn customers hold their Dec 2025 ARR (= the Budget churn deal) flat in the Actual history.
+    budget_pins: dict[str, str] = {}
+    for o in sorted((o for o in b_opps if o["opportunity_type"] == "Churn"), key=lambda o: (o["period"], o["opportunity_id"])):
+        cands = [c for c in opening_masters if c not in used]
+        c = pick(at_renewal(in_region(cands, o), o), 1, f"bchurn|{o['opportunity_id']}", lambda c: jan26[c])[0]
+        budget_pins[o["opportunity_id"]] = c
+        pinned[c] = num(o["amount_arr"])
+        used.add(c)
+    budget_churners = list(budget_pins.values())
 
     # ---- returners: 2024-2025 returns are master customers; 2026 returns are former customers
     departures: dict[str, list[tuple[str, str, Decimal, str]]] = defaultdict(list)
@@ -281,7 +260,9 @@ def build(src: str, dst: str) -> list[str]:
     pool = [c for c in early_masters if c not in used]
     for r in returns:
         if r["period"] <= LAST_PRE_2026:
-            c = pick([x for x in pool if x not in used], 1, f"ret|{r['key']}", lambda c: Decimal(1))[0]
+            cands = [x for x in pool if x not in used]
+            cands = [x for x in cands if anniv(x) == r["departed"][5:7]] or cands
+            c = pick(cands, 1, f"ret|{r['key']}", lambda c: Decimal(1))[0]
         else:
             c = new_customer("returner", r["baseline"], r["departed"], opp_of[r["opp"]])
         used.add(c)
@@ -314,20 +295,20 @@ def build(src: str, dst: str) -> list[str]:
         assign[oid] = c
         used.add(c)
 
-    # ---- formers: the rest of each month's churn
+    # ---- formers: the rest of each month's churn; about half of those leaving from PAUSE_FROM pause
     for p in prange(FIRST, LAST_PRE_2026):
         rem = W[p]["churn_arr"] - sum((x[2] for x in departures[p]), ZERO)
         if rem <= 0:
             raise ValueError(f"{p}: returners' departures {W[p]['churn_arr'] - rem} exceed churn {W[p]['churn_arr']}")
         n = max(1, int((rem / Decimal(85000)).to_integral_value()))
         for key, a in sorted(allocate(rem, [(f"{p}#{i}", Decimal("0.5") + u(f"csplit|{p}|{i}")) for i in range(n)]).items()):
-            pause = p >= "2025-07" and u(f"pause|{key}") < Decimal("0.15")
+            pause = p >= PAUSE_FROM and u(f"pause|{key}") < PAUSE_SHARE
             c = new_customer("former", a, p)
             opening[c] = a
             departures[p].append((c, "Pause" if pause else "Churn", a, ""))
 
     # ---- opening balances
-    for c in churners + contractors:
+    for c in churners + contractors + budget_churners:
         opening[c] = pinned[c]
     free_open = [c for c in opening_masters if c not in opening and c not in {r["customer"] for r in returns}]
     rest = W[FIRST]["beginning_arr"] - sum(opening.values(), ZERO)
@@ -336,7 +317,7 @@ def build(src: str, dst: str) -> list[str]:
     for c, a in allocate(rest, [(c, jan26[c] * (Decimal("0.6") + Decimal("0.4") * u(f"open|{c}"))) for c in free_open]).items():
         opening[c] = a
     for c in sorted(opening):
-        h.open(c, opening[c])
+        h.open(c, opening[c], padd(FIRST, -1), f"ARR at the start of the ARR waterfall ({FIRST})")
     for d, c, b, kind in sorted(pre_departures):
         h.rows.append({"organization_id": org, "version": "Actual", "period": d, "customer_id": c,
                        "customer_name": h.info[c]["customer_name"], "segment": h.info[c]["segment"], "movement_type": kind,
@@ -345,7 +326,7 @@ def build(src: str, dst: str) -> list[str]:
     notes.append(f"opening {padd(FIRST, -1)}: {len(opening)} customers, ARR {sum(opening.values(), ZERO):,.2f}; "
                  f"{len(pre_departures)} returners left before {FIRST}")
 
-    flat = set(churners) | set(contractors)
+    flat = set(churners) | set(contractors) | set(budget_churners)
     leaves = {c: d for d, items in departures.items() for c, *_ in items}
 
     def free(c: str, p: str) -> bool:
@@ -384,7 +365,6 @@ def build(src: str, dst: str) -> list[str]:
         h.close_month(p)
 
     # ---- Jan-Jun 2026: the Actual opportunities
-    exp_assigned: dict[str, str] = {}
     for p in prange("2026-01", CLOSE):
         month = sorted((o for o in opps if o["period"][:7] == p), key=lambda o: o["opportunity_id"])
         for o in month:
@@ -406,44 +386,86 @@ def build(src: str, dst: str) -> list[str]:
                 a, oid = num(o["amount_arr"]), o["opportunity_id"]
                 elig = [c for c in sorted(h.arr) if free(c, p) and h.arr[c] >= a and c not in logos]
                 c = pick(in_region(elig, o), 1, f"exp2026|{oid}", lambda c: h.arr[c])[0]
-                assign[oid] = exp_assigned[oid] = c
+                assign[oid] = c
                 h.move(p, c, "Expansion", a, oid)
         h.close_month(p)
 
-    # ---- ties: every month, every column, ending ARR
-    by = defaultdict(lambda: defaultdict(lambda: ZERO))
-    for r in h.rows:
-        if r["waterfall_column"]:
-            by[r["period"]][r["waterfall_column"]] += abs(r["movement_arr"])
-    bad = []
-    wf_rounding = worst_end = ZERO
-    for p in months:
-        for col in WF_COLUMNS:
-            if by[p][col] != W[p][col]:
-                bad.append(f"{p} {col} {by[p][col]} vs {W[p][col]}")
-        w = W[p]
-        own = w["ending_arr"] - (w["beginning_arr"] + w["new_business_arr"] + w["expansion_arr"] + w["reactivation_arr"]
-                                 - w["contraction_arr"] - w["churn_arr"])
-        wf_rounding = max(wf_rounding, abs(own))
-        diff = abs(sum(h.eop[p].values(), ZERO) - w["ending_arr"])
-        worst_end = max(worst_end, diff)
-        if abs(own) > Decimal("0.05") or diff > Decimal("0.05"):
-            bad.append(f"{p} ending {sum(h.eop[p].values(), ZERO)} vs {w['ending_arr']} (waterfall's own rounding {own})")
     opening_sum = sum((r["ending_arr"] for r in h.rows if r["movement_type"] == "Opening balance"), ZERO)
-    if opening_sum != W[FIRST]["beginning_arr"]:
-        bad.append(f"opening {opening_sum} vs {W[FIRST]['beginning_arr']}")
-    if bad:
-        raise ValueError("history does not tie to the waterfall: " + "; ".join(bad[:10]))
-    notes.append(f"ties: {len(months)} months x 5 movement columns and opening ARR to the cent; ending ARR within "
-                 f"{worst_end} (the waterfall's own ending ARR differs from beginning + movements by up to {wf_rounding})")
+    notes.append(tie(h, W, months, opening_sum))
 
     dec = h.eop[LAST_PRE_2026]
     masters = [r["customer_id"] for r in master]
     if any(dec.get(c, ZERO) <= 0 for c in masters) or sum((dec[c] for c in masters), ZERO) != sum(jan26.values(), ZERO):
         raise ValueError("master customers at Dec 2025 don't keep their count and total ARR")
     notes.append(f"master: {len(masters)} customers active at Dec 2025, ARR {sum((dec[c] for c in masters), ZERO):,.2f} "
-                 f"(unchanged total); {len(new_rows)} former customers added")
+                 f"(unchanged total); {len(new_rows)} former customers added "
+                 f"({sum(1 for x in departures.values() for _, k, *_ in x if k == 'Pause')} paused)")
 
+    # ---- Budget and Forecast
+    taken = {int(c.split("-")[1]) for c in list(mrow) + list(logos)}
+    for v_opps in (b_opps, f_all):
+        taken |= {int(o["customer_id"].split("-")[1]) for o in v_opps}
+    next_logo = max(taken) + 1
+    renamed: dict[str, tuple[str, str]] = {}
+    seen: set[str] = set()
+    for o in sorted(f_opps, key=lambda o: (o["period"], o["opportunity_id"])):
+        cid = o["customer_id"]
+        if o["opportunity_type"] != "New Business":
+            continue
+        if cid in mrow or h.eop[CLOSE].get(cid, ZERO) > 0 or cid in seen:
+            new, name = f"CUST-{next_logo:05d}", re.sub(r"\d+$", str(next_logo), o["customer_name"])
+            next_logo += 1
+            renamed[o["opportunity_id"]] = (new, name)
+            o.update({"customer_id": new, "customer_name": name,
+                      "opportunity_name": f"{name} - New Business - {o['period'][:7]}"})
+        seen.add(o["customer_id"])
+    for o in b_opps:
+        if o["opportunity_type"] == "New Business" and (o["customer_id"] in mrow or dec.get(o["customer_id"], ZERO) > 0):
+            raise ValueError(f"Budget new business {o['opportunity_id']} on a customer active at Dec 2025")
+    plan_logos: dict[str, dict[str, dict]] = {"Budget": {}, "Forecast": {}}
+    for v, v_opps in (("Budget", b_opps), ("Forecast", f_opps)):
+        for o in v_opps:
+            if o["opportunity_type"] == "New Business":
+                cid = o["customer_id"]
+                plan_logos[v][cid] = o
+                start.setdefault(cid, o["period"][:7])
+                h.info.setdefault(cid, {"customer_name": o["customer_name"], "segment": o["segment"]})
+    notes.append(f"Forecast new business on a customer already active at the Actual close or already won earlier in the "
+                 f"Forecast is a new logo: {', '.join(f'{a} -> {b[0]} {b[1]}' for a, b in renamed.items()) or 'none'}")
+
+    def plan_region(c: str) -> str:
+        return region(c) if c in mrow else region_of.get((plan_logos["Budget"].get(c) or plan_logos["Forecast"].get(c)
+                                                          or logos[c])["customer_state"], "")
+
+    hb, b_assign = simulate_budget(org, h.info, dec, LAST_PRE_2026, h.rows, b_opps, WB, budget_pins, plan_region, anniv,
+                                   start, notes)
+    hf, f_assign, f_due = simulate_forecast(org, h.info, h.eop[CLOSE], CLOSE, h.rows, f_opps, WF, plan_region, anniv,
+                                            start, notes)
+
+    # ---- renewal pipelines and renewal commissions
+    churn_by_month: dict[str, set[str]] = defaultdict(set)
+    for o in churn_opps:
+        churn_by_month[o["period"][:7]].add(assign[o["opportunity_id"]])
+    a_due = actual_renewals(h, prange("2026-01", CLOSE), anniv, start, churn_by_month)
+    ren_fields, old_ren = ds.get("Actual_renewal_pipeline.csv")
+    old_by_customer = {r["customer_id"]: r for r in sorted(old_ren, key=lambda r: r["renewal_period"])}
+    a_ren = renewal_rows(org, "Actual", a_due, old_ren, old_by_customer, h.info)
+    by_customer = {r["customer_id"]: r for r in a_ren}
+    by_customer.update({c: r for c, r in old_by_customer.items() if c not in by_customer})
+    f_ren = renewal_rows(org, "Forecast", f_due, old_ren, by_customer, h.info,
+                         {"renewal_probability": f"{FORECAST_RENEWAL_PROBABILITY}", "renewal_stage": "Commit"})
+    com_fields, old_com = ds.get("Actual_renewal_commissions.csv")
+    rep_of = {r["rep_name"]: r["rep_id"] for r in old_com}
+    missing_rep = sorted({r["customer_success_manager"] for r in a_ren} - set(rep_of))
+    if missing_rep:
+        raise ValueError(f"CSMs without a rep ID in the renewal commissions: {missing_rep}")
+    a_com = renewal_commissions(org, a_ren, rep_of, RENEWAL_RATE, last_day)
+    notes.append(f"renewal pipeline: Actual {len(a_ren)} renewals Jan-Jun 2026 (renewal ARR "
+                 f"{sum((num(r['renewal_arr']) for r in a_ren), ZERO):,.2f}), Forecast {len(f_ren)} Jul-Dec 2026; "
+                 f"renewal commissions {len(a_com)} at {RENEWAL_RATE} "
+                 f"({sum((num(r['commission_amount']) for r in a_com), ZERO):,.2f})")
+
+    # ---- customer master
     last_kind = {}
     for r in sorted(h.rows, key=lambda r: r["period"]):
         if r["movement_type"] in ("Churn", "Pause"):
@@ -466,19 +488,39 @@ def build(src: str, dst: str) -> list[str]:
                  + f" (plus {sum(1 for o in logos.values() if o['opportunity_id'] not in assign)} 2026 new logos "
                  f"added by the v5 build; {len(back_new)} returning customers booked as new business)")
 
+    def logo_row(o: dict) -> dict:
+        cid = o["customer_id"]
+        return {"organization_id": org, "customer_id": cid, "customer_name": o["customer_name"], "segment": o["segment"],
+                "industry": o["industry"], "status": "Active", "customer_start_date": o["contract_start_date"],
+                "contract_start_date": o["contract_start_date"], "billing_cadence": o["billing_cadence"],
+                "billing_terms": o["billing_terms"], "billing_state": o["customer_state"], "source_crm": "Salesforce",
+                "netsuite_customer_id": f"NS-{cid}", "stripe_customer_id": f"cus_demo_{cid.split('-')[1]}",
+                "starting_mrr_jan_2026": "0", "starting_arr_jan_2026": "0", "currency": "USD"}
+
     shutil.copytree(src, dst)
-    for v in ("Actual", "Budget", "Forecast"):
-        write(os.path.join(dst, f"{v}_customers.csv"), master_fields, out_master)
-    h.rows.sort(key=lambda r: (r["period"], r["customer_id"], r["movement_type"]))
-    write(os.path.join(dst, HISTORY_FILE), HISTORY_FIELDS, h.rows)
+    write(os.path.join(dst, "Actual_customers.csv"), master_fields, out_master)
+    for v in ("Budget", "Forecast"):
+        extra = [logo_row(o) for cid, o in sorted(plan_logos[v].items()) if cid not in logos]
+        write(os.path.join(dst, f"{v}_customers.csv"), master_fields, out_master + extra)
+        notes.append(f"{v}_customers.csv: the Actual customer master plus {len(extra)} {v}-only new logos (Active)")
+    for name, fields, hist in ((HISTORY_FILE, HISTORY_FIELDS, h), ("Budget_customer_arr_history.csv", HISTORY_FIELDS, hb),
+                               ("Forecast_customer_arr_history.csv", EXPECTED_FIELDS, hf)):
+        hist.rows.sort(key=lambda r: (r["period"], r["customer_id"], r["movement_type"]))
+        write(os.path.join(dst, name), fields, hist.rows)
+    write(os.path.join(dst, "Actual_renewal_pipeline.csv"), ren_fields, a_ren)
+    write(os.path.join(dst, "Forecast_renewal_pipeline.csv"), ren_fields, f_ren)
+    write(os.path.join(dst, "Actual_renewal_commissions.csv"), com_fields, a_com)
 
     info = {c: mrow[c] for c in mrow}
+    for cid, o in logos.items():
+        info.setdefault(cid, {"customer_name": o["customer_name"], "segment": o["segment"], "industry": o["industry"],
+                              "billing_state": o["customer_state"], "billing_terms": o["billing_terms"]})
 
-    def repoint(rows: list[dict]) -> int:
+    def repoint(rows: list[dict], to: dict[str, str]) -> int:
         n = 0
         for r in rows:
-            c = assign.get(r["opportunity_id"])
-            if not c:
+            c = to.get(r["opportunity_id"])
+            if not c or c not in info:
                 continue
             m = info[c]
             r.update({"customer_id": c, "customer_name": m["customer_name"], "segment": m["segment"],
@@ -488,33 +530,51 @@ def build(src: str, dst: str) -> list[str]:
             n += 1
         return n
 
-    n_opp = repoint(opps)
-    write(os.path.join(dst, "Actual_opportunities.csv"), opp_fields, opps)
-    mv_fields, mv = ds.get("Actual_opportunity_movements.csv")
-    n_mv = repoint(mv)
-    opp_by_id = {o["opportunity_id"]: o for o in opps}
-    adjusted = {c.split()[0] for c in cents}
-    for r in mv:
-        o = opp_by_id.get(r["opportunity_id"])
-        if o and r["opportunity_id"] in adjusted and r["close_status"] == o["close_status"]:
-            r["amount_arr"], r["weighted_arr"] = o["amount_arr"], o["weighted_arr"]
-    write(os.path.join(dst, "Actual_opportunity_movements.csv"), mv_fields, mv)
-    notes.append(f"opportunities: {n_opp} pointed at customers in the history (churn, contraction, expansion, "
-                 f"reactivation, {RETURNING_NEW} returning new business); {n_mv} matching opportunity movement rows")
+    moved_region: dict[str, int] = {}
+    for v, fields, v_opps, to, keep in (("Actual", opp_fields, opps, assign, None),
+                                        ("Budget", b_fields, b_opps, b_assign, None),
+                                        ("Forecast", f_fields, f_opps, f_assign, {o["opportunity_id"] for o in f_opps})):
+        before = {o["opportunity_id"]: o["region"] for o in v_opps}
+        n_opp = repoint(v_opps, to)
+        moved_region[v] = sum(1 for o in v_opps if o["region"] != before[o["opportunity_id"]])
+        write(os.path.join(dst, f"{v}_opportunities.csv"), fields, v_opps)
+        mv_fields, mv = ds.get(f"{v}_opportunity_movements.csv")
+        if keep is not None:
+            dropped = {o["opportunity_id"] for o in f_all} - keep
+            mv = [r for r in mv if r["opportunity_id"] not in dropped]
+        if keep is not None:
+            for r in mv:
+                if r["opportunity_id"] in renamed:
+                    new, name = renamed[r["opportunity_id"]]
+                    r.update({"customer_id": new, "customer_name": name,
+                              "opportunity_name": f"{name} - New Business - {r['period'][:7]}"})
+        n_mv = repoint(mv, to)
+        by_id = {o["opportunity_id"]: o for o in v_opps}
+        for r in mv:
+            o = by_id.get(r["opportunity_id"])
+            if o and r["close_status"] == o["close_status"]:
+                r["amount_arr"], r["weighted_arr"] = o["amount_arr"], o["weighted_arr"]
+        write(os.path.join(dst, f"{v}_opportunity_movements.csv"), mv_fields, mv)
+        notes.append(f"{v} opportunities: {n_opp} pointed at customers in the {v} history; {n_mv} matching movement rows; "
+                     f"{moved_region[v]} changed region (no in-region customer fit)")
+    imp_fields, imp = ds.get("Forecast_implementation_schedule.csv")
+    for r in imp:
+        if r["source_record_id"] in renamed:
+            r["customer_id"], r["customer_name"] = renamed[r["source_record_id"]]
+    write(os.path.join(dst, "Forecast_implementation_schedule.csv"), imp_fields, imp)
 
     sched_fields = ds.fields("Actual_recurring_services_schedule.csv")
-    for v, src_months, holding in (("Actual", months, None), ("Budget", None, LAST_PRE_2026), ("Forecast", None, CLOSE)):
-        periods = src_months or sorted({r["period"] for r in ds.rows(f"{v}_recurring_services_schedule.csv")})
+    for v, hist in (("Actual", h), ("Budget", hb), ("Forecast", hf)):
+        periods = months if v == "Actual" else sorted({r["period"] for r in ds.rows(f"{v}_recurring_services_schedule.csv")})
         rows = []
         for p in periods:
-            snap = h.eop[holding or p]
+            snap = hist.eop[p]
             for c in sorted(snap):
                 rows.append({"organization_id": org, "version": v, "period": p, "customer_id": c,
                              "customer_name": h.info[c]["customer_name"], "segment": h.info[c]["segment"],
-                             "weight_source": WEIGHT_SOURCE if not holding else f"{WEIGHT_SOURCE}, held at {holding}",
-                             "customer_arr": snap[c]})
+                             "weight_source": weight_source(v), "customer_arr": snap[c]})
         write(os.path.join(dst, f"{v}_recurring_services_schedule.csv"), sched_fields, rows)
-    notes.append("revenue weights: Actual from the history each month; Budget held at Dec 2025; Forecast held at Jun 2026")
+    notes.append("revenue weights: each version's customer ARR history, month by month (Forecast: expected ARR)")
 
     rets = [r for r in h.rows if r["movement_type"] == "Reactivation"]
     above = sum(1 for r in returns if r["amount"] > r["baseline"])

@@ -30,8 +30,9 @@ Rules (agreed with Matt, Oct 6 2026):
     commission base follows the return policy (onboarding 7.21-7.24): a winback or restart
     earns only on ARR above what the customer left with, expansion first recovers earlier
     contraction, and a customer back more than 6 months after churning is new business.
-    Revenue weights and the customer master then come from that history. The 7 forecast hires that were due to start in June move to July because
-    the June roster has no June hires.
+    Revenue weights and the customer master then come from that history. Budget-only and Forecast-only new
+    logos come from their version's customer file and are billed in that version only. The 7 forecast hires
+    that were due to start in June move to July because the June roster has no June hires.
 """
 
 from __future__ import annotations
@@ -135,29 +136,35 @@ def commission_bases(history: list[dict[str, str]]) -> list[dict]:
     """Each movement's commissionable ARR under the commission policy (onboarding 7.21-7.24, agreed with Matt):
     a return (winback or restart) earns only on ARR above what the customer left with; expansion earns only
     above the customer's prior level (it first recovers earlier contractions or a return below the prior
-    ARR); new business, including a customer back more than 6 months after churning, earns on all of it."""
+    ARR); new business, including a customer back more than 6 months after churning, earns on all of it.
+
+    Expected-value rows (Forecast: ``probability`` and ``opportunity_arr``) earn probability x the base on the full
+    opportunity ARR; a churn that leaves ARR (an expected lapse) is not a departure."""
     out = []
     state: dict[str, dict] = defaultdict(lambda: {"left_with": None, "unrecovered": ZERO})
     for r in sorted(history, key=lambda r: (r["customer_id"], r["period"], HISTORY_ORDER[r["movement_type"]])):
         s, kind = state[r["customer_id"]], r["movement_type"]
         amount = abs(num(r["movement_arr"]))
+        prob = num(r["probability"]) if r.get("probability") else Decimal(1)
+        full = num(r["opportunity_arr"]) if r.get("probability") else amount
         base = None
         if kind in ("Churn", "Pause"):
-            s["left_with"], s["unrecovered"] = num(r["beginning_arr"]), ZERO
+            if num(r["ending_arr"]) == 0:
+                s["left_with"], s["unrecovered"] = num(r["beginning_arr"]), ZERO
         elif kind == "Contraction":
             s["unrecovered"] += amount
         elif kind == "Reactivation":
             if s["left_with"] is None:
                 raise ValueError(f"{r['period']} {r['customer_id']}: return without a recorded departure")
-            base = max(ZERO, amount - s["left_with"])
-            s["unrecovered"], s["left_with"] = max(ZERO, s["left_with"] - amount), None
+            base = prob * max(ZERO, full - s["left_with"])
+            s["unrecovered"], s["left_with"] = max(ZERO, s["left_with"] - full), None
         elif kind == "Expansion":
-            recovered = min(s["unrecovered"], amount)
+            recovered = min(s["unrecovered"], full)
             s["unrecovered"] -= recovered
-            base = amount - recovered
+            base = prob * (full - recovered)
         elif kind == "New Business":
             s["left_with"], s["unrecovered"] = None, ZERO
-            base = amount
+            base = prob * full
         if base is not None:
             out.append({"period": r["period"], "customer_id": r["customer_id"], "movement_type": kind,
                         "opportunity_id": r["opportunity_id"], "arr": amount, "base": base})
@@ -194,6 +201,12 @@ def new_logos(ds: Dataset) -> dict[str, dict[str, str]]:
         if r["opportunity_type"] == "New Business" and r["close_status"] == "Closed Won":
             out[r["customer_id"]] = r
     return out
+
+
+def plan_logos(ds: Dataset, master: list[dict[str, str]], logos: dict[str, dict[str, str]]) -> dict[str, list[dict[str, str]]]:
+    """Budget and Forecast new logos that are not Actual customers (in that version's customer file)."""
+    known = {r["customer_id"] for r in master} | set(logos)
+    return {v: [r for r in ds.rows(f"{v}_customers.csv") if r["customer_id"] not in known] for v in ("Budget", "Forecast")}
 
 
 def no_annual(cadence: str) -> str:
@@ -402,6 +415,13 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     names = {r["customer_id"]: r["customer_name"] for r in master}
     for cid, o in logos.items():
         terms[cid], names[cid] = o["billing_terms"], o["customer_name"]
+    plan_only = plan_logos(ds, master, logos)
+    billing = {"Actual": (cadence, anniv, terms, names)}
+    for v, rows in plan_only.items():
+        billing[v] = ({**cadence, **{r["customer_id"]: no_annual(r["billing_cadence"]) for r in rows}},
+                      {**anniv, **{r["customer_id"]: int(r["customer_start_date"][5:7]) for r in rows}},
+                      {**terms, **{r["customer_id"]: r["billing_terms"] for r in rows}},
+                      {**names, **{r["customer_id"]: r["customer_name"] for r in rows}})
 
     rev = {v: Revenue(ds, v, logos) for v in VERSIONS}
 
@@ -433,8 +453,9 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     for v in ("Budget", "Forecast"):
         start = CHAIN_FROM_ACTUAL[v]
         w = World(v, rev[v].months)
-        w.own = bill_customers(v, w.months, all_customers, cadence, anniv, terms, names, recurring_in(v)) \
-            + implementation_invoices(ds, v)
+        v_cadence, v_anniv, v_terms, v_names = billing.get(v, billing["Actual"])
+        w.own = bill_customers(v, w.months, sorted(set(v_cadence)), v_cadence, v_anniv, v_terms, v_names,
+                               recurring_in(v)) + implementation_invoices(ds, v)
         w.carried = [inv for inv in a.carried + a.own if inv.issue < start]
         w.begin_ar, w.begin_dr = open_balances(w.carried, padd(start, -1))
         worlds[v] = w
@@ -453,7 +474,7 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
             notes.append(f"{v}: deferred revenue below zero in {neg}")
 
     write_income_statement_totals(ds, dst, notes)
-    write_customers(ds, dst, master_fields, master, logos, cadence, org)
+    write_customers(ds, dst, master_fields, master, logos, cadence, org, plan_only)
     write_billing_files(ds, dst, org, worlds, roll, rev)
     write_balance_sheet_inputs(ds, dst, roll, opening_equity_adjustment, notes)
     write_mrr(ds, dst, notes)
@@ -465,11 +486,12 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     share = {}
     for p in ("2024-01", CLOSE, "2026-12"):
         v = "Forecast" if p > CLOSE else "Actual"
+        v_cadence = billing.get(v, billing["Actual"])[0]
         tot = mon = ZERO
         for (cid, mp), m in rev[v].meta.items():
             if mp == p:
                 tot += m["customer_arr"]
-                mon += m["customer_arr"] if cadence[cid] == "Monthly" else ZERO
+                mon += m["customer_arr"] if v_cadence[cid] == "Monthly" else ZERO
         share[p] = mon / tot if tot else ZERO
     notes.append("monthly-billed share of ARR: " + ", ".join(f"{p} {s:.1%}" for p, s in share.items()))
     with open(os.path.join(dst, "v5_build_notes.txt"), "w", encoding="utf-8") as f:
@@ -499,7 +521,7 @@ def write_income_statement_totals(ds, dst, notes):
         notes.append(f"{v} income statement: gross profit, EBITDA, net income recalculated from the lines ({changed} of {len(rows)} months changed)")
 
 
-def write_customers(ds, dst, fields, master, logos, cadence, org):
+def write_customers(ds, dst, fields, master, logos, cadence, org, plan_only):
     rows = []
     for r in master:
         nr = dict(r)
@@ -518,7 +540,8 @@ def write_customers(ds, dst, fields, master, logos, cadence, org):
             "netsuite_customer_id": f"NS-{cid}", "stripe_customer_id": f"cus_demo_{digits}",
             "starting_mrr_jan_2026": "0", "starting_arr_jan_2026": "0", "currency": "USD"})
     for v in VERSIONS:
-        write(os.path.join(dst, f"{v}_customers.csv"), fields, rows)
+        extra = [{**r, "billing_cadence": no_annual(r["billing_cadence"])} for r in plan_only.get(v, [])]
+        write(os.path.join(dst, f"{v}_customers.csv"), fields, rows + extra)
 
 
 def write_billing_files(ds, dst, org, worlds, roll, rev):
