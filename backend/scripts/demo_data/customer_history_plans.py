@@ -20,6 +20,9 @@ Rules (agreed with Matt, Oct 7 2026):
   * Renewal pipeline: a customer is due in its anniversary month (customer start month) once it has been a
     customer for 12 months since it last started; renewal ARR is its ARR at the end of the prior month.
     Customers with a churn deal that month are not in the renewal pipeline (they are leaving instead).
+  * Segment is the customer's ARR at signing: Enterprise $500k+, Mid-Market $100k-$500k, SMB below $100k.
+    Customers that signed before the history starts use the earliest ARR on record; a prospect uses its
+    first New Business deal.
 """
 
 from __future__ import annotations
@@ -45,6 +48,35 @@ WINBACK_WINDOW = 6
 WINBACK_SHARE = Decimal("0.20")
 CONTRACTION_CAP = Decimal("0.6")
 FORECAST_RENEWAL_PROBABILITY = Decimal("0.95")
+SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
+
+
+def segment_for(arr: Decimal) -> str:
+    return next(name for name, floor in SEGMENT_FLOORS if arr >= floor)
+
+
+def signing_arr(rows: list[dict]) -> dict[str, Decimal]:
+    """Each customer's ARR at signing: after its first New Business or opening balance, or what it left with
+    when its first row is a departure from before the history."""
+    first: dict[str, Decimal] = {}
+    for r in sorted(rows, key=lambda r: r["period"]):
+        c = r["customer_id"]
+        if c not in first:
+            first[c] = num(r["beginning_arr"]) if r["movement_type"] in ("Churn", "Pause") else num(r["ending_arr"])
+    return first
+
+
+def prospect_segments(opps: list[dict], known: dict[str, str]) -> dict[str, str]:
+    """Customers not in the history: segment of their first New Business deal (full amount)."""
+    out: dict[str, str] = {}
+    for o in sorted(opps, key=lambda o: (o["period"], o["opportunity_id"])):
+        c = o["customer_id"]
+        if c in known or c in out:
+            continue
+        if o["opportunity_type"] != "New Business":
+            raise ValueError(f"{o['opportunity_id']}: {o['opportunity_type']} on {c}, which has no ARR history")
+        out[c] = segment_for(num(o["amount_arr"]))
+    return out
 
 
 def u(key: str) -> Decimal:

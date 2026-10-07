@@ -28,6 +28,8 @@ Rules (agreed with Matt, Oct 7 2026):
     month at their ARR; Actual renewal commissions are 2% of each renewal, paid to its CSM.
   * Revenue weights (recurring services schedule) follow each version's history: a customer is billed only
     while it has ARR (Forecast: expected ARR).
+  * Segment is the customer's ARR at signing (Enterprise $500k+, Mid-Market $100k-$500k, SMB below $100k) in
+    every file that carries it; the implementation fee follows the segment.
 """
 
 from __future__ import annotations
@@ -43,8 +45,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_v5_dataset import ZERO, Dataset, allocate, last_day, num, padd, pidx, prange, q, write  # noqa: E402
 from customer_history_plans import (EXPECTED_FIELDS, HISTORY_FIELDS, WINBACK_SHARE, WINBACK_WINDOW,  # noqa: E402
                                     FORECAST_RENEWAL_PROBABILITY, History, actual_renewals, forecast_deals, pick,
-                                    renewal_commissions, renewal_rows, simulate_budget, simulate_forecast, tie,
-                                    tie_budget_deals, u, waterfall)
+                                    prospect_segments, renewal_commissions, renewal_rows, segment_for, signing_arr,
+                                    simulate_budget, simulate_forecast, tie, tie_budget_deals, u, waterfall)
+from add_implementation_revenue import FEE_BY_SEGMENT  # noqa: E402
 
 FIRST = "2024-01"
 LAST_PRE_2026 = "2025-12"
@@ -54,6 +57,7 @@ RETURNING_NEW = 2
 PAUSE_FROM = "2024-04"
 PAUSE_SHARE = Decimal("0.5")
 RENEWAL_RATE = Decimal("0.02")
+BIG_ARR = Decimal(100000)
 HISTORY_FILE = "Actual_customer_arr_history.csv"
 
 
@@ -131,13 +135,12 @@ def build(src: str, dst: str) -> list[str]:
 
     def new_customer(tag: str, arr_hint: Decimal, departs: str, like: dict | None = None) -> str:
         """A former customer whose anniversary is the month it leaves. ``like`` is the 2026 opportunity it will
-        carry: the customer takes the deal's segment, industry, state, cadence and terms so the deal keeps its
-        region (and so its owner)."""
+        carry: the customer takes the deal's industry, state, cadence and terms so the deal keeps its region (and
+        so its owner). Segment is set from the history once it is built."""
         nonlocal next_no
         cid = f"CUST-{next_no:04d}"
         next_no += 1
         k = f"former|{cid}"
-        seg = "SMB" if arr_hint < 50000 else "Mid-Market" if arr_hint < 150000 else "Enterprise"
         latest = min(pidx(departs) - 7, pidx("2023-06"))
         s = padd("2019-01", int(u(k + "|start") * (latest - pidx("2019-01") + 1)))
         s = f"{s[:4]}-{departs[5:7]}"
@@ -145,7 +148,7 @@ def build(src: str, dst: str) -> list[str]:
             s = padd(s, -12)
         row = {"organization_id": org, "customer_id": cid,
                "customer_name": f"{prefixes[int(u(k + '|name') * len(prefixes))]} {next_no - 1}",
-               "segment": seg, "industry": industries[int(u(k + "|ind") * len(industries))], "status": "",
+               "segment": "", "industry": industries[int(u(k + "|ind") * len(industries))], "status": "",
                "customer_start_date": f"{s}-01", "contract_start_date": f"{s}-01",
                "billing_cadence": cadences[int(u(k + "|cad") * len(cadences))],
                "billing_terms": terms[int(u(k + "|terms") * len(terms))],
@@ -153,13 +156,12 @@ def build(src: str, dst: str) -> list[str]:
                "netsuite_customer_id": f"NS-{cid}", "stripe_customer_id": f"cus_demo_{cid.split('-')[1]}",
                "starting_mrr_jan_2026": "0", "starting_arr_jan_2026": "0", "currency": "USD", "_tag": tag}
         if like:
-            seg = like["segment"]
-            row.update({"segment": seg, "industry": like["industry"], "billing_state": like["customer_state"],
+            row.update({"industry": like["industry"], "billing_state": like["customer_state"],
                         "billing_cadence": like["billing_cadence"], "billing_terms": like["billing_terms"]})
         new_rows.append(row)
         mrow[cid] = row
         start[cid] = s
-        h.info[cid] = {"customer_name": row["customer_name"], "segment": seg}
+        h.info[cid] = {"customer_name": row["customer_name"], "segment": ""}
         return cid
 
     # ---- returns: every month's reactivation ARR, 2024-2025 split 1-2 ways, 2026 = the opportunities
@@ -232,7 +234,7 @@ def build(src: str, dst: str) -> list[str]:
     for o, c in zip(churn_opps, churners):
         pinned[c] = num(o["amount_arr"])
         used.add(c)
-    big = [c for c in opening_masters if c not in used and mrow[c]["segment"] == "Enterprise"]
+    big = [c for c in opening_masters if c not in used and jan26[c] >= BIG_ARR]
     contractors = []
     for o in con_opps:
         cands = [c for c in big if c not in contractors]
@@ -465,6 +467,22 @@ def build(src: str, dst: str) -> list[str]:
                  f"renewal commissions {len(a_com)} at {RENEWAL_RATE} "
                  f"({sum((num(r['commission_amount']) for r in a_com), ZERO):,.2f})")
 
+    # ---- segment: ARR at signing; plan-only logos from their deal, prospects once opportunities are re-pointed
+    actual_seg = {c: segment_for(a) for c, a in signing_arr(h.rows).items()}
+    seg_of: dict[str, dict[str, str]] = {"Actual": dict(actual_seg)}
+    for v in ("Budget", "Forecast"):
+        seg_of[v] = dict(actual_seg)
+        for cid, o in sorted(plan_logos[v].items()):
+            seg_of[v].setdefault(cid, segment_for(num(o["amount_arr"])))
+    for r in master + new_rows:
+        r["segment"] = actual_seg[r["customer_id"]]
+    for v, hist in (("Actual", h), ("Budget", hb), ("Forecast", hf)):
+        for r in hist.rows:
+            r["segment"] = seg_of[v][r["customer_id"]]
+    notes.append("segment = ARR at signing (earliest ARR on record for customers signed before the history): "
+                 + ", ".join(f"{k} {n}" for k, n in sorted(Counter(actual_seg[r["customer_id"]] for r in master + new_rows).items()))
+                 + " in the customer master")
+
     # ---- customer master
     last_kind = {}
     for r in sorted(h.rows, key=lambda r: r["period"]):
@@ -488,9 +506,9 @@ def build(src: str, dst: str) -> list[str]:
                  + f" (plus {sum(1 for o in logos.values() if o['opportunity_id'] not in assign)} 2026 new logos "
                  f"added by the v5 build; {len(back_new)} returning customers booked as new business)")
 
-    def logo_row(o: dict) -> dict:
+    def logo_row(v: str, o: dict) -> dict:
         cid = o["customer_id"]
-        return {"organization_id": org, "customer_id": cid, "customer_name": o["customer_name"], "segment": o["segment"],
+        return {"organization_id": org, "customer_id": cid, "customer_name": o["customer_name"], "segment": seg_of[v][cid],
                 "industry": o["industry"], "status": "Active", "customer_start_date": o["contract_start_date"],
                 "contract_start_date": o["contract_start_date"], "billing_cadence": o["billing_cadence"],
                 "billing_terms": o["billing_terms"], "billing_state": o["customer_state"], "source_crm": "Salesforce",
@@ -500,7 +518,7 @@ def build(src: str, dst: str) -> list[str]:
     shutil.copytree(src, dst)
     write(os.path.join(dst, "Actual_customers.csv"), master_fields, out_master)
     for v in ("Budget", "Forecast"):
-        extra = [logo_row(o) for cid, o in sorted(plan_logos[v].items()) if cid not in logos]
+        extra = [logo_row(v, o) for cid, o in sorted(plan_logos[v].items()) if cid not in logos]
         write(os.path.join(dst, f"{v}_customers.csv"), master_fields, out_master + extra)
         notes.append(f"{v}_customers.csv: the Actual customer master plus {len(extra)} {v}-only new logos (Active)")
     for name, fields, hist in ((HISTORY_FILE, HISTORY_FIELDS, h), ("Budget_customer_arr_history.csv", HISTORY_FIELDS, hb),
@@ -513,7 +531,9 @@ def build(src: str, dst: str) -> list[str]:
 
     info = {c: mrow[c] for c in mrow}
     for cid, o in logos.items():
-        info.setdefault(cid, {"customer_name": o["customer_name"], "segment": o["segment"], "industry": o["industry"],
+        if cid not in actual_seg:
+            continue
+        info.setdefault(cid, {"customer_name": o["customer_name"], "segment": actual_seg[cid], "industry": o["industry"],
                               "billing_state": o["customer_state"], "billing_terms": o["billing_terms"]})
 
     def repoint(rows: list[dict], to: dict[str, str]) -> int:
@@ -537,7 +557,6 @@ def build(src: str, dst: str) -> list[str]:
         before = {o["opportunity_id"]: o["region"] for o in v_opps}
         n_opp = repoint(v_opps, to)
         moved_region[v] = sum(1 for o in v_opps if o["region"] != before[o["opportunity_id"]])
-        write(os.path.join(dst, f"{v}_opportunities.csv"), fields, v_opps)
         mv_fields, mv = ds.get(f"{v}_opportunity_movements.csv")
         if keep is not None:
             dropped = {o["opportunity_id"] for o in f_all} - keep
@@ -554,14 +573,26 @@ def build(src: str, dst: str) -> list[str]:
             o = by_id.get(r["opportunity_id"])
             if o and r["close_status"] == o["close_status"]:
                 r["amount_arr"], r["weighted_arr"] = o["amount_arr"], o["weighted_arr"]
+        seg_of[v].update(prospect_segments(v_opps + mv, seg_of[v]))
+        for r in v_opps + mv:
+            r["segment"] = seg_of[v][r["customer_id"]]
+        write(os.path.join(dst, f"{v}_opportunities.csv"), fields, v_opps)
         write(os.path.join(dst, f"{v}_opportunity_movements.csv"), mv_fields, mv)
         notes.append(f"{v} opportunities: {n_opp} pointed at customers in the {v} history; {n_mv} matching movement rows; "
                      f"{moved_region[v]} changed region (no in-region customer fit)")
-    imp_fields, imp = ds.get("Forecast_implementation_schedule.csv")
-    for r in imp:
-        if r["source_record_id"] in renamed:
-            r["customer_id"], r["customer_name"] = renamed[r["source_record_id"]]
-    write(os.path.join(dst, "Forecast_implementation_schedule.csv"), imp_fields, imp)
+
+        # implementation fee by segment; deal rows follow their opportunity's customer
+        imp_fields, imp = ds.get(f"{v}_implementation_schedule.csv")
+        before_fee = sum((num(r["implementation_fee"]) for r in imp), ZERO)
+        for r in imp:
+            if r["source"] == f"{v}_opportunities.csv":
+                o = by_id[r["source_record_id"]]
+                r["customer_id"], r["customer_name"] = o["customer_id"], o["customer_name"]
+            r["segment"] = seg_of[v][r["customer_id"]]
+            r["implementation_fee"] = f"{q(FEE_BY_SEGMENT[r['segment']] * num(r['win_probability'])):.2f}"
+        write(os.path.join(dst, f"{v}_implementation_schedule.csv"), imp_fields, imp)
+        notes.append(f"{v} implementation fees by segment: {len(imp)} rows, "
+                     f"{before_fee:,.2f} -> {sum((num(r['implementation_fee']) for r in imp), ZERO):,.2f}")
 
     sched_fields = ds.fields("Actual_recurring_services_schedule.csv")
     for v, hist in (("Actual", h), ("Budget", hb), ("Forecast", hf)):
@@ -571,7 +602,7 @@ def build(src: str, dst: str) -> list[str]:
             snap = hist.eop[p]
             for c in sorted(snap):
                 rows.append({"organization_id": org, "version": v, "period": p, "customer_id": c,
-                             "customer_name": h.info[c]["customer_name"], "segment": h.info[c]["segment"],
+                             "customer_name": h.info[c]["customer_name"], "segment": seg_of[v][c],
                              "weight_source": weight_source(v), "customer_arr": snap[c]})
         write(os.path.join(dst, f"{v}_recurring_services_schedule.csv"), sched_fields, rows)
     notes.append("revenue weights: each version's customer ARR history, month by month (Forecast: expected ARR)")

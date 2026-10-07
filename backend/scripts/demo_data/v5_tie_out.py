@@ -39,6 +39,8 @@ ADDED_COLUMNS = {
 }
 HISTORY_FILE = "Actual_customer_arr_history.csv"
 WINBACK_WINDOW = 6
+SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
+IMPLEMENTATION_FEE = {"SMB": Decimal(2000), "Mid-Market": Decimal(3500), "Enterprise": Decimal(5000)}
 COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
 
 
@@ -500,6 +502,7 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             if os.path.exists(os.path.join(v5, f"{v}_customer_arr_history.csv")):
                 plan_history_section(rep, f, v, hist, a_eop)
                 plan_hists[v] = f(f"{v}_customer_arr_history.csv")
+        segment_section(rep, f, hist)
     if os.path.exists(os.path.join(v5, "Actual_commission_schedule.csv")):
         commission_section(rep, f, gl, months, chain_months, source, bs_line, a_mrr, hist, plan_hists)
         if not os.path.exists(os.path.join(v4, "Actual_commission_schedule.csv")):
@@ -1035,6 +1038,56 @@ def plan_history_section(rep: Report, f, v: str, actual: list[dict[str, str]], a
               f"not active in Actual at {' or '.join(sorted({open_p, CLOSE}))}")
 
 
+def segment_section(rep: Report, f, hist: list[dict[str, str]]) -> None:
+    """Segment = ARR at signing in every file that carries it; implementation fee = the segment's fee."""
+    rep.section("Customer segment (ARR at signing)")
+
+    def band(a: Decimal) -> str:
+        return next(name for name, floor in SEGMENT_FLOORS if a >= floor)
+
+    signing: dict[str, Decimal] = {}
+    for r in sorted(hist, key=lambda r: r["period"]):
+        if r["customer_id"] not in signing:
+            departed = r["movement_type"] in ("Churn", "Pause")
+            signing[r["customer_id"]] = num(r["beginning_arr"] if departed else r["ending_arr"])
+    for v in VERSIONS:
+        opps = f(f"{v}_opportunities.csv")
+        seg = {c: band(a) for c, a in signing.items()}
+        deals = opps + f(f"{v}_opportunity_movements.csv")
+        for o in sorted(deals, key=lambda o: (o["period"], o["opportunity_id"])):
+            if o["customer_id"] not in seg and o["opportunity_type"] == "New Business":
+                seg[o["customer_id"]] = band(num(o["amount_arr"]))
+        diffs: list[str] = []
+        files = [f"{v}_customers.csv", f"{v}_opportunities.csv", f"{v}_opportunity_movements.csv",
+                 f"{v}_customer_arr_history.csv", f"{v}_recurring_services_schedule.csv"]
+        for name in files:
+            for r in f(name):
+                want = seg.get(r["customer_id"])
+                if r["segment"] != want:
+                    diffs.append(f"{name} {r['customer_id']}: {r['segment']} vs {want or 'no signing ARR'}")
+        by_opp = {o["opportunity_id"]: o for o in opps}
+        imp = f(f"{v}_implementation_schedule.csv")
+        for r in imp:
+            want = seg.get(r["customer_id"])
+            if r["segment"] != want:
+                diffs.append(f"implementation {r['invoice_id']} {r['customer_id']}: {r['segment']} vs {want}")
+                continue
+            fee = cents(IMPLEMENTATION_FEE[want] * num(r["win_probability"]))
+            if num(r["implementation_fee"]) != fee:
+                diffs.append(f"implementation {r['invoice_id']}: fee {r['implementation_fee']} vs {fee}")
+            o = by_opp.get(r["source_record_id"])
+            if r["source"] == f"{v}_opportunities.csv" and (o is None or o["customer_id"] != r["customer_id"]):
+                diffs.append(f"implementation {r['invoice_id']}: customer {r['customer_id']} vs its deal "
+                             f"{r['source_record_id']} {o['customer_id'] if o else 'missing'}")
+        counts = defaultdict(int)
+        for r in f(f"{v}_customers.csv"):
+            counts[r["segment"]] += 1
+        rep.check(f"{v} segment = ARR at signing in customers, opportunities, movements, history and revenue schedules; "
+                  f"implementation fee = segment fee x win probability, on its deal's customer", diffs[:20] + (
+                      [f"... {len(diffs) - 20} more"] if len(diffs) > 20 else []),
+                  ", ".join(f"{k} {n}" for k, n in sorted(counts.items())) + f"; {len(imp)} implementation fees")
+
+
 def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line, a_mrr, hist=None,
                        plan_hists: dict[str, list[dict[str, str]]] | None = None) -> None:
     """ASC 340-40: plans -> schedule -> rollforward -> GL -> statements -> cash bridge, each recomputed."""
@@ -1316,7 +1369,8 @@ KNOWN_GAPS = [
     "Budget has no renewal pipeline; Budget renewal commissions are beginning ARR x the Actual renewal share.",
     "Forecast customer ARR is expected value (each deal moves its customer by probability x amount, each renewal by "
     "its expected lapse), so Forecast customer ARR is not a contract amount.",
-    "Customer segment does not follow customer ARR.",
+    "Customer segment is ARR at signing; customers that signed before Jan 2024 use their Dec 2023 ARR (the earliest "
+    "on record). Sales reps keep their roster segment; owners are assigned by region.",
     "Commissions are paid in the booking month (payout lag 0), so there is no accrued commissions liability.",
     "Deferred tax on deferred commissions (book/tax difference) is not modeled.",
     "Budget and Forecast bookings_summary does not tie to their ARR waterfalls; commissions use the waterfall.",
