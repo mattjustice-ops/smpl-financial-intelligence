@@ -8,9 +8,12 @@ Files rewritten in <v5_folder> (same columns as before):
   * <version>_cash_flow_statement.csv: indirect method from the GL: net income, D&A, stock comp,
     working capital changes, capex (PP&E change plus D&A), financing as booked.
   * <version>_cash_collections.csv: beginning and ending cash from the GL.
-  * <version>_cash_flow_bridge.csv: collections from the AR rollforward, Actual 2026 commission
-    cash from the commission payouts, other lines as loaded; other operating cash is what is
-    left so the bridge ends on GL cash.
+  * <version>_cash_flow_bridge.csv: collections from the AR rollforward, commission cash from
+    <version>_commission_schedule.csv (all plans) when it exists, else the Actual commission
+    payouts; other lines as loaded; other operating cash is what is left so the bridge ends on
+    GL cash.
+  * Deferred commissions (when the balance sheet has the columns): current and noncurrent from
+    the GL; their change is an operating line (change_in_deferred_commissions).
   * <version>_Working_Capital_Driver_Summary.csv, <version>_cash_flow_driver_assumptions.csv,
     Forecast_working_capital_metrics.csv, Forecast_revenue_schedule.csv: AR, AP, deferred
     revenue, revenue, billings, collections and DSO from the GL and the billing files.
@@ -131,6 +134,8 @@ def main(src: str, gl_dir: str) -> list[str]:
         dr = by_period(read(os.path.join(src, f"{v}_deferred_revenue_waterfall.csv"))[1])
         ap = by_period(read(os.path.join(src, f"{v}_accounts_payable_rollforward.csv"))[1])
         pp = by_period(read(os.path.join(src, f"{v}_Prepaids_Rollforward.csv"))[1])
+        dc_path = os.path.join(src, f"{v}_deferred_commissions_rollforward.csv")
+        dc = by_period(read(dc_path)[1]) if os.path.exists(dc_path) else {}
         months = [r["period"][:7] for r in bs_file]
 
         bs_out = []
@@ -138,7 +143,11 @@ def main(src: str, gl_dir: str) -> list[str]:
             p = r["period"][:7]
             b = line(v, p)
             nr = dict(r)
-            assets = b["cash"] + b["accounts_receivable"] + b["prepaids_and_other_current"] + b["ppe_net"]
+            if "deferred_commissions_current" in bs_fields:
+                nr["deferred_commissions_current"] = q(b["deferred_commissions_current"])
+                nr["deferred_commissions_noncurrent"] = q(b["deferred_commissions_noncurrent"])
+            assets = b["cash"] + b["accounts_receivable"] + b["prepaids_and_other_current"] + b["ppe_net"] \
+                + b["deferred_commissions_current"] + b["deferred_commissions_noncurrent"]
             liabs = b["accounts_payable"] + b["deferred_revenue"] + b["debt"] + b["other_liabilities"]
             nr.update({"cash": q(b["cash"]), "accounts_receivable": q(b["accounts_receivable"]),
                        "ppe_net": q(b["ppe_net"]), "prepaids_and_other_current": q(b["prepaids_and_other_current"]),
@@ -164,11 +173,17 @@ def main(src: str, gl_dir: str) -> list[str]:
                         "accounts_payable": num(ap[p]["beginning_accounts_payable"]),
                         "prepaids_and_other_current": num(pp[p]["beginning_prepaid_balance"]),
                         "ppe_net": b["ppe_net"] + num(src_cf.get("capital_expenditures")) - da,
-                        "other_liabilities": b["other_liabilities"], "debt": b["debt"]}
+                        "other_liabilities": b["other_liabilities"], "debt": b["debt"],
+                        "deferred_commissions": num(dc[p]["beginning_deferred_commissions"]) if p in dc
+                        else b["deferred_commissions_current"] + b["deferred_commissions_noncurrent"]}
+            else:
+                prev = {**prev, "deferred_commissions": prev["deferred_commissions_current"] + prev["deferred_commissions_noncurrent"]}
+            b = {**b, "deferred_commissions": b["deferred_commissions_current"] + b["deferred_commissions_noncurrent"]}
             chg = {k: b[k] - prev[k] for k in ("accounts_receivable", "deferred_revenue", "accounts_payable",
-                                               "prepaids_and_other_current", "ppe_net", "other_liabilities")}
+                                               "prepaids_and_other_current", "ppe_net", "other_liabilities",
+                                               "deferred_commissions")}
             cfo = ni + da + sbc - chg["accounts_receivable"] + chg["accounts_payable"] + chg["deferred_revenue"] \
-                - chg["prepaids_and_other_current"] + chg["other_liabilities"]
+                - chg["prepaids_and_other_current"] + chg["other_liabilities"] - chg["deferred_commissions"]
             capex = -(chg["ppe_net"] + da)
             cff = num(src_cf.get("debt_issuance_repayment"))
             net = cfo + capex + cff
@@ -183,6 +198,7 @@ def main(src: str, gl_dir: str) -> list[str]:
                         "change_in_accounts_payable": q(chg["accounts_payable"]),
                         "change_in_deferred_revenue": q(chg["deferred_revenue"]),
                         "change_in_prepaids": q(-chg["prepaids_and_other_current"]),
+                        "change_in_deferred_commissions": q(-chg["deferred_commissions"]),
                         "net_cash_from_operating_activities": q(cfo), "capital_expenditures": q(capex),
                         "net_cash_from_investing_activities": q(capex), "debt_issuance_repayment": q(cff),
                         "net_cash_from_financing_activities": q(cff), "net_change_in_cash": q(net),
@@ -200,7 +216,11 @@ def main(src: str, gl_dir: str) -> list[str]:
         bridge_path = os.path.join(src, f"{v}_cash_flow_bridge.csv")
         if os.path.exists(bridge_path):
             payouts: dict[str, Decimal] = defaultdict(Decimal)
-            if v == "Actual":
+            schedule_path = os.path.join(src, f"{v}_commission_schedule.csv")
+            if os.path.exists(schedule_path):
+                for r in read(schedule_path)[1]:
+                    payouts[r["period"][:7]] += num(r["commission_payout"])
+            elif v == "Actual":
                 for r in read(os.path.join(src, "Actual_commission_payouts.csv"))[1]:
                     payouts[r["period"][:7]] += num(r["commission_amount"])
             bf, brows = read(bridge_path)

@@ -10,6 +10,9 @@ Where each balance sheet row comes from:
   * Accounts receivable: AR rollforward (billings, collections).
   * Accounts payable: AP rollforward (vendor accruals, vendor payments).
   * Prepaids: prepaids rollforward (additions, amortization).
+  * Deferred commissions: deferred commissions rollforward. Capitalized payouts post to
+    1550 (noncurrent), amortization comes out of 1250 (current), and a monthly reclass
+    keeps 1250 at the next 12 months' amortization.
   * PP&E: depreciation = the month's GL D&A; additions = the balance sheet change plus D&A.
   * Deferred revenue, debt, other liabilities: change in the version's balance sheet file.
   * Stock comp: SBC schedule total, credited to APIC - Stock Compensation as non-cash
@@ -40,7 +43,11 @@ ACCOUNTS = {
     "cash": ("1000", "Cash", "Assets", "Cash", "Cash"),
     "accounts_receivable": ("1100", "Accounts Receivable", "Assets", "AR", "Accounts Receivable"),
     "prepaids_and_other_current": ("1200", "Prepaids and Other Current Assets", "Assets", "Current Assets", "Prepaids"),
+    "deferred_commissions_current": ("1250", "Deferred Commissions - Current", "Assets", "Deferred Commissions",
+                                     "Deferred Commissions"),
     "ppe_net": ("1500", "Property and Equipment Net", "Assets", "PP&E", "Fixed Assets"),
+    "deferred_commissions_noncurrent": ("1550", "Deferred Commissions - Noncurrent", "Assets", "Deferred Commissions",
+                                        "Deferred Commissions Noncurrent"),
     "accounts_payable": ("2000", "Accounts Payable", "Liabilities", "AP", "Accounts Payable"),
     "deferred_revenue": ("2100", "Deferred Revenue", "Liabilities", "Deferred Revenue", "Deferred Revenue"),
     "debt": ("2500", "Debt", "Liabilities", "Debt", "Debt"),
@@ -49,8 +56,10 @@ ACCOUNTS = {
     "apic_sbc": ("3311", "APIC - Stock Compensation", "Equity", "Equity", "Equity"),
 }
 CREDIT_NORMAL = {"accounts_payable", "deferred_revenue", "debt", "other_liabilities", "equity", "apic_sbc"}
-BALANCE_LINES = ["cash", "accounts_receivable", "prepaids_and_other_current", "ppe_net",
-                 "accounts_payable", "deferred_revenue", "debt", "other_liabilities", "equity"]
+BALANCE_LINES = ["cash", "accounts_receivable", "prepaids_and_other_current", "deferred_commissions_current", "ppe_net",
+                 "deferred_commissions_noncurrent", "accounts_payable", "deferred_revenue", "debt", "other_liabilities",
+                 "equity"]
+DEFERRED_COMMISSION_LINES = ("deferred_commissions_current", "deferred_commissions_noncurrent")
 
 OPENING_VERSION = "Actual"
 CHAIN_FROM_ACTUAL = {"Budget": "2026-01", "Forecast": "2026-07"}
@@ -129,6 +138,8 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
         ap = _by_period(os.path.join(src, f"{version}_accounts_payable_rollforward.csv"))
         pp = _by_period(os.path.join(src, f"{version}_Prepaids_Rollforward.csv"))
         sbc = _by_period(os.path.join(src, f"{version}_SBC_Schedule.csv"))
+        dc_file = f"{version}_deferred_commissions_rollforward.csv"
+        dc = _by_period(os.path.join(src, dc_file))
         w = Writer(org, version)
 
         pl_total: dict[str, Decimal] = defaultdict(Decimal)
@@ -214,6 +225,23 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             subledger(pp, "prepaids_and_other_current", "beginning_prepaid_balance", "ending_prepaid_balance",
                       [("additions", "prepaid_additions", 1), ("amortization", "prepaid_amortization", -1)],
                       f"{version}_Prepaids_Rollforward.csv")
+
+            if p in dc:
+                row = dc[p]
+                gl_begin = sum((running[k] for k in DEFERRED_COMMISSION_LINES), Decimal("0"))
+                if abs(num(row["beginning_deferred_commissions"]) - gl_begin) > TIE:
+                    raise ValueError(f"{version} {p}: {dc_file} starts {num(row['beginning_deferred_commissions']):,.2f}, "
+                                     f"GL deferred commissions {gl_begin:,.2f}")
+                amort = num(row["commission_amortization"])
+                w.add(p, "deferred_commissions_noncurrent", num(row["capitalized_commissions"]), label="capitalized",
+                      source_file=dc_file, note=f"commission payouts capitalized (ASC 340-40) from {dc_file}")
+                w.add(p, "deferred_commissions_current", -amort, label="amortization", source_file=dc_file,
+                      note=f"amortization to 6200 Sales Commissions from {dc_file}")
+                reclass = num(row["current_portion"]) - (running["deferred_commissions_current"] - amort)
+                w.add(p, "deferred_commissions_current", reclass, label="reclass_current", source_file=dc_file,
+                      note=f"current portion = next 12 months' amortization ({dc_file})")
+                w.add(p, "deferred_commissions_noncurrent", -reclass, label="reclass_current", source_file=dc_file,
+                      note=f"current portion = next 12 months' amortization ({dc_file})")
 
             da = da_total[p]
             w.add(p, "ppe_net", -da, label="depreciation", source_file=f"{version}_gl_detail.csv",
