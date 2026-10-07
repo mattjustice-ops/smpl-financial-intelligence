@@ -2269,6 +2269,7 @@ function tsRender() {
     {label:'Change in Deferred Revenue', key:'chg_dr', indent:true},
     {label:'Change in Accounts Payable', key:'chg_ap', indent:true},
     {label:'Change in Prepaids',         key:'chg_prepaids', indent:true},
+    {label:'Change in Deferred Commissions', key:'chg_deferred_commissions', indent:true},
     {type:'sub', label:'Cash from Operations (CFO)', key:'cfo'},
     {type:'sec', label:'Investing Activities'},
     {label:'Capital Expenditures',       key:'capex', indent:true, inv:true},
@@ -2308,11 +2309,14 @@ function tsRender() {
     {label:'Cash & Equivalents',        key:'cash', indent:true},
     {label:'Accounts Receivable',       key:'ar', indent:true},
     {label:'Prepaids & Other Current',  key:'prepaids', indent:true},
+    {label:'Deferred Commissions - Current', key:'deferred_commissions_current', indent:true},
     {type:'sub', label:'Total Current Assets', compute:(p,src)=>{
       const c=tsGet(sc,src,p,'bs','cash'), ar=tsGet(sc,src,p,'bs','ar'), pr=tsGet(sc,src,p,'bs','prepaids');
-      return c==null||ar==null||pr==null ? null : c+ar+pr;
+      const dc=tsGet(sc,src,p,'bs','deferred_commissions_current');
+      return c==null||ar==null||pr==null ? null : c+ar+pr+(dc||0);
     }},
     {label:'PP&E (Net)',                key:'ppe', indent:true},
+    {label:'Deferred Commissions - Noncurrent', key:'deferred_commissions_noncurrent', indent:true},
     {type:'tot', label:'Total Assets',  key:'total_assets'},
     {type:'sec', label:'Liabilities'},
     {label:'Accounts Payable',         key:'ap', indent:true},

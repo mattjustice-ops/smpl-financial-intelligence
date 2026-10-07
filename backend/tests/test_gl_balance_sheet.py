@@ -162,6 +162,82 @@ def test_financial_statements_balance_sheet_and_cash_flow_come_from_gl(monkeypat
     assert rows[0]["prepaids_and_other_current"] == rows[0]["prepaids_and_other_current_assets"] == Decimal("80.00")
 
 
+def deferred_commission_rows():
+    """Dec 2022: pay 60 of commissions (capitalized), amortize 1, reclass 1 to current."""
+
+    def dc(period, expense_type, amount, source="Demo Model"):
+        return {**bs(period, expense_type, amount, source=source), "account_group": "Deferred Commissions"}
+
+    rows, income = worked_example()
+    rows += [
+        dc("2022-10", "Deferred Commissions", 12, source="Opening Balance"),
+        dc("2022-10", "Deferred Commissions Noncurrent", 48, source="Opening Balance"),
+        bs("2022-10", "Equity", -60, name="APIC - Common", source="Opening Balance"),
+        bs("2022-12", "Cash", -60),
+        dc("2022-12", "Deferred Commissions Noncurrent", 60),
+        dc("2022-12", "Deferred Commissions", -1),
+        dc("2022-12", "Deferred Commissions", 1),
+        dc("2022-12", "Deferred Commissions Noncurrent", -1),
+    ]
+    income.append(pl("2022-12", "Operating Expense", 1, group="G&A"))
+    return rows, income
+
+
+def test_deferred_commissions_are_assets_and_operating_working_capital():
+    balance, cash_flow = build_balance_sheet_and_cash_flow(*deferred_commission_rows())
+    nov, dec = balance["2022-11"], balance["2022-12"]
+    assert (nov["deferred_commissions_current"], nov["deferred_commissions_noncurrent"]) == (12, 48)
+    assert (dec["deferred_commissions_current"], dec["deferred_commissions_noncurrent"]) == (12, 107)
+    assert dec["total_assets"] == 670 - 60 + 80 + 12 + 107
+    assert dec["balance_check"] == 0 and "unmapped" not in dec
+    cf = cash_flow["2022-12"]
+    assert cf["change_in_deferred_commissions"] == -59
+    assert cf["unclassified"] == 0
+    assert cf["net_cash_from_operating_activities"] == 120 - 1 - 59
+    assert cf["net_cash_from_investing_activities"] == 0
+    assert cf["cash_check"] == 0
+
+
+def test_statement_validations_include_deferred_commissions(monkeypatch: pytest.MonkeyPatch):
+    from datetime import date
+
+    from app.services.financial_statements import financial_statement_service as fs
+    from app.services.financial_statements.financial_statement_validation_service import validate_financial_statements
+
+    built = build_balance_sheet_and_cash_flow(*deferred_commission_rows())
+    monkeypatch.setattr(fs, "gl_balance_sheet_and_cash_flow_by_period", lambda _db, _org, _scenario: built)
+    monkeypatch.setattr(fs, "gl_income_statement_by_period", lambda _db, _org, _scenario: {})
+    kwargs = dict(scenario="Actual", start_period=date(2022, 12, 1), end_period=date(2022, 12, 1))
+    balance = fs.statement(None, None, statement_type="balance_sheet", **kwargs)
+    cash = fs.statement(None, None, statement_type="cash_flow", **kwargs)
+    income = fs.statement(None, None, statement_type="income_statement", **kwargs)
+    lines = {r.line_item: r.amount for r in balance.rows} | {r.line_item: r.amount for r in cash.rows}
+    assert lines["Deferred Commissions - Noncurrent"] == 107
+    assert lines["Change in Deferred Commissions"] == -59
+    results = {r.validation_name: r.status for r in validate_financial_statements(income, balance, cash)}
+    assert results["balance_sheet_total_assets"] == "pass"
+    assert results["cash_flow_operating_cash_flow"] == "pass"
+
+
+def test_unclassified_gl_balance_sheet_account_fails_validation(monkeypatch: pytest.MonkeyPatch):
+    from datetime import date
+
+    from app.services.financial_statements import financial_statement_service as fs
+
+    rows, income = worked_example()
+    rows += [bs("2022-12", "Mystery Asset", 25), bs("2022-12", "Cash", -25)]
+    built = build_balance_sheet_and_cash_flow(rows, income)
+    monkeypatch.setattr(fs, "gl_balance_sheet_and_cash_flow_by_period", lambda _db, _org, _scenario: built)
+    monkeypatch.setattr(fs, "fetch_rows", lambda *_args: [])
+    results = fs.source_reconciliation_validations(
+        None, None, scenario="Actual", start_period=date(2022, 11, 1), end_period=date(2022, 12, 1)
+    )
+    failed = {(r.validation_name, r.period) for r in results if r.status == "fail"}
+    assert ("gl_balance_sheet_accounts_classified", date(2022, 12, 1)) in failed
+    assert ("gl_cash_flow_activity_classified", date(2022, 12, 1)) in failed
+    assert not {name for name, period in failed if period == date(2022, 11, 1)}
+
+
 def test_unknown_balance_sheet_account_is_reported_not_assigned():
     assert classify_bs_line({"statement": "Balance Sheet", "expense_type": "Mystery", "account_group": ""}) == "unmapped"
     assert classify_bs_line({"statement": "Income Statement", "expense_type": "Cash"}) is None

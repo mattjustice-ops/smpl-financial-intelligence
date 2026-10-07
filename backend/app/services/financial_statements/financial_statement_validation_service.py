@@ -12,6 +12,15 @@ from app.services.financial_statements.financial_statement_service import (
 )
 
 TOLERANCE = Decimal("1.00")  # Closed actuals fail-closed: |Δ|>$1 = fail (significant_miss). |Δ|≤$0.01 = rounding label only.
+ASSET_LINE_ITEMS = (
+    "Cash",
+    "Accounts Receivable",
+    "Prepaids and Other Current Assets",
+    "Deferred Commissions - Current",
+    "Property and Equipment, Net",
+    "Deferred Commissions - Noncurrent",
+    "Other Assets",
+)
 
 
 def _index(stmt: NormalizedStatementResponse) -> dict[tuple[str, date, str], Decimal]:
@@ -58,7 +67,10 @@ def validate_financial_statements(
         results.append(_result(scenario, period, "income_statement_net_income", net_income, inc.get((scenario, period, "Net Income"), Decimal("0")), sources))
 
         bs_sources = ["gl_actuals"]
-        assets = bs.get((scenario, period, "Cash"), Decimal("0")) + bs.get((scenario, period, "Accounts Receivable"), Decimal("0")) + bs.get((scenario, period, "Prepaids and Other Current Assets"), Decimal("0")) + bs.get((scenario, period, "Property and Equipment, Net"), Decimal("0")) + bs.get((scenario, period, "Other Assets"), Decimal("0"))
+        assets = sum(
+            (bs.get((scenario, period, line), Decimal("0")) for line in ASSET_LINE_ITEMS),
+            Decimal("0"),
+        )
         results.append(_result(scenario, period, "balance_sheet_total_assets", assets, bs.get((scenario, period, "Total Assets"), Decimal("0")), bs_sources))
         liabilities = bs.get((scenario, period, "Accounts Payable"), Decimal("0")) + bs.get((scenario, period, "Deferred Revenue"), Decimal("0")) + bs.get((scenario, period, "Debt"), Decimal("0")) + bs.get((scenario, period, "Other Liabilities"), Decimal("0"))
         results.append(_result(scenario, period, "balance_sheet_total_liabilities", liabilities, bs.get((scenario, period, "Total Liabilities"), Decimal("0")), bs_sources))
@@ -84,6 +96,7 @@ def validate_financial_statements(
                     "Change in Deferred Revenue",
                     "Change in Accounts Payable",
                     "Change in Prepaids",
+                    "Change in Deferred Commissions",
                     "Change in Other Liabilities",
                 )
             ),
