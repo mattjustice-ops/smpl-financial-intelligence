@@ -175,6 +175,74 @@ def _invoice_collection_lines(
     return lines
 
 
+PAYOUT_TABLE_SUFFIXES = ("_commission_payouts", "_renewal_commissions")
+COMMISSION_SCHEDULE_SUFFIX = "_commission_schedule"
+COMMISSION_EXPENSE_NOTE = (
+    "GL commission expense, not payouts: when commissions are capitalized, expense is the "
+    "amortization and differs from cash paid. Load payout detail to drill into cash."
+)
+
+
+def _commission_cash_lines(
+    session: Session,
+    organization_id: uuid.UUID,
+    *,
+    period: str,
+    source_scenario: str,
+) -> list[CashFlowDrilldownLine]:
+    """Commission cash is what was paid: payout detail first; plans without detail that month
+    come from the commission schedule, labeled as estimates. Never GL expense."""
+    prefix = source_scenario.lower()
+    lines: list[CashFlowDrilldownLine] = []
+    covered: set[str] = set()
+    for suffix in PAYOUT_TABLE_SUFFIXES:
+        table = f"{prefix}{suffix}"
+        if not table_exists(session, table):
+            continue
+        for raw in fetch_table_rows(session, table, organization_id):
+            if to_period(str(raw.get("period") or "")) != period:
+                continue
+            amount = value_any(raw, "commission_amount")
+            if amount == 0:
+                continue
+            plan = str(raw.get("plan_id") or "").strip() or None
+            if plan:
+                covered.add(plan)
+            rep = str(raw.get("rep_name") or "").strip()
+            rep_id = str(raw.get("rep_id") or "").strip()
+            lines.append(
+                CashFlowDrilldownLine(
+                    account_name=f"{rep} ({rep_id})" if rep and rep_id else rep or rep_id or "Commission payout",
+                    account_group=plan,
+                    vendor_name=str(raw.get("customer_id") or "") or None,
+                    amount=-abs(amount),
+                    source_table=table,
+                    detail_type="payout",
+                    notes=str(raw.get("opportunity_id") or "") or None,
+                )
+            )
+    schedule = f"{prefix}{COMMISSION_SCHEDULE_SUFFIX}"
+    if table_exists(session, schedule):
+        for raw in fetch_table_rows(session, schedule, organization_id):
+            if to_period(str(raw.get("period") or "")) != period:
+                continue
+            plan = str(raw.get("plan_id") or "").strip()
+            amount = value_any(raw, "commission_payout")
+            if amount == 0 or plan in covered:
+                continue
+            lines.append(
+                CashFlowDrilldownLine(
+                    account_name=f"{plan} (estimated, no payout detail)",
+                    account_group=plan or None,
+                    amount=-abs(amount),
+                    source_table=schedule,
+                    detail_type="estimate",
+                    notes=str(raw.get("source") or "") or None,
+                )
+            )
+    return lines
+
+
 def _gl_lines_for_type(
     session: Session,
     organization_id: uuid.UUID,
@@ -189,6 +257,9 @@ def _gl_lines_for_type(
     ):
         if not gl_entry_matches(waterfall_type, entry, raw):
             continue
+        commission = waterfall_type == "commission_cash_out"
+        if commission and str(raw.get("statement") or "").strip().lower().startswith("balance"):
+            continue
         lines.append(
             CashFlowDrilldownLine(
                 account_number=entry.account_number or None,
@@ -199,6 +270,7 @@ def _gl_lines_for_type(
                 amount=_signed_line_amount(waterfall_type, entry.amount),
                 source_table="gl_actuals",
                 detail_type="gl",
+                notes=COMMISSION_EXPENSE_NOTE if commission else None,
             )
         )
     return lines
@@ -216,6 +288,10 @@ def cash_flow_drilldown_lines(
         invoices = _invoice_collection_lines(session, organization_id, period=period)
         if invoices:
             return invoices
+    if waterfall_type == "commission_cash_out":
+        payouts = _commission_cash_lines(session, organization_id, period=period, source_scenario=source_scenario)
+        if payouts:
+            return payouts
     return _gl_lines_for_type(
         session,
         organization_id,
@@ -325,6 +401,15 @@ def cash_flow_drilldown(
             "No GL detail rows matched this cell. Upload Actual_gl_detail.csv / Forecast_gl_detail.csv "
             "(or paid invoices for collections)."
         )
+    elif waterfall_type == "commission_cash_out":
+        estimated = sorted({line.account_group or "" for line in lines if line.detail_type == "estimate"})
+        if any(line.detail_type == "gl" for line in lines):
+            message = COMMISSION_EXPENSE_NOTE
+        elif estimated:
+            message = (
+                f"No payout detail for {', '.join(estimated)} in {period_key}; those lines are the commission "
+                "schedule's estimate (see each line's note for its basis)."
+            )
 
     return CashFlowDrilldownResponse(
         organization_id=str(organization_id),
