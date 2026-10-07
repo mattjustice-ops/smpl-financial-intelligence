@@ -94,7 +94,7 @@ MODULES: tuple[Module, ...] = (
     Module("board_reporting", "Board Reporting",
            ("income_statement", "balance_sheet", "cash_flow_statement", "arr_waterfall", "opportunity",
             "cash_position", "employee"), 0.85, 2,
-           gates=("subscription", "crm_stage"), policy_inputs=("7.13",)),
+           gates=("subscription", "crm_stage", "commission_policy"), policy_inputs=("7.13",)),
     Module("executive_dashboards", "Executive Dashboards",
            ("arr_waterfall", "income_statement", "cash_position", "employee"), 0.88, 2,
            gates=("subscription",)),
@@ -102,7 +102,8 @@ MODULES: tuple[Module, ...] = (
            ("customer", "subscription", "arr_movement", "arr_waterfall", "budget_scenario"), 0.90, 2,
            partial_threshold=0.65, gates=("subscription",)),
     Module("cash_forecasting", "Cash Forecasting",
-           ("cash_position", "payment", "invoice", "payroll_line"), 0.88, 2),
+           ("cash_position", "payment", "invoice", "payroll_line"), 0.88, 2,
+           gates=("commission_policy",)),
     Module("executive_briefings", "Executive Briefings",
            ("arr_waterfall", "income_statement", "cash_position", "employee"), 0.82, 1,
            gates=("subscription",), policy_inputs=("7.10",)),
@@ -124,7 +125,8 @@ MODULES: tuple[Module, ...] = (
            ("opportunity", "campaign", "mql", "customer", "department"), 0.76, 1,
            gates=("crm_stage",)),
     Module("scenario_planning", "Scenario Planning",
-           ("budget_scenario", "forecast_scenario", "budget_line", "forecast_line", "assumption_driver"), 0.75, 1),
+           ("budget_scenario", "forecast_scenario", "budget_line", "forecast_line", "assumption_driver"), 0.75, 1,
+           gates=("commission_policy",)),
 )
 
 MODULES_BY_ID: dict[str, Module] = {m.id: m for m in MODULES}
@@ -168,6 +170,29 @@ CRM_STAGE_GATE: tuple[Question, ...] = (
              ("resolved", "not_applicable", "unresolved")),
 )
 
+AMORTIZATION_MONTHS = ("12", "24", "36", "48", "60", "72", "84", "not_applicable")
+
+# ASC 340-40: the engines read this policy (they never let a user change it) and the
+# readiness checks compare it with the GL.
+COMMISSION_POLICY_GATE: tuple[Question, ...] = (
+    Question("7.14", "commission_policy",
+             "Sales commissions on new and expansion contracts (incremental costs of obtaining a contract)",
+             ("capitalized", "expensed", "no_commissions", "not_sure")),
+    Question("7.15", "commission_policy",
+             "Amortization period for capitalized new-business commissions, in months (including expected renewals)",
+             AMORTIZATION_MONTHS),
+    Question("7.16", "commission_policy", "Amortization period for capitalized expansion commissions, in months",
+             AMORTIZATION_MONTHS),
+    Question("7.17", "commission_policy",
+             "Renewal commissions (expensed under the 12-month practical expedient, or capitalized)",
+             ("expensed", "capitalized", "not_paid")),
+    Question("7.18", "commission_policy", "When commissions are paid",
+             ("month_of_booking", "month_after_booking", "quarter_after_booking", "on_customer_payment")),
+    Question("7.19", "commission_policy", "Employer payroll taxes on commissions", ("expensed", "capitalized")),
+    Question("7.20", "commission_policy", "System of record for commission payouts",
+             ("comp_tool", "payroll_export", "spreadsheet", "none")),
+)
+
 SCORE_INPUTS: tuple[Question, ...] = (
     Question("7.7", "score_input", "Cost of revenue policy documented and approved",
              effect="cap_partial",
@@ -200,7 +225,7 @@ SCORE_INPUTS: tuple[Question, ...] = (
 )
 
 ALL_QUESTIONS: dict[str, Question] = {
-    q.id: q for q in (*READINESS_GATES, *SUBSCRIPTION_GATE, *CRM_STAGE_GATE, *SCORE_INPUTS)
+    q.id: q for q in (*READINESS_GATES, *SUBSCRIPTION_GATE, *CRM_STAGE_GATE, *COMMISSION_POLICY_GATE, *SCORE_INPUTS)
 }
 
 NORMALIZATION_GATES: dict[str, dict[str, object]] = {
@@ -213,6 +238,21 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
         "name": "CRM Stage Normalization Gate",
         "questions": CRM_STAGE_GATE,
         "resolved_values": ("resolved", "not_applicable"),
+    },
+    "commission_policy": {
+        "name": "Commission Policy Gate (ASC 340-40)",
+        "questions": COMMISSION_POLICY_GATE,
+        "resolved_values": None,
+        "unresolved_values": ("not_sure",),
+        # question → (question, answers that make it required); "not_applicable" does not resolve it then.
+        "required_if": {
+            "7.15": ("7.14", ("capitalized",)),
+            "7.16": ("7.14", ("capitalized",)),
+            "7.17": ("7.14", ("capitalized", "expensed")),
+            "7.18": ("7.14", ("capitalized", "expensed")),
+            "7.19": ("7.14", ("capitalized", "expensed")),
+            "7.20": ("7.14", ("capitalized", "expensed")),
+        },
     },
 }
 
