@@ -3304,8 +3304,90 @@ function commissionPolicy() {
     warnings.push(`Commissions earned in ${BUDGET_YEAR - 1} and paid in ${BUDGET_YEAR} are not in the plan: the Dec close has no accrued commissions line.`);
   }
   pol.taxCapitalized = a['7.19'] ? a['7.19'] === 'capitalized' : !!(newPlan && newPlan.capitalize_payroll_taxes);
+  pol.returns = returnsPolicy(inp, warnings, notes);
   (inp.missing || []).forEach(m => warnings.push('Not loaded: ' + m + '.'));
   return pol;
+}
+
+const RETURN_BASIS_LABEL = {
+  above_prior_arr: 'only on ARR above the customer’s ARR before leaving',
+  full_amount: 'on all returned ARR',
+  not_paid: 'not paid',
+};
+
+/**
+ * Share of planned reactivation and expansion ARR that earns commission, and at which rate (7.21–7.24).
+ * The plan has one reactivation line, so winbacks (7.21) and restarts (7.22) must be paid alike for it
+ * to be computed. "Above prior level" shares are measured from loaded CRM opportunities; when they
+ * can't be measured the commission is left out of the plan and named, never assumed.
+ */
+function returnsPolicy(inp, warnings, notes) {
+  const r = inp.returns || {};
+  const a = r.answers || {};
+  const hist = r.history || {};
+  const react = hist.reactivation || {};
+  const practice = r.loaded_practice || {};
+  const span = hist.from ? `${hist.from}–${hist.to} opportunities` : 'the loaded opportunities';
+  const pct1 = v => (v * 100).toFixed(1) + '%';
+  const words = v => String(v).replace(/_/g, ' ');
+  const out = {
+    basis: null, reactShare: null, reactRate: null, reactReason: null, fromPractice: false,
+    expBasis: a['7.24'] || null, expShare: 1, expReason: null,
+  };
+  (r.checks || []).filter(c => c.status === 'conflict').forEach(c => {
+    warnings.push(`Policy check conflict (${c.questions}): ${c.finding}.`);
+  });
+
+  const w = a['7.21'], s = a['7.22'];
+  if (w && s && w !== s) {
+    out.reactReason = `winbacks (7.21: ${words(w)}) and restarts (7.22: ${words(s)}) are paid differently, and the plan has one reactivation line with no winback/restart split`;
+  } else if (w || s) {
+    out.basis = w && s ? w : null;
+    if (!out.basis) out.reactReason = `${w ? '7.22 (restarts)' : '7.21 (winbacks)'} is unanswered, and the plan can’t split reactivation between winbacks and restarts`;
+  } else if (practice.payouts > 0 && practice.paid_on_full_amount) {
+    out.basis = 'full_amount';
+    out.fromPractice = true;
+  } else {
+    out.reactReason = '7.21–7.22 are unanswered and the loaded payouts have no Reactivation commissions to follow';
+  }
+
+  if (out.basis === 'not_paid') out.reactShare = 0;
+  else if (out.basis === 'full_amount') out.reactShare = 1;
+  else if (out.basis === 'above_prior_arr') {
+    if (react.above_baseline_share != null) {
+      out.reactShare = react.above_baseline_share;
+      notes.push(`Reactivation earns commission on ${pct1(out.reactShare)} of returned ARR: the share above customers’ ARR before leaving in ${span} (${react.with_departure} of ${react.count} returns have a recorded churn).`);
+    } else {
+      out.reactReason = `no returned customer in ${span} has a recorded churn to measure ARR above their prior level (${react.count || 0} returns, none with a prior Churn row)`;
+    }
+  }
+  if (out.reactShare > 0) {
+    const ra = a['7.23'];
+    out.reactRate = ra === 'expansion_rate' ? 'expansion' : ra === 'new_business_rate' ? 'new_business' : practice.rate_type || null;
+    if (!out.reactRate) {
+      out.reactShare = null;
+      out.reactReason = '7.23 (rate on winbacks and restarts) is unanswered and the loaded payouts don’t show one';
+    } else if (!ra) {
+      notes.push(`7.23 unanswered: reactivation uses the ${words(out.reactRate)} rate, as the loaded Reactivation payouts did.`);
+    }
+  }
+  if (out.fromPractice && out.reactShare != null) {
+    warnings.push(`7.21–7.22 unanswered: reactivation earns commission on all returned ARR, as the ${practice.payouts} loaded Reactivation payouts (${fmtM(practice.commission)}) did.`);
+  }
+
+  if (out.expBasis === 'above_prior_level') {
+    const sh = hist.expansion && hist.expansion.above_prior_level_share;
+    if (sh != null) {
+      out.expShare = sh;
+      notes.push(`Expansion earns commission on ${pct1(sh)} of expansion ARR: the share above customers’ level before their contractions in ${span}. Contractions before ${hist.from} are not loaded, so this share is an upper bound.`);
+    } else {
+      out.expShare = null;
+      out.expReason = `no expansion bookings in ${span} to measure the share above customers’ prior level`;
+    }
+  } else if (!out.expBasis) {
+    notes.push('7.24 unanswered: expansion earns commission on all expansion ARR.');
+  }
+  return out;
 }
 
 /** Renewing ARR as a share of beginning ARR, from the loaded schedule's renewal base and ARR history. */
@@ -3353,19 +3435,34 @@ function computeCommissionPlan() {
         nb: (hc[p].ending.sales || 0) * ((STATE.nbOteVarAnnual || 0) / 12) * attain,
         exp: 0,
         ren: (hc[p].ending.cs || 0) * ((STATE.csOteVarAnnual || 0) / 12) * attain,
-        nbBase: null, expBase: null, renBase: null,
+        react: 0,
+        nbBase: null, expBase: null, renBase: null, reactBase: null,
       };
     }
-    const nbBase = (a.nb || 0) + (a.react || 0);
-    const expBase = a.exp || 0;
+    const ret = pol.returns;
+    const reactBase = ret.reactShare != null ? (a.react || 0) * ret.reactShare : 0;
+    const reactToNb = ret.reactRate === 'new_business';
+    const nbBase = (a.nb || 0) + (reactToNb ? reactBase : 0);
+    const expBase = (ret.expShare != null ? (a.exp || 0) * ret.expShare : 0) + (reactToNb ? 0 : reactBase);
     const renBase = renShare ? (a.bop || 0) * renShare.share : 0;
     return {
       nb: pol.noNewExp ? 0 : nbBase * (rate('new_business') || 0),
       exp: pol.noNewExp ? 0 : expBase * (rate('expansion') || 0),
       ren: pol.renewalPaid ? renBase * (rate('renewal') || 0) : 0,
-      nbBase, expBase, renBase,
+      react: pol.noNewExp ? 0 : reactBase * ((reactToNb ? rate('new_business') : rate('expansion')) || 0),
+      nbBase, expBase, renBase, reactBase,
     };
   });
+  if (pol.loaded && !pol.noNewExp) {
+    const ret = pol.returns;
+    const fyArr = k => BUD_P.reduce((s, p) => s + ((arr[p] || {})[k] || 0), 0);
+    if (ret.reactShare == null && fyArr('react') > 0.5) {
+      pol.warnings.push(`Reactivation commissions are not in the plan: ${ret.reactReason}. Planned reactivation ARR ${fmtM(fyArr('react'))} has no commission.`);
+    }
+    if (ret.expShare == null && fyArr('exp') > 0.5) {
+      pol.warnings.push(`Expansion commissions are not in the plan: ${ret.expReason}. Planned expansion ARR ${fmtM(fyArr('exp'))} has no commission.`);
+    }
+  }
 
   const paidIndex = i => {
     if (pol.timing === 'quarter_after_booking') return (Math.floor(i / 3) + 1) * 3;
@@ -6381,6 +6478,27 @@ function renderBS() {
   return html;
 }
 
+/** Read-only rows for 7.21–7.24 and what the plan does with them. */
+function returnPolicyRows(pol, shown, pct) {
+  const ret = pol.returns;
+  if (!ret) return '';
+  const ans = (COMMISSION_INPUTS && COMMISSION_INPUTS.returns && COMMISSION_INPUTS.returns.answers) || {};
+  const hist = (COMMISSION_INPUTS && COMMISSION_INPUTS.returns && COMMISSION_INPUTS.returns.history) || {};
+  const react = hist.reactivation || {};
+  const exp = hist.expansion || {};
+  const reactPlan = ret.reactShare == null ? `not in the plan — ${ret.reactReason}`
+    : ret.reactShare === 0 ? 'none'
+      : `${pct(ret.reactShare)} of reactivation ARR at the ${String(ret.reactRate).replace(/_/g, ' ')} rate`
+        + (ret.fromPractice ? ' (as the loaded payouts did)' : '');
+  const expPlan = ret.expShare == null ? `not in the plan — ${ret.expReason}` : `${pct(ret.expShare)} of expansion ARR`;
+  const basis = v => (v && RETURN_BASIS_LABEL[v] ? RETURN_BASIS_LABEL[v] : null);
+  return `
+    <tr><td>7.21 / 7.22 Winbacks / restarts</td><td>${shown(ans['7.21'])} / ${shown(ans['7.22'])}</td><td>Plan: ${basis(ret.basis) ? basis(ret.basis) + '; ' : ''}${reactPlan}</td></tr>
+    <tr><td>7.23 Rate on winbacks and restarts</td><td>${shown(ans['7.23'])}</td><td>Loaded Reactivation payouts: ${(COMMISSION_INPUTS.returns.loaded_practice || {}).payouts || 0} (${fmtM((COMMISSION_INPUTS.returns.loaded_practice || {}).commission || 0)})</td></tr>
+    <tr><td>7.24 Expansion after a contraction</td><td>${shown(ans['7.24'])}</td><td>Plan: ${expPlan}</td></tr>
+    <tr><td>History behind the shares</td><td colspan="2">${hist.from ? `Opportunities ${hist.from}–${hist.to}` : 'No opportunities loaded'}: ${react.count || 0} returns (${fmtM(react.arr || 0)}), ${react.with_departure || 0} with a recorded churn; expansion ${fmtM(exp.arr || 0)}, of which ${fmtM(exp.above_prior_level_arr || 0)} above customers’ prior level.</td></tr>`;
+}
+
 /** Deferred commissions roll-forward, payouts and the read-only policy behind them. */
 function renderCommissionRollforward(comm) {
   const pol = comm.policy;
@@ -6397,6 +6515,7 @@ function renderCommissionRollforward(comm) {
   const sourceLabel = !pol.loaded ? 'not loaded'
     : pol.source === 'onboarding' ? 'onboarding answers 7.14–7.20 (read-only)'
     : 'loaded commission plans (onboarding 7.14–7.20 unanswered)';
+  const ret = pol.returns || null;
   const tie = comm.tie;
   const tieOk = tie.diff != null && Math.abs(tie.diff) < 0.01;
   const curTie = tie.currentBs != null && tie.currentSchedule != null ? tie.currentBs - tie.currentSchedule : null;
@@ -6411,6 +6530,13 @@ function renderCommissionRollforward(comm) {
   ];
   (inp && inp.checks || []).forEach(c => checks.push({ label: 'Server: ' + c.id.replace(/_/g, ' '), ok: c.status === 'pass', detail: c.finding }));
   (inp && inp.policy && inp.policy.checks || []).forEach(c => checks.push({ label: `Policy vs books (${c.questions})`, ok: c.status === 'pass', review: c.status === 'review', detail: c.finding }));
+  if (ret) {
+    (inp.returns && inp.returns.checks || []).forEach(c => checks.push({ label: `Policy vs payouts (${c.questions})`, ok: false, detail: c.finding }));
+    checks.push({ label: 'Planned reactivation ARR has a commission treatment', ok: ret.reactShare != null, review: ret.reactShare == null,
+      detail: ret.reactShare != null ? `${pct(ret.reactShare)} of reactivation ARR earns commission` : ret.reactReason });
+    checks.push({ label: 'Planned expansion ARR has a commission treatment', ok: ret.expShare != null, review: ret.expShare == null,
+      detail: ret.expShare != null ? `${pct(ret.expShare)} of expansion ARR earns commission` : ret.expReason });
+  }
 
   let html = `
     <div class="slide-title" id="comm-rf" style="margin-top:28px">Deferred Commissions · ASC 340-40</div>
@@ -6428,9 +6554,10 @@ function renderCommissionRollforward(comm) {
     <tr><td>7.18 When paid</td><td>${shown(ans['7.18'])}</td><td>Plan: paid ${timing}</td></tr>
     <tr><td>7.19 Payroll tax on commissions</td><td>${shown(ans['7.19'])}</td><td>Plan: ${pol.taxCapitalized ? 'capitalized with the commission' : 'expensed when paid'} at ${pct(comm.taxRate)} of payouts (${inp && inp.payroll_tax_rate != null ? 'loaded roll-forward, trailing 12 months' : 'plan payroll tax lever'})</td></tr>
     <tr><td>7.20 Payout system of record</td><td>${shown(ans['7.20'])}</td><td></td></tr>
+    ${returnPolicyRows(pol, shown, pct)}
     <tr class="sec"><td colspan="3">Rates (forward levers come from data: trailing 12 months of the loaded commission schedule, payouts ÷ base)</td></tr>
-    <tr><td>New business</td><td>${pct(comm.rates.nb)}</td><td>× planned new + reactivation ARR</td></tr>
-    <tr><td>Expansion</td><td>${pct(comm.rates.exp)}</td><td>× planned expansion ARR</td></tr>
+    <tr><td>New business</td><td>${pct(comm.rates.nb)}</td><td>× planned new business ARR${ret && ret.reactRate === 'new_business' ? ' + commissionable reactivation ARR' : ''}</td></tr>
+    <tr><td>Expansion</td><td>${pct(comm.rates.exp)}</td><td>× planned expansion ARR${ret && ret.expShare != null && ret.expShare < 1 ? ' × ' + pct(ret.expShare) + ' above prior level' : ''}${ret && ret.reactRate === 'expansion' ? ' + commissionable reactivation ARR' : ''}</td></tr>
     <tr><td>Renewal</td><td>${pct(comm.rates.ren)}</td><td>× renewing ARR = beginning ARR × ${comm.renShare ? pct(comm.renShare.share) : '—'} (loaded renewal base ÷ beginning ARR${comm.renShare ? ', ' + comm.renShare.months.length + ' months' : ''})</td></tr>
   </tbody></table>`;
 
@@ -6438,6 +6565,7 @@ function renderCommissionRollforward(comm) {
     { type: 'sec', label: 'Commissions earned (planned bookings × rate)' },
     { label: 'New business', get: p => m[p].earned.nb, indent: true },
     { label: 'Expansion', get: p => m[p].earned.exp, indent: true },
+    { label: `of which reactivation (in ${ret && ret.reactRate === 'expansion' ? 'expansion' : 'new business'})`, get: p => m[p].earned.react || 0, indent: true },
     { label: 'Renewal', get: p => m[p].earned.ren, indent: true },
     { label: 'Total earned', get: p => m[p].earnedTot, sub: true },
     { type: 'sec', label: 'Cash payouts' },

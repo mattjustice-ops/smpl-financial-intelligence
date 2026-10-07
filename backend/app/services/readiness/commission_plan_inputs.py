@@ -9,6 +9,9 @@
   its last loaded month, then Forecast), amortized straight-line from the payout month with cumulative
   amortization rounded to the cent — the convention of the deferred commissions roll-forward. The
   schedule balance is checked against the loaded roll-forward at ``as_of``.
+- Returns (7.21–7.24): how winbacks, restarts and expansion after a contraction are paid, the share of
+  returned / expansion ARR above the customer's prior level measured from CRM opportunities, and what
+  the loaded payouts did with Reactivation opportunities.
 
 Nothing is filled in: a missing table or field is reported in ``missing``.
 """
@@ -28,6 +31,7 @@ from app.services.reporting.period_utils import period_range, to_period
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
 COMMISSION_QUESTIONS = ("7.14", "7.15", "7.16", "7.17", "7.18", "7.19", "7.20")
+RETURN_QUESTIONS = ("7.21", "7.22", "7.23", "7.24")
 OPPORTUNITY_TYPES = {
     "new business": "new_business", "new_business": "new_business", "new": "new_business",
     "expansion": "expansion", "upsell": "expansion",
@@ -168,6 +172,124 @@ def _rollforward_row(db: Session, org_id: uuid.UUID, as_of: str, tables: list[st
     return None
 
 
+def _kind(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def customer_return_history(opportunities: list[dict[str, Any]]) -> dict[str, Any]:
+    """From CRM opportunity rows: how much returned ARR was above the ARR the customer left with
+    (their last Churn row), and how much expansion ARR was above the level before their
+    contractions (Contraction rows not yet recovered by later expansion).
+    """
+    order = {"churn": 0, "contraction": 0}
+    by_customer: dict[str, list[tuple[str, int, str, Decimal, bool]]] = defaultdict(list)
+    for o in opportunities:
+        if not o.get("period") or not o.get("customer_id"):
+            continue
+        kind = _kind(o.get("opportunity_type"))
+        won = _kind(o.get("close_status")) == "closed won"
+        by_customer[str(o["customer_id"])].append(
+            (to_period(str(o["period"])), order.get(kind, 1), kind, _num(o.get("amount_arr")) or ZERO, won))
+
+    returned = with_departure = above_baseline = expansion = expansion_above = ZERO
+    returns = returns_with_departure = 0
+    for events in by_customer.values():
+        left_with: Decimal | None = None
+        unrecovered = ZERO
+        for _, _, kind, amount, won in sorted(events):
+            if kind == "churn":
+                left_with, unrecovered = amount, ZERO
+            elif kind == "contraction":
+                unrecovered += amount
+            elif kind == "reactivation" and won:
+                returns += 1
+                returned += amount
+                if left_with is not None:
+                    returns_with_departure += 1
+                    with_departure += amount
+                    above_baseline += max(ZERO, amount - left_with)
+                    left_with = None
+            elif kind == "expansion" and won:
+                recovered = min(amount, unrecovered)
+                unrecovered -= recovered
+                expansion += amount
+                expansion_above += amount - recovered
+    periods = sorted(to_period(str(o["period"])) for o in opportunities if o.get("period"))
+    return {
+        "from": periods[0] if periods else None,
+        "to": periods[-1] if periods else None,
+        "reactivation": {
+            "count": returns,
+            "arr": float(returned),
+            "with_departure": returns_with_departure,
+            "arr_with_departure": float(with_departure),
+            "above_baseline_arr": float(above_baseline),
+            "above_baseline_share": float(above_baseline / with_departure) if with_departure else None,
+        },
+        "expansion": {
+            "arr": float(expansion),
+            "above_prior_level_arr": float(expansion_above),
+            "above_prior_level_share": float(expansion_above / expansion) if expansion else None,
+        },
+    }
+
+
+def _returns(db: Session, org_id: uuid.UUID, answers: dict[str, str], plans: dict[str, dict[str, Any]],
+             as_of: str, missing: list[str]) -> dict[str, Any]:
+    """Commission policy for customer returns and expansion after contraction (7.21–7.24), the history
+    that measures it, what the loaded payouts did, and checks of the answers against those payouts."""
+    opps = [o for o in (_rows(db, "actual_opportunities", org_id) or [])
+            if o.get("period") and to_period(str(o["period"])) <= as_of]
+    if not opps:
+        missing.append("actual_opportunities is not loaded: returns and expansion after contraction can't be measured")
+    history = customer_return_history(opps)
+
+    opp_by_id = {str(o.get("opportunity_id")): o for o in opps}
+    paid = {"count": 0, "booked_arr": ZERO, "opportunity_arr": ZERO, "commission": ZERO, "plan_types": set()}
+    for p in _rows(db, "actual_commission_payouts", org_id) or []:
+        o = opp_by_id.get(str(p.get("opportunity_id")))
+        if not o or _kind(o.get("opportunity_type")) != "reactivation":
+            continue
+        paid["count"] += 1
+        paid["booked_arr"] += _num(p.get("booked_arr")) or ZERO
+        paid["opportunity_arr"] += _num(o.get("amount_arr")) or ZERO
+        paid["commission"] += _num(p.get("commission_amount")) or ZERO
+        plan = plans.get(str(p.get("plan_id") or ""))
+        paid["plan_types"].add(plan["opportunity_type"] if plan else None)
+    rate_types = sorted(t for t in paid["plan_types"] if t)
+    practice = {
+        "payouts": paid["count"],
+        "booked_arr": float(paid["booked_arr"]),
+        "commission": float(paid["commission"]),
+        "paid_on_full_amount": paid["count"] > 0 and abs(paid["booked_arr"] - paid["opportunity_arr"]) < 1,
+        "rate_type": rate_types[0] if len(rate_types) == 1 else None,
+    }
+
+    checks: list[dict[str, Any]] = []
+    n, amount = practice["payouts"], f"${practice['commission']:,.0f}"
+    for q, label in (("7.21", "winbacks"), ("7.22", "restarts")):
+        a = answers.get(q)
+        if a == "not_paid" and n:
+            checks.append({"id": f"{label}_not_paid_vs_payouts", "questions": q, "status": "conflict",
+                           "finding": f"{q} says {label} are not paid, but the loaded payouts include {n} commissions "
+                                      f"({amount}) on Reactivation opportunities"})
+        elif a == "above_prior_arr" and practice["paid_on_full_amount"]:
+            checks.append({"id": f"{label}_above_prior_arr_vs_payouts", "questions": q, "status": "conflict",
+                           "finding": f"{q} pays {label} only above the customer's prior ARR, but the {n} loaded "
+                                      f"Reactivation payouts ({amount}) were paid on the full returned ARR"})
+    rate_answer = answers.get("7.23")
+    if rate_answer and practice["rate_type"] and rate_answer != f"{practice['rate_type']}_rate":
+        checks.append({"id": "return_rate_vs_payouts", "questions": "7.23", "status": "conflict",
+                       "finding": f"7.23 says {rate_answer.replace('_', ' ')}, but the loaded Reactivation payouts "
+                                  f"were paid under {practice['rate_type'].replace('_', ' ')} plans"})
+    return {
+        "answers": {q: answers.get(q) for q in RETURN_QUESTIONS},
+        "history": history,
+        "loaded_practice": practice,
+        "checks": checks,
+    }
+
+
 def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, Any]:
     from app.services.readiness.engine import _normalization_status, commission_policy_checks, normalize_answers
     from app.services.readiness.evidence import build_commission_facts
@@ -190,6 +312,7 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
     }
 
     plans = _plans(db, org.id, missing)
+    returns = _returns(db, org.id, answers, plans, as_of, missing)
     chain, tables = _schedule_chain(db, org.id, as_of, missing)
 
     cohorts: dict[str, list[tuple[Decimal, int]]] = defaultdict(list)
@@ -280,6 +403,7 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
         "rates": rates,
         "payroll_tax_rate": payroll_tax_rate,
         "opening": opening,
+        "returns": returns,
         "checks": checks,
         "missing": missing,
     }

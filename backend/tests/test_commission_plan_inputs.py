@@ -71,7 +71,35 @@ def _db(rollforward_balance: str = "640.00"):
                    "ca": capped, "m": months})
     s.execute(text("insert into forecast_deferred_commissions_rollforward values (:o, 'Forecast', '2026-08', :b, "
                    "'132.00', '330.00', '27.06')"), {"o": ORG, "b": rollforward_balance})
+    s.execute(text(f"create table actual_opportunities ({OPP_COLS})"))
+    s.execute(text(f"create table actual_commission_payouts ({PAYOUT_COLS})"))
+    for opp, cust, period, kind, status, amount in OPPS:
+        s.execute(text("insert into actual_opportunities values (:o, 'Actual', :p, :id, :c, :k, :s, :a)"),
+                  {"o": ORG, "p": period, "id": opp, "c": cust, "k": kind, "s": status, "a": amount})
+    s.execute(text("insert into actual_commission_payouts values (:o, 'Actual', '2026-03', 'O-R1', 'A', '120', "
+                   "'18.00', 'PLAN-AE-NEW')"), {"o": ORG})
     return s
+
+
+OPP_COLS = ("organization_id text, version text, period text, opportunity_id text, customer_id text, "
+            "opportunity_type text, close_status text, amount_arr text")
+PAYOUT_COLS = ("organization_id text, version text, period text, opportunity_id text, customer_id text, "
+               "booked_arr text, commission_amount text, plan_id text")
+OPPS = (
+    # A left with 100 and came back at 120: 20 above its prior ARR.
+    ("O-C1", "A", "2026-01", "Churn", "Churn", "100"),
+    ("O-R1", "A", "2026-03", "Reactivation", "Closed Won", "120"),
+    # B came back with no departure on record.
+    ("O-R2", "B", "2026-04", "Reactivation", "Closed Won", "50"),
+    # C contracted 30, then expanded 50 (30 recovered, 20 above) and 40 more (all above).
+    ("O-X1", "C", "2026-02", "Contraction", "Contraction", "30"),
+    ("O-E1", "C", "2026-04", "Expansion", "Closed Won", "50"),
+    ("O-E2", "C", "2026-06", "Expansion", "Closed Won", "40"),
+    # An open expansion is not a booking; a later churn and same-month return pays only above it.
+    ("O-E3", "C", "2026-07", "Expansion", "Open", "500"),
+    ("O-C2", "D", "2026-05", "Churn", "Churn", "80"),
+    ("O-R3", "D", "2026-05", "Reactivation", "Closed Won", "60"),
+)
 
 
 @pytest.fixture
@@ -127,3 +155,54 @@ def test_a_schedule_that_does_not_tie_is_a_conflict_and_gaps_are_reported(no_ans
     assert any("PLAN-X" in m and "no amortization months" in m for m in out["missing"])
     assert any("PLAN-X" in m and "not in the commission plans" in m for m in out["missing"])
     assert any("roll-forward row at 2026-10" in m for m in out["missing"])
+
+
+def test_return_history_measures_arr_above_the_prior_level(no_answers) -> None:
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    out = build_plan_inputs(_db("630.50"), SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    r = out["returns"]
+    assert r["answers"] == {"7.21": None, "7.22": None, "7.23": None, "7.24": None}
+    react = r["history"]["reactivation"]
+    assert (react["count"], react["arr"], react["with_departure"], react["arr_with_departure"]) == (3, 230.0, 2, 180.0)
+    assert react["above_baseline_arr"] == 20.0  # A: 120 - 100; D came back at 60 < 80
+    assert react["above_baseline_share"] == pytest.approx(20 / 180)
+    exp = r["history"]["expansion"]
+    assert (exp["arr"], exp["above_prior_level_arr"]) == (90.0, 60.0)
+    assert (r["history"]["from"], r["history"]["to"]) == ("2026-01", "2026-07")
+    assert r["loaded_practice"] == {"payouts": 1, "booked_arr": 120.0, "commission": 18.0,
+                                    "paid_on_full_amount": True, "rate_type": "new_business"}
+    assert r["checks"] == []
+
+
+def test_return_answers_that_contradict_the_loaded_payouts_are_conflicts(monkeypatch) -> None:
+    import app.services.readiness.evidence as evidence
+    import app.services.readiness.service as service
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    answers = {"7.21": "not_paid", "7.22": "above_prior_arr", "7.23": "expansion_rate", "7.24": "all_expansion"}
+    monkeypatch.setattr(service, "get_answers", lambda db, org: SimpleNamespace(answers=answers))
+    monkeypatch.setattr(evidence, "build_commission_facts", lambda db, org: {"as_of": "2026-06"})
+    out = build_plan_inputs(_db("630.50"), SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    r = out["returns"]
+    assert r["answers"] == answers
+    assert {c["id"]: c["status"] for c in r["checks"]} == {
+        "winbacks_not_paid_vs_payouts": "conflict",
+        "restarts_above_prior_arr_vs_payouts": "conflict",
+        "return_rate_vs_payouts": "conflict",
+    }
+    assert "1 commissions ($18)" in r["checks"][0]["finding"]
+
+
+def test_no_opportunities_loaded_is_reported_not_assumed(no_answers) -> None:
+    from sqlalchemy import text
+
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    db = _db("630.50")
+    db.execute(text("delete from actual_opportunities"))
+    out = build_plan_inputs(db, SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    assert out["returns"]["history"]["reactivation"]["above_baseline_share"] is None
+    assert out["returns"]["history"]["expansion"]["above_prior_level_share"] is None
+    assert out["returns"]["loaded_practice"]["payouts"] == 0
+    assert any("actual_opportunities is not loaded" in m for m in out["missing"])
