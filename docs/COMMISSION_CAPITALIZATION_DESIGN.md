@@ -73,14 +73,21 @@ Also add the missing `PLAN-RENEWAL` row, with `capitalize = N`. This keeps every
 - **Amortization:** debit 6200, credit 1250, straight-line by monthly cohort.
 - **Reclass:** move the next 12 months of amortization from 1550 to 1250.
 
-**Payout sources:**
-- 2026 Actual comes from the payout detail files.
-- 2024–2025 comes from the bridge's commission cash, at summary level only. No rep detail exists for those years, and the gap will be flagged.
-- Budget and Forecast are calculated as bookings × plan rate, using `*_bookings_summary` by type.
+**Payout sources (as built in v6):**
+- 2026 Actual comes from the payout detail files: new business and expansion Jan–Jun, renewals Jan–May.
+- Every other month, including 2024–2025, Budget, Forecast and June 2026 renewals, is estimated:
+  - new business and expansion = ARR waterfall × the plan's 2026 effective rate (0.14924 for new business, 0.07560 for expansion);
+  - renewals = beginning ARR × the Jan–May 2026 renewal share (9.4875% a month) × 2%.
+- The ARR waterfall is used because the Budget and Forecast `bookings_summary` files don't tie to their waterfalls (flagged).
+- Every estimated row names its source in `{v}_commission_schedule.csv`.
 
 **Opening balance (Jan 2024):** a cohort ladder of pre-2024 payouts creates the opening asset, offset to opening equity.
 
-**Cash recalibration:** the GL would start paying about $8.7M of commission cash over 30 months. The opening equity adjustment (currently $7.0M) is re-solved so that June 2026 cash stays about $30M and the $10M floor holds.
+**Cash recalibration (as built):**
+- Opening Jan 2024 cash rises by $9,535,241.36. That is the commission cash paid Feb 2024–Jun 2026, less the v5 6200 expense it replaces.
+- Opening equity rises by that amount plus the $2,823,928.44 opening asset.
+- June 2026 cash is unchanged, and the lowest Actual cash is $20.1M.
+- Budget and Forecast Dec 2026 cash become $27.6M and $28.7M (was about $31M), because payouts are now cash out in full.
 
 **Statement effects:**
 - Net income falls by about $3M a year (amortization plus expensed renewals), because today the GL books almost none of this expense.
@@ -111,18 +118,68 @@ Also add the missing `PLAN-RENEWAL` row, with `capitalize = N`. This keeps every
 6. **Client validation and readiness.** Detect policy from the chart of accounts (is a deferred commissions asset present?). Check that comp-system payouts tie to the change in deferred commissions + amortization + expensed + the change in accrued commissions. Flag payouts with no GL counterpart, which is our current state.
 7. **Metrics and commentary.** State the CAC, payback and magic-number basis. Make the MD&A S&M commentary explain amortization vs. cash.
 
-## 5. Decisions needed
+## 5. Decisions (accepted)
 
-1. **Amortization life for new-logo and expansion commissions.** The 13+ years implied by data isn't usable. Proposal: 60 months, with an option to derive it from logo churn per client and cap it.
-2. **Renewal commissions:** expense under the 12-month expedient (proposed).
-3. **Balance sheet and cash flow presentation:** new `deferred_commissions` columns (proposed) or fold into prepaids.
-4. **Cash target:** recalibrate opening equity to keep June 2026 cash about $30M (proposed).
-5. **CAC basis:** GAAP S&M (amortized), or cash commissions. Proposal: GAAP by default, with a cash variant shown.
+1. **Amortization life:** 60 months for new-logo and expansion commissions.
+2. **Renewal commissions:** expensed under the 12-month practical expedient.
+3. **Presentation:**
+   - Balance sheet: new `deferred_commissions_current` / `deferred_commissions_noncurrent` lines (GL 1250 / 1550).
+   - Cash flow: `change_in_deferred_commissions` in operating cash flow.
+4. **Cash target:** keep June 2026 Actual cash at about $30M. The v6 build leaves it unchanged at $30,138,650.97.
+5. **CAC basis:** GAAP S&M by default, with a cash variant shown.
+6. **Where the policy comes from:** the onboarding questionnaire, checked against the GL.
+   - Engines show the policy read-only. Only forward levers are adjustable: rates, attainment, bookings mix and payout timing.
+   - Actuals always come from the GL as booked.
+7. **Verification is never minimized.** Every answer is checked against the books (section 7), and a conflict limits the affected modules until the customer resolves it.
 
-## 6. Order of work
+## 6. Onboarding questionnaire (7.14–7.20)
 
-1. Code PR 1 (balance sheet line).
-2. Data v6: build, tie-out and dry run; load only with explicit OK.
-3. Code PRs 2–3 (cash forecast, drill-down).
-4. Code PRs 4–5 (Budget Engine, Forecast Engine).
-5. Code PRs 6–7 (validation, metrics and commentary).
+| # | Question | Choices | Used by |
+|---|---|---|---|
+| 7.14 | Sales commissions on new / expansion contracts | capitalized / expensed / no commissions / not sure | engines, checks |
+| 7.15 | Amortization months, new business (if capitalized) | 12–84 | engines (expense), amortization check |
+| 7.16 | Amortization months, expansion (if capitalized) | 12–84 | engines, amortization check |
+| 7.17 | Renewal commissions | expensed / capitalized / not paid | engines |
+| 7.18 | When commissions are paid | month of booking / month after / quarter after / on customer payment | engines (cash timing), accrual check |
+| 7.19 | Employer payroll tax on commissions | expensed / capitalized | engines |
+| 7.20 | Payout system of record | comp tool / payroll export / spreadsheet / none | payout checks |
+
+The questions form the "Commission Policy Gate". The gate is unresolved when 7.14 is "not sure", or when a required follow-up is unanswered. 7.15 and 7.16 are required only when commissions are capitalized. While the gate is unresolved, Cash Forecasting, Scenario Planning and Board Reporting stay PARTIAL.
+
+## 7. Checks: questionnaire vs books
+
+These run on every readiness load (#223). If a fact can't be read, that check is skipped, never assumed.
+
+| Check | Conflict when |
+|---|---|
+| Deferred commissions in GL | capitalized but no asset; expensed / none but an asset exists |
+| Commission expense in GL | commissions paid but no commission expense in 12 months; "no commissions" but expense exists |
+| Amortization period vs GL | deferred balance is more months of commission expense than the stated period allows |
+| Accrued commissions | payouts lag bookings but there is no accrued liability (an unexpected accrual is a review) |
+| Payouts tie to GL | payouts ≠ expense + Δ deferred − Δ accrued, beyond 1% or $1,000 |
+| Payout detail | payouts are said to be in a system but none are loaded (no system at all is a review) |
+
+- **Today's production data (v5):** the deferred commissions and payout tie-out checks both conflict. Jan–May 2026 payouts are $2.20M against $0.10M booked.
+- **v6:** all six checks pass, and payouts tie to the GL with a $0 difference.
+
+Statements also fail validation on any GL balance sheet account the app can't classify, or any cash flow activity it can't place (#222). An unknown account can no longer hide in the totals.
+
+## 8. Status
+
+| Item | PR | State |
+|---|---|---|
+| Design | #220 | this doc |
+| Data v6 scripts + tie-out | #221 | 0 failing checks; mutation test catches 10 of 10 planted errors |
+| GL statements: deferred commissions lines, unclassified-account validations | #222 | needed before the v6 load |
+| Readiness questionnaire + checks | #223 | stacked on #222 |
+| v6 load | — | dry run after #222 deploys; commit only with Matt's OK |
+| Cash forecast commission cash (bookings × rate, payout lag) and drill-down to payouts | next | |
+| Budget Engine and Forecast Engine deferred commissions roll-forward | next | |
+| Metrics (CAC GAAP and cash) and MD&A S&M commentary | next | |
+
+## 9. Future list
+
+- **Sandbox (policy what-if):** let a customer see their numbers under a different commission policy, such as an expensed vs capitalized comparison. It is not a core need, because companies with audited GAAP books already have a policy. It's worth having so we can say we support it.
+- **Deferred tax** on deferred commissions (book/tax difference).
+- **Impairment test** of the deferred commissions asset when plans or retention change.
+- **Life from data:** derive the amortization period from logo churn per client, as a cross-check on the answer to 7.15.
