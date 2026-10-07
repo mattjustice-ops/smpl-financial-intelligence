@@ -169,10 +169,88 @@ def test_return_history_measures_arr_above_the_prior_level(no_answers) -> None:
     assert react["above_baseline_share"] == pytest.approx(20 / 180)
     exp = r["history"]["expansion"]
     assert (exp["arr"], exp["above_prior_level_arr"]) == (90.0, 60.0)
-    assert (r["history"]["from"], r["history"]["to"]) == ("2026-01", "2026-07")
-    assert r["loaded_practice"] == {"payouts": 1, "booked_arr": 120.0, "commission": 18.0,
-                                    "paid_on_full_amount": True, "rate_type": "new_business"}
+    assert (r["history"]["source"], r["history"]["from"], r["history"]["to"]) == ("opportunities", "2026-01", "2026-07")
+    assert r["loaded_practice"] == {"payouts": 1, "booked_arr": 120.0, "commission_base_arr": 120.0, "commission": 18.0,
+                                    "paid_on_full_amount": True, "paid_above_prior_arr": None,
+                                    "rate_type": "new_business"}
     assert r["checks"] == []
+
+
+HISTORY_COLS = ("organization_id text, version text, period text, customer_id text, movement_type text, "
+                "beginning_arr text, movement_arr text, ending_arr text, opportunity_id text")
+HISTORY = (
+    # A churned at 100 in 2024 and came back at 120 within the window (winback): 20 above.
+    ("2023-12", "A", "Opening balance", "0", "100", "100", ""),
+    ("2024-02", "A", "Churn", "100", "-100", "0", ""),
+    ("2024-05", "A", "Reactivation", "0", "120", "120", "O-R1"),
+    # P paused at 80, restarted at 50 (30 short), then expanded 40: 30 recovers the shortfall, 10 above.
+    ("2023-12", "P", "Opening balance", "0", "80", "80", ""),
+    ("2025-01", "P", "Pause", "80", "-80", "0", ""),
+    ("2025-04", "P", "Reactivation", "0", "50", "50", "O-R2"),
+    ("2025-09", "P", "Expansion", "50", "40", "90", "O-E1"),
+    # N churned and came back as new business: nothing carries over.
+    ("2023-12", "N", "Opening balance", "0", "70", "70", ""),
+    ("2024-03", "N", "Churn", "70", "-70", "0", ""),
+    ("2025-06", "N", "New Business", "0", "90", "90", ""),
+    ("2025-08", "N", "Expansion", "90", "30", "120", ""),
+    # Past the as-of month: ignored.
+    ("2026-10", "A", "Contraction", "120", "-20", "100", ""),
+)
+
+
+def _history_db(payout_base: str | None):
+    from sqlalchemy import text
+
+    db = _db("630.50")
+    db.execute(text(f"create table actual_customer_arr_history ({HISTORY_COLS})"))
+    for period, cust, kind, beg, mv, end, opp in HISTORY:
+        db.execute(text("insert into actual_customer_arr_history values (:o, 'Actual', :p, :c, :k, :b, :m, :e, :op)"),
+                   {"o": ORG, "p": period, "c": cust, "k": kind, "b": beg, "m": mv, "e": end, "op": opp})
+    if payout_base is not None:
+        db.execute(text("alter table actual_commission_payouts add column commission_base_arr text"))
+        db.execute(text("update actual_commission_payouts set commission_base_arr = :b, commission_amount = '3.00'"),
+                   {"b": payout_base})
+    return db
+
+
+def test_customer_arr_history_measures_returns_with_every_departure_on_record(no_answers) -> None:
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    out = build_plan_inputs(_history_db("20"), SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    hist = out["returns"]["history"]
+    assert (hist["source"], hist["from"], hist["to"]) == ("customer_arr_history", "2023-12", "2025-09")
+    react = hist["reactivation"]
+    assert (react["count"], react["arr"], react["with_departure"], react["arr_with_departure"]) == (2, 170.0, 2, 170.0)
+    assert react["above_baseline_arr"] == 20.0
+    assert react["above_baseline_share"] == pytest.approx(20 / 170)
+    assert react["winbacks"] == {"count": 1, "arr": 120.0}
+    assert react["restarts"] == {"count": 1, "arr": 50.0}
+    assert react["back_as_new_business"] == 1
+    assert (hist["expansion"]["arr"], hist["expansion"]["above_prior_level_arr"]) == (70.0, 40.0)
+    assert "bases" not in hist
+    practice = out["returns"]["loaded_practice"]
+    assert (practice["booked_arr"], practice["commission_base_arr"]) == (120.0, 20.0)
+    assert practice["paid_on_full_amount"] is False
+    assert practice["paid_above_prior_arr"] is True
+    assert out["missing"] == []
+
+
+@pytest.mark.parametrize(("answer", "payout_base", "conflict"), [
+    ("above_prior_arr", "20", None),
+    ("above_prior_arr", "35", "restarts_above_prior_arr_vs_payouts"),
+    ("full_amount", "20", "restarts_full_amount_vs_payouts"),
+    ("full_amount", "120", None),
+])
+def test_return_answers_are_checked_against_the_payout_base(monkeypatch, answer, payout_base, conflict) -> None:
+    import app.services.readiness.evidence as evidence
+    import app.services.readiness.service as service
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    monkeypatch.setattr(service, "get_answers", lambda db, org: SimpleNamespace(answers={"7.22": answer}))
+    monkeypatch.setattr(evidence, "build_commission_facts", lambda db, org: {"as_of": "2026-06"})
+    out = build_plan_inputs(_history_db(payout_base), SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    ids = [c["id"] for c in out["returns"]["checks"]]
+    assert ids == ([conflict] if conflict else [])
 
 
 def test_return_answers_that_contradict_the_loaded_payouts_are_conflicts(monkeypatch) -> None:
@@ -205,4 +283,4 @@ def test_no_opportunities_loaded_is_reported_not_assumed(no_answers) -> None:
     assert out["returns"]["history"]["reactivation"]["above_baseline_share"] is None
     assert out["returns"]["history"]["expansion"]["above_prior_level_share"] is None
     assert out["returns"]["loaded_practice"]["payouts"] == 0
-    assert any("actual_opportunities is not loaded" in m for m in out["missing"])
+    assert any("Neither actual_customer_arr_history nor actual_opportunities is loaded" in m for m in out["missing"])
