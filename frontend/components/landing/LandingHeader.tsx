@@ -25,6 +25,16 @@ const RESOURCES_LINKS = [
     label: "Integrations",
     description: "ERP, CRM, billing & HRIS — implementation led by SMPL",
   },
+  {
+    href: "/integrations/salesforce",
+    label: "Salesforce",
+    description: "Pipeline in the connected operating model",
+  },
+  {
+    href: "/blog/best-fpa-software-saas-companies",
+    label: "Buyer's guide",
+    description: "How to evaluate FP&A software for SaaS",
+  },
   { href: "/about", label: "About", description: "Company entity & founder" },
   { href: "/blog", label: "Blog", description: "Close, board packages, commentary" },
   { href: "/glossary", label: "Glossary", description: "Board & close metric literacy" },

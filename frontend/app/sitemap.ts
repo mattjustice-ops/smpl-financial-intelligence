@@ -11,9 +11,9 @@ import { SITE_URL } from "@/lib/site";
  * crawlers ignore lastmod when it moves on every request.
  */
 const STATIC_ROUTES: Array<{ path: string; lastModified: string }> = [
-  { path: "", lastModified: "2026-09-23" },
+  { path: "", lastModified: "2026-10-08" },
   { path: "/pricing", lastModified: "2026-07-21" },
-  { path: "/platform", lastModified: "2026-09-30" },
+  { path: "/platform", lastModified: "2026-10-08" },
   { path: "/fpa-software-for-saas", lastModified: "2026-09-30" },
   { path: "/fpa-software-for-lean-finance-teams", lastModified: "2026-09-30" },
   { path: "/saas-board-reporting", lastModified: "2026-09-30" },
