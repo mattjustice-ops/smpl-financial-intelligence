@@ -256,7 +256,7 @@ Ask which they trust and can supply; skip what is irrelevant:
 
 ### Sales quota and comp plan *(Normalization gate — Recommended)*
 
-> **How SMPL uses the answers** *(Budget Engine changes in progress)*: the Budget Engine plans sales hiring around expected attainment: closers needed = new-business gap ÷ (ramped quota × expected attainment). New hires ramp into quota on the loaded ramp schedule, and commissions = planned bookings × plan rate. Quotas, starting heads by territory and role, ramp and variable pay come from the loaded HRIS, quota and commission plan files; nothing is estimated when they are missing, and commissions are shown as unplannable without commission plans.
+> **How SMPL uses the answers:** the Budget Engine plans sales hiring around expected attainment: closers needed = new-business gap ÷ (ramped quota × expected attainment). New hires ramp into quota on the loaded ramp schedule, and commissions = planned bookings × plan rate. Quotas, starting heads by territory and role, ramp and variable pay come from the loaded HRIS, quota and commission plan files; nothing is estimated when they are missing, and commissions are shown as unplannable without commission plans.
 >
 > **How SMPL checks them:** after connect, each answer is compared with the loaded sales team:
 > - expected attainment (7.25) vs the closers' attainment of ramped quota to date (review if more than 15 points apart);
