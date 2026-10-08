@@ -111,6 +111,8 @@ export default function PlatformPage() {
       more={{ title: "Explore by need", items: SOLUTIONS }}
       related={[
         { href: "/fpa-software-for-saas", label: "FP&A software for SaaS companies" },
+        { href: "/blog/best-fpa-software-saas-companies", label: "Best FP&A software for SaaS companies" },
+        { href: "/integrations/salesforce", label: "Salesforce integration" },
         { href: SAMPLE_DASHBOARD_URL, label: "View the sample board" },
         { href: "/blog/ai-variance-commentary-cfo-standard", label: "What CFOs should demand from AI variance commentary" },
         { href: "/about", label: "About SMPL.ai" },
@@ -144,7 +146,18 @@ export default function PlatformPage() {
           <Link href="/integrations" className="text-teal-300 underline-offset-2 hover:underline">
             integrations and implementation
           </Link>{" "}
-          for the systems SMPL works with and how the connection is delivered.
+          for the systems SMPL works with, including{" "}
+          <Link href="/integrations/salesforce" className="text-teal-300 underline-offset-2 hover:underline">
+            Salesforce
+          </Link>
+          , and how the connection is delivered. For how these platforms compare, see the{" "}
+          <Link
+            href="/blog/best-fpa-software-saas-companies"
+            className="text-teal-300 underline-offset-2 hover:underline"
+          >
+            buyer&apos;s guide to FP&A software for SaaS companies
+          </Link>
+          .
         </p>
       </Section>
     </SolutionPage>

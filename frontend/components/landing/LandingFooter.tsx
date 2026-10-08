@@ -29,6 +29,12 @@ export function LandingFooter() {
           <Link href="/integrations" className="transition hover:text-white">
             Integrations
           </Link>
+          <Link href="/integrations/salesforce" className="transition hover:text-white">
+            Salesforce
+          </Link>
+          <Link href="/blog/best-fpa-software-saas-companies" className="transition hover:text-white">
+            Buyer&apos;s guide
+          </Link>
           <Link href="/about" className="transition hover:text-white">
             About
           </Link>
