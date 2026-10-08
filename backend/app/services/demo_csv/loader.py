@@ -13,8 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import bindparam, func, text
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DBAPIError, IntegrityError, SQLAlchemyError
 from sqlalchemy import delete
@@ -652,24 +651,22 @@ def _delete_org_rows(
     organization_id: uuid.UUID,
     *,
     table_name: str,
-    replace_periods: Optional[set[str]] = None,
+    replace_budget_version_id: Optional[str] = None,
 ) -> None:
-    """Delete the org's rows; with ``replace_periods`` ('YYYY-MM'), only rows in those months."""
+    """Delete the org's rows; with ``replace_budget_version_id``, only that budget version's rows."""
     q_table = _quote_ident(table_name)
-    if replace_periods is None:
+    if replace_budget_version_id is None:
         session.execute(
             text(f"delete from {q_table} where organization_id = :organization_id"),
             {"organization_id": organization_id},
         )
         return
-    if not replace_periods:
-        return
     session.execute(
         text(
             f"delete from {q_table} where organization_id = :organization_id "
-            "and substr(cast(period as text), 1, 7) in :periods"
-        ).bindparams(bindparam("periods", expanding=True)),
-        {"organization_id": organization_id, "periods": sorted(replace_periods)},
+            "and cast(budget_version_id as text) = :budget_version_id"
+        ),
+        {"organization_id": organization_id, "budget_version_id": replace_budget_version_id},
     )
 
 
@@ -681,7 +678,7 @@ def _load_physical_version_csv(
     filename: Optional[str],
     headers: list[str],
     rows: list[dict[str, str]],
-    replace_periods: Optional[set[str]] = None,
+    replace_budget_version_id: Optional[str] = None,
 ) -> int:
     columns = _sync_physical_version_table(session, table_name=table_name, headers=headers)
     column_types = _physical_column_types(session, table_name)
@@ -695,7 +692,9 @@ def _load_physical_version_csv(
             extra_columns.append(target_col)
     all_insert_columns = [*columns, *extra_columns]
     q_table = _quote_ident(table_name)
-    _delete_org_rows(session, organization_id, table_name=table_name, replace_periods=replace_periods)
+    _delete_org_rows(
+        session, organization_id, table_name=table_name, replace_budget_version_id=replace_budget_version_id
+    )
     if not rows:
         return 0
 
@@ -1051,9 +1050,9 @@ def load_physical_table_rows(
     table_name: str,
     rows: list[dict[str, str]],
     filename: str | None = None,
-    replace_periods: set[str] | None = None,
+    replace_budget_version_id: str | None = None,
 ) -> int:
-    """Replace org-scoped rows (only ``replace_periods`` months when given) in a versioned physical table."""
+    """Replace org-scoped rows (only that budget version's rows when given) in a versioned physical table."""
     if not rows:
         return 0
     headers = list(rows[0].keys())
@@ -1065,7 +1064,7 @@ def load_physical_table_rows(
         filename=synthetic_name,
         headers=headers,
         rows=rows,
-        replace_periods=replace_periods,
+        replace_budget_version_id=replace_budget_version_id,
     )
 
 
@@ -1114,13 +1113,11 @@ def promote_budget_tables(
     tables: dict[str, list[dict[str, str]]],
     budget_version_id: uuid.UUID,
     as_of_period: str,
-    clear_periods: set[str] | None = None,
 ) -> dict[str, int]:
-    """Write promoted budget rows into physical warehouse tables (budget_*).
+    """Write promoted budget rows into physical warehouse tables (budget_*), stamped with the version.
 
-    Only the months the version covers are replaced, so other budget years stay loaded.
-    Promotable tables the version has no rows for lose their ``clear_periods`` months, so a
-    prior version's rows for the same budget year can't sit beside the new one.
+    Rows from other versions and the loaded Budget are kept so versions can be reviewed and compared;
+    reporting reads the current final per budget year (``dashboard.query_utils``).
     """
     org_key = str(organization_id)
     version_key = str(budget_version_id)
@@ -1129,7 +1126,6 @@ def promote_budget_tables(
         if table_name not in PROMOTABLE_BUDGET_TABLES:
             continue
         rows: list[dict[str, str]] = []
-        periods: set[str] = set()
         for raw in raw_rows:
             row = {str(k): "" if v is None else str(v) for k, v in raw.items()}
             scenario = (row.get("version") or "Budget").strip()
@@ -1140,7 +1136,6 @@ def promote_budget_tables(
             except ValueError as exc:
                 raise ValueError(f"{table_name}: row without a valid period ({row.get('period')!r}).") from exc
             row["period"] = period
-            periods.add(period)
             row.setdefault("organization_id", org_key)
             row["budget_version_id"] = version_key
             row.setdefault("as_of_period", as_of_period)
@@ -1154,16 +1149,8 @@ def promote_budget_tables(
                 table_name=table_name,
                 rows=rows,
                 filename=f"Budget_{stem}.csv",
-                replace_periods=periods,
+                replace_budget_version_id=version_key,
             )
-    if clear_periods:
-        inspector = sa_inspect(session.connection())
-        for table_name in PROMOTABLE_BUDGET_TABLES:
-            if table_name in loaded or not inspector.has_table(table_name):
-                continue
-            if "period" not in {c["name"] for c in inspector.get_columns(table_name)}:
-                continue
-            _delete_org_rows(session, organization_id, table_name=table_name, replace_periods=clear_periods)
     return loaded
 
 

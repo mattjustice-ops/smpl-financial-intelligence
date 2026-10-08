@@ -11079,7 +11079,7 @@ function formatPromoteRejection(detail) {
   try {
     const d = JSON.parse(detail).detail;
     if (d && Array.isArray(d.failures)) {
-      return d.message + '\n- ' + d.failures.slice(0, 12).join('\n- ')
+      return d.message + (d.how_to_fix ? '\n\n' + d.how_to_fix : '') + '\n\n- ' + d.failures.slice(0, 12).join('\n- ')
         + (d.failures.length > 12 ? `\n- …and ${d.failures.length - 12} more` : '');
     }
     if (typeof d === 'string') return d;
@@ -11104,7 +11104,7 @@ function downloadBudgetCSVs(tables, vid, name) {
     csvs[`Budget_${stem}_${vid}.csv`] = budgetRowsToCSV(rows);
   });
   csvs['budget_versions_registry.csv'] = budgetRowsToCSV(budgetVersions.map(v => ({
-    version_id: v.id, version_name: v.name, status: v.status, budget_year: BUDGET_YEAR,
+    version_id: v.id, version_name: v.name, status: v.status, budget_year: v.budget_year || BUDGET_YEAR,
     as_of_period: CLOSE_MONTH, created_at: v.ts,
     dec_arr: Math.round(v.dec_arr), dec_cash: Math.round(v.dec_cash), fy_ebitda: Math.round(v.fy_ebitda),
   })));
@@ -11121,7 +11121,7 @@ function downloadBudgetCSVs(tables, vid, name) {
   return Object.keys(csvs).length;
 }
 
-async function pushBudgetVersionToWarehouse(status, name, tables) {
+async function pushBudgetVersionToWarehouse(status, name, tables, serverId) {
   if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return { ok: false, reason: 'no_outlook' };
   let orgId;
   try {
@@ -11143,6 +11143,7 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
     results: { engine: 'budget', year: BUDGET_YEAR },
     tables: orgTables,
   };
+  if (serverId) body.version_id = serverId;
   const draftRes = await fetch('/api/v1/budget/versions/draft?organization_id=' + encodeURIComponent(orgId), {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -11155,7 +11156,7 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
     const promoteRes = await fetch('/api/v1/budget/versions/' + draft.id + '/promote?organization_id=' + encodeURIComponent(orgId), {
       method: 'POST', credentials: 'include',
     });
-    if (!promoteRes.ok) return { ok: false, reason: 'promote', detail: await promoteRes.text() };
+    if (!promoteRes.ok) return { ok: false, reason: 'promote', id: draft.id, detail: await promoteRes.text() };
   }
   let assessmentId = null;
   try {
@@ -11174,11 +11175,27 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
     : { ok: true, draft: true, id: draft.id, assessmentId };
 }
 
+/** Prompt until the name differs from every saved version (case and spacing ignored); null if cancelled. */
+function promptUniqueBudgetVersionName(status) {
+  const taken = new Set(budgetVersions.map(v => String(v.name || '').trim().toLowerCase()));
+  let suggestion = `FY${BUDGET_YEAR} ${status === 'final' ? 'Final' : 'Draft'} ${new Date().toLocaleString()}`;
+  let ask = `Name this ${status === 'final' ? 'FINAL' : 'draft'} budget version:`;
+  for (;;) {
+    const raw = prompt(ask, suggestion);
+    if (raw == null) return null;
+    const name = raw.trim();
+    if (name && !taken.has(name.toLowerCase())) return name;
+    suggestion = name;
+    ask = name
+      ? `A version named "${name}" already exists. Use a different name so versions can be told apart:`
+      : `Name this ${status === 'final' ? 'FINAL' : 'draft'} budget version:`;
+  }
+}
+
+const isSameYearFinal = v => v.status === 'final' && (v.budget_year == null || v.budget_year === BUDGET_YEAR);
+
 window.saveBudgetVersion = async function(status) {
-  const name = prompt(
-    `Name this ${status === 'final' ? 'FINAL' : 'draft'} budget version:`,
-    `FY${BUDGET_YEAR} ${status === 'final' ? 'Final' : 'Draft'} ${new Date().toLocaleDateString()}`,
-  );
+  const name = promptUniqueBudgetVersionName(status);
   if (!name) return;
   if (status === 'final') {
     const gaps = budgetCommissionPromoteGaps();
@@ -11186,7 +11203,7 @@ window.saveBudgetVersion = async function(status) {
   }
   const snap = budgetVersionSnapshot();
   const vid = 'B' + Date.now();
-  const priorFinals = budgetVersions.filter(v => v.status === 'final');
+  const priorFinals = budgetVersions.filter(isSameYearFinal);
   if (status === 'final') {
     priorFinals.forEach(v => { v.status = 'superseded'; });
   }
@@ -11201,11 +11218,12 @@ window.saveBudgetVersion = async function(status) {
   let warehouseNote = '';
   try {
     const wh = await pushBudgetVersionToWarehouse(status, name, tables);
-    if (wh.reason === 'promote') {
+    if (wh.id) { entry.serverId = wh.id; persistBudgetVersions(); }
+    if (status === 'final' && (wh.reason === 'promote' || wh.reason === 'draft')) {
       entry.status = 'draft';
       priorFinals.forEach(v => { v.status = 'final'; });
       persistBudgetVersions();
-      alert(`✗ Not promoted: "${name}" (kept as a draft)\n\n${formatPromoteRejection(wh.detail)}`);
+      alert(`✗ Not promoted: "${name}"${wh.reason === 'promote' ? ' (kept as a draft)' : ''}\n\n${formatPromoteRejection(wh.detail)}`);
       showTab('promote');
       return;
     }
@@ -11233,18 +11251,27 @@ window.saveBudgetVersion = async function(status) {
 
 window.promoteBudgetVersion = async function(id) {
   const v = budgetVersions.find(x => x.id === id);
-  if (!v || !confirm(`Promote "${v.name}" to FINAL? This supersedes the current final and loads Budget_* tables.`)) return;
-  const gaps = budgetCommissionPromoteGaps();
-  if (gaps && !confirm(gaps + '\n\nPromote anyway?')) return;
-  const priorFinals = budgetVersions.filter(x => x.status === 'final');
+  if (!v || !confirm(`Promote "${v.name}" to FINAL? It replaces the current FY${v.budget_year || BUDGET_YEAR} final in reporting; earlier versions stay saved.`)) return;
+  if (!v.serverId) {
+    if (!confirm(`"${v.name}" was never saved to the warehouse, so its tables weren't kept. Promoting it loads the plan as it is now under this name. Continue?`)) return;
+    const gaps = budgetCommissionPromoteGaps();
+    if (gaps && !confirm(gaps + '\n\nPromote anyway?')) return;
+  }
+  const priorFinals = budgetVersions.filter(x => x !== v && x.status === 'final' && (x.budget_year == null || x.budget_year === (v.budget_year || BUDGET_YEAR)));
   const priorStatus = v.status;
   priorFinals.forEach(x => { x.status = 'superseded'; });
   v.status = 'final';
   persistBudgetVersions();
-  const tables = buildBudgetTableRows(id);
   let wh = null;
-  try { wh = await pushBudgetVersionToWarehouse('final', v.name, tables); } catch (e) { /* CSVs still go */ }
-  if (wh && wh.reason === 'promote') {
+  let tables = null;
+  if (v.serverId) {
+    try { wh = await promoteSavedBudgetVersion(v.serverId); } catch (e) { wh = { ok: false, reason: 'promote', detail: String(e) }; }
+  } else {
+    tables = buildBudgetTableRows(id);
+    try { wh = await pushBudgetVersionToWarehouse('final', v.name, tables); } catch (e) { /* CSVs still go */ }
+    if (wh && wh.id) v.serverId = wh.id;
+  }
+  if (wh && (wh.reason === 'promote' || wh.reason === 'draft')) {
     v.status = priorStatus;
     priorFinals.forEach(x => { x.status = 'final'; });
     persistBudgetVersions();
@@ -11252,9 +11279,22 @@ window.promoteBudgetVersion = async function(id) {
     showTab('promote');
     return;
   }
-  downloadBudgetCSVs(tables, id, v.name);
+  persistBudgetVersions();
+  if (tables) downloadBudgetCSVs(tables, id, v.name);
   showTab('promote');
 };
+
+/** Promote a draft already saved server-side; the server promotes the tables stored with that draft. */
+async function promoteSavedBudgetVersion(serverId) {
+  if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return { ok: false, reason: 'no_outlook' };
+  const orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: true });
+  if (!orgId) return { ok: false, reason: 'signin' };
+  const res = await fetch('/api/v1/budget/versions/' + serverId + '/promote?organization_id=' + encodeURIComponent(orgId), {
+    method: 'POST', credentials: 'include',
+  });
+  if (!res.ok) return { ok: false, reason: 'promote', id: serverId, detail: await res.text() };
+  return { ok: true, promoted: true, id: serverId };
+}
 
 window.deleteBudgetVersion = function(id) {
   const v = budgetVersions.find(x => x.id === id);
