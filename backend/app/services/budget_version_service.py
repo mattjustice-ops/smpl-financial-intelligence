@@ -14,6 +14,7 @@ from app.api.deps.request_context import get_request_user_id
 from app.models.budget_version import BudgetVersion
 from app.models.organization import Organization
 from app.services.auth.service import AuthService
+from app.services.budget_promotion_checks import budget_promotion_failures
 from app.services.demo_csv.loader import PROMOTABLE_BUDGET_TABLES, promote_budget_tables
 from app.services.organizations import get_organization_or_404
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
@@ -141,6 +142,15 @@ def promote_budget_version(
             status_code=400,
             detail="No budget table data on this version. Save a draft with table rows before promoting.",
         )
+    failures = budget_promotion_failures(tables_payload, version.budget_year)
+    if failures:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "The budget tables don't tie, so nothing was promoted.",
+                "failures": failures,
+            },
+        )
 
     for prior in db.scalars(
         select(BudgetVersion).where(
@@ -157,6 +167,7 @@ def promote_budget_version(
         tables=tables_payload,
         budget_version_id=version.id,
         as_of_period=version.as_of_period,
+        clear_periods={f"{version.budget_year:04d}-{m:02d}" for m in range(1, 13)},
     )
 
     version.status = "final"
