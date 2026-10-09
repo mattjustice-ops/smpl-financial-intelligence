@@ -93,6 +93,13 @@ OBJECTS: dict[str, CanonicalObject] = {
         CanonicalObject("prepaid_schedule", "Prepaid Schedule", "ERP", ("actual_prepaids_rollforward",),
                         files=files("Prepaids_Rollforward", "Prepaid_Amortization_Schedule"), tier=SCHEDULE,
                         question="7.35"),
+        CanonicalObject("accrued_expenses", "Accrued Expenses (services received, not yet billed)", "ERP",
+                        ("actual_accrued_expenses_rollforward",), "actual",
+                        files=(*files("accrued_expenses_rollforward"), *files("accrued_expenses_detail", versions=A)),
+                        tier=SCHEDULE, question="7.35"),
+        CanonicalObject("lease_schedule", "Operating Lease Schedule (ASC 842)", "ERP",
+                        ("actual_operating_lease_schedule",), files=files("operating_lease_schedule"), tier=SCHEDULE,
+                        question="7.35"),
         CanonicalObject("fixed_asset", "Fixed Asset Register", "ERP", ("actual_fixed_asset_register",),
                         files=files("fixed_asset_register", versions=A), tier=SUBLEDGER, question="7.35"),
         CanonicalObject("debt_schedule", "Debt Schedule", "ERP", ("actual_debt_schedule",),
@@ -362,7 +369,8 @@ DATA_SOURCES: tuple[Question, ...] = (
     Question("7.34", "data_sources", "Standard vendor payment terms",
              ("net_15", "net_30", "net_45", "net_60", "mixed")),
     Question("7.35", "data_sources",
-             "Supporting schedules kept outside the GL: prepaid, fixed asset and debt schedules",
+             "Supporting schedules kept outside the GL: prepaid, accrued expense, lease (ASC 842), fixed asset and "
+             "debt schedules",
              ("all", "some", "none")),
     Question("7.36", "data_sources", "Equity grant / stock-based compensation schedule (Carta, Shareworks)"),
 )

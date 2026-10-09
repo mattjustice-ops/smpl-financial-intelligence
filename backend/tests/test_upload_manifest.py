@@ -52,8 +52,13 @@ def test_payroll_register_and_policies_listed_for_every_version():
 def test_ap_and_schedule_objects_are_declared_for_onboarding():
     by_object = Counter(r["object_id"] for r in manifest_rows())
     for oid in ("vendor", "vendor_bill", "vendor_payment", "ap_aging", "fixed_asset", "debt_schedule",
-                "prepaid_schedule", "sbc_schedule", "commission_payout", "vendor_spend_plan"):
+                "prepaid_schedule", "sbc_schedule", "commission_payout", "vendor_spend_plan", "accrued_expenses",
+                "lease_schedule"):
         assert by_object[oid] > 0, oid
+    names = {r["file_name"] for r in manifest_rows()}
+    assert {f"{v}_{base}.csv" for v in VERSIONS for base in ("accrued_expenses_rollforward",
+                                                              "operating_lease_schedule")} <= names
+    assert "Actual_accrued_expenses_detail.csv" in names and "Budget_accrued_expenses_detail.csv" not in names
 
 
 def test_ap_subledger_is_actual_only_and_plans_use_the_spend_plan():
@@ -83,6 +88,8 @@ def test_classify():
     assert classify("Actual_vendor_master.csv") == "vendor"
     assert classify("Forecast_vendor_spend_plan.csv") == "vendor_spend_plan"
     assert classify("Budget_AP_Aging.csv") is None
+    assert classify("Forecast_operating_lease_schedule.csv") == "lease_schedule"
+    assert classify("Actual_accrued_expenses_detail.csv") == "accrued_expenses"
     assert classify("Actual_unknown_export.csv") is None
 
 
