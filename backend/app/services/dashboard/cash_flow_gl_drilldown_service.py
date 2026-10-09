@@ -243,6 +243,72 @@ def _commission_cash_lines(
     return lines
 
 
+VENDOR_PAYMENTS_SUFFIX = "_vendor_payments"
+VENDOR_EXPENSE_NOTE = (
+    "GL vendor expense, not payments: expense is recognized when services are received and differs from "
+    "cash paid by the change in AP, accruals and prepaids. Load vendor payments to drill into cash."
+)
+
+
+def _vendor_payment_lines(
+    session: Session,
+    organization_id: uuid.UUID,
+    *,
+    period: str,
+    source_scenario: str,
+) -> list[CashFlowDrilldownLine]:
+    """Vendor cash is the payments made in the month (by payment date), one line per bill paid."""
+    table = f"{source_scenario.lower()}{VENDOR_PAYMENTS_SUFFIX}"
+    if not table_exists(session, table):
+        return []
+    lines: list[CashFlowDrilldownLine] = []
+    for raw in fetch_table_rows(session, table, organization_id):
+        paid = str(raw.get("payment_date") or raw.get("period") or "")
+        if not paid or to_period(paid) != period:
+            continue
+        amount = value_any(raw, "amount")
+        if amount == 0:
+            continue
+        late = int(value_any(raw, "days_past_due")) if raw.get("days_past_due") not in (None, "") else None
+        bill = str(raw.get("bill_id") or raw.get("vendor_payment_id") or "").strip()
+        details = [
+            f"paid {str(raw.get('payment_date'))[:10]}" if raw.get("payment_date") else "",
+            f"due {str(raw.get('due_date'))[:10]}" if raw.get("due_date") else "",
+            f"{late} days late" if late else "",
+            str(raw.get("payment_method") or ""),
+        ]
+        lines.append(
+            CashFlowDrilldownLine(
+                account_name=f"Bill {bill}" if raw.get("bill_id") else bill or "Vendor payment",
+                account_group=str(raw.get("expense_category") or "") or None,
+                vendor_name=str(raw.get("vendor_name") or raw.get("vendor_id") or "") or None,
+                amount=-abs(amount),
+                source_table=table,
+                detail_type="payment",
+                notes="; ".join(d for d in details if d) or None,
+                days_past_due=late,
+            )
+        )
+    return lines
+
+
+def _late_payment_message(lines: list[CashFlowDrilldownLine], period: str) -> str | None:
+    late = [line for line in lines if (line.days_past_due or 0) > 0]
+    if not late:
+        return None
+    total = sum((abs(line.amount) for line in late), Decimal("0"))
+    by_vendor: dict[str, Decimal] = {}
+    for line in late:
+        name = line.vendor_name or "Unknown vendor"
+        by_vendor[name] = by_vendor.get(name, Decimal("0")) + abs(line.amount)
+    vendors = ", ".join(name for name, _ in sorted(by_vendor.items(), key=lambda kv: -kv[1])[:3])
+    worst = max(line.days_past_due or 0 for line in late)
+    return (
+        f"{len(late)} of {len(lines)} vendor payments in {period} were past due "
+        f"(${total:,.0f}, up to {worst} days late): {vendors}."
+    )
+
+
 def _gl_lines_for_type(
     session: Session,
     organization_id: uuid.UUID,
@@ -292,6 +358,10 @@ def cash_flow_drilldown_lines(
         payouts = _commission_cash_lines(session, organization_id, period=period, source_scenario=source_scenario)
         if payouts:
             return payouts
+    if waterfall_type == "vendor_cash_out":
+        payments = _vendor_payment_lines(session, organization_id, period=period, source_scenario=source_scenario)
+        if payments:
+            return payments
     return _gl_lines_for_type(
         session,
         organization_id,
@@ -399,8 +469,13 @@ def cash_flow_drilldown(
     if not lines:
         message = (
             "No GL detail rows matched this cell. Upload Actual_gl_detail.csv / Forecast_gl_detail.csv "
-            "(or paid invoices for collections)."
+            "(or paid invoices for collections, vendor payments for vendor cash)."
         )
+    elif waterfall_type == "vendor_cash_out":
+        if any(line.detail_type == "payment" for line in lines):
+            message = _late_payment_message(lines, period_key)
+        else:
+            message = VENDOR_EXPENSE_NOTE
     elif waterfall_type == "commission_cash_out":
         estimated = sorted({line.account_group or "" for line in lines if line.detail_type == "estimate"})
         if any(line.detail_type == "gl" for line in lines):

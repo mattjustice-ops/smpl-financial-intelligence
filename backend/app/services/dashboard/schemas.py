@@ -107,6 +107,7 @@ class CashFlowDrilldownLine(BaseModel):
     source_table: str = ""
     detail_type: str = "gl"
     notes: str | None = None
+    days_past_due: int | None = None
 
 
 class CashFlowDrilldownResponse(BaseModel):
