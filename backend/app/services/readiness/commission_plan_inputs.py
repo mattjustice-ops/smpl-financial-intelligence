@@ -13,6 +13,8 @@
   returned / expansion ARR above the customer's prior level measured from the customer ARR history
   (``actual_customer_arr_history``; CRM opportunities when it isn't loaded), and what the loaded payouts
   did with Reactivation opportunities.
+- Sales plan (7.25–7.29): expected attainment, quota credit, attainment period, expansion owner and variable
+  pay, checked against the loaded quotas, opportunities, payouts and employees (``sales_plan_inputs.py``).
 
 Nothing is filled in: a missing table or field is reported in ``missing``.
 """
@@ -427,8 +429,11 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
         "checks_as_of": facts.get("as_of"),
     }
 
+    from app.services.readiness.sales_plan_inputs import sales_plan
+
     plans = _plans(db, org.id, missing)
     returns = _returns(db, org.id, answers, plans, as_of, missing)
+    sales = sales_plan(db, org.id, answers, as_of)
     chain, tables = _schedule_chain(db, org.id, as_of, missing)
 
     cohorts: dict[str, list[tuple[Decimal, int]]] = defaultdict(list)
@@ -520,6 +525,7 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
         "payroll_tax_rate": payroll_tax_rate,
         "opening": opening,
         "returns": returns,
+        "sales_plan": sales,
         "checks": checks,
         "missing": missing,
     }

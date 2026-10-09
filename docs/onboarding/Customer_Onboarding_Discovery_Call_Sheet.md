@@ -254,6 +254,27 @@ Ask which they trust and can supply; skip what is irrelevant:
 
 > **How SMPL uses 7.21–7.24:** "above prior" rules need each customer's history. SMPL measures the share of returned and expansion ARR above the prior level from CRM Churn and Contraction opportunities and applies it to planned ARR; if the history isn't there, that commission is left out of the plan and named, not assumed. The engines' plan has one reactivation line, so winbacks and restarts must be paid the same way for reactivation commission to be computed. Answers are also checked against loaded payouts (for example, "not paid" while Reactivation payouts exist is a conflict).
 
+### Sales quota and comp plan *(Normalization gate — Recommended)*
+
+> **How SMPL uses the answers** *(Budget Engine changes in progress)*: the Budget Engine plans sales hiring around expected attainment: closers needed = new-business gap ÷ (ramped quota × expected attainment). New hires ramp into quota on the loaded ramp schedule, and commissions = planned bookings × plan rate. Quotas, starting heads by territory and role, ramp and variable pay come from the loaded HRIS, quota and commission plan files; nothing is estimated when they are missing, and commissions are shown as unplannable without commission plans.
+>
+> **How SMPL checks them:** after connect, each answer is compared with the loaded sales team:
+> - expected attainment (7.25) vs the closers' attainment of ramped quota to date (review if more than 15 points apart);
+> - quota credit (7.26) vs the attainment in the quota file, rebuilt from closed-won opportunities by owner and month;
+> - measurement period (7.27) vs payouts: a monthly plan pays the accelerated rate exactly when the month's attainment reaches the threshold;
+> - expansion ownership (7.28) vs the owners of closed-won Expansion opportunities;
+> - variable pay (7.29) vs the commission each closer role earns at quota (annual quota × new-business rate) against the HRIS commission target (review if more than 10% apart). A bonus paid in addition to commissions is shown for review, because payroll would carry both.
+
+| # | Question | Choices | Answer |
+|---|----------|---------|--------|
+| 7.25 | **Expected quota attainment** used to plan sales hiring, as a percent of ramped quota? | 50 / 55 / … / 120 | |
+| 7.26 | **What counts toward a closer's quota:** new-business ARR, new and expansion ARR, or net new ARR (new + expansion − contraction − churn)? | new business / new + expansion / net new | |
+| 7.27 | **Period over which attainment and accelerators are measured?** | monthly / quarterly / annual | |
+| 7.28 | **Who owns and is paid on expansion deals?** | account executives / account managers / customer success / not paid | |
+| 7.29 | **Sales variable pay in the HRIS** (commission target): paid through the commission plan, or a bonus in addition to commissions? | through commission plan / bonus in addition | |
+
+7.25 and 7.26 are always asked; 7.27–7.29 are asked when commissions are paid (7.14 capitalized or expensed).
+
 ---
 
 ## 8. Desired modules *(CEP)*
@@ -338,7 +359,7 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 Data ownership + readiness gates (Section 0) → company snapshot → systems & owners → ARR/MRR/churn definitions → trials / past_due / usage min-vs-overage → ARR methodology → rev-rec & renewal/cancel → systems of record → modules → FYE/currency/entities.
 
 **Should cover if time:**  
-Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · access acknowledgment (Section 10).
+Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · quota and comp plan (7.25–7.29) · access acknowledgment (Section 10).
 
 **Recommended extras (label clearly):**  
 How Forecast is built today · trusted drivers · multiple ARR intents · adjusted metrics by audience · close calendar + GL cutoff artifacts · allocations, accrual / reversal practice, audit adjustments (7.9–7.13).
@@ -355,7 +376,8 @@ How Forecast is built today · trusted drivers · multiple ARR intents · adjust
 | Section 7 Close / GL | `docs/Close_Process.md`, close/GL readiness materials | **Recommended — not CEP** |
 | Section 9 CRM / HC | GPES HubSpot + Rippling gate examples | Documented examples |
 | Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
-| 7.14–7.20 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
+| 7.14–7.24 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
+| 7.25–7.29 Sales quota and comp plan | Loaded HRIS, quota, opportunity and commission files | **Recommended — not CEP** |
 | Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
 ---
