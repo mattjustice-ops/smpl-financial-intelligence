@@ -179,15 +179,19 @@ def _working_capital_rows(bundle: ReportingBundle) -> list[list[str]]:
     if wc is None:
         return []
     cur = bundle.currency
+    ar_label, ar_balance = "AR", wc.accounts_receivable
+    if wc.net_accounts_receivable is not None:
+        ar_label = f"AR net of {fmt_money(wc.allowance_for_doubtful_accounts, cur)} allowance"
+        ar_balance = wc.net_accounts_receivable
     rows: list[list[str]] = []
-    for label, balance, days_label, days, past_due in (
-        ("AP", wc.accounts_payable, "DPO", wc.dpo_days, wc.ap_past_due),
-        ("AR", wc.accounts_receivable, "DSO", wc.dso_days, wc.ar_past_due),
+    for label, balance, days_label, days, past_due_label, past_due in (
+        ("AP", wc.accounts_payable, "DPO", wc.dpo_days, "AP past due", wc.ap_past_due),
+        (ar_label, ar_balance, "DSO", wc.dso_days, "AR past due", wc.ar_past_due),
     ):
         if balance is None:
             continue
         rows.append([f"{label} ({days_label} {days} days)" if days is not None else label, fmt_money(balance, cur)])
-        rows.append([f"{label} past due", fmt_money(past_due, cur)])
+        rows.append([past_due_label, fmt_money(past_due, cur)])
     return rows
 
 
@@ -227,6 +231,15 @@ def _risk_matrix_callouts(bundle: ReportingBundle, comm: SlideCommentary) -> lis
                         owner="CFO",
                     )
                 )
+        cases = []
+        for c in wc.collections_cases:
+            if c.status in ("Written off", "Open"):
+                state = f"{c.label}, written off" if c.status == "Written off" else c.label.lower()
+                cases.append(f"{c.name} {fmt_money(c.amount, bundle.currency)} ({state})")
+        if cases:
+            items.append(
+                CalloutBlock(kind="risk", text=f"Collections — {wc.period}: {', '.join(cases[:3])}.", owner="CFO")
+            )
     if bundle.validation.failed_count:
         items.append(
             CalloutBlock(

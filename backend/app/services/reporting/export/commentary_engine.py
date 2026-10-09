@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from app.core.config import get_settings
 from app.services.commentary.llm_factory import build_commentary_llm_client
+from app.services.commentary.schemas import CollectionsCase
 from app.services.dashboard.schemas import WaterfallAttributionRow
 from app.services.financial_statements.financial_statement_service import SummaryResponse
 from app.services.marketing.schemas import ActualBudgetForecastResponse
@@ -183,6 +184,11 @@ def _pipeline_commentary(bundle: ReportingBundle, as_of: str) -> CommentaryField
     return field
 
 
+def _case_text(case: CollectionsCase) -> str:
+    detail = f"{case.label}: {case.reason}" if case.reason else case.label
+    return f"{case.name} {_fmt_money(case.amount)} ({detail})"
+
+
 def _cash_commentary(bundle: ReportingBundle, as_of: str) -> CommentaryField:
     cash = bundle.comparison_waterfalls.get("cash_flow", [])
     field = CommentaryField(section="Cash Forecast", period=as_of)
@@ -211,6 +217,7 @@ def _cash_commentary(bundle: ReportingBundle, as_of: str) -> CommentaryField:
         parts.append(collections_text)
     field.what_changed = "; ".join(parts) + " (cash flow bridge source of truth)."
 
+    favorable: list[str] = []
     unfavorable: list[str] = []
     if collections_a is not None and collections_b is not None and collections_a < collections_b:
         unfavorable.append(f"Collections trailed budget by {_fmt_money(collections_b - collections_a)}.")
@@ -224,7 +231,17 @@ def _cash_commentary(bundle: ReportingBundle, as_of: str) -> CommentaryField:
             context.append(f"AP {_fmt_money(wc.accounts_payable)}{dpo}, {_fmt_money(wc.ap_past_due)} past due.")
         if wc.accounts_receivable is not None:
             dso = f", DSO {wc.dso_days} days" if wc.dso_days is not None else ""
-            context.append(f"AR {_fmt_money(wc.accounts_receivable)}{dso}, {_fmt_money(wc.ar_past_due)} past due.")
+            net = ""
+            if wc.net_accounts_receivable is not None:
+                net = (f" less {_fmt_money(wc.allowance_for_doubtful_accounts)} allowance for doubtful accounts = "
+                       f"{_fmt_money(wc.net_accounts_receivable)} net")
+            context.append(f"AR {_fmt_money(wc.accounts_receivable)}{net}{dso}, {_fmt_money(wc.ar_past_due)} past due.")
+        if wc.bad_debt_expense is not None:
+            if wc.bad_debt_expense < 0:
+                bad_debt = f"Allowance release of {_fmt_money(-wc.bad_debt_expense)} (bad debt expense below zero)"
+            else:
+                bad_debt = f"Bad debt expense {_fmt_money(wc.bad_debt_expense)}"
+            context.append(f"{bad_debt} in {wc.period}; {_fmt_money(wc.ar_write_offs)} written off.")
         for label, parties in (("Past-due vendors", wc.past_due_vendors), ("Past-due customers", wc.past_due_customers)):
             if parties:
                 unfavorable.append(
@@ -232,15 +249,34 @@ def _cash_commentary(bundle: ReportingBundle, as_of: str) -> CommentaryField:
                     + ", ".join(f"{p.name} {_fmt_money(p.past_due)} ({p.oldest_bucket})" for p in parties)
                     + "."
                 )
-        if wc.late_vendor_payments:
-            attention.insert(
-                0,
-                f"{wc.late_vendor_payments} of {wc.vendor_payments} vendor payments in {wc.period} were made after "
-                f"the due date ({_fmt_money(wc.late_vendor_payment_amount)}).",
+        written_off = [c for c in wc.collections_cases if c.status == "Written off"]
+        if written_off:
+            unfavorable.append(
+                f"Written off in {wc.period}: " + "; ".join(_case_text(c) for c in written_off) + "."
+                + (" No-starts count against new business, not churn." if any(c.label == "No-start" for c in written_off)
+                   else "")
             )
+        recovered = [c for c in wc.collections_cases if c.status == "Recovered"]
+        if recovered:
+            favorable.append(f"Recovered from collections in {wc.period}: "
+                             + "; ".join(_case_text(c) for c in recovered) + ".")
+        still_open = [c for c in wc.collections_cases if c.status == "Open"]
+        if still_open:
+            attention.insert(0, f"In collections at {wc.period}: " + "; ".join(_case_text(c) for c in still_open) + ".")
+        for kind, total, late, amount_late in (
+            ("customer", wc.customer_payments, wc.late_customer_payments, wc.late_customer_payment_amount),
+            ("vendor", wc.vendor_payments, wc.late_vendor_payments, wc.late_vendor_payment_amount),
+        ):
+            if late:
+                attention.insert(
+                    0,
+                    f"{late} of {total} {kind} payments in {wc.period} were made after the due date "
+                    f"({_fmt_money(amount_late)}).",
+                )
         if wc.notes:
             field.recommended_actions = " ".join(wc.notes)
 
+    field.favorable = " ".join(favorable)
     field.unfavorable = " ".join(unfavorable)
     field.leadership_attention = " ".join(attention)
     field.metric_context = " ".join(context)

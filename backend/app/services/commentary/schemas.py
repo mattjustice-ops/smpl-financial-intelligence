@@ -83,6 +83,16 @@ class PastDueParty(_ApiModel):
     oldest_bucket: str
 
 
+class CollectionsCase(_ApiModel):
+    """A customer in collections during the month: written off, recovered, or still open at the month-end."""
+
+    name: str
+    status: str
+    label: str
+    amount: Decimal
+    reason: Optional[str] = None
+
+
 class WorkingCapitalInput(_ApiModel):
     """AP and AR aging at one month-end. Amounts are positive; buckets are by days past the due date."""
 
@@ -100,6 +110,14 @@ class WorkingCapitalInput(_ApiModel):
     ar_past_due: Optional[Decimal] = None
     dso_days: Optional[Decimal] = None
     past_due_customers: list[PastDueParty] = Field(default_factory=list)
+    allowance_for_doubtful_accounts: Optional[Decimal] = None
+    net_accounts_receivable: Optional[Decimal] = None
+    bad_debt_expense: Optional[Decimal] = None
+    ar_write_offs: Optional[Decimal] = None
+    customer_payments: Optional[int] = None
+    late_customer_payments: Optional[int] = None
+    late_customer_payment_amount: Optional[Decimal] = None
+    collections_cases: list[CollectionsCase] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 
