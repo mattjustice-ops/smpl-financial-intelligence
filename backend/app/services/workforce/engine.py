@@ -290,10 +290,7 @@ class WorkforcePlanningEngine:
         if offset in ramp:
             return ramp[offset]
         if ramp:
-            max_offset = max(ramp)
-            if offset >= max_offset:
-                return ramp[max_offset]
-            return ramp.get(offset, Decimal("1"))
+            return Decimal("1")
         months_full = employee.months_to_full_productivity if employee else None
         if months_full and months_full > 0:
             return q_money(min(Decimal("1"), Decimal(offset + 1) / Decimal(months_full)))

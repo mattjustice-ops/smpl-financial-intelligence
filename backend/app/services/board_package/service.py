@@ -35,7 +35,7 @@ def generate_board_package(
     package = build_board_package(inputs)
     return BoardPackageBundle(
         package=package,
-        pptx_bytes=render_pptx_bytes(package) if include_pptx else None,
+        pptx_bytes=render_pptx_bytes(package, filter_slides=False) if include_pptx else None,
         google_slides_requests=(
             to_google_slides_requests(package) if include_google_slides else None
         ),

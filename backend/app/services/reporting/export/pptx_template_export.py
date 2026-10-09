@@ -162,12 +162,12 @@ def _period_replacements(bundle: ReportingBundle) -> list[tuple[re.Pattern[str],
     year = as_of[:4]
 
     patterns: list[tuple[str, str]] = [
+        (r"\bJan-[A-Za-z]{3,9}\s+20\d{2}\b", ytd),
         (
-            r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+20\d{2}\b",
+            r"(?<!-)\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+20\d{2}\b",
             close,
         ),
         (r"\bQ[1-4]\s+20\d{2}\b", quarter),
-        (r"\bJan-[A-Za-z]{3}\s+20\d{2}\b", ytd),
         (r"\b20\d{2}\s+Q[1-4]\b", f"{year} {quarter.split()[0]}"),
         (r"\bClose:\s*[A-Za-z]+\s+20\d{2}\b", f"Close: {close}"),
         (r"\bClose\s+[A-Za-z]+\s+20\d{2}\b", f"Close {close}"),
@@ -238,14 +238,18 @@ def _paragraph_has_slide_link(paragraph) -> bool:
     return False
 
 
-def _shape_has_slide_link(shape) -> bool:
+def _shape_click_is_link(shape) -> bool:
     try:
         from pptx.enum.action import PP_ACTION
 
-        if shape.click_action.action != PP_ACTION.NONE:
-            return True
+        return shape.click_action.action != PP_ACTION.NONE
     except Exception:
-        pass
+        return False
+
+
+def _shape_has_slide_link(shape) -> bool:
+    if _shape_click_is_link(shape):
+        return True
     if not hasattr(shape, "text_frame") or shape.text_frame is None:
         return False
     return any(_paragraph_has_slide_link(para) for para in shape.text_frame.paragraphs)
@@ -348,7 +352,7 @@ def repair_executive_nav_links(prs) -> int:
 def _replace_periods_in_shape(shape, replacements: list[tuple[re.Pattern[str], str]]) -> bool:
     if not hasattr(shape, "text_frame") or shape.text_frame is None:
         return False
-    if _is_protected_nav_shape(shape):
+    if _shape_click_is_link(shape):
         return False
 
     changed = False
