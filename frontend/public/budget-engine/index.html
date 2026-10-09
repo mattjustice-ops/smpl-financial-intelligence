@@ -630,36 +630,31 @@ const BUDGET_METRIC_DEFS = [
     formula_id: 'gtm_sm_implied' },
 
   // Sales
-  { id: 'quota', domain: 'Sales', label: 'Quota (annual $)', source_type: 'ASSUMPTION', tab: 'sales',
-    description: 'Annual $ assigned to a seller (AE or CSM) as their attainment book. Segment base quotas are relative weights; dollars are scaled to history then lifted.',
-    formula: 'Segment seed (fy25Quota × heads) → scale to FY26 hist NB/Exp\nFY27 per-head = FY26 watermark × (1 + YoY lift)  [never below FY26]',
+  { id: 'quota', domain: 'Sales', label: 'Quota (annual $)', source_type: 'INPUT', tab: 'sales',
+    description: 'Each rep’s annual quota from the HRIS at the Dec forecast close (forecast_employees). Closers carry Bookings ARR quota; CSMs carry the HRIS annual quota used for CS capacity.',
+    formula: 'Per-head = HRIS annual quota × (1 + YoY lift)',
     formula_id: 'sales_quota_per_head',
     notes: 'Quota is a capacity/coverage construct — not the same as ARR booked or revenue recognized.' },
-  { id: 'quota_watermark', domain: 'Sales', label: 'Quota watermark (FY26)', source_type: 'COMPUTED', tab: 'sales',
-    description: 'FY26 per-head quota after scaling segment seeds to actual FY26 NB (AEs) or Expansion (CS). Floor for FY27 quotas.',
-    formula: 'scale_NB = FY26_NB_hist / Σ(heads × fy25Quota)_NB\nFY26 per-head = fy25Quota × scale_NB\n(same pattern for CS using FY26 Expansion)',
-    formula_id: 'sales_quota_watermark' },
   { id: 'quota_yoy_lift', domain: 'Sales', label: 'Quota YoY lift %', source_type: 'ASSUMPTION', tab: 'sales',
-    description: 'Optional increase in per-head quota vs FY26 watermark (0 = flat). Higher lift shrinks hire need.',
-    formula: 'FY27 per-head = watermark × (1 + lift%)',
+    description: 'Optional increase in per-head quota vs the HRIS quota (0 = flat). Higher lift shrinks hire need.',
+    formula: 'Budget per-head = HRIS annual quota × (1 + lift%)',
     formula_id: 'sales_quota_yoy_lift' },
   { id: 'nb_vs_cs', domain: 'Sales', label: 'New Business vs Customer Success', source_type: 'INPUT', tab: 'sales',
-    description: 'Two selling motions. NB AEs own new logos / new ARR. CSMs own expansion on customers ≥1 year (and coverage vs churn+contraction on that book).',
-    formula: 'NB segments: group = nb (Enterprise / MM / SMB AE by region)\nCS segments: group = cs (CSM by region)\nCS demand = max(FY Expansion ARR, FY26 churn+contraction × CS cover mult)',
+    description: 'Two selling motions. Closers (Bookings ARR quota) own new ARR. CSMs own expansion and coverage vs churn+contraction. SDRs and operations roles are held at their Dec heads.',
+    formula: 'NB segments: closers by territory × role\nCS segments: CSMs with an HRIS quota by territory × role\nCS demand = max(FY Expansion ARR, prior-year churn+contraction × CS cover mult)',
     formula_id: 'sales_nb_vs_cs',
-    notes: 'CS is not “all expansion everywhere” — it is the retained ≥1yr book motion in this plan.' },
-  { id: 'sales_regions', domain: 'Sales', label: 'Sales regions', source_type: 'INPUT', tab: 'sales',
-    description: 'Geographic quota pools: NAM, EMEA, APAC. Each region × role has a relative quota seed and Dec\'26 starting heads.',
-    formula: 'SALES_SEGMENTS: region ∈ {NAM, EMEA, APAC} × role\nHeads locked from Dec\'26 HC BOP (sales / cs)',
+    notes: 'CS hiring is sized on the HRIS CS quota without attainment.' },
+  { id: 'sales_regions', domain: 'Sales', label: 'Sales territories', source_type: 'INPUT', tab: 'sales',
+    description: 'Territories and roles of the team on staff at the Dec forecast close, from the HRIS.',
+    formula: 'Segments = territory × role of loaded employees\nStarting heads = employees on staff at Dec',
     formula_id: 'sales_regions' },
-  { id: 'hire_quota_ramp', domain: 'Sales', label: 'New-hire quota ramp', source_type: 'ASSUMPTION', tab: 'sales',
-    description: 'Productivity of a new hire by tenure month. Applied in the quota waterfall for capacity display — hire count still uses full annual quota (no oversizing for ramp).',
-    formula: 'Month 1 of tenure: 33% of full quota\nMonth 2: 66%\nMonth 3+: 100%\n(HIRE_QUOTA_RAMP = [0.33, 0.66, 1.0])',
-    formula_id: 'sales_hire_ramp',
-    notes: 'Same ramp curve for AE and CSM today; segment type changes quota $, not the ramp shape.' },
-  { id: 'existing_bench_cover', domain: 'Sales', label: 'Expected attain (existing bench)', source_type: 'ASSUMPTION', tab: 'sales',
-    description: 'Expected delivery on the existing full quota book (informational). Does not change hire count — hires use full watermark book vs demand.',
-    formula: 'Effective existing $ = existing quota book × attain %\nHire gap = max(0, demand − full existing book) / avg quota',
+  { id: 'hire_quota_ramp', domain: 'Sales', label: 'Quota ramp', source_type: 'INPUT', tab: 'sales',
+    description: 'Share of full quota by month of tenure, from the loaded hiring ramp curves (by ramp length). Existing reps keep ramping from their tenure; hires ramp from their hire month on their segment’s curve.',
+    formula: 'Capacity = quota ÷ 12 × curve[tenure month]  (100% after the curve ends)',
+    formula_id: 'sales_hire_ramp' },
+  { id: 'existing_bench_cover', domain: 'Sales', label: 'Expected quota attainment', source_type: 'ASSUMPTION', tab: 'sales',
+    description: 'Share of ramped quota closers are expected to book. Defaults to onboarding 7.25; adjustable. Without it, closer hiring is not sized.',
+    formula: 'NB gap = NB demand − bench ramped quota × attainment\nGrowth hires = fewest hires, spread across the year, with ramped quota × attainment ≥ gap',
     formula_id: 'sales_bench_attain' },
   { id: 'cs_churn_cover', domain: 'Sales', label: 'CS vs churn + contraction cover', source_type: 'ASSUMPTION', tab: 'sales',
     description: 'CS demand floor: CSM quota book must cover at least this multiple of FY26 churn+contraction on the retained book (in addition to expansion demand).',
@@ -670,8 +665,8 @@ const BUDGET_METRIC_DEFS = [
     formula: 'Backfill hires = ceil(starting heads × attrition %)\nSpread across months; existing bench reduced first in waterfall',
     formula_id: 'sales_attrition' },
   { id: 'sales_quota_coverage', domain: 'Sales', label: 'Budget coverage (bench / hires)', source_type: 'COMPUTED', tab: 'sales',
-    description: 'How FY27 NB (and CS) demand is covered by existing watermark quota vs hire gap.',
-    formula: 'Existing cover % = existing quota book / demand\nHire % = hire gap / demand\nNeeded heads = ceil(hire gap / avg annual quota) + attrition backfill',
+    description: 'How budget NB (and CS) demand is covered by the bench vs hires.',
+    formula: 'Bench % = bench ramped quota × attainment / NB demand (max 100%)\nHire % = 100% − bench %\nNeeded closers (full-year equivalent) = ceil(demand / (avg quota × attainment))\nHires = growth + attrition backfill',
     formula_id: 'sales_quota_cover' },
   { id: 'quarter_close_weight', domain: 'Sales', label: 'Within-quarter close pattern', source_type: 'ASSUMPTION', tab: 'sales',
     description: 'Quota is thought of as quarterly; month 3 of each quarter gets the bulk of closes (M3 >> M1).',
@@ -680,18 +675,13 @@ const BUDGET_METRIC_DEFS = [
 
   // Headcount
   { id: 'hc_payroll', domain: 'Headcount', label: 'Payroll (by dept)', source_type: 'COMPUTED', tab: 'hc',
-    description: 'Monthly comp: wages, burden, bonus accrual, variable OTE (Sales), severance.',
-    formula: 'Wages from heads × rate cards\n+ payroll tax / benefits / 401k %\n+ bonus accrual · OTE (NB/CS variable)',
+    description: 'Monthly comp: wages, burden, corporate bonus accrual, severance. Sales variable pay is commissions (bookings × plan rate), not payroll.',
+    formula: 'Wages from heads × rate cards\n+ payroll tax / benefits / 401k %\n+ bonus accrual (non-sales)',
     formula_id: 'hc_payroll_roll' },
   { id: 'hc_bop_lock', domain: 'Headcount', label: 'Jan HC BOP lock', source_type: 'INPUT', tab: 'hc',
     description: 'January beginning heads locked to Dec\'26 forecast ending HC by dept (sales / cs / marketing / rd / ga).',
     formula: 'HC_BOP_LOCK[dept] = Dec\'26 Forecast ending heads',
     formula_id: 'hc_bop_lock' },
-  { id: 'nb_ote_var', domain: 'Headcount', label: 'NB / CS variable OTE', source_type: 'ASSUMPTION', tab: 'hc',
-    description: 'Variable on-target earnings at 100% attain for AEs and CSMs — commissions/incentives, not a % of base.',
-    formula: 'Monthly OTE accrual from nbOteVarAnnual / csOteVarAnnual',
-    formula_id: 'hc_ote_variable' },
-
   // P&L / IS
   { id: 'pnl_dept_total', domain: 'P&L', label: 'Department P&L total', source_type: 'COMPUTED', tab: 'pnl',
     description: 'Dept book = HC-linked comp + discretionary spend (editable $k) + GTM channels (Marketing).',
@@ -804,29 +794,6 @@ function metricDefDomains(defs) {
   }
   return seen;
 }
-const HIRE_QUOTA_RAMP = [0.33, 0.66, 1.0];
-
-/**
- * Relative quota mix by region × group × role (weights only).
- * FY26 $ scaled to historical NB/Exp; FY27 per-head = high-watermark (≥ FY26).
- * CS = customers ≥1 year. heads = Dec'26 starting bench.
- */
-const SALES_SEGMENTS = [
-  { id: 'amer_ent_ae', region: 'NAM', group: 'nb', role: 'Enterprise AE', fy25Quota: 1500000, heads: 8 },
-  { id: 'amer_mm_ae', region: 'NAM', group: 'nb', role: 'Mid-Market AE', fy25Quota: 1000000, heads: 8 },
-  { id: 'amer_smb_ae', region: 'NAM', group: 'nb', role: 'SMB AE', fy25Quota: 600000, heads: 6 },
-  { id: 'emea_ent_ae', region: 'EMEA', group: 'nb', role: 'Enterprise AE', fy25Quota: 1400000, heads: 3 },
-  { id: 'emea_mm_ae', region: 'EMEA', group: 'nb', role: 'Mid-Market AE', fy25Quota: 950000, heads: 3 },
-  { id: 'apac_ent_ae', region: 'APAC', group: 'nb', role: 'Enterprise AE', fy25Quota: 1300000, heads: 2 },
-  { id: 'amer_ent_csm', region: 'NAM', group: 'cs', role: 'Enterprise CSM', fy25Quota: 800000, heads: 6 },
-  { id: 'amer_mm_csm', region: 'NAM', group: 'cs', role: 'Mid-Market CSM', fy25Quota: 500000, heads: 6 },
-  { id: 'emea_csm', region: 'EMEA', group: 'cs', role: 'CSM', fy25Quota: 550000, heads: 3 },
-  { id: 'apac_csm', region: 'APAC', group: 'cs', role: 'CSM', fy25Quota: 500000, heads: 1 },
-];
-
-const SALES_START_AE = SALES_SEGMENTS.filter(s => s.group === 'nb').reduce((n, s) => n + s.heads, 0);
-const SALES_START_CS = SALES_SEGMENTS.filter(s => s.group === 'cs').reduce((n, s) => n + s.heads, 0);
-
 /** Company levels — salary & bonus targets live per dept × level on the HC tab. */
 const HC_LEVELS = [
   { key: 'l1', label: 'L1 · Associate' },
@@ -840,7 +807,7 @@ const HC_LEVELS = [
 
 /**
  * Default BOP heads + base salary + target bonus % of base by dept × level.
- * Sales / CS: variable OTE (same bonus mechanic — commissions / incentives, not corp %).
+ * Sales / CS: no corp bonus; their variable pay is commissions (bookings × plan rate).
  * Non-sales: corp bonus accrued monthly, paid in February (cash).
  * start heads must sum to HC_BOP_LOCK.
  */
@@ -924,17 +891,17 @@ function hcMonthSelect(value, onchange, opts) {
 }
 
 /** Dec'26 ending HC anchors — Jan'27 BOP locked to forecast; sales/CS driven by Sales tab.
- *  loadedLabel = HC table total (wages + employee benefits + corp bonus, or + variable OTE for Sales). */
+ *  loadedLabel = HC table total (wages + employee benefits + corp bonus). */
 const HC_DEPTS = [
-  { key: 'sales', label: 'Sales - New Business', loadedLabel: 'Loaded NB Payroll', get start() { return HC_BOP_LOCK.sales; }, avgCost: 145000, fromSales: true, corpBonus: false, oteKey: 'nb' },
-  { key: 'cs', label: 'Sales - Customer Success', loadedLabel: 'Loaded CS Payroll', get start() { return HC_BOP_LOCK.cs; }, avgCost: 120000, fromSales: true, corpBonus: false, oteKey: 'cs' },
+  { key: 'sales', label: 'Sales - New Business', loadedLabel: 'Loaded NB Payroll', get start() { return HC_BOP_LOCK.sales; }, avgCost: 145000, fromSales: true, corpBonus: false },
+  { key: 'cs', label: 'Sales - Customer Success', loadedLabel: 'Loaded CS Payroll', get start() { return HC_BOP_LOCK.cs; }, avgCost: 120000, fromSales: true, corpBonus: false },
   { key: 'marketing', label: 'Marketing', loadedLabel: 'Loaded Marketing Payroll', get start() { return HC_BOP_LOCK.marketing; }, avgCost: 125000, corpBonus: true },
   { key: 'rd', label: 'R&D / Product', loadedLabel: 'Loaded R&D Payroll', get start() { return HC_BOP_LOCK.rd; }, avgCost: 165000, corpBonus: true },
   { key: 'ga', label: 'G&A', loadedLabel: 'Loaded G&A Payroll', get start() { return HC_BOP_LOCK.ga; }, avgCost: 120000, corpBonus: true },
 ];
 
 /** Dept P&Ls feed IS: Sales(NB+CS)+Marketing → S&M, R&D → R&D, G&A → G&A.
- *  Comp lines pull HC breakouts: wages, employee benefits, bonus accrual (+ OTE for Sales). */
+ *  Comp lines pull HC breakouts: wages, employee benefits, bonus accrual. */
 const PL_DEPTS = [
   {
     key: 'sales',
@@ -1129,13 +1096,10 @@ const STATE = {
   pipelineCoverageMult: 3.0,
   /** Within-quarter close pattern (quota is quarterly — M3 is the big month). */
   quarterCloseWeights: [0.22, 0.30, 0.48],
+  /** Expected quota attainment, % of ramped quota; null = onboarding 7.25 (closer hiring unsized without either). */
+  salesAttainPct: null,
   /**
-   * Expected attainment on existing full quota book (informational for delivery).
-   * Does not change hire count — hires = (demand − full book) / avg quota.
-   */
-  existingBenchCoverPct: 100,
-  /**
-   * YoY lift on per-head quota vs FY26 watermark (0 = flat; 20 = +20% quotas).
+   * YoY lift on per-head quota vs the HRIS quota (0 = flat; 20 = +20% quotas).
    * Higher lift → larger existing book → fewer growth hires for the same budget.
    */
   quotaYoyLiftPct: 0,
@@ -1170,9 +1134,6 @@ const STATE = {
   apPctOpex: 13,
   prepaidMonthlyDelta: -15000,
   capexPctRev: 2.0,
-  /** Variable OTE at 100% attain — commissions/incentives, not a % of base salary. */
-  nbOteVarAnnual: 72000,
-  csOteVarAnnual: 72000,
   mixByPeriod: {},
   gtmRatesByPeriod: {},
   /** Channel mix weights by period (relative % of total marketing spend). */
@@ -1228,7 +1189,7 @@ const STATE_DEFAULTS = JSON.parse(JSON.stringify(STATE));
  * Bump when canonical defaults / seed policy change so every browser
  * (localhost and /app) realigns instead of carrying divergent localStorage.
  */
-const BUDGET_PLAN_REV = 10;
+const BUDGET_PLAN_REV = 11;
 /** Mix % of BOP is seeded from this reference YoY; moving the growth lever rebalances the waterfall. */
 const MIX_SEED_YOY_PCT = 20;
 const BUDGET_STATE_KEY = 'smpl.budgetEngine.fy2027.v' + BUDGET_PLAN_REV;
@@ -1289,6 +1250,7 @@ function loadBudgetState() {
       localStorage.removeItem('smpl.budgetEngine.fy2027.v7');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v8');
       localStorage.removeItem('smpl.budgetEngine.fy2027.v9');
+      localStorage.removeItem('smpl.budgetEngine.fy2027.v10');
     } catch (e) { /* ignore */ }
     const raw = localStorage.getItem(BUDGET_STATE_KEY);
     if (!raw) return false;
@@ -1391,7 +1353,6 @@ function salesTieOutDrivers() {
     : (monthsOutlook ? 'outlook' : (monthsWithArr ? 'wf' : 'empty'));
   const nbOuFy = BUD_P.reduce((s, p) => s + (sales.byPeriod[p].nbMonthGap || 0), 0);
   const csOuFy = BUD_P.reduce((s, p) => s + (sales.byPeriod[p].csMonthGap || 0), 0);
-  const seedUnscaled = (m.scaleNb26 == null || Math.abs(m.scaleNb26 - 1) < 1e-9) && fy26Nb <= 0;
   return {
     histSource,
     monthsWithArr,
@@ -1410,11 +1371,9 @@ function salesTieOutDrivers() {
     csGapSigned: m.csGapSigned,
     nbGrowthHires: m.nbGrowthHires,
     csGrowthHires: m.csGrowthHires,
-    scaleNb26: m.scaleNb26,
-    scaleCs26: m.scaleCs26,
     nbOuFy,
     csOuFy,
-    histThin: monthsWithArr < 12 || fy26Nb <= 0 || fy26Exp <= 0 || seedUnscaled,
+    histThin: monthsWithArr < 12 || fy26Nb <= 0 || fy26Exp <= 0,
     usedDemoFallback: monthsDemoFallback > 0,
   };
 }
@@ -2388,17 +2347,6 @@ function fy26ChurnContTotal() {
   return sum;
 }
 
-/** Raw seed mix weights (not dollars). */
-function rawSeedQuotaTotals() {
-  let nb = 0, cs = 0;
-  for (const s of SALES_SEGMENTS) {
-    const q = s.heads * s.fy25Quota;
-    if (s.group === 'nb') nb += q;
-    else cs += q;
-  }
-  return { nb, cs, total: nb + cs };
-}
-
 function distributeHires(n) {
   const out = {};
   for (const p of BUD_P) out[p] = 0;
@@ -2409,25 +2357,10 @@ function distributeHires(n) {
   return out;
 }
 
-/** Linear FY26 head ramp ending at Dec (known BOP into FY27). janRatio < 1 ⇒ net hiring during FY26. */
-function fy26HeadRamp(decEnd, janRatio) {
-  const jan = Math.max(0, Math.round(decEnd * janRatio));
-  const out = [];
-  for (let i = 0; i < 12; i++) {
-    out.push(Math.round(jan + (decEnd - jan) * (i / 11)));
-  }
-  return out;
-}
-
-function quarterEndFromRamp(ramp, qIdx) {
-  return ramp[qIdx * 3 + 2];
-}
-
-function hireQuotaRampFactor(tenureMonths) {
-  if (tenureMonths < 0) return 0;
-  if (tenureMonths === 0) return HIRE_QUOTA_RAMP[0];
-  if (tenureMonths === 1) return HIRE_QUOTA_RAMP[1];
-  return HIRE_QUOTA_RAMP[2];
+/** Share of full quota in a month of tenure (hire month = 1); past the end of the loaded curve, 100%. */
+function rampPct(curve, tenure) {
+  if (!curve || tenure < 1) return 0;
+  return tenure <= curve.length ? curve[tenure - 1] : 1;
 }
 
 function splitHireVsBackfill(totalHire, remainingBackfill) {
@@ -2458,7 +2391,7 @@ function pushSalesHireCohorts(opts) {
     waterfallHires.push(row);
     cohorts.push({
       startMi: mi, segId: s.id, group, hired: count, remaining: count,
-      monthlyFull: s.monthlyFull, key,
+      monthlyFull: s.monthlyFull, curve: s.hireCurve, key,
     });
   }
 }
@@ -2506,29 +2439,14 @@ function allocateHeadsByShare(n, segs) {
   return out;
 }
 
-/** Distribute locked Dec'26 sales/cs bench across segments by template mix. */
-function lockedSalesBench() {
-  const nbSegs = SALES_SEGMENTS.filter(s => s.group === 'nb');
-  const csSegs = SALES_SEGMENTS.filter(s => s.group === 'cs');
-  const nb = allocateHeadsByShare(
-    HC_BOP_LOCK.sales,
-    nbSegs.map(s => ({ id: s.id, share: SALES_START_AE > 0 ? s.heads / SALES_START_AE : 0 }))
-  );
-  const cs = allocateHeadsByShare(
-    HC_BOP_LOCK.cs,
-    csSegs.map(s => ({ id: s.id, share: SALES_START_CS > 0 ? s.heads / SALES_START_CS : 0 }))
-  );
-  return { ...nb, ...cs };
-}
-
 /**
- * Apply attrition: existing bench first (so waterfall existing quota = remaining HC × full quota),
+ * Apply attrition: existing bench first (so waterfall existing capacity drops with the remaining heads),
  * then oldest hire cohorts. Returns { exits, bySeg } for pairing same-month backfills.
  */
-function applyAttritionToPool(existingMap, cohorts, group, attrCount, segById) {
+function applyAttritionToPool(existingMap, cohorts, group, attrCount, segments) {
   let left = attrCount;
   const bySeg = {};
-  const groupSegs = SALES_SEGMENTS.filter(s => s.group === group);
+  const groupSegs = segments.filter(s => s.group === group);
   for (const s of groupSegs) bySeg[s.id] = 0;
   // Prefer existing bench first — drops existing-bench capacity immediately.
   while (left > 0) {
@@ -2562,11 +2480,13 @@ function applyAttritionToPool(existingMap, cohorts, group, attrCount, segById) {
 }
 
 /**
- * Sales capacity from FY27 budget demand (annual $):
- *   Per-head FY27 = FY26 watermark × (1 + YoY lift).
- *   Hire count = ceil(max(0, demand − full existing book) / avg annual quota)
- *     — ramp is for capacity display only, not headcount oversizing.
- *   Attrition replacement layered on top; new-hire quota ramps 33/66/100 in waterfall.
+ * Sales plan from the loaded team at the Dec forecast close (salesTeamPlan):
+ *   Bench capacity = each rep's HRIS annual quota × (1 + YoY lift) ÷ 12 × their ramp, continuing from
+ *   their tenure. Hires ramp on their segment's loaded curve from the hire month.
+ *   NB growth hires = fewest hires, spread across the year, whose ramped quota × expected attainment
+ *   covers NB demand − bench ramped quota × expected attainment.
+ *   CS growth hires = ceil(max(0, CS demand − CS book) ÷ avg CS quota).
+ *   Attrition replacement is layered on top. Missing inputs leave hiring unsized and are named in warnings.
  */
 function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
   const histChurnCont = fy26ChurnContTotal();
@@ -2574,82 +2494,72 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
   const csFloor = churnBase * STATE.csChurnCoverageMult;
   const csDemand = Math.max(fyExp, csFloor);
 
-  const attainPct = Math.max(0, Math.min(100, STATE.existingBenchCoverPct)) / 100;
+  const attainPct = salesAttainPct();
+  const attain = attainPct != null ? attainPct / 100 : null;
   const attritionPct = Math.max(0, STATE.salesAttritionPct) / 100;
-  const benchHeads = lockedSalesBench();
-  const lockedNb = HC_BOP_LOCK.sales;
-  const lockedCs = HC_BOP_LOCK.cs;
+  const team = salesTeamPlan();
+  const warnings = team.warnings.slice();
+  if (team.loaded && attain == null) {
+    warnings.push('Expected quota attainment is not set (onboarding 7.25 is unanswered): closer hiring is not sized. Set it on the right.');
+  }
 
-  const raw = rawSeedQuotaTotals();
-  const fy26Nb = fy26NbTotal();
-  const fy26Exp = fy26ExpTotal();
-  const scaleNb26 = raw.nb > 0 && fy26Nb > 0 ? fy26Nb / raw.nb : 1;
-  const scaleCs26 = raw.cs > 0 && fy26Exp > 0 ? fy26Exp / raw.cs : 1;
-  const quotaLift = Math.max(0, STATE.quotaYoyLiftPct || 0) / 100;
-  // FY27 per-head = FY26 watermark × (1 + YoY lift). Never below FY26.
-  const scaleNb27 = scaleNb26 * (1 + quotaLift);
-  const scaleCs27 = scaleCs26 * (1 + quotaLift);
+  const segments = team.segments;
+  const nbSegs = segments.filter(s => s.group === 'nb');
+  const csSegs = segments.filter(s => s.group === 'cs');
+  const lockedNb = nbSegs.reduce((n, s) => n + s.heads, 0);
+  const lockedCs = csSegs.reduce((n, s) => n + s.heads, 0);
+  const benchFy = segs => segs.reduce((n, s) => n + s.benchMonths.reduce((a, b) => a + b, 0), 0);
 
-  const fy26NbRamp = fy26HeadRamp(lockedNb, 0.88);
-  const fy26CsRamp = fy26HeadRamp(lockedCs, 0.90);
-
-  const segments = SALES_SEGMENTS.map(s => {
-    const scale27 = s.group === 'nb' ? scaleNb27 : scaleCs27;
-    const scale26 = s.group === 'nb' ? scaleNb26 : scaleCs26;
-    const fy26PerHead = s.fy25Quota * scale26;
-    const fy27PerHead = Math.max(fy26PerHead, s.fy25Quota * scale27);
-    const bench = benchHeads[s.id] ?? s.heads;
-    const groupStart = s.group === 'nb' ? lockedNb : lockedCs;
-    const share = groupStart > 0 ? bench / groupStart : 0;
-    const fy26Ramp = s.group === 'nb' ? fy26NbRamp : fy26CsRamp;
-    const fy26QEnds = CTX_QUARTERS.map((_, qi) => Math.max(0, Math.round(quarterEndFromRamp(fy26Ramp, qi) * share)));
-    const fy26Annual = bench * fy26PerHead;
-    const fy27Existing = bench * fy27PerHead;
-    return {
-      ...s,
-      heads: bench,
-      share,
-      fy25Quota: fy26PerHead,
-      fy26Annual,
-      fy26Q: fy26Annual / 4,
-      fy27PerHead,
-      fy27Existing,
-      fy27Month: fy27Existing / 12,
-      monthlyFull: fy27PerHead / 12,
-      fy26QEnds,
-      groupLabel: s.group === 'nb' ? 'New Business' : 'Customer Success',
-    };
-  });
-  const segById = {};
-  for (const s of segments) segById[s.id] = s;
-
-  const existingNbQuota = segments.filter(s => s.group === 'nb').reduce((n, s) => n + s.fy27Existing, 0);
-  const existingCsQuota = segments.filter(s => s.group === 'cs').reduce((n, s) => n + s.fy27Existing, 0);
+  const existingNbQuota = nbSegs.reduce((n, s) => n + s.fy27Existing, 0);
+  const existingCsQuota = csSegs.reduce((n, s) => n + s.fy27Existing, 0);
   const avgNbQuota = lockedNb > 0 ? existingNbQuota / lockedNb : 0;
   const avgCsQuota = lockedCs > 0 ? existingCsQuota / lockedCs : 0;
+  const benchNbFy = benchFy(nbSegs);
+  const benchCsFy = benchFy(csSegs);
 
-  // Attainment is expected delivery vs quota — does NOT invent extra seats.
-  // Hire *count* uses shortfall only (max with 0). Reference bridge shows the signed gap.
-  const existingNbEffective = existingNbQuota * attainPct;
-  const existingCsEffective = existingCsQuota * attainPct;
-  const nbGapSigned = fyNb - existingNbQuota;
-  const csGapSigned = csDemand - existingCsQuota;
-  const hireNbTarget = Math.max(0, nbGapSigned);
-  const hireCsTarget = Math.max(0, csGapSigned);
+  // Ramped quota a hire in month mi carries through Dec, per segment.
+  const hireCapFrom = {};
+  for (const s of segments) {
+    hireCapFrom[s.id] = BUD_P.map((_, mi) => {
+      let cap = 0;
+      for (let j = mi; j < BUD_P.length; j++) cap += s.monthlyFull * rampPct(s.hireCurve, j - mi + 1);
+      return cap;
+    });
+  }
+  const growthCapacity = (n, segs) => {
+    const by = distributeHires(n);
+    let cap = 0;
+    BUD_P.forEach((p, mi) => {
+      if (!by[p]) return;
+      const alloc = allocateHeadsByShare(by[p], segs);
+      for (const s of segs) cap += (alloc[s.id] || 0) * hireCapFrom[s.id][mi];
+    });
+    return cap;
+  };
 
-  const nbGrowthHires = avgNbQuota > 0 ? Math.ceil(hireNbTarget / avgNbQuota) : 0;
+  const nbSizable = team.nbReady && attain != null && attain > 0;
+  const existingNbExpected = attain != null ? benchNbFy * attain : null;
+  const nbGapSigned = nbSizable ? fyNb - existingNbExpected : null;
+  const hireNbTarget = nbGapSigned != null ? Math.max(0, nbGapSigned) : 0;
+  let nbGrowthHires = 0;
+  if (hireNbTarget > 0) {
+    const MAX_HIRES = 500;
+    while (nbGrowthHires < MAX_HIRES && growthCapacity(nbGrowthHires, nbSegs) * attain < hireNbTarget) nbGrowthHires += 1;
+    if (nbGrowthHires >= MAX_HIRES) {
+      warnings.push(`${MAX_HIRES} closer hires spread across ${BUDGET_YEAR} still don’t cover the NB gap at ${attainPct}% attainment on the loaded ramp.`);
+    }
+  }
+  const csGapSigned = team.csReady ? csDemand - existingCsQuota : null;
+  const hireCsTarget = csGapSigned != null ? Math.max(0, csGapSigned) : 0;
   const csGrowthHires = avgCsQuota > 0 ? Math.ceil(hireCsTarget / avgCsQuota) : 0;
+
   const nbAttritionReplace = Math.ceil(lockedNb * attritionPct);
   const csAttritionReplace = Math.ceil(lockedCs * attritionPct);
   const nbHiresNeed = nbGrowthHires + nbAttritionReplace;
   const csHiresNeed = csGrowthHires + csAttritionReplace;
-  // Heads required to deliver demand (never below locked Dec'26 bench).
-  const aeNeeded = avgNbQuota > 0
-    ? Math.max(lockedNb, Math.ceil(fyNb / avgNbQuota))
-    : lockedNb;
-  const csNeeded = avgCsQuota > 0
-    ? Math.max(lockedCs, Math.ceil(csDemand / avgCsQuota))
-    : lockedCs;
+  // Full-year-equivalent closers to deliver NB demand at expected attainment (never below the Dec bench).
+  const aeNeeded = nbSizable && avgNbQuota > 0 ? Math.max(lockedNb, Math.ceil(fyNb / (avgNbQuota * attain))) : null;
+  const csNeeded = team.csReady && avgCsQuota > 0 ? Math.max(lockedCs, Math.ceil(csDemand / avgCsQuota)) : null;
 
   const autoNbGrowth = distributeHires(nbGrowthHires);
   const autoCsGrowth = distributeHires(csGrowthHires);
@@ -2659,14 +2569,12 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
   const autoNbAttr = distributeHires(nbAttritionReplace);
   const autoCsAttr = distributeHires(csAttritionReplace);
 
-  const coverPctActual = fyNb > 0 ? (existingNbQuota / fyNb) * 100 : 0;
-  const coverPctCsActual = csDemand > 0 ? (existingCsQuota / csDemand) * 100 : 0;
-  const coverPct = attainPct * 100;
-  const hirePct = fyNb > 0 ? (hireNbTarget / fyNb) * 100 : 0;
+  const coverPct = nbSizable && fyNb > 0 ? Math.min(100, (existingNbExpected / fyNb) * 100) : null;
+  const hirePct = coverPct != null ? 100 - coverPct : null;
+  const existingHeads = {};
+  for (const s of segments) existingHeads[s.id] = s.heads;
 
-  const existingHeads = { ...benchHeads };
-
-  const cohorts = []; // { startMi, segId, group, hired, remaining, monthlyFull, label }
+  const cohorts = []; // { startMi, segId, group, hired, remaining, monthlyFull, curve, key }
   const waterfallExisting = segments.map(s => ({
     id: s.id,
     label: 'Existing · ' + salesSegmentLabel(s),
@@ -2710,13 +2618,15 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
       csGrowthHire = autoCsGrowth[p] || 0;
       csBackfillHire = autoCsBackfill[p] || 0;
     }
+    if (!nbSegs.length) { nbGrowthHire = 0; nbBackfillHire = 0; }
+    if (!csSegs.length) { csGrowthHire = 0; csBackfillHire = 0; }
     const nbHire = nbGrowthHire + nbBackfillHire;
     const csHire = csGrowthHire + csBackfillHire;
     nbBackfillHiredYtd += nbBackfillHire;
     csBackfillHiredYtd += csBackfillHire;
 
-    const existingNbBop = segments.filter(s => s.group === 'nb').reduce((n, s) => n + (existingHeads[s.id] || 0), 0);
-    const existingCsBop = segments.filter(s => s.group === 'cs').reduce((n, s) => n + (existingHeads[s.id] || 0), 0);
+    const existingNbBop = nbSegs.reduce((n, s) => n + (existingHeads[s.id] || 0), 0);
+    const existingCsBop = csSegs.reduce((n, s) => n + (existingHeads[s.id] || 0), 0);
     const hireNbBop = cohorts.filter(c => c.group === 'nb').reduce((n, c) => n + c.remaining, 0);
     const hireCsBop = cohorts.filter(c => c.group === 'cs').reduce((n, c) => n + c.remaining, 0);
     const bopAes = existingNbBop + hireNbBop;
@@ -2724,16 +2634,14 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
 
     const nbAttr = Math.min(bopAes, autoNbAttr[p] || 0);
     const csAttr = Math.min(bopCs, autoCsAttr[p] || 0);
-    const nbAttrRes = applyAttritionToPool(existingHeads, cohorts, 'nb', nbAttr, segById);
-    const csAttrRes = applyAttritionToPool(existingHeads, cohorts, 'cs', csAttr, segById);
+    const nbAttrRes = applyAttritionToPool(existingHeads, cohorts, 'nb', nbAttr, segments);
+    const csAttrRes = applyAttritionToPool(existingHeads, cohorts, 'cs', csAttr, segments);
     nbAttritionYtd += nbAttrRes.exits;
     csAttritionYtd += csAttrRes.exits;
 
-    const nbSegs = segments.filter(s => s.group === 'nb');
-    const csSegs = segments.filter(s => s.group === 'cs');
     const moLbl = MO[mi];
     const hireArgs = { mi, p, moLbl, hireRowByKey, waterfallHires, cohorts };
-    // Backfill into the same seats attrition emptied → existing HC×quota drops; ramp replaces it.
+    // Backfill into the same seats attrition emptied → existing capacity drops; the hire's ramp replaces it.
     pushSalesHireCohorts({
       ...hireArgs, n: nbBackfillHire, kind: 'backfill', group: 'nb', segs: nbSegs,
       allocBySeg: allocateBackfillToExits(nbBackfillHire, nbSegs, nbAttrRes.bySeg),
@@ -2751,8 +2659,7 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
     let csHireCap = 0;
 
     for (const s of segments) {
-      const heads = existingHeads[s.id] || 0;
-      const cap = heads * s.monthlyFull;
+      const cap = s.heads > 0 ? s.benchMonths[mi] * (existingHeads[s.id] || 0) / s.heads : 0;
       const wf = waterfallExisting.find(r => r.id === s.id);
       if (wf) wf.months[mi] = cap;
       if (s.group === 'nb') nbExistCap += cap;
@@ -2761,8 +2668,7 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
 
     for (const c of cohorts) {
       if (c.remaining <= 0) continue;
-      const factor = hireQuotaRampFactor(mi - c.startMi);
-      const cap = c.remaining * c.monthlyFull * factor;
+      const cap = c.remaining * c.monthlyFull * rampPct(c.curve, mi - c.startMi + 1);
       const row = hireRowByKey[c.key];
       if (row) row.months[mi] = cap;
       if (c.group === 'nb') nbHireCap += cap;
@@ -2803,6 +2709,8 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
       bopCs,
       endingAes: aes,
       endingCs: cs,
+      endingSalesDept: aes + team.other.sales,
+      endingCsDept: cs + team.other.cs,
       endingNbExist,
       endingCsExist,
       endingNbHire,
@@ -2832,52 +2740,42 @@ function buildSalesPlanFromDemand(fyNb, fyExp, fyChurnContAnnual) {
   return {
     byPeriod,
     segments,
-    fy26NbRamp,
-    fy26CsRamp,
     waterfall: {
       existing: waterfallExisting,
       hires: waterfallHires,
-      rampLabel: '33% / 66% / 100%',
+      rampLabel: team.rampLabel,
     },
     meta: {
+      loaded: team.loaded,
+      warnings,
       fyNb, fyExp, csFloor, csDemand, churnBase,
-      fy26Nb, fy26Exp,
+      fy26Nb: fy26NbTotal(),
+      fy26Exp: fy26ExpTotal(),
       existingNbQuota, existingCsQuota,
-      existingNbEffective, existingCsEffective,
-      existingNbCap: existingNbQuota,
-      existingCsCap: existingCsQuota,
+      benchNbFy, benchCsFy,
+      existingNbExpected,
       hireNbTarget, hireCsTarget,
       nbGapSigned, csGapSigned,
-      nbGap$: hireNbTarget,
-      csGap$: hireCsTarget,
       nbGrowthHires, csGrowthHires,
       nbAttritionReplace, csAttritionReplace,
       nbHiresNeed, csHiresNeed,
       nbAttritionYtd, csAttritionYtd,
       avgNbQuota, avgCsQuota,
-      coverPct, hirePct,
-      coverPctActual, coverPctCsActual,
+      lockedNb, lockedCs,
+      otherSales: team.other.sales,
+      otherCs: team.other.cs,
+      coverPct,
+      hirePct,
       quotaYoyLiftPct: STATE.quotaYoyLiftPct || 0,
-      seedNbBook: raw.nb,
-      seedCsBook: raw.cs,
-      scaleNb26, scaleCs26,
-      attainPct: coverPct,
+      attain,
+      attainPct,
       existingCapNbFy, existingCapCsFy,
       rampedHireNbFy, rampedHireCsFy,
       attritionPct: STATE.salesAttritionPct,
-      growthGoal: 100,
-      benchShare: coverPct,
-      hireShare: hirePct,
-      attain: attainPct,
-      qGrowth: 0,
-      priorNb: existingNbQuota,
-      priorCs: existingCsQuota,
-      priorTotal: existingNbQuota + existingCsQuota,
       decAes: byPeriod[BUD_P[11]].endingAes,
       decCs: byPeriod[BUD_P[11]].endingCs,
       aeNeeded,
       csNeeded,
-      hireRamp: HIRE_QUOTA_RAMP,
     },
   };
 }
@@ -2907,10 +2805,6 @@ function computeSalesPlan() {
     r.csMonthGap = r.csMonthQuota - r.csDemandMonth;
   });
   return sales;
-}
-
-function salesHcRequiredFromGtm() {
-  return computeSalesPlan().meta.aeNeeded;
 }
 
 function salesHiresPlan() {
@@ -2985,14 +2879,12 @@ function computeHcPlan() {
       employeeBenefits: {},
       bonusAccrual: {},
       bonusCash: {},
-      ote: {},
       payroll: {},
       payrollTotal: 0,
       wagesTotal: 0,
       employeeBenefitsTotal: 0,
       bonusAccrualTotal: 0,
       bonusCashTotal: 0,
-      oteTotal: 0,
       severanceTotal: 0,
       attritionTotal: 0,
       rifExitsTotal: 0,
@@ -3008,7 +2900,7 @@ function computeHcPlan() {
       let severanceAmt = 0;
 
       if (d.key === 'sales') {
-        const endingTot = salesPlan.byPeriod[p].endingAes;
+        const endingTot = salesPlan.byPeriod[p].endingSalesDept;
         const alloc = allocateByMix(endingTot, startWeights.sales);
         for (const lv of HC_LEVELS) {
           headsByLevel.sales[lv.key] = alloc[lv.key];
@@ -3017,7 +2909,7 @@ function computeHcPlan() {
         hireTot = hiresDept.sales;
         attrExits = salesAuto[p] ? (salesAuto[p].salesAttr || 0) : 0;
       } else if (d.key === 'cs') {
-        const endingTot = salesPlan.byPeriod[p].endingCs;
+        const endingTot = salesPlan.byPeriod[p].endingCsDept;
         const alloc = allocateByMix(endingTot, startWeights.cs);
         for (const lv of HC_LEVELS) {
           headsByLevel.cs[lv.key] = alloc[lv.key];
@@ -3079,15 +2971,8 @@ function computeHcPlan() {
       const k401 = wages * k401Pct;
       const employeeBenefits = payrollTax + benefits + k401;
       const bonusCash = (d.corpBonus && moIdx === hcBonusPayoutMonth()) ? priorBonusCash[d.key] : 0;
-      // Variable OTE (Sales NB/CS) — same monthly cost as P&L commissions / incentives
-      let oteAmt = 0;
-      if (d.oteKey === 'nb') {
-        oteAmt = ending * ((STATE.nbOteVarAnnual || 0) / 12) * plAttainFactor();
-      } else if (d.oteKey === 'cs') {
-        oteAmt = ending * ((STATE.csOteVarAnnual || 0) / 12) * plAttainFactor();
-      }
-      // Loaded = wages + employee benefits + corp bonus + variable OTE (Sales)
-      const payroll = wages + employeeBenefits + bonusAccrual + oteAmt;
+      // Loaded = wages + employee benefits + corp bonus. Sales variable pay is commissions (bookings × rate).
+      const payroll = wages + employeeBenefits + bonusAccrual;
 
       row.hires[d.key] = hireTot;
       row.hiresByLevel[d.key] = levelHires;
@@ -3103,21 +2988,18 @@ function computeHcPlan() {
       row.employeeBenefits[d.key] = employeeBenefits;
       row.bonusAccrual[d.key] = bonusAccrual;
       row.bonusCash[d.key] = bonusCash;
-      row.ote[d.key] = oteAmt;
       row.payroll[d.key] = payroll;
       row.payrollTotal += payroll;
       row.wagesTotal += wages;
       row.employeeBenefitsTotal += employeeBenefits;
       row.bonusAccrualTotal += bonusAccrual;
       row.bonusCashTotal += bonusCash;
-      row.oteTotal += oteAmt;
       row.severanceTotal += severanceAmt;
       row.attritionTotal += attrExits;
       row.rifExitsTotal += rifExitCount;
       row.hiresTotal += hireTot;
       row.headsTotal += ending;
     }
-    row.salesRequired = salesHcRequiredFromGtm();
     row.priorBonusCash = priorBonusCash;
     out[p] = row;
   }
@@ -3178,10 +3060,6 @@ function plFlatPeriod(deptKey, lineKey, period, fallback) {
   return Math.max(0, Number(fallback) || 0);
 }
 
-function plAttainFactor() {
-  return Math.max(0, Math.min(120, STATE.existingBenchCoverPct)) / 100;
-}
-
 /* ---------- Sales commissions (ASC 340-40) ---------- */
 /** GET /readiness/commission-plan-inputs: policy (read-only), plan rates, opening cohort runoff. */
 let COMMISSION_INPUTS = null;
@@ -3204,6 +3082,113 @@ async function loadCommissionInputs() {
     COMMISSION_INPUTS_STATE = 'error';
     console.warn('[commissions] plan inputs failed', e);
   }
+}
+
+/** Sales team at the Dec forecast close (commission-plan-inputs → sales_team); null until it loads. */
+function salesTeamInputs() {
+  return (COMMISSION_INPUTS && COMMISSION_INPUTS.sales_team) || null;
+}
+
+/** Expected quota attainment, % — the lever when set, else onboarding 7.25; null when neither. */
+function salesAttainPct() {
+  if (STATE.salesAttainPct != null) return STATE.salesAttainPct;
+  const t = salesTeamInputs();
+  const expected = t && t.attainment ? t.attainment.expected : null;
+  return expected != null ? Math.round(expected * 100) : null;
+}
+
+/**
+ * Plan segments from the loaded team: closers (Bookings ARR quota) and CSMs (Customer Success with an
+ * HRIS annual quota) by territory × role. Other Sales / CS heads (SDRs, operations) are held at their Dec
+ * count. Each rep keeps their own quota, ramp curve and tenure; hires take their segment's most common
+ * ramp curve. FY context is the same team's ramped quota and heads through the prior year.
+ */
+function salesTeamPlan() {
+  const team = salesTeamInputs();
+  const lift = 1 + Math.max(0, STATE.quotaYoyLiftPct || 0) / 100;
+  const out = { loaded: false, segments: [], other: { sales: 0, cs: 0 }, warnings: [], nbReady: false, csReady: false, rampLabel: '' };
+  // 7.25 is reported by buildSalesPlanFromDemand, which also knows when the lever overrides it.
+  (team && team.missing || []).filter(m => !m.startsWith('Expected quota attainment (7.25)'))
+    .forEach(m => out.warnings.push('Sales team: ' + m + '.'));
+  if (!team || !(team.employees || []).length) {
+    out.other = { sales: HC_BOP_LOCK.sales || 0, cs: HC_BOP_LOCK.cs || 0 };
+    out.warnings.unshift(COMMISSION_INPUTS_STATE === 'ok'
+      ? `No Sales or Customer Success employees are loaded at Dec ${BUDGET_YEAR - 1}: sales hiring and quota capacity can’t be planned. Heads are held at the Dec workforce count.`
+      : 'The sales team (quotas, ramp, heads by territory) did not load: sales hiring and quota capacity can’t be planned. Heads are held at the Dec workforce count.');
+    return out;
+  }
+  out.loaded = true;
+  const curves = (team.ramp && team.ramp.curves) || {};
+  const segs = {};
+  const noCurve = { nb: [], cs: [] };
+  const noQuota = { nb: [], cs: [] };
+  for (const e of team.employees) {
+    const dept = e.department === 'Customer Success' ? 'cs' : 'sales';
+    const group = e.quota_type === 'Bookings ARR' ? 'nb' : (dept === 'cs' && e.annual_quota_arr > 0 ? 'cs' : null);
+    if (!group) { out.other[dept] += 1; continue; }
+    const curve = e.ramp_months != null ? curves[String(e.ramp_months)] || null : null;
+    if (!curve) noCurve[group].push(e.employee_id);
+    if (!(e.annual_quota_arr > 0)) noQuota[group].push(e.employee_id);
+    const territory = e.territory || 'No territory';
+    const id = `${group}|${territory}|${e.role}`;
+    const s = segs[id] || (segs[id] = { id, region: territory, group, role: e.role, heads: 0, annual: 0, members: [], rampCount: {} });
+    s.heads += 1;
+    s.annual += e.annual_quota_arr || 0;
+    s.members.push({ tenure: e.tenure_months, monthly: (e.annual_quota_arr || 0) / 12, curve });
+    if (e.ramp_months != null) s.rampCount[e.ramp_months] = (s.rampCount[e.ramp_months] || 0) + 1;
+  }
+  const groupHeads = { nb: 0, cs: 0 };
+  Object.values(segs).forEach(s => { groupHeads[s.group] += s.heads; });
+  const rampsUsed = new Set();
+  out.segments = Object.values(segs).map(s => {
+    const rampMonths = Object.keys(s.rampCount).sort((a, b) => s.rampCount[b] - s.rampCount[a] || a - b)[0];
+    const hireCurve = rampMonths != null ? curves[rampMonths] || null : null;
+    if (hireCurve) rampsUsed.add(rampMonths);
+    const fy26PerHead = s.heads > 0 ? s.annual / s.heads : 0;
+    const fy27PerHead = fy26PerHead * lift;
+    const priorMonths = MO.map((_, j) => s.members.reduce((n, m) => n + m.monthly * rampPct(m.curve, m.tenure - (11 - j)), 0));
+    const fy26Annual = priorMonths.reduce((a, b) => a + b, 0);
+    return {
+      id: s.id, region: s.region, group: s.group, role: s.role, heads: s.heads,
+      share: groupHeads[s.group] > 0 ? s.heads / groupHeads[s.group] : 0,
+      hireRampMonths: rampMonths != null ? Number(rampMonths) : null,
+      hireCurve,
+      fy26PerHead,
+      fy26Annual,
+      fy26QEnds: [2, 5, 8, 11].map(j => s.members.filter(m => m.tenure - (11 - j) >= 1).length),
+      fy27PerHead,
+      fy27Existing: s.heads * fy27PerHead,
+      monthlyFull: fy27PerHead / 12,
+      benchMonths: BUD_P.map((_, mi) => s.members.reduce((n, m) => n + m.monthly * lift * rampPct(m.curve, m.tenure + mi + 1), 0)),
+      groupLabel: s.group === 'nb' ? 'New Business' : 'Customer Success',
+    };
+  }).sort((a, b) => (a.group === b.group ? 0 : a.group === 'nb' ? -1 : 1) || a.region.localeCompare(b.region) || a.role.localeCompare(b.role));
+
+  const blocked = (group, label) => {
+    const reasons = [];
+    if (!groupHeads[group]) reasons.push(`no ${label} on staff`);
+    if (noCurve[group].length) reasons.push(`${noCurve[group].length} ${label} without a loaded ramp curve for their ramp months (${noCurve[group].slice(0, 5).join(', ')}${noCurve[group].length > 5 ? ', …' : ''}) — their capacity is left out`);
+    if (noQuota[group].length) reasons.push(`${noQuota[group].length} ${label} without an annual quota (${noQuota[group].slice(0, 5).join(', ')}${noQuota[group].length > 5 ? ', …' : ''})`);
+    return reasons;
+  };
+  const nbBlocked = blocked('nb', 'closers');
+  const csBlocked = blocked('cs', 'CSMs');
+  out.nbReady = !nbBlocked.length;
+  out.csReady = !csBlocked.length;
+  if (nbBlocked.length) out.warnings.unshift(`Closer hiring is not sized: ${nbBlocked.join('; ')}.`);
+  if (csBlocked.length) out.warnings.unshift(`CS hiring is not sized: ${csBlocked.join('; ')}.`);
+  out.rampLabel = [...rampsUsed].sort((a, b) => a - b)
+    .map(n => `${n}-mo ${curves[n].map(v => Math.round(v * 100)).join('/')}%`).join(' · ') || 'no loaded ramp';
+
+  const teamSales = groupHeads.nb + out.other.sales;
+  const teamCs = groupHeads.cs + out.other.cs;
+  if (HC_BOP_LOCK.sales != null && HC_BOP_LOCK.sales !== teamSales) {
+    out.warnings.push(`Dec ${BUDGET_YEAR - 1} Sales heads: HRIS employees ${teamSales} ≠ workforce headcount ${HC_BOP_LOCK.sales}. The plan uses the HRIS team.`);
+  }
+  if (HC_BOP_LOCK.cs != null && HC_BOP_LOCK.cs !== teamCs) {
+    out.warnings.push(`Dec ${BUDGET_YEAR - 1} Customer Success heads: HRIS employees ${teamCs} ≠ workforce headcount ${HC_BOP_LOCK.cs}. The plan uses the HRIS team.`);
+  }
+  return out;
 }
 
 const COMMISSION_TIMING_LABEL = {
@@ -3232,7 +3217,7 @@ function commissionPolicy() {
       : COMMISSION_INPUTS_STATE === 'pending'
         ? 'Loading the commission policy, plan rates and deferred commissions schedule…'
         : 'Commission policy, plan rates and deferred commissions schedule did not load.');
-    warnings.push('Until they load, commissions are the variable OTE lever (heads × OTE × attainment), expensed when earned, with no deferred commissions roll-forward.');
+    warnings.push('Until they load, commissions can’t be planned: they are left out of the P&L, cash and deferred commissions.');
     return pol;
   }
   const a = (inp.policy && inp.policy.answers) || {};
@@ -3421,8 +3406,6 @@ function computeCommissionPlan() {
   const arr = computeBudgetArr();
   const open = bsBopLock();
   const n = BUD_P.length;
-  const hc = pol.loaded ? null : computeHcPlan();
-  const attain = plAttainFactor();
   const rate = k => (inp && inp.rates && inp.rates[k] && inp.rates[k].rate != null ? inp.rates[k].rate : null);
   const renShare = pol.loaded ? renewalShareOfBop() : null;
   if (pol.loaded) {
@@ -3435,13 +3418,7 @@ function computeCommissionPlan() {
   const earned = BUD_P.map(p => {
     const a = arr[p] || {};
     if (!pol.loaded) {
-      return {
-        nb: (hc[p].ending.sales || 0) * ((STATE.nbOteVarAnnual || 0) / 12) * attain,
-        exp: 0,
-        ren: (hc[p].ending.cs || 0) * ((STATE.csOteVarAnnual || 0) / 12) * attain,
-        react: 0,
-        nbBase: null, expBase: null, renBase: null, reactBase: null,
-      };
+      return { nb: 0, exp: 0, ren: 0, react: 0, nbBase: null, expBase: null, renBase: null, reactBase: null };
     }
     const ret = pol.returns;
     const reactBase = ret.reactShare != null ? (a.react || 0) * ret.reactShare : 0;
@@ -4277,17 +4254,23 @@ function renderSidebar() {
   if (curTab === 'sales') {
     const sales = computeSalesPlan();
     const m = sales.meta;
+    const team = salesTeamInputs();
+    const answered = team && team.attainment && team.attainment.expected != null ? Math.round(team.attainment.expected * 100) : null;
+    const measured = team && team.attainment && team.attainment.measured != null ? Math.round(team.attainment.measured * 100) : null;
+    const attainSrc = STATE.salesAttainPct != null
+      ? `set here${answered != null ? ` · onboarding 7.25 says ${answered}% · <a href="#" onclick="setSalesAttain(null);return false">use it</a>` : ''}`
+      : (answered != null ? 'onboarding 7.25' : 'not set — onboarding 7.25 is unanswered');
     el.innerHTML = `
-      <div class="panel-lbl">FY27 budget coverage</div>
+      <div class="panel-lbl">FY${BUDGET_YEAR} budget coverage</div>
       <div class="lever">
-        <div class="lever-row"><span class="lever-lbl">Expected attain (existing)</span><span class="lever-val" id="v-bench">${STATE.existingBenchCoverPct.toFixed(0)}%</span></div>
-        <input type="range" min="50" max="100" step="1" value="${STATE.existingBenchCoverPct}" oninput="setBenchCover(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">delivery view only · hire count uses full book ÷ avg quota</div>
+        <div class="lever-row"><span class="lever-lbl">Expected quota attainment</span><span class="lever-val" id="v-attain">${m.attainPct != null ? m.attainPct.toFixed(0) + '%' : 'not set'}</span></div>
+        <input type="range" min="50" max="120" step="5" value="${m.attainPct != null ? m.attainPct : 100}" oninput="setSalesAttain(+this.value)">
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">${attainSrc} · closers ÷ (ramped quota × attainment)${measured != null ? ` · closers attained ${measured}% to date` : ''}</div>
       </div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">Quota YoY lift</span><span class="lever-val" id="v-qlift">${(STATE.quotaYoyLiftPct || 0).toFixed(0)}%</span></div>
         <input type="range" min="0" max="40" step="1" value="${STATE.quotaYoyLiftPct || 0}" oninput="setQuotaYoyLift(+this.value)">
-        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">0 = flat vs FY26 · try 20% to raise per-head quotas and shrink hire need</div>
+        <div style="font-size:9.5px;color:var(--text3);margin-top:4px">0 = HRIS quota · raise per-head quotas to shrink hire need</div>
       </div>
       <div class="lever">
         <div class="lever-row"><span class="lever-lbl">Sales/CS attrition</span><span class="lever-val" id="v-attr">${STATE.salesAttritionPct.toFixed(0)}%</span></div>
@@ -4301,18 +4284,18 @@ function renderSidebar() {
       </div>
       <div class="panel-lbl">Budget vs bench / hires</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
-        NB FY27 budget<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(m.fyNb)}</strong><br>
-        FY26 NB (hist) <strong style="font-family:var(--mono)">${fmtM(m.fy26Nb)}</strong>
-        <span style="font-size:9.5px"> · seed mix ${fmtM(m.seedNbBook)}</span><br>
-        Watermark book (hire sizing)${m.quotaYoyLiftPct ? ` (+${m.quotaYoyLiftPct.toFixed(0)}%)` : ''} <strong style="font-family:var(--mono)">${fmtM(m.existingNbQuota)}</strong>
-        <span style="font-size:9.5px"> · avg ${fmtM(m.avgNbQuota)}/AE · ${m.coverPctActual.toFixed(0)}% of budget · ≠ Σ mo capacity ${fmtM(m.existingCapNbFy || 0)}</span><br>
-        Hire gap (budget − watermark book) <strong style="font-family:var(--mono);color:${(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget) >= 0 ? 'var(--amber)' : 'var(--teal)'}">${(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget) < 0 ? '(' + fmtM(-(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget)) + ')' : fmtM(m.hireNbTarget)}</strong>
+        NB FY${BUDGET_YEAR} budget<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(m.fyNb)}</strong><br>
+        FY${BUDGET_YEAR - 1} NB (hist) <strong style="font-family:var(--mono)">${fmtM(m.fy26Nb)}</strong><br>
+        Bench ramped quota${m.quotaYoyLiftPct ? ` (+${m.quotaYoyLiftPct.toFixed(0)}%)` : ''} <strong style="font-family:var(--mono)">${fmtM(m.benchNbFy)}</strong>
+        <span style="font-size:9.5px"> · ${fmtN(m.lockedNb)} closers · avg ${fmtM(m.avgNbQuota)}/yr</span><br>
+        × attainment <strong style="font-family:var(--mono)">${m.existingNbExpected != null ? fmtM(m.existingNbExpected) : 'not set'}</strong><br>
+        NB gap <strong style="font-family:var(--mono);color:${m.nbGapSigned == null ? 'var(--amber)' : m.nbGapSigned >= 0 ? 'var(--amber)' : 'var(--teal)'}">${m.nbGapSigned == null ? 'not sized' : m.nbGapSigned < 0 ? '(' + fmtM(-m.nbGapSigned) + ')' : fmtM(m.nbGapSigned)}</strong>
         → <strong>${m.nbGrowthHires}</strong> growth
-        <span style="font-size:9.5px">(= max(0,gap) ÷ avg) + ${m.nbAttritionReplace} attrition = ${m.nbHiresNeed} NB · need ${fmtN(m.aeNeeded)} · Dec ${fmtN(m.decAes)}</span><br><br>
+        <span style="font-size:9.5px">+ ${m.nbAttritionReplace} attrition = ${m.nbHiresNeed} closers · need ${fmtN(m.aeNeeded)} · Dec ${fmtN(m.decAes)}</span><br><br>
         CS demand<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(m.csDemand)}</strong><br>
-        Watermark book (hire sizing) <strong style="font-family:var(--mono)">${fmtM(m.existingCsQuota)}</strong>
-        <span style="font-size:9.5px"> · avg ${fmtM(m.avgCsQuota)}/CS · ≠ Σ mo capacity ${fmtM(m.existingCapCsFy || 0)}</span><br>
-        Hire gap (demand − watermark book) <strong style="font-family:var(--mono);color:${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) >= 0 ? 'var(--amber)' : 'var(--teal)'}">${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) < 0 ? '(' + fmtM(-(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget)) + ')' : fmtM(m.hireCsTarget)}</strong>
+        CS book <strong style="font-family:var(--mono)">${fmtM(m.existingCsQuota)}</strong>
+        <span style="font-size:9.5px"> · avg ${fmtM(m.avgCsQuota)}/CSM · Σ mo capacity ${fmtM(m.existingCapCsFy || 0)}</span><br>
+        CS gap <strong style="font-family:var(--mono);color:${m.csGapSigned == null || m.csGapSigned >= 0 ? 'var(--amber)' : 'var(--teal)'}">${m.csGapSigned == null ? 'not sized' : m.csGapSigned < 0 ? '(' + fmtM(-m.csGapSigned) + ')' : fmtM(m.csGapSigned)}</strong>
         → <strong>${m.csGrowthHires}</strong> growth + ${m.csAttritionReplace} attrition = ${m.csHiresNeed} CS · need ${fmtN(m.csNeeded)} · Dec ${fmtN(m.decCs)}
         <br><span style="font-size:9.5px;color:var(--text3)">Combined growth hires ${m.nbGrowthHires + m.csGrowthHires} · with attrition ${m.nbHiresNeed + m.csHiresNeed}</span>
       </div>`;
@@ -4340,7 +4323,7 @@ function renderSidebar() {
       <div class="panel-lbl">Plan rollup</div>
       <div style="font-size:11px;color:var(--text2);line-height:1.55">
         Jan 2027 BOP HC<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtN(hcBopTotal())}</strong><br><span style="font-size:9.5px">Dec 2026 Forecast · locked</span><br><br>
-        Sales - NB / CS<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtN(dec.ending.sales)}</strong> / <strong style="font-family:var(--mono);color:var(--teal)">${fmtN(dec.ending.cs)}</strong><br><br>
+        Sales / Customer Success dept<br><strong style="font-family:var(--mono);color:var(--teal)">${fmtN(dec.ending.sales)}</strong> / <strong style="font-family:var(--mono);color:var(--teal)">${fmtN(dec.ending.cs)}</strong><br><br>
         Dec total HC<br><strong style="font-family:var(--mono);color:var(--text)">${fmtN(dec.headsTotal)}</strong><br><br>
         FY base wages<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyWages)}</strong><br>
         FY bonus<br><strong style="font-family:var(--mono);color:var(--text)">${fmtM(fyBonus)}</strong><br>
@@ -4495,14 +4478,8 @@ window.setYoyGrowth = function(pct) {
   refresh();
 };
 
-window.setAeQuota = function(v) {
-  refresh();
-};
-
-window.setBenchCover = function(v) {
-  STATE.existingBenchCoverPct = v;
-  const el = document.getElementById('v-bench');
-  if (el) el.textContent = v.toFixed(0) + '%';
+window.setSalesAttain = function(v) {
+  STATE.salesAttainPct = v == null ? null : Math.max(0, Number(v) || 0);
   refresh();
 };
 
@@ -4727,20 +4704,6 @@ function plSpendInput(dept, lineKey, period, dollars) {
   const esc = String(period).replace(/'/g, "\\'");
   return hcNumInput(k, `setPlSpend('${dept}','${lineKey}','${esc}',+this.value)`, 1, 0);
 }
-
-window.setNbOteVar = function(k) {
-  STATE.nbOteVarAnnual = Math.max(0, k) * 1000;
-  const el = document.getElementById('v-ote-nb');
-  if (el) el.textContent = '$' + Math.round(STATE.nbOteVarAnnual / 1000) + 'k';
-  refresh();
-};
-
-window.setCsOteVar = function(k) {
-  STATE.csOteVarAnnual = Math.max(0, k) * 1000;
-  const el = document.getElementById('v-ote-cs');
-  if (el) el.textContent = '$' + Math.round(STATE.csOteVarAnnual / 1000) + 'k';
-  refresh();
-};
 
 window.updateHcHire = function(period, dept, val) {
   if (dept === 'sales' || dept === 'cs') return; // owned by Sales tab
@@ -5274,10 +5237,6 @@ function sumSegmentsFy27(segs, pred) {
   return segs.filter(pred).reduce((n, s) => n + s.fy27Existing, 0);
 }
 
-function sumHeads(segs, pred) {
-  return segs.filter(pred).reduce((n, s) => n + s.heads, 0);
-}
-
 /** Book or per-head quota across FY26 Q + FY27 months. */
 function renderSalesQuotaRow(label, fy26Annual, fy27Annual, opts) {
   const tot = opts && opts.tot;
@@ -5341,47 +5300,47 @@ function renderSales() {
   const colSpan = 1 + CTX_QUARTERS.length + BUD_P.length + 2;
   const segs = sales.segments;
   const autoTag = !STATE._salesHireManual ? '<span class="lock-tag">auto from gap</span>' : '';
-  const rampTag = `${Math.round(HIRE_QUOTA_RAMP[0] * 100)}/${Math.round(HIRE_QUOTA_RAMP[1] * 100)}/100`;
-  const fmtSignedGap = (signed) => signed < 0 ? `(${fmtM(-signed)}) surplus` : fmtM(signed);
+  const rampTag = sales.waterfall.rampLabel || 'no loaded ramp';
+  const fmtSignedGap = (signed) => signed == null ? 'not sized' : signed < 0 ? `(${fmtM(-signed)}) surplus` : fmtM(signed);
   const tieWarn = tie.usedDemoFallback || tie.histThin;
+  const prior = BUDGET_YEAR - 1;
 
   let html = `
     <div class="slide-title">Sales · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">Two FY dollars on this tab: <strong>watermark book</strong> (starting bench × full per-head quota — sizes hires) vs <strong>Σ monthly capacity</strong> (after attrition + ramp — delivery view). Hires = (budget − watermark book) ÷ avg $/head. Ramp ${rampTag} shapes capacity only. Quotas ${m.quotaYoyLiftPct ? `+${m.quotaYoyLiftPct.toFixed(0)}% vs FY26` : 'flat vs FY26'}.</div>
+    <div class="slide-sub">Team, quotas, ramp and territories from the HRIS at Dec ${prior} (Forecast). Closer hires = fewest hires whose ramped quota × expected attainment covers NB budget − the bench’s ramped quota × attainment; hires ramp from their hire month (${rampTag}). Quotas ${m.quotaYoyLiftPct ? `+${m.quotaYoyLiftPct.toFixed(0)}% vs HRIS` : 'at HRIS'}. SDRs and operations roles are held at ${fmtN(m.otherSales)} Sales / ${fmtN(m.otherCs)} CS heads.</div>
     ${adjLegend()}
+    ${m.warnings.length ? `<div class="ctx-banner warn"><strong>Sales plan inputs</strong><ul style="margin:4px 0 0 16px;padding:0">${m.warnings.map(w => `<li>${w}</li>`).join('')}</ul></div>` : ''}
     <div class="ctx-banner tie${tieWarn ? ' warn' : ''}">
       <strong>Sales tie-out</strong> · hist <code>${tie.histSource}</code>
       (${tie.monthsWithArr}/12 mo${tie.monthsDemoFallback ? `, ${tie.monthsDemoFallback} demo-fallback` : ''})
-      · FY26 NB <strong>${fmtM(tie.fy26Nb)}</strong>
+      · FY${prior} NB <strong>${fmtM(tie.fy26Nb)}</strong>
       · Exp <strong>${fmtM(tie.fy26Exp)}</strong>
       · churn+cont <strong>${fmtM(tie.churnBase)}</strong>
-      · scale NB/CS <strong>${(m.scaleNb26 || 0).toFixed(2)}× / ${(m.scaleCs26 || 0).toFixed(2)}×</strong>
       · books NB/CS <strong>${fmtM(tie.existingNbQuota)}</strong> / <strong>${fmtM(tie.existingCsQuota)}</strong>
       · demand NB/CS <strong>${fmtM(tie.fyNb)}</strong> / <strong>${fmtM(tie.csDemand)}</strong>
       (CS floor ${fmtM(tie.csFloor)})
       · annual gap NB/CS <strong>${fmtSignedGap(tie.nbGapSigned)}</strong> / <strong>${fmtSignedGap(tie.csGapSigned)}</strong>
       → hires <strong>${tie.nbGrowthHires}</strong> / <strong>${tie.csGrowthHires}</strong>
       · monthly O/U FY <strong>${fmtOuInline(tie.nbOuFy)}</strong> / <strong>${fmtOuInline(tie.csOuFy)}</strong>
-      ${tieWarn ? '<span style="display:block;margin-top:4px">⚠ Live warehouse had empty NB/Exp for some months — using demo hist so quota scale is not forced to 1× (unscaled ~$33M seed book). Match this banner on localhost vs /app after deploy.</span>' : ''}
+      ${tieWarn ? '<span style="display:block;margin-top:4px">⚠ Live warehouse had empty NB/Exp for some months — the prior-year figures use demo history for those months. Match this banner on localhost vs /app after deploy.</span>' : ''}
     </div>
     <div class="ctx-banner">
       NB budget <strong>${fmtM(m.fyNb)}</strong>
-      − book <strong>${fmtM(m.existingNbQuota)}</strong> (avg <strong>${fmtM(m.avgNbQuota)}</strong>/AE)
-      = gap <strong>${(m.nbGapSigned != null ? m.nbGapSigned : m.hireNbTarget) < 0 ? '(' + fmtM(-(m.nbGapSigned != null ? m.nbGapSigned : 0)) + ') surplus' : fmtM(m.hireNbTarget)}</strong>
-      → <strong>${m.nbGrowthHires} NB growth</strong>
-      (+${m.nbAttritionReplace} backfill) · need <strong>${fmtN(m.aeNeeded)}</strong> AEs.
-      CS: gap <strong>${(m.csGapSigned != null ? m.csGapSigned : m.hireCsTarget) < 0 ? '(' + fmtM(-(m.csGapSigned != null ? m.csGapSigned : 0)) + ') surplus' : fmtM(m.hireCsTarget)}</strong> ÷ <strong>${fmtM(m.avgCsQuota)}</strong>
+      − bench ramped quota <strong>${fmtM(m.benchNbFy)}</strong> × <strong>${m.attainPct != null ? m.attainPct + '%' : 'attainment not set'}</strong>
+      = gap <strong>${fmtSignedGap(m.nbGapSigned)}</strong>
+      → <strong>${m.nbGrowthHires} closer growth hires</strong>
+      (+${m.nbAttritionReplace} backfill) · need <strong>${fmtN(m.aeNeeded)}</strong> closers (full-year equivalent).
+      CS: gap <strong>${fmtSignedGap(m.csGapSigned)}</strong> ÷ <strong>${fmtM(m.avgCsQuota)}</strong>
       → <strong>${m.csGrowthHires} CS growth</strong>
-      (+${m.csAttritionReplace} backfill) · need <strong>${fmtN(m.csNeeded)}</strong> CS.
+      (+${m.csAttritionReplace} backfill) · need <strong>${fmtN(m.csNeeded)}</strong> CSMs.
       Combined growth <strong>${m.nbGrowthHires + m.csGrowthHires}</strong>
       · with attrition <strong>${m.nbHiresNeed + m.csHiresNeed}</strong>.
-      Dec NB/CS <strong>${fmtN(m.decAes)}</strong> / <strong>${fmtN(m.decCs)}</strong>.
-      <span style="display:block;margin-top:4px;font-size:10px;color:var(--text3)">Seed role-card book (unscaled) ${fmtM(m.seedNbBook)} · FY26 NB hist ${fmtM(m.fy26Nb)}${m.fy26Nb > 0 ? '' : ' (hist missing → seed used as-is)'}.</span>
+      Dec closers/CSMs <strong>${fmtN(m.decAes)}</strong> / <strong>${fmtN(m.decCs)}</strong>.
     </div>`;
 
   // 1 —— By group
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Total quota by sales group (existing bench = full watermark book)</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Total quota by sales group (FY${prior}: the Dec team’s ramped quota · FY${BUDGET_YEAR}: Dec bench × full quota)</td></tr>`;
   html += renderSalesQuotaRow('New Business', sumSegments(segs, s => s.group === 'nb'), sumSegmentsFy27(segs, s => s.group === 'nb'), { tot: true, noteKey: 'grp_nb' });
   html += renderSalesQuotaRow('Customer Success (expansion)', sumSegments(segs, s => s.group === 'cs'), sumSegmentsFy27(segs, s => s.group === 'cs'), { tot: true, noteKey: 'grp_cs' });
   html += renderSalesQuotaRow('Total quota', sumSegments(segs, () => true), sumSegmentsFy27(segs, () => true), { tot: true, noteKey: 'grp_tot' });
@@ -5389,8 +5348,8 @@ function renderSales() {
 
   // 2 —— By region
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Total quota by region</td></tr>`;
-  for (const region of ['NAM', 'EMEA', 'APAC']) {
+  html += `<tr class="sec"><td colspan="${colSpan}">Total quota by territory</td></tr>`;
+  for (const region of [...new Set(segs.map(s => s.region))].sort()) {
     html += renderSalesQuotaRow(region, sumSegments(segs, s => s.region === region), sumSegmentsFy27(segs, s => s.region === region), { noteKey: 'reg_' + region });
   }
   html += renderSalesQuotaRow('Total quota', sumSegments(segs, () => true), sumSegmentsFy27(segs, () => true), { tot: true, noteKey: 'reg_tot' });
@@ -5398,26 +5357,27 @@ function renderSales() {
 
   // 3 —— Per-head detail
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Quota per head by region · group · role (FY27 = FY26 watermark${m.quotaYoyLiftPct ? ` + ${m.quotaYoyLiftPct.toFixed(0)}%` : ' · flat YoY'})</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Quota per head by territory · group · role (HRIS annual quota${m.quotaYoyLiftPct ? ` + ${m.quotaYoyLiftPct.toFixed(0)}% in FY${BUDGET_YEAR}` : ''})</td></tr>`;
   for (const s of segs) {
     html += renderSalesQuotaRow(
       salesSegmentLabel(s),
-      s.fy25Quota,
+      s.fy26PerHead,
       s.fy27PerHead,
-      { noteKey: 'ph_' + s.id }
+      { noteKey: 'ph_' + s.id, hint: s.hireRampMonths != null ? `${s.hireRampMonths}-mo ramp` : 'no ramp curve' }
     );
   }
   html += '</tbody></table>';
 
   // 4 —— Headcount ramp
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Ending heads by region · group · role — FY26 ramp into Dec bench · FY27 = hires − ${m.attritionPct.toFixed(0)}% attrition</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Ending heads by territory · group · role — FY${prior}: the Dec team on staff at each quarter end · FY${BUDGET_YEAR} = hires − ${m.attritionPct.toFixed(0)}% attrition</td></tr>`;
   for (const s of segs) {
     const fy27Months = BUD_P.map(p => sales.byPeriod[p].segEnds[s.id] || 0);
     html += renderSalesHeadRampRow(salesSegmentLabel(s), s.fy26QEnds, fy27Months, { noteKey: 'hd_' + s.id });
   }
-  const nbFy26Q = CTX_QUARTERS.map((_, qi) => quarterEndFromRamp(sales.fy26NbRamp, qi));
-  const csFy26Q = CTX_QUARTERS.map((_, qi) => quarterEndFromRamp(sales.fy26CsRamp, qi));
+  const groupQEnds = group => CTX_QUARTERS.map((_, qi) => segs.filter(s => s.group === group).reduce((n, s) => n + s.fy26QEnds[qi], 0));
+  const nbFy26Q = groupQEnds('nb');
+  const csFy26Q = groupQEnds('cs');
   html += renderSalesHeadRampRow('New Business heads', nbFy26Q, BUD_P.map(p => sales.byPeriod[p].endingAes), { tot: true, noteKey: 'hd_nb' });
   html += renderSalesHeadRampRow('Customer Success heads', csFy26Q, BUD_P.map(p => sales.byPeriod[p].endingCs), { tot: true, noteKey: 'hd_cs' });
   html += renderSalesHeadRampRow(
@@ -5431,7 +5391,7 @@ function renderSales() {
   // 5 —— Quota capacity waterfall (existing + ramped new hires)
   const wf = sales.waterfall || { existing: [], hires: [] };
   html += `<table class="bud-tbl sales-tbl"><thead><tr>${buildTableHeaders({ lineWidth: 280 })}</tr></thead><tbody>`;
-  html += `<tr class="sec"><td colspan="${colSpan}">Quota capacity waterfall — existing = remaining bench HC × full quota (drops on attrition) + backfill / growth (${rampTag} ramp)</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Quota capacity waterfall — existing = each rep’s quota on their ramp (drops on attrition) + backfill / growth (${rampTag})</td></tr>`;
   html += `<tr class="sec"><td colspan="${colSpan}">Existing bench</td></tr>`;
   for (const row of wf.existing) {
     html += renderSalesQuotaMonthsRow(row.label, row.months, { cls: 'wf-exist', noteKey: 'wf_' + row.id });
@@ -5439,7 +5399,7 @@ function renderSales() {
   const existTot = BUD_P.map((_, i) => wf.existing.reduce((s, r) => s + (r.months[i] || 0), 0));
   html += renderSalesQuotaMonthsRow('Existing bench total', existTot, { tot: true, noteKey: 'wf_exist_tot' });
 
-  html += `<tr class="sec"><td colspan="${colSpan}">Hires (quota ramp ${rampTag}) · backfill = attrition replacement · growth = net add</td></tr>`;
+  html += `<tr class="sec"><td colspan="${colSpan}">Hires (ramp ${rampTag}) · backfill = attrition replacement · growth = net add</td></tr>`;
   if (!wf.hires.length) {
     html += `<tr><td colspan="${colSpan}" style="color:var(--text3);font-family:inherit">No growth or backfill hires in plan</td></tr>`;
   } else {
@@ -5543,7 +5503,7 @@ function renderSales() {
     }
     const fyVal = row.fy != null
       ? (row.delta ? fmtHcFlow(row.fy, row.delta) : (row.n || row.editable ? fmtN(row.fy) : fmtM(row.fy)))
-      : (row.k === 'bop_nb' ? fmtN(SALES_START_AE) : row.k === 'bop_cs' ? fmtN(SALES_START_CS) : '—');
+      : (row.k === 'bop_nb' ? fmtN(m.lockedNb) : row.k === 'bop_cs' ? fmtN(m.lockedCs) : '—');
     html += `<td class="fy-c">${fyVal}</td>`;
     html += `<td class="notes-c">${noteInput('sales_' + row.k)}</td></tr>`;
   }
@@ -5775,7 +5735,7 @@ function renderHC() {
 
   let html = `
     <div class="slide-title">Headcount · FY${BUDGET_YEAR} Plan</div>
-    <div class="slide-sub">One operating plan. Attrition, hire freeze, net hires/(exits), and RIFs are live levers — change them and payroll, P&amp;L, and ending HC move with them. Loaded NB/CS Payroll includes variable OTE.</div>
+    <div class="slide-sub">One operating plan. Attrition, hire freeze, net hires/(exits), and RIFs are live levers — change them and payroll, P&amp;L, and ending HC move with them. Sales and Customer Success variable pay is commissions, planned on the Commissions tab.</div>
     ${adjLegend()}
     <div class="ctx-banner">Jan BOP <strong>${fmtN(hcBopTotal())}</strong> locked to Dec'26. Hire grids accept <strong>negatives</strong> as exits. Sales NB/CS still come from the Sales tab. Board vs operating (padded vs stretch) can be a later overlay — this is the operating book.</div>`;
 
@@ -5846,7 +5806,7 @@ function renderHC() {
     const meritNote = meritMo == null
       ? ' · no merit this year (BOP base = last-year rate)'
       : ` · FY wages steps up ${STATE.meritPct}% from ${MO[meritMo]}`;
-    html += `<tr class="sec"><td colspan="7">${d.label}${d.fromSales ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${d.oteKey ? ' · variable OTE bonus' : ''}${meritNote}${mismatch ? ` · <span style="color:var(--amber)">BOP sum ${startTot} ≠ lock ${lock}</span>` : ''}</td></tr>`;
+    html += `<tr class="sec"><td colspan="7">${d.label}${d.fromSales ? ' · ending heads from Sales tab; BOP sets level mix' : ''}${d.corpBonus ? '' : ' · variable pay is commissions (Commissions tab)'}${meritNote}${mismatch ? ` · <span style="color:var(--amber)">BOP sum ${startTot} ≠ lock ${lock}</span>` : ''}</td></tr>`;
     for (const lv of HC_LEVELS) {
       const start = hcLevelStart(d.key, lv.key);
       const comp = hcLevelComp(d.key, lv.key);
@@ -5860,10 +5820,9 @@ function renderHC() {
             return s + h * (comp.salary / 12) * hcMeritFactor(BUD_P.indexOf(p)) * (comp.bonusPct / 100);
           }, 0)
         : 0;
-      const oteAnnual = d.oteKey === 'nb' ? STATE.nbOteVarAnnual : (d.oteKey === 'cs' ? STATE.csOteVarAnnual : 0);
       const bonusCell = d.corpBonus
         ? hcNumInput(comp.bonusPct, `updateHcBonusPct('${d.key}','${lv.key}',this.value)`, 0.5, 0) + '%'
-        : (d.oteKey ? `<span style="color:var(--text3)">$${Math.round(oteAnnual / 1000)}k OTE</span>` : '<span style="color:var(--text3)">—</span>');
+        : '<span style="color:var(--text3)">—</span>';
       html += `<tr class="adj">
         <td>${lv.label}</td>
         <td class="fy-c">${hcNumInput(start, `updateHcStart('${d.key}','${lv.key}',this.value)`, 1, 0)}</td>
@@ -5876,12 +5835,7 @@ function renderHC() {
     }
     const fyWagesDept = BUD_P.reduce((s, p) => s + hc[p].wages[d.key], 0);
     const fyBonusDept = BUD_P.reduce((s, p) => s + hc[p].bonusAccrual[d.key], 0);
-    const oteEdit = d.oteKey === 'nb'
-      ? `<span class="k-input">${hcNumInput(Math.round(STATE.nbOteVarAnnual / 1000), 'setNbOteVar(+this.value)', 5, 0)}<span class="k-suf">k OTE</span></span>`
-      : (d.oteKey === 'cs'
-        ? `<span class="k-input">${hcNumInput(Math.round(STATE.csOteVarAnnual / 1000), 'setCsOteVar(+this.value)', 5, 0)}<span class="k-suf">k OTE</span></span>`
-        : '—');
-    html += `<tr class="tot${d.oteKey ? ' adj' : ''}"><td>Total</td><td class="fy-c">${fmtN(startTot)}</td><td class="fy-c">—</td><td class="fy-c">${d.corpBonus ? '—' : oteEdit}</td><td class="fy-c">${fmtM(fyWagesDept)}</td><td class="fy-c">${d.corpBonus ? fmtM(fyBonusDept) : '—'}</td><td class="notes-c"></td></tr>`;
+    html += `<tr class="tot"><td>Total</td><td class="fy-c">${fmtN(startTot)}</td><td class="fy-c">—</td><td class="fy-c">—</td><td class="fy-c">${fmtM(fyWagesDept)}</td><td class="fy-c">${d.corpBonus ? fmtM(fyBonusDept) : '—'}</td><td class="notes-c"></td></tr>`;
     html += '</tbody></table>';
   }
 
@@ -5968,29 +5922,10 @@ function renderHC() {
     );
     if (d.corpBonus) {
       deptRows.push({ k: 'ba_' + d.key, label: 'Bonus', bonusAcc: d.key });
-    } else if (d.oteKey) {
-      deptRows.push({ k: 'ote_' + d.key, label: 'Variable OTE', ote: d.oteKey });
     }
     deptRows.push({ k: 'pay_' + d.key, label: d.loadedLabel || ('Loaded ' + d.label + ' Payroll'), payroll: d.key, tot: true });
 
     for (const row of deptRows) {
-      if (row.ote) {
-        const ote = row.ote === 'nb' ? STATE.nbOteVarAnnual : STATE.csOteVarAnnual;
-        html += `<tr><td>${row.label}<span class="lock-tag">$${Math.round(ote / 1000)}k / head × attain · in loaded</span></td>`;
-        for (const q of CTX_QUARTERS) html += `<td class="ctx-c"><span style="color:var(--text3)">—</span></td>`;
-        for (const p of BUD_P) {
-          const heads = hc[p].ending[d.key] || 0;
-          const attain = Math.max(0, Math.min(120, STATE.existingBenchCoverPct)) / 100;
-          html += `<td class="bud-c">${fmtM(heads * (ote / 12) * attain)}</td>`;
-        }
-        const fyOte = BUD_P.reduce((s, p) => {
-          const heads = hc[p].ending[d.key] || 0;
-          const attain = Math.max(0, Math.min(120, STATE.existingBenchCoverPct)) / 100;
-          return s + heads * (ote / 12) * attain;
-        }, 0);
-        html += `<td class="fy-c">${fmtM(fyOte)}</td><td class="notes-c">${noteInput(row.k)}</td></tr>`;
-        continue;
-      }
       const tag = row.readonly ? originTag('from Sales', 'sales', { title: 'Open Sales' }) : '';
       html += `<tr${row.tot ? ' class="tot"' : ''}><td>${row.label}${tag}</td>${hcMonthCells(hc, row)}</tr>`;
     }
@@ -6090,7 +6025,7 @@ function plLineTag(spec, line, sec) {
   }
   if (line.from === 'comm_nb' || line.from === 'comm_ren' || line.from === 'comm_tax') {
     return originTag(
-      COMMISSION_INPUTS ? 'from commissions roll-forward' : 'OTE × attain — inputs not loaded',
+      COMMISSION_INPUTS ? 'from commissions roll-forward' : 'not planned — inputs not loaded',
       'bs',
       { scrollTo: 'comm-rf', title: 'Open deferred commissions roll-forward' }
     );
@@ -6194,7 +6129,7 @@ function renderPnL() {
   const fyDept = BUD_P.reduce((s, p) => s + pl[p].depts[spec.key].total, 0);
   html += `
     <div class="ctx-banner"><strong>${spec.label}</strong> → ${originTag('IS · ' + spec.isLabel, 'is', { title: 'Open Income Statement' })} · FY ${fmtM(fyDept)}.
-    Salaries &amp; wages and benefits come from ${originTag('Headcount', 'hc', { hcFocus: (spec.key === 'sales' ? 'total' : spec.key), title: 'Open Headcount' })} (bonus / OTE / severance too).
+    Salaries &amp; wages and benefits come from ${originTag('Headcount', 'hc', { hcFocus: (spec.key === 'sales' ? 'total' : spec.key), title: 'Open Headcount' })} (bonus and severance too).
     ${spec.key === 'marketing'
       ? `Program channels come from ${originTag('GTM', 'gtm', { title: 'Open GTM channels' })} (mix % × total spend). Martech stays discretionary here.`
       : 'Discretionary lines start flat YoY — edit any month cell and use notes for the rationale.'}
@@ -6616,14 +6551,6 @@ function renderCommissionRollforward(comm) {
   }
   html += '</tbody></table>';
 
-  const oteFy = (() => {
-    const hc = computeHcPlan();
-    const attain = plAttainFactor();
-    return BUD_P.reduce((s, p) => s + (hc[p].ending.sales || 0) * ((STATE.nbOteVarAnnual || 0) / 12) * attain
-      + (hc[p].ending.cs || 0) * ((STATE.csOteVarAnnual || 0) / 12) * attain, 0);
-  })();
-  html += `<div class="ctx-banner">Reconciliation to variable OTE: heads × OTE × attainment ${fmtM(oteFy)} vs commissions earned on planned bookings ${fmtM(fy('earnedTot'))} (difference ${fmtM(fy('earnedTot') - oteFy)}). The OTE lever sets loaded payroll on ${originTag('Headcount', 'hc', { hcFocus: 'total', title: 'Open Headcount' })}; the P&amp;L and cash use bookings × rate.</div>`;
-
   html += `<table class="bud-tbl" style="max-width:980px"><tbody><tr class="sec"><td colspan="3">Checks</td></tr>`;
   for (const c of checks) {
     const mark = c.ok ? '<span style="color:var(--teal)">✓ pass</span>' : c.review ? '<span style="color:var(--amber)">review</span>' : '<span style="color:var(--amber)">⚠ fail</span>';
@@ -6880,8 +6807,8 @@ function renderOverview() {
   const { cfs } = computeCfBsPlan();
   const endCash = cfs[BUD_P[11]].ending_cash;
   const m = sales.meta;
-  const salesEnd = hc[BUD_P[11]].ending.sales;
-  const csEnd = hc[BUD_P[11]].ending.cs;
+  const salesEnd = m.decAes;
+  const csEnd = m.decCs;
   const janHc = hc[BUD_P[0]].headsTotal;
   const gtmSm = BUD_P.reduce((s, p) => s + gtm[p].smTotal, 0);
   const grainQ = STATE.ovGrain !== 'm';
@@ -6981,10 +6908,10 @@ function renderOverview() {
       FY net new ${fmtM(fyNn)} ·
       Jan HC ${fmtN(janHc)} <span style="color:var(--text3)">(Dec'26 fcst lock)</span> ·
       NB AEs ${fmtN(salesEnd)}/${fmtN(m.aeNeeded)}
-      <span style="color:${salesEnd >= m.aeNeeded ? 'var(--teal)' : 'var(--amber)'}">${salesEnd >= m.aeNeeded ? 'covered' : 'short'}</span>
+      ${m.aeNeeded == null ? '<span style="color:var(--amber)">not sized</span>' : `<span style="color:${salesEnd >= m.aeNeeded ? 'var(--teal)' : 'var(--amber)'}">${salesEnd >= m.aeNeeded ? 'covered' : 'short'}</span>`}
       · CS ${fmtN(csEnd)}/${fmtN(m.csNeeded)}
-      <span style="color:${csEnd >= m.csNeeded ? 'var(--teal)' : 'var(--amber)'}">${csEnd >= m.csNeeded ? 'covered' : 'short'}</span>
-      · budget cover ${m.coverPct.toFixed(0)}% bench / ${m.hirePct.toFixed(0)}% hires
+      ${m.csNeeded == null ? '<span style="color:var(--amber)">not sized</span>' : `<span style="color:${csEnd >= m.csNeeded ? 'var(--teal)' : 'var(--amber)'}">${csEnd >= m.csNeeded ? 'covered' : 'short'}</span>`}
+      · ${m.coverPct != null ? `budget NB cover ${m.coverPct.toFixed(0)}% bench / ${m.hirePct.toFixed(0)}% hires` : 'bench cover not sized'}
       · GTM S&amp;M ${fmtM(gtmSm)} · IS S&amp;M ${fmtM(BUD_P.reduce((s,p)=>s+is[p].sm,0))}
     </div>`;
 }
@@ -9350,13 +9277,13 @@ function buildBudgetAssurancePacket() {
     mixDevMax,
     avgGrr,
     minGrr,
-    salesEnd: hc[dec].ending.sales,
-    csEnd: hc[dec].ending.cs,
+    salesEnd: m.decAes,
+    csEnd: m.decCs,
     aeNeeded: m.aeNeeded,
     csNeeded: m.csNeeded,
     coverPct: m.coverPct,
     hirePct: m.hirePct,
-    benchTarget: STATE.existingBenchCoverPct,
+    benchTarget: null,
     janHc,
     janHcExpected,
     decHc: hc[dec].headsTotal,
@@ -9418,22 +9345,30 @@ function runBudgetRiskChecks(packet) {
   }
 
   // ── Sales / CS capacity ──
-  if (p.salesEnd >= p.aeNeeded) {
+  if (p.aeNeeded == null) {
+    // Not sized: no team data or no expected attainment.
+  } else if (p.salesEnd >= p.aeNeeded) {
     out.push({ id: 'nb_cover', severity: 'ok', title: 'NB AE coverage', detail: `${fmtN(p.salesEnd)} ending AEs cover need ${fmtN(p.aeNeeded)}.` });
   } else {
     out.push({ id: 'nb_cover', severity: 'high', title: 'NB AE shortfall', detail: `${fmtN(p.salesEnd)} ending vs ${fmtN(p.aeNeeded)} needed for budget NB.` });
   }
 
-  if (p.csEnd >= p.csNeeded) {
+  if (p.csNeeded == null) {
+    // Not sized: no team data.
+  } else if (p.csEnd >= p.csNeeded) {
     out.push({ id: 'cs_cover', severity: 'ok', title: 'CS coverage', detail: `${fmtN(p.csEnd)} ending CS cover need ${fmtN(p.csNeeded)}.` });
   } else {
     out.push({ id: 'cs_cover', severity: 'high', title: 'CS headcount shortfall', detail: `${fmtN(p.csEnd)} ending vs ${fmtN(p.csNeeded)} needed (expansion + churn cover).` });
   }
 
-  if (p.coverPct + 0.5 >= p.benchTarget) {
-    out.push({ id: 'bench', severity: 'ok', title: 'Existing bench cover', detail: `Bench covers ${p.coverPct.toFixed(0)}% of budget (target ${p.benchTarget.toFixed(0)}%).` });
+  // Mirrors the server registry default (constraints.py "bench" target_pct).
+  const benchTarget = p.benchTarget != null ? p.benchTarget : 60;
+  if (p.coverPct == null) {
+    // Not sized: no team data or no expected attainment.
+  } else if (p.coverPct + 0.5 >= benchTarget) {
+    out.push({ id: 'bench', severity: 'ok', title: 'Existing bench cover', detail: `Bench covers ${p.coverPct.toFixed(0)}% of budget NB (target ${benchTarget.toFixed(0)}%).` });
   } else {
-    out.push({ id: 'bench', severity: 'medium', title: 'Bench cover below expectation', detail: `${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% from hires (target bench ${p.benchTarget.toFixed(0)}%).` });
+    out.push({ id: 'bench', severity: 'medium', title: 'Bench cover below expectation', detail: `${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% from hires (target bench ${benchTarget.toFixed(0)}%).` });
   }
 
   // ── GTM / funnel ──
@@ -9508,7 +9443,7 @@ function buildDeterministicAssuranceNarrative(packet, risks) {
   lines.push(
     `GTM sizes ${fmtN(p.fyMql)} MQLs on ${fmtM(p.fyMkt)} program spend at ${p.pipelineCoverage.toFixed(1)}× pipeline cover. ` +
     `Sales ends at ${fmtN(p.salesEnd)} NB AEs / ${fmtN(p.csEnd)} CS ` +
-    `(${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% hires). ` +
+    (p.coverPct != null ? `(${p.coverPct.toFixed(0)}% bench / ${p.hirePct.toFixed(0)}% hires). ` : '(bench cover not sized). ') +
     `HC ${fmtN(p.janHc)} → ${fmtN(p.decHc)}. Dec ending cash ${fmtM(p.endCash)} vs floor ${fmtM(p.cashFloor)} (liquidity cushion, not collections).`,
   );
   if (highs.length) {
@@ -9606,7 +9541,7 @@ function cloneScenarioJson(v) {
 
 const SCENARIO_LEVER_KEYS = [
   'yoyEndingArrGrowthPct', 'pipelineCoverageMult', 'salesAttritionPct',
-  'existingBenchCoverPct', 'csChurnCoverageMult', 'quotaYoyLiftPct',
+  'salesAttainPct', 'csChurnCoverageMult', 'quotaYoyLiftPct',
   'gtmRatesByPeriod', 'mixByPeriod', 'gtmChannelCplByPeriod',
 ];
 
@@ -9735,8 +9670,8 @@ function classifyScenarioOutcome(base, shock) {
       : 'Dec ARR vs YoY target');
   }
 
-  if (shock.salesEnd < shock.aeNeeded) breaks.push('NB AE cover');
-  if (shock.csEnd < shock.csNeeded) breaks.push('CS cover');
+  if (shock.aeNeeded != null && shock.salesEnd < shock.aeNeeded) breaks.push('NB AE cover');
+  if (shock.csNeeded != null && shock.csEnd < shock.csNeeded) breaks.push('CS cover');
   if (shock.fyEbitda < 0 && base.fyEbitda >= 0) {
     watches.push('EBITDA turns negative');
     cashPostureWatch = true;
@@ -10198,7 +10133,7 @@ async function runScenarioMonteCarloAsync(base, snap, n, onProgress, inputs) {
     }
     if (s.decArr < base.targetArr * 0.995) pArrMiss += 1;
     if (s.endCash < base.cashFloor) pCashBreak += 1;
-    if (s.salesEnd < s.aeNeeded) pAeShort += 1;
+    if (s.aeNeeded != null && s.salesEnd < s.aeNeeded) pAeShort += 1;
     const drop = (base.endCash - s.endCash) / Math.max(1, base.endCash);
     if (drop >= 0.25) pWatch25 += 1;
     if (drop >= 0.50) pAlarm50 += 1;

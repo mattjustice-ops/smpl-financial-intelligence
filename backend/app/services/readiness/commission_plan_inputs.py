@@ -15,6 +15,8 @@
   did with Reactivation opportunities.
 - Sales plan (7.25–7.29): expected attainment, quota credit, attainment period, expansion owner and variable
   pay, checked against the loaded quotas, opportunities, payouts and employees (``sales_plan_inputs.py``).
+- Sales team at ``as_of`` (the forecast year end the budget opens from): heads by territory and role,
+  quotas, ramp curves, commission targets and attainment (``sales_team_inputs.py``).
 
 Nothing is filled in: a missing table or field is reported in ``missing``.
 """
@@ -430,10 +432,12 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
     }
 
     from app.services.readiness.sales_plan_inputs import sales_plan
+    from app.services.readiness.sales_team_inputs import sales_team
 
     plans = _plans(db, org.id, missing)
     returns = _returns(db, org.id, answers, plans, as_of, missing)
     sales = sales_plan(db, org.id, answers, as_of)
+    team = sales_team(db, org.id, answers, as_of, sales["measured"])
     chain, tables = _schedule_chain(db, org.id, as_of, missing)
 
     cohorts: dict[str, list[tuple[Decimal, int]]] = defaultdict(list)
@@ -526,6 +530,7 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
         "opening": opening,
         "returns": returns,
         "sales_plan": sales,
+        "sales_team": team,
         "checks": checks,
         "missing": missing,
     }
