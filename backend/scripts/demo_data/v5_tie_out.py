@@ -1716,9 +1716,9 @@ KNOWN_GAPS = [
     "Sales and Customer Success employees work the CRM territory with the most Actual opportunities per head in "
     "their role group when hired; other departments have an office region.",
     "Headcount plan quota capacity includes SDR pipeline quota alongside AE bookings quota.",
-    "Team payroll follows the GL payroll mix of the summary P&L (averaged over 5 months, never falling); in months "
-    "where the summary steps (Feb 2026 Finance, G&A and Support) the team hires ahead or behind and the line's "
-    "non-payroll accounts take the difference.",
+    "Headcount follows the plan (build_workforce.HEADCOUNT_PLAN): ~250 at the June 2026 close, "
+    "straight-line between plan points; each P&L line's non-payroll accounts take the rest of the line (mostly "
+    "marketing programs in S&M). R&D and G&A heads are limited by their P&L lines.",
     "The summary P&L is fixed shares of revenue; 60% of Tier 1 support labor (5010) was reallocated to R&D in every "
     "month and version (support_labor_reclass_log.csv): gross margin and R&D moved, EBITDA did not.",
     "Bonus and the SDR incentive are paid monthly at target with payroll (no accrued bonus liability); Tier 1 Support "

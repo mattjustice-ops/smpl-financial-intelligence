@@ -1,4 +1,4 @@
-"""Workforce from the books: one employee roster whose payroll is the GL's payroll.
+"""Workforce: one employee roster, sized to the headcount plan; the GL books its payroll.
 
 Writes a new folder only (never touches the database):
   python build_workforce.py <source_folder> <output_folder>
@@ -20,11 +20,11 @@ The output is a copy of the source with these files replaced or added:
   Workforce_Planning_Validation_Summary.csv is removed (a v4 check of the old roster).
 
 Rules (agreed with Matt, Oct 8 2026):
-  * The books are the anchor. A team's payroll target is the GL payroll the summary P&L implies before this step
-    (rebuild_gl_to_summary's account mix: 6100/6110/6120 by department, 5010 for Tier 1 Support and 5020 for
-    Implementation), averaged over 5 months and never falling, because a team does not hire and lay off with the
-    month-to-month swings of that mix. Each version hires to its own target. rebuild_gl_to_summary then books
-    payroll from the register and the other accounts in the P&L line take the rest of the line.
+  * Headcount is the plan (HEADCOUNT_PLAN): month-end heads by team in Jan 2024, Dec 2025, at the June 2026 close
+    and in Dec 2026 (Budget, Forecast), straight-line between them; exits are backfilled the next month. About 250
+    at the close and 270-275 at Dec 2026 for an ~$88M-ARR company. R&D and G&A are sized to fit their P&L lines.
+    rebuild_gl_to_summary books payroll from the register and the other accounts in each P&L line take the rest of
+    the line (mostly marketing programs in S&M). A team's payroll may not exceed PAYROLL_SHARE_CAP of its P&L line.
   * Teams are the GL departments and cost centers (department_cost_centers.csv). Every role has a cost center, an
     HRIS team (sub_department), a pay plan and a 2026 band. Leaders are on staff from before 2024; other hires keep
     each team's role mix.
@@ -59,8 +59,8 @@ from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_gl_balance_sheet import ACCOUNTS as BS_ACCOUNTS  # noqa: E402
-from rebuild_gl_to_summary import COGS_PAYROLL, PAYROLL_COLUMNS, forecast_seed, rebuild  # noqa: E402
-from sales_team import BOOKINGS_ROLES, CSM_ROLES, TEAM_DEPARTMENTS, TERRITORIES, employee_names, role_group  # noqa: E402
+from rebuild_gl_to_summary import COGS_PAYROLL, PAYROLL_COLUMNS  # noqa: E402
+from sales_team import BOOKINGS_ROLES, TEAM_DEPARTMENTS, TERRITORIES, employee_names, role_group  # noqa: E402
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -71,7 +71,25 @@ BUDGET_FROM = "2025-12"
 ID_PREFIX = {"Actual": "EMP-", "Budget": "BEMP-", "Forecast": "FEMP-"}
 ID_START = {"Actual": 1001, "Budget": 5001, "Forecast": 7001}
 REQ_PREFIX = {"Actual": "AREQ-", "Budget": "BREQ-", "Forecast": "FREQ-"}
-SMOOTH_MONTHS = 5
+PLAN_POINTS = ("2024-01", "2025-12", CLOSE)
+HEADCOUNT_PLAN = {
+    #                         Jan 2024  Dec 2025  Jun 2026  Budget Dec 2026  Forecast Dec 2026
+    "Engineering":           (33, 47, 59, 69, 67),
+    "Product":               (9, 11, 13, 16, 16),
+    "Sales":                 (36, 48, 52, 56, 55),
+    "Marketing":             (17, 22, 25, 26, 26),
+    "Customer Success":      (14, 20, 21, 22, 22),
+    "Customer Success COGS": (8, 12, 13, 14, 13),
+    "Support":               (4, 6, 7, 8, 8),
+    "Support COGS":          (12, 16, 18, 19, 18),
+    "Finance":               (7, 11, 14, 16, 15),
+    "G&A":                   (12, 19, 26, 29, 28),
+}
+PAYROLL_SHARE_CAP = Decimal("0.92")
+PNL_LINE = {"Sales": "sales_and_marketing", "Marketing": "sales_and_marketing", "Customer Success": "sales_and_marketing",
+            "Engineering": "research_and_development", "Product": "research_and_development",
+            "Finance": "general_and_administrative", "G&A": "general_and_administrative",
+            "Support": "general_and_administrative"}
 
 TAX_RATE = Decimal("0.08")
 HEALTH_MONTHLY = {"2024": Decimal("1050"), "2025": Decimal("1120"), "2026": Decimal("1200")}
@@ -85,8 +103,6 @@ DEFERRALS = ((0.15, Decimal("0")), (0.25, Decimal("0.03")), (0.45, Decimal("0.04
              (0.85, Decimal("0.06")), (0.95, Decimal("0.08")), (1.0, Decimal("0.10")))
 OFFICE_REGIONS = ((0.30, "East"), (0.60, "West"), (0.80, "Central"), (0.90, "South"), (1.0, "Remote"))
 
-SOURCE_LABOR = {"6100", "6110", "6120", "5010", "5020"}
-COGS_UNIT = {"5010": "Support COGS", "5020": "Customer Success COGS"}
 COGS_ACCOUNT = {cc: number for cc, (number, _) in COGS_PAYROLL.items()}
 PAYROLL_DESCRIPTIONS = {
     "6100": "Base salaries and wages, from the payroll register",
@@ -422,57 +438,27 @@ def cost(person: Person, p: str) -> dict[str, Decimal]:
     return out
 
 
-def monthly_total(person: Person, p: str) -> Decimal:
-    return sum(cost(person, p).values(), ZERO)
-
-
-def full_month_cost(role: Role, p: str) -> Decimal:
-    """A new hire's cost in a full month (2026 band midpoint, average deferral)."""
-    salary = Decimal(role.salary)
-    bonus = salary * role.variable if role.plan == B else (role.variable if role.plan == I else ZERO)
-    pay = (salary + bonus) / 12
-    return pay * (1 + TAX_RATE) + HEALTH_MONTHLY[p[:4]] + pay * Decimal("0.035")
-
-
 # ----------------------------------------------------------------------------- targets
 
 
-def labor_targets(src: str) -> dict[str, dict[str, dict[str, Decimal]]]:
-    """{version: {unit: {period: payroll}}} as the GL rebuild would book it from the summary P&L."""
-    out: dict[str, dict[str, dict[str, Decimal]]] = {}
-    actual_rows: list[dict[str, str]] = []
-    for v in VERSIONS:
-        if v == "Forecast":
-            gl = forecast_seed(actual_rows)
-        else:
-            gl = read(os.path.join(src, f"{v}_gl_detail.csv"))[1]
-        summary = read(os.path.join(src, f"{v}_income_statement.csv"))[1]
-        rows, _ = rebuild(v, gl, summary, {})
-        rows = [r for r in rows if r["statement"] != "Balance Sheet"]
-        if v == "Actual":
-            actual_rows = rows
-        a, b = WINDOW[v]
-        t: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
-        for r in rows:
-            p = r["period"][:7]
-            if r["account_number"] not in SOURCE_LABOR or not a <= p <= b:
-                continue
-            u = COGS_UNIT.get(r["account_number"], r["department"])
-            t[u][p] += num(r["amount"])
-        out[v] = t
+def straight_line(points: list[tuple[str, int]]) -> dict[str, int]:
+    """Month-end heads between plan points, rounded half up."""
+    out: dict[str, int] = {}
+    for (a, ha), (b, hb) in zip(points, points[1:]):
+        n = pidx(b) - pidx(a)
+        for i in range(n + 1):
+            out[padd(a, i)] = int(Decimal(ha) + Decimal(hb - ha) * i / n + Decimal("0.5"))
     return out
 
 
-def smooth(series: dict[str, Decimal]) -> dict[str, Decimal]:
-    """Centered 5-month average, never falling."""
-    ps = sorted(series)
-    out, top = {}, ZERO
-    half = SMOOTH_MONTHS // 2
-    for i, p in enumerate(ps):
-        win = ps[max(0, i - half): i + half + 1]
-        top = max(top, sum((series[x] for x in win), ZERO) / len(win))
-        out[p] = top
-    return out
+def head_targets(unit_name: str) -> dict[str, dict[str, int]]:
+    """{version: {period: month-end heads}} from HEADCOUNT_PLAN."""
+    jan24, dec25, close, budget, forecast = HEADCOUNT_PLAN[unit_name]
+    actual = straight_line([(PLAN_POINTS[0], jan24), (PLAN_POINTS[1], dec25), (CLOSE, close)])
+    return {"Actual": actual,
+            "Budget": {p: h for p, h in straight_line([(BUDGET_FROM, dec25), ("2026-12", budget)]).items()
+                       if p >= "2026-01"},
+            "Forecast": {p: h for p, h in straight_line([(CLOSE, close), ("2026-12", forecast)]).items() if p > CLOSE}}
 
 
 # ----------------------------------------------------------------------------- hiring
@@ -515,45 +501,43 @@ def next_role(unit_roles: list[Role], staff: list[Person]) -> Role:
     return max(open_roles, key=lambda r: (r.weight / wsum * total - counts[r], r.weight, r.role))
 
 
-def staff_unit(st: Staffing, unit_name: str, target: dict[str, Decimal], months: list[str], *, planned: bool,
+def staff_unit(st: Staffing, unit_name: str, target: dict[str, int], months: list[str], *, planned: bool,
                opening: bool, exits: bool) -> None:
+    """Hire to the month's planned heads. People leaving in a month still count that month, so exits are backfilled
+    the next month."""
     roles = [r for r in ROLES if r.unit == unit_name]
+
+    def present(p: str) -> list[Person]:
+        return [x for x in st.people if x.role.unit == unit_name and x.hire <= last_day(p)
+                and (x.exit is None or month(x.exit) >= p)]
+
     open_backfills = 0
     for i, p in enumerate(months):
-        mine = [x for x in st.people if x.role.unit == unit_name]
         if opening and i == 0:
-            d0 = first_day(p)
             for r in (r for r in roles if r.seed):
                 hire = dt.date(2016 + int(unit(f"seedy|{r.role}") * 4), 1 + int(unit(f"seedm|{r.role}") * 12), 1)
                 st.hire(r, hire, planned=False)
-            while True:
-                mine = [x for x in st.people if x.role.unit == unit_name]
-                have = sum((monthly_total(x, p) for x in mine), ZERO)
+            mine = present(p)
+            while len(mine) < target[p]:
                 r = next_role(roles, mine)
-                if target.get(p, ZERO) - have < full_month_cost(r, p) / 2:
-                    break
                 back = 1 + int(unit(f"tenure|{unit_name}|{len(mine)}") ** 1.6 * 84)
                 hp = padd(p, -back)
-                st.hire(r, dt.date(int(hp[:4]), int(hp[5:7]), 1 if unit(f"day|{unit_name}|{len(mine)}") < 0.6 else 16),
-                         planned=False)
+                mine.append(st.hire(r, dt.date(int(hp[:4]), int(hp[5:7]),
+                                               1 if unit(f"day|{unit_name}|{len(mine)}") < 0.6 else 16), planned=False))
             if exits:
                 schedule_exits(st, unit_name, months)
             continue
-        have = sum((monthly_total(x, p) for x in mine), ZERO)
-        open_backfills += sum(1 for x in mine if x.exit and month(x.exit) == padd(p, -1))
-        while True:
-            mine = [x for x in st.people if x.role.unit == unit_name and x.on_staff(last_day(p))]
+        mine = present(p)
+        open_backfills += sum(1 for x in st.people if x.role.unit == unit_name and x.exit
+                              and month(x.exit) == padd(p, -1))
+        while len(mine) < target[p]:
             r = next_role(roles, mine)
-            c = full_month_cost(r, p)
-            gap = target.get(p, ZERO) - have
-            if gap < c / 2:
-                break
-            day = 1 if gap >= c else 16
+            day = 1 if unit(f"hireday|{unit_name}|{p}|{len(mine)}") < 0.6 else 16
             person = st.hire(r, dt.date(int(p[:4]), int(p[5:7]), day), planned=planned, replacement=open_backfills > 0)
             open_backfills = max(0, open_backfills - 1)
             if exits:
                 schedule_exits(st, unit_name, months, only=person)
-            have += monthly_total(person, p)
+            mine.append(person)
 
 
 def schedule_exits(st: Staffing, unit_name: str, months: list[str], only: Person | None = None) -> None:
@@ -602,11 +586,10 @@ def build(src: str, dst: str) -> list[str]:
     notes: list[str] = []
     org = read(os.path.join(src, "Actual_customers.csv"))[1][0]["organization_id"]
     demand = Counter(o["region"] for o in read(os.path.join(src, "Actual_opportunities.csv"))[1])
-    targets = labor_targets(src)
     units = sorted({r.unit for r in ROLES})
-    missing = [u for v in VERSIONS for u in targets[v] if u not in units]
-    if missing:
-        raise ValueError(f"GL payroll for teams with no roles: {sorted(set(missing))}")
+    if set(HEADCOUNT_PLAN) != set(units):
+        raise ValueError(f"HEADCOUNT_PLAN teams {sorted(HEADCOUNT_PLAN)} differ from the role teams {units}")
+    targets = {u: head_targets(u) for u in units}
     role_ccs = {(department_of(r.unit), r.cost_center) for r in ROLES}
     for v in VERSIONS:
         ccs = {(r["department"], r["cost_center"]) for r in read(os.path.join(src, f"{v}_department_cost_centers.csv"))[1]}
@@ -619,7 +602,7 @@ def build(src: str, dst: str) -> list[str]:
     actual = Staffing("Actual", demand, ID_START["Actual"])
     a_months = prange(*WINDOW["Actual"])
     for u in units:
-        staff_unit(actual, u, smooth(targets["Actual"][u]), a_months, planned=False, opening=True, exits=True)
+        staff_unit(actual, u, targets[u]["Actual"], a_months, planned=False, opening=True, exits=True)
     renumber(actual.people, "Actual")
 
     def plan_view(x: Person) -> Person:
@@ -634,10 +617,10 @@ def build(src: str, dst: str) -> list[str]:
     forecast = Staffing("Forecast", demand, ID_START["Forecast"])
     forecast.people = [copy.copy(x) for x in actual.people]
     for u in units:
-        staff_unit(budget, u, smooth(targets["Budget"][u]), prange(*WINDOW["Budget"]), planned=True, opening=False,
+        staff_unit(budget, u, targets[u]["Budget"], prange(*WINDOW["Budget"]), planned=True, opening=False,
                    exits=False)
-        staff_unit(forecast, u, smooth(targets["Forecast"][u]), prange(*WINDOW["Forecast"]), planned=True,
-                   opening=False, exits=False)
+        staff_unit(forecast, u, targets[u]["Forecast"], prange(*WINDOW["Forecast"]), planned=True, opening=False,
+                   exits=False)
     renumber([x for x in budget.people if x.planned], "Budget")
     renumber([x for x in forecast.people if x.planned], "Forecast")
 
@@ -666,7 +649,7 @@ def build(src: str, dst: str) -> list[str]:
         write_chart_of_accounts(dst, v)
     write_bands(dst)
     write_allocation_rules(dst, registers["Actual"])
-    report_fit(targets, registers, notes)
+    check_payroll_share(src, registers, notes)
     with open(os.path.join(dst, "workforce_build_notes.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(notes) + "\n")
     return notes
@@ -930,23 +913,27 @@ def write_allocation_rules(dst, actual_register) -> None:
     write(os.path.join(dst, "Department_Allocation_Rules.csv"), fields, rows)
 
 
-def report_fit(targets, registers, notes) -> None:
+def check_payroll_share(src: str, registers: dict[str, list[dict]], notes: list[str]) -> None:
+    """Payroll by P&L line against the summary P&L line: at most PAYROLL_SHARE_CAP, so the line's other accounts
+    (software, hosting, programs, facilities) keep a share."""
+    over = []
     for v in VERSIONS:
-        got: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+        lines = {r["period"][:7]: r for r in read(os.path.join(src, f"{v}_income_statement.csv"))[1]}
+        pay: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
         for r in registers[v]:
-            u = {"SUP-TIER1": "Support COGS", "CS-IMPL": "Customer Success COGS"}.get(r["cost_center"], r["department"])
-            got[(u, r["period"])] += r["total_payroll_cost"]
-        worst = []
-        for u, series in targets[v].items():
-            for p, t in series.items():
-                if t:
-                    worst.append(((got[(u, p)] - t) / t, u, p))
-        worst.sort()
-        tot_t = sum((t for s in targets[v].values() for t in s.values()), ZERO)
-        tot_g = sum(got.values(), ZERO)
-        notes.append(f"{v} payroll vs the GL mix it replaces: register {tot_g:,.0f} vs {tot_t:,.0f} "
-                     f"({(tot_g - tot_t) / tot_t:+.1%}); team-months from {worst[0][0]:+.1%} ({worst[0][1]} {worst[0][2]}) "
-                     f"to {worst[-1][0]:+.1%} ({worst[-1][1]} {worst[-1][2]})")
+            line = "cost_of_revenue" if r["cost_center"] in COGS_ACCOUNT else PNL_LINE[r["department"]]
+            pay[(line, r["period"])] += r["total_payroll_cost"]
+        shares: dict[str, list[Decimal]] = defaultdict(list)
+        for (line, p), amt in pay.items():
+            share = amt / num(lines[p][line])
+            shares[line].append(share)
+            if share > PAYROLL_SHARE_CAP:
+                over.append(f"{v} {p} {line} {share:.1%}")
+        notes.append(f"{v} payroll share of its P&L line: " + "; ".join(
+            f"{line} {min(s):.0%}-{max(s):.0%}" for line, s in sorted(shares.items())))
+    if over:
+        raise ValueError(f"payroll above {PAYROLL_SHARE_CAP:.0%} of its P&L line: {', '.join(over[:8])}"
+                         + (f" (+{len(over) - 8} more)" if len(over) > 8 else ""))
 
 
 if __name__ == "__main__":
