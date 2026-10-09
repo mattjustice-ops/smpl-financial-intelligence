@@ -51,9 +51,21 @@ def test_payroll_register_and_policies_listed_for_every_version():
 
 def test_ap_and_schedule_objects_are_declared_for_onboarding():
     by_object = Counter(r["object_id"] for r in manifest_rows())
-    for oid in ("vendor_bill", "vendor_payment", "ap_aging", "fixed_asset", "debt_schedule", "prepaid_schedule",
-                "sbc_schedule", "commission_payout"):
+    for oid in ("vendor", "vendor_bill", "vendor_payment", "ap_aging", "fixed_asset", "debt_schedule",
+                "prepaid_schedule", "sbc_schedule", "commission_payout", "vendor_spend_plan"):
         assert by_object[oid] > 0, oid
+
+
+def test_ap_subledger_is_actual_only_and_plans_use_the_spend_plan():
+    rows = manifest_rows()
+    names = {r["file_name"] for r in rows}
+    for base in ("vendor_master", "vendor_bills", "vendor_payments", "AP_Aging"):
+        assert f"Actual_{base}.csv" in names
+        assert not {f"Budget_{base}.csv", f"Forecast_{base}.csv"} & names, base
+    assert {"Budget_vendor_spend_plan.csv", "Forecast_vendor_spend_plan.csv"} <= names
+    assert not [n for n in names if "vendor_accrual_payment_schedule" in n]
+    order = [r["object_id"] for r in rows]
+    assert order.index("vendor") < order.index("vendor_bill") < order.index("vendor_payment") < order.index("ap_aging")
 
 
 def test_shared_workforce_inputs_carry_no_version_prefix():
@@ -68,6 +80,9 @@ def test_classify():
     assert classify("forecast_PAYROLL_REGISTER.csv") == "payroll_line"
     assert classify("Compensation_Bands.csv") == "hiring_plan_input"
     assert classify("Budget_gl_detail.csv") == "budget_line"
+    assert classify("Actual_vendor_master.csv") == "vendor"
+    assert classify("Forecast_vendor_spend_plan.csv") == "vendor_spend_plan"
+    assert classify("Budget_AP_Aging.csv") is None
     assert classify("Actual_unknown_export.csv") is None
 
 
