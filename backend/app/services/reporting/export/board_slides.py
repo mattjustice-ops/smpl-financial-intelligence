@@ -174,6 +174,23 @@ def _exec_callouts(bundle: ReportingBundle) -> list[CalloutBlock]:
     return out[:6]
 
 
+def _working_capital_rows(bundle: ReportingBundle) -> list[list[str]]:
+    wc = bundle.working_capital
+    if wc is None:
+        return []
+    cur = bundle.currency
+    rows: list[list[str]] = []
+    for label, balance, days_label, days, past_due in (
+        ("AP", wc.accounts_payable, "DPO", wc.dpo_days, wc.ap_past_due),
+        ("AR", wc.accounts_receivable, "DSO", wc.dso_days, wc.ar_past_due),
+    ):
+        if balance is None:
+            continue
+        rows.append([f"{label} ({days_label} {days} days)" if days is not None else label, fmt_money(balance, cur)])
+        rows.append([f"{label} past due", fmt_money(past_due, cur)])
+    return rows
+
+
 def _risk_matrix_callouts(bundle: ReportingBundle, comm: SlideCommentary) -> list[CalloutBlock]:
     from app.services.reporting.export.board_metrics_snapshot import build_metrics_snapshot
 
@@ -195,6 +212,21 @@ def _risk_matrix_callouts(bundle: ReportingBundle, comm: SlideCommentary) -> lis
                 owner="CFO",
             )
         )
+    wc = bundle.working_capital
+    if wc is not None:
+        for label, total, parties in (
+            ("Payables", wc.ap_past_due, wc.past_due_vendors),
+            ("Receivables", wc.ar_past_due, wc.past_due_customers),
+        ):
+            if total and parties:
+                names = ", ".join(f"{p.name} {fmt_money(p.past_due, bundle.currency)}" for p in parties[:3])
+                items.append(
+                    CalloutBlock(
+                        kind="risk",
+                        text=f"{label} — {fmt_money(total, bundle.currency)} past due at {wc.period}: {names}.",
+                        owner="CFO",
+                    )
+                )
     if bundle.validation.failed_count:
         items.append(
             CalloutBlock(
@@ -400,8 +432,10 @@ def _build_slide_by_id(
                 [
                     ["Ending Cash", fmt_money(m.cash_actual, bundle.currency)],
                     ["FY Outlook", fmt_money(m.cash_forecast, bundle.currency)],
+                    *_working_capital_rows(bundle),
                 ],
             ),
+            max_table_rows=6,
         )
 
     if slide_id == "headcount":

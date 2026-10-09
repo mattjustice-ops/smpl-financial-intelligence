@@ -77,6 +77,32 @@ class CashCollectionsForecastInput(_ApiModel):
     aging_buckets: dict[str, Decimal] = Field(default_factory=dict)
 
 
+class PastDueParty(_ApiModel):
+    name: str
+    past_due: Decimal
+    oldest_bucket: str
+
+
+class WorkingCapitalInput(_ApiModel):
+    """AP and AR aging at one month-end. Amounts are positive; buckets are by days past the due date."""
+
+    period: str
+    accounts_payable: Optional[Decimal] = None
+    ap_aging_buckets: dict[str, Decimal] = Field(default_factory=dict)
+    ap_past_due: Optional[Decimal] = None
+    dpo_days: Optional[Decimal] = None
+    past_due_vendors: list[PastDueParty] = Field(default_factory=list)
+    vendor_payments: Optional[int] = None
+    late_vendor_payments: Optional[int] = None
+    late_vendor_payment_amount: Optional[Decimal] = None
+    accounts_receivable: Optional[Decimal] = None
+    ar_aging_buckets: dict[str, Decimal] = Field(default_factory=dict)
+    ar_past_due: Optional[Decimal] = None
+    dso_days: Optional[Decimal] = None
+    past_due_customers: list[PastDueParty] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class KpiTrend(_ApiModel):
     period_label: str
     arr: Optional[Decimal] = None
@@ -148,6 +174,7 @@ class CommentaryInputs(_ApiModel):
     bookings_forecast: Optional[BookingsForecastInput] = None
     revenue_forecast: Optional[RevenueForecastInput] = None
     cash_forecast: Optional[CashCollectionsForecastInput] = None
+    working_capital: Optional[WorkingCapitalInput] = None
     kpi_trends: list[KpiTrend] = Field(default_factory=list)
     actuals_vs_forecast: list[VarianceRow] = Field(default_factory=list)
     pipeline_changes: list[PipelineChange] = Field(default_factory=list)

@@ -12,6 +12,7 @@ from app.services.commentary.schemas import (
     PipelineChange,
     RevenueForecastInput,
     VarianceRow,
+    WorkingCapitalInput,
 )
 from app.services.dashboard.schemas import (
     ExecutiveFlowResponse,
@@ -197,6 +198,7 @@ def build_commentary_inputs(
     bundle_data: ExecutiveFlowResponse,
     financial: SummaryResponse | None,
     comparison_waterfalls: dict[str, list[WaterfallSummaryRow]] | None = None,
+    working_capital: WorkingCapitalInput | None = None,
 ) -> CommentaryInputs:
     period = to_period(as_of_period)
     arr_rows = (comparison_waterfalls or {}).get("arr")
@@ -276,6 +278,7 @@ def build_commentary_inputs(
         mrr_waterfall=mrr,
         revenue_forecast=revenue_forecast,
         cash_forecast=cash_forecast,
+        working_capital=working_capital,
         pipeline_changes=pipeline_changes,
         actuals_vs_forecast=[row for row in variance_rows if row is not None],
     )

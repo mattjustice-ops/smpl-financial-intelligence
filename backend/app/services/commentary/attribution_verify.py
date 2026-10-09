@@ -868,6 +868,7 @@ def build_attribution_package_from_commentary_inputs(
       - customer_movement counts / notable customers
       - quota_attainment segments / rep names
       - cash aging bucket keys
+      - working capital: past-due AP / AR, DPO, DSO, late vendor payments, past-due vendor and customer names
 
     Deal-count / named-logo enrichment: customer_movement counts and
     notable_customers become allowlisted phrases. Invented counts still fail.
@@ -1021,6 +1022,36 @@ def build_attribution_package_from_commentary_inputs(
                             aliases=(label.lower(), f"aging {label.lower()}"),
                         )
                     )
+
+    wc = data.get("working_capital")
+    if isinstance(wc, Mapping):
+        # Sources group drivers for magnitude dominance, so only like amounts share a prefix.
+        for key, label, source, aliases in (
+            ("ap_past_due", "Past-due AP", "working_capital.past_due.ap",
+             ("past-due ap", "past due payables", "ap past due")),
+            ("ar_past_due", "Past-due AR", "working_capital.past_due.ar",
+             ("past-due ar", "past due receivables", "ar past due")),
+            ("dpo_days", "DPO", "working_capital.dpo.days", ("dpo", "days payable outstanding")),
+            ("dso_days", "DSO", "working_capital.dso.days", ("dso", "days sales outstanding")),
+            ("late_vendor_payments", "Late vendor payments", "working_capital.late_vendor_payments.count",
+             ("late vendor payments", "late payments")),
+        ):
+            if wc.get(key) is not None:
+                drivers.append(_driver(key, label, amount=wc.get(key), source=source, aliases=aliases))
+        for field_name, kind in (("past_due_vendors", "vendor"), ("past_due_customers", "customer")):
+            for party in wc.get(field_name) or []:
+                if not isinstance(party, Mapping) or not str(party.get("name") or "").strip():
+                    continue
+                name = str(party["name"]).strip()
+                drivers.append(
+                    _driver(
+                        _slug(f"{kind} {name}"),
+                        name,
+                        amount=party.get("past_due"),
+                        source=f"working_capital.{field_name}.{_slug(name)}",
+                        aliases=(name.lower(),),
+                    )
+                )
 
     # Deduplicate by id keeping first.
     seen: set[str] = set()
