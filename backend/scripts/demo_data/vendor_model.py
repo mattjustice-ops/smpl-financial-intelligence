@@ -2,25 +2,36 @@
 
 Spend (what each vendor charges in a month):
   * Seat-priced software: heads on the roster in the teams that use the tool x the list price for the year.
-  * Fixed contracts: rent, contractors, outside counsel, HubSpot, Bill.com; leases escalate on their anniversary.
+  * Fixed contracts: contractors, outside counsel, HubSpot, Bill.com.
+  * Office leases (ASC 842 operating leases, LEASES): rent escalates on the anniversary and is paid monthly in
+    advance. Rent bills reduce the lease liability (2060); the P&L cost is the straight-line cost on 6510; the
+    right-of-use asset (1600) is the liability less cumulative straight-line cost over payments.
   * Per-hire: recruiting agency fees (VP-level and senior engineering hires) and laptops; laptops are also refreshed
     every 36 months.
   * American Express: one statement a month with T&E by cost center (sales kickoff in January, company offsite in
     September).
-  * Annual contracts (Salesforce, Snowflake, NetSuite, insurance, ...): billed at renewal for 12 months, sized on the
-    heads at renewal, booked to 1200 Prepaids and amortized monthly to the expense account.
+  * Annual contracts (Salesforce, Snowflake, NetSuite, insurance, the AWS Savings Plan, ...): billed at renewal for
+    12 months, seat contracts sized on the heads at renewal, booked to 1200 Prepaids and amortized monthly to the
+    expense account. The Savings Plan's amortization is part of production hosting (5000), so the usage bills are
+    the rest of the account.
   * Usage: the rest of a P&L line whose total is fixed (cloud hosting and third-party fees in cost of revenue,
-    marketing programs in S&M) is split across that account's vendors by share (USAGE_SHARES).
+    marketing programs in S&M) and development cloud (its share of R&D) are split across the account's vendors
+    by share (USAGE_SHARES).
 
 Bills: one bill per vendor per month (per hire for recruiting fees; per renewal for annual contracts), dated on
-the vendor's billing day; usage and services are billed on the last day of the month they cover. Due date = bill
-date + terms. Payments go out in the Thursday payment run on or before the due date; autopay vendors are paid on
-the bill date. Actual payments: about 1 in 6 bills misses its run (one run late, a few by weeks, a handful
-disputed for 6-10 weeks). Payments after the June 2026 close are not in the Actual files: those bills are open.
-Budget and Forecast pay every bill on schedule, including the Actual bills open when they start.
+the vendor's billing day. Usage and services vendors (cloud, ads, events, content, partners, legal, audit,
+contractors, facilities) bill in arrears, in the month after the services; until then the services are accrued
+expenses (2050). Due date = bill date + terms. Payments go out in the Thursday payment run on or before the due date; autopay vendors are paid on
+the bill date. Actual payments: 1 in 10 bills misses its run, and 4 in 10 from vendors whose invoices need a
+budget owner's approval (legal, audit, contractors, events, partners, recruiting, facilities); of the late ones
+70% miss one run, 21% slip 2-4 weeks and 9% are disputed for 6-10 weeks. Payments after the June 2026 close are
+not in the Actual files: those bills are open. Bills dated after the close are not in the Actual files either;
+the services they bill are the accrued expenses at the close.
+Budget and Forecast pay every bill on schedule, including the Actual bills open (or not yet billed) when they start.
 
 The Actual months before January 2024 (the GL's opening month) are billed from the January 2024 roster and P&L
-so the opening AP and prepaid balances are the bills and contracts open at January 31, 2024.
+so the opening AP, prepaid and accrued expense balances are the bills, contracts and unbilled services open at
+January 31, 2024.
 """
 
 from __future__ import annotations
@@ -28,6 +39,7 @@ from __future__ import annotations
 import calendar
 import csv
 import datetime as dt
+import functools
 import hashlib
 import os
 from collections import defaultdict
@@ -43,6 +55,12 @@ WINDOW = {"Actual": (FIRST, CLOSE), "Budget": ("2026-01", "2026-12"), "Forecast"
 PRICE_GROWTH = Decimal("0.05")
 PREPAID_ACCOUNT = "1200"
 AP_ACCOUNT = "2000"
+ACCRUED_ACCOUNT = "2050"
+LEASE_LIABILITY_ACCOUNT = "2060"
+ROU_ACCOUNT = "1600"
+RENT_ACCOUNT = "6510"
+# Bill lines coded to the balance sheet, not the P&L: annual contracts paid up front and lease payments.
+BALANCE_SHEET_LINE_ACCOUNTS = frozenset({PREPAID_ACCOUNT, LEASE_LIABILITY_ACCOUNT})
 
 # account number -> (name, statement category, account group, expense type, description); added to the COA.
 VENDOR_ACCOUNTS = {
@@ -66,17 +84,21 @@ class Vendor:
     method: str
     bill_day: int
     is_1099: bool = False
+    # Invoices routed to a budget owner for approval (services billed for work done): paid late more often.
+    approval: bool = False
+    # Billed in arrears: a month's services are billed on bill_day of the next month (accrued at month end).
+    arrears: bool = False
 
 
 V = Vendor
 VENDORS: dict[str, Vendor] = {v.id: v for v in (
-    V("V1001", "Amazon Web Services", "Cloud Infrastructure", 30, "ACH", 31),
-    V("V1002", "Datadog", "Cloud Infrastructure", 30, "ACH", 31),
-    V("V1003", "Cloudflare", "Cloud Infrastructure", 30, "ACH", 31),
-    V("V1004", "OpenAI", "Third-Party Product Services", 0, "Autopay", 31),
-    V("V1005", "Twilio", "Third-Party Product Services", 0, "Autopay", 31),
-    V("V1006", "Plaid", "Third-Party Product Services", 30, "ACH", 31),
-    V("V1007", "Merge API", "Third-Party Product Services", 30, "ACH", 31),
+    V("V1001", "Amazon Web Services", "Cloud Infrastructure", 30, "ACH", 3, arrears=True),
+    V("V1002", "Datadog", "Cloud Infrastructure", 30, "ACH", 2, arrears=True),
+    V("V1003", "Cloudflare", "Cloud Infrastructure", 30, "ACH", 1, arrears=True),
+    V("V1004", "OpenAI", "Third-Party Product Services", 0, "Autopay", 1, arrears=True),
+    V("V1005", "Twilio", "Third-Party Product Services", 0, "Autopay", 1, arrears=True),
+    V("V1006", "Plaid", "Third-Party Product Services", 30, "ACH", 5, arrears=True),
+    V("V1007", "Merge API", "Third-Party Product Services", 30, "ACH", 1, arrears=True),
     V("V1010", "Google Workspace", "Software", 0, "Autopay", 1),
     V("V1011", "Zoom Video Communications", "Software", 30, "ACH", 5),
     V("V1012", "1Password", "Software", 0, "Autopay", 8),
@@ -100,39 +122,42 @@ VENDORS: dict[str, Vendor] = {v.id: v for v in (
     V("V1031", "Gong", "Sales Software", 30, "ACH", 1),
     V("V1032", "Outreach", "Sales Software", 30, "ACH", 1),
     V("V1033", "ZoomInfo", "Sales Software", 30, "ACH", 1),
-    V("V1034", "LinkedIn", "Advertising and Sales Software", 30, "ACH", 31),
-    V("V1040", "Google Ads", "Advertising", 30, "ACH", 31),
-    V("V1041", "Microsoft Advertising", "Advertising", 30, "ACH", 31),
-    V("V1042", "Meta Platforms", "Advertising", 30, "ACH", 31),
-    V("V1043", "ON24", "Events and Webinars", 30, "ACH", 31),
-    V("V1044", "Cvent", "Events and Webinars", 30, "ACH", 31),
-    V("V1045", "Summit Events Group", "Events and Webinars", 45, "ACH", 31),
-    V("V1046", "CFO Leadership Forum", "Events and Webinars", 15, "ACH", 31),
-    V("V1047", "G2", "Content and Syndication", 30, "ACH", 31),
-    V("V1048", "TechTarget", "Content and Syndication", 45, "ACH", 31),
-    V("V1049", "Integrate", "Content and Syndication", 30, "ACH", 31),
-    V("V1050", "Brightline Content Studio", "Content and Syndication", 15, "ACH", 31, is_1099=True),
-    V("V1051", "Ledgerwise Partners", "Partner Marketing", 60, "ACH", 31),
-    V("V1052", "Northstar CPA Alliance", "Partner Marketing", 60, "ACH", 31),
+    V("V1034", "LinkedIn", "Advertising and Sales Software", 30, "ACH", 1, arrears=True),
+    V("V1040", "Google Ads", "Advertising", 30, "ACH", 1, arrears=True),
+    V("V1041", "Microsoft Advertising", "Advertising", 30, "ACH", 5, arrears=True),
+    V("V1042", "Meta Platforms", "Advertising", 30, "ACH", 1, arrears=True),
+    V("V1043", "ON24", "Events and Webinars", 30, "ACH", 5, arrears=True),
+    V("V1044", "Cvent", "Events and Webinars", 30, "ACH", 5, arrears=True),
+    V("V1045", "Summit Events Group", "Events and Webinars", 45, "ACH", 10, approval=True, arrears=True),
+    V("V1046", "CFO Leadership Forum", "Events and Webinars", 15, "ACH", 10, approval=True, arrears=True),
+    V("V1047", "G2", "Content and Syndication", 30, "ACH", 5, arrears=True),
+    V("V1048", "TechTarget", "Content and Syndication", 45, "ACH", 10, arrears=True),
+    V("V1049", "Integrate", "Content and Syndication", 30, "ACH", 5, arrears=True),
+    V("V1050", "Brightline Content Studio", "Content and Syndication", 15, "ACH", 5, is_1099=True, approval=True,
+      arrears=True),
+    V("V1051", "Ledgerwise Partners", "Partner Marketing", 60, "ACH", 15, approval=True, arrears=True),
+    V("V1052", "Northstar CPA Alliance", "Partner Marketing", 60, "ACH", 15, approval=True, arrears=True),
     V("V1060", "Harborview Properties", "Rent", 0, "ACH", 1),
     V("V1061", "Eastgate Office Partners", "Rent", 0, "ACH", 1),
-    V("V1062", "Metro Facility Services", "Facilities", 15, "ACH", 31),
-    V("V1063", "City Utilities", "Facilities", 15, "ACH", 20),
+    V("V1062", "Metro Facility Services", "Facilities", 15, "ACH", 5, approval=True, arrears=True),
+    V("V1063", "City Utilities", "Facilities", 15, "ACH", 12, arrears=True),
     V("V1064", "Amazon Business", "Office Supplies", 30, "ACH", 25),
     V("V1065", "CDW", "Computer Equipment", 30, "ACH", 20),
     V("V1066", "American Express", "Corporate Card", 25, "ACH", 22),
     V("V1067", "Summit Risk Advisors", "Insurance", 30, "ACH", 1),
-    V("V1070", "Brennan Cole LLP", "Legal", 30, "Check", 31, is_1099=True),
-    V("V1071", "Hartwell & Pierce LLP", "Audit and Tax", 30, "ACH", 31),
-    V("V1072", "Talentbridge Search", "Recruiting", 30, "ACH", 15),
-    V("V1073", "Northwind Software Partners", "Contract Engineering", 45, "ACH", 31, is_1099=True),
+    V("V1070", "Brennan Cole LLP", "Legal", 30, "Check", 10, is_1099=True, approval=True, arrears=True),
+    V("V1071", "Hartwell & Pierce LLP", "Audit and Tax", 30, "ACH", 10, approval=True, arrears=True),
+    V("V1072", "Talentbridge Search", "Recruiting", 30, "ACH", 15, approval=True),
+    V("V1073", "Northwind Software Partners", "Contract Engineering", 45, "ACH", 5, is_1099=True, approval=True,
+      arrears=True),
 )}
 
 # Usage vendors: the account's monthly amount is split by these shares (they add to 1).
 USAGE_SHARES: dict[str, tuple[tuple[str, Decimal], ...]] = {
-    "5000": (("V1001", Decimal("0.86")), ("V1002", Decimal("0.09")), ("V1003", Decimal("0.05"))),
+    "5000": (("V1001", Decimal("0.80")), ("V1002", Decimal("0.13")), ("V1003", Decimal("0.07"))),
     "5030": (("V1004", Decimal("0.35")), ("V1005", Decimal("0.25")), ("V1006", Decimal("0.25")),
              ("V1007", Decimal("0.15"))),
+    "6410": (("V1001", Decimal("0.90")), ("V1002", Decimal("0.10"))),
     "6300": (("V1040", Decimal("0.85")), ("V1041", Decimal("0.15"))),
     "6310": (("V1034", Decimal("0.70")), ("V1042", Decimal("0.30"))),
     "6320": (("V1043", Decimal("0.20")), ("V1044", Decimal("0.15")), ("V1045", Decimal("0.40")),
@@ -169,6 +194,8 @@ ANNUAL_SEATS = (
 )
 # (vendor, account, department, cost center, renewal month, {renewal year: annual amount}, description)
 ANNUAL_FIXED = (
+    ("V1001", "5000", "Engineering", "ENG-DEVOPS", 10, {2023: 2400000, 2024: 2900000, 2025: 3400000, 2026: 3900000},
+     "AWS Compute Savings Plan, 1-year term paid all upfront (about a third of production compute)"),
     ("V1020", "6420", "Engineering", "ENG-DATA", 1, {2023: 180000, 2024: 240000, 2025: 300000, 2026: 360000},
      "Snowflake capacity commitment"),
     ("V1023", "6400", "Finance", "FIN-ACCT", 1, {2023: 84000, 2024: 96000, 2025: 110000, 2026: 125000},
@@ -201,18 +228,21 @@ MONTHLY_FIXED = (
     ("V1070", "6500", "G&A", "GA-LEGAL", {2023: 24000, 2024: 24000, 2025: 28000, 2026: 32000}, None,
      "Outside counsel: commercial contracts, employment and corporate matters", True),
 )
-# Leases: (vendor, first month, monthly rent in the first lease year, escalation month)
-LEASES = (("V1060", HISTORY_FROM, Decimal("52000"), 3), ("V1061", "2025-04", Decimal("26000"), 4))
 LEASE_ESCALATION = Decimal("0.03")
+LEASE_DEPARTMENT, LEASE_COST_CENTER = "G&A", "GA-OPS"
+# Incremental borrowing rate used to discount the lease payments (ASC 842).
+LEASE_DISCOUNT_RATE = Decimal("0.07")
 # Audit and tax: {fiscal year audited: fee}, billed in progress bills the next year.
 AUDIT_FEES = {2022: 190000, 2023: 210000, 2024: 240000, 2025: 275000}
 AUDIT_BILLING = ((2, Decimal("0.30")), (3, Decimal("0.45")), (4, Decimal("0.25")))
 TAX_FEES = {2022: 48000, 2023: 52000, 2024: 58000, 2025: 64000}
 TAX_BILLING = ((3, Decimal("0.60")), (10, Decimal("0.40")))
+# Actual bills paid in their scheduled run; the late ones miss one run, slip 2-4 weeks, or are disputed for 6-10.
+ON_TIME, ON_TIME_APPROVAL = 0.90, 0.60
+LATE_ONE_RUN, LATE_WEEKS = 0.70, 0.21
 RECRUITING_FEE = Decimal("0.20")
 LAPTOP = Decimal("2300")
 LAPTOP_LIFE_MONTHS = 36
-DEV_CLOUD_PER_ENGINEER = Decimal("950")
 FACILITIES_PER_OFFICE_HEAD = Decimal("95")
 UTILITIES_BASE, UTILITIES_PER_OFFICE_HEAD = Decimal("4000"), Decimal("15")
 SUPPLIES_PER_HEAD = Decimal("22")
@@ -293,6 +323,7 @@ class Bill:
     lines: list[Line]
     paid_date: dt.date | None = None
     payment_id: str = ""
+    period: str = ""  # month the bill's services (or the contract) start
 
     @property
     def total(self) -> Decimal:
@@ -324,6 +355,86 @@ class Contract:
         if k < 0:
             return ZERO
         return self.amount - sum((self.amortization(padd(self.start, i)) for i in range(min(k + 1, self.months))), ZERO)
+
+
+@dataclass(frozen=True)
+class LeaseMonth:
+    period: str
+    payment: Decimal
+    straight_line_cost: Decimal
+    accretion: Decimal
+    rou_amortization: Decimal
+    new_liability: Decimal
+    liability: Decimal
+    rou_asset: Decimal
+
+
+@dataclass(frozen=True)
+class Lease:
+    """Operating lease (ASC 842): rent paid at the start of each month, escalating every lease year.
+
+    Liability = remaining payments discounted at LEASE_DISCOUNT_RATE; cost = total payments straight-line over the
+    term; right-of-use asset = liability less (cumulative cost - cumulative payments)."""
+    id: str
+    vendor: str
+    commencement: str
+    months: int
+    rent: Decimal
+    rent_from: str  # first month of the lease year whose monthly rent is ``rent``
+    description: str
+
+    @property
+    def end(self) -> str:
+        return padd(self.commencement, self.months - 1)
+
+    def payment(self, p: str) -> Decimal:
+        if not self.commencement <= p <= self.end:
+            return ZERO
+        return q(self.rent * (1 + LEASE_ESCALATION) ** ((pidx(p) - pidx(self.rent_from)) // 12))
+
+    @functools.cache
+    def schedule(self) -> dict[str, LeaseMonth]:
+        months = prange(self.commencement, self.end)
+        pays = [self.payment(p) for p in months]
+        rate = 1 + LEASE_DISCOUNT_RATE / 12
+
+        def pv(k: int) -> Decimal:
+            """Payments k.. at the start of month k."""
+            return q(sum((pays[j] / rate ** (j - k) for j in range(k, len(pays))), ZERO))
+
+        total = sum(pays, ZERO)
+        each = q(total / self.months)
+        out: dict[str, LeaseMonth] = {}
+        liability = rou = cum_cost = cum_paid = ZERO
+        for k, p in enumerate(months):
+            new = pv(0) if k == 0 else ZERO
+            cost = total - each * (self.months - 1) if k == self.months - 1 else each
+            end = pv(k + 1) if k + 1 < len(pays) else ZERO
+            cum_cost += cost
+            cum_paid += pays[k]
+            end_rou = end - (cum_cost - cum_paid)
+            out[p] = LeaseMonth(p, pays[k], cost, end - (liability + new - pays[k]), rou + new - end_rou, new, end,
+                                end_rou)
+            liability, rou = end, end_rou
+        return out
+
+    def at(self, p: str) -> LeaseMonth | None:
+        return self.schedule().get(p)
+
+    def balances(self, p: str) -> tuple[Decimal, Decimal]:
+        """(lease liability, right-of-use asset) at the end of ``p``."""
+        if p < self.commencement or p > self.end:
+            return ZERO, ZERO
+        m = self.schedule()[p]
+        return m.liability, m.rou_asset
+
+
+LEASES = (
+    Lease("LEASE-V1060", "V1060", "2021-03", 84, Decimal("52000"), "2022-03",
+          "Harborview Properties headquarters lease, 7 years from March 2021"),
+    Lease("LEASE-V1061", "V1061", "2025-04", 60, Decimal("26000"), "2025-04",
+          "Eastgate Office Partners second office lease, 5 years from April 2025"),
+)
 
 
 class Roster:
@@ -406,18 +517,13 @@ class VendorModel:
             if noisy:
                 amt *= Decimal(str(round(0.7 + 0.7 * unit(f"{vendor}-{p}"), 4)))
             add(vendor, account, dept, cc, amt, desc)
-        for vendor, first, rent, esc_month in LEASES:
-            if p < first:
-                continue
-            steps = sum(1 for yy in range(int(first[:4]), int(p[:4]) + 1) if first < f"{yy}-{esc_month:02d}" <= p)
-            add(vendor, "6510", "G&A", "GA-OPS", rent * (1 + LEASE_ESCALATION) ** steps, "Office rent")
+        for lease in LEASES:
+            add(lease.vendor, LEASE_LIABILITY_ACCOUNT, LEASE_DEPARTMENT, LEASE_COST_CENTER, lease.payment(p),
+                f"Office rent (operating lease payment; cost is straight-line on {RENT_ACCOUNT})")
         office = r.office_heads(p)
         add("V1062", "6510", "G&A", "GA-OPS", office * FACILITIES_PER_OFFICE_HEAD, f"Cleaning and maintenance, {office} office staff")
         add("V1063", "6510", "G&A", "GA-OPS", UTILITIES_BASE + office * UTILITIES_PER_OFFICE_HEAD, "Utilities")
         add("V1064", "6530", "G&A", "GA-OPS", r.heads(p) * SUPPLIES_PER_HEAD, "Office supplies")
-        eng = r.heads(p, {"Engineering"})
-        add("V1001", "6410", "Engineering", "ENG-PLAT", eng * DEV_CLOUD_PER_ENGINEER,
-            f"Development and staging environments, {eng} engineers")
         hires = r.hires(p)
         refresh = Decimal(r.heads(p)) / LAPTOP_LIFE_MONTHS
         add("V1065", "6430", "G&A", "GA-IT", (len(hires) + refresh) * LAPTOP,
@@ -505,7 +611,8 @@ class VendorModel:
             for ln in self.monthly_lines(version, p) + self.usage_lines(version, p):
                 by_vendor[ln.vendor].append(ln)
             for vendor, lines in by_vendor.items():
-                drafts.append((on_day(p, VENDORS[vendor].bill_day), vendor, lines, p))
+                v = VENDORS[vendor]
+                drafts.append((on_day(padd(p, 1) if v.arrears else p, v.bill_day), vendor, lines, p))
             for d, ln in self.hire_bills(version, p):
                 drafts.append((d, ln.vendor, [ln], p))
         led.contracts = self.contracts(version)
@@ -524,20 +631,23 @@ class VendorModel:
             counter[vendor] += 1
             bill = Bill(f"{prefix}-{p.replace('-', '')}-{n:05d}", vendor,
                         f"{vendor[1:]}-{d.strftime('%y%m')}{counter[vendor]:03d}", d, d + dt.timedelta(days=v.terms),
-                        lines)
+                        lines, period=p)
             bill.paid_date = self._pay_date(bill, late=version == "Actual")
             led.bills.append(bill)
         if version == "Actual":
+            # Bills dated after the close (services through the close billed in arrears) stay in the ledger,
+            # unpaid: they are the accrued expenses at the close. The Actual files leave them out.
             close = last_day(CLOSE)
             for b in led.bills:
                 if b.paid_date and b.paid_date > close:
                     b.paid_date = None
         else:
-            start = dt.date.fromisoformat(f"{WINDOW[version][0]}-01")
+            start_month = WINDOW[version][0]
+            start = dt.date.fromisoformat(f"{start_month}-01")
             carried = [b for b in (actual.bills if actual else [])
-                       if b.bill_date < start and (b.paid_date is None or b.paid_date >= start)]
+                       if b.period < start_month and (b.paid_date is None or b.paid_date >= start)]
             for b in carried:
-                nb = Bill(b.id, b.vendor, b.number, b.bill_date, b.due_date, b.lines)
+                nb = Bill(b.id, b.vendor, b.number, b.bill_date, b.due_date, b.lines, period=b.period)
                 nb.paid_date = max(self._pay_date(nb, late=False), run_on_or_after(start))
                 led.bills.append(nb)
         payments: dict[tuple[str, dt.date], str] = {}
@@ -556,12 +666,14 @@ class VendorModel:
         scheduled = max(run_on_or_before(bill.due_date), run_on_or_after(bill.bill_date))
         if not late:
             return scheduled
+        on_time = ON_TIME_APPROVAL if v.approval else ON_TIME
         u = unit(f"pay-{bill.id}")
-        if u < 0.83:
+        if u < on_time:
             return scheduled
-        if u < 0.95:
+        r = (u - on_time) / (1 - on_time)
+        if r < LATE_ONE_RUN:
             return scheduled + dt.timedelta(days=7)
-        if u < 0.985:
+        if r < LATE_ONE_RUN + LATE_WEEKS:
             return scheduled + dt.timedelta(days=7 * (2 + int(unit(f"wk-{bill.id}") * 3)))
         return scheduled + dt.timedelta(days=7 * (6 + int(unit(f"wk-{bill.id}") * 5)))
 
@@ -604,16 +716,44 @@ def prepaid_balance(ledger: Ledger, p: str) -> Decimal:
     return sum((c.remaining(p) for c in ledger.contracts), ZERO)
 
 
+def accrued_lines(ledger: Ledger, p: str) -> list[tuple[Bill, int, Line]]:
+    """Expense lines for services through the end of ``p`` that are billed after it: (bill, line number, line)."""
+    as_of = last_day(p)
+    return [(b, i, ln) for b in ledger.bills if b.bill_date > as_of
+            for i, ln in enumerate(b.lines, 1)
+            if ln.account not in BALANCE_SHEET_LINE_ACCOUNTS and month(ln.service_start) <= p]
+
+
+def accrued_balance(ledger: Ledger, p: str) -> Decimal:
+    return sum((ln.amount for _, _, ln in accrued_lines(ledger, p)), ZERO)
+
+
+def accrual_moves(ledger: Ledger, p: str) -> tuple[list[tuple[Bill, int, Line]], list[tuple[Bill, int, Line]]]:
+    """(services in ``p`` not billed by its end, earlier months' accrued services billed in ``p``)."""
+    as_of = last_day(p)
+    accrued = [(b, i, ln) for b, i, ln in accrued_lines(ledger, p) if month(ln.service_start) == p]
+    billed = [(b, i, ln) for b, i, ln in accrued_lines(ledger, padd(p, -1)) if b.bill_date <= as_of]
+    return accrued, billed
+
+
+def lease_balances(p: str) -> tuple[Decimal, Decimal]:
+    """(lease liabilities, right-of-use assets) at the end of ``p``."""
+    out = [lease.balances(p) for lease in LEASES]
+    return sum((x for x, _ in out), ZERO), sum((y for _, y in out), ZERO)
+
+
 def terms_label(v: Vendor) -> str:
     return "Due on receipt" if v.terms == 0 else f"Net {v.terms}"
 
 
 def file_names() -> list[str]:
     """Every file write_files writes (sync_v5_statements.py copies them into the dataset)."""
-    names = ["Actual_vendor_master.csv", "Actual_vendor_bills.csv", "Actual_vendor_payments.csv", "Actual_AP_Aging.csv"]
+    names = ["Actual_vendor_master.csv", "Actual_vendor_bills.csv", "Actual_vendor_payments.csv", "Actual_AP_Aging.csv",
+             "Actual_accrued_expenses_detail.csv"]
     for v in WINDOW:
         names += [f"{v}_Prepaid_Amortization_Schedule.csv", f"{v}_Prepaids_Rollforward.csv",
-                  f"{v}_accounts_payable_rollforward.csv"]
+                  f"{v}_accounts_payable_rollforward.csv", f"{v}_accrued_expenses_rollforward.csv",
+                  f"{v}_operating_lease_schedule.csv"]
     return names + ["Budget_vendor_spend_plan.csv", "Forecast_vendor_spend_plan.csv"]
 
 
@@ -631,21 +771,24 @@ def write_files(dst: str, org: str, model: VendorModel, ledgers: dict[str, Ledge
     close = last_day(CLOSE)
     first = dt.date.fromisoformat(f"{FIRST}-01")
 
+    on_books = [b for b in actual.bills if b.bill_date <= close]
     spend: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
-    for b in actual.bills:
+    for b in on_books:
         for ln in b.lines:
-            spend[b.vendor][ln.account] += ln.amount
+            spend[b.vendor][RENT_ACCOUNT if ln.account == LEASE_LIABILITY_ACCOUNT else ln.account] += ln.amount
     _write(os.path.join(dst, "Actual_vendor_master.csv"),
            ["organization_id", "vendor_id", "vendor_name", "vendor_category", "payment_terms", "payment_terms_days",
-            "payment_method", "billing_day", "is_1099", "default_account", "status"],
+            "payment_method", "billing_day", "bills_in_arrears", "is_1099", "invoice_approval", "default_account",
+            "status"],
            [{"organization_id": org, "vendor_id": v.id, "vendor_name": v.name, "vendor_category": v.category,
              "payment_terms": terms_label(v), "payment_terms_days": str(v.terms), "payment_method": v.method,
-             "billing_day": "last" if v.bill_day >= 28 else str(v.bill_day), "is_1099": "Yes" if v.is_1099 else "No",
-             "default_account": max(spend[v.id], key=spend[v.id].get) if spend[v.id] else "",
+             "billing_day": "last" if v.bill_day >= 28 else str(v.bill_day),
+             "bills_in_arrears": "Yes" if v.arrears else "No", "is_1099": "Yes" if v.is_1099 else "No",
+             "invoice_approval": "Budget owner" if v.approval else "AP", "default_account": max(spend[v.id], key=spend[v.id].get) if spend[v.id] else "",
              "status": "Active" if spend[v.id] else "Inactive"} for v in VENDORS.values()])
 
-    # Bills dated from the GL's first month, plus older bills still open when it starts.
-    listed = [b for b in actual.bills if b.bill_date >= first or b.paid_date is None or b.paid_date >= first]
+    # Bills dated from the GL's first month through the close, plus older bills still open when it starts.
+    listed = [b for b in on_books if b.bill_date >= first or b.paid_date is None or b.paid_date >= first]
     rows = []
     for b in listed:
         v = VENDORS[b.vendor]
@@ -697,6 +840,25 @@ def write_files(dst: str, org: str, model: VendorModel, ledgers: dict[str, Ledge
     _write(os.path.join(dst, "Actual_AP_Aging.csv"),
            ["organization_id", "version", "period", "vendor_id", "vendor_name", *buckets, "total"], rows)
 
+    rows = []
+    for p in prange(FIRST, CLOSE):
+        for b, i, ln in accrued_lines(actual, p):
+            billed = b.bill_date <= close
+            rows.append({"organization_id": org, "version": "Actual", "period": p, "vendor_id": b.vendor,
+                         "vendor_name": VENDORS[b.vendor].name, "account_number": ln.account,
+                         "department": ln.department, "cost_center": ln.cost_center, "description": ln.description,
+                         "service_period": month(ln.service_start), "amount": ln.amount,
+                         "bill_id": b.id if billed else "", "bill_date": b.bill_date.isoformat() if billed else "",
+                         "line_number": str(i) if billed else "",
+                         "status": "Billed" if billed else "Not billed at the close"})
+    _write(os.path.join(dst, "Actual_accrued_expenses_detail.csv"),
+           ["organization_id", "version", "period", "vendor_id", "vendor_name", "account_number", "department",
+            "cost_center", "description", "service_period", "amount", "bill_id", "bill_date", "line_number", "status"],
+           rows)
+    unbilled = accrued_balance(actual, CLOSE)
+    notes.append(f"Actual_accrued_expenses_detail.csv: {len(rows)} accrued lines; {unbilled:,.2f} of services "
+                 f"through the close not billed by it")
+
     for version, led in ledgers.items():
         months = prange(*WINDOW[version])
         rows, roll = [], []
@@ -739,17 +901,59 @@ def write_files(dst: str, org: str, model: VendorModel, ledgers: dict[str, Ledge
                ["organization_id", "version", "period", "beginning_accounts_payable", "vendor_expense_accruals",
                 "vendor_cash_payments_n30", "ending_accounts_payable", "rollforward_check"], ap)
 
+        acc = []
+        for p in months:
+            begin, end = accrued_balance(led, padd(p, -1)), accrued_balance(led, p)
+            accrued, billed = accrual_moves(led, p)
+            added = sum((ln.amount for _, _, ln in accrued), ZERO)
+            relieved = sum((ln.amount for _, _, ln in billed), ZERO)
+            acc.append({"organization_id": org, "version": version, "period": p, "beginning_accrued_expenses": begin,
+                        "services_accrued": added, "accruals_billed": relieved, "ending_accrued_expenses": end,
+                        "rollforward_check": begin + added - relieved - end})
+        _write(os.path.join(dst, f"{version}_accrued_expenses_rollforward.csv"),
+               ["organization_id", "version", "period", "beginning_accrued_expenses", "services_accrued",
+                "accruals_billed", "ending_accrued_expenses", "rollforward_check"], acc)
+
+        rows = []
+        for lease in LEASES:
+            for p in months:
+                m = lease.at(p)
+                if m is None:
+                    continue
+                liab, rou = lease.balances(padd(p, -1))
+                rows.append({"organization_id": org, "version": version, "period": p, "lease_id": lease.id,
+                             "vendor_id": lease.vendor, "vendor_name": VENDORS[lease.vendor].name,
+                             "description": lease.description, "commencement": lease.commencement,
+                             "term_months": str(lease.months), "discount_rate": f"{LEASE_DISCOUNT_RATE:.4f}",
+                             "beginning_lease_liability": liab, "new_lease_liability": m.new_liability,
+                             "lease_payment": m.payment, "interest_accretion": m.accretion,
+                             "ending_lease_liability": m.liability, "beginning_rou_asset": rou,
+                             "new_rou_asset": m.new_liability, "rou_amortization": m.rou_amortization,
+                             "ending_rou_asset": m.rou_asset, "straight_line_cost": m.straight_line_cost})
+        _write(os.path.join(dst, f"{version}_operating_lease_schedule.csv"),
+               ["organization_id", "version", "period", "lease_id", "vendor_id", "vendor_name", "description",
+                "commencement", "term_months", "discount_rate", "beginning_lease_liability", "new_lease_liability",
+                "lease_payment", "interest_accretion", "ending_lease_liability", "beginning_rou_asset", "new_rou_asset",
+                "rou_amortization", "ending_rou_asset", "straight_line_cost"], rows)
+
         if version != "Actual":
             plan: dict[tuple, Decimal] = defaultdict(Decimal)
             basis: dict[tuple, str] = {}
             for b in led.bills:
                 for ln in b.lines:
                     p = month(ln.service_start)
-                    if ln.account == PREPAID_ACCOUNT or p not in months:
+                    if ln.account in BALANCE_SHEET_LINE_ACCOUNTS or p not in months:
                         continue
                     key = (p, ln.vendor, ln.account, ln.department, ln.cost_center)
                     plan[key] += ln.amount
                     basis.setdefault(key, ln.description)
+            for lease in LEASES:
+                for p in months:
+                    m = lease.at(p)
+                    if m is not None:
+                        key = (p, lease.vendor, RENT_ACCOUNT, LEASE_DEPARTMENT, LEASE_COST_CENTER)
+                        plan[key] += m.straight_line_cost
+                        basis.setdefault(key, f"{lease.description}: straight-line lease cost")
             for c in led.contracts:
                 for p in months:
                     if c.amortization(p):

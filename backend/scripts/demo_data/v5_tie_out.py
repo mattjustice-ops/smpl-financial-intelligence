@@ -30,13 +30,18 @@ CENTS = Decimal("0.02")
 REVENUE_ACCOUNTS = {"4000": "Subscription", "4100": "Implementation & Onboarding", "4200": "Recurring Services"}
 BS_ACCOUNTS = {"1000": ("cash", 1), "1100": ("accounts_receivable", 1), "1200": ("prepaids_and_other_current", 1),
                "1250": ("deferred_commissions_current", 1), "1500": ("ppe_net", 1),
-               "1550": ("deferred_commissions_noncurrent", 1), "2000": ("accounts_payable", -1),
+               "1550": ("deferred_commissions_noncurrent", 1), "1600": ("other_assets", 1),
+               "2000": ("accounts_payable", -1), "2050": ("other_liabilities", -1), "2060": ("other_liabilities", -1),
                "2100": ("deferred_revenue", -1), "2500": ("debt", -1), "2600": ("other_liabilities", -1)}
+BS_COLUMNS = {name: sign for name, sign in BS_ACCOUNTS.values()}
+CFO_LINES = ("net_income", "depreciation_and_amortization", "stock_based_compensation", "other_non_cash",
+             "change_in_accounts_receivable", "change_in_accounts_payable", "change_in_deferred_revenue",
+             "change_in_prepaids", "change_in_other_liabilities", "change_in_deferred_commissions")
 ADDED_COLUMNS = {
     "_commission_plans.csv": ("capitalize", "amortization_months", "payout_basis", "payout_lag_months",
                               "capitalize_payroll_taxes"),
-    "_balance_sheet.csv": ("deferred_commissions_current", "deferred_commissions_noncurrent"),
-    "_cash_flow_statement.csv": ("change_in_deferred_commissions",),
+    "_balance_sheet.csv": ("deferred_commissions_current", "deferred_commissions_noncurrent", "other_assets"),
+    "_cash_flow_statement.csv": ("change_in_deferred_commissions", "other_non_cash", "change_in_other_liabilities"),
     "_commission_payouts.csv": ("commission_base_arr",),
     "_Employees.csv": ("cost_center", "termination_type", "pay_plan", "bonus_target_pct", "retirement_deferral_pct"),
     "_SBC_Schedule.csv": ("headcount",),
@@ -179,10 +184,11 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             balance[v][p] = dict(run)
 
     def bs_line(v: str, p: str, field: str) -> Decimal:
-        for acct, (name, sign) in BS_ACCOUNTS.items():
-            if name == field:
-                return balance[v][p].get(acct, ZERO) * sign
-        raise KeyError(field)
+        """A balance sheet file column, or one account when ``field`` is an account number (natural sign)."""
+        hits = [(a, s) for a, (n, s) in BS_ACCOUNTS.items() if field in (a, n)]
+        if not hits:
+            raise KeyError(field)
+        return sum((balance[v][p].get(a, ZERO) * s for a, s in hits), ZERO)
 
     # ------------------------------------------------------------------ schema
     rep.section("Warehouse schema (columns = prior dataset, plus columns added on purpose)")
@@ -226,12 +232,12 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             if r is None:
                 diffs.append(f"{p}: missing from balance sheet file")
                 continue
-            for _, (name, _) in BS_ACCOUNTS.items():
+            for name in BS_COLUMNS:
                 if name not in r and bs_line(v, p, name) == 0:
                     continue
                 if abs(num(r.get(name)) - bs_line(v, p, name)) > CENTS:
                     diffs.append(f"{p} {name}: file {money(num(r.get(name)))} vs GL {money(bs_line(v, p, name))}")
-            listed = sum((num(r.get(name)) for _, (name, sign) in BS_ACCOUNTS.items() if sign > 0), ZERO)
+            listed = sum((num(r.get(name)) for name, sign in BS_COLUMNS.items() if sign > 0), ZERO)
             if abs(listed - num(r["total_assets"])) > CENTS:
                 diffs.append(f"{p}: asset lines add to {money(listed)}, total assets {money(num(r['total_assets']))}")
             if abs(num(r["total_assets"]) - num(r["total_liabilities"]) - num(r["equity"])) > CENTS:
@@ -335,6 +341,10 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             net = num(r["net_cash_from_operating_activities"]) + num(r["net_cash_from_investing_activities"]) + num(r["net_cash_from_financing_activities"])
             if abs(net - num(r["net_change_in_cash"])) > CENTS:
                 diffs.append(f"{p}: sections do not add to net change")
+            cfo = sum((num(r.get(k)) for k in CFO_LINES), ZERO)
+            if abs(cfo - num(r["net_cash_from_operating_activities"])) > CENTS:
+                diffs.append(f"{p}: operating lines add to {money(cfo)}, operating cash flow "
+                             f"{money(num(r['net_cash_from_operating_activities']))}")
             if abs(num(r["beginning_cash"]) + net - num(r["ending_cash"])) > CENTS:
                 diffs.append(f"{p}: beginning + net change != ending")
             if abs(num(r["ending_cash"]) - bs_line(v, p, "cash")) > CENTS:
@@ -353,6 +363,12 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                 if abs(num(r.get("change_in_deferred_commissions")) + d_dc) > CENTS:
                     diffs.append(f"{p}: change in deferred commissions {money(num(r.get('change_in_deferred_commissions')))} "
                                  f"vs GL {money(-d_dc)}")
+                d_other = (bs_line(v, p, "other_liabilities") - bs_line(v, prior(p), "other_liabilities")) - \
+                    (bs_line(v, p, "other_assets") - bs_line(v, prior(p), "other_assets"))
+                shown = num(r.get("change_in_other_liabilities")) + num(r.get("other_non_cash"))
+                if abs(shown - d_other) > CENTS:
+                    diffs.append(f"{p}: other liabilities change + other non-cash {money(shown)} vs GL other "
+                                 f"liabilities less other assets {money(d_other)}")
         rep.check(f"{v} cash flow statement adds up and ties to GL cash, net income and working capital", diffs)
 
         cc = {r["period"][:7]: r for r in f(f"{v}_cash_collections.csv")}
@@ -1738,8 +1754,10 @@ def change_scope_section(rep: Report, prior_dir: str, data_dir: str, gl_dir: str
 
 
 AP_ACCOUNT, PREPAID_ACCOUNT, APIC_SBC_ACCOUNT = "2000", "1200", "3311"
+ACCRUED_ACCOUNT, LEASE_ACCOUNT, ROU_ACCOUNT, RENT_ACCOUNT = "2050", "2060", "1600", "6510"
 SBC_GL_ACCOUNTS = {"5040", "6140"}
-USAGE_ACCOUNTS = {"5000", "5030", "6300", "6310", "6320", "6330", "6340"}
+USAGE_ACCOUNTS = {"5000", "5030", "6300", "6310", "6320", "6330", "6340", "6410"}
+INCOME_TAX_RATE = Decimal("0.25")
 AGING_COLUMNS = ("current", "days_1_30", "days_31_60", "days_61_90", "days_over_90")
 DAYS_PER_MONTH = Decimal("30.4")
 
@@ -1782,18 +1800,26 @@ def vendor_section(rep: Report, f, gl, months, bs_line, cutoff: str) -> None:
               "= paid date, never before the bill date", diffs,
               f"{len(master)} vendors, {len(bills)} bills, {len(lines)} lines")
 
+    detail = f("Actual_accrued_expenses_detail.csv")
     gl_cost: dict[tuple, Decimal] = defaultdict(Decimal)
     bill_cost: dict[tuple, Decimal] = defaultdict(Decimal)
     for r in gl["Actual"]:
-        if r["statement"] != "Balance Sheet" and r["source_file"] == "Actual_vendor_bills.csv":
+        if r["statement"] != "Balance Sheet" and r["source_file"] in ("Actual_vendor_bills.csv",
+                                                                       "Actual_accrued_expenses_detail.csv"):
             gl_cost[(r["period"][:7], r["vendor_id"], r["account_number"], r["cost_center"])] += num(r["amount"])
     for r in lines:
-        if r["account_number"] != PREPAID_ACCOUNT and r["period"] in a_months:
+        if r["account_number"] not in (PREPAID_ACCOUNT, LEASE_ACCOUNT) and r["period"] in a_months:
             bill_cost[(r["period"], r["vendor_id"], r["account_number"], r["cost_center"])] += num(r["amount"])
+    unbilled = [r for r in detail if not r["bill_id"]]
+    for r in unbilled:
+        bill_cost[(r["service_period"], r["vendor_id"], r["account_number"], r["cost_center"])] += num(r["amount"])
     diffs = [f"{k}: GL {money(gl_cost.get(k, ZERO))} vs bills {money(bill_cost.get(k, ZERO))}"
              for k in sorted(set(gl_cost) | set(bill_cost)) if gl_cost.get(k, ZERO) != bill_cost.get(k, ZERO)]
-    rep.check("Actual GL vendor expense = bill lines by month of service, vendor, account and cost center", diffs,
-              money(sum(bill_cost.values(), ZERO)))
+    diffs += [f"{r['period']} {r['vendor_id']}: not billed but not at the close" for r in unbilled if r["period"] != CLOSE]
+    rep.check("Actual GL vendor expense = bill lines (and, for services through the close billed after it, accrued "
+              "lines) by month of service, vendor, account and cost center", diffs,
+              f"{money(sum(bill_cost.values(), ZERO))}; {money(sum((num(r['amount']) for r in unbilled), ZERO))} "
+              f"accrued at the close, not yet billed")
 
     pays = f("Actual_vendor_payments.csv")
     paid_by_bill = Counter(r["bill_id"] for r in pays)
@@ -1920,6 +1946,114 @@ def vendor_section(rep: Report, f, gl, months, bs_line, cutoff: str) -> None:
                  for k in sorted(set(plan) | set(got)) if plan.get(k, ZERO) != got.get(k, ZERO)]
         rep.check(f"{v} GL vendor expense = vendor spend plan by month, account and cost center", diffs,
                   money(sum(plan.values(), ZERO)))
+    accrual_lease_section(rep, f, gl, months, bs_line, cutoff, bills, lines)
+
+
+def accrual_lease_section(rep: Report, f, gl, months, bs_line, cutoff: str, bills: dict[str, dict], lines) -> None:
+    rep.section("Accrued expenses and operating leases (ASC 842)")
+    acc_files = {v: {r["period"][:7]: r for r in f(f"{v}_accrued_expenses_rollforward.csv")} for v in VERSIONS}
+    for v in VERSIONS:
+        roll = acc_files[v]
+        moves = _suffix_sums(gl[v], ACCRUED_ACCOUNT, cutoff)
+        start = CHAIN_FROM_ACTUAL.get(v)
+        prev = num(acc_files["Actual"][prior(start)]["ending_accrued_expenses"]) if start else None
+        diffs = []
+        for p in months[v]:
+            r = roll.get(p)
+            if r is None:
+                diffs.append(f"{p}: no row")
+                continue
+            begin, added, billed, end = (num(r[k]) for k in ("beginning_accrued_expenses", "services_accrued",
+                                                              "accruals_billed", "ending_accrued_expenses"))
+            if begin + added - billed != end or (prev is not None and begin != prev):
+                diffs.append(f"{p}: does not roll or pick up the prior month")
+            if abs(end - bs_line(v, p, ACCRUED_ACCOUNT)) > CENTS:
+                diffs.append(f"{p}: ending {money(end)} vs GL 2050 {money(bs_line(v, p, ACCRUED_ACCOUNT))}")
+            if p > cutoff and (-moves.get((p, "accrued"), ZERO) != added or moves.get((p, "billed"), ZERO) != billed):
+                diffs.append(f"{p}: GL 2050 accrued/billed vs rollforward")
+            prev = end
+        rep.check(f"{v} accrued expenses rollforward rolls, picks up the prior month, ends on GL 2050; GL accruals "
+                  f"and billings = rollforward", diffs,
+                  f"ending {money(num(roll[months[v][-1]]['ending_accrued_expenses']))}")
+
+    detail = f("Actual_accrued_expenses_detail.csv")
+    by_p: dict[str, Decimal] = defaultdict(Decimal)
+    line_amt = {(r["bill_id"], r["line_number"]): num(r["amount"]) for r in lines}
+    diffs = []
+    for r in detail:
+        by_p[r["period"]] += num(r["amount"])
+        if r["bill_id"]:
+            b = bills.get(r["bill_id"])
+            if b is None or b["date"] <= _month_end(r["period"]) or \
+                    line_amt.get((r["bill_id"], r["line_number"])) != num(r["amount"]):
+                diffs.append(f"{r['period']} {r['bill_id']}-{r['line_number']}: not a later bill line for the amount")
+        if r["service_period"] > r["period"]:
+            diffs.append(f"{r['period']} {r['vendor_id']}: service {r['service_period']} after the month")
+    diffs += [f"{p}: detail {money(by_p.get(p, ZERO))} vs rollforward" for p in months["Actual"]
+              if by_p.get(p, ZERO) != num(acc_files["Actual"][p]["ending_accrued_expenses"])]
+    rep.check("Actual accrued expenses detail = rollforward every month end; each billed line is a later bill's line "
+              "for the same amount", diffs, f"{len(detail)} lines")
+
+    for v in VERSIONS:
+        sched = f(f"{v}_operating_lease_schedule.csv")
+        sums_p: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+        last: dict[str, dict[str, str]] = {}
+        diffs = []
+        for r in sorted(sched, key=lambda r: (r["lease_id"], r["period"])):
+            x = {k: num(r[k]) for k in ("beginning_lease_liability", "new_lease_liability", "lease_payment",
+                                        "interest_accretion", "ending_lease_liability", "beginning_rou_asset",
+                                        "new_rou_asset", "rou_amortization", "ending_rou_asset", "straight_line_cost")}
+            p = r["period"][:7]
+            if x["beginning_lease_liability"] + x["new_lease_liability"] - x["lease_payment"] + x["interest_accretion"] \
+                    != x["ending_lease_liability"] or x["beginning_rou_asset"] + x["new_rou_asset"] - \
+                    x["rou_amortization"] != x["ending_rou_asset"] or \
+                    x["interest_accretion"] + x["rou_amortization"] != x["straight_line_cost"]:
+                diffs.append(f"{p} {r['lease_id']}: does not roll, or cost != accretion + amortization")
+            prev = last.get(r["lease_id"])
+            if prev is not None and (num(prev["ending_lease_liability"]) != x["beginning_lease_liability"] or
+                                     num(prev["ending_rou_asset"]) != x["beginning_rou_asset"]):
+                diffs.append(f"{p} {r['lease_id']}: does not pick up the prior month")
+            last[r["lease_id"]] = r
+            for k, amt in x.items():
+                sums_p[p][k] += amt
+        liab, rou = _suffix_sums(gl[v], LEASE_ACCOUNT, cutoff), _suffix_sums(gl[v], ROU_ACCOUNT, cutoff)
+        cf = {r["period"][:7]: r for r in f(f"{v}_cash_flow_statement.csv")}
+        for p in months[v]:
+            s = sums_p.get(p, {})
+            if abs(s.get("ending_lease_liability", ZERO) - bs_line(v, p, LEASE_ACCOUNT)) > CENTS or \
+                    abs(s.get("ending_rou_asset", ZERO) - bs_line(v, p, ROU_ACCOUNT)) > CENTS:
+                diffs.append(f"{p}: schedule vs GL 2060 / 1600")
+            if p > cutoff and (liab.get((p, "lease_payments"), ZERO) != s.get("lease_payment", ZERO)
+                               or -liab.get((p, "accretion"), ZERO) != s.get("interest_accretion", ZERO)
+                               or -liab.get((p, "new_lease"), ZERO) != s.get("new_lease_liability", ZERO)
+                               or rou.get((p, "new_lease"), ZERO) != s.get("new_rou_asset", ZERO)
+                               or -rou.get((p, "amortization"), ZERO) != s.get("rou_amortization", ZERO)):
+                diffs.append(f"{p}: GL 2060 / 1600 activity vs schedule")
+            if p > cutoff and p in cf and abs(num(cf[p].get("other_non_cash")) - s.get("rou_amortization", ZERO)) > CENTS:
+                diffs.append(f"{p}: cash flow other non-cash {money(num(cf[p].get('other_non_cash')))} vs right-of-use "
+                             f"amortization {money(s.get('rou_amortization', ZERO))}")
+        if v == "Actual":
+            gl_cost: dict[tuple, Decimal] = defaultdict(Decimal)
+            for r in gl[v]:
+                if r["statement"] != "Balance Sheet" and r["source_file"] == "Actual_operating_lease_schedule.csv":
+                    gl_cost[(r["period"][:7], r["vendor_id"], r["account_number"])] += num(r["amount"])
+            want = defaultdict(Decimal)
+            paid = defaultdict(Decimal)
+            for r in sched:
+                want[(r["period"][:7], r["vendor_id"], RENT_ACCOUNT)] += num(r["straight_line_cost"])
+                paid[(r["period"][:7], r["vendor_id"])] += num(r["lease_payment"])
+            billed = defaultdict(Decimal)
+            for r in lines:
+                if r["account_number"] == LEASE_ACCOUNT and r["period"] in months[v]:
+                    billed[(r["period"], r["vendor_id"])] += num(r["amount"])
+            diffs += [f"{k}: GL lease cost vs schedule" for k in set(want) | set(gl_cost) if want.get(k) != gl_cost.get(k)]
+            diffs += [f"{k}: rent bills {money(billed.get(k, ZERO))} vs lease payments {money(paid.get(k, ZERO))}"
+                      for k in set(paid) | set(billed) if k[0] in months[v] and paid.get(k, ZERO) != billed.get(k, ZERO)]
+        rep.check(f"{v} operating leases: schedule rolls (cost = accretion + right-of-use amortization) and ends on "
+                  f"GL 2060 / 1600; GL activity = schedule; cash flow other non-cash = right-of-use amortization"
+                  + ("; GL 6510 lease cost = schedule; rent bills = lease payments" if v == "Actual" else ""), diffs,
+                  f"liability {money(bs_line(v, months[v][-1], LEASE_ACCOUNT))}, right-of-use "
+                  f"{money(bs_line(v, months[v][-1], ROU_ACCOUNT))} at {months[v][-1]}")
 
 
 def _pl_line(r: dict[str, str]) -> str:
@@ -1952,7 +2086,7 @@ def pl_lines_section(rep: Report, f, gl, months) -> None:
                 if abs(num(is_rows[p][k]) - want) > CENTS:
                     diffs.append(f"{p} {k}: file {money(num(is_rows[p][k]))} vs GL {money(want)}")
         rep.check(f"{v} income statement every line = GL", diffs, f"{len(months[v])} months")
-        rep.check(f"{v} usage spend (hosting, third-party fees, marketing programs) is never negative", neg)
+        rep.check(f"{v} usage spend (hosting, third-party fees, marketing programs, development cloud) is never negative", neg)
 
         sched = {r["period"][:7]: r for r in f(f"{v}_SBC_Schedule.csv")}
         roster = f(f"{v}_Employees.csv")
@@ -1987,6 +2121,27 @@ def pl_lines_section(rep: Report, f, gl, months) -> None:
                   f"= headcount plan (within $1 of rounding)", diffs,
                   f"{money(sum((num(r['total_sbc']) for r in sched.values()), ZERO))}")
 
+    pretax: dict[str, dict[str, Decimal]] = {v: defaultdict(Decimal) for v in VERSIONS}
+    tax: dict[str, dict[str, Decimal]] = {v: defaultdict(Decimal) for v in VERSIONS}
+    for v in VERSIONS:
+        for r in gl[v]:
+            if r["statement"] == "Balance Sheet":
+                continue
+            target = tax if r["statement_category"] == "Taxes" else pretax
+            target[v][r["period"][:7]] += num(r["amount"]) if target is tax else -num(r["amount"])
+    for v in VERSIONS:
+        cum = sum((x for p, x in pretax["Actual"].items() if p in months["Actual"] and p < months[v][0]), ZERO)
+        prior_due = cents(INCOME_TAX_RATE * max(cum, ZERO))
+        diffs = []
+        for p in months[v]:
+            cum += pretax[v][p]
+            due = cents(INCOME_TAX_RATE * max(cum, ZERO))
+            if tax[v][p] != due - prior_due:
+                diffs.append(f"{p}: GL tax {money(tax[v][p])} vs {money(due - prior_due)} (cumulative pre-tax {money(cum)})")
+            prior_due = due
+        rep.check(f"{v} income tax = {INCOME_TAX_RATE:.0%} of positive cumulative pre-tax income since Jan 2024, "
+                  f"less earlier months", diffs, f"cumulative pre-tax {money(cum)}")
+
 
 KNOWN_GAPS = [
     "Implementation fees are billed and recognized at signing (not spread over the implementation period).",
@@ -1996,21 +2151,27 @@ KNOWN_GAPS = [
     "their role group when hired; other departments have an office region.",
     "Headcount plan quota capacity includes SDR pipeline quota alongside AE bookings quota.",
     "Headcount follows the plan (build_workforce.HEADCOUNT_PLAN): ~250 at the June 2026 close, "
-    "straight-line between plan points. S&M and cost of revenue keep the summary totals (marketing programs, hosting "
-    "and third-party fees take the rest); R&D and G&A are payroll, stock comp and vendor spend, so EBITDA and net "
-    "income differ from the original summary.",
+    "straight-line between plan points. S&M and cost of revenue keep the summary cash totals (marketing programs, "
+    "hosting and third-party fees take the rest) plus stock comp; R&D and G&A are payroll, stock comp, vendor spend "
+    "and development cloud at its source share of R&D, so EBITDA and net income differ from the original summary.",
     "The summary P&L is fixed shares of revenue; 60% of Tier 1 support labor (5010) was reallocated to R&D in every "
     "month and version (support_labor_reclass_log.csv): gross margin and R&D moved, EBITDA did not.",
     "Bonus and the SDR incentive are paid monthly at target with payroll (no accrued bonus liability); Tier 1 Support "
     "and Implementation post fully loaded payroll (incl. bonus, 401(k), severance) to 5010 / 5020.",
-    "Vendor bills are dated in the month of service; vendors that bill in arrears (usage, legal, contractors) have no "
-    "month-end accrual for services not yet billed.",
     "Vendor history before the GL (Feb 2023 - Jan 2024) is billed from the January 2024 roster and P&L so the opening "
-    "AP and prepaids are the bills and contracts open at Jan 31, 2024; the v4 opening AP and prepaids (including "
-    "other current assets) are restated to them, with opening cash moved by the same amounts.",
-    "Office leases are expensed as rent; ASC 842 right-of-use assets and lease liabilities are not modeled.",
-    "Income tax expense is the summary's; it is not recomputed for the bottom-up R&D and G&A.",
-    "Budget and Forecast pay every bill on schedule; only Actual has late payments.",
+    "AP, prepaids and accrued expenses are the bills, contracts and unbilled services open at Jan 31, 2024; the v4 "
+    "opening AP (to open bills plus accrued expenses) and prepaids (including other current assets) are restated to "
+    "them, with opening cash moved by the same amounts. The opening lease liability less the right-of-use asset "
+    "(deferred rent) comes out of other liabilities (no cash move).",
+    "Accrued expenses are the exact amounts later billed (no estimate or true-up), and every bill in arrears comes "
+    "the next month.",
+    "Operating leases: 7% incremental borrowing rate, no initial direct costs, incentives, renewal options or "
+    "short-term leases; the Harborview lease's first year (March 2021 - February 2022) is before the data and its "
+    "rent is the second year's less the 3% escalation.",
+    "Income tax is 25% of cumulative pre-tax income since Jan 2024 when positive; losses before 2024, state "
+    "minimum taxes and deferred tax assets (with their valuation allowance) are not modeled.",
+    "Budget and Forecast pay every bill on schedule; only Actual has late payments (more often for vendors whose "
+    "invoices need a budget owner's approval).",
     "Cost center SALES-AM has no roles (expansion is owned by AEs and CSMs).",
     "CSMs are on the Commission pay plan (target in commission_target); their renewal commissions come from the "
     "renewal commission files, not the target.",

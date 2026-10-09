@@ -5,9 +5,13 @@ Writes new files only (never touches the database):
   <out>/gl_rebuild_log.csv, <out>/gl_balance_sheet_check.csv and the vendor files of vendor_model.write_files
 
 Rules (agreed with Matt, Oct 5-9 2026):
-  * Revenue, cost of revenue, S&M, D&A, interest and tax add up to the summary total for each month.
-    R&D and G&A are what the subledgers book (payroll, stock comp, vendor bills and prepaid
-    amortization); sync_v5_statements.py rewrites the income statement files from the GL.
+  * Revenue, cost of revenue, S&M, D&A and interest add up to the summary total for each month
+    (build_workforce.py adds stock comp to the summary lines, so it does not displace hosting or marketing
+    programs). Income tax is recomputed on the rebuilt pre-tax income: INCOME_TAX_RATE of cumulative pre-tax
+    income since January 2024 when positive (losses carry forward; losses before 2024 are not known). R&D and G&A are what the subledgers book (payroll, stock comp, vendor bills and prepaid
+    amortization) plus development cloud (6410), which keeps its source share of the summary R&D line less
+    stock comp (the Forecast uses June 2026's share); sync_v5_statements.py rewrites the income statement
+    files from the GL.
   * Booked from the subledgers, by cost center:
       - payroll from <version>_payroll_register.csv: 5010 / 5020 one fully loaded row for Tier 1
         Support / Implementation, other cost centers one row per account (wages 6100, bonus 6105,
@@ -19,9 +23,11 @@ Rules (agreed with Matt, Oct 5-9 2026):
         S&M less payroll, so the commission build replaces exactly what the summary held;
       - stock comp from the roster's equity grants (stock_comp.py): 5040 for cost-of-revenue cost
         centers, 6140 for the rest;
-      - vendor spend (vendor_model.py): seat-priced and fixed contracts, rent, per-hire fees, the
-        corporate card, audit and tax fees, and amortization of annual contracts paid up front.
-        Actual rows are one per bill line (and per contract for amortization) with the vendor;
+      - vendor spend (vendor_model.py): seat-priced and fixed contracts, straight-line office lease cost
+        (ASC 842), per-hire fees, the corporate card, audit and tax fees, and amortization of annual contracts
+        paid up front. Expense is booked in the month of service, whenever the bill comes.
+        Actual rows are one per bill line (per accrued line for services not billed by the close; per
+        contract and lease for amortization and lease cost) with the vendor;
         Budget and Forecast rows are one per account and cost center a month
         (<version>_vendor_spend_plan.csv has the vendors).
   * The rest of cost of revenue (hosting, third-party product fees: 5000, 5030) and of S&M (marketing
@@ -39,7 +45,7 @@ Rules (agreed with Matt, Oct 5-9 2026):
     revenue is the summary revenue less those two.
   * Amounts are debit-positive (expenses positive, revenue negative), matching the rest of the GL.
   * Balance sheet: opening balances at Jan 2024 and monthly activity from the dataset's schedules and
-    the AP and prepaid subledgers (build_gl_balance_sheet.py). gl_balance_sheet_check.csv compares the
+    the AP, prepaid, accrued expense and lease subledgers (build_gl_balance_sheet.py). gl_balance_sheet_check.csv compares the
     GL balances with the balance sheet files.
 
 Usage:
@@ -57,7 +63,8 @@ from decimal import ROUND_HALF_UP, Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_gl_balance_sheet import balances, build_balance_sheet_rows, check_against_statements  # noqa: E402
 from stock_comp import COGS_COST_CENTERS, SBC_ACCOUNTS, by_cost_center  # noqa: E402
-from vendor_model import (PREPAID_ACCOUNT, USAGE_ACCOUNTS, VENDORS, Ledger, VendorModel, month,  # noqa: E402
+from vendor_model import (BALANCE_SHEET_LINE_ACCOUNTS, CLOSE, LEASE_COST_CENTER, LEASE_DEPARTMENT,  # noqa: E402
+                          LEASES, RENT_ACCOUNT, USAGE_ACCOUNTS, VENDORS, Ledger, VendorModel, last_day, month,
                           write_files)
 
 CENT = Decimal("0.01")
@@ -90,6 +97,11 @@ SIZED_LINES = ("revenue", "cost_of_revenue", "sales_and_marketing", "depreciatio
                "interest_expense", "tax_expense")
 USAGE_LINES = frozenset({"cost_of_revenue", "sales_and_marketing"})
 BOTTOM_UP_LINES = frozenset({"research_and_development", "general_and_administrative"})
+# Accounts in a bottom-up line sized to their source share of the summary line (usage accounts, billed by vendor).
+SHARE_ACCOUNTS = {"research_and_development": frozenset({"6410"})}
+BOTTOM_UP_REASON = "R&D and G&A are booked from payroll, stock comp and vendor bills"
+# Federal 21% plus state, net of the federal benefit.
+INCOME_TAX_RATE = Decimal("0.25")
 
 HISTORY_MONTHS = [f"{y}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)]
 
@@ -154,7 +166,7 @@ def _drop_reason(row: dict[str, str]) -> str:
         return "duplicate of the cost-of-revenue payroll"
     line = _line(row)
     if line in BOTTOM_UP_LINES:
-        return "R&D and G&A are booked from payroll, stock comp and vendor bills"
+        return BOTTOM_UP_REASON
     if line in USAGE_LINES and row["account_number"] not in USAGE_ACCOUNTS:
         return "booked from the payroll register, commission schedule, stock comp or vendor bills"
     return ""
@@ -175,16 +187,21 @@ def _read(path: str) -> list[dict[str, str]]:
 
 
 def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
-            booked: dict[tuple[str, str], Decimal]):
+            booked: dict[tuple[str, str], Decimal], stock_comp: dict[tuple[str, str], Decimal] | None = None,
+            line_shares: dict[str, Decimal] | None = None):
     """Size each SIZED_LINES line's kept source rows to the summary less ``booked`` (by month and line: revenue
-    from the revenue schedules, expense from the subledgers). Returns the GL rows (source rows outside the rebuilt
-    months and balance sheet rows pass through) and the log."""
+    from the revenue schedules, expense from the subledgers), and SHARE_ACCOUNTS rows to their share of the summary
+    line less ``stock_comp`` (the source rows' share, or ``line_shares`` when given). Returns the GL rows (source
+    rows outside the rebuilt months and balance sheet rows pass through) and the log."""
+    stock_comp = stock_comp or {}
     summary = {r["period"][:7]: r for r in summary_rows}
     periods = REBUILD_PERIODS[version]
     fill = DETAIL_FROM_MONTH[version]
     out: list[dict[str, str]] = []
     log: list[dict[str, str]] = []
     by_period_line: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    line_rows: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    shared: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
 
     for row in gl_rows:
         period = row["period"][:7]
@@ -197,17 +214,42 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
                         "amount": row["amount"]})
             continue
         reason = _drop_reason(row)
+        line = _line(row)
+        if reason == BOTTOM_UP_REASON and line in SHARE_ACCOUNTS:
+            line_rows[(period, line)].append(row)
+            if row["account_number"] in SHARE_ACCOUNTS[line]:
+                shared[(period, line)].append(row)
+                continue
         if reason:
-            log.append({"version": version, "period": period, "line": _line(row) or "", "action": "removed",
+            log.append({"version": version, "period": period, "line": line or "", "action": "removed",
                         "detail": f"{row['department']} / {row['cost_center']} / {row['account_name']} ({reason})",
                         "amount": row["amount"]})
             continue
-        by_period_line[(period, _line(row))].append(row)
+        by_period_line[(period, line)].append(row)
 
     for target, template in fill.items():
-        for (period, line), rows in list(by_period_line.items()):
-            if period == template:
-                by_period_line[(target, line)] = [_clone_to(r, target, template) for r in rows]
+        for grouped in (by_period_line, line_rows, shared):
+            for (period, line), rows in list(grouped.items()):
+                if period == template:
+                    grouped[(target, line)] = [_clone_to(r, target, template) for r in rows]
+
+    for period in sorted(periods):
+        for line in SHARE_ACCOUNTS:
+            rows = shared.get((period, line), [])
+            if not rows:
+                continue
+            source = sum((Decimal(r["amount"]) for r in rows), ZERO)
+            if line_shares is not None:
+                share = line_shares[line]
+            else:
+                share = source / sum((Decimal(r["amount"]) for r in line_rows[(period, line)]), ZERO)
+            cash = Decimal(str(summary[period][line] or 0)) - stock_comp.get((period, line), ZERO)
+            want = (share * cash).quantize(CENT, ROUND_HALF_UP)
+            for r, amt in zip(rows, _scale(rows, want / -source, want)):
+                out.append({**r, "amount": f"{amt:.2f}"})
+            log.append({"version": version, "period": period, "line": line, "action": "scaled",
+                        "detail": f"{len(rows)} {'/'.join(sorted(SHARE_ACCOUNTS[line]))} rows; {share:.4%} of the "
+                                  f"summary line less stock comp", "amount": f"{want:.2f}"})
 
     for period in sorted(periods):
         for line in SIZED_LINES:
@@ -240,8 +282,9 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
 
 def summary_sized_sm(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
                      payroll: dict[tuple[str, str], Decimal]) -> list[dict[str, str]]:
-    """The S&M line's non-payroll source rows sized to the summary S&M less payroll (debit-positive), as the GL was
-    booked before the commission rollforward existed. Its 6200 rows are the commissions that build replaces."""
+    """The S&M line's non-payroll source rows sized to the summary S&M less payroll and stock comp (``payroll``,
+    debit-positive), as the GL was booked before the commission rollforward existed. Its 6200 rows are the
+    commissions that build replaces."""
     summary = {r["period"][:7]: r for r in summary_rows}
     periods = REBUILD_PERIODS[version]
     fill = DETAIL_FROM_MONTH[version]
@@ -261,6 +304,19 @@ def summary_sized_sm(version: str, gl_rows: list[dict[str, str]], summary_rows: 
         want = Decimal(str(summary[p]["sales_and_marketing"])) - payroll.get((p, "sales_and_marketing"), ZERO)
         current = -sum((Decimal(r["amount"]) for r in rows), ZERO)
         out += [{**r, "amount": f"{amt:.2f}"} for r, amt in zip(rows, _scale(rows, want / current, want))]
+    return out
+
+
+def line_shares_at(rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
+                   stock_comp: dict[tuple[str, str], Decimal], period: str) -> dict[str, Decimal]:
+    """Each SHARE_ACCOUNTS line's share accounts as a fraction of the summary line less stock comp in ``period``
+    (rebuilt rows)."""
+    summary = next(r for r in summary_rows if r["period"][:7] == period)
+    out = {}
+    for line, accounts in SHARE_ACCOUNTS.items():
+        amount = sum((Decimal(r["amount"]) for r in rows
+                      if r["period"][:7] == period and r["account_number"] in accounts and _line(r) == line), ZERO)
+        out[line] = amount / (Decimal(str(summary[line])) - stock_comp.get((period, line), ZERO))
     return out
 
 
@@ -451,8 +507,8 @@ def stock_comp_rows(src: str, version: str, template: dict[str, str], accts: Acc
 
 
 def model_fixed_by_line(model: VendorModel, version: str, accts: Accounts) -> dict[tuple[str, str], Decimal]:
-    """Vendor expense that does not depend on the P&L summary, by month and line: every bill line except usage,
-    plus prepaid amortization."""
+    """Vendor expense that does not depend on the P&L summary, by month and line: every bill line except usage and
+    lease payments, plus prepaid amortization and straight-line lease cost."""
     out: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
 
     def add(p, account, dept, amount):
@@ -463,9 +519,13 @@ def model_fixed_by_line(model: VendorModel, version: str, accts: Accounts) -> di
     periods = sorted(REBUILD_PERIODS[version])
     for p in periods:
         for ln in model.monthly_lines(version, p):
-            add(p, ln.account, ln.department, ln.amount)
+            if ln.account not in BALANCE_SHEET_LINE_ACCOUNTS:
+                add(p, ln.account, ln.department, ln.amount)
         for _, ln in model.hire_bills(version, p):
             add(p, ln.account, ln.department, ln.amount)
+        for lease in LEASES:
+            if (m := lease.at(p)) is not None:
+                add(p, RENT_ACCOUNT, LEASE_DEPARTMENT, m.straight_line_cost)
     for c in model.contracts(version):
         for p in periods:
             if c.amortization(p):
@@ -474,24 +534,44 @@ def model_fixed_by_line(model: VendorModel, version: str, accts: Accounts) -> di
 
 
 def vendor_rows(ledger: Ledger, template: dict[str, str], accts: Accounts) -> list[dict[str, str]]:
-    """P&L rows from the vendor ledger: Actual per bill line and per contract month with the vendor; Budget and
-    Forecast one row per month, account and cost center."""
+    """P&L rows from the vendor ledger: Actual per bill line (services not billed by the close: per accrued line),
+    per contract month and per lease month with the vendor; Budget and Forecast one row per month, account and cost
+    center."""
     version = ledger.version
     periods = REBUILD_PERIODS[version]
+    close = last_day(CLOSE)
     rows: list[dict[str, str]] = []
     plan: dict[tuple[str, str, str, str], Decimal] = defaultdict(Decimal)
     for b in ledger.bills:
         for i, ln in enumerate(b.lines, 1):
             p = month(ln.service_start)
-            if ln.account == PREPAID_ACCOUNT or p not in periods:
+            if ln.account in BALANCE_SHEET_LINE_ACCOUNTS or p not in periods:
                 continue
-            if version == "Actual":
+            if version == "Actual" and b.bill_date > close:
+                rows.append(accts.row(template, p, ln.account, ln.department, ln.cost_center, ln.amount,
+                                      source_file="Actual_accrued_expenses_detail.csv",
+                                      record_id=f"ACCR-{p.replace('-', '')}-{b.vendor}-{i}", source_system="AP",
+                                      vendor_id=b.vendor,
+                                      notes=f"{ln.description}; accrued, not billed at the close"))
+            elif version == "Actual":
                 rows.append(accts.row(template, p, ln.account, ln.department, ln.cost_center, ln.amount,
                                       source_file="Actual_vendor_bills.csv", record_id=f"{b.id}-{i}",
                                       source_system="AP", vendor_id=b.vendor,
                                       notes=f"{ln.description}; bill {b.number} dated {b.bill_date.isoformat()}"))
             else:
                 plan[(p, ln.account, ln.department, ln.cost_center)] += ln.amount
+    for lease in LEASES:
+        for p in sorted(periods):
+            m = lease.at(p)
+            if m is None:
+                continue
+            if version == "Actual":
+                rows.append(accts.row(template, p, RENT_ACCOUNT, LEASE_DEPARTMENT, LEASE_COST_CENTER,
+                                      m.straight_line_cost, source_file="Actual_operating_lease_schedule.csv",
+                                      record_id=f"{lease.id}-{p}", source_system="AP", vendor_id=lease.vendor,
+                                      notes=f"{lease.description}: straight-line lease cost (ASC 842)"))
+            else:
+                plan[(p, RENT_ACCOUNT, LEASE_DEPARTMENT, LEASE_COST_CENTER)] += m.straight_line_cost
     for c in ledger.contracts:
         for p in sorted(periods):
             amount = c.amortization(p)
@@ -512,6 +592,42 @@ def vendor_rows(ledger: Ledger, template: dict[str, str], accts: Accounts) -> li
     return rows
 
 
+def recompute_income_tax(rebuilt: dict[str, list[dict[str, str]]]) -> list[dict[str, str]]:
+    """Set each month's tax row to INCOME_TAX_RATE x cumulative pre-tax income since the GL start when positive, less
+    what earlier months booked (losses carry forward; Budget and Forecast continue from the Actual months before
+    them). Returns the log."""
+    pretax: dict[str, dict[str, Decimal]] = {v: defaultdict(Decimal) for v in VERSIONS}
+    for v, rows in rebuilt.items():
+        for r in rows:
+            if r["statement"] != "Balance Sheet" and r["statement_category"] != "Taxes":
+                pretax[v][r["period"][:7]] -= Decimal(r["amount"])
+    log = []
+    for v in VERSIONS:
+        months = sorted(REBUILD_PERIODS[v])
+        cum = sum((x for p, x in pretax["Actual"].items() if p < months[0] and p in REBUILD_PERIODS["Actual"]), ZERO)
+        booked = (INCOME_TAX_RATE * max(cum, ZERO)).quantize(CENT, ROUND_HALF_UP)
+        tax_rows: dict[str, list[dict[str, str]]] = defaultdict(list)
+        for r in rebuilt[v]:
+            if r["statement_category"] == "Taxes" and r["period"][:7] in REBUILD_PERIODS[v]:
+                tax_rows[r["period"][:7]].append(r)
+        total = ZERO
+        for p in months:
+            if len(tax_rows[p]) != 1:
+                raise ValueError(f"{v} {p}: {len(tax_rows[p])} tax rows; expected one")
+            cum += pretax[v][p]
+            due = (INCOME_TAX_RATE * max(cum, ZERO)).quantize(CENT, ROUND_HALF_UP)
+            row = tax_rows[p][0]
+            row["amount"] = f"{due - booked:.2f}"
+            row["notes"] = (f"income tax: {INCOME_TAX_RATE:.0%} of cumulative pre-tax income since January 2024 "
+                            f"({cum:,.2f}) when positive, less earlier months")
+            total += due - booked
+            booked = due
+        log.append({"version": v, "period": "", "line": "tax_expense", "action": "recomputed",
+                    "detail": f"{INCOME_TAX_RATE:.0%} of positive cumulative pre-tax income; cumulative at "
+                              f"{months[-1]}: {cum:,.2f}", "amount": f"{total:.2f}"})
+    return log
+
+
 def by_line(rows: list[dict[str, str]]) -> dict[tuple[str, str], Decimal]:
     out: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for r in rows:
@@ -527,6 +643,8 @@ def main(src: str, dst: str) -> None:
     sized: dict[str, list[dict[str, str]]] = {}
     summary_sm: dict[str, list[dict[str, str]]] = {}
     booked_rows: dict[str, list[dict[str, str]]] = {}
+    summaries: dict[str, list[dict[str, str]]] = {}
+    stock_comp: dict[str, dict[tuple[str, str], Decimal]] = {}
     fixed: dict[str, dict[tuple[str, str], Decimal]] = {}
     accts = {v: Accounts(src, v) for v in VERSIONS}
     for version in VERSIONS:
@@ -541,24 +659,28 @@ def main(src: str, dst: str) -> None:
         rsvc = recurring_services_rows(src, version, template)
         comm = commission_rows(src, version, template)
         pay = payroll_rows(src, version, template)
+        sbc = stock_comp_rows(src, version, template, accts[version])
         if not comm:
             if version == "Forecast" and "Actual" not in summary_sm:
                 raise ValueError("Forecast has no commission rollforward but Actual does")
             sm_source = forecast_seed(summary_sm["Actual"]) if version == "Forecast" else gl
-            summary_sm[version] = summary_sized_sm(version, sm_source, summary, by_line(pay))
+            summary_sm[version] = summary_sized_sm(version, sm_source, summary, by_line(pay + sbc))
             comm = [{**r, "notes": "commissions as the summary S&M held them (sized with the line's other non-payroll "
                                    "source rows); replaced by the commission rollforward"}
                     for r in summary_sm[version] if r["account_number"] == COMMISSION_ACCOUNT]
-        sbc = stock_comp_rows(src, version, template, accts[version])
         fixed[version] = model_fixed_by_line(model, version, accts[version])
         booked: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
         for r in impl + rsvc:
             booked[(r["period"], "revenue")] -= Decimal(r["amount"])
+        stock_comp[version] = by_line(sbc)
         for key, amount in by_line(comm + pay + sbc).items():
             booked[key] += amount
         for key, amount in fixed[version].items():
             booked[key] += amount
-        rows, log = rebuild(version, gl, summary, booked)
+        shares = line_shares_at(sized["Actual"], summaries["Actual"], stock_comp["Actual"],
+                                FORECAST_TEMPLATE_MONTH) if version == "Forecast" else None
+        rows, log = rebuild(version, gl, summary, booked, stock_comp[version], shares)
+        summaries[version] = summary
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
         if old_bs:
             log.append({"version": version, "period": "", "line": "balance sheet", "action": "replaced",
@@ -587,7 +709,7 @@ def main(src: str, dst: str) -> None:
         vend = vendor_rows(ledgers[version], sized[version][0], accts[version])
         usage_rows = [r for r in sized[version]
                       if r["account_number"] in USAGE_ACCOUNTS and r["period"][:7] in REBUILD_PERIODS[version]]
-        check_vendor_rows(version, vend, usage_rows, fixed[version])
+        check_vendor_rows(version, vend, usage_rows, fixed[version], ledgers[version], accts[version])
         keep = [r for r in sized[version] if not (r["account_number"] in USAGE_ACCOUNTS
                                                   and r["period"][:7] in REBUILD_PERIODS[version])]
         rebuilt[version] = keep + booked_rows[version] + vend
@@ -596,6 +718,7 @@ def main(src: str, dst: str) -> None:
                                   f"{len(ledgers[version].contracts)} prepaid contracts)",
                         "amount": f"{sum(Decimal(r['amount']) for r in vend):.2f}"})
 
+    all_log.extend(recompute_income_tax(rebuilt))
     bs_rows, bs_log = build_balance_sheet_rows(src, rebuilt, ledgers)
     all_log.extend(bs_log)
     for version, rows in rebuilt.items():
@@ -621,12 +744,23 @@ def main(src: str, dst: str) -> None:
 
 
 def check_vendor_rows(version: str, vend: list[dict[str, str]], usage_rows: list[dict[str, str]],
-                      fixed: dict[tuple[str, str], Decimal]) -> None:
-    """The ledger's usage rows are the sized usage rows (by month, account and cost center); its other rows are the
-    fixed spend the lines were sized around."""
+                      fixed: dict[tuple[str, str], Decimal], ledger: Ledger, accts: Accounts) -> None:
+    """The ledger's rows on usage accounts are the sized usage rows plus the amortization of prepaid contracts on
+    those accounts (by month, account and cost center); its other rows are the rest of the fixed spend the lines
+    were sized around."""
     want: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
     for r in usage_rows:
         want[(r["period"][:7], r["account_number"], r["cost_center"])] += Decimal(r["amount"])
+    fixed = dict(fixed)
+    for c in ledger.contracts:
+        if c.account not in USAGE_ACCOUNTS:
+            continue
+        cat = accts.coa[c.account]["statement_category"]
+        line = LINE_BY_DEPARTMENT[c.department] if cat == "Operating Expense" else LINE_BY_CATEGORY[cat]
+        for p in REBUILD_PERIODS[version]:
+            if c.amortization(p):
+                want[(p, c.account, c.cost_center)] += c.amortization(p)
+                fixed[(p, line)] = fixed.get((p, line), ZERO) - c.amortization(p)
     got: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
     rest: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for r in vend:

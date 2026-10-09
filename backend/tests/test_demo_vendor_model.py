@@ -103,6 +103,44 @@ def test_lease_escalates_on_its_anniversary(src: str) -> None:
     assert rent("2026-04") == Decimal("26780.00")
 
 
+@pytest.mark.parametrize("lease", vm.LEASES, ids=lambda x: x.id)
+def test_lease_schedule_runs_off_to_zero(lease: vm.Lease) -> None:
+    sched = lease.schedule()
+    months = vm.prange(lease.commencement, lease.end)
+    assert list(sched) == months
+    first, last = sched[months[0]], sched[months[-1]]
+    assert first.new_liability > 0 and last.liability == last.rou_asset == 0
+    pays = sum(m.payment for m in sched.values())
+    assert sum(m.straight_line_cost for m in sched.values()) == pays
+    assert first.new_liability < pays
+    liab = rou = Decimal(0)
+    for m in sched.values():
+        assert liab + m.new_liability - m.payment + m.accretion == m.liability
+        assert rou + m.new_liability - m.rou_amortization == m.rou_asset
+        assert m.accretion + m.rou_amortization == m.straight_line_cost
+        assert m.accretion >= 0
+        liab, rou = m.liability, m.rou_asset
+
+
+def test_lease_rent_escalates_from_the_lease_year() -> None:
+    harborview = next(x for x in vm.LEASES if x.vendor == "V1060")
+    assert harborview.payment("2023-02") == Decimal("52000.00")
+    assert harborview.payment("2023-03") == Decimal("53560.00")
+    assert harborview.payment("2021-03") == vm.q(Decimal(52000) / Decimal("1.03"))
+    assert harborview.payment("2021-02") == harborview.payment(vm.padd(harborview.end, 1)) == 0
+
+
+def test_arrears_vendors_bill_the_next_month(src: str) -> None:
+    model = vm.VendorModel(src)
+    model.add_usage("Actual", "2025-03", "5000", "Engineering", "ENG-DEVOPS", Decimal("50000"))
+    led = model.ledger("Actual")
+    aws = [b for b in led.bills if b.vendor == "V1001" and b.period == "2025-03"
+           and all(ln.account == "5000" for ln in b.lines)]
+    assert len(aws) == 1 and aws[0].bill_date == dt.date(2025, 4, 3)
+    assert vm.accrued_balance(led, "2025-03") >= aws[0].total
+    assert all(b.bill_date.month == int(b.period[5:7]) for b in led.bills if not vm.VENDORS[b.vendor].arrears)
+
+
 @pytest.mark.parametrize("version", ["Actual", "Budget", "Forecast"])
 def test_ap_and_prepaids_roll_forward(src: str, version: str) -> None:
     model = vm.VendorModel(src)
@@ -120,10 +158,15 @@ def test_ap_and_prepaids_roll_forward(src: str, version: str) -> None:
         added = sum((c.amount for c in led.contracts if c.start == p), Decimal(0))
         amort = sum((c.amortization(p) for c in led.contracts), Decimal(0))
         assert vm.prepaid_balance(led, prev) + added - amort == vm.prepaid_balance(led, p), p
+        accrued, billed_accruals = vm.accrual_moves(led, p)
+        assert vm.accrued_balance(led, prev) + sum(ln.amount for _, _, ln in accrued) \
+            - sum(ln.amount for _, _, ln in billed_accruals) == vm.accrued_balance(led, p), p
     if version == "Actual":
         assert all(b.paid_date is None or b.paid_date <= vm.last_day(vm.CLOSE) for b in led.bills)
     else:
         assert vm.ap_balance(led, vm.WINDOW[version][1]) >= 0
+        before = vm.padd(vm.WINDOW[version][0], -1)
+        assert vm.accrued_balance(led, before) == vm.accrued_balance(actual, before)
 
 
 def test_write_files_ties(src: str, tmp_path: Path) -> None:

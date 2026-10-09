@@ -12,6 +12,7 @@ The output is a copy of the source with these files replaced or added:
   {V}_payroll_policies.csv    the pay policies the register applies (the company's onboarding answers)
   {V}_Headcount_Plan.csv      by GL department and month, counted from the roster; payroll from the register
   {V}_SBC_Schedule.csv        stock comp by P&L line and month from the roster's equity grants (stock_comp.py)
+  {V}_income_statement.csv    the schedule's stock comp added to each P&L line (the source lines are cash costs)
   {V}_Open_Requisitions.csv   one requisition per hire: filled through the June close, open after
   Compensation_Bands.csv      every role on the roster (2026 midpoints)
   Department_Allocation_Rules.csv  GL departments and the P&L line each cost center posts to
@@ -25,9 +26,9 @@ Rules (agreed with Matt, Oct 8 2026):
   * Headcount is the plan (HEADCOUNT_PLAN): month-end heads by team in Jan 2024, Dec 2025, at the June 2026 close
     and in Dec 2026 (Budget, Forecast), straight-line between them; exits are backfilled the next month. About 250
     at the close and 270-275 at Dec 2026 for an ~$88M-ARR company. rebuild_gl_to_summary books payroll from the
-    register and stock comp from the grants; S&M and cost of revenue keep their P&L totals (marketing programs and
-    hosting take the rest), R&D and G&A are payroll, stock comp and vendor spend (Oct 9 2026). A team's payroll may
-    not exceed PAYROLL_SHARE_CAP of its P&L line.
+    register and stock comp from the grants; S&M and cost of revenue keep their cash P&L totals (marketing programs
+    and hosting take the rest; stock comp is added on top), R&D and G&A are payroll, stock comp and vendor spend
+    (Oct 9 2026). A team's payroll may not exceed PAYROLL_SHARE_CAP of its cash P&L line.
   * Stock comp: each employee's equity_sbc_annual (the role's grant value per year), expensed for the days employed.
   * Teams are the GL departments and cost centers (department_cost_centers.csv). Every role has a cost center, an
     HRIS team (sub_department), a pay plan and a 2026 band. Leaders are on staff from before 2024; other hires keep
@@ -657,6 +658,8 @@ def build(src: str, dst: str) -> list[str]:
     write_bands(dst)
     write_allocation_rules(dst, registers["Actual"])
     check_payroll_share(src, registers, notes)
+    for v in VERSIONS:
+        add_sbc_to_income_statement(dst, v, notes)
     with open(os.path.join(dst, "workforce_build_notes.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(notes) + "\n")
     return notes
@@ -840,6 +843,37 @@ def write_sbc_schedule(dst, org, v, notes) -> None:
     write(os.path.join(dst, f"{v}_SBC_Schedule.csv"), SCHEDULE_FIELDS, rows)
     total = sum((r["total_sbc"] for r in rows), ZERO)
     notes.append(f"{v}_SBC_Schedule.csv: {len(rows)} months, stock comp {total:,.0f} from equity_sbc_annual")
+
+
+SBC_LINES = {"cost_of_revenue": "cogs_sbc", "sales_and_marketing": "sm_sbc", "research_and_development": "rd_sbc",
+             "general_and_administrative": "ga_sbc"}
+
+
+def add_sbc_to_income_statement(dst, v, notes) -> None:
+    """The source P&L lines are cash costs; stock comp from {V}_SBC_Schedule.csv is added to each line and the totals
+    recalculated, so the summary the GL is sized to includes it."""
+    sched = {r["period"]: r for r in read(os.path.join(dst, f"{v}_SBC_Schedule.csv"))[1]}
+    path = os.path.join(dst, f"{v}_income_statement.csv")
+    fields, rows = read(path)
+    missing = sorted(set(sched) - {r["period"][:7] for r in rows})
+    if missing:
+        raise ValueError(f"{v}_income_statement.csv has no rows for SBC months {', '.join(missing)}")
+    added = ZERO
+    for r in rows:
+        s = sched.get(r["period"][:7])
+        if not s:
+            continue
+        for line, col in SBC_LINES.items():
+            r[line] = f"{num(r[line]) + num(s[col]):.2f}"
+            added += num(s[col])
+        gp = num(r["revenue"]) - num(r["cost_of_revenue"])
+        ebitda = gp - sum((num(r[k]) for k in ("sales_and_marketing", "research_and_development",
+                                                 "general_and_administrative")), ZERO)
+        below = sum((num(r[k]) for k in ("depreciation_and_amortization", "interest_expense", "tax_expense")
+                     if k in r), ZERO)
+        r.update({"gross_profit": f"{gp:.2f}", "ebitda": f"{ebitda:.2f}", "net_income": f"{ebitda - below:.2f}"})
+    write(path, fields, rows)
+    notes.append(f"{v}_income_statement.csv: stock comp {added:,.0f} added to the P&L lines")
 
 
 def write_chart_of_accounts(dst, v) -> None:
