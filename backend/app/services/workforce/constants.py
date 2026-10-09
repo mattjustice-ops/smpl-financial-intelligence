@@ -20,6 +20,8 @@ GTM_DEPARTMENTS: frozenset[str] = frozenset({"Sales", "Marketing"})
 ACTIVE_EMPLOYMENT_STATUSES: frozenset[str] = frozenset(
     {"active", "on leave", "leave", "paid leave", "unpaid leave"}
 )
+# Leavers stay on the roster for the months before their termination date.
+TERMINATED_EMPLOYMENT_STATUSES: frozenset[str] = frozenset({"terminated"})
 
 APPROVED_REQ_STATUSES: frozenset[str] = frozenset({"approved", "open", "committed", "in process"})
 

@@ -10,8 +10,8 @@ Files rewritten in <v5_folder> (same columns as before):
   * <version>_cash_collections.csv: beginning and ending cash from the GL.
   * <version>_cash_flow_bridge.csv: collections from the AR rollforward, commission cash from
     <version>_commission_schedule.csv (all plans) when it exists, else the Actual commission
-    payouts; other lines as loaded; other operating cash is what is left so the bridge ends on
-    GL cash.
+    payouts; payroll cash from <version>_payroll_register.csv when it exists (paid in the month);
+    other lines as loaded; other operating cash is what is left so the bridge ends on GL cash.
   * Deferred commissions (when the balance sheet has the columns): current and noncurrent from
     the GL; their change is an operating line (change_in_deferred_commissions).
   * <version>_Working_Capital_Driver_Summary.csv, <version>_cash_flow_driver_assumptions.csv,
@@ -223,6 +223,11 @@ def main(src: str, gl_dir: str) -> list[str]:
             elif v == "Actual":
                 for r in read(os.path.join(src, "Actual_commission_payouts.csv"))[1]:
                     payouts[r["period"][:7]] += num(r["commission_amount"])
+            payroll: dict[str, Decimal] = defaultdict(Decimal)
+            register_path = os.path.join(src, f"{v}_payroll_register.csv")
+            if os.path.exists(register_path):
+                for r in read(register_path)[1]:
+                    payroll[r["period"][:7]] += num(r["total_payroll_cost"])
             bf, brows = read(bridge_path)
             out = []
             for r in brows:
@@ -234,6 +239,8 @@ def main(src: str, gl_dir: str) -> list[str]:
                 nr = dict(r)
                 if p in payouts:
                     nr["commission_cash_out"] = q(payouts[p])
+                if p in payroll:
+                    nr["payroll_cash_out"] = q(payroll[p])
                 outflows = sum((num(nr.get(k)) for k in ("payroll_cash_out", "commission_cash_out", "vendor_cash_out_n30",
                                                           "tax_cash_out", "interest_cash_out")), ZERO)
                 financing_key = "financing_to_maintain_cash_floor" if "financing_to_maintain_cash_floor" in bf else "financing"

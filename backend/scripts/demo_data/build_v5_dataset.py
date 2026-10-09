@@ -484,7 +484,6 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     write_billing_files(ds, dst, org, worlds, roll, rev)
     write_balance_sheet_inputs(ds, dst, roll, opening_equity_adjustment, notes)
     write_mrr(ds, dst, notes)
-    write_workforce(ds, dst, notes)
     rosters = write_rosters(ds, dst, notes)
     write_opportunities(ds, dst, rosters, notes)
     write_quota_capacity(ds, dst, rosters, notes)
@@ -696,7 +695,7 @@ def ramp_pct(curve, ramp_months: int, hire: str, p: str) -> Decimal:
 
 
 def write_rosters(ds, dst, notes):
-    """Per version, the Sales employees (after write_workforce) month by month: quota from the employee file, ramp
+    """Per version, the Sales employees month by month: quota from the employee file, ramp
     from Hiring_Ramp_Assumptions.csv. Writes each version's sales_reps and the Budget quotas; Actual quotas are
     written with attainment by write_opportunities."""
     curve = ramp_curve(ds)
@@ -724,7 +723,7 @@ def write_rosters(ds, dst, notes):
                 monthly = q(annual / 12)
                 by_period[p].append({
                     "period": p, "version": v, "employee_id": e["employee_id"], "rep_name": e["employee_name"],
-                    "quota_status": "Filled" if e["employment_status"] == "Active" else "Open Req", "role": e["role"],
+                    "quota_status": "Open Req" if e["employment_status"] == "Planned" else "Filled", "role": e["role"],
                     "sub_department": e["sub_department"], "department": e["department"], "region": e["region"],
                     "manager": e["manager"], "quota_type": kind, "hire_period": e["hire_date"][:7],
                     "annual_quota_arr": f"{annual:.2f}", "monthly_quota_arr": f"{monthly:.2f}",
@@ -737,7 +736,7 @@ def write_rosters(ds, dst, notes):
             {"organization_id": org, "rep_id": e["employee_id"], "rep_name": e["employee_name"], "role": e["role"],
              "segment": REP_SEGMENT.get(e["sub_department"], "All"), "region": e["region"], "manager_id": e["manager"],
              "hire_date": e["hire_date"], "quota_eligible": e["quota_carrying"],
-             "status": "Active" if e["employment_status"] == "Active" else "Planned"} for e in emps])
+             "status": e["employment_status"]} for e in emps])
         last = max(by_period)
         notes.append(f"{v} sales team: {len(emps)} Sales employees; {last}: " + ", ".join(
             f"{k} {n}" for k, n in sorted(Counter(r["quota_type"] for r in by_period[last]).items()))
@@ -911,87 +910,6 @@ def write_commissions(ds, dst, roster, notes):
         by_p[r["period"]] += r["commission_amount"]
     roster["payouts_by_period"] = dict(by_p)
     notes.append("commission payouts: " + ", ".join(f"{p} {v:,.2f}" for p, v in sorted(by_p.items())))
-
-
-# ----------------------------------------------------------------------------- workforce
-
-
-def write_workforce(ds, dst, notes):
-    curve = ramp_curve(ds)
-    req_fields, reqs = ds.get("Forecast_Open_Requisitions.csv")
-    moved = []
-    new_reqs = []
-    for r in reqs:
-        nr = dict(r)
-        if r["status"] == "Open" and r["planned_start_date"][:7] <= CLOSE:
-            nxt = padd(CLOSE, 1)
-            nr["planned_start_date"] = nr["scenario_start_date"] = f"{nxt}-01"
-            if nr.get("target_hire_date"):
-                d = dt.date.fromisoformat(nr["target_hire_date"])
-                nr["target_hire_date"] = (d + dt.timedelta(days=30)).isoformat()
-            nr["source"] = f"{r.get('source', '')}; start moved from {r['planned_start_date']}: not filled by the {CLOSE} close".strip("; ")
-            moved.append((r["department"], r["role"]))
-        new_reqs.append(nr)
-    write(os.path.join(dst, "Forecast_Open_Requisitions.csv"), req_fields, new_reqs)
-
-    emp_fields, emps = ds.get("Forecast_Employees.csv")
-    new_emps = []
-    pending = list(moved)
-    for e in emps:
-        ne = dict(e)
-        if e["employment_status"] == "Planned" and e["hire_date"][:7] <= CLOSE and (e["department"], e["role"]) in pending:
-            pending.remove((e["department"], e["role"]))
-            ne["hire_date"] = f"{padd(CLOSE, 1)}-01"
-        new_emps.append(ne)
-    if pending:
-        notes.append(f"workforce: no planned employee found for moved reqs {pending}")
-    write(os.path.join(dst, "Forecast_Employees.csv"), emp_fields, new_emps)
-
-    hp_fields, hp = ds.get("Forecast_Headcount_Plan.csv")
-
-    def active(emp_rows, dept, p):
-        return [e for e in emp_rows if e["department"] == dept and e["hire_date"][:7] <= p
-                and (not e["termination_date"] or e["termination_date"][:7] > p)]
-
-    def plan_row(emp_rows, req_rows, base, p):
-        dept = base["department"]
-        act = active(emp_rows, dept, p)
-        prev = active(emp_rows, dept, padd(p, -1))
-        quota = [e for e in act if e["quota_carrying"] == "Yes"]
-        ramped = sum((num(e["annual_quota_arr"]) * ramp_pct(curve, int(e["productivity_ramp_months"] or 0), e["hire_date"][:7], p)
-                      for e in quota), ZERO)
-        return {
-            "headcount_beginning": str(len(prev)), "new_hires": str(sum(1 for e in act if e["hire_date"][:7] == p)),
-            "headcount_ending": str(len(act)),
-            "open_requisitions": str(sum(1 for r in req_rows if r["department"] == dept and r["status"] == "Open"
-                                         and r["planned_start_date"][:7] > p)),
-            "monthly_cash_payroll_cost": f"{q(sum((num(e['fully_loaded_cash_cost']) for e in act), ZERO) / 12):.2f}",
-            "monthly_gaap_payroll_cost": f"{q(sum((num(e['fully_loaded_gaap_cost']) for e in act), ZERO) / 12):.2f}",
-            "monthly_sbc": f"{q(sum((num(e['equity_sbc_annual']) for e in act), ZERO) / 12):.2f}",
-            "quota_capacity_arr": f"{sum((num(e['annual_quota_arr']) for e in quota), ZERO):.2f}",
-            "ramped_quota_capacity_arr": f"{q(ramped):.2f}",
-        }
-
-    diffs = defaultdict(int)
-    out = []
-    for r in hp:
-        before = plan_row(emps, reqs, r, r["period"])
-        after = plan_row(new_emps, new_reqs, r, r["period"])
-        nr = dict(r)
-        for k in before:
-            if num(before[k]) != num(r[k]):
-                diffs[k] += 1
-            delta = num(after[k]) - num(before[k])
-            if delta:
-                val = num(r[k]) + delta
-                nr[k] = str(int(val)) if k in ("headcount_beginning", "new_hires", "headcount_ending", "open_requisitions") else f"{val:.2f}"
-        if any(nr[k] != r[k] for k in before):
-            nr["source"] = f"{r['source']}; June starts moved to July"
-        out.append(nr)
-    write(os.path.join(dst, "Forecast_Headcount_Plan.csv"), hp_fields, out)
-    notes.append(f"workforce: {len(moved)} forecast reqs/hires moved from June to July ({moved}); "
-                 f"Forecast_Headcount_Plan.csv adjusted by the roster change "
-                 f"(formula check against v4 cells it does not reproduce: {dict(diffs) or 'none'})")
 
 
 if __name__ == "__main__":

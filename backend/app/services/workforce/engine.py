@@ -32,6 +32,7 @@ from app.models.workforce import (
 from app.services.workforce.constants import (
     ACTIVE_EMPLOYMENT_STATUSES,
     APPROVED_REQ_STATUSES,
+    TERMINATED_EMPLOYMENT_STATUSES,
     DEFAULT_BENEFITS_LOAD_PCT,
     GTM_DEPARTMENTS,
     WORKFORCE_DEPARTMENTS,
@@ -300,7 +301,8 @@ class WorkforcePlanningEngine:
         return Decimal("1")
 
     def _employee_active(self, employee: RosterEmployee, period: date) -> bool:
-        if not _status_active(employee.employment_status):
+        left = _norm(employee.employment_status).lower() in TERMINATED_EMPLOYMENT_STATUSES and employee.termination_date
+        if not _status_active(employee.employment_status) and not left:
             return False
         return self._employed_in(employee, period)
 
@@ -311,7 +313,7 @@ class WorkforcePlanningEngine:
     def _employed_in(employee: RosterEmployee, period: date) -> bool:
         if employee.hire_date and month_start(employee.hire_date) > period:
             return False
-        if employee.termination_date and month_start(employee.termination_date) < period:
+        if employee.termination_date and month_start(employee.termination_date) <= period:
             return False
         return True
 

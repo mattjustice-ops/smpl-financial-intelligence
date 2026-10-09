@@ -92,6 +92,8 @@ def default_recompute_range(*, anchor: date | None = None) -> tuple[date, date]:
 def is_payroll_gl_entry(entry: GlEntry) -> bool:
     if entry.account_group in PAYROLL_GL_GROUPS:
         return True
+    if (entry.expense_type or "").strip().lower() in gl_payroll.PAYROLL_TYPES:
+        return True
     blob = f"{entry.account_name} {entry.account_group}".lower()
     if "payroll" in blob or "salary" in blob or "salaries" in blob:
         return True

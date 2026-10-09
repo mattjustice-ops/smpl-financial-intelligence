@@ -12,7 +12,9 @@ Exit code 1 if any check fails.
 
 from __future__ import annotations
 
+import calendar
 import csv
+import datetime as dt
 import os
 import sys
 from collections import Counter, defaultdict
@@ -36,7 +38,16 @@ ADDED_COLUMNS = {
     "_balance_sheet.csv": ("deferred_commissions_current", "deferred_commissions_noncurrent"),
     "_cash_flow_statement.csv": ("change_in_deferred_commissions",),
     "_commission_payouts.csv": ("commission_base_arr",),
+    "_Employees.csv": ("cost_center", "termination_type", "pay_plan", "bonus_target_pct", "retirement_deferral_pct"),
 }
+PAYROLL_REGISTER_SUFFIX = "_payroll_register.csv"
+REGISTER_ACCOUNTS = {"regular_wages": "6100", "bonus": "6105", "employer_payroll_tax": "6110", "retirement_match": "6115",
+                     "health_benefits": "6120", "severance": "6125"}
+COGS_PAYROLL = {"SUP-TIER1": "5010", "CS-IMPL": "5020"}
+PAYROLL_ACCOUNTS = set(REGISTER_ACCOUNTS.values()) | set(COGS_PAYROLL.values())
+EXPENSE_LINES = {"Sales": "S&M", "Marketing": "S&M", "Customer Success": "S&M", "Engineering": "R&D", "Product": "R&D",
+                 "Finance": "G&A", "G&A": "G&A", "Support": "G&A"}
+REGISTER_WINDOW = {"Actual": ("2024-01", CLOSE), "Budget": ("2026-01", "2026-12"), "Forecast": ("2026-07", "2026-12")}
 HISTORY_FILE = "Actual_customer_arr_history.csv"
 WINBACK_WINDOW = 6
 SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
@@ -355,8 +366,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             neg = [o for o in others if o < 0]
             if neg:
                 rep.flag(f"{v} cash bridge other operating cash out is negative in {len(neg)} of {len(others)} months "
-                         f"({money(min(others))} to {money(max(others))}): the payroll line is larger than the GL "
-                         f"implies (headcount-plan payroll does not tie to GL payroll)")
+                         f"({money(min(others))} to {money(max(others))}): vendor payments in the AP rollforward "
+                         f"exceed the GL's non-payroll expense")
 
     # ------------------------------------------------------------------ cash path and caps
     rep.section("Cash path and deferred revenue level")
@@ -684,6 +695,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                          if d in TEAM_DEPARTMENTS))
     rep.check("Hiring_Ramp_Assumptions.csv present (loader expands it for every role)",
               [] if os.path.exists(os.path.join(v5, "Hiring_Ramp_Assumptions.csv")) else ["missing"])
+    if os.path.exists(os.path.join(v5, f"Actual{PAYROLL_REGISTER_SUFFIX}")):
+        payroll_section(rep, f, gl, emps, on_staff, ramp)
 
     # ------------------------------------------------------------------ marketing
     rep.section("Marketing")
@@ -702,6 +715,208 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
     rep.check("Forecast marketing pipeline summary spend = GL programs",
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
     return rep
+
+
+def _first(p: str) -> dt.date:
+    return dt.date(int(p[:4]), int(p[5:7]), 1)
+
+
+def _last(p: str) -> dt.date:
+    return dt.date(int(p[:4]), int(p[5:7]), calendar.monthrange(int(p[:4]), int(p[5:7]))[1])
+
+
+def _months(a: str, b: str) -> list[str]:
+    return [_padd(a, i) for i in range(_pidx(b) - _pidx(a) + 1)]
+
+
+def _register_line(e: dict[str, str], p: str, pol: dict[str, list[dict[str, str]]], as_of: dt.date):
+    """One employee-month of payroll from the employee file and the payroll policies, or None when not employed."""
+    hire = dt.date.fromisoformat(e["hire_date"])
+    exit_ = dt.date.fromisoformat(e["termination_date"]) if e["termination_date"] else None
+    start, end = max(hire, _first(p)), min(exit_ or _last(p), _last(p))
+    days = (end - start).days + 1
+    if days <= 0:
+        return None
+    value = {k: num(rows[0]["value"]) for k, rows in pol.items() if len(rows) == 1 and k != "bonus_payout"
+             and rows[0]["value"].replace(".", "").isdigit()}
+    merit_month = int(pol["merit_increase_pct"][0]["effective_from"][5:7])
+
+    def raises(d: dt.date) -> int:
+        return sum(1 for y in range(hire.year + 1, d.year + 1) if dt.date(y, merit_month, 1) <= d)
+
+    salary = cents(num(e["base_salary"]) / (1 + value["merit_increase_pct"]) ** (raises(as_of) - raises(end)))
+    share = Decimal(days) / Decimal(calendar.monthrange(int(p[:4]), int(p[5:7]))[1])
+    wages = cents(salary / 12 * share)
+    annual = (cents(salary * num(e["bonus_target_pct"])) if e["pay_plan"] == "Bonus"
+              else num(e["variable_comp"]) if e["pay_plan"] == "Incentive" else ZERO)
+    bonus = cents(annual / 12 * share)
+    severance = ZERO
+    if e["termination_type"] == "Involuntary" and exit_ and exit_.strftime("%Y-%m") == p:
+        weeks = min(max(int(value["severance_weeks_per_year"]) * ((exit_ - hire).days // 365),
+                        int(value["severance_min_weeks"])), int(value["severance_max_weeks"]))
+        severance = cents(salary / 52 * weeks)
+    health = next(num(r["value"]) for r in pol["health_benefits_monthly"] if r["effective_from"][:4] == p[:4]) \
+        if hire <= _first(p) and (exit_ is None or exit_ >= _first(p)) else ZERO
+    match = cents((wages + bonus) * min(num(e["retirement_deferral_pct"]), value["retirement_match_cap_pct"])
+                  * value["retirement_match_rate"])
+    return {"days_employed": Decimal(days), "regular_wages": wages, "bonus": bonus, "severance": severance,
+            "employer_payroll_tax": cents((wages + bonus + severance) * value["employer_payroll_tax_rate"]),
+            "health_benefits": health, "retirement_match": match}
+
+
+def payroll_section(rep: Report, f, gl, emps, on_staff, ramp) -> None:
+    """The payroll register recomputed from the employee files and the payroll policies; GL payroll, headcount-plan
+    payroll and cash-bridge payroll = the register; each P&L line keeps positive non-payroll spend; the chart of
+    accounts covers the GL; managers, requisitions and the Budget's opening roster come from the employee files."""
+    rep.section("Payroll register, GL payroll, chart of accounts")
+    reg = {v: f(f"{v}{PAYROLL_REGISTER_SUFFIX}") for v in VERSIONS}
+    tol = Decimal("0.02")
+    for v in VERSIONS:
+        pol: dict[str, list[dict[str, str]]] = defaultdict(list)
+        for r in f(f"{v}_payroll_policies.csv"):
+            pol[r["policy"]].append(r)
+        plan_end = _last(CLOSE if v == "Actual" else "2026-12")
+        want = {}
+        for e in emps[v]:
+            exit_ = dt.date.fromisoformat(e["termination_date"]) if e["termination_date"] else None
+            as_of = dt.date.fromisoformat(e["hire_date"]) if e["employment_status"] == "Planned" else min(exit_ or plan_end, plan_end)
+            for p in _months(*REGISTER_WINDOW[v]):
+                line = _register_line(e, p, pol, as_of)
+                if line:
+                    want[(p, e["employee_id"])] = line
+        got = {(r["period"], r["employee_id"]): r for r in reg[v]}
+        by_id = {e["employee_id"]: e for e in emps[v]}
+        diffs = [f"{p} {i}: missing from the register" for p, i in sorted(set(want) - set(got))]
+        diffs += [f"{p} {i}: on the register, not employed" for p, i in sorted(set(got) - set(want))]
+        worst = ZERO
+        for k in sorted(set(want) & set(got)):
+            r, w, e = got[k], want[k], by_id[k[1]]
+            if (r["employee_name"], r["department"], r["cost_center"]) != (e["employee_name"], e["department"], e["cost_center"]):
+                diffs.append(f"{k[0]} {k[1]}: name, department or cost center differs from the employee file")
+            for col, x in w.items():
+                worst = max(worst, abs(num(r[col]) - x))
+                if abs(num(r[col]) - x) > tol:
+                    diffs.append(f"{k[0]} {k[1]} {col}: register {r[col]} vs {x}")
+            if num(r["total_payroll_cost"]) != sum((num(r[c]) for c in REGISTER_ACCOUNTS), ZERO):
+                diffs.append(f"{k[0]} {k[1]}: total is not the sum of its components")
+        rep.check(f"{v} payroll register = the employee file under the payroll policies (days employed, wages, bonus, "
+                  f"severance, payroll tax, benefits, 401(k) match)", diffs,
+                  f"{len(got)} employee-months, largest difference {money(worst)} (salary restated from the close)")
+
+        exp: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
+        for r in reg[v]:
+            if r["cost_center"] in COGS_PAYROLL:
+                exp[(r["period"], r["cost_center"], COGS_PAYROLL[r["cost_center"]])] += num(r["total_payroll_cost"])
+            else:
+                for col, acct in REGISTER_ACCOUNTS.items():
+                    exp[(r["period"], r["cost_center"], acct)] += num(r[col])
+        posted: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
+        stray = []
+        for r in gl[v]:
+            if r["statement"] == "Balance Sheet" or r["account_number"] not in PAYROLL_ACCOUNTS \
+                    or r["source_file"].endswith(COMMISSION_SOURCE_SUFFIX):
+                continue
+            if r["source_file"] != f"{v}{PAYROLL_REGISTER_SUFFIX}":
+                stray.append(f"{r['period'][:7]} {r['account_number']} {r['cost_center']} from {r['source_file']}")
+            posted[(r["period"][:7], r["cost_center"], r["account_number"])] += num(r["amount"])
+        diffs = stray + [f"{p} {cc} {a}: GL {money(posted.get((p, cc, a), ZERO))} vs register {money(x)}"
+                         for (p, cc, a), x in sorted(exp.items()) if abs(posted.get((p, cc, a), ZERO) - x) > CENTS / 2]
+        diffs += [f"{k}: GL only" for k in sorted(set(posted) - set(exp)) if posted[k]]
+        rep.check(f"{v} GL payroll accounts ({', '.join(sorted(PAYROLL_ACCOUNTS))}) = the payroll register by month, cost "
+                  f"center and account, to the cent (commission payroll tax rows aside)", diffs,
+                  f"{money(sum(exp.values(), ZERO))}")
+
+        hp_reg: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+        for r in reg[v] + (reg["Actual"] if v == "Forecast" else []):
+            hp_reg[(r["period"], r["department"])] += num(r["total_payroll_cost"])
+        diffs = [f"{r['period'][:7]} {r['department']}: {r['monthly_cash_payroll_cost']} vs {money(hp_reg[(r['period'][:7], r['department'])])}"
+                 for r in f(f"{v}_Headcount_Plan.csv")
+                 if abs(num(r["monthly_cash_payroll_cost"]) - hp_reg[(r["period"][:7], r["department"])]) > CENTS]
+        rep.check(f"{v} headcount plan cash payroll = the payroll register by department", diffs)
+
+        by_p = sums(reg[v], "period", "total_payroll_cost")
+        bridge = [r for r in f(f"{v}_cash_flow_bridge.csv") if r["period"][:7] in by_p]
+        diffs = [f"{r['period'][:7]}: {r['payroll_cash_out']} vs {money(by_p[r['period'][:7]])}" for r in bridge
+                 if abs(num(r["payroll_cash_out"]) - by_p[r["period"][:7]]) > CENTS]
+        rep.check(f"{v} cash bridge payroll = the payroll register (paid in the month)", diffs, f"{len(bridge)} months")
+
+        other: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+        accounts: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
+        for r in gl[v]:
+            cat = r["statement_category"]
+            if r["statement"] == "Balance Sheet" or cat not in ("Operating Expense", "Cost of Revenue"):
+                continue
+            if r["source_file"] == f"{v}{PAYROLL_REGISTER_SUFFIX}" or r["source_file"].endswith(COMMISSION_SOURCE_SUFFIX):
+                continue
+            line = "COGS" if cat == "Cost of Revenue" else EXPENSE_LINES[r["department"]]
+            other[(r["period"][:7], line)] += num(r["amount"])
+            accounts[(r["period"][:7], line, r["account_number"])] += num(r["amount"])
+        neg = [f"{p} {line} {a}: {money(x)}" for (p, line, a), x in sorted(accounts.items()) if x < 0]
+        low = {line: min((x, p) for (p, l_), x in other.items() if l_ == line) for line in sorted({l_ for _, l_ in other})}
+        rep.check(f"{v} every P&L line keeps positive non-payroll spend (each account, every month)", neg,
+                  "lowest month: " + ", ".join(f"{line} {money(x)} ({p})" for line, (x, p) in low.items()))
+
+        coa = {r["account_number"]: r["account_name"] for r in f(f"{v}_chart_of_accounts.csv")}
+        used = {(r["account_number"], r["account_name"]) for r in gl[v]}
+        diffs = [f"{a} {n}: not in the chart of accounts" for a, n in sorted(used) if a not in coa]
+        diffs += [f"{a}: GL '{n}' vs chart '{coa[a]}'" for a, n in sorted(used) if a in coa and coa[a] != n]
+        rep.check(f"{v} chart of accounts covers every GL account under the same name", diffs, f"{len(coa)} accounts")
+
+        ids = {e["employee_id"]: e for e in emps[v]}
+        diffs = []
+        for e in emps[v]:
+            exit_ = dt.date.fromisoformat(e["termination_date"]) if e["termination_date"] else None
+            d = dt.date.fromisoformat(e["hire_date"]) if e["employment_status"] == "Planned" else min(exit_ or plan_end, plan_end)
+            m = ids.get(e["manager"])
+            if not e["manager"]:
+                if e["role"] != "Chief Executive Officer":
+                    diffs.append(f"{e['employee_id']}: no manager")
+            elif m is None or m["employee_id"] == e["employee_id"]:
+                diffs.append(f"{e['employee_id']}: manager {e['manager']} is not another {v} employee")
+            elif not (m["hire_date"] <= d.isoformat() and (not m["termination_date"] or m["termination_date"] >= d.isoformat())):
+                diffs.append(f"{e['employee_id']}: manager {e['manager']} not employed on {d}")
+        rep.check(f"{v} managers are employees employed alongside the employee; only the CEO has none", diffs)
+
+        reqs = f(f"{v}_Open_Requisitions.csv")
+        planned = [e for e in emps[v] if e["employment_status"] == "Planned"]
+        open_ids = {r["source"].split()[0] for r in reqs if r["status"] == "Open"}
+        if v == "Actual":
+            hires = {e["employee_id"] for e in emps[v] if e["hire_date"] >= "2024-01-01"}
+            filled = {r["source"].split()[0] for r in reqs if r["status"] == "Filled"}
+            diffs = [f"{len(hires ^ filled)} hires without a filled requisition or the reverse"] if hires != filled else []
+            forecast_planned = {e["employee_id"] for e in emps["Forecast"] if e["employment_status"] == "Planned"}
+            if open_ids != forecast_planned:
+                diffs.append(f"open requisitions {len(open_ids)} vs Forecast planned hires {len(forecast_planned)}")
+        else:
+            diffs = [] if open_ids == {e["employee_id"] for e in planned} else [
+                f"open requisitions {len(open_ids)} vs planned hires {len(planned)}"]
+            diffs += [f"{e['employee_id']}: source names no requisition" for e in planned if "REQ-" not in e["source"]]
+        rep.check(f"{v} requisitions = hires (filled since Jan 2024, open = the Forecast's planned hires)" if v == "Actual"
+                  else f"{v} requisitions = planned hires, one each", diffs, f"{len(reqs)} requisitions")
+
+    dec = "2025-12-31"
+    a_open = {e["employee_id"]: e for e in emps["Actual"] if e["hire_date"] <= dec
+              and (not e["termination_date"] or e["termination_date"] > dec)}
+    b_open = {e["employee_id"]: e for e in emps["Budget"] if e["employment_status"] != "Planned"}
+    diffs = [f"{len(set(a_open) ^ set(b_open))} employees differ"] if set(a_open) != set(b_open) else []
+    diffs += [f"{i}: role or cost center" for i in set(a_open) & set(b_open)
+              if (a_open[i]["role"], a_open[i]["cost_center"]) != (b_open[i]["role"], b_open[i]["cost_center"])]
+    rep.check("Budget opening roster = Actual employees on staff at Dec 31, 2025 (Budget plans no exits)", diffs,
+              f"{len(b_open)} employees")
+
+    heads = Counter(e["department"] for e in emps["Actual"] if on_staff(e, CLOSE))
+    rep.info(f"Actual employees on staff at the {CLOSE} close: {sum(heads.values())} (" +
+             ", ".join(f"{d} {n}" for d, n in sorted(heads.items())) + ")")
+    h1 = _months("2026-01", CLOSE)
+    quotas = [r for r in f("Actual_Sales_Quotas.csv") if r["quota_type"] == "Bookings ARR" and r["period"][:7] in h1]
+    won = sum((num(r["quota_attainment_actual_arr"]) for r in quotas), ZERO)
+    cap = sum((num(r["ramped_monthly_quota_arr"]) for r in quotas), ZERO)
+    exp_arr = sum((num(o["amount_arr"]) for o in f("Actual_opportunities.csv") if o["opportunity_type"] == "Expansion"
+                   and o["close_status"] == "Closed Won" and o["period"][:7] in h1), ZERO)
+    csm_cap = sum((num(e["annual_quota_arr"]) / 12 * ramp(e, p) for e in emps["Actual"] if e["role"] in CSM_ROLES
+                   for p in h1 if on_staff(e, p)), ZERO)
+    rep.info(f"H1 2026 attainment: AEs and Senior AEs {won / cap:.0%} of ramped quota (new business {money(won)}); "
+             f"CSMs {exp_arr / csm_cap:.0%} of ramped quota (expansion {money(exp_arr)})")
 
 
 def _pidx(p: str) -> int:
@@ -1498,12 +1713,22 @@ KNOWN_GAPS = [
     "Implementation fees are billed and recognized at signing (not spread over the implementation period).",
     "Budget deferred revenue differs from the unrecognized amount on its invoices (see the build check line above): "
     "Budget recognizes Budget revenue against invoices billed before 2026 at Actual amounts.",
-    "Employee manager and sales_reps manager_id hold the manager's title (the HRIS has no sales or CS leadership rows).",
-    "Sales and Customer Success employees' HRIS region is their CRM territory (EMEA became South; Remote took the "
-    "territory with the most opportunities per head); other departments keep their HRIS region.",
+    "Sales and Customer Success employees work the CRM territory with the most Actual opportunities per head in "
+    "their role group when hired; other departments have an office region.",
     "Headcount plan quota capacity includes SDR pipeline quota alongside AE bookings quota.",
-    "FY24/FY25 headcount-plan payroll does not tie to GL payroll (GL detail for those months is cloned from Jan 2026).",
-    "FY24/FY25 Actual headcount plan is a backcast; the employee file has no one hired before 2024 and no leavers.",
+    "Team payroll follows the GL payroll mix of the summary P&L (averaged over 5 months, never falling); in months "
+    "where the summary steps (Feb 2026 Finance, G&A and Support) the team hires ahead or behind and the line's "
+    "non-payroll accounts take the difference.",
+    "The summary P&L is fixed shares of revenue; 60% of Tier 1 support labor (5010) was reallocated to R&D in every "
+    "month and version (support_labor_reclass_log.csv): gross margin and R&D moved, EBITDA did not.",
+    "Bonus and the SDR incentive are paid monthly at target with payroll (no accrued bonus liability); Tier 1 Support "
+    "and Implementation post fully loaded payroll (incl. bonus, 401(k), severance) to 5010 / 5020.",
+    "The SBC schedule is still 1% of revenue (not the roster's equity grants); the headcount plan's SBC is the roster's.",
+    "The AP rollforward's vendor accruals are a fixed share of expense from the v4 model, larger than the GL's "
+    "non-payroll expense once payroll comes from the register; the cash bridge's other operating cash is the plug.",
+    "Cost center SALES-AM has no roles (expansion is owned by AEs and CSMs).",
+    "CSMs are on the Commission pay plan (target in commission_target); their renewal commissions come from the "
+    "renewal commission files, not the target.",
     "Budget-only and Forecast-only new logos are in their own version's customer file, not the Actual master.",
     "renewal_arr redefined as beginning ARR less contraction and churn.",
     "Commission payout detail exists only for Actual Jan-Jun 2026; every other month is estimated at the 2026 "

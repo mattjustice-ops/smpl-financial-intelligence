@@ -48,11 +48,18 @@ def _employee(employee_id: str, department: str, status: str = "Active", hire: s
     return row
 
 
-def _gl(period: str, expense_type: str, amount: float, department: str, statement: str = "Income Statement") -> dict:
+def _gl(
+    period: str,
+    expense_type: str,
+    amount: float,
+    department: str,
+    statement: str = "Income Statement",
+    category: str = "Operating Expense",
+) -> dict:
     return {
         "period": period,
         "statement": statement,
-        "statement_category": "Operating Expense",
+        "statement_category": category,
         "account_group": "Labor",
         "expense_type": expense_type,
         "account_name": expense_type,
@@ -119,6 +126,70 @@ def test_build_gl_payroll_takes_payroll_types_only() -> None:
     )
     assert payroll.by_pnl_line[(date(2026, 6, 1), "sales_and_marketing")] == Decimal("135")
     assert payroll.by_pnl_line[(date(2026, 6, 1), "research_and_development")] == Decimal("70")
+
+
+def test_build_gl_payroll_counts_bonus_retirement_severance_and_cogs_labor() -> None:
+    payroll = gl_payroll.build_gl_payroll(
+        [
+            _gl("2026-06", "Salaries and Wages", 100, "Finance"),
+            _gl("2026-06", "Bonus", 12, "Finance"),
+            _gl("2026-06", "Retirement Match", 4, "Finance"),
+            _gl("2026-06", "Severance", 30, "Finance"),
+            _gl("2026-06", "Labor", 500, "Support", category="Cost of Revenue"),
+        ]
+    )
+    period = date(2026, 6, 1)
+    finance = payroll.by_department[(period, "Finance")]
+    assert (finance.wages, finance.bonus, finance.benefits, finance.total) == (
+        Decimal("130"),
+        Decimal("12"),
+        Decimal("4"),
+        Decimal("146"),
+    )
+    assert payroll.by_department[(period, "Support")].wages == Decimal("500")
+    assert payroll.by_pnl_line[(period, "cost_of_revenue")] == Decimal("500")
+    assert payroll.by_pnl_line[(period, "general_and_administrative")] == Decimal("146")
+
+    rows = [
+        {
+            "period": period,
+            "department": "Finance",
+            "filled_headcount": Decimal("1"),
+            "planned_hire_headcount": Decimal("0"),
+            "total_headcount_fte": Decimal("1"),
+            "quota_capacity_arr": Decimal("0"),
+            "productive_quota_capacity_arr": Decimal("0"),
+        }
+    ]
+    out = {r["department"]: r for r in gl_payroll.apply_gl_payroll(rows, payroll, [period])}
+    assert out["Finance"]["bonus_monthly"] == Decimal("12.00")
+    assert out["Finance"]["total_people_cost_monthly"] == Decimal("146.00")
+
+
+def test_leavers_count_by_date_at_month_end() -> None:
+    leaver = roster.employee_from_loaded_row(
+        _employee("E9", "Sales", status="Terminated", hire="2025-01-15", termination_date="2026-03-31")
+    )
+    assert leaver.counted
+    assert roster.on_roster(leaver, date(2025, 1, 1))
+    assert roster.on_roster(leaver, date(2026, 2, 1))
+    assert not roster.on_roster(leaver, date(2026, 3, 1))
+    undated = roster.employee_from_loaded_row(_employee("E10", "Sales", status="Terminated"))
+    assert not undated.counted
+
+
+def test_engine_counts_leavers_until_their_exit_month(db_session, monkeypatch) -> None:
+    session, org_id = db_session
+    loaded = [
+        _employee("E1", "Sales"),
+        _employee("E2", "Sales", status="Terminated", termination_date="2026-02-10"),
+    ]
+    monkeypatch.setattr(roster, "_loaded_rows", lambda s, o, v: loaded if v == "Actual" else [])
+    engine = WorkforcePlanningEngine(session, org_id, version="Actual")
+    result = engine.build(date(2026, 1, 1), date(2026, 2, 1))
+    sales = {r["period"]: r for r in result.period_rows if r["department"] == "Sales"}
+    assert sales[date(2026, 1, 1)]["filled_headcount"] == Decimal("2")
+    assert sales[date(2026, 2, 1)]["filled_headcount"] == Decimal("1")
 
 
 def test_forecast_payroll_uses_actual_gl_for_months_without_forecast_gl(db_session, monkeypatch) -> None:

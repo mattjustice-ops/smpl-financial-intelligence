@@ -33,6 +33,12 @@ Rules (agreed with Matt, Oct 5-6 2026):
     commissions expensed when paid, and 6110 rows carry employer payroll tax on the payouts.
     They are part of the summary's S&M: the other S&M accounts are sized to the rest, with the
     source 6200 rows scaled alongside them before removal, so no other account moves.
+  * Payroll (when <version>_payroll_register.csv exists, Oct 8 2026): the source payroll rows
+    (5010, 5020, 6100-6125) are removed and payroll is booked from the register by cost center:
+    5010 / 5020 one fully loaded row for Tier 1 Support / Implementation, other cost centers one
+    row per account (wages 6100, bonus 6105, payroll tax 6110, 401(k) match 6115, benefits 6120,
+    severance 6125). Payroll is part of its P&L line: the line's other accounts keep their mix
+    and are sized to the rest.
 
 Usage:
   python rebuild_gl_to_summary.py <source_folder> <output_folder>
@@ -94,6 +100,19 @@ RECURRING_SERVICES_ACCOUNT = "4200"
 ADDED_REVENUE_ACCOUNTS = {IMPLEMENTATION_ACCOUNT, RECURRING_SERVICES_ACCOUNT}
 COMMISSION_ACCOUNT = "6200"
 COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
+PAYROLL_REGISTER_SUFFIX = "_payroll_register.csv"
+# register column, account, account name, expense type
+PAYROLL_COLUMNS = (
+    ("regular_wages", "6100", "Base Salaries", "Salaries and Wages"),
+    ("bonus", "6105", "Bonuses", "Bonus"),
+    ("employer_payroll_tax", "6110", "Payroll Taxes", "Payroll Taxes"),
+    ("retirement_match", "6115", "401(k) Employer Match", "Retirement Match"),
+    ("health_benefits", "6120", "Employee Benefits", "Benefits"),
+    ("severance", "6125", "Severance", "Severance"),
+)
+# Cost centers whose payroll is cost of revenue: one fully loaded row per month.
+COGS_PAYROLL = {"SUP-TIER1": ("5010", "Customer Support Labor COGS"), "CS-IMPL": ("5020", "Customer Success Labor COGS")}
+PAYROLL_ACCOUNTS = {a for _, a, _, _ in PAYROLL_COLUMNS} | {a for a, _ in COGS_PAYROLL.values()}
 
 
 def _clone_to(row: dict[str, str], target: str, template: str) -> dict[str, str]:
@@ -138,10 +157,13 @@ def _read(path: str) -> list[dict[str, str]]:
 
 def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict[str, str]],
             added_revenue: dict[str, Decimal], added_sm: dict[str, Decimal] | None = None,
-            replaced_out: list[dict[str, str]] | None = None):
+            replaced_out: list[dict[str, str]] | None = None,
+            payroll: dict[tuple[str, str], Decimal] | None = None):
     """``added_revenue``: implementation + recurring services by month, carved out of the summary revenue.
     ``added_sm``: commission rows by month, carved out of the summary S&M (source 6200 rows are scaled, then
-    dropped; the scaled rows go to ``replaced_out`` so the forecast seed can keep the same mix)."""
+    dropped; the scaled rows go to ``replaced_out`` so the forecast seed can keep the same mix).
+    ``payroll``: register payroll by (month, line), carved out of the summary line; the source payroll rows are
+    dropped. None keeps the source payroll rows."""
     added_sm = added_sm or {}
     summary = {r["period"][:7]: r for r in summary_rows}
     periods = REBUILD_PERIODS[version]
@@ -165,6 +187,13 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
                         "detail": f"{row['department']} / {row['cost_center']} / {row['account_name']}",
                         "amount": row["amount"]})
             continue
+        if payroll is not None and row["account_number"] in PAYROLL_ACCOUNTS \
+                and not row["source_file"].endswith(COMMISSION_SOURCE_SUFFIX):
+            log.append({"version": version, "period": period, "line": _line(row) or "", "action": "removed",
+                        "detail": f"{row['department']} / {row['cost_center']} / {row['account_name']} "
+                                  "(replaced by the payroll register)",
+                        "amount": row["amount"]})
+            continue
         by_period_line[(period, _line(row))].append(row)
 
     for target, template in fill.items():
@@ -178,6 +207,10 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
             target -= added_revenue.get(period, Decimal("0"))
         elif line == "sales_and_marketing":
             target -= added_sm.get(period, Decimal("0"))
+        if payroll is not None:
+            target -= payroll.get((period, line), Decimal("0"))
+            if target < 0:
+                raise ValueError(f"{version} {period} {line}: register payroll exceeds the summary line by {-target}")
         posted = sum((Decimal(r["amount"]) for r in rows), Decimal("0"))
         # Source P&L rows are credit-positive: revenue +, expenses -.
         current = posted if line == "revenue" else -posted
@@ -228,7 +261,8 @@ def rebuild(version: str, gl_rows: list[dict[str, str]], summary_rows: list[dict
                     "detail": f"{len(rows)} rows; factor {factor:.4f}", "amount": f"{target:.2f}"})
 
     for (period, line) in {(p, l) for p in periods for l in set(LINE_BY_CATEGORY.values()) | set(LINE_BY_DEPARTMENT.values())}:
-        if (period, line) not in by_period_line and Decimal(str(summary[period][line] or 0)) != 0:
+        rest = Decimal(str(summary[period][line] or 0)) - (payroll or {}).get((period, line), Decimal("0"))
+        if (period, line) not in by_period_line and rest != 0:
             raise ValueError(f"{version} {period} {line}: summary has a total but the GL has no rows")
     return out, log
 
@@ -337,6 +371,53 @@ def commission_rows(src: str, version: str, template: dict[str, str]) -> list[di
     return rows
 
 
+def payroll_rows(src: str, version: str, template: dict[str, str]) -> list[dict[str, str]]:
+    """GL payroll rows from <version>_payroll_register.csv by month and cost center, when the file exists."""
+    source = f"{version}{PAYROLL_REGISTER_SUFFIX}"
+    path = os.path.join(src, source)
+    if not os.path.exists(path):
+        return []
+    sub = {r["cost_center"]: r["sub_department"] for r in _read(os.path.join(src, f"{version}_department_cost_centers.csv"))}
+    totals: dict[tuple[str, str, str], dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+    heads: dict[tuple[str, str, str], int] = defaultdict(int)
+    for r in _read(path):
+        key = (r["period"][:7], r["department"], r["cost_center"])
+        if r["cost_center"] not in sub:
+            raise ValueError(f"{source}: cost center {r['cost_center']} is not in {version}_department_cost_centers.csv")
+        for col, *_ in PAYROLL_COLUMNS:
+            totals[key][col] += Decimal(r[col])
+        totals[key]["total"] += Decimal(r["total_payroll_cost"])
+        heads[key] += 1
+    rows = []
+    for (period, dept, cc), t in sorted(totals.items()):
+        if cc in COGS_PAYROLL:
+            number, name = COGS_PAYROLL[cc]
+            lines = [(number, name, "Cost of Revenue", "COGS", "Labor", t["total"])]
+        else:
+            lines = [(number, name, "Operating Expense", "Labor", etype, t[col]) for col, number, name, etype in PAYROLL_COLUMNS]
+        for number, name, category, group, etype, amount in lines:
+            if not amount:
+                continue
+            rows.append({
+                **{k: "" for k in template},
+                "organization_id": template["organization_id"], "version": version, "period": period,
+                "account_number": number, "account_name": name, "statement": "Income Statement",
+                "statement_category": category, "account_group": group, "expense_type": etype,
+                "department": dept, "cost_center": cc, "sub_department": sub[cc], "source_file": source,
+                "source_record_id": f"{version}-{period}-{cc}-{number}", "amount": f"{amount:.2f}",
+                "currency": "USD", "subsidiary": "US Parent", "source_system": "Payroll",
+                "notes": f"{heads[(period, dept, cc)]} employees on the {period} payroll register",
+            })
+    return rows
+
+
+def payroll_by_line(rows: list[dict[str, str]]) -> dict[tuple[str, str], Decimal]:
+    out: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for r in rows:
+        out[(r["period"], _line(r))] += Decimal(r["amount"])
+    return out
+
+
 def main(src: str, dst: str) -> None:
     os.makedirs(dst, exist_ok=True)
     all_log: list[dict[str, str]] = []
@@ -359,13 +440,21 @@ def main(src: str, dst: str) -> None:
         added_sm: dict[str, Decimal] = defaultdict(Decimal)
         for r in comm:
             added_sm[r["period"]] += Decimal(r["amount"])
-        rows, log = rebuild(version, gl, summary, added, added_sm, replaced[version])
+        pay = payroll_rows(src, version, gl[0])
+        rows, log = rebuild(version, gl, summary, added, added_sm, replaced[version],
+                            payroll_by_line(pay) if pay else None)
         old_bs = [r for r in rows if r["statement"] == "Balance Sheet"]
         if old_bs:
             log.append({"version": version, "period": "", "line": "balance sheet", "action": "replaced",
                         "detail": f"{len(old_bs)} month-end balance rows replaced by opening balances and monthly activity",
                         "amount": ""})
-        rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"] + impl + rsvc + comm
+        rebuilt[version] = [r for r in rows if r["statement"] != "Balance Sheet"] + impl + rsvc + comm + pay
+        if pay:
+            log.append({"version": version, "period": "", "line": "payroll", "action": "carved out",
+                        "detail": f"{len(pay)} payroll rows from {version}{PAYROLL_REGISTER_SUFFIX}; source payroll "
+                                  f"rows ({', '.join(sorted(PAYROLL_ACCOUNTS))}) removed; each line's other accounts "
+                                  f"are the summary line less payroll",
+                        "amount": f"{sum(Decimal(r['amount']) for r in pay):.2f}"})
         if comm:
             log.append({"version": version, "period": "", "line": "sales_and_marketing", "action": "carved out",
                         "detail": f"{len(comm)} commission rows (6200 amortization, 6210 expensed, 6110 payroll tax) "

@@ -1,7 +1,9 @@
 """
 Payroll dollars from the GL — the only payroll source for workforce plans, cash and the P&L.
 
-Payroll = Salaries and Wages + Benefits + Payroll Taxes + Commissions (P&L rows only).
+Payroll = P&L rows whose expense type is a payroll type: wages (Salaries and Wages, Severance), bonus (Bonus),
+benefits (Benefits, Payroll Taxes, Retirement Match), commissions (Commissions) and Labor — fully loaded payroll a
+cost center posts to cost of revenue without a component split, counted as wages.
 The Forecast version covers open months; closed months use Actual GL, matching the outlook.
 """
 
@@ -23,10 +25,11 @@ GL_PAYROLL_SOURCE = "gl_actuals"
 CHECK_TOLERANCE = Decimal("1.00")
 ALL_TEAMS = "All teams"
 
-WAGES_TYPES = frozenset({"salaries and wages"})
-BENEFITS_TYPES = frozenset({"benefits", "payroll taxes"})
+WAGES_TYPES = frozenset({"salaries and wages", "severance", "labor"})
+BONUS_TYPES = frozenset({"bonus"})
+BENEFITS_TYPES = frozenset({"benefits", "payroll taxes", "retirement match"})
 COMMISSION_TYPES = frozenset({"commissions"})
-PAYROLL_TYPES = WAGES_TYPES | BENEFITS_TYPES | COMMISSION_TYPES
+PAYROLL_TYPES = WAGES_TYPES | BONUS_TYPES | BENEFITS_TYPES | COMMISSION_TYPES
 
 PNL_LINE_BY_GL_LINE = {
     "sm": "sales_and_marketing",
@@ -39,16 +42,19 @@ PNL_LINE_BY_GL_LINE = {
 @dataclass
 class GlPayroll:
     wages: Decimal = Decimal("0")
+    bonus: Decimal = Decimal("0")
     benefits: Decimal = Decimal("0")
     commissions: Decimal = Decimal("0")
 
     @property
     def total(self) -> Decimal:
-        return self.wages + self.benefits + self.commissions
+        return self.wages + self.bonus + self.benefits + self.commissions
 
     def add(self, expense_type: str, amount: Decimal) -> None:
         if expense_type in WAGES_TYPES:
             self.wages += amount
+        elif expense_type in BONUS_TYPES:
+            self.bonus += amount
         elif expense_type in BENEFITS_TYPES:
             self.benefits += amount
         else:
@@ -158,7 +164,7 @@ def apply_gl_payroll(rows: list[dict[str, Any]], payroll: GlPayrollSet, periods:
         gl = payroll.by_department.get(key, GlPayroll())
         row.update(
             base_payroll_monthly=q_money(gl.wages),
-            bonus_monthly=q_money(0),
+            bonus_monthly=q_money(gl.bonus),
             commission_monthly=q_money(gl.commissions),
             equity_sbc_monthly=q_money(0),
             benefits_load_monthly=q_money(gl.benefits),
