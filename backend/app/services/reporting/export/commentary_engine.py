@@ -253,7 +253,7 @@ def _cash_commentary(bundle: ReportingBundle, as_of: str) -> CommentaryField:
         if written_off:
             unfavorable.append(
                 f"Written off in {wc.period}: " + "; ".join(_case_text(c) for c in written_off) + "."
-                + (" No-starts count against new business, not churn." if any(c.label == "No-start" for c in written_off)
+                + (" No-starts are churn inside the first year and also reduce new business." if any(c.label == "No-start" for c in written_off)
                    else "")
             )
         recovered = [c for c in wc.collections_cases if c.status == "Recovered"]

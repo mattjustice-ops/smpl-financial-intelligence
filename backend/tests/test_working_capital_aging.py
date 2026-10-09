@@ -259,7 +259,7 @@ def test_commentary_and_board_report_allowance_bad_debt_and_collections() -> Non
             in field.metric_context)
     assert "Bad debt expense $40 in 2026-06; $400 written off." in field.metric_context
     assert ("Written off in 2026-06: Nimbus Works $250 (Non-payment churn: Budget cut); "
-            "Vertex Group $150 (No-start: Tax registration). No-starts count against new business, not churn."
+            "Vertex Group $150 (No-start: Tax registration). No-starts are churn inside the first year and also reduce new business."
             in field.unfavorable)
     assert field.favorable == ("Recovered from collections in 2026-06: Pioneer Group $340 "
                                "(Recovered after escalation: Payment plan).")
