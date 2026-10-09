@@ -7,13 +7,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps.request_context import get_request_user_id
 from app.models.budget_version import BudgetVersion
 from app.models.organization import Organization
 from app.services.auth.service import AuthService
+from app.services.budget_promotion_checks import budget_promotion_failures
 from app.services.demo_csv.loader import PROMOTABLE_BUDGET_TABLES, promote_budget_tables
 from app.services.organizations import get_organization_or_404
 from app.services.reporting.org_reporting_settings import resolve_org_reporting_window
@@ -94,6 +95,20 @@ def save_budget_draft(
     org, user_id = require_org_promoter(db, organization_id)
     get_organization_or_404(db, organization_id)
     as_of, _, _ = resolve_org_reporting_window(db, org, as_of_period=as_of_period)
+    name = version_name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Name the budget version.")
+    same_name = select(BudgetVersion.id).where(
+        BudgetVersion.organization_id == organization_id,
+        func.lower(func.trim(BudgetVersion.version_name)) == name.lower(),
+    )
+    if version_id:
+        same_name = same_name.where(BudgetVersion.id != version_id)
+    if db.scalars(same_name).first() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f'A budget version named "{name}" already exists. Use a different name so versions can be told apart.',
+        )
 
     if version_id:
         version = get_budget_version(db, organization_id, version_id)
@@ -102,14 +117,14 @@ def save_budget_draft(
     else:
         version = BudgetVersion(
             organization_id=organization_id,
-            version_name=version_name.strip(),
+            version_name=name,
             status="draft",
             as_of_period=as_of,
             created_by_user_id=user_id,
         )
         db.add(version)
 
-    version.version_name = version_name.strip()
+    version.version_name = name
     version.budget_year = budget_year
     version.as_of_period = as_of
     version.levers = levers
@@ -141,11 +156,28 @@ def promote_budget_version(
             status_code=400,
             detail="No budget table data on this version. Save a draft with table rows before promoting.",
         )
+    failures = budget_promotion_failures(tables_payload, version.budget_year)
+    if failures:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "The budget tables don't tie, so nothing was promoted.",
+                "how_to_fix": (
+                    "The Budget Engine computes all of these tables from one plan, so a mismatch means this "
+                    "draft was saved from an out-of-date plan or there is an engine defect. Reopen the Budget "
+                    "Engine, let it recalculate, and save a new draft. If the new draft fails too, send SMPL "
+                    f"this version ID: {version.id}."
+                ),
+                "failures": failures,
+            },
+        )
 
+    # One final per budget year; earlier versions stay saved for review and comparison.
     for prior in db.scalars(
         select(BudgetVersion).where(
             BudgetVersion.organization_id == organization_id,
             BudgetVersion.status == "final",
+            BudgetVersion.budget_year == version.budget_year,
         )
     ).all():
         prior.status = "superseded"

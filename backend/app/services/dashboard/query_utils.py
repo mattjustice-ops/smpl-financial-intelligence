@@ -156,6 +156,32 @@ def _forecast_version_predicates(
     return clauses, params
 
 
+def _budget_version_predicates(db: Session, columns: set[str]) -> list[str]:
+    """Report each budget year's current final version; the loaded (unstamped) Budget for years without one.
+
+    Promotion keeps every version's rows so versions can be reviewed and compared later.
+    """
+    if "budget_version_id" not in columns or "period" not in columns or not table_exists(db, "budget_versions"):
+        return []
+    return [
+        """(
+            cast(budget_version_id as text) in (
+                select cast(_bv.id as text) from budget_versions _bv
+                where cast(_bv.organization_id as text) = :organization_id and _bv.status = 'final'
+            )
+            or (
+                (budget_version_id is null or cast(budget_version_id as text) = '')
+                and not exists (
+                    select 1 from budget_versions _bv
+                    where cast(_bv.organization_id as text) = :organization_id
+                      and _bv.status = 'final'
+                      and cast(_bv.budget_year as text) = substr(cast(period as text), 1, 4)
+                )
+            )
+        )"""
+    ]
+
+
 def fetch_table_rows(db: Session, table_name: str, organization_id: uuid.UUID) -> list[dict[str, Any]]:
     if not table_exists(db, table_name):
         return []
@@ -175,6 +201,8 @@ def fetch_table_rows(db: Session, table_name: str, organization_id: uuid.UUID) -
                 "(version is null or trim(cast(version as text)) = '' "
                 "or lower(trim(cast(version as text))) = 'forecast')"
             )
+    elif table_name.lower().startswith("budget_"):
+        clauses.extend(_budget_version_predicates(db, _table_columns(db, table_name)))
 
     where_sql = " and ".join(clauses)
     rows = db.execute(

@@ -10982,13 +10982,109 @@ function buildBudgetTableRows(vid, orgId) {
       pipeline_coverage_ratio: a.nb > 0 ? (g.pipelineDollar || 0) / a.nb : 0,
     };
   });
-  return {
+  const tables = {
     budget_mrr_waterfall: mrr,
     budget_income_statement: income,
     budget_cash_flow_statement: cashflow,
     budget_balance_sheet: balance,
     budget_bookings_summary: bookings,
   };
+  return Object.assign(tables, buildBudgetCommissionRows(vid, org, asOf));
+}
+
+/**
+ * Commission schedule (one row per planned commission kind per month, accrual basis) and the deferred
+ * commissions roll-forward that the balance sheet and cash flow already use. Nothing when the
+ * commission inputs aren't loaded: commissions are unplanned, not zero.
+ */
+function buildBudgetCommissionRows(vid, org, asOf) {
+  const cm = computeCommissionPlan();
+  const pol = cm.policy;
+  if (!pol.loaded) return {};
+  const ret = pol.returns || {};
+  const reactKind = ret.reactShare > 0 ? ret.reactRate : null;
+  const plansOf = kind => {
+    const r = COMMISSION_INPUTS.rates && COMMISSION_INPUTS.rates[kind];
+    return r && r.plans && r.plans.length ? r.plans.join('+') : '';
+  };
+  const ren = cm.renShare;
+  const kinds = [
+    {
+      key: 'nb', kind: 'new_business', planned: !pol.noNewExp && cm.rates.nb != null,
+      cap: pol.capNew, months: pol.monthsNew, base: e => e.nbBase,
+      source: `Budget Engine: planned new business ARR${reactKind === 'new_business' ? ' + commissionable reactivation ARR' : ''} x loaded new business rate`,
+    },
+    {
+      key: 'exp', kind: 'expansion', planned: !pol.noNewExp && cm.rates.exp != null,
+      cap: pol.capExp, months: pol.monthsExp, base: e => e.expBase,
+      source: 'Budget Engine: ' + ([
+        ret.expShare != null ? `planned expansion ARR${ret.expShare < 1 ? ' above prior level' : ''}` : null,
+        reactKind === 'expansion' ? 'commissionable reactivation ARR' : null,
+      ].filter(Boolean).join(' + ') || 'no commissionable expansion ARR') + ' x loaded expansion rate',
+    },
+    {
+      key: 'ren', kind: 'renewal', planned: pol.renewalPaid && cm.rates.ren != null && !!ren,
+      cap: false, months: 0, base: e => e.renBase,
+      source: ren ? `Budget Engine: beginning ARR x ${ren.months[0]}..${ren.months[ren.months.length - 1]} renewal share x renewal rate` : '',
+    },
+  ];
+  const schedule = [];
+  BUD_P.forEach(p => {
+    const m = cm.months[p];
+    kinds.filter(k => k.planned).forEach(k => {
+      const payout = m.earned[k.key];
+      schedule.push({
+        budget_version_id: vid, organization_id: org, version: 'Budget', period: p, as_of_period: asOf,
+        plan_id: plansOf(k.kind), commission_base_arr: k.base(m.earned), commission_rate: cm.rates[k.key],
+        commission_payout: payout, capitalize: k.cap ? 'Y' : 'N',
+        capitalized_amount: k.cap ? payout : 0, expensed_amount: k.cap ? 0 : payout,
+        amortization_months: k.cap ? k.months : 0, source: k.source,
+      });
+    });
+  });
+  const capMonths = pol.capNew ? pol.monthsNew : pol.capExp ? pol.monthsExp : 0;
+  const notes = [
+    'Budget Engine roll-forward from the Dec close',
+    pol.taxCapitalized ? 'payroll tax on capitalized commissions is capitalized' : 'payroll tax expensed',
+    pol.lagMonths > 0 || pol.timing === 'quarter_after_booking' ? 'payouts are cash paid (lagged from earned)' : 'payouts paid in the month earned',
+  ].join('; ');
+  const rollforward = BUD_P.map(p => {
+    const m = cm.months[p];
+    return {
+      budget_version_id: vid, organization_id: org, version: 'Budget', period: p, as_of_period: asOf,
+      beginning_deferred_commissions: m.dcBeg, capitalized_commissions: m.capitalized,
+      commission_amortization: m.amort, ending_deferred_commissions: m.dcEnd,
+      current_portion: m.dcCurrent, noncurrent_portion: m.dcNoncurrent,
+      expensed_commissions: m.expensedNewExp + m.expRen, total_commission_payouts: m.paidTot,
+      payroll_tax_on_commissions: m.tax, amortization_months: capMonths, notes,
+    };
+  });
+  return { budget_commission_schedule: schedule, budget_deferred_commissions_rollforward: rollforward };
+}
+
+/** Confirm text when the commission tables can't be written in full; null when nothing to confirm. */
+function budgetCommissionPromoteGaps() {
+  const pol = computeCommissionPlan().policy;
+  if (!pol.loaded) {
+    return 'Commissions are not planned: the commission inputs did not load. The commission schedule and '
+      + 'deferred commissions roll-forward will not be written for FY' + BUDGET_YEAR + '.';
+  }
+  const w = pol.warnings;
+  if (!w.length) return null;
+  return 'Commission plan warnings (' + w.length + '):\n- ' + w.slice(0, 6).join('\n- ')
+    + (w.length > 6 ? '\n- …' : '');
+}
+
+function formatPromoteRejection(detail) {
+  try {
+    const d = JSON.parse(detail).detail;
+    if (d && Array.isArray(d.failures)) {
+      return d.message + (d.how_to_fix ? '\n\n' + d.how_to_fix : '') + '\n\n- ' + d.failures.slice(0, 12).join('\n- ')
+        + (d.failures.length > 12 ? `\n- …and ${d.failures.length - 12} more` : '');
+    }
+    if (typeof d === 'string') return d;
+  } catch (e) { /* not JSON */ }
+  return detail;
 }
 
 function budgetRowsToCSV(rows) {
@@ -11008,7 +11104,7 @@ function downloadBudgetCSVs(tables, vid, name) {
     csvs[`Budget_${stem}_${vid}.csv`] = budgetRowsToCSV(rows);
   });
   csvs['budget_versions_registry.csv'] = budgetRowsToCSV(budgetVersions.map(v => ({
-    version_id: v.id, version_name: v.name, status: v.status, budget_year: BUDGET_YEAR,
+    version_id: v.id, version_name: v.name, status: v.status, budget_year: v.budget_year || BUDGET_YEAR,
     as_of_period: CLOSE_MONTH, created_at: v.ts,
     dec_arr: Math.round(v.dec_arr), dec_cash: Math.round(v.dec_cash), fy_ebitda: Math.round(v.fy_ebitda),
   })));
@@ -11025,7 +11121,7 @@ function downloadBudgetCSVs(tables, vid, name) {
   return Object.keys(csvs).length;
 }
 
-async function pushBudgetVersionToWarehouse(status, name, tables) {
+async function pushBudgetVersionToWarehouse(status, name, tables, serverId) {
   if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return { ok: false, reason: 'no_outlook' };
   let orgId;
   try {
@@ -11047,6 +11143,7 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
     results: { engine: 'budget', year: BUDGET_YEAR },
     tables: orgTables,
   };
+  if (serverId) body.version_id = serverId;
   const draftRes = await fetch('/api/v1/budget/versions/draft?organization_id=' + encodeURIComponent(orgId), {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -11059,7 +11156,7 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
     const promoteRes = await fetch('/api/v1/budget/versions/' + draft.id + '/promote?organization_id=' + encodeURIComponent(orgId), {
       method: 'POST', credentials: 'include',
     });
-    if (!promoteRes.ok) return { ok: false, reason: 'promote', detail: await promoteRes.text() };
+    if (!promoteRes.ok) return { ok: false, reason: 'promote', id: draft.id, detail: await promoteRes.text() };
   }
   let assessmentId = null;
   try {
@@ -11078,16 +11175,37 @@ async function pushBudgetVersionToWarehouse(status, name, tables) {
     : { ok: true, draft: true, id: draft.id, assessmentId };
 }
 
+/** Prompt until the name differs from every saved version (case and spacing ignored); null if cancelled. */
+function promptUniqueBudgetVersionName(status) {
+  const taken = new Set(budgetVersions.map(v => String(v.name || '').trim().toLowerCase()));
+  let suggestion = `FY${BUDGET_YEAR} ${status === 'final' ? 'Final' : 'Draft'} ${new Date().toLocaleString()}`;
+  let ask = `Name this ${status === 'final' ? 'FINAL' : 'draft'} budget version:`;
+  for (;;) {
+    const raw = prompt(ask, suggestion);
+    if (raw == null) return null;
+    const name = raw.trim();
+    if (name && !taken.has(name.toLowerCase())) return name;
+    suggestion = name;
+    ask = name
+      ? `A version named "${name}" already exists. Use a different name so versions can be told apart:`
+      : `Name this ${status === 'final' ? 'FINAL' : 'draft'} budget version:`;
+  }
+}
+
+const isSameYearFinal = v => v.status === 'final' && (v.budget_year == null || v.budget_year === BUDGET_YEAR);
+
 window.saveBudgetVersion = async function(status) {
-  const name = prompt(
-    `Name this ${status === 'final' ? 'FINAL' : 'draft'} budget version:`,
-    `FY${BUDGET_YEAR} ${status === 'final' ? 'Final' : 'Draft'} ${new Date().toLocaleDateString()}`,
-  );
+  const name = promptUniqueBudgetVersionName(status);
   if (!name) return;
+  if (status === 'final') {
+    const gaps = budgetCommissionPromoteGaps();
+    if (gaps && !confirm(gaps + '\n\nPromote anyway?')) return;
+  }
   const snap = budgetVersionSnapshot();
   const vid = 'B' + Date.now();
+  const priorFinals = budgetVersions.filter(isSameYearFinal);
   if (status === 'final') {
-    budgetVersions.forEach(v => { if (v.status === 'final') v.status = 'superseded'; });
+    priorFinals.forEach(v => { v.status = 'superseded'; });
   }
   const entry = {
     id: vid, name, status, ts: new Date().toLocaleString(),
@@ -11100,10 +11218,19 @@ window.saveBudgetVersion = async function(status) {
   let warehouseNote = '';
   try {
     const wh = await pushBudgetVersionToWarehouse(status, name, tables);
+    if (wh.id) { entry.serverId = wh.id; persistBudgetVersions(); }
+    if (status === 'final' && (wh.reason === 'promote' || wh.reason === 'draft')) {
+      entry.status = 'draft';
+      priorFinals.forEach(v => { v.status = 'final'; });
+      persistBudgetVersions();
+      alert(`✗ Not promoted: "${name}"${wh.reason === 'promote' ? ' (kept as a draft)' : ''}\n\n${formatPromoteRejection(wh.detail)}`);
+      showTab('promote');
+      return;
+    }
     if (wh.ok && wh.promoted) warehouseNote = '\n\nLoaded into Neon/Postgres warehouse.';
     else if (wh.ok && wh.draft) warehouseNote = '\n\nDraft saved server-side.';
     else if (wh.reason === 'signin') warehouseNote = '\n\nSign in to push to warehouse (CSVs still downloaded).';
-    else if (wh.reason === 'draft' || wh.reason === 'promote') {
+    else if (wh.reason === 'draft') {
       warehouseNote = `\n\nWarehouse API: ${wh.detail || wh.reason}. CSVs downloaded for manual load.`;
     } else {
       warehouseNote = '\n\nWarehouse API unavailable — CSVs downloaded for load via Budget_* manifest.';
@@ -11124,15 +11251,50 @@ window.saveBudgetVersion = async function(status) {
 
 window.promoteBudgetVersion = async function(id) {
   const v = budgetVersions.find(x => x.id === id);
-  if (!v || !confirm(`Promote "${v.name}" to FINAL? This supersedes the current final and loads Budget_* tables.`)) return;
-  budgetVersions.forEach(x => { if (x.status === 'final') x.status = 'superseded'; });
+  if (!v || !confirm(`Promote "${v.name}" to FINAL? It replaces the current FY${v.budget_year || BUDGET_YEAR} final in reporting; earlier versions stay saved.`)) return;
+  if (!v.serverId) {
+    if (!confirm(`"${v.name}" was never saved to the warehouse, so its tables weren't kept. Promoting it loads the plan as it is now under this name. Continue?`)) return;
+    const gaps = budgetCommissionPromoteGaps();
+    if (gaps && !confirm(gaps + '\n\nPromote anyway?')) return;
+  }
+  const priorFinals = budgetVersions.filter(x => x !== v && x.status === 'final' && (x.budget_year == null || x.budget_year === (v.budget_year || BUDGET_YEAR)));
+  const priorStatus = v.status;
+  priorFinals.forEach(x => { x.status = 'superseded'; });
   v.status = 'final';
   persistBudgetVersions();
-  const tables = buildBudgetTableRows(id);
-  try { await pushBudgetVersionToWarehouse('final', v.name, tables); } catch (e) { /* CSVs still go */ }
-  downloadBudgetCSVs(tables, id, v.name);
+  let wh = null;
+  let tables = null;
+  if (v.serverId) {
+    try { wh = await promoteSavedBudgetVersion(v.serverId); } catch (e) { wh = { ok: false, reason: 'promote', detail: String(e) }; }
+  } else {
+    tables = buildBudgetTableRows(id);
+    try { wh = await pushBudgetVersionToWarehouse('final', v.name, tables); } catch (e) { /* CSVs still go */ }
+    if (wh && wh.id) v.serverId = wh.id;
+  }
+  if (wh && (wh.reason === 'promote' || wh.reason === 'draft')) {
+    v.status = priorStatus;
+    priorFinals.forEach(x => { x.status = 'final'; });
+    persistBudgetVersions();
+    alert(`✗ Not promoted: "${v.name}"\n\n${formatPromoteRejection(wh.detail)}`);
+    showTab('promote');
+    return;
+  }
+  persistBudgetVersions();
+  if (tables) downloadBudgetCSVs(tables, id, v.name);
   showTab('promote');
 };
+
+/** Promote a draft already saved server-side; the server promotes the tables stored with that draft. */
+async function promoteSavedBudgetVersion(serverId) {
+  if (!window.SMPLOutlook || typeof window.SMPLOutlook.resolveOrgId !== 'function') return { ok: false, reason: 'no_outlook' };
+  const orgId = await window.SMPLOutlook.resolveOrgId({ waitForParent: true });
+  if (!orgId) return { ok: false, reason: 'signin' };
+  const res = await fetch('/api/v1/budget/versions/' + serverId + '/promote?organization_id=' + encodeURIComponent(orgId), {
+    method: 'POST', credentials: 'include',
+  });
+  if (!res.ok) return { ok: false, reason: 'promote', id: serverId, detail: await res.text() };
+  return { ok: true, promoted: true, id: serverId };
+}
 
 window.deleteBudgetVersion = function(id) {
   const v = budgetVersions.find(x => x.id === id);
