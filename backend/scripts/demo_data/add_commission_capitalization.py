@@ -24,6 +24,11 @@ Rules (agreed with Matt, Oct 7 2026; docs/COMMISSION_CAPITALIZATION_DESIGN.md):
     policy; Forecast bases are probability-weighted), and Forecast renewals are the renewals
     expected in Forecast_renewal_pipeline.csv (renewal ARR x renewal probability) x the
     renewal plan rate.
+  * No-starts (Oct 9 2026, Actual_collections_cases.csv): the new business commission paid at booking is clawed
+    back when the customer's payments stopped inside PLAN-AE-NEW's clawback window (the rep repays it: the
+    unamortized balance leaves the asset, amortization to date is reversed, and the month's payouts are net of
+    it); outside the window the unamortized balance is written down to 6200. Both in the month the customer
+    leaves the ARR history (Actual_commission_clawbacks.csv).
   * Opening asset (Jan 2024 month end): the 60 monthly cohorts paid through Jan 2024. Pre-2024
     payouts are Jan 2024's payout discounted by the ARR growth rate from Jan 2024 to Dec 2025.
   * Employer payroll tax rate = the payroll policy's employer_payroll_tax_rate (Actual_payroll_policies.csv).
@@ -73,9 +78,16 @@ POLICY_COLUMNS = ["capitalize", "amortization_months", "payout_basis", "payout_l
 BS_NEW = ["deferred_commissions_current", "deferred_commissions_noncurrent"]
 CF_NEW = "change_in_deferred_commissions"
 ROLLFORWARD_FIELDS = ["organization_id", "version", "period", "beginning_deferred_commissions", "capitalized_commissions",
-                      "commission_amortization", "ending_deferred_commissions", "current_portion", "noncurrent_portion",
+                      "commission_amortization", "clawbacks", "clawback_amortization_reversal",
+                      "commission_write_downs", "ending_deferred_commissions", "current_portion", "noncurrent_portion",
                       "expensed_commissions", "total_commission_payouts", "payroll_tax_on_commissions",
                       "amortization_months", "notes"]
+CASES_FILE = "Actual_collections_cases.csv"
+NO_START = "No-start"
+CLAWBACK_FIELDS = ["organization_id", "version", "period", "customer_id", "customer_name", "plan_id", "booked_period",
+                   "commission_base_arr", "commission_paid", "months_paid_before_stop", "clawback_window_months",
+                   "treatment", "clawback_amount", "amortized_before_removal", "unamortized_removed",
+                   "expense_impact", "note"]
 SCHEDULE_FIELDS = ["organization_id", "version", "period", "plan_id", "commission_base_arr", "commission_rate",
                    "commission_payout", "capitalize", "capitalized_amount", "expensed_amount", "amortization_months",
                    "source"]
@@ -128,14 +140,19 @@ def insert_after(fields: list[str], anchor: str, new: list[str]) -> list[str]:
 
 
 class Cohorts:
-    """Straight-line amortization of monthly payout cohorts, exact to the cent on cumulative totals."""
+    """Straight-line amortization of monthly payout cohorts, exact to the cent on cumulative totals. A removed
+    slice (a no-start's commission) stops amortizing the month it is removed; its unamortized balance leaves then."""
 
     def __init__(self, months: int):
         self.n = months
         self.paid: dict[str, Decimal] = defaultdict(Decimal)
+        self.removed: list[tuple[str, Decimal, str]] = []  # payout month, amount, month removed
 
     def add(self, period: str, amount: Decimal) -> None:
         self.paid[period] += amount
+
+    def remove(self, paid: str, amount: Decimal, at: str) -> None:
+        self.removed.append((paid, amount, at))
 
     def cumulative_amortization(self, through: str, *, paid_through: str | None = None) -> Decimal:
         total = ZERO
@@ -146,13 +163,25 @@ class Cohorts:
             if age <= 0:
                 continue
             total += amt * min(age, self.n) / self.n
+        for p, amt, at in self.removed:
+            if paid_through and p > paid_through:
+                continue
+            age, frozen = pidx(through) - pidx(p) + 1, pidx(at) - pidx(p)
+            if age > frozen:
+                total -= amt * (min(age, self.n) - min(frozen, self.n)) / self.n
         return q(total)
+
+    def removed_in(self, at: str) -> tuple[Decimal, Decimal]:
+        """(amortized before removal, unamortized) of the slices removed in ``at``."""
+        amortized = sum((q(amt * min(pidx(at) - pidx(p), self.n) / self.n) for p, amt, a in self.removed if a == at), ZERO)
+        return amortized, sum((amt for p, amt, a in self.removed if a == at), ZERO) - amortized
 
     def cumulative_paid(self, through: str) -> Decimal:
         return sum((a for p, a in self.paid.items() if p <= through), ZERO)
 
     def balance(self, through: str) -> Decimal:
-        return q(self.cumulative_paid(through)) - self.cumulative_amortization(through)
+        gone = sum((self.removed_in(a)[1] for a in {a for _, _, a in self.removed if a <= through}), ZERO)
+        return q(self.cumulative_paid(through)) - self.cumulative_amortization(through) - gone
 
     def current_portion(self, at: str) -> Decimal:
         """Amortization in the next 12 months of cohorts paid through ``at``."""
@@ -294,6 +323,44 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
         schedule[v].sort(key=lambda r: (r["period"], r["plan_id"]))
         write(os.path.join(dst, f"{v}_commission_schedule.csv"), SCHEDULE_FIELDS, schedule[v])
 
+    # No-starts: the new business commission is clawed back when payment stopped inside the plan's clawback window
+    # (the rep repays it); otherwise the unamortized balance is written down. Either way when the customer leaves.
+    window = {r["plan_id"]: int(num(r["clawback_window_months"]))
+              for r in read(os.path.join(src, "Actual_commission_plans.csv"))[1]}[NEW]
+    cases_path = os.path.join(src, CASES_FILE)
+    no_starts = [r for r in read(cases_path)[1] if r["case_type"] == NO_START] if os.path.exists(cases_path) else []
+    nb_base: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for x in commission_bases(actual_hist or []):
+        if x["movement_type"] == "New Business":
+            nb_base[(x["customer_id"], x["period"][:7])] += x["base"]
+    removals = []
+    for r in no_starts:
+        booked, at = r["booked_period"], r["left_arr_history"]
+        base = nb_base[(r["customer_id"], booked)]
+        paid_months = pidx(r["first_unpaid_period"]) - pidx(booked)
+        if not base or not (CUTOFF <= booked < at <= CLOSE):
+            raise ValueError(f"{CASES_FILE} {r['customer_id']}: no new business base in {booked} or leaves {at}")
+        amount = q(base * eff[NEW])
+        amortized = q(amount * min(pidx(at) - pidx(booked), AMORTIZATION_MONTHS) / AMORTIZATION_MONTHS)
+        clawed = paid_months < window
+        removals.append({"organization_id": org, "version": "Actual", "period": at, "customer_id": r["customer_id"],
+                         "customer_name": r["customer_name"], "plan_id": NEW, "booked_period": booked,
+                         "commission_base_arr": q(base), "commission_paid": amount,
+                         "months_paid_before_stop": str(paid_months), "clawback_window_months": str(window),
+                         "treatment": "Clawed back" if clawed else "Written down",
+                         "clawback_amount": amount if clawed else ZERO, "amortized_before_removal": amortized,
+                         "unamortized_removed": amount - amortized,
+                         "expense_impact": -amortized if clawed else amount - amortized,
+                         "note": (f"payment stopped {paid_months} months after booking, inside the {window}-month "
+                                  f"clawback window: the rep repays the commission; amortization to date reversed"
+                                  if clawed else
+                                  f"payment stopped {paid_months} months after booking, after the {window}-month "
+                                  f"clawback window: unamortized commission written down to 6200")})
+    write(os.path.join(dst, "Actual_commission_clawbacks.csv"), CLAWBACK_FIELDS, removals)
+    notes.append(f"no-start commissions: " + "; ".join(
+        f"{x['customer_id']} {x['treatment'].lower()} {x['period']} ({x['commission_paid']:,.2f} paid {x['booked_period']}, "
+        f"expense {x['expense_impact']:+,.2f})" for x in removals))
+
     chain_start = {"Actual": None, "Budget": "2026-01", "Forecast": "2026-07"}
     rollforward: dict[str, dict[str, dict]] = {}
     for v, (a, b) in VERSION_MONTHS.items():
@@ -301,6 +368,8 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
         for p, plans in ladder.items():
             for amt in plans.values():
                 c.add(p, amt)
+        for x in removals:
+            c.remove(x["booked_period"], x["commission_paid"], x["period"])
         for p, plans in payouts["Actual"].items():
             if chain_start[v] is None or p < chain_start[v]:
                 for plan in CAPITALIZED_PLANS:
@@ -317,9 +386,16 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
             end = c.balance(p)
             current = c.current_portion(p)
             expensed = payouts[v][p][REN]
-            total = cap + expensed
+            here = [x for x in removals if x["period"] == p]
+            clawback = sum((x["clawback_amount"] for x in here), ZERO)
+            reversal = sum((x["amortized_before_removal"] for x in here if x["clawback_amount"]), ZERO)
+            write_down = sum((x["unamortized_removed"] for x in here if not x["clawback_amount"]), ZERO)
+            if end != begin + cap - amort - (clawback - reversal) - write_down:
+                raise ValueError(f"{v} {p}: deferred commissions do not roll forward")
+            total = cap + expensed - clawback
             rows[p] = {"organization_id": org, "version": v, "period": p, "beginning_deferred_commissions": begin,
-                       "capitalized_commissions": cap, "commission_amortization": amort,
+                       "capitalized_commissions": cap, "commission_amortization": amort, "clawbacks": clawback,
+                       "clawback_amortization_reversal": reversal, "commission_write_downs": write_down,
                        "ending_deferred_commissions": end, "current_portion": current, "noncurrent_portion": end - current,
                        "expensed_commissions": expensed, "total_commission_payouts": total,
                        "payroll_tax_on_commissions": q(total * tax_rate),
@@ -340,7 +416,8 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
         for r in rows:
             p = r["period"][:7]
             rf = rollforward[v][p]
-            add = rf["commission_amortization"] + rf["expensed_commissions"] + rf["payroll_tax_on_commissions"]
+            add = (rf["commission_amortization"] - rf["clawback_amortization_reversal"] + rf["commission_write_downs"]
+                   + rf["expensed_commissions"] + rf["payroll_tax_on_commissions"])
             r["sales_and_marketing"] = q(num(r["sales_and_marketing"]) - old_6200[p] + add)
             gp = num(r["gross_profit"])
             ebitda = gp - num(r["sales_and_marketing"]) - num(r["research_and_development"]) - num(r["general_and_administrative"])
@@ -349,7 +426,8 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
         write(path, fields, rows)
         yr = defaultdict(Decimal)
         for p, rf in rollforward[v].items():
-            yr[p[:4]] += rf["commission_amortization"] + rf["expensed_commissions"] + rf["payroll_tax_on_commissions"]
+            yr[p[:4]] += (rf["commission_amortization"] - rf["clawback_amortization_reversal"]
+                          + rf["commission_write_downs"] + rf["expensed_commissions"] + rf["payroll_tax_on_commissions"])
         notes.append(f"{v} S&M up by commission expense: " + ", ".join(f"{y} {a:,.2f}" for y, a in sorted(yr.items()))
                      + f"; v5 GL 6200 removed: {sum(old_6200.values(), ZERO):,.2f}")
 

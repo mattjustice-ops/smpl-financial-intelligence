@@ -7,7 +7,10 @@ Method (financial_dashboard_cf_re_logic.md): the GL holds an opening trial balan
 Where each balance sheet row comes from:
   * Opening balances: the cutoff month of Actual_balance_sheet.csv. Equity is one total
     in the dataset, so it opens on account 3000 with no split.
-  * Accounts receivable: AR rollforward (billings, collections).
+  * Accounts receivable: AR rollforward (billings, collections, write-offs). The allowance for doubtful
+    accounts (1110, contra AR) from the allowance rollforward: the provision is credited (6560 is the debit),
+    write-offs are debited. The balance sheet file's AR is net of it, so the opening splits into gross AR and the
+    allowance.
   * Accounts payable and prepaids (Oct 9 2026): the vendor ledger (vendor_model.py). Bills credit AP
     (Actual: one row per bill with the vendor; Budget and Forecast: one row a month), payments debit
     it (Actual: one row per payment run and vendor). Annual contracts paid up front debit 1200 when
@@ -59,6 +62,8 @@ NON_CASH_DEPT = "Balance Sheet Activity"
 ACCOUNTS = {
     "cash": ("1000", "Cash", "Assets", "Cash", "Cash"),
     "accounts_receivable": ("1100", "Accounts Receivable", "Assets", "AR", "Accounts Receivable"),
+    "allowance_for_doubtful_accounts": ("1110", "Allowance for Doubtful Accounts", "Assets", "AR",
+                                        "Accounts Receivable"),
     "prepaids_and_other_current": ("1200", "Prepaids and Other Current Assets", "Assets", "Current Assets", "Prepaids"),
     "deferred_commissions_current": ("1250", "Deferred Commissions - Current", "Assets", "Deferred Commissions",
                                      "Deferred Commissions"),
@@ -77,12 +82,15 @@ ACCOUNTS = {
     "apic_sbc": ("3311", "APIC - Stock Compensation", "Equity", "Equity", "Equity"),
 }
 CREDIT_NORMAL = {"accounts_payable", "accrued_expenses", "operating_lease_liabilities", "deferred_revenue", "debt",
-                 "other_liabilities", "equity", "apic_sbc"}
+                 "other_liabilities", "equity", "apic_sbc", "allowance_for_doubtful_accounts"}
+# Credit-normal lines shown inside an asset column: they reduce it.
+CONTRA = {"allowance_for_doubtful_accounts"}
 BALANCE_LINES = ["cash", "accounts_receivable", "prepaids_and_other_current", "deferred_commissions_current", "ppe_net",
                  "deferred_commissions_noncurrent", "accounts_payable", "deferred_revenue", "debt", "other_liabilities",
                  "equity"]
 # Balance sheet file columns that hold more than one GL line (the app's other assets / other liabilities).
 STATEMENT_LINES = {**{k: (k,) for k in BALANCE_LINES if k != "equity"},
+                   "accounts_receivable": ("accounts_receivable", "allowance_for_doubtful_accounts"),
                    "other_assets": ("operating_lease_rou",),
                    "other_liabilities": ("other_liabilities", "accrued_expenses", "operating_lease_liabilities")}
 # sync_v5_statements.py writes other_assets; a balance sheet file with that column has the accrued expenses and
@@ -157,7 +165,7 @@ def _natural(key: str, amount: Decimal) -> Decimal:
 
 def statement_value(line: dict[str, Decimal], column: str) -> Decimal:
     """A balance sheet file column from GL balances (natural sign)."""
-    return sum((line[k] for k in STATEMENT_LINES[column]), Decimal("0"))
+    return sum((-line[k] if k in CONTRA else line[k] for k in STATEMENT_LINES[column]), Decimal("0"))
 
 
 def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, str]]], ledgers: dict[str, Ledger]):
@@ -176,6 +184,8 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
         bs = _by_period(os.path.join(src, f"{version}_balance_sheet.csv"))
         cf = _by_period(os.path.join(src, f"{version}_cash_flow_statement.csv"))
         ar = _by_period(os.path.join(src, f"{version}_accounts_receivable_rollforward.csv"))
+        allow_file = f"{version}_allowance_for_doubtful_accounts.csv"
+        allow = _by_period(os.path.join(src, allow_file))
         sbc = _by_period(os.path.join(src, f"{version}_SBC_Schedule.csv"))
         dc_file = f"{version}_deferred_commissions_rollforward.csv"
         dc = _by_period(os.path.join(src, dc_file))
@@ -252,6 +262,14 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             sources = {"accrued_expenses": f"{version}_accrued_expenses_rollforward.csv",
                        "operating_lease_liabilities": f"{version}_operating_lease_schedule.csv",
                        "operating_lease_rou": f"{version}_operating_lease_schedule.csv"}
+            if cutoff in allow:
+                # The file's AR is net of the allowance: the GL carries gross AR and the contra account.
+                a0 = num(allow[cutoff]["ending_allowance"])
+                opening["accounts_receivable"] += a0
+                opening["allowance_for_doubtful_accounts"] = a0
+                notes["accounts_receivable"] = f"gross: the file's AR (net) plus the allowance {a0:,.2f}"
+                notes["allowance_for_doubtful_accounts"] = f"allowance for doubtful accounts at {cutoff} month end"
+                sources["allowance_for_doubtful_accounts"] = allow_file
             log.append({"version": version, "period": cutoff, "line": "other_liabilities", "action": "opening split",
                         "detail": notes["other_liabilities"], "amount": f"{carved:.2f}"})
             for key, bal in opening.items():
@@ -318,9 +336,15 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                 log.append({"version": version, "period": p, "line": key, "action": "balance sheet change",
                             "detail": f"{file_label} not used: {reason}", "amount": f"{amt:.2f}"})
 
+            ar_legs = [("billings", "new_billings", 1), ("collections", "cash_collections", -1)]
+            if "write_offs" in ar.get(p, {}):
+                ar_legs.append(("write_offs", "write_offs", -1))
             subledger(ar, "accounts_receivable", "beginning_accounts_receivable", "ending_accounts_receivable",
-                      [("billings", "new_billings", 1), ("collections", "cash_collections", -1)],
-                      f"{version}_accounts_receivable_rollforward.csv")
+                      ar_legs, f"{version}_accounts_receivable_rollforward.csv")
+            if allow:
+                subledger(allow, "allowance_for_doubtful_accounts", "beginning_allowance", "ending_allowance",
+                          [("provision", "provision_for_credit_losses", -1), ("write_offs", "write_offs", 1)],
+                          allow_file)
             sbc_amt, sbc_file = stock_comp(p)
             if sbc_file.endswith("_cash_flow_statement.csv"):
                 log.append({"version": version, "period": p, "line": "apic_sbc", "action": "source",
@@ -341,6 +365,11 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                       source_file=dc_file, note=f"commission payouts capitalized (ASC 340-40) from {dc_file}")
                 w.add(p, "deferred_commissions_current", -amort, label="amortization", source_file=dc_file,
                       note=f"amortization to 6200 Sales Commissions from {dc_file}")
+                removed = (num(row.get("clawbacks")) - num(row.get("clawback_amortization_reversal"))
+                           + num(row.get("commission_write_downs")))
+                w.add(p, "deferred_commissions_noncurrent", -removed, label="no_start_removed", source_file=dc_file,
+                      note="no-start commission: unamortized balance clawed back or written down "
+                           "(Actual_commission_clawbacks.csv)")
                 reclass = num(row["current_portion"]) - (running["deferred_commissions_current"] - amort)
                 w.add(p, "deferred_commissions_current", reclass, label="reclass_current", source_file=dc_file,
                       note=f"current portion = next 12 months' amortization ({dc_file})")

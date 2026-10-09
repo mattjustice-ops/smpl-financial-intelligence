@@ -158,11 +158,13 @@ def main(src: str, gl_dir: str) -> list[str]:
         return pl[source][p][key]
 
     def line(v: str, p: str) -> dict[str, Decimal] | None:
-        """GL balances with other assets / other liabilities as the balance sheet file shows them."""
+        """GL balances with AR (net of the allowance), other assets and other liabilities as the balance sheet file
+        shows them."""
         b = bal[v].get(p)
         if b is None:
             return None
-        return {**b, "other_assets": statement_value(b, "other_assets"),
+        return {**b, "accounts_receivable": statement_value(b, "accounts_receivable"),
+                "other_assets": statement_value(b, "other_assets"),
                 "other_liabilities": statement_value(b, "other_liabilities")}
 
     for v in VERSIONS:
@@ -198,6 +200,8 @@ def main(src: str, gl_dir: str) -> list[str]:
             new_lease[r["period"][:7]] += num(r["new_lease_liability"])
         cf_by = by_period(cf_file)
         ar = by_period(read(os.path.join(src, f"{v}_accounts_receivable_rollforward.csv"))[1])
+        allow_path = os.path.join(src, f"{v}_allowance_for_doubtful_accounts.csv")
+        allow = by_period(read(allow_path)[1]) if os.path.exists(allow_path) else {}
         dr = by_period(read(os.path.join(src, f"{v}_deferred_revenue_waterfall.csv"))[1])
         ap = by_period(read(os.path.join(src, f"{v}_accounts_payable_rollforward.csv"))[1])
         pp = by_period(read(os.path.join(src, f"{v}_Prepaids_Rollforward.csv"))[1])
@@ -254,7 +258,8 @@ def main(src: str, gl_dir: str) -> list[str]:
             da = pl_for(v, p, "da")
             sbc = pl_for(v, p, "sbc")
             if prev is None:
-                prev = {"accounts_receivable": num(ar[p]["beginning_accounts_receivable"]),
+                prev = {"accounts_receivable": num(ar[p]["beginning_accounts_receivable"])
+                        - (num(allow[p]["beginning_allowance"]) if p in allow else ZERO),
                         "deferred_revenue": num(dr[p]["beginning_deferred_revenue"]),
                         "accounts_payable": num(ap[p]["beginning_accounts_payable"]),
                         "prepaids_and_other_current": num(pp[p]["beginning_prepaid_balance"]),
@@ -313,6 +318,10 @@ def main(src: str, gl_dir: str) -> list[str]:
             elif v == "Actual":
                 for r in read(os.path.join(src, "Actual_commission_payouts.csv"))[1]:
                     payouts[r["period"][:7]] += num(r["commission_amount"])
+            clawback_path = os.path.join(src, "Actual_commission_clawbacks.csv")
+            if v == "Actual" and os.path.exists(clawback_path):
+                for r in read(clawback_path)[1]:
+                    payouts[r["period"][:7]] -= num(r["clawback_amount"])
             payroll: dict[str, Decimal] = defaultdict(Decimal)
             register_path = os.path.join(src, f"{v}_payroll_register.csv")
             if os.path.exists(register_path):
