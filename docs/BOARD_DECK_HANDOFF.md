@@ -401,7 +401,6 @@ Alias: `board-presentation.pptx`
 - New generic python-pptx tutorial project  
 - Replacing `ReportingBundle` with raw CSV reads in the renderer  
 - Dashboard-style multi-chart slides  
-- Re-adding `reporting/export/__init__.py` imports that pull in `pptx_report_builder` at load time  
 - Beginning/ending pipeline balance as primary GTM chart  
 
 **Extend** `board_visuals`, `saas_semantic_reporting`, `pptx_layout_engine`, `board_slide_viability` with real data first.

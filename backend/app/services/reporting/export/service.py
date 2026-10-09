@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.services.reporting.export.data_collector import collect_reporting_bundle
 from app.services.reporting.export.excel_workbook import build_workbook_bytes
-from app.services.reporting.export.pptx_report_builder import build_pptx_bytes
 from app.services.reporting.export.schemas import ExportValidationSummary, ReportingBundle
 
 CLOSE_PACKAGE_SHEETS = [
