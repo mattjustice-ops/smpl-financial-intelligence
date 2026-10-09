@@ -3,18 +3,21 @@
   python sync_v5_statements.py <v5_folder> <gl_folder>
 
 Files rewritten in <v5_folder> (same columns as before):
+  * The vendor files of the GL rebuild (vendor_model.file_names(): vendor master, bills, payments and
+    AP aging for Actual; AP and prepaid rollforwards and the prepaid amortization schedule for every
+    version; the Budget and Forecast vendor spend plans) are copied in. Each month's ending AP and
+    prepaids must equal the GL. The v4 vendor files they replace are removed (Budget and Forecast
+    vendor payments and AP aging, every vendor accrual payment schedule).
+  * <version>_income_statement.csv: every line from the GL (R&D and G&A are booked bottom-up).
   * <version>_balance_sheet.csv: every line from the GL balances; equity is total equity
     (paid-in capital + stock comp + retained earnings).
   * <version>_cash_flow_statement.csv: indirect method from the GL: net income, D&A, stock comp,
     working capital changes, capex (PP&E change plus D&A), financing as booked.
   * <version>_cash_collections.csv: beginning and ending cash from the GL.
-  * <version>_accounts_payable_rollforward.csv: beginning, vendor invoices, payments and ending AP
-    from the GL (build_gl_balance_sheet.py: invoices paid net 30). The opening month has no GL
-    activity: its beginning AP, invoices and payments are taken as its (restated) ending AP.
   * <version>_cash_flow_bridge.csv: collections from the AR rollforward, commission cash from
     <version>_commission_schedule.csv (all plans) when it exists, else the Actual commission
     payouts; payroll cash from <version>_payroll_register.csv when it exists (paid in the month);
-    vendor cash = GL AP payments; tax and interest cash = GL tax and interest expense (paid in the
+    vendor cash = AP payments; tax and interest cash = GL tax and interest expense (paid in the
     month; the GL has no tax or interest payable); capex and financing from the GL; other
     operating cash is what is left so the bridge ends on GL cash.
   * Deferred commissions (when the balance sheet has the columns): current and noncurrent from
@@ -32,12 +35,15 @@ from __future__ import annotations
 
 import csv
 import os
+import shutil
 import sys
 from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_gl_balance_sheet import CHAIN_FROM_ACTUAL, balances, is_da, is_pl  # noqa: E402
+from rebuild_gl_to_summary import _line  # noqa: E402
+from vendor_model import file_names as vendor_file_names  # noqa: E402
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -53,6 +59,13 @@ STALE_VALIDATION_FILES = (
     "statement_validation_summary.csv", "working_capital_refresh_validation_summary.csv",
     "mrr_waterfall_validation_summary.csv", "marketing_spend_update_validation_summary.csv",
 )
+REPLACED_VENDOR_FILES = (
+    "Budget_vendor_payments.csv", "Forecast_vendor_payments.csv", "Budget_AP_Aging.csv", "Forecast_AP_Aging.csv",
+    "Actual_vendor_accrual_payment_schedule.csv", "Budget_vendor_accrual_payment_schedule.csv",
+    "Forecast_vendor_accrual_payment_schedule.csv",
+)
+IS_LINES = ("revenue", "cost_of_revenue", "sales_and_marketing", "research_and_development",
+            "general_and_administrative", "depreciation_and_amortization", "interest_expense", "tax_expense")
 
 
 def num(value) -> Decimal:
@@ -106,13 +119,20 @@ def main(src: str, gl_dir: str) -> list[str]:
     bs_rows = {v: [r for r in rows if r["statement"] == "Balance Sheet"] for v, rows in gl.items()}
     bal = balances(bs_rows, gl)
 
+    for name in vendor_file_names():
+        shutil.copyfile(os.path.join(gl_dir, name), os.path.join(src, name))
+    for name in REPLACED_VENDOR_FILES:
+        if os.path.exists(os.path.join(src, name)):
+            os.remove(os.path.join(src, name))
+    notes.append(f"copied {len(vendor_file_names())} vendor files from {gl_dir}; removed the v4 vendor files they replace")
+
     pl = {v: defaultdict(lambda: defaultdict(Decimal)) for v in VERSIONS}
-    ap_flow = {v: defaultdict(lambda: defaultdict(Decimal)) for v in VERSIONS}
     for v, rows in gl.items():
         for r in rows:
             p = r["period"][:7]
             amt = num(r["amount"])
             if is_pl(r):
+                pl[v][p][f"line:{_line(r)}"] += amt
                 pl[v][p]["net_income"] -= amt
                 if r["statement_category"] == "Revenue":
                     pl[v][p]["revenue"] -= amt
@@ -127,8 +147,6 @@ def main(src: str, gl_dir: str) -> list[str]:
                     pl[v][p]["programs"] += amt
             elif r["account_number"] == "3311":
                 pl[v][p]["sbc"] -= amt
-            elif r["account_number"] == "2000":
-                ap_flow[v][p][r["source_record_id"].rsplit("-", 1)[-1]] += amt
 
     def pl_for(v: str, p: str, key: str) -> Decimal:
         chain = CHAIN_FROM_ACTUAL.get(v)
@@ -139,31 +157,39 @@ def main(src: str, gl_dir: str) -> list[str]:
         return bal[v].get(p)
 
     for v in VERSIONS:
+        is_path = os.path.join(src, f"{v}_income_statement.csv")
+        is_fields, is_file = read(is_path)
+        for r in is_file:
+            p = r["period"][:7]
+            if p not in pl[v]:
+                notes.append(f"{v} {p}: no GL rows; income statement left as loaded")
+                continue
+            amounts = {k: pl[v][p][f"line:{k}"] for k in IS_LINES}
+            amounts["revenue"] = -amounts["revenue"]
+            gp = amounts["revenue"] - amounts["cost_of_revenue"]
+            ebitda = gp - amounts["sales_and_marketing"] - amounts["research_and_development"] \
+                - amounts["general_and_administrative"]
+            ni = ebitda - amounts["depreciation_and_amortization"] - amounts["interest_expense"] - amounts["tax_expense"]
+            if ni != pl[v][p]["net_income"]:
+                raise ValueError(f"{v} {p}: income statement lines give net income {ni}, the GL {pl[v][p]['net_income']}")
+            r.update({**{k: q(a) for k, a in amounts.items()}, "gross_profit": q(gp), "ebitda": q(ebitda),
+                      "net_income": q(ni)})
+        write(is_path, is_fields, is_file)
+
         bs_fields, bs_file = read(os.path.join(src, f"{v}_balance_sheet.csv"))
         cf_fields, cf_file = read(os.path.join(src, f"{v}_cash_flow_statement.csv"))
         cf_by = by_period(cf_file)
         ar = by_period(read(os.path.join(src, f"{v}_accounts_receivable_rollforward.csv"))[1])
         dr = by_period(read(os.path.join(src, f"{v}_deferred_revenue_waterfall.csv"))[1])
-        ap_path = os.path.join(src, f"{v}_accounts_payable_rollforward.csv")
-        ap_fields, ap_file = read(ap_path)
-        for r in ap_file:
-            p = r["period"][:7]
-            if line(v, p) is None:
-                continue
-            end = line(v, p)["accounts_payable"]
-            if line(v, prior(p)) is None:
-                begin = invoiced = paid = end
-            elif "vendor_accruals" in ap_flow[v].get(p, {}):
-                begin = line(v, prior(p))["accounts_payable"]
-                invoiced, paid = -ap_flow[v][p]["vendor_accruals"], ap_flow[v][p]["vendor_payments"]
-            else:
-                continue
-            r.update({"beginning_accounts_payable": q(begin), "vendor_expense_accruals": q(invoiced),
-                      "vendor_cash_payments_n30": q(paid), "ending_accounts_payable": q(end),
-                      "rollforward_check": q(begin + invoiced - paid - end)})
-        write(ap_path, ap_fields, ap_file)
-        ap = by_period(ap_file)
+        ap = by_period(read(os.path.join(src, f"{v}_accounts_payable_rollforward.csv"))[1])
         pp = by_period(read(os.path.join(src, f"{v}_Prepaids_Rollforward.csv"))[1])
+        for name, sched, col, key in ((f"{v}_accounts_payable_rollforward.csv", ap, "ending_accounts_payable",
+                                       "accounts_payable"),
+                                      (f"{v}_Prepaids_Rollforward.csv", pp, "ending_prepaid_balance",
+                                       "prepaids_and_other_current")):
+            for p, r in sched.items():
+                if line(v, p) is not None and abs(num(r[col]) - line(v, p)[key]) > CENT:
+                    raise ValueError(f"{v} {p}: {name} ends {num(r[col]):,.2f}, the GL {line(v, p)[key]:,.2f}")
         dc_path = os.path.join(src, f"{v}_deferred_commissions_rollforward.csv")
         dc = by_period(read(dc_path)[1]) if os.path.exists(dc_path) else {}
         months = [r["period"][:7] for r in bs_file]

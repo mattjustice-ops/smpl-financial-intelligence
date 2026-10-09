@@ -27,7 +27,8 @@ from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rebuild_gl_to_summary import forecast_seed, rebuild  # noqa: E402
+from rebuild_gl_to_summary import (DETAIL_FROM_MONTH, DROP_ACCOUNTS, FORECAST_TEMPLATE_MONTH,  # noqa: E402
+                                   REBUILD_PERIODS, _clone_to, _scale)
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0")
@@ -63,19 +64,35 @@ def write(path: str, fields: list[str], rows: list[dict]) -> None:
 
 
 def booked_5010(folder: str) -> dict[str, dict[str, Decimal]]:
-    """{version: {period: 5010}} as the GL rebuild books it from the folder's summary and GL."""
+    """{version: {period: 5010}} with the source GL's cost-of-revenue rows sized to the summary: each month's rows keep
+    their mix (summary-only months take a template month's, the Forecast takes June's sized rows)."""
     out: dict[str, dict[str, Decimal]] = {}
-    actual_rows: list[dict[str, str]] = []
+    june: list[dict[str, str]] = []
     for v in VERSIONS:
-        gl = forecast_seed(actual_rows) if v == "Forecast" else read(os.path.join(folder, f"{v}_gl_detail.csv"))[1]
-        rows, _ = rebuild(v, gl, read(os.path.join(folder, f"{v}_income_statement.csv"))[1], {})
-        rows = [r for r in rows if r["statement"] != "Balance Sheet"]
-        if v == "Actual":
-            actual_rows = rows
-        amounts: dict[str, Decimal] = defaultdict(Decimal)
+        summary = {r["period"][:7]: r for r in read(os.path.join(folder, f"{v}_income_statement.csv"))[1]}
+        if v == "Forecast":
+            rows = [{**_clone_to(r, p, FORECAST_TEMPLATE_MONTH), "amount": f"{-num(r['amount']):.2f}"}
+                    for p in sorted(REBUILD_PERIODS[v]) for r in june]
+        else:
+            rows = [r for r in read(os.path.join(folder, f"{v}_gl_detail.csv"))[1]
+                    if r["statement_category"] == "Cost of Revenue" and r["account_name"] not in DROP_ACCOUNTS]
+        fill = DETAIL_FROM_MONTH[v]
+        by_period: dict[str, list[dict[str, str]]] = defaultdict(list)
         for r in rows:
-            if r["account_number"] == FROM_ACCOUNT:
-                amounts[r["period"][:7]] += num(r["amount"])
+            p = r["period"][:7]
+            if p in REBUILD_PERIODS[v] and p not in fill:
+                by_period[p].append(r)
+        for target, template in fill.items():
+            by_period[target] = [_clone_to(r, target, template) for r in by_period.get(template, [])]
+        amounts: dict[str, Decimal] = defaultdict(Decimal)
+        for p, rs in by_period.items():
+            want = num(summary[p]["cost_of_revenue"])
+            sized = _scale(rs, want / -sum((num(r["amount"]) for r in rs), ZERO), want)
+            for r, amt in zip(rs, sized):
+                if r["account_number"] == FROM_ACCOUNT:
+                    amounts[p] += amt
+            if v == "Actual" and p == FORECAST_TEMPLATE_MONTH:
+                june = [{**r, "amount": f"{amt:.2f}"} for r, amt in zip(rs, sized)]
         out[v] = amounts
     return out
 

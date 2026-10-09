@@ -8,20 +8,19 @@ Where each balance sheet row comes from:
   * Opening balances: the cutoff month of Actual_balance_sheet.csv. Equity is one total
     in the dataset, so it opens on account 3000 with no split.
   * Accounts receivable: AR rollforward (billings, collections).
-  * Accounts payable (Oct 8 2026): vendor invoices are the month's GL expense other than payroll,
-    commissions, D&A, interest and tax, less the month's stock comp and prepaid amortization
-    (non-cash / paid when prepaid); they are paid the next month (net 30), so each month pays the
-    opening balance. The opening AP is restated to the cutoff month's invoices by the same rule,
-    with opening cash moved by the same amount. The AP rollforward file is rewritten from the GL
-    (sync_v5_statements.py).
-  * Prepaids: prepaids rollforward (additions, amortization).
+  * Accounts payable and prepaids (Oct 9 2026): the vendor ledger (vendor_model.py). Bills credit AP
+    (Actual: one row per bill with the vendor; Budget and Forecast: one row a month), payments debit
+    it (Actual: one row per payment run and vendor). Annual contracts paid up front debit 1200 when
+    billed and amortize monthly to their expense account. The opening AP and prepaids are restated
+    to the bills open and the contracts unamortized at the cutoff, with opening cash moved by the
+    same amounts.
   * Deferred commissions: deferred commissions rollforward. Capitalized payouts post to
     1550 (noncurrent), amortization comes out of 1250 (current), and a monthly reclass
     keeps 1250 at the next 12 months' amortization.
   * PP&E: depreciation = the month's GL D&A; additions = the balance sheet change plus D&A.
   * Deferred revenue, debt, other liabilities: change in the version's balance sheet file.
   * Stock comp: SBC schedule total, credited to APIC - Stock Compensation as non-cash
-    ("Balance Sheet Activity"). The P&L rows already include the expense.
+    ("Balance Sheet Activity"). The expense is on 5040 / 6140.
   * Equity raises: financing in the cash flow statement that is not a change in debt.
   * Cash: the other side of the month's entries, so every month's journal balances.
 A sub-ledger is the source for its line. Its billings/payments are posted when it starts
@@ -39,6 +38,9 @@ import csv
 import os
 from collections import defaultdict
 from decimal import Decimal
+
+from vendor_model import (VENDORS, Ledger, ap_balance, bills_in, last_day, open_bills, payments_in,
+                          prepaid_balance)
 
 CENT = Decimal("0.01")
 TIE = Decimal("1.00")
@@ -68,10 +70,6 @@ DEFERRED_COMMISSION_LINES = ("deferred_commissions_current", "deferred_commissio
 
 OPENING_VERSION = "Actual"
 CHAIN_FROM_ACTUAL = {"Budget": "2026-01", "Forecast": "2026-07"}
-
-NON_VENDOR_CATEGORIES = frozenset({"revenue", "d&a", "interest", "taxes", "tax"})
-NON_VENDOR_EXPENSE_TYPES = frozenset({"salaries and wages", "bonus", "payroll taxes", "retirement match", "benefits",
-                                      "severance", "labor", "commissions"})
 
 
 def num(value) -> Decimal:
@@ -103,25 +101,15 @@ def is_da(row: dict[str, str]) -> bool:
     return row["statement_category"] == "D&A" or row["account_group"] == "D&A"
 
 
-def vendor_spend(gl_rows: list[dict[str, str]]) -> dict[str, Decimal]:
-    """Monthly P&L expense billed by vendors: all expense but payroll, commissions, D&A, interest and tax."""
-    out: dict[str, Decimal] = defaultdict(Decimal)
-    for r in gl_rows:
-        if not is_pl(r) or is_da(r) or r["statement_category"].strip().lower() in NON_VENDOR_CATEGORIES:
-            continue
-        if (r["expense_type"] or "").strip().lower() in NON_VENDOR_EXPENSE_TYPES:
-            continue
-        out[r["period"][:7]] += num(r["amount"])
-    return out
-
-
 class Writer:
     def __init__(self, org: str, version: str):
         self.org, self.version = org, version
         self.rows: list[dict[str, str]] = []
 
     def add(self, period: str, key: str, amount: Decimal, *, label: str, source_file: str,
-            source_system: str = "Demo Model", department: str = "", note: str = "") -> None:
+            source_system: str = "Demo Model", department: str = "", note: str = "", record: str = "",
+            vendor_id: str = "") -> None:
+        """``record``: the subledger document (bill, payment, contract) the row posts; the record id ends in ``label``."""
         if amount == 0:
             return
         number, name, category, group, expense_type = ACCOUNTS[key]
@@ -129,9 +117,9 @@ class Writer:
             "organization_id": self.org, "version": self.version, "period": period,
             "account_number": number, "account_name": name, "statement": "Balance Sheet",
             "statement_category": category, "account_group": group, "expense_type": expense_type,
-            "department": department, "cost_center": "", "sub_department": "", "vendor_id": "",
-            "vendor_name": "", "source_file": source_file,
-            "source_record_id": f"{self.version}-{period}-{number}-{label}",
+            "department": department, "cost_center": "", "sub_department": "", "vendor_id": vendor_id,
+            "vendor_name": VENDORS[vendor_id].name if vendor_id else "", "source_file": source_file,
+            "source_record_id": f"{record}-{label}" if record else f"{self.version}-{period}-{number}-{label}",
             "amount": f"{amount.quantize(CENT):.2f}", "currency": "USD", "subsidiary": "US Parent",
             "source_system": source_system, "notes": note,
         })
@@ -144,7 +132,7 @@ def _natural(key: str, amount: Decimal) -> Decimal:
     return -amount if key in CREDIT_NORMAL else amount
 
 
-def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, str]]]):
+def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, str]]], ledgers: dict[str, Ledger]):
     """Return {version: balance sheet rows} and a log of every choice made."""
     org = next(r["organization_id"] for r in gl_by_version["Actual"])
     actual_bs = _by_period(os.path.join(src, "Actual_balance_sheet.csv"))
@@ -156,14 +144,12 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
         bs = _by_period(os.path.join(src, f"{version}_balance_sheet.csv"))
         cf = _by_period(os.path.join(src, f"{version}_cash_flow_statement.csv"))
         ar = _by_period(os.path.join(src, f"{version}_accounts_receivable_rollforward.csv"))
-        ap = _by_period(os.path.join(src, f"{version}_accounts_payable_rollforward.csv"))
-        pp = _by_period(os.path.join(src, f"{version}_Prepaids_Rollforward.csv"))
         sbc = _by_period(os.path.join(src, f"{version}_SBC_Schedule.csv"))
         dc_file = f"{version}_deferred_commissions_rollforward.csv"
         dc = _by_period(os.path.join(src, dc_file))
+        led = ledgers[version]
         w = Writer(org, version)
 
-        vendor = vendor_spend(gl_rows)
         pl_total: dict[str, Decimal] = defaultdict(Decimal)
         da_total: dict[str, Decimal] = defaultdict(Decimal)
         for r in gl_rows:
@@ -178,31 +164,31 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                 return num(sched["total_sbc"]), f"{version}_SBC_Schedule.csv"
             return num(cf.get(p, {}).get("stock_based_compensation")), f"{version}_cash_flow_statement.csv"
 
-        def invoices(p: str) -> tuple[Decimal, str]:
-            sbc_amt, amortized = stock_comp(p)[0], num(pp.get(p, {}).get("prepaid_amortization"))
-            amount = vendor[p] - sbc_amt - amortized
-            if amount < 0:
-                raise ValueError(f"{version} {p}: vendor expense {vendor[p]:,.2f} is less than stock comp {sbc_amt:,.2f} "
-                                 f"plus prepaid amortization {amortized:,.2f}")
-            return amount, (f"vendor invoices: non-payroll expense {vendor[p]:,.2f} less stock comp {sbc_amt:,.2f} "
-                            f"and prepaid amortization {amortized:,.2f}")
-
         periods = sorted(bs)
         running: dict[str, Decimal] = defaultdict(Decimal)
         if version == OPENING_VERSION:
             cutoff = periods[0]
             opening = {key: num(bs[cutoff][key]) for key in BALANCE_LINES if key in bs[cutoff]}
-            restated, invoice_note = invoices(cutoff)
-            moved = opening["accounts_payable"] - restated
-            opening["accounts_payable"], opening["cash"] = restated, opening["cash"] - moved
-            log.append({"version": version, "period": cutoff, "line": "accounts_payable", "action": "opening restated",
-                        "detail": f"opening AP {restated + moved:,.2f} in {version}_balance_sheet.csv restated to the "
-                                  f"month's {invoice_note} (net 30); opening cash moves by the same amount",
-                        "amount": f"{-moved:.2f}"})
+            restated = {"accounts_payable": (ap_balance(led, cutoff),
+                                             f"{len(open_bills(led.bills, last_day(cutoff)))} vendor bills open"),
+                        "prepaids_and_other_current": (prepaid_balance(led, cutoff),
+                                                       "unamortized annual contracts")}
+            notes: dict[str, str] = {}
+            for key, (subledger_balance, what) in restated.items():
+                moved = opening[key] - subledger_balance
+                opening[key] = subledger_balance
+                # Restating a liability down (or an asset up) uses cash; the other way frees it.
+                opening["cash"] += moved if key not in CREDIT_NORMAL else -moved
+                notes[key] = (f"restated from {subledger_balance + moved:,.2f} in {version}_balance_sheet.csv to the "
+                              f"{what} at {cutoff} month end; opening cash moves by {moved:,.2f}")
+                log.append({"version": version, "period": cutoff, "line": key, "action": "opening restated",
+                            "detail": notes[key], "amount": f"{-moved:.2f}"})
             for key, bal in opening.items():
                 note = f"Opening balance at {cutoff} month end, from {version}_balance_sheet.csv"
-                if key in ("accounts_payable", "cash") and moved:
-                    note += f"; AP restated to one month of vendor invoices (net 30), {-moved:,.2f} on both lines"
+                if key in notes:
+                    note += f"; {notes[key]}"
+                elif key == "cash":
+                    note += "; moved by the AP and prepaid restatements"
                 w.add(cutoff, key, -bal if key in CREDIT_NORMAL else bal, label="opening",
                       source_file=f"{version}_balance_sheet.csv", source_system="Opening Balance", note=note)
             for r in w.rows:
@@ -269,14 +255,7 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                             "detail": f"{version}_SBC_Schedule.csv has no total_sbc in the 1%-of-revenue layout; "
                                       f"stock comp from {sbc_file}", "amount": f"{sbc_amt:.2f}"})
 
-            invoiced, note = invoices(p)
-            w.add(p, "accounts_payable", running["accounts_payable"], label="vendor_payments",
-                  source_file=f"{version}_gl_detail.csv", note="last month's vendor invoices paid (net 30)")
-            w.add(p, "accounts_payable", -invoiced, label="vendor_accruals", source_file=f"{version}_gl_detail.csv",
-                  note=note)
-            subledger(pp, "prepaids_and_other_current", "beginning_prepaid_balance", "ending_prepaid_balance",
-                      [("additions", "prepaid_additions", 1), ("amortization", "prepaid_amortization", -1)],
-                      f"{version}_Prepaids_Rollforward.csv")
+            post_vendor_ledger(w, led, p)
 
             if p in dc:
                 row = dc[p]
@@ -312,7 +291,7 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                       source_file=f"{version}_balance_sheet.csv", note=f"change in {version}_balance_sheet.csv")
 
             w.add(p, "apic_sbc", -sbc_amt, label="stock_comp", source_file=sbc_file, department=NON_CASH_DEPT,
-                  note=f"stock comp (non-cash) from {sbc_file}; expense is inside the P&L lines")
+                  note=f"stock comp (non-cash) from {sbc_file}; expense on 5040 / 6140")
 
             if p in cf:
                 raised = num(cf[p]["debt_issuance_repayment"]) - change("debt")
@@ -332,12 +311,47 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             if version == OPENING_VERSION:
                 actual_running[p] = dict(running)
 
-        if ap:
-            log.append({"version": version, "period": "", "line": "accounts_payable", "action": "from GL",
-                        "detail": f"{version}_accounts_payable_rollforward.csv not used: invoices = non-payroll expense "
-                                  f"less stock comp and prepaid amortization, paid net 30", "amount": ""})
         out[version] = w.rows
     return out, log
+
+
+def post_vendor_ledger(w: Writer, led: Ledger, p: str) -> None:
+    """AP and prepaid activity for month ``p``. Record ids end in vendor_accruals / vendor_payments (AP) and
+    additions / amortization (prepaids)."""
+    actual = w.version == "Actual"
+    bills_file = "Actual_vendor_bills.csv" if actual else f"{w.version}_vendor_spend_plan.csv"
+    schedule = f"{w.version}_Prepaid_Amortization_Schedule.csv"
+    billed = bills_in(led, p)
+    paid = payments_in(led, p)
+    if actual:
+        for b in billed:
+            w.add(p, "accounts_payable", -b.total, label="vendor_accruals", source_file=bills_file, record=b.id,
+                  vendor_id=b.vendor, source_system="AP", note=f"bill {b.number} dated {b.bill_date.isoformat()}")
+        runs: dict[str, list] = defaultdict(list)
+        for b in paid:
+            runs[b.payment_id].append(b)
+        for pid, bills in sorted(runs.items()):
+            w.add(p, "accounts_payable", sum((b.total for b in bills), Decimal("0")), label="vendor_payments",
+                  source_file="Actual_vendor_payments.csv", record=pid, vendor_id=bills[0].vendor, source_system="AP",
+                  note=f"payment {bills[0].paid_date.isoformat()}: {', '.join(b.number for b in bills)}")
+        for c in led.contracts:
+            if c.start == p:
+                w.add(p, "prepaids_and_other_current", c.amount, label="additions", source_file=schedule, record=c.id,
+                      vendor_id=c.vendor, source_system="AP", note=f"{c.description}: billed for {c.months} months")
+            amort = c.amortization(p)
+            if amort:
+                w.add(p, "prepaids_and_other_current", -amort, label="amortization", source_file=schedule,
+                      record=f"{c.id}-{p}", vendor_id=c.vendor, source_system="AP",
+                      note=f"{c.description}: amortization to {c.account}")
+        return
+    w.add(p, "accounts_payable", -sum((b.total for b in billed), Decimal("0")), label="vendor_accruals",
+          source_file=bills_file, note=f"{len(billed)} planned vendor bills")
+    w.add(p, "accounts_payable", sum((b.total for b in paid), Decimal("0")), label="vendor_payments",
+          source_file=bills_file, note=f"{len(paid)} planned vendor bills paid")
+    w.add(p, "prepaids_and_other_current", sum((c.amount for c in led.contracts if c.start == p), Decimal("0")),
+          label="additions", source_file=schedule, note="annual contracts billed up front")
+    w.add(p, "prepaids_and_other_current", -sum((c.amortization(p) for c in led.contracts), Decimal("0")),
+          label="amortization", source_file=schedule, note="amortization of prepaid contracts")
 
 
 def balances(rows_by_version: dict[str, list[dict[str, str]]], gl_by_version: dict[str, list[dict[str, str]]]):
