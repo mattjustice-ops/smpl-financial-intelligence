@@ -360,16 +360,16 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
         prepaid = {r["period"][:7]: r for r in f(f"{v}_Prepaids_Rollforward.csv")}
         spend = sums(gl[v], "period", "amount", is_vendor_expense)
         diffs = []
+        sbc_file = {r["period"][:7]: num(r.get("total_sbc")) for r in f(f"{v}_SBC_Schedule.csv")}
         for p in ms:
-            if p == cutoff:
-                continue
             r = ap_by.get(p)
             if r is None:
                 diffs.append(f"{p}: no AP rollforward row")
                 continue
-            begin, end = bs_line(v, prior(p), "accounts_payable"), bs_line(v, p, "accounts_payable")
-            invoiced = spend.get(p, ZERO) + movement[source(v, p)][p].get("3311", ZERO) \
-                - num(prepaid.get(p, {}).get("prepaid_amortization"))
+            end = bs_line(v, p, "accounts_payable")
+            begin = end if p == cutoff else bs_line(v, prior(p), "accounts_payable")
+            stock_comp = sbc_file.get(p, ZERO) if p == cutoff else -movement[source(v, p)][p].get("3311", ZERO)
+            invoiced = spend.get(p, ZERO) - stock_comp - num(prepaid.get(p, {}).get("prepaid_amortization"))
             for label, got, want in (("beginning", r["beginning_accounts_payable"], begin),
                                      ("invoices", r["vendor_expense_accruals"], invoiced),
                                      ("payments", r["vendor_cash_payments_n30"], begin),
@@ -377,7 +377,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                 if abs(num(got) - want) > CENTS:
                     diffs.append(f"{p} {label} {money(num(got))} vs {money(want)}")
         rep.check(f"{v} AP rollforward = GL: invoices = non-payroll expense less stock comp and prepaid amortization; "
-                  f"paid net 30 (payments = opening AP)", diffs, f"{len([p for p in ms if p != cutoff])} months")
+                  f"paid net 30 (payments = opening AP; the {cutoff} opening AP is that month's invoices)", diffs,
+                  f"{len(ms)} months")
 
         path = os.path.join(v5, f"{v}_cash_flow_bridge.csv")
         if os.path.exists(path):
@@ -395,8 +396,6 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                     diffs.append(p)
                 if abs(num(r["cash_collections_from_invoices"]) - num(ar[p]["cash_collections"])) > CENTS:
                     diffs.append(f"{p} collections")
-                if p == cutoff:
-                    continue
                 if abs(num(r["vendor_cash_out_n30"]) - num(ap_by.get(p, {}).get("vendor_cash_payments_n30"))) > CENTS:
                     diffs.append(f"{p} vendor cash vs AP payments")
                 if abs(num(r["tax_cash_out"]) - tax.get(p, ZERO)) > CENTS or \
@@ -1768,8 +1767,9 @@ KNOWN_GAPS = [
     "Bonus and the SDR incentive are paid monthly at target with payroll (no accrued bonus liability); Tier 1 Support "
     "and Implementation post fully loaded payroll (incl. bonus, 401(k), severance) to 5010 / 5020.",
     "The SBC schedule is still 1% of revenue (not the roster's equity grants); the headcount plan's SBC is the roster's.",
-    "AP is one month of vendor invoices (net 30) from Feb 2024; the Jan 2024 opening AP from the balance sheet file "
-    "is paid in Feb 2024. Vendor invoices carry no line or vendor detail.",
+    "AP is one month of vendor invoices (net 30). The Jan 2024 opening AP ($3.72M in the v4 balance sheet, about three "
+    "months of invoices) is restated to Jan 2024 invoices with opening cash lower by the same amount; Dec 2023 AP is "
+    "taken as equal to Jan 2024 (no Dec 2023 GL). Vendor invoices carry no line or vendor detail.",
     "Cost center SALES-AM has no roles (expansion is owned by AEs and CSMs).",
     "CSMs are on the Commission pay plan (target in commission_target); their renewal commissions come from the "
     "renewal commission files, not the target.",

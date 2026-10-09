@@ -11,7 +11,9 @@ Where each balance sheet row comes from:
   * Accounts payable (Oct 8 2026): vendor invoices are the month's GL expense other than payroll,
     commissions, D&A, interest and tax, less the month's stock comp and prepaid amortization
     (non-cash / paid when prepaid); they are paid the next month (net 30), so each month pays the
-    opening balance. The AP rollforward file is rewritten from the GL (sync_v5_statements.py).
+    opening balance. The opening AP is restated to the cutoff month's invoices by the same rule,
+    with opening cash moved by the same amount. The AP rollforward file is rewritten from the GL
+    (sync_v5_statements.py).
   * Prepaids: prepaids rollforward (additions, amortization).
   * Deferred commissions: deferred commissions rollforward. Capitalized payouts post to
     1550 (noncurrent), amortization comes out of 1250 (current), and a monthly reclass
@@ -170,17 +172,39 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
                 if is_da(r):
                     da_total[r["period"][:7]] += num(r["amount"])
 
+        def stock_comp(p: str) -> tuple[Decimal, str]:
+            sched = sbc.get(p, {})
+            if sched.get("total_sbc") not in (None, ""):
+                return num(sched["total_sbc"]), f"{version}_SBC_Schedule.csv"
+            return num(cf.get(p, {}).get("stock_based_compensation")), f"{version}_cash_flow_statement.csv"
+
+        def invoices(p: str) -> tuple[Decimal, str]:
+            sbc_amt, amortized = stock_comp(p)[0], num(pp.get(p, {}).get("prepaid_amortization"))
+            amount = vendor[p] - sbc_amt - amortized
+            if amount < 0:
+                raise ValueError(f"{version} {p}: vendor expense {vendor[p]:,.2f} is less than stock comp {sbc_amt:,.2f} "
+                                 f"plus prepaid amortization {amortized:,.2f}")
+            return amount, (f"vendor invoices: non-payroll expense {vendor[p]:,.2f} less stock comp {sbc_amt:,.2f} "
+                            f"and prepaid amortization {amortized:,.2f}")
+
         periods = sorted(bs)
         running: dict[str, Decimal] = defaultdict(Decimal)
         if version == OPENING_VERSION:
             cutoff = periods[0]
-            for key in BALANCE_LINES:
-                if key not in bs[cutoff]:
-                    continue
-                bal = num(bs[cutoff][key])
+            opening = {key: num(bs[cutoff][key]) for key in BALANCE_LINES if key in bs[cutoff]}
+            restated, invoice_note = invoices(cutoff)
+            moved = opening["accounts_payable"] - restated
+            opening["accounts_payable"], opening["cash"] = restated, opening["cash"] - moved
+            log.append({"version": version, "period": cutoff, "line": "accounts_payable", "action": "opening restated",
+                        "detail": f"opening AP {restated + moved:,.2f} in {version}_balance_sheet.csv restated to the "
+                                  f"month's {invoice_note} (net 30); opening cash moves by the same amount",
+                        "amount": f"{-moved:.2f}"})
+            for key, bal in opening.items():
+                note = f"Opening balance at {cutoff} month end, from {version}_balance_sheet.csv"
+                if key in ("accounts_payable", "cash") and moved:
+                    note += f"; AP restated to one month of vendor invoices (net 30), {-moved:,.2f} on both lines"
                 w.add(cutoff, key, -bal if key in CREDIT_NORMAL else bal, label="opening",
-                      source_file=f"{version}_balance_sheet.csv", source_system="Opening Balance",
-                      note=f"Opening balance at {cutoff} month end, from {version}_balance_sheet.csv")
+                      source_file=f"{version}_balance_sheet.csv", source_system="Opening Balance", note=note)
             for r in w.rows:
                 running[KEY_BY_NUMBER[r["account_number"]]] += _natural(KEY_BY_NUMBER[r["account_number"]], num(r["amount"]))
             actual_running[cutoff] = dict(running)
@@ -239,25 +263,17 @@ def build_balance_sheet_rows(src: str, gl_by_version: dict[str, list[dict[str, s
             subledger(ar, "accounts_receivable", "beginning_accounts_receivable", "ending_accounts_receivable",
                       [("billings", "new_billings", 1), ("collections", "cash_collections", -1)],
                       f"{version}_accounts_receivable_rollforward.csv")
-            sched = sbc.get(p, {})
-            if sched.get("total_sbc") not in (None, ""):
-                sbc_amt, sbc_file = num(sched["total_sbc"]), f"{version}_SBC_Schedule.csv"
-            else:
-                sbc_amt, sbc_file = num(cf.get(p, {}).get("stock_based_compensation")), f"{version}_cash_flow_statement.csv"
+            sbc_amt, sbc_file = stock_comp(p)
+            if sbc_file.endswith("_cash_flow_statement.csv"):
                 log.append({"version": version, "period": p, "line": "apic_sbc", "action": "source",
                             "detail": f"{version}_SBC_Schedule.csv has no total_sbc in the 1%-of-revenue layout; "
                                       f"stock comp from {sbc_file}", "amount": f"{sbc_amt:.2f}"})
 
-            amortized = num(pp.get(p, {}).get("prepaid_amortization"))
-            invoiced = vendor[p] - sbc_amt - amortized
-            if invoiced < 0:
-                raise ValueError(f"{version} {p}: vendor expense {vendor[p]:,.2f} is less than stock comp {sbc_amt:,.2f} "
-                                 f"plus prepaid amortization {amortized:,.2f}")
+            invoiced, note = invoices(p)
             w.add(p, "accounts_payable", running["accounts_payable"], label="vendor_payments",
                   source_file=f"{version}_gl_detail.csv", note="last month's vendor invoices paid (net 30)")
             w.add(p, "accounts_payable", -invoiced, label="vendor_accruals", source_file=f"{version}_gl_detail.csv",
-                  note=f"vendor invoices: non-payroll expense {vendor[p]:,.2f} less stock comp {sbc_amt:,.2f} "
-                       f"and prepaid amortization {amortized:,.2f}")
+                  note=note)
             subledger(pp, "prepaids_and_other_current", "beginning_prepaid_balance", "ending_prepaid_balance",
                       [("additions", "prepaid_additions", 1), ("amortization", "prepaid_amortization", -1)],
                       f"{version}_Prepaids_Rollforward.csv")

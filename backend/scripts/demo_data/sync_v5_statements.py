@@ -9,7 +9,8 @@ Files rewritten in <v5_folder> (same columns as before):
     working capital changes, capex (PP&E change plus D&A), financing as booked.
   * <version>_cash_collections.csv: beginning and ending cash from the GL.
   * <version>_accounts_payable_rollforward.csv: beginning, vendor invoices, payments and ending AP
-    from the GL (build_gl_balance_sheet.py: invoices paid net 30).
+    from the GL (build_gl_balance_sheet.py: invoices paid net 30). The opening month has no GL
+    activity: its beginning AP, invoices and payments are taken as its (restated) ending AP.
   * <version>_cash_flow_bridge.csv: collections from the AR rollforward, commission cash from
     <version>_commission_schedule.csv (all plans) when it exists, else the Actual commission
     payouts; payroll cash from <version>_payroll_register.csv when it exists (paid in the month);
@@ -147,10 +148,16 @@ def main(src: str, gl_dir: str) -> list[str]:
         ap_fields, ap_file = read(ap_path)
         for r in ap_file:
             p = r["period"][:7]
-            if "vendor_accruals" not in ap_flow[v].get(p, {}) or line(v, p) is None or line(v, prior(p)) is None:
+            if line(v, p) is None:
                 continue
-            begin, end = line(v, prior(p))["accounts_payable"], line(v, p)["accounts_payable"]
-            invoiced, paid = -ap_flow[v][p]["vendor_accruals"], ap_flow[v][p]["vendor_payments"]
+            end = line(v, p)["accounts_payable"]
+            if line(v, prior(p)) is None:
+                begin = invoiced = paid = end
+            elif "vendor_accruals" in ap_flow[v].get(p, {}):
+                begin = line(v, prior(p))["accounts_payable"]
+                invoiced, paid = -ap_flow[v][p]["vendor_accruals"], ap_flow[v][p]["vendor_payments"]
+            else:
+                continue
             r.update({"beginning_accounts_payable": q(begin), "vendor_expense_accruals": q(invoiced),
                       "vendor_cash_payments_n30": q(paid), "ending_accounts_payable": q(end),
                       "rollforward_check": q(begin + invoiced - paid - end)})
@@ -264,8 +271,8 @@ def main(src: str, gl_dir: str) -> list[str]:
                     nr["commission_cash_out"] = q(payouts[p])
                 if p in payroll:
                     nr["payroll_cash_out"] = q(payroll[p])
-                if "vendor_payments" in ap_flow[v].get(p, {}):
-                    nr["vendor_cash_out_n30"] = q(ap_flow[v][p]["vendor_payments"])
+                if p in ap:
+                    nr["vendor_cash_out_n30"] = q(num(ap[p]["vendor_cash_payments_n30"]))
                 nr["tax_cash_out"] = q(pl_for(v, p, "tax"))
                 nr["interest_cash_out"] = q(pl_for(v, p, "interest"))
                 outflows = sum((num(nr.get(k)) for k in ("payroll_cash_out", "commission_cash_out", "vendor_cash_out_n30",
