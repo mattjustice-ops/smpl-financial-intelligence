@@ -73,6 +73,21 @@ def test_ap_subledger_is_actual_only_and_plans_use_the_spend_plan():
     assert order.index("vendor") < order.index("vendor_bill") < order.index("vendor_payment") < order.index("ap_aging")
 
 
+def test_collections_files_are_declared():
+    rows = manifest_rows()
+    names = {r["file_name"] for r in rows}
+    assert {f"{v}_allowance_for_doubtful_accounts.csv" for v in VERSIONS} <= names
+    for base in ("customer_payments", "AR_Aging", "collections_cases", "collections_activity", "commission_clawbacks"):
+        assert f"Actual_{base}.csv" in names
+        assert not {f"Budget_{base}.csv", f"Forecast_{base}.csv"} & names, base
+    order = [r["object_id"] for r in rows]
+    assert order.index("invoice") < order.index("customer_payment") < order.index("ar_aging")
+    by_file = {r["file_name"]: r for r in rows}
+    assert by_file["Actual_customer_payments.csv"]["question"] == "7.37"
+    assert by_file["Actual_collections_cases.csv"]["question"] == "7.38"
+    assert by_file["Actual_commission_clawbacks.csv"]["object_id"] == "commission_payout"
+
+
 def test_shared_workforce_inputs_carry_no_version_prefix():
     shared = [r for r in manifest_rows() if r["dataset_type"] == "Shared"]
     assert {r["file_name"] for r in shared} == {
@@ -90,6 +105,10 @@ def test_classify():
     assert classify("Budget_AP_Aging.csv") is None
     assert classify("Forecast_operating_lease_schedule.csv") == "lease_schedule"
     assert classify("Actual_accrued_expenses_detail.csv") == "accrued_expenses"
+    assert classify("Actual_AR_Aging.csv") == "ar_aging"
+    assert classify("Budget_allowance_for_doubtful_accounts.csv") == "allowance_for_doubtful_accounts"
+    assert classify("Actual_collections_activity.csv") == "collections_case"
+    assert classify("Forecast_customer_payments.csv") is None
     assert classify("Actual_unknown_export.csv") is None
 
 
@@ -113,7 +132,8 @@ def test_check_files_reports_undeclared_duplicates_reference_and_missing():
 
 
 def test_vendor_terms_only_required_when_ap_subledger_exportable():
-    base = {"7.30": "by_employee", "7.31": "yes", "7.32": "yes", "7.35": "all", "7.36": "yes"}
+    base = {"7.30": "by_employee", "7.31": "yes", "7.32": "yes", "7.35": "all", "7.36": "yes", "7.37": "yes",
+            "7.38": "no"}
     assert _normalization_status({**base, "7.33": "no"})["data_sources"]["resolved"]
     pending = _normalization_status({**base, "7.33": "yes"})["data_sources"]
     assert pending["unresolved_questions"] == ["7.34"]
@@ -123,6 +143,8 @@ def test_vendor_terms_only_required_when_ap_subledger_exportable():
 def test_data_source_answers_validate():
     assert validate_answers({"7.30": "by_department", "7.33": "yes", "7.34": "mixed", "7.35": "some"}) == []
     assert validate_answers({"7.34": "net_90"})
+    assert validate_answers({"7.37": "yes", "7.38": "no"}) == []
+    assert validate_answers({"7.38": "sometimes"})
 
 
 def test_script_writes_manifest_and_fails_on_undeclared_files(tmp_path):

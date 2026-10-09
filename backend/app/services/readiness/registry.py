@@ -90,6 +90,9 @@ OBJECTS: dict[str, CanonicalObject] = {
                         files=files("accounts_payable_rollforward"), tier=SCHEDULE),
         CanonicalObject("ar_rollforward", "AR Rollforward", "ERP", ("actual_accounts_receivable_rollforward",), "actual",
                         files=files("accounts_receivable_rollforward"), tier=SCHEDULE),
+        CanonicalObject("allowance_for_doubtful_accounts", "Allowance for Doubtful Accounts (reserve and write-offs)",
+                        "ERP", ("actual_allowance_for_doubtful_accounts",), "actual",
+                        files=files("allowance_for_doubtful_accounts"), tier=SCHEDULE, question="7.35"),
         CanonicalObject("prepaid_schedule", "Prepaid Schedule", "ERP", ("actual_prepaids_rollforward",),
                         files=files("Prepaids_Rollforward", "Prepaid_Amortization_Schedule"), tier=SCHEDULE,
                         question="7.35"),
@@ -136,6 +139,15 @@ OBJECTS: dict[str, CanonicalObject] = {
                         files=files("invoices"), tier=SUBLEDGER),
         CanonicalObject("payment", "Payment", "BILLING", ("actual_cash_collections",), "actual",
                         files=files("cash_collections"), tier=SUBLEDGER),
+        CanonicalObject("customer_payment", "Customer Payment (applied to invoices)", "BILLING",
+                        ("actual_customer_payments",), "actual",
+                        files=files("customer_payments", versions=A), tier=SUBLEDGER, question="7.37"),
+        CanonicalObject("ar_aging", "AR Aging", "BILLING", ("actual_ar_aging",),
+                        files=files("AR_Aging", versions=A), tier=SCHEDULE, question="7.37"),
+        CanonicalObject("collections_case", "Collections Cases and Dunning Log", "BILLING",
+                        ("actual_collections_cases", "actual_collections_activity"),
+                        files=files("collections_cases", "collections_activity", versions=A), tier=OPERATIONAL,
+                        question="7.38"),
         CanonicalObject("revenue_schedule", "Revenue Schedule", "BILLING", ("actual_revenue_recognition",),
                         files=files("revenue_schedule", versions=F), tier=SCHEDULE),
         CanonicalObject("services_schedule", "Implementation / Services Schedule", "BILLING",
@@ -172,7 +184,8 @@ OBJECTS: dict[str, CanonicalObject] = {
                         files=files("commission_plans"), tier=DIMENSION, question="7.20"),
         CanonicalObject("commission_payout", "Commission Payout", "COMP",
                         ("actual_commission_payouts", "actual_renewal_commissions"), "actual",
-                        files=files("commission_payouts", "renewal_commissions", versions=A), tier=SUBLEDGER,
+                        files=files("commission_payouts", "renewal_commissions", "commission_clawbacks", versions=A),
+                        tier=SUBLEDGER,
                         question="7.20"),
         CanonicalObject("commission_schedule", "Commission Schedule (capitalized / expensed)", "COMP",
                         ("actual_commission_schedule",), "actual",
@@ -369,10 +382,16 @@ DATA_SOURCES: tuple[Question, ...] = (
     Question("7.34", "data_sources", "Standard vendor payment terms",
              ("net_15", "net_30", "net_45", "net_60", "mixed")),
     Question("7.35", "data_sources",
-             "Supporting schedules kept outside the GL: prepaid, accrued expense, lease (ASC 842), fixed asset and "
-             "debt schedules",
+             "Supporting schedules kept outside the GL: prepaid, accrued expense, lease (ASC 842), fixed asset, "
+             "debt and allowance for doubtful accounts schedules",
              ("all", "some", "none")),
     Question("7.36", "data_sources", "Equity grant / stock-based compensation schedule (Carta, Shareworks)"),
+    Question("7.37", "data_sources",
+             "AR subledger exportable from billing or the ERP: customer payments applied to invoices (payment date "
+             "and amount) and AR aging"),
+    Question("7.38", "data_sources",
+             "Collections history kept: dunning steps, service suspensions and write-offs by customer, with the "
+             "reason"),
 )
 
 SCORE_INPUTS: tuple[Question, ...] = (
