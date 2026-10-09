@@ -53,10 +53,27 @@ ADDED_COLUMNS = {
     "_SBC_Schedule.csv": ("headcount",),
     "_vendor_payments.csv": ("bill_id", "due_date", "payment_method", "days_past_due"),
     "_accounts_receivable_rollforward.csv": ("write_offs",),
-    "_customer_arr_history.csv": ("churn_type",),
+    "_customer_arr_history.csv": ("churn_type", "first_mrr_period", "customer_age_months", "customer_bucket",
+                                  "waterfall_line", "movement_subcategory"),
     "_deferred_commissions_rollforward.csv": ("clawbacks", "clawback_amortization_reversal", "commission_write_downs"),
     "_invoices.csv": ("payment_date",),
+    "_customers.csv": ("first_mrr_date",),
+    "_MRR_Waterfall.csv": ("new_logo_arr", "winback_arr", "first_year_expansion_arr", "first_year_contraction_arr",
+                           "no_start_arr", "new_business_bucket_arr", "customer_success_beginning_arr",
+                           "customer_success_expansion_arr", "customer_success_contraction_arr",
+                           "customer_success_churn_arr", "customer_success_reactivation_arr"),
 }
+# Customer buckets: New Business is a customer's first 12 months of MRR (excluded from retention); the age of first
+# MRR restarts after more than 6 months at zero ARR.
+FIRST_YEAR_MONTHS, RESTART_AFTER_MONTHS = 12, 6
+BUCKET_LINES = {"new_logo": ("New Business", "new_logo_arr", 1), "winback": ("New Business", "winback_arr", 1),
+                "first_year_expansion": ("New Business", "first_year_expansion_arr", 1),
+                "first_year_contraction": ("New Business", "first_year_contraction_arr", -1),
+                "no_start": ("New Business", "no_start_arr", -1),
+                "expansion": ("Customer Success", "customer_success_expansion_arr", 1),
+                "contraction": ("Customer Success", "customer_success_contraction_arr", -1),
+                "churn": ("Customer Success", "customer_success_churn_arr", -1),
+                "reactivation": ("Customer Success", "customer_success_reactivation_arr", 1)}
 # Files whose v4 layout is replaced by the vendor subledger (vendor_model.py) and the grants-based SBC schedule.
 REPLACED_LAYOUTS = {
     "Budget_SBC_Schedule.csv": "v4 grant-pool layout; now the Actual/Forecast layout from the roster's grants",
@@ -486,19 +503,32 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                 diffs.append(f"{p}: ending ARR")
             if abs(num(r["net_new_arr"]) - (nb + ex + re_ - co - ch)) > 1 or abs(num(r["renewal_arr"]) - (bop - co - ch)) > 1:
                 diffs.append(f"{p}: net new or renewal")
-            if abs(num(r["gross_retention_rate"]) - (bop - co - ch) / bop) > Decimal("0.0001"):
+            line = {k: num(r[col]) for k, (_, col, _) in BUCKET_LINES.items()}
+            nb_lines = sum((s * line[k] for k, (b, _, s) in BUCKET_LINES.items() if b == "New Business"), ZERO)
+            if nb_lines != num(r["new_business_bucket_arr"]):
+                diffs.append(f"{p}: New Business bucket {r['new_business_bucket_arr']} vs its lines {nb_lines}")
+            if sum((s * line[k] for k, (_, _, s) in BUCKET_LINES.items()), ZERO) != nb + ex + re_ - co - ch:
+                diffs.append(f"{p}: bucket lines vs movement columns")
+            base = num(r["customer_success_beginning_arr"])
+            kept = base - line["contraction"] - line["churn"]
+            if abs(num(r["gross_retention_rate"]) - kept / base) > Decimal("0.0001"):
                 diffs.append(f"{p}: GRR {r['gross_retention_rate']}")
-            if abs(num(r["net_dollar_retention_rate"]) - (bop + ex + re_ - co - ch) / bop) > Decimal("0.0001"):
+            if abs(num(r["net_dollar_retention_rate"]) - (kept + line["expansion"] + line["reactivation"]) / base) \
+                    > Decimal("0.0001"):
                 diffs.append(f"{p}: NRR {r['net_dollar_retention_rate']}")
             if prev_end is not None and abs(bop - prev_end) > 1:
                 diffs.append(f"{p}: beginning ARR vs prior ending")
             prev_end = num(r["ending_arr"])
-        rep.check(f"{v} ARR waterfall: movements, renewal, GRR and NRR computed from components; months chain", diffs,
+        rep.check(f"{v} ARR waterfall: movements and renewal from components; New Business bucket = its lines; bucket "
+                  f"lines = movement columns; GRR and NRR on the Customer Success bucket; months chain", diffs,
                   f"{len(rows)} months")
     a_mrr = {r["period"][:7]: r for r in f("Actual_MRR_Waterfall.csv")}
     if "2026-06" in a_mrr:
         r = a_mrr["2026-06"]
-        rep.info(f"Actual June 2026 GRR {r['gross_retention_rate']}, NRR {r['net_dollar_retention_rate']}")
+        rep.info(f"Actual June 2026 GRR {r['gross_retention_rate']}, NRR {r['net_dollar_retention_rate']} (customers 12 "
+                 f"months and older: beginning ARR {money(num(r['customer_success_beginning_arr']))} of "
+                 f"{money(num(r['beginning_arr']))}); New Business bucket {money(num(r['new_business_bucket_arr']))}")
+    bucket_checks(rep, f)
 
     # ------------------------------------------------------------------ sales
     rep.section("Sales team: employees, quotas, opportunities, commissions")
@@ -988,6 +1018,119 @@ def _pidx(p: str) -> int:
 def _padd(p: str, n: int) -> str:
     i = _pidx(p) + n
     return f"{i // 12}-{i % 12 + 1:02d}"
+
+
+def bucket_checks(rep: Report, f) -> None:
+    """New Business and Customer Success buckets: every history row's age and line against the rules, the MRR
+    waterfall bucket columns against the history, and first_mrr_date on the customer master."""
+    def key(r):
+        return r["period"][:7], r["customer_id"], r["movement_type"] != "Opening balance"
+
+    actual = f("Actual_customer_arr_history.csv")
+    latest_first = {r["customer_id"]: r["first_mrr_period"] for r in sorted(actual, key=lambda r: r["period"])}
+    for v in VERSIONS:
+        hist = sorted(f(f"{v}_customer_arr_history.csv"), key=key)
+        prior = sorted((r for r in actual if r["period"][:7] < CHAIN_FROM_ACTUAL[v]), key=key) if v != "Actual" else []
+        first: dict[str, str] = {}
+        left: dict[str, tuple[str, int]] = {}
+        bad, typed = [], []
+        for i, r in enumerate([*prior, *hist]):
+            c, p, kind, line = r["customer_id"], r["period"][:7], r["movement_type"], r["waterfall_line"]
+            fm = r["first_mrr_period"]
+            age = int(r["customer_age_months"])
+            mine = i >= len(prior)
+            why = []
+            if age != _pidx(p) - _pidx(fm) or age < 0:
+                why.append(f"age {age} from first MRR {fm}")
+            if line and r["customer_bucket"] != BUCKET_LINES[line][0]:
+                why.append(f"bucket {r['customer_bucket']} for {line}")
+            young = age < FIRST_YEAR_MONTHS
+            if kind == "Opening balance":
+                if line:
+                    why.append(f"opening balance on line {line}")
+                if c in first and fm != first[c]:
+                    why.append(f"opening first MRR {fm} vs {first[c]} before the plan")
+            elif kind in ("New Business", "Reactivation"):
+                gone = left.pop(c, None)
+                if gone is None:
+                    want, restart = "new_logo", True
+                elif _pidx(p) - _pidx(gone[0]) > RESTART_AFTER_MONTHS:
+                    want, restart = "winback", True
+                else:
+                    want, restart = ("reactivation" if gone[1] >= FIRST_YEAR_MONTHS else "winback"), False
+                if line != want:
+                    why.append(f"{kind} is {line}, rule says {want}")
+                if restart and fm != p:
+                    why.append(f"age of first MRR did not restart ({fm})")
+                if not restart and fm != first.get(c):
+                    why.append(f"age of first MRR restarted inside {RESTART_AFTER_MONTHS} months")
+            else:
+                want = {"Churn": ("no_start", "churn"), "Pause": ("no_start", "churn"),
+                        "Expansion": ("first_year_expansion", "expansion"),
+                        "Contraction": ("first_year_contraction", "contraction")}.get(kind, ("?", "?"))[0 if young else 1]
+                if line != want:
+                    why.append(f"{kind} at age {age} is {line}, rule says {want}")
+                if c in first and fm != first[c]:
+                    why.append(f"first MRR moved from {first[c]} to {fm} without a return")
+                if kind in ("Churn", "Pause") and num(r["ending_arr"]) <= 0:
+                    left[c] = (p, age)
+            first[c] = fm
+            if mine and r.get("churn_type"):
+                want = {NO_START: "no_start", NON_PAYMENT: "churn"}.get(r["churn_type"])
+                typed.append(r)
+                if line != want:
+                    why.append(f"churn_type {r['churn_type']} on line {line}")
+            if mine and why:
+                bad.append(f"{p} {c}: " + "; ".join(why))
+        counts = Counter(r["waterfall_line"] for r in hist if r["waterfall_line"])
+        rep.check(f"{v} customer buckets: age of first MRR (restarts after {RESTART_AFTER_MONTHS}+ months at zero "
+                  f"ARR); under {FIRST_YEAR_MONTHS} months is New Business (new logo, winback, first-year expansion "
+                  f"and contraction, no-start); {FIRST_YEAR_MONTHS}+ is Customer Success (reactivation only within "
+                  f"{RESTART_AFTER_MONTHS} months for customers who left at {FIRST_YEAR_MONTHS}+); No-start and "
+                  f"Non-payment churn_type on the no_start and churn lines", bad,
+                  ", ".join(f"{k} {n}" for k, n in sorted(counts.items())) + f"; {len(typed)} typed churns")
+
+        mrr = f(f"{v}_MRR_Waterfall.csv")
+        months = [r["period"][:7] for r in mrr]
+        line_sum: dict[tuple[str, str], Decimal] = defaultdict(lambda: ZERO)
+        base: dict[str, Decimal] = {}
+        arr: dict[str, Decimal] = {}
+        fm: dict[str, str] = {}
+        by_month = defaultdict(list)
+        for r in hist:
+            by_month[r["period"][:7]].append(r)
+        for p in sorted(by_month.keys() | set(months)):
+            base[p] = sum((a for c, a in arr.items() if a > 0 and _pidx(p) - _pidx(fm[c]) >= FIRST_YEAR_MONTHS), ZERO)
+            for r in by_month.get(p, []):
+                arr[r["customer_id"]], fm[r["customer_id"]] = num(r["ending_arr"]), r["first_mrr_period"]
+                if r["waterfall_line"]:
+                    line_sum[(p, r["waterfall_line"])] += abs(num(r["movement_arr"]))
+        diffs = []
+        for r in mrr:
+            p = r["period"][:7]
+            for k, (_, col, _) in BUCKET_LINES.items():
+                if num(r[col]) != line_sum[(p, k)]:
+                    diffs.append(f"{p} {col}: {r[col]} vs history {line_sum[(p, k)]}")
+            if num(r["customer_success_beginning_arr"]) != base[p]:
+                diffs.append(f"{p} customer_success_beginning_arr: {r['customer_success_beginning_arr']} vs {base[p]}")
+        rep.check(f"{v} MRR waterfall bucket columns = history waterfall_line sums; Customer Success beginning ARR = "
+                  f"ARR at the start of the month of customers {FIRST_YEAR_MONTHS} months and older", diffs,
+                  f"{len(mrr)} months")
+
+        own_first = {}
+        for r in hist:
+            if r["movement_type"] != "Opening balance":
+                own_first.setdefault(r["customer_id"], r["first_mrr_period"])
+        diffs, missing = [], []
+        for r in f(f"{v}_customers.csv"):
+            c, d = r["customer_id"], r.get("first_mrr_date", "")
+            want = latest_first.get(c) or own_first.get(c)
+            if not d:
+                missing.append(c)
+            elif want and d[:7] != want:
+                diffs.append(f"{c}: first_mrr_date {d} vs history {want}")
+        rep.check(f"{v} customers: first_mrr_date on every customer and = the age-of-first-MRR start in the history "
+                  f"(latest Actual, else the plan's new logo)", diffs + [f"{c}: blank first_mrr_date" for c in missing])
 
 
 def collections_checks(rep: Report, f, prior_dir: str, months: dict[str, list[str]], bs_line, gl) -> None:

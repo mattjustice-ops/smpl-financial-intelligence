@@ -57,6 +57,8 @@ from decimal import ROUND_HALF_UP, Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from collections_model import (BUCKETS, activity_rows, aging_rows, allowance_rollforward, case_rows,  # noqa: E402
                                is_open, payment_rows, plan_cases, settle, write_off_month)
+from customer_buckets import (CUSTOMER_SUCCESS_BEGINNING, LINES, NEW_BUSINESS_TOTAL,  # noqa: E402
+                              WATERFALL_BUCKET_FIELDS, bucket_waterfall)
 from sales_team import BOOKINGS_ROLES, REP_SEGMENT, TERRITORIES, active, quota_type  # noqa: E402
 
 CENT = Decimal("0.01")
@@ -578,6 +580,7 @@ def write_customers(ds, dst, fields, master, logos, cadence, org, plan_only):
         rows.append({
             "organization_id": org, "customer_id": cid, "customer_name": o["customer_name"], "segment": o["segment"],
             "industry": o["industry"], "status": "Active", "customer_start_date": o["contract_start_date"],
+            "first_mrr_date": f"{o['period'][:7]}-01",
             "contract_start_date": o["contract_start_date"], "billing_cadence": cadence[cid],
             "billing_terms": o["billing_terms"], "billing_state": o["customer_state"], "source_crm": "Salesforce",
             "netsuite_customer_id": f"NS-{cid}", "stripe_customer_id": f"cus_demo_{digits}",
@@ -776,6 +779,8 @@ def write_balance_sheet_inputs(ds, dst, roll, allowance, opening_equity_adjustme
 def write_mrr(ds, dst, notes):
     for v in VERSIONS:
         fields, rows = ds.get(f"{v}_MRR_Waterfall.csv")
+        fields = [*fields, *(f for f in WATERFALL_BUCKET_FIELDS if f not in fields)]
+        buckets = bucket_waterfall(ds.rows(f"{v}_customer_arr_history.csv"), [r["period"][:7] for r in rows])
         out, changed = [], 0
         for r in rows:
             nr = dict(r)
@@ -784,15 +789,26 @@ def write_mrr(ds, dst, notes):
             net = nb + ex + re_ - co - ch
             if abs(bop + net - num(r["ending_arr"])) > 1:
                 notes.append(f"{v} MRR {r['period']}: ending ARR {r['ending_arr']} != beginning + movements {bop + net:,.2f}")
+            b = buckets[r["period"][:7]]
+            cs = {k: b[LINES[k][1]] for k in ("expansion", "contraction", "churn", "reactivation")}
+            moved = b[NEW_BUSINESS_TOTAL] + cs["expansion"] + cs["reactivation"] - cs["contraction"] - cs["churn"]
+            if moved != net:
+                raise ValueError(f"{v} {r['period']}: customer bucket lines {moved} != waterfall movements {net}")
+            base = b[CUSTOMER_SUCCESS_BEGINNING]
+            kept = base - cs["contraction"] - cs["churn"]
             new = {"renewal_arr": f"{bop - co - ch:.2f}", "net_new_arr": f"{net:.2f}",
-                   "gross_retention_rate": f"{(bop - co - ch) / bop:.4f}",
-                   "net_dollar_retention_rate": f"{(bop + ex + re_ - co - ch) / bop:.4f}", "waterfall_check": "0"}
+                   "gross_retention_rate": f"{kept / base:.4f}",
+                   "net_dollar_retention_rate": f"{(kept + cs['expansion'] + cs['reactivation']) / base:.4f}",
+                   "waterfall_check": "0"}
             if any(num(nr.get(k)) != num(val) for k, val in new.items() if k != "waterfall_check"):
                 changed += 1
             nr.update(new)
+            nr.update({k: f"{x:.2f}" for k, x in b.items()})
             out.append(nr)
         write(os.path.join(dst, f"{v}_MRR_Waterfall.csv"), fields, out)
-        notes.append(f"{v} MRR: renewal ARR, net new ARR, GRR and NRR recalculated from the movements ({changed} of {len(rows)} months changed)")
+        notes.append(f"{v} MRR: New Business and Customer Success bucket lines from the customer history; GRR and NRR on "
+                     f"customers 12 months and older; renewal ARR and net new ARR from the movements "
+                     f"({changed} of {len(rows)} months changed)")
 
 
 # ----------------------------------------------------------------------------- reps, quotas, commissions
