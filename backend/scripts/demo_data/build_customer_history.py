@@ -32,6 +32,10 @@ Rules (agreed with Matt, Oct 7 2026):
     while it has ARR (Forecast: expected ARR).
   * Segment is the customer's ARR at signing (Enterprise $500k+, Mid-Market $100k-$500k, SMB below $100k) in
     every file that carries it; the implementation fee follows the segment.
+  * Every history row carries the customer's age of first MRR and its New Business or Customer Success line
+    (customer_buckets.py, agreed Oct 9 2026). The movement types above stay as they are for bookings and
+    commissions; the bucket lines are what the ARR waterfall and retention use. first_mrr_date on the customer
+    master is the latest restart of that age.
 """
 
 from __future__ import annotations
@@ -51,6 +55,7 @@ from customer_history_plans import (EXPECTED_FIELDS, HISTORY_FIELDS, WINBACK_SHA
                                     simulate_budget, simulate_forecast, tie, tie_budget_deals, u, waterfall)
 from add_implementation_revenue import FEE_BY_SEGMENT  # noqa: E402
 from collections_model import NO_START, NO_START_TERMS_DAYS, NO_STARTS, NON_PAYMENT, NONPAY_CHURN, no_start_exit  # noqa: E402
+from customer_buckets import classify  # noqa: E402
 from sales_team import VERSIONS, assign_csms, team_employees  # noqa: E402
 
 FIRST = "2024-01"
@@ -548,6 +553,22 @@ def build(src: str, dst: str) -> list[str]:
                  + ", ".join(f"{k} {n}" for k, n in sorted(Counter(actual_seg[r["customer_id"]] for r in master + new_rows).items()))
                  + " in the customer master")
 
+    # ---- customer buckets: age of first MRR; New Business (first 12 months) vs Customer Success
+    classify(h.rows, start)
+    classify(hb.rows, start, prior=[r for r in h.rows if r["period"] <= LAST_PRE_2026])
+    classify(hf.rows, start, prior=[r for r in h.rows if r["period"] <= CLOSE])
+    for r in h.rows:
+        expected = {NO_START: "no_start", NON_PAYMENT: "churn"}.get(r.get("churn_type", ""))
+        if expected and r["waterfall_line"] != expected:
+            raise ValueError(f"{r['period']} {r['customer_id']}: {r['churn_type']} churn at age "
+                             f"{r['customer_age_months']} is {r['waterfall_line']}")
+    for v, hist in (("Actual", h), ("Budget", hb), ("Forecast", hf)):
+        counts = Counter(r["waterfall_line"] for r in hist.rows if r["waterfall_line"])
+        notes.append(f"{v} bucket lines: " + ", ".join(f"{k} {n}" for k, n in sorted(counts.items())))
+    first_mrr = {r["customer_id"]: r["first_mrr_period"] for r in sorted(h.rows, key=lambda r: r["period"])}
+    if "first_mrr_date" not in master_fields:
+        master_fields.insert(master_fields.index("customer_start_date") + 1, "first_mrr_date")
+
     # ---- customer master
     last_kind = {}
     for r in sorted(h.rows, key=lambda r: r["period"]):
@@ -563,6 +584,7 @@ def build(src: str, dst: str) -> list[str]:
         nr = {k: v for k, v in r.items() if not k.startswith("_")}
         c = r["customer_id"]
         nr["status"] = status(c)
+        nr["first_mrr_date"] = f"{first_mrr[c]}-01"
         a = dec.get(c, ZERO)
         nr["starting_arr_jan_2026"] = f"{a:.2f}"
         nr["starting_mrr_jan_2026"] = f"{q(a / 12):.2f}"
@@ -575,7 +597,7 @@ def build(src: str, dst: str) -> list[str]:
         cid = o["customer_id"]
         return {"organization_id": org, "customer_id": cid, "customer_name": o["customer_name"], "segment": seg_of[v][cid],
                 "industry": o["industry"], "status": "Active", "customer_start_date": o["contract_start_date"],
-                "contract_start_date": o["contract_start_date"], "billing_cadence": o["billing_cadence"],
+                "first_mrr_date": f"{o['period'][:7]}-01", "contract_start_date": o["contract_start_date"], "billing_cadence": o["billing_cadence"],
                 "billing_terms": o["billing_terms"], "billing_state": o["customer_state"], "source_crm": "Salesforce",
                 "netsuite_customer_id": f"NS-{cid}", "stripe_customer_id": f"cus_demo_{cid.split('-')[1]}",
                 "starting_mrr_jan_2026": "0", "starting_arr_jan_2026": "0", "currency": "USD"}

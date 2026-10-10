@@ -34,10 +34,11 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_v5_dataset import ZERO, allocate, num, padd, pidx, prange, q, stable_unit  # noqa: E402
+from customer_buckets import HISTORY_BUCKET_FIELDS  # noqa: E402
 
 HISTORY_FIELDS = ["organization_id", "version", "period", "customer_id", "customer_name", "segment", "movement_type",
                   "beginning_arr", "movement_arr", "ending_arr", "waterfall_column", "opportunity_id", "note",
-                  "churn_type"]
+                  "churn_type", *HISTORY_BUCKET_FIELDS]
 EXPECTED_FIELDS = HISTORY_FIELDS + ["probability", "opportunity_arr"]
 COLUMN = {"New Business": "new_business_arr", "Expansion": "expansion_arr", "Reactivation": "reactivation_arr",
           "Contraction": "contraction_arr", "Churn": "churn_arr", "Pause": "churn_arr", "Opening balance": ""}
