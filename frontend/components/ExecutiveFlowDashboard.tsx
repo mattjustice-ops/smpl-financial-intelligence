@@ -80,6 +80,8 @@ type WaterfallSummaryRow = {
   amount: string | number;
   source_table: string;
   detail_count: number;
+  row_kind?: "line" | "sub_line" | "memo";
+  parent_type?: string | null;
 };
 
 type AttributionRow = {
@@ -2046,7 +2048,18 @@ export function ExpandableWaterfallTable({
   expandable?: boolean;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
   const rows = (response?.rows ?? []).filter((row) => !filterTypes || filterTypes.includes(row.waterfall_type));
+  const groupParents = new Set(
+    rows.filter((row) => row.row_kind === "sub_line" && row.parent_type).map((row) => row.parent_type as string)
+  );
+  const toggleGroup = (parent: string) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(parent)) next.delete(parent);
+      else next.add(parent);
+      return next;
+    });
   const periods =
     periodsOverride ??
     Array.from(new Set(rows.map((row) => normalizeDashboardPeriod(row.period)))).sort();
@@ -2092,22 +2105,29 @@ export function ExpandableWaterfallTable({
             </tr>
           </thead>
           <tbody>
-            {summaryRows.map((row) => {
-              const key = `${row.waterfall_type}-${row.source_table}`;
-              const detail = attributionByType.get(row.waterfall_type) ?? [];
-              return (
-                <WaterfallSummaryRow
-                  key={key}
-                  row={row}
-                  periods={periods}
-                  amountByTypePeriod={amountByTypePeriod}
-                  detail={detail}
-                  expandable={expandable}
-                  expanded={expandable && expanded === key}
-                  onToggle={() => setExpanded(expanded === key ? null : key)}
-                />
-              );
-            })}
+            {summaryRows
+              .filter((row) => row.row_kind !== "sub_line" || openGroups.has(row.parent_type ?? ""))
+              .map((row) => {
+                const key = `${row.waterfall_type}-${row.source_table}`;
+                const detail = attributionByType.get(row.waterfall_type) ?? [];
+                return (
+                  <WaterfallSummaryRow
+                    key={key}
+                    row={row}
+                    periods={periods}
+                    amountByTypePeriod={amountByTypePeriod}
+                    detail={detail}
+                    expandable={expandable}
+                    expanded={expandable && expanded === key}
+                    onToggle={() => setExpanded(expanded === key ? null : key)}
+                    group={
+                      groupParents.has(row.waterfall_type)
+                        ? { open: openGroups.has(row.waterfall_type), onToggle: () => toggleGroup(row.waterfall_type) }
+                        : undefined
+                    }
+                  />
+                );
+              })}
           </tbody>
         </table>
       </div>
@@ -2123,6 +2143,7 @@ export function WaterfallSummaryRow({
   expandable,
   expanded,
   onToggle,
+  group,
 }: {
   row: WaterfallSummaryRow;
   periods: string[];
@@ -2131,12 +2152,38 @@ export function WaterfallSummaryRow({
   expandable: boolean;
   expanded: boolean;
   onToggle: () => void;
+  group?: { open: boolean; onToggle: () => void };
 }) {
   const detailColumns = expandable ? 2 : 1;
+  const isSubLine = row.row_kind === "sub_line";
+  const isMemo = row.row_kind === "memo";
+  const labelWeight = isSubLine || isMemo ? 400 : 700;
   return (
     <>
       <tr onClick={expandable ? onToggle : undefined} style={expandable ? { cursor: "pointer" } : undefined}>
-        <td style={{ ...categoryCellStyle(td), fontWeight: 700 }}>
+        <td
+          style={{
+            ...categoryCellStyle(td),
+            fontWeight: labelWeight,
+            fontStyle: isMemo ? "italic" : undefined,
+            color: isMemo ? "var(--muted)" : undefined,
+            paddingLeft: isSubLine ? 28 : undefined,
+          }}
+        >
+          {group && (
+            <button
+              type="button"
+              aria-expanded={group.open}
+              aria-label={group.open ? `Collapse ${row.line_item}` : `Expand ${row.line_item}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                group.onToggle();
+              }}
+              style={{ border: "none", background: "none", padding: "0 6px 0 0", cursor: "pointer", font: "inherit" }}
+            >
+              {group.open ? "−" : "+"}
+            </button>
+          )}
           {expandable ? `${expanded ? "▾" : "▸"} ` : ""}
           {row.line_item}
         </td>
@@ -2147,8 +2194,9 @@ export function WaterfallSummaryRow({
             <td
               key={period}
               style={periodCellStyle(td, {
-                color: n(amount) < 0 ? "#b91c1c" : "#166534",
-                fontWeight: 700,
+                color: isMemo ? "var(--muted)" : n(amount) < 0 ? "#b91c1c" : "#166534",
+                fontWeight: labelWeight,
+                fontStyle: isMemo ? "italic" : undefined,
               })}
             >
               {match ? money(amount) : ""}

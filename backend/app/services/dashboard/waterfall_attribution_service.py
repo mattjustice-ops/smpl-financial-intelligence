@@ -9,22 +9,42 @@ from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import fetch_scenario_rows, str_any, value_any
 from app.services.dashboard.schemas import WaterfallAttributionRow
+from app.services.mrr.bucket_columns import (
+    CLOSED_WON_NEW_BUSINESS,
+    CUSTOMER_SUCCESS_BEGINNING,
+    CUSTOMER_SUCCESS_BEGINNING_COLUMN,
+    CUSTOMER_SUCCESS_LINES,
+    NEW_BUSINESS_LINES,
+    NEW_BUSINESS_TOTAL_COLUMN,
+    has_bucket_columns,
+)
+
+
+def _bucket_metrics(raw: dict) -> dict[str, Decimal]:
+    """New Business = its sub-lines; expansion, contraction, churn and reactivation are Customer Success only."""
+    metrics = {
+        "beginning": value_any(raw, "beginning_arr"),
+        "new_business": value_any(raw, NEW_BUSINESS_TOTAL_COLUMN),
+    }
+    for waterfall_type, column, sign, _label in NEW_BUSINESS_LINES:
+        metrics[waterfall_type] = sign * abs(value_any(raw, column))
+    for waterfall_type, column, sign in CUSTOMER_SUCCESS_LINES:
+        metrics[waterfall_type] = sign * abs(value_any(raw, column))
+    metrics["ending"] = value_any(raw, "ending_arr")
+    metrics[CUSTOMER_SUCCESS_BEGINNING] = value_any(raw, CUSTOMER_SUCCESS_BEGINNING_COLUMN)
+    metrics[CLOSED_WON_NEW_BUSINESS] = value_any(raw, "new_business_arr")
+    return metrics
 
 
 def arr_waterfall_attribution_view(db: Session, organization_id: uuid.UUID, **params) -> list[WaterfallAttributionRow]:
     rows: list[WaterfallAttributionRow] = []
     for scenario, period, table_name, raw in fetch_scenario_rows(db, organization_id, suffix="mrr_waterfall", fallback="mrr_waterfall", **params):
-        metrics = {
-            "beginning": value_any(raw, "beginning_arr", "beginning_mrr") * (Decimal("12") if raw.get("beginning_arr") in (None, "") else Decimal("1")),
-            "new_business": value_any(raw, "new_business_arr", "new_mrr") * (Decimal("12") if raw.get("new_business_arr") in (None, "") else Decimal("1")),
-            "expansion": value_any(raw, "expansion_arr", "expansion_mrr") * (Decimal("12") if raw.get("expansion_arr") in (None, "") else Decimal("1")),
-            "contraction": -abs(value_any(raw, "contraction_arr", "contraction_mrr") * (Decimal("12") if raw.get("contraction_arr") in (None, "") else Decimal("1"))),
-            "churn": -abs(value_any(raw, "churn_arr", "churn_mrr") * (Decimal("12") if raw.get("churn_arr") in (None, "") else Decimal("1"))),
-            "reactivation": value_any(raw, "reactivation_arr", "reactivation_mrr") * (Decimal("12") if raw.get("reactivation_arr") in (None, "") else Decimal("1")),
-            "ending": value_any(raw, "ending_arr", "ending_mrr") * (Decimal("12") if raw.get("ending_arr") in (None, "") else Decimal("1")),
-        }
+        if has_bucket_columns(raw):
+            metrics = _bucket_metrics(raw)
+        else:
+            metrics = _movement_metrics(raw)
         for waterfall_type, amount in metrics.items():
-            if amount == 0 and waterfall_type not in {"beginning", "ending"}:
+            if amount == 0 and waterfall_type not in {"beginning", "ending", CUSTOMER_SUCCESS_BEGINNING, CLOSED_WON_NEW_BUSINESS}:
                 continue
             rows.append(
                 WaterfallAttributionRow(
@@ -43,6 +63,19 @@ def arr_waterfall_attribution_view(db: Session, organization_id: uuid.UUID, **pa
                 )
             )
     return rows
+
+
+def _movement_metrics(raw: dict) -> dict[str, Decimal]:
+    """Files without customer buckets: the movement columns, on all customers."""
+    return {
+        "beginning": value_any(raw, "beginning_arr", "beginning_mrr") * (Decimal("12") if raw.get("beginning_arr") in (None, "") else Decimal("1")),
+        "new_business": value_any(raw, "new_business_arr", "new_mrr") * (Decimal("12") if raw.get("new_business_arr") in (None, "") else Decimal("1")),
+        "expansion": value_any(raw, "expansion_arr", "expansion_mrr") * (Decimal("12") if raw.get("expansion_arr") in (None, "") else Decimal("1")),
+        "contraction": -abs(value_any(raw, "contraction_arr", "contraction_mrr") * (Decimal("12") if raw.get("contraction_arr") in (None, "") else Decimal("1"))),
+        "churn": -abs(value_any(raw, "churn_arr", "churn_mrr") * (Decimal("12") if raw.get("churn_arr") in (None, "") else Decimal("1"))),
+        "reactivation": value_any(raw, "reactivation_arr", "reactivation_mrr") * (Decimal("12") if raw.get("reactivation_arr") in (None, "") else Decimal("1")),
+        "ending": value_any(raw, "ending_arr", "ending_mrr") * (Decimal("12") if raw.get("ending_arr") in (None, "") else Decimal("1")),
+    }
 
 
 def pipeline_waterfall_attribution_view(db: Session, organization_id: uuid.UUID, **params) -> list[WaterfallAttributionRow]:

@@ -31,6 +31,15 @@ VALIDATION_LABEL_CATALOG: dict[str, tuple[str, str]] = {
         "Closed-won ties to new ARR",
         "Closed-won pipeline ARR matches new-business ARR in the MRR bridge.",
     ),
+    "arr_new_business_ties_to_its_lines": (
+        "New Business ties to its lines",
+        "New Business equals new logo + winback + first-year expansion − first-year contraction − no-start.",
+    ),
+    "arr_customer_buckets_unavailable": (
+        "Customer buckets not loaded",
+        "The MRR waterfall has no New Business / Customer Success columns, so GRR and NRR use all customers' "
+        "beginning ARR and first-year customers are included in retention.",
+    ),
     "actual_marketing_closed_won_arr_ties_to_actual_opportunities": (
         "Marketing closed-won ties to opportunities",
         "Marketing closed-won ARR matches opportunity closed-won ARR.",
@@ -154,8 +163,12 @@ CHECK_COMPARISON_SIDES: dict[str, tuple[str, str]] = {
         "cash_flow_statement Beginning Cash Balance",
     ),
     "closed_won_arr_ties_mrr_new_business_arr": (
-        "ARR waterfall new business / new_arr",
+        "ARR waterfall closed-won new business (bookings) / new_arr",
         "Pipeline waterfall closed_won",
+    ),
+    "arr_new_business_ties_to_its_lines": (
+        "Sum of New Business lines",
+        "new_business_bucket_arr",
     ),
     "roster_cost_vs_gl_payroll": (
         "GL payroll",

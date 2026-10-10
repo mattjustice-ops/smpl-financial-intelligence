@@ -904,7 +904,8 @@ def build_arr_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
         return round(float(val) / 1_000_000, 4)
 
     bop_m = to_m(arr_prior)
-    nb_m = to_m(abs(comp("new_business")))
+    # With customer buckets New Business is a net of its lines and turns negative when no-starts outweigh them.
+    nb_m = to_m(comp("new_business"))
     exp_m = to_m(abs(comp("expansion")))
     react_m = to_m(abs(comp("reactivation")))
     con_m = -to_m(abs(comp("contraction")))
@@ -925,11 +926,13 @@ def build_arr_waterfall_chart(bundle: ReportingBundle) -> dict[str, Any]:
         "Churn",
         "End ARR",
     ]
-    kinds = ["total", "increase", "increase", "increase", "decrease", "decrease", "total"]
+    nb_kind = "increase" if nb_m >= 0 else "decrease"
+    kinds = ["total", nb_kind, "increase", "increase", "decrease", "decrease", "total"]
     signed_m = [bop_m, nb_m, exp_m, react_m, con_m, churn_m, after_churn]
     # Board Chart.js convention: decrease offsets are the post-decrease floor.
-    offsets_m = [0, bop_m, after_nb, after_exp, after_con, after_churn, 0]
-    heights_m = [bop_m, nb_m, exp_m, react_m, abs(con_m), abs(churn_m), after_churn]
+    nb_offset = bop_m if nb_m >= 0 else after_nb
+    offsets_m = [0, nb_offset, after_nb, after_exp, after_con, after_churn, 0]
+    heights_m = [bop_m, abs(nb_m), exp_m, react_m, abs(con_m), abs(churn_m), after_churn]
 
     color_map = {
         "total": "00d4aa",

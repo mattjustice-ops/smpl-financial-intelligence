@@ -99,6 +99,10 @@ class KpiInputs:
     # Period length in whole months (used by LTV / CAC payback)
     period_months: int = 1
 
+    # Customer Success bucket MRR (beginning, expansion, contraction, churn, reactivation). When given,
+    # GRR and NRR are measured on it; otherwise on all customers.
+    customer_success_mrr: Optional[dict[str, Decimal]] = None
+
 
 @dataclass(frozen=True)
 class KpiResults:
@@ -135,6 +139,7 @@ class KpiResults:
     burn_multiple: Optional[Decimal]
 
     inputs_used: dict[str, object] = field(default_factory=dict)
+    retention_base: str = "all_customers"
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -146,6 +151,7 @@ class KpiResults:
             "ending_arr": self.ending_arr,
             "nrr": self.nrr,
             "grr": self.grr,
+            "retention_base": self.retention_base,
             "logo_churn_rate": self.logo_churn_rate,
             "gross_mrr_churn_rate": self.gross_mrr_churn_rate,
             "net_mrr_churn_rate": self.net_mrr_churn_rate,
@@ -391,14 +397,19 @@ def calculate_kpis(inputs: KpiInputs) -> KpiResults:
         _to_decimal(inputs.ending_arr) if inputs.ending_arr is not None else arr
     )
 
-    nrr = calculate_nrr(
-        inputs.beginning_mrr,
-        inputs.expansion_mrr,
-        inputs.reactivation_mrr,
-        inputs.contraction_mrr,
-        inputs.churn_mrr,
-    )
-    grr = calculate_grr(inputs.beginning_mrr, inputs.contraction_mrr, inputs.churn_mrr)
+    cs = inputs.customer_success_mrr
+    if cs is not None:
+        nrr = calculate_nrr(cs["beginning"], cs["expansion"], cs["reactivation"], cs["contraction"], cs["churn"])
+        grr = calculate_grr(cs["beginning"], cs["contraction"], cs["churn"])
+    else:
+        nrr = calculate_nrr(
+            inputs.beginning_mrr,
+            inputs.expansion_mrr,
+            inputs.reactivation_mrr,
+            inputs.contraction_mrr,
+            inputs.churn_mrr,
+        )
+        grr = calculate_grr(inputs.beginning_mrr, inputs.contraction_mrr, inputs.churn_mrr)
     logo_churn = calculate_logo_churn_rate(
         inputs.churned_customers, inputs.active_customers_beginning
     )
@@ -464,4 +475,5 @@ def calculate_kpis(inputs: KpiInputs) -> KpiResults:
         sales_efficiency=sales_eff,
         pipeline_coverage=pipeline,
         burn_multiple=burn,
+        retention_base="customer_success" if cs is not None else "all_customers",
     )

@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.services.dashboard.query_utils import fetch_table_rows, table_exists, value_any
+from app.services.mrr.bucket_columns import BUCKET_COLUMNS, has_bucket_columns
 from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 from app.services.reporting.export.data_collector import collect_reporting_bundle
 from app.services.reporting.gl_balance_sheet import gl_balance_sheet_and_cash_flow_by_period
@@ -142,15 +143,18 @@ IS_KEY_MAP = dict(IS_FIELD_SPECS)
 BS_KEY_MAP = dict(BS_FIELD_SPECS)
 CFS_KEY_MAP = dict(CFS_FIELD_SPECS)
 
+# Customer bucket columns come first: New Business is the bucket total and expansion, contraction, churn and
+# reactivation are Customer Success only (bucket_columns.py).
 MRR_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("arr_bop", ("beginning_arr", "beginning_mrr")),
-    ("arr_nb", ("new_business_arr", "new_mrr")),
-    ("arr_exp", ("expansion_arr", "expansion_mrr")),
-    ("arr_cont", ("contraction_arr", "contraction_mrr")),
-    ("arr_churn", ("churn_arr", "churn_mrr")),
-    ("arr_react", ("reactivation_arr", "reactivation_mrr")),
+    ("arr_nb", ("new_business_bucket_arr", "new_business_arr", "new_mrr")),
+    ("arr_exp", ("customer_success_expansion_arr", "expansion_arr", "expansion_mrr")),
+    ("arr_cont", ("customer_success_contraction_arr", "contraction_arr", "contraction_mrr")),
+    ("arr_churn", ("customer_success_churn_arr", "churn_arr", "churn_mrr")),
+    ("arr_react", ("customer_success_reactivation_arr", "reactivation_arr", "reactivation_mrr")),
     ("arr_nn", ("net_new_arr", "net_new_mrr")),
     ("arr_eop", ("ending_arr", "ending_mrr")),
+    ("arr_cs_bop", ("customer_success_beginning_arr",)),
 )
 
 ARR_WATERFALL_ROW_KEYS: tuple[str, ...] = (
@@ -248,7 +252,12 @@ def _aggregate_mrr_by_period(rows: list[dict[str, Any]]) -> dict[str, dict[str, 
             continue
         period = to_period(str(period_raw))
         bucket = totals.setdefault(period, {})
+        bucketed = has_bucket_columns(raw)
         for key, aliases in MRR_FIELD_SPECS:
+            if key == "arr_cs_bop" and not bucketed:
+                continue
+            if not bucketed:
+                aliases = tuple(a for a in aliases if a not in BUCKET_COLUMNS)
             val = _dec(value_any(raw, *aliases))
             if val is None:
                 continue
@@ -259,12 +268,14 @@ def _aggregate_mrr_by_period(rows: list[dict[str, Any]]) -> dict[str, dict[str, 
 def _normalize_mrr_metrics(raw: dict[str, float | None]) -> dict[str, float | None]:
     """Net new, GRR and NRR are always calculated from the loaded movement components.
 
-    GRR = (beginning - contraction - churn) / beginning
-    NRR = (beginning + expansion + reactivation - contraction - churn) / beginning
+    GRR = (base - contraction - churn) / base
+    NRR = (base + expansion + reactivation - contraction - churn) / base
+    The base is the Customer Success beginning ARR when customer buckets are loaded, else beginning ARR.
     A rate is ``None`` when a component it needs is not loaded.
     """
     metrics = dict(raw)
     bop = metrics.get("arr_bop")
+    base = metrics.get("arr_cs_bop") if metrics.get("arr_cs_bop") is not None else bop
     eop = metrics.get("arr_eop")
     nb, exp, react = metrics.get("arr_nb"), metrics.get("arr_exp"), metrics.get("arr_react")
     cont = abs(metrics["arr_cont"]) if metrics.get("arr_cont") is not None else None
@@ -279,10 +290,10 @@ def _normalize_mrr_metrics(raw: dict[str, float | None]) -> dict[str, float | No
 
     metrics["grr"] = None
     metrics["nrr"] = None
-    if bop and bop > 0 and cont is not None and churn is not None:
-        metrics["grr"] = (bop - cont - churn) / bop
+    if base and base > 0 and cont is not None and churn is not None:
+        metrics["grr"] = (base - cont - churn) / base
         if exp is not None and react is not None:
-            metrics["nrr"] = (bop + exp + react - cont - churn) / bop
+            metrics["nrr"] = (base + exp + react - cont - churn) / base
     return metrics
 
 

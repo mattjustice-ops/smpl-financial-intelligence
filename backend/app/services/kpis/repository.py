@@ -11,7 +11,8 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.models.demo_finance import GlActual, MrrWaterfall, Opportunity
-from app.services.mrr.repository import month_start
+from app.services.mrr.engine import CUSTOMER_SUCCESS, BucketPolicy, MovementType, customer_age
+from app.services.mrr.repository import customer_active_months, month_start
 
 ZERO = Decimal("0")
 
@@ -131,6 +132,31 @@ def load_mrr_summary_for_period(
         "reactivation_mrr": _to_decimal(row.reactivation_mrr),
         "ending_mrr": _to_decimal(row.ending_mrr),
     }
+
+
+def load_customer_success_mrr(
+    session: Session, organization_id: uuid.UUID, period: date, policy: BucketPolicy
+) -> Optional[dict[str, Decimal]]:
+    """Customer Success bucket MRR for `period` from the stored mrr_waterfall rows, with each customer's age
+    of first MRR from its subscription history. None when nothing is stored or a customer's age is unknown."""
+    p = month_start(period)
+    rows = session.scalars(
+        select(MrrWaterfall).where(MrrWaterfall.organization_id == organization_id, MrrWaterfall.period == p)
+    ).all()
+    if not rows:
+        return None
+    history = customer_active_months(session, organization_id, p, {r.customer_id for r in rows})
+    out = {k: ZERO for k in ("beginning", "expansion", "contraction", "churn", "reactivation")}
+    for r in rows:
+        age = customer_age(p, MovementType(r.movement_type), history.get(r.customer_id, ()), policy)
+        if age is None:
+            return None
+        begin, end = _to_decimal(r.beginning_mrr), _to_decimal(r.ending_mrr)
+        if begin > ZERO and age.bucket == CUSTOMER_SUCCESS:
+            out["beginning"] += begin
+        if age.line in out:
+            out[age.line] += abs(end - begin)
+    return out
 
 
 def load_customer_counts(
