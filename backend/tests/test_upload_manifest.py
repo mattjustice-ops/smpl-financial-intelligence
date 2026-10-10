@@ -133,7 +133,7 @@ def test_check_files_reports_undeclared_duplicates_reference_and_missing():
 
 def test_vendor_terms_only_required_when_ap_subledger_exportable():
     base = {"7.30": "by_employee", "7.31": "yes", "7.32": "yes", "7.35": "all", "7.36": "yes", "7.37": "yes",
-            "7.38": "no"}
+            "7.38": "no", "7.39": "yes", "7.40": "no"}
     assert _normalization_status({**base, "7.33": "no"})["data_sources"]["resolved"]
     pending = _normalization_status({**base, "7.33": "yes"})["data_sources"]
     assert pending["unresolved_questions"] == ["7.34"]
@@ -145,6 +145,22 @@ def test_data_source_answers_validate():
     assert validate_answers({"7.34": "net_90"})
     assert validate_answers({"7.37": "yes", "7.38": "no"}) == []
     assert validate_answers({"7.38": "sometimes"})
+    assert validate_answers({"7.39": "yes", "7.40": "no"}) == []
+
+
+def test_customer_bucket_questions_and_files():
+    assert all(q.default is None or q.default in q.choices for q in ALL_QUESTIONS.values())
+    assert (ALL_QUESTIONS["4.10"].default, ALL_QUESTIONS["4.12"].default) == ("6", "12")
+    assert validate_answers({"4.10": "6", "4.11": "removes_arr", "4.12": "12"}) == []
+    assert validate_answers({"4.12": "9"})
+    # Defaults are shown, not assumed: the gate waits for explicit answers.
+    status = _normalization_status({"4.10": "6", "4.11": "removes_arr"})["customer_returns"]
+    assert status["unresolved_questions"] == ["4.12"]
+    assert _normalization_status({"4.10": "6", "4.11": "removes_arr", "4.12": "12"})["customer_returns"]["resolved"]
+    by_file = {r["file_name"]: r for r in manifest_rows()}
+    for v in VERSIONS:
+        assert by_file[f"{v}_customers.csv"]["question"] == "7.39"
+        assert by_file[f"{v}_customer_arr_history.csv"]["question"] == "7.40"
 
 
 def test_script_writes_manifest_and_fails_on_undeclared_files(tmp_path):
