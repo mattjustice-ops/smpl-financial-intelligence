@@ -15,7 +15,7 @@ from __future__ import annotations
 import csv
 import os
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 ZERO = Decimal("0")
@@ -42,6 +42,13 @@ WINBACK_WINDOW = 6
 SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
 IMPLEMENTATION_FEE = {"SMB": Decimal(2000), "Mid-Market": Decimal(3500), "Enterprise": Decimal(5000)}
 COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
+TERRITORIES = ("Central", "East", "South", "West")
+TEAM_DEPARTMENTS = ("Sales", "Customer Success")
+BOOKINGS_ROLES = ("Account Executive", "Senior Account Executive")
+PIPELINE_ROLES = ("Sales Development Rep",)
+CSM_ROLES = ("Customer Success Manager", "Senior Customer Success Manager")
+PERSON_COLUMNS = {"rep_id": "id", "employee_id": "id", "owner_id": "id", "csm_id": "id", "rep_name": "name",
+                  "owner": "name", "customer_success_manager": "name"}
 
 
 def num(value) -> Decimal:
@@ -423,24 +430,99 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
         rep.info(f"Actual June 2026 GRR {r['gross_retention_rate']}, NRR {r['net_dollar_retention_rate']}")
 
     # ------------------------------------------------------------------ sales
-    rep.section("Sales: roster, quotas, opportunities, commissions")
-    quotas = f("Actual_Sales_Quotas.csv")
-    roster = {r["employee_id"]: r["rep_name"] for r in quotas}
+    rep.section("Sales team: employees, quotas, opportunities, commissions")
+    emps = {v: f(f"{v}_Employees.csv") for v in VERSIONS}
+    team = {v: [e for e in emps[v] if e["department"] in TEAM_DEPARTMENTS] for v in VERSIONS}
+    sales = {v: {e["employee_id"]: e for e in emps[v] if e["department"] == "Sales"} for v in VERSIONS}
+    diffs = [f"{v} {e['employee_id']}: region {e['region']}" for v in VERSIONS for e in team[v] if e["region"] not in TERRITORIES]
+    seen: dict[str, tuple] = {}
+    for v in VERSIONS:
+        for e in emps[v]:
+            key = tuple(e[k] for k in ("employee_name", "department", "role", "region", "hire_date"))
+            if seen.setdefault(e["employee_id"], key) != key:
+                diffs.append(f"{v} {e['employee_id']}: name, role, territory or hire date differs from another version")
+        diffs += [f"{v}: {n} used {c} times" for n, c in Counter(e["employee_name"] for e in emps[v]).items() if c > 1]
+        diffs += [f"{v} {e['employee_id']}: quota_carrying {e['quota_carrying']} for {e['role']}" for e in sales[v].values()
+                  if (e["quota_carrying"] == "Yes") != (e["role"] in BOOKINGS_ROLES + PIPELINE_ROLES)]
+    rep.check("employees: Sales and Customer Success work a CRM territory; an ID has one name, role, territory and hire "
+              "date in every version; names unique; quota-carrying = AE, Senior AE, SDR", diffs,
+              "; ".join(f"{v} " + ", ".join(f"{t} {n}" for t, n in sorted(Counter(e["region"] for e in team[v]).items()))
+                        for v in VERSIONS))
+
+    curve: dict[int, dict[int, Decimal]] = defaultdict(dict)
+    for r in f("Hiring_Ramp_Assumptions.csv"):
+        curve[int(r["ramp_months"])][int(r["month_after_start"])] = num(r["productivity_pct"])
+
+    def ramp(e: dict[str, str], p: str) -> Decimal:
+        k = _pidx(p) - _pidx(e["hire_date"][:7]) + 1
+        return ZERO if k < 1 else curve.get(int(e["productivity_ramp_months"] or 0), {}).get(k, Decimal(1))
+
+    def on_staff(e: dict[str, str], p: str) -> bool:
+        return e["hire_date"][:7] <= p and (not e["termination_date"] or e["termination_date"][:7] > p)
+
+    quota_files = {"Actual": f("Actual_Sales_Quotas.csv"), "Budget": f("Budget_Sales_Quotas.csv")}
+    for v, rows in quota_files.items():
+        months_q = sorted({r["period"][:7] for r in rows})
+        end = CLOSE if v == "Actual" else "2026-12"
+        diffs = [] if months_q and (months_q[0], months_q[-1]) == ("2026-01", end) else [f"months {months_q[:1]}..{months_q[-1:]}"]
+        got: dict[str, set[str]] = defaultdict(set)
+        for r in rows:
+            p = r["period"][:7]
+            got[p].add(r["employee_id"])
+            e = sales[v].get(r["employee_id"])
+            if e is None:
+                diffs.append(f"{p} {r['employee_id']}: not a {v} Sales employee")
+                continue
+            kind = ("Bookings ARR" if e["role"] in BOOKINGS_ROLES else
+                    "Pipeline ARR" if e["role"] in PIPELINE_ROLES else "Non-Quota")
+            annual = num(e["annual_quota_arr"]) if kind != "Non-Quota" else ZERO
+            pct = ramp(e, p) if kind != "Non-Quota" else Decimal(1)
+            if (r["rep_name"], r["role"], r["region"], r["hire_period"], r["quota_type"], r["productivity_ramp_months"]) != \
+                    (e["employee_name"], e["role"], e["region"], e["hire_date"][:7], kind, e["productivity_ramp_months"]) \
+                    or num(r["annual_quota_arr"]) != annual or num(r["ramp_pct"]) != pct \
+                    or abs(num(r["ramped_monthly_quota_arr"]) - cents(cents(annual / 12) * pct)) > CENTS:
+                diffs.append(f"{p} {r['employee_id']}: not its employee row or ramp")
+        for p in months_q:
+            want = {i for i, e in sales[v].items() if on_staff(e, p)}
+            if got[p] != want:
+                diffs.append(f"{p}: {len(got[p])} quota rows vs {len(want)} Sales employees on staff")
+        rep.check(f"{v} quotas = the {v} Sales employees on staff each month (name, role, territory, hire month, quota; "
+                  f"ramp from Hiring_Ramp_Assumptions.csv)", diffs, f"{len(rows)} rows {months_q[0]}..{months_q[-1]}")
+
+    diffs = []
+    for v in VERSIONS:
+        reps = {r["rep_id"]: r for r in f(f"{v}_sales_reps.csv")}
+        if set(reps) != set(sales[v]):
+            diffs.append(f"{v}: {len(reps)} reps vs {len(sales[v])} Sales employees")
+        diffs += [f"{v} {i}" for i, r in reps.items() if i in sales[v] and (r["rep_name"], r["role"], r["region"], r["hire_date"])
+                  != tuple(sales[v][i][k] for k in ("employee_name", "role", "region", "hire_date"))]
+    rep.check("sales_reps files = each version's Sales employees (ID, name, role, territory, hire date)", diffs)
+
+    diffs, local = [], Counter()
+    for v in VERSIONS:
+        closers = {e["employee_name"]: e for e in sales[v].values() if e["role"] in BOOKINGS_ROLES}
+        v_opps = f(f"{v}_opportunities.csv")
+        owner_of = {o["opportunity_id"]: o["owner"] for o in v_opps}
+        for o in v_opps:
+            e, p = closers.get(o["owner"]), o["period"][:7]
+            if e is None or not on_staff(e, p) or ramp(e, p) == 0:
+                diffs.append(f"{v} {o['opportunity_id']}: owner {o['owner']} is not a ramped AE on staff in {p}")
+            else:
+                local[(v, e["region"] == o["region"])] += 1
+        for r in f(f"{v}_opportunity_movements.csv"):
+            if r["opportunity_id"] in owner_of and r["owner"] != owner_of[r["opportunity_id"]]:
+                diffs.append(f"{v} movement {r['opportunity_id']}: owner differs from its opportunity")
+            elif r["owner"] not in closers:
+                diffs.append(f"{v} movement {r['opportunity_id']}: owner {r['owner']} is not a {v} AE")
+    rep.check("opportunity owners are ramped AEs or Senior AEs on staff in the deal month (each version's own team); "
+              "movements carry their deal's owner", diffs,
+              ", ".join(f"{v} {local[(v, True)] / max(1, local[(v, True)] + local[(v, False)]):.0%} in the rep's territory"
+                        for v in VERSIONS))
+
+    quotas = quota_files["Actual"]
+    roster = {i: e["employee_name"] for i, e in sales["Actual"].items()}
     by_name = {n: i for i, n in roster.items()}
     q_months = sorted({r["period"][:7] for r in quotas})
-    in_close = {r["employee_id"] for r in quotas if r["period"][:7] == CLOSE}
-    rep.check("quotas run through the June close for every rep",
-              [] if q_months and q_months[-1] == CLOSE and in_close == set(roster)
-              else [f"months {q_months[0]}..{q_months[-1]}; {len(in_close)} of {len(roster)} reps in {CLOSE}"],
-              f"{len(roster)} reps, {q_months[0]}..{q_months[-1]}; reps hired in 2026 start at their hire month")
-    budget_q = f("Budget_Sales_Quotas.csv")
-    rep.flag(f"Budget_Sales_Quotas.csv is a separate planning roster ({len({r['employee_id'] for r in budget_q})} "
-             f"BSALES IDs with placeholder names); not mapped to the Actual roster")
-    reps_files = [n for v in VERSIONS for n in [f"{v}_sales_reps.csv"]
-                  if {r["rep_id"]: r["rep_name"] for r in f(n)} != roster]
-    rep.check("sales_reps files = quota roster (IDs and names)", reps_files)
-    opp_owner_bad = sorted({r["owner"] for v in VERSIONS for r in f(f"{v}_opportunities.csv") if r["owner"] not in by_name})
-    rep.check("every opportunity owner is a roster rep", opp_owner_bad)
     opps = f("Actual_opportunities.csv")
     won_nb = defaultdict(Decimal)
     for o in opps:
@@ -516,20 +598,57 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             f"{p} {money(gl6200[p])} vs {money(by_p.get(p, ZERO))}" for p in q_months)
                  + " (commission expense is not in the GL; the GL expense is not the cash paid)")
 
+    state_region = {o["customer_state"]: o["region"] for v in VERSIONS for o in f(f"{v}_opportunities.csv")}
+    cust_region = {c["customer_id"]: state_region.get(c["billing_state"], "") for v in VERSIONS for c in f(f"{v}_customers.csv")}
+    diffs, csm_of = [], {}
+    for v in ("Actual", "Forecast"):
+        csms = {e["employee_name"]: e for e in team[v] if e["role"] in CSM_ROLES}
+        for r in f(f"{v}_renewal_pipeline.csv"):
+            e, p = csms.get(r["customer_success_manager"]), r["renewal_period"][:7]
+            if e is None or not on_staff(e, p):
+                diffs.append(f"{v} {r['renewal_id']}: {r['customer_success_manager']} is not a CSM on staff in {p}")
+            elif csm_of.setdefault(r["customer_id"], e["employee_id"]) != e["employee_id"]:
+                diffs.append(f"{v} {r['renewal_id']}: {r['customer_id']} has another CSM")
+            elif e["region"] != cust_region.get(r["customer_id"]) and any(
+                    x["region"] == cust_region.get(r["customer_id"]) and on_staff(x, p) for x in csms.values()):
+                diffs.append(f"{v} {r['renewal_id']}: CSM outside the customer's territory")
+    csm_ids = {e["employee_id"]: e["employee_name"] for e in team["Actual"] if e["role"] in CSM_ROLES}
+    diffs += [f"{r['commission_id']}: {r['rep_id']} {r['rep_name']} is not an Actual CSM"
+              for r in f("Actual_renewal_commissions.csv") if csm_ids.get(r["rep_id"]) != r["rep_name"]]
+    rep.check("renewal CSMs are CSM employees on staff, in the customer's territory where it has one, one CSM per "
+              "customer; renewal commissions are paid to the CSM's employee ID", diffs,
+              f"{len(set(csm_of.values()))} CSMs, {len(csm_of)} customers, up to "
+              f"{max(Counter(csm_of.values()).values(), default=0)} accounts each")
+
+    nb = defaultdict(Decimal)
+    for v, status, col in (("Actual", "Closed Won", "amount_arr"), ("Forecast", "Open", "weighted_arr")):
+        for o in f(f"{v}_opportunities.csv"):
+            if o["opportunity_type"] == "New Business" and o["close_status"] == status:
+                nb[(o["period"][:7], o["region"])] += num(o[col])
+    cap = f("Forecast_quota_capacity.csv")
+    diffs = [f"{p}: {n} rows" for p, n in Counter(r["period"][:7] for r in cap).items() if n != len(TERRITORIES)]
+    for r in cap:
+        p, t = r["period"][:7], r["region"]
+        mine = [e for e in sales["Forecast"].values() if e["role"] in BOOKINGS_ROLES and on_staff(e, p) and e["region"] == t]
+        if num(r["quota_carrying_reps"]) != len(mine) or num(r["quota_capacity_arr"]) != sum((num(e["annual_quota_arr"]) for e in mine), ZERO) \
+                or abs(num(r["expected_bookings_arr"]) - nb[(p, t)]) > CENTS:
+            diffs.append(f"{p} {t}: {r['quota_carrying_reps']} reps {r['quota_capacity_arr']} vs {len(mine)} AEs on staff")
+    last_cap = max((r["period"][:7] for r in cap), default="")
+    rep.check("Forecast quota capacity by territory = Forecast AEs and Senior AEs on staff (count, annual quota); expected "
+              "bookings = the month's new business (Actual closed won through the close, Forecast weighted ARR after)", diffs,
+              f"{last_cap}: {money(sum((num(r['quota_capacity_arr']) for r in cap if r['period'][:7] == last_cap), ZERO))} "
+              f"annual quota across {len(TERRITORIES)} territories")
+
+    ids = {e["employee_id"] for v in VERSIONS for e in emps[v]}
+    names = {e["employee_name"] for v in VERSIONS for e in emps[v]}
     stray = defaultdict(set)
     for n in sorted(v5_files):
         h, rows = read(os.path.join(v5, n))
-        for col in ("rep_id", "employee_id", "owner_id", "csm_id", "rep_name"):
-            if col in h and n not in ("Actual_Sales_Quotas.csv", "Budget_Sales_Quotas.csv") and not n.endswith("_sales_reps.csv"):
-                for r in rows:
-                    val = r[col]
-                    if col == "rep_name":
-                        if val and val not in by_name:
-                            stray[n].add(val)
-                    elif val.startswith(("REP-", "ASALES-")) and val not in roster:
-                        stray[n].add(val)
-    for n, vals in sorted(stray.items()):
-        rep.flag(f"{n} has rep IDs/names not on the quota roster ({len(vals)}): {', '.join(sorted(vals)[:6])}")
+        for col, kind in PERSON_COLUMNS.items():
+            if col in h:
+                stray[n].update(r[col] for r in rows if r[col] and r[col] not in (ids if kind == "id" else names))
+    rep.check("every rep, owner, CSM and employee ID or name in any file is an employee",
+              [f"{n} ({len(vals)}): {', '.join(sorted(vals)[:4])}" for n, vals in sorted(stray.items()) if vals])
 
     # ------------------------------------------------------------------ workforce
     rep.section("Workforce")
@@ -542,6 +661,27 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
              for (p, d) in a_hp if p == CLOSE and (CLOSE, d) in f_hp
              and a_hp[(CLOSE, d)]["headcount_ending"] != f_hp[(CLOSE, d)]["headcount_ending"]]
     rep.check("Forecast headcount at June = Actual headcount at June, by department", diffs)
+    for v in VERSIONS:
+        diffs, hp_months, backcast = [], set(), defaultdict(list)
+        for r in f(f"{v}_Headcount_Plan.csv"):
+            p = r["period"][:7]
+            act = [e for e in emps[v] if e["department"] == r["department"] and on_staff(e, p)]
+            if f"{v}_Employees" not in r["source"]:
+                backcast[r["department"]].append((p, int(num(r["headcount_ending"])), len(act)))
+                continue
+            hp_months.add(p)
+            quota = sum((num(e["annual_quota_arr"]) for e in act if e["quota_carrying"] == "Yes"), ZERO)
+            if int(num(r["headcount_ending"])) != len(act) or abs(num(r["quota_capacity_arr"]) - quota) > 1:
+                diffs.append(f"{p} {r['department']}: {r['headcount_ending']} heads {money(num(r['quota_capacity_arr']))} "
+                             f"vs {len(act)} employees {money(quota)}")
+        rep.check(f"{v} headcount plan = employees on staff, every department (heads; quota capacity incl. SDR pipeline "
+                  f"quota)", diffs, f"{len(hp_months)} months from {v}_Employees.csv")
+        if backcast:
+            rows = [x for d in backcast.values() for x in d]
+            rep.flag(f"{v} headcount plan {min(x[0] for x in rows)}..{max(x[0] for x in rows)} is a backcast the employee "
+                     f"file does not reproduce (no hires before 2024, no leavers): " + ", ".join(
+                         f"{d} {xs[0][0]} {xs[0][1]} planned vs {xs[0][2]} employees" for d, xs in sorted(backcast.items())
+                         if d in TEAM_DEPARTMENTS))
     rep.check("Hiring_Ramp_Assumptions.csv present (loader expands it for every role)",
               [] if os.path.exists(os.path.join(v5, "Hiring_Ramp_Assumptions.csv")) else ["missing"])
 
@@ -1358,22 +1498,31 @@ KNOWN_GAPS = [
     "Implementation fees are billed and recognized at signing (not spread over the implementation period).",
     "Budget deferred revenue differs from the unrecognized amount on its invoices (see the build check line above): "
     "Budget recognizes Budget revenue against invoices billed before 2026 at Actual amounts.",
-    "Renewal commissions are paid to CSM rep IDs that are not on the quota roster.",
-    "Employees (EMP IDs) are not linked to the ASALES quota roster; sales_reps manager_id holds the manager title.",
+    "Employee manager and sales_reps manager_id hold the manager's title (the HRIS has no sales or CS leadership rows).",
+    "Sales and Customer Success employees' HRIS region is their CRM territory (EMEA became South; Remote took the "
+    "territory with the most opportunities per head); other departments keep their HRIS region.",
+    "Headcount plan quota capacity includes SDR pipeline quota alongside AE bookings quota.",
     "FY24/FY25 headcount-plan payroll does not tie to GL payroll (GL detail for those months is cloned from Jan 2026).",
+    "FY24/FY25 Actual headcount plan is a backcast; the employee file has no one hired before 2024 and no leavers.",
     "Budget-only and Forecast-only new logos are in their own version's customer file, not the Actual master.",
-    "Roster region EMEA renamed South; renewal_arr redefined as beginning ARR less contraction and churn.",
+    "renewal_arr redefined as beginning ARR less contraction and churn.",
     "Commission payout detail exists only for Actual Jan-Jun 2026; every other month is estimated at the 2026 "
     "effective rates on each version's customer ARR history (Forecast probability-weighted), and pre-2024 cohorts "
     "are an opening ladder.",
-    "Budget has no renewal pipeline; Budget renewal commissions are beginning ARR x the Actual renewal share.",
     "Forecast customer ARR is expected value (each deal moves its customer by probability x amount, each renewal by "
     "its expected lapse), so Forecast customer ARR is not a contract amount.",
     "Customer segment is ARR at signing; customers that signed before Jan 2024 use their Dec 2023 ARR (the earliest "
-    "on record). Sales reps keep their roster segment; owners are assigned by region.",
+    "on record). A rep's segment is the HRIS sub-department (Enterprise Sales, Mid-Market Sales; others All); owners "
+    "are assigned by territory, not segment.",
     "Commissions are paid in the booking month (payout lag 0), so there is no accrued commissions liability.",
     "Deferred tax on deferred commissions (book/tax difference) is not modeled.",
     "Budget and Forecast bookings_summary does not tie to their ARR waterfalls; commissions use the waterfall.",
+]
+
+METHODS = [
+    "Budget renewal commissions: the Budget has no renewal pipeline (by design). Each month is Budget beginning ARR "
+    "x the Jan-Jun 2026 Actual renewal share (renewal ARR / beginning ARR, a month) x the 2% renewal rate, built "
+    "in the dataset and stored in the warehouse as the Budget commission schedule.",
 ]
 
 
@@ -1390,8 +1539,8 @@ if __name__ == "__main__":
     report = main(v4_dir, v5_dir, gl, prior_gl)
     text = [f"# {name} tie-out", "", f"prior dataset: {v4_dir}", f"dataset: {v5_dir}", f"GL: {gl}",
             f"prior GL: {prior_gl or 'not given'}",
-            "", f"**{report.failures} failing checks**"] + report.lines + ["\n## Known gaps (not fixed in this dataset)\n"] + \
-           [f"- {g}" for g in KNOWN_GAPS]
+            "", f"**{report.failures} failing checks**"] + report.lines + ["\n## Methods (estimates by design)\n"] + \
+           [f"- {m}" for m in METHODS] + ["\n## Known gaps (not fixed in this dataset)\n"] + [f"- {g}" for g in KNOWN_GAPS]
     with open(out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(text) + "\n")
     print("\n".join(text))
