@@ -128,11 +128,11 @@ OBJECTS: dict[str, CanonicalObject] = {
                         files=files("Compensation_Bands", "Hiring_Ramp_Assumptions", "Department_Allocation_Rules",
                                     versions=SHARED), tier=OPERATIONAL),
         CanonicalObject("customer", "Customer", "BILLING", ("actual_customers",),
-                        files=files("customers"), tier=SUBLEDGER),
+                        files=files("customers"), tier=SUBLEDGER, question="7.39"),
         CanonicalObject("subscription", "Subscription", "BILLING", ("actual_invoice_billing_schedule", "actual_revenue_recognition"),
                         files=files("invoice_billing_schedule", "revenue_recognition"), tier=SUBLEDGER),
         CanonicalObject("arr_movement", "ARR Movement", "BILLING", ("actual_mrr_waterfall",), "actual",
-                        files=files("customer_arr_history"), tier=SUBLEDGER),
+                        files=files("customer_arr_history"), tier=SUBLEDGER, question="7.40"),
         CanonicalObject("arr_waterfall", "ARR Waterfall", "BILLING", ("actual_mrr_waterfall",), "actual",
                         files=files("MRR_Waterfall"), tier=SCHEDULE),
         CanonicalObject("invoice", "Invoice", "BILLING", ("actual_invoices",),
@@ -279,6 +279,8 @@ class Question:
     penalty: float = 1.0
     consequence: str = ""
     customer_action: str = ""
+    # SMPL default shown on the call sheet; a gate still resolves only on an explicit answer.
+    default: str | None = None
 
 
 READINESS_GATES: tuple[Question, ...] = (
@@ -296,15 +298,20 @@ SUBSCRIPTION_GATE: tuple[Question, ...] = (
              ("not_applicable", "committed_minimums_only", "committed_and_overages")),
 )
 
-# The ARR engine reads these to label returning customers. No module is gated on them yet;
-# unanswered, every return stays Reactivation with an unknown return type.
+# Age of first MRR: months since a customer's first MRR, restarted when it returns after the 4.10 window.
+# Customers younger than the 4.12 period are New Business and excluded from retention (GRR, NRR).
+# No module is gated on these yet.
 CUSTOMER_RETURNS: tuple[Question, ...] = (
     Question("4.10", "customer_returns",
-             "Winback window: a customer who ended their contract and returns within this many months is a "
-             "winback (Reactivation); a later return is new business",
-             ("3", "6", "12", "no_window")),
+             "Restart window: a customer back within this many months of leaving (churn, or a pause that removes "
+             "ARR) keeps its age of first MRR; a later return restarts it as a New Business winback",
+             ("3", "6", "12", "no_window"), default="6"),
     Question("4.11", "customer_returns", "Paused subscriptions in ARR",
              ("removes_arr", "keeps_arr", "not_offered")),
+    Question("4.12", "customer_returns",
+             "New Business period: months from a customer's first MRR before it moves to Customer Success and "
+             "into retention",
+             ("6", "12", "18", "24"), default="12"),
 )
 
 CRM_STAGE_GATE: tuple[Question, ...] = (
@@ -336,7 +343,7 @@ COMMISSION_POLICY_GATE: tuple[Question, ...] = (
     Question("7.20", "commission_policy", "System of record for commission payouts",
              ("comp_tool", "payroll_export", "spreadsheet", "none")),
     Question("7.21", "commission_policy",
-             "Commissions on winbacks (a customer who ended their contract returns within the winback window)",
+             "Commissions on winbacks (a customer who ended their contract returns within the restart window, 4.10)",
              RETURN_COMMISSION),
     Question("7.22", "commission_policy", "Commissions on restarts after a pause", RETURN_COMMISSION),
     Question("7.23", "commission_policy", "Rate paid on commissionable winback and restart ARR",
@@ -392,6 +399,12 @@ DATA_SOURCES: tuple[Question, ...] = (
     Question("7.38", "data_sources",
              "Collections history kept: dunning steps, service suspensions and write-offs by customer, with the "
              "reason"),
+    Question("7.39", "data_sources",
+             "Customer export includes each customer's first MRR date (the first month it was billed recurring "
+             "revenue), restarted when it returns after the restart window (4.10)"),
+    Question("7.40", "data_sources",
+             "Expansion and contraction reasons recorded by customer (for example new feature or product, platform "
+             "upgrade, more or fewer users, price change)"),
 )
 
 SCORE_INPUTS: tuple[Question, ...] = (
@@ -438,7 +451,7 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
         "resolved_values": None,  # any answer resolves each question
     },
     "customer_returns": {
-        "name": "Customer Returns (winbacks and restarts)",
+        "name": "Customer Returns and New Business Period (age of first MRR)",
         "questions": CUSTOMER_RETURNS,
         "resolved_values": None,
     },

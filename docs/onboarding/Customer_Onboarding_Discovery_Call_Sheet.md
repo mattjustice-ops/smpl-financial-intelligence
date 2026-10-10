@@ -132,10 +132,11 @@ These come from the **Subscription Normalization Gate** (GPES Stripe reference +
 | 4.7 | Multiple billing accounts / sites (regional / product) — consolidation strategy? | |
 | 4.8 | Non-card methods (ACH / invoice) present? Settlement lag / banking pairing needed? | |
 | 4.9 | Live-only data confirmed (exclude test / sandbox)? | Enforced automatically for Stripe (`livemode`); still confirm expectation |
-| 4.10 | **Winback window:** a customer who ended their contract and comes back within how many months is a winback (stays in Reactivation)? After the window the return is new business. Counted in calendar months from the first month without ARR to the month they return, inclusive. | 3 / 6 / 12 / no window (every return is a winback). No default: until answered, returns stay in Reactivation as "unknown return". |
-| 4.11 | **Paused subscriptions:** does a pause take the customer's ARR to zero until they restart, keep it in ARR, or are pauses not offered? A restart after a pause is never new business, however long the pause. | removes ARR / keeps ARR / not offered |
+| 4.10 | **Restart window:** a customer who leaves (churns, or pauses with ARR going to zero) and comes back within how many months keeps its age of first MRR? A later return restarts the age: the customer comes back as a New Business winback. Counted in calendar months from the first month without ARR to the month they return, inclusive. | 3 / 6 / 12 / no window (the age never restarts). **SMPL default: 6** — confirm explicitly. |
+| 4.11 | **Paused subscriptions:** does a pause take the customer's ARR to zero until they restart, keep it in ARR, or are pauses not offered? A pause that takes ARR to zero is a departure like a churn: a restart within the restart window (4.10) keeps the customer's age, a later restart restarts it. | removes ARR / keeps ARR / not offered |
+| 4.12 | **New Business period:** how many months after a customer's first MRR does it move from New Business to Customer Success, and into retention (GRR, NRR)? | 6 / 12 / 18 / 24. **SMPL default: 12** — confirm explicitly. |
 
-> **How SMPL uses 4.10–4.11:** the ARR waterfall keeps every return in Reactivation and labels it winback, restart after pause, or unknown; a terminated customer back after the winback window moves to New Business, flagged as a returning customer so new-logo counts can show them separately. A return is only moved to New Business when the source records a termination (not a pause) and 4.10 is answered. Each return also carries the customer's ARR before leaving and the part of the returned ARR above it; commission rules for returns are separate questions (Section 7).
+> **How SMPL uses 4.10–4.12:** every customer has an **age of first MRR**: months since its first MRR, restarted when it comes back after the restart window (4.10). Customers younger than the New Business period (4.12) are in **New Business**: new logo, winback, first-year expansion, first-year contraction and no-start (ARR to zero inside the period). New Business is excluded from retention. Older customers are in **Customer Success**: expansion, contraction, churn (pauses that take ARR to zero included) and reactivation. Reactivation is a customer back within the restart window that left at or past the New Business period; any other return is a winback in New Business. GRR and NRR are measured on Customer Success only. The age comes from the first MRR date on the customer export (7.39); where it is missing, the customer's bucket is reported as a data gap, not assumed. Each return also carries the customer's ARR before leaving and the part of the returned ARR above it; commission rules for returns are separate questions (Section 7).
 
 ---
 
@@ -247,7 +248,7 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.18 | **When are commissions paid?** Drives forecast commission cash and whether an accrued commissions liability is expected. | month of booking / month after booking / quarter after booking / on customer payment | |
 | 7.19 | **Employer payroll taxes on commissions:** expensed or capitalized with the commission? | expensed / capitalized | |
 | 7.20 | **System of record for commission payouts** (comp tool such as CaptivateIQ, Spiff or Xactly; payroll export; spreadsheet; none)? Without payout detail, commission cash can be estimated but not checked. | comp tool / payroll export / spreadsheet / none | |
-| 7.21 | **Winbacks** (a customer who ended their contract returns within the winback window, 4.10): commission only on ARR above what the customer paid before leaving, on all returned ARR, or none? A return after the window is new business and paid as new business. | above prior ARR / full amount / not paid | |
+| 7.21 | **Winbacks** (a customer who ended their contract returns within the restart window, 4.10): commission only on ARR above what the customer paid before leaving, on all returned ARR, or none? A return after the window is new business and paid as new business. | above prior ARR / full amount / not paid | |
 | 7.22 | **Restarts after a pause** (no time limit): commission only on ARR above the customer's ARR before the pause, on all of it, or none? | above prior ARR / full amount / not paid | |
 | 7.23 | **Rate** on commissionable winback and restart ARR: the new-business rate or the expansion rate? | new business rate / expansion rate | |
 | 7.24 | **Expansion after a contraction:** commission only on ARR above the customer's level before the contraction, or on all expansion? | above prior level / all expansion | |
@@ -290,6 +291,8 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.36 | **Equity grant / stock-based compensation schedule** (Carta, Shareworks)? | yes / no | |
 | 7.37 | **AR subledger exportable** from billing or the ERP: customer payments applied to invoices (payment date and amount) and AR aging? Needed for DSO, collections forecasting and AR aging. | yes / no | |
 | 7.38 | **Collections history kept:** dunning steps, service suspensions and write-offs by customer, with the reason? Separates non-payment churn and no-starts from other churn. | yes / no | |
+| 7.39 | **Customer export includes each customer's first MRR date** (the first month billed recurring revenue), restarted when the customer returns after the restart window (4.10)? Sets the age of first MRR that splits New Business from Customer Success (4.12). | yes / no | |
+| 7.40 | **Expansion and contraction reasons recorded** by customer (for example new feature or product, platform upgrade, more or fewer users, price change)? They become sub-lines under expansion and contraction; without them those lines are not split. | yes / no | |
 
 7.34 is asked only when the AP subledger can be exported (7.33 yes).
 
@@ -377,7 +380,7 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 Data ownership + readiness gates (Section 0) → company snapshot → systems & owners → ARR/MRR/churn definitions → trials / past_due / usage min-vs-overage → ARR methodology → rev-rec & renewal/cancel → systems of record → modules → FYE/currency/entities.
 
 **Should cover if time:**  
-Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · quota and comp plan (7.25–7.29) · payroll register, AP and AR subledgers, supporting schedules and collections history (7.30–7.38) · access acknowledgment (Section 10).
+Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · quota and comp plan (7.25–7.29) · payroll register, AP and AR subledgers, supporting schedules, collections history, first MRR dates and expansion/contraction reasons (7.30–7.40) · access acknowledgment (Section 10).
 
 **Recommended extras (label clearly):**  
 How Forecast is built today · trusted drivers · multiple ARR intents · adjusted metrics by audience · close calendar + GL cutoff artifacts · allocations, accrual / reversal practice, audit adjustments (7.9–7.13).
@@ -396,7 +399,7 @@ How Forecast is built today · trusted drivers · multiple ARR intents · adjust
 | Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
 | 7.14–7.24 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
 | 7.25–7.29 Sales quota and comp plan | Loaded HRIS, quota, opportunity and commission files | **Recommended — not CEP** |
-| 7.30–7.38 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
+| 7.30–7.40 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
 | Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
 ---
