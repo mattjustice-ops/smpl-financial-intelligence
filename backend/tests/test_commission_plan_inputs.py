@@ -284,3 +284,96 @@ def test_no_opportunities_loaded_is_reported_not_assumed(no_answers) -> None:
     assert out["returns"]["history"]["expansion"]["above_prior_level_share"] is None
     assert out["returns"]["loaded_practice"]["payouts"] == 0
     assert any("Neither actual_customer_arr_history nor actual_opportunities is loaded" in m for m in out["missing"])
+
+
+CLAW_PLANS = {
+    "PLAN-AE-NEW": {"plan_id": "PLAN-AE-NEW", "opportunity_type": "new_business", "clawback_window_months": 6},
+    "PLAN-AM-EXP": {"plan_id": "PLAN-AM-EXP", "opportunity_type": "expansion", "clawback_window_months": 6},
+    "PLAN-RENEWAL": {"plan_id": "PLAN-RENEWAL", "opportunity_type": "renewal", "clawback_window_months": 0},
+}
+# The three no-starts in the demo data: stopped paying after 0 and 2 months (clawed back in full) and after
+# 7 months (outside the 6-month window, written down).
+CLAWBACKS = [
+    {"customer_id": "CUST-0765", "commission_paid": "15814.47", "months_paid_before_stop": "0",
+     "treatment": "Clawed back", "clawback_amount": "15814.47", "unamortized_removed": "0"},
+    {"customer_id": "CUST-0766", "commission_paid": "14386.62", "months_paid_before_stop": "2",
+     "treatment": "Clawed back", "clawback_amount": "14386.62", "unamortized_removed": "0"},
+    {"customer_id": "CUST-0767", "commission_paid": "8451.50", "months_paid_before_stop": "7",
+     "treatment": "Written down", "clawback_amount": "0.00", "unamortized_removed": "7605.00"},
+]
+
+
+def _claw(answers, plans=CLAW_PLANS, rows=CLAWBACKS):
+    from app.services.readiness.commission_plan_inputs import clawback_policy
+
+    missing: list[str] = []
+    out = clawback_policy(answers, plans, rows, missing)
+    return out, {c["id"]: c["status"] for c in out["checks"]}, missing
+
+
+def test_clawback_answers_that_match_the_plans_and_rows_pass() -> None:
+    out, checks, missing = _claw({"7.41": "6", "7.42": "full"})
+    assert checks == {"clawback_window_vs_plans": "pass", "clawbacks_follow_window": "pass",
+                      "clawback_amount_vs_policy": "pass"}
+    assert out["plan_windows"] == {"PLAN-AE-NEW": 6, "PLAN-AM-EXP": 6}
+    assert out["loaded_practice"] == {"clawed_back": 2, "clawed_back_amount": pytest.approx(30201.09),
+                                      "written_down": 1, "written_down_amount": pytest.approx(7605.0)}
+    assert missing == []
+
+
+def test_a_longer_window_than_the_plans_conflicts_with_the_write_down() -> None:
+    _, checks, _ = _claw({"7.41": "12", "7.42": "full"})
+    assert checks["clawback_window_vs_plans"] == "conflict"
+    assert checks["clawbacks_follow_window"] == "conflict"  # month 7 is inside 12 but was written down
+
+
+def test_prorated_answer_conflicts_with_full_recoveries() -> None:
+    out, checks, _ = _claw({"7.41": "6", "7.42": "prorated"})
+    assert checks["clawback_amount_vs_policy"] == "conflict"
+    finding = next(c["finding"] for c in out["checks"] if c["id"] == "clawback_amount_vs_policy")
+    assert "CUST-0766" in finding and "CUST-0765" not in finding  # 0 months paid: prorated is the full amount
+
+
+def test_no_clawback_answer_conflicts_with_clawed_back_rows() -> None:
+    _, checks, _ = _claw({"7.41": "none"})
+    assert checks == {"clawback_window_vs_plans": "conflict", "clawbacks_follow_window": "conflict"}
+
+
+def test_missing_windows_and_files_are_reported_not_assumed() -> None:
+    plans = {k: dict(v, clawback_window_months=None) for k, v in CLAW_PLANS.items()}
+    _, checks, missing = _claw({"7.41": "6"}, plans=plans, rows=None)
+    assert checks == {}
+    assert "Commission plan PLAN-AE-NEW has no clawback_window_months" in missing
+    assert any("actual_commission_clawbacks is not loaded" in m for m in missing)
+
+
+def test_unanswered_clawback_policy_runs_no_checks() -> None:
+    out, checks, missing = _claw({})
+    assert checks == {} and missing == []
+    assert out["answers"] == {"7.41": None, "7.42": None}
+
+
+def test_plan_inputs_report_the_clawback_policy(monkeypatch) -> None:
+    import app.services.readiness.evidence as evidence
+    import app.services.readiness.service as service
+    from sqlalchemy import text
+
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    monkeypatch.setattr(service, "get_answers", lambda db, org: SimpleNamespace(answers={"7.41": "6", "7.42": "full"}))
+    monkeypatch.setattr(evidence, "build_commission_facts", lambda db, org: {"as_of": "2026-06"})
+    db = _db("630.50")
+    db.execute(text("create table actual_commission_clawbacks (organization_id text, period text, customer_id text, "
+                    "commission_paid text, months_paid_before_stop text, treatment text, clawback_amount text, "
+                    "unamortized_removed text)"))
+    for period, cid, paid, months, treatment, amount in (("2026-03", "A", "100.00", "1", "Clawed back", "100.00"),
+                                                         ("2026-09", "B", "50.00", "0", "Clawed back", "50.00")):
+        db.execute(text("insert into actual_commission_clawbacks values (:o, :p, :c, :paid, :m, :t, :a, '0')"),
+                   {"o": ORG, "p": period, "c": cid, "paid": paid, "m": months, "t": treatment, "a": amount})
+    out = build_plan_inputs(db, SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    claw = out["clawbacks"]
+    assert claw["loaded_practice"]["clawed_back"] == 1  # the September row is after as_of
+    assert {c["id"]: c["status"] for c in claw["checks"]} == {"clawbacks_follow_window": "pass",
+                                                              "clawback_amount_vs_policy": "pass"}
+    # The test plans table has no clawback_window_months column.
+    assert "Commission plan PLAN-AE-NEW has no clawback_window_months" in out["missing"]

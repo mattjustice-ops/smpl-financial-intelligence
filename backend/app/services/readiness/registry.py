@@ -322,6 +322,9 @@ CRM_STAGE_GATE: tuple[Question, ...] = (
 AMORTIZATION_MONTHS = ("12", "24", "36", "48", "60", "72", "84", "not_applicable")
 # Customer returns: on ARR above the customer's ARR before leaving, on all returned ARR, or none.
 RETURN_COMMISSION = ("above_prior_arr", "full_amount", "not_paid")
+# Months after the booking; "none" = commissions are never clawed back. Writing down the capitalized commission
+# when the customer leaves is ASC 340-40, not a policy choice, so it isn't asked.
+CLAWBACK_WINDOW = ("none", "3", "6", "12")
 
 # ASC 340-40: the engines read this policy (they never let a user change it) and the
 # readiness checks compare it with the GL.
@@ -351,6 +354,13 @@ COMMISSION_POLICY_GATE: tuple[Question, ...] = (
     Question("7.24", "commission_policy",
              "Commissions on expansion after a contraction (only above the customer's prior level, or all of it)",
              ("above_prior_level", "all_expansion")),
+    Question("7.41", "commission_policy",
+             "Commission clawback window: a new-business or expansion commission is recovered from the rep when the "
+             "customer stops paying or cancels within this many months of the booking",
+             CLAWBACK_WINDOW),
+    Question("7.42", "commission_policy",
+             "Commission recovered on a clawback: all of it, or prorated for the months the customer paid",
+             ("full", "prorated")),
 )
 
 ATTAINMENT_PCT = tuple(str(p) for p in range(50, 125, 5))
@@ -477,6 +487,8 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
             "7.22": ("7.14", ("capitalized", "expensed")),
             "7.23": ("7.14", ("capitalized", "expensed")),
             "7.24": ("7.14", ("capitalized", "expensed")),
+            "7.41": ("7.14", ("capitalized", "expensed")),
+            "7.42": ("7.41", ("3", "6", "12")),
         },
     },
     "sales_plan": {
