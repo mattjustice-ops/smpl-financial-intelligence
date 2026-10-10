@@ -123,6 +123,32 @@ def test_payroll_gl_entry_detection() -> None:
     assert integration.is_payroll_gl_entry(entry)
 
 
+@pytest.mark.parametrize(
+    ("account_number", "account_name", "expense_type", "expected"),
+    [
+        ("6105", "Bonus", "Bonus", True),
+        ("6115", "401(k) Match", "Retirement Match", True),
+        ("6125", "Severance", "Severance", True),
+        ("5010", "Customer Support Labor COGS", "Labor", True),
+        ("6400", "Software", "Software", False),
+    ],
+)
+def test_payroll_gl_entry_detection_by_expense_type(account_number, account_name, expense_type, expected) -> None:
+    entry = GlEntry(
+        period="2026-06",
+        version="Actual",
+        account_number=account_number,
+        account_name=account_name,
+        account_group="Operating Expense",
+        section_key="general_and_administrative",
+        department="G&A",
+        source_department="Finance",
+        expense_type=expense_type,
+        amount=Decimal("-1000"),
+    )
+    assert integration.is_payroll_gl_entry(entry) is expected
+
+
 def _gl_row(period: str, expense_type: str, amount: float, department: str = "Sales") -> dict:
     return {
         "period": period,

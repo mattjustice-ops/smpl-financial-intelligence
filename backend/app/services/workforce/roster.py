@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models.workforce import WorkforceEmployee
 from app.services.dashboard.query_utils import fetch_table_rows, table_exists
-from app.services.workforce.constants import ACTIVE_EMPLOYMENT_STATUSES
+from app.services.workforce.constants import ACTIVE_EMPLOYMENT_STATUSES, TERMINATED_EMPLOYMENT_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,8 @@ class RosterEmployee:
     @property
     def counted(self) -> bool:
         status = self.employment_status.strip().lower()
+        if status in TERMINATED_EMPLOYMENT_STATUSES:
+            return self.termination_date is not None
         return status in ACTIVE_EMPLOYMENT_STATUSES or status in PLANNED_STATUSES
 
 
@@ -187,12 +189,13 @@ def roster_present(session: Session, organization_id: uuid.UUID, version: str) -
 
 
 def on_roster(employee: RosterEmployee, period: date) -> bool:
-    """Counted in ``period`` (month start): hired by that month and not terminated before it (same rule as the engine)."""
+    """Counted in ``period`` (month start) at month end: hired in or before the month and not leaving in or before it,
+    as the headcount plan files count heads (same rule as the engine)."""
     if not employee.counted:
         return False
     if employee.hire_date and employee.hire_date.replace(day=1) > period:
         return False
-    if employee.termination_date and employee.termination_date.replace(day=1) < period:
+    if employee.termination_date and employee.termination_date.replace(day=1) <= period:
         return False
     return True
 

@@ -26,7 +26,7 @@ Rules (agreed with Matt, Oct 7 2026; docs/COMMISSION_CAPITALIZATION_DESIGN.md):
     renewal plan rate.
   * Opening asset (Jan 2024 month end): the 60 monthly cohorts paid through Jan 2024. Pre-2024
     payouts are Jan 2024's payout discounted by the ARR growth rate from Jan 2024 to Dec 2025.
-  * Employer payroll tax rate = GL payroll taxes / base salaries (Actual).
+  * Employer payroll tax rate = the payroll policy's employer_payroll_tax_rate (Actual_payroll_policies.csv).
   * Income statement: S&M = v5 S&M - the v5 GL's 6200 (commissions expensed as paid, replaced)
     + amortization + expensed commissions + payroll tax on payouts; totals recomputed.
   * Opening balance sheet: deferred commissions current/noncurrent added; equity rises by the
@@ -204,11 +204,12 @@ def build(src: str, gl_dir: str, dst: str) -> list[str]:
     notes.append(f"effective rates from the 2026 payout detail: new business {eff[NEW]:.5f}, expansion {eff[EXP]:.5f}; "
                  f"renewals: {renew_share:.4%} of beginning ARR renews a month ({ren_span} renewal detail) x {ren_rate}")
 
-    _, gl_rows = read(os.path.join(gl_dir, "Actual_gl_detail.csv"))
-    wages = sum((num(r["amount"]) for r in gl_rows if r["account_number"] == "6100"), ZERO)
-    ptax = sum((num(r["amount"]) for r in gl_rows if r["account_number"] == "6110"), ZERO)
-    tax_rate = ptax / wages
-    notes.append(f"employer payroll tax on commissions: {tax_rate:.4%} (Actual GL 6110 / 6100)")
+    rates = [r["value"] for r in read(os.path.join(src, "Actual_payroll_policies.csv"))[1]
+             if r["policy"] == "employer_payroll_tax_rate"]
+    if len(rates) != 1:
+        raise ValueError(f"Actual_payroll_policies.csv: {len(rates)} employer_payroll_tax_rate rows, expected 1")
+    tax_rate = num(rates[0])
+    notes.append(f"employer payroll tax on commissions: {tax_rate:.4%} (Actual_payroll_policies.csv)")
 
     actual_hist = read(os.path.join(src, HISTORY_FILE))[1] if os.path.exists(os.path.join(src, HISTORY_FILE)) else None
     hist: dict[str, dict[str, dict[str, Decimal]]] = {}
