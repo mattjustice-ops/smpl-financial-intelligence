@@ -15,9 +15,10 @@ Rules (agreed with Matt, Oct 7 2026):
     assigned by region, so deals stay with their reps). Opportunity cents move to the waterfall.
   * Customers in the master at Jan 2026 keep their count (700) and total ARR ($75M); their individual ARR is
     where their history lands. Customers who left before 2026 are added to the master (Churned or Paused).
-  * Returns: a pause is in the churn bucket when it starts. A restart after a pause (no time limit) and a
-    winback within 6 months of churning are reactivation; a customer back more than 6 months after churning
-    is new business. About 20% of reactivation ARR is winbacks and 80% restarts.
+  * Returns: a pause is in the churn bucket when it starts. A customer back after a pause (any length) or
+    within 6 months of cancelling is a Reactivation movement; a customer back more than 6 months after
+    cancelling is new business. About 20% of reactivation ARR is customers back after cancelling and 80% after
+    a pause.
   * Some returns come back above the ARR they left with, some below, some equal; some customers contract and
     later expand. That is what the commission policy (7.21-7.24) measures.
   * Customers leave at renewal: a former customer's anniversary (start month) is the month it left, and churn
@@ -49,13 +50,13 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_v5_dataset import ZERO, Dataset, allocate, last_day, num, padd, pidx, prange, q, write  # noqa: E402
-from customer_history_plans import (EXPECTED_FIELDS, HISTORY_FIELDS, WINBACK_SHARE, WINBACK_WINDOW,  # noqa: E402
-                                    FORECAST_RENEWAL_PROBABILITY, History, actual_renewals, forecast_deals, pick,
+from customer_history_plans import (CANCELLED, CANCELLED_SHARE, EXPECTED_FIELDS, HISTORY_FIELDS,  # noqa: E402
+                                    PAUSED, RETURN_NOTE, FORECAST_RENEWAL_PROBABILITY, History, actual_renewals, forecast_deals, pick,
                                     prospect_segments, renewal_commissions, renewal_rows, segment_for, signing_arr,
                                     simulate_budget, simulate_forecast, tie, tie_budget_deals, u, waterfall)
 from add_implementation_revenue import FEE_BY_SEGMENT  # noqa: E402
 from collections_model import NO_START, NO_START_TERMS_DAYS, NO_STARTS, NON_PAYMENT, NONPAY_CHURN, no_start_exit  # noqa: E402
-from customer_buckets import classify  # noqa: E402
+from customer_buckets import RESTART_AFTER_MONTHS, classify  # noqa: E402
 from sales_team import VERSIONS, assign_csms, team_employees  # noqa: E402
 
 FIRST = "2024-01"
@@ -194,12 +195,12 @@ def build(src: str, dst: str) -> list[str]:
     wb = tot = ZERO
     for r in returns:
         tot += r["amount"]
-        r["kind"] = "winback" if wb + r["amount"] <= WINBACK_SHARE * tot + Decimal("15000") and wb < WINBACK_SHARE * tot else "restart"
-        if r["kind"] == "winback":
+        r["kind"] = CANCELLED if wb + r["amount"] <= CANCELLED_SHARE * tot + Decimal("15000") and wb < CANCELLED_SHARE * tot else PAUSED
+        if r["kind"] == CANCELLED:
             wb += r["amount"]
         p, key = r["period"], r["key"]
-        lo = max(1 if r["kind"] == "winback" else 2, pidx(p) - pidx(LAST_PRE_2026))
-        hi = WINBACK_WINDOW if r["kind"] == "winback" else 14
+        lo = max(1 if r["kind"] == CANCELLED else 2, pidx(p) - pidx(LAST_PRE_2026))
+        hi = RESTART_AFTER_MONTHS if r["kind"] == CANCELLED else 14
         hi = max(lo, min(hi, pidx(p) - pidx(PRE_FROM)))
         r["months_away"] = lo + int(u(f"away|{key}") * (hi - lo + 1))
         r["departed"] = padd(p, -r["months_away"])
@@ -211,8 +212,9 @@ def build(src: str, dst: str) -> list[str]:
             r["baseline"] = q(a * (Decimal("1.05") + Decimal("0.25") * y))
         else:
             r["baseline"] = a
-    notes.append(f"returns: {len(returns)} (${tot:,.2f}); winbacks {sum(1 for r in returns if r['kind'] == 'winback')} "
-                 f"(${wb:,.2f}, {wb / tot:.1%} of reactivation ARR); restarts {sum(1 for r in returns if r['kind'] == 'restart')}")
+    notes.append(f"returns: {len(returns)} (${tot:,.2f}); after cancelling {sum(1 for r in returns if r['kind'] == CANCELLED)} "
+                 f"(${wb:,.2f}, {wb / tot:.1%} of reactivation ARR); after a pause "
+                 f"{sum(1 for r in returns if r['kind'] == PAUSED)}")
 
     # ---- 2026 opportunities pinned to flat-ARR customers
     used: set[str] = set()
@@ -284,8 +286,8 @@ def build(src: str, dst: str) -> list[str]:
             c = new_customer("returner", r["baseline"], r["departed"], opp_of[r["opp"]])
         used.add(c)
         r["customer"] = c
-        kind = "Churn" if r["kind"] == "winback" else "Pause"
-        note = f"{'winback' if kind == 'Churn' else 'restart'} after {r['months_away']} months away"
+        kind = "Churn" if r["kind"] == CANCELLED else "Pause"
+        note = f"{RETURN_NOTE[r['kind']]} after {r['months_away']} months away"
         if r["departed"] >= FIRST:
             opening[c] = r["baseline"]
             departures[r["departed"]].append((c, kind, r["baseline"], ""))

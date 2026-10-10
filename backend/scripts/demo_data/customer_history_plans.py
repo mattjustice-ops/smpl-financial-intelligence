@@ -14,9 +14,9 @@ Rules (agreed with Matt, Oct 7 2026):
     each renewal due moves its customer by renewal ARR x (1 - renewal probability). Forecast rows carry the
     probability and the full opportunity ARR. A Forecast churn deal is the customer's whole ARR; the month's
     last churn deal takes the cents so churn deals plus expected renewal lapses equal waterfall churn.
-  * Returns follow the Actual rules: a restart after a pause (no time limit) or a winback within 6 months of
-    churning; about 20% of each plan's reactivation ARR is winbacks. A restart goes to a paused customer
-    whose ARR left with is closest to the deal.
+  * Returns follow the Actual rules: a customer back after a pause (any length) or back within 6 months of
+    cancelling; about 20% of each plan's reactivation ARR is customers back after cancelling. A return after a
+    pause goes to a paused customer whose ARR left with is closest to the deal.
   * Renewal pipeline: a customer is due in its anniversary month (customer start month) once it has been a
     customer for 12 months since it last started; renewal ARR is its ARR at the end of the prior month.
     Customers with a churn deal that month are not in the renewal pipeline (they are leaving instead).
@@ -34,7 +34,7 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_v5_dataset import ZERO, allocate, num, padd, pidx, prange, q, stable_unit  # noqa: E402
-from customer_buckets import HISTORY_BUCKET_FIELDS  # noqa: E402
+from customer_buckets import HISTORY_BUCKET_FIELDS, RESTART_AFTER_MONTHS  # noqa: E402
 
 HISTORY_FIELDS = ["organization_id", "version", "period", "customer_id", "customer_name", "segment", "movement_type",
                   "beginning_arr", "movement_arr", "ending_arr", "waterfall_column", "opportunity_id", "note",
@@ -46,8 +46,11 @@ WF_COLUMNS = ("new_business_arr", "expansion_arr", "reactivation_arr", "contract
 DEAL_TYPES = ("New Business", "Expansion", "Reactivation", "Contraction", "Churn")
 BOOKED = {"New Business": "Closed Won", "Expansion": "Closed Won", "Reactivation": "Closed Won",
           "Contraction": "Contraction", "Churn": "Churn"}
-WINBACK_WINDOW = 6
-WINBACK_SHARE = Decimal("0.20")
+CANCELLED, PAUSED = "cancelled", "paused"
+CANCELLED_SHARE = Decimal("0.20")
+# Text of the history ``note`` column ("<word> after N months away"): it is in the built files and loaded data,
+# so changing it changes the dataset.
+RETURN_NOTE = {CANCELLED: "winback", PAUSED: "restart"}
 CONTRACTION_CAP = Decimal("0.6")
 FORECAST_RENEWAL_PROBABILITY = Decimal("0.95")
 SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
@@ -283,8 +286,8 @@ class Plan:
                         key=lambda o: (o["period"], o["opportunity_id"])):
             a = num(o["amount_arr"])
             tot += a
-            kind = "winback" if wb + a <= WINBACK_SHARE * tot + Decimal("15000") and wb < WINBACK_SHARE * tot else "restart"
-            if kind == "winback":
+            kind = CANCELLED if wb + a <= CANCELLED_SHARE * tot + Decimal("15000") and wb < CANCELLED_SHARE * tot else PAUSED
+            if kind == CANCELLED:
                 wb += a
             out[o["opportunity_id"]] = kind
         return out
@@ -293,14 +296,14 @@ class Plan:
         a = num(o["amount_arr"])
 
         def cands(k: str) -> list[str]:
-            if k == "winback":
+            if k == CANCELLED:
                 return [c for c, (dk, dp, _) in self.departed.items()
-                        if dk == "Churn" and 1 <= pidx(p) - pidx(dp) <= WINBACK_WINDOW]
+                        if dk == "Churn" and 1 <= pidx(p) - pidx(dp) <= RESTART_AFTER_MONTHS]
             return [c for c, (dk, _, _) in self.departed.items() if dk == "Pause"]
 
         pool = cands(kind)
         if not pool:
-            kind = "restart" if kind == "winback" else "winback"
+            kind = PAUSED if kind == CANCELLED else CANCELLED
             pool = cands(kind)
         if not pool:
             raise ValueError(f"{self.h.version} {p} {o['opportunity_id']}: no paused or recently churned customer to return")
@@ -356,7 +359,7 @@ def simulate_budget(org: str, info: dict, opening: dict[str, Decimal], open_peri
             c, kind = s.returner(p, o, kinds[o["opportunity_id"]])
             dp = s.departed.pop(c)[1]
             h.move(p, c, "Reactivation", num(o["amount_arr"]), o["opportunity_id"],
-                   f"{kind} after {pidx(p) - pidx(dp)} months away")
+                   f"{RETURN_NOTE[kind]} after {pidx(p) - pidx(dp)} months away")
             s.assign[o["opportunity_id"]] = c
             s.no_more.add(c)
             counts[kind] += 1
@@ -372,7 +375,7 @@ def simulate_budget(org: str, info: dict, opening: dict[str, Decimal], open_peri
             s.assign[o["opportunity_id"]] = c
         h.close_month(p)
     notes.append(tie(h, W, _months_of(deals), sum(opening.values(), ZERO)))
-    notes.append(f"Budget returns: {counts['winback']} winbacks, {counts['restart']} restarts")
+    notes.append(f"Budget returns: {counts[CANCELLED]} after cancelling, {counts[PAUSED]} after a pause")
     return h, s.assign
 
 
@@ -460,7 +463,8 @@ def simulate_forecast(org: str, info: dict, opening: dict[str, Decimal], open_pe
             c, kind = s.returner(p, o, kinds[o["opportunity_id"]])
             dp = s.departed.pop(c)[1]
             h.move(p, c, "Reactivation", num(o["weighted_arr"]), o["opportunity_id"],
-                   f"{kind} after {pidx(p) - pidx(dp)} months away", num(o["probability"]), num(o["amount_arr"]))
+                   f"{RETURN_NOTE[kind]} after {pidx(p) - pidx(dp)} months away", num(o["probability"]),
+                   num(o["amount_arr"]))
             s.assign[o["opportunity_id"]] = c
             s.no_more.add(c)
             counts[kind] += 1
@@ -478,7 +482,7 @@ def simulate_forecast(org: str, info: dict, opening: dict[str, Decimal], open_pe
             touched.add(c)
         h.close_month(p)
     notes.append(tie(h, W, _months_of(deals), sum(opening.values(), ZERO)))
-    notes.append(f"Forecast returns: {counts['winback']} winbacks, {counts['restart']} restarts; renewals due "
+    notes.append(f"Forecast returns: {counts[CANCELLED]} after cancelling, {counts[PAUSED]} after a pause; renewals due "
                  f"{len(renewals)} (renewal ARR {sum((r['renewal_arr'] for r in renewals), ZERO):,.2f}); each month's "
                  f"last churn deal weighted at {min(off):+.3f}..{max(off):+.3f} of its probability x ARR")
     return h, s.assign, renewals
