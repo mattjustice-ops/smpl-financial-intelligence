@@ -17,9 +17,18 @@ def enforce_executive_layout(slide: SlideContent) -> SlideContent:
     return prepare_slide_for_render(slide)
 
 
-def prepare_package_for_render(package: BoardPackage, *, include_appendix: bool = True) -> BoardPackage:
-    """Filter, apply templates, remediate, and optionally append overflow slides before PPTX build."""
-    slides = filter_board_slides(package.slides)
+def prepare_package_for_render(
+    package: BoardPackage,
+    *,
+    include_appendix: bool = True,
+    filter_slides: bool = True,
+) -> BoardPackage:
+    """Filter, apply templates, remediate, and optionally append overflow slides before PPTX build.
+
+    ``filter_slides=False`` keeps every slide: the viability score is tuned to export-deck slide ids
+    and drops canonical package slides that carry data.
+    """
+    slides = filter_board_slides(package.slides) if filter_slides else list(package.slides)
     slides = [enforce_executive_layout(s) for s in slides]
     if include_appendix:
         slides = inject_appendix_slides(slides)

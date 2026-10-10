@@ -453,12 +453,21 @@ def cash_reconciliation_prompt_blob(
     """Operational cash bridge for focus month (or org close month)."""
     detail = to_period(focus_period or bundle.as_of_period)
     cur = bundle.currency
-    section_lines = _waterfall_section_lines(
-        bundle,
-        f"Cash reconciliation ({detail}) — operational cash bridge:",
-        "cash_flow",
-        _CASH_BRIDGE_ITEMS,
-        period=detail,
+    has_waterfall_cash = any(
+        _wf(bundle, "cash_flow", wtype, detail, scenario) != 0
+        for wtype, _label in _CASH_BRIDGE_ITEMS
+        for scenario in ("Actual", "Budget", "Forecast")
+    )
+    section_lines = (
+        _waterfall_section_lines(
+            bundle,
+            f"Cash reconciliation ({detail}) — operational cash bridge:",
+            "cash_flow",
+            _CASH_BRIDGE_ITEMS,
+            period=detail,
+        )
+        if has_waterfall_cash
+        else []
     )
     if len(section_lines) <= 1 and cash_bridge_table:
         for scenario in ("Actual", "Budget", "Forecast"):

@@ -1090,10 +1090,15 @@ def _render_content_slide(prs, slide_content: SlideContent, pptx_ns: dict) -> No
 # ---------------------------------------------------------------------------
 
 
-def render_pptx_bytes(package: BoardPackage, *, skip_orchestration: bool = False) -> bytes:
+def render_pptx_bytes(
+    package: BoardPackage,
+    *,
+    skip_orchestration: bool = False,
+    filter_slides: bool = True,
+) -> bytes:
     """Build a PowerPoint presentation in memory and return its bytes."""
     if not skip_orchestration:
-        package = prepare_package_for_render(package)
+        package = prepare_package_for_render(package, filter_slides=filter_slides)
 
     pptx_ns = _import_pptx()
     Inches = pptx_ns["Inches"]

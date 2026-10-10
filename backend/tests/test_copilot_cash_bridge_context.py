@@ -8,18 +8,27 @@ from app.services.reporting.export.board_commentary_service import (
     _monthly_cash_bridge_table_prompt,
     cash_reconciliation_prompt_blob,
 )
+from app.services.dashboard.schemas import ExecutiveFlowResponse
 from app.services.reporting.export.schemas import ReportingBundle
 
 
 def _minimal_bundle(*, as_of: str = "2026-06") -> ReportingBundle:
+    org = "00000000-0000-0000-0000-000000000001"
     return ReportingBundle(
-        organization_id="00000000-0000-0000-0000-000000000001",
+        organization_id=org,
         organization_name="SMPL",
         scenario="Combined",
         start_period="2026-01",
         end_period="2026-12",
         as_of_period=as_of,
         period_label="June 2026",
+        executive_flow=ExecutiveFlowResponse(
+            organization_id=org,
+            scenario="Combined",
+            start_period="2026-01",
+            end_period="2026-12",
+            as_of_period=as_of,
+        ),
         comparison_waterfalls={},
     )
 

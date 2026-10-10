@@ -33,6 +33,7 @@ def db_session(monkeypatch):
     factory = sessionmaker(bind=engine)
     session = factory()
     monkeypatch.setenv("SMPL_USAGE_LIMITS_ENABLED", "true")
+    monkeypatch.setenv("SMPL_FAST_AI", "false")
     monkeypatch.setenv("SMPL_PROMPT5_DECK_PER_CLOSE", "2")
     # Clear settings cache if present
     try:
@@ -104,3 +105,27 @@ def test_prompt5_regen_cap_blocks_at_limit(db_session, monkeypatch) -> None:
         assert_prompt5_regen_cap(db_session, org, "2026-06")
     assert exc.value.status_code == 429
     assert exc.value.detail["code"] == "prompt5_regen_cap_exceeded"
+
+
+def test_prompt5_regen_cap_skipped_in_fast_ai_mode(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("SMPL_FAST_AI", "true")
+    monkeypatch.setenv("SMPL_PROMPT5_DECK_PER_CLOSE", "1")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    org = Organization(id=uuid.uuid4(), name="Cap Co 3", status="active", plan="growth")
+    db_session.add(org)
+    for _ in range(3):
+        db_session.add(
+            UsageEvent(
+                id=uuid.uuid4(),
+                organization_id=org.id,
+                event_type="export_start",
+                feature="mda_deck",
+                metadata_json={"as_of_period": "2026-06", "kind": "mda_deck"},
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+    db_session.commit()
+    assert_prompt5_regen_cap(db_session, org, "2026-06")

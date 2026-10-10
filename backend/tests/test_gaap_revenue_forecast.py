@@ -11,6 +11,7 @@ from app.services.dashboard.gaap_revenue_forecast_service import (
 )
 from app.services.dashboard.schemas import WaterfallSummaryRow
 from app.services.dashboard.waterfall_service import _add_total_gaap_revenue_rows, _validate
+from app.services.reporting.as_of_period import bind_as_of_period, reset_as_of_period
 
 
 def test_mrr_prefers_mrr_columns_over_arr() -> None:
@@ -77,12 +78,16 @@ def test_total_gaap_includes_actual_and_forecast_income_statement() -> None:
         "2026-03": Decimal("500000"),
         "2026-06": Decimal("1000000"),
     }
-    _add_total_gaap_revenue_rows(rows, "org", income_statement_revenue=income)
+    token = bind_as_of_period("2026-05")
+    try:
+        _add_total_gaap_revenue_rows(rows, "org", income_statement_revenue=income)
+    finally:
+        reset_as_of_period(token)
     by_period = {row.period: row for row in rows}
     assert by_period["2026-03"].scenario == "Actual"
-    assert by_period["2026-03"].source_table == "actual_income_statement"
+    assert by_period["2026-03"].source_table == "gl_actuals"
     assert by_period["2026-03"].amount == Decimal("500000")
     assert by_period["2026-06"].scenario == "Forecast"
-    assert by_period["2026-06"].source_table == "forecast_income_statement"
+    assert by_period["2026-06"].source_table == "gl_actuals"
     assert by_period["2026-06"].amount == Decimal("1000000")
 

@@ -17,6 +17,19 @@ from app.services.ops.usage_limits import (
 )
 
 
+class _EnforcedSettings:
+    smpl_usage_limits_enabled = True
+    smpl_fast_ai = False
+
+
+@pytest.fixture(autouse=True)
+def _enforce_caps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.services.ops.usage_limits.get_settings",
+        lambda: _EnforcedSettings(),
+    )
+
+
 def test_limits_flat_for_all_plans() -> None:
     for plan in ("starter", "professional", "enterprise", None):
         limits = limits_for_plan(plan)
@@ -125,6 +138,31 @@ def test_assert_skipped_when_limits_disabled(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(
         "app.services.ops.usage_limits.get_settings",
         lambda: _Settings(),
+    )
+
+    assert_within_usage_limits(None, org, require_export=True, require_ai=True)
+
+
+def test_assert_skipped_in_fast_ai_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    org = Organization(id=uuid.uuid4(), name="Acme", plan="starter")
+    usage = MonthlyUsageTotals(
+        month="2026-06",
+        ai_cost_usd=999.0,
+        llm_calls=999,
+        exports_complete=999,
+    )
+    monkeypatch.setattr(
+        "app.services.ops.usage_limits.monthly_usage_totals",
+        lambda _db, _org_id: usage,
+    )
+
+    class _FastSettings:
+        smpl_usage_limits_enabled = True
+        smpl_fast_ai = True
+
+    monkeypatch.setattr(
+        "app.services.ops.usage_limits.get_settings",
+        lambda: _FastSettings(),
     )
 
     assert_within_usage_limits(None, org, require_export=True, require_ai=True)

@@ -104,6 +104,7 @@ def test_forecast_june_beginning_cash_equals_actual_may_ending_cash() -> None:
         ],
         {("Actual", date(2026, 5, 1)): Decimal("500")},
         "Forecast",
+        as_of_period=date(2026, 5, 1),
     )
     assert rows[0]["beginning_cash"] == Decimal("500")
     assert rows[0]["ending_cash"] == Decimal("511.00")

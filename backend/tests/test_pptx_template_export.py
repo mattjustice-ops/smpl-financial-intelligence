@@ -46,6 +46,7 @@ def _minimal_bundle(*, as_of: str = "2026-06") -> ReportingBundle:
             scenario="Combined",
             start_period="2026-01",
             end_period="2026-12",
+            as_of_period=as_of,
         ),
         validation=ExportValidationSummary(status="pass", failed_count=0, warning_count=0, passed_count=0, checks=[]),
     )
@@ -71,10 +72,15 @@ def test_period_replacements_roll_may_to_june():
 
 
 def test_resolve_template_returns_none_when_missing(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        "app.services.reporting.export.pptx_template_export._TEMPLATE_SEARCH_GLOBS",
-        ((tmp_path, "*.pptx"),),
-    )
+    module = "app.services.reporting.export.pptx_template_export"
+
+    class _NoTemplateSettings:
+        board_pptx_template = None
+
+    monkeypatch.setattr(f"{module}.get_settings", lambda: _NoTemplateSettings())
+    monkeypatch.setattr(f"{module}._CANONICAL_TEMPLATE", tmp_path / "missing.pptx")
+    monkeypatch.setattr(f"{module}._ONEDRIVE_TEMPLATE", tmp_path / "missing_onedrive.pptx")
+    monkeypatch.setattr(f"{module}._TEMPLATE_SEARCH_GLOBS", ((tmp_path, "*.pptx"),))
     assert resolve_board_pptx_template() is None
 
 

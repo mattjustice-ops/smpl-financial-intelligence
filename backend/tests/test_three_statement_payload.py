@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.services.reporting.three_statement_payload import (
     _calculate_cfs_row,
     _enrich_is,
@@ -176,17 +178,18 @@ def test_calculate_cfs_row_uses_balance_sheet_deltas() -> None:
         "ap": 6_048_779.27,
         "dr": 1_176_000.0,
         "prepaids": 2_010_000.0,
-        "ppe": 4_619_250.0,
+        "ppe": 4_913_250.0,
         "debt": 5_000_000.0,
-        "cash": 50_257_902.27,
+        "cash": 50_287_902.27,
     }
 
     cfs = _calculate_cfs_row(is_row, bs_row, prior_bs)
 
-    assert cfs["chg_ar"] == -535_916.73
-    assert cfs["chg_ap"] == 551_260.75
-    assert cfs["chg_dr"] == 56_000.0
-    assert cfs["chg_prepaids"] == 15_000.0
-    assert cfs["capex"] == -147_000.0
-    assert cfs["net_change"] == 502_094.02
-    assert cfs["cfo"] == 649_094.02
+    assert cfs["chg_ar"] == pytest.approx(-535_916.73, abs=0.005)
+    assert cfs["chg_ap"] == pytest.approx(551_260.75, abs=0.005)
+    assert cfs["chg_dr"] == pytest.approx(56_000.0, abs=0.005)
+    assert cfs["chg_prepaids"] == pytest.approx(15_000.0, abs=0.005)
+    assert cfs["capex"] == pytest.approx(-147_000.0, abs=0.005)
+    assert cfs["cfo"] == pytest.approx(679_094.02, abs=0.005)
+    assert cfs["net_change"] == pytest.approx(532_094.02, abs=0.005)
+    assert cfs["cash_tie_variance"] == pytest.approx(0.0, abs=0.005)

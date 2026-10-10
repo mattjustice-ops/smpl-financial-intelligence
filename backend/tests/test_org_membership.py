@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.api.deps.request_context import reset_request_user_id, set_request_user_id
 from app.db.base import Base
@@ -18,7 +19,12 @@ from app.services.organizations import get_organization_or_404
 
 @pytest.fixture()
 def membership_db():
-    engine = create_engine("sqlite:///:memory:")
+    # TestClient serves requests on another thread; one shared connection keeps the in-memory DB visible.
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(
         engine,
         tables=[

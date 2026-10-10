@@ -863,7 +863,7 @@ def _calculate_cfs_row(
 
         prior_ppe, ppe = prior_bs.get("ppe"), bs_row.get("ppe")
         if prior_ppe is not None and ppe is not None and da is not None:
-            cfs["capex"] = ppe - prior_ppe - da
+            cfs["capex"] = prior_ppe - ppe - da
             cfs["cfi"] = cfs["capex"]
 
         prior_debt, debt = prior_bs.get("debt"), bs_row.get("debt")

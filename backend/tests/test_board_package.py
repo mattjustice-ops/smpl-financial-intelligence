@@ -298,8 +298,7 @@ def test_formatters() -> None:
 
 def test_render_pptx_produces_valid_zip_bytes() -> None:
     pptx = pytest.importorskip("pptx")
-    pkg = build_board_package(_full_inputs())
-    data = render_pptx_bytes(pkg)
+    data = generate_board_package(_full_inputs(), include_pptx=True).pptx_bytes
     assert isinstance(data, bytes)
     # .pptx files are zip archives; first two bytes are always "PK".
     assert data[:2] == b"PK"

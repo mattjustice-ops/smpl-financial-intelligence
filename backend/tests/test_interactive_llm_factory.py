@@ -12,7 +12,7 @@ def test_fast_ai_defaults_on() -> None:
     s = Settings(ANTHROPIC_API_KEY="test-key")
     assert s.smpl_fast_ai is True
     assert s.anthropic_interactive_model == "claude-haiku-4-5"
-    assert s.anthropic_fast_export_timeout_seconds == 180.0
+    assert s.anthropic_fast_export_timeout_seconds == 240.0
     assert s.anthropic_interactive_timeout_seconds == 120.0
 
 
@@ -28,7 +28,7 @@ def test_fast_ai_export_uses_haiku_even_if_sonnet_configured(monkeypatch) -> Non
             build_commentary_llm_client(purpose="export")
         kwargs = mock_cls.call_args.kwargs
         assert kwargs["model"] == "claude-haiku-4-5"
-        assert kwargs["timeout_seconds"] == 180.0
+        assert kwargs["timeout_seconds"] == 240.0
     finally:
         get_settings.cache_clear()
 
