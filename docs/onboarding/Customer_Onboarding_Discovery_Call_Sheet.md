@@ -252,8 +252,12 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.22 | **Restarts after a pause** (no time limit): commission only on ARR above the customer's ARR before the pause, on all of it, or none? | above prior ARR / full amount / not paid | |
 | 7.23 | **Rate** on commissionable winback and restart ARR: the new-business rate or the expansion rate? | new business rate / expansion rate | |
 | 7.24 | **Expansion after a contraction:** commission only on ARR above the customer's level before the contraction, or on all expansion? | above prior level / all expansion | |
+| 7.41 | **Commission clawback window:** a new-business or expansion commission is recovered from the rep when the customer stops paying or cancels within how many months of the booking? | none / 3 / 6 / 12 | |
+| 7.42 | If there is a window: **amount recovered** on a clawback — all of it, or prorated for the months the customer paid? | full / prorated | |
 
 > **How SMPL uses 7.21–7.24:** "above prior" rules need each customer's history. SMPL measures the share of returned and expansion ARR above the prior level from CRM Churn and Contraction opportunities and applies it to planned ARR; if the history isn't there, that commission is left out of the plan and named, not assumed. The engines' plan has one reactivation line, so winbacks and restarts must be paid the same way for reactivation commission to be computed. Answers are also checked against loaded payouts (for example, "not paid" while Reactivation payouts exist is a conflict).
+>
+> **How SMPL uses 7.41–7.42:** the window is checked against each new-business and expansion plan's clawback window in the commission plans file, and against the commission clawbacks file: a customer who stopped paying inside the window must be clawed back, and one who stopped later is written down instead. "Full" recovers the commission paid; "prorated" recovers paid × (window − months paid) ÷ window. Writing down the rest of a capitalized commission when the customer leaves is required under ASC 340-40 either way, so it isn't asked.
 
 ### Sales quota and comp plan *(Normalization gate — Recommended)*
 
@@ -380,7 +384,7 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 Data ownership + readiness gates (Section 0) → company snapshot → systems & owners → ARR/MRR/churn definitions → trials / past_due / usage min-vs-overage → ARR methodology → rev-rec & renewal/cancel → systems of record → modules → FYE/currency/entities.
 
 **Should cover if time:**  
-Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · quota and comp plan (7.25–7.29) · payroll register, AP and AR subledgers, supporting schedules, collections history, first MRR dates and expansion/contraction reasons (7.30–7.40) · access acknowledgment (Section 10).
+Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy, payout timing and clawbacks (7.14–7.20, 7.41–7.42) · quota and comp plan (7.25–7.29) · payroll register, AP and AR subledgers, supporting schedules, collections history, first MRR dates and expansion/contraction reasons (7.30–7.40) · access acknowledgment (Section 10).
 
 **Recommended extras (label clearly):**  
 How Forecast is built today · trusted drivers · multiple ARR intents · adjusted metrics by audience · close calendar + GL cutoff artifacts · allocations, accrual / reversal practice, audit adjustments (7.9–7.13).
@@ -397,7 +401,7 @@ How Forecast is built today · trusted drivers · multiple ARR intents · adjust
 | Section 7 Close / GL | `docs/Close_Process.md`, close/GL readiness materials | **Recommended — not CEP** |
 | Section 9 CRM / HC | GPES HubSpot + Rippling gate examples | Documented examples |
 | Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
-| 7.14–7.24 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
+| 7.14–7.24, 7.41–7.42 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
 | 7.25–7.29 Sales quota and comp plan | Loaded HRIS, quota, opportunity and commission files | **Recommended — not CEP** |
 | 7.30–7.40 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
 | Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |

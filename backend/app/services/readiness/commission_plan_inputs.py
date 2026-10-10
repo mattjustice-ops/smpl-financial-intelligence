@@ -13,6 +13,8 @@
   returned / expansion ARR above the customer's prior level measured from the customer ARR history
   (``actual_customer_arr_history``; CRM opportunities when it isn't loaded), and what the loaded payouts
   did with Reactivation opportunities.
+- Clawbacks (7.41–7.42): the clawback window and amount recovered, checked against each plan's
+  ``clawback_window_months`` and the loaded ``actual_commission_clawbacks`` rows.
 - Sales plan (7.25–7.29): expected attainment, quota credit, attainment period, expansion owner and variable
   pay, checked against the loaded quotas, opportunities, payouts and employees (``sales_plan_inputs.py``).
 - Sales team at ``as_of`` (the forecast year end the budget opens from): heads by territory and role,
@@ -37,6 +39,8 @@ CENT = Decimal("0.01")
 ZERO = Decimal("0")
 COMMISSION_QUESTIONS = ("7.14", "7.15", "7.16", "7.17", "7.18", "7.19", "7.20")
 RETURN_QUESTIONS = ("7.21", "7.22", "7.23", "7.24")
+CLAWBACK_QUESTIONS = ("7.41", "7.42")
+CLAWED_BACK, WRITTEN_DOWN = "clawed back", "written down"
 OPPORTUNITY_TYPES = {
     "new business": "new_business", "new_business": "new_business", "new": "new_business",
     "expansion": "expansion", "upsell": "expansion",
@@ -136,6 +140,7 @@ def _plans(db: Session, org_id: uuid.UUID, missing: list[str]) -> dict[str, dict
                 "amortization_months": _months(r.get("amortization_months")),
                 "payout_lag_months": _months(r.get("payout_lag_months")),
                 "capitalize_payroll_taxes": _flag(r.get("capitalize_payroll_taxes")),
+                "clawback_window_months": _months(r.get("clawback_window_months")),
                 "source_table": table,
             }
             if plans[plan_id]["opportunity_type"] is None:
@@ -410,6 +415,83 @@ def _returns(db: Session, org_id: uuid.UUID, answers: dict[str, str], plans: dic
     }
 
 
+def clawback_policy(answers: dict[str, str], plans: dict[str, dict[str, Any]],
+                    clawbacks: list[dict[str, Any]] | None, missing: list[str]) -> dict[str, Any]:
+    """Clawback policy (7.41 window, 7.42 amount) against each new-business and expansion plan's
+    ``clawback_window_months`` and the loaded ``actual_commission_clawbacks`` rows.
+
+    A row is clawed back inside the window (months paid before the customer stopped < window) and written
+    down otherwise. Full recovers the commission paid; prorated recovers paid × (window − months paid) / window.
+    """
+    window_answer, amount_answer = answers.get("7.41"), answers.get("7.42")
+    window = 0 if window_answer == "none" else int(window_answer) if window_answer else None
+    plan_windows = {p["plan_id"]: p["clawback_window_months"] for p in plans.values()
+                    if p["opportunity_type"] in ("new_business", "expansion")}
+    rows = clawbacks or []
+    clawed = [r for r in rows if _kind(r.get("treatment")) == CLAWED_BACK]
+    written = [r for r in rows if _kind(r.get("treatment")) == WRITTEN_DOWN]
+    practice = {
+        "clawed_back": len(clawed),
+        "clawed_back_amount": float(sum((_num(r.get("clawback_amount")) or ZERO for r in clawed), ZERO)),
+        "written_down": len(written),
+        "written_down_amount": float(sum((_num(r.get("unamortized_removed")) or ZERO for r in written), ZERO)),
+    }
+    checks: list[dict[str, Any]] = []
+
+    def add(cid: str, questions: str, ok: bool, finding: str) -> None:
+        checks.append({"id": cid, "questions": questions, "status": "pass" if ok else "conflict", "finding": finding})
+
+    if window is not None:
+        for plan_id, months in sorted(plan_windows.items()):
+            if months is None:
+                missing.append(f"Commission plan {plan_id} has no clawback_window_months")
+        known = {p: m for p, m in plan_windows.items() if m is not None}
+        if known:
+            off = sorted(f"{p} ({m})" for p, m in known.items() if m != window)
+            add("clawback_window_vs_plans", "7.41", not off,
+                f"7.41 clawback window {window_answer}; " + (
+                    f"plans with a different clawback_window_months: {', '.join(off)}" if off
+                    else f"every new-business and expansion plan has {window} months"))
+        if clawbacks is None:
+            missing.append("actual_commission_clawbacks is not loaded: clawbacks can't be checked against 7.41")
+        elif rows:
+            wrong = []
+            for r in rows:
+                paid = _months(r.get("months_paid_before_stop"))
+                if paid is None:
+                    missing.append(f"actual_commission_clawbacks {r.get('customer_id')}: months_paid_before_stop "
+                                   f"is blank")
+                    continue
+                inside = paid < window
+                if (_kind(r.get("treatment")) == CLAWED_BACK) != inside:
+                    wrong.append(f"{r.get('customer_id')} {r.get('treatment')} after {paid} months paid")
+            policy = "with no clawback" if window == 0 else f"under a {window}-month window"
+            add("clawbacks_follow_window", "7.41", not wrong,
+                f"{len(clawed)} clawed back and {len(written)} written down {policy}"
+                + (f"; outside the policy: {', '.join(wrong)}" if wrong else ""))
+
+    if amount_answer and window and clawed:
+        wrong = []
+        for r in clawed:
+            paid_amount, recovered = _num(r.get("commission_paid")), _num(r.get("clawback_amount"))
+            months_paid = _months(r.get("months_paid_before_stop"))
+            if paid_amount is None or recovered is None or months_paid is None:
+                continue
+            expected = paid_amount if amount_answer == "full" else paid_amount * (window - months_paid) / window
+            if abs(recovered - expected.quantize(CENT)) >= 1:
+                wrong.append(f"{r.get('customer_id')} recovered {float(recovered):,.2f} of {float(paid_amount):,.2f} "
+                             f"paid ({amount_answer}: {float(expected):,.2f})")
+        add("clawback_amount_vs_policy", "7.42", not wrong,
+            f"7.42 says {amount_answer}; " + (f"recovered differently: {', '.join(wrong)}" if wrong
+                                              else f"{len(clawed)} clawbacks recovered {amount_answer}"))
+    return {
+        "answers": {q: answers.get(q) for q in CLAWBACK_QUESTIONS},
+        "plan_windows": plan_windows,
+        "loaded_practice": practice,
+        "checks": checks,
+    }
+
+
 def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, Any]:
     from app.services.readiness.engine import _normalization_status, commission_policy_checks, normalize_answers
     from app.services.readiness.evidence import build_commission_facts
@@ -436,6 +518,10 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
 
     plans = _plans(db, org.id, missing)
     returns = _returns(db, org.id, answers, plans, as_of, missing)
+    clawback_rows = _rows(db, "actual_commission_clawbacks", org.id)
+    if clawback_rows is not None:
+        clawback_rows = [r for r in clawback_rows if r.get("period") and to_period(str(r["period"])) <= as_of]
+    clawbacks = clawback_policy(answers, plans, clawback_rows, missing)
     sales = sales_plan(db, org.id, answers, as_of)
     team = sales_team(db, org.id, answers, as_of, sales["measured"])
     chain, tables = _schedule_chain(db, org.id, as_of, missing)
@@ -529,6 +615,7 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
         "payroll_tax_rate": payroll_tax_rate,
         "opening": opening,
         "returns": returns,
+        "clawbacks": clawbacks,
         "sales_plan": sales,
         "sales_team": team,
         "checks": checks,
