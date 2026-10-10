@@ -286,8 +286,10 @@ Ask which they trust and can supply; skip what is irrelevant:
 | 7.32 | **HRIS export includes terminated employees** with termination dates? Leavers are needed for attrition and backfill planning. | yes / no | |
 | 7.33 | **AP subledger exportable from the ERP:** vendor bills (vendor, bill date, due date, amount, GL account) and bill payments? Needed for AP aging, DPO and vendor-level cash drill-down. | yes / no | |
 | 7.34 | If 7.33 is yes: **standard vendor payment terms?** | net 15 / net 30 / net 45 / net 60 / mixed | |
-| 7.35 | **Supporting schedules kept outside the GL:** prepaid, fixed asset and debt schedules? | all / some / none | |
+| 7.35 | **Supporting schedules kept outside the GL:** prepaid, accrued expense, lease (ASC 842), fixed asset, debt and allowance for doubtful accounts schedules? | all / some / none | |
 | 7.36 | **Equity grant / stock-based compensation schedule** (Carta, Shareworks)? | yes / no | |
+| 7.37 | **AR subledger exportable** from billing or the ERP: customer payments applied to invoices (payment date and amount) and AR aging? Needed for DSO, collections forecasting and AR aging. | yes / no | |
+| 7.38 | **Collections history kept:** dunning steps, service suspensions and write-offs by customer, with the reason? Separates non-payment churn and no-starts from other churn. | yes / no | |
 
 7.34 is asked only when the AP subledger can be exported (7.33 yes).
 
@@ -375,7 +377,7 @@ Ask only if CRM or HRIS is in scope and ambiguity appears after (or before) conn
 Data ownership + readiness gates (Section 0) → company snapshot → systems & owners → ARR/MRR/churn definitions → trials / past_due / usage min-vs-overage → ARR methodology → rev-rec & renewal/cancel → systems of record → modules → FYE/currency/entities.
 
 **Should cover if time:**  
-Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · quota and comp plan (7.25–7.29) · payroll register, AP subledger and supporting schedules (7.30–7.36) · access acknowledgment (Section 10).
+Pipeline stage meanings · headcount/contractor · multi-account billing · live-only data · cost of revenue policy + payroll by department (7.7–7.8) · commission capitalization policy and payout timing (7.14–7.20) · quota and comp plan (7.25–7.29) · payroll register, AP and AR subledgers, supporting schedules and collections history (7.30–7.38) · access acknowledgment (Section 10).
 
 **Recommended extras (label clearly):**  
 How Forecast is built today · trusted drivers · multiple ARR intents · adjusted metrics by audience · close calendar + GL cutoff artifacts · allocations, accrual / reversal practice, audit adjustments (7.9–7.13).
@@ -394,7 +396,7 @@ How Forecast is built today · trusted drivers · multiple ARR intents · adjust
 | Data ownership, Section 0 gates, 7.7–7.13, Sections 10–11 | SMPL onboarding policy; accounting-quality inputs to the Readiness Score | **Recommended — not CEP** |
 | 7.14–7.24 Sales commissions | ASC 340-40; `docs/COMMISSION_CAPITALIZATION_DESIGN.md` | **Recommended — not CEP** |
 | 7.25–7.29 Sales quota and comp plan | Loaded HRIS, quota, opportunity and commission files | **Recommended — not CEP** |
-| 7.30–7.36 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
+| 7.30–7.38 Data sources and subledgers | Upload manifest generated from `backend/app/services/readiness/registry.py` | **Recommended — not CEP** |
 | Readiness Score (Section 11) | `backend/tmp/impl-docs/SMPL_AI_Agent_Playbooks_v1.0.txt` (CAL.4–CAL.7) + GPES Stage 7 | Methodology spec |
 
 ---
