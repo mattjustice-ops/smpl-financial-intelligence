@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.services.dashboard.schemas import ExecutiveFlowResponse, WaterfallSummaryRow
 from app.services.financial_statements.financial_statement_service import SummaryResponse
+from app.services.mrr.bucket_columns import CLOSED_WON_NEW_BUSINESS
 from app.services.reporting.export.schemas import ExportValidationSummary, ReportingBundle
 from app.services.reporting.period_utils import prior_period, to_period
 from app.services.reporting.validation_service import ValidationCheck, compare_values, warning
@@ -69,7 +70,13 @@ def _cross_source_checks(bundle: ReportingBundle) -> list[ValidationCheck]:
     deferred = bundle.comparison_waterfalls.get("deferred_revenue", [])
 
     if arr and pipeline:
-        new_arr = _amount_for(arr, as_of, "Actual", "new_arr") or _amount_for(arr, as_of, "Actual", "new_business")
+        bucketed = any(
+            r.period == as_of and r.scenario == "Actual" and r.waterfall_type == CLOSED_WON_NEW_BUSINESS for r in arr
+        )
+        if bucketed:
+            new_arr = _amount_for(arr, as_of, "Actual", CLOSED_WON_NEW_BUSINESS)
+        else:
+            new_arr = _amount_for(arr, as_of, "Actual", "new_arr") or _amount_for(arr, as_of, "Actual", "new_business")
         closed_won = _amount_for(pipeline, as_of, "Actual", "closed_won")
         if new_arr or closed_won:
             checks.append(

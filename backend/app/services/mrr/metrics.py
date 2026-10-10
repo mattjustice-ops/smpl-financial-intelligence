@@ -5,6 +5,8 @@ Definitions used here (standard SaaS):
   - GRR (Gross Retention) = (beginning - churn - contraction) / beginning
   - NRR (Net Retention)   = (beginning + expansion + reactivation - contraction - churn)
                           / beginning
+    Retention is measured on the Customer Success bucket (customers past the New Business period)
+    when the summary has customer buckets; otherwise on all customers, and ``retention_base`` says so.
   - Gross MRR Churn Rate  = churn / beginning
   - Expansion Rate        = expansion / beginning
   - Logo Churn Rate       = churned_customers / active_customers_beginning
@@ -26,6 +28,8 @@ from app.services.mrr.engine import CompanyMrrSummary, quantize_money
 ZERO = Decimal("0")
 TWELVE = Decimal("12")
 RATE_PLACES = Decimal("0.0001")
+CUSTOMER_SUCCESS_BASE = "customer_success"
+ALL_CUSTOMERS = "all_customers"
 
 
 def _q_rate(v: Decimal) -> Decimal:
@@ -86,6 +90,8 @@ class PeriodMetrics:
     expansion_rate: Optional[Decimal]
     logo_churn_rate: Optional[Decimal]
     net_new_mrr: Decimal
+    retention_base: str = ALL_CUSTOMERS
+    retention_beginning_mrr: Decimal = ZERO
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -96,19 +102,24 @@ class PeriodMetrics:
             "expansion_rate": self.expansion_rate,
             "logo_churn_rate": self.logo_churn_rate,
             "net_new_mrr": self.net_new_mrr,
+            "retention_base": self.retention_base,
+            "retention_beginning_mrr": self.retention_beginning_mrr,
         }
 
 
 def compute_period_metrics(summary: CompanyMrrSummary) -> PeriodMetrics:
     begin = summary.beginning_mrr
-    grr_num = begin - summary.churn_mrr - summary.contraction_mrr
-    nrr_num = (
-        begin
-        + summary.expansion_mrr
-        + summary.reactivation_mrr
-        - summary.contraction_mrr
-        - summary.churn_mrr
-    )
+    lines = summary.bucket_lines_mrr
+    if lines is not None and summary.customer_success_beginning_mrr is not None:
+        base, basis = summary.customer_success_beginning_mrr, CUSTOMER_SUCCESS_BASE
+        exp, react = lines["expansion"], lines["reactivation"]
+        cont, churn = lines["contraction"], lines["churn"]
+    else:
+        base, basis = begin, ALL_CUSTOMERS
+        exp, react = summary.expansion_mrr, summary.reactivation_mrr
+        cont, churn = summary.contraction_mrr, summary.churn_mrr
+    grr_num = base - churn - cont
+    nrr_num = base + exp + react - cont - churn
     net_new = quantize_money(
         summary.new_mrr
         + summary.expansion_mrr
@@ -128,12 +139,14 @@ def compute_period_metrics(summary: CompanyMrrSummary) -> PeriodMetrics:
 
     return PeriodMetrics(
         period=summary.period,
-        nrr=_safe_ratio(nrr_num, begin),
-        grr=_safe_ratio(grr_num, begin),
+        nrr=_safe_ratio(nrr_num, base),
+        grr=_safe_ratio(grr_num, base),
         gross_mrr_churn_rate=_safe_ratio(summary.churn_mrr, begin),
         expansion_rate=_safe_ratio(summary.expansion_mrr, begin),
         logo_churn_rate=logo_churn,
         net_new_mrr=net_new,
+        retention_base=basis,
+        retention_beginning_mrr=base,
     )
 
 

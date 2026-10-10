@@ -7,6 +7,11 @@ from decimal import Decimal
 
 from app.services.board_package.package import fmt_money, fmt_pct
 from app.services.board_package.schemas import BoardPackage, SlideContent, TableSpec
+from app.services.mrr.bucket_columns import (
+    CUSTOMER_SUCCESS_BEGINNING,
+    CUSTOMER_SUCCESS_BEGINNING_LABEL,
+    NEW_BUSINESS_LINES,
+)
 from app.services.reporting.export.commentary_engine import _fmt_money
 from app.services.reporting.export.schemas import ReportingBundle
 from app.services.reporting.period_utils import to_period
@@ -191,6 +196,10 @@ def _slide_arr_waterfall(bundle: ReportingBundle) -> SlideContent:
     types = ("beginning_arr", "beginning", "new_arr", "new_business", "expansion_arr", "expansion", "contraction_arr", "contraction", "churn_arr", "churn", "reactivation_arr", "reactivation", "ending_arr", "ending")
     seen: set[str] = set()
     rows: list[list[str]] = []
+    has_buckets = any(
+        row.waterfall_type == CUSTOMER_SUCCESS_BEGINNING and row.period == as_of and row.scenario == "Actual"
+        for row in bundle.comparison_waterfalls.get("arr") or []
+    )
     for t in types:
         if t in seen:
             continue
@@ -202,12 +211,29 @@ def _slide_arr_waterfall(bundle: ReportingBundle) -> SlideContent:
             continue
         seen.add(label)
         rows.append([label, fmt_money(amt, bundle.currency)])
+        if t == "new_business" and has_buckets:
+            for sub_type, _col, _sign, sub_label in NEW_BUSINESS_LINES:
+                sub_amt = _wf_amount(bundle, "arr", sub_type, as_of)
+                if sub_amt != 0:
+                    rows.append([f"   {sub_label}", fmt_money(sub_amt, bundle.currency)])
+    bullets: list[str] = []
+    if not rows:
+        bullets.append("Load MRR waterfall CSVs for ARR bridge detail.")
+    elif has_buckets:
+        cs_beginning = _wf_amount(bundle, "arr", CUSTOMER_SUCCESS_BEGINNING, as_of)
+        rows.append([CUSTOMER_SUCCESS_BEGINNING_LABEL, fmt_money(cs_beginning, bundle.currency)])
+        bullets.append(
+            "Expansion, contraction, churn and reactivation are Customer Success customers only; "
+            "customers in their first year are in New Business and excluded from GRR and NRR."
+        )
+    else:
+        bullets.append("Customer buckets are not loaded; GRR and NRR use all customers' beginning ARR.")
     return SlideContent(
         slide_id="arr_waterfall",
         title="MRR / ARR Waterfall",
         subtitle=_commentary_for(bundle, "MRR") or "MRR waterfall is source of truth for ARR movement",
         table=_optional_table(["Component", "ARR"], rows),
-        bullets=[] if rows else ["Load MRR waterfall CSVs for ARR bridge detail."],
+        bullets=bullets,
     )
 
 

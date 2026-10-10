@@ -21,6 +21,10 @@ class WaterfallSummaryRow(BaseModel):
     amount: Decimal = Decimal("0")
     source_table: str
     detail_count: int = 0
+    # "line" (a movement or balance), "sub_line" (part of parent_type, e.g. the New Business lines) or
+    # "memo" (shown with the waterfall but not part of it, e.g. the retention base).
+    row_kind: str = "line"
+    parent_type: str | None = None
 
 
 class WaterfallAttributionRow(BaseModel):

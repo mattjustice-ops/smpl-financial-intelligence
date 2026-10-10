@@ -28,12 +28,26 @@ from app.services.dashboard.waterfall_attribution_service import (
     deferred_revenue_attribution_view,
     pipeline_waterfall_attribution_view,
 )
+from app.services.mrr.bucket_columns import (
+    CLOSED_WON_NEW_BUSINESS,
+    CLOSED_WON_NEW_BUSINESS_LABEL,
+    CUSTOMER_SUCCESS_BEGINNING,
+    CUSTOMER_SUCCESS_BEGINNING_LABEL,
+    NEW_BUSINESS_LINES,
+)
 from app.services.reporting.validation_service import ValidationCheck, compare_values, warning
 
 
 LINE_ORDER = {
     "beginning": 100,
     "new_business": 200,
+    "new_logo": 210,
+    "winback": 220,
+    "first_year_expansion": 230,
+    "first_year_contraction": 240,
+    "no_start": 250,
+    CUSTOMER_SUCCESS_BEGINNING: 950,
+    CLOSED_WON_NEW_BUSINESS: 960,
     "expansion": 300,
     "contraction": 500,
     "churn": 600,
@@ -71,8 +85,27 @@ LINE_ORDER = {
 }
 
 
+ARR_SUB_LINES = {waterfall_type: ("new_business", label) for waterfall_type, _col, _sign, label in NEW_BUSINESS_LINES}
+ARR_MEMO_LINES = {
+    CUSTOMER_SUCCESS_BEGINNING: CUSTOMER_SUCCESS_BEGINNING_LABEL,
+    CLOSED_WON_NEW_BUSINESS: CLOSED_WON_NEW_BUSINESS_LABEL,
+}
+
+
 def _label(value: str) -> str:
+    if value in ARR_SUB_LINES:
+        return ARR_SUB_LINES[value][1]
+    if value in ARR_MEMO_LINES:
+        return ARR_MEMO_LINES[value]
     return value.replace("_", " ").title().replace("Arr", "ARR").replace("Mrr", "MRR")
+
+
+def _row_kind(waterfall_name: str, waterfall_type: str) -> tuple[str, str | None]:
+    if waterfall_name == "arr" and waterfall_type in ARR_SUB_LINES:
+        return "sub_line", ARR_SUB_LINES[waterfall_type][0]
+    if waterfall_name == "arr" and waterfall_type in ARR_MEMO_LINES:
+        return "memo", None
+    return "line", None
 
 
 def _summarize(organization_id: uuid.UUID, waterfall_name: str, attribution: list[WaterfallAttributionRow]) -> list[WaterfallSummaryRow]:
@@ -81,6 +114,7 @@ def _summarize(organization_id: uuid.UUID, waterfall_name: str, attribution: lis
         grouped[(row.scenario, row.period, row.waterfall_type, row.source_table)].append(row)
     out: list[WaterfallSummaryRow] = []
     for (scenario, period, waterfall_type, source_table), rows in grouped.items():
+        row_kind, parent_type = _row_kind(waterfall_name, waterfall_type)
         out.append(
             WaterfallSummaryRow(
                 organization_id=str(organization_id),
@@ -93,6 +127,8 @@ def _summarize(organization_id: uuid.UUID, waterfall_name: str, attribution: lis
                 amount=sum((r.amount for r in rows), Decimal("0")),
                 source_table=source_table,
                 detail_count=len(rows),
+                row_kind=row_kind,
+                parent_type=parent_type,
             )
         )
     return sorted(out, key=lambda r: (r.period, r.line_item_order))
@@ -138,6 +174,26 @@ def _validate(rows: list[WaterfallSummaryRow], waterfall_name: str) -> list[Vali
             expected = values["beginning"] + values["new_business"] + values["expansion"] + values["reactivation"] + values["contraction"] + values["churn"]
             actual = values["ending"]
             checks.append(compare_values(scenario=scenario, period=period, validation_name="arr_waterfall_ties", expected_value=expected, actual_value=actual, source_tables_used=sources))
+            if CUSTOMER_SUCCESS_BEGINNING in values:
+                checks.append(
+                    compare_values(
+                        scenario=scenario,
+                        period=period,
+                        validation_name="arr_new_business_ties_to_its_lines",
+                        expected_value=sum((values[t] for t in ARR_SUB_LINES), Decimal("0")),
+                        actual_value=values["new_business"],
+                        source_tables_used=sources,
+                    )
+                )
+            else:
+                checks.append(
+                    warning(
+                        scenario=scenario,
+                        period=period,
+                        validation_name="arr_customer_buckets_unavailable",
+                        source_tables_used=sources,
+                    )
+                )
         elif waterfall_name == "pipeline":
             balance_types = (
                 "beginning_pipeline",

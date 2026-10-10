@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from app.services.board_package.package import fmt_money, fmt_pct
 from app.services.board_package.schemas import ChartSpec, KpiCard, TableSpec
+from app.services.mrr.bucket_columns import CUSTOMER_SUCCESS_BEGINNING
 from app.services.reporting.export.board_format_utils import (
     direction_from_delta,
     direction_glyph,
@@ -28,9 +29,22 @@ def _wf(bundle: ReportingBundle, key: str, wtype: str, period: str, scenario: st
     return Decimal("0")
 
 
+def _has_wf_row(bundle: ReportingBundle, key: str, wtype: str, period: str, scenario: str = "Actual") -> bool:
+    if any(r.period == period and r.waterfall_type == wtype and r.scenario == scenario
+           for r in bundle.comparison_waterfalls.get(key) or []):
+        return True
+    wf = bundle.executive_flow.waterfalls.get(key)
+    return bool(wf) and any(r.period == period and r.waterfall_type == wtype for r in wf.rows)
+
+
 def _arr_parts(bundle: ReportingBundle, period: str) -> dict[str, Decimal]:
+    """With customer buckets, expansion, contraction, churn and reactivation are Customer Success only and
+    ``retention_base`` is the Customer Success beginning ARR; otherwise it is all beginning ARR."""
+    bop = _wf(bundle, "arr", "beginning_arr", period) or _wf(bundle, "arr", "beginning", period)
+    bucketed = _has_wf_row(bundle, "arr", CUSTOMER_SUCCESS_BEGINNING, period)
     return {
-        "bop": _wf(bundle, "arr", "beginning_arr", period) or _wf(bundle, "arr", "beginning", period),
+        "bop": bop,
+        "retention_base": _wf(bundle, "arr", CUSTOMER_SUCCESS_BEGINNING, period) if bucketed else bop,
         "nb": _wf(bundle, "arr", "new_business", period) or _wf(bundle, "arr", "new_arr", period),
         "exp": _wf(bundle, "arr", "expansion_arr", period) or _wf(bundle, "arr", "expansion", period),
         "react": _wf(bundle, "arr", "reactivation_arr", period) or _wf(bundle, "arr", "reactivation", period),
@@ -39,20 +53,26 @@ def _arr_parts(bundle: ReportingBundle, period: str) -> dict[str, Decimal]:
     }
 
 
+def retention_base_label(bundle: ReportingBundle, period: str) -> str:
+    if _has_wf_row(bundle, "arr", CUSTOMER_SUCCESS_BEGINNING, period):
+        return "Customer Success customers (past the New Business period)"
+    return "all customers (customer buckets not loaded)"
+
+
 def _grr(bundle: ReportingBundle, period: str) -> Decimal | None:
-    """(beginning - contraction - churn) / beginning, from the loaded components."""
+    """(retention base - contraction - churn) / retention base, from the loaded components."""
     p = _arr_parts(bundle, period)
-    if not p["bop"]:
+    if not p["retention_base"]:
         return None
-    return (p["bop"] - p["churn"] - p["cont"]) / p["bop"]
+    return (p["retention_base"] - p["churn"] - p["cont"]) / p["retention_base"]
 
 
 def _nrr(bundle: ReportingBundle, period: str) -> Decimal | None:
-    """(beginning + expansion + reactivation - contraction - churn) / beginning."""
+    """(retention base + expansion + reactivation - contraction - churn) / retention base."""
     p = _arr_parts(bundle, period)
-    if not p["bop"]:
+    if not p["retention_base"]:
         return None
-    return (p["bop"] + p["exp"] + p["react"] - p["churn"] - p["cont"]) / p["bop"]
+    return (p["retention_base"] + p["exp"] + p["react"] - p["churn"] - p["cont"]) / p["retention_base"]
 
 
 def _net_new(bundle: ReportingBundle, period: str) -> Decimal:
@@ -296,16 +316,18 @@ def arr_waterfall_chart(bundle: ReportingBundle) -> ChartSpec | None:
 def arr_retention_kpis(bundle: ReportingBundle) -> list[KpiCard]:
     as_of = bundle.as_of_period
     cur = bundle.currency
-    bop = _wf(bundle, "arr", "beginning_arr", as_of) or _wf(bundle, "arr", "beginning", as_of)
-    churn = abs(_wf(bundle, "arr", "churn_arr", as_of) or _wf(bundle, "arr", "churn", as_of))
-    expansion = _wf(bundle, "arr", "expansion_arr", as_of) or _wf(bundle, "arr", "expansion", as_of)
+    parts = _arr_parts(bundle, as_of)
+    bop = parts["retention_base"]
+    churn = parts["churn"]
+    expansion = parts["exp"]
     new_arr = _net_new(bundle, as_of)
     grr = _grr(bundle, as_of)
     churn_pct = (churn / bop) if bop else None
     exp_pct = (expansion / bop) if bop else None
     return [
         _kpi("Net New ARR", fmt_money(new_arr, cur), group="growth"),
-        _kpi("GRR", fmt_pct(grr) if grr is not None else "n/a", group="growth"),
+        _kpi("GRR", fmt_pct(grr) if grr is not None else "n/a", subtext=f"On {retention_base_label(bundle, as_of)}",
+             group="growth"),
         _kpi("Churn %", fmt_pct(churn_pct) if churn_pct is not None else "n/a", tone="unfavorable", group="growth"),
         _kpi("Expansion %", fmt_pct(exp_pct) if exp_pct is not None else "n/a", tone="favorable", group="growth"),
     ]

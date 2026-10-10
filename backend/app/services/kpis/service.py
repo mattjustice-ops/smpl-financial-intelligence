@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.services.kpis.engine import KpiInputs, KpiResults, calculate_kpis
 from app.services.kpis.repository import (
     load_customer_counts,
+    load_customer_success_mrr,
     load_mrr_summary_for_period,
     load_pipeline_for_period,
     new_bookings_arr_for_period,
@@ -26,6 +27,7 @@ from app.services.kpis.repository import (
     sales_marketing_expense_for_period,
 )
 from app.services.mrr.repository import month_start, previous_month_start
+from app.services.mrr.service import bucket_policy
 
 
 def _months_between(start: date, end: date) -> int:
@@ -47,6 +49,8 @@ def run_kpis(
     p_start = month_start(period_start)
 
     mrr_summary = load_mrr_summary_for_period(session, organization_id, p_start)
+    customer_success = load_customer_success_mrr(session, organization_id, p_start,
+                                                 bucket_policy(session, organization_id))
     counts = load_customer_counts(session, organization_id, p_start)
     revenue = revenue_for_period(session, organization_id, period_start, period_end)
     sm_expense = sales_marketing_expense_for_period(session, organization_id, period_start, period_end)
@@ -92,6 +96,7 @@ def run_kpis(
         gross_margin=gross_margin,
         net_burn=net_burn,
         period_months=_months_between(period_start, period_end),
+        customer_success_mrr=customer_success,
     )
 
     results = calculate_kpis(inputs)

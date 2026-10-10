@@ -97,6 +97,32 @@ def historical_active_customers(
     return {row[0] for row in session.execute(stmt).all()}
 
 
+def customer_active_months(
+    session: Session, organization_id: uuid.UUID, before_period_start: date, customer_ids: Iterable[str]
+) -> dict[str, list[date]]:
+    """Months before `before_period_start` in which each customer had a subscription with positive MRR
+    (same activity rule as `customer_mrr_for_month`)."""
+    ids = set(customer_ids)
+    if not ids:
+        return {}
+    stmt = select(Subscription.customer_id, Subscription.start_date, Subscription.end_date).where(
+        Subscription.organization_id == organization_id,
+        Subscription.customer_id.in_(ids),
+        Subscription.start_date.isnot(None),
+        Subscription.start_date < before_period_start,
+        Subscription.current_mrr > 0,
+    )
+    last = previous_month_start(month_start(before_period_start))
+    months: dict[str, set[date]] = {}
+    for cid, start, end in session.execute(stmt).all():
+        m = month_start(start)
+        stop = min(month_start(end), last) if end else last
+        while m <= stop:
+            months.setdefault(cid, set()).add(m)
+            m = next_month_start(m)
+    return {cid: sorted(ms) for cid, ms in months.items()}
+
+
 def customer_departures(
     session: Session, organization_id: uuid.UUID, before_period_start: date, customer_ids: Iterable[str]
 ) -> dict[str, Departure]:

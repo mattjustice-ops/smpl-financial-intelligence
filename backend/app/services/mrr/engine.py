@@ -21,15 +21,25 @@ policy (questions 4.10 winback window and 4.11 pauses) and the customer's Depart
                             pause vs termination where the two are treated differently
                                                                              -> REACTIVATION
 A return is never moved to NEW without a recorded termination and an answered window.
+
+Customer buckets (onboarding 4.10 restart window, 4.12 New Business period) sit beside the movement
+types, which stay as above for bookings and commissions:
+  - Age of first MRR counts months from a customer's first MRR and restarts when it returns after
+    more than the restart window at zero MRR (after a churn or a pause).
+  - New Business (age under the New Business period, excluded from retention): new_logo, winback
+    (back after the window, or back at any gap while still in the period), first_year_expansion,
+    first_year_contraction, no_start (MRR to zero inside the period).
+  - Customer Success: expansion, contraction, churn and reactivation (back within the window after
+    leaving at or past the period). GRR and NRR are measured on this bucket.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from enum import Enum
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 ZERO = Decimal("0")
 TWO_PLACES = Decimal("0.01")
@@ -93,6 +103,89 @@ def months_between(start: date, end: date) -> int:
     return (end.year - start.year) * 12 + end.month - start.month
 
 
+SMPL_DEFAULT_RESTART_WINDOW_MONTHS = 6
+SMPL_DEFAULT_NEW_BUSINESS_MONTHS = 12
+NEW_BUSINESS, CUSTOMER_SUCCESS = "New Business", "Customer Success"
+LINE_BUCKET = {
+    "new_logo": NEW_BUSINESS,
+    "winback": NEW_BUSINESS,
+    "first_year_expansion": NEW_BUSINESS,
+    "first_year_contraction": NEW_BUSINESS,
+    "no_start": NEW_BUSINESS,
+    "expansion": CUSTOMER_SUCCESS,
+    "contraction": CUSTOMER_SUCCESS,
+    "churn": CUSTOMER_SUCCESS,
+    "reactivation": CUSTOMER_SUCCESS,
+}
+
+
+@dataclass(frozen=True)
+class BucketPolicy:
+    """Onboarding 4.10 (restart window; None = the age never restarts) and 4.12 (New Business period).
+
+    ``defaults_used`` names the questions answered by the SMPL default because they are unanswered.
+    """
+
+    restart_window_months: Optional[int] = SMPL_DEFAULT_RESTART_WINDOW_MONTHS
+    new_business_months: int = SMPL_DEFAULT_NEW_BUSINESS_MONTHS
+    defaults_used: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CustomerAge:
+    first_mrr_period: date
+    age_months: int
+    bucket: str
+    line: str  # "" when the customer's MRR did not move
+
+
+def first_mrr_period(active_months: Sequence[date], restart_window_months: Optional[int]) -> date:
+    """Start of the customer's age of first MRR: its first month with MRR, moved to each return made
+    after more than the restart window at zero MRR. ``active_months`` are first-of-month dates."""
+    months = sorted(set(active_months))
+    first = months[0]
+    for prev, cur in zip(months, months[1:]):
+        away = months_between(prev, cur) - 1
+        if restart_window_months is not None and away > restart_window_months:
+            first = cur
+    return first
+
+
+def customer_age(
+    period: date, movement: MovementType, active_before: Sequence[date], policy: BucketPolicy
+) -> Optional[CustomerAge]:
+    """Age, bucket and waterfall line of one customer's movement in ``period``.
+
+    ``active_before``: first-of-month dates before ``period`` in which the customer had MRR. None when
+    the customer had MRR last month but no history says when it started (the age is unknown).
+    """
+    months = sorted({m for m in active_before if m < period})
+    nb_months = policy.new_business_months
+    if movement in (MovementType.NEW, MovementType.REACTIVATION):
+        if not months:
+            return CustomerAge(period, 0, NEW_BUSINESS, "new_logo")
+        first = first_mrr_period(months, policy.restart_window_months)
+        last = months[-1]
+        gone = date(last.year + last.month // 12, last.month % 12 + 1, 1)
+        window = policy.restart_window_months
+        if window is not None and months_between(gone, period) > window:
+            return CustomerAge(period, 0, NEW_BUSINESS, "winback")
+        line = "reactivation" if months_between(first, gone) >= nb_months else "winback"
+        return CustomerAge(first, months_between(first, period), LINE_BUCKET[line], line)
+    if not months:
+        return None
+    first = first_mrr_period(months, policy.restart_window_months)
+    age = months_between(first, period)
+    young = age < nb_months
+    line = {
+        MovementType.CHURN: "no_start" if young else "churn",
+        MovementType.EXPANSION: "first_year_expansion" if young else "expansion",
+        MovementType.CONTRACTION: "first_year_contraction" if young else "contraction",
+    }.get(movement, "")
+    bucket = LINE_BUCKET[line] if line else NEW_BUSINESS if young else CUSTOMER_SUCCESS
+    return CustomerAge(first, age, bucket, line)
+
+
 @dataclass(frozen=True)
 class CustomerMrrMovement:
     """One customer's MRR movement for a given period.
@@ -121,6 +214,15 @@ class CustomerMrrMovement:
     restored_mrr: Optional[Decimal] = None
     above_baseline_mrr: Optional[Decimal] = None
     return_note: Optional[str] = None
+    # Customer buckets; None when the customer's MRR history was not supplied.
+    first_mrr_period: Optional[date] = None
+    customer_age_months: Optional[int] = None
+    customer_bucket: Optional[str] = None
+    waterfall_line: Optional[str] = None
+
+    @property
+    def movement_mrr(self) -> Decimal:
+        return abs(self.ending_mrr - self.beginning_mrr)
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -140,6 +242,10 @@ class CustomerMrrMovement:
             "restored_mrr": self.restored_mrr,
             "above_baseline_mrr": self.above_baseline_mrr,
             "return_note": self.return_note,
+            "first_mrr_period": self.first_mrr_period,
+            "customer_age_months": self.customer_age_months,
+            "customer_bucket": self.customer_bucket,
+            "waterfall_line": self.waterfall_line,
         }
 
 
@@ -258,6 +364,8 @@ def compute_waterfall(
     historical_active_customers: Iterable[str],
     departures: Optional[Mapping[str, Departure]] = None,
     policy: Optional[ReturnPolicy] = None,
+    mrr_history: Optional[Mapping[str, Sequence[date]]] = None,
+    bucket_policy: Optional[BucketPolicy] = None,
 ) -> list[CustomerMrrMovement]:
     """Build customer-level MRR waterfall rows for a single period.
 
@@ -270,10 +378,13 @@ def compute_waterfall(
             from REACTIVATION.
         departures: customer_id → Departure for returning customers.
         policy: onboarding return policy (4.10 / 4.11).
+        mrr_history: customer_id → months before ``period`` with MRR. When given, every row gets
+            its age of first MRR, bucket and waterfall line under ``bucket_policy``.
     """
     history = set(historical_active_customers)
     customer_ids = set(prior_mrr_by_customer) | set(current_mrr_by_customer)
     departures = departures or {}
+    buckets = bucket_policy or BucketPolicy()
 
     rows: list[CustomerMrrMovement] = []
     for cid in sorted(customer_ids):
@@ -286,8 +397,14 @@ def compute_waterfall(
             departure=departures.get(cid),
             policy=policy,
         )
-        if row is not None:
-            rows.append(row)
+        if row is None:
+            continue
+        age = None if mrr_history is None else customer_age(period, row.movement_type, mrr_history.get(cid, ()),
+                                                            buckets)
+        if age is not None:
+            row = replace(row, first_mrr_period=age.first_mrr_period, customer_age_months=age.age_months,
+                          customer_bucket=age.bucket, waterfall_line=age.line)
+        rows.append(row)
     return rows
 
 
@@ -314,6 +431,18 @@ class CompanyMrrSummary:
     returning_new_mrr: Decimal = ZERO
     reactivation_above_baseline_mrr: Decimal = ZERO
     reactivation_without_baseline_mrr: Decimal = ZERO
+    # Customer buckets: waterfall line -> MRR moved (positive), and the Customer Success beginning MRR.
+    # None when any row has no age of first MRR.
+    bucket_lines_mrr: Optional[dict[str, Decimal]] = None
+    customer_success_beginning_mrr: Optional[Decimal] = None
+
+    @property
+    def new_business_bucket_mrr(self) -> Optional[Decimal]:
+        if self.bucket_lines_mrr is None:
+            return None
+        lines = self.bucket_lines_mrr
+        return (lines["new_logo"] + lines["winback"] + lines["first_year_expansion"]
+                - lines["first_year_contraction"] - lines["no_start"])
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -337,6 +466,9 @@ class CompanyMrrSummary:
             "returning_new_mrr": self.returning_new_mrr,
             "reactivation_above_baseline_mrr": self.reactivation_above_baseline_mrr,
             "reactivation_without_baseline_mrr": self.reactivation_without_baseline_mrr,
+            "bucket_lines_mrr": self.bucket_lines_mrr,
+            "new_business_bucket_mrr": self.new_business_bucket_mrr,
+            "customer_success_beginning_mrr": self.customer_success_beginning_mrr,
         }
 
 
@@ -365,8 +497,17 @@ def summarize_company(
     returning_new_mrr = ZERO
     above_baseline = ZERO
     without_baseline = ZERO
+    rows = list(rows)
+    bucketed = bool(rows) and all(r.customer_bucket is not None for r in rows)
+    lines = {line: ZERO for line in LINE_BUCKET}
+    cs_beginning = ZERO
 
     for r in rows:
+        if bucketed:
+            if r.waterfall_line:
+                lines[r.waterfall_line] += r.movement_mrr
+            if r.beginning_mrr > ZERO and r.customer_bucket == CUSTOMER_SUCCESS:
+                cs_beginning += r.beginning_mrr
         if r.return_type is not None:
             by_return[r.return_type] += 1
         if r.return_type is ReturnType.RETURNING_NEW_BUSINESS:
@@ -416,4 +557,6 @@ def summarize_company(
         returning_new_mrr=quantize_money(returning_new_mrr),
         reactivation_above_baseline_mrr=quantize_money(above_baseline),
         reactivation_without_baseline_mrr=quantize_money(without_baseline),
+        bucket_lines_mrr={k: quantize_money(v) for k, v in lines.items()} if bucketed else None,
+        customer_success_beginning_mrr=quantize_money(cs_beginning) if bucketed else None,
     )
