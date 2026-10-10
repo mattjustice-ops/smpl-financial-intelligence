@@ -9,8 +9,8 @@
   its last loaded month, then Forecast), amortized straight-line from the payout month with cumulative
   amortization rounded to the cent — the convention of the deferred commissions roll-forward. The
   schedule balance is checked against the loaded roll-forward at ``as_of``.
-- Returns (7.21–7.24): how winbacks, restarts and expansion after a contraction are paid, the share of
-  returned / expansion ARR above the customer's prior level measured from the customer ARR history
+- Returns (7.21–7.24): how customers back after cancelling or a pause and expansion after a contraction are
+  paid, the share of returned / expansion ARR above the customer's prior level measured from the customer ARR history
   (``actual_customer_arr_history``; CRM opportunities when it isn't loaded), and what the loaded payouts
   did with Reactivation opportunities.
 - Clawbacks (7.41–7.42): the clawback window and amount recovered, checked against each plan's
@@ -253,9 +253,10 @@ HISTORY_ORDER = {"opening balance": 0, "churn": 1, "pause": 1, "contraction": 2,
 def customer_arr_history_returns(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """From the customer ARR history (one row per customer movement): the same measures as
     ``customer_return_history``, with every departure on record. A Churn or Pause row is the ARR the
-    customer left with; a Reactivation after a Churn is a winback, after a Pause a restart. A return
-    below the ARR left with leaves the shortfall for later expansion to recover, like a contraction.
-    New Business after a departure (back past the winback window) starts the customer over.
+    customer left with; a Reactivation after a Churn is a return after cancelling (7.21), after a Pause a
+    return after a pause (7.22), whatever its line in the ARR waterfall. A return below the ARR left with
+    leaves the shortfall for later expansion to recover, like a contraction. New Business after a departure
+    (back after the restart window, 4.10) starts the customer over.
     Each return's commissionable ARR is in ``bases`` by opportunity ID.
     """
     by_customer: dict[str, list[tuple[str, int, str, Decimal, Decimal, str]]] = defaultdict(list)
@@ -315,8 +316,8 @@ def customer_arr_history_returns(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "arr_with_departure": float(with_departure),
             "above_baseline_arr": float(above_baseline),
             "above_baseline_share": float(above_baseline / with_departure) if with_departure else None,
-            "winbacks": {"count": split["churn"][0], "arr": float(split["churn"][1])},
-            "restarts": {"count": split["pause"][0], "arr": float(split["pause"][1])},
+            "after_cancelling": {"count": split["churn"][0], "arr": float(split["churn"][1])},
+            "after_pause": {"count": split["pause"][0], "arr": float(split["pause"][1])},
             "back_as_new_business": back_as_new,
         },
         "expansion": {
@@ -381,24 +382,25 @@ def _returns(db: Session, org_id: uuid.UUID, answers: dict[str, str], plans: dic
 
     checks: list[dict[str, Any]] = []
     n, amount = practice["payouts"], f"${practice['commission']:,.0f}"
-    for q, label in (("7.21", "winbacks"), ("7.22", "restarts")):
+    for q, cid, label in (("7.21", "cancel_returns", "customers back after cancelling"),
+                          ("7.22", "pause_returns", "customers back after a pause")):
         a = answers.get(q)
         if a == "not_paid" and n:
-            checks.append({"id": f"{label}_not_paid_vs_payouts", "questions": q, "status": "conflict",
+            checks.append({"id": f"{cid}_not_paid_vs_payouts", "questions": q, "status": "conflict",
                            "finding": f"{q} says {label} are not paid, but the loaded payouts include {n} commissions "
                                       f"({amount}) on Reactivation opportunities"})
         elif a == "above_prior_arr" and practice["paid_on_full_amount"]:
-            checks.append({"id": f"{label}_above_prior_arr_vs_payouts", "questions": q, "status": "conflict",
+            checks.append({"id": f"{cid}_above_prior_arr_vs_payouts", "questions": q, "status": "conflict",
                            "finding": f"{q} pays {label} only above the customer's prior ARR, but the {n} loaded "
                                       f"Reactivation payouts ({amount}) were paid on the full returned ARR"})
         elif a == "above_prior_arr" and practice["paid_above_prior_arr"] is False and n:
-            checks.append({"id": f"{label}_above_prior_arr_vs_payouts", "questions": q, "status": "conflict",
+            checks.append({"id": f"{cid}_above_prior_arr_vs_payouts", "questions": q, "status": "conflict",
                            "finding": f"{q} pays {label} only above the customer's prior ARR, but "
                                       f"{paid['off_policy'] + paid['unmatched']} of the {n} loaded Reactivation payouts "
                                       f"have a commission base that isn't the ARR above the customer's prior level in "
                                       f"the customer ARR history"})
         elif a == "full_amount" and n and not practice["paid_on_full_amount"]:
-            checks.append({"id": f"{label}_full_amount_vs_payouts", "questions": q, "status": "conflict",
+            checks.append({"id": f"{cid}_full_amount_vs_payouts", "questions": q, "status": "conflict",
                            "finding": f"{q} pays {label} on the full returned ARR, but the {n} loaded Reactivation "
                                       f"payouts ({amount}) were paid on ${practice['commission_base_arr']:,.0f} of "
                                       f"${float(paid['opportunity_arr']):,.0f} returned ARR"})

@@ -3302,8 +3302,8 @@ const RETURN_BASIS_LABEL = {
 
 /**
  * Share of planned reactivation and expansion ARR that earns commission, and at which rate (7.21–7.24).
- * The plan has one reactivation line, so winbacks (7.21) and restarts (7.22) must be paid alike for it
- * to be computed. "Above prior level" shares are measured from the loaded customer ARR history (CRM
+ * The plan has one reactivation line, so customers back after cancelling (7.21) and after a pause (7.22)
+ * must be paid alike for it to be computed. "Above prior level" shares are measured from the loaded customer ARR history (CRM
  * opportunities when it isn't loaded); when they
  * can't be measured the commission is left out of the plan and named, never assumed.
  */
@@ -3329,10 +3329,10 @@ function returnsPolicy(inp, warnings, notes) {
 
   const w = a['7.21'], s = a['7.22'];
   if (w && s && w !== s) {
-    out.reactReason = `winbacks (7.21: ${words(w)}) and restarts (7.22: ${words(s)}) are paid differently, and the plan has one reactivation line with no winback/restart split`;
+    out.reactReason = `customers back after cancelling (7.21: ${words(w)}) and after a pause (7.22: ${words(s)}) are paid differently, and the plan has one reactivation line with no cancel/pause split`;
   } else if (w || s) {
     out.basis = w && s ? w : null;
-    if (!out.basis) out.reactReason = `${w ? '7.22 (restarts)' : '7.21 (winbacks)'} is unanswered, and the plan can’t split reactivation between winbacks and restarts`;
+    if (!out.basis) out.reactReason = `${w ? '7.22 (back after a pause)' : '7.21 (back after cancelling)'} is unanswered, and the plan can’t split reactivation between customers back after cancelling and after a pause`;
   } else if (practice.payouts > 0 && practice.paid_on_full_amount) {
     out.basis = 'full_amount';
     out.fromPractice = true;
@@ -3355,7 +3355,7 @@ function returnsPolicy(inp, warnings, notes) {
     out.reactRate = ra === 'expansion_rate' ? 'expansion' : ra === 'new_business_rate' ? 'new_business' : practice.rate_type || null;
     if (!out.reactRate) {
       out.reactShare = null;
-      out.reactReason = '7.23 (rate on winbacks and restarts) is unanswered and the loaded payouts don’t show one';
+      out.reactReason = '7.23 (rate on customers back after cancelling or a pause) is unanswered and the loaded payouts don’t show one';
     } else if (!ra) {
       notes.push(`7.23 unanswered: reactivation uses the ${words(out.reactRate)} rate, as the loaded Reactivation payouts did.`);
     }
@@ -6432,8 +6432,8 @@ function returnPolicyRows(pol, shown, pct) {
   const expPlan = ret.expShare == null ? `not in the plan — ${ret.expReason}` : `${pct(ret.expShare)} of expansion ARR`;
   const basis = v => (v && RETURN_BASIS_LABEL[v] ? RETURN_BASIS_LABEL[v] : null);
   return `
-    <tr><td>7.21 / 7.22 Winbacks / restarts</td><td>${shown(ans['7.21'])} / ${shown(ans['7.22'])}</td><td>Plan: ${basis(ret.basis) ? basis(ret.basis) + '; ' : ''}${reactPlan}</td></tr>
-    <tr><td>7.23 Rate on winbacks and restarts</td><td>${shown(ans['7.23'])}</td><td>Loaded Reactivation payouts: ${(COMMISSION_INPUTS.returns.loaded_practice || {}).payouts || 0} (${fmtM((COMMISSION_INPUTS.returns.loaded_practice || {}).commission || 0)})</td></tr>
+    <tr><td>7.21 / 7.22 Back after cancelling / after a pause</td><td>${shown(ans['7.21'])} / ${shown(ans['7.22'])}</td><td>Plan: ${basis(ret.basis) ? basis(ret.basis) + '; ' : ''}${reactPlan}</td></tr>
+    <tr><td>7.23 Rate on customers back after cancelling or a pause</td><td>${shown(ans['7.23'])}</td><td>Loaded Reactivation payouts: ${(COMMISSION_INPUTS.returns.loaded_practice || {}).payouts || 0} (${fmtM((COMMISSION_INPUTS.returns.loaded_practice || {}).commission || 0)})</td></tr>
     <tr><td>7.24 Expansion after a contraction</td><td>${shown(ans['7.24'])}</td><td>Plan: ${expPlan}</td></tr>
     <tr><td>History behind the shares</td><td colspan="2">${historyBehindShares(hist, react, exp)}</td></tr>`;
 }
@@ -6441,11 +6441,11 @@ function returnPolicyRows(pol, shown, pct) {
 function historyBehindShares(hist, react, exp) {
   const expansion = `expansion ${fmtM(exp.arr || 0)}, of which ${fmtM(exp.above_prior_level_arr || 0)} above customers’ prior level`;
   if (hist.source === 'customer_arr_history') {
-    const wb = react.winbacks || {}, rs = react.restarts || {};
+    const ac = react.after_cancelling || {}, ap = react.after_pause || {};
     return `Customer ARR history ${hist.from}–${hist.to}: ${react.count || 0} returns (${fmtM(react.arr || 0)}) — `
-      + `${wb.count || 0} winbacks (${fmtM(wb.arr || 0)}) and ${rs.count || 0} restarts after a pause (${fmtM(rs.arr || 0)}), `
+      + `${ac.count || 0} after cancelling (${fmtM(ac.arr || 0)}) and ${ap.count || 0} after a pause (${fmtM(ap.arr || 0)}), `
       + `${fmtM(react.above_baseline_arr || 0)} above the ARR customers left with; `
-      + `${react.back_as_new_business || 0} customers back past the winback window booked as new business; ${expansion}.`;
+      + `${react.back_as_new_business || 0} customers back after the restart window booked as new business; ${expansion}.`;
   }
   return `${hist.from ? `Opportunities ${hist.from}–${hist.to}` : 'No opportunities loaded'}: ${react.count || 0} returns (${fmtM(react.arr || 0)}), ${react.with_departure || 0} with a recorded churn; ${expansion}.`;
 }
