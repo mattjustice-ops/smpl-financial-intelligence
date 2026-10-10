@@ -40,6 +40,8 @@ ZERO = Decimal("0")
 COMMISSION_QUESTIONS = ("7.14", "7.15", "7.16", "7.17", "7.18", "7.19", "7.20")
 RETURN_QUESTIONS = ("7.21", "7.22", "7.23", "7.24")
 CLAWBACK_QUESTIONS = ("7.41", "7.42")
+AMOUNT_LABEL = {"full": "full", "prorated": "prorated over the clawback window",
+                "prorated_term": "prorated over the contract term"}
 CLAWED_BACK, WRITTEN_DOWN = "clawed back", "written down"
 OPPORTUNITY_TYPES = {
     "new business": "new_business", "new_business": "new_business", "new": "new_business",
@@ -416,12 +418,16 @@ def _returns(db: Session, org_id: uuid.UUID, answers: dict[str, str], plans: dic
 
 
 def clawback_policy(answers: dict[str, str], plans: dict[str, dict[str, Any]],
-                    clawbacks: list[dict[str, Any]] | None, missing: list[str]) -> dict[str, Any]:
+                    clawbacks: list[dict[str, Any]] | None, missing: list[str],
+                    opportunity_terms: dict[str, int] | None = None) -> dict[str, Any]:
     """Clawback policy (7.41 window, 7.42 amount) against each new-business and expansion plan's
     ``clawback_window_months`` and the loaded ``actual_commission_clawbacks`` rows.
 
     A row is clawed back inside the window (months paid before the customer stopped < window) and written
-    down otherwise. Full recovers the commission paid; prorated recovers paid × (window − months paid) / window.
+    down otherwise. Full recovers the commission paid; prorated recovers paid × (window − months paid) / window;
+    prorated over the term recovers paid × (term − months paid) / term. The term is the row's
+    ``contract_term_months``, else its opportunity's (``opportunity_terms`` by opportunity ID); a row with
+    neither is reported in ``missing`` and not checked.
     """
     window_answer, amount_answer = answers.get("7.41"), answers.get("7.42")
     window = 0 if window_answer == "none" else int(window_answer) if window_answer else None
@@ -471,19 +477,33 @@ def clawback_policy(answers: dict[str, str], plans: dict[str, dict[str, Any]],
                 + (f"; outside the policy: {', '.join(wrong)}" if wrong else ""))
 
     if amount_answer and window and clawed:
-        wrong = []
+        wrong, checked = [], 0
+        label = AMOUNT_LABEL.get(amount_answer, amount_answer)
         for r in clawed:
             paid_amount, recovered = _num(r.get("commission_paid")), _num(r.get("clawback_amount"))
             months_paid = _months(r.get("months_paid_before_stop"))
             if paid_amount is None or recovered is None or months_paid is None:
                 continue
-            expected = paid_amount if amount_answer == "full" else paid_amount * (window - months_paid) / window
+            if amount_answer == "prorated_term":
+                term = _months(r.get("contract_term_months")) or (opportunity_terms or {}).get(
+                    str(r.get("opportunity_id") or ""))
+                if not term:
+                    missing.append(f"actual_commission_clawbacks {r.get('customer_id')}: no contract term on the row "
+                                   f"(contract_term_months) or its opportunity, so the 7.42 amount can't be checked")
+                    continue
+                expected = paid_amount * max(0, term - months_paid) / term
+            elif amount_answer == "prorated":
+                expected = paid_amount * (window - months_paid) / window
+            else:
+                expected = paid_amount
+            checked += 1
             if abs(recovered - expected.quantize(CENT)) >= 1:
                 wrong.append(f"{r.get('customer_id')} recovered {float(recovered):,.2f} of {float(paid_amount):,.2f} "
-                             f"paid ({amount_answer}: {float(expected):,.2f})")
-        add("clawback_amount_vs_policy", "7.42", not wrong,
-            f"7.42 says {amount_answer}; " + (f"recovered differently: {', '.join(wrong)}" if wrong
-                                              else f"{len(clawed)} clawbacks recovered {amount_answer}"))
+                             f"paid ({label}: {float(expected):,.2f})")
+        if checked:
+            add("clawback_amount_vs_policy", "7.42", not wrong,
+                f"7.42 says {label}; " + (f"recovered differently: {', '.join(wrong)}" if wrong
+                                          else f"{checked} clawbacks recovered {label}"))
     return {
         "answers": {q: answers.get(q) for q in CLAWBACK_QUESTIONS},
         "plan_windows": plan_windows,
@@ -521,7 +541,11 @@ def build_plan_inputs(db: Session, org: Organization, as_of: str) -> dict[str, A
     clawback_rows = _rows(db, "actual_commission_clawbacks", org.id)
     if clawback_rows is not None:
         clawback_rows = [r for r in clawback_rows if r.get("period") and to_period(str(r["period"])) <= as_of]
-    clawbacks = clawback_policy(answers, plans, clawback_rows, missing)
+    terms = None
+    if answers.get("7.42") == "prorated_term":
+        terms = {str(o["opportunity_id"]): t for o in _rows(db, "actual_opportunities", org.id) or []
+                 if o.get("opportunity_id") and (t := _months(o.get("contract_term_months")))}
+    clawbacks = clawback_policy(answers, plans, clawback_rows, missing, terms)
     sales = sales_plan(db, org.id, answers, as_of)
     team = sales_team(db, org.id, answers, as_of, sales["measured"])
     chain, tables = _schedule_chain(db, org.id, as_of, missing)

@@ -377,3 +377,69 @@ def test_plan_inputs_report_the_clawback_policy(monkeypatch) -> None:
                                                               "clawback_amount_vs_policy": "pass"}
     # The test plans table has no clawback_window_months column.
     assert "Commission plan PLAN-AE-NEW has no clawback_window_months" in out["missing"]
+
+
+TERM_PRORATED = [  # 12-month contracts: paid × (12 − months paid) / 12
+    {"customer_id": "T0", "commission_paid": "1200.00", "months_paid_before_stop": "0", "treatment": "Clawed back",
+     "clawback_amount": "1200.00", "contract_term_months": "12"},
+    {"customer_id": "T3", "commission_paid": "1200.00", "months_paid_before_stop": "3", "treatment": "Clawed back",
+     "clawback_amount": "900.00", "opportunity_id": "O-T3"},
+]
+
+
+def test_prorated_over_the_term_uses_the_row_or_its_opportunity_term() -> None:
+    out, checks, missing = _claw({"7.41": "6", "7.42": "prorated_term"}, rows=TERM_PRORATED)
+    check = next(c for c in out["checks"] if c["id"] == "clawback_amount_vs_policy")
+    assert check["finding"].endswith("1 clawbacks recovered prorated over the contract term")  # T0 only
+    assert any("T3: no contract term" in m for m in missing)
+
+    from app.services.readiness.commission_plan_inputs import clawback_policy
+    missing = []
+    out = clawback_policy({"7.41": "6", "7.42": "prorated_term"}, CLAW_PLANS, TERM_PRORATED, missing, {"O-T3": 12})
+    check = next(c for c in out["checks"] if c["id"] == "clawback_amount_vs_policy")
+    assert check["status"] == "pass" and missing == []
+    assert check["finding"] == "7.42 says prorated over the contract term; 2 clawbacks recovered prorated over the contract term"
+
+
+def test_prorated_over_the_term_conflicts_with_full_recoveries_after_months_paid() -> None:
+    rows = [dict(r, contract_term_months="12") for r in CLAWBACKS]
+    out, checks, missing = _claw({"7.41": "6", "7.42": "prorated_term"}, rows=rows)
+    assert checks["clawback_amount_vs_policy"] == "conflict" and missing == []
+    finding = next(c["finding"] for c in out["checks"] if c["id"] == "clawback_amount_vs_policy")
+    assert "CUST-0766 recovered 14,386.62 of 14,386.62 paid (prorated over the contract term: 11,988.85)" in finding
+    assert "CUST-0765" not in finding  # 0 months paid: prorated is the full amount
+
+
+def test_clawbacks_with_no_term_on_record_are_missing_not_assumed() -> None:
+    out, checks, missing = _claw({"7.41": "6", "7.42": "prorated_term"})
+    assert "clawback_amount_vs_policy" not in checks
+    assert [m for m in missing if "no contract term" in m] == [
+        "actual_commission_clawbacks CUST-0765: no contract term on the row (contract_term_months) or its "
+        "opportunity, so the 7.42 amount can't be checked",
+        "actual_commission_clawbacks CUST-0766: no contract term on the row (contract_term_months) or its "
+        "opportunity, so the 7.42 amount can't be checked"]
+
+
+def test_plan_inputs_read_the_term_from_the_booking_opportunity(monkeypatch) -> None:
+    import app.services.readiness.evidence as evidence
+    import app.services.readiness.service as service
+    from sqlalchemy import text
+
+    from app.services.readiness.commission_plan_inputs import build_plan_inputs
+
+    monkeypatch.setattr(service, "get_answers",
+                        lambda db, org: SimpleNamespace(answers={"7.41": "6", "7.42": "prorated_term"}))
+    monkeypatch.setattr(evidence, "build_commission_facts", lambda db, org: {"as_of": "2026-06"})
+    db = _db("630.50")
+    db.execute(text("alter table actual_opportunities add column contract_term_months text"))
+    db.execute(text("insert into actual_opportunities values (:o, 'Actual', '2026-01', 'O-T3', 'T3', 'New Business', "
+                    "'Closed Won', '10000', '24')"), {"o": ORG})
+    db.execute(text("create table actual_commission_clawbacks (organization_id text, period text, customer_id text, "
+                    "opportunity_id text, commission_paid text, months_paid_before_stop text, treatment text, "
+                    "clawback_amount text, unamortized_removed text)"))
+    db.execute(text("insert into actual_commission_clawbacks values (:o, '2026-04', 'T3', 'O-T3', '2400.00', '3', "
+                    "'Clawed back', '2100.00', '0')"), {"o": ORG})
+    out = build_plan_inputs(db, SimpleNamespace(id=uuid.UUID(ORG)), "2026-08")
+    checks = {c["id"]: c["status"] for c in out["clawbacks"]["checks"]}
+    assert checks["clawback_amount_vs_policy"] == "pass"  # 2,400 × (24 − 3) / 24
+    assert not any("no contract term" in m for m in out["missing"])
