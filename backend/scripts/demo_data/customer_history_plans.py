@@ -48,9 +48,12 @@ BOOKED = {"New Business": "Closed Won", "Expansion": "Closed Won", "Reactivation
           "Contraction": "Contraction", "Churn": "Churn"}
 CANCELLED, PAUSED = "cancelled", "paused"
 CANCELLED_SHARE = Decimal("0.20")
-# Text of the history ``note`` column ("<word> after N months away"): it is in the built files and loaded data,
-# so changing it changes the dataset.
-RETURN_NOTE = {CANCELLED: "winback", PAUSED: "restart"}
+RETURN_NOTE = {CANCELLED: "back after cancelling", PAUSED: "back after a pause"}
+
+
+def return_note(kind: str, months_away: int) -> str:
+    """The history ``note`` on a Reactivation; the tie-out reads it to split returns by how the customer left."""
+    return f"{RETURN_NOTE[kind]}, {months_away} months away"
 CONTRACTION_CAP = Decimal("0.6")
 FORECAST_RENEWAL_PROBABILITY = Decimal("0.95")
 SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
@@ -359,7 +362,7 @@ def simulate_budget(org: str, info: dict, opening: dict[str, Decimal], open_peri
             c, kind = s.returner(p, o, kinds[o["opportunity_id"]])
             dp = s.departed.pop(c)[1]
             h.move(p, c, "Reactivation", num(o["amount_arr"]), o["opportunity_id"],
-                   f"{RETURN_NOTE[kind]} after {pidx(p) - pidx(dp)} months away")
+                   return_note(kind, pidx(p) - pidx(dp)))
             s.assign[o["opportunity_id"]] = c
             s.no_more.add(c)
             counts[kind] += 1
@@ -463,8 +466,7 @@ def simulate_forecast(org: str, info: dict, opening: dict[str, Decimal], open_pe
             c, kind = s.returner(p, o, kinds[o["opportunity_id"]])
             dp = s.departed.pop(c)[1]
             h.move(p, c, "Reactivation", num(o["weighted_arr"]), o["opportunity_id"],
-                   f"{RETURN_NOTE[kind]} after {pidx(p) - pidx(dp)} months away", num(o["probability"]),
-                   num(o["amount_arr"]))
+                   return_note(kind, pidx(p) - pidx(dp)), num(o["probability"]), num(o["amount_arr"]))
             s.assign[o["opportunity_id"]] = c
             s.no_more.add(c)
             counts[kind] += 1

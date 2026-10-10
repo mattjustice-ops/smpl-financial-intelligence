@@ -51,7 +51,7 @@ from decimal import Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_v5_dataset import ZERO, Dataset, allocate, last_day, num, padd, pidx, prange, q, write  # noqa: E402
 from customer_history_plans import (CANCELLED, CANCELLED_SHARE, EXPECTED_FIELDS, HISTORY_FIELDS,  # noqa: E402
-                                    PAUSED, RETURN_NOTE, FORECAST_RENEWAL_PROBABILITY, History, actual_renewals, forecast_deals, pick,
+                                    PAUSED, FORECAST_RENEWAL_PROBABILITY, return_note, History, actual_renewals, forecast_deals, pick,
                                     prospect_segments, renewal_commissions, renewal_rows, segment_for, signing_arr,
                                     simulate_budget, simulate_forecast, tie, tie_budget_deals, u, waterfall)
 from add_implementation_revenue import FEE_BY_SEGMENT  # noqa: E402
@@ -287,7 +287,7 @@ def build(src: str, dst: str) -> list[str]:
         used.add(c)
         r["customer"] = c
         kind = "Churn" if r["kind"] == CANCELLED else "Pause"
-        note = f"{RETURN_NOTE[r['kind']]} after {r['months_away']} months away"
+        note = return_note(r["kind"], r["months_away"])
         if r["departed"] >= FIRST:
             opening[c] = r["baseline"]
             departures[r["departed"]].append((c, kind, r["baseline"], ""))
