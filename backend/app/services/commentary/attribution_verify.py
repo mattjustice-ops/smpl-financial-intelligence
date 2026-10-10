@@ -1035,9 +1035,30 @@ def build_attribution_package_from_commentary_inputs(
             ("dso_days", "DSO", "working_capital.dso.days", ("dso", "days sales outstanding")),
             ("late_vendor_payments", "Late vendor payments", "working_capital.late_vendor_payments.count",
              ("late vendor payments", "late payments")),
+            ("late_customer_payments", "Late customer payments", "working_capital.late_customer_payments.count",
+             ("late customer payments", "customers paid late")),
+            ("allowance_for_doubtful_accounts", "Allowance for doubtful accounts", "working_capital.allowance.balance",
+             ("allowance for doubtful accounts", "bad debt reserve", "allowance")),
+            ("bad_debt_expense", "Bad debt expense", "working_capital.bad_debt.expense",
+             ("bad debt expense", "bad debt", "provision for credit losses")),
+            ("ar_write_offs", "AR write-offs", "working_capital.write_offs.amount",
+             ("write-offs", "written off", "write-off")),
         ):
             if wc.get(key) is not None:
                 drivers.append(_driver(key, label, amount=wc.get(key), source=source, aliases=aliases))
+        for case in wc.get("collections_cases") or []:
+            if not isinstance(case, Mapping) or not str(case.get("name") or "").strip():
+                continue
+            name = str(case["name"]).strip()
+            drivers.append(
+                _driver(
+                    _slug(f"collections {name}"),
+                    name,
+                    amount=case.get("amount"),
+                    source=f"working_capital.collections_cases.{_slug(name)}",
+                    aliases=(name.lower(), str(case.get("label") or "").lower()),
+                )
+            )
         for field_name, kind in (("past_due_vendors", "vendor"), ("past_due_customers", "customer")):
             for party in wc.get(field_name) or []:
                 if not isinstance(party, Mapping) or not str(party.get("name") or "").strip():
