@@ -120,6 +120,76 @@ def test_commission_cash_without_payouts_shows_expense_only_and_says_so(monkeypa
     assert res.message == svc.COMMISSION_EXPENSE_NOTE
 
 
+def _vendor_db():
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    session = Session(create_engine("sqlite://"))
+    session.execute(text("create table actual_vendor_payments (organization_id text, vendor_payment_id text, "
+                         "period text, vendor_id text, vendor_name text, expense_category text, payment_date text, "
+                         "amount text, bill_id text, due_date text, payment_method text, days_past_due text)"))
+    payments = [
+        ("VP-1", "2026-06", "Amazon Web Services", "Cloud Infrastructure", "2026-06-04", "1200.00", "B-1",
+         "2026-06-04", "ACH", "0"),
+        ("VP-2", "2026-06", "Summit Events Group", "Events and Webinars", "2026-06-18", "500.00", "B-2",
+         "2026-06-01", "Check", "17"),
+        ("VP-3", "2026-06", "Brennan Cole LLP", "Legal", "2026-06-25", "300.00", "B-3", "2026-06-20", "ACH", "5"),
+        ("VP-4", "2026-05", "Summit Events Group", "Events and Webinars", "2026-07-02", "50.00", "B-4",
+         "2026-06-30", "Check", "2"),
+        ("VP-5", "2026-05", "Datadog", "Software", "2026-05-28", "999.00", "B-5", "2026-05-28", "Card", "0"),
+    ]
+    for row in payments:
+        session.execute(text("insert into actual_vendor_payments values (:o, :id, :p, 'V', :n, :c, :pd, :a, :b, "
+                             ":due, :m, :late)"),
+                        dict(zip(("id", "p", "n", "c", "pd", "a", "b", "due", "m", "late"), row), o=ORG))
+    return session
+
+
+def test_vendor_cash_drills_into_payments_by_payment_date_and_flags_late() -> None:
+    import uuid
+
+    from app.services.dashboard.cash_flow_gl_drilldown_service import cash_flow_drilldown
+
+    res = cash_flow_drilldown(_vendor_db(), uuid.UUID(ORG), scenario="Actual", period="2026-06",
+                              waterfall_type="vendor_cash_out", expected_amount=Decimal("-2000.00"))
+    assert sorted(line.account_name for line in res.lines) == ["Bill B-1", "Bill B-2", "Bill B-3"]
+    assert {line.detail_type for line in res.lines} == {"payment"}
+    assert res.signed_total == Decimal("-2000.00")
+    assert [v.status for v in res.validation] == ["pass"]
+    late = {line.vendor_name: line.days_past_due for line in res.lines}
+    assert late == {"Amazon Web Services": 0, "Summit Events Group": 17, "Brennan Cole LLP": 5}
+    summit = next(line for line in res.lines if line.vendor_name == "Summit Events Group")
+    assert summit.notes == "paid 2026-06-18; due 2026-06-01; 17 days late; Check"
+    assert res.message == ("2 of 3 vendor payments in 2026-06 were past due ($800, up to 17 days late): "
+                           "Summit Events Group, Brennan Cole LLP.")
+
+    july = cash_flow_drilldown(_vendor_db(), uuid.UUID(ORG), scenario="Actual", period="2026-07",
+                               waterfall_type="vendor_cash_out")
+    assert [line.account_name for line in july.lines] == ["Bill B-4"]
+
+    on_time = cash_flow_drilldown(_vendor_db(), uuid.UUID(ORG), scenario="Actual", period="2026-05",
+                                  waterfall_type="vendor_cash_out", expected_amount=Decimal("-1500.00"))
+    assert on_time.message is None
+    assert [v.status for v in on_time.validation] == ["fail"]
+
+
+def test_vendor_cash_without_payments_falls_back_to_gl_and_says_so(monkeypatch) -> None:
+    import uuid
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.services.dashboard import cash_flow_gl_drilldown_service as svc
+
+    hosting = _entry(account_number="6410", account_name="Cloud Infrastructure", account_group="Hosting",
+                     department="G&A", expense_type="Vendor", amount=Decimal("-700"))
+    monkeypatch.setattr(svc, "_load_gl_entries_for_cell", lambda *_a, **_k: [(hosting, {"vendor_name": "AWS"})])
+    res = svc.cash_flow_drilldown(Session(create_engine("sqlite://")), uuid.UUID(ORG), scenario="Budget",
+                                  period="2026-09", waterfall_type="vendor_cash_out")
+    assert [(line.account_number, line.detail_type) for line in res.lines] == [("6410", "gl")]
+    assert res.message == svc.VENDOR_EXPENSE_NOTE
+
+
 def test_gl_entry_matches_revenue_collections() -> None:
     entry = _entry(
         account_number="4000",

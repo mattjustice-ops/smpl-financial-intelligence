@@ -334,6 +334,7 @@ type CashFlowDrilldownLine = {
   source_table: string;
   detail_type: string;
   notes?: string | null;
+  days_past_due?: number | null;
 };
 
 type CashFlowDrilldownResponse = {
@@ -1973,8 +1974,14 @@ export function CashFlowWaterfallTable({
                 : "Detail line sum differs from the bridge cell — bridge totals come from cash_flow_bridge CSV; GL lines are indicative composition."}
             </div>
           )}
-          {drilldown && !drilldown.drilldown_available && drilldown.message && (
-            <div style={{ color: "var(--muted)" }}>{drilldown.message}</div>
+          {drilldown && drilldown.message && (
+            <div
+              style={
+                drilldown.lines.some((line) => (line.days_past_due ?? 0) > 0) ? warningBox : { color: "var(--muted)" }
+              }
+            >
+              {drilldown.message}
+            </div>
           )}
           {drilldown && drilldown.lines.length > 0 && (
             <div style={{ overflowX: "auto" }}>
@@ -1990,7 +1997,10 @@ export function CashFlowWaterfallTable({
                 </thead>
                 <tbody>
                   {drilldown.lines.map((line, i) => (
-                    <tr key={`${line.source_table}-${i}`}>
+                    <tr
+                      key={`${line.source_table}-${i}`}
+                      style={(line.days_past_due ?? 0) > 0 ? { background: "#fff7ed" } : undefined}
+                    >
                       <td style={td}>
                         {line.account_number ? `${line.account_number} ` : ""}
                         {line.account_name ?? ""}
