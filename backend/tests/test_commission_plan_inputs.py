@@ -223,8 +223,8 @@ def test_customer_arr_history_measures_returns_with_every_departure_on_record(no
     assert (react["count"], react["arr"], react["with_departure"], react["arr_with_departure"]) == (2, 170.0, 2, 170.0)
     assert react["above_baseline_arr"] == 20.0
     assert react["above_baseline_share"] == pytest.approx(20 / 170)
-    assert react["winbacks"] == {"count": 1, "arr": 120.0}
-    assert react["restarts"] == {"count": 1, "arr": 50.0}
+    assert react["after_cancelling"] == {"count": 1, "arr": 120.0}
+    assert react["after_pause"] == {"count": 1, "arr": 50.0}
     assert react["back_as_new_business"] == 1
     assert (hist["expansion"]["arr"], hist["expansion"]["above_prior_level_arr"]) == (70.0, 40.0)
     assert "bases" not in hist
@@ -237,8 +237,8 @@ def test_customer_arr_history_measures_returns_with_every_departure_on_record(no
 
 @pytest.mark.parametrize(("answer", "payout_base", "conflict"), [
     ("above_prior_arr", "20", None),
-    ("above_prior_arr", "35", "restarts_above_prior_arr_vs_payouts"),
-    ("full_amount", "20", "restarts_full_amount_vs_payouts"),
+    ("above_prior_arr", "35", "pause_returns_above_prior_arr_vs_payouts"),
+    ("full_amount", "20", "pause_returns_full_amount_vs_payouts"),
     ("full_amount", "120", None),
 ])
 def test_return_answers_are_checked_against_the_payout_base(monkeypatch, answer, payout_base, conflict) -> None:
@@ -265,11 +265,24 @@ def test_return_answers_that_contradict_the_loaded_payouts_are_conflicts(monkeyp
     r = out["returns"]
     assert r["answers"] == answers
     assert {c["id"]: c["status"] for c in r["checks"]} == {
-        "winbacks_not_paid_vs_payouts": "conflict",
-        "restarts_above_prior_arr_vs_payouts": "conflict",
+        "cancel_returns_not_paid_vs_payouts": "conflict",
+        "pause_returns_above_prior_arr_vs_payouts": "conflict",
         "return_rate_vs_payouts": "conflict",
     }
     assert "1 commissions ($18)" in r["checks"][0]["finding"]
+    assert r["checks"][0]["finding"].startswith("7.21 says customers back after cancelling are not paid")
+    assert "customers back after a pause" in r["checks"][1]["finding"]
+
+
+def test_return_questions_name_how_the_customer_left_not_the_waterfall_line() -> None:
+    from app.services.readiness.registry import COMMISSION_POLICY_GATE
+
+    prompts = {q.id: q.prompt for q in COMMISSION_POLICY_GATE}
+    assert "cancelling" in prompts["7.21"] and "restart window (4.10)" in prompts["7.21"]
+    assert "pause of any length" in prompts["7.22"]
+    assert "cancelling or a pause" in prompts["7.23"]
+    for q in ("7.21", "7.22", "7.23"):
+        assert "winbacks" not in prompts[q].lower() and "restarts" not in prompts[q].lower()
 
 
 def test_no_opportunities_loaded_is_reported_not_assumed(no_answers) -> None:

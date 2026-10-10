@@ -346,10 +346,15 @@ COMMISSION_POLICY_GATE: tuple[Question, ...] = (
     Question("7.20", "commission_policy", "System of record for commission payouts",
              ("comp_tool", "payroll_export", "spreadsheet", "none")),
     Question("7.21", "commission_policy",
-             "Commissions on winbacks (a customer who ended their contract returns within the restart window, 4.10)",
+             "Commissions on a customer back after cancelling, within the restart window (4.10): a Reactivation, or "
+             "a New Business winback if it left in its New Business period; a later return is paid as new business",
              RETURN_COMMISSION),
-    Question("7.22", "commission_policy", "Commissions on restarts after a pause", RETURN_COMMISSION),
-    Question("7.23", "commission_policy", "Rate paid on commissionable winback and restart ARR",
+    Question("7.22", "commission_policy",
+             "Commissions on a customer back after a pause of any length (a pause past the restart window is a New "
+             "Business winback in the ARR waterfall, but its commission follows this answer)",
+             RETURN_COMMISSION),
+    Question("7.23", "commission_policy",
+             "Rate paid on commissionable ARR from customers back after cancelling or a pause (7.21, 7.22)",
              ("new_business_rate", "expansion_rate")),
     Question("7.24", "commission_policy",
              "Commissions on expansion after a contraction (only above the customer's prior level, or all of it)",
