@@ -364,8 +364,9 @@ COMMISSION_POLICY_GATE: tuple[Question, ...] = (
              "customer stops paying or cancels within this many months of the booking",
              CLAWBACK_WINDOW),
     Question("7.42", "commission_policy",
-             "Commission recovered on a clawback: all of it, or prorated for the months the customer paid",
-             ("full", "prorated")),
+             "Commission recovered on a clawback: all of it, prorated over the clawback window for the months the "
+             "customer paid, or prorated over the contract term",
+             ("full", "prorated", "prorated_term")),
 )
 
 ATTAINMENT_PCT = tuple(str(p) for p in range(50, 125, 5))
