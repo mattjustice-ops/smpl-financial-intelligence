@@ -28,12 +28,18 @@ CASH_FLOOR = Decimal("10000000")
 DEFERRED_REVENUE_CAP = Decimal("10000000")
 CENTS = Decimal("0.02")
 REVENUE_ACCOUNTS = {"4000": "Subscription", "4100": "Implementation & Onboarding", "4200": "Recurring Services"}
-BS_ACCOUNTS = {"1000": ("cash", 1), "1100": ("accounts_receivable", 1), "1200": ("prepaids_and_other_current", 1),
+BS_ACCOUNTS = {"1000": ("cash", 1), "1100": ("accounts_receivable", 1), "1110": ("accounts_receivable", 1),
+               "1200": ("prepaids_and_other_current", 1),
                "1250": ("deferred_commissions_current", 1), "1500": ("ppe_net", 1),
                "1550": ("deferred_commissions_noncurrent", 1), "1600": ("other_assets", 1),
                "2000": ("accounts_payable", -1), "2050": ("other_liabilities", -1), "2060": ("other_liabilities", -1),
                "2100": ("deferred_revenue", -1), "2500": ("debt", -1), "2600": ("other_liabilities", -1)}
 BS_COLUMNS = {name: sign for name, sign in BS_ACCOUNTS.values()}
+ALLOWANCE_ACCOUNT, BAD_DEBT_ACCOUNT = "1110", "6560"
+# P&L accounts that can be negative in a month: the provision for credit losses is a release when the allowance falls.
+ESTIMATE_ACCOUNTS = {BAD_DEBT_ACCOUNT}
+NO_START, NON_PAYMENT = "No-start", "Non-payment"
+CASE_SHARE_CAP = Decimal("0.01")
 CFO_LINES = ("net_income", "depreciation_and_amortization", "stock_based_compensation", "other_non_cash",
              "change_in_accounts_receivable", "change_in_accounts_payable", "change_in_deferred_revenue",
              "change_in_prepaids", "change_in_other_liabilities", "change_in_deferred_commissions")
@@ -46,6 +52,10 @@ ADDED_COLUMNS = {
     "_Employees.csv": ("cost_center", "termination_type", "pay_plan", "bonus_target_pct", "retirement_deferral_pct"),
     "_SBC_Schedule.csv": ("headcount",),
     "_vendor_payments.csv": ("bill_id", "due_date", "payment_method", "days_past_due"),
+    "_accounts_receivable_rollforward.csv": ("write_offs",),
+    "_customer_arr_history.csv": ("churn_type",),
+    "_deferred_commissions_rollforward.csv": ("clawbacks", "clawback_amortization_reversal", "commission_write_downs"),
+    "_invoices.csv": ("payment_date",),
 }
 # Files whose v4 layout is replaced by the vendor subledger (vendor_model.py) and the grants-based SBC schedule.
 REPLACED_LAYOUTS = {
@@ -302,7 +312,8 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
             d, a = dr[p], ar[p]
             if abs(num(d["beginning_deferred_revenue"]) + num(d["new_billings"]) - num(d["revenue_recognized"]) - num(d["ending_deferred_revenue"])) > CENTS:
                 diffs.append(f"{p}: deferred revenue waterfall does not roll")
-            if abs(num(a["beginning_accounts_receivable"]) + num(a["new_billings"]) - num(a["cash_collections"]) - num(a["ending_accounts_receivable"])) > CENTS:
+            if abs(num(a["beginning_accounts_receivable"]) + num(a["new_billings"]) - num(a["cash_collections"])
+                   - num(a.get("write_offs")) - num(a["ending_accounts_receivable"])) > CENTS:
                 diffs.append(f"{p}: AR rollforward does not roll")
             if prev_dr is not None and abs(num(d["beginning_deferred_revenue"]) - prev_dr) > CENTS:
                 diffs.append(f"{p}: deferred revenue beginning {money(num(d['beginning_deferred_revenue']))} vs prior ending {money(prev_dr)}")
@@ -315,20 +326,25 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                         {p: bs_line(v, p, "deferred_revenue") for p in ms}, ms)
         diffs += compare("waterfall revenue vs GL revenue", {p: num(dr[p]["revenue_recognized"]) for p in ms},
                          {p: pl[v][p]["revenue"] for p in ms}, ms)
-        diffs += compare("AR rollforward vs GL 1100", {p: num(ar[p]["ending_accounts_receivable"]) for p in ms},
-                         {p: bs_line(v, p, "accounts_receivable") for p in ms}, ms)
+        diffs += compare("AR rollforward vs GL 1100 (gross)", {p: num(ar[p]["ending_accounts_receivable"]) for p in ms},
+                         {p: bs_line(v, p, "1100") for p in ms}, ms)
         rep.check(f"{v} deferred revenue and AR ending balances = GL", diffs)
 
+        # Invoices issued before 2024 are paid by Apr 2024 (latest due date + the slowest payment habit).
         carried = [r for r in sched_all["Actual"] if not start or r["period"][:7] < start] if v != "Actual" else []
         collect = sums(sched_all[v] + carried, "collection_period", "billings")
-        check_ms = [p for p in ms if p >= "2024-03"]
-        diffs = compare("collections vs invoices due", {p: num(ar[p]["cash_collections"]) for p in check_ms}, collect, check_ms)
-        rep.check(f"{v} cash collections = invoices by collection month (due date + 7 days)", diffs)
+        check_ms = [p for p in ms if p >= "2024-05"]
+        diffs = compare("collections vs invoices paid", {p: num(ar[p]["cash_collections"]) for p in check_ms}, collect, check_ms)
+        rep.check(f"{v} cash collections = invoices by collection month (Actual: payment date; Budget and Forecast "
+                  f"invoices: due date + 7 days)", diffs)
         if v == "Actual":
-            pre = sum((num(ar[p]["cash_collections"]) - collect.get(p, ZERO) for p in ms if p < "2024-03"), ZERO)
+            pre = sum((num(ar[p]["cash_collections"]) - collect.get(p, ZERO) for p in ms if p < "2024-05"), ZERO)
             opening = num(ar[ms[0]]["beginning_accounts_receivable"])
-            rep.check("Actual Jan-Feb 2024 collections of invoices issued before 2024 = opening AR",
+            rep.check("Actual Jan-Apr 2024 collections of invoices issued before 2024 = opening AR",
                       [] if abs(pre - opening) <= CENTS else [f"{money(pre)} vs {money(opening)}"], money(opening))
+
+    if os.path.exists(os.path.join(v5, "Actual_allowance_for_doubtful_accounts.csv")):
+        collections_checks(rep, f, v4, months, bs_line, gl)
 
     # ------------------------------------------------------------------ cash flow
     rep.section("Cash flow statement, cash collections, cash bridge")
@@ -895,9 +911,11 @@ def payroll_section(rep: Report, f, gl, emps, on_staff, ramp) -> None:
             line = "COGS" if cat == "Cost of Revenue" else EXPENSE_LINES[r["department"]]
             other[(r["period"][:7], line)] += num(r["amount"])
             accounts[(r["period"][:7], line, r["account_number"])] += num(r["amount"])
-        neg = [f"{p} {line} {a}: {money(x)}" for (p, line, a), x in sorted(accounts.items()) if x < 0]
+        neg = [f"{p} {line} {a}: {money(x)}" for (p, line, a), x in sorted(accounts.items())
+               if x < 0 and a not in ESTIMATE_ACCOUNTS]
         low = {line: min((x, p) for (p, l_), x in other.items() if l_ == line) for line in sorted({l_ for _, l_ in other})}
-        rep.check(f"{v} every P&L line keeps positive non-payroll spend (each account, every month)", neg,
+        rep.check(f"{v} every P&L line keeps positive non-payroll spend (each account, every month; bad debt "
+                  f"{BAD_DEBT_ACCOUNT} can be a release)", neg,
                   "lowest month: " + ", ".join(f"{line} {money(x)} ({p})" for line, (x, p) in low.items()))
 
         coa = {r["account_number"]: r["account_name"] for r in f(f"{v}_chart_of_accounts.csv")}
@@ -972,7 +990,172 @@ def _padd(p: str, n: int) -> str:
     return f"{i // 12}-{i % 12 + 1:02d}"
 
 
-def _cum_amortization(cohorts: dict[str, list[tuple[Decimal, int]]], through: str, paid_through: str | None = None) -> Decimal:
+def collections_checks(rep: Report, f, prior_dir: str, months: dict[str, list[str]], bs_line, gl) -> None:
+    """Customer payments, AR aging, the allowance for doubtful accounts, write-offs, collections cases and the
+    no-start commission clawbacks against each other, the AR rollforward, the ARR history and the GL."""
+    rep.section("Collections, allowance for doubtful accounts, write-offs")
+    bad_debt = {v: defaultdict(Decimal) for v in VERSIONS}
+    for v in VERSIONS:
+        for r in gl[v]:
+            if r["account_number"] == BAD_DEBT_ACCOUNT:
+                bad_debt[v][r["period"][:7]] += num(r["amount"])
+    allow = {v: {r["period"][:7]: r for r in f(f"{v}_allowance_for_doubtful_accounts.csv")} for v in VERSIONS}
+    for v in VERSIONS:
+        ar = {r["period"][:7]: r for r in f(f"{v}_accounts_receivable_rollforward.csv")}
+        bs = {r["period"][:7]: r for r in f(f"{v}_balance_sheet.csv")}
+        start = CHAIN_FROM_ACTUAL.get(v)
+        prev = num(allow["Actual"][prior(start)]["ending_allowance"]) if start else None
+        diffs = []
+        for p in months[v]:
+            a = allow[v].get(p)
+            if a is None:
+                diffs.append(f"{p}: no allowance row")
+                continue
+            begin, prov, wo, end = (num(a[k]) for k in ("beginning_allowance", "provision_for_credit_losses",
+                                                        "write_offs", "ending_allowance"))
+            reserves = sum((num(a[k]) for k in a if k.startswith("reserve_")), ZERO) + num(a["specific_reserve"])
+            checks = (("rolls", begin + prov - wo, end), ("reserves add to ending", reserves, end),
+                      ("write-offs = AR rollforward", wo, num(ar[p].get("write_offs"))),
+                      ("gross AR = AR rollforward", num(a["gross_accounts_receivable"]),
+                       num(ar[p]["ending_accounts_receivable"])),
+                      ("net AR = gross - allowance", num(a["net_accounts_receivable"]),
+                       num(a["gross_accounts_receivable"]) - end),
+                      ("net AR = balance sheet file", num(a["net_accounts_receivable"]), num(bs[p]["accounts_receivable"])),
+                      ("GL 1110 = ending allowance", -bs_line(v, p, ALLOWANCE_ACCOUNT), end),
+                      ("GL 6560 = provision", bad_debt[v][p], prov))
+            if prev is not None:
+                checks += (("beginning = prior ending", begin, prev),)
+            diffs += [f"{p} {name}: {money(x)} vs {money(y)}" for name, x, y in checks if abs(x - y) > CENTS]
+            prev = end
+        last = allow[v][months[v][-1]]
+        rep.check(f"{v} allowance for doubtful accounts rolls (beginning + provision - write-offs), is the aged "
+                  f"reserves plus specific reserves, and ties to the AR rollforward, the balance sheet's net AR, GL "
+                  f"{ALLOWANCE_ACCOUNT} and GL {BAD_DEBT_ACCOUNT}" + (f", from Actual {prior(start)}" if start else ""),
+                  diffs, f"{months[v][-1]}: {money(num(last['ending_allowance']))} on gross AR "
+                         f"{money(num(last['gross_accounts_receivable']))}; provision "
+                         f"{money(sum(bad_debt[v].values(), ZERO))}")
+
+    ms = months["Actual"]
+    ar = {r["period"][:7]: r for r in f("Actual_accounts_receivable_rollforward.csv")}
+    invoices = {r["invoice_id"]: r for r in f("Actual_invoices.csv")}
+    pays = f("Actual_customer_payments.csv")
+    diffs = compare("payments vs AR collections", sums(pays, "period", "amount"),
+                    {p: num(ar[p]["cash_collections"]) for p in ms}, ms)
+    seen = Counter(r["invoice_id"] for r in pays)
+    diffs += [f"{i}: paid {n} times" for i, n in seen.items() if n > 1]
+    pre = 0
+    for r in pays:
+        inv = invoices.get(r["invoice_id"])
+        if inv is None:
+            if r["invoice_date"] >= f"{ms[0]}-01":
+                diffs.append(f"{r['customer_payment_id']}: invoice {r['invoice_id']} not in Actual_invoices.csv")
+            pre += 1
+            continue
+        if num(r["amount"]) != num(inv["invoice_amount"]) or r["payment_date"] != inv["payment_date"] \
+                or inv["payment_status"] != "Paid" or r["payment_date"] < inv["invoice_date"]:
+            diffs.append(f"{r['customer_payment_id']}: amount, date or status differs from {r['invoice_id']}")
+    rep.check("Actual customer payments = AR collections every month; one payment per invoice, matching the invoice's "
+              "amount, payment date and Paid status", diffs,
+              f"{len(pays)} payments ({pre} of invoices issued before {ms[0]})")
+
+    aging = f("Actual_AR_Aging.csv")
+    buckets = ("current", "days_1_30", "days_31_60", "days_61_90", "days_over_90")
+    diffs = compare("aging vs AR rollforward", sums(aging, "period", "total"),
+                    {p: num(ar[p]["ending_accounts_receivable"]) for p in ms}, ms)
+    diffs += [f"{r['period']} {r['customer_id']}: buckets do not add to total" for r in aging
+              if abs(sum((num(r[b]) for b in buckets), ZERO) - num(r["total"])) > CENTS]
+    over90 = {p: x for p, x in sums(aging, "period", "days_over_90").items()}
+    rep.check("Actual AR aging = gross AR (AR rollforward) every month, buckets add up", diffs,
+              f"over 90 days at {ms[-1]}: {money(over90.get(ms[-1], ZERO))}")
+
+    cases = f("Actual_collections_cases.csv")
+    hist = f(HISTORY_FILE)
+    customers = f("Actual_customers.csv")
+    written = sum((num(r["write_offs"]) for r in ar.values()), ZERO)
+    diffs = []
+    by_case = sum((num(r["written_off_amount"]) for r in cases), ZERO)
+    by_inv = sum((num(r["invoice_amount"]) for r in invoices.values() if r["payment_status"] == "Written Off"), ZERO)
+    if abs(written - by_case) > CENTS or abs(written - by_inv) > CENTS:
+        diffs.append(f"AR write-offs {money(written)}, cases {money(by_case)}, written-off invoices {money(by_inv)}")
+    churn_cases = {(r["customer_id"], r["left_arr_history"]): r for r in cases if r["case_type"] in (NO_START, NON_PAYMENT)}
+    typed = {(r["customer_id"], r["period"][:7]): r for r in hist if r.get("churn_type")}
+    diffs += [f"{c} {p}: churn_type {typed[(c, p)]['churn_type']} without a collections case"
+              for c, p in sorted(set(typed) - set(churn_cases))]
+    diffs += [f"{c} {p}: {churn_cases[(c, p)]['case_type']} case without a churn_type row" for c, p in sorted(set(churn_cases) - set(typed))]
+    start = {r["customer_id"]: r["customer_start_date"][:7] for r in customers}
+    for (c, p), r in sorted(churn_cases.items()):
+        t = typed.get((c, p))
+        if t is None:
+            continue
+        if t["churn_type"] != r["case_type"] or t["movement_type"] != "Churn" or num(t["ending_arr"]) != 0:
+            diffs.append(f"{c} {p}: history row {t['movement_type']} {t['churn_type']} vs case {r['case_type']}")
+        tenure = _pidx(p) - _pidx(start[c])
+        if (r["case_type"] == NO_START) != (tenure < 12):
+            diffs.append(f"{c} {p}: {r['case_type']} after {tenure} months (no-start = inside the first year)")
+        if any(h["customer_id"] == c and h["period"][:7] > p for h in hist):
+            diffs.append(f"{c}: back in the ARR history after leaving for {r['case_type'].lower()}")
+    share = Decimal(len(cases)) / Decimal(len(customers))
+    if share > CASE_SHARE_CAP:
+        diffs.append(f"{len(cases)} cases are {share:.2%} of {len(customers)} customers (cap {CASE_SHARE_CAP:.0%})")
+    rep.check("write-offs = the collections cases = written-off invoices; every no-start / non-payment churn in the "
+              "ARR history has its case (no-start inside the first year, non-payment after) and never returns; cases "
+              f"are at most {CASE_SHARE_CAP:.0%} of customers", diffs,
+              f"{len(cases)} cases ({share:.2%} of {len(customers)} customers): "
+              + ", ".join(f"{k} {n}" for k, n in sorted(Counter(r['case_type'] for r in cases).items()))
+              + f"; written off {money(written)}")
+
+    act = f("Actual_collections_activity.csv")
+    diffs = []
+    for r in cases:
+        kinds = {a["activity"] for a in act if a["customer_id"] == r["customer_id"] and a["case_type"] == r["case_type"]}
+        need = {"Service suspended"} if r["case_type"] in (NO_START, NON_PAYMENT) else set()
+        if r["written_off_date"]:
+            need.add("Written off")
+        if r["case_type"] == "Recovered after escalation":
+            need |= {"Payment plan agreed", "Paid"}
+        if r["case_type"] == "In dispute at close":
+            need.add("Dispute opened")
+        diffs += [f"{r['customer_id']} {r['case_type']}: no '{k}' step" for k in sorted(need - kinds)]
+    for a in act:
+        inv = invoices.get(a["invoice_id"])
+        if inv and inv["payment_date"] and a["activity"] != "Paid" and a["activity_date"] >= inv["payment_date"]:
+            diffs.append(f"{a['collection_activity_id']}: {a['activity']} on {a['activity_date']} after payment "
+                         f"{inv['payment_date']}")
+    rep.check("dunning log: every case reaches its suspension / write-off / payment plan / dispute steps; no reminder "
+              "after the invoice is paid", diffs, f"{len(act)} steps")
+
+    claws = f("Actual_commission_clawbacks.csv")
+    ns = {r["customer_id"]: r for r in cases if r["case_type"] == NO_START}
+    nb = {(r["customer_id"], r["period"][:7]): num(r["movement_arr"]) for r in hist if r["movement_type"] == "New Business"}
+    diffs = [f"{c}: no-start without a commission clawback / write-down row" for c in sorted(set(ns) - {r["customer_id"] for r in claws})]
+    for r in claws:
+        case = ns.get(r["customer_id"])
+        if case is None:
+            diffs.append(f"{r['customer_id']}: clawback row but no no-start case")
+            continue
+        paid = _pidx(case["first_unpaid_period"]) - _pidx(case["booked_period"])
+        inside = paid < int(r["clawback_window_months"])
+        if r["booked_period"] != case["booked_period"] or r["period"][:7] != case["left_arr_history"] \
+                or int(r["months_paid_before_stop"]) != paid or (r["treatment"] == "Clawed back") != inside \
+                or num(r["commission_base_arr"]) != nb.get((r["customer_id"], case["booked_period"])):
+            diffs.append(f"{r['customer_id']}: clawback row vs case / history (paid {paid} months, "
+                         f"window {r['clawback_window_months']}, treatment {r['treatment']})")
+    rep.check("no-start commissions: clawed back only when payment stopped inside the plan's clawback window, else "
+              "written down; base = the no-start's new business ARR; in the month it leaves", diffs,
+              "; ".join(f"{r['customer_id']} {r['treatment']} {money(num(r['commission_paid']))}" for r in claws))
+
+    prior_wf = {r["period"][:7]: r for r in read(os.path.join(prior_dir, "Actual_MRR_Waterfall.csv"))[1]}
+    cols = ("beginning_arr", "new_business_arr", "expansion_arr", "reactivation_arr", "contraction_arr", "churn_arr",
+            "ending_arr")
+    diffs = [f"{r['period'][:7]} {k}" for r in f("Actual_MRR_Waterfall.csv") if r["period"][:7] in prior_wf
+             for k in cols if num(r[k]) != num(prior_wf[r["period"][:7]][k])]
+    rep.check("Actual ARR waterfall unchanged by the collections cases (no-starts are inside new business and churn)",
+              diffs)
+
+
+def _cum_amortization(cohorts: dict[str, list[tuple[Decimal, int]]], through: str, paid_through: str | None = None,
+                      removed: list[tuple[str, Decimal, str, int]] = ()) -> Decimal:
+    """``removed``: (payout month, amount, month removed, amortization months) slices that stop amortizing."""
     total = ZERO
     for p, layers in cohorts.items():
         if paid_through and p > paid_through:
@@ -982,6 +1165,12 @@ def _cum_amortization(cohorts: dict[str, list[tuple[Decimal, int]]], through: st
             continue
         for amt, n in layers:
             total += amt * min(age, n) / n
+    for p, amt, at, n in removed:
+        if paid_through and p > paid_through:
+            continue
+        age, frozen = _pidx(through) - _pidx(p) + 1, _pidx(at) - _pidx(p)
+        if age > frozen:
+            total -= amt * (min(age, n) - min(frozen, n)) / n
     return total.quantize(Decimal("0.01"))
 
 
@@ -1599,6 +1788,23 @@ def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line
     rep.flag(f"payout detail exists only for Actual Jan-Jun 2026 (renewals {ren_span}); estimated months: "
              + "; ".join(f"{v} {min(ms)}..{max(ms)} ({len(ms)})" for v, ms in est_months.items() if ms))
 
+    try:
+        claws = f("Actual_commission_clawbacks.csv")
+    except FileNotFoundError:
+        claws = []
+    removed = [(r["booked_period"], num(r["commission_paid"]), r["period"][:7], 60) for r in claws]
+    claw_by = defaultdict(lambda: defaultdict(Decimal))
+    for r in claws:
+        frozen = min(_pidx(r["period"]) - _pidx(r["booked_period"]), 60)
+        amortized = (num(r["commission_paid"]) * frozen / 60).quantize(Decimal("0.01"))
+        unamortized = num(r["commission_paid"]) - amortized
+        if r["treatment"] == "Clawed back":
+            claw_by[r["period"][:7]]["clawbacks"] += num(r["commission_paid"])
+            claw_by[r["period"][:7]]["clawback_amortization_reversal"] += amortized
+        else:
+            claw_by[r["period"][:7]]["commission_write_downs"] += unamortized
+        claw_by[r["period"][:7]]["unamortized"] += unamortized
+
     diffs = []
     for v in VERSIONS:
         cohorts: dict[str, list[tuple[Decimal, int]]] = defaultdict(list)
@@ -1615,20 +1821,30 @@ def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line
             r = roll[v][p]
             begin, cap, amort, end = (num(r[k]) for k in ("beginning_deferred_commissions", "capitalized_commissions",
                                                           "commission_amortization", "ending_deferred_commissions"))
-            if abs(begin + cap - amort - end) > CENTS:
+            claw, reversal, write_down = (num(r.get(k)) for k in ("clawbacks", "clawback_amortization_reversal",
+                                                                  "commission_write_downs"))
+            if abs(begin + cap - amort - (claw - reversal) - write_down - end) > CENTS:
                 diffs.append(f"{v} {p}: rollforward does not roll")
+            if v == "Actual" and any(abs(x - claw_by[p][k]) > CENTS for x, k in (
+                    (claw, "clawbacks"), (reversal, "clawback_amortization_reversal"),
+                    (write_down, "commission_write_downs"))):
+                diffs.append(f"{v} {p}: clawbacks / reversal / write-downs vs Actual_commission_clawbacks.csv")
             if prev_end is not None and abs(begin - prev_end) > CENTS:
                 diffs.append(f"{v} {p}: beginning {money(begin)} vs prior ending {money(prev_end)}")
             prev_end = end
             if abs(cap - cap_by.get(p, ZERO)) > CENTS or abs(num(r["expensed_commissions"]) - exp_by.get(p, ZERO)) > CENTS:
                 diffs.append(f"{v} {p}: rollforward capitalized/expensed vs schedule")
-            if abs(cap + num(r["expensed_commissions"]) - num(r["total_commission_payouts"])) > CENTS:
-                diffs.append(f"{v} {p}: total payouts != capitalized + expensed")
+            if abs(cap + num(r["expensed_commissions"]) - claw - num(r["total_commission_payouts"])) > CENTS:
+                diffs.append(f"{v} {p}: total payouts != capitalized + expensed - clawbacks")
             if abs(num(r["current_portion"]) + num(r["noncurrent_portion"]) - end) > CENTS:
                 diffs.append(f"{v} {p}: current + noncurrent != ending")
-            want_amort = _cum_amortization(cohorts, p) - _cum_amortization(cohorts, _padd(p, -1))
-            want_end = sum((a for q_, layers in cohorts.items() if q_ <= p for a, _ in layers), ZERO) - _cum_amortization(cohorts, p)
-            want_cur = _cum_amortization(cohorts, _padd(p, 12), paid_through=p) - _cum_amortization(cohorts, p)
+            want_amort = (_cum_amortization(cohorts, p, removed=removed)
+                          - _cum_amortization(cohorts, _padd(p, -1), removed=removed))
+            gone = sum((x["unamortized"] for at, x in claw_by.items() if at <= p), ZERO)
+            want_end = (sum((a for q_, layers in cohorts.items() if q_ <= p for a, _ in layers), ZERO)
+                        - _cum_amortization(cohorts, p, removed=removed) - gone)
+            want_cur = (_cum_amortization(cohorts, _padd(p, 12), paid_through=p, removed=removed)
+                        - _cum_amortization(cohorts, p, removed=removed))
             if abs(amort - want_amort) > CENTS or abs(end - want_end) > CENTS or abs(num(r["current_portion"]) - want_cur) > CENTS:
                 diffs.append(f"{v} {p}: amortization {money(amort)} / ending {money(end)} / current "
                              f"{money(num(r['current_portion']))} vs recomputed {money(want_amort)} / {money(want_end)} / {money(want_cur)}")
@@ -1638,7 +1854,8 @@ def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line
         if len(tax_rates) > 1:
             diffs.append(f"{v}: payroll tax on commissions is not one rate ({sorted(tax_rates)})")
     rep.check("deferred commissions rollforward rolls, chains (Budget from Actual Dec 2025, Forecast from Jun 2026), "
-              "matches the schedule, and amortization / ending / current portion recompute from the payout cohorts", diffs)
+              "matches the schedule, and amortization / ending / current portion recompute from the payout cohorts "
+              "less the no-start commissions clawed back or written down", diffs)
 
     diffs = []
     for v in VERSIONS:
@@ -1655,17 +1872,21 @@ def commission_section(rep: Report, f, gl, months, chain_months, source, bs_line
                 gl_by[p]["tax"] += num(r["amount"])
         for p in months[v]:
             r = roll[v][p]
-            for key, col in (("6200", "commission_amortization"), ("6210", "expensed_commissions"),
-                             ("tax", "payroll_tax_on_commissions")):
-                if abs(gl_by[p][key] - num(r[col])) > CENTS:
-                    diffs.append(f"{v} {p} GL {key} {money(gl_by[p][key])} vs rollforward {col} {money(num(r[col]))}")
+            want_6200 = (num(r["commission_amortization"]) - num(r.get("clawback_amortization_reversal"))
+                         + num(r.get("commission_write_downs")))
+            for key, col, want in (("6200", "commission_amortization", want_6200),
+                                   ("6210", "expensed_commissions", num(r["expensed_commissions"])),
+                                   ("tax", "payroll_tax_on_commissions", num(r["payroll_tax_on_commissions"]))):
+                if abs(gl_by[p][key] - want) > CENTS:
+                    diffs.append(f"{v} {p} GL {key} {money(gl_by[p][key])} vs rollforward {col} {money(want)}")
             if gl_by[p]["stray"]:
                 diffs.append(f"{v} {p}: 6200 rows not from the rollforward {money(gl_by[p]['stray'])}")
             for k, col in (("deferred_commissions_current", "current_portion"),
                            ("deferred_commissions_noncurrent", "noncurrent_portion")):
                 if abs(bs_line(v, p, k) - num(r[col])) > CENTS:
                     diffs.append(f"{v} {p} GL {k} {money(bs_line(v, p, k))} vs rollforward {money(num(r[col]))}")
-    rep.check("GL 6200 = amortization, 6210 = expensed commissions, 6110 commission rows = payroll tax on payouts, "
+    rep.check("GL 6200 = amortization less clawed-back amortization plus write-downs, 6210 = expensed commissions, "
+              "6110 commission rows = payroll tax on payouts, "
               "1250/1550 = current/noncurrent deferred commissions, every month", diffs)
 
     diffs = []

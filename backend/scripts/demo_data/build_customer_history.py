@@ -50,6 +50,7 @@ from customer_history_plans import (EXPECTED_FIELDS, HISTORY_FIELDS, WINBACK_SHA
                                     prospect_segments, renewal_commissions, renewal_rows, segment_for, signing_arr,
                                     simulate_budget, simulate_forecast, tie, tie_budget_deals, u, waterfall)
 from add_implementation_revenue import FEE_BY_SEGMENT  # noqa: E402
+from collections_model import NO_START, NO_START_TERMS_DAYS, NO_STARTS, NON_PAYMENT, NONPAY_CHURN, no_start_exit  # noqa: E402
 from sales_team import VERSIONS, assign_csms, team_employees  # noqa: E402
 
 FIRST = "2024-01"
@@ -141,10 +142,10 @@ def build(src: str, dst: str) -> list[str]:
     next_no = max(int(c.split("-")[1]) for c in mrow) + 1
     new_rows: list[dict] = []
 
-    def new_customer(tag: str, arr_hint: Decimal, departs: str, like: dict | None = None) -> str:
-        """A former customer whose anniversary is the month it leaves. ``like`` is the 2026 opportunity it will
-        carry: the customer takes the deal's industry, state, cadence and terms so the deal keeps its region (and
-        so its owner). Segment is set from the history once it is built."""
+    def new_customer(tag: str, arr_hint: Decimal, departs: str, like: dict | None = None, starts: str = "") -> str:
+        """A former customer whose anniversary is the month it leaves (or that starts in ``starts``). ``like`` is
+        the 2026 opportunity it will carry: the customer takes the deal's industry, state, cadence and terms so the
+        deal keeps its region (and so its owner). Segment is set from the history once it is built."""
         nonlocal next_no
         cid = f"CUST-{next_no:04d}"
         next_no += 1
@@ -154,6 +155,7 @@ def build(src: str, dst: str) -> list[str]:
         s = f"{s[:4]}-{departs[5:7]}"
         if pidx(s) > latest:
             s = padd(s, -12)
+        s = starts or s
         row = {"organization_id": org, "customer_id": cid,
                "customer_name": f"{prefixes[int(u(k + '|name') * len(prefixes))]} {next_no - 1}",
                "segment": "", "industry": industries[int(u(k + "|ind") * len(industries))], "status": "",
@@ -305,17 +307,38 @@ def build(src: str, dst: str) -> list[str]:
         assign[oid] = c
         used.add(c)
 
+    # ---- no-starts: booked, onboarded and billed but never paid; service suspended and the contract ended inside
+    # its first year. Their ARR is carved out of the booking month's new business and the exit month's churn.
+    ns_plan = []
+    ns_out: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    for ns in NO_STARTS:
+        _, _, suspended, left = no_start_exit(ns)
+        if pidx(left) - pidx(ns.booked) >= 12 or not FIRST <= ns.booked < left <= LAST_PRE_2026:
+            raise ValueError(f"no-start booked {ns.booked} leaves {left}: must leave inside its first year, by {LAST_PRE_2026}")
+        a = q(W[ns.booked]["new_business_arr"] * ns.nb_share)
+        ns_plan.append((ns, suspended, left, a))
+        ns_out[left] += a
+
     # ---- formers: the rest of each month's churn; about half of those leaving from PAUSE_FROM pause
     for p in prange(FIRST, LAST_PRE_2026):
-        rem = W[p]["churn_arr"] - sum((x[2] for x in departures[p]), ZERO)
+        rem = W[p]["churn_arr"] - sum((x[2] for x in departures[p]), ZERO) - ns_out[p]
         if rem <= 0:
             raise ValueError(f"{p}: returners' departures {W[p]['churn_arr'] - rem} exceed churn {W[p]['churn_arr']}")
         n = max(1, int((rem / Decimal(85000)).to_integral_value()))
-        for key, a in sorted(allocate(rem, [(f"{p}#{i}", Decimal("0.5") + u(f"csplit|{p}|{i}")) for i in range(n)]).items()):
-            pause = p >= PAUSE_FROM and u(f"pause|{key}") < PAUSE_SHARE
+        split = sorted(allocate(rem, [(f"{p}#{i}", Decimal("0.5") + u(f"csplit|{p}|{i}")) for i in range(n)]).items())
+        pauses = [p >= PAUSE_FROM and u(f"pause|{key}") < PAUSE_SHARE for key, _ in split]
+        if p in dict(NONPAY_CHURN) and all(pauses):
+            pauses[-1] = False  # the month's non-payment churn is a full churn
+        for (key, a), pause in zip(split, pauses):
             c = new_customer("former", a, p)
             opening[c] = a
             departures[p].append((c, "Pause" if pause else "Churn", a, ""))
+    no_starts: dict[str, list[tuple[str, Decimal, str]]] = defaultdict(list)
+    for ns, suspended, left, a in ns_plan:
+        c = new_customer("no-start", a, left, starts=ns.booked)
+        mrow[c].update({"billing_cadence": "Monthly", "billing_terms": f"Net {NO_START_TERMS_DAYS}"})
+        no_starts[ns.booked].append((c, a, f"no-start: {ns.reason}"))
+        departures[left].append((c, "Churn", a, f"no-start: never paid; service suspended {suspended:%Y-%m-%d}"))
 
     # ---- opening balances
     for c in churners + contractors + budget_churners:
@@ -336,7 +359,7 @@ def build(src: str, dst: str) -> list[str]:
     notes.append(f"opening {padd(FIRST, -1)}: {len(opening)} customers, ARR {sum(opening.values(), ZERO):,.2f}; "
                  f"{len(pre_departures)} returners left before {FIRST}")
 
-    flat = set(churners) | set(contractors) | set(budget_churners)
+    flat = set(churners) | set(contractors) | set(budget_churners) | {c for x in no_starts.values() for c, *_ in x}
     leaves = {c: d for d, items in departures.items() for c, *_ in items}
 
     def free(c: str, p: str) -> bool:
@@ -354,9 +377,11 @@ def build(src: str, dst: str) -> list[str]:
         starters = sorted(c for c in mrow if start[c] == p and c in jan26)
         if not starters:
             raise ValueError(f"{p}: new business {W[p]['new_business_arr']} but no customer starts")
-        for c, a in allocate(W[p]["new_business_arr"], [(c, jan26[c] * (Decimal("0.6") + Decimal("0.4") * u(f"nb|{c}")))
-                                                       for c in starters]).items():
+        nb = W[p]["new_business_arr"] - sum((a for _, a, _ in no_starts[p]), ZERO)
+        for c, a in allocate(nb, [(c, jan26[c] * (Decimal("0.6") + Decimal("0.4") * u(f"nb|{c}"))) for c in starters]).items():
             h.move(p, c, "New Business", a)
+        for c, a, note in no_starts[p]:
+            h.move(p, c, "New Business", a, note=note)
         for kind, col, size, cap, floor in (("Contraction", "contraction_arr", 18000, Decimal("0.5"), Decimal(30000)),
                                             ("Expansion", "expansion_arr", 45000, Decimal("1.0"), ZERO)):
             total = W[p][col]
@@ -402,6 +427,32 @@ def build(src: str, dst: str) -> list[str]:
 
     opening_sum = sum((r["ending_arr"] for r in h.rows if r["movement_type"] == "Opening balance"), ZERO)
     notes.append(tie(h, W, months, opening_sum))
+
+    # ---- churn type: no-starts, and one non-payment churn in each NONPAY_CHURN month (a full churn of a customer
+    # past its first year that never comes back)
+    ns_ids = {c for x in no_starts.values() for c, *_ in x}
+    back: dict[str, str] = {}
+    for r in h.rows:
+        if r["movement_type"] in ("Reactivation", "New Business"):
+            back[r["customer_id"]] = max(back.get(r["customer_id"], ""), r["period"])
+        if r["customer_id"] in ns_ids and r["movement_type"] == "Churn":
+            r["churn_type"] = NO_START
+    nonpay = []
+    for m, reason in NONPAY_CHURN:
+        cands = sorted(r["customer_id"] for r in h.rows
+                       if r["period"] == m and r["movement_type"] == "Churn" and r["ending_arr"] == 0
+                       and r["customer_id"] not in ns_ids and back.get(r["customer_id"], "") <= m
+                       and pidx(m) - pidx(start[r["customer_id"]]) >= 12)
+        cands = [c for c in cands if mrow.get(c, {}).get("billing_cadence") == "Monthly"] or cands
+        if not cands:
+            raise ValueError(f"{m}: no full churn past its first year to mark as non-payment")
+        c = pick(cands, 1, f"nonpay|{m}", lambda c: Decimal(1))[0]
+        for r in h.rows:
+            if r["customer_id"] == c and r["period"] == m and r["movement_type"] == "Churn":
+                r["churn_type"] = NON_PAYMENT
+                r["note"] = "; ".join(x for x in (r["note"], f"non-payment: {reason}") if x)
+        nonpay.append(f"{c} {m}")
+    notes.append(f"churn type: {len(ns_ids)} no-starts ({', '.join(sorted(ns_ids))}), non-payment churn {', '.join(nonpay)}")
 
     dec = h.eop[LAST_PRE_2026]
     masters = [r["customer_id"] for r in master]

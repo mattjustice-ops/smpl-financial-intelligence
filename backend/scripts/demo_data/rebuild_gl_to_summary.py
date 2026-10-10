@@ -23,6 +23,8 @@ Rules (agreed with Matt, Oct 5-9 2026):
         S&M less payroll, so the commission build replaces exactly what the summary held;
       - stock comp from the roster's equity grants (stock_comp.py): 5040 for cost-of-revenue cost
         centers, 6140 for the rest;
+      - bad debt expense (6560, Revenue Accounting) = the provision for credit losses in
+        <version>_allowance_for_doubtful_accounts.csv (G&A);
       - vendor spend (vendor_model.py): seat-priced and fixed contracts, straight-line office lease cost
         (ASC 842), per-hire fees, the corporate card, audit and tax fees, and amortization of annual contracts
         paid up front. Expense is booked in the month of service, whenever the bill comes.
@@ -123,6 +125,9 @@ IMPLEMENTATION_ACCOUNT = "4100"
 RECURRING_SERVICES_ACCOUNT = "4200"
 ADDED_REVENUE_ACCOUNTS = {IMPLEMENTATION_ACCOUNT, RECURRING_SERVICES_ACCOUNT}
 COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
+ALLOWANCE_SUFFIX = "_allowance_for_doubtful_accounts.csv"
+BAD_DEBT_ACCOUNT = "6560"
+BAD_DEBT_COST_CENTER = "FIN-REV"
 PAYROLL_REGISTER_SUFFIX = "_payroll_register.csv"
 # register column, account, account name, expense type
 PAYROLL_COLUMNS = (
@@ -429,6 +434,12 @@ def commission_rows(src: str, version: str, template: dict[str, str]) -> list[di
     lines = (
         ("commission_amortization", "6200", "Sales Commissions", "Sales Expense", "Commissions", "Sales", "SALES-AE",
          "Account Executives", "amortization of deferred commissions (ASC 340-40, straight-line from the payout month)"),
+        ("-clawback_amortization_reversal", "6200", "Sales Commissions", "Sales Expense", "Commissions", "Sales",
+         "SALES-AE", "Account Executives", "no-start commission clawed back: amortization to date reversed "
+                                           "(Actual_commission_clawbacks.csv)"),
+        ("commission_write_downs", "6200", "Sales Commissions", "Sales Expense", "Commissions", "Sales", "SALES-AE",
+         "Account Executives", "no-start outside the clawback window: unamortized commission written down "
+                               "(Actual_commission_clawbacks.csv)"),
         ("expensed_commissions", "6210", "Sales Commissions - Expensed", "Sales Expense", "Commissions",
          "Customer Success", "CS-RENEW", "Renewals", "renewal commissions expensed when paid (12-month term)"),
         ("payroll_tax_on_commissions", "6110", "Payroll Taxes", "Labor", "Payroll Taxes", "Sales", "SALES-AE",
@@ -438,7 +449,8 @@ def commission_rows(src: str, version: str, template: dict[str, str]) -> list[di
     for r in _read(path):
         period = r["period"][:7]
         for col, number, name, group, etype, dept, cc, sub, note in lines:
-            amount = Decimal(r[col] or "0")
+            sign, col = (-1, col[1:]) if col.startswith("-") else (1, col)
+            amount = sign * Decimal(r.get(col) or "0")
             if not amount:
                 continue
             rows.append({
@@ -450,6 +462,27 @@ def commission_rows(src: str, version: str, template: dict[str, str]) -> list[di
                 "source_record_id": f"{version}-{period}-{number}-{col}", "amount": f"{amount:.2f}",
                 "currency": "USD", "subsidiary": "US Parent", "source_system": "Demo Model", "notes": note,
             })
+    return rows
+
+
+def bad_debt_rows(src: str, version: str, template: dict[str, str], accts: Accounts) -> list[dict[str, str]]:
+    """6560 Bad Debt Expense (Revenue Accounting) = the month's provision for credit losses in
+    <version>_allowance_for_doubtful_accounts.csv, when the file exists."""
+    source = f"{version}{ALLOWANCE_SUFFIX}"
+    path = os.path.join(src, source)
+    if not os.path.exists(path):
+        return []
+    rows = []
+    for r in _read(path):
+        amount = Decimal(r["provision_for_credit_losses"])
+        if amount:
+            period = r["period"][:7]
+            rows.append(accts.row(template, period, BAD_DEBT_ACCOUNT, "Finance", BAD_DEBT_COST_CENTER, amount,
+                                  source_file=source, record_id=f"{version}-{period}-{BAD_DEBT_ACCOUNT}",
+                                  source_system="Demo Model",
+                                  notes=f"provision for credit losses: allowance {Decimal(r['beginning_allowance']):,.2f} "
+                                        f"-> {Decimal(r['ending_allowance']):,.2f}, write-offs "
+                                        f"{Decimal(r['write_offs']):,.2f}"))
     return rows
 
 
@@ -660,6 +693,7 @@ def main(src: str, dst: str) -> None:
         comm = commission_rows(src, version, template)
         pay = payroll_rows(src, version, template)
         sbc = stock_comp_rows(src, version, template, accts[version])
+        bad = bad_debt_rows(src, version, template, accts[version])
         if not comm:
             if version == "Forecast" and "Actual" not in summary_sm:
                 raise ValueError("Forecast has no commission rollforward but Actual does")
@@ -687,12 +721,12 @@ def main(src: str, dst: str) -> None:
                         "detail": f"{len(old_bs)} month-end balance rows replaced by opening balances and monthly activity",
                         "amount": ""})
         sized[version] = [r for r in rows if r["statement"] != "Balance Sheet"]
-        booked_rows[version] = impl + rsvc + comm + pay + sbc
+        booked_rows[version] = impl + rsvc + comm + pay + sbc + bad
         for r in sized[version]:
             if r["account_number"] in USAGE_ACCOUNTS and r["period"][:7] in REBUILD_PERIODS[version]:
                 model.add_usage(version, r["period"][:7], r["account_number"], r["department"], r["cost_center"],
                                 Decimal(r["amount"]))
-        for name, rws in (("payroll", pay), ("commissions", comm), ("stock comp", sbc),
+        for name, rws in (("payroll", pay), ("commissions", comm), ("stock comp", sbc), ("bad debt", bad),
                           ("implementation revenue", impl), ("recurring services revenue", rsvc)):
             if rws:
                 log.append({"version": version, "period": "", "line": name, "action": "booked",

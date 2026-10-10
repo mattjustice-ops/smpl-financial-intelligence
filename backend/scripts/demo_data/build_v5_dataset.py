@@ -17,8 +17,13 @@ Rules (agreed with Matt, Oct 6 2026):
     invoiced on the 1st of the month before the quarter (about 30 days ahead). Recurring
     services bill on the same invoice as subscription. Implementation fees bill at signing
     and are recognized in that month (implementation schedule).
-  * Collections: the customer's terms (Net 15/30/45/60) plus 7 days.
-  * Deferred revenue = billed but not yet recognized. AR = billed but not yet collected.
+  * Collections (Oct 9 2026, collections_model.py): Actual invoices are paid on each customer's payment habit;
+    the collections cases (no-starts and non-payment churn from the ARR history, one late payer recovered after
+    escalation, one dispute open at the close) go unpaid and are written off, or are paid late. Budget and
+    Forecast invoices are collected at the customer's terms (Net 15/30/45/60) plus 7 days.
+  * Deferred revenue = billed but not yet recognized. AR = billed but not yet collected or written off; the
+    balance sheet shows it net of the allowance for doubtful accounts (opening equity carries the opening
+    allowance, so opening cash does not move).
     Budget continues from the Actual balances at Dec 2025, Forecast from Jun 2026.
   * Opening balance sheet (Jan 2024 month end): AR and deferred revenue come from the
     billing model; equity is the v4 opening equity less --opening-equity-adjustment; cash
@@ -50,6 +55,8 @@ from collections import Counter, defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from collections_model import (BUCKETS, activity_rows, aging_rows, allowance_rollforward, case_rows,  # noqa: E402
+                               is_open, payment_rows, plan_cases, settle, write_off_month)
 from sales_team import BOOKINGS_ROLES, REP_SEGMENT, TERRITORIES, active, quota_type  # noqa: E402
 
 CENT = Decimal("0.01")
@@ -297,12 +304,19 @@ class Revenue:
 
 
 class Invoice:
+    """``paid`` / ``written_off``: dates (or None). Plan invoices are paid on the plan rule; the Actual invoices get
+    their payment record from collections_model.settle."""
     __slots__ = ("id", "version", "customer_id", "customer_name", "cadence", "terms", "issue", "invoice_date",
-                 "due_date", "collection", "service", "amount", "kind")
+                 "due_date", "service", "amount", "kind", "paid", "written_off")
 
     def __init__(self, **kw):
+        self.paid = self.written_off = None
         for k, v in kw.items():
             setattr(self, k, v)
+
+    @property
+    def collection(self) -> str:
+        return month_of(self.paid) if self.paid else ""
 
 
 class World:
@@ -350,7 +364,7 @@ def bill_customers(version: str, issue_months: list[str], customers: list[str], 
             out.append(Invoice(
                 id=f"INV-{LETTER[version]}-{i.replace('-', '')}-{cid}", version=version, customer_id=cid,
                 customer_name=names[cid], cadence=cadence[cid], terms=terms[cid], issue=i, invoice_date=inv_date,
-                due_date=due, collection=month_of(due + dt.timedelta(days=COLLECTION_LAG_DAYS)),
+                due_date=due, paid=due + dt.timedelta(days=COLLECTION_LAG_DAYS),
                 service=amounts, amount=sum(amounts.values(), ZERO), kind="recurring"))
     return out
 
@@ -360,10 +374,11 @@ def implementation_invoices(ds: Dataset, version: str) -> list[Invoice]:
     for r in ds.rows(f"{version}_implementation_schedule.csv"):
         p = r["period"][:7]
         fee = num(r["implementation_fee"])
+        due, cp = dt.date.fromisoformat(r["due_date"]), r["collection_period"][:7]
         out.append(Invoice(
             id=r["invoice_id"], version=version, customer_id=r["customer_id"], customer_name=r["customer_name"],
             cadence="One-time", terms="", issue=p, invoice_date=dt.date.fromisoformat(r["invoice_date"]),
-            due_date=dt.date.fromisoformat(r["due_date"]), collection=r["collection_period"][:7],
+            due_date=due, paid=min(max(due, first_day(cp)), last_day(cp)),
             service={p: fee}, amount=fee, kind="implementation"))
     return out
 
@@ -373,14 +388,16 @@ def rollforward(world: World, revenue_by_month: dict[str, Decimal]) -> dict[str,
     for inv in world.own:
         billed[inv.issue] += inv.amount
     collected: dict[str, Decimal] = defaultdict(Decimal)
+    written: dict[str, Decimal] = defaultdict(Decimal)
     for inv in world.own + world.carried:
         collected[inv.collection] += inv.amount
+        written[write_off_month(inv)] += inv.amount
     out = {}
     ar, dr = world.begin_ar, world.begin_dr
     for p in world.months:
-        row = {"begin_ar": ar, "billings": billed[p], "collections": collected[p],
+        row = {"begin_ar": ar, "billings": billed[p], "collections": collected[p], "write_offs": written[p],
                "begin_dr": dr, "revenue": revenue_by_month[p]}
-        ar = ar + billed[p] - collected[p]
+        ar = ar + billed[p] - collected[p] - written[p]
         dr = dr + billed[p] - revenue_by_month[p]
         row["end_ar"], row["end_dr"] = ar, dr
         out[p] = row
@@ -393,7 +410,7 @@ def open_balances(invoices: list[Invoice], month_end: str) -> tuple[Decimal, Dec
     for inv in invoices:
         if inv.issue > month_end:
             continue
-        if inv.collection > month_end:
+        if is_open(inv, last_day(month_end)):
             ar += inv.amount
         dr += sum((a for s, a in inv.service.items() if s > month_end), ZERO)
     return ar, dr
@@ -451,6 +468,12 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     a = World("Actual", rev["Actual"].months)
     a.own = bill_customers("Actual", prange(PRE_PERIOD_START, CLOSE), all_customers, cadence, anniv, terms, names,
                            recurring_actual_world) + implementation_invoices(ds, "Actual")
+    history = ds.rows("Actual_customer_arr_history.csv") if ds.exists("Actual_customer_arr_history.csv") else []
+    cases = plan_cases(history, a.own, cadence, terms)
+    settle(a.own, cases)
+    notes.append("collections cases: " + "; ".join(
+        f"{c.kind} {c.customer_id} ({len(c.invoices)} invoices, {sum((i.amount for i in c.invoices), ZERO):,.2f})"
+        for c in cases))
     pre = [inv for inv in a.own if inv.issue < a.months[0]]
     a.own = [inv for inv in a.own if inv.issue >= a.months[0]]
     a.carried = pre
@@ -468,6 +491,18 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
 
     gl_revenue = {v: {p: rev[v].sub[p] + rev[v].rsvc[p] + rev[v].impl.get(p, ZERO) for p in rev[v].months} for v in VERSIONS}
     roll = {v: rollforward(worlds[v], gl_revenue[v]) for v in VERSIONS}
+    allowance = {v: {r["period"]: r for r in allowance_rollforward(worlds[v].carried + worlds[v].own, cases,
+                                                                   worlds[v].months)} for v in VERSIONS}
+    for v in VERSIONS:
+        for p, x in roll[v].items():
+            al = allowance[v][p]
+            if al["gross_accounts_receivable"] != x["end_ar"]:
+                raise ValueError(f"{v} {p}: aged AR {al['gross_accounts_receivable']} != AR rollforward {x['end_ar']}")
+            if al["write_offs"] != x["write_offs"]:
+                raise ValueError(f"{v} {p}: allowance write-offs {al['write_offs']} != AR write-offs {x['write_offs']}")
+        start = CHAIN_FROM_ACTUAL.get(v)
+        if start and allowance[v][start]["beginning_allowance"] != allowance["Actual"][padd(start, -1)]["ending_allowance"]:
+            raise ValueError(f"{v}: opening allowance does not continue from the Actual {padd(start, -1)}")
 
     for v in VERSIONS:
         w = worlds[v]
@@ -482,7 +517,9 @@ def build(src: str, dst: str, opening_equity_adjustment: Decimal) -> list[str]:
     write_income_statement_totals(ds, dst, notes)
     write_customers(ds, dst, master_fields, master, logos, cadence, org, plan_only)
     write_billing_files(ds, dst, org, worlds, roll, rev)
-    write_balance_sheet_inputs(ds, dst, roll, opening_equity_adjustment, notes)
+    write_collections_files(ds, dst, org, worlds, cases, allowance, master, logos, notes)
+    write_chart_of_accounts(ds, dst)
+    write_balance_sheet_inputs(ds, dst, roll, allowance, opening_equity_adjustment, notes)
     write_mrr(ds, dst, notes)
     rosters = write_rosters(ds, dst, notes)
     write_opportunities(ds, dst, rosters, notes)
@@ -555,7 +592,10 @@ def write_billing_files(ds, dst, org, worlds, roll, rev):
         w, r = worlds[v], rev[v]
         months = set(w.months)
         own = sorted((inv for inv in w.own if inv.issue in months), key=lambda i: (i.issue, i.kind, i.customer_id))
-        inv_fields = ds.fields(f"{v}_invoices.csv")
+        inv_fields = list(ds.fields(f"{v}_invoices.csv"))
+        if "payment_date" not in inv_fields:
+            inv_fields.insert(inv_fields.index("payment_status") + 1, "payment_date")
+        close = last_day(CLOSE)
         inv_rows, sched_rows = [], []
         carrier: dict[tuple[str, str], Invoice] = {}
         for inv in w.carried + w.own:
@@ -564,13 +604,20 @@ def write_billing_files(ds, dst, org, worlds, roll, rev):
                     carrier[(inv.customer_id, s)] = inv
         for inv in own:
             svc = sorted(inv.service)
-            status = ("Paid" if inv.collection <= CLOSE else "Open") if v == "Actual" else "Forecast"
+            paid = v == "Actual" and inv.paid is not None and inv.paid <= close
+            if v != "Actual":
+                status = "Forecast"
+            elif inv.written_off and inv.written_off <= close:
+                status = "Written Off"
+            else:
+                status = "Paid" if paid else "Open"
             inv_rows.append({
                 "organization_id": org, "version": v, "invoice_id": inv.id, "customer_id": inv.customer_id,
                 "customer_name": inv.customer_name, "invoice_period": inv.issue,
                 "service_period_start": first_day(svc[0]).isoformat(), "service_period_end": last_day(svc[-1]).isoformat(),
                 "invoice_date": inv.invoice_date.isoformat(), "due_date": inv.due_date.isoformat(),
-                "invoice_amount": inv.amount, "payment_status": status, "billing_cadence": inv.cadence,
+                "invoice_amount": inv.amount, "payment_status": status,
+                "payment_date": inv.paid.isoformat() if paid else "", "billing_cadence": inv.cadence,
                 "billing_terms": inv.terms or "Net 30", "currency": "USD"})
             driver = {"recurring": f"{inv.cadence} subscription + recurring services",
                       "implementation": "Implementation fee at signing"}[inv.kind]
@@ -613,6 +660,11 @@ def write_billing_files(ds, dst, org, worlds, roll, rev):
         write(os.path.join(dst, f"{v}_revenue_recognition.csv"), ds.fields("Actual_revenue_recognition.csv"), rr_rows)
 
         dr_rows, ar_rows, cc_rows = [], [], []
+        ar_fields = list(ds.fields("Actual_accounts_receivable_rollforward.csv"))
+        if "write_offs" not in ar_fields:
+            ar_fields.insert(ar_fields.index("cash_collections") + 1, "write_offs")
+        driver = ("Customer payments received (Actual_customer_payments.csv)" if v == "Actual" else
+                  "Invoices collected: customer terms + 7 days; Actual invoices as paid")
         for p in w.months:
             x = roll[v][p]
             dr_rows.append({"organization_id": org, "version": v, "period": p, "beginning_deferred_revenue": x["begin_dr"],
@@ -620,16 +672,80 @@ def write_billing_files(ds, dst, org, worlds, roll, rev):
                             "ending_deferred_revenue": x["end_dr"], "waterfall_check": "0.00"})
             ar_rows.append({"organization_id": org, "version": v, "period": p, "beginning_accounts_receivable": x["begin_ar"],
                             "new_billings": x["billings"], "cash_collections": x["collections"],
+                            "write_offs": x["write_offs"],
                             "ending_accounts_receivable": x["end_ar"], "rollforward_check": "0.00"})
             cc_rows.append({"organization_id": org, "version": v, "period": p, "cash_collections": x["collections"],
-                            "beginning_cash": "", "ending_cash": "",
-                            "driver": "Invoices collected: customer terms + 7 days"})
+                            "beginning_cash": "", "ending_cash": "", "driver": driver})
         write(os.path.join(dst, f"{v}_deferred_revenue_waterfall.csv"), ds.fields("Actual_deferred_revenue_waterfall.csv"), dr_rows)
-        write(os.path.join(dst, f"{v}_accounts_receivable_rollforward.csv"), ds.fields("Actual_accounts_receivable_rollforward.csv"), ar_rows)
+        write(os.path.join(dst, f"{v}_accounts_receivable_rollforward.csv"), ar_fields, ar_rows)
         write(os.path.join(dst, f"{v}_cash_collections.csv"), ds.fields("Actual_cash_collections.csv"), cc_rows)
 
 
-def write_balance_sheet_inputs(ds, dst, roll, opening_equity_adjustment, notes):
+ALLOWANCE_FIELDS = ["organization_id", "version", "period", "beginning_allowance", "provision_for_credit_losses",
+                    "write_offs", "ending_allowance", "gross_accounts_receivable", "net_accounts_receivable",
+                    *(f"reserve_{b}" for b in BUCKETS), "specific_reserve"]
+NEW_ACCOUNTS = (
+    {"account_number": "1110", "account_name": "Allowance for Doubtful Accounts", "statement": "Balance Sheet",
+     "statement_category": "Assets", "account_group": "AR", "expense_type": "Accounts Receivable",
+     "description": "Contra AR: open invoices not expected to be collected, by age and for customers in collections "
+                    "(<version>_allowance_for_doubtful_accounts.csv)"},
+    {"account_number": "6560", "account_name": "Bad Debt Expense", "statement": "Income Statement",
+     "statement_category": "Operating Expense", "account_group": "G&A Expense", "expense_type": "Bad Debt",
+     "description": "Provision for credit losses: change in the allowance for doubtful accounts plus write-offs"},
+)
+
+
+def write_collections_files(ds, dst, org, worlds, cases, allowance, master, logos, notes):
+    """The allowance rollforward per version; the Actual payments, AR aging, dunning log and collections cases;
+    the Actual implementation schedule's collection period from the payment record."""
+    for v in VERSIONS:
+        rows = [{"organization_id": org, "version": v, **r} for _, r in sorted(allowance[v].items())]
+        write(os.path.join(dst, f"{v}_allowance_for_doubtful_accounts.csv"), ALLOWANCE_FIELDS, rows)
+    a = worlds["Actual"]
+    invoices = a.carried + a.own
+    first, close = first_day(a.months[0]), last_day(CLOSE)
+    segment = {r["customer_id"]: r["segment"] for r in master}
+    segment.update({cid: o["segment"] for cid, o in logos.items()})
+    names = {inv.customer_id: inv.customer_name for inv in invoices}
+    finance = [e for e in ds.rows("Actual_Employees.csv") if e["department"] == "Finance"]
+    files = {
+        "Actual_customer_payments.csv": [r for r in payment_rows(org, invoices, close, segment) if r["period"] >= a.months[0]],
+        "Actual_AR_Aging.csv": aging_rows(org, invoices, a.months, names),
+        "Actual_collections_activity.csv": [r for r in activity_rows(org, invoices, cases, close, finance)
+                                            if r["activity_date"] >= first.isoformat()],
+        "Actual_collections_cases.csv": case_rows(org, cases, close),
+    }
+    for name, rows in files.items():
+        write(os.path.join(dst, name), list(rows[0]), rows)
+    paid_by: dict[str, Decimal] = defaultdict(Decimal)
+    for r in files["Actual_customer_payments.csv"]:
+        paid_by[r["period"]] += r["amount"]
+    imp_fields, imp = read(os.path.join(dst, "Actual_implementation_schedule.csv"))
+    by_id = {inv.id: inv for inv in invoices if inv.kind == "implementation"}
+    for r in imp:
+        r["collection_period"] = by_id[r["invoice_id"]].collection
+    write(os.path.join(dst, "Actual_implementation_schedule.csv"), imp_fields, imp)
+    end = allowance["Actual"][CLOSE]
+    notes.append(f"collections: {len(files['Actual_customer_payments.csv'])} customer payments "
+                 f"({sum(paid_by.values(), ZERO):,.2f}), {len(files['Actual_collections_activity.csv'])} dunning "
+                 f"steps, {len(cases)} cases; write-offs "
+                 f"{sum((r['write_offs'] for r in allowance['Actual'].values()), ZERO):,.2f}; allowance at {CLOSE} "
+                 f"{end['ending_allowance']:,.2f} on gross AR {end['gross_accounts_receivable']:,.2f}")
+
+
+def write_chart_of_accounts(ds, dst):
+    for v in VERSIONS:
+        fields, rows = read(os.path.join(dst, f"{v}_chart_of_accounts.csv"))
+        have = {r["account_number"] for r in rows}
+        for acct in NEW_ACCOUNTS:
+            if acct["account_number"] not in have:
+                at = next((i for i, r in enumerate(rows) if r["account_number"] > acct["account_number"]), len(rows))
+                rows.insert(at, {k: acct.get(k, "") for k in fields})
+        write(os.path.join(dst, f"{v}_chart_of_accounts.csv"), fields, rows)
+
+
+def write_balance_sheet_inputs(ds, dst, roll, allowance, opening_equity_adjustment, notes):
+    """AR is net of the allowance for doubtful accounts."""
     for v in VERSIONS:
         fields, rows = ds.get(f"{v}_balance_sheet.csv")
         out = []
@@ -637,17 +753,19 @@ def write_balance_sheet_inputs(ds, dst, roll, opening_equity_adjustment, notes):
             p = r["period"][:7]
             nr = dict(r)
             if p in roll[v]:
-                nr["accounts_receivable"] = f"{roll[v][p]['end_ar']:.2f}"
+                nr["accounts_receivable"] = f"{roll[v][p]['end_ar'] - allowance[v][p]['ending_allowance']:.2f}"
                 nr["deferred_revenue"] = f"{roll[v][p]['end_dr']:.2f}"
             out.append(nr)
         if v == "Actual":
             o = out[0]
+            a0 = allowance[v][o["period"][:7]]["ending_allowance"]
             liab = sum((num(o[k]) for k in ("accounts_payable", "deferred_revenue", "debt", "other_liabilities")), ZERO)
-            equity = num(o["equity"]) - opening_equity_adjustment
+            equity = num(o["equity"]) - opening_equity_adjustment - a0
             cash = liab + equity - sum((num(o[k]) for k in ("accounts_receivable", "ppe_net", "prepaids_and_other_current")), ZERO)
-            notes.append(f"opening {o['period']}: AR {num(o['accounts_receivable']):,.2f}, deferred revenue "
-                         f"{num(o['deferred_revenue']):,.2f}, equity {equity:,.2f} (v4 {num(rows[0]['equity']):,.2f} less "
-                         f"{opening_equity_adjustment:,.2f}), cash {cash:,.2f} (v4 {num(rows[0]['cash']):,.2f})")
+            notes.append(f"opening {o['period']}: AR {num(o['accounts_receivable']):,.2f} (net of a "
+                         f"{a0:,.2f} allowance), deferred revenue {num(o['deferred_revenue']):,.2f}, equity "
+                         f"{equity:,.2f} (v4 {num(rows[0]['equity']):,.2f} less {opening_equity_adjustment:,.2f} and "
+                         f"the allowance), cash {cash:,.2f} (v4 {num(rows[0]['cash']):,.2f})")
             o["equity"], o["cash"] = f"{equity:.2f}", f"{cash:.2f}"
             o["total_liabilities"] = f"{liab:.2f}"
             o["total_assets"] = o["total_liabilities_and_equity"] = f"{liab + equity:.2f}"
