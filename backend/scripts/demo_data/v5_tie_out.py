@@ -60,6 +60,15 @@ PIPELINE_ROLES = ("Sales Development Rep",)
 CSM_ROLES = ("Customer Success Manager", "Senior Customer Success Manager")
 PERSON_COLUMNS = {"rep_id": "id", "employee_id": "id", "owner_id": "id", "csm_id": "id", "rep_name": "name",
                   "owner": "name", "customer_success_manager": "name"}
+NON_VENDOR_CATEGORIES = {"revenue", "d&a", "interest", "taxes", "tax"}
+NON_VENDOR_EXPENSE_TYPES = {"salaries and wages", "bonus", "payroll taxes", "retirement match", "benefits", "severance",
+                            "labor", "commissions"}
+
+
+def is_vendor_expense(r: dict[str, str]) -> bool:
+    return (r["statement"] != "Balance Sheet" and r["account_group"] != "D&A"
+            and r["statement_category"].strip().lower() not in NON_VENDOR_CATEGORIES
+            and (r["expense_type"] or "").strip().lower() not in NON_VENDOR_EXPENSE_TYPES)
 
 
 def num(value) -> Decimal:
@@ -347,9 +356,35 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                  or abs(num(cc[p]["ending_cash"]) - bs_line(v, p, "cash")) > CENTS]
         rep.check(f"{v} cash collections file = AR collections and GL cash", diffs)
 
+        ap_by = {r["period"][:7]: r for r in f(f"{v}_accounts_payable_rollforward.csv")}
+        prepaid = {r["period"][:7]: r for r in f(f"{v}_Prepaids_Rollforward.csv")}
+        spend = sums(gl[v], "period", "amount", is_vendor_expense)
+        diffs = []
+        sbc_file = {r["period"][:7]: num(r.get("total_sbc")) for r in f(f"{v}_SBC_Schedule.csv")}
+        for p in ms:
+            r = ap_by.get(p)
+            if r is None:
+                diffs.append(f"{p}: no AP rollforward row")
+                continue
+            end = bs_line(v, p, "accounts_payable")
+            begin = end if p == cutoff else bs_line(v, prior(p), "accounts_payable")
+            stock_comp = sbc_file.get(p, ZERO) if p == cutoff else -movement[source(v, p)][p].get("3311", ZERO)
+            invoiced = spend.get(p, ZERO) - stock_comp - num(prepaid.get(p, {}).get("prepaid_amortization"))
+            for label, got, want in (("beginning", r["beginning_accounts_payable"], begin),
+                                     ("invoices", r["vendor_expense_accruals"], invoiced),
+                                     ("payments", r["vendor_cash_payments_n30"], begin),
+                                     ("ending", r["ending_accounts_payable"], end)):
+                if abs(num(got) - want) > CENTS:
+                    diffs.append(f"{p} {label} {money(num(got))} vs {money(want)}")
+        rep.check(f"{v} AP rollforward = GL: invoices = non-payroll expense less stock comp and prepaid amortization; "
+                  f"paid net 30 (payments = opening AP; the {cutoff} opening AP is that month's invoices)", diffs,
+                  f"{len(ms)} months")
+
         path = os.path.join(v5, f"{v}_cash_flow_bridge.csv")
         if os.path.exists(path):
             br = read(path)[1]
+            tax = sums(gl[v], "period", "amount", lambda r: r["statement_category"] in ("Taxes", "Tax"))
+            interest = sums(gl[v], "period", "amount", lambda r: r["statement_category"] == "Interest")
             diffs, others = [], []
             fin_key = "financing_to_maintain_cash_floor" if "financing_to_maintain_cash_floor" in br[0] else "financing"
             for r in br:
@@ -361,13 +396,21 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
                     diffs.append(p)
                 if abs(num(r["cash_collections_from_invoices"]) - num(ar[p]["cash_collections"])) > CENTS:
                     diffs.append(f"{p} collections")
+                if abs(num(r["vendor_cash_out_n30"]) - num(ap_by.get(p, {}).get("vendor_cash_payments_n30"))) > CENTS:
+                    diffs.append(f"{p} vendor cash vs AP payments")
+                if abs(num(r["tax_cash_out"]) - tax.get(p, ZERO)) > CENTS or \
+                        abs(num(r["interest_cash_out"]) - interest.get(p, ZERO)) > CENTS:
+                    diffs.append(f"{p} tax or interest cash vs GL expense")
                 others.append(num(r["other_operating_cash_out"]))
-            rep.check(f"{v} cash bridge adds up to GL cash; collections = AR rollforward", diffs, f"{len(br)} months")
+            rep.check(f"{v} cash bridge adds up to GL cash; collections = AR rollforward; vendor cash = AP payments; "
+                      f"tax and interest cash = GL expense", diffs, f"{len(br)} months")
             neg = [o for o in others if o < 0]
             if neg:
                 rep.flag(f"{v} cash bridge other operating cash out is negative in {len(neg)} of {len(others)} months "
-                         f"({money(min(others))} to {money(max(others))}): vendor payments in the AP rollforward "
-                         f"exceed the GL's non-payroll expense")
+                         f"({money(min(others))} to {money(max(others))})")
+            elif others:
+                rep.info(f"{v} cash bridge other operating cash out {money(min(others))} to {money(max(others))} a month "
+                         f"(prepaid purchases, payroll tax on commission payouts, billing timing)")
 
     # ------------------------------------------------------------------ cash path and caps
     rep.section("Cash path and deferred revenue level")
@@ -1724,8 +1767,9 @@ KNOWN_GAPS = [
     "Bonus and the SDR incentive are paid monthly at target with payroll (no accrued bonus liability); Tier 1 Support "
     "and Implementation post fully loaded payroll (incl. bonus, 401(k), severance) to 5010 / 5020.",
     "The SBC schedule is still 1% of revenue (not the roster's equity grants); the headcount plan's SBC is the roster's.",
-    "The AP rollforward's vendor accruals are a fixed share of expense from the v4 model, larger than the GL's "
-    "non-payroll expense once payroll comes from the register; the cash bridge's other operating cash is the plug.",
+    "AP is one month of vendor invoices (net 30). The Jan 2024 opening AP ($3.72M in the v4 balance sheet, about three "
+    "months of invoices) is restated to Jan 2024 invoices with opening cash lower by the same amount; Dec 2023 AP is "
+    "taken as equal to Jan 2024 (no Dec 2023 GL). Vendor invoices carry no line or vendor detail.",
     "Cost center SALES-AM has no roles (expansion is owned by AEs and CSMs).",
     "CSMs are on the Commission pay plan (target in commission_target); their renewal commissions come from the "
     "renewal commission files, not the target.",

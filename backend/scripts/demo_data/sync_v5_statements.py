@@ -8,10 +8,15 @@ Files rewritten in <v5_folder> (same columns as before):
   * <version>_cash_flow_statement.csv: indirect method from the GL: net income, D&A, stock comp,
     working capital changes, capex (PP&E change plus D&A), financing as booked.
   * <version>_cash_collections.csv: beginning and ending cash from the GL.
+  * <version>_accounts_payable_rollforward.csv: beginning, vendor invoices, payments and ending AP
+    from the GL (build_gl_balance_sheet.py: invoices paid net 30). The opening month has no GL
+    activity: its beginning AP, invoices and payments are taken as its (restated) ending AP.
   * <version>_cash_flow_bridge.csv: collections from the AR rollforward, commission cash from
     <version>_commission_schedule.csv (all plans) when it exists, else the Actual commission
     payouts; payroll cash from <version>_payroll_register.csv when it exists (paid in the month);
-    other lines as loaded; other operating cash is what is left so the bridge ends on GL cash.
+    vendor cash = GL AP payments; tax and interest cash = GL tax and interest expense (paid in the
+    month; the GL has no tax or interest payable); capex and financing from the GL; other
+    operating cash is what is left so the bridge ends on GL cash.
   * Deferred commissions (when the balance sheet has the columns): current and noncurrent from
     the GL; their change is an operating line (change_in_deferred_commissions).
   * <version>_Working_Capital_Driver_Summary.csv, <version>_cash_flow_driver_assumptions.csv,
@@ -102,6 +107,7 @@ def main(src: str, gl_dir: str) -> list[str]:
     bal = balances(bs_rows, gl)
 
     pl = {v: defaultdict(lambda: defaultdict(Decimal)) for v in VERSIONS}
+    ap_flow = {v: defaultdict(lambda: defaultdict(Decimal)) for v in VERSIONS}
     for v, rows in gl.items():
         for r in rows:
             p = r["period"][:7]
@@ -112,11 +118,17 @@ def main(src: str, gl_dir: str) -> list[str]:
                     pl[v][p]["revenue"] -= amt
                 if is_da(r):
                     pl[v][p]["da"] += amt
+                if r["statement_category"] in ("Taxes", "Tax"):
+                    pl[v][p]["tax"] += amt
+                if r["statement_category"] == "Interest":
+                    pl[v][p]["interest"] += amt
                 if (r["expense_type"] or "").strip().lower() == "marketing programs" or \
                         (r["account_group"] or "").strip().lower() == "marketing programs":
                     pl[v][p]["programs"] += amt
             elif r["account_number"] == "3311":
                 pl[v][p]["sbc"] -= amt
+            elif r["account_number"] == "2000":
+                ap_flow[v][p][r["source_record_id"].rsplit("-", 1)[-1]] += amt
 
     def pl_for(v: str, p: str, key: str) -> Decimal:
         chain = CHAIN_FROM_ACTUAL.get(v)
@@ -132,7 +144,25 @@ def main(src: str, gl_dir: str) -> list[str]:
         cf_by = by_period(cf_file)
         ar = by_period(read(os.path.join(src, f"{v}_accounts_receivable_rollforward.csv"))[1])
         dr = by_period(read(os.path.join(src, f"{v}_deferred_revenue_waterfall.csv"))[1])
-        ap = by_period(read(os.path.join(src, f"{v}_accounts_payable_rollforward.csv"))[1])
+        ap_path = os.path.join(src, f"{v}_accounts_payable_rollforward.csv")
+        ap_fields, ap_file = read(ap_path)
+        for r in ap_file:
+            p = r["period"][:7]
+            if line(v, p) is None:
+                continue
+            end = line(v, p)["accounts_payable"]
+            if line(v, prior(p)) is None:
+                begin = invoiced = paid = end
+            elif "vendor_accruals" in ap_flow[v].get(p, {}):
+                begin = line(v, prior(p))["accounts_payable"]
+                invoiced, paid = -ap_flow[v][p]["vendor_accruals"], ap_flow[v][p]["vendor_payments"]
+            else:
+                continue
+            r.update({"beginning_accounts_payable": q(begin), "vendor_expense_accruals": q(invoiced),
+                      "vendor_cash_payments_n30": q(paid), "ending_accounts_payable": q(end),
+                      "rollforward_check": q(begin + invoiced - paid - end)})
+        write(ap_path, ap_fields, ap_file)
+        ap = by_period(ap_file)
         pp = by_period(read(os.path.join(src, f"{v}_Prepaids_Rollforward.csv"))[1])
         dc_path = os.path.join(src, f"{v}_deferred_commissions_rollforward.csv")
         dc = by_period(read(dc_path)[1]) if os.path.exists(dc_path) else {}
@@ -241,6 +271,10 @@ def main(src: str, gl_dir: str) -> list[str]:
                     nr["commission_cash_out"] = q(payouts[p])
                 if p in payroll:
                     nr["payroll_cash_out"] = q(payroll[p])
+                if p in ap:
+                    nr["vendor_cash_out_n30"] = q(num(ap[p]["vendor_cash_payments_n30"]))
+                nr["tax_cash_out"] = q(pl_for(v, p, "tax"))
+                nr["interest_cash_out"] = q(pl_for(v, p, "interest"))
                 outflows = sum((num(nr.get(k)) for k in ("payroll_cash_out", "commission_cash_out", "vendor_cash_out_n30",
                                                           "tax_cash_out", "interest_cash_out")), ZERO)
                 financing_key = "financing_to_maintain_cash_floor" if "financing_to_maintain_cash_floor" in bf else "financing"
