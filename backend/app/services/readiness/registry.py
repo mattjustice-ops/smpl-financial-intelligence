@@ -19,7 +19,22 @@ CONNECTOR_TYPES: dict[str, str] = {
     "MARKETING": "Marketing automation (HubSpot, Marketo)",
     "HRIS": "HRIS / payroll (Rippling, Workday, BambooHR + Gusto)",
     "CS": "Customer success tool (Gainsight, ChurnZero)",
+    "COMP": "Commission / comp tool (CaptivateIQ, Spiff, Xactly) or payroll export",
 }
+
+VERSIONS: tuple[str, ...] = ("Actual", "Budget", "Forecast")
+
+
+@dataclass(frozen=True)
+class SourceFile:
+    """One upload file: ``{Version}_{base}.csv`` for each version, or ``{base}.csv`` when versions is empty."""
+
+    base: str
+    versions: tuple[str, ...] = VERSIONS
+
+
+def files(*bases: str, versions: tuple[str, ...] = VERSIONS) -> tuple[SourceFile, ...]:
+    return tuple(SourceFile(b, versions) for b in bases)
 
 
 @dataclass(frozen=True)
@@ -32,36 +47,139 @@ class CanonicalObject:
     # Reporting window used to score period coverage: "actual" (FY start → close month),
     # "budget" (full FY), "forecast" (after close month → FY end), or None (presence only).
     period_scope: str | None = None
+    # Upload manifest (manifest.py): the files that supply the object, the load tier (dimensions
+    # before ledgers, ledgers before subledgers, schedules last) and the questionnaire question
+    # that says whether the customer has it.
+    files: tuple[SourceFile, ...] = ()
+    tier: int = 0
+    question: str | None = None
 
+
+A, B, F = ("Actual",), ("Budget",), ("Forecast",)
+SHARED: tuple[str, ...] = ()
+
+# Load tiers for the upload manifest.
+DIMENSION, LEDGER, SUBLEDGER, OPERATIONAL, SCHEDULE, STATEMENT = 1, 2, 3, 4, 5, 6
 
 OBJECTS: dict[str, CanonicalObject] = {
     o.id: o
     for o in (
-        CanonicalObject("gl_account", "GL Account", "ERP", ("actual_chart_of_accounts",)),
-        CanonicalObject("journal_entry", "Journal Entry (GL activity)", "ERP", ("gl_actuals#Actual", "actual_gl_detail"), "actual"),
-        CanonicalObject("income_statement", "Income Statement", "ERP", ("gl_actuals#Actual",), "actual"),
-        CanonicalObject("balance_sheet", "Balance Sheet", "ERP", ("gl_actuals#Actual",), "actual"),
-        CanonicalObject("cash_flow_statement", "Cash Flow Statement", "ERP", ("gl_actuals#Actual",), "actual"),
+        CanonicalObject("gl_account", "GL Account", "ERP", ("actual_chart_of_accounts",),
+                        files=files("chart_of_accounts"), tier=DIMENSION),
+        CanonicalObject("journal_entry", "Journal Entry (GL activity)", "ERP", ("gl_actuals#Actual", "actual_gl_detail"), "actual",
+                        files=files("gl_detail", versions=A), tier=LEDGER),
+        CanonicalObject("income_statement", "Income Statement", "ERP", ("gl_actuals#Actual",), "actual",
+                        files=files("income_statement"), tier=STATEMENT),
+        CanonicalObject("balance_sheet", "Balance Sheet", "ERP", ("gl_actuals#Actual",), "actual",
+                        files=files("balance_sheet"), tier=STATEMENT),
+        CanonicalObject("cash_flow_statement", "Cash Flow Statement", "ERP", ("gl_actuals#Actual",), "actual",
+                        files=files("cash_flow_statement", "cash_flow_bridge"), tier=STATEMENT),
         CanonicalObject("cash_position", "Cash Position", "ERP", ("gl_actuals#Actual",), "actual"),
         CanonicalObject("legal_entity", "Legal Entity", "ERP", ("@organization",)),
-        CanonicalObject("department", "Department / Cost Center", "ERP", ("actual_department_cost_centers",)),
+        CanonicalObject("department", "Department / Cost Center", "ERP", ("actual_department_cost_centers",),
+                        files=files("department_cost_centers"), tier=DIMENSION),
+        CanonicalObject("vendor", "Vendor", "ERP", ("actual_vendor_master",),
+                        files=files("vendor_master", versions=A), tier=DIMENSION, question="7.33"),
+        CanonicalObject("vendor_bill", "Vendor Bill (AP subledger)", "ERP", ("actual_vendor_bills",),
+                        files=files("vendor_bills", versions=A), tier=SUBLEDGER, question="7.33"),
+        CanonicalObject("vendor_payment", "Vendor Payment", "ERP", ("actual_vendor_payments",),
+                        files=files("vendor_payments", versions=A), tier=SUBLEDGER, question="7.33"),
+        CanonicalObject("ap_aging", "AP Aging", "ERP", ("actual_ap_aging",),
+                        files=files("AP_Aging", versions=A), tier=SCHEDULE, question="7.33"),
+        CanonicalObject("ap_rollforward", "AP Rollforward", "ERP", ("actual_accounts_payable_rollforward",), "actual",
+                        files=files("accounts_payable_rollforward"), tier=SCHEDULE),
+        CanonicalObject("ar_rollforward", "AR Rollforward", "ERP", ("actual_accounts_receivable_rollforward",), "actual",
+                        files=files("accounts_receivable_rollforward"), tier=SCHEDULE),
+        CanonicalObject("prepaid_schedule", "Prepaid Schedule", "ERP", ("actual_prepaids_rollforward",),
+                        files=files("Prepaids_Rollforward", "Prepaid_Amortization_Schedule"), tier=SCHEDULE,
+                        question="7.35"),
+        CanonicalObject("accrued_expenses", "Accrued Expenses (services received, not yet billed)", "ERP",
+                        ("actual_accrued_expenses_rollforward",), "actual",
+                        files=(*files("accrued_expenses_rollforward"), *files("accrued_expenses_detail", versions=A)),
+                        tier=SCHEDULE, question="7.35"),
+        CanonicalObject("lease_schedule", "Operating Lease Schedule (ASC 842)", "ERP",
+                        ("actual_operating_lease_schedule",), files=files("operating_lease_schedule"), tier=SCHEDULE,
+                        question="7.35"),
+        CanonicalObject("fixed_asset", "Fixed Asset Register", "ERP", ("actual_fixed_asset_register",),
+                        files=files("fixed_asset_register", versions=A), tier=SUBLEDGER, question="7.35"),
+        CanonicalObject("debt_schedule", "Debt Schedule", "ERP", ("actual_debt_schedule",),
+                        files=files("debt_schedule", versions=A), tier=SUBLEDGER, question="7.35"),
         CanonicalObject("budget_scenario", "Scenario — Budget", "BUDGET", ("gl_actuals#Budget",), "budget"),
-        CanonicalObject("budget_line", "Budget Line", "BUDGET", ("gl_actuals#Budget", "budget_gl_detail"), "budget"),
+        CanonicalObject("budget_line", "Budget Line", "BUDGET", ("gl_actuals#Budget", "budget_gl_detail"), "budget",
+                        files=files("gl_detail", versions=B), tier=LEDGER),
+        CanonicalObject("vendor_spend_plan", "Vendor Spend Plan", "BUDGET",
+                        ("budget_vendor_spend_plan", "forecast_vendor_spend_plan"),
+                        files=files("vendor_spend_plan", versions=B + F), tier=OPERATIONAL),
         CanonicalObject("forecast_scenario", "Scenario — Forecast", "BUDGET", ("gl_actuals#Forecast",), "forecast"),
-        CanonicalObject("forecast_line", "Forecast Line", "BUDGET", ("gl_actuals#Forecast", "forecast_gl_detail"), "forecast"),
-        CanonicalObject("assumption_driver", "Assumption Driver", "BUDGET", ("forecast_assumptions", "forecast_driver_assumptions")),
-        CanonicalObject("customer", "Customer", "BILLING", ("actual_customers",)),
-        CanonicalObject("subscription", "Subscription", "BILLING", ("actual_invoice_billing_schedule", "actual_revenue_recognition")),
-        CanonicalObject("arr_movement", "ARR Movement", "BILLING", ("actual_mrr_waterfall",), "actual"),
-        CanonicalObject("arr_waterfall", "ARR Waterfall", "BILLING", ("actual_mrr_waterfall",), "actual"),
-        CanonicalObject("invoice", "Invoice", "BILLING", ("actual_invoices",)),
-        CanonicalObject("payment", "Payment", "BILLING", ("actual_cash_collections",), "actual"),
-        CanonicalObject("revenue_schedule", "Revenue Schedule", "BILLING", ("actual_revenue_recognition",)),
-        CanonicalObject("opportunity", "Opportunity", "CRM", ("actual_opportunities",)),
-        CanonicalObject("campaign", "Campaign / Channel", "MARKETING", ("actual_marketing_spend_by_channel",), "actual"),
-        CanonicalObject("mql", "MQL", "MARKETING", ("actual_marketing_pipeline",), "actual"),
-        CanonicalObject("employee", "Employee", "HRIS", ("actual_employees", "workforce_employees")),
-        CanonicalObject("payroll_line", "Payroll Line", "HRIS", ("actual_headcount_plan", "workforce_period_summary")),
+        CanonicalObject("forecast_line", "Forecast Line", "BUDGET", ("gl_actuals#Forecast", "forecast_gl_detail"), "forecast",
+                        files=files("gl_detail", versions=F), tier=LEDGER),
+        CanonicalObject("assumption_driver", "Assumption Driver", "BUDGET", ("forecast_assumptions", "forecast_driver_assumptions"),
+                        files=(*files("assumptions", "working_capital_metrics", versions=F),
+                               *files("cash_flow_driver_assumptions", "Working_Capital_Driver_Summary")),
+                        tier=SCHEDULE),
+        CanonicalObject("headcount_plan", "Headcount Plan", "BUDGET", ("actual_headcount_plan",),
+                        files=files("Headcount_Plan"), tier=SCHEDULE),
+        CanonicalObject("hiring_plan_input", "Hiring Plan Inputs (comp bands, ramp, allocations)", "BUDGET",
+                        ("workforce_compensation_bands", "workforce_hiring_ramp_assumptions",
+                         "workforce_department_allocation_rules"),
+                        files=files("Compensation_Bands", "Hiring_Ramp_Assumptions", "Department_Allocation_Rules",
+                                    versions=SHARED), tier=OPERATIONAL),
+        CanonicalObject("customer", "Customer", "BILLING", ("actual_customers",),
+                        files=files("customers"), tier=SUBLEDGER),
+        CanonicalObject("subscription", "Subscription", "BILLING", ("actual_invoice_billing_schedule", "actual_revenue_recognition"),
+                        files=files("invoice_billing_schedule", "revenue_recognition"), tier=SUBLEDGER),
+        CanonicalObject("arr_movement", "ARR Movement", "BILLING", ("actual_mrr_waterfall",), "actual",
+                        files=files("customer_arr_history"), tier=SUBLEDGER),
+        CanonicalObject("arr_waterfall", "ARR Waterfall", "BILLING", ("actual_mrr_waterfall",), "actual",
+                        files=files("MRR_Waterfall"), tier=SCHEDULE),
+        CanonicalObject("invoice", "Invoice", "BILLING", ("actual_invoices",),
+                        files=files("invoices"), tier=SUBLEDGER),
+        CanonicalObject("payment", "Payment", "BILLING", ("actual_cash_collections",), "actual",
+                        files=files("cash_collections"), tier=SUBLEDGER),
+        CanonicalObject("revenue_schedule", "Revenue Schedule", "BILLING", ("actual_revenue_recognition",),
+                        files=files("revenue_schedule", versions=F), tier=SCHEDULE),
+        CanonicalObject("services_schedule", "Implementation / Services Schedule", "BILLING",
+                        ("actual_implementation_schedule", "actual_recurring_services_schedule"),
+                        files=files("implementation_schedule", "recurring_services_schedule"), tier=SUBLEDGER),
+        CanonicalObject("deferred_revenue", "Deferred Revenue Waterfall", "BILLING", ("actual_deferred_revenue_waterfall",), "actual",
+                        files=files("deferred_revenue_waterfall"), tier=SCHEDULE),
+        CanonicalObject("opportunity", "Opportunity", "CRM", ("actual_opportunities",),
+                        files=files("opportunities", "opportunity_movements"), tier=OPERATIONAL),
+        CanonicalObject("renewal_pipeline", "Renewal Pipeline", "CRM", ("actual_renewal_pipeline",),
+                        files=files("renewal_pipeline", versions=A + F), tier=OPERATIONAL),
+        CanonicalObject("pipeline_waterfall", "Pipeline Waterfall and Bookings", "CRM", ("actual_pipeline_waterfall",),
+                        files=(*files("pipeline_waterfall"), *files("bookings_summary", versions=B + F)), tier=SCHEDULE),
+        CanonicalObject("sales_quota", "Sales Reps and Quotas", "CRM", ("actual_sales_quotas", "actual_sales_reps"),
+                        files=(*files("sales_reps"), *files("Sales_Quotas", versions=A + B),
+                               *files("quota_capacity", versions=F)), tier=SUBLEDGER),
+        CanonicalObject("campaign", "Campaign / Channel", "MARKETING", ("actual_marketing_spend_by_channel",), "actual",
+                        files=files("marketing_spend_by_channel", versions=A), tier=OPERATIONAL),
+        CanonicalObject("mql", "MQL", "MARKETING", ("actual_marketing_pipeline",), "actual",
+                        files=(*files("marketing_pipeline"), *files("funnel_conversion_rates", versions=A),
+                               *files("marketing_pipeline_summary", versions=F)), tier=OPERATIONAL),
+        CanonicalObject("employee", "Employee", "HRIS", ("actual_employees", "workforce_employees"),
+                        files=files("Employees"), tier=DIMENSION, question="7.32"),
+        CanonicalObject("payroll_policy", "Payroll Policy (tax, benefits, 401(k), bonus timing)", "HRIS",
+                        ("actual_payroll_policies",), files=files("payroll_policies"), tier=DIMENSION, question="7.31"),
+        CanonicalObject("payroll_line", "Payroll Line", "HRIS",
+                        ("actual_payroll_register", "actual_headcount_plan", "workforce_period_summary"),
+                        files=files("payroll_register"), tier=SUBLEDGER, question="7.30"),
+        CanonicalObject("open_requisition", "Open Requisition", "HRIS", ("actual_open_requisitions",),
+                        files=files("Open_Requisitions"), tier=OPERATIONAL),
+        CanonicalObject("sbc_schedule", "Stock-Based Compensation Schedule", "HRIS", ("actual_sbc_schedule",),
+                        files=files("SBC_Schedule"), tier=SCHEDULE, question="7.36"),
+        CanonicalObject("commission_plan", "Commission Plan", "COMP", ("actual_commission_plans",),
+                        files=files("commission_plans"), tier=DIMENSION, question="7.20"),
+        CanonicalObject("commission_payout", "Commission Payout", "COMP",
+                        ("actual_commission_payouts", "actual_renewal_commissions"), "actual",
+                        files=files("commission_payouts", "renewal_commissions", versions=A), tier=SUBLEDGER,
+                        question="7.20"),
+        CanonicalObject("commission_schedule", "Commission Schedule (capitalized / expensed)", "COMP",
+                        ("actual_commission_schedule",), "actual",
+                        files=files("commission_schedule"), tier=SCHEDULE, question="7.14"),
+        CanonicalObject("deferred_commission", "Deferred Commissions Rollforward (ASC 340-40)", "COMP",
+                        ("actual_deferred_commissions_rollforward",), "actual",
+                        files=files("deferred_commissions_rollforward"), tier=SCHEDULE, question="7.14"),
         CanonicalObject("health_score", "Health Score", "CS", ()),
     )
 }
@@ -235,6 +353,28 @@ SALES_PLAN: tuple[Question, ...] = (
              ("through_commission_plan", "bonus_in_addition")),
 )
 
+# Which source files and subledgers the customer can export; the upload manifest links each object to
+# its question (CanonicalObject.question). No module is gated on them.
+DATA_SOURCES: tuple[Question, ...] = (
+    Question("7.30", "data_sources",
+             "Payroll register export (Gusto, ADP, Rippling, Paylocity): by employee and pay period, by department, "
+             "summary only, or none",
+             ("by_employee", "by_department", "summary_only", "none")),
+    Question("7.31", "data_sources",
+             "Payroll policies documented: employer tax rates, benefits, 401(k) match and bonus payout timing"),
+    Question("7.32", "data_sources", "HRIS export includes terminated employees with termination dates"),
+    Question("7.33", "data_sources",
+             "AP subledger exportable from the ERP: vendor bills (vendor, bill date, due date, amount, GL account) "
+             "and bill payments"),
+    Question("7.34", "data_sources", "Standard vendor payment terms",
+             ("net_15", "net_30", "net_45", "net_60", "mixed")),
+    Question("7.35", "data_sources",
+             "Supporting schedules kept outside the GL: prepaid, accrued expense, lease (ASC 842), fixed asset and "
+             "debt schedules",
+             ("all", "some", "none")),
+    Question("7.36", "data_sources", "Equity grant / stock-based compensation schedule (Carta, Shareworks)"),
+)
+
 SCORE_INPUTS: tuple[Question, ...] = (
     Question("7.7", "score_input", "Cost of revenue policy documented and approved",
              effect="cap_partial",
@@ -269,7 +409,7 @@ SCORE_INPUTS: tuple[Question, ...] = (
 ALL_QUESTIONS: dict[str, Question] = {
     q.id: q
     for q in (*READINESS_GATES, *SUBSCRIPTION_GATE, *CUSTOMER_RETURNS, *CRM_STAGE_GATE, *COMMISSION_POLICY_GATE,
-              *SALES_PLAN, *SCORE_INPUTS)
+              *SALES_PLAN, *DATA_SOURCES, *SCORE_INPUTS)
 }
 
 NORMALIZATION_GATES: dict[str, dict[str, object]] = {
@@ -315,6 +455,14 @@ NORMALIZATION_GATES: dict[str, dict[str, object]] = {
             "7.27": ("7.14", ("capitalized", "expensed")),
             "7.28": ("7.14", ("capitalized", "expensed")),
             "7.29": ("7.14", ("capitalized", "expensed")),
+        },
+    },
+    "data_sources": {
+        "name": "Data Sources and Subledgers",
+        "questions": DATA_SOURCES,
+        "resolved_values": None,
+        "required_if": {
+            "7.34": ("7.33", ("yes",)),
         },
     },
 }

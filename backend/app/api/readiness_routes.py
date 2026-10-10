@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.services.organizations import get_organization_or_404
 from app.services.readiness.commission_plan_inputs import build_plan_inputs
 from app.services.readiness.engine import validate_answers
+from app.services.readiness.manifest import MANIFEST_COLUMNS, manifest_rows
 from app.services.readiness.registry import catalog
 from app.services.readiness.service import readiness_payload, save_answers
 
@@ -30,6 +31,12 @@ def get_readiness(
 @readiness_router.get("/questions")
 def get_readiness_questions() -> dict[str, Any]:
     return catalog()
+
+
+@readiness_router.get("/manifest")
+def get_upload_manifest() -> dict[str, Any]:
+    """Files SMPL ingests, by canonical object, with load order, target table and questionnaire link."""
+    return {"columns": list(MANIFEST_COLUMNS), "rows": manifest_rows()}
 
 
 @readiness_router.get("/commission-plan-inputs")
