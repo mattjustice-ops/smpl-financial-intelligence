@@ -92,7 +92,8 @@ EXPENSE_LINES = {"Sales": "S&M", "Marketing": "S&M", "Customer Success": "S&M", 
                  "Finance": "G&A", "G&A": "G&A", "Support": "G&A"}
 REGISTER_WINDOW = {"Actual": ("2024-01", CLOSE), "Budget": ("2026-01", "2026-12"), "Forecast": ("2026-07", "2026-12")}
 HISTORY_FILE = "Actual_customer_arr_history.csv"
-WINBACK_WINDOW = 6
+# The note the history builder writes on a Reactivation after a churn ("winback after N months away").
+CANCELLED_RETURN_NOTE = "winback"
 SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
 IMPLEMENTATION_FEE = {"SMB": Decimal(2000), "Mid-Market": Decimal(3500), "Enterprise": Decimal(5000)}
 COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
@@ -1453,17 +1454,19 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
             dep, when = last.pop(c)
             away = _pidx(p) - _pidx(when)
             if kind == "Reactivation":
-                kinds["restart" if dep == "Pause" else "winback"] += 1
-                if dep == "Churn" and away > WINBACK_WINDOW:
-                    diffs.append(f"{p} {c}: reactivation {away} months after churning (new business after {WINBACK_WINDOW})")
+                kinds["back after a pause" if dep == "Pause" else "back after cancelling"] += 1
+                if dep == "Churn" and away > RESTART_AFTER_MONTHS:
+                    diffs.append(f"{p} {c}: reactivation {away} months after churning "
+                                 f"(new business after {RESTART_AFTER_MONTHS})")
             else:
                 kinds["back as new business"] += 1
-                if dep != "Churn" or away <= WINBACK_WINDOW:
+                if dep != "Churn" or away <= RESTART_AFTER_MONTHS:
                     diffs.append(f"{p} {c}: new business {away} months after a {dep.lower()}")
         elif kind == "Reactivation":
             diffs.append(f"{p} {c}: reactivation without a departure")
-    rep.check(f"returns follow the policy: restart after a pause (any time), winback within {WINBACK_WINDOW} months of "
-              f"churning, later than that is new business", diffs, ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
+    rep.check(f"returns follow the commission policy: back after a pause (any length) or within {RESTART_AFTER_MONTHS} "
+              f"months of cancelling is a Reactivation movement, later after cancelling is new business", diffs,
+              ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
 
     opps = f("Actual_opportunities.csv")
     want = {}
@@ -1603,10 +1606,11 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
               "with; expansion: above their level before contractions), recomputed as a high-water level", diffs,
               f"reactivation {tot[('Reactivation', 'base')] / tot[('Reactivation', 'arr')]:.2%} commissionable, "
               f"expansion {tot[('Expansion', 'base')] / tot[('Expansion', 'arr')]:.2%}")
-    wb = sum((num(r["movement_arr"]) for r in rows if r["movement_type"] == "Reactivation"
-              and r["note"].startswith("winback")), ZERO)
+    cancelled = sum((num(r["movement_arr"]) for r in rows if r["movement_type"] == "Reactivation"
+                     and r["note"].startswith(CANCELLED_RETURN_NOTE)), ZERO)
     re_ = sum((num(r["movement_arr"]) for r in rows if r["movement_type"] == "Reactivation"), ZERO)
-    rep.info(f"winbacks {money(wb)} of {money(re_)} reactivation ARR ({wb / re_:.1%}); the rest are restarts after a pause")
+    rep.info(f"customers back after cancelling {money(cancelled)} of {money(re_)} reactivation ARR "
+             f"({cancelled / re_:.1%}); the rest are customers back after a pause")
 
 
 def plan_history_section(rep: Report, f, v: str, actual: list[dict[str, str]], a_eop) -> None:
@@ -1706,13 +1710,14 @@ def plan_history_section(rep: Report, f, v: str, actual: list[dict[str, str]], a
             away = _pidx(p) - _pidx(when)
             if p >= first:
                 if kind == "Reactivation":
-                    kinds["restart" if dep == "Pause" else "winback"] += 1
-                if (kind == "Reactivation" and dep == "Churn" and away > WINBACK_WINDOW) or \
-                        (kind == "New Business" and (dep != "Churn" or away <= WINBACK_WINDOW)):
+                    kinds["back after a pause" if dep == "Pause" else "back after cancelling"] += 1
+                if (kind == "Reactivation" and dep == "Churn" and away > RESTART_AFTER_MONTHS) or \
+                        (kind == "New Business" and (dep != "Churn" or away <= RESTART_AFTER_MONTHS)):
                     diffs.append(f"{p} {c}: {kind} {away} months after a {dep.lower()}")
         elif kind == "Reactivation":
             diffs.append(f"{p} {c}: reactivation without a departure")
-    rep.check(f"{v} returns follow the policy (restart after a pause, winback within {WINBACK_WINDOW} months)", diffs,
+    rep.check(f"{v} returns follow the commission policy (back after a pause, or within {RESTART_AFTER_MONTHS} months "
+              f"of cancelling)", diffs,
               ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
 
     customers = {r["customer_id"]: r for r in f(f"{v}_customers.csv")}

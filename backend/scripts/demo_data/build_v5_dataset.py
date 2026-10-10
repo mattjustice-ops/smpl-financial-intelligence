@@ -35,8 +35,8 @@ Rules (agreed with Matt, Oct 6 2026):
   * Sales team: each version's roster is its Sales employees (sales_team.py), month by month with the
     employee's quota and the Hiring_Ramp_Assumptions.csv ramp: sales_reps, Actual and Budget quotas,
     Forecast quota capacity by territory, and the owners of that version's opportunities and movements. When Actual_customer_arr_history.csv exists (build_customer_history.py), the
-    commission base follows the return policy (onboarding 7.21-7.24): a winback or restart
-    earns only on ARR above what the customer left with, expansion first recovers earlier
+    commission base follows the return policy (onboarding 7.21-7.24): a customer back after cancelling
+    or a pause earns only on ARR above what the customer left with, expansion first recovers earlier
     contraction, and a customer back more than 6 months after churning is new business.
     Revenue weights and the customer master then come from that history. Budget-only and Forecast-only new
     logos come from their version's customer file and are billed in that version only. The 7 forecast hires
@@ -149,7 +149,8 @@ HISTORY_ORDER = {"Opening balance": 0, "Churn": 1, "Pause": 1, "Contraction": 2,
 
 def commission_bases(history: list[dict[str, str]]) -> list[dict]:
     """Each movement's commissionable ARR under the commission policy (onboarding 7.21-7.24, agreed with Matt):
-    a return (winback or restart) earns only on ARR above what the customer left with; expansion earns only
+    a Reactivation movement (back after cancelling or a pause) earns only on ARR above what the customer left
+    with, whatever its customer bucket line; expansion earns only
     above the customer's prior level (it first recovers earlier contractions or a return below the prior
     ARR); new business, including a customer back more than 6 months after churning, earns on all of it.
 
