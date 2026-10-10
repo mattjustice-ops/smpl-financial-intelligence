@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.services.commentary.schemas import CommentaryOutput
+from app.services.commentary.schemas import CommentaryOutput, WorkingCapitalInput
 from app.services.dashboard.schemas import (
     ExecutiveFlowResponse,
     WaterfallAttributionRow,
@@ -112,6 +112,8 @@ class ReportingBundle(BaseModel):
     opportunity_attribution: list[WaterfallAttributionRow] = Field(default_factory=list)
     mda_commentary: list[CommentaryField] = Field(default_factory=list)
     data_gaps: list[DataGapNote] = Field(default_factory=list)
+    working_capital: WorkingCapitalInput | None = None
+    working_capital_checks: list[ValidationCheck] = Field(default_factory=list)
 
     commentary: CommentaryOutput | None = None
     commentary_fields: list[CommentaryField] = Field(default_factory=list)

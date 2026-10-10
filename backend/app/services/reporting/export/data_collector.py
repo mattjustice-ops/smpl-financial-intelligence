@@ -276,6 +276,10 @@ def collect_reporting_bundle(
     except Exception:
         opportunity_rows = []
 
+    from app.services.reporting.working_capital_aging import working_capital_aging
+
+    working_capital, working_capital_checks = working_capital_aging(db, organization_id, as_of)
+
     data_gaps = assess_data_gaps(
         comparison_waterfalls=comparison_waterfalls,
         financial=financial,
@@ -313,6 +317,8 @@ def collect_reporting_bundle(
         pipeline_drilldown=drilldown_payload,
         opportunity_attribution=opportunity_rows,
         data_gaps=data_gaps,
+        working_capital=working_capital,
+        working_capital_checks=working_capital_checks,
         commentary_fields=commentary_fields,
     )
     mda_commentary = generate_mda_commentary(partial_bundle, use_ai=include_ai_commentary)
@@ -327,6 +333,7 @@ def collect_reporting_bundle(
                 bundle_data=executive,
                 financial=financial,
                 comparison_waterfalls=comparison_waterfalls,
+                working_capital=working_capital,
             )
             client = build_commentary_llm_client()
             commentary = generate_commentary(inputs, client)
@@ -368,6 +375,8 @@ def collect_reporting_bundle(
         opportunity_attribution=opportunity_rows,
         mda_commentary=mda_commentary,
         data_gaps=data_gaps,
+        working_capital=working_capital,
+        working_capital_checks=working_capital_checks,
         commentary=commentary,
         commentary_fields=commentary_fields,
     )

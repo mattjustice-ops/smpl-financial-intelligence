@@ -211,12 +211,39 @@ def _cash_commentary(bundle: ReportingBundle, as_of: str) -> CommentaryField:
         parts.append(collections_text)
     field.what_changed = "; ".join(parts) + " (cash flow bridge source of truth)."
 
+    unfavorable: list[str] = []
     if collections_a is not None and collections_b is not None and collections_a < collections_b:
-        field.unfavorable = (
-            f"Collections trailed budget by {_fmt_money(collections_b - collections_a)}."
-        )
-    field.leadership_attention = "Confirm ending cash ties to balance sheet cash in Validation tab."
-    field.metric_context = field.what_changed
+        unfavorable.append(f"Collections trailed budget by {_fmt_money(collections_b - collections_a)}.")
+    attention = ["Confirm ending cash ties to balance sheet cash in Validation tab."]
+    context = [field.what_changed]
+
+    wc = bundle.working_capital
+    if wc is not None:
+        if wc.accounts_payable is not None:
+            dpo = f", DPO {wc.dpo_days} days" if wc.dpo_days is not None else ""
+            context.append(f"AP {_fmt_money(wc.accounts_payable)}{dpo}, {_fmt_money(wc.ap_past_due)} past due.")
+        if wc.accounts_receivable is not None:
+            dso = f", DSO {wc.dso_days} days" if wc.dso_days is not None else ""
+            context.append(f"AR {_fmt_money(wc.accounts_receivable)}{dso}, {_fmt_money(wc.ar_past_due)} past due.")
+        for label, parties in (("Past-due vendors", wc.past_due_vendors), ("Past-due customers", wc.past_due_customers)):
+            if parties:
+                unfavorable.append(
+                    f"{label}: "
+                    + ", ".join(f"{p.name} {_fmt_money(p.past_due)} ({p.oldest_bucket})" for p in parties)
+                    + "."
+                )
+        if wc.late_vendor_payments:
+            attention.insert(
+                0,
+                f"{wc.late_vendor_payments} of {wc.vendor_payments} vendor payments in {wc.period} were made after "
+                f"the due date ({_fmt_money(wc.late_vendor_payment_amount)}).",
+            )
+        if wc.notes:
+            field.recommended_actions = " ".join(wc.notes)
+
+    field.unfavorable = " ".join(unfavorable)
+    field.leadership_attention = " ".join(attention)
+    field.metric_context = " ".join(context)
     field.source = "metrics"
     return field
 
@@ -258,6 +285,7 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
                 bundle_data=bundle.executive_flow,
                 financial=bundle.comparison_financial_statements or bundle.financial_statements,
                 comparison_waterfalls=bundle.comparison_waterfalls,
+                working_capital=bundle.working_capital,
             )
             client = build_commentary_llm_client()
             user_prompt = (
@@ -268,7 +296,10 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
                 + monthly_close_requirements_prompt()
             )
             ai_raw = client.generate(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
-            from app.services.commentary.claim_verify import apply_fail_closed_to_commentary
+            from app.services.commentary.claim_verify import (
+                apply_fail_closed_to_commentary,
+                flatten_evidence_values,
+            )
             from app.services.commentary.schemas import CommentaryOutput
 
             ai = CommentaryOutput.model_validate({**ai_raw, "period_label": inputs.period_label})
@@ -301,6 +332,8 @@ def generate_mda_commentary(bundle: ReportingBundle, *, use_ai: bool = False) ->
                     evidence[f"variance.{i}.baseline"] = row.forecast
             for i, ch in enumerate(inputs.pipeline_changes or []):
                 evidence[f"pipeline.{i}"] = ch.delta_arr
+            if inputs.working_capital is not None:
+                flatten_evidence_values(inputs.working_capital, prefix="working_capital", out=evidence)
 
             verified, claim_result = apply_fail_closed_to_commentary(
                 ai, evidence, policy="strict"
