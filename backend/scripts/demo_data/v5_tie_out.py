@@ -92,8 +92,13 @@ EXPENSE_LINES = {"Sales": "S&M", "Marketing": "S&M", "Customer Success": "S&M", 
                  "Finance": "G&A", "G&A": "G&A", "Support": "G&A"}
 REGISTER_WINDOW = {"Actual": ("2024-01", CLOSE), "Budget": ("2026-01", "2026-12"), "Forecast": ("2026-07", "2026-12")}
 HISTORY_FILE = "Actual_customer_arr_history.csv"
-# The note the history builder writes on a Reactivation after a churn ("winback after N months away").
-CANCELLED_RETURN_NOTE = "winback"
+# The note the history builder writes on a Reactivation after a churn ("back after cancelling, N months away").
+CANCELLED_RETURN_NOTE = "back after cancelling,"
+
+
+def _return_note(departure: str, months_away: int) -> str:
+    left = "a pause" if departure == "Pause" else "cancelling"
+    return f"back after {left}, {months_away} months away"
 SEGMENT_FLOORS = (("Enterprise", Decimal(500000)), ("Mid-Market", Decimal(100000)), ("SMB", ZERO))
 IMPLEMENTATION_FEE = {"SMB": Decimal(2000), "Mid-Market": Decimal(3500), "Enterprise": Decimal(5000)}
 COMMISSION_SOURCE_SUFFIX = "_deferred_commissions_rollforward.csv"
@@ -1444,7 +1449,7 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
               "churn and pause end at zero; new business and returns start from zero; one movement a month", chain,
               f"{len({r['customer_id'] for r in rows})} customers, {len(rows)} rows")
 
-    diffs, kinds = [], defaultdict(int)
+    diffs, kinds, notes = [], defaultdict(int), []
     last: dict[str, tuple[str, str]] = {}
     for r in sorted(rows, key=lambda r: (r["customer_id"], r["period"], HISTORY_ORDER[r["movement_type"]])):
         c, p, kind = r["customer_id"], r["period"], r["movement_type"]
@@ -1455,6 +1460,8 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
             away = _pidx(p) - _pidx(when)
             if kind == "Reactivation":
                 kinds["back after a pause" if dep == "Pause" else "back after cancelling"] += 1
+                if r["note"] != _return_note(dep, away):
+                    notes.append(f"{p} {c}: note '{r['note']}', expected '{_return_note(dep, away)}'")
                 if dep == "Churn" and away > RESTART_AFTER_MONTHS:
                     diffs.append(f"{p} {c}: reactivation {away} months after churning "
                                  f"(new business after {RESTART_AFTER_MONTHS})")
@@ -1467,6 +1474,8 @@ def history_section(rep: Report, f, hist: list[dict[str, str]], a_mrr) -> None:
     rep.check(f"returns follow the commission policy: back after a pause (any length) or within {RESTART_AFTER_MONTHS} "
               f"months of cancelling is a Reactivation movement, later after cancelling is new business", diffs,
               ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
+    rep.check("each Reactivation's note names how the customer left and the months away, as the history shows",
+              notes, f"{sum(n for k, n in kinds.items() if k != 'back as new business')} notes")
 
     opps = f("Actual_opportunities.csv")
     want = {}
@@ -1711,13 +1720,15 @@ def plan_history_section(rep: Report, f, v: str, actual: list[dict[str, str]], a
             if p >= first:
                 if kind == "Reactivation":
                     kinds["back after a pause" if dep == "Pause" else "back after cancelling"] += 1
+                    if r["note"] != _return_note(dep, away):
+                        diffs.append(f"{p} {c}: note '{r['note']}', expected '{_return_note(dep, away)}'")
                 if (kind == "Reactivation" and dep == "Churn" and away > RESTART_AFTER_MONTHS) or \
                         (kind == "New Business" and (dep != "Churn" or away <= RESTART_AFTER_MONTHS)):
                     diffs.append(f"{p} {c}: {kind} {away} months after a {dep.lower()}")
         elif kind == "Reactivation":
             diffs.append(f"{p} {c}: reactivation without a departure")
     rep.check(f"{v} returns follow the commission policy (back after a pause, or within {RESTART_AFTER_MONTHS} months "
-              f"of cancelling)", diffs,
+              f"of cancelling) and each Reactivation's note names how the customer left and the months away", diffs,
               ", ".join(f"{k} {n}" for k, n in sorted(kinds.items())))
 
     customers = {r["customer_id"]: r for r in f(f"{v}_customers.csv")}
