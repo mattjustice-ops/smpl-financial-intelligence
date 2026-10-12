@@ -1737,7 +1737,8 @@ function buildFcAssurancePacket(){
     try {
       ensureFcGtmState();
       fyMkt = ALL_P.reduce((s, p) => s + (fcGtmAllocate(p).spendTot || 0), 0);
-      fyMql = ALL_P.reduce((s, p) => s + (fcGtmAllocate(p).mqlSum || 0), 0);
+      const mqls = ALL_P.map(p => fcGtmAllocate(p).mqlSum);
+      fyMql = mqls.some(v => v == null) ? null : mqls.reduce((s, v) => s + v, 0);
     } catch (e) { /* optional */ }
   }
 
@@ -4873,7 +4874,10 @@ function buildFcYoyCompare() {
       try { return typeof fcGtmAllocate === 'function' ? Number(fcGtmAllocate(p).spendTot) : null; } catch (e) { return null; }
     }),
     mqls: ALL_P.map(p => {
-      try { return typeof fcGtmAllocate === 'function' ? Number(fcGtmAllocate(p).mqlSum) : null; } catch (e) { return null; }
+      try {
+        const v = typeof fcGtmAllocate === 'function' ? fcGtmAllocate(p).mqlSum : null;
+        return v == null ? null : Number(v);
+      } catch (e) { return null; }
     }),
     cash: ALL_P.map(p => {
       const cfs = getDisplayCFS(p) || {};
@@ -5248,7 +5252,7 @@ function renderOverview(area) {
       </div>
       <div class="ov-card">
         <div class="ov-card-title">MQLs</div>
-        <div class="ov-card-sub">${grainQ ? 'Quarter total' : 'Monthly'} · funnel required</div>
+        <div class="ov-card-sub">${grainQ ? 'Quarter total' : 'Monthly'} · loaded funnel; forecast = spend ÷ loaded cost per MQL</div>
         <div class="chart-wrap"><canvas id="ovMqlC"></canvas></div>
       </div>
       <div class="ov-card">
@@ -6223,22 +6227,77 @@ function renderBS(area){
 
 // \u2500\u2500 PIPELINE DETAIL \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 // ── GTM / Pipeline (top-down: CRM pipe first, marketing MQLs overlay) ─────────
-const FC_GTM_DEFAULT_ACV = 125000;
-const FC_GTM_DEFAULT_MQL_OPP = 0.28;
-// Assumed cost per MQL by program account name until MQL volumes are loaded (checklist f5 / b5).
-const FC_GTM_ASSUMED_CPL = [
-  [/search/i, 450], [/social/i, 320], [/content|seo|syndication/i, 160],
-  [/event|webinar|field/i, 650], [/partner/i, 280],
-];
-const FC_GTM_ASSUMED_CPL_OTHER = 500;
+const FC_GTM_RATE_MONTHS = 12;
 
 // Program spend is not GTM state: it is the GL marketing program accounts on the P&L
 // (Actual GL through close, Forecast GL after, plus forecast account edits in fcPlSpend).
 let fcGtmState = {
-  cpl: null,           // { period: { programKey: $/MQL } } — edits over the assumed CPL
-  mqlOpp: FC_GTM_DEFAULT_MQL_OPP,
-  avgAcv: null,        // set only when the user overrides ACV; otherwise fcGtmDataAcv()
+  cpl: null,           // { period: { programKey: $/MQL } } — forecast edits over the loaded cost per MQL
 };
+
+function fcGtmPriorMonth(p) {
+  const y = Number(p.slice(0, 4)), m = Number(p.slice(5, 7));
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+/** Loaded funnel row for a month (history, then Actual / Forecast); null when not loaded. */
+function fcGtmLoadedFunnel(p) {
+  const SO = window.SMPLOutlook;
+  return SO && typeof SO.getLoadedFunnel === 'function' ? SO.getLoadedFunnel(p, getCloseMonth()) : null;
+}
+
+/** New Business ARR booked in a closed month (outlook actuals, else the loaded history). */
+function fcGtmBookedNb(p) {
+  const a = SRC.actuals && SRC.actuals[p];
+  if (a && a.arr_nb != null) return Number(a.arr_nb);
+  const h = window.SMPL_HISTORY && window.SMPL_HISTORY.arr && window.SMPL_HISTORY.arr[p];
+  return h && h.arr_nb != null ? Number(h.arr_nb) : null;
+}
+
+/**
+ * Funnel rates over the last FC_GTM_RATE_MONTHS closed months with loaded funnel, GL program spend and
+ * booked New Business: cost per MQL, MQL→opportunity, win rate on pipeline, MQLs per $ of New Business.
+ * Fields are null when the months are not loaded.
+ */
+function fcGtmFunnelRates() {
+  const cache = fcPlCache();
+  if (cache.gtmRates) return cache.gtmRates;
+  const SO = window.SMPLOutlook;
+  const months = [];
+  let p = getCloseMonth();
+  const sum = { spend: 0, mqls: 0, opps: 0, pipe: 0, won: 0, nb: 0 };
+  for (let i = 0; i < FC_GTM_RATE_MONTHS; i++, p = fcGtmPriorMonth(p)) {
+    const f = fcGtmLoadedFunnel(p);
+    const spend = SO && typeof SO.getLoadedProgramSpend === 'function' ? SO.getLoadedProgramSpend(p, getCloseMonth()) : null;
+    const nb = fcGtmBookedNb(p);
+    if (!f || f.mqls == null || spend == null || nb == null) continue;
+    months.push(p);
+    sum.spend += Number(spend) || 0;
+    sum.mqls += Number(f.mqls) || 0;
+    sum.opps += Number(f.opportunities_created) || 0;
+    sum.pipe += Number(f.pipeline_arr_created) || 0;
+    sum.won += Number(f.closed_won_arr) || 0;
+    sum.nb += nb;
+  }
+  months.sort();
+  const div = (a, b) => (b > 0 ? a / b : null);
+  cache.gtmRates = {
+    months,
+    from: months[0] || null,
+    to: months[months.length - 1] || null,
+    cpl: div(sum.spend, sum.mqls),
+    mqlOpp: div(sum.opps, sum.mqls),
+    winRate: div(sum.won, sum.pipe),
+    mqlPerNb: div(sum.mqls, sum.nb),
+  };
+  return cache.gtmRates;
+}
+
+function fcGtmRatesLabel(r) {
+  if (!r.months.length) return 'no closed months with loaded funnel, program spend and bookings';
+  const lbl = p => `${MO12[parseInt(p.slice(5), 10) - 1]} ${p.slice(0, 4)}`;
+  return `${r.months.length} closed months ${lbl(r.from)}–${lbl(r.to)}`;
+}
 
 /** CRM buckets carry `expected`; the engine's built-in demo pipeline does not. */
 function fcGtmIsCrmBucket(bucket) {
@@ -6260,27 +6319,18 @@ function fcGtmClosedNb() {
 }
 
 /** Average ARR of closed New Business deals through the close month (warehouse, else the deal book). */
-function fcGtmDataAcv() {
+function fcGtmAcv() {
   const live = SRC.gtm && Number(SRC.gtm.avg_acv);
   if (live > 0) return live;
   const nb = fcGtmClosedNb();
-  return nb.count ? nb.total / nb.count : FC_GTM_DEFAULT_ACV;
+  return nb.count ? nb.total / nb.count : null;
 }
 
 function fcGtmAcvSource() {
-  if (fcGtmState.avgAcv != null) return 'Edited on this page';
+  if (SRC.gtm && Number(SRC.gtm.avg_acv) > 0) return 'Closed new business deals · warehouse';
   const nb = fcGtmClosedNb();
   if (nb.count) return `${nb.count} closed deals Jan–${getCloseMoLabel()} · CRM`;
-  return 'Default — no CRM deals loaded';
-}
-
-function fcGtmAcv() {
-  return Math.max(1000, Number(fcGtmState.avgAcv) || fcGtmDataAcv());
-}
-
-function fcGtmAssumedCpl(label) {
-  const hit = FC_GTM_ASSUMED_CPL.find(([re]) => re.test(label));
-  return hit ? hit[1] : FC_GTM_ASSUMED_CPL_OTHER;
+  return 'Not loaded — no closed CRM deals';
 }
 
 /** GL marketing program accounts for a month (expense type "Marketing Programs"): { key: GL amount }. */
@@ -6302,10 +6352,7 @@ function fcGtmChannels() {
   });
   cache.gtmChannels = Object.keys(fy)
     .sort((a, b) => fy[b] - fy[a] || a.localeCompare(b))
-    .map(key => {
-      const label = fcPlSplitKey(key).account;
-      return { key, label, defaultCpl: fcGtmAssumedCpl(label) };
-    });
+    .map(key => ({ key, label: fcPlSplitKey(key).account }));
   return cache.gtmChannels;
 }
 
@@ -6320,7 +6367,6 @@ function fcGtmChannelSpend(period, key) {
 
 function ensureFcGtmState() {
   if (!fcGtmState.cpl) fcGtmState.cpl = {};
-  if (fcGtmState.mqlOpp == null) fcGtmState.mqlOpp = FC_GTM_DEFAULT_MQL_OPP;
 }
 
 /** Program spend edits are P&L account edits; the GL amount (within $500) clears the edit. */
@@ -6355,16 +6401,10 @@ function updateFcGtmSpend(period, raw) {
 
 function updateFcGtmCpl(period, idx, raw) {
   const ch = fcGtmChannels()[idx];
-  if (!ch) return;
+  if (!ch || period <= getCloseMonth()) return;
   ensureFcGtmState();
   if (!fcGtmState.cpl[period]) fcGtmState.cpl[period] = {};
   fcGtmState.cpl[period][ch.key] = Math.max(1, Math.round(Number(raw) || 0));
-  refresh();
-}
-function updateFcGtmRate(field, raw) {
-  ensureFcGtmState();
-  if (field === 'mqlOpp') fcGtmState.mqlOpp = Math.max(0.01, Math.min(1, (Number(raw) || 0) / 100));
-  if (field === 'avgAcv') fcGtmState.avgAcv = Math.max(1000, Math.round(Number(raw) || 0) * 1000);
   refresh();
 }
 
@@ -6472,46 +6512,49 @@ function fcGtmPipelineBooks(periods) {
   return out;
 }
 
+/**
+ * Program spend and MQLs for a month by GL program account.
+ * Closed months: the loaded MQLs, spread over accounts by spend (MQLs are loaded by marketing channel,
+ * not by GL account). Forecast months: spend ÷ cost per MQL (an edit, else the loaded rate).
+ * mqlSum is null when the month's MQLs or the cost per MQL are not loaded.
+ */
 function fcGtmAllocate(period) {
   ensureFcGtmState();
+  const closed = period <= getCloseMonth();
   const cpls = fcGtmState.cpl[period] || {};
+  const rates = fcGtmFunnelRates();
+  const loaded = closed ? fcGtmLoadedFunnel(period) : null;
+  const loadedMqls = loaded && loaded.mqls != null ? Number(loaded.mqls) : null;
   const channels = {};
   let spendTot = 0;
-  let mqlSum = 0;
+  fcGtmChannels().forEach(ch => { spendTot += fcGtmChannelSpend(period, ch.key); });
+  let mqlSum = closed ? loadedMqls : 0;
   fcGtmChannels().forEach(ch => {
     const spend = fcGtmChannelSpend(period, ch.key);
-    const cpl = Math.max(1, Number(cpls[ch.key]) || ch.defaultCpl);
-    const mqls = Math.max(0, spend) / cpl;
-    channels[ch.key] = { spend, cpl, mqls };
-    spendTot += spend;
-    mqlSum += mqls;
+    const mix = spendTot > 0 ? spend / spendTot : 0;
+    let cpl, mqls;
+    if (closed) {
+      mqls = loadedMqls != null ? loadedMqls * mix : null;
+      cpl = mqls ? spend / mqls : null;
+    } else {
+      cpl = Number(cpls[ch.key]) > 0 ? Number(cpls[ch.key]) : rates.cpl;
+      mqls = cpl ? Math.max(0, spend) / cpl : null;
+      if (mqls == null) mqlSum = null;
+      else if (mqlSum != null) mqlSum += mqls;
+    }
+    channels[ch.key] = { spend, cpl, mqls, mix };
   });
-  Object.keys(channels).forEach(k => { channels[k].mix = spendTot > 0 ? channels[k].spend / spendTot : 0; });
   return { spendTot, channels, mqlSum };
 }
 
-/** Pipeline coverage for Budget-aligned MQL implied (Budget default 3.0×). */
-const FC_GTM_PIPE_COV = 3.0;
-
 /**
- * MQLs implied — aligned with Budget "MQLs required" funnel math:
- *   pipelineOpps = (NB$ × coverage) / ACV
- *   mqls = pipelineOpps / (MQL→Opp %)
- * Actuals: closed logos / (mqlOpp × oppClose) — same back-solve as Budget hist.
- * Note: Forecast "MQLs bought" = raw spend÷CPL; Budget channel MQLs are scaled
- * to match required (not raw spend÷CPL), so bought can diverge even at same spend.
+ * MQLs implied by New Business ARR at the loaded funnel's MQLs per $ of New Business
+ * (fcGtmFunnelRates): closed months from booked New Business, forecast months from weighted New Business.
  */
 function fcGtmImpliedMqls(pipe) {
-  const mqlOpp = Math.max(0.01, Number(fcGtmState.mqlOpp) || FC_GTM_DEFAULT_MQL_OPP);
-  const oppClose = 0.14;
-  const avgAcv = fcGtmAcv();
-  if (pipe && pipe.isActual) {
-    const logos = pipe.logos != null ? pipe.logos : (avgAcv > 0 ? (Number(pipe.wtdNb) || 0) / avgAcv : 0);
-    return logos / (mqlOpp * oppClose);
-  }
-  const nb = Number(pipe && pipe.wtdNb) || 0;
-  const pipelineOpps = avgAcv > 0 ? (nb * FC_GTM_PIPE_COV) / avgAcv : 0;
-  return pipelineOpps / mqlOpp;
+  const r = fcGtmFunnelRates();
+  if (r.mqlPerNb == null) return null;
+  return (Number(pipe && pipe.wtdNb) || 0) * r.mqlPerNb;
 }
 
 let fcGtmSelectedMonth = null;
@@ -6591,7 +6634,8 @@ function fcGtmNumCells(periods, getter, fmt) {
     const c = p > getCloseMonth() ? 'fc-c' : 'act-c';
     return `<td class="${c}">${fmt(v)}</td>`;
   }).join('');
-  const fy = periods.reduce((s, p) => s + (Number(getter(p)) || 0), 0);
+  const vals = periods.map(getter);
+  const fy = vals.some(v => v == null) ? null : vals.reduce((s, v) => s + (Number(v) || 0), 0);
   return cells + `<td class="fy-c">${fmt(fy)}</td>`;
 }
 
@@ -6732,9 +6776,13 @@ function renderPipeline(area){
   periods.forEach(p => { allocByP[p] = fcGtmAllocate(p); });
 
   const fySpend = periods.reduce((s, p) => s + allocByP[p].spendTot, 0);
-  const fyMqlBought = periods.reduce((s, p) => s + allocByP[p].mqlSum, 0);
-  const fyMqlImplied = periods.reduce((s, p) => s + fcGtmImpliedMqls(pipeByP[p]), 0);
-  const mqlGap = fyMqlBought - fyMqlImplied;
+  const sumOrNull = vals => (vals.some(v => v == null) ? null : vals.reduce((s, v) => s + v, 0));
+  const fyMqlBought = sumOrNull(periods.map(p => allocByP[p].mqlSum));
+  const fyMqlImplied = sumOrNull(periods.map(p => fcGtmImpliedMqls(pipeByP[p])));
+  const mqlGap = fyMqlBought != null && fyMqlImplied != null ? fyMqlBought - fyMqlImplied : null;
+  const rates = fcGtmFunnelRates();
+  const fmtN = v => (v == null ? 'not loaded' : Math.round(v).toLocaleString());
+  const fmtPct = v => (v == null ? 'not loaded' : (v * 100).toFixed(1) + '%');
   const ytdNb = actP.reduce((s, p) => s + (pipeByP[p].wtdNb || 0), 0);
   const ytdExp = actP.reduce((s, p) => s + (pipeByP[p].wtdExp || 0), 0);
   const ytdNet = actP.reduce((s, p) => s + (pipeByP[p].netWtd || 0), 0);
@@ -6758,13 +6806,13 @@ function renderPipeline(area){
       · Dec ARR <strong>${fM(decArr,1)}</strong> vs base <strong>${decBasePlan != null ? fM(decBasePlan,1) : 'no budget ARR loaded'}</strong>
       · FY spend <strong>${fM(fySpend,1)}</strong> (YTD ${fM(ytdSpend,1)} · Fcst ${fM(fcSpend,1)})
     </div>
-    <div class="hc-legend"><i></i><span><strong>Act</strong> columns = booked ARR / locked spend. <strong>Fcst</strong> = lever-adjusted CRM pipe + editable mix/CPL/spend. MQLs implied: actuals from closed logos; forecast from open opps ÷ MQL→Opp%.</span></div>
+    <div class="hc-legend"><i></i><span><strong>Act</strong> columns = booked ARR / locked spend / loaded MQLs. <strong>Fcst</strong> = lever-adjusted CRM pipe + editable spend and cost per MQL. MQLs implied = New Business ARR × MQLs per $ of New Business (${fcGtmRatesLabel(rates)}).</span></div>
     <div class="gtm-strip">
       <div class="gtm-tile"><div class="gtm-tile-lbl">YTD net ARR</div><div class="gtm-tile-val">${fM(ytdNet,1)}</div><div class="gtm-tile-sub">Booked through ${getCloseMoLabel()}</div></div>
       <div class="gtm-tile"><div class="gtm-tile-lbl">Fcst net (weighted)</div><div class="gtm-tile-val">${fM(fcNet,1)}</div><div class="gtm-tile-sub">NB ${fM(fcNb,1)} + Exp ${fM(fcExp,1)} · lever-adj</div></div>
       <div class="gtm-tile"><div class="gtm-tile-lbl">Pipeline / NB</div><div class="gtm-tile-val">${coverLbl}</div><div class="gtm-tile-sub">Gross NB pipe ÷ weighted NB (Budget parity)</div></div>
-      <div class="gtm-tile"><div class="gtm-tile-lbl">Avg deal size (new business)</div><div class="gtm-tile-val">${fM(fcGtmAcv(),0)}</div><div class="gtm-tile-sub">${fcGtmAcvSource()}</div></div>
-      <div class="gtm-tile"><div class="gtm-tile-lbl">MQL bought vs implied</div><div class="gtm-tile-val">${mqlGap>=0?'+':''}${Math.round(mqlGap).toLocaleString()}</div><div class="gtm-tile-sub">FY ${Math.round(fyMqlBought).toLocaleString()} bought · ${Math.round(fyMqlImplied).toLocaleString()} implied</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">Avg deal size (new business)</div><div class="gtm-tile-val">${fcGtmAcv() != null ? fM(fcGtmAcv(),0) : '—'}</div><div class="gtm-tile-sub">${fcGtmAcvSource()}</div></div>
+      <div class="gtm-tile"><div class="gtm-tile-lbl">MQL bought vs implied</div><div class="gtm-tile-val">${mqlGap == null ? '—' : (mqlGap>=0?'+':'') + Math.round(mqlGap).toLocaleString()}</div><div class="gtm-tile-sub">FY ${fmtN(fyMqlBought)} bought · ${fmtN(fyMqlImplied)} implied</div></div>
     </div>`;
 
   const arrGap = decArr != null && decBasePlan != null ? decArr - decBasePlan : null;
@@ -6777,14 +6825,10 @@ function renderPipeline(area){
   if (!fcGtmSelectedMonth || !periods.includes(fcGtmSelectedMonth)) {
     fcGtmSelectedMonth = fcP[0] || periods[periods.length - 1] || periods[0];
   }
-  const mqlOppPct = Math.round((fcGtmState.mqlOpp || FC_GTM_DEFAULT_MQL_OPP) * 100);
-  const acvK = Math.round(fcGtmAcv() / 1000);
-  html += `<div class="hc-banner" style="margin-top:4px">Marketing first · then pipeline &amp; outstanding opportunities below · MQL→Opp
-    <input class="hc-attr-pct" type="number" min="1" max="100" step="1" value="${mqlOppPct}"
-      onchange="updateFcGtmRate('mqlOpp',this.value)">%
-    · Avg ACV <input class="hc-attr-pct" style="width:48px" type="number" min="10" step="5" value="${acvK}"
-      onchange="updateFcGtmRate('avgAcv',this.value)">k
-    · Spend = GL marketing program accounts (Actual GL through ${getCloseMoLabel()}, Forecast GL after); editing a forecast month changes that account on the ${originTag('P&amp;L', 'pnl', { plDept: 'sm', title: 'Open S&M by team on the P&L' })}. CPL is assumed until MQL volumes are loaded.
+  html += `<div class="hc-banner" style="margin-top:4px">Marketing first · then pipeline &amp; outstanding opportunities below
+    · Loaded funnel, ${fcGtmRatesLabel(rates)}: cost per MQL <strong>${rates.cpl != null ? '$' + Math.round(rates.cpl).toLocaleString() : 'not loaded'}</strong>
+    · MQL→Opp <strong>${fmtPct(rates.mqlOpp)}</strong> · win rate on pipeline <strong>${fmtPct(rates.winRate)}</strong>
+    · Spend = GL marketing program accounts (Actual GL through ${getCloseMoLabel()}, Forecast GL after); editing a forecast month changes that account on the ${originTag('P&amp;L', 'pnl', { plDept: 'sm', title: 'Open S&M by team on the P&L' })}.
   </div>`;
 
   // Marketing tables share one grid so month headers stay aligned + sticky
@@ -6807,28 +6851,34 @@ function renderPipeline(area){
     units: 'm',
   })}</tr>`;
 
-  body += `<tr class="sec"><td colspan="${colSpan}">MQLs generated (spend ÷ CPL)</td></tr>`;
+  const fmtMql = v => (v == null ? 'n/l' : v ? Math.round(v).toLocaleString() : '—');
+  body += `<tr class="sec"><td colspan="${colSpan}">MQLs — Act: loaded MQLs spread over program accounts by spend · Fcst: spend ÷ cost per MQL</td></tr>`;
   chans.forEach(ch => {
-    body += `<tr><td>${fcPlAttr(ch.label)} MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].channels[ch.key].mqls, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+    body += `<tr><td>${fcPlAttr(ch.label)} MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].channels[ch.key].mqls, fmtMql)}</tr>`;
   });
-  body += `<tr class="tot"><td>Total MQLs bought</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
+  body += `<tr class="tot"><td>Total MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum, fmtMql)}</tr>`;
 
-  body += `<tr class="sec"><td colspan="${colSpan}">CPL ($/MQL) — assumed until MQL volumes are loaded · raise when a program isn't going as far</td></tr>`;
+  body += `<tr class="sec"><td colspan="${colSpan}">Cost per MQL — Act: spend ÷ loaded MQLs · Fcst: loaded rate (${fcGtmRatesLabel(rates)}) · raise when a program isn't going as far</td></tr>`;
   chans.forEach((ch, i) => {
     const cells = periods.map(p => {
       const cpl = allocByP[p].channels[ch.key].cpl;
       const c = p > getCloseMonth() ? 'fc-c' : 'act-c';
+      if (cpl == null) return `<td class="${c}">n/l</td>`;
       if (p <= getCloseMonth()) return `<td class="${c}">$${Math.round(cpl).toLocaleString()}</td>`;
       return `<td class="${c}"><input class="hc-hire" style="width:52px;max-width:100%" type="number" min="1" step="10" value="${Math.round(cpl)}"
         onchange="updateFcGtmCpl('${p}',${i},this.value)"></td>`;
     }).join('');
-    body += `<tr class="adj"><td>${fcPlAttr(ch.label)} CPL</td>${cells}<td class="fy-c">—</td></tr>`;
+    body += `<tr class="adj"><td>${fcPlAttr(ch.label)} cost per MQL</td>${cells}<td class="fy-c">—</td></tr>`;
   });
 
-  body += `<tr class="sec"><td colspan="${colSpan}">MQL check — bought (spend÷CPL) vs implied (Budget funnel: NB$ × ${FC_GTM_PIPE_COV.toFixed(1)}× ÷ ACV ÷ MQL→Opp)</td></tr>`;
-  body += `<tr><td>MQLs bought (raw spend÷CPL)</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum, v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
-  body += `<tr><td>MQLs implied (Budget-style from NB$)</td>${fcGtmNumCells(periods, p => fcGtmImpliedMqls(pipeByP[p]), v => (v ? Math.round(v).toLocaleString() : '—'))}</tr>`;
-  body += `<tr class="tot"><td>MQL surplus / (gap)</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum - fcGtmImpliedMqls(pipeByP[p]), v => {
+  body += `<tr class="sec"><td colspan="${colSpan}">MQL check — MQLs vs implied by New Business (NB$ × ${rates.mqlPerNb != null ? (rates.mqlPerNb * 1e6).toFixed(1) : 'n/l'} MQLs per $1M of New Business, ${fcGtmRatesLabel(rates)})</td></tr>`;
+  body += `<tr><td>MQLs</td>${fcGtmNumCells(periods, p => allocByP[p].mqlSum, fmtMql)}</tr>`;
+  body += `<tr><td>MQLs implied by New Business</td>${fcGtmNumCells(periods, p => fcGtmImpliedMqls(pipeByP[p]), fmtMql)}</tr>`;
+  body += `<tr class="tot"><td>MQL surplus / (gap)</td>${fcGtmNumCells(periods, p => {
+    const a = allocByP[p].mqlSum, b = fcGtmImpliedMqls(pipeByP[p]);
+    return a == null || b == null ? null : a - b;
+  }, v => {
+    if (v == null) return 'n/l';
     const n = Math.round(v);
     if (!n) return '—';
     return (n > 0 ? '+' : '') + n.toLocaleString();
@@ -6978,7 +7028,7 @@ function showPipeMonth(p, btn){
       <div class="var-row"><span class="var-lbl">Contraction</span><span class="var-act" style="color:var(--amber)">−${fM(a.arr_cont||0)}</span></div>
       <div class="var-row"><span class="var-lbl">Churn</span><span class="var-act" style="color:var(--red)">−${fM(a.arr_churn||0)}</span></div>
       <div class="var-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:8px"><span class="var-lbl" style="font-weight:500">Net new</span><span class="var-act pos" style="font-weight:500">${fM(pipe.netWtd)}</span></div>
-      <div class="var-row"><span class="var-lbl">Program spend / MQLs</span><span class="var-act">${fM(alloc.spendTot,1)} · ${Math.round(alloc.mqlSum).toLocaleString()}</span></div>
+      <div class="var-row"><span class="var-lbl">Program spend / MQLs</span><span class="var-act">${fM(alloc.spendTot,1)} · ${alloc.mqlSum == null ? 'MQLs not loaded' : Math.round(alloc.mqlSum).toLocaleString()}</span></div>
     </div>`;
   } else {
     // Prefer at-risk / watch renewals first in the focus list
