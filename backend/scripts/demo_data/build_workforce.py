@@ -99,7 +99,7 @@ PNL_LINE = {"Sales": "sales_and_marketing", "Marketing": "sales_and_marketing", 
             "Support": "general_and_administrative"}
 
 TAX_RATE = Decimal("0.08")
-HEALTH_MONTHLY = {"2024": Decimal("1050"), "2025": Decimal("1120"), "2026": Decimal("1200")}
+HEALTH_MONTHLY = {"2024": Decimal("1050"), "2025": Decimal("1120"), "2026": Decimal("1200"), "2027": Decimal("1285")}
 MATCH_RATE, MATCH_CAP = Decimal("1.00"), Decimal("0.04")
 MERIT = Decimal("0.035")
 MERIT_MONTH = 4
