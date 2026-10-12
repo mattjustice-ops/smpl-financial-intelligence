@@ -27,7 +27,9 @@ Rules (agreed with Matt, Oct 6 2026):
     Budget continues from the Actual balances at Dec 2025, Forecast from Jun 2026.
   * Opening balance sheet (Jan 2024 month end): AR and deferred revenue come from the
     billing model; equity is the v4 opening equity less --opening-equity-adjustment; cash
-    balances it.
+    balances it. The adjustment is set so the finished dataset's June 2026 cash equals the input
+    dataset's (the tie-out's --close-cash-from check): later steps move cash, so rerun with the
+    adjustment less the tie-out's shortfall.
   * June close: ARR waterfall rates and renewal ARR are calculated from the movements;
     quotas run through June; quota attainment is the closed-won new business each rep owns;
     commission payouts are rebuilt from closed-won deals at the plan rates and paid to

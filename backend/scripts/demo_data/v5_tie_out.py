@@ -1,6 +1,7 @@
 """Tie-out report for the v5/v6 dataset: every file against the GL and against each other.
 
   python v5_tie_out.py <prior_folder> <dataset_folder> <gl_folder> [report.md] [--prior-gl <prior_gl_folder>]
+      [--close-cash-from <input_dataset_folder>]
 
 Each check is PASS or FAIL; gaps that are known and accepted are listed as FLAG with the number.
 Columns added on purpose (ADDED_COLUMNS) are allowed in the schema check. When the dataset has
@@ -170,7 +171,7 @@ def sums(rows, key: str, value: str, where=lambda r: True) -> dict[str, Decimal]
     return out
 
 
-def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
+def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None, close_cash_from: str | None = None) -> Report:
     rep = Report()
 
     def f(name: str) -> list[dict[str, str]]:
@@ -850,7 +851,81 @@ def main(v4: str, v5: str, gl_dir: str, prior_gl: str | None = None) -> Report:
     fs = {r["period"][:7]: num(r["forecast_marketing_spend"]) for r in f("Forecast_marketing_pipeline_summary.csv")}
     rep.check("Forecast marketing pipeline summary spend = GL programs",
               compare("summary", fs, {p: pl[source("Forecast", p)][p]["programs"] for p in fs}, sorted(fs)))
+    funnel_section(rep, f)
+
+    if close_cash_from:
+        ref = {r["period"][:7]: r for r in read(os.path.join(close_cash_from, "Actual_balance_sheet.csv"))[1]}
+        want, got = num(ref[CLOSE]["cash"]), bs_line("Actual", CLOSE, "cash")
+        rep.check(f"Actual {CLOSE} close cash = the input dataset's {CLOSE} cash ({money(want)})",
+                  [] if abs(got - want) <= 1 else [f"GL cash {money(got)}, off by {money(got - want)}"])
+    else:
+        rep.flag("input dataset not given (--close-cash-from); close cash not checked")
     return rep
+
+
+def funnel_section(rep: Report, f) -> None:
+    """Lead volume follows spend at one cost per MQL per channel; plan bookings follow each version's New Business."""
+    actual = f("Actual_marketing_pipeline.csv")
+    spend: dict[str, Decimal] = defaultdict(Decimal)
+    leads: dict[str, Decimal] = defaultdict(Decimal)
+    tot: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+    for r in actual:
+        c = r["marketing_channel"]
+        spend[c] += num(r["marketing_spend"])
+        leads[c] += num(r["mqls"])
+        for k in ("sqls", "opportunities_created", "pipeline_arr_created", "closed_won_arr"):
+            tot[c][k] += num(r[k])
+    cpl = {c: spend[c] / leads[c] for c in spend if leads[c]}
+
+    def nb(v: str) -> dict[str, Decimal]:
+        out: dict[str, Decimal] = defaultdict(Decimal)
+        for r in f(f"{v}_customer_arr_history.csv"):
+            if r["waterfall_column"] == "new_business_arr":
+                out[r["period"][:7]] += num(r["movement_arr"])
+        return out
+
+    a_months = sorted({r["period"][:7] for r in actual})
+    actual_nb = sum((nb("Actual").get(p, ZERO) for p in a_months), ZERO)
+    by_key = {(r["period"][:7], r["marketing_channel"]): r for r in actual}
+    for v in VERSIONS:
+        rows = actual if v == "Actual" else f(f"{v}_marketing_pipeline.csv")
+        lead_diffs = [f"{r['period'][:7]} {r['marketing_channel']}: {r['mqls']} MQLs for {money(num(r['marketing_spend']))}"
+                      for r in rows if r["marketing_channel"] not in cpl
+                      or abs(num(r["mqls"]) - num(r["marketing_spend"]) / cpl[r["marketing_channel"]]) > 1]
+        rep.check(f"{v} MQLs = channel spend / the channel's Actual cost per MQL, every month (whole leads, within one)",
+                  lead_diffs,
+                  f"{len(rows)} rows; cost per MQL " + ", ".join(f"{c} {money(cpl[c])}" for c in sorted(cpl)) if v == "Actual" else f"{len(rows)} rows")
+        if v == "Actual":
+            continue
+        v_nb = nb(v)
+        diffs = []
+        for r in rows:
+            p, c = r["period"][:7], r["marketing_channel"]
+            if v == "Forecast" and p <= CLOSE:
+                a = by_key.get((p, c))
+                if a is None or any(num(r[k]) != num(a[k]) for k in ("mqls", "sqls", "opportunities_created",
+                                                                       "pipeline_arr_created", "closed_won_arr")):
+                    diffs.append(f"{p} {c}: closed month differs from Actual")
+                continue
+            t = tot[c]
+            want_won = t["closed_won_arr"] / actual_nb * v_nb.get(p, ZERO)
+            want_pipe = want_won * t["pipeline_arr_created"] / t["closed_won_arr"] if t["closed_won_arr"] else ZERO
+            if abs(num(r["closed_won_arr"]) - want_won) > 1 or abs(num(r["pipeline_arr_created"]) - want_pipe) > 1:
+                diffs.append(f"{p} {c}: won {r['closed_won_arr']} vs {want_won:.2f}, pipeline {r['pipeline_arr_created']} "
+                             f"vs {want_pipe:.2f}")
+        rep.check(f"{v} closed-won = the channel's Actual share of New Business x {v} New Business ARR; pipeline = "
+                  f"closed-won / the channel's Actual win rate", diffs)
+
+    pipe: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+    for r in f("Forecast_marketing_pipeline.csv"):
+        for k in ("mqls", "sqls", "opportunities_created", "pipeline_arr_created", "closed_won_arr"):
+            pipe[r["period"][:7]][k] += num(r[k])
+    cols = {"mqls": "mqls", "sqls": "sqls", "opportunities_created": "opportunities_created",
+            "forecast_marketing_pipeline_arr": "pipeline_arr_created",
+            "forecast_marketing_sourced_closed_won_arr": "closed_won_arr"}
+    diffs = [f"{r['period'][:7]} {col}" for r in f("Forecast_marketing_pipeline_summary.csv")
+             for col, k in cols.items() if abs(num(r[col]) - pipe[r["period"][:7]][k]) > Decimal("0.02")]
+    rep.check("Forecast marketing pipeline summary = the monthly totals of the Forecast marketing pipeline", diffs)
 
 
 def _first(p: str) -> dt.date:
@@ -2624,12 +2699,17 @@ if __name__ == "__main__":
         i = argv.index("--prior-gl")
         prior_gl = argv[i + 1]
         del argv[i:i + 2]
+    close_cash_from = None
+    if "--close-cash-from" in argv:
+        i = argv.index("--close-cash-from")
+        close_cash_from = argv[i + 1]
+        del argv[i:i + 2]
     v4_dir, v5_dir, gl = argv[:3]
     name = os.path.basename(os.path.normpath(v5_dir))
     out = argv[3] if len(argv) > 3 else os.path.join(v5_dir, "tie_out_report.md")
-    report = main(v4_dir, v5_dir, gl, prior_gl)
+    report = main(v4_dir, v5_dir, gl, prior_gl, close_cash_from)
     text = [f"# {name} tie-out", "", f"prior dataset: {v4_dir}", f"dataset: {v5_dir}", f"GL: {gl}",
-            f"prior GL: {prior_gl or 'not given'}",
+            f"prior GL: {prior_gl or 'not given'}", f"close cash from: {close_cash_from or 'not given'}",
             "", f"**{report.failures} failing checks**"] + report.lines + ["\n## Methods (estimates by design)\n"] + \
            [f"- {m}" for m in METHODS] + ["\n## Known gaps (not fixed in this dataset)\n"] + [f"- {g}" for g in KNOWN_GAPS]
     with open(out, "w", encoding="utf-8") as fh:
